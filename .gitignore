@@ -5,6 +5,8 @@ server/.data/
 
 plan/
 examples/
+graphify-out/
+AGENTS.md
 
 # Python and test caches
 __pycache__/
