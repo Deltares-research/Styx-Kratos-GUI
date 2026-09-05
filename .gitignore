@@ -1,0 +1,12 @@
+# Virtual environments contain platform-specific executables and native libraries.
+server/.venv/
+server/.venv-*/
+server/.data/
+
+plan/
+examples/
+
+# Python and test caches
+__pycache__/
+.pytest_cache/
+*.py[cod]

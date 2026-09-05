@@ -1,0 +1,138 @@
+/* Live-only controls; the file:// mockup styles remain frozen. */
+.mesh-settings-body { padding: 14px 18px; overflow: auto; }
+.mesh-settings-form {
+  display: grid;
+  grid-template-columns: 165px minmax(170px, 220px) 1fr;
+  gap: 10px 12px;
+  align-items: center;
+  width: 100%;
+}
+.mesh-setting-label { font-weight: 600; color: var(--c-ink); }
+.mesh-setting-control {
+  min-width: 0;
+  height: 27px;
+  border: 1px solid var(--c-border);
+  border-radius: 2px;
+  background: #fff;
+  padding: 2px 6px;
+  color: var(--c-ink);
+  font: inherit;
+}
+input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify-self: start; }
+.mesh-setting-help { color: var(--c-ink-soft); font-size: var(--fs-sm); line-height: 1.3; }
+.mesh-setting-targets { font-family: var(--font-mono); color: var(--brand-primary); }
+/* Sized to the form's control column, so its right edge lines up with the
+   single-line fields below it. A min-width wider than the track's max would
+   overflow the cell and run under the help text. */
+.mesh-body-table {
+  border: 1px solid var(--c-border);
+  border-radius: 2px;
+  background: #fff;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+.mesh-body-head,
+.mesh-body-row {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) 74px;
+  gap: 8px;
+  align-items: center;
+  min-height: 30px;
+  padding: 3px 8px;
+}
+.mesh-body-head > span,
+.mesh-body-row > span {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.mesh-body-head {
+  color: var(--c-ink-soft);
+  font-size: var(--fs-sm);
+  background: var(--c-panel);
+  border-bottom: 1px solid var(--c-border);
+}
+.mesh-body-row + .mesh-body-row { border-top: 1px solid var(--c-border); }
+.mesh-body-enabled { width: 16px; height: 16px; margin: 0; }
+/* Fills its column and keeps the border/height of the fields below. */
+.mesh-body-size { width: 100%; height: 24px; }
+/* An unchecked layer is not meshed, so its target size does not apply. */
+.mesh-body-size:disabled { background: var(--c-panel); color: var(--c-ink-faint); }
+.mesh-body-row.off > span { color: var(--c-ink-faint); }
+.mesh-settings-message { color: #a12622; max-width: 280px; }
+
+/* ── Create soil volume ────────────────────────────────────────── */
+.soil-volume-body { padding: 14px 18px; overflow: auto; }
+.soil-volume-table {
+  border: 1px solid var(--c-border);
+  border-radius: 2px;
+  background: #fff;
+  width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+.soil-volume-head,
+.soil-volume-row {
+  display: grid;
+  grid-template-columns: 20px repeat(3, minmax(0, 1fr)) 26px;
+  gap: 5px;
+  align-items: center;
+  padding: 3px 6px;
+}
+/* In 2D the corner table drops the out-of-plane column. */
+.soil-volume-table.planar .soil-volume-head,
+.soil-volume-table.planar .soil-volume-row {
+  grid-template-columns: 20px repeat(2, minmax(0, 1fr)) 26px;
+}
+.soil-volume-head {
+  color: var(--c-ink-soft); font-size: var(--fs-sm);
+  background: var(--c-panel); border-bottom: 1px solid var(--c-border);
+}
+.soil-volume-row + .soil-volume-row { border-top: 1px solid var(--c-border-soft); }
+.soil-volume-index { color: var(--c-ink-faint); font-size: var(--fs-sm); }
+.soil-volume-coord { height: 23px; width: 100%; }
+.soil-volume-rows { max-height: 132px; overflow-y: auto; }
+.soil-volume-actions { margin-top: 6px; }
+.soil-volume-extrusion {
+  display: grid; grid-template-columns: repeat(3, auto minmax(0, 1fr));
+  gap: 5px; align-items: center;
+}
+.soil-volume-axis { color: var(--c-ink-soft); font-size: var(--fs-sm); }
+.soil-volume-summary { font-size: var(--fs-sm); color: var(--c-ink-soft); }
+.soil-volume-summary.invalid { color: #a3341f; }
+
+/* Custom soil volumes, listed inside the frozen Modify soil layers window. */
+.soil-body-section { border-top: 1px solid var(--c-border); background: var(--c-panel); }
+.soil-body-section-head {
+  padding: 5px 10px; font-weight: 600; font-size: var(--fs-sm); color: var(--c-ink-soft);
+}
+.soil-body-section table.lay-table { background: #fff; }
+
+/* The view presets are meaningless once the camera is locked to the section
+   plane, so 2D greys them out rather than leaving four buttons that do nothing. */
+#vp-viewcube.off { opacity: .4; }
+#vp-viewcube.off button { cursor: default; }
+
+/* ── No WebGL ────────────────────────────────────────────────────────────────
+   Shown in place of the 3D scene when the browser gives no WebGL context. It has
+   to be readable and actionable: the user is looking at an empty viewport and
+   needs to know it is their graphics settings, not their model. */
+.vp-no-webgl {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  max-width: 460px;
+  z-index: 4;
+  background: var(--c-vp-hud);
+  border: 1px solid var(--c-border);
+  border-left: 3px solid #c0392b;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-menu);
+  padding: 14px 18px;
+  color: var(--c-ink);
+  line-height: 1.55;
+}
+
+/* A rail tool the current model cannot have: js/data.js never needed a disabled
+   state for these, because none of them did anything. Matches .tbtn.disabled. */
+.rail-btn.disabled { color: var(--c-disabled); pointer-events: none; }

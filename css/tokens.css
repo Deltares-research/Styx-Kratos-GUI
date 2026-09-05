@@ -1,0 +1,82 @@
+/* ══════════════════════════════════════════════════════════════════
+   Design tokens — single source of truth for colour, type and metrics.
+   Swap the brand block below for the official Deltares house-style
+   values and the whole application follows.
+   ══════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── Deltares brand ─────────────────────────────────────────── */
+  --brand-primary:  #080c80;   /* deep Deltares blue  */
+  --brand-primary-2:#131a9e;   /* lighter, for gradients/hover */
+  --brand-accent:   #0ebbf0;   /* Deltares light blue */
+  --brand-green:    #00b389;
+  --brand-on-dark:  #ffffff;
+
+  /* ── Application chrome (neutral engineering greys) ─────────── */
+  --c-app-bg:       #eceff3;
+  --c-panel:        #f5f6f8;
+  --c-panel-2:      #ffffff;
+  --c-toolbar:      #f0f2f5;
+  --c-rail:         #eef0f4;
+  --c-border:       #c8ced8;
+  --c-border-soft:  #dfe3ea;
+  --c-ink:          #1d2430;
+  --c-ink-soft:     #5b6577;
+  --c-ink-faint:    #8b94a5;
+  --c-disabled:     #adb5c2;
+
+  --c-hover:        #dfe9f7;
+  --c-active:       #cddef5;
+  --c-select:       #cfe0f6;
+  --c-select-bd:    #6f9fdd;
+  --c-focus:        #2f7fe0;
+
+  /* ── Viewport ───────────────────────────────────────────────── */
+  --c-vp-top:       #7f8ea3;
+  --c-vp-bottom:    #cfd6df;
+  --c-vp-hud:       rgba(255,255,255,.86);
+
+  /* ── Soil / material palette (borehole + 3D) ────────────────── */
+  --soil-1: #d8c48a;   /* Fill            */
+  --soil-2: #c4a86a;   /* Sand, loose     */
+  --soil-3: #8fa86b;   /* Clay, soft      */
+  --soil-4: #6f8fa8;   /* Clay, stiff     */
+  --soil-5: #b08a6a;   /* Sand, dense     */
+  --soil-6: #8d8d99;   /* Bedrock         */
+
+  /* ── Structure colours ──────────────────────────────────────── */
+  --st-plate:  #4b6ea8;
+  --st-beam:   #b5573a;
+  --st-anchor: #2f6f4f;
+  --st-load:   #d4342d;
+  --st-water:  #2f8fd8;
+  --st-mesh:   #37474f;
+
+  /* ── Typography ─────────────────────────────────────────────── */
+  --font-ui:   "Segoe UI", Frutiger, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "Cascadia Mono", Consolas, "Courier New", monospace;
+  --fs-xs: 10.5px;
+  --fs-sm: 11.5px;
+  --fs-md: 12.5px;
+  --fs-lg: 14px;
+
+  /* ── Metrics ────────────────────────────────────────────────── */
+  --h-titlebar: 34px;
+  --h-menubar:  25px;
+  --h-toolbar:  32px;
+  --h-modetabs: 48px;
+  --h-status:   23px;
+  --h-dockhead: 23px;
+
+  --w-rail:  var(--rail-width, 40px);
+  --w-dock:  var(--dock-width, 296px);
+  --h-cmd:   var(--cmd-height, 150px);
+  --h-model-panel: var(--model-panel-height, 320px);
+  --h-phases: var(--phases-height, 250px);
+
+  --split: 5px;
+  --radius: 2px;
+
+  --shadow-menu: 0 6px 18px rgba(15, 23, 42, .22), 0 1px 3px rgba(15, 23, 42, .16);
+  --shadow-modal: 0 24px 64px rgba(15, 23, 42, .34), 0 2px 8px rgba(15, 23, 42, .2);
+}

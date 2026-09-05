@@ -1,0 +1,431 @@
+"""The plane-strain x-z section.
+
+A 2D model is not a flattened 3D one: it is the *face* OCC cuts out of the solid at
+`section_offset`. So the same rules the 3D build lives by still apply -- ownership is
+rebuilt from the boolean's output map, never cached across it -- but every entity
+that comes out is dim 2, and a part that does not reach the plane is simply not in
+the section.
+
+Areas are recomputed here from the project fields by a formula written independently
+of build.py, for the same reason test_build.py recomputes volumes: gmsh's failure mode
+is to succeed with empty results.
+"""
+
+import gmsh
+import pytest
+
+from app import build
+from app.schemas import Project
+from app.seed import seed_project
+
+
+def section_project(simple: bool, y: float | None = None) -> Project:
+    payload = seed_project(simple=simple).model_dump() | {"dimension": 2}
+    if y is not None:
+        payload["section_offset"] = y
+    return Project.model_validate(payload)
+
+
+@pytest.fixture(scope="module")
+def simple():
+    project = section_project(simple=True)
+    with build.session():
+        yield project, build.build_geometry(project)
+
+
+@pytest.fixture(scope="module")
+def full():
+    project = section_project(simple=False)
+    with build.session():
+        yield project, build.build_geometry(project)
+
+
+# ── The section is two-dimensional ──────────────────────────────────────────
+
+def test_the_result_reports_its_dimension(simple):
+    _, result = simple
+    assert result.dim == 2
+
+
+def test_every_entity_is_a_surface(simple):
+    project, result = simple
+    with build.session():
+        for key in project.part_keys():
+            for tag in result.volumes[key]:
+                # A dim-3 tag would still be a valid number here; asking gmsh which
+                # entities exist at dim 2 is what actually proves the slice happened.
+                assert (2, tag) in gmsh.model.getEntities(2), f"{key}:{tag} is not a surface"
+
+
+def test_physical_groups_are_registered_at_dimension_two(simple):
+    project, _ = simple
+    named = {gmsh.model.getPhysicalName(2, tag) for _, tag in gmsh.model.getPhysicalGroups(2)}
+    assert named == set(project.part_keys())
+    assert gmsh.model.getPhysicalGroups(3) == []
+
+
+def test_the_section_is_flat_in_y(simple):
+    project, result = simple
+    y = project.section_offset
+    assert result.bbox[1] == pytest.approx(y, abs=1e-6)
+    assert result.bbox[4] == pytest.approx(y, abs=1e-6)
+
+
+# ── Real, measurable areas ──────────────────────────────────────────────────
+
+def test_each_layer_sections_to_its_own_rectangle(simple):
+    """The simple example is a stack of full-width boxes, so the section of each
+    layer is exactly domain width x layer thickness."""
+    project, result = simple
+    bh = project.borehole_ids()[0]
+    for layer in project.layers:
+        expected = project.domain.dx * (layer.tops[bh] - layer.bots[bh])
+        assert result.mass[f"soil_{layer.id}"] == pytest.approx(expected, rel=1e-6)
+
+
+def test_mass_is_area_and_the_stack_tiles_the_domain(simple):
+    project, result = simple
+    total = sum(result.mass[f"soil_{l.id}"] for l in project.layers)
+    assert total == pytest.approx(project.domain.dx * project.domain.dz, rel=1e-6)
+
+
+def test_the_excavated_pit_is_missing_from_the_soil_section(full):
+    """The pit is cut before the slice, so its rectangle must not be in the face."""
+    project, result = full
+    d, e = project.domain, project.excavation
+    soil = sum(result.mass[f"soil_{l.id}"] for l in project.layers)
+    pit = (e.x1 - e.x0) * (d.z_top - e.floor_z)
+    # Structures inside the section displace a little more soil on top of the pit.
+    assert soil < d.dx * d.dz - pit + 1e-6
+
+
+# ── A part that does not reach the plane ────────────────────────────────────
+
+@pytest.mark.parametrize("key", ["wells", "anchors"])
+def test_a_part_that_misses_the_plane_drops_out_instead_of_failing(full, key):
+    """Two parts of the seed model genuinely have nothing at y = 20.
+
+    The wells sit at y = 15 and y = 25, so a section at y = 20 passes between them.
+    The anchors run outward in +/-y from the pit walls at y = 10 and y = 30 and slope
+    away, so they never come back to mid-pit either.
+
+    In 3D either would be a build failure (_verify). In plane strain it is the correct
+    answer -- there is no well and no anchor in this section -- so it must be reported,
+    not raised.
+    """
+    project, result = full
+    assert project.section_offset == pytest.approx(20.0)
+    assert result.volumes[key] == []
+    assert any(key in line for line in result.log), "the drop must be logged"
+
+
+def test_the_parts_that_do_reach_the_plane_are_present(full):
+    _, result = full
+    for key in ("wall", "struts", "piles"):
+        assert result.volumes[key], f"{key} crosses y = 20 and must be in the section"
+
+
+def test_part_keys_still_map_one_to_one(full):
+    """Missing parts keep their key with an empty list, so the frontend's
+    userData.key namespace is unchanged between 2D and 3D."""
+    project, result = full
+    assert sorted(result.volumes) == sorted(project.part_keys())
+
+
+# ── The plan section ────────────────────────────────────────────────────────
+
+@pytest.fixture(scope="module")
+def plan():
+    """A horizontal cut at z = -6: inside the upper layer (0 to -8), above the pit
+    floor (-7), and within the depth range of both the anchors (-10.8 to -4.5) and
+    the wells (-15 to 0)."""
+    payload = seed_project(simple=False).model_dump() | {
+        "dimension": 2, "section_plane": "xy", "section_offset": -6.0
+    }
+    project = Project.model_validate(payload)
+    with build.session():
+        yield project, build.build_geometry(project)
+
+
+def test_a_plan_section_is_flat_in_z(plan):
+    project, result = plan
+    assert result.dim == 2
+    assert result.bbox[2] == pytest.approx(project.section_offset, abs=1e-6)
+    assert result.bbox[5] == pytest.approx(project.section_offset, abs=1e-6)
+    # ...and spans the domain in plan, unlike the elevation which is flat in y.
+    assert result.bbox[3] - result.bbox[0] > 1.0
+    assert result.bbox[4] - result.bbox[1] > 1.0
+
+
+def test_a_plan_cut_sees_only_the_layer_it_passes_through(plan):
+    """z = -6 is inside L1 (0 to -8), so L2 contributes nothing.
+
+    This is the price of a plan view on a layered model, and it is the reason the
+    elevation is the default: a horizontal cut has no stratigraphy in it.
+    """
+    project, result = plan
+    assert result.volumes["soil_L1"]
+    assert result.volumes["soil_L2"] == []
+
+
+def test_a_plan_cut_at_pit_level_still_shows_the_excavation(plan):
+    """The cut is above the pit floor (-7), so the pit is a hole in the soil face."""
+    project, result = plan
+    d, e = project.domain, project.excavation
+    soil = result.mass["soil_L1"]
+    assert soil < d.dx * d.dy - (e.x1 - e.x0) * (e.y1 - e.y0) + 1e-6
+
+
+def test_a_plan_cut_catches_the_parts_an_elevation_misses(plan):
+    """Both wells and every anchor cross z = -6, so the two parts that are absent
+    from the mid-pit elevation are exactly the two this cut recovers."""
+    _, result = plan
+    assert result.volumes["wells"]
+    assert result.volumes["anchors"]
+
+
+def test_the_other_elevation_also_sections(full):
+    payload = seed_project(simple=False).model_dump() | {
+        "dimension": 2, "section_plane": "yz", "section_offset": 25.0
+    }
+    project = Project.model_validate(payload)
+    with build.session():
+        result = build.build_geometry(project)
+    assert result.dim == 2
+    assert result.bbox[0] == pytest.approx(25.0, abs=1e-6)
+    assert result.bbox[3] == pytest.approx(25.0, abs=1e-6)
+    assert result.volumes["soil_L1"]
+
+
+# ── Load footprint imprint ──────────────────────────────────────────────────
+
+def _vertices_at(z: float, slack: float = 1e-5) -> list[float]:
+    """x of every model vertex sitting on the elevation `z`."""
+    out = []
+    for _, tag in gmsh.model.getEntities(0):
+        box = gmsh.model.getBoundingBox(0, tag)
+        if abs(box[2] - z) < slack:
+            out.append(box[0])
+    return sorted(out)
+
+
+def _loaded_section(load: dict | None = None) -> Project:
+    payload = section_project(simple=True).model_dump()
+    payload["loads"] = [load or LINE_LOAD]
+    return Project.model_validate(payload)
+
+
+LINE_LOAD = {"id": "load_line", "name": "LineLoad_1", "kind": "line",
+             "x0": 3.2, "x1": 11.7, "z": 0.0, "components": (0.0, -20.0)}
+POINT_LOAD = {"id": "load_jack", "name": "PointLoad_1", "kind": "point",
+              "x": 7.3, "z": -2.0, "components": (0.0, -50.0)}
+
+
+def test_a_line_load_puts_a_vertex_at_each_of_its_ends():
+    """Both ends become model vertices, so the mesh cannot straddle them."""
+    project = _loaded_section()
+    load = project.loads[0]
+    with build.session():
+        build.build_geometry(project)
+        xs = _vertices_at(load.z)
+
+    assert any(x == pytest.approx(load.x0) for x in xs)
+    assert any(x == pytest.approx(load.x1) for x in xs)
+
+
+def test_a_point_load_puts_a_vertex_at_its_own_coordinate():
+    project = _loaded_section(POINT_LOAD)
+    load = project.loads[0]
+    with build.session():
+        build.build_geometry(project)
+        xs = _vertices_at(load.z)
+
+    assert any(x == pytest.approx(load.x) for x in xs)
+
+
+def test_the_section_imprint_splits_no_area():
+    """A load is a boundary condition: it must not cut the sectioned soil."""
+    loaded, plain = _loaded_section(), section_project(simple=True)
+    with build.session():
+        with_load = build.build_geometry(loaded)
+        without_load = build.build_geometry(plain)
+
+    for key, mass in without_load.mass.items():
+        if key not in build.DISPLAY_ONLY:
+            assert with_load.mass[key] == pytest.approx(mass), key
+
+
+# ── Sheet piles embedded in the section ─────────────────────────────────────
+
+SECTION_AZ26 = {"id": "az26", "name": "AZ 26-700", "E": 2.1e8, "nu": 0.3,
+                "area": 0.0198, "inertia": 5.52e-4, "density": 7850.0, "spacing": 1.0}
+
+
+def _piled_section(points, simple: bool = True) -> Project:
+    payload = section_project(simple=simple).model_dump()
+    payload["beam_sections"] = [SECTION_AZ26]
+    payload["beams"] = [{"id": "sheetpile_1", "name": "Sheet pile 1", "section": "az26",
+                         "points": points, "active": True}]
+    return Project.model_validate(payload)
+
+
+def test_a_sheet_pile_becomes_named_one_dimensional_curves():
+    """Not a thin solid: a sheet pile is 1D structural geometry inside a 2D model."""
+    project = _piled_section([[12.0, 0.0], [12.0, -14.0]])
+    with build.session():
+        result = build.build_geometry(project)
+        groups = {gmsh.model.getPhysicalName(dim, tag): dim
+                  for dim, tag in gmsh.model.getPhysicalGroups()}
+
+    assert result.curves["sheetpile_1"], "the pile must survive the build"
+    assert groups["sheetpile_1"] == 1
+    # It keeps its part key in the 2D namespace, but with no surface behind it: the
+    # pile is a curve, not a thin sliver of material.
+    assert result.volumes["sheetpile_1"] == []
+
+
+def test_the_pile_curves_span_exactly_the_polyline_the_user_drew():
+    project = _piled_section([[12.0, 0.0], [12.0, -14.0]])
+    with build.session():
+        result = build.build_geometry(project)
+        boxes = [gmsh.model.getBoundingBox(1, tag)
+                 for tag in result.curves["sheetpile_1"]]
+
+    # abs=1e-5 throughout: OCC pads a bounding box by about 1.5e-7, and approx(0.0)
+    # would otherwise compare against an absolute tolerance of 1e-12.
+    assert min(b[2] for b in boxes) == pytest.approx(-14.0, abs=1e-5)
+    assert max(b[5] for b in boxes) == pytest.approx(0.0, abs=1e-5)
+    assert all(b[0] == pytest.approx(12.0, abs=1e-5)
+               and b[3] == pytest.approx(12.0, abs=1e-5) for b in boxes)
+
+
+def test_the_pile_is_embedded_in_the_soil_rather_than_cutting_it_away():
+    """It displaces no soil: the same area is there with and without the pile."""
+    plain = section_project(simple=True)
+    piled = _piled_section([[12.0, 0.0], [12.0, -14.0]])
+    with build.session():
+        without = build.build_geometry(plain)
+        with_pile = build.build_geometry(piled)
+
+    for key, area in without.mass.items():
+        if key not in build.DISPLAY_ONLY:
+            assert with_pile.mass[key] == pytest.approx(area), key
+
+
+def test_a_polyline_pile_keeps_every_segment():
+    project = _piled_section([[12.0, 0.0], [12.0, -7.0], [14.0, -12.0]])
+    with build.session():
+        result = build.build_geometry(project)
+        boxes = [gmsh.model.getBoundingBox(1, tag)
+                 for tag in result.curves["sheetpile_1"]]
+
+    assert max(b[3] for b in boxes) == pytest.approx(14.0)
+    assert min(b[2] for b in boxes) == pytest.approx(-12.0)
+
+
+def test_an_inactive_pile_is_kept_in_the_project_but_not_built():
+    payload = section_project(simple=True).model_dump()
+    payload["beam_sections"] = [SECTION_AZ26]
+    payload["beams"] = [{"id": "sheetpile_1", "name": "Sheet pile 1", "section": "az26",
+                         "points": [[12.0, 0.0], [12.0, -14.0]], "active": False}]
+    project = Project.model_validate(payload)
+    with build.session():
+        result = build.build_geometry(project)
+
+    assert result.curves.get("sheetpile_1", []) == []
+
+
+def test_a_sheet_pile_is_not_built_into_a_3d_model_and_says_so():
+    """The verified Kratos beam classes are 2D; 3D authoring is still ahead."""
+    payload = seed_project(simple=True).model_dump()
+    payload["beam_sections"] = [SECTION_AZ26]
+    payload["beams"] = [{"id": "sheetpile_1", "name": "Sheet pile 1", "section": "az26",
+                         "points": [[12.0, 0.0], [12.0, -14.0]], "active": True}]
+    project = Project.model_validate(payload)
+    with build.session():
+        result = build.build_geometry(project)
+
+    assert result.curves.get("sheetpile_1", []) == []
+    assert any("sheetpile_1" in line for line in result.log)
+
+
+# ── Anchors: a tie from a sheet pile to a restrained point ──────────────────
+
+TENDON = {"id": "strand", "name": "4-strand tendon", "E": 1.95e8, "area": 0.0006,
+          "density": 7850.0, "spacing": 2.5, "tension_limit": 900.0,
+          "compression_limit": None}
+
+
+def _anchored_section(head=(12.0, -2.0), tail=(20.0, -8.0), active=True) -> Project:
+    payload = _piled_section([[12.0, 0.0], [12.0, -14.0]]).model_dump()
+    payload["anchor_sections"] = [TENDON]
+    payload["anchors"] = [{"id": "anchor_1", "name": "Anchor 1", "kind": "anchor",
+                           "section": "strand", "head": list(head), "tail": list(tail),
+                           "prestress": 250.0, "active": active}]
+    return Project.model_validate(payload)
+
+
+def test_an_anchor_becomes_its_own_named_curve():
+    with build.session():
+        result = build.build_geometry(_anchored_section())
+        groups = {gmsh.model.getPhysicalName(dim, tag): dim
+                  for dim, tag in gmsh.model.getPhysicalGroups()}
+
+    assert result.ties["anchor_1"], "the anchor must survive the build"
+    assert groups["anchor_1"] == 1
+    assert result.volumes["anchor_1"] == [], "an anchor is a line, not a sliver of soil"
+
+
+def test_the_anchor_splits_the_pile_at_its_head():
+    """The head has to become a vertex the beam shares, which is what makes it one
+    node in the mesh (examples/crow_case.mdpa: the head sits in two beam elements)."""
+    with build.session():
+        plain = build.build_geometry(_piled_section([[12.0, 0.0], [12.0, -14.0]]))
+        plain_pieces = len(plain.curves["sheetpile_1"])
+        anchored = build.build_geometry(_anchored_section())
+
+    assert len(anchored.curves["sheetpile_1"]) == plain_pieces + 1
+
+
+def test_the_anchor_spans_exactly_the_head_and_tail_drawn():
+    with build.session():
+        result = build.build_geometry(_anchored_section())
+        boxes = [gmsh.model.getBoundingBox(1, tag) for tag in result.ties["anchor_1"]]
+
+    assert min(b[0] for b in boxes) == pytest.approx(12.0, abs=1e-5)
+    assert max(b[3] for b in boxes) == pytest.approx(20.0, abs=1e-5)
+    assert min(b[2] for b in boxes) == pytest.approx(-8.0, abs=1e-5)
+    assert max(b[5] for b in boxes) == pytest.approx(-2.0, abs=1e-5)
+
+
+def test_the_anchor_does_not_cut_or_displace_the_soil():
+    with build.session():
+        without = build.build_geometry(_piled_section([[12.0, 0.0], [12.0, -14.0]]))
+        with_anchor = build.build_geometry(_anchored_section())
+
+    for key, area in without.mass.items():
+        if key not in build.DISPLAY_ONLY:
+            assert with_anchor.mass[key] == pytest.approx(area), key
+
+
+def test_an_inactive_anchor_is_kept_in_the_project_but_not_built():
+    with build.session():
+        result = build.build_geometry(_anchored_section(active=False))
+
+    assert result.ties.get("anchor_1", []) == []
+
+
+def test_an_anchor_is_not_built_into_a_3d_model_and_says_so():
+    payload = seed_project(simple=True).model_dump()
+    payload["beam_sections"] = [SECTION_AZ26]
+    payload["beams"] = [{"id": "sheetpile_1", "name": "Sheet pile 1", "section": "az26",
+                         "points": [[12.0, 0.0], [12.0, -14.0]], "active": True}]
+    payload["anchor_sections"] = [TENDON]
+    payload["anchors"] = [{"id": "anchor_1", "name": "Anchor 1", "kind": "anchor",
+                           "section": "strand", "head": [12.0, -2.0],
+                           "tail": [20.0, -8.0], "prestress": 250.0, "active": True}]
+    with build.session():
+        result = build.build_geometry(Project.model_validate(payload))
+
+    assert result.ties.get("anchor_1", []) == []
+    assert any("anchor_1" in line for line in result.log)

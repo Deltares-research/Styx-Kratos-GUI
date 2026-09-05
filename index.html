@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>D-Kratos</title>
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/layout.css">
+<link rel="stylesheet" href="css/components.css">
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ── Title bar ─────────────────────────────────────────────── -->
+  <header id="titlebar">
+    <div class="tb-brand">
+      <img src="assets/deltares-logo.png" alt="Deltares" class="tb-logo">
+      <span class="tb-brand-sep"></span>
+      <img src="assets/kratos.png" alt="Kratos Multiphysics" class="tb-logo tb-logo-kratos">
+    </div>
+    <div class="tb-title" id="tb-title"></div>
+    <div class="tb-wincontrols">
+      <button class="wc" title="Minimise"><svg viewBox="0 0 12 12"><path d="M2 6h8"/></svg></button>
+      <button class="wc" title="Maximise"><svg viewBox="0 0 12 12"><rect x="2.5" y="2.5" width="7" height="7"/></svg></button>
+      <button class="wc wc-close" title="Close"><svg viewBox="0 0 12 12"><path d="M3 3l6 6M9 3l-6 6"/></svg></button>
+    </div>
+  </header>
+
+  <!-- ── Menu bar ──────────────────────────────────────────────── -->
+  <nav id="menubar" role="menubar"></nav>
+
+  <!-- ── Main toolbar ──────────────────────────────────────────── -->
+  <div id="maintoolbar"></div>
+
+  <!-- ── Mode tabs ─────────────────────────────────────────────── -->
+  <div id="modetabs"></div>
+
+  <!-- ── Work area ─────────────────────────────────────────────── -->
+  <main id="workarea">
+    <div id="toolrail"></div>
+    <div class="splitter splitter-v" id="split-left" title="Drag to resize"></div>
+
+    <section id="viewport">
+      <canvas id="scene"></canvas>
+
+      <div id="vp-hud-topleft" class="vp-hud">
+        <span class="vp-mode-label" id="vp-mode-label"></span>
+      </div>
+
+      <div id="vp-viewcube" class="vp-hud" title="View presets">
+        <button data-view="front">Front</button>
+        <button data-view="top">Top</button>
+        <button data-view="side">Side</button>
+        <button data-view="iso" class="active">Iso</button>
+      </div>
+
+      <div id="vp-triad"><canvas id="triad"></canvas></div>
+
+      <div id="vp-tooltip" class="vp-tooltip" hidden></div>
+      <div id="vp-loading" class="vp-loading" hidden>
+        <div class="vp-loading-box">
+          <div class="vp-loading-label">Generating mesh…</div>
+          <div class="vp-progress"><i></i></div>
+        </div>
+      </div>
+    </section>
+
+    <div class="splitter splitter-v" id="split-right" title="Drag to resize"></div>
+
+    <aside id="dock">
+      <section class="dock-panel" id="panel-model">
+        <header class="dock-head"><span class="dock-caret">▾</span> Model explorer
+          <span class="dock-head-tools"><button title="Expand all">⊞</button><button title="Collapse all">⊟</button></span>
+        </header>
+        <div class="dock-body" id="tree-model"></div>
+      </section>
+
+      <div class="splitter splitter-h dock-split" id="split-dock1"></div>
+
+      <section class="dock-panel" id="panel-selection">
+        <header class="dock-head"><span class="dock-caret">▾</span> Selection explorer</header>
+        <div class="dock-body" id="grid-selection"></div>
+      </section>
+
+      <div class="splitter splitter-h dock-split" id="split-dock2" hidden></div>
+
+      <section class="dock-panel" id="panel-phases" hidden>
+        <header class="dock-head"><span class="dock-caret">▾</span> Phases explorer</header>
+        <div class="dock-body" id="list-phases"></div>
+      </section>
+    </aside>
+  </main>
+
+  <div class="splitter splitter-h" id="split-cmd" title="Drag to resize"></div>
+
+  <!-- ── Command panel ─────────────────────────────────────────── -->
+  <section id="cmdpanel">
+    <div class="cmd-tabs">
+      <button class="cmd-tab active" data-tab="session">Session</button>
+      <button class="cmd-tab" data-tab="history">Model history</button>
+      <span class="cmd-spacer"></span>
+      <a class="cmd-link" href="#" id="cmd-ref">Command reference</a>
+    </div>
+    <div class="cmd-log" id="cmd-log"></div>
+    <div class="cmd-log" id="cmd-history" hidden></div>
+    <div class="cmd-input">
+      <span class="cmd-prompt">&gt;</span>
+      <input type="text" id="cmd-entry" spellcheck="false" autocomplete="off"
+             placeholder="Type a command, e.g. borehole 0 0 — or gotostructures">
+    </div>
+  </section>
+
+  <!-- ── Status bar ────────────────────────────────────────────── -->
+  <footer id="statusbar">
+    <span class="sb-item sb-hint" id="sb-hint"></span>
+    <span class="sb-spacer"></span>
+    <span class="sb-item sb-coords" id="sb-coords">x 0.000 m &nbsp; y 0.000 m &nbsp; z 0.000 m</span>
+    <span class="sb-sep"></span>
+    <span class="sb-item" id="sb-units">Units: m / kN / day</span>
+    <span class="sb-sep"></span>
+    <span class="sb-item sb-toggle active" id="sb-snap">Snapping</span>
+    <span class="sb-sep"></span>
+    <span class="sb-item" id="sb-zoom">Zoom 100%</span>
+  </footer>
+
+</div>
+
+<!-- Floating layers: menus, flyouts, context menu, modals -->
+<div id="menu-layer"></div>
+<div id="modal-layer"></div>
+
+<script src="vendor/three.min.js"></script>
+<script src="js/data.js"></script>
+<script src="live/js/material-library.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/orbit.js"></script>
+<script src="js/viewport.js"></script>
+<script src="js/menubar.js"></script>
+<script src="js/toolbars.js"></script>
+<script src="js/explorer.js"></script>
+<script src="js/command.js"></script>
+<script src="js/dialogs.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,875 @@
+"""Export the meshed model as a Kratos MultiPhysics `.mdpa` input deck.
+
+The target is the file GiD writes for a Kratos GeoMechanics analysis: an empty
+`Properties 0` block, one global node table, one `Elements` block per material body,
+optional `Conditions` for the surface load, and one `SubModelPart` per body whose node
+list is exactly the union of its elements' nodes.
+
+One thing the deck does that the mesh does not: an interface. Where the project asks for
+one, `app.interfaces` splits the meshed soil off the structure it was built conformal to
+and this writes the zero-thickness elements that hold the two together again -- see the
+`INTERFACES` table below.
+
+Two conventions are load-bearing and both are checked by tests rather than assumed:
+
+*   **Node ordering.** gmsh's TRI6 (`c1 c2 c3 m12 m23 m31`) is already Kratos'. Its
+    TET10 is not: gmsh's last two midside nodes are m34, m24 where Kratos' are m24, m34,
+    so the table below carries a permutation per element type.
+*   **The plane.** A 2D project is a section at a constant coordinate along its normal
+    axis -- an `xz` elevation lives at a constant *y*. Kratos plane strain reads X and Y
+    only, so the section's own two axes are remapped onto X/Y with Z zeroed. Passing the
+    world coordinates through would produce a model with no extent in Y.
+
+The mesh is not re-generated here. `meshing.mesh_project` leaves the mesh in the gmsh
+worker's model and this harvests it in the same job; rebuilding the geometry afterwards
+would clear it.
+"""
+
+from __future__ import annotations
+
+import gmsh
+
+from app import build, interfaces, meshing
+from app import kratos_processes
+from app.kratos_materials import material_parameters
+from app.schemas import (Beam, LineLoad, MeshRequest, PointLoad, Project,
+                         SurfaceLoad)
+
+# (dim, gmsh element type) -> (Kratos class, gmsh index order in Kratos' order)
+ELEMENTS: dict[tuple[int, int], tuple[str, tuple[int, ...]]] = {
+    (2, 2): ("UPwSmallStrainElement2D3N", (0, 1, 2)),
+    (2, 9): ("SmallStrainUPwDiffOrderElement2D6N", (0, 1, 2, 3, 4, 5)),
+    (3, 4): ("UPwSmallStrainElement3D4N", (0, 1, 2, 3)),
+    (3, 11): ("SmallStrainUPwDiffOrderElement3D10N", (0, 1, 2, 3, 4, 5, 6, 7, 9, 8)),
+}
+
+# Sheet piles: 1D structural elements living inside the 2D section, sharing its nodes.
+# Both 2D classes and their (end, end, midside) connectivity are read off the reference
+# decks -- examples/dike_with_sheet_pile.mdpa writes the linear one,
+# examples/crow_case.mdpa the quadratic one -- so the gmsh order maps straight through.
+#
+# The 3D entries are the members: bored piles, king posts and struts. NOT CONFIRMED by
+# any deck in examples/ -- every one of them is plane strain -- so these follow Kratos
+# StructuralMechanicsApplication's naming rather than a fixture here, exactly as the
+# constitutive laws in app/kratos_materials.py already do. Check them against the first
+# real 3D run; they are named here, in one place, so that is a one-line change.
+BEAMS: dict[tuple[int, int], tuple[str, tuple[int, ...]]] = {
+    (2, 1): ("LinearTimoshenkoCurvedBeamElement2D2N", (0, 1)),
+    (2, 8): ("LinearTimoshenkoCurvedBeamElement2D3N", (0, 1, 2)),
+    (3, 1): ("LinearTimoshenkoBeamElement3D2N", (0, 1)),
+    (3, 8): ("LinearTimoshenkoBeamElement3D3N", (0, 1, 2)),
+}
+
+# Wall panels: 2D structural elements living inside the 3D solid, sharing its nodes.
+# Kratos' shells are 3- and 4-node only -- there is no quadratic shell -- so a 6-node
+# triangle is written from its three corners and the export says so. Same confidence
+# note as the 3D beams above.
+SHELLS: dict[tuple[int, int], tuple[str, tuple[int, ...]]] = {
+    (3, 2): ("ShellThinElement3D3N", (0, 1, 2)),
+    (3, 9): ("ShellThinElement3D3N", (0, 1, 2)),
+}
+
+# Zero-thickness contact between a structure and the soil, or between two soils. Only
+# the quadratic class is pinned by a fixture: examples/crow_case.mdpa writes
+# `Geo_UPwLineInterfacePlaneStrainDiffOrderElement3Plus3N` with six nodes -- three from
+# the sheet pile, then their three coincident copies on one face of the soil -- and one
+# element per pile segment per face, the two faces carrying opposite node orders.
+#
+# The linear name below follows the same convention with the DiffOrder infix dropped, as
+# the beam and soil classes do between orders, but no deck in examples/ contains it.
+# Check it against the first real first-order run; it is named here alone.
+#
+# 2D only. Every reference deck is plane strain, and a 3D interface is a surface element
+# with a different class, a different node layout and no fixture at all -- so a 3D
+# project exports no interface and says so, rather than inventing one.
+INTERFACES: dict[tuple[int, int], str] = {
+    (2, 2): "Geo_UPwLineInterfacePlaneStrainElement2Plus2N",
+    (2, 3): "Geo_UPwLineInterfacePlaneStrainDiffOrderElement3Plus3N",
+}
+
+TRUSSES: dict[int, str] = {
+    2: "LinearTrussElement2D2N",
+    3: "LinearTrussElement3D2N",
+}
+"""The anchor tie, per model dimension. The 2D name is read off examples/crow_case.mdpa;
+the 3D one is its documented counterpart and carries the same caveat as `SHELLS`."""
+
+# The boundary of a 2D body is a line, of a 3D body a surface.
+CONDITIONS: dict[tuple[int, int], tuple[str, tuple[int, ...]]] = {
+    (2, 1): ("LineLoadCondition2D2N", (0, 1)),
+    (2, 8): ("LineLoadDiffOrderCondition2D3N", (0, 1, 2)),
+    (3, 2): ("UPwFaceLoadCondition3D3N", (0, 1, 2)),
+    (3, 9): ("SurfaceLoadDiffOrderCondition3D6N", (0, 1, 2, 3, 4, 5)),
+}
+
+# Reversing the first two corners flips an element; the midside nodes move with the
+# edges they sit on. Keyed by node count, applied to connectivity already in Kratos
+# order.
+FLIP: dict[int, tuple[int, ...]] = {
+    3: (0, 2, 1),
+    6: (0, 2, 1, 5, 4, 3),
+    4: (1, 0, 2, 3),
+    10: (1, 0, 2, 3, 4, 6, 5, 8, 7, 9),
+}
+
+# Domain faces that become named node groups: (part name, world axis, Domain attribute).
+BOUNDARIES = (
+    ("Bottom_Fixed", 2, "z_bottom"),
+    ("Left_Edge", 0, "x0"),
+    ("Right_Edge", 0, "x1"),
+    ("Front_Edge", 1, "y0"),
+    ("Back_Edge", 1, "y1"),
+    ("Top_Surface", 2, "z_top"),
+)
+RESERVED = {name for name, _, _ in BOUNDARIES}
+
+TOLERANCE = 1e-6
+"""Metres. A node counts as lying on a domain face within this."""
+
+# Indicators, not finite-element material: the load pad and the phreatic slab are never
+# meshed, and `excavation` is an alias for soil that has been dug away.
+NOT_MATERIAL = set(build.DISPLAY_ONLY) | {"excavation"}
+
+
+class ExportError(RuntimeError):
+    """The mesh cannot be expressed as a Kratos deck. Surfaced to the command log."""
+
+
+def export_project(project: Project, settings: MeshRequest,
+                   include_materials: bool = True) -> dict:
+    """Mesh the project and render it as a Kratos deck.
+
+    Returns `{"mdpa", "materials", "stats", "meshed_keys", "warnings", "log"}`, all
+    JSON-safe, so it can cross the gmsh worker's process boundary unchanged.
+    `materials` is None when the companion MaterialParameters.json is not wanted.
+    """
+    mesh = meshing.mesh_project(
+        project, element_size=settings.element_size, order=settings.order,
+        refinements=settings.refinements, algorithm_3d=settings.algorithm_3d,
+        algorithm_2d=settings.algorithm_2d, optimization=settings.optimization,
+        smoothing=settings.smoothing, curvature_points=settings.curvature_points,
+        size_min_factor=settings.size_min_factor,
+        second_order_linear=settings.second_order_linear,
+        volume_keys=settings.volume_keys, body_sizes=settings.body_sizes,
+    )
+    dim = 2 if project.dimension == 2 else 3
+    names = _part_names(project)
+    # Collected from here down rather than only out of the materials file: the deck
+    # itself has things to say -- an interface a 3D model cannot carry, a wall written
+    # one order below the soil around it.
+    warnings: list[str] = []
+
+    world = _world_coordinates()
+    coordinates = _kratos_coordinates(world, dim, project.section_plane)
+    bodies = _bodies(project, dim)
+    soil_blocks = [(key, name, _oriented(rows, coordinates, dim))
+                   for key, name, rows in _harvest(bodies, dim)]
+    blocks = list(soil_blocks)
+    # Not passed through `_oriented`: a line has no signed area to be inside out, and
+    # its 3-node form would collide with the triangle entry in `FLIP`. The mesher
+    # already emits each segment in the order the beam was drawn.
+    beam_blocks = _harvest(_beam_bodies(project, dim), 1, BEAMS, model_dim=dim)
+    blocks.extend(beam_blocks)
+    # Nor are the wall shells: a sheet of steel has two faces and no "inside out", so
+    # there is no signed area to correct -- only a normal, which is the wall's own.
+    panel_blocks = _harvest(_panel_bodies(project, dim), 2, SHELLS, model_dim=dim)
+    blocks.extend(panel_blocks)
+    anchor_blocks, anchor_supports = _anchor_ties(project, dim, _world_coordinates())
+    blocks.extend(anchor_blocks)
+    conditions = _load_conditions(project, dim, world)
+    # Last, because it rewrites what everything above produced: the interface unglues
+    # the soil from the structures already harvested, so it needs their connectivity in
+    # hand -- and the nodes it adds have to be in `world` before the boundary groups and
+    # the node table are read off it.
+    interface_blocks = _interface_elements(project, dim, soil_blocks, beam_blocks,
+                                           conditions, world, coordinates, warnings)
+    blocks.extend(interface_blocks)
+
+    used = sorted({tag for _, _, rows in blocks for row in rows for tag in row}
+                  | {tag for _, _, rows in conditions for row in rows for tag in row})
+    node_id = {tag: index for index, tag in enumerate(used, start=1)}
+
+    part_materials = _part_materials(project, names, blocks)
+    numbered, parts, next_id = _number_elements(blocks, names, node_id)
+    condition_blocks, load_parts = _number_conditions(conditions, names, node_id, next_id)
+    boundaries = _boundary_nodes(project, dim, world, node_id)
+    parts.extend(_boundary_parts(boundaries))
+    parts.extend(load_parts)
+    supports = [(f"{names[key]}_Support", [node_id[tag]], [], [])
+                for key, tag in anchor_supports.items() if tag in node_id]
+    parts.extend(supports)
+
+    condition_keys = {key for key, _, rows in conditions if rows}
+    active_loads = [(names[load.id], *_load_variable(load, dim))
+                    for load in project.loads if load.id in condition_keys]
+    parts_data = {name: [(variable, value)] for name, variable, value in active_loads}
+    beam_properties = [(names[key], project.beam_section(_beam_of(project, key).section),
+                        dim)
+                       for key, _, _ in beam_blocks]
+    panel_properties = [(names[key], project.panel_section(_panel_of(project, key).section))
+                        for key, _, _ in panel_blocks]
+    anchor_properties = [(names[key], project.anchor_section(_anchor_of(project, key).section),
+                          _anchor_of(project, key).prestress, dim)
+                         for key, _, _ in anchor_blocks]
+    interface_properties = [(names[key], project.interface_section(
+                                 _interface_of(project, key).section))
+                            for key, _, _ in interface_blocks]
+    materials, material_warnings = (
+        material_parameters(project, part_materials, dim, beam_properties,
+                            anchor_properties, panel_properties, interface_properties)
+        if include_materials else (None, [])
+    )
+    warnings.extend(material_warnings)
+    # Kratos has no quadratic shell, so a wall in a quadratic mesh is written from the
+    # corner nodes of each 6-node face: compatible along the soil's linear edges, one
+    # order below it along the curved ones. Said out loud rather than left to be found
+    # in the deck.
+    if panel_blocks and settings.order == 2:
+        warnings.append(
+            "the wall panels are written as linear shells inside a quadratic soil mesh "
+            "-- Kratos has no 6-node shell. Mesh with order 1 for a fully compatible "
+            "wall, or accept the linear approximation along its faces."
+        )
+
+    load_mask = [True, True, dim == 3]
+    # The far end of every anchor is pinned: in this formulation the grouted body is a
+    # fixed point, so the tie reacts against a restraint rather than against the soil.
+    anchor_fixities = [(name, list(load_mask)) for name, _, _, _ in supports]
+    processes = kratos_processes.project_parameters(
+        _boundary_constraints(project, dim, boundaries) + anchor_fixities,
+        [(name, variable, load_mask, value) for name, variable, value in active_loads],
+    )
+    return {
+        "mdpa": _render(coordinates, node_id, numbered, condition_blocks, parts, parts_data),
+        "materials": materials,
+        "project_parameters": processes,
+        "stats": mesh.stats.to_dict(),
+        "meshed_keys": mesh.meshed_keys,
+        "warnings": warnings,
+        "log": mesh.log,
+    }
+
+
+
+
+# ── Interfaces ──────────────────────────────────────────────────────────────
+
+def _interface_elements(project: Project, dim: int,
+                        soil_blocks: list[tuple[str, str, list[list[int]]]],
+                        beam_blocks: list[tuple[str, str, list[list[int]]]],
+                        conditions: list[tuple[str, str, list[list[int]]]],
+                        world: dict[int, tuple[float, float, float]],
+                        coordinates: dict[int, tuple[float, float, float]],
+                        warnings: list[str]
+                        ) -> list[tuple[str, str, list[list[int]]]]:
+    """Unglue the soil along every active interface and write the contact elements.
+
+    The topology is `app.interfaces`' job and is done on connectivity alone; what
+    happens here is the bookkeeping around it. The soil rows are rewritten onto the
+    copies, the copies inherit their originals' coordinates -- which is what makes the
+    element zero-thickness -- and any load condition standing on a split node follows
+    the element it belongs to, so a surface load beside a wall stays on the soil rather
+    than being left on the wall's own node.
+
+    A 3D project exports no interface: see the `INTERFACES` table for why.
+    """
+    active = project.active_interfaces
+    if not active:
+        if project.dimension != 2 and any(i.active for i in project.interfaces):
+            warnings.append(
+                "interfaces are plane-strain only and none was written into this 3D "
+                "deck; the structures are meshed bonded to the soil."
+            )
+        return []
+
+    beam_rows = {key: rows for key, _, rows in beam_blocks}
+    specs = []
+    for interface in active:
+        if interface.structure is None:
+            segments = _segments(_tagged(1).get(interface.id, []))
+            path = [tuple(point) for point in interface.points]
+        else:
+            segments = beam_rows.get(interface.structure, [])
+            path = [tuple(point) for point in
+                    _beam_of(project, interface.structure).points]
+        if not segments:
+            raise ExportError(
+                f"interface {interface.name!r} has no mesh along its line -- the line "
+                "it follows lies outside the soil in this section, so there is nothing "
+                "for the contact to hold."
+            )
+        specs.append(interfaces.Spec(key=interface.id, path=path, segments=segments,
+                                     structural=interface.structure is not None,
+                                     sides=interface.side))
+
+    flat: list[list[int]] = []
+    spans = []
+    for _, _, rows in soil_blocks:
+        spans.append((len(flat), len(rows)))
+        flat.extend(rows)
+    before = [list(row) for row in flat]
+
+    try:
+        split = interfaces.split_mesh(specs, flat, coordinates)
+    except interfaces.InterfaceError as failure:
+        raise ExportError(str(failure)) from None
+
+    for (start, count), (_, _, rows) in zip(spans, soil_blocks):
+        rows[:] = flat[start:start + count]
+    for new_tag, source in split.duplicates.items():
+        coordinates[new_tag] = coordinates[source]
+        world[new_tag] = world[source]
+    _follow_the_soil(conditions, before, split)
+
+    out = []
+    for interface in active:
+        rows = split.elements.get(interface.id) or []
+        if not rows:
+            continue
+        per_side = len(rows[0]) // 2
+        name = INTERFACES.get((dim, per_side))
+        if name is None:
+            raise ExportError(
+                f"no Kratos interface element is mapped for {per_side} nodes a side in "
+                f"{dim}D. Mesh the section with linear or quadratic triangles."
+            )
+        out.append((interface.id, name, rows))
+    return out
+
+
+def _segments(entities: list[int]) -> list[list[int]]:
+    """The mesh's own line elements on a set of curves, `(end, end)` or
+    `(end, end, midside)` -- gmsh's line order, which is already Kratos'."""
+    rows = []
+    for entity in entities:
+        types, _, connectivity = gmsh.model.mesh.getElements(1, entity)
+        for element_type, flat in zip(types, connectivity):
+            stride = gmsh.model.mesh.getElementProperties(int(element_type))[3]
+            for offset in range(0, len(flat), stride):
+                rows.append([int(flat[offset + i]) for i in range(stride)])
+    return rows
+
+
+def _follow_the_soil(conditions: list[tuple[str, str, list[list[int]]]],
+                     before: list[list[int]], split: interfaces.Split) -> None:
+    """Move every condition standing on a split node onto the copy its own soil got.
+
+    A condition is a face of one continuum element, so the element that contained all of
+    its nodes before the split is the body it belongs to, and it is renamed exactly as
+    that element was.
+    """
+    sources = set(split.duplicates.values())
+    for _, _, rows in conditions:
+        for index, row in enumerate(rows):
+            if not sources.intersection(row):
+                continue
+            owner = next((i for i, element in enumerate(before)
+                          if set(row) <= set(element)), None)
+            if owner is None:
+                continue
+            rows[index] = [split.renamed[owner].get(node, node) for node in row]
+
+
+def _interface_of(project: Project, key: str):
+    return next(interface for interface in project.interfaces if interface.id == key)
+
+def _anchor_ties(project: Project, dim: int,
+                 world: dict[int, tuple[float, float, float]]
+                 ) -> tuple[list[tuple[str, str, list[list[int]]]], dict[str, int]]:
+    """One two-node truss per active anchor, plus the tail node each one is held by.
+
+    Built from located nodes rather than harvested from a meshed curve, the same way a
+    point load's condition is. That is what makes the result match the reference deck
+    exactly: one linear element whatever the mesh order, with the head node the beam
+    already owns and a tail node bonded to nothing.
+
+    The head is resolved to a *beam* node specifically. `build._attach_anchors` draws
+    the anchor as display geometry whose own head vertex sits at the same place, so a
+    plain nearest-node search could pick that stray instead of the pile's node.
+    """
+    anchors = project.plane_anchors if dim == 2 else project.space_anchors
+    # The structures an anchor may hang from: a 2D head is on a sheet pile, a 3D head on
+    # a wall or a member. Resolved to *structural* nodes specifically, because
+    # `build._attach_anchors` draws the tie's own head vertex at the same place and a
+    # plain nearest-node search could pick that stray instead.
+    structural = {tag for _, _, rows in _harvest(_beam_bodies(project, dim), 1, BEAMS,
+                                                 model_dim=dim)
+                  for row in rows for tag in row}
+    structural |= {tag for _, _, rows in _harvest(_panel_bodies(project, dim), 2, SHELLS,
+                                                  model_dim=dim)
+                   for row in rows for tag in row}
+    blocks, supports = [], {}
+    for anchor in anchors:
+        if not anchor.active:
+            continue
+        head = _node_at(anchor.head, project, world, structural)
+        tail = _node_at(anchor.tail, project, world, None)
+        if head is None or tail is None:
+            raise ExportError(
+                f"anchor {anchor.name!r} has no mesh node at its "
+                f"{'head' if head is None else 'tail'}; re-mesh the model."
+            )
+        blocks.append((anchor.id, TRUSSES[dim], [[head, tail]]))
+        supports[anchor.id] = tail
+    return blocks, supports
+
+
+def _node_at(point: tuple[float, ...], project: Project,
+             world: dict[int, tuple[float, float, float]],
+             among: set[int] | None) -> int | None:
+    """The mesh node on an anchor end, in world coordinates, or None.
+
+    A 2D anchor is dimension-native, so its `(x, z)` is compared through the section
+    plane's own axes; a 3D one is already in world coordinates and is compared directly.
+    """
+    if len(point) == 3:
+        axes = (0, 1, 2)
+    else:
+        _, u, v = build.PLANE_AXES[project.section_plane]
+        axes = (u, v)
+    for tag, xyz in world.items():
+        if among is not None and tag not in among:
+            continue
+        if all(abs(xyz[axis] - value) <= TOLERANCE
+               for axis, value in zip(axes, point)):
+            return tag
+    return None
+
+
+def _anchor_of(project: Project, key: str):
+    return next(anchor for anchor in project.anchors if anchor.id == key)
+
+
+def _beam_of(project: Project, key: str) -> Beam:
+    return next(beam for beam in project.beams if beam.id == key)
+
+
+def _panel_of(project: Project, key: str):
+    return next(panel for panel in project.panels if panel.id == key)
+
+
+def _load_variable(load: PointLoad | LineLoad | SurfaceLoad,
+                   dim: int) -> tuple[str, list[float]]:
+    """The Kratos variable name and world-shaped value a load's condition carries.
+
+    Recorded as `SubModelPartData` rather than a `MaterialParameters.json` entry: no
+    real Kratos GeoMechanics deck defines LINE_LOAD/POINT_LOAD/SURFACE_LOAD as a
+    material. It is applied by a ProjectParameters.json process reading the sub-model
+    part -- a file this exporter does not yet write -- so the value is kept here rather
+    than silently dropped.
+    """
+    components = [load.components[0], load.components[1], 0.0] if dim == 2 \
+        else list(load.components)
+    variable = {"point": "POINT_LOAD", "line": "LINE_LOAD",
+               "surface": "SURFACE_LOAD"}[load.kind]
+    return variable, components
+
+
+# ── Reading the mesh back out of gmsh ───────────────────────────────────────
+
+def _world_coordinates() -> dict[int, tuple[float, float, float]]:
+    tags, flat, _ = gmsh.model.mesh.getNodes()
+    return {int(tag): (float(flat[3 * i]), float(flat[3 * i + 1]), float(flat[3 * i + 2]))
+            for i, tag in enumerate(tags)}
+
+
+def _kratos_coordinates(world: dict[int, tuple[float, float, float]], dim: int,
+                        plane: str) -> dict[int, tuple[float, float, float]]:
+    if dim == 3:
+        return world
+    _, u, v = build.PLANE_AXES[plane]
+    return {tag: (xyz[u], xyz[v], 0.0) for tag, xyz in world.items()}
+
+
+def _bodies(project: Project, dim: int) -> dict[str, list[int]]:
+    """Part key -> entity tags, from the physical groups `build` tagged, in tree order.
+
+    Physical groups are the identity contract the rest of the app already uses, so the
+    deck's bodies are the same bodies the model tree and the viewport name.
+    """
+    tagged: dict[str, list[int]] = {}
+    for group_dim, tag in gmsh.model.getPhysicalGroups(dim):
+        name = gmsh.model.getPhysicalName(group_dim, tag)
+        tagged[name] = [int(t) for t in gmsh.model.getEntitiesForPhysicalGroup(group_dim, tag)]
+    load_keys = {load.id for load in project.loads}
+    return {key: tagged[key] for key in project.part_keys()
+            if key in tagged and key not in NOT_MATERIAL and key not in load_keys}
+
+
+def _tagged(dim: int) -> dict[str, list[int]]:
+    """Physical group name -> entity tags, for one dimension."""
+    return {
+        gmsh.model.getPhysicalName(dim, tag):
+            [int(t) for t in gmsh.model.getEntitiesForPhysicalGroup(dim, tag)]
+        for _, tag in gmsh.model.getPhysicalGroups(dim)
+    }
+
+
+def _beam_bodies(project: Project, dim: int) -> dict[str, list[int]]:
+    """Beam key -> 1D entity tags: the sheet piles in a 2D section, the members in 3D.
+
+    Both are curves inside the continuum they stand in, so they are harvested the same
+    way and differ only in which Kratos class the model's dimension picks.
+    """
+    structures = project.sheet_piles if dim == 2 else project.members
+    tagged = _tagged(1)
+    return {beam.id: tagged[beam.id] for beam in structures
+            if beam.active and tagged.get(beam.id)}
+
+
+def _panel_bodies(project: Project, dim: int) -> dict[str, list[int]]:
+    """Panel key -> 2D entity tags, for the walls embedded in the 3D solid.
+
+    Empty in 2D: a wall is drawn in plan and has no place in a plane-strain cut, which
+    `build._embed_beams` has already logged.
+    """
+    if dim != 3:
+        return {}
+    tagged = _tagged(2)
+    return {panel.id: tagged[panel.id] for panel in project.panels
+            if panel.active and tagged.get(panel.id)}
+
+
+def _harvest(bodies: dict[str, list[int]], dim: int, table: dict | None = None,
+             model_dim: int | None = None) -> list[tuple[str, str, list[list[int]]]]:
+    """One (part key, Kratos class, connectivity rows) per body and element type.
+
+    `dim` is the dimension of the *entities* read from gmsh; `model_dim` is the one the
+    element table is keyed by. They differ for the sheet piles alone: a beam is a curve
+    (`dim` 1) but its Kratos class is named for the plane-strain model it lives in
+    (`model_dim` 2), which is also what tells a 2D beam from a 3D one.
+    """
+    out = []
+    for key, entities in bodies.items():
+        rows_by_class: dict[str, list[list[int]]] = {}
+        for entity in entities:
+            types, _, connectivity = gmsh.model.mesh.getElements(dim, entity)
+            for element_type, flat in zip(types, connectivity):
+                name, order = _lookup(table or ELEMENTS,
+                                      dim if model_dim is None else model_dim,
+                                      int(element_type))
+                # The stride is what gmsh wrote, which is not always what Kratos reads:
+                # a 6-node triangle becomes a 3-node shell, because Kratos has no
+                # quadratic shell to pair with a quadratic soil mesh.
+                stride = gmsh.model.mesh.getElementProperties(int(element_type))[3]
+                rows = rows_by_class.setdefault(name, [])
+                for offset in range(0, len(flat), stride):
+                    rows.append([int(flat[offset + i]) for i in order])
+        for name, rows in rows_by_class.items():
+            if rows:
+                out.append((key, name, rows))
+    return out
+
+
+def _lookup(table: dict, dim: int, element_type: int) -> tuple[str, tuple[int, ...]]:
+    try:
+        return table[(dim, element_type)]
+    except KeyError:
+        shape = gmsh.model.mesh.getElementProperties(element_type)[0]
+        raise ExportError(
+            f"no Kratos element is mapped for a {shape} in {dim}D. Mesh with linear or "
+            "quadratic simplices, or add the type to app/kratos.py."
+        ) from None
+
+
+def _oriented(rows: list[list[int]], coordinates: dict[int, tuple[float, float, float]],
+              dim: int) -> list[list[int]]:
+    """Flip any element whose corners run the wrong way.
+
+    gmsh is consistent, but a negative Jacobian is silent in the deck and fatal in the
+    solver, so it is cheaper to check every element than to trust the mesher.
+    """
+    fixed = []
+    for row in rows:
+        corners = [coordinates[tag] for tag in row[:dim + 1]]
+        if _signed_measure(corners, dim) < 0:
+            row = [row[i] for i in FLIP[len(row)]]
+        fixed.append(row)
+    return fixed
+
+
+def _signed_measure(corners: list[tuple[float, float, float]], dim: int) -> float:
+    if dim == 2:
+        (x1, y1, _), (x2, y2, _), (x3, y3, _) = corners
+        return (x2 - x1) * (y3 - y1) - (y2 - y1) * (x3 - x1)
+    a, b, c, d = corners
+    u = [b[i] - a[i] for i in range(3)]
+    v = [c[i] - a[i] for i in range(3)]
+    w = [d[i] - a[i] for i in range(3)]
+    cross = (u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0])
+    return sum(cross[i] * w[i] for i in range(3))
+
+
+def _load_conditions(project: Project, dim: int,
+                     world: dict[int, tuple[float, float, float]]
+                     ) -> list[tuple[str, str, list[list[int]]]]:
+    """Boundary elements on the ground surface that lie under the load pad.
+
+    Selected element by element rather than entity by entity: the pad is a display
+    indicator that never cuts the soil, so the loaded region is not a separate part.
+
+    `build._imprint_load_footprints` has split the boundary exactly at the footprint
+    edges, so every element is wholly inside or wholly outside it and the test below is
+    an exact containment test. Without that imprint the only available rule would be
+    whether an element's centre lies under the pad, which moves a loaded edge by as
+    much as one element.
+    """
+    out: list[tuple[str, str, list[list[int]]]] = []
+    for load in project.loads:
+        if not load.active:
+            continue
+        if (dim == 2 and load.kind not in ("point", "line")) or \
+                (dim == 3 and load.kind != "surface"):
+            continue
+        if load.kind == "point":
+            target = (load.x, project.section_offset, load.z)
+            nearest = min(
+                world,
+                key=lambda tag: sum((world[tag][axis] - target[axis]) ** 2 for axis in range(3)),
+            )
+            out.append((load.id, f"PointLoadCondition{dim}D1N", [[nearest]]))
+            continue
+        elevation = load.z if load.kind == "line" else project.domain.z_top
+        rows_by_class: dict[str, list[list[int]]] = {}
+        for _, entity in gmsh.model.getEntities(dim - 1):
+            box = gmsh.model.getBoundingBox(dim - 1, entity)
+            if abs(box[2] - elevation) > TOLERANCE or abs(box[5] - elevation) > TOLERANCE:
+                continue
+            types, _, connectivity = gmsh.model.mesh.getElements(dim - 1, entity)
+            for element_type, flat in zip(types, connectivity):
+                name, order = _lookup(CONDITIONS, dim, int(element_type))
+                for offset in range(0, len(flat), len(order)):
+                    row = [int(flat[offset + i]) for i in order]
+                    if _under_load(row[:dim], world, load):
+                        rows_by_class.setdefault(name, []).append(row)
+        out.extend((load.id, name, rows) for name, rows in rows_by_class.items() if rows)
+    return out
+
+
+def _under_load(corners: list[int], world: dict[int, tuple[float, float, float]],
+                load) -> bool:
+    """Every corner inside the footprint, within the tolerance the imprint holds to."""
+    def inside(value: float, low: float, high: float) -> bool:
+        return low - TOLERANCE <= value <= high + TOLERANCE
+
+    if load.kind == "line":
+        return all(inside(world[tag][0], load.x0, load.x1) for tag in corners)
+    return all(inside(world[tag][0], load.x0, load.x1)
+               and inside(world[tag][1], load.y0, load.y1) for tag in corners)
+
+
+# ── Naming and numbering ────────────────────────────────────────────────────
+
+def _part_names(project: Project) -> dict[str, str]:
+    """Part key -> sub-model part name, unique and safe for a Kratos deck."""
+    used = set(RESERVED)
+    names: dict[str, str] = {}
+    for layer in project.layers:
+        names[f"soil_{layer.id}"] = _unique(_sanitise(layer.name) or layer.id, used)
+    for part in project.custom_parts:
+        names[part.key] = _unique(_sanitise(part.label) or part.key, used)
+    for load in project.loads:
+        names[load.id] = _unique(_sanitise(load.name) or load.id, used)
+    for beam in project.beams:
+        names[beam.id] = _unique(_sanitise(beam.name) or beam.id, used)
+    for anchor in project.anchors:
+        names[anchor.id] = _unique(_sanitise(anchor.name) or anchor.id, used)
+    for interface in project.interfaces:
+        names[interface.id] = _unique(_sanitise(interface.name) or interface.id, used)
+    for key in project.part_keys():
+        names.setdefault(key, _unique(key, used))
+    return names
+
+
+def _sanitise(name: str) -> str:
+    cleaned = "".join(c if c.isalnum() or c == "_" else "_" for c in name).strip("_")
+    while "__" in cleaned:
+        cleaned = cleaned.replace("__", "_")
+    return "" if cleaned[:1].isdigit() else cleaned
+
+
+def _unique(name: str, used: set[str]) -> str:
+    candidate, suffix = name, 2
+    while candidate in used:
+        candidate, suffix = f"{name}_{suffix}", suffix + 1
+    used.add(candidate)
+    return candidate
+
+
+def _number_elements(blocks: list[tuple[str, str, list[list[int]]]],
+                     names: dict[str, str], node_id: dict[int, int]
+                     ) -> tuple[list[tuple[str, list[tuple[int, int, list[int]]]]],
+                                list[tuple[str, list[int], list[int], list[int]]], int]:
+    """Assign element ids in emission order and collect one sub-model part per body."""
+    numbered = []
+    parts: dict[str, tuple[list[int], list[int]]] = {}
+    next_id = 1
+    for key, class_name, rows in blocks:
+        entries = []
+        for row in rows:
+            entries.append((next_id, 0, [node_id[tag] for tag in row]))
+            next_id += 1
+        numbered.append((class_name, entries))
+        nodes, elements = parts.setdefault(names[key], ([], []))
+        elements.extend(element_id for element_id, _, _ in entries)
+        nodes.extend(n for _, _, connectivity in entries for n in connectivity)
+    ordered = [(name, sorted(set(nodes)), sorted(elements), [])
+               for name, (nodes, elements) in parts.items()]
+    return numbered, ordered, next_id
+
+
+def _number_conditions(
+    conditions: list[tuple[str, str, list[list[int]]]],
+    names: dict[str, str],
+    node_id: dict[int, int],
+    next_id: int,
+) -> tuple[list[tuple[str, list[tuple[int, int, list[int]]]]],
+           list[tuple[str, list[int], list[int], list[int]]]]:
+    """Conditions continue the element id space, as GiD's decks do.
+
+    Property 0, always: a load's magnitude is not read off a Properties block (see
+    `_load_variable`), and every reference GeoMechanics deck in examples/ writes 0 here
+    for exactly this condition class.
+    """
+    numbered = []
+    parts = []
+    for key, class_name, rows in conditions:
+        entries = []
+        nodes: set[int] = set()
+        ids: list[int] = []
+        for row in rows:
+            connectivity = [node_id[tag] for tag in row]
+            entries.append((next_id, 0, connectivity))
+            nodes.update(connectivity)
+            ids.append(next_id)
+            next_id += 1
+        numbered.append((class_name, entries))
+        if ids:
+            parts.append((names[key], sorted(nodes), [], ids))
+    return numbered, parts
+
+
+def _boundary_nodes(project: Project, dim: int,
+                    world: dict[int, tuple[float, float, float]],
+                    node_id: dict[int, int]
+                    ) -> list[tuple[str, int, list[int]]]:
+    """(name, world axis, node ids) for every domain-face boundary present in this
+    dimension. Shared by the .mdpa sub-model parts and the derived boundary
+    constraints below, so both agree on exactly which boundaries exist.
+
+    A 2D section has no boundary along its normal axis, so those two groups are simply
+    not written -- an empty `Front_Edge` would read as a modelling mistake.
+    """
+    skipped = build.PLANE_AXES[project.section_plane][0] if dim == 2 else None
+    out = []
+    for name, axis, attribute in BOUNDARIES:
+        if axis == skipped:
+            continue
+        plane = getattr(project.domain, attribute)
+        nodes = sorted(node_id[tag] for tag, xyz in world.items()
+                       if tag in node_id and abs(xyz[axis] - plane) <= TOLERANCE)
+        if nodes:
+            out.append((name, axis, nodes))
+    return out
+
+
+def _boundary_parts(boundaries: list[tuple[str, int, list[int]]]
+                    ) -> list[tuple[str, list[int], list[int], list[int]]]:
+    """Named node groups on the domain faces, as `.mdpa` sub-model parts."""
+    return [(name, nodes, [], []) for name, _, nodes in boundaries]
+
+
+def _kratos_axis(dim: int, plane: str, world_axis: int) -> int:
+    """The Kratos vector index (0/1/2) a world axis lands on.
+
+    In 3D, Kratos coordinates are world coordinates (`_kratos_coordinates`), so the
+    axis is unchanged. In 2D, the section's in-plane axes become Kratos X and Y in the
+    order `_kratos_coordinates` writes them, and the section's own normal axis never
+    reaches this function -- `_boundary_nodes` has already dropped that boundary.
+    """
+    if dim == 3:
+        return world_axis
+    _, u, v = build.PLANE_AXES[plane]
+    return 0 if world_axis == u else 1
+
+
+def _boundary_constraints(project: Project, dim: int,
+                          boundaries: list[tuple[str, int, list[int]]]
+                          ) -> list[tuple[str, list[bool]]]:
+    """DISPLACEMENT fixities for a box domain: pinned at the bottom, rollers on the
+    sides. `Top_Surface` is deliberately excluded -- it is the free or loaded surface,
+    never a fixed one.
+    """
+    ndof = [True, True, dim == 3]
+    out = []
+    for name, axis, _ in boundaries:
+        if name == "Top_Surface":
+            continue
+        if name == "Bottom_Fixed":
+            out.append((name, list(ndof)))
+            continue
+        is_fixed = [False, False, False]
+        is_fixed[_kratos_axis(dim, project.section_plane, axis)] = True
+        out.append((name, is_fixed))
+    return out
+
+
+def _part_materials(project: Project, names: dict[str, str],
+                    blocks: list[tuple[str, str, list[list[int]]]]) -> list[tuple[str, str]]:
+    """(sub-model part name, material id) for every exported body that has a material."""
+    material_of = {f"soil_{layer.id}": layer.mat for layer in project.layers}
+    material_of.update({p.key: p.mat for p in project.custom_parts if p.mat})
+    seen: list[tuple[str, str]] = []
+    for key, _, _ in blocks:
+        entry = (names[key], material_of.get(key))
+        if entry[1] and entry not in seen:
+            seen.append(entry)
+    return seen
+
+
+# ── Rendering ───────────────────────────────────────────────────────────────
+
+LINE_END = "\r\n"
+
+
+def _render(coordinates: dict[int, tuple[float, float, float]], node_id: dict[int, int],
+            elements: list[tuple[str, list[tuple[int, int, list[int]]]]],
+            conditions: list[tuple[str, list[tuple[int, int, list[int]]]]],
+            parts: list[tuple[str, list[int], list[int], list[int]]],
+            parts_data: dict[str, list[tuple[str, list[float]]]] | None = None) -> str:
+    """Lay the deck out the way GiD does, so the two diff against each other."""
+    lines = ["Begin Properties 0", "End Properties", ""]
+
+    lines.append("Begin Nodes")
+    for tag, index in sorted(node_id.items(), key=lambda item: item[1]):
+        x, y, z = coordinates[tag]
+        lines.append(f"{index:5d}{x:15.10f}{y:15.10f}{z:15.10f}")
+    lines += ["End Nodes", ""]
+
+    for keyword, blocks in (("Elements", elements), ("Conditions", conditions)):
+        for class_name, entries in blocks:
+            lines.append(f"Begin {keyword} {class_name}")
+            for entry_id, property_id, connectivity in entries:
+                nodes = "".join(f"{n:6d}" for n in connectivity)
+                lines.append(f"{entry_id:9d}{property_id:11d}{nodes} ")
+            lines += [f"End {keyword}", ""]
+
+    for name, nodes, part_elements, part_conditions in parts:
+        lines.append(f"Begin SubModelPart {name}")
+        data = (parts_data or {}).get(name, [])
+        if data:
+            lines.append("    Begin SubModelPartData")
+            for variable, values in data:
+                lines.append(f"        {variable} [{len(values)}] "
+                             f"({','.join(repr(v) for v in values)})")
+            lines.append("    End SubModelPartData")
+        for keyword, values in (("Nodes", nodes), ("Elements", part_elements),
+                                ("Conditions", part_conditions)):
+            if not values:
+                continue
+            lines.append(f"    Begin SubModelPart{keyword}")
+            lines += [f"{value:13d}" for value in values]
+            lines.append(f"    End SubModelPart{keyword}")
+        lines += ["End SubModelPart", ""]
+
+    return LINE_END.join(lines)

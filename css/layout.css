@@ -1,0 +1,238 @@
+/* ══════════════════════════════════════════════════════════════════
+   Layout — the application shell: bands, docks and splitters.
+   ══════════════════════════════════════════════════════════════════ */
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0; padding: 0;
+  height: 100%;
+  overflow: hidden;
+  font-family: var(--font-ui);
+  font-size: var(--fs-md);
+  color: var(--c-ink);
+  background: var(--c-app-bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+#app {
+  height: 100vh;
+  min-height: 0;
+  overflow: hidden;
+  display: grid;
+  grid-template-rows:
+    var(--h-titlebar)   /* title bar    */
+    var(--h-menubar)    /* menu bar     */
+    var(--h-toolbar)    /* main toolbar */
+    var(--h-modetabs)   /* mode tabs    */
+    minmax(120px, 1fr)  /* work area    */
+    var(--split)        /* splitter     */
+    minmax(0px, min(var(--h-cmd), max(0px, calc(
+      100vh - var(--h-titlebar) - var(--h-menubar) - var(--h-toolbar)
+      - var(--h-modetabs) - var(--split) - var(--h-status) - 120px
+    ))))                /* command line */
+    var(--h-status);    /* status bar   */
+}
+
+/* ── Title bar ─────────────────────────────────────────────────── */
+#titlebar {
+  display: flex; align-items: center; gap: 14px;
+  padding: 0 0 0 12px;
+  background: linear-gradient(180deg, var(--brand-primary-2), var(--brand-primary));
+  color: var(--brand-on-dark);
+  user-select: none;
+}
+.tb-brand { display: flex; align-items: center; }
+.tb-logo { height: 21px; display: block; }
+.tb-logo-kratos { height: 17px; display: block; opacity: .92; }
+.tb-brand-sep {
+  width: 1px;
+  height: 16px;
+  margin: 0 10px;
+  background: currentColor;
+  opacity: .35;
+}
+.tb-title {
+  flex: 1;
+  text-align: center;
+  font-size: var(--fs-md);
+  color: rgba(255,255,255,.94);
+  letter-spacing: .1px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.tb-wincontrols { display: flex; height: 100%; }
+.wc {
+  width: 44px; height: 100%;
+  background: none; border: 0; cursor: default;
+  display: grid; place-items: center;
+}
+.wc svg { width: 11px; height: 11px; fill: none; stroke: #fff; stroke-width: 1.1; }
+.wc:hover { background: rgba(255,255,255,.15); }
+.wc-close:hover { background: #e0323c; }
+
+/* ── Work area ─────────────────────────────────────────────────── */
+#workarea {
+  display: grid;
+  grid-template-columns: var(--w-rail) var(--split) minmax(200px, 1fr) var(--split) var(--w-dock);
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--c-border);
+}
+
+#toolrail {
+  background: var(--c-rail);
+  border-right: 1px solid var(--c-border);
+  overflow: hidden auto;
+  padding: 3px 0;
+  display: flex; flex-direction: column; align-items: center; gap: 1px;
+  min-height: 0;
+}
+#toolrail::-webkit-scrollbar { width: 6px; }
+
+/* ── Viewport ──────────────────────────────────────────────────── */
+#viewport {
+  position: relative;
+  min-width: 0;
+  overflow: hidden;
+  background: linear-gradient(180deg, var(--c-vp-top), var(--c-vp-bottom));
+}
+#scene { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+.vp-hud {
+  position: absolute;
+  z-index: 3;
+  user-select: none;
+  font-size: var(--fs-sm);
+}
+#vp-hud-topleft { top: 8px; left: 10px; }
+.vp-mode-label {
+  background: var(--c-vp-hud);
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  padding: 3px 9px;
+  color: var(--c-ink);
+  font-weight: 600;
+}
+#vp-viewcube {
+  top: 8px; right: 10px;
+  display: flex; gap: 1px;
+  border: 1px solid var(--c-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+#vp-viewcube button {
+  background: var(--c-vp-hud); border: 0;
+  padding: 4px 10px; font: inherit; color: var(--c-ink-soft); cursor: pointer;
+}
+#vp-viewcube button:hover { background: #fff; color: var(--c-ink); }
+#vp-viewcube button.active { background: var(--brand-primary); color: #fff; }
+
+#vp-triad {
+  position: absolute; left: 8px; bottom: 8px;
+  width: 86px; height: 86px; z-index: 3; pointer-events: none;
+}
+#triad { width: 100%; height: 100%; display: block; }
+
+.vp-tooltip {
+  position: absolute; z-index: 5;
+  background: #2b3242; color: #fff;
+  padding: 3px 7px; border-radius: var(--radius);
+  font-size: var(--fs-sm); pointer-events: none; white-space: nowrap;
+}
+
+.vp-loading {
+  position: absolute; right: 12px; bottom: 12px; z-index: 6;
+  pointer-events: none;
+}
+.vp-loading-box {
+  background: var(--c-vp-hud);
+  border: 1px solid var(--c-border);
+  box-shadow: var(--shadow-menu);
+  padding: 9px 14px; min-width: 230px;
+  border-radius: var(--radius);
+}
+.vp-loading-label { font-size: var(--fs-sm); color: var(--c-ink-soft); margin-bottom: 7px; }
+.vp-progress { height: 6px; background: #e3e7ee; border: 1px solid var(--c-border); overflow: hidden; }
+.vp-progress i { display: block; height: 100%; width: 0%; background: var(--brand-accent); transition: width .12s linear; }
+
+/* ── Right dock ────────────────────────────────────────────────── */
+/* Row sizes go through --r-* so a panel can be collapsed by overriding just its own
+   row with `auto` (js/ui.js, collapsibleDock). Inline custom properties on #dock beat
+   these, and removing one restores the size below -- including a dragged height. */
+#dock {
+  background: var(--c-panel);
+  border-left: 1px solid var(--c-border);
+  display: grid;
+  --r-model:
+    minmax(var(--h-dockhead), min(var(--h-model-panel), calc(100% - var(--split) - var(--h-dockhead))));
+  --r-selection: minmax(var(--h-dockhead), 1fr);
+  --r-phases: var(--h-phases);
+  grid-template-rows: var(--r-model) var(--split) var(--r-selection);
+  align-content: start;
+  min-width: 0;
+  min-height: 0;
+}
+#dock.has-phases {
+  --r-model: var(--h-model-panel);
+  --r-selection: minmax(70px, 1fr);
+  grid-template-rows: var(--r-model) var(--split) var(--r-selection) var(--split) var(--r-phases);
+}
+.dock-panel { display: flex; flex-direction: column; min-width: 0; min-height: 0; background: var(--c-panel); }
+.dock-head {
+  cursor: pointer;
+  height: var(--h-dockhead);
+  flex: 0 0 auto;
+  display: flex; align-items: center; gap: 5px;
+  padding: 0 6px;
+  background: linear-gradient(180deg, #f7f8fa, #e8ebf1);
+  border-bottom: 1px solid var(--c-border);
+  font-size: var(--fs-sm); font-weight: 600; color: var(--c-ink-soft);
+  user-select: none;
+}
+/* Fixed width so the title does not shift by a pixel between ▾ and ▸. */
+.dock-caret { color: var(--c-ink-faint); font-size: 9px; width: 9px; text-align: center; }
+.dock-panel.collapsed > .dock-body { display: none; }
+.dock-head-tools { margin-left: auto; display: flex; gap: 2px; }
+.dock-head-tools button {
+  border: 0; background: none; cursor: pointer; color: var(--c-ink-faint);
+  font-size: 11px; padding: 1px 3px; border-radius: var(--radius);
+}
+.dock-head-tools button:hover { background: var(--c-hover); color: var(--c-ink); }
+.dock-body { flex: 1 1 auto; overflow: auto; background: var(--c-panel-2); }
+
+/* ── Command panel ─────────────────────────────────────────────── */
+#cmdpanel {
+  display: grid;
+  grid-template-rows: 24px 1fr 26px;
+  background: var(--c-panel-2);
+  border-top: 1px solid var(--c-border);
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* ── Splitters ─────────────────────────────────────────────────── */
+.splitter { background: var(--c-panel); position: relative; }
+.splitter-v { cursor: col-resize; border-left: 1px solid var(--c-border); border-right: 1px solid var(--c-border); }
+.splitter-h { cursor: row-resize; border-top: 1px solid var(--c-border); border-bottom: 1px solid var(--c-border); }
+.splitter:hover, .splitter.dragging { background: var(--c-active); }
+/* Nothing to resize while the panel it sizes is collapsed. */
+.splitter.disabled { pointer-events: none; cursor: default; }
+.splitter::after {
+  content: ""; position: absolute; background: var(--c-ink-faint); opacity: .5; border-radius: 2px;
+}
+.splitter-v::after { width: 1px; height: 22px; left: 1px; top: 50%; transform: translateY(-50%); }
+.splitter-h::after { height: 1px; width: 22px; top: 1px; left: 50%; transform: translateX(-50%); }
+body.resizing { cursor: inherit; user-select: none; }
+body.resizing #viewport { pointer-events: none; }
+
+/* ── Floating layers ───────────────────────────────────────────── */
+#menu-layer, #modal-layer { position: fixed; inset: 0; pointer-events: none; z-index: 500; }
+#modal-layer { z-index: 600; }
+#menu-layer > *, #modal-layer > * { pointer-events: auto; }
+
+/* ── Scrollbars ────────────────────────────────────────────────── */
+*::-webkit-scrollbar { width: 12px; height: 12px; }
+*::-webkit-scrollbar-track { background: #f0f2f5; }
+*::-webkit-scrollbar-thumb { background: #c3cad6; border: 3px solid #f0f2f5; border-radius: 6px; }
+*::-webkit-scrollbar-thumb:hover { background: #a8b2c2; }

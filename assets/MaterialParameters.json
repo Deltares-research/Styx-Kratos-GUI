@@ -1,0 +1,56 @@
+{
+    "properties": [
+        {
+            "model_part_name": "PorousDomain.Soil_1",
+            "properties_id": 1,
+            "Material": {
+                "constitutive_law": {
+                    "name": "GeoLinearElasticPlaneStrain2DLaw"
+                },
+                "Variables": {
+                    "IGNORE_UNDRAINED": false,
+                    "YOUNG_MODULUS": 25000.0,
+                    "POISSON_RATIO": 0.28,
+                    "DENSITY_SOLID": 1834.8623853211009,
+                    "DENSITY_WATER": 1000.0,
+                    "POROSITY": 0.3,
+                    "BULK_MODULUS_SOLID": 1000000000000.0,
+                    "BULK_MODULUS_FLUID": 2000000.0,
+                    "DYNAMIC_VISCOSITY": 0.001,
+                    "PERMEABILITY_XX": 1.736111111111111e-05,
+                    "PERMEABILITY_YY": 1.736111111111111e-05,
+                    "PERMEABILITY_XY": 0.0,
+                    "GEO_COHESION": 0.5,
+                    "GEO_FRICTION_ANGLE": 32.0
+                },
+                "Tables": {}
+            }
+        },
+        {
+            "model_part_name": "PorousDomain.Soil_2",
+            "properties_id": 2,
+            "Material": {
+                "constitutive_law": {
+                    "name": "GeoLinearElasticPlaneStrain2DLaw"
+                },
+                "Variables": {
+                    "IGNORE_UNDRAINED": false,
+                    "YOUNG_MODULUS": 12000.0,
+                    "POISSON_RATIO": 0.33,
+                    "DENSITY_SOLID": 1783.893985728848,
+                    "DENSITY_WATER": 1000.0,
+                    "POROSITY": 0.3,
+                    "BULK_MODULUS_SOLID": 1000000000000.0,
+                    "BULK_MODULUS_FLUID": 2000000.0,
+                    "DYNAMIC_VISCOSITY": 0.001,
+                    "PERMEABILITY_XX": 5.787037037037037e-09,
+                    "PERMEABILITY_YY": 5.787037037037037e-09,
+                    "PERMEABILITY_XY": 0.0,
+                    "GEO_COHESION": 15.0,
+                    "GEO_FRICTION_ANGLE": 25.0
+                },
+                "Tables": {}
+            }
+        }
+    ]
+}

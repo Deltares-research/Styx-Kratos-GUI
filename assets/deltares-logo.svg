@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 132 26" width="132" height="26" role="img" aria-label="Deltares">
+  <!-- Placeholder wordmark — replace with the official Deltares logo asset. -->
+  <g fill="none" stroke="#0EBBF0" stroke-width="2.6" stroke-linecap="round">
+    <path d="M4 18.5c3.2-4.6 6.4-4.6 9.6 0"/>
+    <path d="M4 12c3.2-4.6 6.4-4.6 9.6 0 3.2 4.6 6.4 4.6 9.6 0"/>
+  </g>
+  <text x="28" y="19" font-family="Segoe UI, Frutiger, Helvetica, Arial, sans-serif"
+        font-size="16.5" font-weight="600" letter-spacing="0.2" fill="#ffffff">Deltares</text>
+</svg>

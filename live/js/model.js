@@ -1,0 +1,1239 @@
+/* ══════════════════════════════════════════════════════════════════
+   model.js — the server's project, in the shape the frozen UI expects.
+
+   js/data.js is still loaded verbatim, but only its UI chrome (ICONS, MENUS,
+   TOOLBAR, MODES, RAILS) is used as-is. The model halves -- MATERIALS,
+   BOREHOLES, LAYERS -- are replaced from the server here, and the two derived
+   structures are rebuilt.
+
+   Those derived structures are the reason this file exists. App.TREES and
+   App.OBJECT_PROPS are computed once inside an IIFE at js/data.js:460-579 and
+   closed over, so nothing can recompute them. That is why a layer added in the
+   soil dialog never appears in the model tree today.
+   ══════════════════════════════════════════════════════════════════ */
+
+var App = window.App || {};
+
+App.Model = (function () {
+
+  /* Falls back to the frozen demo extents until a project has been applied, so
+     the module is usable before the first fetch resolves. */
+  var domain = { x0: 0, x1: 50, y0: 0, y1: 40, z_top: 0, z_bottom: -25 };
+
+  /* ── Mapping ─────────────────────────────────────────────────── */
+
+  function fromProject(project) {
+    return {
+      domain: project.domain,
+      BOREHOLES: project.boreholes.map(function (b) {
+        return { id: b.id, name: b.name, x: b.x, y: b.y, head: b.head, water: b.water };
+      }),
+      // The schema is snake_case; js/data.js:315 reads gUnsat/gSat.
+      MATERIALS: project.materials.map(function (m) {
+        return { id: m.id, name: m.name, model: m.model, type: m.type, color: m.color,
+                 gUnsat: m.g_unsat, gSat: m.g_sat, E: m.E, nu: m.nu, c: m.c, phi: m.phi, k: m.k,
+                 rInter: m.r_inter, interfacePerm: m.interface_permeability };
+      }),
+      LAYERS: project.layers.map(function (l) {
+        return { id: l.id, name: l.name, mat: l.mat,
+                 tops: Object.assign({}, l.tops), bots: Object.assign({}, l.bots) };
+      }),
+      LOADS: (project.loads || []).filter(function (load) {
+        return project.dimension === 2
+          ? load.kind === 'point' || load.kind === 'line'
+          : load.kind === 'surface';
+      }).map(function (load) { return JSON.parse(JSON.stringify(load)); }),
+      // `beams` and `anchors` each hold every kind, and each dimension shows its own:
+      // a 2D section shows sheet piles and plane anchors, the solid model shows wall
+      // panels, members and space anchors. The kinds of the other dimension stay in
+      // the project untouched -- the same rule the loads follow.
+      BEAMS: (project.beams || []).filter(function (beam) {
+        return project.dimension === 2
+          ? (beam.kind || 'beam') === 'beam'
+          : beam.kind === 'panel' || beam.kind === 'member';
+      }).map(function (beam) { return JSON.parse(JSON.stringify(beam)); }),
+      BEAM_SECTIONS: (project.beam_sections || [])
+        .map(function (s) { return JSON.parse(JSON.stringify(s)); }),
+      PANEL_SECTIONS: (project.panel_sections || [])
+        .map(function (s) { return JSON.parse(JSON.stringify(s)); }),
+      ANCHORS: (project.anchors || []).filter(function (anchor) {
+        return project.dimension === 2
+          ? (anchor.kind || 'anchor') === 'anchor'
+          : anchor.kind === 'anchor3d';
+      }).map(function (a) { return JSON.parse(JSON.stringify(a)); }),
+      ANCHOR_SECTIONS: (project.anchor_sections || [])
+        .map(function (s) { return JSON.parse(JSON.stringify(s)); }),
+      // Interfaces are plane strain only, so a solid model shows none of them and
+      // keeps every one saved -- the same rule the 2D loads and piles follow.
+      INTERFACES: project.dimension === 2
+        ? (project.interfaces || []).map(function (i) { return JSON.parse(JSON.stringify(i)); })
+        : [],
+      INTERFACE_SECTIONS: (project.interface_sections || [])
+        .map(function (s) { return JSON.parse(JSON.stringify(s)); })
+    };
+  }
+
+  /* The inverse of the MATERIALS mapping above, for the material-set write path.
+     Everything the server's Material schema requires has to be present and
+     named its way; an unknown or missing key is a 422. */
+  function materialsToServer(materials) {
+    return materials.map(function (m) {
+      return { id: m.id, name: m.name, model: m.model, type: m.type, color: m.color,
+               g_unsat: m.gUnsat, g_sat: m.gSat, E: m.E, nu: m.nu, c: m.c, phi: m.phi,
+               k: m.k, r_inter: m.rInter, interface_permeability: m.interfacePerm };
+    });
+  }
+
+  /* ── The title bar ──────────────────────────────────────────────────────
+     js/app.js:243-245 writes the title once at boot, out of the frozen
+     App.PRODUCT constant, and nothing rewrites it -- so a project loaded from
+     the server, opened from a file or reset to the seed still announced itself
+     as "Untitled project". The name is one more global the frozen UI reads off
+     the project, which is what this module is for. */
+  function projectTitle(project) {
+    var name = project && project.name ? String(project.name).trim() : '';
+    return App.PRODUCT.name + '  ' + App.PRODUCT.version + '  —  '
+      + (name || 'Untitled project') + '  [Model]';
+  }
+
+  /* App.PRODUCT.project moves with it: boot() reads that constant, and boot runs
+     after the first project arrives, so leaving it stale would put the old name
+     straight back into the bar. */
+  function syncTitle(project) {
+    var name = project && project.name ? String(project.name).trim() : '';
+    App.PRODUCT.project = name || 'Untitled project';
+    var bar = typeof document !== 'undefined' && document.getElementById('tb-title');
+    if (bar) bar.textContent = projectTitle(project);
+  }
+
+  function apply(project) {
+    var mapped = fromProject(project);
+    domain = mapped.domain;
+    App.BOREHOLES = mapped.BOREHOLES;
+    App.MATERIALS = mapped.MATERIALS;
+    App.LAYERS = mapped.LAYERS;
+    App.LOADS = mapped.LOADS;
+    App.BEAMS = mapped.BEAMS;
+    App.BEAM_SECTIONS = mapped.BEAM_SECTIONS;
+    App.PANEL_SECTIONS = mapped.PANEL_SECTIONS;
+    App.ANCHORS = mapped.ANCHORS;
+    App.ANCHOR_SECTIONS = mapped.ANCHOR_SECTIONS;
+    App.INTERFACES = mapped.INTERFACES;
+    App.INTERFACE_SECTIONS = mapped.INTERFACE_SECTIONS;
+    App.PROJECT = project;
+    rebuildDerived();
+    syncTitle(project);
+    return project;
+  }
+
+  function load() {
+    return App.Api.get('/api/project').then(apply);
+  }
+
+  /* ── Derived: the model tree ─────────────────────────────────── */
+
+  /* js/data.js:573-577 puts one `soilVolumes` object into all five mode trees.
+     Rebuilding it *in place* is what keeps them consistent -- replacing the node
+     would only update whichever array we happened to reach. */
+  function soilNodes() {
+    var found = [], seen = [];
+    Object.keys(App.TREES || {}).forEach(function (mode) {
+      (function walk(nodes) {
+        (nodes || []).forEach(function (n) {
+          if (n.obj === 'soil' && seen.indexOf(n) < 0) { seen.push(n); found.push(n); }
+          walk(n.children);
+        });
+      })(App.TREES[mode]);
+    });
+    return found;
+  }
+
+  function layerChild(layer) {
+    var m = App.matById(layer.mat);
+    return { label: layer.name + '  ·  ' + m.name, swatch: m.color,
+             leaf: true, eye: true, obj: 'soil_' + layer.id };
+  }
+
+  /* Drawn/imported geometry has no place in App.TREES -- js/data.js:572-577 builds
+     that structure once, before any of it exists. One shared node, which syncTrees()
+     places in the single tree every mode reads, mirrors how soilVolumes above stays
+     in sync across modes. */
+  var customGeometryNode = {
+    label: 'Custom geometry', icon: 'cube', count: 0,
+    eye: true, obj: 'group:custom', children: []
+  };
+
+  /* A .mdpa import's accepted parts (mdpa-import-dialog.js's checklist "Accept"
+     button): read-only, static geometry with no project counterpart -- there is no
+     `App.PROJECT` field behind this node the way there is for every other one here --
+     so `setImportedParts` below is the only thing that ever touches it, called
+     straight from the dialog rather than from `rebuildDerived`'s project-driven pass. */
+  var importedMeshNode = {
+    label: 'Imported mesh', icon: 'cube', count: 0,
+    eye: true, obj: 'group:imported', children: []
+  };
+
+  var loadConditionsNode = null;
+  var previousLoadKeys = ['load']; // remove the frozen sample property on first rebuild
+  var sheetPileNode = null;
+  var previousBeamKeys = [];
+  var anchorNode = null;
+  var previousAnchorKeys = [];
+  var interfaceNode = null;
+  var previousInterfaceKeys = [];
+
+  /* Top level only, deliberately: js/data.js:688 also has a "Loads" node *inside*
+     the Attributes library, and that one lists load definitions, not the loads in
+     the model. Reusing it made the live loads land in a different place depending
+     on which project happened to load first. */
+  function findLoadConditionsNode() {
+    if (loadConditionsNode) return loadConditionsNode;
+    Object.keys(App.TREES || {}).some(function (mode) {
+      (App.TREES[mode] || []).some(function (node) {
+        if (node && node.label === 'Loads' && node.icon === 'load') loadConditionsNode = node;
+        return !!loadConditionsNode;
+      });
+      return !!loadConditionsNode;
+    });
+    if (!loadConditionsNode) {
+      loadConditionsNode = { label: 'Loads', icon: 'load', count: 0, children: [] };
+    }
+    // Whether it was found or made: js/explorer.js:36 draws the visibility checkbox
+    // only for a node carrying both, and a group row without one is the odd row out.
+    loadConditionsNode.eye = true;
+    loadConditionsNode.obj = 'group:loads';
+    return loadConditionsNode;
+  }
+
+  /* The frozen data has no sheet-pile node and no per-member Anchors node -- its
+     Anchors entry describes the seeded rows, not individual members -- so both are
+     created here. Placing them is syncTrees()'s job, not theirs. */
+  function ensureSheetPileNode() {
+    if (!sheetPileNode) {
+      sheetPileNode = { label: 'Sheet piles', icon: 'wall', count: 0,
+                        eye: true, obj: 'group:sheetpiles', children: [] };
+    }
+    return sheetPileNode;
+  }
+
+  function ensureAnchorNode() {
+    if (!anchorNode) {
+      anchorNode = { label: 'Anchors', icon: 'anchor', count: 0,
+                     eye: true, obj: 'group:anchors', children: [] };
+    }
+    return anchorNode;
+  }
+
+  /* The frozen tree already has an "Interfaces" row (js/data.js:729): a leaf inside
+     Structures claiming eight of them, from the aggregate mockup. It selects nothing
+     and cannot be edited, and leaving it beside the live node would put two rows with
+     the identical label in one tree -- the dead-twin problem the rail solved for the
+     frozen anchor tool. It is dropped, once, and the live node takes the name. */
+  function dropFrozenInterfaceRow() {
+    Object.keys(App.TREES || {}).forEach(function (mode) {
+      (function walk(nodes) {
+        if (!nodes) return;
+        for (var i = nodes.length - 1; i >= 0; i -= 1) {
+          var node = nodes[i];
+          if (!node) continue;
+          if (node !== interfaceNode && node.label === 'Interfaces' && node.leaf) {
+            nodes.splice(i, 1);
+            continue;
+          }
+          walk(node.children);
+        }
+      })(App.TREES[mode]);
+    });
+  }
+
+  function ensureInterfaceNode() {
+    if (!interfaceNode) {
+      interfaceNode = { label: 'Interfaces', icon: 'interface', count: 0,
+                        eye: true, obj: 'group:interfaces', children: [] };
+    }
+    dropFrozenInterfaceRow();
+    return interfaceNode;
+  }
+
+  /* ── One tree, in one order ──────────────────────────────────────────────
+     The Model explorer is remounted from App.TREES[mode] on every mode change,
+     and the live nodes were pushed into the Structures tree alone: Loads, Sheet
+     piles and Anchors vanished the moment the user clicked Soil. Every mode is
+     handed the same array now, sorted into one order -- what the model is made
+     of, then what is built on it, then what acts on it, then what is computed
+     from it. A label this list does not name keeps its place at the end rather
+     than being dropped. */
+  var TREE_ORDER = [
+    'Attributes library', 'Soil', 'Boreholes', 'Geometry', 'Custom geometry',
+    'Imported mesh', 'Structures', 'Sheet piles', 'Anchors', 'Interfaces', 'Loads',
+    'Mesh', 'Flow conditions', 'Model conditions'
+  ];
+
+  function containsNode(nodes, node) {
+    return (nodes || []).some(function (item) {
+      return item === node || containsNode(item.children, node);
+    });
+  }
+
+  /* The union of every mode's top-level nodes. Deduped by identity first, then by
+     label: the Soil and Structures trees carry *different* "Attributes library"
+     objects (js/data.js:673,683), and once one tree serves both modes the richer
+     of the two is the one worth keeping. */
+  function topLevelUnion() {
+    var out = [];
+    Object.keys(App.TREES || {}).forEach(function (mode) {
+      (App.TREES[mode] || []).forEach(function (node) {
+        if (!node || out.indexOf(node) >= 0) return;
+        var twin = -1;
+        out.forEach(function (seen, i) { if (seen.label === node.label) twin = i; });
+        if (twin < 0) out.push(node);
+        else if ((node.children || []).length > (out[twin].children || []).length) {
+          out[twin] = node;
+        }
+      });
+    });
+    return out;
+  }
+
+  function orderTree(nodes) {
+    function rank(node) {
+      var i = TREE_ORDER.indexOf(node.label);
+      return i < 0 ? TREE_ORDER.length : i;
+    }
+    return nodes.map(function (node, i) { return { node: node, i: i }; })
+      .sort(function (a, b) { return rank(a.node) - rank(b.node) || a.i - b.i; })
+      .map(function (entry) { return entry.node; });
+  }
+
+  /* One array object shared by all five modes, so a node expanded in Soil mode is
+     still expanded in Structures mode -- and so a count rebuilt here shows up
+     wherever the user happens to be standing.
+
+     A simple_example project has none of the frozen demo structure behind it, so
+     its tree is the live nodes alone; a full project keeps its frozen nodes and
+     gains the live ones. Either way a live node that is already in the tree stays
+     where it is rather than being added a second time. */
+  function syncTrees(simpleExample, soil) {
+    var top = simpleExample ? (soil ? [soil] : []) : topLevelUnion();
+    [customGeometryNode, importedMeshNode, sheetPileNode, anchorNode, interfaceNode,
+     loadConditionsNode]
+      .forEach(function (node) {
+        if (node && !containsNode(top, node)) top.push(node);
+      });
+    var tree = orderTree(top);
+    Object.keys(App.TREES || {}).forEach(function (mode) { App.TREES[mode] = tree; });
+    return tree;
+  }
+
+  function customPartChild(part) {
+    return { label: part.label, swatch: part.color, leaf: true, eye: true, obj: part.key };
+  }
+
+  /* Labelled the way a stack layer is: name, then the material it is made of. */
+  function soilBodyChild(part) {
+    return { label: part.label + '  ·  ' + App.matById(part.mat).name,
+             swatch: part.color, leaf: true, eye: true, obj: part.key };
+  }
+
+  /* A part with a material is a soil body, so it gets the same editable Material
+     row a stack layer has; one without stays plain geometry. */
+  function partMaterialEditor(part) {
+    return {
+      kind: 'select',
+      options: function () {
+        return App.MATERIALS.map(function (m) { return { value: m.id, text: m.name }; });
+      },
+      get: function () { return part.mat; },
+      set: function (v) {
+        part.mat = v;
+        part.color = App.matById(v).color;
+        return null;
+      }
+    };
+  }
+
+  /* The extent of a polygon_extrude body, from the corners and the sweep. Derived
+     rather than free: the corners are the definition, so these are read-only and
+     the corners themselves are edited in the Create/Edit soil volume dialog. */
+  function recipeExtent(recipe) {
+    if (!recipe || recipe.kind !== 'polygon_extrude') return null;
+    var ext = recipe.extrusion || [0, 0, 0];
+    var lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+    (recipe.vertices || []).forEach(function (v) {
+      [0, 1, 2].forEach(function (a) {
+        lo[a] = Math.min(lo[a], v[a], v[a] + ext[a]);
+        hi[a] = Math.max(hi[a], v[a], v[a] + ext[a]);
+      });
+    });
+    return { lo: lo, hi: hi, corners: (recipe.vertices || []).length };
+  }
+
+  function customPartProps(part) {
+    if (!part.mat) {
+      return {
+        title: part.label, icon: 'cube',
+        groups: { 'General': [['Source', part.source === 'import' ? 'Imported' : 'Drawn'],
+                              ['Color', part.color]] }
+      };
+    }
+
+    /* A soil body gets the same shape of panel as a stack layer: what it is made
+       of, how big it is, and where it sits. */
+    // Area in a 2D model, volume in 3D: see App.SoilVolumeDialog.measure.
+    var size = App.SoilVolumeDialog && part.recipe
+      ? App.SoilVolumeDialog.measure(App.PROJECT, part.recipe) : null;
+
+    var general = [
+      ['Material', App.matById(part.mat).name, '', false, partMaterialEditor(part)],
+      [size ? size.label : 'Volume', size ? size.value.toFixed(1) : '—',
+       size ? size.unit : 'm³', true],
+      ['Source', part.source === 'import' ? 'Imported' : 'Drawn', '', true]
+    ];
+
+    var groups = { 'General': general };
+    var extent = recipeExtent(part.recipe);
+    if (extent) {
+      groups['Geometry'] = [
+        ['x min', fixed(extent.lo[0]), 'm', true], ['x max', fixed(extent.hi[0]), 'm', true],
+        ['y min', fixed(extent.lo[1]), 'm', true], ['y max', fixed(extent.hi[1]), 'm', true],
+        ['z min', fixed(extent.lo[2]), 'm', true], ['z max', fixed(extent.hi[2]), 'm', true],
+        ['Corners', String(extent.corners), '', false, {
+          kind: 'button', text: 'Edit coordinates…',
+          run: function () { App.SoilVolumeDialog.open(part); }
+        }]
+      ];
+    }
+    return { title: part.label, icon: 'cube', groups: groups };
+  }
+
+  /* ── Derived: the selection-explorer property grid ───────────── */
+
+  function fixed(v) { return v.toFixed(3); }
+
+  /* The domain is one object for the whole project, so these rows edit the model
+     rather than the selected layer. Mirrors the server's ordering validator
+     (server/app/schemas.py:45-49) so an impossible extent is refused here. */
+  var LIMITS = { x0: ['x1', 'below'], x1: ['x0', 'above'],
+                 y0: ['y1', 'below'], y1: ['y0', 'above'] };
+
+  function domainEditor(field) {
+    return {
+      kind: 'number', decimals: 3, unit: 'm',
+      get: function () { return domain[field]; },
+      set: function (v) {
+        var other = LIMITS[field][0], side = LIMITS[field][1];
+        if (side === 'below' && v >= domain[other]) return field + ' must stay below ' + other + '.';
+        if (side === 'above' && v <= domain[other]) return field + ' must stay above ' + other + '.';
+        domain[field] = v;
+        return null;
+      }
+    };
+  }
+
+  function pendingDomain() { return domain; }
+
+  function loadNumberEditor(load, field, component) {
+    return {
+      kind: 'number', decimals: 3, unit: 'kN/m²',
+      get: function () { return component === undefined ? load[field] : load.components[component]; },
+      set: function (value) {
+        if (!Number.isFinite(value)) return field + ' must be a finite number.';
+        if (component !== undefined) { load.components[component] = value; return null; }
+        var other = { x0: 'x1', x1: 'x0', y0: 'y1', y1: 'y0' }[field];
+        if ((field === 'x0' || field === 'y0') && value >= load[other]) {
+          return field + ' must stay below ' + other + '.';
+        }
+        if ((field === 'x1' || field === 'y1') && value <= load[other]) {
+          return field + ' must stay above ' + other + '.';
+        }
+        load[field] = value;
+        return null;
+      }
+    };
+  }
+
+  function beamNumberEditor(beam, index, axis) {
+    return {
+      kind: 'number', decimals: 3, unit: 'm',
+      get: function () { return beam.points[index][axis]; },
+      set: function (value) {
+        if (!Number.isFinite(value)) return 'Every pile coordinate must be a number.';
+        var was = beam.points[index][axis];
+        beam.points[index][axis] = value;
+        var problem = App.Beams ? App.Beams.validate(beam) : null;
+        if (problem) { beam.points[index][axis] = was; return problem; }
+        return null;
+      }
+    };
+  }
+
+  /* Editing the section edits the shared profile, which is the point of it being
+     reusable: every pile using it moves together, in one validated write. */
+  function sectionNumberEditor(section, field, unit, decimals) {
+    return {
+      kind: 'number', decimals: decimals === undefined ? 4 : decimals, unit: unit,
+      get: function () { return section[field]; },
+      set: function (value) {
+        var was = section[field];
+        section[field] = value;
+        var problem = App.Beams ? App.Beams.validateSection(section) : null;
+        if (problem) { section[field] = was; return problem; }
+        return null;
+      }
+    };
+  }
+
+  function beamLength(beam) {
+    var total = 0;
+    for (var i = 1; i < beam.points.length; i += 1) {
+      var dx = beam.points[i][0] - beam.points[i - 1][0];
+      var dz = beam.points[i][1] - beam.points[i - 1][1];
+      total += Math.sqrt(dx * dx + dz * dz);
+    }
+    return total;
+  }
+
+  /* One editor per coordinate of a member's polyline, which is the 3D sibling of
+     `beamNumberEditor` and validates through the same door. */
+  function memberNumberEditor(member, index, axis) {
+    return {
+      kind: 'number', decimals: 3, unit: 'm',
+      get: function () { return member.points[index][axis]; },
+      set: function (value) {
+        if (!Number.isFinite(value)) return 'Every member coordinate must be a number.';
+        var was = member.points[index][axis];
+        member.points[index][axis] = value;
+        var problem = App.Beams ? App.Beams.validate(member) : null;
+        if (problem) { member.points[index][axis] = was; return problem; }
+        return null;
+      }
+    };
+  }
+
+  function panelPointEditor(panel, index, axis) {
+    return {
+      kind: 'number', decimals: 3, unit: 'm',
+      get: function () { return panel.footprint[index][axis]; },
+      set: function (value) {
+        if (!Number.isFinite(value)) return 'Every wall coordinate must be a number.';
+        var was = panel.footprint[index][axis];
+        panel.footprint[index][axis] = value;
+        var problem = App.Beams ? App.Beams.validate(panel) : null;
+        if (problem) { panel.footprint[index][axis] = was; return problem; }
+        return null;
+      }
+    };
+  }
+
+  function panelLevelEditor(panel, field) {
+    return {
+      kind: 'number', decimals: 3, unit: 'm',
+      get: function () { return panel[field]; },
+      set: function (value) {
+        var was = panel[field];
+        panel[field] = value;
+        var problem = App.Beams ? App.Beams.validate(panel) : null;
+        if (problem) { panel[field] = was; return problem; }
+        return null;
+      }
+    };
+  }
+
+  /* The plan length of a wall, which with its height is what an engineer checks. */
+  function panelLength(panel) {
+    var total = 0;
+    for (var i = 1; i < panel.footprint.length; i += 1) {
+      var dx = panel.footprint[i][0] - panel.footprint[i - 1][0];
+      var dy = panel.footprint[i][1] - panel.footprint[i - 1][1];
+      total += Math.sqrt(dx * dx + dy * dy);
+    }
+    return total;
+  }
+
+  function memberLength(member) {
+    var total = 0;
+    for (var i = 1; i < member.points.length; i += 1) {
+      var d = [0, 1, 2].map(function (axis) {
+        return member.points[i][axis] - member.points[i - 1][axis];
+      });
+      total += Math.sqrt(d[0] * d[0] + d[1] * d[1] + d[2] * d[2]);
+    }
+    return total;
+  }
+
+  /* A wall: a footprint in plan, two levels, and a thickness where the 2D pile has an
+     area and an inertia per metre run. */
+  function panelProps(panel) {
+    var section = App.Beams ? App.Beams.sectionOf(panel) : {};
+    var geometry = [];
+    panel.footprint.forEach(function (point, index) {
+      geometry.push(['x' + (index + 1), fixed(point[0]), 'm', false,
+                     panelPointEditor(panel, index, 0)]);
+      geometry.push(['y' + (index + 1), fixed(point[1]), 'm', false,
+                     panelPointEditor(panel, index, 1)]);
+    });
+    geometry.push(['Top level', fixed(panel.z_top), 'm', false,
+                   panelLevelEditor(panel, 'z_top')]);
+    geometry.push(['Toe level', fixed(panel.z_toe), 'm', false,
+                   panelLevelEditor(panel, 'z_toe')]);
+    geometry.push(['Length', fixed(panelLength(panel)), 'm', true]);
+    geometry.push(['Height', fixed(panel.z_top - panel.z_toe), 'm', true]);
+    geometry.push(['Delete', '', '', false, { kind: 'button', text: 'Delete wall',
+      run: function () { if (App.Beams) App.Beams.remove(panel.id); } }]);
+    return {
+      title: panel.name, icon: 'wall',
+      groups: {
+        'General': [
+          ['Section', section.name || panel.section, '', true],
+          ['Vertices', String(panel.footprint.length), '', true],
+          ['Active', panel.active !== false, '', true]
+        ],
+        'Section': [
+          ['E', String(section.E), 'kN/m²', false,
+           sectionNumberEditor(section, 'E', 'kN/m²', 0)],
+          ["Poisson's ratio", String(section.nu), '', false,
+           sectionNumberEditor(section, 'nu', '', 3)],
+          ['Thickness', String(section.thickness), 'm', false,
+           sectionNumberEditor(section, 'thickness', 'm', 3)],
+          ['Density', String(section.density), 'kg/m³', false,
+           sectionNumberEditor(section, 'density', 'kg/m³', 1)]
+        ],
+        'Geometry': geometry
+      }
+    };
+  }
+
+  /* A member: the sheet pile's own profile library, standing in space. */
+  function memberProps(member) {
+    var section = App.Beams ? App.Beams.sectionOf(member) : {};
+    var geometry = [];
+    member.points.forEach(function (point, index) {
+      ['x', 'y', 'z'].forEach(function (axis, a) {
+        geometry.push([axis + (index + 1), fixed(point[a]), 'm', false,
+                       memberNumberEditor(member, index, a)]);
+      });
+    });
+    geometry.push(['Length', fixed(memberLength(member)), 'm', true]);
+    geometry.push(['Delete', '', '', false, { kind: 'button', text: 'Delete member',
+      run: function () { if (App.Beams) App.Beams.remove(member.id); } }]);
+    return {
+      title: member.name, icon: 'beam',
+      groups: {
+        'General': [
+          ['Section', section.name || member.section, '', true],
+          ['Vertices', String(member.points.length), '', true],
+          ['Active', member.active !== false, '', true]
+        ],
+        'Section': [
+          ['E', String(section.E), 'kN/m²', false,
+           sectionNumberEditor(section, 'E', 'kN/m²', 0)],
+          ["Poisson's ratio", String(section.nu), '', false,
+           sectionNumberEditor(section, 'nu', '', 3)],
+          ['Area', String(section.area), 'm²', false,
+           sectionNumberEditor(section, 'area', 'm²', 5)],
+          ['Inertia', String(section.inertia), 'm⁴', false,
+           sectionNumberEditor(section, 'inertia', 'm⁴', 7)],
+          ['Density', String(section.density), 'kg/m³', false,
+           sectionNumberEditor(section, 'density', 'kg/m³', 1)]
+        ],
+        'Geometry': geometry
+      }
+    };
+  }
+
+  function beamProps(beam) {
+    if (beam.kind === 'panel') return panelProps(beam);
+    if (beam.kind === 'member') return memberProps(beam);
+    var section = App.Beams ? App.Beams.sectionOf(beam) : {};
+    var geometry = [];
+    beam.points.forEach(function (point, index) {
+      geometry.push(['x' + (index + 1), fixed(point[0]), 'm', false,
+                     beamNumberEditor(beam, index, 0)]);
+      geometry.push(['z' + (index + 1), fixed(point[1]), 'm', false,
+                     beamNumberEditor(beam, index, 1)]);
+    });
+    geometry.push(['Length', fixed(beamLength(beam)), 'm', true]);
+    geometry.push(['Delete', '', '', false, { kind: 'button', text: 'Delete sheet pile',
+      run: function () { if (App.Beams) App.Beams.remove(beam.id); } }]);
+    return {
+      title: beam.name, icon: 'wall',
+      groups: {
+        'General': [
+          ['Section', section.name || beam.section, '', true],
+          ['Vertices', String(beam.points.length), '', true],
+          ['Active', beam.active !== false, '', true]
+        ],
+        'Section': [
+          ["E", String(section.E), 'kN/m²', false,
+           sectionNumberEditor(section, 'E', 'kN/m²', 0)],
+          ["Poisson's ratio", String(section.nu), '', false,
+           sectionNumberEditor(section, 'nu', '', 3)],
+          ['Area', String(section.area), 'm²/m', false,
+           sectionNumberEditor(section, 'area', 'm²/m', 5)],
+          ['Inertia', String(section.inertia), 'm⁴/m', false,
+           sectionNumberEditor(section, 'inertia', 'm⁴/m', 7)],
+          ['Density', String(section.density), 'kg/m³', false,
+           sectionNumberEditor(section, 'density', 'kg/m³', 1)],
+          ['Spacing', String(section.spacing), 'm', false,
+           sectionNumberEditor(section, 'spacing', 'm', 3)]
+        ],
+        'Geometry': geometry
+      }
+    };
+  }
+
+  function anchorEndEditor(anchor, end, axis) {
+    return {
+      kind: 'number', decimals: 3, unit: 'm',
+      get: function () { return anchor[end][axis]; },
+      set: function (value) {
+        if (!Number.isFinite(value)) return 'Every anchor coordinate must be a number.';
+        var was = anchor[end][axis];
+        anchor[end][axis] = value;
+        var problem = App.Anchors ? App.Anchors.validate(anchor, App.PROJECT) : null;
+        if (problem) { anchor[end][axis] = was; return problem; }
+        return null;
+      }
+    };
+  }
+
+  function anchorNumberEditor(anchor, field, unit, decimals) {
+    return {
+      kind: 'number', decimals: decimals === undefined ? 1 : decimals, unit: unit,
+      get: function () { return anchor[field]; },
+      set: function (value) {
+        var was = anchor[field];
+        anchor[field] = value;
+        var problem = App.Anchors ? App.Anchors.validate(anchor, App.PROJECT) : null;
+        if (problem) { anchor[field] = was; return problem; }
+        return null;
+      }
+    };
+  }
+
+  function tendonNumberEditor(section, field, unit, decimals) {
+    return {
+      kind: 'number', decimals: decimals === undefined ? 4 : decimals, unit: unit,
+      get: function () { return section[field]; },
+      set: function (value) {
+        var was = section[field];
+        section[field] = value;
+        var problem = App.Anchors ? App.Anchors.validateSection(section) : null;
+        if (problem) { section[field] = was; return problem; }
+        return null;
+      }
+    };
+  }
+
+  /* The 3D anchor: both ends in space, and no out-of-plane spacing to smear over --
+     it is the discrete member the user drew, where it was drawn. */
+  function spaceAnchorProps(anchor) {
+    var tendon = App.Anchors ? App.Anchors.sectionOf(anchor) : {};
+    var geometry = [];
+    [['Head', 'head'], ['Tail', 'tail']].forEach(function (end) {
+      ['x', 'y', 'z'].forEach(function (axis, a) {
+        geometry.push([end[0] + ' ' + axis, fixed(anchor[end[1]][a]), 'm', false,
+                       anchorEndEditor(anchor, end[1], a)]);
+      });
+    });
+    geometry.push(['Length', fixed(App.Anchors ? App.Anchors.length(anchor) : 0),
+                   'm', true]);
+    geometry.push(['Inclination', fixed(App.Anchors ? App.Anchors.inclination(anchor) : 0),
+                   '°', true]);
+    geometry.push(['Delete', '', '', false, { kind: 'button', text: 'Delete anchor',
+      run: function () { if (App.Anchors) App.Anchors.remove(anchor.id); } }]);
+    return {
+      title: anchor.name, icon: 'anchor',
+      groups: {
+        'General': [
+          ['Tendon', tendon.name || anchor.section, '', true],
+          ['Prestress', fixed(anchor.prestress), 'kN', false,
+           anchorNumberEditor(anchor, 'prestress', 'kN', 1)],
+          ['Active', anchor.active !== false, '', true]
+        ],
+        'Tendon': [
+          ['E', String(tendon.E), 'kN/m²', false,
+           tendonNumberEditor(tendon, 'E', 'kN/m²', 0)],
+          ['Area', String(tendon.area), 'm²', false,
+           tendonNumberEditor(tendon, 'area', 'm²', 6)],
+          ['Density', String(tendon.density), 'kg/m³', false,
+           tendonNumberEditor(tendon, 'density', 'kg/m³', 1)]
+        ],
+        'Geometry': geometry
+      }
+    };
+  }
+
+  function anchorProps(anchor) {
+    if (anchor.kind === 'anchor3d') return spaceAnchorProps(anchor);
+    var tendon = App.Anchors ? App.Anchors.sectionOf(anchor) : {};
+    var geometry = [
+      ['Head x', fixed(anchor.head[0]), 'm', false, anchorEndEditor(anchor, 'head', 0)],
+      ['Head z', fixed(anchor.head[1]), 'm', false, anchorEndEditor(anchor, 'head', 1)],
+      ['Tail x', fixed(anchor.tail[0]), 'm', false, anchorEndEditor(anchor, 'tail', 0)],
+      ['Tail z', fixed(anchor.tail[1]), 'm', false, anchorEndEditor(anchor, 'tail', 1)],
+      ['Length', fixed(App.Anchors ? App.Anchors.length(anchor) : 0), 'm', true],
+      ['Inclination', fixed(App.Anchors ? App.Anchors.inclination(anchor) : 0), '°', true],
+      ['Delete', '', '', false, { kind: 'button', text: 'Delete anchor',
+        run: function () { if (App.Anchors) App.Anchors.remove(anchor.id); } }]
+    ];
+    return {
+      title: anchor.name, icon: 'anchor',
+      groups: {
+        'General': [
+          ['Tendon', tendon.name || anchor.section, '', true],
+          ['Prestress', fixed(anchor.prestress), 'kN', false,
+           anchorNumberEditor(anchor, 'prestress', 'kN', 1)],
+          ['Active', anchor.active !== false, '', true]
+        ],
+        'Tendon': [
+          ['E', String(tendon.E), 'kN/m²', false,
+           tendonNumberEditor(tendon, 'E', 'kN/m²', 0)],
+          ['Area', String(tendon.area), 'm²', false,
+           tendonNumberEditor(tendon, 'area', 'm²', 6)],
+          ['Density', String(tendon.density), 'kg/m³', false,
+           tendonNumberEditor(tendon, 'density', 'kg/m³', 1)],
+          ['Spacing', String(tendon.spacing), 'm', false,
+           tendonNumberEditor(tendon, 'spacing', 'm', 3)]
+        ],
+        'Geometry': geometry
+      }
+    };
+  }
+
+  /* ── Interfaces ──────────────────────────────────────────────────────────
+     The contact itself carries almost nothing: which line it runs along, which
+     side of it is unglued, and which reusable property set it reads. The numbers
+     live on that set, because r_inter reduces a particular soil's strength and
+     several interfaces normally share one contact. */
+
+  function interfaceSideEditor(record) {
+    return {
+      kind: 'select',
+      options: function () {
+        return [{ value: 'both', text: 'Both sides' },
+                { value: 'left', text: 'Left of the line' },
+                { value: 'right', text: 'Right of the line' }];
+      },
+      get: function () { return record.side; },
+      set: function (value) {
+        var was = record.side;
+        record.side = value;
+        var problem = App.Interfaces
+          ? App.Interfaces.validate(record, App.PROJECT) : null;
+        if (problem) { record.side = was; return problem; }
+        return null;
+      }
+    };
+  }
+
+  function interfaceStructureEditor(record) {
+    return {
+      kind: 'select',
+      options: function () {
+        var piles = App.Interfaces ? App.Interfaces.livePiles(App.PROJECT) : [];
+        return piles.map(function (beam) {
+          return { value: beam.id, text: beam.name };
+        });
+      },
+      get: function () { return record.structure; },
+      set: function (value) {
+        var was = record.structure;
+        record.structure = value;
+        var problem = App.Interfaces
+          ? App.Interfaces.validate(record, App.PROJECT) : null;
+        if (problem) { record.structure = was; return problem; }
+        return null;
+      }
+    };
+  }
+
+  function interfacePointEditor(record, index, axis) {
+    return {
+      kind: 'number', decimals: 3, unit: 'm',
+      get: function () { return record.points[index][axis]; },
+      set: function (value) {
+        if (!Number.isFinite(value)) return 'Every interface coordinate must be a number.';
+        var was = record.points[index][axis];
+        record.points[index][axis] = value;
+        var problem = App.Interfaces
+          ? App.Interfaces.validate(record, App.PROJECT) : null;
+        if (problem) { record.points[index][axis] = was; return problem; }
+        return null;
+      }
+    };
+  }
+
+  function contactNumberEditor(section, field, unit, decimals) {
+    return {
+      kind: 'number', decimals: decimals === undefined ? 3 : decimals, unit: unit,
+      get: function () { return section[field]; },
+      set: function (value) {
+        var was = section[field];
+        section[field] = value;
+        var problem = App.Interfaces ? App.Interfaces.validateSection(section) : null;
+        if (problem) { section[field] = was; return problem; }
+        return null;
+      }
+    };
+  }
+
+  function contactMaterialEditor(section) {
+    return {
+      kind: 'select',
+      options: function () {
+        return (App.MATERIALS || []).map(function (m) {
+          return { value: m.id, text: m.name };
+        });
+      },
+      get: function () { return section.material; },
+      set: function (value) {
+        var was = section.material;
+        section.material = value;
+        var problem = App.Interfaces ? App.Interfaces.validateSection(section) : null;
+        if (problem) { section.material = was; return problem; }
+        return null;
+      }
+    };
+  }
+
+  function contactPermeabilityEditor(section) {
+    return {
+      kind: 'select',
+      options: function () {
+        return ['Neutral', 'Drain', 'Impermeable'].map(function (name) {
+          return { value: name, text: name };
+        });
+      },
+      get: function () { return section.permeability; },
+      set: function (value) { section.permeability = value; return null; }
+    };
+  }
+
+  function interfaceProps(record) {
+    var contact = App.Interfaces ? App.Interfaces.sectionOf(record) : {};
+    var follows = !!record.structure;
+    var pile = follows
+      ? ((App.BEAMS || []).filter(function (b) { return b.id === record.structure; })[0])
+      : null;
+    var geometry = [];
+    if (follows) {
+      geometry.push(['Follows', (pile && pile.name) || record.structure, '', false,
+                     interfaceStructureEditor(record)]);
+    } else {
+      (record.points || []).forEach(function (point, index) {
+        geometry.push(['x' + (index + 1), fixed(point[0]), 'm', false,
+                       interfacePointEditor(record, index, 0)]);
+        geometry.push(['z' + (index + 1), fixed(point[1]), 'm', false,
+                       interfacePointEditor(record, index, 1)]);
+      });
+    }
+    geometry.push(['Length',
+                   fixed(App.Interfaces ? App.Interfaces.length(record) : 0), 'm', true]);
+    geometry.push(['Delete', '', '', false, { kind: 'button', text: 'Delete interface',
+      run: function () { if (App.Interfaces) App.Interfaces.remove(record.id); } }]);
+
+    var properties = [
+      ['Soil', (App.matById && contact.material
+                && (App.matById(contact.material) || {}).name) || contact.material || '—',
+       '', false, contactMaterialEditor(contact)],
+      ['R_inter', String(contact.r_inter), '', false,
+       contactNumberEditor(contact, 'r_inter', '', 2)],
+      ['Virtual thickness', String(contact.virtual_thickness), 'm', false,
+       contactNumberEditor(contact, 'virtual_thickness', 'm', 4)],
+      ['Permeability', contact.permeability || 'Neutral', '', false,
+       contactPermeabilityEditor(contact)]
+    ];
+    // Blank rather than zero when they are derived: showing 0 kN/m³ would read as a
+    // contact with no stiffness rather than one the soil's own E supplies.
+    if (contact.normal_stiffness || contact.shear_stiffness) {
+      properties.push(['Normal stiffness', String(contact.normal_stiffness), 'kN/m³',
+                       false, contactNumberEditor(contact, 'normal_stiffness', 'kN/m³', 0)]);
+      properties.push(['Shear stiffness', String(contact.shear_stiffness), 'kN/m³',
+                       false, contactNumberEditor(contact, 'shear_stiffness', 'kN/m³', 0)]);
+    } else {
+      properties.push(['Stiffness', 'derived from the soil', '', true]);
+    }
+
+    return {
+      title: record.name, icon: 'interface',
+      groups: {
+        'General': [
+          ['Contact', contact.name || record.section, '', true],
+          ['Along', follows ? 'Sheet pile' : 'Own line', '', true],
+          ['Side', record.side, '', false, interfaceSideEditor(record)],
+          ['Active', record.active !== false, '', true]
+        ],
+        'Contact': properties,
+        'Geometry': geometry
+      }
+    };
+  }
+
+  function loadProps(load) {
+    var point = load.kind === 'point';
+    var line = load.kind === 'line';
+    var unit = point ? 'kN' : (line ? 'kN/m' : 'kN/m²');
+    var geometry = point ? [
+      ['x', fixed(load.x), 'm', false, loadNumberEditor(load, 'x')],
+      ['z', fixed(load.z), 'm', false, loadNumberEditor(load, 'z')]
+    ] : line ? [
+      ['x min', fixed(load.x0), 'm', false, loadNumberEditor(load, 'x0')],
+      ['x max', fixed(load.x1), 'm', false, loadNumberEditor(load, 'x1')],
+      ['z', fixed(load.z), 'm', false, loadNumberEditor(load, 'z')],
+      ['Length', fixed(load.x1 - load.x0), 'm', true]
+    ] : [
+      ['x min', fixed(load.x0), 'm', false, loadNumberEditor(load, 'x0')],
+      ['x max', fixed(load.x1), 'm', false, loadNumberEditor(load, 'x1')],
+      ['y min', fixed(load.y0), 'm', false, loadNumberEditor(load, 'y0')],
+      ['y max', fixed(load.y1), 'm', false, loadNumberEditor(load, 'y1')],
+      ['Area', fixed((load.x1 - load.x0) * (load.y1 - load.y0)), 'm²', true]
+    ];
+    geometry.push(['Delete', '', '', false, { kind: 'button', text: 'Delete load',
+      run: function () { if (App.Loads) App.Loads.remove(load.id); } }]);
+    return {
+      title: load.name, icon: 'load',
+      groups: {
+        'General': [
+          ['Distribution', load.distribution, '', true],
+          ['Active', load.active !== false, '', true],
+          ['Edit', '', '', false, { kind: 'button', text: 'Edit load…',
+            run: function () { if (App.Loads) App.Loads.edit(load.id); } }]
+        ],
+        'Components': (point || line) ? [
+          ['qx', fixed(load.components[0]), unit, false, loadNumberEditor(load, 'qx', 0)],
+          ['qz', fixed(load.components[1]), unit, false, loadNumberEditor(load, 'qz', 1)]
+        ] : [
+          ['qx', fixed(load.components[0]), unit, false, loadNumberEditor(load, 'qx', 0)],
+          ['qy', fixed(load.components[1]), unit, false, loadNumberEditor(load, 'qy', 1)],
+          ['qz', fixed(load.components[2]), unit, false, loadNumberEditor(load, 'qz', 2)]
+        ],
+        'Geometry': geometry
+      }
+    };
+  }
+
+  /* Which axis a plane-strain model has no extent along. For the x-z section that
+     is y: the body runs forever out of plane, so its y extents stop describing the
+     model. x and z still bound the section itself and stay. */
+  var SECTION_NORMAL = { xz: 'y', xy: 'z', yz: 'x' };
+
+  function outOfPlaneAxis(project) {
+    if (!project || project.dimension !== 2) return null;
+    return SECTION_NORMAL[project.section_plane || 'xz'] || 'y';
+  }
+
+  /* Where the cut sits along that axis. Mirrors App.Viewport.sectionOffset: an
+     explicit offset, else the middle of the domain. */
+  var SECTION_TRAVEL = { x: ['x0', 'x1'], y: ['y0', 'y1'], z: ['z_bottom', 'z_top'] };
+
+  function sectionAt(project, axis) {
+    if (project && typeof project.section_offset === 'number') return project.section_offset;
+    var travel = SECTION_TRAVEL[axis];
+    return (domain[travel[0]] + domain[travel[1]]) / 2;
+  }
+
+  function layerProps(layer, i) {
+    var m = App.matById(layer.mat);
+    var tops = App.BOREHOLES.map(function (bh) { return layer.tops[bh.id]; });
+    var bots = App.BOREHOLES.map(function (bh) { return layer.bots[bh.id]; });
+
+    return {
+      title: 'BoreholeVolume_' + (i + 1) + ' (' + layer.name + ')', icon: 'cube',
+      groups: {
+        'General':  [['Material', m.name, '', false, App.LayerEditors.material(layer)],
+                     // Filled in from the geometry response, which measures it.
+                     ['Volume', '—', 'm³', true],
+                     ['Active', true]],
+        'Geometry': geometryRows(bots, tops, layer),
+        'Mesh':     [['Coarseness factor', '1.000'], ['Element count', '—', '', true]]
+      }
+    };
+  }
+
+  /* x/y are the project domain -- the model's plan extents, shared by every layer --
+     so editing one edits the whole model (see domainEditor). In 2D the pair normal
+     to the section is dropped and the cut's position shown in its place: read-only,
+     because moving the section is a mode switch (PATCH /api/project/dimension), not
+     a property edit. z stays either way: for the elevation sections it bounds the
+     cut, and it is the layer's own stratigraphy rather than the domain. */
+  function geometryRows(bots, tops, layer) {
+    var hidden = outOfPlaneAxis(App.PROJECT);
+    var rows = [];
+    if (hidden !== 'x') {
+      rows.push(['x min', fixed(domain.x0), 'm', false, domainEditor('x0')]);
+      rows.push(['x max', fixed(domain.x1), 'm', false, domainEditor('x1')]);
+    }
+    if (hidden !== 'y') {
+      rows.push(['y min', fixed(domain.y0), 'm', false, domainEditor('y0')]);
+      rows.push(['y max', fixed(domain.y1), 'm', false, domainEditor('y1')]);
+    }
+    rows.push(['z min', fixed(Math.min.apply(null, bots)), 'm', false,
+               App.LayerEditors.bottomLevel(layer)]);
+    rows.push(['z max', fixed(Math.max.apply(null, tops)), 'm', false,
+               App.LayerEditors.topLevel(layer)]);
+    if (hidden) {
+      rows.push(['Section at ' + hidden, fixed(sectionAt(App.PROJECT, hidden)), 'm', true]);
+    }
+    return rows;
+  }
+
+  function rebuildDerived() {
+    var layers = App.LAYERS || [];
+    var loads = App.LOADS || [];
+    var customParts = (App.PROJECT && App.PROJECT.custom_parts) || [];
+
+    /* A custom part with a material is soil, so it sits under Soil beside the
+       borehole-stack layers. Without one it is plain geometry and stays under
+       Custom geometry. */
+    var soilBodies = customParts.filter(function (p) { return !!p.mat; });
+    var plainParts = customParts.filter(function (p) { return !p.mat; });
+
+    var sharedSoilNodes = soilNodes();
+    sharedSoilNodes.forEach(function (node) {
+      node.count = layers.length + soilBodies.length;
+      node.children = layers.map(layerChild).concat(soilBodies.map(soilBodyChild));
+    });
+
+    customGeometryNode.count = plainParts.length;
+    customGeometryNode.children = plainParts.map(customPartChild);
+
+    App.OBJECT_PROPS = App.OBJECT_PROPS || {};
+    Object.keys(App.OBJECT_PROPS).forEach(function (key) {
+      if (key.indexOf('soil_') === 0) delete App.OBJECT_PROPS[key];
+    });
+    layers.forEach(function (layer, i) {
+      App.OBJECT_PROPS['soil_' + layer.id] = layerProps(layer, i);
+    });
+
+    var currentPartKeys = {};
+    customParts.forEach(function (part) {
+      App.OBJECT_PROPS[part.key] = customPartProps(part);
+      currentPartKeys[part.key] = true;
+    });
+    Object.keys(App.OBJECT_PROPS).forEach(function (key) {
+      if (/^(drawn|imported)_/.test(key) && !currentPartKeys[key]) delete App.OBJECT_PROPS[key];
+    });
+
+    var loadNode = findLoadConditionsNode();
+    loadNode.count = loads.length;
+    loadNode.children = loads.map(function (load) {
+      return { label: load.name, icon: 'load', leaf: true, eye: true, obj: load.id };
+    });
+    previousLoadKeys.forEach(function (key) { delete App.OBJECT_PROPS[key]; });
+    loads.forEach(function (load) { App.OBJECT_PROPS[load.id] = loadProps(load); });
+    previousLoadKeys = loads.map(function (load) { return load.id; });
+
+    var beams = App.BEAMS || [];
+    var pileNode = ensureSheetPileNode();
+    pileNode.count = beams.length;
+    pileNode.children = beams.map(function (beam) {
+      return { label: beam.name, icon: 'wall', leaf: true, eye: true, obj: beam.id };
+    });
+    previousBeamKeys.forEach(function (key) { delete App.OBJECT_PROPS[key]; });
+    beams.forEach(function (beam) { App.OBJECT_PROPS[beam.id] = beamProps(beam); });
+    previousBeamKeys = beams.map(function (beam) { return beam.id; });
+
+    var anchors = App.ANCHORS || [];
+    var tieNode = ensureAnchorNode();
+    tieNode.count = anchors.length;
+    tieNode.children = anchors.map(function (anchor) {
+      return { label: anchor.name, icon: 'anchor', leaf: true, eye: true,
+               obj: anchor.id };
+    });
+    previousAnchorKeys.forEach(function (key) { delete App.OBJECT_PROPS[key]; });
+    anchors.forEach(function (a) { App.OBJECT_PROPS[a.id] = anchorProps(a); });
+    previousAnchorKeys = anchors.map(function (anchor) { return anchor.id; });
+
+    var contacts = App.INTERFACES || [];
+    var contactNode = ensureInterfaceNode();
+    contactNode.count = contacts.length;
+    contactNode.children = contacts.map(function (record) {
+      return { label: record.name, icon: 'interface', leaf: true, eye: true,
+               obj: record.id };
+    });
+    previousInterfaceKeys.forEach(function (key) { delete App.OBJECT_PROPS[key]; });
+    contacts.forEach(function (record) {
+      App.OBJECT_PROPS[record.id] = interfaceProps(record);
+    });
+    previousInterfaceKeys = contacts.map(function (record) { return record.id; });
+
+    // Last, so every node it has to place already exists.
+    syncTrees(!!(App.PROJECT && App.PROJECT.simple_example), sharedSoilNodes[0]);
+  }
+
+  /* Volumes are measured by the geometry build, not the project, so they arrive
+     separately. Called by the viewport once a payload has been drawn. */
+  function setVolumes(mass) {
+    Object.keys(mass || {}).forEach(function (key) {
+      var props = App.OBJECT_PROPS[key];
+      if (!props) return;
+      props.groups.General.forEach(function (row) {
+        if (row[0] === 'Volume') { row[1] = mass[key].toFixed(1); row[3] = false; }
+      });
+    });
+  }
+
+  function groupedInteger(value) {
+    return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  }
+
+  function setMeshStats(stats) {
+    if (!stats) return;
+    var elements = groupedInteger(stats.elements);
+    var nodes = groupedInteger(stats.nodes);
+    var typeNames = Object.keys(stats.by_type || {});
+    var props = App.OBJECT_PROPS && App.OBJECT_PROPS.mesh;
+
+    if (props && props.groups && props.groups.Statistics) {
+      props.groups.Statistics.forEach(function (row) {
+        if (row[0] === 'Element type') row[1] = typeNames.join(', ') || '—';
+        else if (row[0] === 'Elements') row[1] = elements;
+        else if (row[0] === 'Nodes') row[1] = nodes;
+        else if (row[0] === 'Average element size') row[1] = '—';
+      });
+    }
+
+    Object.keys(App.TREES || {}).forEach(function (mode) {
+      (function walk(items) {
+        (items || []).forEach(function (item) {
+          if (item.obj === 'mesh' && /^Elements:/.test(item.label)) item.label = 'Elements: ' + elements;
+          if (item.obj === 'mesh' && /^Nodes:/.test(item.label)) item.label = 'Nodes: ' + nodes;
+          walk(item.children);
+        });
+      })(App.TREES[mode]);
+    });
+
+    if (App.Explorer && App.state) {
+      App.Explorer.mountTree(App.state.mode);
+      if (App.state.selection === 'mesh') App.Explorer.mountSelection('mesh');
+    }
+  }
+
+  /* mdpa-import-dialog.js's "Accept": `parts` is `[{key, label, color}]`, one per
+     checklist row the user left checked. Replaces whatever was accepted before --
+     this is one deck's worth of parts at a time, not an accumulating library, the same
+     way `App.Viewport.showImportedMesh` replaces the previous preview outright. */
+  function setImportedParts(parts) {
+    parts = parts || [];
+    importedMeshNode.count = parts.length;
+    importedMeshNode.children = parts.map(function (part) {
+      return { label: part.label, swatch: part.color, leaf: true, eye: true, obj: part.key };
+    });
+    if (App.Viewport && App.Viewport.setImportedGroupKeys) {
+      App.Viewport.setImportedGroupKeys(parts.map(function (part) { return part.key; }));
+    }
+    syncTrees(!!(App.PROJECT && App.PROJECT.simple_example), soilNodes()[0]);
+    if (App.Explorer && App.state) App.Explorer.mountTree(App.state.mode);
+  }
+
+  return {
+    fromProject: fromProject, materialsToServer: materialsToServer,
+    pendingDomain: pendingDomain, outOfPlaneAxis: outOfPlaneAxis,
+    apply: apply, load: load,
+    projectTitle: projectTitle, syncTitle: syncTitle,
+    rebuildDerived: rebuildDerived, setVolumes: setVolumes, setMeshStats: setMeshStats,
+    setImportedParts: setImportedParts,
+    domain: function () { return domain; }
+  };
+})();

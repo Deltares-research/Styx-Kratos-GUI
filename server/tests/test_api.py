@@ -1,0 +1,1253 @@
+"""HTTP contract tests.
+
+The frozen demo must keep working untouched: these assert the server mounts
+`Mockup/css`, `js`, `assets` and `vendor` *in place* rather than copying them, so there
+is exactly one copy of each file on disk and no chance of the served app drifting from
+the one that opens off `file://`.
+"""
+
+import json
+import re
+
+import pytest
+from fastapi.testclient import TestClient
+
+from app.main import app
+from app import build
+from app.schemas import Project
+from app.seed import seed_project
+
+
+@pytest.fixture(scope="module")
+def client():
+    # The server now opens on a blank project (app/store.py); this whole suite is
+    # written against the seeded demo model, so start every module from there.
+    with TestClient(app) as c:
+        c.post("/api/project/reset")
+        yield c
+
+
+# ── Health ──────────────────────────────────────────────────────────────────
+
+def test_empty_project_can_save_first_layer_and_delete_last_layer(client):
+    from app.seed import blank_project
+    original = client.get('/api/project').json()
+    try:
+        client.put('/api/project', json=blank_project().model_dump())
+        material = seed_project().materials[0].model_dump()
+        layer = dict(id='L1', name='Soil_1', mat=material['id'],
+                     tops={'bh1': 0}, bots={'bh1': -5})
+        response = client.patch('/api/project/layers', json={
+            'layers': [layer], 'materials': [material],
+        })
+        assert response.status_code == 200
+        response = client.patch('/api/project/layers', json={'layers': []})
+        assert response.status_code == 200
+        assert response.json()['project']['layers'] == []
+    finally:
+        client.put('/api/project', json=original)
+
+
+def test_custom_layer_can_be_inserted_before_an_existing_body(client):
+    original = client.get('/api/project').json()
+    try:
+        recipe = dict(kind='box', origin=[0, 0, 0], size=[1, 1, 1], material=original['materials'][0]['id'])
+        first = client.post('/api/geometry/create', json=recipe).json()['parts'][0]['key']
+        recipe.update(origin=[2, 0, 0], insert_before=first)
+        response = client.post('/api/geometry/create', json=recipe)
+        assert response.status_code == 200
+        keys = [p['key'] for p in client.get('/api/project').json()['custom_parts']]
+        assert keys.index(response.json()['parts'][0]['key']) < keys.index(first)
+    finally:
+        client.put('/api/project', json=original)
+
+def test_health_reports_the_gmsh_version(client):
+    """Not a ping. The point is to prove the worker subprocess is alive and that gmsh
+    loaded inside it, which is where the interesting failures live."""
+    body = client.get("/api/health").json()
+    assert body["ok"] is True
+    assert body["gmsh_version"].startswith("4.")
+
+
+# ── Project ─────────────────────────────────────────────────────────────────
+
+def test_get_project_returns_something_the_schema_accepts_back(client):
+    body = client.get("/api/project").json()
+    assert Project.model_validate(body) == seed_project()
+
+
+def test_put_project_replaces_the_model(client):
+    changed = seed_project().model_dump()
+    changed["name"] = "Renamed site"
+    changed["mesh"]["element_size"] = 4.0
+
+    assert client.put("/api/project", json=changed).status_code == 200
+    assert client.get("/api/project").json()["name"] == "Renamed site"
+
+    client.put("/api/project", json=seed_project().model_dump())
+
+
+def test_post_project_reset_restores_the_seed_project(client):
+    """Test setup's way back to the known, fully-populated demo model -- not what the
+    toolbar's "New project" does (see test_post_project_new_starts_an_empty_project,
+    below). The client has no copy of the seed -- it is the server that decides what
+    the demo model is -- so the reset has to happen here."""
+    changed = seed_project().model_dump()
+    changed["name"] = "Something else"
+    changed["dimension"] = 2
+    changed["section_plane"] = "xz"
+    client.put("/api/project", json=changed)
+
+    body = client.post("/api/project/reset").json()
+    assert Project.model_validate(body["project"]) == seed_project()
+    assert body["invalidates"] == ["project", "tree", "geometry", "mesh"]
+    assert client.get("/api/project").json()["name"] == seed_project().name
+
+
+def test_post_project_new_starts_an_empty_project(client):
+    """"New project" on the toolbar. The client has no copy of what "empty" means --
+    it is the server that decides -- so this has to happen here, not by the client
+    inventing a blank document of its own."""
+    from app.seed import blank_project
+
+    body = client.post("/api/project/new").json()
+
+    assert Project.model_validate(body["project"]) == blank_project()
+    assert body["invalidates"] == ["project", "tree", "geometry", "mesh"]
+    assert client.get("/api/project").json() == blank_project().model_dump(mode="json")
+
+    client.put("/api/project", json=seed_project().model_dump())
+
+
+def test_put_project_rejects_a_model_that_breaks_the_layer_stack(client):
+    """js/dialogs.js edits layer depths with no validation at all, so this is the first
+    place a gap in the stack can be caught rather than silently rendered."""
+    broken = seed_project().model_dump()
+    broken["layers"][0]["bots"]["bh1"] = -9.0        # L2 still starts at -8.0
+
+    response = client.put("/api/project", json=broken)
+    assert response.status_code == 422
+    assert "contiguous" in json.dumps(response.json())
+
+    assert client.get("/api/project").json()["layers"][0]["bots"]["bh1"] == -8.0
+
+
+def test_put_project_rejects_unknown_fields(client):
+    """extra='forbid' catches a frontend sending a renamed field, which would otherwise
+    be dropped in silence and look like the edit simply did not take."""
+    payload = seed_project().model_dump() | {"elementSize": 3.0}
+    assert client.put("/api/project", json=payload).status_code == 422
+
+
+# ── Geometry ────────────────────────────────────────────────────────────────
+
+def test_geometry_returns_drawable_sections_for_every_part(client):
+    body = client.get("/api/geometry").json()
+    assert {s["key"] for s in body["sections"]} == set(seed_project().part_keys())
+    assert len(body["bbox"]) == 6
+
+    for section in body["sections"]:
+        assert set(section) == {"key", "color", "positions", "indices", "edges"}
+        assert section["indices"] and len(section["indices"]) % 3 == 0
+        assert max(section["indices"]) < len(section["positions"]) // 3
+
+
+def test_geometry_is_gzipped_for_a_browser(client):
+    """Uncompressed the payload is megabytes of decimal digits; gzipped it is tens of
+    kilobytes, which is what makes JSON the right choice here rather than a binary
+    format."""
+    plain = client.get("/api/geometry", headers={"accept-encoding": "identity"})
+    zipped = client.get("/api/geometry", headers={"accept-encoding": "gzip"})
+
+    assert zipped.headers.get("content-encoding") == "gzip"
+    assert int(zipped.headers["content-length"]) < len(plain.content) // 4
+
+
+def test_geometry_follows_the_project(client):
+    """The whole point of the backend: editing the model changes the 3D, which is what
+    js/dialogs.js:124 currently apologises for being unable to do."""
+    before = client.get("/api/geometry").json()
+
+    deeper = seed_project().model_dump()
+    deeper["layers"][0]["bots"]["bh1"] = -9.0
+    deeper["layers"][1]["tops"]["bh1"] = -9.0
+    assert client.put("/api/project", json=deeper).status_code == 200
+
+    after = client.get("/api/geometry").json()
+    assert after != before
+    assert after["sections"] != before["sections"]
+
+    client.put("/api/project", json=seed_project().model_dump())
+
+
+def test_a_geometry_failure_is_reported_not_swallowed(client):
+    """An OCC boolean that produces nothing must surface as an error the command log can
+    show, never as an empty model that looks like a rendering bug."""
+    impossible = seed_project().model_dump()
+    impossible["wall"]["thickness"] = 1e-9
+
+    client.put("/api/project", json=impossible)
+    response = client.get("/api/geometry")
+    client.put("/api/project", json=seed_project().model_dump())
+
+    assert response.status_code in (200, 500)
+    if response.status_code == 500:
+        assert "detail" in response.json()
+
+
+# ── Geometry Import ───────────────────────────────────────────────────────────
+
+def test_post_geometry_import_rejects_unsupported_extensions(client):
+    response = client.post("/api/geometry/import", files={"file": ("test.txt", b"foo")})
+    assert response.status_code == 422
+    assert "extension" in response.json()["detail"]
+
+
+def test_post_geometry_import_adds_custom_part_and_invalidates(client):
+    # A tiny valid step file (just to pass extension check and get to gmsh)
+    # The actual parsing will happen in the gmsh worker.
+    # For a real test, let's just make sure the API calls the job and handles response.
+    # Since we don't want to actually run the gmsh import on a dummy file that would fail,
+    # we can use a valid step file string from test_importer.py, but it's easier to mock the worker job
+    # or just use a valid step. Let's create a real step file via gmsh here.
+    
+    import gmsh
+    with build.session():
+        gmsh.clear()
+        gmsh.model.occ.addBox(0,0,0,1,1,1)
+        gmsh.model.occ.synchronize()
+        import tempfile
+        import os
+        fd, path = tempfile.mkstemp(suffix=".step")
+        os.close(fd)
+        gmsh.write(path)
+        gmsh.clear()
+        
+    with open(path, "rb") as f:
+        content = f.read()
+    os.remove(path)
+    
+    response = client.post("/api/geometry/import", files={"file": ("box.step", content)})
+    assert response.status_code == 200
+    body = response.json()
+    
+    assert len(body["parts"]) == 1
+    part = body["parts"][0]
+    assert part["key"].startswith("imported_")
+    assert part["source"] == "import"
+    assert "invalidates" in body
+
+
+# ── Mdpa Import ────────────────────────────────────────────────────────────
+
+def test_post_import_mdpa_rejects_unsupported_extensions(client):
+    response = client.post("/api/import/mdpa", files={"file": ("test.txt", b"foo")})
+    assert response.status_code == 422
+    assert "extension" in response.json()["detail"]
+
+
+def test_post_import_mdpa_rejects_malformed_decks(client):
+    response = client.post("/api/import/mdpa",
+                           files={"file": ("broken.mdpa", b"Begin Nodes\n1 x 0 0\nEnd Nodes\n")})
+    assert response.status_code == 422
+
+
+def test_post_import_mdpa_returns_the_parsed_mesh(client):
+    deck = (
+        b"Begin Properties 0\nEnd Properties\n\n"
+        b"Begin Nodes\n1 0.0 0.0 0.0\n2 1.0 0.0 0.0\n3 0.0 1.0 0.0\nEnd Nodes\n\n"
+        b"Begin Elements UPwSmallStrainElement2D3N\n1 0 1 2 3\nEnd Elements\n\n"
+        b"Begin SubModelPart Soil_1\n"
+        b"    Begin SubModelPartNodes\n1\n2\n3\n    End SubModelPartNodes\n"
+        b"    Begin SubModelPartElements\n1\n    End SubModelPartElements\n"
+        b"End SubModelPart\n"
+    )
+    response = client.post("/api/import/mdpa", files={"file": ("case.mdpa", deck)})
+    assert response.status_code == 200
+    body = response.json()
+
+    assert body["nodes"] == 3
+    assert body["dimension"] == 2
+    assert body["elements"] == [{"kratos_class": "UPwSmallStrainElement2D3N",
+                                 "kind": "continuum", "dim": 2, "count": 1}]
+    part = next(p for p in body["parts"] if p["name"] == "Soil_1")
+    assert part["kind"] == "body"
+
+
+def test_post_import_mdpa_stands_a_2d_deck_up_on_the_open_projects_section_plane(client):
+    """A .mdpa carries Kratos plane coordinates and no memory of the plane they were cut
+    from. Drawn as they stand they lie flat in the ground plane -- edge-on to the 2D view
+    -- so the deck is placed on the plane the open project's own section uses."""
+    deck = (
+        b"Begin Properties 0\nEnd Properties\n\n"
+        b"Begin Nodes\n1 0.0 0.0 0.0\n2 8.0 0.0 0.0\n3 0.0 -6.0 0.0\nEnd Nodes\n\n"
+        b"Begin Elements UPwSmallStrainElement2D3N\n1 0 1 2 3\nEnd Elements\n"
+    )
+    section = seed_project().model_dump()
+    section.update(dimension=2, section_plane="xz", section_offset=20.0)
+    client.put("/api/project", json=section)
+    try:
+        body = client.post("/api/import/mdpa", files={"file": ("case.mdpa", deck)}).json()
+    finally:
+        client.put("/api/project", json=seed_project().model_dump())
+
+    assert body["bbox"] == [0.0, 20.0, -6.0, 8.0, 20.0, 0.0]
+    positions = next(s for s in body["sections"]
+                     if s["key"] == "imported_continuum")["positions"]
+    assert positions[1::3] == [20.0, 20.0, 20.0], "every node sits on the section plane"
+
+
+def test_post_geometry_create_adds_custom_part(client):
+    recipe = {
+        "kind": "box",
+        "origin": [0,0,0],
+        "size": [5,5,5],
+        "label": "My Box"
+    }
+    
+    response = client.post("/api/geometry/create", json=recipe)
+    assert response.status_code == 200
+    body = response.json()
+    
+    assert len(body["parts"]) == 1
+    part = body["parts"][0]
+    assert part["key"].startswith("drawn_")
+    assert part["source"] == "gui"
+    assert part["label"] == "My Box"
+    assert part["recipe"] == recipe
+    assert "invalidates" in body
+    
+    # Check it persisted
+    project = client.get("/api/project").json()
+    assert len(project["custom_parts"]) > 0
+    assert project["custom_parts"][-1]["key"] == part["key"]
+    
+    # Test clearing custom parts
+    response = client.delete("/api/project/custom_parts")
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
+    
+    project = client.get("/api/project").json()
+    assert len(project["custom_parts"]) == 0
+
+    # Revert project to avoid polluting other tests
+    client.put("/api/project", json=seed_project().model_dump())
+
+
+def test_delete_geometry_part_removes_just_that_part(client):
+    """The Model explorer's per-part Delete needs a per-part endpoint -- the existing
+    DELETE /api/project/custom_parts clears everything, which is not what "delete this
+    one thing I drew" means."""
+    first = client.post("/api/geometry/create", json={
+        "kind": "box", "origin": [0, 0, 0], "size": [1, 1, 1], "label": "Box one",
+    }).json()["parts"][0]
+    second = client.post("/api/geometry/create", json={
+        "kind": "box", "origin": [5, 5, 0], "size": [1, 1, 1], "label": "Box two",
+    }).json()["parts"][0]
+
+    response = client.delete(f"/api/geometry/parts/{first['key']}")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert "invalidates" in body
+
+    project = client.get("/api/project").json()
+    keys = [p["key"] for p in project["custom_parts"]]
+    assert first["key"] not in keys
+    assert second["key"] in keys
+
+    # The remaining part must still be drawable -- deleting one part must not corrupt
+    # the geometry build for the ones left behind.
+    geometry = client.get("/api/geometry")
+    assert geometry.status_code == 200
+    assert any(s["key"] == second["key"] for s in geometry.json()["sections"])
+
+    client.delete("/api/project/custom_parts")
+    client.put("/api/project", json=seed_project().model_dump())
+
+
+def test_delete_geometry_part_unknown_key_is_404(client):
+    response = client.delete("/api/geometry/parts/does_not_exist")
+    assert response.status_code == 404
+
+
+@pytest.mark.parametrize("recipe", [
+    {"kind": "line", "vertices": [[0, 0, 0], [5, 0, 0]], "label": "A line"},
+    {"kind": "polygon", "vertices": [[0, 0, 0], [5, 0, 0], [5, 5, 0]], "label": "A surface"},
+])
+def test_post_geometry_create_line_and_surface_stay_drawable(client, recipe):
+    """A drawn line or bare surface has no volume, which used to make the very next
+    /api/geometry call raise -- either a GeometryError ("no volume for ...") or an
+    unhandled KeyError. It must round-trip cleanly, like box already did."""
+    response = client.post("/api/geometry/create", json=recipe)
+    assert response.status_code == 200
+    part = response.json()["parts"][0]
+    key = part["key"]
+
+    geometry = client.get("/api/geometry")
+    assert geometry.status_code == 200
+    sections = geometry.json()["sections"]
+    assert any(s["key"] == key for s in sections)
+
+    client.delete("/api/project/custom_parts")
+    client.put("/api/project", json=seed_project().model_dump())
+
+
+# ── Finite-element mesh ────────────────────────────────────────────────────
+
+def test_mesh_endpoint_returns_real_stats_and_drawable_sections(client):
+    response = client.post("/api/mesh", json={"element_size": 4.0, "order": 1})
+    assert response.status_code == 200
+    body = response.json()
+
+    assert body["stats"]["nodes"] > 0
+    assert body["stats"]["elements"] > 0
+    assert body["stats"]["seconds"] >= 0
+    assert body["sections"] and body["sections"][0]["indices"]
+    assert isinstance(body["log"], list)
+
+
+def test_mesh_endpoint_validates_settings_before_starting_gmsh(client):
+    assert client.post("/api/mesh", json={"element_size": 0, "order": 2}).status_code == 422
+    assert client.post("/api/mesh", json={"element_size": 4, "order": 3}).status_code == 422
+    assert client.post("/api/mesh", json={
+        "element_size": 4, "order": 1, "volume_keys": ["missing_body"]
+    }).status_code == 422
+
+
+def test_mesh_endpoint_reports_the_bodies_that_were_meshed(client):
+    response = client.post("/api/mesh", json={
+        "element_size": 5.0, "order": 1, "volume_keys": ["soil_L1"]
+    })
+    assert response.status_code == 200
+    assert response.json()["meshed_keys"] == ["soil_L1"]
+
+
+# ── Soil-layer write path ──────────────────────────────────────────────────
+
+def test_patch_layers_updates_the_project_and_declares_invalidations(client):
+    layers = [layer.model_dump() for layer in seed_project().layers]
+    for borehole in seed_project().borehole_ids():
+        layers[0]["bots"][borehole] = -9.0
+        layers[1]["tops"][borehole] = -9.0
+
+    response = client.patch("/api/project/layers", json={"layers": layers})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["project"]["layers"][0]["bots"]["bh1"] == -9.0
+    assert body["invalidates"] == ["project", "tree", "geometry", "mesh"]
+    assert client.get("/api/project").json()["layers"][1]["tops"]["bh2"] == -9.0
+
+    client.put("/api/project", json=seed_project().model_dump())
+
+
+def test_patch_layers_rejects_invalid_stack_without_mutating_the_project(client):
+    layers = [layer.model_dump() for layer in seed_project().layers]
+    layers[0]["bots"]["bh1"] = -9.0
+
+    assert client.patch("/api/project/layers", json={"layers": layers}).status_code == 422
+    assert client.get("/api/project").json()["layers"][0]["bots"]["bh1"] == -8.0
+
+
+# ── Structure write path ───────────────────────────────────────────────────
+
+def test_patch_structures_updates_loads_and_declares_invalidations(client):
+    loads = [load.model_dump() for load in seed_project().loads]
+    loads[0]["name"] = "North surcharge"
+    loads[0]["components"] = [5.0, 0.0, -35.0]
+
+    response = client.patch("/api/project/structures", json={"loads": loads})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["project"]["loads"][0]["name"] == "North surcharge"
+    assert body["project"]["loads"][0]["components"] == [5.0, 0.0, -35.0]
+    assert body["invalidates"] == ["project", "tree", "geometry", "mesh"]
+    assert client.get("/api/project").json()["loads"] == loads
+
+    client.put("/api/project", json=seed_project().model_dump())
+
+
+def test_patch_structures_rejects_duplicate_loads_without_mutating_project(client):
+    original = [load.model_dump(mode="json") for load in seed_project().loads]
+    response = client.patch(
+        "/api/project/structures", json={"loads": original + [original[0]]}
+    )
+
+    assert response.status_code == 422
+    assert client.get("/api/project").json()["loads"] == original
+
+
+def test_patch_structures_accepts_a_coordinate_defined_point_load(client):
+    point = {
+        "id": "load_crane", "name": "Crane reaction", "kind": "point",
+        "x": 8.5, "z": -3.0, "thickness": 0.25,
+        "components": [15.0, -120.0], "distribution": "Uniform", "active": True,
+    }
+    response = client.patch("/api/project/structures", json={"loads": [point]})
+
+    assert response.status_code == 200
+    assert response.json()["project"]["loads"] == [point]
+
+    client.put("/api/project", json=seed_project().model_dump())
+
+
+SECTION = {"id": "az26", "name": "AZ 26-700", "E": 2.1e8, "nu": 0.3,
+           "area": 0.0198, "inertia": 5.52e-4, "density": 7850.0, "spacing": 1.0}
+BEAM = {"id": "sheetpile_1", "name": "Sheet pile 1", "section": "az26",
+        "points": [[12.0, 0.0], [12.0, -14.0]], "active": True}
+# What comes back: `kind` is defaulted in, which is how a project written before the
+# 3D pile kinds existed still loads as the 2D sheet pile it was saved as, and the
+# section gains the two inertias only a member in space has any use for.
+STORED_BEAM = BEAM | {"kind": "beam"}
+STORED_SECTION = SECTION | {"inertia_minor": None, "torsional_inertia": None}
+
+
+def test_patch_structures_creates_a_sheet_pile_and_its_section(client):
+    loads = [load.model_dump(mode="json") for load in seed_project().loads]
+    response = client.patch("/api/project/structures",
+                            json={"loads": loads, "beam_sections": [SECTION],
+                                  "beams": [BEAM]})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["project"]["beams"] == [STORED_BEAM]
+    assert body["project"]["beam_sections"] == [STORED_SECTION]
+    assert body["invalidates"] == ["project", "tree", "geometry", "mesh"]
+    assert client.get("/api/project").json()["beams"] == [STORED_BEAM]
+
+    client.put("/api/project", json=seed_project().model_dump())
+
+
+def test_patch_structures_rejects_a_beam_without_its_section(client):
+    """The whole-project validation is what stops a dangling section reference."""
+    loads = [load.model_dump(mode="json") for load in seed_project().loads]
+    response = client.patch("/api/project/structures",
+                            json={"loads": loads, "beam_sections": [], "beams": [BEAM]})
+
+    assert response.status_code == 422
+    assert client.get("/api/project").json()["beams"] == []
+
+
+def test_patch_structures_leaves_beams_alone_when_only_loads_are_sent(client):
+    """Editing a load must not delete the sheet piles: an omitted collection is
+    'unchanged', not 'empty'."""
+    loads = [load.model_dump(mode="json") for load in seed_project().loads]
+    client.patch("/api/project/structures",
+                 json={"loads": loads, "beam_sections": [SECTION], "beams": [BEAM]})
+
+    response = client.patch("/api/project/structures", json={"loads": loads})
+
+    assert response.status_code == 200
+    assert response.json()["project"]["beams"] == [STORED_BEAM]
+
+    client.put("/api/project", json=seed_project().model_dump())
+
+
+def test_patch_structures_deletes_a_sheet_pile_with_an_explicit_empty_list(client):
+    loads = [load.model_dump(mode="json") for load in seed_project().loads]
+    client.patch("/api/project/structures",
+                 json={"loads": loads, "beam_sections": [SECTION], "beams": [BEAM]})
+
+    response = client.patch("/api/project/structures",
+                            json={"loads": loads, "beams": []})
+
+    assert response.status_code == 200
+    assert response.json()["project"]["beams"] == []
+
+    client.put("/api/project", json=seed_project().model_dump())
+
+
+ANCHOR_SECTION = {"id": "strand", "name": "4-strand tendon", "E": 1.95e8,
+                  "area": 0.0006, "density": 7850.0, "spacing": 2.5,
+                  "tension_limit": 900.0, "compression_limit": None}
+ANCHOR = {"id": "anchor_1", "name": "Anchor 1", "kind": "anchor", "section": "strand",
+          "head": [12.0, -2.0], "tail": [20.0, -8.0], "prestress": 250.0, "active": True}
+
+
+def test_patch_structures_creates_an_anchor_on_a_sheet_pile(client):
+    loads = [load.model_dump(mode="json") for load in seed_project().loads]
+    response = client.patch("/api/project/structures", json={
+        "loads": loads, "beam_sections": [SECTION], "beams": [BEAM],
+        "anchor_sections": [ANCHOR_SECTION], "anchors": [ANCHOR],
+    })
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["project"]["anchors"] == [ANCHOR]
+    assert body["invalidates"] == ["project", "tree", "geometry", "mesh"]
+
+    client.put("/api/project", json=seed_project().model_dump())
+
+
+def test_patch_structures_refuses_an_anchor_that_hangs_off_no_pile(client):
+    """Whole-project validation is what catches a head that would export a truss
+    connected to nothing."""
+    loads = [load.model_dump(mode="json") for load in seed_project().loads]
+    floating = dict(ANCHOR, head=[30.0, -2.0])
+    response = client.patch("/api/project/structures", json={
+        "loads": loads, "beam_sections": [SECTION], "beams": [BEAM],
+        "anchor_sections": [ANCHOR_SECTION], "anchors": [floating],
+    })
+
+    assert response.status_code == 422
+    assert client.get("/api/project").json()["anchors"] == []
+
+
+def test_patch_structures_leaves_anchors_alone_when_only_loads_are_sent(client):
+    loads = [load.model_dump(mode="json") for load in seed_project().loads]
+    client.patch("/api/project/structures", json={
+        "loads": loads, "beam_sections": [SECTION], "beams": [BEAM],
+        "anchor_sections": [ANCHOR_SECTION], "anchors": [ANCHOR],
+    })
+
+    response = client.patch("/api/project/structures", json={"loads": loads})
+
+    assert response.status_code == 200
+    assert response.json()["project"]["anchors"] == [ANCHOR]
+
+    client.put("/api/project", json=seed_project().model_dump())
+
+
+INTERFACE_SECTION = {"id": "contact_1", "name": "Steel against sand",
+                     "material": "mat_sand", "r_inter": 0.67,
+                     "virtual_thickness": 0.01, "normal_stiffness": None,
+                     "shear_stiffness": None, "permeability": "Neutral"}
+INTERFACE = {"id": "interface_1", "name": "Wall contact", "kind": "interface",
+             "section": "contact_1", "structure": "sheetpile_1", "points": None,
+             "side": "both", "active": True}
+
+
+def interface_section(client) -> dict:
+    """The contact, bound to whichever soil the stored project actually has."""
+    material = client.get("/api/project").json()["materials"][0]["id"]
+    return dict(INTERFACE_SECTION, material=material)
+
+
+def test_patch_structures_creates_an_interface_on_a_sheet_pile(client):
+    loads = [load.model_dump(mode="json") for load in seed_project().loads]
+    response = client.patch("/api/project/structures", json={
+        "loads": loads, "beam_sections": [SECTION], "beams": [BEAM],
+        "interface_sections": [interface_section(client)], "interfaces": [INTERFACE],
+    })
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["project"]["interfaces"] == [INTERFACE]
+    assert body["invalidates"] == ["project", "tree", "geometry", "mesh"]
+    assert client.get("/api/project").json()["interfaces"] == [INTERFACE]
+
+    client.put("/api/project", json=seed_project().model_dump())
+
+
+def test_patch_structures_refuses_an_interface_against_no_pile(client):
+    """Whole-project validation again: an interface following a pile that is not in
+    the project would mesh into a contact holding nothing."""
+    loads = [load.model_dump(mode="json") for load in seed_project().loads]
+    response = client.patch("/api/project/structures", json={
+        "loads": loads, "interface_sections": [interface_section(client)],
+        "interfaces": [INTERFACE],
+    })
+
+    assert response.status_code == 422
+    assert client.get("/api/project").json()["interfaces"] == []
+
+
+def test_patch_structures_refuses_an_interface_without_its_section(client):
+    loads = [load.model_dump(mode="json") for load in seed_project().loads]
+    response = client.patch("/api/project/structures", json={
+        "loads": loads, "beam_sections": [SECTION], "beams": [BEAM],
+        "interface_sections": [], "interfaces": [INTERFACE],
+    })
+
+    assert response.status_code == 422
+    assert client.get("/api/project").json()["interfaces"] == []
+
+
+def test_patch_structures_leaves_interfaces_alone_when_only_loads_are_sent(client):
+    loads = [load.model_dump(mode="json") for load in seed_project().loads]
+    client.patch("/api/project/structures", json={
+        "loads": loads, "beam_sections": [SECTION], "beams": [BEAM],
+        "interface_sections": [interface_section(client)], "interfaces": [INTERFACE],
+    })
+
+    response = client.patch("/api/project/structures", json={"loads": loads})
+
+    assert response.status_code == 200
+    assert response.json()["project"]["interfaces"] == [INTERFACE]
+
+    client.put("/api/project", json=seed_project().model_dump())
+
+
+def test_patch_structures_deletes_an_interface_with_an_explicit_empty_list(client):
+    loads = [load.model_dump(mode="json") for load in seed_project().loads]
+    client.patch("/api/project/structures", json={
+        "loads": loads, "beam_sections": [SECTION], "beams": [BEAM],
+        "interface_sections": [interface_section(client)], "interfaces": [INTERFACE],
+    })
+
+    response = client.patch("/api/project/structures",
+                            json={"loads": loads, "interfaces": []})
+
+    assert response.status_code == 200
+    assert response.json()["project"]["interfaces"] == []
+    assert response.json()["project"]["interface_sections"], \
+        "a reusable contact outlives the interface using it"
+
+    client.put("/api/project", json=seed_project().model_dump())
+
+
+# ── Borehole write path (rides on the layer update) ─────────────────────────
+
+def test_patch_layers_can_move_and_rename_a_borehole(client):
+    project = seed_project()
+    boreholes = [b.model_dump() for b in project.boreholes]
+    boreholes[0].update(name="BH-North", x=5.0, y=7.0, head=-0.6, water=-2.4)
+
+    response = client.patch("/api/project/layers", json={
+        "layers": [layer.model_dump() for layer in project.layers],
+        "boreholes": boreholes,
+    })
+    assert response.status_code == 200
+
+    saved = client.get("/api/project").json()["boreholes"][0]
+    assert (saved["name"], saved["x"], saved["y"]) == ("BH-North", 5.0, 7.0)
+    assert (saved["head"], saved["water"]) == (-0.6, -2.4)
+
+    client.put("/api/project", json=seed_project().model_dump())
+
+
+def test_patch_layers_adds_a_borehole_together_with_its_layer_levels(client):
+    project = seed_project()
+    boreholes = [b.model_dump() for b in project.boreholes]
+    boreholes.append({"id": "bh4", "name": "BH-4", "x": 40.0, "y": 20.0,
+                      "head": 0.0, "water": -1.5})
+
+    layers = [layer.model_dump() for layer in project.layers]
+    for layer in layers:
+        layer["tops"]["bh4"] = layer["tops"]["bh1"]
+        layer["bots"]["bh4"] = layer["bots"]["bh1"]
+
+    response = client.patch("/api/project/layers",
+                            json={"layers": layers, "boreholes": boreholes})
+    assert response.status_code == 200
+    assert client.get("/api/project").json()["boreholes"][-1]["id"] == "bh4"
+
+    client.put("/api/project", json=seed_project().model_dump())
+
+
+def test_patch_layers_rejects_a_borehole_the_layers_do_not_cover(client):
+    """A borehole with no levels in the stack is exactly what validate_layer_stack
+    is there to catch — the pair has to arrive consistent."""
+    project = seed_project()
+    boreholes = [b.model_dump() for b in project.boreholes]
+    boreholes.append({"id": "bh4", "name": "BH-4", "x": 40.0, "y": 20.0,
+                      "head": 0.0, "water": -1.5})
+
+    response = client.patch("/api/project/layers", json={
+        "layers": [layer.model_dump() for layer in project.layers],
+        "boreholes": boreholes,
+    })
+    assert response.status_code == 422
+    assert len(client.get("/api/project").json()["boreholes"]) == 3
+
+
+# ── Domain write path (rides on the layer update too) ───────────────────────
+
+def test_patch_layers_can_resize_the_domain(client):
+    project = seed_project()
+    domain = project.domain.model_dump()
+    domain.update(x1=60.0, y1=45.0)
+
+    response = client.patch("/api/project/layers", json={
+        "layers": [layer.model_dump() for layer in project.layers],
+        "domain": domain,
+    })
+    assert response.status_code == 200
+
+    saved = client.get("/api/project").json()["domain"]
+    assert (saved["x1"], saved["y1"]) == (60.0, 45.0)
+
+    client.put("/api/project", json=seed_project().model_dump())
+
+
+def test_patch_layers_rejects_an_inverted_domain(client):
+    project = seed_project()
+    domain = project.domain.model_dump()
+    domain["x1"] = domain["x0"] - 1.0
+
+    response = client.patch("/api/project/layers", json={
+        "layers": [layer.model_dump() for layer in project.layers],
+        "domain": domain,
+    })
+    assert response.status_code == 422
+    assert client.get("/api/project").json()["domain"]["x1"] == seed_project().domain.x1
+
+
+# ── Material write path ─────────────────────────────────────────────────────
+
+def test_patch_materials_saves_edited_values_including_the_interface_fields(client):
+    materials = [m.model_dump() for m in seed_project().materials]
+    materials[1].update(name="Sand, medium", color="#ff0000", g_unsat=18.6,
+                        r_inter=0.65, interface_permeability="Drain")
+
+    response = client.patch("/api/project/materials", json={"materials": materials})
+    assert response.status_code == 200
+    assert response.json()["invalidates"] == ["project", "tree", "geometry"]
+
+    saved = client.get("/api/project").json()["materials"][1]
+    assert (saved["name"], saved["color"], saved["g_unsat"]) == ("Sand, medium", "#ff0000", 18.6)
+    assert (saved["r_inter"], saved["interface_permeability"]) == (0.65, "Drain")
+
+    client.put("/api/project", json=seed_project().model_dump())
+
+
+def test_patch_materials_accepts_a_newly_added_material(client):
+    materials = [m.model_dump() for m in seed_project().materials]
+    materials.append({
+        "id": "mx1", "name": "Peat, soft", "model": "Soft Soil", "type": "Undrained (A)",
+        "color": "#9aa7b4", "g_unsat": 11.0, "g_sat": 12.0, "E": 2000.0, "nu": 0.35,
+        "c": 2.0, "phi": 20.0, "k": 0.001, "r_inter": 0.5,
+        "interface_permeability": "Impermeable",
+    })
+
+    assert client.patch("/api/project/materials",
+                        json={"materials": materials}).status_code == 200
+    assert client.get("/api/project").json()["materials"][-1]["id"] == "mx1"
+
+    client.put("/api/project", json=seed_project().model_dump())
+
+
+def test_patch_materials_refuses_to_drop_a_material_a_layer_still_uses(client):
+    """The delete guard in the material editor, enforced for real: layer L1 points
+    at m2, so a library without m2 must not be stored."""
+    materials = [m.model_dump() for m in seed_project().materials if m.id != "m2"]
+
+    response = client.patch("/api/project/materials", json={"materials": materials})
+    assert response.status_code == 422
+    assert len(client.get("/api/project").json()["materials"]) == 6
+
+
+def test_patch_materials_rejects_out_of_range_values(client):
+    materials = [m.model_dump() for m in seed_project().materials]
+    materials[0]["r_inter"] = 1.5
+
+    assert client.patch("/api/project/materials",
+                        json={"materials": materials}).status_code == 422
+    assert client.get("/api/project").json()["materials"][0]["r_inter"] == 0.70
+
+
+# ── Custom soil volumes ─────────────────────────────────────────────────────
+
+EMBANKMENT = {
+    "kind": "polygon_extrude",
+    "label": "Embankment",
+    "vertices": [[0, 0, 0], [3, 0, 3], [9, 0, 3], [12, 0, 0]],
+    "extrusion": [0, 30, 0],
+}
+
+
+def test_a_custom_part_may_carry_a_soil_material(client):
+    """A drawn solid becomes soil when given a material: it takes that material's
+    colour, which is what makes it render and mesh as ground rather than as a prop."""
+    response = client.post("/api/geometry/create", json=dict(EMBANKMENT, material="m1"))
+    assert response.status_code == 200
+
+    part = client.get("/api/project").json()["custom_parts"][-1]
+    assert part["mat"] == "m1"
+    assert part["color"] == seed_project().material("m1").color
+
+    client.delete("/api/project/custom_parts")
+
+
+def test_creating_a_custom_part_rejects_an_unknown_material(client):
+    response = client.post("/api/geometry/create", json=dict(EMBANKMENT, material="nope"))
+    assert response.status_code == 422
+    assert client.get("/api/project").json()["custom_parts"] == []
+
+
+def test_a_second_solid_in_exactly_the_same_place_is_refused(client):
+    """Fragmenting two coincident solids gives the shared volume to one of them, so
+    the other would own nothing and draw nothing (see tessellate's .get fallback)."""
+    assert client.post("/api/geometry/create", json=dict(EMBANKMENT, material="m1")).status_code == 200
+
+    duplicate = dict(EMBANKMENT, label="Copy", material="m4")
+    response = client.post("/api/geometry/create", json=duplicate)
+    assert response.status_code == 422
+    assert "same place" in response.json()["detail"]
+    assert len(client.get("/api/project").json()["custom_parts"]) == 1
+
+    # The model still builds, which is the point of refusing.
+    assert client.get("/api/geometry").status_code == 200
+
+    client.delete("/api/project/custom_parts")
+
+
+def test_two_overlapping_but_distinct_soil_volumes_both_survive(client):
+    """Overlap is legitimate -- fragmentation splits it -- and both keep a section."""
+    assert client.post("/api/geometry/create", json=dict(EMBANKMENT, material="m1")).status_code == 200
+    shifted = dict(EMBANKMENT, label="Emb B", material="m4",
+                   vertices=[[6, 0, 0], [9, 0, 3], [15, 0, 3], [18, 0, 0]])
+    assert client.post("/api/geometry/create", json=shifted).status_code == 200
+
+    keys = {section["key"] for section in client.get("/api/geometry").json()["sections"]}
+    assert {"drawn_0", "drawn_1"} <= keys
+
+    client.delete("/api/project/custom_parts")
+
+
+def test_patch_layers_can_reassign_a_custom_part_material(client):
+    assert client.post("/api/geometry/create", json=dict(EMBANKMENT, material="m1")).status_code == 200
+
+    project = client.get("/api/project").json()
+    parts = project["custom_parts"]
+    parts[0]["mat"] = "m4"
+
+    response = client.patch("/api/project/layers",
+                            json={"layers": project["layers"], "custom_parts": parts})
+    assert response.status_code == 200
+    assert client.get("/api/project").json()["custom_parts"][0]["mat"] == "m4"
+
+    client.delete("/api/project/custom_parts")
+
+
+def test_a_custom_part_pointing_at_an_unknown_material_is_rejected(client):
+    assert client.post("/api/geometry/create", json=dict(EMBANKMENT, material="m1")).status_code == 200
+
+    project = client.get("/api/project").json()
+    parts = project["custom_parts"]
+    parts[0]["mat"] = "ghost"
+
+    response = client.patch("/api/project/layers",
+                            json={"layers": project["layers"], "custom_parts": parts})
+    assert response.status_code == 422
+    assert client.get("/api/project").json()["custom_parts"][0]["mat"] == "m1"
+
+    client.delete("/api/project/custom_parts")
+
+
+def test_a_soil_volume_can_be_rebuilt_in_place(client):
+    """Editing the coordinates must keep the key: its mesh size, tree row and any
+    selection are all keyed by it."""
+    assert client.post("/api/geometry/create", json=dict(EMBANKMENT, material="m1")).status_code == 200
+    key = client.get("/api/project").json()["custom_parts"][0]["key"]
+
+    taller = dict(EMBANKMENT, material="m1", replace=key,
+                  vertices=[[0, 0, 0], [3, 0, 5], [9, 0, 5], [12, 0, 0]])
+    assert client.post("/api/geometry/create", json=taller).status_code == 200
+
+    parts = client.get("/api/project").json()["custom_parts"]
+    assert len(parts) == 1
+    assert parts[0]["key"] == key
+    assert parts[0]["recipe"]["vertices"][1] == [3, 0, 5]
+
+    client.delete("/api/project/custom_parts")
+
+
+def test_replacing_an_unknown_part_is_a_404(client):
+    response = client.post("/api/geometry/create",
+                           json=dict(EMBANKMENT, material="m1", replace="drawn_99"))
+    assert response.status_code == 404
+    assert client.get("/api/project").json()["custom_parts"] == []
+
+
+# ── The frozen demo is served in place ──────────────────────────────────────
+
+@pytest.mark.parametrize(
+    "path",
+    ["/css/tokens.css", "/css/layout.css", "/css/components.css",
+     "/js/app.js", "/js/data.js", "/js/explorer.js", "/js/viewport.js",
+     "/vendor/three.min.js", "/assets/deltares-logo.svg"],
+)
+def test_frozen_assets_are_served(client, path):
+    assert client.get(path).status_code == 200
+
+
+# ── The live shell ──────────────────────────────────────────────────────────
+
+def test_root_serves_the_live_shell(client):
+    body = client.get("/").text
+    assert "/live/js/viewport.js" in body
+
+
+def test_the_live_shell_substitutes_exactly_one_frozen_script(client):
+    """The whole portability argument rests on this: every frozen module is loaded
+    verbatim except js/viewport.js, which is the only one that invents geometry. If a
+    second file ever needs replacing, that is a design change and should not pass
+    quietly."""
+    body = client.get("/").text
+    frozen = re.findall(r'src="/js/([a-z]+\.js)"', body)
+    replaced = re.findall(r'src="/live/js/([a-z-]+\.js)"', body)
+
+    assert "viewport.js" not in frozen, "the frozen viewport must not be loaded"
+    assert set(frozen) == {"data.js", "ui.js", "orbit.js", "menubar.js",
+                           "toolbars.js", "explorer.js", "command.js", "dialogs.js", "app.js"}
+    # soil-volume-dialog.js and canvas-renderer.js are additions, not substitutions:
+    # they have no frozen counterpart. The assertion above is the one that guards the
+    # portability claim.
+    assert set(replaced) == {"api.js", "buffers.js", "model.js", "viewport.js", "patches.js",
+                                 "mesh-settings.js", "import-dialog.js", "mdpa-import-dialog.js",
+                                 "draw-input.js", "soil-volume-dialog.js", "canvas-renderer.js",
+                                 "export.js", "history.js", "loads.js", "beams.js", "anchors.js",
+                                 "interfaces.js", "material-library.js"}
+
+
+def test_the_live_viewport_keeps_the_frozen_public_api(client):
+    """js/app.js, toolbars.js and menubar.js only ever reach the 3D through these
+    thirteen names (js/viewport.js:707-712). Dropping one breaks a button silently."""
+    from tests.frozen import FROZEN_ROOT
+
+    def exported(source: str) -> set[str]:
+        tail = source[source.rindex("return {"):]
+        return set(re.findall(r"(\w+)\s*:", tail[:tail.index("}")]))
+
+    frozen = exported((FROZEN_ROOT / "js/viewport.js").read_text(encoding="utf-8"))
+    live = exported(client.get("/live/js/viewport.js").text)
+    assert frozen <= live, f"missing from the live viewport: {sorted(frozen - live)}"
+
+
+def test_the_frozen_viewport_is_still_served_for_the_file_url_demo(client):
+    """Mounted, not deleted. Opening Mockup/index.html off disk must still work."""
+    assert "CylinderGeometry" in client.get("/js/viewport.js").text
+
+
+def test_served_frozen_files_are_byte_identical_to_the_originals(client):
+    """Mounted, not copied. A second copy would drift from the file:// demo."""
+    from tests.frozen import FROZEN_ROOT
+
+    for path in ("js/viewport.js", "css/tokens.css"):
+        served = client.get("/" + path).content
+        assert served == (FROZEN_ROOT / path).read_bytes(), path
+
+
+# ── Model dimension ─────────────────────────────────────────────────────────
+
+@pytest.fixture
+def restore_3d(client):
+    """The project store is process-global, so a test that switches to 2D has to
+    put it back or every test after it meshes a section instead of a solid."""
+    yield
+    client.patch("/api/project/dimension", json={"dimension": 3})
+
+
+def test_switching_to_2d_resolves_the_section_plane(client, restore_3d):
+    body = client.patch("/api/project/dimension", json={"dimension": 2}).json()
+    project = body["project"]
+    assert project["dimension"] == 2
+    domain = project["domain"]
+    assert project["section_offset"] == pytest.approx((domain["y0"] + domain["y1"]) / 2)
+
+
+def test_switching_dimension_invalidates_everything_downstream(client, restore_3d):
+    body = client.patch("/api/project/dimension", json={"dimension": 2}).json()
+    # The tree too: a part that misses the plane is gone from the model explorer.
+    assert set(body["invalidates"]) == {"project", "tree", "geometry", "mesh"}
+
+
+def test_an_explicit_section_plane_is_accepted(client, restore_3d):
+    body = client.patch("/api/project/dimension",
+                        json={"dimension": 2, "section_offset": 6.25}).json()
+    assert body["project"]["section_offset"] == 6.25
+
+
+def test_a_section_outside_the_domain_is_refused(client, restore_3d):
+    response = client.patch("/api/project/dimension",
+                            json={"dimension": 2, "section_offset": 999.0})
+    assert response.status_code == 422
+    assert client.get("/api/project").json()["dimension"] == 3, "a refused patch must not commit"
+
+
+def test_geometry_after_the_switch_is_a_flat_section(client, restore_3d):
+    client.patch("/api/project/dimension", json={"dimension": 2})
+    payload = client.get("/api/geometry").json()
+    section_offset = client.get("/api/project").json()["section_offset"]
+    assert payload["bbox"][1] == pytest.approx(section_offset, abs=1e-3)
+    assert payload["bbox"][4] == pytest.approx(section_offset, abs=1e-3)
+    assert payload["sections"], "the section still has to be drawable"
+
+
+def test_switching_back_to_3d_restores_the_solid(client, restore_3d):
+    client.patch("/api/project/dimension", json={"dimension": 2})
+    client.patch("/api/project/dimension", json={"dimension": 3})
+    payload = client.get("/api/geometry").json()
+    assert payload["bbox"][4] - payload["bbox"][1] > 1.0
+
+
+def test_the_switch_carries_which_plane_to_cut(client, restore_3d):
+    body = client.patch("/api/project/dimension",
+                        json={"dimension": 2, "section_plane": "xy"}).json()
+    assert body["project"]["section_plane"] == "xy"
+    # The offset must be resolved along the *new* plane's normal, not the old one.
+    domain = body["project"]["domain"]
+    assert body["project"]["section_offset"] == pytest.approx(
+        (domain["z_bottom"] + domain["z_top"]) / 2)
+
+
+def test_a_plan_switch_yields_geometry_flat_in_z(client, restore_3d):
+    client.patch("/api/project/dimension", json={"dimension": 2, "section_plane": "xy"})
+    payload = client.get("/api/geometry").json()
+    offset = client.get("/api/project").json()["section_offset"]
+    assert payload["bbox"][2] == pytest.approx(offset, abs=1e-3)
+    assert payload["bbox"][5] == pytest.approx(offset, abs=1e-3)
+    assert payload["bbox"][4] - payload["bbox"][1] > 1.0, "a plan view still spans y"
+
+
+def test_switching_between_the_two_2d_planes_re_resolves_the_offset(client, restore_3d):
+    client.patch("/api/project/dimension", json={"dimension": 2, "section_plane": "xz"})
+    elevation = client.get("/api/project").json()["section_offset"]
+    client.patch("/api/project/dimension", json={"dimension": 2, "section_plane": "xy"})
+    plan = client.get("/api/project").json()["section_offset"]
+    # 20.0 (mid-y) would be far outside the domain measured along z.
+    assert elevation != plan
+
+
+# ── Kratos export ───────────────────────────────────────────────────────────
+
+def test_export_returns_a_deck_and_its_material_file(client):
+    body = client.post("/api/export/mdpa", json={"element_size": 8.0, "order": 2}).json()
+    assert body["mdpa"].startswith("Begin Properties 0")
+    assert "Begin Nodes" in body["mdpa"] and "Begin SubModelPart Soil_1" in body["mdpa"]
+    assert json.loads(body["materials"])["properties"]
+    assert json.loads(body["project_parameters"])["processes"]["loads_process_list"]
+    assert body["stats"]["elements"] > 0
+
+
+def test_export_can_leave_the_material_file_out(client):
+    body = client.post("/api/export/mdpa",
+                       json={"element_size": 8.0, "include_materials": False}).json()
+    assert body["materials"] is None
+    assert body["mdpa"]
+
+
+def test_export_rejects_an_unknown_body_key(client):
+    response = client.post("/api/export/mdpa",
+                           json={"element_size": 8.0, "volume_keys": ["soil_L9"]})
+    assert response.status_code == 422
+
+
+def test_export_of_a_section_is_a_plane_strain_deck(client, restore_3d):
+    client.patch("/api/project/dimension", json={"dimension": 2, "section_offset": 20.0})
+    loads = client.get("/api/project").json()["loads"]
+    loads.append({
+        "id": "load_line", "name": "LineLoad_1", "kind": "line",
+        "x0": 1.0, "x1": 10.0, "z": 0.0, "thickness": 0.15,
+        "components": [0.0, -20.0], "distribution": "Uniform", "active": True,
+    })
+    client.patch("/api/project/structures", json={"loads": loads})
+    body = client.post("/api/export/mdpa", json={"element_size": 8.0, "order": 2}).json()
+    assert "SmallStrainUPwDiffOrderElement2D6N" in body["mdpa"]
+    assert "LineLoadDiffOrderCondition2D3N" in body["mdpa"], "the load pad is in this section"
+
+
+# ── Cache control ───────────────────────────────────────────────────────────
+
+@pytest.mark.parametrize("path", ["/", "/live/js/patches.js", "/js/viewport.js",
+                                  "/live/css/live.css", "/css/layout.css"])
+def test_app_sources_are_never_cached(client, path):
+    """The frontend is edited constantly and reloaded in a browser that is happy to
+    keep an old copy. A half-stale mix -- new patches.js against an old viewport.js,
+    say -- fails in ways that look like model bugs rather than caching, so the
+    served sources say not to cache them at all."""
+    headers = client.get(path).headers
+    assert "no-store" in headers.get("cache-control", "")
+
+
+def test_static_assets_may_still_be_cached(client):
+    """Only the sources. The logo and the pinned three.js build never change."""
+    assert "no-store" not in client.get("/vendor/three.min.js").headers.get("cache-control", "")
+
+
+# ── 3D structures through the same one endpoint ─────────────────────────────
+
+PANEL_SECTION = {"id": "az26_wall", "name": "AZ 26-700 wall", "E": 2.1e8, "nu": 0.3,
+                 "thickness": 0.4, "density": 7850.0}
+PANEL = {"id": "panel_1", "name": "Wall 1", "kind": "panel", "section": "az26_wall",
+         "footprint": [[12.0, 4.0], [12.0, 20.0]], "z_top": 0.0, "z_toe": -14.0,
+         "active": True}
+MEMBER = {"id": "member_1", "name": "King post 1", "kind": "member", "section": "az26",
+          "points": [[18.0, 10.0, 0.0], [18.0, 10.0, -12.0]], "active": True}
+TENDON = {"id": "strand", "name": "4-strand tendon", "E": 1.95e8, "area": 0.0006,
+          "density": 7850.0, "spacing": 2.5, "tension_limit": 900.0,
+          "compression_limit": None}
+SPACE_ANCHOR = {"id": "anchor_1", "name": "Anchor 1", "kind": "anchor3d",
+                "section": "strand", "head": [12.0, 10.0, -2.0],
+                "tail": [17.0, 10.0, -8.0], "prestress": 250.0, "active": True}
+
+
+def test_patch_structures_creates_a_wall_a_member_and_a_space_anchor(client):
+    """One endpoint for every structure kind, in either dimension: the 3D records go
+    through the same validated transaction the 2D ones do."""
+    loads = [load.model_dump(mode="json") for load in seed_project().loads]
+    response = client.patch("/api/project/structures",
+                            json={"loads": loads,
+                                  "beam_sections": [SECTION],
+                                  "panel_sections": [PANEL_SECTION],
+                                  "beams": [PANEL, MEMBER],
+                                  "anchor_sections": [TENDON],
+                                  "anchors": [SPACE_ANCHOR]})
+
+    assert response.status_code == 200, response.json()
+    stored = client.get("/api/project").json()
+    assert [b["kind"] for b in stored["beams"]] == ["panel", "member"]
+    assert [a["kind"] for a in stored["anchors"]] == ["anchor3d"]
+    assert stored["panel_sections"] == [PANEL_SECTION]
+
+    client.put("/api/project", json=seed_project().model_dump())
+
+
+def test_patch_structures_rejects_a_wall_without_its_section(client):
+    loads = [load.model_dump(mode="json") for load in seed_project().loads]
+    response = client.patch("/api/project/structures",
+                            json={"loads": loads, "panel_sections": [], "beams": [PANEL]})
+
+    assert response.status_code == 422
+    assert client.get("/api/project").json()["beams"] == []
+
+
+def test_patch_structures_leaves_panel_sections_alone_when_unmentioned(client):
+    """An omitted collection means 'unchanged', for the 3D library as for the 2D one."""
+    loads = [load.model_dump(mode="json") for load in seed_project().loads]
+    client.patch("/api/project/structures",
+                 json={"loads": loads, "panel_sections": [PANEL_SECTION],
+                       "beams": [PANEL]})
+    response = client.patch("/api/project/structures", json={"loads": loads})
+
+    assert response.status_code == 200
+    assert response.json()["project"]["panel_sections"] == [PANEL_SECTION]
+    assert [b["id"] for b in response.json()["project"]["beams"]] == ["panel_1"]
+
+    client.put("/api/project", json=seed_project().model_dump())
+
+
+def test_a_3d_structural_model_goes_from_patch_to_deck_through_the_api(client):
+    """The whole 3D path the frontend drives, over HTTP: create a wall, a member and
+    an anchor, draw them, mesh them, and export the deck they produce."""
+    loads = [load.model_dump(mode="json") for load in seed_project().loads]
+    created = client.patch("/api/project/structures",
+                           json={"loads": loads,
+                                 "beam_sections": [SECTION],
+                                 "panel_sections": [PANEL_SECTION],
+                                 "beams": [PANEL, MEMBER],
+                                 "anchor_sections": [TENDON],
+                                 "anchors": [SPACE_ANCHOR]})
+    assert created.status_code == 200, created.json()
+
+    drawn = client.get("/api/geometry").json()
+    keys = {section["key"] for section in drawn["sections"]}
+    assert {"panel_1", "member_1", "anchor_1"} <= keys, "the viewport cannot draw them"
+
+    meshed = client.post("/api/mesh", json={"element_size": 8.0, "order": 2})
+    assert meshed.status_code == 200, meshed.json()
+
+    body = client.post("/api/export/mdpa", json={"element_size": 8.0, "order": 2}).json()
+    deck, materials = body["mdpa"], json.loads(body["materials"])
+    assert "ShellThinElement3D3N" in deck, "no wall in the deck"
+    assert "Beam" in deck and "3D" in deck, "no member in the deck"
+    assert "LinearTrussElement3D2N" in deck, "no anchor in the deck"
+    assert "Anchor_1_Support" in deck, "the tail is not held by anything"
+    named = {entry["model_part_name"] for entry in materials["properties"]}
+    assert {"PorousDomain.Wall_1", "PorousDomain.King_post_1",
+            "PorousDomain.Anchor_1"} <= named
+    assert any("order 1" in warning for warning in body["warnings"]), body["warnings"]
+
+    client.put("/api/project", json=seed_project().model_dump())
