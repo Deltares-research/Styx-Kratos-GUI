@@ -208,8 +208,8 @@ def export_project(project: Project, settings: MeshRequest,
     node_id = {tag: index for index, tag in enumerate(used, start=1)}
 
     part_materials = _part_materials(project, names, blocks)
-    numbered, parts, next_id = _number_elements(blocks, names, node_id)
-    condition_blocks, load_parts = _number_conditions(conditions, names, node_id, next_id)
+    numbered, parts = _number_elements(blocks, names, node_id)
+    condition_blocks, load_parts = _number_conditions(conditions, names, node_id)
     body_tags = {tag for _, _, rows in soil_blocks for row in rows for tag in row}
     boundaries = _boundary_nodes(project, dim, world, node_id, body_tags)
     parts.extend(_boundary_parts(boundaries))
@@ -781,7 +781,7 @@ def _unique(name: str, used: set[str]) -> str:
 def _number_elements(blocks: list[tuple[str, str, list[list[int]]]],
                      names: dict[str, str], node_id: dict[int, int]
                      ) -> tuple[list[tuple[str, list[tuple[int, int, list[int]]]]],
-                                list[tuple[str, list[int], list[int], list[int]]], int]:
+                                list[tuple[str, list[int], list[int], list[int]]]]:
     """Assign element ids in emission order and collect one sub-model part per body."""
     numbered = []
     parts: dict[str, tuple[list[int], list[int]]] = {}
@@ -797,17 +797,16 @@ def _number_elements(blocks: list[tuple[str, str, list[list[int]]]],
         nodes.extend(n for _, _, connectivity in entries for n in connectivity)
     ordered = [(name, sorted(set(nodes)), sorted(elements), [])
                for name, (nodes, elements) in parts.items()]
-    return numbered, ordered, next_id
+    return numbered, ordered
 
 
 def _number_conditions(
     conditions: list[tuple[str, str, list[list[int]]]],
     names: dict[str, str],
     node_id: dict[int, int],
-    next_id: int,
 ) -> tuple[list[tuple[str, list[tuple[int, int, list[int]]]]],
            list[tuple[str, list[int], list[int], list[int]]]]:
-    """Conditions continue the element id space, as GiD's decks do.
+    """Assign condition ids in emission order, in their own id space starting at 1.
 
     Property 0, always: a load's magnitude is not read off a Properties block (see
     `_load_variable`), and every reference GeoMechanics deck in examples/ writes 0 here
@@ -815,6 +814,7 @@ def _number_conditions(
     """
     numbered = []
     parts = []
+    next_id = 1
     for key, class_name, rows in conditions:
         entries = []
         nodes: set[int] = set()

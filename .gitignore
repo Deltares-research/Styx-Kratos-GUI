@@ -7,6 +7,7 @@ plan/
 examples/
 graphify-out/
 AGENTS.md
+test/
 
 # Python and test caches
 __pycache__/

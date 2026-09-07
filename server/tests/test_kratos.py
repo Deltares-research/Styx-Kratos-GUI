@@ -158,11 +158,22 @@ def test_node_ids_are_contiguous_from_one_and_every_node_is_used(solid):
     assert used == set(deck.nodes)
 
 
-def test_elements_and_conditions_share_one_ascending_id_space(section):
+def test_elements_and_conditions_are_each_numbered_from_one(section):
+    """Two id spaces, not one: Kratos keeps conditions in a container of their own, and
+    a sub-model part's `Conditions` list is read against that container."""
     deck = deck_of(section)
-    ids = deck.element_ids() + deck.condition_ids()
-    assert len(set(ids)) == len(ids)
-    assert sorted(ids) == list(range(1, len(ids) + 1))
+    for ids in (deck.element_ids(), deck.condition_ids()):
+        assert ids
+        assert sorted(ids) == list(range(1, len(ids) + 1))
+
+
+def test_a_load_part_lists_its_conditions_by_their_own_ids(section):
+    deck = deck_of(section)
+    part = deck.parts["LineLoad_1"]
+    assert part.conditions == sorted(deck.condition_ids())
+    assert part.nodes == sorted({n for block in deck.conditions
+                                 for c in part.conditions
+                                 for n in block.entries[c]})
 
 
 def test_a_sub_model_part_lists_exactly_the_nodes_of_its_elements(solid):

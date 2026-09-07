@@ -161,12 +161,14 @@ def test_sub_model_part_names_are_unique_and_legal_kratos_identifiers(golden, de
 
 
 def test_every_part_lists_exactly_the_nodes_its_own_entities_use(deck):
-    blocks = deck.elements + deck.conditions
+    # Elements and conditions are numbered from 1 each, so an id is only meaningful
+    # against the container it came from.
     for name, part in deck.parts.items():
-        owned = set(part.elements) | set(part.conditions)
-        if not owned:
+        if not part.elements and not part.conditions:
             continue        # a boundary or support group is nodes by definition
-        expected = {n for block in blocks
+        expected = {n for blocks, owned in ((deck.elements, set(part.elements)),
+                                            (deck.conditions, set(part.conditions)))
+                    for block in blocks
                     for entry, nodes in block.entries.items() if entry in owned
                     for n in nodes}
         assert part.nodes == sorted(expected), name
