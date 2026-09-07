@@ -846,27 +846,27 @@ App.LivePatches = (function () {
   }
 
   function saveProject() {
-    // The server's copy, not the browser's: App.PROJECT is a snapshot from whenever
-    // the last request answered, and a save has to be of what is actually modelled.
-    return App.Api.get('/api/project')
-      .then(function (project) {
-        downloadFile(projectFileName(project), JSON.stringify(project, null, 2));
-        if (App.Command) App.Command.ok('Saved ' + projectFileName(project) + '.');
+    // The window is asked for first, before anything is awaited: a browser only
+    // offers the save picker while the click that opened the menu still counts as a
+    // gesture. Without it Chrome on Windows drops the file into Downloads unasked.
+    return App.Download.pickFile(projectFileName(App.PROJECT), 'application/json')
+      .then(function (handle) {
+        if (handle === App.Download.CANCELLED) return;
+        // The server's copy, not the browser's: App.PROJECT is a snapshot from
+        // whenever the last request answered, and a save has to be of what is
+        // actually modelled.
+        return App.Api.get('/api/project').then(function (project) {
+          var name = (handle && handle.name) || projectFileName(project);
+          return App.Download.write(handle, projectFileName(project),
+                                    JSON.stringify(project, null, 2), 'application/json')
+            .then(function () {
+              if (App.Command) App.Command.ok('Saved ' + name + '.');
+            });
+        });
       })
       .catch(function (error) {
         if (App.Command) App.Command.err('Could not save the project: ' + error.message);
       });
-  }
-
-  function downloadFile(name, text) {
-    var url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
-    var link = document.createElement('a');
-    link.href = url;
-    link.download = name;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    setTimeout(function () { URL.revokeObjectURL(url); }, 0);
   }
 
   /* ── Pan / rotate ────────────────────────────────────────────────────────── */
