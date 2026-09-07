@@ -296,4 +296,102 @@
     });
     T.ok(selectable.length >= 1);
   });
+  /* ── Standing on a drawn layer ────────────────────────────────────
+     `Domain` is the block the boreholes describe; an embankment drawn on top of it
+     reaches above `z_top`. A load placed there is on model geometry, and refusing it
+     as "outside the model domain" is the bug App.Model.extentOf fixes -- it mirrors
+     the server's `Project.extent`. */
+
+  var EMBANKMENT = { key: 'drawn_1', label: 'Embankment', source: 'gui',
+                     bbox: [0, 0, 0, 50, 40, 4] };
+
+  test('a point load on a drawn layer above ground is accepted', function () {
+    var project = Object.assign({}, SECTION, { custom_parts: [EMBANKMENT] });
+    var load = App.Loads.draftPoint(project, [10, 2]);
+    T.eq(load.z, 2);
+  });
+
+  test('a point load above everything in the model is still refused', function () {
+    var project = Object.assign({}, SECTION, { custom_parts: [EMBANKMENT] });
+    var error = null;
+    try { App.Loads.draftPoint(project, [10, 9]); } catch (e) { error = e; }
+    T.ok(error, 'the check is relaxed, not removed');
+  });
+
+  test('with no drawn parts the domain is still the limit', function () {
+    var error = null;
+    try { App.Loads.draftPoint(SECTION, [10, 2]); } catch (e) { error = e; }
+    T.ok(error, 'nothing sticks out, so z_top still applies');
+  });
+
+  test('a line load drawn over a raised layer sits on top of it', function () {
+    /* Its z has to match the server's `Project.ground_z` or the switch to 3D will not
+       translate it into a surface load -- the regression this pins down. */
+    var project = Object.assign({}, SECTION, { custom_parts: [EMBANKMENT] });
+    var load = App.Loads.draftFromPoints(project, [[9, 20, 0], [2, 20, 0]]);
+    T.eq(load.z, 4);
+  });
+
+  test('a 3D surface load records the elevation it was drawn at', function () {
+    /* The server places the pad from this (`Project.elevation_of`); leaving it out
+       makes it fall back to a bounding box padded by 1e-7. */
+    var project = Object.assign({}, SOLID, { custom_parts: [EMBANKMENT] });
+    var load = App.Loads.draftFromPoints(project, [[12, 25, 0], [3, 7, 0]]);
+    T.eq(load.z, 4);
+  });
+
+  /* ── Where the arrows are drawn ───────────────────────────────────
+     The glyph is the load, as far as the user is concerned. Its 3D branch anchored
+     every arrow at `domain.z_top` -- the top of the *borehole* block -- so a load put
+     on an embankment in 2D jumped down onto the borehole soil on the switch to 3D,
+     while the 2D branch had used `load.z` all along. Mirrors the server's
+     `Project.elevation_of`. */
+
+  var RAISED_SOLID = { dimension: 3,
+    domain: { x0: 0, x1: 50, y0: 0, y1: 40, z_top: 0, z_bottom: -25 },
+    custom_parts: [EMBANKMENT], loads: [] };
+
+  function surfaceLoad(z) {
+    return { id: 'load_1', name: 'SurfaceLoad_1', kind: 'surface',
+             x0: 4, x1: 16, y0: 5, y1: 10, z: z, thickness: 0.15,
+             components: [0, 0, -20], distribution: 'Uniform', active: true };
+  }
+
+  test('a 3D surface load draws its arrows at its own elevation', function () {
+    var spec = App.Viewport.loadGlyphSpec(surfaceLoad(4), RAISED_SOLID);
+    T.ok(spec.anchors.length, 'the glyph has anchors');
+    T.eq(spec.anchors.every(function (a) { return a[2] === 4; }), true,
+         'every arrow sits on the embankment, not on the borehole soil: '
+         + JSON.stringify(spec.anchors.map(function (a) { return a[2]; })));
+  });
+
+  test('a surface load with no elevation falls back to the top of the model', function () {
+    var spec = App.Viewport.loadGlyphSpec(surfaceLoad(null), RAISED_SOLID);
+    T.eq(spec.anchors.every(function (a) { return a[2] === 4; }), true,
+         'older records still mean the model top, which the embankment raised');
+  });
+
+  test('with nothing drawn the model top is still the domain top', function () {
+    var plain = Object.assign({}, RAISED_SOLID, { custom_parts: [] });
+    var spec = App.Viewport.loadGlyphSpec(surfaceLoad(null), plain);
+    T.eq(spec.anchors.every(function (a) { return a[2] === 0; }), true);
+  });
+
+  test('the surface load outline is drawn at the same elevation as its arrows', function () {
+    /* The pad outline had its own copy of `domain.z_top`, so fixing only the arrows
+       would have left the rectangle behind on the borehole soil. */
+    var group = App.Viewport.loadGlyphGroup(surfaceLoad(4), RAISED_SOLID);
+    var outline = null;
+    group.traverse(function (object) {
+      if (object.geometry && object.geometry.attributes
+          && object.type === 'Line' && object.userData.noPick) outline = object;
+    });
+    T.ok(outline, 'the pad has an outline');
+    var z = outline.geometry.attributes.position.array;
+    var levels = [];
+    for (var i = 2; i < z.length; i += 3) levels.push(z[i]);
+    T.eq(levels.every(function (v) { return v === 4; }), true,
+         'outline levels: ' + JSON.stringify(levels));
+  });
+
 })();

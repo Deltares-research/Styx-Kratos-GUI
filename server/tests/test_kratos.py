@@ -266,7 +266,11 @@ def test_surface_load_has_no_material_parameters_entry(solid):
     assert all(entry["model_part_name"] != "PorousDomain.SurfaceLoad_1" for entry in entries)
 
 
-def test_a_2d_point_load_is_not_exported_as_a_3d_condition(session):
+def test_a_2d_point_load_is_exported_as_a_3d_point_condition(session):
+    """A point load has no surface form to be translated into (`app/loads.py`), so the
+    solid model carries it at the section plane -- and a node is a node in either
+    dimension, so the deck can apply it there. It still has no material entry: a load
+    is a condition, not a property set."""
     project = seed_project()
     project.loads = [
         PointLoad(
@@ -277,7 +281,8 @@ def test_a_2d_point_load_is_not_exported_as_a_3d_condition(session):
     ]
     exported = kratos.export_project(project, MeshRequest(element_size=6.0, order=1))
     deck = deck_of(exported)
-    assert "Crane_reaction" not in deck.parts
+    assert "Crane_reaction" in deck.parts
+    assert deck.parts["Crane_reaction"].data["POINT_LOAD"] == [15.0, -120.0]
     assert all(item["model_part_name"] != "PorousDomain.Crane_reaction"
                for item in json.loads(exported["materials"])["properties"])
 

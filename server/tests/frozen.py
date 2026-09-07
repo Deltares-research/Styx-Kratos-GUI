@@ -1,6 +1,6 @@
 """Read values back out of the frozen mockup so tests can assert against them.
 
-The frozen files under Mockup/ are the shippable demo and must never be edited. They are
+The frozen files under kratos-GUI/ are the shippable demo and must never be edited. They are
 also, right now, the only record of the model's dimensions. These helpers parse them so
 test_parity.py can prove the Python seed project still agrees.
 """

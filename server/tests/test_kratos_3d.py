@@ -310,3 +310,110 @@ def test_every_node_written_is_used_and_ids_are_contiguous(walled):
 
     assert sorted(deck.nodes) == list(range(1, len(deck.nodes) + 1))
     assert used <= set(deck.nodes)
+
+
+# ── 2D structures carried into the 3D deck ──────────────────────────────────
+#
+# A sheet pile and a plane anchor are drawn in the section and built on it in the solid
+# model too (build._section_sweeps). Having built them, the deck has to carry them: a
+# structure the viewport shows but Calculate silently drops is worse than one that was
+# never there.
+
+PILE = {"id": "sheetpile_1", "name": "Sheet pile 1", "kind": "beam",
+        "section": "az26", "points": [[12.0, 0.0], [12.0, -14.0]], "active": True}
+PLANE_ANCHOR = {"id": "anchor_2d", "name": "Anchor 2D", "kind": "anchor",
+                "section": "strand", "head": [12.0, -2.0], "tail": [18.0, -8.0],
+                "prestress": 250.0, "active": True}
+
+
+@pytest.fixture(scope="module")
+def sectioned(session):
+    """A 2D sheet pile and a 2D anchor, exported from a *3D* project."""
+    return kratos.export_project(structured([PILE], [PLANE_ANCHOR]),
+                                 MeshRequest(element_size=6.0, order=1))
+
+
+def test_a_sheet_pile_reaches_the_3d_deck_as_a_shell(sectioned):
+    """Swept into a surface, so it is a shell here -- not the beam a section writes."""
+    block = shells_of(deck_of(sectioned))
+
+    assert block.entries
+    assert set(block.properties.values()) == {0}
+
+
+def test_the_sheet_pile_gets_its_own_sub_model_part(sectioned):
+    deck = deck_of(sectioned)
+
+    assert "Sheet_pile_1" in deck.parts, list(deck.parts)
+
+
+def test_the_pile_shell_thickness_is_the_profiles_area_per_metre_run(sectioned):
+    """`area` is m2 per metre run, which is exactly a thickness in metres. The sweep
+    width never enters it: widening the strip adds no steel."""
+    materials = json.loads(sectioned["materials"])
+    thicknesses = [
+        m["Material"]["Variables"]["THICKNESS"]
+        for m in materials["properties"]
+        if "THICKNESS" in m["Material"]["Variables"]
+    ]
+
+    assert pytest.approx(SECTION_AZ26["area"]) in thicknesses
+
+
+def test_a_plane_anchor_reaches_the_3d_deck_as_a_truss(sectioned):
+    block = truss_of(deck_of(sectioned))
+
+    assert block.entries
+    assert all(len(nodes) == 2 for nodes in block.entries.values())
+
+
+def test_the_plane_anchors_tail_is_pinned_in_all_three_directions(sectioned):
+    """A 3D deck restrains z as well; the 2D origin of the record changes nothing."""
+    parameters = json.loads(sectioned["project_parameters"])
+    constraints = [
+        p for p in parameters["processes"]["constraints_process_list"]
+        if "anchor_2d" in p["Parameters"]["model_part_name"].lower()
+    ]
+
+    assert constraints, parameters["processes"]["constraints_process_list"]
+    assert constraints[0]["Parameters"]["is_fixed"] == [True, True, True]
+
+
+# ── 2D loads that reach a 3D deck ───────────────────────────────────────────
+#
+# A point load and a line load below the ground surface have no surface form (a
+# SurfaceLoad has no z of its own), so `app/loads.py` translates neither and the solid
+# model carries them at the section plane instead. What the deck can do with them
+# differs, and the difference is said out loud rather than left to be discovered.
+
+POINT_LOAD = {"id": "pointload_1", "name": "PointLoad_1", "kind": "point",
+              "x": 10.0, "z": 0.0, "components": [0.0, -30.0], "active": True}
+BURIED_LINE = {"id": "lineload_2", "name": "LineLoad_2", "kind": "line",
+               "x0": 4.0, "x1": 16.0, "z": -5.0, "components": [0.0, -25.0],
+               "active": True}
+
+
+def loaded(loads: list[dict]) -> Project:
+    payload = seed_project(simple=True).model_dump()
+    payload["loads"] = loads
+    return Project.model_validate(payload)
+
+
+def test_a_2d_point_load_is_written_as_a_3d_point_condition(session):
+    """It has a node to sit on wherever it is, so the dimension costs it nothing."""
+    export = kratos.export_project(loaded([POINT_LOAD]),
+                                   MeshRequest(element_size=6.0, order=1))
+    deck = deck_of(export)
+
+    block = next((b for b in deck.conditions if "PointLoad" in b.name), None)
+    assert block is not None, [b.name for b in deck.conditions]
+    assert "3D" in block.name
+
+
+def test_a_buried_line_load_in_3d_warns_rather_than_vanishing(session):
+    """Kratos has no 3D line-load condition in this deck's table, so it cannot be
+    written -- and a load that is drawn but not applied has to be said out loud."""
+    export = kratos.export_project(loaded([BURIED_LINE]),
+                                   MeshRequest(element_size=6.0, order=1))
+
+    assert any("LineLoad_2" in w for w in export["warnings"]), export["warnings"]

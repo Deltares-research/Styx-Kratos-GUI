@@ -1,7 +1,7 @@
 """HTTP contract tests.
 
 The frozen demo must keep working untouched: these assert the server mounts
-`Mockup/css`, `js`, `assets` and `vendor` *in place* rather than copying them, so there
+`kratos-GUI/css`, `js`, `assets` and `vendor` *in place* rather than copying them, so there
 is exactly one copy of each file on disk and no chance of the served app drifting from
 the one that opens off `file://`.
 """
@@ -487,7 +487,9 @@ def test_patch_structures_accepts_a_coordinate_defined_point_load(client):
     response = client.patch("/api/project/structures", json={"loads": [point]})
 
     assert response.status_code == 200
-    assert response.json()["project"]["loads"] == [point]
+    # `derived_from` comes back on every load: it is how a translated pair is linked
+    # (app/loads.py), and a load the client authored is nobody's translation.
+    assert response.json()["project"]["loads"] == [point | {"derived_from": None}]
 
     client.put("/api/project", json=seed_project().model_dump())
 
@@ -499,7 +501,9 @@ BEAM = {"id": "sheetpile_1", "name": "Sheet pile 1", "section": "az26",
 # What comes back: `kind` is defaulted in, which is how a project written before the
 # 3D pile kinds existed still loads as the 2D sheet pile it was saved as, and the
 # section gains the two inertias only a member in space has any use for.
-STORED_BEAM = BEAM | {"kind": "beam"}
+# `derived_from` comes back on every structure: it is how a translated pair is linked
+# (app/walls.py), and a pile the client authored is nobody's translation.
+STORED_BEAM = BEAM | {"kind": "beam", "derived_from": None}
 STORED_SECTION = SECTION | {"inertia_minor": None, "torsional_inertia": None}
 
 
@@ -1007,7 +1011,7 @@ def test_the_live_viewport_keeps_the_frozen_public_api(client):
 
 
 def test_the_frozen_viewport_is_still_served_for_the_file_url_demo(client):
-    """Mounted, not deleted. Opening Mockup/index.html off disk must still work."""
+    """Mounted, not deleted. Opening kratos-GUI/index.html off disk must still work."""
     assert "CylinderGeometry" in client.get("/js/viewport.js").text
 
 

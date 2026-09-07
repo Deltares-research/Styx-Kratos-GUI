@@ -152,6 +152,18 @@ App.Viewport = (function () {
   /* Conventional load symbols: the arrow tip is the application point and the shaft
      extends opposite to the force vector. Keeping this as a pure specification makes
      the 2D/3D placement rules testable without a renderer. */
+  /* Where a load lies, whichever kind it is. Mirrors `Project.elevation_of` on the
+     server: a point or line load carries its own z, and a surface load may leave it
+     unset, which means the top of the model -- the reading every such load had before
+     the field existed, and which a drawn embankment raises above `domain.z_top`. */
+  function loadElevation(load, project) {
+    if (load.kind !== 'surface') return load.z;
+    if (load.z !== null && load.z !== undefined) return load.z;
+    var span = (App.Model && App.Model.extentOf)
+      ? App.Model.extentOf(project) : project.domain;
+    return span.z_top;
+  }
+
   function loadGlyphSpec(load, project) {
     var vector = project.dimension === 2
       ? [load.components[0], 0, load.components[1]]
@@ -185,9 +197,14 @@ App.Viewport = (function () {
       });
       return spec;
     }
+    // The load's own elevation, not `d.z_top`: the domain is only the borehole block,
+    // so a pad on a drawn embankment was being dragged down onto the borehole soil the
+    // moment the model switched to 3D. Mirrors the server's `Project.elevation_of`,
+    // including what an unset z means -- see `loadElevation`.
+    var z = loadElevation(load, project);
     samples(load.x0, load.x1, 3).forEach(function (x) {
       samples(load.y0, load.y1, 3).forEach(function (y) {
-        spec.anchors.push([x, y, d.z_top]);
+        spec.anchors.push([x, y, z]);
       });
     });
     return spec;
@@ -237,10 +254,13 @@ App.Viewport = (function () {
       if (spec.kind === 'line') {
         outlinePoints = [spec.anchors[0], spec.anchors[spec.anchors.length - 1]];
       } else {
+        // The same elevation the arrows use, or the outline stays behind on the
+        // borehole soil while the arrows move up onto the embankment.
+        var pad = loadElevation(load, project);
         outlinePoints = [
-          [load.x0, load.y0, project.domain.z_top], [load.x1, load.y0, project.domain.z_top],
-          [load.x1, load.y1, project.domain.z_top], [load.x0, load.y1, project.domain.z_top],
-          [load.x0, load.y0, project.domain.z_top]
+          [load.x0, load.y0, pad], [load.x1, load.y0, pad],
+          [load.x1, load.y1, pad], [load.x0, load.y1, pad],
+          [load.x0, load.y0, pad]
         ];
       }
       var outline = new THREE.Line(
@@ -433,6 +453,21 @@ App.Viewport = (function () {
     gridSpec = next;
     makeReferenceGrid(next.span, next.divisions);
     orientReferenceGrid(activeView, frameBBox(), [next.u, next.v]);
+  }
+
+  /* The rulers read the same visible rectangle the 2D grid does, so the numbers on
+     the edges and the lines under the model can never disagree. Off in 3D: there is no
+     one plane for a screen-edge coordinate to be measured in. */
+  function syncRulers() {
+    if (!App.Ruler) return;
+    var on = dimension === 2 && !!cam && !!cam.isOrthographicCamera && !!frame;
+    var view = on ? visibleHalfExtent() : { halfW: 0, halfH: 0 };
+    App.Ruler.sync({
+      active: on,
+      plane: sectionPlane,
+      center: on ? sectionCenter() : [0, 0],
+      halfW: view.halfW, halfH: view.halfH
+    });
   }
 
   /* The extents the frame was built from. gridReference() needs them to place the 3D
@@ -727,6 +762,10 @@ App.Viewport = (function () {
       triadRenderer = null;
     }
     bindPointer();
+
+    // The edge rulers live in the viewport's DOM, not in the scene: they measure the
+    // screen, so they are painted in screen pixels rather than projected like geometry.
+    if (App.Ruler) App.Ruler.install(host);
 
     if (window.ResizeObserver) new ResizeObserver(resize).observe(host);
     window.addEventListener('resize', resize);
@@ -1346,6 +1385,7 @@ App.Viewport = (function () {
 
     orbit.apply(cam);
     syncSectionGrid();                     // needs the camera the frame is drawn with
+    syncRulers();                          // same: the visible rectangle is known here
     renderer.render(scene, cam);
 
     if (triadRenderer) {
@@ -1361,7 +1401,7 @@ App.Viewport = (function () {
   return {
     init: init, setMode: setMode, setVisible: setVisible, isVisible: isVisible,
     select: select, setView: setView, zoomFit: zoomFit, dolly: dolly,
-    setProjection: setProjection, setGrid: setGrid,
+    setProjection: setProjection, setGrid: setGrid, syncRulers: syncRulers,
     setViewMode: setViewMode, is2D: is2D,
     setNavMode: setNavMode, getNavMode: getNavMode,
     effectiveNavMode: effectiveNavMode, forcePanIfNeeded: forcePanIfNeeded,

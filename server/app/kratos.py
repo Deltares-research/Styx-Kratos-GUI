@@ -32,8 +32,8 @@ import gmsh
 from app import build, interfaces, meshing
 from app import kratos_processes
 from app.kratos_materials import material_parameters
-from app.schemas import (Beam, LineLoad, MeshRequest, PointLoad, Project,
-                         SurfaceLoad)
+from app.schemas import (Beam, LineLoad, MeshRequest, PanelSection, PointLoad,
+                         Project, SurfaceLoad)
 
 # (dim, gmsh element type) -> (Kratos class, gmsh index order in Kratos' order)
 ELEMENTS: dict[tuple[int, int], tuple[str, tuple[int, ...]]] = {
@@ -176,7 +176,7 @@ def export_project(project: Project, settings: MeshRequest,
     blocks.extend(panel_blocks)
     anchor_blocks, anchor_supports = _anchor_ties(project, dim, _world_coordinates())
     blocks.extend(anchor_blocks)
-    conditions = _load_conditions(project, dim, world)
+    conditions = _load_conditions(project, dim, world, warnings)
     # Last, because it rewrites what everything above produced: the interface unglues
     # the soil from the structures already harvested, so it needs their connectivity in
     # hand -- and the nodes it adds have to be in `world` before the boundary groups and
@@ -206,7 +206,7 @@ def export_project(project: Project, settings: MeshRequest,
     beam_properties = [(names[key], project.beam_section(_beam_of(project, key).section),
                         dim)
                        for key, _, _ in beam_blocks]
-    panel_properties = [(names[key], project.panel_section(_panel_of(project, key).section))
+    panel_properties = [(names[key], _shell_section_of(project, key))
                         for key, _, _ in panel_blocks]
     anchor_properties = [(names[key], project.anchor_section(_anchor_of(project, key).section),
                           _anchor_of(project, key).prestress, dim)
@@ -387,7 +387,10 @@ def _anchor_ties(project: Project, dim: int,
     the anchor as display geometry whose own head vertex sits at the same place, so a
     plain nearest-node search could pick that stray instead of the pile's node.
     """
-    anchors = project.plane_anchors if dim == 2 else project.space_anchors
+    # In 3D both kinds are live: a space anchor is drawn in the model, and a plane
+    # anchor hangs off the sheet pile that `build._section_sweeps` put on the cut.
+    anchors = (project.plane_anchors if dim == 2
+               else project.plane_anchors + project.space_anchors)
     # The structures an anchor may hang from: a 2D head is on a sheet pile, a 3D head on
     # a wall or a member. Resolved to *structural* nodes specifically, because
     # `build._attach_anchors` draws the tie's own head vertex at the same place and a
@@ -446,6 +449,24 @@ def _beam_of(project: Project, key: str) -> Beam:
 
 def _panel_of(project: Project, key: str):
     return next(panel for panel in project.panels if panel.id == key)
+
+
+def _shell_section_of(project: Project, key: str) -> PanelSection:
+    """The shell property set behind a surface structure, whichever kind drew it.
+
+    A panel carries a thickness already. A sheet pile carries `area` in m2 per metre
+    run -- which *is* a thickness in metres, the plane-strain reduction `PanelSection`
+    documents read backwards -- so the swept wall is written with exactly the steel the
+    section was drawn with. The sweep width never enters it: widening the strip
+    (`BeamSection.spacing`) spreads the same wall over more of the model, it does not
+    add material to it.
+    """
+    panel = next((p for p in project.panels if p.id == key), None)
+    if panel is not None:
+        return project.panel_section(panel.section)
+    beam = project.beam_section(_beam_of(project, key).section)
+    return PanelSection(id=beam.id, name=beam.name, E=beam.E, nu=beam.nu,
+                        thickness=beam.area, density=beam.density)
 
 
 def _load_variable(load: PointLoad | LineLoad | SurfaceLoad,
@@ -526,8 +547,12 @@ def _panel_bodies(project: Project, dim: int) -> dict[str, list[int]]:
     if dim != 3:
         return {}
     tagged = _tagged(2)
-    return {panel.id: tagged[panel.id] for panel in project.panels
-            if panel.active and tagged.get(panel.id)}
+    # A sheet pile swept onto the section plane is a surface like a panel is, so it is
+    # harvested as one. Which property set it binds is the only thing that differs, and
+    # `_shell_section_of` is where that is decided.
+    walls = list(project.panels) + list(project.sheet_piles)
+    return {wall.id: tagged[wall.id] for wall in walls
+            if wall.active and tagged.get(wall.id)}
 
 
 def _harvest(bodies: dict[str, list[int]], dim: int, table: dict | None = None,
@@ -601,7 +626,8 @@ def _signed_measure(corners: list[tuple[float, float, float]], dim: int) -> floa
 
 
 def _load_conditions(project: Project, dim: int,
-                     world: dict[int, tuple[float, float, float]]
+                     world: dict[int, tuple[float, float, float]],
+                     warnings: list[str] | None = None
                      ) -> list[tuple[str, str, list[list[int]]]]:
     """Boundary elements on the ground surface that lie under the load pad.
 
@@ -615,21 +641,36 @@ def _load_conditions(project: Project, dim: int,
     much as one element.
     """
     out: list[tuple[str, str, list[list[int]]]] = []
-    for load in project.loads:
+    # `loads_for` rather than a kind test: a translated pair holds a surface record and
+    # a line record for one load, and writing both would apply it twice. What it hands
+    # back for a 3D model is the surface loads plus the 2D ones nothing was translated
+    # from -- see the CONDITIONS table for which of those can actually be written.
+    for load in project.loads_for(dim):
         if not load.active:
             continue
-        if (dim == 2 and load.kind not in ("point", "line")) or \
-                (dim == 3 and load.kind != "surface"):
+        if dim == 3 and load.kind == "line":
+            # A line load imprints a *curve* on the solid's boundary, and the boundary
+            # elements harvested below are faces. CONDITIONS has no 3D line class to
+            # write it with, and inventing one with no reference deck behind it would
+            # be a guess in the deck rather than in a comment. Said out loud instead:
+            # the load is drawn and meshed, but it is not applied.
+            if warnings is not None:
+                warnings.append(
+                    f"{load.name!r} is a line load, which has no Kratos condition in a "
+                    "3D deck; it is drawn at the section plane but applies no force. "
+                    "Move it to the ground surface so it translates to a surface load, "
+                    "or apply it in the 2D section."
+                )
             continue
         if load.kind == "point":
-            target = (load.x, project.section_offset, load.z)
+            target = (load.x, project.cut_at(), load.z)
             nearest = min(
                 world,
                 key=lambda tag: sum((world[tag][axis] - target[axis]) ** 2 for axis in range(3)),
             )
             out.append((load.id, f"PointLoadCondition{dim}D1N", [[nearest]]))
             continue
-        elevation = load.z if load.kind == "line" else project.domain.z_top
+        elevation = project.elevation_of(load)
         rows_by_class: dict[str, list[list[int]]] = {}
         for _, entity in gmsh.model.getEntities(dim - 1):
             box = gmsh.model.getBoundingBox(dim - 1, entity)

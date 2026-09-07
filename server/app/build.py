@@ -362,19 +362,29 @@ def _build_display_only(project: Project, dim: int = 3,
                        log: list[str] | None = None) -> dict[str, list[int]]:
     p, d = project, project.domain
     loads = {}
-    for load in p.loads:
-        if dim == 2 and load.kind == "point":
+    # `loads_for` rather than `p.loads`: a translated pair holds a surface record and a
+    # line record for one load, and drawing both would show it twice.
+    for load in p.loads_for(dim):
+        # A 2D load has a symbol in either model. In the section it is drawn across the
+        # full out-of-plane depth, because the section has none to speak of; in the
+        # solid model it is drawn *at the cut*, one thickness wide, so it reads as the
+        # plane-strain condition it is rather than as a load over the whole width.
+        if load.kind == "point":
             loads[load.id] = [gmsh.model.occ.addSphere(
-                load.x, project.section_offset, load.z, load.thickness,
+                load.x, project.cut_at(), load.z, load.thickness,
             )]
-        elif dim == 2 and load.kind == "line":
+        elif load.kind == "line":
+            y0, depth = ((d.y0, d.dy) if dim == 2
+                         else (project.cut_at() - load.thickness / 2.0, load.thickness))
             loads[load.id] = [gmsh.model.occ.addBox(
-                load.x0, d.y0, load.z,
-                load.x1 - load.x0, d.dy, load.thickness,
+                load.x0, y0, load.z,
+                load.x1 - load.x0, depth, load.thickness,
             )]
         elif dim == 3 and load.kind == "surface":
+            # `ground_z`, not `d.z_top`: the symbol belongs on top of the model, and a
+            # drawn embankment puts that above the borehole block.
             loads[load.id] = [gmsh.model.occ.addBox(
-                load.x0, load.y0, d.z_top,
+                load.x0, load.y0, project.elevation_of(load),
                 load.x1 - load.x0, load.y1 - load.y0, load.thickness,
             )]
     wa = p.water
@@ -447,20 +457,24 @@ def _load_footprint_tools(project: Project, dim: int) -> list[tuple[int, int]]:
 
     def point(x: float, z: float) -> int:
         xyz = [x, 0.0, z]
-        xyz[normal] = project.section_offset
+        xyz[normal] = project.cut_at()
         return gmsh.model.occ.addPoint(*xyz)
 
-    for load in project.loads:
+    for load in project.loads_for(dim):
         if not load.active:
             continue
-        if dim == 2 and load.kind == "point":
+        # A point or line load is dimension-native, and imprints on the section plane
+        # in either model: in 2D that plane *is* the model, and in 3D it is a line
+        # across the solid's boundary at the cut. Same tool, same world position, so
+        # `kratos._load_conditions` reads it back the same way in both.
+        if load.kind == "point":
             tools.append((0, point(load.x, load.z)))
-        elif dim == 2 and load.kind == "line":
+        elif load.kind == "line":
             tools.append((1, gmsh.model.occ.addLine(point(load.x0, load.z),
                                                     point(load.x1, load.z))))
         elif dim == 3 and load.kind == "surface":
             tools.append((2, gmsh.model.occ.addRectangle(
-                load.x0, load.y0, project.domain.z_top,
+                load.x0, load.y0, project.elevation_of(load),
                 load.x1 - load.x0, load.y1 - load.y0,
             )))
     return tools
@@ -594,7 +608,7 @@ def _embed_beams(project: Project, owners: dict[int, set[str]], dim: int,
 
     def point(x: float, z: float) -> int:
         xyz = [x, 0.0, z]
-        xyz[normal] = project.section_offset
+        xyz[normal] = project.cut_at()
         return gmsh.model.occ.addPoint(*xyz)
 
     heads = [anchor.head for anchor in project.plane_anchors if anchor.active]
@@ -650,6 +664,73 @@ def _embed_beams(project: Project, owners: dict[int, set[str]], dim: int,
     return rebuilt, {key: sorted(set(tags)) for key, tags in beam_curves.items()}, {}
 
 
+def _section_sweeps(project: Project, log: list[str] | None = None
+                    ) -> list[tuple[str, list[int]]]:
+    """Every 2D-native line structure, swept into a surface on the section plane.
+
+    A sheet pile is an `(x, z)` polyline with no thickness and no out-of-plane extent,
+    and the solid model has to give it both to have anything to mesh. It gets the one
+    the profile already carries: `BeamSection.spacing`, the out-of-plane centres the
+    plane-strain reduction smears the wall over. The sweep is centred on
+    `section_offset`, so the wall sits *on* the cut it was drawn on rather than
+    starting there and running off to one side.
+
+    Free interfaces are swept the same way and for a narrower purpose: the imprint.
+    Their zero-thickness elements are plane strain only (`app/kratos.py`'s `INTERFACES`
+    table), so the surface splits the mesh and nothing more -- which is still worth
+    having, because it is what makes the interface visible in the solid model.
+
+    Returns (part key, swept face tags), in the order the fragment should see them.
+    """
+    # A 2D record's two coordinates are the plane's own axes, whichever plane it is;
+    # PLANE_AXES names them, so no plane is a special case here.
+    normal, u, v = PLANE_AXES[project.section_plane]
+    spacings = {section.id: section.spacing for section in project.beam_sections}
+
+    def sweep(key: str, points: list[tuple[float, float]], width: float
+              ) -> tuple[str, list[int]] | None:
+        start = [0.0, 0.0, 0.0]
+        start[normal] = project.cut_at() - width / 2.0
+        vertices = []
+        for first, second in points:
+            xyz = list(start)
+            xyz[u], xyz[v] = first, second
+            vertices.append(gmsh.model.occ.addPoint(*xyz))
+        lines = [gmsh.model.occ.addLine(a, b) for a, b in zip(vertices, vertices[1:])]
+        delta = [0.0, 0.0, 0.0]
+        delta[normal] = width
+        swept = gmsh.model.occ.extrude([(1, line) for line in lines], *delta)
+        faces = [tag for entity_dim, tag in swept if entity_dim == 2]
+        return (key, faces) if faces else None
+
+    out: list[tuple[str, list[int]]] = []
+    heads = [anchor.head for anchor in project.plane_anchors if anchor.active]
+    # `structures_for` rather than `sheet_piles`: a pile the switch translated into a
+    # wall panel is built as that panel, and sweeping it here as well would put two
+    # walls in the same place. What is left is the piles with no panel form.
+    swept = {b.id for b in project.structures_for(3)}
+    for beam in project.sheet_piles:
+        if not beam.active or beam.id not in swept:
+            continue
+        width = spacings.get(beam.section, 1.0)
+        swept = sweep(beam.id, _split_at(beam.points, heads), width)
+        if swept:
+            out.append(swept)
+        elif log is not None:
+            log.append(f"Info    : {beam.id} could not be swept onto the section plane")
+
+    for interface in project.active_interfaces:
+        if interface.structure is not None or not interface.points:
+            continue
+        swept = sweep(interface.id, interface.points, INTERFACE_SWEEP)
+        if swept:
+            out.append(swept)
+    if log is not None and any(i.structure is None for i in project.active_interfaces):
+        log.append("Info    : interfaces are plane-strain elements; the ones drawn in "
+                   "the section split this 3D mesh but export no interface elements")
+    return out
+
+
 def _embed_3d_structures(project: Project, owners: dict[int, set[str]],
                          log: list[str] | None = None
                          ) -> tuple[dict[int, set[str]], dict[str, list[int]],
@@ -667,20 +748,42 @@ def _embed_3d_structures(project: Project, owners: dict[int, set[str]],
     around it. A wall that stops inside the body does not separate it: the face simply
     becomes an internal one, as an internal edge does in 2D.
     """
-    panels = [panel for panel in project.panels if panel.active]
-    members = [member for member in project.members if member.active]
-    # A 2D sheet pile has no place in the solid model, for the mirror of the reason a
-    # panel has none in a section: it is drawn in a plane the 3D model does not have.
-    for beam in project.sheet_piles:
-        if beam.active and log is not None:
-            log.append(f"Info    : {beam.id} is a sheet pile, which is built in a 2D "
-                       "section only; it is not part of this 3D model")
-    if not owners or not (panels or members):
+    built = {b.id for b in project.structures_for(3)}
+    panels = [p for p in project.panels if p.active and p.id in built]
+    members = [m for m in project.members if m.active and m.id in built]
+    # A 2D sheet pile is drawn in the section, not in plan, but it is still somewhere
+    # in the solid model: on the plane it was drawn on. Swept there rather than
+    # dropped, so switching to 3D shows the wall the section was built around instead
+    # of an empty box. Interfaces ride along for the imprint alone -- see `_section_
+    # sweeps`.
+    section_lines = _section_sweeps(project, log)
+    if not owners or not (panels or members or section_lines):
         return owners, {}, {}
 
+    # An anchor drawn in the section hangs off a wall the section drew too, and after
+    # the switch that wall is a panel. Its head is `(x, z)`, so it is placed on the cut
+    # to be imprinted alongside the space anchors' -- the surface counterpart of the
+    # vertex `_split_at` gives it in 2D.
+    normal, u, v = PLANE_AXES[project.section_plane]
+
+    def at_cut(first: float, second: float) -> tuple[float, float, float]:
+        xyz = [0.0, 0.0, 0.0]
+        xyz[normal] = project.cut_at()
+        xyz[u], xyz[v] = first, second
+        return tuple(xyz)
+
     heads = [anchor.head for anchor in project.space_anchors if anchor.active]
+    heads += [at_cut(*anchor.head) for anchor in project.plane_anchors if anchor.active]
     tools: list[tuple[int, int]] = []
     owner_of_tool: list[str] = []
+
+    # Placed before the panels so a swept pile is fragmented by the same boolean, and
+    # so a plane anchor's head lands on a vertex of it exactly as `_split_at` puts one
+    # on a member.
+    for key, faces_of in section_lines:
+        for tag in faces_of:
+            tools.append((2, tag))
+            owner_of_tool.append(key)
 
     for panel in panels:
         # Swept from the top down: extruding the footprint's lines gives one face per
@@ -812,35 +915,38 @@ def _attach_anchors(project: Project, dim: int, log: list[str] | None = None
     # Each dimension draws its own kind and says so about the other's: an anchor drawn
     # in a section has no place in the solid model, and one drawn in space has none in
     # the section, for the same reason their structures do not cross over either.
+    normal, u, v = PLANE_AXES[project.section_plane]
+
+    def in_plane(first: float, second: float) -> int:
+        """A dimension-native `(x, z)` end, placed on the cut it was drawn on."""
+        xyz = [0.0, 0.0, 0.0]
+        xyz[normal] = project.cut_at()
+        xyz[u], xyz[v] = first, second
+        return gmsh.model.occ.addPoint(*xyz)
+
+    def in_space(x: float, y: float, z: float) -> int:
+        return gmsh.model.occ.addPoint(x, y, z)
+
+    # An anchor drawn in the section belongs to the solid model too -- it hangs off a
+    # sheet pile, and `_section_sweeps` has just put that pile on the section plane.
+    # One anchor, on the plane: a plane-strain record says where the tie is in the
+    # section, not how many of them run out of plane.
+    plane = [(a, in_plane) for a in project.plane_anchors if a.active]
+    space = [(a, in_space) for a in project.space_anchors if a.active]
     if dim == 3:
-        active = [anchor for anchor in project.space_anchors if anchor.active]
-        skipped = [anchor for anchor in project.plane_anchors if anchor.active]
-        noun, other = "in the 2D section", "3D model"
+        active, skipped = plane + space, []
     else:
-        active = [anchor for anchor in project.plane_anchors if anchor.active]
-        skipped = [anchor for anchor in project.space_anchors if anchor.active]
-        noun, other = "in space", "section"
+        active, skipped = plane, [a for a, _ in space]
     for anchor in skipped:
         if log is not None:
-            log.append(f"Info    : {anchor.id} is an anchor drawn {noun}; it is not "
-                       f"part of this {other}")
+            log.append(f"Info    : {anchor.id} is an anchor drawn in space; it is not "
+                       "part of this section")
     if not active:
         return {}, {}
 
-    if dim == 3:
-        def point(x: float, y: float, z: float) -> int:
-            return gmsh.model.occ.addPoint(x, y, z)
-    else:
-        normal = PLANE_AXES[project.section_plane][0]
-
-        def point(x: float, z: float) -> int:
-            xyz = [x, 0.0, z]
-            xyz[normal] = project.section_offset
-            return gmsh.model.occ.addPoint(*xyz)
-
     curves: dict[str, list[int]] = {}
     tails: dict[str, int] = {}
-    for anchor in active:
+    for anchor, point in active:
         head, tail = point(*anchor.head), point(*anchor.tail)
         curves[anchor.id] = [gmsh.model.occ.addLine(head, tail)]
         tails[anchor.id] = tail
@@ -854,6 +960,14 @@ SECTION_PAD = 1.0
 
 Sized from the built solids rather than the domain: the wall top (0.6 m above z_top)
 and any drawn or imported part can legitimately stick out of the declared domain.
+"""
+
+
+INTERFACE_SWEEP = 1.0
+"""Metres a free interface is swept out of plane, so it has a surface to imprint with.
+
+Arbitrary in a way `BeamSection.spacing` is not: an interface carries no out-of-plane
+dimension of its own, and this one only has to be wide enough to cut the mesh.
 """
 
 
@@ -984,12 +1098,17 @@ def _verify(
         # In plane strain an absent part is an answer, not a failure: it means nothing
         # of that part crosses the section plane. `_section` has already logged which.
         return
-    # Sheet piles are 2D-only for now and `_embed_beams` has logged each one it skipped,
-    # so a 3D project is not missing anything by having no geometry for them.
-    beams = ({beam.id for beam in project.beams} | {a.id for a in project.anchors}
-             | {i.id for i in project.interfaces})
+    # A structure may legitimately contribute nothing: one drawn outside the soil, or
+    # of the other dimension's kind, which `_embed_beams` has already logged.
+    exempt = ({beam.id for beam in project.beams} | {a.id for a in project.anchors}
+              | {i.id for i in project.interfaces})
+    # So may the half of a translated load pair that this dimension does not build: the
+    # pair is one load with two records, and `loads_for` picks which one is the model's.
+    # Its key stays in `part_keys` so the frontend's namespace does not change.
+    built = {load.id for load in project.loads_for(3)}
+    exempt |= {load.id for load in project.loads if load.id not in built}
     missing = [key for key in project.part_keys()
-               if key not in beams
+               if key not in exempt
                and not volumes.get(key) and not overlays.get(key) and not curves.get(key)]
     if missing:
         raise GeometryError(
