@@ -224,7 +224,6 @@ def test_the_load_value_and_the_anchor_support_reach_the_process_file(golden, de
                    for p in doc["processes"]["constraints_process_list"]}
 
     assert loads["PorousDomain.Surcharge"]["value"] == [0.0, -20.0, 0.0]
-    assert deck.parts["Surcharge"].data["LINE_LOAD"] == [0.0, -20.0, 0.0]
     assert "PorousDomain.Anchor_1_Support" in constraints
     for name in set(loads) | constraints:
         assert name.partition(".")[2] in deck.parts, name

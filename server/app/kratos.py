@@ -102,6 +102,17 @@ CONDITIONS: dict[tuple[int, int], tuple[str, tuple[int, ...]]] = {
     (3, 9): ("SurfaceLoadDiffOrderCondition3D6N", (0, 1, 2, 3, 4, 5)),
 }
 
+# The edges of a 2D continuum element, in the order its own geometry generates them.
+# Kratos matches a condition to its element by exact node-id sequence -- its
+# NeighbouringElementFinder rotates faces only, never a line, and reverse search is off
+# -- so a line condition carrying the right nodes in any other order is reported as
+# having no neighbour element and the run stops before its first step. Keyed by node
+# count, indices into connectivity already in Kratos order.
+EDGES: dict[int, tuple[tuple[int, ...], ...]] = {
+    3: ((0, 1), (1, 2), (2, 0)),
+    6: ((0, 1, 3), (1, 2, 4), (2, 0, 5)),
+}
+
 # Reversing the first two corners flips an element; the midside nodes move with the
 # edges they sit on. Keyed by node count, applied to connectivity already in Kratos
 # order.
@@ -122,6 +133,10 @@ BOUNDARIES = (
     ("Top_Surface", 2, "z_top"),
 )
 RESERVED = {name for name, _, _ in BOUNDARIES}
+
+LOWER_FACES = {"x0", "y0", "z_bottom"}
+"""The `BOUNDARIES` attributes naming the low side of their axis; the rest are the high
+side. Used to read each face off the meshed body rather than off the declared box."""
 
 TOLERANCE = 1e-6
 """Metres. A node counts as lying on a domain face within this."""
@@ -184,6 +199,9 @@ def export_project(project: Project, settings: MeshRequest,
     interface_blocks = _interface_elements(project, dim, soil_blocks, beam_blocks,
                                            conditions, world, coordinates, warnings)
     blocks.extend(interface_blocks)
+    # After the interface split, so each condition is aligned to the copy of the soil it
+    # ended up on rather than to the element it left behind.
+    _align_conditions(conditions, soil_blocks)
 
     used = sorted({tag for _, _, rows in blocks for row in rows for tag in row}
                   | {tag for _, _, rows in conditions for row in rows for tag in row})
@@ -192,7 +210,8 @@ def export_project(project: Project, settings: MeshRequest,
     part_materials = _part_materials(project, names, blocks)
     numbered, parts, next_id = _number_elements(blocks, names, node_id)
     condition_blocks, load_parts = _number_conditions(conditions, names, node_id, next_id)
-    boundaries = _boundary_nodes(project, dim, world, node_id)
+    body_tags = {tag for _, _, rows in soil_blocks for row in rows for tag in row}
+    boundaries = _boundary_nodes(project, dim, world, node_id, body_tags)
     parts.extend(_boundary_parts(boundaries))
     parts.extend(load_parts)
     supports = [(f"{names[key]}_Support", [node_id[tag]], [], [])
@@ -202,7 +221,6 @@ def export_project(project: Project, settings: MeshRequest,
     condition_keys = {key for key, _, rows in conditions if rows}
     active_loads = [(names[load.id], *_load_variable(load, dim))
                     for load in project.loads if load.id in condition_keys]
-    parts_data = {name: [(variable, value)] for name, variable, value in active_loads}
     beam_properties = [(names[key], project.beam_section(_beam_of(project, key).section),
                         dim)
                        for key, _, _ in beam_blocks]
@@ -240,7 +258,7 @@ def export_project(project: Project, settings: MeshRequest,
         [(name, variable, load_mask, value) for name, variable, value in active_loads],
     )
     return {
-        "mdpa": _render(coordinates, node_id, numbered, condition_blocks, parts, parts_data),
+        "mdpa": _render(coordinates, node_id, numbered, condition_blocks, parts),
         "materials": materials,
         "project_parameters": processes,
         "stats": mesh.stats.to_dict(),
@@ -473,11 +491,8 @@ def _load_variable(load: PointLoad | LineLoad | SurfaceLoad,
                    dim: int) -> tuple[str, list[float]]:
     """The Kratos variable name and world-shaped value a load's condition carries.
 
-    Recorded as `SubModelPartData` rather than a `MaterialParameters.json` entry: no
-    real Kratos GeoMechanics deck defines LINE_LOAD/POINT_LOAD/SURFACE_LOAD as a
-    material. It is applied by a ProjectParameters.json process reading the sub-model
-    part -- a file this exporter does not yet write -- so the value is kept here rather
-    than silently dropped.
+    It reaches the solver through a ProjectParameters.json process against the load's
+    sub-model part; the .mdpa itself names the part and its conditions and nothing more.
     """
     components = [load.components[0], load.components[1], 0.0] if dim == 2 \
         else list(load.components)
@@ -687,6 +702,32 @@ def _load_conditions(project: Project, dim: int,
     return out
 
 
+def _align_conditions(conditions: list[tuple[str, str, list[list[int]]]],
+                      soil_blocks: list[tuple[str, str, list[list[int]]]]) -> None:
+    """Rewrite each boundary condition onto the element edge it stands on.
+
+    gmsh hands a boundary line out in the direction of the curve it meshed, which is not
+    the direction the neighbouring element traverses that same edge; `_oriented` then
+    flips elements the mesher gave inside out, moving the edge again. Kratos wants the
+    element's order exactly -- see `EDGES` for what it does with anything else.
+
+    A boundary edge belongs to one element, so the first ordering found for a set of
+    nodes is the only one a condition can sit on. 3D faces are left alone: Kratos rotates
+    those itself, and only the continuum blocks are offered here in any case.
+    """
+    edges: dict[frozenset[int], tuple[int, ...]] = {}
+    for _, _, rows in soil_blocks:
+        for row in rows:
+            for order in EDGES.get(len(row), ()):
+                edge = tuple(row[index] for index in order)
+                edges.setdefault(frozenset(edge), edge)
+    for _, _, rows in conditions:
+        for index, row in enumerate(rows):
+            edge = edges.get(frozenset(row))
+            if edge is not None and len(edge) == len(row):
+                rows[index] = list(edge)
+
+
 def _under_load(corners: list[int], world: dict[int, tuple[float, float, float]],
                 load) -> bool:
     """Every corner inside the footprint, within the tolerance the imprint holds to."""
@@ -792,21 +833,35 @@ def _number_conditions(
 
 def _boundary_nodes(project: Project, dim: int,
                     world: dict[int, tuple[float, float, float]],
-                    node_id: dict[int, int]
+                    node_id: dict[int, int],
+                    body_tags: set[int] | None = None,
                     ) -> list[tuple[str, int, list[int]]]:
     """(name, world axis, node ids) for every domain-face boundary present in this
     dimension. Shared by the .mdpa sub-model parts and the derived boundary
     constraints below, so both agree on exactly which boundaries exist.
 
+    The faces are measured from the meshed soil, not from `project.domain`: a drawn or
+    imported soil body is not held to the borehole box, so a domain plane it does not
+    reach yields an empty group and the deck silently loses `Right_Edge` or
+    `Bottom_Fixed`. Where the soil does fill the domain the two agree exactly.
+    Structures are excluded from the measurement -- a sheet pile standing proud of the
+    ground must not become the whole `Top_Surface` -- but any node lying on a face,
+    structural or not, joins the group.
+
     A 2D section has no boundary along its normal axis, so those two groups are simply
     not written -- an empty `Front_Edge` would read as a modelling mistake.
     """
     skipped = build.PLANE_AXES[project.section_plane][0] if dim == 2 else None
+    measured = [xyz for tag, xyz in world.items()
+                if tag in node_id and (body_tags is None or tag in body_tags)]
+    if not measured:
+        measured = [xyz for tag, xyz in world.items() if tag in node_id]
     out = []
     for name, axis, attribute in BOUNDARIES:
-        if axis == skipped:
+        if axis == skipped or not measured:
             continue
-        plane = getattr(project.domain, attribute)
+        values = [xyz[axis] for xyz in measured]
+        plane = min(values) if attribute in LOWER_FACES else max(values)
         nodes = sorted(node_id[tag] for tag, xyz in world.items()
                        if tag in node_id and abs(xyz[axis] - plane) <= TOLERANCE)
         if nodes:
@@ -876,8 +931,7 @@ LINE_END = "\r\n"
 def _render(coordinates: dict[int, tuple[float, float, float]], node_id: dict[int, int],
             elements: list[tuple[str, list[tuple[int, int, list[int]]]]],
             conditions: list[tuple[str, list[tuple[int, int, list[int]]]]],
-            parts: list[tuple[str, list[int], list[int], list[int]]],
-            parts_data: dict[str, list[tuple[str, list[float]]]] | None = None) -> str:
+            parts: list[tuple[str, list[int], list[int], list[int]]]) -> str:
     """Lay the deck out the way GiD does, so the two diff against each other."""
     lines = ["Begin Properties 0", "End Properties", ""]
 
@@ -897,13 +951,6 @@ def _render(coordinates: dict[int, tuple[float, float, float]], node_id: dict[in
 
     for name, nodes, part_elements, part_conditions in parts:
         lines.append(f"Begin SubModelPart {name}")
-        data = (parts_data or {}).get(name, [])
-        if data:
-            lines.append("    Begin SubModelPartData")
-            for variable, values in data:
-                lines.append(f"        {variable} [{len(values)}] "
-                             f"({','.join(repr(v) for v in values)})")
-            lines.append("    End SubModelPartData")
         for keyword, values in (("Nodes", nodes), ("Elements", part_elements),
                                 ("Conditions", part_conditions)):
             if not values:
