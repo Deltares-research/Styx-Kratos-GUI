@@ -56,16 +56,15 @@ App.Interfaces = (function () {
     return (App.PROJECT && App.PROJECT.loads) || [];
   }
 
-  /* Authored in the x-z elevation and nowhere else, for the same reason a sheet
+  /* Authored in the 2D x-y section and nowhere else, for the same reason a sheet
      pile is: that is the plane the confirmed interface element describes. */
   function available(project) {
-    return !!project && project.dimension === 2
-      && (project.section_plane || 'xz') === 'xz';
+    return !!project && project.dimension === 2;
   }
 
   function unavailableMessage(project) {
     return project && project.dimension === 2
-      ? 'Interfaces are created in the x-z section.'
+      ? 'Interfaces are created in the 2D x-y section.'
       : 'An interface is a plane-strain object; switch to 2D to create one.';
   }
 
@@ -121,7 +120,7 @@ App.Interfaces = (function () {
     // the original nodes and "both" would leave nothing holding them.
     var d = project.domain;
     var x = d.x0 + (d.x1 - d.x0) * 0.5;
-    record.points = [[x, d.z_top], [x, d.z_top - (d.z_top - d.z_bottom) * 0.5]];
+    record.points = [[x, d.y_top], [x, d.y_top - (d.y_top - d.y_bottom) * 0.5]];
     record.side = 'left';
     return record;
   }

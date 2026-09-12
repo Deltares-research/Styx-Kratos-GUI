@@ -2,7 +2,7 @@
 
    The head has to land on that structure -- that is what makes it one shared node in
    the mesh rather than a truss attached to nothing. In a section it hangs from a sheet
-   pile in (x, z); in the solid model it hangs from a wall panel or a member, in
+   pile in (x, y); in the solid model it hangs from a wall panel or a member, in
    (x, y, z), as `kind: "anchor3d"`. Same formulation, one dimension up. */
 
 (function () {
@@ -13,21 +13,21 @@
 
   function section(extra) {
     return Object.assign({
-      dimension: 2, section_plane: 'xz', section_offset: 20,
-      domain: { x0: 0, x1: 50, y0: 0, y1: 40, z_top: 0, z_bottom: -25 },
+      dimension: 2, section_offset: 20,
+      domain: { x0: 0, x1: 50, z0: 0, z1: 40, y_top: 0, y_bottom: -25 },
       loads: [], beams: [PILE], beam_sections: [PROFILE],
       anchors: [], anchor_sections: []
     }, extra || {});
   }
   var WALL = { id: 'panel_1', name: 'Wall 1', kind: 'panel', section: 'w1',
-               footprint: [[12, 4], [12, 20]], z_top: 0, z_toe: -14, active: true };
+               footprint: [[12, 4], [12, 20]], y_top: 0, y_toe: -14, active: true };
   var MEMBER = { id: 'member_1', name: 'King post 1', kind: 'member', section: 'az26',
-                 points: [[18, 10, 0], [18, 10, -12]], active: true };
+                 points: [[18, 0, 10], [18, -12, 10]], active: true };
 
   function solid(extra) {
     return Object.assign({
       dimension: 3,
-      domain: { x0: 0, x1: 50, y0: 0, y1: 40, z_top: 0, z_bottom: -25 },
+      domain: { x0: 0, x1: 50, z0: 0, z1: 40, y_top: 0, y_bottom: -25 },
       loads: [], beams: [WALL], beam_sections: [PROFILE],
       panel_sections: [], anchors: [], anchor_sections: []
     }, extra || {});
@@ -40,7 +40,6 @@
       T.eq(App.Anchors.available(solid({ beams: [MEMBER] })), true);
       T.eq(App.Anchors.available(solid({ beams: [] })), false);
       T.eq(App.Anchors.available(section({ beams: [] })), false);
-      T.eq(App.Anchors.available(section({ section_plane: 'xy' })), false);
       // Each dimension sees only its own kinds: a saved sheet pile is nothing to hang
       // a space anchor from, and a wall is nothing to hang a plane anchor from.
       T.eq(App.Anchors.available(solid({ beams: [PILE] })), false);
@@ -56,28 +55,28 @@
       T.eq(anchor.head.length, 3);
       T.eq(anchor.head[0], 12, 'the head is on the wall');
       T.ok(anchor.tail[0] > anchor.head[0], 'the tail rakes away from the wall');
-      T.ok(anchor.tail[2] < anchor.head[2], 'and downward');
+      T.ok(anchor.tail[1] < anchor.head[1], 'and downward');
       T.eq(App.Anchors.validate(anchor, solid()), null);
     });
 
   test('a space anchor head is snapped onto the wall it was dropped near', function () {
-    var anchor = App.Anchors.draftFromPoints(solid(), [[12.4, 10, -3], [20, 10, -9]]);
-    T.eq(anchor.head, [12, 10, -3], 'the head lands on the wall surface');
+    var anchor = App.Anchors.draftFromPoints(solid(), [[12.4, -3, 10], [20, -9, 10]]);
+    T.eq(anchor.head, [12, -3, 10], 'the head lands on the wall surface');
   });
 
   test('a head placed in mid-air is refused rather than snapped from far away',
     function () {
       var message = '';
       try {
-        App.Anchors.draftFromPoints(solid(), [[30, 10, -3], [35, 10, -9]]);
+        App.Anchors.draftFromPoints(solid(), [[30, -3, 10], [35, -9, 10]]);
       } catch (e) { message = e.message; }
       T.ok(/wall or a member/i.test(message), message);
     });
 
   test('a space anchor may hang from a member instead', function () {
     var anchor = App.Anchors.draftFromPoints(solid({ beams: [MEMBER] }),
-                                             [[18, 10, -4], [23, 10, -9]]);
-    T.eq(anchor.head, [18, 10, -4]);
+                                             [[18, -4, 10], [23, -9, 10]]);
+    T.eq(anchor.head, [18, -4, 10]);
     T.eq(anchor.kind, 'anchor3d');
   });
 
@@ -116,7 +115,7 @@
   test('a picked head is snapped onto the nearest pile rather than left floating',
     function () {
       var anchor = App.Anchors.draftFromPoints(section(),
-        [[12.4, 20, -3], [20, 20, -8]]);
+        [[12.4, -3, 20], [20, -8, 20]]);
       T.eq(anchor.head, [12, -3], 'snapped 0.4 m across onto the pile');
       T.eq(anchor.tail, [20, -8]);
     });

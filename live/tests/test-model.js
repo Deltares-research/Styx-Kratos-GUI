@@ -10,7 +10,7 @@
     return {
       name: 'Test site',
       simple_example: !!simpleExample,
-      domain: { x0: 0, x1: 50, y0: 0, y1: 40, z_top: 0, z_bottom: -25 },
+      domain: { x0: 0, x1: 50, z0: 0, z1: 40, y_top: 0, y_bottom: -25 },
       boreholes: [
         { id: 'bh1', name: 'BH-1', x: 0, y: 0, head: 0, water: -1.5 },
         { id: 'bh2', name: 'BH-2', x: 28, y: 4, head: -0.4, water: -1.8 }
@@ -123,7 +123,7 @@
 
   function piledProject() {
     var p = project(TWO);
-    p.dimension = 2; p.section_plane = 'xz'; p.section_offset = 20;
+    p.dimension = 2; p.section_offset = 20;
     p.beam_sections = [{ id: 'az26', name: 'AZ 26-700', E: 2.1e8, nu: 0.3,
                          area: 0.0198, inertia: 5.52e-4, density: 7850, spacing: 1 }];
     p.beams = [{ id: 'beam_1', name: 'Sheet pile 1', section: 'az26',
@@ -152,7 +152,7 @@
       var props = App.OBJECT_PROPS.beam_1;
       T.eq(props.title, 'Sheet pile 1');
       T.eq(props.groups.Geometry.map(function (row) { return row[0]; }),
-           ['x1', 'z1', 'x2', 'z2', 'Length', 'Delete']);
+           ['x1', 'y1', 'x2', 'y2', 'Length', 'Delete']);
       T.eq(props.groups.Geometry[4][1], '14.000', 'length is derived from the polyline');
       T.eq(props.groups.General[0][1], 'AZ 26-700', 'the shared profile is named');
     });
@@ -172,10 +172,10 @@
   test('a pile coordinate edit is refused when it collapses a segment', function () {
     withProject(piledProject(), function () {
       var rows = App.OBJECT_PROPS.beam_1.groups.Geometry;
-      var z2 = rows.filter(function (row) { return row[0] === 'z2'; })[0];
-      T.ok(z2[4].set(0), 'a pile of zero length cannot be meshed');
+      var y2 = rows.filter(function (row) { return row[0] === 'y2'; })[0];
+      T.ok(y2[4].set(0), 'a pile of zero length cannot be meshed');
       T.eq(App.BEAMS[0].points[1][1], -14, 'the pile is unchanged');
-      T.eq(z2[4].set(-10), null);
+      T.eq(y2[4].set(-10), null);
       T.eq(App.BEAMS[0].points[1][1], -10);
     });
   });
@@ -213,7 +213,7 @@
       var props = App.OBJECT_PROPS.anchor_1;
       T.eq(props.title, 'Anchor 1');
       T.eq(props.groups.Geometry.map(function (row) { return row[0]; }),
-           ['Head x', 'Head z', 'Tail x', 'Tail z', 'Length', 'Inclination', 'Delete']);
+           ['Head x', 'Head y', 'Tail x', 'Tail y', 'Length', 'Inclination', 'Delete']);
       T.eq(props.groups.Geometry[4][1], '10.000', 'length is derived from the ends');
       T.eq(props.groups.Geometry[5][1], '36.870', 'so is the rake');
       T.eq(props.groups.General[0][1], '4-strand tendon');
@@ -226,7 +226,7 @@
       var headX = rows.filter(function (row) { return row[0] === 'Head x'; })[0];
       T.ok(headX[4].set(20), 'a head in mid-air is refused');
       T.eq(App.ANCHORS[0].head[0], 12, 'and the anchor is left where it was');
-      var headZ = rows.filter(function (row) { return row[0] === 'Head z'; })[0];
+      var headZ = rows.filter(function (row) { return row[0] === 'Head y'; })[0];
       T.eq(headZ[4].set(-5), null, 'sliding along the pile is fine');
       T.eq(App.ANCHORS[0].head[1], -5);
     });
@@ -318,7 +318,7 @@
       var props = App.OBJECT_PROPS.interface_1;
       T.eq(props.groups.General[1][1], 'Own line');
       T.eq(props.groups.Geometry.map(function (row) { return row[0]; }),
-           ['x1', 'z1', 'x2', 'z2', 'Length', 'Delete']);
+           ['x1', 'y1', 'x2', 'y2', 'Length', 'Delete']);
     });
   });
 
@@ -344,13 +344,67 @@
   function pairedLoads() {
     return [
       { id: 'surfaceload_1', name: 'SurfaceLoad_1', kind: 'surface', x0: 4, x1: 16,
-        y0: 5, y1: 10, thickness: 0.3, components: [0, 0, -25],
+        z0: 5, z1: 10, thickness: 0.3, components: [0, 0, -25],
         distribution: 'Uniform', active: true, derived_from: null },
       { id: 'surfaceload_1_2d', name: 'SurfaceLoad_1', kind: 'line', x0: 4, x1: 16,
-        z: 0, thickness: 0.3, components: [0, -25], distribution: 'Uniform',
+        y: 0, thickness: 0.3, components: [0, -25], distribution: 'Uniform',
         active: true, derived_from: 'surfaceload_1' }
     ];
   }
+
+  /* A surface load is a horizontal pad, so x/z say where it sits in plan and y says
+     how high it lies -- the elevation the server imprints it at (SurfaceLoad.y). The
+     point and line loads have always shown their y; the pad's grid listed only the
+     plan extents, so the one number that says which face it loads was invisible. */
+
+  function surfaceRows(load) {
+    var p = project(TWO);
+    p.dimension = 3;
+    p.loads = [load];
+    return withProject(p, function () {
+      return App.OBJECT_PROPS.surfaceload_1.groups.Geometry;
+    });
+  }
+
+  function rowNamed(rows, label) {
+    return rows.filter(function (r) { return r[0] === label; })[0];
+  }
+
+  test('a surface load shows the elevation it lies at', function () {
+    var load = pairedLoads()[0];
+    load.y = 4;
+    var rows = surfaceRows(load);
+    var row = rowNamed(rows, 'y');
+    T.ok(row, 'the pad gives no clue which face it loads');
+    T.eq(row[1], '4.000');
+    T.eq(row[2], 'm');
+    T.ok(row[4], 'it should be editable, like the line load it translates to');
+  });
+
+  test('a surface load with no elevation says so rather than showing a number', function () {
+    /* y is optional: null means "the top of the model", resolved server-side against
+       ground_y. Formatting that as 0.000 would claim a level the load does not have. */
+    var rows = surfaceRows(pairedLoads()[0]);
+    var row = rowNamed(rows, 'y');
+    T.ok(row, 'the row should still be there');
+    T.eq(row[1], 'Top of model');
+    T.ok(row[3], 'with nothing to edit, it is read-only');
+  });
+
+  test('the pad keeps its plan extents alongside the elevation', function () {
+    var rows = surfaceRows(pairedLoads()[0]).map(function (r) { return r[0]; });
+    ['x min', 'x max', 'z min', 'z max', 'Area'].forEach(function (label) {
+      T.ok(rows.indexOf(label) >= 0, label + ' should still be shown');
+    });
+  });
+
+  test('the pad reads x, then y, then z -- the order the axes are named in', function () {
+    /* Elevation between the two plan axes rather than after them, so the grid reads
+       in the same order as the load components above it (qx, qy, qz) and as the
+       Edit surface load dialog. */
+    var rows = surfaceRows(pairedLoads()[0]).map(function (r) { return r[0]; });
+    T.eq(rows.slice(0, 5), ['x min', 'x max', 'y', 'z min', 'z max']);
+  });
 
   test('a translated load pair shows its 3D half in the solid model', function () {
     var p = project(TWO);
@@ -365,7 +419,7 @@
 
   test('a translated load pair shows its 2D half in the section', function () {
     var p = project(TWO);
-    p.dimension = 2; p.section_plane = 'xz'; p.section_offset = 20;
+    p.dimension = 2; p.section_offset = 20;
     p.loads = pairedLoads();
     withProject(p, function () {
       T.eq(App.LOADS.map(function (l) { return l.id; }), ['surfaceload_1_2d']);
@@ -378,7 +432,7 @@
        carried at the section plane rather than translated or dropped. */
     var p = project(TWO);
     p.dimension = 3;
-    p.loads = [{ id: 'load_1', name: 'PointLoad_1', kind: 'point', x: 10, z: 0,
+    p.loads = [{ id: 'load_1', name: 'PointLoad_1', kind: 'point', x: 10, y: 0,
                  thickness: 0.25, components: [0, -30], distribution: 'Uniform',
                  active: true, derived_from: null }];
     withProject(p, function () {
@@ -388,8 +442,8 @@
 
   test('named loads replace the frozen sample in the tree and selection properties', function () {
     var p = project(TWO);
-    p.dimension = 2; p.section_plane = 'xz'; p.section_offset = 20;
-    p.loads = [{ id: 'load_1', name: 'LineLoad_1', kind: 'line', x0: 2, x1: 9, z: 0,
+    p.dimension = 2; p.section_offset = 20;
+    p.loads = [{ id: 'load_1', name: 'LineLoad_1', kind: 'line', x0: 2, x1: 9, y: 0,
       thickness: 0.15, components: [3, -20], distribution: 'Uniform', active: true }];
     withProject(p, function () {
       var loads = null;
@@ -403,8 +457,8 @@
       T.eq(loads.count, 1);
       T.eq(loads.children[0].obj, 'load_1');
       T.eq(App.OBJECT_PROPS.load_1.title, 'LineLoad_1');
-      T.eq(App.OBJECT_PROPS.load_1.groups.Geometry.some(function (row) { return /^y/.test(row[0]); }), false);
-      T.eq(App.OBJECT_PROPS.load_1.groups.Components.map(function (row) { return row[0]; }), ['qx', 'qz']);
+      T.eq(App.OBJECT_PROPS.load_1.groups.Geometry.some(function (row) { return /^z/.test(row[0]); }), false);
+      T.eq(App.OBJECT_PROPS.load_1.groups.Components.map(function (row) { return row[0]; }), ['qx', 'qy']);
       T.eq(App.OBJECT_PROPS.load_1.groups.Components[0][1], '3.000');
     });
   });
@@ -462,30 +516,30 @@
       function value(label) {
         return geom.filter(function (r) { return r[0] === label; })[0][1];
       }
-      T.eq(value('z max'), '0.000');       // highest top, at bh1
-      T.eq(value('z min'), '-9.200');      // lowest bottom, at bh2
+      T.eq(value('y max'), '0.000');       // highest top, at bh1
+      T.eq(value('y min'), '-9.200');      // lowest bottom, at bh2
       T.eq(value('x max'), '50.000');      // from the project domain, not a literal
     });
   });
 
   test('the property grid follows the domain rather than assuming 50 × 40', function () {
     var p = project(TWO);
-    p.domain = { x0: 0, x1: 120, y0: -10, y1: 30, z_top: 0, z_bottom: -25 };
+    p.domain = { x0: 0, x1: 120, z0: -10, z1: 30, y_top: 0, y_bottom: -25 };
     withProject(p, function () {
       var geom = App.OBJECT_PROPS.soil_L1.groups.Geometry;
       function value(label) {
         return geom.filter(function (r) { return r[0] === label; })[0][1];
       }
       T.eq(value('x max'), '120.000');
-      T.eq(value('y min'), '-10.000');
+      T.eq(value('z min'), '-10.000');
     });
   });
 
   /* In a plane-strain model the axis normal to the section is not part of the
-     geometry any more: the body runs forever that way. For the x-z section that is
-     y, not x -- x still bounds the section left to right. What replaces the pair is
-     where the cut sits, which is the one thing about that axis that still matters
-     and would otherwise vanish from the panel entirely. */
+     geometry any more: the body runs forever that way. That axis is z -- x and y
+     still bound the section itself. What replaces the pair is where the cut sits,
+     which is the one thing about that axis that still matters and would otherwise
+     vanish from the panel entirely. */
   (function () {
     function labels(p) {
       return withProject(p, function () {
@@ -501,36 +555,28 @@
       T.eq(rows.filter(function (r) { return /^Section/.test(r); }).length, 0);
     });
 
-    test('an x-z section drops the y extents, not the x ones', function () {
+    test('the section drops the out-of-plane extents, not the in-plane ones', function () {
       var p = project(TWO);
-      p.dimension = 2; p.section_plane = 'xz'; p.section_offset = 12.5;
+      p.dimension = 2; p.section_offset = 12.5;
       var rows = labels(p);
-      T.eq(rows.indexOf('y min'), -1, 'y min is not a property of a plane-strain model');
-      T.eq(rows.indexOf('y max'), -1);
+      T.eq(rows.indexOf('z min'), -1, 'z min is not a property of a plane-strain model');
+      T.eq(rows.indexOf('z max'), -1);
       T.ok(rows.indexOf('x min') >= 0, 'x still bounds the section');
       T.ok(rows.indexOf('x max') >= 0);
-      T.ok(rows.indexOf('z min') >= 0, 'z still bounds the section');
+      T.ok(rows.indexOf('y min') >= 0, 'and y still bounds it top to bottom');
+      T.ok(rows.indexOf('y max') >= 0);
     });
 
     test('the section position replaces the extents it hid', function () {
       var p = project(TWO);
-      p.dimension = 2; p.section_plane = 'xz'; p.section_offset = 12.5;
+      p.dimension = 2; p.section_offset = 12.5;
       withProject(p, function () {
         var geom = App.OBJECT_PROPS.soil_L1.groups.Geometry;
-        var row = geom.filter(function (r) { return r[0] === 'Section at y'; })[0];
+        var row = geom.filter(function (r) { return r[0] === 'Section at z'; })[0];
         T.ok(row, 'the panel says where the cut is');
         T.eq(row[1], '12.500');
         T.eq(row[2], 'm');
       });
-    });
-
-    test('a y-z section drops the x extents instead', function () {
-      var p = project(TWO);
-      p.dimension = 2; p.section_plane = 'yz'; p.section_offset = 20;
-      var rows = labels(p);
-      T.eq(rows.indexOf('x min'), -1);
-      T.ok(rows.indexOf('y min') >= 0);
-      T.ok(rows.indexOf('Section at x') >= 0);
     });
   })();
 
@@ -579,6 +625,41 @@
       var node = customGeometryNode(App.TREES.soil);
       T.eq(node.children.map(function (c) { return c.obj; }), ['imported_0']);
     });
+  });
+
+  /* A drawn soil body shows the same Geometry block a stack layer does, so it has to
+     hide the same rows: in plane strain the model has no extent along z, and the
+     body runs forever out of plane. This one kept its z min/z max after the stack
+     layers stopped showing theirs -- the two grids are built by different functions
+     (customPartProps vs geometryRows) and only the second one was re-based. */
+  var DRAWN_SOIL = {
+    key: 'drawn_2', label: 'Embankment', color: '#c4a86a', source: 'gui', mat: 'm2',
+    recipe: { kind: 'polygon_extrude', extrusion: [0, 0, 20],
+              vertices: [[0, 0, 0], [12, 0, 0], [9, 5, 0], [3, 5, 0]] }
+  };
+
+  function partRows(p) {
+    return withProject(p, function () {
+      return App.OBJECT_PROPS.drawn_2.groups.Geometry.map(function (r) { return r[0]; });
+    });
+  }
+
+  test('a drawn soil body shows all three extents in 3D', function () {
+    var rows = partRows(project(TWO, [DRAWN_SOIL]));
+    ['x min', 'x max', 'y min', 'y max', 'z min', 'z max'].forEach(function (label) {
+      T.ok(rows.indexOf(label) >= 0, label + ' should be shown in 3D');
+    });
+  });
+
+  test('a drawn soil body drops its out-of-plane extents in the section', function () {
+    var p = project(TWO, [DRAWN_SOIL]);
+    p.dimension = 2; p.section_offset = 12.5;
+    var rows = partRows(p);
+    T.eq(rows.indexOf('z min'), -1, 'z min is not a property of a plane-strain model');
+    T.eq(rows.indexOf('z max'), -1);
+    T.ok(rows.indexOf('x min') >= 0, 'x still bounds the section');
+    T.ok(rows.indexOf('y min') >= 0, 'and y still bounds it top to bottom');
+    T.ok(rows.indexOf('Corners') >= 0, 'the corner editor stays either way');
   });
 
   test('with no custom parts, the node still exists but is empty', function () {
@@ -633,7 +714,7 @@
                           thickness: 0.4, density: 7850 }];
     p.beams = [
       { id: 'panel_1', name: 'Wall 1', kind: 'panel', section: 'az26_wall',
-        footprint: [[12, 4], [12, 20]], z_top: 0, z_toe: -14, active: true },
+        footprint: [[12, 4], [12, 20]], y_top: 0, y_toe: -14, active: true },
       { id: 'member_1', name: 'King post 1', kind: 'member', section: 'az26',
         points: [[18, 10, 0], [18, 10, -12]], active: true }
     ];
@@ -667,14 +748,14 @@
       { id: 'beam_1', name: 'Sheet pile 1', kind: 'beam', section: 'az26',
         points: [[10, 0], [10, -7.5]], active: true, derived_from: null },
       { id: 'beam_1_3d', name: 'Wall 1', kind: 'panel', section: 'az26_wall',
-        footprint: [[10, 0], [10, 20]], z_top: 0, z_toe: -7.5, active: true,
+        footprint: [[10, 0], [10, 20]], y_top: 0, y_toe: -7.5, active: true,
         derived_from: 'beam_1' }
     ];
     p.anchors = [];
     return p;
   }
 
-  test('a translated wall shows its panel in 3D, with y values to edit', function () {
+  test('a translated wall shows its panel in 3D, with z values to edit', function () {
     var p = pairedWall();
     p.dimension = 3;
     withProject(p, function () {
@@ -682,14 +763,14 @@
            'the pile half is the same wall, not a second one');
       var geometry = App.OBJECT_PROPS.beam_1_3d.groups.Geometry
         .map(function (row) { return row[0]; });
-      T.ok(geometry.indexOf('y1') >= 0 && geometry.indexOf('y2') >= 0,
+      T.ok(geometry.indexOf('z1') >= 0 && geometry.indexOf('z2') >= 0,
            'the wall has a plan footprint to edit: ' + geometry.join(', '));
     });
   });
 
   test('a translated wall shows its sheet pile in the section', function () {
     var p = pairedWall();
-    p.dimension = 2; p.section_plane = 'xz'; p.section_offset = 10;
+    p.dimension = 2; p.section_offset = 10;
     withProject(p, function () {
       T.eq(App.BEAMS.map(function (b) { return b.id; }), ['beam_1']);
     });
@@ -717,7 +798,7 @@
       T.eq(props.title, 'Wall 1');
       T.eq(props.groups.General[0][1], 'AZ 26-700 wall');
       var geometry = props.groups.Geometry.map(function (row) { return row[0]; });
-      T.eq(geometry.slice(0, 4), ['x1', 'y1', 'x2', 'y2']);
+      T.eq(geometry.slice(0, 4), ['x1', 'z1', 'x2', 'z2']);
       T.ok(geometry.indexOf('Top level') >= 0 && geometry.indexOf('Toe level') >= 0);
       var section = props.groups.Section.map(function (row) { return row[0]; });
       T.ok(section.indexOf('Thickness') >= 0, section.join(', '));
@@ -751,9 +832,9 @@
       var rows = App.OBJECT_PROPS.panel_1.groups.Geometry;
       var toe = rows.filter(function (row) { return row[0] === 'Toe level'; })[0];
       T.ok(toe[4].set(0), 'a wall of zero height cannot be meshed');
-      T.eq(App.BEAMS[0].z_toe, -14, 'the wall is left as it was');
+      T.eq(App.BEAMS[0].y_toe, -14, 'the wall is left as it was');
       T.eq(toe[4].set(-10), null);
-      T.eq(App.BEAMS[0].z_toe, -10);
+      T.eq(App.BEAMS[0].y_toe, -10);
     });
   });
 

@@ -16,7 +16,7 @@ var App = window.App || {};
 
 App.SoilVolumeDialog = (function () {
 
-  /* An embankment, as a worked example: a trapezoid in the x-z plane extruded
+  /* An embankment, as a worked example: a trapezoid in the x-y plane extruded
      30 m along y. Base 12 m, crest 6 m, height 3 m, 1:1 side slopes. */
   var EXAMPLE = {
     label: 'Embankment',
@@ -116,50 +116,28 @@ App.SoilVolumeDialog = (function () {
      arbitrary thickness sitting at a remembered offset.
      ══════════════════════════════════════════════════════════════ */
 
-  var PLANE_AXES = {
-    xz: { inPlane: [0, 2], normal: 1, labels: ['x', 'z'] },
-    xy: { inPlane: [0, 1], normal: 2, labels: ['x', 'y'] },
-    yz: { inPlane: [1, 2], normal: 0, labels: ['y', 'z'] }
-  };
+  /* There is one section plane: the x-y plane, normal to z. The outline is drawn
+     in the section's own two axes and swept out of plane along Z. */
+  var SECTION_AXES = { inPlane: [0, 1], normal: 2, labels: ['x', 'y'] };
 
-  function sectionAxes(plane) {
-    return PLANE_AXES[plane] || PLANE_AXES.xz;
-  }
-
-  function planeOf(project) {
-    return (project && project.section_plane) || 'xz';
+  function sectionAxes() {
+    return SECTION_AXES;
   }
 
   /* How far the model extends along the section normal: the prism spans all of it. */
-  function domainSpan(project, plane) {
+  function domainSpan(project) {
     var d = (project && project.domain) || {};
-    if (plane === 'xy') return [d.z_bottom, d.z_top];
-    if (plane === 'yz') return [d.x0, d.x1];
-    return [d.y0, d.y1];
+    return [d.z0, d.z1];
   }
 
   function prismFor(project, points) {
-    var plane = planeOf(project);
-    var axes = sectionAxes(plane);
-    var span = domainSpan(project, plane);
-
-    var vertices = points.map(function (p) {
-      var v = [0, 0, 0];
-      v[axes.inPlane[0]] = p[0];
-      v[axes.inPlane[1]] = p[1];
-      v[axes.normal] = span[0];
-      return v;
-    });
-    var extrusion = [0, 0, 0];
-    extrusion[axes.normal] = span[1] - span[0];
-    return { vertices: vertices, extrusion: extrusion };
+    var span = domainSpan(project);
+    var vertices = points.map(function (p) { return [p[0], p[1], span[0]]; });
+    return { vertices: vertices, extrusion: [0, 0, span[1] - span[0]] };
   }
 
-  function outlineOf(recipe, plane) {
-    var axes = sectionAxes(plane);
-    return (recipe.vertices || []).map(function (v) {
-      return [v[axes.inPlane[0]], v[axes.inPlane[1]]];
-    });
+  function outlineOf(recipe) {
+    return (recipe.vertices || []).map(function (v) { return [v[0], v[1]]; });
   }
 
   /* Shoelace. The outline is already in one plane, so this is the whole story. */
@@ -196,7 +174,7 @@ App.SoilVolumeDialog = (function () {
     var recipe = part && part.recipe;
     if (!recipe || recipe.kind !== 'polygon_extrude') return 'surface';
 
-    var axes = sectionAxes(planeOf(project));
+    var axes = sectionAxes();
     var e = recipe.extrusion || [0, 0, 0];
     var acrossOnly = e.every(function (c, a) {
       return a === axes.normal ? Math.abs(c) > 1e-9 : Math.abs(c) < 1e-9;
@@ -213,7 +191,7 @@ App.SoilVolumeDialog = (function () {
     if (formFor(project, { recipe: Object.assign({ kind: 'polygon_extrude' }, recipe) })
         === 'surface') {
       return { label: 'Area', unit: 'm²',
-               value: areaOf(outlineOf(recipe, planeOf(project))) };
+               value: areaOf(outlineOf(recipe)) };
     }
     return { label: 'Volume', unit: 'm³',
              value: volumeOf(recipe.vertices, recipe.extrusion) };
@@ -232,7 +210,7 @@ App.SoilVolumeDialog = (function () {
     var editing = part && part.recipe && part.recipe.kind === 'polygon_extrude' ? part : null;
     var form = formFor(App.PROJECT, editing);
     var surface = form === 'surface';
-    var axes = sectionAxes(planeOf(App.PROJECT));
+    var axes = sectionAxes();
     var el = App.UI.el;
     var layer = document.getElementById('modal-layer');
     var scrim = el('div.scrim');
@@ -454,8 +432,7 @@ App.SoilVolumeDialog = (function () {
     // input is obvious.
     var seed;
     if (surface) {
-      seed = outlineOf(editing ? editing.recipe : { vertices: EXAMPLE.vertices },
-                       planeOf(App.PROJECT));
+      seed = outlineOf(editing ? editing.recipe : { vertices: EXAMPLE.vertices });
     } else {
       seed = editing ? editing.recipe.vertices : EXAMPLE.vertices;
     }

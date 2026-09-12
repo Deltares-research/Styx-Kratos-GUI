@@ -43,8 +43,8 @@ App.LivePatches = (function () {
     return {
       kind: 'box', size: project.mesh.element_size * factor,
       x_min: project.excavation.x0, x_max: project.excavation.x1,
-      y_min: project.excavation.y0, y_max: project.excavation.y1,
-      z_min: project.domain.z_bottom, z_max: project.domain.z_top
+      z_min: project.excavation.z0, z_max: project.excavation.z1,
+      y_min: project.domain.y_bottom, y_max: project.domain.y_top
     };
   }
 
@@ -72,7 +72,7 @@ App.LivePatches = (function () {
      does, so its row gets a second, capturing 'contextmenu' listener that runs before
      the frozen one (stopping it) and opens the same menu with Delete wired up instead. */
 
-  /* Switch between the solid model and the plane-strain x-z section.
+  /* Switch between the solid model and the plane-strain x-y section.
 
      The server owns the dimension, because it decides what the geometry *is*: the
      section is cut by OCC, not projected in the browser. So nothing local changes
@@ -88,7 +88,7 @@ App.LivePatches = (function () {
      place the camera); `plane` is what the server cuts. */
   var MODES = [
     { id: '2d', label: '2D', icon: 'section2d', action: 'viewMode2D',
-      viewport: 'elevation', plane: 'xz' },
+      viewport: 'elevation' },
     { id: '3d', label: '3D', icon: 'cube', action: 'viewMode3D',
       viewport: 'solid' }
   ];
@@ -100,16 +100,14 @@ App.LivePatches = (function () {
   }
 
   function patchFor(id) {
-    var def = modeDef(id);
-    return def.plane ? { dimension: 2, section_plane: def.plane } : { dimension: 3 };
+    return modeDef(id).id === '2d' ? { dimension: 2 } : { dimension: 3 };
   }
 
-  /* "z = -12.5" -- the axis the cut travels along, which is the one *not* in the
-     plane's name, plus where it sits. */
+  /* "z = -12.5" -- the axis the cut travels along, which is always z now that a 2D
+     model is the x-y plane, plus where it sits. */
   function sectionLabel(project) {
-    var normal = { xy: 'z', xz: 'y', yz: 'x' }[(project && project.section_plane) || 'xz'];
     var offset = project && project.section_offset;
-    return normal + ' = ' + (typeof offset === 'number' ? offset : '?');
+    return 'z = ' + (typeof offset === 'number' ? offset : '?');
   }
 
   /* Ask the server for a mode. Explicit rather than a toggle, because each button
@@ -117,12 +115,7 @@ App.LivePatches = (function () {
      and a rebuild of the whole model is not nothing. */
   function setModelMode(id) {
     var def = modeDef(id);
-    // Same mode *and* same cut. A project can be 2D on a plane this UI no longer
-    // offers (left from an earlier session, or set through the API); guarding on the
-    // mode id alone would make the 2D button a no-op and strand it there, because
-    // nothing else in the UI can name that plane.
-    var already = (App.state.modelMode || '3d') === def.id
-      && (!def.plane || !App.PROJECT || App.PROJECT.section_plane === def.plane);
+    var already = (App.state.modelMode || '3d') === def.id;
     if (modeInFlight || already) return Promise.resolve();
     modeInFlight = true;
 
@@ -130,12 +123,12 @@ App.LivePatches = (function () {
       .then(function (result) {
         App.PROJECT = result.project;
         App.state.modelMode = def.id;
-        App.state.dimension = def.plane ? 2 : 3;
+        App.state.dimension = def.id === '2d' ? 2 : 3;
         syncModelMode(def.id);
         App.Viewport.setViewMode(def.viewport);
-        App.Command.note(def.plane
+        App.Command.note(def.id === '2d'
           ? 'Switched to 2D — a plane-strain cross-section at ' + sectionLabel(result.project)
-            + '. Geometry and mesh are rebuilt in the x-z plane.'
+            + '. Geometry and mesh are rebuilt in the x-y plane.'
           : 'Switched to 3D — the full solid model.');
         // A load changes shape with the dimension: a pressure over a footprint in the
         // solid model is a pressure per metre run in the cut, and the server translates

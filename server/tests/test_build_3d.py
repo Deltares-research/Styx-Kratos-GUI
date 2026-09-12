@@ -26,12 +26,12 @@ STRAND = {"id": "strand", "name": "4-strand tendon", "E": 1.95e8, "area": 0.0006
           "compression_limit": None}
 
 PANEL = {"id": "panel_1", "name": "Wall 1", "kind": "panel", "section": "az26_wall",
-         "footprint": [[12.0, 4.0], [12.0, 20.0]], "z_top": 0.0, "z_toe": -14.0,
+         "footprint": [[12.0, 4.0], [12.0, 20.0]], "y_top": 0.0, "y_toe": -14.0,
          "active": True}
 MEMBER = {"id": "member_1", "name": "King post 1", "kind": "member", "section": "az26",
-          "points": [[18.0, 10.0, 0.0], [18.0, 10.0, -12.0]], "active": True}
+          "points": [[18.0, 0.0, 10.0], [18.0, -12.0, 10.0]], "active": True}
 ANCHOR = {"id": "anchor_1", "name": "Anchor 1", "kind": "anchor3d", "section": "strand",
-          "head": [12.0, 10.0, -2.0], "tail": [17.0, 10.0, -8.0], "prestress": 250.0,
+          "head": [12.0, -2.0, 10.0], "tail": [17.0, -8.0, 10.0], "prestress": 250.0,
           "active": True}
 
 
@@ -105,10 +105,10 @@ def test_the_panel_faces_span_exactly_the_footprint_and_levels_drawn():
 
     assert min(b[0] for b in boxes) == pytest.approx(12.0, abs=1e-5)
     assert max(b[3] for b in boxes) == pytest.approx(12.0, abs=1e-5)
-    assert min(b[1] for b in boxes) == pytest.approx(4.0, abs=1e-5)
-    assert max(b[4] for b in boxes) == pytest.approx(20.0, abs=1e-5)
-    assert min(b[2] for b in boxes) == pytest.approx(-14.0, abs=1e-5)
-    assert max(b[5] for b in boxes) == pytest.approx(0.0, abs=1e-5)
+    assert min(b[2] for b in boxes) == pytest.approx(4.0, abs=1e-5)
+    assert max(b[5] for b in boxes) == pytest.approx(20.0, abs=1e-5)
+    assert min(b[1] for b in boxes) == pytest.approx(-14.0, abs=1e-5)
+    assert max(b[4] for b in boxes) == pytest.approx(0.0, abs=1e-5)
 
 
 def test_the_panel_is_fragmented_into_the_soil_so_the_two_share_nodes():
@@ -127,7 +127,7 @@ def test_the_panel_is_fragmented_into_the_soil_so_the_two_share_nodes():
 
 def test_a_wall_that_stops_inside_the_soil_does_not_cut_the_body_in_two():
     """A panel shorter than the block leaves the soil one volume, imprinted."""
-    shallow = PANEL | {"z_toe": -6.0, "footprint": [[12.0, 8.0], [12.0, 16.0]]}
+    shallow = PANEL | {"y_toe": -6.0, "footprint": [[12.0, 8.0], [12.0, 16.0]]}
     with build.session():
         result = build.build_geometry(structured([shallow]))
         soil = [tag for key, tags in result.volumes.items()
@@ -146,7 +146,7 @@ def test_an_inactive_panel_is_not_built():
 
 
 def test_a_panel_is_not_built_into_a_2d_section_and_says_so():
-    """The mirror of the 2D pile in 3D: a wall in plan has no place in an x-z cut."""
+    """The mirror of the 2D pile in 3D: a wall in plan has no place in an x-y cut."""
     payload = structured([PANEL]).model_dump() | {"dimension": 2}
     project = Project.model_validate(payload)
     with build.session():
@@ -173,10 +173,10 @@ def test_the_member_curves_span_exactly_the_polyline_drawn():
         result = build.build_geometry(structured([MEMBER]))
         boxes = [gmsh.model.getBoundingBox(1, tag) for tag in result.curves["member_1"]]
 
-    assert min(b[2] for b in boxes) == pytest.approx(-12.0, abs=1e-5)
-    assert max(b[5] for b in boxes) == pytest.approx(0.0, abs=1e-5)
+    assert min(b[1] for b in boxes) == pytest.approx(-12.0, abs=1e-5)
+    assert max(b[4] for b in boxes) == pytest.approx(0.0, abs=1e-5)
     assert all(b[0] == pytest.approx(18.0, abs=1e-5) for b in boxes)
-    assert all(b[1] == pytest.approx(10.0, abs=1e-5) for b in boxes)
+    assert all(b[2] == pytest.approx(10.0, abs=1e-5) for b in boxes)
 
 
 def test_the_member_is_fragmented_into_the_soil_it_stands_in():
@@ -222,8 +222,8 @@ def test_the_tie_runs_from_the_head_on_the_wall_to_the_tail():
 
     assert min(b[0] for b in boxes) == pytest.approx(12.0, abs=1e-5)
     assert max(b[3] for b in boxes) == pytest.approx(17.0, abs=1e-5)
-    assert min(b[2] for b in boxes) == pytest.approx(-8.0, abs=1e-5)
-    assert max(b[5] for b in boxes) == pytest.approx(-2.0, abs=1e-5)
+    assert min(b[1] for b in boxes) == pytest.approx(-8.0, abs=1e-5)
+    assert max(b[4] for b in boxes) == pytest.approx(-2.0, abs=1e-5)
 
 
 def test_the_tie_is_not_fragmented_into_the_soil():
@@ -242,7 +242,7 @@ def test_the_tie_is_not_fragmented_into_the_soil():
 
 def test_an_anchor_head_splits_the_member_it_hangs_from():
     """The same trick the 2D pile uses: split at the head and the shared node is free."""
-    on_member = ANCHOR | {"head": [18.0, 10.0, -4.0], "tail": [22.0, 10.0, -9.0]}
+    on_member = ANCHOR | {"head": [18.0, -4.0, 10.0], "tail": [22.0, -9.0, 10.0]}
     with build.session():
         result = build.build_geometry(structured([MEMBER], [on_member]))
         ends = set()
@@ -250,7 +250,7 @@ def test_an_anchor_head_splits_the_member_it_hangs_from():
             for point in gmsh.model.getAdjacencies(1, tag)[1]:
                 ends.add(tuple(round(v, 6) for v in gmsh.model.getValue(0, point, [])))
 
-    assert (18.0, 10.0, -4.0) in ends, "the head is not a vertex of the member"
+    assert (18.0, -4.0, 10.0) in ends, "the head is not a vertex of the member"
 
 
 def test_an_inactive_space_anchor_is_not_built():
@@ -296,8 +296,8 @@ def test_a_wall_is_drawn_as_a_surface_and_a_member_as_edges():
     wall = next(s for s in model.sections if s.key == "panel_1")
     assert wall.indices, "a wall is a surface: there is something to triangulate"
     assert wall.edges, "and it keeps its outline"
-    assert min(wall.positions[2::3]) == pytest.approx(-14.0, abs=1e-4)
-    assert max(wall.positions[2::3]) == pytest.approx(0.0, abs=1e-4)
+    assert min(wall.positions[1::3]) == pytest.approx(-14.0, abs=1e-4)
+    assert max(wall.positions[1::3]) == pytest.approx(0.0, abs=1e-4)
 
     member = next(s for s in model.sections if s.key == "member_1")
     assert member.edges and not member.indices, "a member is a curve"

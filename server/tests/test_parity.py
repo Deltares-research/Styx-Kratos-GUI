@@ -32,33 +32,33 @@ def test_the_frozen_constant_block_is_still_where_we_think_it_is(vp):
 def test_domain_matches_frozen_viewport(vp):
     d = seed_project(simple=False).domain
     assert (d.x0, d.x1) == (vp["X0"], vp["X1"])
-    assert (d.y0, d.y1) == (vp["Y0"], vp["Y1"])
-    assert (d.z_top, d.z_bottom) == (vp["ZTOP"], vp["ZBOT"])
+    assert (d.z0, d.z1) == (vp["Y0"], vp["Y1"])
+    assert (d.y_top, d.y_bottom) == (vp["ZTOP"], vp["ZBOT"])
 
 
 def test_excavation_matches_frozen_viewport(vp):
     e = seed_project(simple=False).excavation
     assert (e.x0, e.x1) == (vp["PX0"], vp["PX1"])
-    assert (e.y0, e.y1) == (vp["PY0"], vp["PY1"])
-    assert e.floor_z == vp["Z_PIT"]
+    assert (e.z0, e.z1) == (vp["PY0"], vp["PY1"])
+    assert e.floor_y == vp["Z_PIT"]
 
 
 def test_wall_matches_frozen_viewport(vp):
     w = seed_project(simple=False).wall
-    assert w.toe_z == vp["Z_WALL_TOE"]
-    assert w.top_z == vp["Z_WALL_TOP"]
+    assert w.toe_y == vp["Z_WALL_TOE"]
+    assert w.top_y == vp["Z_WALL_TOP"]
     assert w.thickness == 0.8  # js/viewport.js:109, `var t = 0.8`
 
 
 def test_struts_match_frozen_viewport(vp):
     s = seed_project(simple=False).struts
-    assert s.z == vp["Z_STRUT"]
+    assert s.y == vp["Z_STRUT"]
     assert s.xs == [14.0, 20.0, 26.0, 32.0]  # js/viewport.js:120
     assert s.radius == 0.28
 
 
 def test_water_level_matches_frozen_viewport(vp):
-    assert seed_project(simple=False).water.z == vp["Z_WATER"]
+    assert seed_project(simple=False).water.y == vp["Z_WATER"]
 
 
 def test_boreholes_match_frozen_data_js():

@@ -29,7 +29,7 @@ from tests import mdpa
 # surcharge sits on it, so the model reads as one structure rather than three fixtures
 # that happen to share a domain.
 LINE_LOAD = {"id": "load_1", "name": "Surcharge", "kind": "line",
-             "x0": 14.0, "x1": 22.0, "z": 0.0, "thickness": 0.15,
+             "x0": 14.0, "x1": 22.0, "y": 0.0, "thickness": 0.15,
              "components": [0.0, -20.0], "distribution": "Uniform", "active": True}
 PILE_SECTION = {"id": "az26", "name": "AZ 26-700", "E": 2.1e8, "nu": 0.3,
                 "area": 0.0198, "inertia": 5.52e-4, "density": 7850.0, "spacing": 1.0}
@@ -46,7 +46,7 @@ KRATOS_IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
 def golden_project(**overrides) -> Project:
     payload = seed_project().model_dump()
-    payload.update(dimension=2, section_plane="xz", section_offset=20.0)
+    payload.update(dimension=2, section_offset=20.0)
     payload.update(loads=[LINE_LOAD], beam_sections=[PILE_SECTION], beams=[PILE],
                    anchor_sections=[TENDON], anchors=[ANCHOR])
     payload.update(overrides)

@@ -39,11 +39,10 @@ def section(session):
     """A plane-strain elevation with its own dimension-native line load."""
     project = seed_project()
     project.dimension = 2
-    project.section_plane = "xz"
     project.section_offset = 20.0
     project.loads = [LineLoad(
         id="load_line", name="LineLoad_1", x0=1.0, x1=10.0,
-        z=project.domain.z_top, thickness=0.25, components=(0.0, -20.0),
+        y=project.domain.y_top, thickness=0.25, components=(0.0, -20.0),
     )]
     return kratos.export_project(project, MeshRequest(element_size=6.0, order=2))
 
@@ -137,15 +136,15 @@ def test_every_triangle_is_counter_clockwise(section):
 
 
 def test_the_section_is_written_in_the_kratos_xy_plane(section):
-    """A section on xz lives at a constant y in the model, but Kratos plane strain
-    reads X and Y. The in-plane axes must be remapped, not passed through."""
+    """The section already *is* the x-y plane at z = 0, which is exactly where Kratos
+    plane strain reads it. Nothing is remapped -- the numbers pass straight through."""
     deck = deck_of(section)
     assert all(z == 0.0 for _, _, z in deck.nodes.values())
     domain = seed_project().domain
     xs = [x for x, _, _ in deck.nodes.values()]
     ys = [y for _, y, _ in deck.nodes.values()]
     assert min(xs) == pytest.approx(domain.x0) and max(xs) == pytest.approx(domain.x1)
-    assert min(ys) == pytest.approx(domain.z_bottom) and max(ys) == pytest.approx(domain.z_top)
+    assert min(ys) == pytest.approx(domain.y_bottom) and max(ys) == pytest.approx(domain.y_top)
 
 
 # ── Bookkeeping invariants ──────────────────────────────────────────────────
@@ -196,14 +195,38 @@ def test_the_element_count_matches_the_reported_mesh_statistics(solid):
 def test_boundary_groups_lie_on_their_domain_plane(solid):
     deck = deck_of(solid)
     domain = seed_project().domain
-    planes = {"Bottom_Fixed": (2, domain.z_bottom), "Top_Surface": (2, domain.z_top),
+    planes = {"Bottom_Fixed": (1, domain.y_bottom), "Top_Surface": (1, domain.y_top),
               "Left_Edge": (0, domain.x0), "Right_Edge": (0, domain.x1),
-              "Front_Edge": (1, domain.y0), "Back_Edge": (1, domain.y1)}
+              "Front_Edge": (2, domain.z0), "Back_Edge": (2, domain.z1)}
     for name, (axis, value) in planes.items():
         assert name in deck.parts, name
         assert deck.parts[name].nodes
         for node in deck.parts[name].nodes:
             assert deck.nodes[node][axis] == pytest.approx(value), name
+
+
+def test_the_3d_deck_is_written_y_up(solid):
+    """The internal frame passes straight through the exporter: no swap back to a
+    Z-up Kratos convention on the way out. The deck's vertical extent is the domain's
+    depth on Y, its out-of-plane extent is the domain width on Z, and the two named
+    horizontal faces sit where Y says they do."""
+    deck = deck_of(solid)
+    domain = seed_project().domain
+
+    ys = [y for _, y, _ in deck.nodes.values()]
+    zs = [z for _, _, z in deck.nodes.values()]
+    assert min(ys) == pytest.approx(domain.y_bottom) and max(ys) == pytest.approx(domain.y_top)
+    assert min(zs) == pytest.approx(domain.z0) and max(zs) == pytest.approx(domain.z1)
+
+    assert all(deck.nodes[n][1] == pytest.approx(domain.y_bottom)
+               for n in deck.parts["Bottom_Fixed"].nodes)
+    assert all(deck.nodes[n][1] == pytest.approx(domain.y_top)
+               for n in deck.parts["Top_Surface"].nodes)
+    # ...and Front/Back are the out-of-plane pair, which is Z.
+    assert all(deck.nodes[n][2] == pytest.approx(domain.z0)
+               for n in deck.parts["Front_Edge"].nodes)
+    assert all(deck.nodes[n][2] == pytest.approx(domain.z1)
+               for n in deck.parts["Back_Edge"].nodes)
 
 
 def test_the_section_has_no_out_of_plane_boundary_groups(section):
@@ -216,10 +239,10 @@ def test_boundary_groups_follow_a_drawn_body_that_does_not_fill_the_domain():
     """A drawn soil is not held to the borehole box. Read off `project.domain`, the
     faces it never reaches came out empty and the deck lost `Right_Edge` and
     `Bottom_Fixed` -- the bug this guards."""
-    project = seed_project()  # domain x 0..25, z -25..0
+    project = seed_project()  # domain x 0..25, y -25..0
     # A 5 x 3 block in the domain's top-left corner, one node per corner.
     world = {1: (0.0, 0.0, 0.0), 2: (5.0, 0.0, 0.0),
-             3: (5.0, 0.0, -3.0), 4: (0.0, 0.0, -3.0)}
+             3: (5.0, -3.0, 0.0), 4: (0.0, -3.0, 0.0)}
     node_id = {tag: tag for tag in world}
     boundaries = dict((name, nodes) for name, _, nodes in
                       kratos._boundary_nodes(project, 2, world, node_id, set(world)))
@@ -233,8 +256,8 @@ def test_a_structure_standing_proud_of_the_soil_does_not_become_the_top_surface(
     """The faces are measured from the soil body; a sheet pile above ground still joins
     whichever face it touches, but never defines one."""
     project = seed_project()
-    world = {1: (0.0, 0.0, 0.0), 2: (5.0, 0.0, 0.0), 3: (5.0, 0.0, -3.0),
-             4: (0.0, 0.0, -3.0), 5: (2.0, 0.0, 2.0), 6: (2.0, 0.0, 0.0)}
+    world = {1: (0.0, 0.0, 0.0), 2: (5.0, 0.0, 0.0), 3: (5.0, -3.0, 0.0),
+             4: (0.0, -3.0, 0.0), 5: (2.0, 2.0, 0.0), 6: (2.0, 0.0, 0.0)}
     node_id = {tag: tag for tag in world}
     boundaries = dict((name, nodes) for name, _, nodes in
                       kratos._boundary_nodes(project, 2, world, node_id, {1, 2, 3, 4}))
@@ -245,7 +268,7 @@ def test_the_2d_line_load_becomes_conditions_inside_its_interval(section):
     deck = deck_of(section)
     load = LineLoad(
         id="load_line", name="LineLoad_1", x0=1.0, x1=10.0,
-        z=seed_project().domain.z_top, thickness=0.25, components=(0.0, -20.0),
+        y=seed_project().domain.y_top, thickness=0.25, components=(0.0, -20.0),
     )
     assert deck.conditions and deck.conditions[0].name == "LineLoadDiffOrderCondition2D3N"
     part = deck.parts["LineLoad_1"]
@@ -253,7 +276,7 @@ def test_the_2d_line_load_becomes_conditions_inside_its_interval(section):
     assert not part.elements
     assert part.nodes == sorted({n for c in part.conditions
                                  for n in deck.conditions[0].entries[c]})
-    top = seed_project().domain.z_top
+    top = seed_project().domain.y_top
     for nodes in deck.conditions[0].entries.values():
         # The boundary is split at the pad's ends, so a condition is wholly under it.
         corners = [deck.nodes[n] for n in nodes[:2]]
@@ -302,7 +325,7 @@ def test_3d_surface_load_condition_keeps_property_zero(solid):
 
 
 def test_the_3d_surface_load_value_reaches_the_process_file(solid):
-    assert _load_process(solid, "SurfaceLoad_1")["value"] == [0.0, 0.0, -20.0]
+    assert _load_process(solid, "SurfaceLoad_1")["value"] == [0.0, -20.0, 0.0]
 
 
 def test_surface_load_has_no_material_parameters_entry(solid):
@@ -319,7 +342,7 @@ def test_a_2d_point_load_is_exported_as_a_3d_point_condition(session):
     project.loads = [
         PointLoad(
             id="load_crane", name="Crane reaction", kind="point",
-            x=5.0, z=0.0, thickness=0.25,
+            x=5.0, y=0.0, thickness=0.25,
             components=(15.0, -120.0), active=True,
         )
     ]
@@ -334,10 +357,9 @@ def test_a_2d_point_load_is_exported_as_a_3d_point_condition(session):
 def test_point_load_coordinates_export_in_a_2d_section(session):
     project = seed_project()
     project.dimension = 2
-    project.section_plane = "xz"
     project.section_offset = 12.0
     project.loads = [PointLoad(
-        id="load_jack", name="Jack", x=5.0, z=-4.0,
+        id="load_jack", name="Jack", x=5.0, y=-4.0,
         components=(15.0, -120.0),
     )]
     exported = kratos.export_project(project, MeshRequest(element_size=6.0, order=1))
@@ -456,11 +478,11 @@ def test_3d_surface_load_conditions_cover_its_footprint_exactly(solid):
     assert min(x for x, _, _ in corners) == pytest.approx(1.0)
     assert max(x for x, _, _ in corners) == pytest.approx(10.0)
     # The seeded pad overhangs the 25 m domain, and the overhang is not boundary.
-    assert min(y for _, y, _ in corners) == pytest.approx(14.0)
-    assert max(y for _, y, _ in corners) == pytest.approx(seed_project().domain.y1)
-    for x, y, _ in corners:
+    assert min(z for _, _, z in corners) == pytest.approx(14.0)
+    assert max(z for _, _, z in corners) == pytest.approx(seed_project().domain.z1)
+    for x, _, z in corners:
         assert 1.0 - 1e-6 <= x <= 10.0 + 1e-6
-        assert 14.0 - 1e-6 <= y <= 26.0 + 1e-6
+        assert 14.0 - 1e-6 <= z <= 26.0 + 1e-6
 
 
 # ── ProjectParameters.json (partial) ────────────────────────────────────────
@@ -493,7 +515,7 @@ def test_the_section_pins_the_bottom_and_rolls_the_sides(section):
 
     bottom = constraints["PorousDomain.Bottom_Fixed"]
     assert bottom["variable_name"] == "DISPLACEMENT"
-    # 2D section on the xz plane: Kratos X = world x, Kratos Y = world z, Z unused.
+    # The 2D section is the x-y plane: Kratos X and Y are world x and y, Z unused.
     assert bottom["is_fixed"] == [True, True, False]
     assert bottom["is_fixed"] == bottom["active"]
 
@@ -509,8 +531,8 @@ def test_the_3d_model_pins_the_bottom_and_rolls_all_four_sides(solid):
     assert constraints["PorousDomain.Bottom_Fixed"]["is_fixed"] == [True, True, True]
     assert constraints["PorousDomain.Left_Edge"]["is_fixed"] == [True, False, False]
     assert constraints["PorousDomain.Right_Edge"]["is_fixed"] == [True, False, False]
-    assert constraints["PorousDomain.Front_Edge"]["is_fixed"] == [False, True, False]
-    assert constraints["PorousDomain.Back_Edge"]["is_fixed"] == [False, True, False]
+    assert constraints["PorousDomain.Front_Edge"]["is_fixed"] == [False, False, True]
+    assert constraints["PorousDomain.Back_Edge"]["is_fixed"] == [False, False, True]
 
 
 def test_the_active_load_becomes_a_load_process(section):
@@ -530,7 +552,7 @@ def test_the_3d_surface_load_process_is_fully_active(solid):
     loads = {p["Parameters"]["model_part_name"]: p["Parameters"]
              for p in doc["processes"]["loads_process_list"]}
     load = loads["PorousDomain.SurfaceLoad_1"]
-    assert load["value"] == [0.0, 0.0, -20.0]
+    assert load["value"] == [0.0, -20.0, 0.0]
     assert load["active"] == [True, True, True]
 
 
@@ -555,7 +577,7 @@ BEAM_SECTION = {"id": "az26", "name": "AZ 26-700", "E": 2.1e8, "nu": 0.3,
 
 def piled_project(order: int = 2, active: bool = True, dimension: int = 2):
     payload = seed_project().model_dump()
-    payload.update(dimension=dimension, section_plane="xz", section_offset=20.0)
+    payload.update(dimension=dimension, section_offset=20.0)
     payload["beam_sections"] = [BEAM_SECTION]
     payload["beams"] = [{"id": "sheetpile_1", "name": "Sheet pile 1", "section": "az26",
                          "points": [[12.0, 0.0], [12.0, -14.0]], "active": active}]

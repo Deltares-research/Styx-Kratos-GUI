@@ -108,20 +108,19 @@ def test_box_shaped_parts_tessellate_exactly(display, project):
     faceting loss. They pin the volume test's arithmetic independently of tolerance."""
     lo, wa, d = project.loads[0], project.water, project.domain
     assert sum(signed_volume(s) for s in sections_of(display, "load")) == pytest.approx(
-        (lo.x1 - lo.x0) * (lo.y1 - lo.y0) * lo.thickness, rel=1e-6
+        (lo.x1 - lo.x0) * (lo.z1 - lo.z0) * lo.thickness, rel=1e-6
     )
     assert sum(signed_volume(s) for s in sections_of(display, "water")) == pytest.approx(
-        (d.dx + 2 * wa.margin) * (d.dy + 2 * wa.margin) * wa.thickness, rel=1e-6
+        (d.dx + 2 * wa.margin) * (d.dz + 2 * wa.margin) * wa.thickness, rel=1e-6
     )
 
 
 def test_coordinate_defined_point_load_has_a_display_indicator(project):
     candidate = project.model_copy(deep=True)
     candidate.dimension = 2
-    candidate.section_plane = "xz"
     candidate.section_offset = 5.0
     candidate.loads = [PointLoad(
-        id="load_crane", name="Crane", x=5.0, z=-3.0,
+        id="load_crane", name="Crane", x=5.0, y=-3.0,
         thickness=0.25, components=(0.0, -100.0),
     )]
     with build.session():
@@ -133,8 +132,9 @@ def test_coordinate_defined_point_load_has_a_display_indicator(project):
     ys = sections[0].positions[1::3]
     zs = sections[0].positions[2::3]
     assert sum(xs) / len(xs) == pytest.approx(5.0, abs=0.05)
-    assert sum(ys) / len(ys) == pytest.approx(5.0, abs=0.05)
-    assert sum(zs) / len(zs) == pytest.approx(-3.0, abs=0.05)
+    assert sum(ys) / len(ys) == pytest.approx(-3.0, abs=0.05)
+    # The section was cut at z = 5.0 and moved onto the x-y plane with everything else.
+    assert sum(zs) / len(zs) == pytest.approx(0.0, abs=0.05)
 
 
 def test_interior_faces_between_volumes_of_one_part_are_dropped(display, project):
@@ -159,7 +159,7 @@ def test_interior_faces_between_volumes_of_one_part_are_dropped(display, project
                 naive += sum(len(e) for t, e in zip(types, elems) if t == 2)
 
     emitted = sum(len(s.indices) // 3 for s in sections_of(display, "piles"))
-    assert len(result.volumes["piles"]) == 2 * len(project.piles.xs) * len(project.piles.ys)
+    assert len(result.volumes["piles"]) == 2 * len(project.piles.xs) * len(project.piles.zs)
     assert emitted < naive, f"emitted {emitted} triangles of {naive}; interior faces kept"
 
 
@@ -294,9 +294,9 @@ def test_a_drawn_surface_renders_as_a_visible_flat_section(project_with_line_and
 
     # 6 x 6 square, visible from both sides -- every OCC triangle is emitted with both
     # windings, since a bare surface (unlike a solid) has no "outward" to pick.
-    xs, ys = section.positions[0::3], section.positions[1::3]
+    xs, zs = section.positions[0::3], section.positions[1::3]
     assert max(xs) - min(xs) == pytest.approx(6.0, rel=1e-6)
-    assert max(ys) - min(ys) == pytest.approx(6.0, rel=1e-6)
+    assert max(zs) - min(zs) == pytest.approx(6.0, rel=1e-6)
 
 
 def test_every_part_key_is_drawable_including_overlays(project_with_line_and_surface):

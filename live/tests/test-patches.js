@@ -55,12 +55,12 @@
 
   test('pit refinement maps project extents to the mesh API schema', function () {
     var refinement = App.LivePatches.pitRefinement({
-      domain: { z_bottom: -25, z_top: 0 },
-      excavation: { x0: 12, x1: 38, y0: 10, y1: 30 },
+      domain: { y_bottom: -25, y_top: 0 },
+      excavation: { x0: 12, x1: 38, z0: 10, z1: 30 },
       mesh: { element_size: 2.5 }
     }, 0.5);
     T.eq(refinement, { kind: 'box', size: 1.25, x_min: 12, x_max: 38,
-      y_min: 10, y_max: 30, z_min: -25, z_max: 0 });
+      z_min: 10, z_max: 30, y_min: -25, y_max: 0 });
   });
 
   /* ── Model explorer: Delete for drawn/imported geometry ──────────
@@ -367,7 +367,7 @@
   });
 
   test('each mode maps to the patch body the server expects', function () {
-    T.eq(App.LivePatches.patchFor('2d'), { dimension: 2, section_plane: 'xz' });
+    T.eq(App.LivePatches.patchFor('2d'), { dimension: 2 });
     T.eq(App.LivePatches.patchFor('3d'), { dimension: 3 });
   });
 
@@ -447,8 +447,7 @@
       Api: Object.assign({}, App.Api, {
         patch: function (path, body) {
           patched = [path, body];
-          return Promise.resolve({ project: { dimension: 2, section_plane: 'xz',
-                                              section_offset: 20 } });
+          return Promise.resolve({ project: { dimension: 2, section_offset: 20 } });
         }
       }),
       Viewport: {
@@ -458,35 +457,13 @@
     }), function () {
       return App.runAction({ action: 'viewMode2D' }).then(function () {
         T.eq(patched[0], '/api/project/dimension');
-        T.eq(patched[1], { dimension: 2, section_plane: 'xz' });
+        T.eq(patched[1], { dimension: 2 });
         T.eq(App.state.modelMode, '2d');
         T.eq(App.state.dimension, 2);
         // The camera must not move before the server has agreed, and the scene must
         // be refetched after it has: the section is cut by OCC, not projected here.
         T.eq(order, ['viewport:elevation', 'refresh']);
-        T.eq(App.PROJECT.section_plane, 'xz', 'the patched project has to be adopted');
-      });
-    });
-  });
-
-  test('2D re-cuts when the project is on a different plane than the mode means', function () {
-    /* A project can be 2D on a plane this UI no longer offers -- left over from an
-       earlier session, or edited through the API. Guarding on the mode id alone
-       would make the 2D button a no-op and strand the model on that plane, since
-       nothing else in the UI can name it. */
-    var sent = [];
-    return withStubs(stubs({
-      state: { mode: 'soil', modelMode: '2d' },
-      PROJECT: { dimension: 2, section_plane: 'xy', section_offset: -12.5 },
-      Api: Object.assign({}, App.Api, {
-        patch: function (path, body) {
-          sent.push(body.section_plane);
-          return Promise.resolve({ project: { dimension: 2, section_plane: 'xz' } });
-        }
-      })
-    }), function () {
-      return App.LivePatches.setModelMode('2d').then(function () {
-        T.eq(sent, ['xz'], 'the button must be able to correct the plane');
+        T.eq(App.PROJECT.section_offset, 20, 'the patched project has to be adopted');
       });
     });
   });
@@ -501,9 +478,9 @@
       return App.runAction({ action: 'viewMode3D' }).then(function () {
         T.eq(calls, 0, 'a section rebuild is expensive; do not spend one on a no-op');
         App.state.modelMode = '2d';
-        App.PROJECT = { dimension: 2, section_plane: 'xz' };
+        App.PROJECT = { dimension: 2, section_offset: 20 };
         return App.runAction({ action: 'viewMode2D' }).then(function () {
-          T.eq(calls, 0, 'already on this plane too');
+          T.eq(calls, 0, 'already in the section too');
         });
       });
     });
@@ -517,7 +494,7 @@
         patch: function () {
           calls++;
           return pending.then(function () {
-            return { project: { dimension: 2, section_plane: 'xz' } };
+            return { project: { dimension: 2 } };
           });
         }
       })
@@ -657,10 +634,10 @@
 })();
 
 (function () {
-  test('the log names the axis the cut travels along, not one in the plane', function () {
-    T.eq(App.LivePatches.sectionLabel({ section_plane: 'xz', section_offset: 20 }), 'y = 20');
-    T.eq(App.LivePatches.sectionLabel({ section_plane: 'xy', section_offset: -12.5 }), 'z = -12.5');
-    T.eq(App.LivePatches.sectionLabel({ section_plane: 'yz', section_offset: 25 }), 'x = 25');
+  test('the log names the axis the cut travels along, which is always z', function () {
+    T.eq(App.LivePatches.sectionLabel({ section_offset: 20 }), 'z = 20');
+    T.eq(App.LivePatches.sectionLabel({ section_offset: -12.5 }), 'z = -12.5');
+    T.eq(App.LivePatches.sectionLabel({}), 'z = ?');
   });
 })();
 

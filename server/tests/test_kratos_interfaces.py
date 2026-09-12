@@ -39,7 +39,7 @@ def interfaced_project(side: str = "both", active: bool = True, dimension: int =
                        structure: str | None = "sheetpile_1", points=None,
                        section: dict | None = None) -> Project:
     payload = seed_project().model_dump()
-    payload.update(dimension=dimension, section_plane="xz", section_offset=20.0)
+    payload.update(dimension=dimension, section_offset=20.0)
     payload["beam_sections"] = [BEAM_SECTION]
     payload["beams"] = [{"id": "sheetpile_1", "name": "Sheet pile 1", "section": "az26",
                          "points": [[12.0, 0.0], [12.0, -14.0]], "active": True}]
@@ -153,8 +153,8 @@ def test_each_element_normal_points_into_the_soil_it_holds(contacted):
     deck = deck_of(contacted)
     for nodes in interface_block(deck).entries.values():
         half = len(nodes) // 2
-        (x0, y0, _), (x1, y1, _) = deck.nodes[nodes[0]], deck.nodes[nodes[1]]
-        normal = (-(y1 - y0), x1 - x0)
+        (x0, z0, _), (x1, z1, _) = deck.nodes[nodes[0]], deck.nodes[nodes[1]]
+        normal = (-(z1 - z0), x1 - x0)
         # The soil half's own elements sit on the side the normal points at. Take any
         # soil element holding that node and compare its centre against the line.
         holder = next(n for block in deck.elements
@@ -162,7 +162,7 @@ def test_each_element_normal_points_into_the_soil_it_holds(contacted):
                       for n in block.entries.values()
                       if set(nodes[half:]) <= set(n))
         centre = [sum(deck.nodes[n][axis] for n in holder[:3]) / 3 for axis in (0, 1)]
-        towards = normal[0] * (centre[0] - x0) + normal[1] * (centre[1] - y0)
+        towards = normal[0] * (centre[0] - x0) + normal[1] * (centre[1] - z0)
         assert towards > 0
 
 
@@ -193,8 +193,8 @@ def test_every_soil_triangle_is_still_counter_clockwise_after_the_split(contacte
         if not block.name.startswith("SmallStrainUPw"):
             continue
         for nodes in block.entries.values():
-            (x1, y1, _), (x2, y2, _), (x3, y3, _) = (deck.nodes[n] for n in nodes[:3])
-            assert (x2 - x1) * (y3 - y1) - (y2 - y1) * (x3 - x1) > 0
+            (x1, z1, _), (x2, y2, _), (x3, y3, _) = (deck.nodes[n] for n in nodes[:3])
+            assert (x2 - x1) * (y3 - z1) - (y2 - z1) * (x3 - x1) > 0
 
 
 def test_a_soil_sub_model_part_still_lists_exactly_its_own_nodes(contacted):

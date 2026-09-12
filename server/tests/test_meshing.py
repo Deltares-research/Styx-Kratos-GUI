@@ -76,7 +76,7 @@ def test_box_and_cylinder_refinements_create_a_background_size_field():
         gmsh.model.add("fields")
         background = meshing._apply_refinements(3.0, [
             BoxRefinement(kind="box", size=1.0, x_min=0, x_max=10,
-                          y_min=0, y_max=10, z_min=-10, z_max=0),
+                          z_min=0, z_max=10, y_min=-10, y_max=0),
             CylinderRefinement(kind="cylinder", size=0.5, x=5, y=5, z=-10,
                                axis_x=0, axis_y=0, axis_z=10, radius=2),
         ])

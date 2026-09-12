@@ -95,7 +95,6 @@ def test_post_project_reset_restores_the_seed_project(client):
     changed = seed_project().model_dump()
     changed["name"] = "Something else"
     changed["dimension"] = 2
-    changed["section_plane"] = "xz"
     client.put("/api/project", json=changed)
 
     body = client.post("/api/project/reset").json()
@@ -274,27 +273,27 @@ def test_post_import_mdpa_returns_the_parsed_mesh(client):
     assert part["kind"] == "body"
 
 
-def test_post_import_mdpa_stands_a_2d_deck_up_on_the_open_projects_section_plane(client):
-    """A .mdpa carries Kratos plane coordinates and no memory of the plane they were cut
-    from. Drawn as they stand they lie flat in the ground plane -- edge-on to the 2D view
-    -- so the deck is placed on the plane the open project's own section uses."""
+def test_post_import_mdpa_returns_a_2d_deck_in_the_frame_it_was_written_in(client):
+    """A .mdpa carries Kratos plane coordinates, which since the re-basis are the
+    world's: a 2D model is the x-y plane at z = 0. Nothing about the open project is
+    needed to place it, and nothing is rotated on the way in."""
     deck = (
         b"Begin Properties 0\nEnd Properties\n\n"
         b"Begin Nodes\n1 0.0 0.0 0.0\n2 8.0 0.0 0.0\n3 0.0 -6.0 0.0\nEnd Nodes\n\n"
         b"Begin Elements UPwSmallStrainElement2D3N\n1 0 1 2 3\nEnd Elements\n"
     )
     section = seed_project().model_dump()
-    section.update(dimension=2, section_plane="xz", section_offset=20.0)
+    section.update(dimension=2, section_offset=20.0)
     client.put("/api/project", json=section)
     try:
         body = client.post("/api/import/mdpa", files={"file": ("case.mdpa", deck)}).json()
     finally:
         client.put("/api/project", json=seed_project().model_dump())
 
-    assert body["bbox"] == [0.0, 20.0, -6.0, 8.0, 20.0, 0.0]
+    assert body["bbox"] == [0.0, -6.0, 0.0, 8.0, 0.0, 0.0]
     positions = next(s for s in body["sections"]
                      if s["key"] == "imported_continuum")["positions"]
-    assert positions[1::3] == [20.0, 20.0, 20.0], "every node sits on the section plane"
+    assert positions[2::3] == [0.0, 0.0, 0.0], "every node sits on the x-y plane"
 
 
 def test_post_geometry_create_adds_custom_part(client):
@@ -481,7 +480,7 @@ def test_patch_structures_rejects_duplicate_loads_without_mutating_project(clien
 def test_patch_structures_accepts_a_coordinate_defined_point_load(client):
     point = {
         "id": "load_crane", "name": "Crane reaction", "kind": "point",
-        "x": 8.5, "z": -3.0, "thickness": 0.25,
+        "x": 8.5, "y": -3.0, "thickness": 0.25,
         "components": [15.0, -120.0], "distribution": "Uniform", "active": True,
     }
     response = client.patch("/api/project/structures", json={"loads": [point]})
@@ -761,7 +760,7 @@ def test_patch_layers_rejects_a_borehole_the_layers_do_not_cover(client):
 def test_patch_layers_can_resize_the_domain(client):
     project = seed_project()
     domain = project.domain.model_dump()
-    domain.update(x1=60.0, y1=45.0)
+    domain.update(x1=60.0, z1=45.0)
 
     response = client.patch("/api/project/layers", json={
         "layers": [layer.model_dump() for layer in project.layers],
@@ -770,7 +769,7 @@ def test_patch_layers_can_resize_the_domain(client):
     assert response.status_code == 200
 
     saved = client.get("/api/project").json()["domain"]
-    assert (saved["x1"], saved["y1"]) == (60.0, 45.0)
+    assert (saved["x1"], saved["z1"]) == (60.0, 45.0)
 
     client.put("/api/project", json=seed_project().model_dump())
 
@@ -974,11 +973,17 @@ def test_root_serves_the_live_shell(client):
     assert "/live/js/viewport.js" in body
 
 
-def test_the_live_shell_substitutes_exactly_one_frozen_script(client):
+def test_the_live_shell_replaces_only_the_viewport_and_the_orbit_controller(client):
     """The whole portability argument rests on this: every frozen module is loaded
-    verbatim except js/viewport.js, which is the only one that invents geometry. If a
-    second file ever needs replacing, that is a design change and should not pass
-    quietly."""
+    verbatim except js/viewport.js, which is the only one that invents geometry, and
+    js/orbit.js, which is hard-wired to a Z-up world the model no longer uses. If a
+    third file ever needs replacing, that is a design change and should not pass
+    quietly.
+
+    The orbit controller is *overridden* rather than dropped: `App.Orbit` is a plain
+    global assignment, so the frozen file is still loaded and the live one after it
+    wins. It therefore appears in both lists, and the order matters.
+    """
     body = client.get("/").text
     frozen = re.findall(r'src="/js/([a-z]+\.js)"', body)
     replaced = re.findall(r'src="/live/js/([a-z-]+\.js)"', body)
@@ -986,14 +991,17 @@ def test_the_live_shell_substitutes_exactly_one_frozen_script(client):
     assert "viewport.js" not in frozen, "the frozen viewport must not be loaded"
     assert set(frozen) == {"data.js", "ui.js", "orbit.js", "menubar.js",
                            "toolbars.js", "explorer.js", "command.js", "dialogs.js", "app.js"}
-    # soil-volume-dialog.js and canvas-renderer.js are additions, not substitutions:
-    # they have no frozen counterpart. The assertion above is the one that guards the
-    # portability claim.
+    # Additions rather than substitutions -- they have no frozen counterpart:
+    # soil-volume-dialog.js, canvas-renderer.js, ruler.js, download.js, zip.js.
+    # The assertion above is the one that guards the portability claim.
     assert set(replaced) == {"api.js", "buffers.js", "model.js", "viewport.js", "patches.js",
-                                 "mesh-settings.js", "import-dialog.js", "mdpa-import-dialog.js",
-                                 "draw-input.js", "soil-volume-dialog.js", "canvas-renderer.js",
-                                 "export.js", "history.js", "loads.js", "beams.js", "anchors.js",
-                                 "interfaces.js", "material-library.js"}
+                             "mesh-settings.js", "import-dialog.js", "mdpa-import-dialog.js",
+                             "draw-input.js", "soil-volume-dialog.js", "canvas-renderer.js",
+                             "export.js", "history.js", "loads.js", "beams.js", "anchors.js",
+                             "interfaces.js", "material-library.js", "orbit.js", "ruler.js",
+                             "download.js", "zip.js"}
+    assert body.index('/js/orbit.js') < body.index('/live/js/orbit.js'), (
+        "the Y-up controller has to be loaded after the frozen one it overrides")
 
 
 def test_the_live_viewport_keeps_the_frozen_public_api(client):
@@ -1034,12 +1042,13 @@ def restore_3d(client):
     client.patch("/api/project/dimension", json={"dimension": 3})
 
 
-def test_switching_to_2d_resolves_the_section_plane(client, restore_3d):
+def test_switching_to_2d_resolves_the_section_offset(client, restore_3d):
     body = client.patch("/api/project/dimension", json={"dimension": 2}).json()
     project = body["project"]
     assert project["dimension"] == 2
+    assert "section_plane" not in project
     domain = project["domain"]
-    assert project["section_offset"] == pytest.approx((domain["y0"] + domain["y1"]) / 2)
+    assert project["section_offset"] == pytest.approx((domain["z0"] + domain["z1"]) / 2)
 
 
 def test_switching_dimension_invalidates_everything_downstream(client, restore_3d):
@@ -1048,7 +1057,7 @@ def test_switching_dimension_invalidates_everything_downstream(client, restore_3
     assert set(body["invalidates"]) == {"project", "tree", "geometry", "mesh"}
 
 
-def test_an_explicit_section_plane_is_accepted(client, restore_3d):
+def test_an_explicit_section_offset_is_accepted(client, restore_3d):
     body = client.patch("/api/project/dimension",
                         json={"dimension": 2, "section_offset": 6.25}).json()
     assert body["project"]["section_offset"] == 6.25
@@ -1062,11 +1071,14 @@ def test_a_section_outside_the_domain_is_refused(client, restore_3d):
 
 
 def test_geometry_after_the_switch_is_a_flat_section(client, restore_3d):
+    """Flat in z: the cut is taken at `section_offset` and moved onto the x-y plane."""
     client.patch("/api/project/dimension", json={"dimension": 2})
     payload = client.get("/api/geometry").json()
-    section_offset = client.get("/api/project").json()["section_offset"]
-    assert payload["bbox"][1] == pytest.approx(section_offset, abs=1e-3)
-    assert payload["bbox"][4] == pytest.approx(section_offset, abs=1e-3)
+    assert payload["bbox"][2] == pytest.approx(0.0, abs=1e-3)
+    assert payload["bbox"][5] == pytest.approx(0.0, abs=1e-3)
+    # ...and it still spans both of its own axes.
+    assert payload["bbox"][3] - payload["bbox"][0] > 1.0
+    assert payload["bbox"][4] - payload["bbox"][1] > 1.0
     assert payload["sections"], "the section still has to be drawable"
 
 
@@ -1074,35 +1086,17 @@ def test_switching_back_to_3d_restores_the_solid(client, restore_3d):
     client.patch("/api/project/dimension", json={"dimension": 2})
     client.patch("/api/project/dimension", json={"dimension": 3})
     payload = client.get("/api/geometry").json()
-    assert payload["bbox"][4] - payload["bbox"][1] > 1.0
+    assert payload["bbox"][5] - payload["bbox"][2] > 1.0, "the solid has depth again"
 
 
-def test_the_switch_carries_which_plane_to_cut(client, restore_3d):
-    body = client.patch("/api/project/dimension",
-                        json={"dimension": 2, "section_plane": "xy"}).json()
-    assert body["project"]["section_plane"] == "xy"
-    # The offset must be resolved along the *new* plane's normal, not the old one.
-    domain = body["project"]["domain"]
-    assert body["project"]["section_offset"] == pytest.approx(
-        (domain["z_bottom"] + domain["z_top"]) / 2)
-
-
-def test_a_plan_switch_yields_geometry_flat_in_z(client, restore_3d):
-    client.patch("/api/project/dimension", json={"dimension": 2, "section_plane": "xy"})
-    payload = client.get("/api/geometry").json()
-    offset = client.get("/api/project").json()["section_offset"]
-    assert payload["bbox"][2] == pytest.approx(offset, abs=1e-3)
-    assert payload["bbox"][5] == pytest.approx(offset, abs=1e-3)
-    assert payload["bbox"][4] - payload["bbox"][1] > 1.0, "a plan view still spans y"
-
-
-def test_switching_between_the_two_2d_planes_re_resolves_the_offset(client, restore_3d):
-    client.patch("/api/project/dimension", json={"dimension": 2, "section_plane": "xz"})
-    elevation = client.get("/api/project").json()["section_offset"]
-    client.patch("/api/project/dimension", json={"dimension": 2, "section_plane": "xy"})
-    plan = client.get("/api/project").json()["section_offset"]
-    # 20.0 (mid-y) would be far outside the domain measured along z.
-    assert elevation != plan
+def test_the_switch_refuses_a_section_plane(client, restore_3d):
+    """There is one plane now -- the x-y section -- so a client still sending the old
+    field is out of date rather than asking for something reasonable. Refused loudly,
+    and the project must not switch behind the refusal."""
+    response = client.patch("/api/project/dimension",
+                            json={"dimension": 2, "section_plane": "xy"})
+    assert response.status_code == 422
+    assert client.get("/api/project").json()["dimension"] == 3
 
 
 # ── Kratos export ───────────────────────────────────────────────────────────
@@ -1134,7 +1128,7 @@ def test_export_of_a_section_is_a_plane_strain_deck(client, restore_3d):
     loads = client.get("/api/project").json()["loads"]
     loads.append({
         "id": "load_line", "name": "LineLoad_1", "kind": "line",
-        "x0": 1.0, "x1": 10.0, "z": 0.0, "thickness": 0.15,
+        "x0": 1.0, "x1": 10.0, "y": 0.0, "thickness": 0.15,
         "components": [0.0, -20.0], "distribution": "Uniform", "active": True,
     })
     client.patch("/api/project/structures", json={"loads": loads})
@@ -1166,16 +1160,16 @@ def test_static_assets_may_still_be_cached(client):
 PANEL_SECTION = {"id": "az26_wall", "name": "AZ 26-700 wall", "E": 2.1e8, "nu": 0.3,
                  "thickness": 0.4, "density": 7850.0}
 PANEL = {"id": "panel_1", "name": "Wall 1", "kind": "panel", "section": "az26_wall",
-         "footprint": [[12.0, 4.0], [12.0, 20.0]], "z_top": 0.0, "z_toe": -14.0,
+         "footprint": [[12.0, 4.0], [12.0, 20.0]], "y_top": 0.0, "y_toe": -14.0,
          "active": True}
 MEMBER = {"id": "member_1", "name": "King post 1", "kind": "member", "section": "az26",
-          "points": [[18.0, 10.0, 0.0], [18.0, 10.0, -12.0]], "active": True}
+          "points": [[18.0, 0.0, 10.0], [18.0, -12.0, 10.0]], "active": True}
 TENDON = {"id": "strand", "name": "4-strand tendon", "E": 1.95e8, "area": 0.0006,
           "density": 7850.0, "spacing": 2.5, "tension_limit": 900.0,
           "compression_limit": None}
 SPACE_ANCHOR = {"id": "anchor_1", "name": "Anchor 1", "kind": "anchor3d",
-                "section": "strand", "head": [12.0, 10.0, -2.0],
-                "tail": [17.0, 10.0, -8.0], "prestress": 250.0, "active": True}
+                "section": "strand", "head": [12.0, -2.0, 10.0],
+                "tail": [17.0, -8.0, 10.0], "prestress": 250.0, "active": True}
 
 
 def test_patch_structures_creates_a_wall_a_member_and_a_space_anchor(client):
@@ -1253,5 +1247,56 @@ def test_a_3d_structural_model_goes_from_patch_to_deck_through_the_api(client):
     assert {"PorousDomain.Wall_1", "PorousDomain.King_post_1",
             "PorousDomain.Anchor_1"} <= named
     assert any("order 1" in warning for warning in body["warnings"]), body["warnings"]
+
+    client.put("/api/project", json=seed_project().model_dump())
+
+
+# ── The dimension round trip ────────────────────────────────────────────────
+
+def test_a_2d_model_survives_a_round_trip_through_the_solid_model(client, restore_3d):
+    """Author a beam, an anchor and a line load in the section, go up to 3D and come
+    back: the numbers have to be the ones the user drew.
+
+    The guard on the re-basis as a whole. Every record is dimension-native `(x, y)`,
+    the switch up gives the wall a plan footprint and the load a pad spanning the
+    domain's out-of-plane depth, and the switch down has to throw exactly that away
+    again -- not a rotated, offset or transposed version of it.
+    """
+    line = {"id": "load_line", "name": "LineLoad_1", "kind": "line",
+            "x0": 4.0, "x1": 16.0, "y": 0.0, "thickness": 0.15,
+            "components": [0.0, -20.0], "distribution": "Uniform", "active": True}
+    client.patch("/api/project/dimension", json={"dimension": 2, "section_offset": 12.5})
+    client.patch("/api/project/structures", json={
+        "loads": [line], "beam_sections": [SECTION], "beams": [BEAM],
+        "anchor_sections": [ANCHOR_SECTION], "anchors": [ANCHOR],
+    })
+
+    def one(collection, kind):
+        stored = client.get("/api/project").json()
+        return next(r for r in stored[collection] if r.get("kind") == kind)
+
+    up = client.patch("/api/project/dimension", json={"dimension": 3}).json()["project"]
+    domain = up["domain"]
+
+    # The wall is swept across the full out-of-plane depth, which is z.
+    panel = next(b for b in up["beams"] if b["kind"] == "panel")
+    assert panel["footprint"] == [[12.0, domain["z0"]], [12.0, domain["z1"]]]
+    assert (panel["y_top"], panel["y_toe"]) == (0.0, -14.0)
+    # ...and so is the load pad, which keeps the level it was drawn on.
+    pad = next(l for l in up["loads"] if l["kind"] == "surface")
+    assert (pad["x0"], pad["x1"]) == (4.0, 16.0)
+    assert (pad["z0"], pad["z1"]) == (domain["z0"], domain["z1"])
+    assert pad["y"] == 0.0
+    # kN/m in the cut becomes kN/m2 over the footprint, vertical on Y.
+    assert pad["components"] == [0.0, -20.0, 0.0]
+
+    client.patch("/api/project/dimension", json={"dimension": 2, "section_offset": 12.5})
+
+    assert one("beams", "beam")["points"] == BEAM["points"]
+    assert one("anchors", "anchor")["head"] == ANCHOR["head"]
+    assert one("anchors", "anchor")["tail"] == ANCHOR["tail"]
+    back = one("loads", "line")
+    assert (back["x0"], back["x1"], back["y"]) == (4.0, 16.0, 0.0)
+    assert back["components"] == [0.0, -20.0]
 
     client.put("/api/project", json=seed_project().model_dump())

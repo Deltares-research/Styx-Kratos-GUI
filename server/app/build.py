@@ -153,7 +153,7 @@ def build_geometry(project: Project) -> BuildResult:
             # Section before fragmenting: the faces are what has to be made conformal,
             # and fragmenting the solids first would only be work thrown away.
             dim = 2
-            owners = _section(owners, project.section_offset, project.section_plane, notes)
+            owners = _section(owners, project.section_offset, notes)
             overlays = _drop_overlays(overlays, notes)
 
         owners = _fragment(owners, dim)
@@ -194,8 +194,9 @@ def build_geometry(project: Project) -> BuildResult:
             mass={key: sum(gmsh.model.occ.getMass(dim, t) for t in tags)
                   for key, tags in volumes.items()},
             bbox=bounding_box([t for tags in volumes.values() for t in tags], dim,
-                              fallback=(project.domain.x0, project.domain.y0, project.domain.z_bottom,
-                                        project.domain.x1, project.domain.y1, project.domain.z_top)),
+                              fallback=(project.domain.x0, project.domain.y_bottom,
+                                        project.domain.z0, project.domain.x1,
+                                        project.domain.y_top, project.domain.z1)),
             log=notes + gmsh.logger.get(),
             dim=dim,
             curves=curves,
@@ -219,7 +220,7 @@ def _build_simple_example(project: Project) -> BuildResult:
         owners = {}
         for layer in project.layers:
             bottom, top = layer.bots[borehole], layer.tops[borehole]
-            tag = gmsh.model.occ.addBox(d.x0, d.y0, bottom, d.dx, d.dy, top - bottom)
+            tag = gmsh.model.occ.addBox(d.x0, bottom, d.z0, d.dx, top - bottom, d.dz)
             owners[tag] = {f"soil_{layer.id}"}
             
         custom_volumes, overlays = _import_custom_parts(project.custom_parts)
@@ -229,7 +230,7 @@ def _build_simple_example(project: Project) -> BuildResult:
         dim, notes = 3, []
         if project.dimension == 2:
             dim = 2
-            owners = _section(owners, project.section_offset, project.section_plane, notes)
+            owners = _section(owners, project.section_offset, notes)
             overlays = _drop_overlays(overlays, notes)
 
         owners, curves, faces = _embed_beams(
@@ -254,8 +255,9 @@ def _build_simple_example(project: Project) -> BuildResult:
             mass={key: sum(gmsh.model.occ.getMass(dim, tag) for tag in tags)
                   for key, tags in volumes.items()},
             bbox=bounding_box(tags, dim,
-                              fallback=(project.domain.x0, project.domain.y0, project.domain.z_bottom,
-                                        project.domain.x1, project.domain.y1, project.domain.z_top)),
+                              fallback=(project.domain.x0, project.domain.y_bottom,
+                                        project.domain.z0, project.domain.x1,
+                                        project.domain.y_top, project.domain.z1)),
             log=notes + gmsh.logger.get(),
             dim=dim,
             curves=curves,
@@ -284,6 +286,7 @@ def _build_solids(project: Project) -> tuple[dict[int, set[str]], dict[str, list
         return tag
 
     def box(x0, x1, y0, y1, z0, z1, key):
+        """An axis-aligned box in world coordinates: x across, y up, z out of plane."""
         return own(gmsh.model.occ.addBox(x0, y0, z0, x1 - x0, y1 - y0, z1 - z0), key)
 
     # Soil layers span the domain in plan and are flat-bottomed. The frozen viewport
@@ -291,41 +294,45 @@ def _build_solids(project: Project) -> tuple[dict[int, set[str]], dict[str, list
     # two boreholes; dipping layer surfaces are a later change, made here once.
     bh = p.borehole_ids()[0]
     for layer in p.layers:
-        box(d.x0, d.x1, d.y0, d.y1, layer.bots[bh], layer.tops[bh], f"soil_{layer.id}")
+        box(d.x0, d.x1, layer.bots[bh], layer.tops[bh], d.z0, d.z1, f"soil_{layer.id}")
 
     t, w = p.wall.thickness, p.wall
-    outer = box(e.x0 - t, e.x1 + t, e.y0 - t, e.y1 + t, w.toe_z, w.top_z, "wall")
-    inner = gmsh.model.occ.addBox(e.x0, e.y0, w.toe_z, e.x1 - e.x0, e.y1 - e.y0, w.top_z - w.toe_z)
+    outer = box(e.x0 - t, e.x1 + t, w.toe_y, w.top_y, e.z0 - t, e.z1 + t, "wall")
+    inner = gmsh.model.occ.addBox(e.x0, w.toe_y, e.z0,
+                                  e.x1 - e.x0, w.top_y - w.toe_y, e.z1 - e.z0)
     ring, _ = gmsh.model.occ.cut([(3, outer)], [(3, inner)])
     del owners[outer]
     for _, tag in ring:
         own(tag, "wall")
 
     s = p.struts
-    span = (e.y1 + s.overhang) - (e.y0 - s.overhang)
+    span = (e.z1 + s.overhang) - (e.z0 - s.overhang)
     for x in s.xs:
-        own(gmsh.model.occ.addCylinder(x, e.y0 - s.overhang, s.z, 0, span, 0, s.radius), "struts")
-    for y in (e.y0 - s.waler_offset, e.y1 + s.waler_offset):
+        own(gmsh.model.occ.addCylinder(x, s.y, e.z0 - s.overhang, 0, 0, span, s.radius),
+            "struts")
+    for z in (e.z0 - s.waler_offset, e.z1 + s.waler_offset):
         box(e.x0, e.x1,
-            y - s.waler_width / 2, y + s.waler_width / 2,
-            s.z - s.waler_height / 2, s.z + s.waler_height / 2, "struts")
+            s.y - s.waler_height / 2, s.y + s.waler_height / 2,
+            z - s.waler_width / 2, z + s.waler_width / 2, "struts")
 
     a = p.anchor_rows
     reach = math.cos(math.radians(a.inclination_deg)) * a.length
     drop = math.sin(math.radians(a.inclination_deg)) * a.length
-    for y_head, direction in ((e.y0 - t + a.head_offset, -1.0), (e.y1 + t - a.head_offset, 1.0)):
+    for z_head, direction in ((e.z0 - t + a.head_offset, -1.0), (e.z1 + t - a.head_offset, 1.0)):
         for x in a.xs:
             own(gmsh.model.occ.addCylinder(
-                x, y_head, a.head_z, 0, direction * reach, -drop, a.radius), "anchors")
+                x, a.head_y, z_head, 0, -drop, direction * reach, a.radius), "anchors")
 
     for x in p.piles.xs:
-        for y in p.piles.ys:
+        for z in p.piles.zs:
             own(gmsh.model.occ.addCylinder(
-                x, y, p.piles.top_z - p.piles.length, 0, 0, p.piles.length, p.piles.radius), "piles")
+                x, p.piles.top_y - p.piles.length, z,
+                0, p.piles.length, 0, p.piles.radius), "piles")
 
-    for x, y in p.wells.positions:
+    for x, z in p.wells.positions:
         own(gmsh.model.occ.addCylinder(
-            x, y, p.wells.top_z - p.wells.length, 0, 0, p.wells.length, p.wells.radius), "wells")
+            x, p.wells.top_y - p.wells.length, z,
+            0, p.wells.length, 0, p.wells.radius), "wells")
 
     # Import any custom parts
     custom_volumes, overlays = _import_custom_parts(p.custom_parts)
@@ -371,26 +378,26 @@ def _build_display_only(project: Project, dim: int = 3,
         # plane-strain condition it is rather than as a load over the whole width.
         if load.kind == "point":
             loads[load.id] = [gmsh.model.occ.addSphere(
-                load.x, project.cut_at(), load.z, load.thickness,
+                load.x, load.y, project.cut_at(), load.thickness,
             )]
         elif load.kind == "line":
-            y0, depth = ((d.y0, d.dy) if dim == 2
+            z0, depth = ((d.z0, d.dz) if dim == 2
                          else (project.cut_at() - load.thickness / 2.0, load.thickness))
             loads[load.id] = [gmsh.model.occ.addBox(
-                load.x0, y0, load.z,
-                load.x1 - load.x0, depth, load.thickness,
+                load.x0, load.y, z0,
+                load.x1 - load.x0, load.thickness, depth,
             )]
         elif dim == 3 and load.kind == "surface":
-            # `ground_z`, not `d.z_top`: the symbol belongs on top of the model, and a
+            # `ground_y`, not `d.y_top`: the symbol belongs on top of the model, and a
             # drawn embankment puts that above the borehole block.
             loads[load.id] = [gmsh.model.occ.addBox(
-                load.x0, load.y0, project.elevation_of(load),
-                load.x1 - load.x0, load.y1 - load.y0, load.thickness,
+                load.x0, project.elevation_of(load), load.z0,
+                load.x1 - load.x0, load.thickness, load.z1 - load.z0,
             )]
     wa = p.water
     water = gmsh.model.occ.addBox(
-        d.x0 - wa.margin, d.y0 - wa.margin, wa.z - wa.thickness / 2,
-        d.dx + 2 * wa.margin, d.dy + 2 * wa.margin, wa.thickness,
+        d.x0 - wa.margin, wa.y - wa.thickness / 2, d.z0 - wa.margin,
+        d.dx + 2 * wa.margin, wa.thickness, d.dz + 2 * wa.margin,
     )
     built = {**loads, "water": [water]}
     if dim == 3:
@@ -400,8 +407,7 @@ def _build_display_only(project: Project, dim: int = 3,
     # this section" needs no special case. Never fragmented, in either dimension:
     # these are indicators, and letting them cut the model would change the mesh.
     owners = {tag: {key} for key, tags in built.items() for tag in tags}
-    sectioned = _assign_by_priority(
-        _section(owners, project.section_offset, project.section_plane, log))
+    sectioned = _assign_by_priority(_section(owners, project.section_offset, log))
     return {key: sectioned.get(key, []) for key in built}
 
 
@@ -417,8 +423,8 @@ def _cut_the_pit(project: Project, owners: dict[int, set[str]]) -> dict[int, set
     e, d = project.excavation, project.domain
     soil = [(3, tag) for tag, keys in owners.items() if any(k.startswith("soil_") for k in keys)]
 
-    pit = gmsh.model.occ.addBox(e.x0, e.y0, e.floor_z,
-                                e.x1 - e.x0, e.y1 - e.y0, d.z_top - e.floor_z)
+    pit = gmsh.model.occ.addBox(e.x0, e.floor_y, e.z0,
+                                e.x1 - e.x0, d.y_top - e.floor_y, e.z1 - e.z0)
     _, mapping = gmsh.model.occ.cut(soil, [(3, pit)])
 
     rebuilt = {tag: keys for tag, keys in owners.items() if (3, tag) not in soil}
@@ -448,17 +454,15 @@ def _fragment(owners: dict[int, set[str]], dim: int = 3) -> dict[int, set[str]]:
 def _load_footprint_tools(project: Project, dim: int) -> list[tuple[int, int]]:
     """One boundary-coincident entity per active load, in this dimension's coordinates.
 
-    A 2D load record is dimension-native `(x, z)`, so the tool is placed at the section
-    offset along the plane's normal -- the same world position `kratos._load_conditions`
-    reads a point load back at.
+    A 2D load record is dimension-native `(x, y)`, so the tool is placed at the section
+    offset along z -- the same world position `kratos._load_conditions` reads a point
+    load back at.
     """
     tools: list[tuple[int, int]] = []
-    normal = PLANE_AXES[project.section_plane][0]
+    cut = project.cut_at() if dim == 3 else 0.0
 
-    def point(x: float, z: float) -> int:
-        xyz = [x, 0.0, z]
-        xyz[normal] = project.cut_at()
-        return gmsh.model.occ.addPoint(*xyz)
+    def point(x: float, y: float) -> int:
+        return gmsh.model.occ.addPoint(x, y, cut)
 
     for load in project.loads_for(dim):
         if not load.active:
@@ -468,16 +472,32 @@ def _load_footprint_tools(project: Project, dim: int) -> list[tuple[int, int]]:
         # across the solid's boundary at the cut. Same tool, same world position, so
         # `kratos._load_conditions` reads it back the same way in both.
         if load.kind == "point":
-            tools.append((0, point(load.x, load.z)))
+            tools.append((0, point(load.x, load.y)))
         elif load.kind == "line":
-            tools.append((1, gmsh.model.occ.addLine(point(load.x0, load.z),
-                                                    point(load.x1, load.z))))
+            tools.append((1, gmsh.model.occ.addLine(point(load.x0, load.y),
+                                                    point(load.x1, load.y))))
         elif dim == 3 and load.kind == "surface":
-            tools.append((2, gmsh.model.occ.addRectangle(
-                load.x0, load.y0, project.elevation_of(load),
-                load.x1 - load.x0, load.y1 - load.y0,
+            # A pad lies flat on the ground, so its footprint is in the x-z plane at
+            # the load's own elevation. `occ.addRectangle` only builds in x-y, so the
+            # four corners are drawn directly instead.
+            tools.append((2, _horizontal_rectangle(
+                load.x0, load.x1, load.z0, load.z1, project.elevation_of(load),
             )))
     return tools
+
+
+def _horizontal_rectangle(x0: float, x1: float, z0: float, z1: float,
+                          y: float) -> int:
+    """A flat plane surface in the x-z plane at elevation `y`.
+
+    The counterpart of `occ.addRectangle`, which only builds in the x-y plane. A load
+    pad and the ground surface it imprints are both horizontal, so with Y up the
+    rectangle has to be drawn corner by corner.
+    """
+    corners = [gmsh.model.occ.addPoint(a, y, b)
+               for a, b in ((x0, z0), (x1, z0), (x1, z1), (x0, z1))]
+    edges = [gmsh.model.occ.addLine(corners[i], corners[(i + 1) % 4]) for i in range(4)]
+    return gmsh.model.occ.addPlaneSurface([gmsh.model.occ.addCurveLoop(edges)])
 
 
 def _clip_to_model(tools: list[tuple[int, int]],
@@ -604,18 +624,15 @@ def _embed_beams(project: Project, owners: dict[int, set[str]], dim: int,
     if not active and not free:
         return owners, {}, {}
 
-    normal = PLANE_AXES[project.section_plane][0]
-
-    def point(x: float, z: float) -> int:
-        xyz = [x, 0.0, z]
-        xyz[normal] = project.cut_at()
-        return gmsh.model.occ.addPoint(*xyz)
+    def point(x: float, y: float) -> int:
+        """A 2D record's own coordinates: the section has been moved to z = 0."""
+        return gmsh.model.occ.addPoint(x, y, 0.0)
 
     heads = [anchor.head for anchor in project.plane_anchors if anchor.active]
     tools: list[tuple[int, int]] = []
     owner_of_tool: list[str] = []
     for beam in active:
-        vertices = [point(x, z) for x, z in _split_at(beam.points, heads)]
+        vertices = [point(x, y) for x, y in _split_at(beam.points, heads)]
         for start, end in zip(vertices, vertices[1:]):
             tools.append((1, gmsh.model.occ.addLine(start, end)))
             owner_of_tool.append(beam.id)
@@ -625,7 +642,7 @@ def _embed_beams(project: Project, owners: dict[int, set[str]], dim: int,
     # actually has edges on. It carries no elements of its own, so unlike a beam it is
     # only ever an internal edge; `app.interfaces` does the rest, after meshing.
     for interface in free:
-        vertices = [point(x, z) for x, z in interface.points]
+        vertices = [point(x, y) for x, y in interface.points]
         for start, end in zip(vertices, vertices[1:]):
             tools.append((1, gmsh.model.occ.addLine(start, end)))
             owner_of_tool.append(interface.id)
@@ -668,7 +685,7 @@ def _section_sweeps(project: Project, log: list[str] | None = None
                     ) -> list[tuple[str, list[int]]]:
     """Every 2D-native line structure, swept into a surface on the section plane.
 
-    A sheet pile is an `(x, z)` polyline with no thickness and no out-of-plane extent,
+    A sheet pile is an `(x, y)` polyline with no thickness and no out-of-plane extent,
     and the solid model has to give it both to have anything to mesh. It gets the one
     the profile already carries: `BeamSection.spacing`, the out-of-plane centres the
     plane-strain reduction smears the wall over. The sweep is centred on
@@ -682,24 +699,16 @@ def _section_sweeps(project: Project, log: list[str] | None = None
 
     Returns (part key, swept face tags), in the order the fragment should see them.
     """
-    # A 2D record's two coordinates are the plane's own axes, whichever plane it is;
-    # PLANE_AXES names them, so no plane is a special case here.
-    normal, u, v = PLANE_AXES[project.section_plane]
+    # A 2D record's two coordinates are the section's own axes, which are the world's
+    # X and Y; the sweep is along Z, the axis the section has none of.
     spacings = {section.id: section.spacing for section in project.beam_sections}
 
     def sweep(key: str, points: list[tuple[float, float]], width: float
               ) -> tuple[str, list[int]] | None:
-        start = [0.0, 0.0, 0.0]
-        start[normal] = project.cut_at() - width / 2.0
-        vertices = []
-        for first, second in points:
-            xyz = list(start)
-            xyz[u], xyz[v] = first, second
-            vertices.append(gmsh.model.occ.addPoint(*xyz))
+        start = project.cut_at() - width / 2.0
+        vertices = [gmsh.model.occ.addPoint(x, y, start) for x, y in points]
         lines = [gmsh.model.occ.addLine(a, b) for a, b in zip(vertices, vertices[1:])]
-        delta = [0.0, 0.0, 0.0]
-        delta[normal] = width
-        swept = gmsh.model.occ.extrude([(1, line) for line in lines], *delta)
+        swept = gmsh.model.occ.extrude([(1, line) for line in lines], 0.0, 0.0, width)
         faces = [tag for entity_dim, tag in swept if entity_dim == 2]
         return (key, faces) if faces else None
 
@@ -761,16 +770,11 @@ def _embed_3d_structures(project: Project, owners: dict[int, set[str]],
         return owners, {}, {}
 
     # An anchor drawn in the section hangs off a wall the section drew too, and after
-    # the switch that wall is a panel. Its head is `(x, z)`, so it is placed on the cut
+    # the switch that wall is a panel. Its head is `(x, y)`, so it is placed on the cut
     # to be imprinted alongside the space anchors' -- the surface counterpart of the
     # vertex `_split_at` gives it in 2D.
-    normal, u, v = PLANE_AXES[project.section_plane]
-
-    def at_cut(first: float, second: float) -> tuple[float, float, float]:
-        xyz = [0.0, 0.0, 0.0]
-        xyz[normal] = project.cut_at()
-        xyz[u], xyz[v] = first, second
-        return tuple(xyz)
+    def at_cut(x: float, y: float) -> tuple[float, float, float]:
+        return (x, y, project.cut_at())
 
     heads = [anchor.head for anchor in project.space_anchors if anchor.active]
     heads += [at_cut(*anchor.head) for anchor in project.plane_anchors if anchor.active]
@@ -788,11 +792,12 @@ def _embed_3d_structures(project: Project, owners: dict[int, set[str]],
     for panel in panels:
         # Swept from the top down: extruding the footprint's lines gives one face per
         # segment, which is what a wall in plan is.
-        vertices = [gmsh.model.occ.addPoint(x, y, panel.z_top) for x, y in panel.footprint]
+        vertices = [gmsh.model.occ.addPoint(x, panel.y_top, z)
+                    for x, z in panel.footprint]
         lines = [gmsh.model.occ.addLine(start, end)
                  for start, end in zip(vertices, vertices[1:])]
         swept = gmsh.model.occ.extrude([(1, line) for line in lines],
-                                       0.0, 0.0, panel.z_toe - panel.z_top)
+                                       0.0, panel.y_toe - panel.y_top, 0.0)
         for entity_dim, tag in swept:
             if entity_dim == 2:
                 tools.append((2, tag))
@@ -915,14 +920,13 @@ def _attach_anchors(project: Project, dim: int, log: list[str] | None = None
     # Each dimension draws its own kind and says so about the other's: an anchor drawn
     # in a section has no place in the solid model, and one drawn in space has none in
     # the section, for the same reason their structures do not cross over either.
-    normal, u, v = PLANE_AXES[project.section_plane]
+    # A 2D section has been moved to z = 0; in the solid model the same record sits on
+    # the cut it was drawn on.
+    cut = project.cut_at() if dim == 3 else 0.0
 
-    def in_plane(first: float, second: float) -> int:
-        """A dimension-native `(x, z)` end, placed on the cut it was drawn on."""
-        xyz = [0.0, 0.0, 0.0]
-        xyz[normal] = project.cut_at()
-        xyz[u], xyz[v] = first, second
-        return gmsh.model.occ.addPoint(*xyz)
+    def in_plane(x: float, y: float) -> int:
+        """A dimension-native `(x, y)` end, placed on the cut it was drawn on."""
+        return gmsh.model.occ.addPoint(x, y, cut)
 
     def in_space(x: float, y: float, z: float) -> int:
         return gmsh.model.occ.addPoint(x, y, z)
@@ -958,7 +962,7 @@ def _attach_anchors(project: Project, dim: int, log: list[str] | None = None
 SECTION_PAD = 1.0
 """Metres the cutting plane extends past the model, so nothing is clipped by it.
 
-Sized from the built solids rather than the domain: the wall top (0.6 m above z_top)
+Sized from the built solids rather than the domain: the wall top (0.6 m above y_top)
 and any drawn or imported part can legitimately stick out of the declared domain.
 """
 
@@ -971,39 +975,27 @@ dimension of its own, and this one only has to be wide enough to cut the mesh.
 """
 
 
-# Which coordinate index each section plane holds constant, and which two it spans.
-PLANE_AXES = {"xy": (2, 0, 1), "xz": (1, 0, 2), "yz": (0, 1, 2)}
-
-
-def _section_extents(tags: list[int], plane: str) -> tuple[float, float, float, float]:
-    """The span every cutting plane must cover, as (u0, u1, v0, v1) in its own axes.
+def _section_extents(tags: list[int]) -> tuple[float, float, float, float]:
+    """The span the cutting plane must cover, as (x0, x1, y0, y1).
 
     Measured once, before any boolean runs. `_section` removes each volume as it cuts
     it, so measuring inside that loop reads a tag OCC has already deleted.
     """
-    _, u, v = PLANE_AXES[plane]
     boxes = [gmsh.model.occ.getBoundingBox(3, tag) for tag in tags]
-    return (min(b[u] for b in boxes) - SECTION_PAD, max(b[u + 3] for b in boxes) + SECTION_PAD,
-            min(b[v] for b in boxes) - SECTION_PAD, max(b[v + 3] for b in boxes) + SECTION_PAD)
+    return (min(b[0] for b in boxes) - SECTION_PAD, max(b[3] for b in boxes) + SECTION_PAD,
+            min(b[1] for b in boxes) - SECTION_PAD, max(b[4] for b in boxes) + SECTION_PAD)
 
 
-def _section_plane(extents: tuple[float, float, float, float],
-                   offset: float, plane: str) -> int:
-    """A plane surface at `offset` along its normal, spanning the whole model."""
-    normal, u, v = PLANE_AXES[plane]
-    u0, u1, v0, v1 = extents
-
-    def point(a: float, b: float) -> int:
-        xyz = [0.0, 0.0, 0.0]
-        xyz[normal], xyz[u], xyz[v] = offset, a, b
-        return gmsh.model.occ.addPoint(*xyz)
-
-    corners = [point(a, b) for a, b in ((u0, v0), (u1, v0), (u1, v1), (u0, v1))]
+def _section_plane(extents: tuple[float, float, float, float], offset: float) -> int:
+    """An x-y plane surface at z = `offset`, spanning the whole model."""
+    x0, x1, y0, y1 = extents
+    corners = [gmsh.model.occ.addPoint(a, b, offset)
+               for a, b in ((x0, y0), (x1, y0), (x1, y1), (x0, y1))]
     edges = [gmsh.model.occ.addLine(corners[i], corners[(i + 1) % 4]) for i in range(4)]
     return gmsh.model.occ.addPlaneSurface([gmsh.model.occ.addCurveLoop(edges)])
 
 
-def _section(owners: dict[int, set[str]], offset: float, plane: str = "xz",
+def _section(owners: dict[int, set[str]], offset: float,
              log: list[str] | None = None) -> dict[int, set[str]]:
     """Cut the solids with the section plane and keep the faces, with their owners.
 
@@ -1014,27 +1006,32 @@ def _section(owners: dict[int, set[str]], offset: float, plane: str = "xz",
     and there is nothing to unpick -- and a plane is a cheap solid to boolean against.
 
     A volume that misses the plane contributes nothing. That is the correct plane-strain
-    answer -- a pile row at another y is genuinely not in this section -- but it is
+    answer -- a pile row at another z is genuinely not in this section -- but it is
     logged, because a part silently vanishing otherwise reads as a boolean failure.
+
+    The faces are moved to z = 0 afterwards, which is what makes the 2D model *be* the
+    x-y plane rather than a plane parked somewhere out along z. No rotation is needed:
+    the section's own axes are already X and Y.
     """
     if not owners:
         return {}
-    extents = _section_extents(list(owners), plane)
-    normal = {"xy": "z", "xz": "y", "yz": "x"}[plane]
+    extents = _section_extents(list(owners))
 
     rebuilt: dict[int, set[str]] = {}
     for tag, keys in owners.items():
         # A fresh plane each time: intersect deletes the object it was given.
-        cutter = _section_plane(extents, offset, plane)
+        cutter = _section_plane(extents, offset)
         pieces, _ = gmsh.model.occ.intersect(
             [(2, cutter)], [(3, tag)], removeObject=True, removeTool=True
         )
         faces = [t for dim, t in pieces if dim == 2]
         if not faces and log is not None:
             log.append(f"Info    : {', '.join(sorted(keys))} does not reach the section "
-                       f"plane at {normal} = {offset} and is not part of this 2D model")
+                       f"plane at z = {offset} and is not part of this 2D model")
         for face in faces:
             rebuilt.setdefault(face, set()).update(keys)
+    if rebuilt and offset:
+        gmsh.model.occ.translate([(2, tag) for tag in rebuilt], 0.0, 0.0, -offset)
     return rebuilt
 
 

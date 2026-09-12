@@ -2,37 +2,37 @@
 
 (function () {
   var SECTION = {
-    dimension: 2, section_plane: 'xz', section_offset: 20,
-    domain: { x0: 0, x1: 50, y0: 0, y1: 40, z_top: 0, z_bottom: -25 },
+    dimension: 2, section_offset: 20,
+    domain: { x0: 0, x1: 50, z0: 0, z1: 40, y_top: 0, y_bottom: -25 },
     loads: []
   };
   var SOLID = {
     dimension: 3,
-    domain: { x0: 0, x1: 50, y0: 0, y1: 40, z_top: 0, z_bottom: -25 },
+    domain: { x0: 0, x1: 50, z0: 0, z1: 40, y_top: 0, y_bottom: -25 },
     loads: []
   };
 
-  test('2D load capture creates a dimension-native line with no hidden y values', function () {
-    var load = App.Loads.draftFromPoints(SECTION, [[9, 20, 0], [2, 20, 0]]);
+  test('2D load capture creates a dimension-native line with no hidden z values', function () {
+    var load = App.Loads.draftFromPoints(SECTION, [[9, 0, 20], [2, 0, 20]]);
     T.eq(load.kind, 'line');
-    T.eq([load.x0, load.x1, load.z], [2, 9, 0]);
+    T.eq([load.x0, load.x1, load.y], [2, 9, 0]);
     T.eq(load.components, [0, -20]);
-    T.eq('y' in load || 'y0' in load || 'y1' in load, false);
+    T.eq('z' in load || 'z0' in load || 'z1' in load, false);
     T.eq(load.name, 'LineLoad_1');
   });
 
   test('3D load capture becomes the rectangle drawn on the ground surface', function () {
     var load = App.Loads.draftFromPoints(SOLID, [[12, 25, 0], [3, 7, 0]]);
-    T.eq([load.x0, load.x1, load.y0, load.y1], [3, 12, 7, 25]);
+    T.eq([load.x0, load.x1, load.z0, load.z1], [3, 12, 7, 25]);
     T.eq(load.name, 'SurfaceLoad_1');
   });
 
-  test('a 2D point load draft accepts x and z with no hidden y value', function () {
+  test('a 2D point load draft accepts x and y with no hidden z value', function () {
     var load = App.Loads.draftPoint(SECTION, [8.5, -3]);
     T.eq(load.kind, 'point');
-    T.eq([load.x, load.z], [8.5, -3]);
+    T.eq([load.x, load.y], [8.5, -3]);
     T.eq(load.components, [0, -20]);
-    T.eq('y' in load, false);
+    T.eq('z' in load, false);
     T.eq(load.name, 'PointLoad_1');
   });
 
@@ -40,7 +40,7 @@
     var load = App.Loads.draftSurface(SOLID);
     T.eq(load.kind, 'surface');
     T.ok(load.x0 >= SOLID.domain.x0 && load.x1 <= SOLID.domain.x1);
-    T.ok(load.y0 >= SOLID.domain.y0 && load.y1 <= SOLID.domain.y1);
+    T.ok(load.z0 >= SOLID.domain.z0 && load.z1 <= SOLID.domain.z1);
   });
 
   test('load kinds are constrained by model dimension', function () {
@@ -84,17 +84,120 @@
     T.eq(drawStarts, 0);
   });
 
-  test('2D loads are authored only in the x-z structural section', function () {
-    var section = Object.assign({}, SECTION, { section_plane: 'yz' });
-    var error = null;
-    try { App.Loads.draftFromPoints(section, [[20, 18, 0], [20, 6, 0]]); }
-    catch (caught) { error = caught; }
-    T.ok(error && /x-z/.test(error.message));
+  test('2D loads are available in the section and surface loads are not', function () {
+    T.eq(App.Loads.available('line', SECTION), true);
+    T.eq(App.Loads.available('point', SECTION), true);
+    T.eq(App.Loads.available('surface', SECTION), false);
+    T.eq(App.Loads.available('surface', SOLID), true);
+    T.eq(App.Loads.available('line', SOLID), false);
+  });
+
+  /* ── The surface-load editor's elevation field ────────────────────
+     A pad is placed by x/z in plan and y in elevation, and y is what says which face
+     it loads. The dialog offered only the plan extents, so a pad could be read out of
+     the Selection explorer at y = 5 with no way to move it from the form it was
+     authored in. y is optional server-side (SurfaceLoad.y): null means "the top of
+     the model", so the field has to round-trip blank as blank -- Number('') is 0,
+     which would silently drop the pad to datum. */
+
+  function openDialog(load) {
+    var saved = { PROJECT: App.PROJECT, Dialogs: App.Dialogs, LOADS: App.LOADS };
+    var captured = null;
+    App.PROJECT = SOLID;
+    App.LOADS = [];
+    App.Dialogs = { open: function (options) {
+      captured = options;
+      captured.form = document.createElement('div');
+      options.build(captured.form);
+      return { close: function () { captured.closed = true; } };
+    } };
+    try { App.Loads.open(load); } finally { Object.assign(App, saved); }
+    return captured;
+  }
+
+  function fieldNamed(dialog, label) {
+    var kids = Array.prototype.slice.call(dialog.form.firstChild.children);
+    for (var i = 0; i < kids.length; i += 1) {
+      if (kids[i].textContent === label && kids[i].tagName === 'LABEL') return kids[i + 1];
+    }
+    return null;
+  }
+
+  var PAD = { id: 'surfaceload_1', name: 'SurfaceLoad_1', kind: 'surface',
+              x0: 8, x1: 12, z0: 0, z1: 20, thickness: 0.15,
+              components: [0, -20, 0], distribution: 'Uniform', active: true };
+
+  test('the surface-load editor offers the elevation the pad lies at', function () {
+    var field = fieldNamed(openDialog(Object.assign({}, PAD, { y: 5 })), 'y');
+    T.ok(field, 'the form gives no way to move the pad in elevation');
+    T.eq(field.value, '5');
+  });
+
+  test('the editor reads x, then y, then z, like the Selection explorer does', function () {
+    var dialog = openDialog(Object.assign({}, PAD, { y: 5 }));
+    var labels = Array.prototype.slice.call(dialog.form.firstChild.children)
+      .filter(function (node) { return node.tagName === 'LABEL'; })
+      .map(function (node) { return node.textContent; });
+    T.eq(labels.slice(1, 6), ['x min', 'x max', 'y', 'z min', 'z max']);
+  });
+
+  test('a pad with no elevation opens with the field blank', function () {
+    var field = fieldNamed(openDialog(Object.assign({}, PAD, { y: null })), 'y');
+    T.ok(field, 'the row should be there either way');
+    T.eq(field.value, '', 'a blank field reads as "the top of the model"');
+  });
+
+  test('saving an untouched blank elevation keeps it blank, not zero', function () {
+    var sent = null;
+    var saved = { Api: App.Api, PROJECT: App.PROJECT, Dialogs: App.Dialogs,
+                  LOADS: App.LOADS, Model: App.Model, Viewport: App.Viewport,
+                  Command: App.Command, Explorer: App.Explorer,
+                  selectObject: App.selectObject };
+    App.Api = { patch: function (path, body) {
+      sent = body;
+      return Promise.resolve({ project: SOLID });
+    } };
+    App.Model = { apply: function () {}, load: function () { return Promise.resolve(); } };
+    App.Viewport = { refresh: function () { return Promise.resolve(); } };
+    App.Command = { ok: function () {}, err: function () {}, note: function () {} };
+    App.Explorer = null; App.selectObject = null;
+
+    try {
+      var dialog = openDialog(Object.assign({}, PAD, { y: null }));
+      dialog.buttons.filter(function (b) { return b.label === 'Save'; })[0].onClick();
+    } finally { Object.assign(App, saved); }
+    T.ok(sent, 'the save never reached the server');
+    T.eq(sent.loads[0].y, null, 'a blank field must not become a pad at y = 0');
+  });
+
+  test('an edited elevation is what gets saved', function () {
+    var sent = null;
+    var saved = { Api: App.Api, PROJECT: App.PROJECT, Dialogs: App.Dialogs,
+                  LOADS: App.LOADS, Model: App.Model, Viewport: App.Viewport,
+                  Command: App.Command, Explorer: App.Explorer,
+                  selectObject: App.selectObject };
+    App.Api = { patch: function (path, body) {
+      sent = body;
+      return Promise.resolve({ project: SOLID });
+    } };
+    App.Model = { apply: function () {}, load: function () { return Promise.resolve(); } };
+    App.Viewport = { refresh: function () { return Promise.resolve(); } };
+    App.Command = { ok: function () {}, err: function () {}, note: function () {} };
+    App.Explorer = null; App.selectObject = null;
+
+    try {
+      var dialog = openDialog(Object.assign({}, PAD, { y: 5 }));
+      var field = fieldNamed(dialog, 'y');
+      T.ok(field, 'the form has no elevation field to edit');
+      field.value = '2.5';
+      dialog.buttons.filter(function (b) { return b.label === 'Save'; })[0].onClick();
+    } finally { Object.assign(App, saved); }
+    T.eq(sent.loads[0].y, 2.5);
   });
 
   test('load capture refuses a zero-width line or surface', function () {
     var error = null;
-    try { App.Loads.draftFromPoints(SECTION, [[4, 20, 0], [4, 20, 0]]); }
+    try { App.Loads.draftFromPoints(SECTION, [[4, 0, 20], [4, 0, 20]]); }
     catch (caught) { error = caught; }
     T.ok(error && /width/.test(error.message));
   });
@@ -263,18 +366,18 @@
     var load = App.Loads.draftPoint(SECTION, [8, -3]);
     load.components = [0, -100];
     var spec = App.Viewport.loadGlyphSpec(load, SECTION);
-    T.eq(spec.anchors, [[8, 20, -3]]);
-    T.eq(spec.direction, [0, 0, -1]);
+    T.eq(spec.anchors, [[8, -3, 20]]);
+    T.eq(spec.direction, [0, -1, 0]);
     T.eq(spec.kind, 'point');
   });
 
   test('a 2D line load is indicated by repeated arrows along the loaded interval', function () {
-    var load = App.Loads.draftFromPoints(SECTION, [[4, 20, 0], [14, 20, 0]]);
+    var load = App.Loads.draftFromPoints(SECTION, [[4, 0, 20], [14, 0, 20]]);
     var spec = App.Viewport.loadGlyphSpec(load, SECTION);
     T.eq(spec.kind, 'line');
     T.eq(spec.anchors.length, 5);
-    T.eq(spec.anchors[0], [4, 20, 0]);
-    T.eq(spec.anchors[4], [14, 20, 0]);
+    T.eq(spec.anchors[0], [4, 0, 20]);
+    T.eq(spec.anchors[4], [14, 0, 20]);
   });
 
   test('a 3D surface load is indicated by an arrow grid over its footprint', function () {
@@ -283,7 +386,7 @@
     T.eq(spec.kind, 'surface');
     T.eq(spec.anchors.length, 9);
     T.ok(spec.anchors.every(function (point) {
-      return point[0] >= 3 && point[0] <= 12 && point[1] >= 7 && point[1] <= 25 && point[2] === 0;
+      return point[0] >= 3 && point[0] <= 12 && point[2] >= 7 && point[2] <= 25 && point[1] === 0;
     }));
   });
 
@@ -303,8 +406,8 @@
      a length in metres of its own: it is a fraction of what is on screen. */
 
   var COLUMN = {
-    dimension: 2, section_plane: 'xz', section_offset: 0.5,
-    domain: { x0: 0, x1: 0.1, y0: 0, y1: 1, z_top: 0, z_bottom: -1 },
+    dimension: 2, section_offset: 0.5,
+    domain: { x0: 0, x1: 0.1, z0: 0, z1: 1, y_top: 0, y_bottom: -1 },
     loads: []
   };
 
@@ -329,7 +432,7 @@
 
   test('the span is taken from the framed model when there is one', function () {
     var wide = Object.assign({}, COLUMN, {
-      domain: { x0: -10, x1: 10, y0: 0, y1: 20, z_top: 10, z_bottom: -10 }
+      domain: { x0: -10, x1: 10, z0: 0, z1: 20, y_top: 10, y_bottom: -10 }
     });
     T.near(App.Viewport.modelSpan(wide, [0.1, 1, 1]), 1, 1e-9,
            'the column, not the 20 m block it was drawn in');
@@ -339,9 +442,9 @@
 
   test('a 2D section is sized by what is on screen, not the out-of-plane thickness', function () {
     // 40 m of thickness behind the section is edge-on: it cannot make the arrow
-    // drawn on a 1 m column 3 m long.
-    T.near(App.Viewport.modelSpan(COLUMN, [0.1, 40, 1]), 1, 1e-9);
-    T.near(App.Viewport.modelSpan({ dimension: 3, domain: COLUMN.domain }, [0.1, 40, 1]),
+    // drawn on a 1 m column 3 m long. Out of plane is z, so that is size[2].
+    T.near(App.Viewport.modelSpan(COLUMN, [0.1, 1, 40]), 1, 1e-9);
+    T.near(App.Viewport.modelSpan({ dimension: 3, domain: COLUMN.domain }, [0.1, 1, 40]),
            40, 1e-9, 'in 3D every axis is on screen');
   });
 
@@ -362,17 +465,17 @@
   });
   /* ── Standing on a drawn layer ────────────────────────────────────
      `Domain` is the block the boreholes describe; an embankment drawn on top of it
-     reaches above `z_top`. A load placed there is on model geometry, and refusing it
+     reaches above `y_top`. A load placed there is on model geometry, and refusing it
      as "outside the model domain" is the bug App.Model.extentOf fixes -- it mirrors
      the server's `Project.extent`. */
 
   var EMBANKMENT = { key: 'drawn_1', label: 'Embankment', source: 'gui',
-                     bbox: [0, 0, 0, 50, 40, 4] };
+                     bbox: [0, 0, 0, 50, 4, 40] };
 
   test('a point load on a drawn layer above ground is accepted', function () {
     var project = Object.assign({}, SECTION, { custom_parts: [EMBANKMENT] });
     var load = App.Loads.draftPoint(project, [10, 2]);
-    T.eq(load.z, 2);
+    T.eq(load.y, 2);
   });
 
   test('a point load above everything in the model is still refused', function () {
@@ -385,15 +488,15 @@
   test('with no drawn parts the domain is still the limit', function () {
     var error = null;
     try { App.Loads.draftPoint(SECTION, [10, 2]); } catch (e) { error = e; }
-    T.ok(error, 'nothing sticks out, so z_top still applies');
+    T.ok(error, 'nothing sticks out, so y_top still applies');
   });
 
   test('a line load drawn over a raised layer sits on top of it', function () {
-    /* Its z has to match the server's `Project.ground_z` or the switch to 3D will not
-       translate it into a surface load -- the regression this pins down. */
+    /* Its level has to match the server's `Project.ground_y` or the switch to 3D
+       will not translate it into a surface load -- the regression this pins down. */
     var project = Object.assign({}, SECTION, { custom_parts: [EMBANKMENT] });
-    var load = App.Loads.draftFromPoints(project, [[9, 20, 0], [2, 20, 0]]);
-    T.eq(load.z, 4);
+    var load = App.Loads.draftFromPoints(project, [[9, 0, 20], [2, 0, 20]]);
+    T.eq(load.y, 4);
   });
 
   test('a 3D surface load records the elevation it was drawn at', function () {
@@ -401,48 +504,48 @@
        makes it fall back to a bounding box padded by 1e-7. */
     var project = Object.assign({}, SOLID, { custom_parts: [EMBANKMENT] });
     var load = App.Loads.draftFromPoints(project, [[12, 25, 0], [3, 7, 0]]);
-    T.eq(load.z, 4);
+    T.eq(load.y, 4);
   });
 
   /* ── Where the arrows are drawn ───────────────────────────────────
      The glyph is the load, as far as the user is concerned. Its 3D branch anchored
-     every arrow at `domain.z_top` -- the top of the *borehole* block -- so a load put
+     every arrow at `domain.y_top` -- the top of the *borehole* block -- so a load put
      on an embankment in 2D jumped down onto the borehole soil on the switch to 3D,
-     while the 2D branch had used `load.z` all along. Mirrors the server's
+     while the 2D branch had used `load.y` all along. Mirrors the server's
      `Project.elevation_of`. */
 
   var RAISED_SOLID = { dimension: 3,
-    domain: { x0: 0, x1: 50, y0: 0, y1: 40, z_top: 0, z_bottom: -25 },
+    domain: { x0: 0, x1: 50, z0: 0, z1: 40, y_top: 0, y_bottom: -25 },
     custom_parts: [EMBANKMENT], loads: [] };
 
-  function surfaceLoad(z) {
+  function surfaceLoad(y) {
     return { id: 'load_1', name: 'SurfaceLoad_1', kind: 'surface',
-             x0: 4, x1: 16, y0: 5, y1: 10, z: z, thickness: 0.15,
-             components: [0, 0, -20], distribution: 'Uniform', active: true };
+             x0: 4, x1: 16, z0: 5, z1: 10, y: y, thickness: 0.15,
+             components: [0, -20, 0], distribution: 'Uniform', active: true };
   }
 
   test('a 3D surface load draws its arrows at its own elevation', function () {
     var spec = App.Viewport.loadGlyphSpec(surfaceLoad(4), RAISED_SOLID);
     T.ok(spec.anchors.length, 'the glyph has anchors');
-    T.eq(spec.anchors.every(function (a) { return a[2] === 4; }), true,
+    T.eq(spec.anchors.every(function (a) { return a[1] === 4; }), true,
          'every arrow sits on the embankment, not on the borehole soil: '
-         + JSON.stringify(spec.anchors.map(function (a) { return a[2]; })));
+         + JSON.stringify(spec.anchors.map(function (a) { return a[1]; })));
   });
 
   test('a surface load with no elevation falls back to the top of the model', function () {
     var spec = App.Viewport.loadGlyphSpec(surfaceLoad(null), RAISED_SOLID);
-    T.eq(spec.anchors.every(function (a) { return a[2] === 4; }), true,
+    T.eq(spec.anchors.every(function (a) { return a[1] === 4; }), true,
          'older records still mean the model top, which the embankment raised');
   });
 
   test('with nothing drawn the model top is still the domain top', function () {
     var plain = Object.assign({}, RAISED_SOLID, { custom_parts: [] });
     var spec = App.Viewport.loadGlyphSpec(surfaceLoad(null), plain);
-    T.eq(spec.anchors.every(function (a) { return a[2] === 0; }), true);
+    T.eq(spec.anchors.every(function (a) { return a[1] === 0; }), true);
   });
 
   test('the surface load outline is drawn at the same elevation as its arrows', function () {
-    /* The pad outline had its own copy of `domain.z_top`, so fixing only the arrows
+    /* The pad outline had its own copy of `domain.y_top`, so fixing only the arrows
        would have left the rectangle behind on the borehole soil. */
     var group = App.Viewport.loadGlyphGroup(surfaceLoad(4), RAISED_SOLID);
     var outline = null;
@@ -451,9 +554,9 @@
           && object.type === 'Line' && object.userData.noPick) outline = object;
     });
     T.ok(outline, 'the pad has an outline');
-    var z = outline.geometry.attributes.position.array;
+    var xyz = outline.geometry.attributes.position.array;
     var levels = [];
-    for (var i = 2; i < z.length; i += 3) levels.push(z[i]);
+    for (var i = 1; i < xyz.length; i += 3) levels.push(xyz[i]);
     T.eq(levels.every(function (v) { return v === 4; }), true,
          'outline levels: ' + JSON.stringify(levels));
   });

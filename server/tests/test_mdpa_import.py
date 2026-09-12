@@ -78,7 +78,7 @@ def test_dimension_is_inferred_from_the_node_table(reimported):
 
 def test_a_plane_strain_export_is_recognised_as_2d(session):
     payload = seed_project().model_dump()
-    payload.update(dimension=2, section_plane="xz", section_offset=20.0)
+    payload.update(dimension=2, section_offset=20.0)
     project = Project.model_validate(payload)
     exported = kratos.export_project(project, MeshRequest(element_size=4.0, order=1))
 
@@ -392,7 +392,7 @@ def test_reference_decks_produce_at_least_one_drawable_section(filename):
         assert section["indices"] or section["edges"]
 
 
-# ── Standing a 2D deck up on its section plane ───────────────────────────────
+# ── A deck's node table is already the world frame ───────────────────────────────
 
 SECTION_DECK = (
     "Begin Properties 0\nEnd Properties\n\n"
@@ -403,24 +403,18 @@ SECTION_DECK = (
 own two axes on X and Y, Z zeroed."""
 
 
-def test_a_2d_deck_is_stood_up_on_the_section_plane_it_is_drawn_against():
-    """The bug this guards: a section drawn from the file as-is lies flat in the ground
-    plane, which is exactly edge-on -- invisible -- in the 2D view it belongs to."""
+def test_a_2d_deck_needs_no_standing_up():
+    """It used to: a section authored in the world x-z elevation had to be rotated out
+    of the Kratos x-y plane to be visible. Since the re-basis a 2D model *is* the x-y
+    plane at z = 0, so the file's own numbers are already the world's."""
     model = mdpa_import.import_mdpa(SECTION_DECK)
 
-    placed = model.world_nodes("xz", 10.0)
+    placed = model.world_nodes()
 
-    # xz: Kratos X stays x, Kratos Y becomes z (depth), and y is the section offset.
-    assert placed[1] == (0.0, 10.0, 0.0)
-    assert placed[2] == (8.0, 10.0, 0.0)
-    assert placed[3] == (0.0, 10.0, -6.0)
-
-
-def test_the_other_section_planes_place_a_deck_on_their_own_axes():
-    model = mdpa_import.import_mdpa(SECTION_DECK)
-
-    assert model.world_nodes("yz", 3.0)[3] == (3.0, 0.0, -6.0)
-    assert model.world_nodes("xy", 3.0)[3] == (0.0, -6.0, 3.0)
+    assert placed == model.nodes
+    assert placed[1] == (0.0, 0.0, 0.0)
+    assert placed[2] == (8.0, 0.0, 0.0)
+    assert placed[3] == (0.0, -6.0, 0.0), "the section has its depth in y, not in z"
 
 
 def test_a_3d_deck_is_already_in_the_world_frame_and_is_left_alone():
@@ -433,7 +427,7 @@ def test_a_3d_deck_is_already_in_the_world_frame_and_is_left_alone():
     )
     model = mdpa_import.import_mdpa(text)
 
-    assert model.world_nodes("xz", 10.0) == model.nodes
+    assert model.world_nodes() == model.nodes
 
 
 def test_the_bbox_and_the_geometry_are_reported_in_one_frame():
@@ -441,16 +435,16 @@ def test_the_bbox_and_the_geometry_are_reported_in_one_frame():
     is in the world's, it aims the camera at empty space."""
     model = mdpa_import.import_mdpa(SECTION_DECK)
 
-    payload = model.to_dict("xz", 10.0)
+    payload = model.to_dict()
 
-    assert payload["bbox"] == [0.0, 10.0, -6.0, 8.0, 10.0, 0.0]
+    assert payload["bbox"] == [0.0, -6.0, 0.0, 8.0, 0.0, 0.0]
     positions = next(s for s in payload["sections"]
                      if s["key"] == "imported_continuum")["positions"]
-    assert min(positions[1::3]) == max(positions[1::3]) == 10.0, "the whole sheet is on the plane"
-    assert min(positions[2::3]) == -6.0, "the section has depth in z, not in y"
+    assert min(positions[2::3]) == max(positions[2::3]) == 0.0, "the whole sheet is on z = 0"
+    assert min(positions[1::3]) == -6.0, "the section has depth in y, not in z"
 
 
-def test_a_beams_line_work_is_placed_with_the_soil_it_shares_nodes_with():
+def test_a_beams_line_work_is_in_the_same_frame_as_the_soil_it_shares_nodes_with():
     text = (
         "Begin Properties 0\nEnd Properties\n\n"
         "Begin Nodes\n1 4.0 0.0 0.0\n2 4.0 -5.0 0.0\nEnd Nodes\n\n"
@@ -458,7 +452,7 @@ def test_a_beams_line_work_is_placed_with_the_soil_it_shares_nodes_with():
     )
     model = mdpa_import.import_mdpa(text)
 
-    truss = next(s for s in mdpa_import.to_sections(model, "xz", 10.0)
+    truss = next(s for s in mdpa_import.to_sections(model)
                  if s["key"] == "imported_truss")
 
-    assert truss["edges"] == [4.0, 10.0, 0.0, 4.0, 10.0, -5.0]
+    assert truss["edges"] == [4.0, 0.0, 0.0, 4.0, -5.0, 0.0]

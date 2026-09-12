@@ -33,12 +33,12 @@ TENDON = {"id": "strand", "name": "4-strand tendon", "E": 1.95e8, "area": 0.0006
           "compression_limit": None}
 
 PANEL = {"id": "panel_1", "name": "Wall 1", "kind": "panel", "section": "az26_wall",
-         "footprint": [[12.0, 4.0], [12.0, 20.0]], "z_top": 0.0, "z_toe": -14.0,
+         "footprint": [[12.0, 4.0], [12.0, 20.0]], "y_top": 0.0, "y_toe": -14.0,
          "active": True}
 MEMBER = {"id": "member_1", "name": "King post 1", "kind": "member", "section": "az26",
-          "points": [[18.0, 10.0, 0.0], [18.0, 10.0, -12.0]], "active": True}
+          "points": [[18.0, 0.0, 10.0], [18.0, -12.0, 10.0]], "active": True}
 ANCHOR = {"id": "anchor_1", "name": "Anchor 1", "kind": "anchor3d", "section": "strand",
-          "head": [12.0, 10.0, -2.0], "tail": [17.0, 10.0, -8.0], "prestress": 250.0,
+          "head": [12.0, -2.0, 10.0], "tail": [17.0, -8.0, 10.0], "prestress": 250.0,
           "active": True}
 
 
@@ -209,8 +209,8 @@ def test_the_tie_runs_from_the_head_to_the_tail_the_user_drew(walled):
     deck = deck_of(walled)
     head, tail = (deck.nodes[n] for n in next(iter(truss_of(deck).entries.values())))
 
-    assert head == pytest.approx((12.0, 10.0, -2.0), abs=1e-6)
-    assert tail == pytest.approx((17.0, 10.0, -8.0), abs=1e-6)
+    assert head == pytest.approx((12.0, -2.0, 10.0), abs=1e-6)
+    assert tail == pytest.approx((17.0, -8.0, 10.0), abs=1e-6)
 
 
 def test_the_anchor_head_node_is_a_node_of_the_wall_it_hangs_from(walled):
@@ -265,7 +265,7 @@ def test_the_tendon_becomes_a_material_entry_with_its_prestress(walled):
 
 
 def test_an_anchor_may_hang_from_a_member_instead_of_a_wall(session):
-    on_member = ANCHOR | {"head": [18.0, 10.0, -4.0], "tail": [22.0, 10.0, -9.0]}
+    on_member = ANCHOR | {"head": [18.0, -4.0, 10.0], "tail": [22.0, -9.0, 10.0]}
     export = kratos.export_project(structured([MEMBER], [on_member]),
                                    MeshRequest(element_size=6.0, order=1))
     deck = deck_of(export)
@@ -387,9 +387,9 @@ def test_the_plane_anchors_tail_is_pinned_in_all_three_directions(sectioned):
 # differs, and the difference is said out loud rather than left to be discovered.
 
 POINT_LOAD = {"id": "pointload_1", "name": "PointLoad_1", "kind": "point",
-              "x": 10.0, "z": 0.0, "components": [0.0, -30.0], "active": True}
+              "x": 10.0, "y": 0.0, "components": [0.0, -30.0], "active": True}
 BURIED_LINE = {"id": "lineload_2", "name": "LineLoad_2", "kind": "line",
-               "x0": 4.0, "x1": 16.0, "z": -5.0, "components": [0.0, -25.0],
+               "x0": 4.0, "x1": 16.0, "y": -5.0, "components": [0.0, -25.0],
                "active": True}
 
 

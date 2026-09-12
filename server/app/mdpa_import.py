@@ -26,7 +26,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import re
 
-from app.build import PLANE_AXES
 from app.kratos import BEAMS, BOUNDARIES, CONDITIONS, ELEMENTS, SHELLS, TRUSSES
 
 TOLERANCE = 1e-6
@@ -111,39 +110,27 @@ class MdpaModel:
     parts: dict[str, Part] = field(default_factory=dict)
     properties: list[int] = field(default_factory=list)
     dimension: int = 3
-    """Inferred from the node table: 2 when every z is zero (a plane-strain section
-    written by `kratos._kratos_coordinates`), 3 otherwise."""
+    """Inferred from the node table: 2 when every z is zero (a plane-strain section),
+    3 otherwise."""
 
-    def world_nodes(self, plane: str | None = None,
-                    offset: float = 0.0) -> dict[int, tuple[float, float, float]]:
-        """The node table in the viewer's world frame (X east, Y north, Z up).
+    def world_nodes(self) -> dict[int, tuple[float, float, float]]:
+        """The node table in the viewer's world frame (X across, Y up, Z out of plane).
 
-        A 3D deck is already in it. A 2D deck is not: `kratos._kratos_coordinates` laid
-        the section's own two axes onto Kratos X and Y and zeroed Z, so a section drawn
-        straight from the file lies flat in the ground plane -- edge-on, and therefore
-        invisible, in the very 2D view it belongs to. Standing it back up means sending
-        Kratos X and Y to the section plane's two axes and putting the section at
-        `offset` along the plane's normal.
+        The identity, in both dimensions. A plane-strain deck is written in Kratos X
+        and Y with Z zero, and since the re-basis that is exactly where a 2D model
+        lives -- the x-y plane at z = 0 -- so there is nothing to stand up. It was a
+        remapping only while the section was authored in the world x-z elevation.
         """
-        if self.dimension == 3 or plane is None:
-            return self.nodes
-        normal, u, v = PLANE_AXES[plane]
-        placed = {}
-        for tag, (x, y, _z) in self.nodes.items():
-            xyz = [0.0, 0.0, 0.0]
-            xyz[u], xyz[v], xyz[normal] = x, y, offset
-            placed[tag] = (xyz[0], xyz[1], xyz[2])
-        return placed
+        return self.nodes
 
     @property
     def bbox(self) -> tuple[float, float, float, float, float, float]:
         return bbox_of(self.nodes)
 
-    def to_dict(self, plane: str | None = None, offset: float = 0.0) -> dict:
-        """`plane`/`offset` place a 2D deck on a section plane; see `world_nodes`. The
-        bbox travels with the geometry -- it is what frames the camera, so the two have
-        to be in one frame."""
-        placed = self.world_nodes(plane, offset)
+    def to_dict(self) -> dict:
+        """The bbox travels with the geometry -- it is what frames the camera, so the
+        two have to be in one frame."""
+        placed = self.world_nodes()
         return {
             "dimension": self.dimension,
             "bbox": list(bbox_of(placed)),
@@ -151,7 +138,7 @@ class MdpaModel:
             "elements": [entity.to_dict() for entity in self.elements],
             "conditions": [entity.to_dict() for entity in self.conditions],
             "parts": [part.to_dict() for part in self.parts.values()],
-            "sections": to_sections(self, plane, offset),
+            "sections": to_sections(self),
         }
 
 
@@ -331,15 +318,11 @@ def _section_dict(nodes: dict[int, tuple[float, float, float]], key: str, color:
     }
 
 
-def to_sections(model: MdpaModel, plane: str | None = None,
-                offset: float = 0.0) -> list[dict]:
+def to_sections(model: MdpaModel) -> list[dict]:
     """Render-ready sections for the mesh a deck contains: one per body sub-model part
     (soil layer, sheet pile, anchor, wall panel -- whatever the file itself calls a
     body), each with its own colour, local geometry and bbox; anything no body part
     claims falls back to one section per element kind, coloured by `SECTION_COLORS`.
-
-    `plane`/`offset` stand a 2D deck up on a section plane -- see
-    `MdpaModel.world_nodes`, without which a section is drawn flat on the ground.
 
     A class this exporter does not recognise (`Entity.kind == "unknown"`, e.g. an
     interface element) contributes no geometry -- its topology is not known here, so
@@ -350,7 +333,7 @@ def to_sections(model: MdpaModel, plane: str | None = None,
     """
     if not model.nodes:
         return []
-    nodes = model.world_nodes(plane, offset)
+    nodes = model.world_nodes()
     by_id: dict[int, tuple[str, list[int]]] = {
         element_id: (entity.kind, conn)
         for entity in model.elements for element_id, conn in entity.entries.items()

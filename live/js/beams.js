@@ -22,7 +22,7 @@ var App = window.App || {};
 App.Beams = (function () {
 
   /* How far the model reaches, which is not the same as the borehole domain: a drawn
-     or imported part may stand above `z_top`, and a structure placed on one is on
+     or imported part may stand above `y_top`, and a structure placed on one is on
      model geometry. `App.Model.extentOf` mirrors the server's `Project.extent`; the
      fallback keeps this module usable in a page that has no App.Model. */
   function extent(project) {
@@ -85,13 +85,13 @@ App.Beams = (function () {
     return (App.PROJECT && App.PROJECT.loads) || [];
   }
 
-  /* A sheet pile is authored in the x-z elevation and nowhere else: that is the
+  /* A sheet pile is authored in the 2D x-y section and nowhere else: that is the
      plane the confirmed beam elements describe. A wall or a member is authored in
      the solid model, for the mirror of that reason. */
   function available(project, kind) {
     if (!project) return false;
     if (project.dimension === 2) {
-      return (kind || 'beam') === 'beam' && (project.section_plane || 'xz') === 'xz';
+      return (kind || 'beam') === 'beam';
     }
     return kindsFor(project).indexOf(kind || 'panel') >= 0;
   }
@@ -99,7 +99,7 @@ App.Beams = (function () {
   function unavailableMessage(project, kind) {
     if ((kind || 'beam') === 'beam') {
       return project && project.dimension === 2
-        ? 'Sheet piles are created in the x-z section.'
+        ? 'Sheet piles are created in the 2D x-y section.'
         : 'A sheet pile is a 2D section object; switch to 2D, or create a wall instead.';
     }
     return kind === 'panel'
@@ -125,7 +125,7 @@ App.Beams = (function () {
     if (plan.length < 2) throw new Error('A wall needs at least two points.');
     plan.forEach(function (p) {
       if (!p.every(Number.isFinite)) throw new Error('Every wall coordinate must be a number.');
-      if (p[0] < d.x0 || p[0] > d.x1 || p[1] < d.y0 || p[1] > d.y1) {
+      if (p[0] < d.x0 || p[0] > d.x1 || p[1] < d.z0 || p[1] > d.z1) {
         throw new Error('The wall must stay inside the model domain.');
       }
     });
@@ -137,8 +137,8 @@ App.Beams = (function () {
       kind: 'panel',
       section: existing ? existing.id : 'panelsection_1',
       footprint: plan,
-      z_top: d.z_top,
-      z_toe: d.z_top - (d.z_top - d.z_bottom) * 0.5,
+      y_top: d.y_top,
+      y_toe: d.y_top - (d.y_top - d.y_bottom) * 0.5,
       active: true
     };
   }
@@ -153,8 +153,9 @@ App.Beams = (function () {
     if (space.length < 2) throw new Error('A member needs at least two points.');
     space.forEach(function (p) {
       if (!p.every(Number.isFinite)) throw new Error('Every member coordinate must be a number.');
-      if (p[0] < span.x0 || p[0] > span.x1 || p[1] < span.y0 || p[1] > span.y1
-          || p[2] < span.z_bottom || p[2] > span.z_top) {
+      if (p[0] < span.x0 || p[0] > span.x1
+          || p[1] < span.y_bottom || p[1] > span.y_top
+          || p[2] < span.z0 || p[2] > span.z1) {
         throw new Error('The member must stay inside the model domain.');
       }
     });
@@ -172,18 +173,18 @@ App.Beams = (function () {
 
   function draftFromPoints(project, points) {
     if (!available(project, 'beam')) {
-      throw new Error('Sheet piles are created in the 2D x-z section.');
+      throw new Error('Sheet piles are created in the 2D x-y section.');
     }
     if (!points || points.length < 2) {
       throw new Error('A sheet pile needs at least two points.');
     }
     var d = project.domain;
     var span = extent(project);
-    var flat = points.map(function (p) { return [p[0], p[2] === undefined ? p[1] : p[2]]; });
+    var flat = points.map(function (p) { return [p[0], p[1]]; });
     flat.forEach(function (p) {
       if (!p.every(Number.isFinite)) throw new Error('Every pile coordinate must be a number.');
       if (p[0] < span.x0 || p[0] > span.x1
-          || p[1] < span.z_bottom || p[1] > span.z_top) {
+          || p[1] < span.y_bottom || p[1] > span.y_top) {
         throw new Error('The sheet pile must stay inside the model domain.');
       }
     });
@@ -215,17 +216,17 @@ App.Beams = (function () {
     if (wanted === 'panel') {
       // Across the middle of the site, a quarter in from either edge: a wall the
       // user drags to where their excavation actually is.
-      var y0 = d.y0 + (d.y1 - d.y0) * 0.25;
-      var y1 = d.y1 - (d.y1 - d.y0) * 0.25;
-      return draftPanel(project, [[x, y0], [x, y1]]);
+      var z0 = d.z0 + (d.z1 - d.z0) * 0.25;
+      var z1 = d.z1 - (d.z1 - d.z0) * 0.25;
+      return draftPanel(project, [[x, z0], [x, z1]]);
     }
     if (wanted === 'member') {
-      var y = d.y0 + (d.y1 - d.y0) * 0.5;
-      return draftMember(project, [[x, y, d.z_top],
-                                   [x, y, d.z_top - (d.z_top - d.z_bottom) * 0.5]]);
+      var z = d.z0 + (d.z1 - d.z0) * 0.5;
+      return draftMember(project, [[x, d.y_top, z],
+                                   [x, d.y_top - (d.y_top - d.y_bottom) * 0.5, z]]);
     }
-    var toe = d.z_top - (d.z_top - d.z_bottom) * 0.5;
-    return draftFromPoints(project, [[x, 0, d.z_top], [x, 0, toe]]);
+    var toe = d.y_top - (d.y_top - d.y_bottom) * 0.5;
+    return draftFromPoints(project, [[x, d.y_top], [x, toe]]);
   }
 
   /* The section list this pile needs saved alongside it: the project's own, plus a
@@ -267,10 +268,10 @@ App.Beams = (function () {
     if (kind === 'panel') {
       var flat = validatePolyline(beam.footprint, 2, 'wall');
       if (flat) return flat;
-      if (!(Number.isFinite(beam.z_top) && Number.isFinite(beam.z_toe))) {
+      if (!(Number.isFinite(beam.y_top) && Number.isFinite(beam.y_toe))) {
         return 'Every wall level must be a number.';
       }
-      if (!(beam.z_top > beam.z_toe)) return 'A wall must have its top above its toe.';
+      if (!(beam.y_top > beam.y_toe)) return 'A wall must have its top above its toe.';
       return null;
     }
     if (kind === 'member') return validatePolyline(beam.points, 3, 'member');

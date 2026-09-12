@@ -27,20 +27,12 @@
   var MIN_MINOR_SPACING = 7;     // below this the minor ticks are a grey smudge
   var EDGES = ['top', 'bottom', 'left', 'right'];
 
-  /* The two world axes the screen's horizontal and vertical edges measure, for each
-     section plane. Fixed, not derived from the camera, because the camera for each
-     plane is fixed too (viewport.js SECTION_VIEWS): the elevation looks along +y with
-     z up, the other elevation along +x, and the plan (nearly) down with y up.
+  /* The two world axes the screen's horizontal and vertical edges measure. Fixed,
+     not derived from the camera, because the 2D camera is fixed too: there is one
+     section -- the x-y plane -- and it is viewed along -z with +y up. */
+  var AXES = ['x', 'y'];
 
-     "Nearly" is the plan's 0.035 rad tilt, which js/orbit.js forces by hard-coding
-     camera.up = (0,0,1) -- looking straight down would leave lookAt() degenerate and
-     the viewport empty. It foreshortens y by cos(0.035), six parts in ten thousand:
-     half a pixel across a 900 px viewport, and the same half pixel the grid under it
-     is already drawn with. Correcting for it here would make the ruler disagree with
-     the lines it labels. */
-  var AXES = { xz: ['x', 'z'], yz: ['y', 'z'], xy: ['x', 'y'] };
-
-  function axesOf(plane) { return (AXES[plane] || AXES.xz).slice(); }
+  function axesOf() { return AXES.slice(); }
 
   /* 1, 2 or 5 times a power of ten: the only steps a reader can add up in their head,
      and the same family the grid coarsens by, so a ruler tick is always on a grid line
@@ -120,7 +112,7 @@
      horizontal scale is listed left to right; the vertical one is listed *down* the
      screen, so its values descend: both are then in the order they are painted. */
   function plan(state) {
-    var axes = axesOf(state.plane);
+    var axes = axesOf();
     var w = state.width, h = state.height;
     var spacing = state.minSpacing || MIN_SPACING;
     var hMin = state.center[0] - state.halfW, hMax = state.center[0] + state.halfW;
@@ -285,7 +277,7 @@
     var height = state.height || host.clientHeight;
     if (!(width > 2 && height > 2)) { hideAll(); return null; }
 
-    var layout = plan({ plane: state.plane, center: state.center,
+    var layout = plan({ center: state.center,
                         halfW: state.halfW, halfH: state.halfH,
                         width: width, height: height,
                         minSpacing: state.minSpacing });

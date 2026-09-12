@@ -18,7 +18,7 @@ App.Model = (function () {
 
   /* Falls back to the frozen demo extents until a project has been applied, so
      the module is usable before the first fetch resolves. */
-  var domain = { x0: 0, x1: 50, y0: 0, y1: 40, z_top: 0, z_bottom: -25 };
+  var domain = { x0: 0, x1: 50, z0: 0, z1: 40, y_top: 0, y_bottom: -25 };
 
   /* ── Mapping ─────────────────────────────────────────────────── */
 
@@ -53,7 +53,7 @@ App.Model = (function () {
   /* Mirrors `Project.extent` in server/app/schemas.py: how far the model actually
      reaches, which is the domain grown to cover every drawn or imported part. A
      structure is placed against this, not against `project.domain` -- an embankment
-     drawn above `z_top` is model geometry, and a load standing on it was being refused
+     drawn above `y_top` is model geometry, and a load standing on it was being refused
      as "outside the domain" by both ends at once. Parts saved before their bounding
      box was recorded contribute nothing, exactly as on the server. */
   function extentOf(project) {
@@ -69,8 +69,8 @@ App.Model = (function () {
       return Math.max.apply(null, [own].concat(boxes.map(function (b) { return b[index]; })));
     }
     return {
-      x0: low(0, d.x0), y0: low(1, d.y0), z_bottom: low(2, d.z_bottom),
-      x1: high(3, d.x1), y1: high(4, d.y1), z_top: high(5, d.z_top)
+      x0: low(0, d.x0), y_bottom: low(1, d.y_bottom), z0: low(2, d.z0),
+      x1: high(3, d.x1), y_top: high(4, d.y_top), z1: high(5, d.z1)
     };
   }
 
@@ -169,6 +169,10 @@ App.Model = (function () {
     if (bar) bar.textContent = projectTitle(project);
   }
 
+  /* Replaces the frozen js/data.js globals with the server's project. Until this
+     runs the app is showing data.js's offline seed, which is still written in the
+     mockup's Z-up frame -- deliberately, because that file is frozen. Nothing here
+     reads its coordinates; the first project to arrive overwrites them wholesale. */
   function apply(project) {
     var mapped = fromProject(project);
     domain = mapped.domain;
@@ -456,15 +460,24 @@ App.Model = (function () {
     var groups = { 'General': general };
     var extent = recipeExtent(part.recipe);
     if (extent) {
-      groups['Geometry'] = [
+      /* Same rule as the stack layers in geometryRows(): a plane-strain body runs
+         forever out of plane, so the extents along the hidden axis stop describing
+         it and are dropped. The axes themselves stay read-only either way -- the
+         corners are the definition, and they are edited in the dialog. */
+      var hidden = outOfPlaneAxis(App.PROJECT);
+      var rows = [
         ['x min', fixed(extent.lo[0]), 'm', true], ['x max', fixed(extent.hi[0]), 'm', true],
-        ['y min', fixed(extent.lo[1]), 'm', true], ['y max', fixed(extent.hi[1]), 'm', true],
-        ['z min', fixed(extent.lo[2]), 'm', true], ['z max', fixed(extent.hi[2]), 'm', true],
-        ['Corners', String(extent.corners), '', false, {
-          kind: 'button', text: 'Edit coordinates…',
-          run: function () { App.SoilVolumeDialog.open(part); }
-        }]
+        ['y min', fixed(extent.lo[1]), 'm', true], ['y max', fixed(extent.hi[1]), 'm', true]
       ];
+      if (hidden !== 'z') {
+        rows.push(['z min', fixed(extent.lo[2]), 'm', true]);
+        rows.push(['z max', fixed(extent.hi[2]), 'm', true]);
+      }
+      rows.push(['Corners', String(extent.corners), '', false, {
+        kind: 'button', text: 'Edit coordinates…',
+        run: function () { App.SoilVolumeDialog.open(part); }
+      }]);
+      groups['Geometry'] = rows;
     }
     return { title: part.label, icon: 'cube', groups: groups };
   }
@@ -477,7 +490,7 @@ App.Model = (function () {
      rather than the selected layer. Mirrors the server's ordering validator
      (server/app/schemas.py:45-49) so an impossible extent is refused here. */
   var LIMITS = { x0: ['x1', 'below'], x1: ['x0', 'above'],
-                 y0: ['y1', 'below'], y1: ['y0', 'above'] };
+                 z0: ['z1', 'below'], z1: ['z0', 'above'] };
 
   function domainEditor(field) {
     return {
@@ -502,11 +515,11 @@ App.Model = (function () {
       set: function (value) {
         if (!Number.isFinite(value)) return field + ' must be a finite number.';
         if (component !== undefined) { load.components[component] = value; return null; }
-        var other = { x0: 'x1', x1: 'x0', y0: 'y1', y1: 'y0' }[field];
-        if ((field === 'x0' || field === 'y0') && value >= load[other]) {
+        var other = { x0: 'x1', x1: 'x0', z0: 'z1', z1: 'z0' }[field];
+        if ((field === 'x0' || field === 'z0') && value >= load[other]) {
           return field + ' must stay below ' + other + '.';
         }
-        if ((field === 'x1' || field === 'y1') && value <= load[other]) {
+        if ((field === 'x1' || field === 'z1') && value <= load[other]) {
           return field + ' must stay above ' + other + '.';
         }
         load[field] = value;
@@ -632,15 +645,15 @@ App.Model = (function () {
     panel.footprint.forEach(function (point, index) {
       geometry.push(['x' + (index + 1), fixed(point[0]), 'm', false,
                      panelPointEditor(panel, index, 0)]);
-      geometry.push(['y' + (index + 1), fixed(point[1]), 'm', false,
+      geometry.push(['z' + (index + 1), fixed(point[1]), 'm', false,
                      panelPointEditor(panel, index, 1)]);
     });
-    geometry.push(['Top level', fixed(panel.z_top), 'm', false,
-                   panelLevelEditor(panel, 'z_top')]);
-    geometry.push(['Toe level', fixed(panel.z_toe), 'm', false,
-                   panelLevelEditor(panel, 'z_toe')]);
+    geometry.push(['Top level', fixed(panel.y_top), 'm', false,
+                   panelLevelEditor(panel, 'y_top')]);
+    geometry.push(['Toe level', fixed(panel.y_toe), 'm', false,
+                   panelLevelEditor(panel, 'y_toe')]);
     geometry.push(['Length', fixed(panelLength(panel)), 'm', true]);
-    geometry.push(['Height', fixed(panel.z_top - panel.z_toe), 'm', true]);
+    geometry.push(['Height', fixed(panel.y_top - panel.y_toe), 'm', true]);
     geometry.push(['Delete', '', '', false, { kind: 'button', text: 'Delete wall',
       run: function () { if (App.Beams) App.Beams.remove(panel.id); } }]);
     return {
@@ -712,7 +725,7 @@ App.Model = (function () {
     beam.points.forEach(function (point, index) {
       geometry.push(['x' + (index + 1), fixed(point[0]), 'm', false,
                      beamNumberEditor(beam, index, 0)]);
-      geometry.push(['z' + (index + 1), fixed(point[1]), 'm', false,
+      geometry.push(['y' + (index + 1), fixed(point[1]), 'm', false,
                      beamNumberEditor(beam, index, 1)]);
     });
     geometry.push(['Length', fixed(beamLength(beam)), 'm', true]);
@@ -832,9 +845,9 @@ App.Model = (function () {
     var tendon = App.Anchors ? App.Anchors.sectionOf(anchor) : {};
     var geometry = [
       ['Head x', fixed(anchor.head[0]), 'm', false, anchorEndEditor(anchor, 'head', 0)],
-      ['Head z', fixed(anchor.head[1]), 'm', false, anchorEndEditor(anchor, 'head', 1)],
+      ['Head y', fixed(anchor.head[1]), 'm', false, anchorEndEditor(anchor, 'head', 1)],
       ['Tail x', fixed(anchor.tail[0]), 'm', false, anchorEndEditor(anchor, 'tail', 0)],
-      ['Tail z', fixed(anchor.tail[1]), 'm', false, anchorEndEditor(anchor, 'tail', 1)],
+      ['Tail y', fixed(anchor.tail[1]), 'm', false, anchorEndEditor(anchor, 'tail', 1)],
       ['Length', fixed(App.Anchors ? App.Anchors.length(anchor) : 0), 'm', true],
       ['Inclination', fixed(App.Anchors ? App.Anchors.inclination(anchor) : 0), '°', true],
       ['Delete', '', '', false, { kind: 'button', text: 'Delete anchor',
@@ -987,7 +1000,7 @@ App.Model = (function () {
       (record.points || []).forEach(function (point, index) {
         geometry.push(['x' + (index + 1), fixed(point[0]), 'm', false,
                        interfacePointEditor(record, index, 0)]);
-        geometry.push(['z' + (index + 1), fixed(point[1]), 'm', false,
+        geometry.push(['y' + (index + 1), fixed(point[1]), 'm', false,
                        interfacePointEditor(record, index, 1)]);
       });
     }
@@ -1039,18 +1052,26 @@ App.Model = (function () {
     var unit = point ? 'kN' : (line ? 'kN/m' : 'kN/m²');
     var geometry = point ? [
       ['x', fixed(load.x), 'm', false, loadNumberEditor(load, 'x')],
-      ['z', fixed(load.z), 'm', false, loadNumberEditor(load, 'z')]
+      ['y', fixed(load.y), 'm', false, loadNumberEditor(load, 'y')]
     ] : line ? [
       ['x min', fixed(load.x0), 'm', false, loadNumberEditor(load, 'x0')],
       ['x max', fixed(load.x1), 'm', false, loadNumberEditor(load, 'x1')],
-      ['z', fixed(load.z), 'm', false, loadNumberEditor(load, 'z')],
+      ['y', fixed(load.y), 'm', false, loadNumberEditor(load, 'y')],
       ['Length', fixed(load.x1 - load.x0), 'm', true]
     ] : [
       ['x min', fixed(load.x0), 'm', false, loadNumberEditor(load, 'x0')],
       ['x max', fixed(load.x1), 'm', false, loadNumberEditor(load, 'x1')],
-      ['y min', fixed(load.y0), 'm', false, loadNumberEditor(load, 'y0')],
-      ['y max', fixed(load.y1), 'm', false, loadNumberEditor(load, 'y1')],
-      ['Area', fixed((load.x1 - load.x0) * (load.y1 - load.y0)), 'm²', true]
+      /* x/z place the pad in plan, y says which face it loads; it sits between them so
+         the grid reads x, y, z. The server leaves y null to mean "the top of the
+         model" (SurfaceLoad.y), resolved against ground_y at build time -- so say
+         that rather than formatting the missing level as 0.000, which would read as
+         a pad at datum. */
+      Number.isFinite(load.y)
+        ? ['y', fixed(load.y), 'm', false, loadNumberEditor(load, 'y')]
+        : ['y', 'Top of model', '', true],
+      ['z min', fixed(load.z0), 'm', false, loadNumberEditor(load, 'z0')],
+      ['z max', fixed(load.z1), 'm', false, loadNumberEditor(load, 'z1')],
+      ['Area', fixed((load.x1 - load.x0) * (load.z1 - load.z0)), 'm²', true]
     ];
     geometry.push(['Delete', '', '', false, { kind: 'button', text: 'Delete load',
       run: function () { if (App.Loads) App.Loads.remove(load.id); } }]);
@@ -1065,7 +1086,7 @@ App.Model = (function () {
         ],
         'Components': (point || line) ? [
           ['qx', fixed(load.components[0]), unit, false, loadNumberEditor(load, 'qx', 0)],
-          ['qz', fixed(load.components[1]), unit, false, loadNumberEditor(load, 'qz', 1)]
+          ['qy', fixed(load.components[1]), unit, false, loadNumberEditor(load, 'qy', 1)]
         ] : [
           ['qx', fixed(load.components[0]), unit, false, loadNumberEditor(load, 'qx', 0)],
           ['qy', fixed(load.components[1]), unit, false, loadNumberEditor(load, 'qy', 1)],
@@ -1076,24 +1097,19 @@ App.Model = (function () {
     };
   }
 
-  /* Which axis a plane-strain model has no extent along. For the x-z section that
-     is y: the body runs forever out of plane, so its y extents stop describing the
-     model. x and z still bound the section itself and stay. */
-  var SECTION_NORMAL = { xz: 'y', xy: 'z', yz: 'x' };
-
+  /* Which axis a plane-strain model has no extent along. Always z: a 2D model is
+     the x-y plane, and the body runs forever out of plane, so its z extents stop
+     describing the model. x and y still bound the section itself and stay. */
   function outOfPlaneAxis(project) {
     if (!project || project.dimension !== 2) return null;
-    return SECTION_NORMAL[project.section_plane || 'xz'] || 'y';
+    return 'z';
   }
 
   /* Where the cut sits along that axis. Mirrors App.Viewport.sectionOffset: an
-     explicit offset, else the middle of the domain. */
-  var SECTION_TRAVEL = { x: ['x0', 'x1'], y: ['y0', 'y1'], z: ['z_bottom', 'z_top'] };
-
-  function sectionAt(project, axis) {
+     explicit offset, else the middle of the domain's out-of-plane depth. */
+  function sectionAt(project) {
     if (project && typeof project.section_offset === 'number') return project.section_offset;
-    var travel = SECTION_TRAVEL[axis];
-    return (domain[travel[0]] + domain[travel[1]]) / 2;
+    return (domain.z0 + domain.z1) / 2;
   }
 
   function layerProps(layer, i) {
@@ -1127,16 +1143,16 @@ App.Model = (function () {
       rows.push(['x min', fixed(domain.x0), 'm', false, domainEditor('x0')]);
       rows.push(['x max', fixed(domain.x1), 'm', false, domainEditor('x1')]);
     }
-    if (hidden !== 'y') {
-      rows.push(['y min', fixed(domain.y0), 'm', false, domainEditor('y0')]);
-      rows.push(['y max', fixed(domain.y1), 'm', false, domainEditor('y1')]);
-    }
-    rows.push(['z min', fixed(Math.min.apply(null, bots)), 'm', false,
+    rows.push(['y min', fixed(Math.min.apply(null, bots)), 'm', false,
                App.LayerEditors.bottomLevel(layer)]);
-    rows.push(['z max', fixed(Math.max.apply(null, tops)), 'm', false,
+    rows.push(['y max', fixed(Math.max.apply(null, tops)), 'm', false,
                App.LayerEditors.topLevel(layer)]);
+    if (hidden !== 'z') {
+      rows.push(['z min', fixed(domain.z0), 'm', false, domainEditor('z0')]);
+      rows.push(['z max', fixed(domain.z1), 'm', false, domainEditor('z1')]);
+    }
     if (hidden) {
-      rows.push(['Section at ' + hidden, fixed(sectionAt(App.PROJECT, hidden)), 'm', true]);
+      rows.push(['Section at ' + hidden, fixed(sectionAt(App.PROJECT)), 'm', true]);
     }
     return rows;
   }

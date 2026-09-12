@@ -15,18 +15,18 @@ from app.seed import seed_project
 # ── Domain ──────────────────────────────────────────────────────────────────
 
 def test_domain_reports_its_extents():
-    d = schemas.Domain(x0=0, x1=50, y0=0, y1=40, z_top=0, z_bottom=-25)
-    assert (d.dx, d.dy, d.dz) == (50.0, 40.0, 25.0)
-    assert d.center == (25.0, 20.0, -12.5)
+    d = schemas.Domain(x0=0, x1=50, z0=0, z1=40, y_top=0, y_bottom=-25)
+    assert (d.dx, d.dy, d.dz) == (50.0, 25.0, 40.0)
+    assert d.center == (25.0, -12.5, 20.0)
 
 
 @pytest.mark.parametrize(
     "kwargs",
     [
-        dict(x0=50, x1=0, y0=0, y1=40, z_top=0, z_bottom=-25),   # x reversed
-        dict(x0=0, x1=50, y0=40, y1=0, z_top=0, z_bottom=-25),   # y reversed
-        dict(x0=0, x1=50, y0=0, y1=40, z_top=-25, z_bottom=0),   # z reversed
-        dict(x0=0, x1=0, y0=0, y1=40, z_top=0, z_bottom=-25),    # zero width
+        dict(x0=50, x1=0, z0=0, z1=40, y_top=0, y_bottom=-25),   # x reversed
+        dict(x0=0, x1=50, z0=40, z1=0, y_top=0, y_bottom=-25),   # y reversed
+        dict(x0=0, x1=50, z0=0, z1=40, y_top=-25, y_bottom=0),   # z reversed
+        dict(x0=0, x1=0, z0=0, z1=40, y_top=0, y_bottom=-25),    # zero width
     ],
 )
 def test_domain_rejects_degenerate_extents(kwargs):
@@ -121,43 +121,43 @@ def test_excavation_must_sit_inside_the_domain():
 def test_surface_load_is_a_named_first_class_condition():
     load = schemas.SurfaceLoad(
         id="load_north", name="North surcharge",
-        x0=1.0, x1=10.0, y0=14.0, y1=26.0, thickness=0.25,
-        components=(0.0, 0.0, -20.0), distribution="Uniform", active=True,
+        x0=1.0, x1=10.0, z0=14.0, z1=26.0, thickness=0.25,
+        components=(0.0, -20.0, 0.0), distribution="Uniform", active=True,
     )
 
     assert load.id == "load_north"
-    assert load.components == (0.0, 0.0, -20.0)
+    assert load.components == (0.0, -20.0, 0.0)
     assert load.distribution == "Uniform"
 
 
-def test_line_load_is_dimension_native_and_contains_no_hidden_y_values():
+def test_line_load_is_dimension_native_and_contains_no_hidden_z_values():
     load = schemas.LineLoad(
         id="load_strip", name="Strip surcharge", kind="line",
-        x0=2.0, x1=9.0, z=0.0, thickness=0.15,
+        x0=2.0, x1=9.0, y=0.0, thickness=0.15,
         components=(5.0, -20.0), active=True,
     )
 
-    assert (load.x0, load.x1, load.z) == (2.0, 9.0, 0.0)
+    assert (load.x0, load.x1, load.y) == (2.0, 9.0, 0.0)
     assert load.components == (5.0, -20.0)
-    assert not {"y", "y0", "y1"}.intersection(load.model_dump())
+    assert not {"z", "z0", "z1"}.intersection(load.model_dump())
 
 
 def test_point_load_accepts_an_explicit_2d_coordinate():
     load = schemas.PointLoad(
         id="load_crane", name="Crane reaction", kind="point",
-        x=8.5, z=0.0, thickness=0.25,
+        x=8.5, y=0.0, thickness=0.25,
         components=(15.0, -120.0), active=True,
     )
 
-    assert (load.x, load.z) == (8.5, 0.0)
+    assert (load.x, load.y) == (8.5, 0.0)
     assert load.components == (15.0, -120.0)
-    assert "y" not in load.model_dump()
+    assert "z" not in load.model_dump()
 
 
 def test_point_load_rejects_a_non_finite_coordinate():
     with pytest.raises(ValidationError, match="coordinates"):
         schemas.PointLoad(
-            id="bad", name="Bad", kind="point", x=float("nan"), z=0,
+            id="bad", name="Bad", kind="point", x=float("nan"), y=0,
             thickness=0.25, components=(0, -1),
         )
 
@@ -166,7 +166,7 @@ def test_project_rejects_a_point_load_coordinate_outside_the_domain():
     payload = seed_project().model_dump()
     payload["loads"] = [{
         "id": "outside", "name": "Outside", "kind": "point",
-        "x": payload["domain"]["x1"] + 1, "z": 0,
+        "x": payload["domain"]["x1"] + 1, "y": 0,
         "thickness": 0.25, "components": [0, -1],
     }]
 
@@ -178,15 +178,15 @@ def test_project_rejects_a_point_load_coordinate_outside_the_domain():
     "change",
     [
         {"x1": 1.0},
-        {"y1": 14.0},
+        {"z1": 14.0},
         {"components": (0.0, float("inf"), -20.0)},
     ],
 )
 def test_surface_load_rejects_degenerate_geometry_and_non_finite_components(change):
     values = dict(
         id="load_north", name="North surcharge",
-        x0=1.0, x1=10.0, y0=14.0, y1=26.0, thickness=0.25,
-        components=(0.0, 0.0, -20.0), distribution="Uniform", active=True,
+        x0=1.0, x1=10.0, z0=14.0, z1=26.0, thickness=0.25,
+        components=(0.0, -20.0, 0.0), distribution="Uniform", active=True,
     )
     values.update(change)
     with pytest.raises(ValidationError):
@@ -216,30 +216,30 @@ def test_seed_surface_load_has_migrated_to_the_load_collection():
     assert [(load.id, load.name) for load in project.loads] == [
         ("load", "SurfaceLoad_1")
     ]
-    assert project.loads[0].components == (0.0, 0.0, -20.0)
+    assert project.loads[0].components == (0.0, -20.0, 0.0)
 
 
 def test_legacy_single_load_is_migrated_when_a_saved_project_is_opened():
     payload = seed_project(simple=False).model_dump()
     payload.pop("loads")
     payload["load"] = {
-        "x0": 1.0, "x1": 10.0, "y0": 14.0, "y1": 26.0,
+        "x0": 1.0, "x1": 10.0, "z0": 14.0, "z1": 26.0,
         "thickness": 0.25, "magnitude": 20.0,
     }
 
     migrated = schemas.Project.model_validate(payload)
 
     assert migrated.loads[0].id == "load"
-    assert migrated.loads[0].components == (0.0, 0.0, -20.0)
+    assert migrated.loads[0].components == (0.0, -20.0, 0.0)
     assert "load" not in migrated.model_dump()
 
 
-def test_legacy_2d_line_footprint_is_migrated_without_hidden_y_data():
+def test_legacy_2d_line_footprint_is_migrated_without_hidden_z_data():
     payload = seed_project().model_dump()
-    payload.update(dimension=2, section_plane="xz", section_offset=20.0)
+    payload.update(dimension=2, section_offset=20.0)
     payload["loads"] = [{
         "id": "load_1", "name": "LineLoad_1", "kind": "surface",
-        "x0": 2.0, "x1": 9.0, "y0": 0.0, "y1": 40.0,
+        "x0": 2.0, "x1": 9.0, "z0": 0.0, "z1": 40.0,
         "thickness": 0.15, "components": [3.0, 8.0, -20.0],
         "distribution": "Uniform", "active": True,
     }]
@@ -248,8 +248,8 @@ def test_legacy_2d_line_footprint_is_migrated_without_hidden_y_data():
     dumped = migrated.loads[0].model_dump()
 
     assert isinstance(migrated.loads[0], schemas.LineLoad)
-    assert dumped["components"] == (3.0, -20.0)
-    assert not {"y", "y0", "y1"}.intersection(dumped)
+    assert dumped["components"] == (3.0, 8.0)
+    assert not {"z", "z0", "z1"}.intersection(dumped)
 
 
 # ── The key namespace: the contract with the frozen frontend ────────────────
@@ -302,7 +302,7 @@ def test_mesh_request_accepts_box_and_cylinder_refinements():
         "element_size": 3.0, "order": 2,
         "refinements": [
             {"kind": "box", "size": 1.0, "x_min": 1, "x_max": 2,
-             "y_min": 3, "y_max": 4, "z_min": -5, "z_max": 0},
+             "z_min": 3, "z_max": 4, "y_min": -5, "y_max": 0},
             {"kind": "cylinder", "size": 0.5, "x": 1, "y": 2, "z": -5,
              "axis_x": 0, "axis_y": 0, "axis_z": 10, "radius": 2},
         ],
@@ -315,7 +315,7 @@ def test_mesh_request_rejects_degenerate_refinements():
         schemas.MeshRequest.model_validate({
             "element_size": 3.0, "order": 1,
             "refinements": [{"kind": "box", "size": 1, "x_min": 2, "x_max": 1,
-                             "y_min": 0, "y_max": 1, "z_min": -1, "z_max": 0}],
+                             "z_min": 0, "z_max": 1, "y_min": -1, "y_max": 0}],
         })
 
 
@@ -362,7 +362,7 @@ def test_a_project_is_three_dimensional_by_default():
     assert p.section_offset is None
 
 
-def test_switching_to_2d_fills_in_the_section_plane():
+def test_switching_to_2d_fills_in_the_section_offset():
     """Left unset, the section goes through the middle of the domain.
 
     Resolved here rather than in build.py so that everything downstream -- the
@@ -371,19 +371,19 @@ def test_switching_to_2d_fills_in_the_section_plane():
     """
     p = seed_project().model_copy(update={"dimension": 2})
     p = schemas.Project.model_validate(p.model_dump())
-    assert p.section_offset == pytest.approx((p.domain.y0 + p.domain.y1) / 2)
+    assert p.section_offset == pytest.approx((p.domain.z0 + p.domain.z1) / 2)
 
 
-def test_an_explicit_section_plane_is_kept():
+def test_an_explicit_section_offset_is_kept():
     payload = seed_project().model_dump() | {"dimension": 2, "section_offset": 7.5}
     assert schemas.Project.model_validate(payload).section_offset == 7.5
 
 
-@pytest.mark.parametrize("y", [-1.0, 40.0, 0.0, 100.0])
-def test_a_section_outside_the_domain_is_rejected(y):
+@pytest.mark.parametrize("z", [-1.0, 40.0, 0.0, 100.0])
+def test_a_section_outside_the_domain_is_rejected(z):
     """Including flush with a face: a section on the boundary grazes the outside
     of the solid and cuts a zero-area or knife-edge face out of it."""
-    payload = seed_project(simple=False).model_dump() | {"dimension": 2, "section_offset": y}
+    payload = seed_project(simple=False).model_dump() | {"dimension": 2, "section_offset": z}
     with pytest.raises(ValidationError):
         schemas.Project.model_validate(payload)
 
@@ -394,38 +394,25 @@ def test_section_offset_is_inert_in_3d():
     assert schemas.Project.model_validate(payload).section_offset == 999.0
 
 
-@pytest.mark.parametrize(
-    "plane,normal,bounds",
-    [("xz", "y", (0.0, 40.0)), ("xy", "z", (-25.0, 0.0)), ("yz", "x", (0.0, 50.0))],
-)
-def test_each_section_plane_knows_its_normal_axis_and_travel(plane, normal, bounds):
-    p = seed_project(simple=False).model_copy(update={"section_plane": plane})
-    assert p.section_normal() == normal
-    assert p.section_bounds() == bounds
+def test_the_section_is_always_the_xy_plane_cut_at_a_constant_z():
+    """There is one section plane now: x across, y up, normal to z. The offset is a
+    world z and travels the domain's out-of-plane depth."""
+    p = seed_project(simple=False)
+    assert p.section_normal() == "z"
+    assert p.section_bounds() == (p.domain.z0, p.domain.z1) == (0.0, 40.0)
 
 
-@pytest.mark.parametrize(
-    "plane,expected",
-    [("xz", 20.0), ("xy", -12.5), ("yz", 25.0)],
-)
-def test_the_default_offset_is_the_middle_of_the_travel(plane, expected):
-    payload = seed_project(simple=False).model_dump() | {
-        "dimension": 2, "section_plane": plane
-    }
-    assert schemas.Project.model_validate(payload).section_offset == pytest.approx(expected)
+def test_the_default_offset_is_the_middle_of_the_travel():
+    payload = seed_project(simple=False).model_dump() | {"dimension": 2}
+    assert schemas.Project.model_validate(payload).section_offset == pytest.approx(20.0)
 
 
-def test_a_plan_section_is_bounded_by_depth_not_by_plan_extent():
-    """The offset travels along the plane's normal, so 20.0 is inside the domain for
-    an elevation and far outside it for a plan."""
-    base = seed_project(simple=False).model_dump() | {"dimension": 2, "section_offset": 20.0}
-    assert schemas.Project.model_validate(base | {"section_plane": "xz"}).section_offset == 20.0
+def test_a_project_carries_no_section_plane():
+    """`section_plane` is gone: sending one is a schema error, not a silent no-op."""
+    assert not hasattr(seed_project(), "section_plane")
+    payload = seed_project().model_dump() | {"section_plane": "xz"}
     with pytest.raises(ValidationError):
-        schemas.Project.model_validate(base | {"section_plane": "xy"})
-
-
-def test_the_default_plane_is_the_elevation():
-    assert seed_project().section_plane == "xz"
+        schemas.Project.model_validate(payload)
 
 
 # ── Sheet piles: reusable sections and beam records ─────────────────────────
@@ -467,7 +454,7 @@ def test_a_beam_is_a_dimension_native_polyline_with_no_hidden_y():
 
     assert beam.points == [(12.0, 0.0), (12.0, -7.0), (13.0, -14.0)]
     assert beam.section == "az26"
-    assert not {"y", "y0", "y1", "section_offset"}.intersection(beam.model_dump())
+    assert not {"y", "z0", "z1", "section_offset"}.intersection(beam.model_dump())
     assert all(len(point) == 2 for point in beam.points)
 
 
@@ -671,19 +658,19 @@ def _panel_section(**overrides) -> dict:
 
 def _panel(**overrides) -> dict:
     return {"id": "panel_1", "name": "Wall 1", "kind": "panel", "section": "az26_wall",
-            "footprint": [[12.0, 4.0], [12.0, 26.0]], "z_top": 0.0, "z_toe": -14.0,
+            "footprint": [[12.0, 4.0], [12.0, 26.0]], "y_top": 0.0, "y_toe": -14.0,
             "active": True} | overrides
 
 
 def _member(**overrides) -> dict:
     return {"id": "member_1", "name": "King post 1", "kind": "member",
-            "section": "az26", "points": [[20.0, 10.0, 0.0], [20.0, 10.0, -12.0]],
+            "section": "az26", "points": [[20.0, 0.0, 10.0], [20.0, -12.0, 10.0]],
             "active": True} | overrides
 
 
 def _space_anchor(**overrides) -> dict:
     return {"id": "anchor_1", "name": "Anchor 1", "kind": "anchor3d",
-            "section": "strand", "head": [12.0, 10.0, -2.0], "tail": [18.0, 10.0, -8.0],
+            "section": "strand", "head": [12.0, -2.0, 10.0], "tail": [18.0, -8.0, 10.0],
             "prestress": 250.0, "active": True} | overrides
 
 
@@ -701,9 +688,9 @@ def test_a_panel_is_a_plan_footprint_swept_between_two_levels():
     panel = schemas.Panel(**_panel())
 
     assert panel.footprint == [(12.0, 4.0), (12.0, 26.0)]
-    assert (panel.z_top, panel.z_toe) == (0.0, -14.0)
+    assert (panel.y_top, panel.y_toe) == (0.0, -14.0)
     assert panel.kind == "panel"
-    # A wall in plan has no in-section (x, z) polyline and no per-metre-run area.
+    # A wall in plan has no in-section (x, y) polyline and no per-metre-run area.
     assert not {"points", "area", "inertia"}.intersection(panel.model_dump())
 
 
@@ -717,8 +704,8 @@ def test_a_panel_section_carries_a_thickness_rather_than_area_and_inertia():
 @pytest.mark.parametrize("overrides, message", [
     ({"footprint": [[12.0, 4.0]]}, "at least two points"),
     ({"footprint": [[12.0, 4.0], [12.0, 4.0]]}, "zero-length"),
-    ({"z_top": -14.0, "z_toe": 0.0}, "above its toe"),
-    ({"z_top": -14.0, "z_toe": -14.0}, "above its toe"),
+    ({"y_top": -14.0, "y_toe": 0.0}, "above its toe"),
+    ({"y_top": -14.0, "y_toe": -14.0}, "above its toe"),
     ({"footprint": [[12.0, float("inf")], [12.0, 26.0]]}, "non-finite"),
 ])
 def test_panel_rejects_a_footprint_it_could_not_sweep(overrides, message):
@@ -729,15 +716,15 @@ def test_panel_rejects_a_footprint_it_could_not_sweep(overrides, message):
 def test_a_member_is_a_polyline_in_space():
     member = schemas.Member(**_member())
 
-    assert member.points == [(20.0, 10.0, 0.0), (20.0, 10.0, -12.0)]
+    assert member.points == [(20.0, 0.0, 10.0), (20.0, -12.0, 10.0)]
     assert member.kind == "member"
     assert all(len(point) == 3 for point in member.points)
 
 
 @pytest.mark.parametrize("overrides, message", [
-    ({"points": [[20.0, 10.0, 0.0]]}, "at least two points"),
-    ({"points": [[20.0, 10.0, 0.0], [20.0, 10.0, 0.0]]}, "zero-length"),
-    ({"points": [[20.0, 10.0, float("nan")], [20.0, 10.0, -12.0]]}, "non-finite"),
+    ({"points": [[20.0, 0.0, 10.0]]}, "at least two points"),
+    ({"points": [[20.0, 0.0, 10.0], [20.0, 0.0, 10.0]]}, "zero-length"),
+    ({"points": [[20.0, float("nan"), 10.0], [20.0, -12.0, 10.0]]}, "non-finite"),
 ])
 def test_member_rejects_a_polyline_it_could_not_mesh(overrides, message):
     with pytest.raises(ValidationError, match=message):
@@ -747,14 +734,14 @@ def test_member_rejects_a_polyline_it_could_not_mesh(overrides, message):
 def test_a_space_anchor_is_a_tie_between_two_points_in_space():
     anchor = schemas.SpaceAnchor(**_space_anchor())
 
-    assert anchor.head == (12.0, 10.0, -2.0)
-    assert anchor.tail == (18.0, 10.0, -8.0)
+    assert anchor.head == (12.0, -2.0, 10.0)
+    assert anchor.tail == (18.0, -8.0, 10.0)
     assert anchor.kind == "anchor3d"
 
 
 def test_space_anchor_rejects_a_tie_of_zero_length():
     with pytest.raises(ValidationError, match="non-zero length"):
-        schemas.SpaceAnchor(**_space_anchor(tail=[12.0, 10.0, -2.0]))
+        schemas.SpaceAnchor(**_space_anchor(tail=[12.0, -2.0, 10.0]))
 
 
 def test_the_three_pile_kinds_live_in_one_collection_and_keep_their_types():
@@ -816,9 +803,9 @@ def test_ids_stay_unique_across_every_pile_kind():
 
 @pytest.mark.parametrize("beams, anchors", [
     ([_panel(footprint=[[999.0, 4.0], [999.0, 26.0]])], []),
-    ([_panel(z_toe=-999.0)], []),
-    ([_member(points=[[999.0, 10.0, 0.0], [999.0, 10.0, -12.0]])], []),
-    ([_panel()], [_space_anchor(tail=[999.0, 10.0, -8.0])]),
+    ([_panel(y_toe=-999.0)], []),
+    ([_member(points=[[999.0, 0.0, 10.0], [999.0, -12.0, 10.0]])], []),
+    ([_panel()], [_space_anchor(tail=[999.0, -8.0, 10.0])]),
 ])
 def test_a_3d_structure_outside_the_domain_is_rejected(beams, anchors):
     with pytest.raises(ValidationError, match="outside the domain"):
@@ -828,30 +815,30 @@ def test_a_3d_structure_outside_the_domain_is_rejected(beams, anchors):
 def test_a_space_anchor_head_must_be_on_a_panel_or_a_member():
     # On the panel's footprint, between its levels: the head becomes a shared node.
     ok = schemas.Project.model_validate(_with_3d([_panel()], [_space_anchor()]))
-    assert ok.space_anchors[0].head == (12.0, 10.0, -2.0)
+    assert ok.space_anchors[0].head == (12.0, -2.0, 10.0)
 
     # On a member's polyline instead.
     ok = schemas.Project.model_validate(
-        _with_3d([_member()], [_space_anchor(head=[20.0, 10.0, -4.0])])
+        _with_3d([_member()], [_space_anchor(head=[20.0, -4.0, 10.0])])
     )
-    assert ok.space_anchors[0].head == (20.0, 10.0, -4.0)
+    assert ok.space_anchors[0].head == (20.0, -4.0, 10.0)
 
     # Beside the wall, in mid-air.
     with pytest.raises(ValidationError, match="not on a wall or member"):
         schemas.Project.model_validate(
-            _with_3d([_panel()], [_space_anchor(head=[13.0, 10.0, -2.0])])
+            _with_3d([_panel()], [_space_anchor(head=[13.0, -2.0, 10.0])])
         )
     # On the footprint in plan, but below the toe.
     with pytest.raises(ValidationError, match="not on a wall or member"):
         schemas.Project.model_validate(
-            _with_3d([_panel()], [_space_anchor(head=[12.0, 10.0, -20.0],
-                                                tail=[18.0, 10.0, -22.0])])
+            _with_3d([_panel()], [_space_anchor(head=[12.0, -20.0, 10.0],
+                                                tail=[18.0, -22.0, 10.0])])
         )
 
 
 def test_an_inactive_space_anchor_is_not_required_to_be_attached():
     project = schemas.Project.model_validate(
-        _with_3d([_panel()], [_space_anchor(head=[13.0, 10.0, -2.0], active=False)])
+        _with_3d([_panel()], [_space_anchor(head=[13.0, -2.0, 10.0], active=False)])
     )
 
     assert project.space_anchors[0].active is False
@@ -908,7 +895,6 @@ def _with_interfaces(records: list[dict], contacts: list[dict] | None = None,
     # Plane strain: an interface is a line in a section, so the project it lives in is
     # one. `test_interfaces_are_plane_strain_only` puts it back in 3D on purpose.
     payload["dimension"] = 2
-    payload["section_plane"] = "xz"
     payload["beam_sections"] = [_section()]
     payload["beams"] = beams if beams is not None else [
         _beam(points=[[12.0, 0.0], [12.0, -14.0]])

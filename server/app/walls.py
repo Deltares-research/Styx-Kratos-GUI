@@ -79,20 +79,20 @@ def _panel_from(beam: Beam, project: Project, existing: Panel | None,
     """The solid model's view of a sheet pile.
 
     The footprint runs the whole out-of-plane width the first time, which is all the
-    pile can say. On a later switch the counterpart's own `y` values are kept: the user
+    pile can say. On a later switch the counterpart's own `z` values are kept: the user
     may have narrowed the wall in plan, and a trip through the section is not a reason
     to undo that.
     """
     x = beam.points[0][0]
-    zs = [z for _, z in beam.points]
-    ys = ([point[1] for point in existing.footprint] if existing
-          else [project.domain.y0, project.domain.y1])
+    ys = [y for _, y in beam.points]
+    zs = ([point[1] for point in existing.footprint] if existing
+          else [project.domain.z0, project.domain.z1])
     return Panel(
         id=existing.id if existing else f"{beam.id}_3d",
         name=_translated_name(beam, existing, "panel"),
         section=existing.section if existing else section.id,
-        footprint=[(x, y) for y in ys],
-        z_top=max(zs), z_toe=min(zs),
+        footprint=[(x, z) for z in zs],
+        y_top=max(ys), y_toe=min(ys),
         active=beam.active,
         derived_from=existing.derived_from if existing else beam.id,
     )
@@ -108,7 +108,7 @@ def _beam_from(panel: Panel, project: Project, existing: Beam) -> Beam:
     return Beam(
         id=existing.id, name=_translated_name(panel, existing, "beam"),
         section=existing.section,
-        points=[(x, panel.z_top), (x, panel.z_toe)],
+        points=[(x, panel.y_top), (x, panel.y_toe)],
         active=panel.active,
         derived_from=existing.derived_from,
     )

@@ -1,4 +1,4 @@
-"""The plane-strain x-z section.
+"""The plane-strain x-y section.
 
 A 2D model is not a flattened 3D one: it is the *face* OCC cuts out of the solid at
 `section_offset`. So the same rules the 3D build lives by still apply -- ownership is
@@ -19,10 +19,10 @@ from app.schemas import Project
 from app.seed import seed_project
 
 
-def section_project(simple: bool, y: float | None = None) -> Project:
+def section_project(simple: bool, z: float | None = None) -> Project:
     payload = seed_project(simple=simple).model_dump() | {"dimension": 2}
-    if y is not None:
-        payload["section_offset"] = y
+    if z is not None:
+        payload["section_offset"] = z
     return Project.model_validate(payload)
 
 
@@ -64,11 +64,24 @@ def test_physical_groups_are_registered_at_dimension_two(simple):
     assert gmsh.model.getPhysicalGroups(3) == []
 
 
-def test_the_section_is_flat_in_y(simple):
+def test_the_section_is_the_xy_plane_at_z_zero(simple):
+    """The cut is taken at `section_offset` and then moved onto z = 0, so a 2D model
+    *is* the x-y plane rather than a plane parked out along z."""
+    _, result = simple
+    assert result.bbox[2] == pytest.approx(0.0, abs=1e-6)
+    assert result.bbox[5] == pytest.approx(0.0, abs=1e-6)
+    # ...and it has real extent in both of its own axes.
+    assert result.bbox[3] - result.bbox[0] > 1.0
+    assert result.bbox[4] - result.bbox[1] > 1.0
+
+
+def test_the_section_spans_the_domain_across_and_the_layers_down(simple):
     project, result = simple
-    y = project.section_offset
-    assert result.bbox[1] == pytest.approx(y, abs=1e-6)
-    assert result.bbox[4] == pytest.approx(y, abs=1e-6)
+    d = project.domain
+    assert result.bbox[0] == pytest.approx(d.x0, abs=1e-6)
+    assert result.bbox[3] == pytest.approx(d.x1, abs=1e-6)
+    assert result.bbox[1] == pytest.approx(d.y_bottom, abs=1e-6)
+    assert result.bbox[4] == pytest.approx(d.y_top, abs=1e-6)
 
 
 # ── Real, measurable areas ──────────────────────────────────────────────────
@@ -94,7 +107,7 @@ def test_the_excavated_pit_is_missing_from_the_soil_section(full):
     project, result = full
     d, e = project.domain, project.excavation
     soil = sum(result.mass[f"soil_{l.id}"] for l in project.layers)
-    pit = (e.x1 - e.x0) * (d.z_top - e.floor_z)
+    pit = (e.x1 - e.x0) * (d.y_top - e.floor_y)
     # Structures inside the section displace a little more soil on top of the pit.
     assert soil < d.dx * d.dz - pit + 1e-6
 
@@ -132,79 +145,36 @@ def test_part_keys_still_map_one_to_one(full):
     assert sorted(result.volumes) == sorted(project.part_keys())
 
 
-# ── The plan section ────────────────────────────────────────────────────────
+# ── The offset still selects ────────────────────────────────────────────────
 
-@pytest.fixture(scope="module")
-def plan():
-    """A horizontal cut at z = -6: inside the upper layer (0 to -8), above the pit
-    floor (-7), and within the depth range of both the anchors (-10.8 to -4.5) and
-    the wells (-15 to 0)."""
-    payload = seed_project(simple=False).model_dump() | {
-        "dimension": 2, "section_plane": "xy", "section_offset": -6.0
-    }
-    project = Project.model_validate(payload)
-    with build.session():
-        yield project, build.build_geometry(project)
+def test_the_offset_chooses_which_parts_the_section_catches():
+    """A part at another z is genuinely not in this section.
 
-
-def test_a_plan_section_is_flat_in_z(plan):
-    project, result = plan
-    assert result.dim == 2
-    assert result.bbox[2] == pytest.approx(project.section_offset, abs=1e-6)
-    assert result.bbox[5] == pytest.approx(project.section_offset, abs=1e-6)
-    # ...and spans the domain in plan, unlike the elevation which is flat in y.
-    assert result.bbox[3] - result.bbox[0] > 1.0
-    assert result.bbox[4] - result.bbox[1] > 1.0
-
-
-def test_a_plan_cut_sees_only_the_layer_it_passes_through(plan):
-    """z = -6 is inside L1 (0 to -8), so L2 contributes nothing.
-
-    This is the price of a plan view on a layered model, and it is the reason the
-    elevation is the default: a horizontal cut has no stratigraphy in it.
+    The cut is moved onto z = 0 afterwards, so the section itself cannot say where it
+    was taken -- what it *contains* has to. The piles stand on a z grid of
+    14/20/26, so a cut between two rows misses them and a cut through one catches them.
     """
-    project, result = plan
-    assert result.volumes["soil_L1"]
-    assert result.volumes["soil_L2"] == []
-
-
-def test_a_plan_cut_at_pit_level_still_shows_the_excavation(plan):
-    """The cut is above the pit floor (-7), so the pit is a hole in the soil face."""
-    project, result = plan
-    d, e = project.domain, project.excavation
-    soil = result.mass["soil_L1"]
-    assert soil < d.dx * d.dy - (e.x1 - e.x0) * (e.y1 - e.y0) + 1e-6
-
-
-def test_a_plan_cut_catches_the_parts_an_elevation_misses(plan):
-    """Both wells and every anchor cross z = -6, so the two parts that are absent
-    from the mid-pit elevation are exactly the two this cut recovers."""
-    _, result = plan
-    assert result.volumes["wells"]
-    assert result.volumes["anchors"]
-
-
-def test_the_other_elevation_also_sections(full):
-    payload = seed_project(simple=False).model_dump() | {
-        "dimension": 2, "section_plane": "yz", "section_offset": 25.0
-    }
-    project = Project.model_validate(payload)
     with build.session():
-        result = build.build_geometry(project)
-    assert result.dim == 2
-    assert result.bbox[0] == pytest.approx(25.0, abs=1e-6)
-    assert result.bbox[3] == pytest.approx(25.0, abs=1e-6)
-    assert result.volumes["soil_L1"]
+        between = build.build_geometry(section_project(simple=False, z=17.0))
+    with build.session():
+        through = build.build_geometry(section_project(simple=False, z=20.0))
+
+    assert between.volumes["piles"] == []
+    assert through.volumes["piles"]
+    # Both are the same plane, moved to the same place, whatever they caught.
+    for result in (between, through):
+        assert result.bbox[2] == pytest.approx(0.0, abs=1e-6)
+        assert result.bbox[5] == pytest.approx(0.0, abs=1e-6)
 
 
 # ── Load footprint imprint ──────────────────────────────────────────────────
 
-def _vertices_at(z: float, slack: float = 1e-5) -> list[float]:
-    """x of every model vertex sitting on the elevation `z`."""
+def _vertices_at(y: float, slack: float = 1e-5) -> list[float]:
+    """x of every model vertex sitting on the elevation `y`."""
     out = []
     for _, tag in gmsh.model.getEntities(0):
         box = gmsh.model.getBoundingBox(0, tag)
-        if abs(box[2] - z) < slack:
+        if abs(box[1] - y) < slack:
             out.append(box[0])
     return sorted(out)
 
@@ -216,9 +186,9 @@ def _loaded_section(load: dict | None = None) -> Project:
 
 
 LINE_LOAD = {"id": "load_line", "name": "LineLoad_1", "kind": "line",
-             "x0": 3.2, "x1": 11.7, "z": 0.0, "components": (0.0, -20.0)}
+             "x0": 3.2, "x1": 11.7, "y": 0.0, "components": (0.0, -20.0)}
 POINT_LOAD = {"id": "load_jack", "name": "PointLoad_1", "kind": "point",
-              "x": 7.3, "z": -2.0, "components": (0.0, -50.0)}
+              "x": 7.3, "y": -2.0, "components": (0.0, -50.0)}
 
 
 def test_a_line_load_puts_a_vertex_at_each_of_its_ends():
@@ -227,7 +197,7 @@ def test_a_line_load_puts_a_vertex_at_each_of_its_ends():
     load = project.loads[0]
     with build.session():
         build.build_geometry(project)
-        xs = _vertices_at(load.z)
+        xs = _vertices_at(load.y)
 
     assert any(x == pytest.approx(load.x0) for x in xs)
     assert any(x == pytest.approx(load.x1) for x in xs)
@@ -238,7 +208,7 @@ def test_a_point_load_puts_a_vertex_at_its_own_coordinate():
     load = project.loads[0]
     with build.session():
         build.build_geometry(project)
-        xs = _vertices_at(load.z)
+        xs = _vertices_at(load.y)
 
     assert any(x == pytest.approx(load.x) for x in xs)
 
@@ -293,8 +263,8 @@ def test_the_pile_curves_span_exactly_the_polyline_the_user_drew():
 
     # abs=1e-5 throughout: OCC pads a bounding box by about 1.5e-7, and approx(0.0)
     # would otherwise compare against an absolute tolerance of 1e-12.
-    assert min(b[2] for b in boxes) == pytest.approx(-14.0, abs=1e-5)
-    assert max(b[5] for b in boxes) == pytest.approx(0.0, abs=1e-5)
+    assert min(b[1] for b in boxes) == pytest.approx(-14.0, abs=1e-5)
+    assert max(b[4] for b in boxes) == pytest.approx(0.0, abs=1e-5)
     assert all(b[0] == pytest.approx(12.0, abs=1e-5)
                and b[3] == pytest.approx(12.0, abs=1e-5) for b in boxes)
 
@@ -320,7 +290,7 @@ def test_a_polyline_pile_keeps_every_segment():
                  for tag in result.curves["sheetpile_1"]]
 
     assert max(b[3] for b in boxes) == pytest.approx(14.0)
-    assert min(b[2] for b in boxes) == pytest.approx(-12.0)
+    assert min(b[1] for b in boxes) == pytest.approx(-12.0)
 
 
 def test_an_inactive_pile_is_kept_in_the_project_but_not_built():
@@ -399,8 +369,8 @@ def test_the_anchor_spans_exactly_the_head_and_tail_drawn():
 
     assert min(b[0] for b in boxes) == pytest.approx(12.0, abs=1e-5)
     assert max(b[3] for b in boxes) == pytest.approx(20.0, abs=1e-5)
-    assert min(b[2] for b in boxes) == pytest.approx(-8.0, abs=1e-5)
-    assert max(b[5] for b in boxes) == pytest.approx(-2.0, abs=1e-5)
+    assert min(b[1] for b in boxes) == pytest.approx(-8.0, abs=1e-5)
+    assert max(b[4] for b in boxes) == pytest.approx(-2.0, abs=1e-5)
 
 
 def test_the_anchor_does_not_cut_or_displace_the_soil():
