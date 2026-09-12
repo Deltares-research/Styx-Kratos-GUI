@@ -296,6 +296,70 @@
     });
     T.ok(selectable.length >= 1);
   });
+
+  /* ── Sized against the model ──────────────────────────────────────
+     The arrow used to have a 0.75 m floor, so on a 0.1 x 1 m column it was three
+     quarters as tall as the model it was drawn on. Nothing about a load symbol has
+     a length in metres of its own: it is a fraction of what is on screen. */
+
+  var COLUMN = {
+    dimension: 2, section_plane: 'xz', section_offset: 0.5,
+    domain: { x0: 0, x1: 0.1, y0: 0, y1: 1, z_top: 0, z_bottom: -1 },
+    loads: []
+  };
+
+  test('the arrow is a fraction of the model, however small the model is', function () {
+    var load = App.Loads.draftPoint(COLUMN, [0.05, 0]);
+    var length = App.Viewport.loadGlyphSpec(load, COLUMN).length;
+    T.ok(length > 0 && length < 0.2,
+         'an arrow on a 1 m column must not be 0.75 m long: ' + length);
+    T.near(length / 1, App.Viewport.loadGlyphSpec(
+      App.Loads.draftPoint(SECTION, [8, -3]), SECTION).length / 50, 1e-9,
+      'the same fraction of the model at either scale');
+  });
+
+  test('the arrow keeps the size it had on the demo domain', function () {
+    var load = App.Loads.draftPoint(SECTION, [8, -3]);
+    T.near(App.Viewport.loadGlyphSpec(load, SECTION).length, 4, 1e-9);
+  });
+
+  /* The domain is what was declared, not what is on screen: a 0.1 x 1 m column
+     drawn inside the default 20 m block is still a 1 m model, and the arrow has to
+     be a fraction of the column. The viewport's own frame is what it frames. */
+
+  test('the span is taken from the framed model when there is one', function () {
+    var wide = Object.assign({}, COLUMN, {
+      domain: { x0: -10, x1: 10, y0: 0, y1: 20, z_top: 10, z_bottom: -10 }
+    });
+    T.near(App.Viewport.modelSpan(wide, [0.1, 1, 1]), 1, 1e-9,
+           'the column, not the 20 m block it was drawn in');
+    T.near(App.Viewport.modelSpan(wide, null), 20, 1e-9,
+           'with nothing framed yet, the domain is all there is to go on');
+  });
+
+  test('a 2D section is sized by what is on screen, not the out-of-plane thickness', function () {
+    // 40 m of thickness behind the section is edge-on: it cannot make the arrow
+    // drawn on a 1 m column 3 m long.
+    T.near(App.Viewport.modelSpan(COLUMN, [0.1, 40, 1]), 1, 1e-9);
+    T.near(App.Viewport.modelSpan({ dimension: 3, domain: COLUMN.domain }, [0.1, 40, 1]),
+           40, 1e-9, 'in 3D every axis is on screen');
+  });
+
+  test('the arrowhead and the point marker scale with the shaft', function () {
+    var load = App.Loads.draftPoint(COLUMN, [0.05, 0]);
+    var spec = App.Viewport.loadGlyphSpec(load, COLUMN);
+    var group = App.Viewport.loadGlyphGroup(load, COLUMN);
+    var sizes = [];
+    group.traverse(function (object) {
+      if (object.geometry && object.geometry.parameters
+          && object.geometry.parameters.radius !== undefined) {
+        sizes.push(object.geometry.parameters.radius);
+      }
+    });
+    T.ok(sizes.length > 0, 'the cone head and the sphere marker are both radii');
+    T.ok(sizes.every(function (r) { return r < spec.length; }),
+         'nothing on the glyph is wider than the glyph is long: ' + sizes.join(', '));
+  });
   /* ── Standing on a drawn layer ────────────────────────────────────
      `Domain` is the block the boreholes describe; an embankment drawn on top of it
      reaches above `z_top`. A load placed there is on model geometry, and refusing it
