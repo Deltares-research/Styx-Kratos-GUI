@@ -2,7 +2,7 @@
 
 Two things it deliberately does not do:
 
-*   It does not copy the frozen mockup. `Mockup/css`, `js`, `assets` and `vendor` are
+*   It does not copy the frozen mockup. `kratos-GUI/css`, `js`, `assets` and `vendor` are
     mounted where they already live, so the served app and the one that opens straight
     off `file://` are the same bytes and cannot drift apart.
 *   It does not modify them. The backend-connected frontend lives in `live/`, loads the
@@ -25,6 +25,8 @@ import os
 import tempfile
 
 from app import gmsh_worker, store
+from app.loads import translate as translate_loads
+from app.walls import translate as translate_walls
 from app.build import GeometryError
 from app.kratos import ExportError
 from app.meshing import MeshingError
@@ -45,7 +47,7 @@ async def lifespan(_: FastAPI):
     gmsh_worker.shutdown()
 
 
-app = FastAPI(title="Mockup backend", lifespan=lifespan)
+app = FastAPI(title="kratos-GUI backend", lifespan=lifespan)
 
 # The geometry payload is flat arrays of decimal digits: highly repetitive, and roughly
 # an order of magnitude smaller gzipped. This is what makes JSON the right format here.
@@ -163,6 +165,7 @@ async def patch_structures(update: StructuresUpdate) -> dict:
     """
     current = store.get()
     payload = current.model_dump()
+    notes: list[str] = []
     payload["loads"] = [load.model_dump() for load in update.loads]
     if update.beam_sections is not None:
         payload["beam_sections"] = [s.model_dump() for s in update.beam_sections]
@@ -204,12 +207,28 @@ async def patch_dimension(update: DimensionUpdate) -> dict:
     # plan/elevation switch would place the cut somewhere arbitrary or outside the
     # domain entirely.
     payload["section_offset"] = update.section_offset
+    # A load is the one thing that changes shape with the dimension: a pressure over a
+    # footprint in the solid model is a pressure per metre run in the cut. Translated
+    # here, at the single point the mode changes, so the tree, the geometry and the
+    # deck all see the same pair. See app/loads.py for what is and is not translatable.
+    notes: list[str] = []
+    payload["loads"] = [load.model_dump()
+                        for load in translate_loads(current, update.dimension, notes)]
+    # A wall changes shape with the dimension the same way: a sheet pile in the section
+    # is a panel swept between two levels in the solid model, which is what gives it a
+    # plan footprint to edit. See app/walls.py for what is and is not translatable.
+    beams, panel_sections = translate_walls(current, update.dimension, notes)
+    payload["beams"] = [beam.model_dump() for beam in beams]
+    payload["panel_sections"] = [section.model_dump() for section in panel_sections]
     try:
         project = Project.model_validate(payload)
     except ValidationError as failure:
         raise RequestValidationError(failure.errors()) from failure
     store.put(project)
-    return {"project": project, "invalidates": ["project", "tree", "geometry", "mesh"]}
+    # `notes` is what the command log says about the loads that changed shape; the
+    # frontend prints them under the mode-switch line (live/js/patches.js).
+    return {"project": project, "notes": notes,
+            "invalidates": ["project", "tree", "geometry", "mesh"]}
 
 
 @app.delete("/api/project/custom_parts")
@@ -270,7 +289,10 @@ async def import_geometry(file: UploadFile = File(...)) -> dict:
         key=key,
         label=file.filename or key,
         source="import",
-        source_file=res["brep_path"]
+        source_file=res["brep_path"],
+        # gmsh measured it while the part was open; kept so `Project.extent` can say
+        # how far the model reaches without reopening every .brep.
+        bbox=tuple(res["bbox"]),
     )
     project.custom_parts.append(part)
     store.put(project)
@@ -346,6 +368,7 @@ async def create_geometry(recipe: dict) -> dict:
         recipe=recipe,
         mat=mat,
         color=color,
+        bbox=tuple(res["bbox"]),
     )
     if replace is not None:
         at = next(i for i, p in enumerate(project.custom_parts) if p.key == replace)
@@ -426,11 +449,9 @@ async def import_mdpa(file: UploadFile = File(...)) -> dict:
         raise HTTPException(status_code=422, detail=str(failure)) from failure
 
     project = store.get()
-    # A 3D project never resolved its own section offset (app/schemas.py:936 only does
-    # that at dimension 2), so fall back to the mid-plane the same rule would pick.
-    low, high = project.section_bounds()
-    offset = project.section_offset if project.section_offset is not None else (low + high) / 2
-    return model.to_dict(project.section_plane, offset)
+    # A 3D project never resolved its own section offset; `cut_at` falls back to the
+    # mid-plane the dimension-2 validator would have picked.
+    return model.to_dict(project.section_plane, project.cut_at())
 
 
 # ── Static ──────────────────────────────────────────────────────────────────

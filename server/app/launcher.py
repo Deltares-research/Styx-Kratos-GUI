@@ -92,7 +92,7 @@ def check_environment(python: Path) -> None:
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Set up and run the Mockup backend")
+    parser = argparse.ArgumentParser(description="Set up and run the kratos-GUI backend")
     parser.add_argument("--check", action="store_true", help="install and validate dependencies, then exit")
     parser.add_argument("--open-browser", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--host", default="127.0.0.1")

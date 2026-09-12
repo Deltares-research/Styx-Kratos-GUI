@@ -22,6 +22,72 @@ App.Model = (function () {
 
   /* ── Mapping ─────────────────────────────────────────────────── */
 
+  /* Mirrors `Project.loads_for` in server/app/schemas.py, and has to stay in step
+     with it: a surface load and a line load can be one load seen from two dimensions
+     (server/app/loads.py translates between them on the mode switch), and both records
+     are kept so the round trip does not widen the footprint. Exactly one of a pair
+     belongs to the model, or the tree lists the load twice and the viewport draws it
+     twice. A 2D load nothing was translated from -- a point load, or a line load below
+     the ground surface -- has no surface form and shows in both. */
+  function loadsFor(project) {
+    var loads = project.loads || [];
+    if (project.dimension === 2) {
+      return loads.filter(function (load) { return load.kind !== 'surface'; });
+    }
+    var paired = {};
+    loads.forEach(function (load) {
+      if (load.derived_from) { paired[load.id] = true; paired[load.derived_from] = true; }
+    });
+    return loads.filter(function (load) {
+      return load.kind === 'surface' || !paired[load.id];
+    });
+  }
+
+  /* Mirrors `Project.structures_for` in server/app/schemas.py, the way `loadsFor`
+     mirrors `loads_for` and for the same reason: a sheet pile and a wall panel can be
+     one wall seen from two dimensions (server/app/walls.py translates between them on
+     the mode switch), and exactly one half of a pair belongs to the model or the tree
+     lists the wall twice and the viewport draws it twice. A pile nothing was
+     translated from -- a raking or stepped one, which has no panel form -- shows in
+     both. */
+  /* Mirrors `Project.extent` in server/app/schemas.py: how far the model actually
+     reaches, which is the domain grown to cover every drawn or imported part. A
+     structure is placed against this, not against `project.domain` -- an embankment
+     drawn above `z_top` is model geometry, and a load standing on it was being refused
+     as "outside the domain" by both ends at once. Parts saved before their bounding
+     box was recorded contribute nothing, exactly as on the server. */
+  function extentOf(project) {
+    var d = (project && project.domain) || domain;
+    var boxes = (((project || {}).custom_parts) || [])
+      .map(function (part) { return part.bbox; })
+      .filter(function (box) { return box && box.length === 6; });
+    if (!boxes.length) return d;
+    function low(index, own) {
+      return Math.min.apply(null, [own].concat(boxes.map(function (b) { return b[index]; })));
+    }
+    function high(index, own) {
+      return Math.max.apply(null, [own].concat(boxes.map(function (b) { return b[index]; })));
+    }
+    return {
+      x0: low(0, d.x0), y0: low(1, d.y0), z_bottom: low(2, d.z_bottom),
+      x1: high(3, d.x1), y1: high(4, d.y1), z_top: high(5, d.z_top)
+    };
+  }
+
+  function structuresFor(project) {
+    var beams = project.beams || [];
+    if (project.dimension === 2) {
+      return beams.filter(function (b) { return (b.kind || 'beam') === 'beam'; });
+    }
+    var paired = {};
+    beams.forEach(function (b) {
+      if (b.derived_from) { paired[b.id] = true; paired[b.derived_from] = true; }
+    });
+    return beams.filter(function (b) {
+      return b.kind === 'panel' || b.kind === 'member' || !paired[b.id];
+    });
+  }
+
   function fromProject(project) {
     return {
       domain: project.domain,
@@ -38,36 +104,33 @@ App.Model = (function () {
         return { id: l.id, name: l.name, mat: l.mat,
                  tops: Object.assign({}, l.tops), bots: Object.assign({}, l.bots) };
       }),
-      LOADS: (project.loads || []).filter(function (load) {
-        return project.dimension === 2
-          ? load.kind === 'point' || load.kind === 'line'
-          : load.kind === 'surface';
-      }).map(function (load) { return JSON.parse(JSON.stringify(load)); }),
-      // `beams` and `anchors` each hold every kind, and each dimension shows its own:
-      // a 2D section shows sheet piles and plane anchors, the solid model shows wall
-      // panels, members and space anchors. The kinds of the other dimension stay in
-      // the project untouched -- the same rule the loads follow.
-      BEAMS: (project.beams || []).filter(function (beam) {
-        return project.dimension === 2
-          ? (beam.kind || 'beam') === 'beam'
-          : beam.kind === 'panel' || beam.kind === 'member';
-      }).map(function (beam) { return JSON.parse(JSON.stringify(beam)); }),
+      // Every 2D-native record is built into the solid model too, on the section
+      // plane it was drawn on (server/app/build.py's `_section_sweeps`), so 3D shows
+      // it rather than hiding it: a sheet pile the viewport drops is the bug this
+      // filter used to cause. The traffic is one way -- a wall panel is drawn in plan
+      // and genuinely has no place in a plane-strain cut -- so 2D still shows only
+      // its own kinds.
+      LOADS: loadsFor(project).map(function (load) {
+        return JSON.parse(JSON.stringify(load));
+      }),
+      BEAMS: structuresFor(project).map(function (beam) {
+        return JSON.parse(JSON.stringify(beam));
+      }),
       BEAM_SECTIONS: (project.beam_sections || [])
         .map(function (s) { return JSON.parse(JSON.stringify(s)); }),
       PANEL_SECTIONS: (project.panel_sections || [])
         .map(function (s) { return JSON.parse(JSON.stringify(s)); }),
       ANCHORS: (project.anchors || []).filter(function (anchor) {
-        return project.dimension === 2
-          ? (anchor.kind || 'anchor') === 'anchor'
-          : anchor.kind === 'anchor3d';
+        return project.dimension === 2 ? (anchor.kind || 'anchor') === 'anchor' : true;
       }).map(function (a) { return JSON.parse(JSON.stringify(a)); }),
       ANCHOR_SECTIONS: (project.anchor_sections || [])
         .map(function (s) { return JSON.parse(JSON.stringify(s)); }),
-      // Interfaces are plane strain only, so a solid model shows none of them and
-      // keeps every one saved -- the same rule the 2D loads and piles follow.
-      INTERFACES: project.dimension === 2
-        ? (project.interfaces || []).map(function (i) { return JSON.parse(JSON.stringify(i)); })
-        : [],
+      // Shown in 3D as well: an interface is swept onto the section plane there and
+      // splits the mesh along it. Its zero-thickness *elements* are still plane strain
+      // only -- the export says so in a warning -- but the line is part of the solid
+      // model and hiding it made the drawn interface look lost.
+      INTERFACES: (project.interfaces || [])
+        .map(function (i) { return JSON.parse(JSON.stringify(i)); }),
       INTERFACE_SECTIONS: (project.interface_sections || [])
         .map(function (s) { return JSON.parse(JSON.stringify(s)); })
     };
@@ -1229,6 +1292,7 @@ App.Model = (function () {
 
   return {
     fromProject: fromProject, materialsToServer: materialsToServer,
+    extentOf: extentOf,
     pendingDomain: pendingDomain, outOfPlaneAxis: outOfPlaneAxis,
     apply: apply, load: load,
     projectTitle: projectTitle, syncTitle: syncTitle,

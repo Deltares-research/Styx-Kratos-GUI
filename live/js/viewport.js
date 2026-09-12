@@ -152,6 +152,33 @@ App.Viewport = (function () {
   /* Conventional load symbols: the arrow tip is the application point and the shaft
      extends opposite to the force vector. Keeping this as a pure specification makes
      the 2D/3D placement rules testable without a renderer. */
+  /* Where a load lies, whichever kind it is. Mirrors `Project.elevation_of` on the
+     server: a point or line load carries its own z, and a surface load may leave it
+     unset, which means the top of the model -- the reading every such load had before
+     the field existed, and which a drawn embankment raises above `domain.z_top`. */
+  function loadElevation(load, project) {
+    if (load.kind !== 'surface') return load.z;
+    if (load.z !== null && load.z !== undefined) return load.z;
+    var span = (App.Model && App.Model.extentOf)
+      ? App.Model.extentOf(project) : project.domain;
+    return span.z_top;
+  }
+
+  /* The extent a symbol is sized against: what is drawn, not what is declared.
+     `project.domain` is the block the boreholes describe and stays tens of metres
+     wide around a 0.1 x 1 m column, so `size` -- the bounding box the viewport is
+     framing -- is preferred whenever there is one. In 2D only the two axes on
+     screen count: the third is edge-on to the camera. */
+  function modelSpan(project, size) {
+    var d = project.domain;
+    var x = size ? size[0] : d.x1 - d.x0;
+    var y = size ? size[1] : d.y1 - d.y0;
+    var z = size ? size[2] : d.z_top - d.z_bottom;
+    if (project.dimension !== 2) return Math.max(x, y, z);
+    var plane = planeOf(project);
+    return plane === 'xy' ? Math.max(x, y) : plane === 'yz' ? Math.max(y, z) : Math.max(x, z);
+  }
+
   function loadGlyphSpec(load, project) {
     var vector = project.dimension === 2
       ? [load.components[0], 0, load.components[1]]
@@ -161,12 +188,13 @@ App.Viewport = (function () {
     var direction = magnitude > 0
       ? vector.map(function (component) { return component / magnitude; })
       : [0, 0, -1];
-    var d = project.domain;
-    var span = Math.max(d.x1 - d.x0, d.y1 - d.y0, d.z_top - d.z_bottom);
+    var span = modelSpan(project, frame && frame.size);
     var spec = {
       kind: load.kind === 'point' ? 'point' : (project.dimension === 2 ? 'line' : 'surface'),
       direction: direction,
-      length: Math.max(0.75, Math.min(4, span * 0.08)),
+      // Purely proportional. A floor in metres made the arrow on a 0.1 x 1 m column
+      // three quarters as tall as the column itself.
+      length: span > 0 ? span * 0.08 : 1,
       anchors: [], active: load.active !== false, zero: magnitude === 0
     };
     if (load.kind === 'point') {
@@ -185,9 +213,14 @@ App.Viewport = (function () {
       });
       return spec;
     }
+    // The load's own elevation, not `d.z_top`: the domain is only the borehole block,
+    // so a pad on a drawn embankment was being dragged down onto the borehole soil the
+    // moment the model switched to 3D. Mirrors the server's `Project.elevation_of`,
+    // including what an unset z means -- see `loadElevation`.
+    var z = loadElevation(load, project);
     samples(load.x0, load.x1, 3).forEach(function (x) {
       samples(load.y0, load.y1, 3).forEach(function (y) {
-        spec.anchors.push([x, y, d.z_top]);
+        spec.anchors.push([x, y, z]);
       });
     });
     return spec;
@@ -207,7 +240,7 @@ App.Viewport = (function () {
       if (!spec.zero) {
         var arrow = new THREE.ArrowHelper(
           direction, origin, spec.length, color,
-          Math.min(0.65, spec.length * 0.3), Math.min(0.35, spec.length * 0.16));
+          spec.length * 0.16, spec.length * 0.09);
         arrow.traverse(function (object) {
           object.userData.key = load.id;
           object.userData.loadGlyph = true;
@@ -222,7 +255,7 @@ App.Viewport = (function () {
       }
     });
 
-    var markerRadius = Math.max(0.08, spec.length * 0.045);
+    var markerRadius = spec.length * 0.045;
     if (spec.kind === 'point') {
       var marker = new THREE.Mesh(
         new THREE.SphereGeometry(markerRadius, 10, 6),
@@ -237,10 +270,13 @@ App.Viewport = (function () {
       if (spec.kind === 'line') {
         outlinePoints = [spec.anchors[0], spec.anchors[spec.anchors.length - 1]];
       } else {
+        // The same elevation the arrows use, or the outline stays behind on the
+        // borehole soil while the arrows move up onto the embankment.
+        var pad = loadElevation(load, project);
         outlinePoints = [
-          [load.x0, load.y0, project.domain.z_top], [load.x1, load.y0, project.domain.z_top],
-          [load.x1, load.y1, project.domain.z_top], [load.x0, load.y1, project.domain.z_top],
-          [load.x0, load.y0, project.domain.z_top]
+          [load.x0, load.y0, pad], [load.x1, load.y0, pad],
+          [load.x1, load.y1, pad], [load.x0, load.y1, pad],
+          [load.x0, load.y0, pad]
         ];
       }
       var outline = new THREE.Line(
@@ -435,6 +471,21 @@ App.Viewport = (function () {
     orientReferenceGrid(activeView, frameBBox(), [next.u, next.v]);
   }
 
+  /* The rulers read the same visible rectangle the 2D grid does, so the numbers on
+     the edges and the lines under the model can never disagree. Off in 3D: there is no
+     one plane for a screen-edge coordinate to be measured in. */
+  function syncRulers() {
+    if (!App.Ruler) return;
+    var on = dimension === 2 && !!cam && !!cam.isOrthographicCamera && !!frame;
+    var view = on ? visibleHalfExtent() : { halfW: 0, halfH: 0 };
+    App.Ruler.sync({
+      active: on,
+      plane: sectionPlane,
+      center: on ? sectionCenter() : [0, 0],
+      halfW: view.halfW, halfH: view.halfH
+    });
+  }
+
   /* The extents the frame was built from. gridReference() needs them to place the 3D
      grid under a front or side view, and passing null there is a crash, not a default. */
   function frameBBox() {
@@ -480,6 +531,7 @@ App.Viewport = (function () {
     gridGroup.visible = boundsGroup.visible = showGrid;
     scene.add(gridGroup);
     scene.add(boundsGroup);
+    applyRadiusLimits();
   }
 
   /* Canvas-texture text label facing the camera. */
@@ -566,8 +618,10 @@ App.Viewport = (function () {
         }
 
         fillTriad();
-        buildGroups(payload);
+        // Framed before the groups are built: the load glyphs are sized against the
+        // frame, and would otherwise carry the previous model's scale for a frame.
         rebuildFrame(payload.bbox);
+        buildGroups(payload);
         meshBuilt = false;
 
         var triangles = payload.sections.reduce(function (n, s) {
@@ -710,7 +764,8 @@ App.Viewport = (function () {
     orbit = new App.Orbit(canvas, {
       tx: frame.center[0], ty: frame.center[1], tz: frame.center[2],
       radius: frame.homeRadius, theta: -Math.PI * 0.68, phi: Math.PI * 0.33,
-      minRadius: 8, maxRadius: frame.homeRadius * 6, orthoBase: ORTHO_BASE
+      minRadius: radiusLimits(frame).min, maxRadius: radiusLimits(frame).max,
+      orthoBase: ORTHO_BASE
     });
     orbit.onChange = function () {
       var fixed = clampAngles(orbit, dimension, sectionPlane);
@@ -727,6 +782,10 @@ App.Viewport = (function () {
       triadRenderer = null;
     }
     bindPointer();
+
+    // The edge rulers live in the viewport's DOM, not in the scene: they measure the
+    // screen, so they are painted in screen pixels rather than projected like geometry.
+    if (App.Ruler) App.Ruler.install(host);
 
     if (window.ResizeObserver) new ResizeObserver(resize).observe(host);
     window.addEventListener('resize', resize);
@@ -812,6 +871,17 @@ App.Viewport = (function () {
   var groundPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
   var scratch = new THREE.Vector3();
 
+  var PLANE_NORMALS = { xz: [0, 1, 0], yz: [1, 0, 0], xy: [0, 0, 1] };
+
+  /* The plane the coordinate readout is taken off. In 2D it has to be the section
+     itself: the camera looks straight down that plane's normal, so a ray cast at
+     the z = 0 ground runs almost parallel to it and lands 1e14 m away. */
+  function pickPlane(dim, plane, offset) {
+    if (dim !== 2) return groundPlane;
+    var n = PLANE_NORMALS[plane] || PLANE_NORMALS.xz;
+    return new THREE.Plane(new THREE.Vector3(n[0], n[1], n[2]), -(offset || 0));
+  }
+
   function bindPointer() {
     canvas.addEventListener('mousemove', function (ev) {
       var hit = pickAt(ev);
@@ -824,7 +894,8 @@ App.Viewport = (function () {
         canvas.style.cursor = hovered ? 'pointer' : '';
       }
 
-      var p = hit ? hit.point : raycaster.ray.intersectPlane(groundPlane, scratch);
+      var p = hit ? hit.point : raycaster.ray.intersectPlane(
+        pickPlane(dimension, sectionPlane, sectionOffset(App.PROJECT)), scratch);
       if (p) App.setCoords(p.x, p.y, p.z);
     });
 
@@ -1124,6 +1195,26 @@ App.Viewport = (function () {
   var ORTHO_HALF_HEIGHT = 30;
   var ORTHO_MARGIN = 1.12;
 
+  /* How far the wheel may dolly, as multiples of the fitted view rather than as
+     metres. The frozen pair (8, and 6x the demo frame's 116) is a floor above the
+     home radius of anything smaller than a few metres, which left the wheel dead
+     and the zoom readout stuck. 0.08 is that same 8 on the demo domain. */
+  var MIN_RADIUS_FRACTION = 0.08;
+  var MAX_RADIUS_FACTOR = 6;
+
+  function radiusLimits(frame) {
+    var home = (frame && frame.homeRadius) || ORTHO_HALF_HEIGHT;
+    return { min: home * MIN_RADIUS_FRACTION, max: home * MAX_RADIUS_FACTOR };
+  }
+
+  function applyRadiusLimits() {
+    if (!orbit || !frame) return;
+    var limits = radiusLimits(frame);
+    orbit.minRadius = limits.min;
+    orbit.maxRadius = limits.max;
+    orbit.radius = Math.max(limits.min, Math.min(limits.max, orbit.radius));
+  }
+
   /* The frustum half-height that fits a section at the home radius.
 
      Visible half-height is s / zoom, i.e. s * radius / ORTHO_BASE, so solving for a
@@ -1346,6 +1437,7 @@ App.Viewport = (function () {
 
     orbit.apply(cam);
     syncSectionGrid();                     // needs the camera the frame is drawn with
+    syncRulers();                          // same: the visible rectangle is known here
     renderer.render(scene, cam);
 
     if (triadRenderer) {
@@ -1361,11 +1453,12 @@ App.Viewport = (function () {
   return {
     init: init, setMode: setMode, setVisible: setVisible, isVisible: isVisible,
     select: select, setView: setView, zoomFit: zoomFit, dolly: dolly,
-    setProjection: setProjection, setGrid: setGrid,
+    setProjection: setProjection, setGrid: setGrid, syncRulers: syncRulers,
     setViewMode: setViewMode, is2D: is2D,
     setNavMode: setNavMode, getNavMode: getNavMode,
     effectiveNavMode: effectiveNavMode, forcePanIfNeeded: forcePanIfNeeded,
     orthoHalfHeight: orthoHalfHeight, ORTHO_BASE: ORTHO_BASE,
+    radiusLimits: radiusLimits, pickPlane: pickPlane, modelSpan: modelSpan,
     sectionGridSpec: sectionGridSpec, sectionGridNeedsRebuild: sectionGridNeedsRebuild,
     MAX_GRID_DIVISIONS: MAX_GRID_DIVISIONS,
     makeRenderer: makeRenderer, WEBGL_HELP: WEBGL_HELP,

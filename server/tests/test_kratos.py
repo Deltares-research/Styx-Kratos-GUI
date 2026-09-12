@@ -52,6 +52,12 @@ def deck_of(export: dict) -> mdpa.Deck:
     return mdpa.parse(export["mdpa"])
 
 
+def _load_process(export: dict, part_name: str) -> dict:
+    doc = json.loads(export["project_parameters"])
+    return next(p["Parameters"] for p in doc["processes"]["loads_process_list"]
+                if p["Parameters"]["model_part_name"] == f"PorousDomain.{part_name}")
+
+
 # ── Shape of the deck ───────────────────────────────────────────────────────
 
 def test_the_solid_model_is_written_as_quadratic_tetrahedra(solid):
@@ -152,11 +158,22 @@ def test_node_ids_are_contiguous_from_one_and_every_node_is_used(solid):
     assert used == set(deck.nodes)
 
 
-def test_elements_and_conditions_share_one_ascending_id_space(section):
+def test_elements_and_conditions_are_each_numbered_from_one(section):
+    """Two id spaces, not one: Kratos keeps conditions in a container of their own, and
+    a sub-model part's `Conditions` list is read against that container."""
     deck = deck_of(section)
-    ids = deck.element_ids() + deck.condition_ids()
-    assert len(set(ids)) == len(ids)
-    assert sorted(ids) == list(range(1, len(ids) + 1))
+    for ids in (deck.element_ids(), deck.condition_ids()):
+        assert ids
+        assert sorted(ids) == list(range(1, len(ids) + 1))
+
+
+def test_a_load_part_lists_its_conditions_by_their_own_ids(section):
+    deck = deck_of(section)
+    part = deck.parts["LineLoad_1"]
+    assert part.conditions == sorted(deck.condition_ids())
+    assert part.nodes == sorted({n for block in deck.conditions
+                                 for c in part.conditions
+                                 for n in block.entries[c]})
 
 
 def test_a_sub_model_part_lists_exactly_the_nodes_of_its_elements(solid):
@@ -195,6 +212,35 @@ def test_the_section_has_no_out_of_plane_boundary_groups(section):
     assert deck.parts["Bottom_Fixed"].nodes
 
 
+def test_boundary_groups_follow_a_drawn_body_that_does_not_fill_the_domain():
+    """A drawn soil is not held to the borehole box. Read off `project.domain`, the
+    faces it never reaches came out empty and the deck lost `Right_Edge` and
+    `Bottom_Fixed` -- the bug this guards."""
+    project = seed_project()  # domain x 0..25, z -25..0
+    # A 5 x 3 block in the domain's top-left corner, one node per corner.
+    world = {1: (0.0, 0.0, 0.0), 2: (5.0, 0.0, 0.0),
+             3: (5.0, 0.0, -3.0), 4: (0.0, 0.0, -3.0)}
+    node_id = {tag: tag for tag in world}
+    boundaries = dict((name, nodes) for name, _, nodes in
+                      kratos._boundary_nodes(project, 2, world, node_id, set(world)))
+    assert boundaries["Left_Edge"] == [1, 4]
+    assert boundaries["Right_Edge"] == [2, 3]
+    assert boundaries["Top_Surface"] == [1, 2]
+    assert boundaries["Bottom_Fixed"] == [3, 4]
+
+
+def test_a_structure_standing_proud_of_the_soil_does_not_become_the_top_surface():
+    """The faces are measured from the soil body; a sheet pile above ground still joins
+    whichever face it touches, but never defines one."""
+    project = seed_project()
+    world = {1: (0.0, 0.0, 0.0), 2: (5.0, 0.0, 0.0), 3: (5.0, 0.0, -3.0),
+             4: (0.0, 0.0, -3.0), 5: (2.0, 0.0, 2.0), 6: (2.0, 0.0, 0.0)}
+    node_id = {tag: tag for tag in world}
+    boundaries = dict((name, nodes) for name, _, nodes in
+                      kratos._boundary_nodes(project, 2, world, node_id, {1, 2, 3, 4}))
+    assert boundaries["Top_Surface"] == [1, 2, 6]
+
+
 def test_the_2d_line_load_becomes_conditions_inside_its_interval(section):
     deck = deck_of(section)
     load = LineLoad(
@@ -231,11 +277,10 @@ def test_load_conditions_keep_property_zero_like_a_gid_deck(section):
     assert deck.properties == [0]
 
 
-def test_the_2d_line_load_value_is_recorded_as_sub_model_part_data(section):
-    """No process file is exported yet, so the value is kept next to the nodes and
-    conditions it belongs to rather than silently dropped."""
-    deck = deck_of(section)
-    assert deck.parts["LineLoad_1"].data["LINE_LOAD"] == [0.0, -20.0, 0.0]
+def test_the_2d_line_load_value_reaches_the_process_file(section):
+    """The .mdpa names the part and its conditions; the magnitude is a process against
+    that part, which is the only place a Kratos GeoMechanics deck reads it from."""
+    assert _load_process(section, "LineLoad_1")["value"] == [0.0, -20.0, 0.0]
 
 
 def test_line_load_has_no_material_parameters_entry(section):
@@ -256,9 +301,8 @@ def test_3d_surface_load_condition_keeps_property_zero(solid):
     assert property_ids == {0}
 
 
-def test_the_3d_surface_load_value_is_recorded_as_sub_model_part_data(solid):
-    deck = deck_of(solid)
-    assert deck.parts["SurfaceLoad_1"].data["SURFACE_LOAD"] == [0.0, 0.0, -20.0]
+def test_the_3d_surface_load_value_reaches_the_process_file(solid):
+    assert _load_process(solid, "SurfaceLoad_1")["value"] == [0.0, 0.0, -20.0]
 
 
 def test_surface_load_has_no_material_parameters_entry(solid):
@@ -266,7 +310,11 @@ def test_surface_load_has_no_material_parameters_entry(solid):
     assert all(entry["model_part_name"] != "PorousDomain.SurfaceLoad_1" for entry in entries)
 
 
-def test_a_2d_point_load_is_not_exported_as_a_3d_condition(session):
+def test_a_2d_point_load_is_exported_as_a_3d_point_condition(session):
+    """A point load has no surface form to be translated into (`app/loads.py`), so the
+    solid model carries it at the section plane -- and a node is a node in either
+    dimension, so the deck can apply it there. It still has no material entry: a load
+    is a condition, not a property set."""
     project = seed_project()
     project.loads = [
         PointLoad(
@@ -277,7 +325,8 @@ def test_a_2d_point_load_is_not_exported_as_a_3d_condition(session):
     ]
     exported = kratos.export_project(project, MeshRequest(element_size=6.0, order=1))
     deck = deck_of(exported)
-    assert "Crane_reaction" not in deck.parts
+    assert "Crane_reaction" in deck.parts
+    assert _load_process(exported, "Crane_reaction")["value"] == [15.0, -120.0]
     assert all(item["model_part_name"] != "PorousDomain.Crane_reaction"
                for item in json.loads(exported["materials"])["properties"])
 
@@ -295,7 +344,7 @@ def test_point_load_coordinates_export_in_a_2d_section(session):
     deck = deck_of(exported)
 
     assert any(block.name == "PointLoadCondition2D1N" for block in deck.conditions)
-    assert deck.parts["Jack"].data["POINT_LOAD"] == [15.0, -120.0, 0.0]
+    assert _load_process(exported, "Jack")["value"] == [15.0, -120.0, 0.0]
     assert all(item["model_part_name"] != "PorousDomain.Jack"
                for item in json.loads(exported["materials"])["properties"])
 
@@ -380,6 +429,23 @@ def test_2d_line_load_conditions_span_its_interval_exactly(section):
     for nodes in deck.conditions[0].entries.values():
         for node in nodes:
             assert 1.0 - 1e-6 <= deck.nodes[node][0] <= 10.0 + 1e-6
+
+
+def test_2d_load_conditions_are_written_in_their_element_edge_order(section):
+    """Kratos matches a 2D condition to its element by exact node-id sequence: its
+    NeighbouringElementFinder rotates faces only, and reverse search is off. A condition
+    holding the right nodes in any other order has no neighbour element, and the run
+    stops in FindNeighbourElementsOfConditionsProcess before the first step."""
+    deck = deck_of(section)
+    edges = {tuple(nodes[index] for index in order)
+             for block in deck.elements if block.name.startswith("SmallStrain")
+             for nodes in block.entries.values()
+             for order in kratos.EDGES[len(nodes)]}
+
+    rows = [tuple(nodes) for block in deck.conditions
+            for nodes in block.entries.values()]
+    assert rows
+    assert all(row in edges for row in rows)
 
 
 def test_3d_surface_load_conditions_cover_its_footprint_exactly(solid):

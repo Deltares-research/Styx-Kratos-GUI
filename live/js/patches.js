@@ -137,6 +137,11 @@ App.LivePatches = (function () {
           ? 'Switched to 2D — a plane-strain cross-section at ' + sectionLabel(result.project)
             + '. Geometry and mesh are rebuilt in the x-z plane.'
           : 'Switched to 3D — the full solid model.');
+        // A load changes shape with the dimension: a pressure over a footprint in the
+        // solid model is a pressure per metre run in the cut, and the server translates
+        // between them (server/app/loads.py). It says what it did to each one, and a
+        // record the user did not author must not appear in the tree unannounced.
+        (result.notes || []).forEach(function (note) { App.Command.note(note); });
         return App.Viewport.refresh();
       })
       .catch(function (error) {
@@ -215,7 +220,7 @@ App.LivePatches = (function () {
   // older viewport.js than this file -- the two are edited together and renamed
   // together, so a mixed pair is always a cache artefact.
   var REQUIRED_VIEWPORT_API = ['setViewMode', 'refresh', 'viewModeOf', 'orthoHalfHeight',
-                             'setNavMode', 'effectiveNavMode'];
+                             'setNavMode', 'effectiveNavMode', 'syncRulers'];
 
   function missingViewportApi(viewport) {
     return REQUIRED_VIEWPORT_API.filter(function (name) {
@@ -571,7 +576,9 @@ App.LivePatches = (function () {
   /* And the mirror of it. An interface is a zero-thickness contact along a line in
      the section: every reference deck that has one is plane strain, and the 3D
      element is a surface with a different node layout and no fixture to pin it. */
-  var TWO_D_ONLY = ['interface'];
+  /* The rulers measure two named axes of one plane. In 3D the screen edges are three
+     axes mixed by the orbit, so a number on an edge would be a number for nothing. */
+  var TWO_D_ONLY = ['interface', 'toggleRuler'];
 
   function availableIn2D(action) { return THREE_D_ONLY.indexOf(action) < 0; }
 
@@ -839,27 +846,27 @@ App.LivePatches = (function () {
   }
 
   function saveProject() {
-    // The server's copy, not the browser's: App.PROJECT is a snapshot from whenever
-    // the last request answered, and a save has to be of what is actually modelled.
-    return App.Api.get('/api/project')
-      .then(function (project) {
-        downloadFile(projectFileName(project), JSON.stringify(project, null, 2));
-        if (App.Command) App.Command.ok('Saved ' + projectFileName(project) + '.');
+    // The window is asked for first, before anything is awaited: a browser only
+    // offers the save picker while the click that opened the menu still counts as a
+    // gesture. Without it Chrome on Windows drops the file into Downloads unasked.
+    return App.Download.pickFile(projectFileName(App.PROJECT), 'application/json')
+      .then(function (handle) {
+        if (handle === App.Download.CANCELLED) return;
+        // The server's copy, not the browser's: App.PROJECT is a snapshot from
+        // whenever the last request answered, and a save has to be of what is
+        // actually modelled.
+        return App.Api.get('/api/project').then(function (project) {
+          var name = (handle && handle.name) || projectFileName(project);
+          return App.Download.write(handle, projectFileName(project),
+                                    JSON.stringify(project, null, 2), 'application/json')
+            .then(function () {
+              if (App.Command) App.Command.ok('Saved ' + name + '.');
+            });
+        });
       })
       .catch(function (error) {
         if (App.Command) App.Command.err('Could not save the project: ' + error.message);
       });
-  }
-
-  function downloadFile(name, text) {
-    var url = URL.createObjectURL(new Blob([text], { type: 'application/json' }));
-    var link = document.createElement('a');
-    link.href = url;
-    link.download = name;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    setTimeout(function () { URL.revokeObjectURL(url); }, 0);
   }
 
   /* ── Pan / rotate ────────────────────────────────────────────────────────── */
@@ -871,6 +878,43 @@ App.LivePatches = (function () {
     App.Command.note(chosen === 'pan'
       ? 'Navigation: left-drag pans. (Middle-drag pans in either mode.)'
       : 'Navigation: left-drag orbits.');
+  }
+
+  /* ── Rulers ─────────────────────────────────────────────────────────────
+     live/js/ruler.js owns the drawing; this owns the switch. The state lives on
+     App.state beside `grid` and `snap`, so it is one flag in one place whether the
+     toolbar, the View menu or a mode change last touched it. On by default: a section
+     is a measured drawing, and the point of the rulers is that nobody has to know
+     they exist to read a coordinate off one. */
+
+  function rulersOn() {
+    App.state = App.state || {};
+    if (App.state.ruler === undefined) App.state.ruler = true;
+    return App.state.ruler;
+  }
+
+  /* Pushes the flag to the renderer and to both copies of the switch. Called on every
+     change and once at install, so the two never drift apart. */
+  function applyRulers() {
+    var on = rulersOn();
+    if (App.Ruler) {
+      App.Ruler.setEnabled(on);
+      // The rulers are painted from the render tick; a switch flipped while nothing is
+      // moving has to ask for that tick itself.
+      if (App.Viewport && App.Viewport.syncRulers) App.Viewport.syncRulers();
+    }
+    if (App.Toolbars && App.Toolbars.setToolbarState) {
+      App.Toolbars.setToolbarState('toggleRuler', on);
+    }
+    menuItemsFor('toggleRuler').forEach(function (item) { item.checked = on; });
+    return on;
+  }
+
+  function toggleRulers() {
+    App.state.ruler = !rulersOn();
+    applyRulers();
+    App.Command.note('Rulers ' + (App.state.ruler ? 'shown' : 'hidden')
+                     + ' along the viewport edges.');
   }
 
   function install() {
@@ -980,6 +1024,8 @@ App.LivePatches = (function () {
         return;
       }
 
+      if (item && item.action === 'toggleRuler') return toggleRulers();
+
       if (item && /^viewMode(2D|3D)$/.test(item.action || '')) {
         return setModelMode(item.action === 'viewMode2D' ? '2d' : '3d');
       }
@@ -1057,6 +1103,12 @@ App.LivePatches = (function () {
       App.ICONS.section2d = '<path d="M4 5h16v14H4z"/><path d="M4 12h16"/><path d="M8 5v14"/>';
     }
 
+    // A rule with three ticks: the thing itself, not a metaphor for it.
+    if (!App.ICONS.ruler) {
+      App.ICONS.ruler = '<path d="M3 8h18v8H3z"/><path d="M7.5 8v4"/><path d="M12 8v5"/>'
+                      + '<path d="M16.5 8v4"/>';
+    }
+
     // Their own group in the toolbar, fenced by separators: they are not view tools
     // sitting beside zoom and pan, they choose which model is being edited. Both
     // carry a text label, so neither has to be decoded from an icon.
@@ -1074,6 +1126,24 @@ App.LivePatches = (function () {
       });
       App.TOOLBAR.splice.apply(App.TOOLBAR, [at, 0].concat(buttons).concat(['|']));
     }
+
+    /* The ruler switch goes beside Show grid, in both places the grid switch lives:
+       they are the same kind of thing -- reference marks over the section -- and a
+       user looking to turn one off looks for the other in the same group. */
+    if (!App.TOOLBAR.some(function (t) { return t && t.action === 'toggleRuler'; })) {
+      var gridAt = App.TOOLBAR.findIndex(function (t) { return t && t.action === 'toggleGrid'; });
+      App.TOOLBAR.splice(gridAt < 0 ? App.TOOLBAR.length : gridAt + 1, 0, {
+        icon: 'ruler', tip: 'Show rulers — coordinates along all four viewport edges (2D)',
+        action: 'toggleRuler', on: rulersOn()
+      });
+    }
+    var viewMenu = (App.MENUS || []).filter(function (m) { return m.label === 'View'; })[0];
+    if (viewMenu && !viewMenu.items.some(function (i) { return i && i.action === 'toggleRuler'; })) {
+      var gridItem = viewMenu.items.filter(function (i) { return i && i.action === 'toggleGrid'; })[0];
+      viewMenu.items.splice(viewMenu.items.indexOf(gridItem) + 1, 0,
+        { label: 'Show rulers', icon: 'ruler', checked: rulersOn(), action: 'toggleRuler' });
+    }
+    applyRulers();
 
     (App.RAILS.mesh || []).forEach(function (tool) {
       if (!tool || !tool.tip) return;
@@ -1550,6 +1620,7 @@ App.LivePatches = (function () {
     projectFileName: projectFileName, projectFromFileText: projectFromFileText,
     projectNameFromFile: projectNameFromFile,
     setNavigation: setNavigation, gateRail: gateRail,
+    rulersOn: rulersOn, toggleRulers: toggleRulers, applyRulers: applyRulers,
     orderStructuresRail: orderStructuresRail,
     STRUCTURES_RAIL_GROUPS: STRUCTURES_RAIL_GROUPS,
     nameSoilBodyActions: nameSoilBodyActions,

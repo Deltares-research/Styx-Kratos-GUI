@@ -21,6 +21,17 @@ var App = window.App || {};
 
 App.Beams = (function () {
 
+  /* How far the model reaches, which is not the same as the borehole domain: a drawn
+     or imported part may stand above `z_top`, and a structure placed on one is on
+     model geometry. `App.Model.extentOf` mirrors the server's `Project.extent`; the
+     fallback keeps this module usable in a page that has no App.Model. */
+  function extent(project) {
+    return (App.Model && App.Model.extentOf)
+      ? App.Model.extentOf(project)
+      : (project && project.domain);
+  }
+
+
   /* S355 sheet piling, near an AZ 26-700 profile per metre run. A starting point
      the user edits, not a claim about their wall. */
   var DEFAULT_SECTION = {
@@ -137,12 +148,13 @@ App.Beams = (function () {
   function draftMember(project, points) {
     if (!available(project, 'member')) throw new Error(unavailableMessage(project, 'member'));
     var d = project.domain;
+    var span = extent(project);
     var space = (points || []).map(function (p) { return [p[0], p[1], p[2]]; });
     if (space.length < 2) throw new Error('A member needs at least two points.');
     space.forEach(function (p) {
       if (!p.every(Number.isFinite)) throw new Error('Every member coordinate must be a number.');
-      if (p[0] < d.x0 || p[0] > d.x1 || p[1] < d.y0 || p[1] > d.y1
-          || p[2] < d.z_bottom || p[2] > d.z_top) {
+      if (p[0] < span.x0 || p[0] > span.x1 || p[1] < span.y0 || p[1] > span.y1
+          || p[2] < span.z_bottom || p[2] > span.z_top) {
         throw new Error('The member must stay inside the model domain.');
       }
     });
@@ -166,10 +178,12 @@ App.Beams = (function () {
       throw new Error('A sheet pile needs at least two points.');
     }
     var d = project.domain;
+    var span = extent(project);
     var flat = points.map(function (p) { return [p[0], p[2] === undefined ? p[1] : p[2]]; });
     flat.forEach(function (p) {
       if (!p.every(Number.isFinite)) throw new Error('Every pile coordinate must be a number.');
-      if (p[0] < d.x0 || p[0] > d.x1 || p[1] < d.z_bottom || p[1] > d.z_top) {
+      if (p[0] < span.x0 || p[0] > span.x1
+          || p[1] < span.z_bottom || p[1] > span.z_top) {
         throw new Error('The sheet pile must stay inside the model domain.');
       }
     });

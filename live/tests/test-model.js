@@ -180,12 +180,15 @@
     });
   });
 
-  test('sheet piles saved in a project are hidden in a 3D view, not lost', function () {
+  test('sheet piles drawn in 2D are shown in a 3D view, not dropped', function () {
+    /* The solid model builds them on the section plane (build._section_sweeps), so
+       the explorer has to list them: a row that disappears on the mode switch reads
+       as a lost structure. */
     var p = piledProject();
     p.dimension = 3;
     withProject(p, function () {
-      T.eq(App.BEAMS.length, 0, '3D has no beam class to draw them with');
-      T.eq(nodeLabelled(App.TREES.structures, 'Sheet piles').count, 0);
+      T.eq(App.BEAMS.length, 1, 'the pile is built on the section plane in 3D');
+      T.eq(nodeLabelled(App.TREES.structures, 'Sheet piles').count, 1);
       T.eq(p.beams.length, 1, 'the record survives in the project');
     });
   });
@@ -240,12 +243,12 @@
     });
   });
 
-  test('anchors saved in a project are hidden in a 3D view, not lost', function () {
+  test('anchors drawn in 2D are shown in a 3D view, not dropped', function () {
     var p = anchoredProject();
     p.dimension = 3;
     withProject(p, function () {
-      T.eq(App.ANCHORS.length, 0);
-      T.eq(nodeLabelled(App.TREES.structures, 'Anchors').count, 0);
+      T.eq(App.ANCHORS.length, 1, 'the tie hangs off the pile in 3D too');
+      T.eq(nodeLabelled(App.TREES.structures, 'Anchors').count, 1);
       T.eq(p.anchors.length, 1, 'the record survives in the project');
     });
   });
@@ -319,13 +322,67 @@
     });
   });
 
-  test('interfaces saved in a project are hidden in a 3D view, not lost', function () {
+  test('interfaces drawn in 2D are listed in a 3D view', function () {
+    /* Shown, though still authored in 2D only (App.Interfaces.available) and still
+       exporting no elements in 3D: the line is swept into the solid model and splits
+       its mesh, so the row has something behind it. */
     var p = contactedProject();
     p.dimension = 3;
     withProject(p, function () {
-      T.eq(App.INTERFACES.length, 0);
-      T.eq(nodeLabelled(App.TREES.structures, 'Interfaces').count, 0);
+      T.eq(App.INTERFACES.length, 1);
+      T.eq(nodeLabelled(App.TREES.structures, 'Interfaces').count, 1);
       T.eq(p.interfaces.length, 1, 'the record survives in the project');
+    });
+  });
+
+  /* ── A translated load pair ──────────────────────────────────────
+     server/app/loads.py turns a surface load into a line load on the switch to 2D and
+     back, keeping both records so the footprint survives the round trip. Exactly one
+     half of a pair belongs to the model: `App.Model`'s `loadsFor` mirrors the server's
+     `Project.loads_for`, and these hold the two in step. */
+
+  function pairedLoads() {
+    return [
+      { id: 'surfaceload_1', name: 'SurfaceLoad_1', kind: 'surface', x0: 4, x1: 16,
+        y0: 5, y1: 10, thickness: 0.3, components: [0, 0, -25],
+        distribution: 'Uniform', active: true, derived_from: null },
+      { id: 'surfaceload_1_2d', name: 'SurfaceLoad_1', kind: 'line', x0: 4, x1: 16,
+        z: 0, thickness: 0.3, components: [0, -25], distribution: 'Uniform',
+        active: true, derived_from: 'surfaceload_1' }
+    ];
+  }
+
+  test('a translated load pair shows its 3D half in the solid model', function () {
+    var p = project(TWO);
+    p.dimension = 3;
+    p.loads = pairedLoads();
+    withProject(p, function () {
+      T.eq(App.LOADS.map(function (l) { return l.id; }), ['surfaceload_1'],
+           'the line half is the same load, not a second one');
+      T.eq(nodeLabelled(App.TREES.structures, 'Loads').count, 1);
+    });
+  });
+
+  test('a translated load pair shows its 2D half in the section', function () {
+    var p = project(TWO);
+    p.dimension = 2; p.section_plane = 'xz'; p.section_offset = 20;
+    p.loads = pairedLoads();
+    withProject(p, function () {
+      T.eq(App.LOADS.map(function (l) { return l.id; }), ['surfaceload_1_2d']);
+      T.eq(nodeLabelled(App.TREES.structures, 'Loads').count, 1);
+    });
+  });
+
+  test('a 2D load with no surface counterpart is shown in 3D too', function () {
+    /* A point load is kN, not kN/m2, and there is no 3D point-load kind: it is
+       carried at the section plane rather than translated or dropped. */
+    var p = project(TWO);
+    p.dimension = 3;
+    p.loads = [{ id: 'load_1', name: 'PointLoad_1', kind: 'point', x: 10, z: 0,
+                 thickness: 0.25, components: [0, -30], distribution: 'Uniform',
+                 active: true, derived_from: null }];
+    withProject(p, function () {
+      T.eq(App.LOADS.map(function (l) { return l.id; }), ['load_1']);
     });
   });
 
@@ -594,17 +651,61 @@
       T.eq(App.BEAMS.map(function (b) { return b.kind; }), ['panel', 'member']);
       T.eq(App.ANCHORS.map(function (a) { return a.kind; }), ['anchor3d']);
       T.eq(nodeLabelled(App.TREES.soil, 'Sheet piles').count, 2);
+      // 3D-only kinds are unaffected: the traffic added here runs 2D -> 3D only.
       T.eq(nodeLabelled(App.TREES.soil, 'Anchors').count, 1);
     });
   });
 
-  test('the 2D kinds are kept but not shown while the model is 3D', function () {
+  /* ── A translated wall pair ──────────────────────────────────────
+     server/app/walls.py turns a sheet pile into a wall panel on the switch to 3D and
+     back, keeping both records so the plan footprint survives the round trip. The
+     panel is what gives the wall y values to edit at all -- a pile has none. */
+
+  function pairedWall() {
+    var p = walledProject();
+    p.beams = [
+      { id: 'beam_1', name: 'Sheet pile 1', kind: 'beam', section: 'az26',
+        points: [[10, 0], [10, -7.5]], active: true, derived_from: null },
+      { id: 'beam_1_3d', name: 'Wall 1', kind: 'panel', section: 'az26_wall',
+        footprint: [[10, 0], [10, 20]], z_top: 0, z_toe: -7.5, active: true,
+        derived_from: 'beam_1' }
+    ];
+    p.anchors = [];
+    return p;
+  }
+
+  test('a translated wall shows its panel in 3D, with y values to edit', function () {
+    var p = pairedWall();
+    p.dimension = 3;
+    withProject(p, function () {
+      T.eq(App.BEAMS.map(function (b) { return b.id; }), ['beam_1_3d'],
+           'the pile half is the same wall, not a second one');
+      var geometry = App.OBJECT_PROPS.beam_1_3d.groups.Geometry
+        .map(function (row) { return row[0]; });
+      T.ok(geometry.indexOf('y1') >= 0 && geometry.indexOf('y2') >= 0,
+           'the wall has a plan footprint to edit: ' + geometry.join(', '));
+    });
+  });
+
+  test('a translated wall shows its sheet pile in the section', function () {
+    var p = pairedWall();
+    p.dimension = 2; p.section_plane = 'xz'; p.section_offset = 10;
+    withProject(p, function () {
+      T.eq(App.BEAMS.map(function (b) { return b.id; }), ['beam_1']);
+    });
+  });
+
+  test('a 3D model shows its own kinds and the 2D ones drawn into it', function () {
+    /* Both, now: a wall panel is drawn in plan and a sheet pile in the section, and
+       the solid model builds each where it was drawn. The kinds keep their order in
+       `beams[]` rather than being grouped. */
     var p = walledProject();
     p.beams = p.beams.concat([{ id: 'sheetpile_1', name: 'Sheet pile 1', kind: 'beam',
                                 section: 'az26', points: [[12, 0], [12, -14]],
                                 active: true }]);
     withProject(p, function () {
-      T.eq(App.BEAMS.map(function (b) { return b.id; }), ['panel_1', 'member_1']);
+      T.eq(App.BEAMS.map(function (b) { return b.id; }),
+           ['panel_1', 'member_1', 'sheetpile_1']);
       T.eq(p.beams.length, 3, 'the saved sheet pile is untouched');
     });
   });

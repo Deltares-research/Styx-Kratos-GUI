@@ -136,3 +136,26 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
 /* A rail tool the current model cannot have: js/data.js never needed a disabled
    state for these, because none of them did anything. Matches .tbtn.disabled. */
 .rail-btn.disabled { color: var(--c-disabled); pointer-events: none; }
+
+/* ── 2D rulers ──────────────────────────────────────────────────────
+   One canvas per viewport edge, painted by live/js/ruler.js from the same
+   visible rectangle the camera is drawn with. They sit *over* the scene rather
+   than shrinking it: the renderer's canvas is the full viewport, and inseting
+   it would change every screen-to-world mapping in the app for a 22 px frame.
+   Below .vp-hud (z-index 3) and inert, so nothing in the viewport becomes
+   unclickable behind them; the HUD corners step inward instead. */
+.vp-ruler {
+  position: absolute;
+  z-index: 2;
+  display: block;
+  pointer-events: none;
+}
+.vp-ruler[hidden] { display: none; }
+.vp-ruler-top    { top: 0; left: 0; width: 100%; height: 22px; }
+.vp-ruler-bottom { bottom: 0; left: 0; width: 100%; height: 22px; }
+.vp-ruler-left   { top: 0; left: 0; width: 22px; height: 100%; }
+.vp-ruler-right  { top: 0; right: 0; width: 22px; height: 100%; }
+
+#viewport.rulers-on #vp-hud-topleft { top: 28px; left: 30px; }
+#viewport.rulers-on #vp-viewcube    { top: 28px; right: 30px; }
+#viewport.rulers-on #vp-triad       { left: 26px; bottom: 26px; }

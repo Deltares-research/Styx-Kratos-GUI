@@ -4,6 +4,17 @@
 var App = window.App || {};
 
 App.Loads = (function () {
+
+  /* How far the model reaches, which is not the same as the borehole domain: a drawn
+     or imported part may stand above `z_top`, and a structure placed on one is on
+     model geometry. `App.Model.extentOf` mirrors the server's `Project.extent`; the
+     fallback keeps this module usable in a page that has no App.Model. */
+  function extent(project) {
+    return (App.Model && App.Model.extentOf)
+      ? App.Model.extentOf(project)
+      : (project && project.domain);
+  }
+
   function copy(value) { return JSON.parse(JSON.stringify(value)); }
 
   function collection() { return App.LOADS || []; }
@@ -38,13 +49,18 @@ App.Loads = (function () {
       }
       x0 = Math.min(a[0], b[0]); x1 = Math.max(a[0], b[0]);
       if (!(x1 > x0)) throw new Error('The load must have a non-zero width.');
-      if (x0 < d.x0 || x1 > d.x1) {
+      var span = extent(project);
+      if (x0 < span.x0 || x1 > span.x1) {
         throw new Error('The load interval must stay inside the model domain.');
       }
       var lineNumber = nextNumber(project);
       return {
         id: 'load_' + lineNumber, name: 'LineLoad_' + lineNumber, kind: 'line',
-        x0: x0, x1: x1, z: d.z_top, thickness: 0.15,
+        // The top of the model, not of the borehole block: a load drawn on a raised
+        // embankment belongs on it, and one left at `domain.z_top` would sit buried
+        // inside the fill and would not translate to a surface load (server/app/
+        // loads.py compares against `Project.ground_z`).
+        x0: x0, x1: x1, z: span.z_top, thickness: 0.15,
         components: [0, -20], distribution: 'Uniform', active: true
       };
     } else {
@@ -60,7 +76,10 @@ App.Loads = (function () {
       id: 'load_' + number,
       name: (project.dimension === 2 ? 'LineLoad_' : 'SurfaceLoad_') + number,
       kind: 'surface',
-      x0: x0, x1: x1, y0: y0, y1: y1,
+      // The elevation is carried, not rederived: the server places the pad from it
+      // (`Project.elevation_of`), and rederiving from a gmsh bounding box is padded
+      // by 1e-7 and lands just above the face it should imprint.
+      x0: x0, x1: x1, y0: y0, y1: y1, z: extent(project).z_top,
       thickness: 0.15,
       components: [0, 0, -20],
       distribution: 'Uniform', active: true
@@ -74,8 +93,9 @@ App.Loads = (function () {
       throw new Error('A 2D point load needs one finite x-z coordinate.');
     }
     var d = project.domain;
-    if (coordinate[0] < d.x0 || coordinate[0] > d.x1 ||
-        coordinate[1] < d.z_bottom || coordinate[1] > d.z_top) {
+    var span = extent(project);
+    if (coordinate[0] < span.x0 || coordinate[0] > span.x1 ||
+        coordinate[1] < span.z_bottom || coordinate[1] > span.z_top) {
       throw new Error('The point-load coordinate must stay inside the model domain.');
     }
     var number = nextNumber(project);

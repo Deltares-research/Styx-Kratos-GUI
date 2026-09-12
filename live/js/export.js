@@ -23,6 +23,8 @@ var App = window.App || {};
 App.Export = (function () {
 
   var inFlight = false;
+  // The file the user named for this export, if the browser offered to ask.
+  var target = null;
 
   function log(kind, line) {
     if (App.Command && App.Command[kind]) App.Command[kind](line);
@@ -55,16 +57,19 @@ App.Export = (function () {
   }
 
   function save(filename, text, mime) {
-    var url = URL.createObjectURL(new Blob([text], { type: mime || 'text/plain' }));
-    var anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = filename;
-    document.body.appendChild(anchor);
-    anchor.click();
-    document.body.removeChild(anchor);
-    // Revoked a tick later: a browser still reading the blob when the URL goes
-    // away saves an empty file.
-    setTimeout(function () { URL.revokeObjectURL(url); }, 0);
+    return App.Download.write(target, filename, text, mime || 'text/plain');
+  }
+
+  /* The deck's three files, named as they are inside the archive. */
+  function files(result, deckName) {
+    var written = [{ name: deckName, text: result.mdpa }];
+    if (result.materials) {
+      written.push({ name: 'MaterialParameters.json', text: result.materials });
+    }
+    if (result.project_parameters) {
+      written.push({ name: 'ProjectParameters.json', text: result.project_parameters });
+    }
+    return written;
   }
 
   function run(done) {
@@ -73,30 +78,45 @@ App.Export = (function () {
       return;
     }
     inFlight = true;
-    log('note', 'Meshing and writing the Kratos deck…');
 
-    return App.Api.post('/api/export/mdpa', meshRequest()).then(function (result) {
-      inFlight = false;
-      var name = baseName(App.PROJECT) + '.mdpa';
-      // Through the module object, so a test can record what would be written
-      // instead of making the browser save three files.
-      App.Export.save(name, result.mdpa, 'text/plain');
-      if (result.materials) App.Export.save('MaterialParameters.json', result.materials,
-                                            'application/json');
-      if (result.project_parameters) App.Export.save('ProjectParameters.json',
-                                                      result.project_parameters,
-                                                      'application/json');
-      (result.warnings || []).forEach(function (warning) { log('note', warning); });
-      log('ok', 'Exported ' + name + ': ' + integer(result.stats.elements)
-                + ' elements, ' + integer(result.stats.nodes) + ' nodes.');
-      if (done) done(result);
-      return result;
+    var archive = baseName(App.PROJECT) + '.zip';
+    // Asked for first, before anything is awaited: a browser only offers the save
+    // window while the click that opened the menu still counts as a gesture, and the
+    // mesh takes far too long for the answer to still be one. One window, so one
+    // file -- which is why the deck is zipped rather than written loose.
+    return App.Download.pickFile(archive, 'application/zip').then(function (handle) {
+      if (handle === App.Download.CANCELLED) {
+        inFlight = false;
+        log('note', 'Export cancelled.');
+        if (done) done();
+        return;
+      }
+      target = handle;
+      log('note', 'Meshing and writing the Kratos deck…');
+
+      return App.Api.post('/api/export/mdpa', meshRequest()).then(function (result) {
+        var deck = baseName(App.PROJECT) + '.mdpa';
+        // Through the module object, so a test can record what would be written
+        // instead of making the browser save a file.
+        return Promise.resolve(App.Export.save(archive, App.Zip.create(files(result, deck)),
+                                               'application/zip')).then(function () {
+          inFlight = false;
+          target = null;
+          (result.warnings || []).forEach(function (warning) { log('note', warning); });
+          log('ok', 'Exported ' + archive + ': ' + integer(result.stats.elements)
+                    + ' elements, ' + integer(result.stats.nodes) + ' nodes.');
+          if (done) done(result);
+          return result;
+        });
+      });
     }).catch(function (err) {
       inFlight = false;
+      target = null;
       log('err', 'Export failed: ' + err.message);
       if (done) done();
     });
   }
 
-  return { run: run, meshRequest: meshRequest, baseName: baseName, save: save };
+  return { run: run, meshRequest: meshRequest, baseName: baseName, save: save,
+           files: files };
 })();

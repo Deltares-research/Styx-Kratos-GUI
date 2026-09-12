@@ -222,6 +222,77 @@
   });
 })();
 
+/* ── How far the wheel may go ──────────────────────────────────────────────────
+   js/orbit.js clamps the dolly between minRadius and maxRadius, and the live
+   viewport used to hand it 8 and 6x the *provisional* demo frame. On a 0.1 x 1 m
+   column the home radius is smaller than that floor, so the wheel did nothing at
+   all and the readout sat stuck at 19%. Both limits have to come from the model. */
+(function () {
+  var DEMO = App.Buffers.bounds([0, 0, -25, 50, 40, 0]);
+  var COLUMN = App.Buffers.bounds([0, 0, -1, 0.1, 1, 0]);
+
+  test('the limits are the same multiples of the model at any scale', function () {
+    var demo = App.Viewport.radiusLimits(DEMO);
+    var column = App.Viewport.radiusLimits(COLUMN);
+    T.near(demo.min / DEMO.homeRadius, column.min / COLUMN.homeRadius, 1e-12);
+    T.near(demo.max / DEMO.homeRadius, column.max / COLUMN.homeRadius, 1e-12);
+  });
+
+  test('a small model can still be zoomed in on', function () {
+    var limits = App.Viewport.radiusLimits(COLUMN);
+    T.ok(limits.min < COLUMN.homeRadius,
+         'the floor is above the fitted view: the wheel would be dead on arrival');
+    T.ok(COLUMN.homeRadius / limits.min >= 10,
+         'and there has to be room to get close: ' + COLUMN.homeRadius / limits.min);
+    T.ok(limits.max > COLUMN.homeRadius, 'zooming out has to move too');
+  });
+
+  test('the demo domain keeps the reach the frozen constants gave it', function () {
+    var limits = App.Viewport.radiusLimits(DEMO);
+    T.near(limits.min, 8, 0.5, 'the frozen minRadius, now expressed as a fraction');
+    T.near(limits.max, DEMO.homeRadius * 6, 1e-9);
+  });
+
+  test('with no frame yet there are still limits, and they are ordered', function () {
+    var limits = App.Viewport.radiusLimits(null);
+    T.ok(limits.min > 0 && limits.max > limits.min);
+  });
+})();
+
+/* ── The coordinate readout ────────────────────────────────────────────────────
+   The status bar reads the cursor off a plane. In 2D the camera looks straight
+   down that plane's normal, so casting at the z = 0 ground plane instead sends the
+   ray almost parallel to it -- which is where the reported y of 2.2e14 m came
+   from. The plane has to be the section itself. */
+(function () {
+  function normalOf(plane) { return [plane.normal.x, plane.normal.y, plane.normal.z]; }
+
+  test('2D reads the cursor off the section plane it is looking at', function () {
+    T.eq(normalOf(App.Viewport.pickPlane(2, 'xz', 20)), [0, 1, 0]);
+    T.eq(App.Viewport.pickPlane(2, 'xz', 20).constant, -20, 'and at the section offset');
+    T.eq(normalOf(App.Viewport.pickPlane(2, 'yz', 3)), [1, 0, 0]);
+    T.eq(normalOf(App.Viewport.pickPlane(2, 'xy', -4)), [0, 0, 1]);
+  });
+
+  test('3D still reads off the ground', function () {
+    var plane = App.Viewport.pickPlane(3, 'xz', 20);
+    T.eq(normalOf(plane), [0, 0, 1]);
+    T.eq(plane.constant, 0);
+  });
+
+  test('the elevation ray meets the section plane instead of running along it', function () {
+    // The camera the xz section uses: looking along +y, exactly parallel to z = 0.
+    var ray = new THREE.Ray(new THREE.Vector3(5, -100, -3),
+                            new THREE.Vector3(0, 1, 0));
+    var onSection = ray.intersectPlane(App.Viewport.pickPlane(2, 'xz', 20),
+                                       new THREE.Vector3());
+    T.ok(onSection, 'the section plane is square to the view: it always has a hit');
+    T.eq([onSection.x, onSection.y, onSection.z], [5, 20, -3]);
+    T.eq(ray.intersectPlane(App.Viewport.pickPlane(3, 'xz', 20), new THREE.Vector3()),
+         null, 'the ground plane is the one that gave 2.2e14 m');
+  });
+})();
+
 /* ── The 2D grid is the drawing surface, not a footprint ────────────────────────
    In 3D the grid is a plane the model stands on, so model-sized is right. In 2D it
    is the paper the section is drawn on and has to reach the edges of the viewport

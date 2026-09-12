@@ -335,8 +335,13 @@ def test_an_inactive_pile_is_kept_in_the_project_but_not_built():
     assert result.curves.get("sheetpile_1", []) == []
 
 
-def test_a_sheet_pile_is_not_built_into_a_3d_model_and_says_so():
-    """The verified Kratos beam classes are 2D; 3D authoring is still ahead."""
+def test_a_sheet_pile_is_swept_onto_the_section_plane_of_a_3d_model():
+    """A 2D pile is not dropped by the solid model: it is built where it was drawn.
+
+    It becomes a surface rather than the curve a section leaves, because a wall needs
+    an out-of-plane width to be meshed as a shell -- see `build._section_sweeps`, and
+    tests/test_section_structures_3d.py for where the sweep is placed.
+    """
     payload = seed_project(simple=True).model_dump()
     payload["beam_sections"] = [SECTION_AZ26]
     payload["beams"] = [{"id": "sheetpile_1", "name": "Sheet pile 1", "section": "az26",
@@ -345,8 +350,8 @@ def test_a_sheet_pile_is_not_built_into_a_3d_model_and_says_so():
     with build.session():
         result = build.build_geometry(project)
 
-    assert result.curves.get("sheetpile_1", []) == []
-    assert any("sheetpile_1" in line for line in result.log)
+    assert result.faces.get("sheetpile_1"), "the pile vanished from the solid model"
+    assert not any("not part of this 3D model" in line for line in result.log)
 
 
 # ── Anchors: a tie from a sheet pile to a restrained point ──────────────────
@@ -415,7 +420,8 @@ def test_an_inactive_anchor_is_kept_in_the_project_but_not_built():
     assert result.ties.get("anchor_1", []) == []
 
 
-def test_an_anchor_is_not_built_into_a_3d_model_and_says_so():
+def test_a_plane_anchor_is_built_on_the_section_plane_of_a_3d_model():
+    """The mirror of the sheet pile above: the tie hangs off the wall in 3D too."""
     payload = seed_project(simple=True).model_dump()
     payload["beam_sections"] = [SECTION_AZ26]
     payload["beams"] = [{"id": "sheetpile_1", "name": "Sheet pile 1", "section": "az26",
@@ -427,5 +433,5 @@ def test_an_anchor_is_not_built_into_a_3d_model_and_says_so():
     with build.session():
         result = build.build_geometry(Project.model_validate(payload))
 
-    assert result.ties.get("anchor_1", []) == []
-    assert any("anchor_1" in line for line in result.log)
+    assert result.ties.get("anchor_1"), "the 2D anchor vanished from the solid model"
+    assert "anchor_1" in result.tie_nodes

@@ -38,6 +38,13 @@ class CustomPart(Base):
     # carries the same strength/stiffness/permeability set as a stack layer and is
     # meshed as a soil body. Left unset, the part stays plain display geometry.
     mat: Ident | None = None
+    bbox: tuple[float, float, float, float, float, float] | None = None
+    """Where this part is, as (xmin, ymin, zmin, xmax, ymax, zmax) in metres.
+
+    Measured by gmsh when the part is drawn or imported (`creator.process_creation`,
+    `importer`), and kept so `Project.extent` knows how far the model reaches without
+    reopening every .brep. Optional: a project saved before this was recorded still
+    loads, and simply contributes nothing to the extent."""
 
 
 # ── Domain ──────────────────────────────────────────────────────────────────
@@ -226,6 +233,12 @@ class PointLoad(Base):
     components: tuple[float, float]  # in-plane x/z, kN
     distribution: Literal["Uniform"] = "Uniform"
     active: bool = True
+    derived_from: Ident | None = None
+    """The load in the other dimension this one is the translation of, if any.
+
+    A surface load and a line load are one load seen from two dimensions, and both
+    records are kept so a round trip does not widen the footprint (`app/loads.py`).
+    Set on the *derived* record only; the one the user authored carries None."""
 
     @model_validator(mode="after")
     def _valid_condition(self) -> PointLoad:
@@ -247,6 +260,12 @@ class LineLoad(Base):
     components: tuple[float, float]  # in-plane x/z, kN/m
     distribution: Literal["Uniform"] = "Uniform"
     active: bool = True
+    derived_from: Ident | None = None
+    """The load in the other dimension this one is the translation of, if any.
+
+    A surface load and a line load are one load seen from two dimensions, and both
+    records are kept so a round trip does not widen the footprint (`app/loads.py`).
+    Set on the *derived* record only; the one the user authored carries None."""
 
     @model_validator(mode="after")
     def _valid_condition(self) -> LineLoad:
@@ -267,10 +286,26 @@ class SurfaceLoad(Base):
     x1: float
     y0: float
     y1: float
+    z: float | None = None
+    """The elevation the pad lies at. None means the top of the model.
+
+    Carried rather than rederived because rederiving it is not exact: `ground_z` is
+    built from gmsh bounding boxes, which are padded by 1e-7, so a pad placed there
+    floats just above the face it is meant to imprint. A translated load keeps the
+    elevation of the line load it came from, which is on the face by construction.
+
+    None is what every project saved before this field reads as, and it still means
+    what it always did."""
     thickness: float = Field(gt=0)
     components: tuple[float, float, float]  # world x/y/z, kN/m2
     distribution: Literal["Uniform"] = "Uniform"
     active: bool = True
+    derived_from: Ident | None = None
+    """The load in the other dimension this one is the translation of, if any.
+
+    A surface load and a line load are one load seen from two dimensions, and both
+    records are kept so a round trip does not widen the footprint (`app/loads.py`).
+    Set on the *derived* record only; the one the user authored carries None."""
 
     @model_validator(mode="after")
     def _valid_condition(self) -> SurfaceLoad:
@@ -334,6 +369,12 @@ class Beam(Base):
     section: Ident
     points: list[tuple[float, float]]      # in-plane (x, z), metres
     active: bool = True
+    derived_from: Ident | None = None
+    """The structure in the other dimension this one is the translation of, if any.
+
+    A sheet pile and a wall panel are one wall seen from two dimensions, and both
+    records are kept so a plan footprint survives a trip through the section, which has
+    no y to remember it by (`app/walls.py`). Set on the *derived* record only."""
 
     @model_validator(mode="after")
     def _usable_polyline(self) -> Beam:
@@ -553,6 +594,12 @@ class Panel(Base):
     z_top: float
     z_toe: float
     active: bool = True
+    derived_from: Ident | None = None
+    """The structure in the other dimension this one is the translation of, if any.
+
+    A sheet pile and a wall panel are one wall seen from two dimensions, and both
+    records are kept so a plan footprint survives a trip through the section, which has
+    no y to remember it by (`app/walls.py`). Set on the *derived* record only."""
 
     @model_validator(mode="after")
     def _usable_sweep(self) -> Panel:
@@ -588,6 +635,9 @@ class Member(Base):
     section: Ident
     points: list[tuple[float, float, float]]   # world (x, y, z), metres
     active: bool = True
+    derived_from: Ident | None = None
+    """Never set on a member: it has no 2D counterpart. Present so every structure in
+    `beams[]` answers the same question -- see `Panel.derived_from`."""
 
     @model_validator(mode="after")
     def _usable_polyline(self) -> Member:
@@ -975,15 +1025,19 @@ class Project(Base):
                 raise ValueError(
                     f"custom part {part.key} references unknown material {part.mat!r}"
                 )
+        # Structures are placed against the *extent*, not the domain: a load or a pile
+        # standing on a drawn embankment above `z_top` is on model geometry, and the
+        # domain is only the block the boreholes describe. See `Project.extent`.
+        extent = self.extent()
         for load in self.loads:
             if load.kind == "point" and not (
-                self.domain.x0 <= load.x <= self.domain.x1
-                and self.domain.z_bottom <= load.z <= self.domain.z_top
+                extent.x0 <= load.x <= extent.x1
+                and extent.z_bottom <= load.z <= extent.z_top
             ):
                 raise ValueError(f"point load {load.id!r} lies outside the domain")
             if load.kind == "line" and not (
-                self.domain.x0 <= load.x0 < load.x1 <= self.domain.x1
-                and self.domain.z_bottom <= load.z <= self.domain.z_top
+                extent.x0 <= load.x0 < load.x1 <= extent.x1
+                and extent.z_bottom <= load.z <= extent.z_top
             ):
                 raise ValueError(f"line load {load.id!r} lies outside the domain")
 
@@ -996,8 +1050,8 @@ class Project(Base):
                 )
         for anchor in self.plane_anchors:
             for x, z in (anchor.head, anchor.tail):
-                if not (self.domain.x0 <= x <= self.domain.x1
-                        and self.domain.z_bottom <= z <= self.domain.z_top):
+                if not (extent.x0 <= x <= extent.x1
+                        and extent.z_bottom <= z <= extent.z_top):
                     raise ValueError(
                         f"anchor {anchor.id!r} lies outside the domain at ({x}, {z})"
                     )
@@ -1013,7 +1067,7 @@ class Project(Base):
                 )
         for anchor in self.space_anchors:
             for point in (anchor.head, anchor.tail):
-                if not self.domain.contains(*point):
+                if not extent.contains(*point):
                     raise ValueError(
                         f"anchor {anchor.id!r} lies outside the domain at {point}"
                     )
@@ -1036,8 +1090,8 @@ class Project(Base):
                     f"beam {beam.id} references unknown beam section {beam.section!r}"
                 )
             for x, z in beam.points:
-                if not (self.domain.x0 <= x <= self.domain.x1
-                        and self.domain.z_bottom <= z <= self.domain.z_top):
+                if not (extent.x0 <= x <= extent.x1
+                        and extent.z_bottom <= z <= extent.z_top):
                     raise ValueError(
                         f"beam {beam.id!r} lies outside the domain at ({x}, {z})"
                     )
@@ -1049,7 +1103,7 @@ class Project(Base):
                     f"beam {member.id} references unknown beam section {member.section!r}"
                 )
             for point in member.points:
-                if not self.domain.contains(*point):
+                if not extent.contains(*point):
                     raise ValueError(
                         f"member {member.id!r} lies outside the domain at {point}"
                     )
@@ -1061,7 +1115,7 @@ class Project(Base):
                 )
             for x, y in panel.footprint:
                 for z in (panel.z_top, panel.z_toe):
-                    if not self.domain.contains(x, y, z):
+                    if not extent.contains(x, y, z):
                         raise ValueError(
                             f"panel {panel.id!r} lies outside the domain at ({x}, {y}, {z})"
                         )
@@ -1094,12 +1148,90 @@ class Project(Base):
         """The axis the section plane is normal to."""
         return {"xy": "z", "xz": "y", "yz": "x"}[self.section_plane]
 
+    def extent(self) -> Domain:
+        """How far the model reaches: the domain grown to cover every custom part.
+
+        `Domain` is the soil block the boreholes describe, and a drawn or imported part
+        is not held to it -- an embankment stands above `z_top`. Anything asking "may a
+        structure be here?" wants this, not the domain: a load on a custom layer above
+        ground stands on model geometry, and refusing it as "outside the domain" is the
+        bug this exists to fix. `build.SECTION_PAD` measures the section the same way,
+        from the built solids rather than the declared box.
+
+        Parts with no recorded box contribute nothing, so an older project is unchanged.
+        """
+        boxes = [p.bbox for p in self.custom_parts if p.bbox is not None]
+        if not boxes:
+            return self.domain
+        d = self.domain
+        return Domain(
+            x0=min([d.x0] + [b[0] for b in boxes]),
+            y0=min([d.y0] + [b[1] for b in boxes]),
+            z_bottom=min([d.z_bottom] + [b[2] for b in boxes]),
+            x1=max([d.x1] + [b[3] for b in boxes]),
+            y1=max([d.y1] + [b[4] for b in boxes]),
+            z_top=max([d.z_top] + [b[5] for b in boxes]),
+        )
+
+    def ground_z(self) -> float:
+        """The elevation a surface load lies on: the top of the model.
+
+        A `SurfaceLoad` carries no z of its own -- it sits on the ground surface -- and
+        that used to be read as `domain.z_top`. But the domain is only the block the
+        boreholes describe, so once a drawn embankment stands above it, `domain.z_top`
+        is buried inside the fill rather than on top of it. `extent` knows where the
+        model actually ends; everything that places or reads a surface load asks here,
+        so the build, the exporter and `app/loads.py` agree on one answer.
+        """
+        return self.extent().z_top
+
+    def elevation_of(self, load: PointLoad | LineLoad | SurfaceLoad) -> float:
+        """Where a load lies, whichever kind it is.
+
+        A point or line load carries its own z. A surface load may leave it unset,
+        which means the top of the model -- the reading every such load had before the
+        field existed.
+        """
+        if load.kind == "surface":
+            return self.ground_z() if load.z is None else load.z
+        return load.z
+
     def section_bounds(self) -> tuple[float, float]:
         """How far the section may travel along its normal axis."""
         d = self.domain
         return {"xy": (d.z_bottom, d.z_top), "xz": (d.y0, d.y1), "yz": (d.x0, d.x1)}[
             self.section_plane
         ]
+
+    def cut_at(self) -> float:
+        """Where the section plane sits, resolved even when nothing has resolved it.
+
+        A 3D project never runs the validator that fills `section_offset` in (only
+        dimension 2 does), yet the solid model still needs the plane: it is where a
+        sheet pile, an anchor and a 2D load are built. Falling back to the mid-plane
+        picks exactly what switching to 2D would pick, so a structure does not move
+        when the mode changes.
+        """
+        low, high = self.section_bounds()
+        return self.section_offset if self.section_offset is not None else (low + high) / 2
+
+    def loads_for(self, dimension: int) -> list[PointLoad | LineLoad | SurfaceLoad]:
+        """The loads this dimension builds, in `loads[]` order.
+
+        A translated pair holds two records for one load, so exactly one of them is the
+        model's or the load is applied twice. The section builds its own kinds; the
+        solid model builds the surface loads, plus the 2D loads nothing was derived
+        from -- a point load, or a line load below `z_top`, which have no surface form
+        and are carried at the section plane instead (`build._load_footprint_tools`).
+        """
+        if dimension == 2:
+            return [load for load in self.loads if load.kind != "surface"]
+        # Both ends of every pair, so a 2D half is recognised whether it was the record
+        # the user authored or the one translated from a surface load.
+        paired = {id for load in self.loads if load.derived_from is not None
+                  for id in (load.id, load.derived_from)}
+        return [load for load in self.loads
+                if load.kind == "surface" or load.id not in paired]
 
     def material(self, mat_id: str) -> Material:
         return next(m for m in self.materials if m.id == mat_id)
@@ -1156,6 +1288,22 @@ class Project(Base):
     @property
     def space_anchors(self) -> list[SpaceAnchor]:
         return [a for a in self.anchors if isinstance(a, SpaceAnchor)]
+
+    def structures_for(self, dimension: int) -> list[Beam | Panel | Member]:
+        """The structures this dimension builds, in `beams[]` order.
+
+        A translated pair holds a sheet pile and a wall panel for one wall, so exactly
+        one of them is the model's or the wall is built twice. The section builds its
+        own kind; the solid model builds the panels and members, plus the piles nothing
+        was translated from -- a raking or stepped pile has no panel form and is swept
+        onto the section plane instead (`build._section_sweeps`).
+        """
+        if dimension == 2:
+            return [b for b in self.beams if isinstance(b, Beam)]
+        paired = {i for b in self.beams if b.derived_from is not None
+                  for i in (b.id, b.derived_from)}
+        return [b for b in self.beams
+                if isinstance(b, (Panel, Member)) or b.id not in paired]
 
     def structures_3d(self) -> list[Panel | Member]:
         """Everything a 3D model builds structure from, in `beams[]` order."""

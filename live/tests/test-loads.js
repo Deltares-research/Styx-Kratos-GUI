@@ -296,4 +296,166 @@
     });
     T.ok(selectable.length >= 1);
   });
+
+  /* ── Sized against the model ──────────────────────────────────────
+     The arrow used to have a 0.75 m floor, so on a 0.1 x 1 m column it was three
+     quarters as tall as the model it was drawn on. Nothing about a load symbol has
+     a length in metres of its own: it is a fraction of what is on screen. */
+
+  var COLUMN = {
+    dimension: 2, section_plane: 'xz', section_offset: 0.5,
+    domain: { x0: 0, x1: 0.1, y0: 0, y1: 1, z_top: 0, z_bottom: -1 },
+    loads: []
+  };
+
+  test('the arrow is a fraction of the model, however small the model is', function () {
+    var load = App.Loads.draftPoint(COLUMN, [0.05, 0]);
+    var length = App.Viewport.loadGlyphSpec(load, COLUMN).length;
+    T.ok(length > 0 && length < 0.2,
+         'an arrow on a 1 m column must not be 0.75 m long: ' + length);
+    T.near(length / 1, App.Viewport.loadGlyphSpec(
+      App.Loads.draftPoint(SECTION, [8, -3]), SECTION).length / 50, 1e-9,
+      'the same fraction of the model at either scale');
+  });
+
+  test('the arrow keeps the size it had on the demo domain', function () {
+    var load = App.Loads.draftPoint(SECTION, [8, -3]);
+    T.near(App.Viewport.loadGlyphSpec(load, SECTION).length, 4, 1e-9);
+  });
+
+  /* The domain is what was declared, not what is on screen: a 0.1 x 1 m column
+     drawn inside the default 20 m block is still a 1 m model, and the arrow has to
+     be a fraction of the column. The viewport's own frame is what it frames. */
+
+  test('the span is taken from the framed model when there is one', function () {
+    var wide = Object.assign({}, COLUMN, {
+      domain: { x0: -10, x1: 10, y0: 0, y1: 20, z_top: 10, z_bottom: -10 }
+    });
+    T.near(App.Viewport.modelSpan(wide, [0.1, 1, 1]), 1, 1e-9,
+           'the column, not the 20 m block it was drawn in');
+    T.near(App.Viewport.modelSpan(wide, null), 20, 1e-9,
+           'with nothing framed yet, the domain is all there is to go on');
+  });
+
+  test('a 2D section is sized by what is on screen, not the out-of-plane thickness', function () {
+    // 40 m of thickness behind the section is edge-on: it cannot make the arrow
+    // drawn on a 1 m column 3 m long.
+    T.near(App.Viewport.modelSpan(COLUMN, [0.1, 40, 1]), 1, 1e-9);
+    T.near(App.Viewport.modelSpan({ dimension: 3, domain: COLUMN.domain }, [0.1, 40, 1]),
+           40, 1e-9, 'in 3D every axis is on screen');
+  });
+
+  test('the arrowhead and the point marker scale with the shaft', function () {
+    var load = App.Loads.draftPoint(COLUMN, [0.05, 0]);
+    var spec = App.Viewport.loadGlyphSpec(load, COLUMN);
+    var group = App.Viewport.loadGlyphGroup(load, COLUMN);
+    var sizes = [];
+    group.traverse(function (object) {
+      if (object.geometry && object.geometry.parameters
+          && object.geometry.parameters.radius !== undefined) {
+        sizes.push(object.geometry.parameters.radius);
+      }
+    });
+    T.ok(sizes.length > 0, 'the cone head and the sphere marker are both radii');
+    T.ok(sizes.every(function (r) { return r < spec.length; }),
+         'nothing on the glyph is wider than the glyph is long: ' + sizes.join(', '));
+  });
+  /* ── Standing on a drawn layer ────────────────────────────────────
+     `Domain` is the block the boreholes describe; an embankment drawn on top of it
+     reaches above `z_top`. A load placed there is on model geometry, and refusing it
+     as "outside the model domain" is the bug App.Model.extentOf fixes -- it mirrors
+     the server's `Project.extent`. */
+
+  var EMBANKMENT = { key: 'drawn_1', label: 'Embankment', source: 'gui',
+                     bbox: [0, 0, 0, 50, 40, 4] };
+
+  test('a point load on a drawn layer above ground is accepted', function () {
+    var project = Object.assign({}, SECTION, { custom_parts: [EMBANKMENT] });
+    var load = App.Loads.draftPoint(project, [10, 2]);
+    T.eq(load.z, 2);
+  });
+
+  test('a point load above everything in the model is still refused', function () {
+    var project = Object.assign({}, SECTION, { custom_parts: [EMBANKMENT] });
+    var error = null;
+    try { App.Loads.draftPoint(project, [10, 9]); } catch (e) { error = e; }
+    T.ok(error, 'the check is relaxed, not removed');
+  });
+
+  test('with no drawn parts the domain is still the limit', function () {
+    var error = null;
+    try { App.Loads.draftPoint(SECTION, [10, 2]); } catch (e) { error = e; }
+    T.ok(error, 'nothing sticks out, so z_top still applies');
+  });
+
+  test('a line load drawn over a raised layer sits on top of it', function () {
+    /* Its z has to match the server's `Project.ground_z` or the switch to 3D will not
+       translate it into a surface load -- the regression this pins down. */
+    var project = Object.assign({}, SECTION, { custom_parts: [EMBANKMENT] });
+    var load = App.Loads.draftFromPoints(project, [[9, 20, 0], [2, 20, 0]]);
+    T.eq(load.z, 4);
+  });
+
+  test('a 3D surface load records the elevation it was drawn at', function () {
+    /* The server places the pad from this (`Project.elevation_of`); leaving it out
+       makes it fall back to a bounding box padded by 1e-7. */
+    var project = Object.assign({}, SOLID, { custom_parts: [EMBANKMENT] });
+    var load = App.Loads.draftFromPoints(project, [[12, 25, 0], [3, 7, 0]]);
+    T.eq(load.z, 4);
+  });
+
+  /* ── Where the arrows are drawn ───────────────────────────────────
+     The glyph is the load, as far as the user is concerned. Its 3D branch anchored
+     every arrow at `domain.z_top` -- the top of the *borehole* block -- so a load put
+     on an embankment in 2D jumped down onto the borehole soil on the switch to 3D,
+     while the 2D branch had used `load.z` all along. Mirrors the server's
+     `Project.elevation_of`. */
+
+  var RAISED_SOLID = { dimension: 3,
+    domain: { x0: 0, x1: 50, y0: 0, y1: 40, z_top: 0, z_bottom: -25 },
+    custom_parts: [EMBANKMENT], loads: [] };
+
+  function surfaceLoad(z) {
+    return { id: 'load_1', name: 'SurfaceLoad_1', kind: 'surface',
+             x0: 4, x1: 16, y0: 5, y1: 10, z: z, thickness: 0.15,
+             components: [0, 0, -20], distribution: 'Uniform', active: true };
+  }
+
+  test('a 3D surface load draws its arrows at its own elevation', function () {
+    var spec = App.Viewport.loadGlyphSpec(surfaceLoad(4), RAISED_SOLID);
+    T.ok(spec.anchors.length, 'the glyph has anchors');
+    T.eq(spec.anchors.every(function (a) { return a[2] === 4; }), true,
+         'every arrow sits on the embankment, not on the borehole soil: '
+         + JSON.stringify(spec.anchors.map(function (a) { return a[2]; })));
+  });
+
+  test('a surface load with no elevation falls back to the top of the model', function () {
+    var spec = App.Viewport.loadGlyphSpec(surfaceLoad(null), RAISED_SOLID);
+    T.eq(spec.anchors.every(function (a) { return a[2] === 4; }), true,
+         'older records still mean the model top, which the embankment raised');
+  });
+
+  test('with nothing drawn the model top is still the domain top', function () {
+    var plain = Object.assign({}, RAISED_SOLID, { custom_parts: [] });
+    var spec = App.Viewport.loadGlyphSpec(surfaceLoad(null), plain);
+    T.eq(spec.anchors.every(function (a) { return a[2] === 0; }), true);
+  });
+
+  test('the surface load outline is drawn at the same elevation as its arrows', function () {
+    /* The pad outline had its own copy of `domain.z_top`, so fixing only the arrows
+       would have left the rectangle behind on the borehole soil. */
+    var group = App.Viewport.loadGlyphGroup(surfaceLoad(4), RAISED_SOLID);
+    var outline = null;
+    group.traverse(function (object) {
+      if (object.geometry && object.geometry.attributes
+          && object.type === 'Line' && object.userData.noPick) outline = object;
+    });
+    T.ok(outline, 'the pad has an outline');
+    var z = outline.geometry.attributes.position.array;
+    var levels = [];
+    for (var i = 2; i < z.length; i += 3) levels.push(z[i]);
+    T.eq(levels.every(function (v) { return v === 4; }), true,
+         'outline levels: ' + JSON.stringify(levels));
+  });
+
 })();
