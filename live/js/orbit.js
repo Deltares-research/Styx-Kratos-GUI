@@ -115,9 +115,14 @@ App.Orbit = function (domElement, opts) {
       /* Pan in the camera plane, scaled so it tracks the cursor at target depth.
          The two screen axes are the derivatives of the position above: `right` is
          the azimuthal one and `upv` the polar one, negated so a downward drag
-         moves the model down. */
+         moves the model down.
+
+         `right` is cross(up, offset) with up = +Y, which is (sin, 0, -cos) --
+         the opposite sign to the Z-up controller's (-sin, cos, 0), because
+         projecting the azimuth onto x-z reverses the handedness. Copying that
+         file's vector verbatim is what made a rightward drag pan left. */
       var s = self.radius * panSpeed;
-      var right = new THREE.Vector3(-Math.sin(self.theta), 0, Math.cos(self.theta));
+      var right = new THREE.Vector3(Math.sin(self.theta), 0, -Math.cos(self.theta));
       var upv = new THREE.Vector3(
         -Math.cos(self.phi) * Math.cos(self.theta),
          Math.sin(self.phi),
