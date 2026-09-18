@@ -7,9 +7,9 @@ what the reduction integrates over -- and the out-of-plane extent is what it thr
 away. Switching mode translates one into the other so a load drawn in 3D is still
 there in 2D, and back.
 
-Both records are kept, paired by `derived_from`. A line load carries no `y` at all --
+Both records are kept, paired by `derived_from`. A line load carries no `z` at all --
 dimension-native by design, and there is a test that says so -- so replacing the
-surface record outright would widen a footprint of y = 5..10 to the whole model on the
+surface record outright would widen a footprint of z = 5..10 to the whole model on the
 way back. Keeping it costs one extra record and makes the round trip lossless.
 
 The translation runs in the direction of travel: leaving 2D pushes the section's line
@@ -17,8 +17,8 @@ loads up, leaving 3D pushes the solid model's surface loads down. Whichever dime
 the user was working in is the one they edited, so that is the one that wins.
 
 Not everything has a counterpart. A point load is kN, not kN/m2, and there is no 3D
-point-load kind to put it in. A line load below `z_top` has nowhere to go either: a
-`SurfaceLoad` has no z of its own and always sits on the ground surface, so translating
+point-load kind to put it in. A line load below `y_top` has nowhere to go either: a
+`SurfaceLoad` has no level of its own and always sits on the ground surface, so translating
 one would relocate it. Both are left alone and built at the section plane instead --
 see `Project.loads_for`, which is what keeps a translated pair from being applied twice.
 """
@@ -72,13 +72,13 @@ def _line_from(surface: SurfaceLoad, project: Project, existing: LineLoad | None
     `existing` is the counterpart a previous switch already made. Its id and name are
     reused so the tree row, the selection and anything holding the key stay put.
     """
-    qx, _, qz = surface.components
+    qx, qy, _ = surface.components
     return LineLoad(
         id=existing.id if existing else f"{surface.id}_2d",
         name=_translated_name(surface, existing, "line"),
-        x0=surface.x0, x1=surface.x1, z=project.elevation_of(surface),
+        x0=surface.x0, x1=surface.x1, y=project.elevation_of(surface),
         thickness=surface.thickness,
-        components=(qx, qz),
+        components=(qx, qy),
         distribution=surface.distribution,
         active=surface.active,
         derived_from=existing.derived_from if existing else surface.id,
@@ -91,18 +91,18 @@ def _surface_from(line: LineLoad, project: Project, existing: SurfaceLoad | None
 
     The footprint is the whole out-of-plane width the first time, which is what plane
     strain means and all the line record can say. On a later switch the counterpart's
-    own `y0`/`y1` are kept: the user may have narrowed the footprint in 3D, and the
+    own `z0`/`z1` are kept: the user may have narrowed the footprint in 3D, and the
     trip through the section is not a reason to undo that.
     """
-    qx, qz = line.components
+    qx, qy = line.components
     return SurfaceLoad(
         id=existing.id if existing else f"{line.id}_3d",
         name=_translated_name(line, existing, "surface"),
-        x0=line.x0, x1=line.x1, z=line.z,
-        y0=existing.y0 if existing else project.domain.y0,
-        y1=existing.y1 if existing else project.domain.y1,
+        x0=line.x0, x1=line.x1, y=line.y,
+        z0=existing.z0 if existing else project.domain.z0,
+        z1=existing.z1 if existing else project.domain.z1,
         thickness=line.thickness,
-        components=(qx, 0.0, qz),
+        components=(qx, qy, 0.0),
         distribution=line.distribution,
         active=line.active,
         derived_from=existing.derived_from if existing else line.id,
@@ -113,7 +113,7 @@ GROUND_TOLERANCE = 1e-6
 """How far off the ground a line load may be and still count as lying on it.
 
 Not a nicety: gmsh pads every bounding box it reports by 1e-7, so an embankment drawn
-0..4 makes `ground_z` 4.0000001 while the load the user places on its visible top is at
+0..4 makes `ground_y` 4.0000001 while the load the user places on its visible top is at
 4.0. Exact equality made those two different numbers and the load stopped translating.
 Comfortably above that pad and below anything an engineer would mean by a level.
 """
@@ -122,12 +122,12 @@ Comfortably above that pad and below anything an engineer would mean by a level.
 def _translatable(load: Load, project: Project) -> bool:
     """Whether this 2D load has a surface form at all. See the module docstring.
 
-    `ground_z` rather than `domain.z_top`: a load drawn on top of an embankment is on
+    `ground_y` rather than `domain.y_top`: a load drawn on top of an embankment is on
     the ground surface even though it is well above the borehole block. Compared within
     `GROUND_TOLERANCE`, because neither number is exact.
     """
     return (load.kind == "line"
-            and abs(load.z - project.ground_z()) <= GROUND_TOLERANCE)
+            and abs(load.y - project.ground_y()) <= GROUND_TOLERANCE)
 
 
 def _partner_of(load: Load, by_id: dict[str, Load], derived: dict[str, Load]

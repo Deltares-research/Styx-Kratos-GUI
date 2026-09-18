@@ -177,8 +177,8 @@ def test_the_element_normal_points_at_the_soil_it_holds():
     left_nodes = {node for row in rows[:2] for node in row}
 
     for element in result.elements["iface_1"]:
-        (x0, y0, _), (x1, y1, _) = (SQUARE_NODES[n] for n in element[:2])
-        normal = (-(y1 - y0), x1 - x0)
+        (x0, z0, _), (x1, z1, _) = (SQUARE_NODES[n] for n in element[:2])
+        normal = (-(z1 - z0), x1 - x0)
         towards_left = normal[0] < 0
         assert towards_left == (element[2] in left_nodes)
 

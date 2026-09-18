@@ -125,16 +125,16 @@ FLIP: dict[int, tuple[int, ...]] = {
 
 # Domain faces that become named node groups: (part name, world axis, Domain attribute).
 BOUNDARIES = (
-    ("Bottom_Fixed", 2, "z_bottom"),
+    ("Bottom_Fixed", 1, "y_bottom"),
     ("Left_Edge", 0, "x0"),
     ("Right_Edge", 0, "x1"),
-    ("Front_Edge", 1, "y0"),
-    ("Back_Edge", 1, "y1"),
-    ("Top_Surface", 2, "z_top"),
+    ("Front_Edge", 2, "z0"),
+    ("Back_Edge", 2, "z1"),
+    ("Top_Surface", 1, "y_top"),
 )
 RESERVED = {name for name, _, _ in BOUNDARIES}
 
-LOWER_FACES = {"x0", "y0", "z_bottom"}
+LOWER_FACES = {"x0", "z0", "y_bottom"}
 """The `BOUNDARIES` attributes naming the low side of their axis; the rest are the high
 side. Used to read each face off the meshed body rather than off the declared box."""
 
@@ -175,7 +175,7 @@ def export_project(project: Project, settings: MeshRequest,
     warnings: list[str] = []
 
     world = _world_coordinates()
-    coordinates = _kratos_coordinates(world, dim, project.section_plane)
+    coordinates = _kratos_coordinates(world, dim)
     bodies = _bodies(project, dim)
     soil_blocks = [(key, name, _oriented(rows, coordinates, dim))
                    for key, name, rows in _harvest(bodies, dim)]
@@ -440,14 +440,11 @@ def _node_at(point: tuple[float, ...], project: Project,
              among: set[int] | None) -> int | None:
     """The mesh node on an anchor end, in world coordinates, or None.
 
-    A 2D anchor is dimension-native, so its `(x, z)` is compared through the section
-    plane's own axes; a 3D one is already in world coordinates and is compared directly.
+    A 2D anchor is dimension-native `(x, y)`, which is exactly the first two world
+    axes now that the section is the x-y plane; a 3D one is in world coordinates
+    already. Either way the comparison is direct.
     """
-    if len(point) == 3:
-        axes = (0, 1, 2)
-    else:
-        _, u, v = build.PLANE_AXES[project.section_plane]
-        axes = (u, v)
+    axes = (0, 1, 2) if len(point) == 3 else (0, 1)
     for tag, xyz in world.items():
         if among is not None and tag not in among:
             continue
@@ -509,12 +506,23 @@ def _world_coordinates() -> dict[int, tuple[float, float, float]]:
             for i, tag in enumerate(tags)}
 
 
-def _kratos_coordinates(world: dict[int, tuple[float, float, float]], dim: int,
-                        plane: str) -> dict[int, tuple[float, float, float]]:
-    if dim == 3:
-        return world
-    _, u, v = build.PLANE_AXES[plane]
-    return {tag: (xyz[u], xyz[v], 0.0) for tag, xyz in world.items()}
+def _kratos_coordinates(world: dict[int, tuple[float, float, float]], dim: int
+                        ) -> dict[int, tuple[float, float, float]]:
+    """World coordinates are Kratos coordinates, in both dimensions.
+
+    There is nothing to remap since the re-basis: a 2D model is the x-y plane, which is
+    the plane Kratos writes a plane-strain deck in, and `build._section` has already
+    moved it onto z = 0. Asserted rather than assumed -- a 2D node off the plane would
+    otherwise reach the deck as a silently wrong third coordinate.
+    """
+    if dim == 2:
+        off_plane = [tag for tag, xyz in world.items() if abs(xyz[2]) > TOLERANCE]
+        if off_plane:
+            raise ValueError(
+                f"{len(off_plane)} node(s) of the 2D mesh lie off the z = 0 plane; "
+                "the section was not flattened"
+            )
+    return world
 
 
 def _bodies(project: Project, dim: int) -> dict[str, list[int]]:
@@ -678,7 +686,8 @@ def _load_conditions(project: Project, dim: int,
                 )
             continue
         if load.kind == "point":
-            target = (load.x, project.cut_at(), load.z)
+            target = ((load.x, load.y, 0.0) if dim == 2
+                      else (load.x, load.y, project.cut_at()))
             nearest = min(
                 world,
                 key=lambda tag: sum((world[tag][axis] - target[axis]) ** 2 for axis in range(3)),
@@ -689,7 +698,7 @@ def _load_conditions(project: Project, dim: int,
         rows_by_class: dict[str, list[list[int]]] = {}
         for _, entity in gmsh.model.getEntities(dim - 1):
             box = gmsh.model.getBoundingBox(dim - 1, entity)
-            if abs(box[2] - elevation) > TOLERANCE or abs(box[5] - elevation) > TOLERANCE:
+            if abs(box[1] - elevation) > TOLERANCE or abs(box[4] - elevation) > TOLERANCE:
                 continue
             types, _, connectivity = gmsh.model.mesh.getElements(dim - 1, entity)
             for element_type, flat in zip(types, connectivity):
@@ -737,7 +746,7 @@ def _under_load(corners: list[int], world: dict[int, tuple[float, float, float]]
     if load.kind == "line":
         return all(inside(world[tag][0], load.x0, load.x1) for tag in corners)
     return all(inside(world[tag][0], load.x0, load.x1)
-               and inside(world[tag][1], load.y0, load.y1) for tag in corners)
+               and inside(world[tag][2], load.z0, load.z1) for tag in corners)
 
 
 # ── Naming and numbering ────────────────────────────────────────────────────
@@ -848,10 +857,11 @@ def _boundary_nodes(project: Project, dim: int,
     ground must not become the whole `Top_Surface` -- but any node lying on a face,
     structural or not, joins the group.
 
-    A 2D section has no boundary along its normal axis, so those two groups are simply
-    not written -- an empty `Front_Edge` would read as a modelling mistake.
+    A 2D section has no boundary along its normal axis, which is always z, so
+    `Front_Edge` and `Back_Edge` are simply not written -- an empty one would read as
+    a modelling mistake.
     """
-    skipped = build.PLANE_AXES[project.section_plane][0] if dim == 2 else None
+    skipped = 2 if dim == 2 else None
     measured = [xyz for tag, xyz in world.items()
                 if tag in node_id and (body_tags is None or tag in body_tags)]
     if not measured:
@@ -875,18 +885,7 @@ def _boundary_parts(boundaries: list[tuple[str, int, list[int]]]
     return [(name, nodes, [], []) for name, _, nodes in boundaries]
 
 
-def _kratos_axis(dim: int, plane: str, world_axis: int) -> int:
-    """The Kratos vector index (0/1/2) a world axis lands on.
 
-    In 3D, Kratos coordinates are world coordinates (`_kratos_coordinates`), so the
-    axis is unchanged. In 2D, the section's in-plane axes become Kratos X and Y in the
-    order `_kratos_coordinates` writes them, and the section's own normal axis never
-    reaches this function -- `_boundary_nodes` has already dropped that boundary.
-    """
-    if dim == 3:
-        return world_axis
-    _, u, v = build.PLANE_AXES[plane]
-    return 0 if world_axis == u else 1
 
 
 def _boundary_constraints(project: Project, dim: int,
@@ -904,8 +903,11 @@ def _boundary_constraints(project: Project, dim: int,
         if name == "Bottom_Fixed":
             out.append((name, list(ndof)))
             continue
+        # Kratos coordinates are world coordinates in both dimensions, so the world
+        # axis is the vector index. In 2D the only axis this never sees is z, which
+        # `_boundary_nodes` has already dropped.
         is_fixed = [False, False, False]
-        is_fixed[_kratos_axis(dim, project.section_plane, axis)] = True
+        is_fixed[axis] = True
         out.append((name, is_fixed))
     return out
 

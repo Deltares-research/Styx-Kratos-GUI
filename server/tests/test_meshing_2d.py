@@ -57,12 +57,14 @@ def test_stats_are_internally_consistent(quadratic):
 
 
 def test_every_node_lies_on_the_section_plane(quadratic):
+    """Which is z = 0: the cut is taken at `section_offset` and moved onto the x-y
+    plane, so the mesh has no third coordinate to speak of."""
     import gmsh
 
-    project, mesh = quadratic
+    _, mesh = quadratic
     _, coordinates, _ = gmsh.model.mesh.getNodes()
-    for y in coordinates[1::3]:
-        assert y == pytest.approx(project.section_offset, abs=1e-6)
+    for z in coordinates[2::3]:
+        assert z == pytest.approx(0.0, abs=1e-6)
 
 
 def test_the_payload_is_drawable_and_finite(quadratic):
@@ -92,8 +94,8 @@ def test_a_local_refinement_box_still_applies():
     d = project.domain
     box = BoxRefinement(kind="box", size=0.8,
                         x_min=d.x0, x_max=d.x1 / 2,
-                        y_min=d.y0 - 1, y_max=d.y1 + 1,
-                        z_min=d.z_bottom, z_max=d.z_top)
+                        z_min=d.z0 - 1, z_max=d.z1 + 1,
+                        y_min=d.y_bottom, y_max=d.y_top)
     with build.session():
         plain = meshing.mesh_project(project, element_size=4.0, order=1)
         refined = meshing.mesh_project(project, element_size=4.0, order=1, refinements=[box])
@@ -189,11 +191,11 @@ def anchored_section(head=(12.0, -2.0), tail=(20.0, -8.0)) -> Project:
     return Project.model_validate(payload)
 
 
-def mesh_nodes_at(x: float, z: float, tol: float = 1e-6) -> list[int]:
+def mesh_nodes_at(x: float, y: float, tol: float = 1e-6) -> list[int]:
     import gmsh
     tags, coords, _ = gmsh.model.mesh.getNodes()
     return [int(t) for i, t in enumerate(tags)
-            if abs(coords[3 * i] - x) < tol and abs(coords[3 * i + 2] - z) < tol]
+            if abs(coords[3 * i] - x) < tol and abs(coords[3 * i + 1] - y) < tol]
 
 
 def test_the_anchor_head_is_a_node_the_sheet_pile_owns():

@@ -1,9 +1,13 @@
 (function () {
   test('view presets select a stable reference grid plane', function () {
-    var box = [0, 0, -25, 50, 40, 0];
-    T.eq(App.Viewport.gridReference('top', box), { plane: 'xy', offset: -25 });
-    T.eq(App.Viewport.gridReference('iso', box), { plane: 'xy', offset: -25 });
-    T.eq(App.Viewport.gridReference('front', box), { plane: 'xz', offset: 0 });
+    // The model box, world (xmin, ymin, zmin, xmax, ymax, zmax): 50 across, 25 deep
+    // below ground, 40 out of plane.
+    var box = [0, -25, 0, 50, 0, 40];
+    T.eq(App.Viewport.gridReference('top', box), { plane: 'xz', offset: -25 },
+         'the top view backs the grid onto the model floor');
+    T.eq(App.Viewport.gridReference('iso', box), { plane: 'xz', offset: -25 });
+    T.eq(App.Viewport.gridReference('front', box), { plane: 'xy', offset: 0 },
+         'the front view stands it up in the x-y plane at the near z');
     T.eq(App.Viewport.gridReference('side', box), { plane: 'yz', offset: 50 });
   });
 
@@ -71,7 +75,7 @@
    See plan/plan_2d_mode.md. */
 
 (function () {
-  var DOMAIN = { domain: { x0: 0, x1: 50, y0: 0, y1: 40, z_top: 0, z_bottom: -25 } };
+  var DOMAIN = { domain: { x0: 0, x1: 50, z0: 0, z1: 40, y_top: 0, y_bottom: -25 } };
 
   test('an explicit section_offset wins over the domain midpoint', function () {
     T.near(App.Viewport.sectionOffset({ domain: DOMAIN.domain, section_offset: 12.5 }),
@@ -85,74 +89,60 @@
     T.eq(App.Viewport.cameraAngles('nonsense', 3), App.Viewport.cameraAngles('iso', 3));
   });
 
-  test('in 2D every view preset collapses to the section view', function () {
-    // Elevation: theta -pi/2 with phi pi/2 puts the camera on -y looking along +y,
-    // so x runs right and z up. Front/top/side/iso must not rotate out of it.
+  test('in 2D every view preset collapses to the one section view', function () {
+    // theta pi/2 with phi pi/2 puts the camera on +z looking along -z, so x runs
+    // right and y up. Front/top/side/iso must not rotate out of it.
     ['iso', 'front', 'side', 'top', 'nonsense'].forEach(function (name) {
-      var a = App.Viewport.cameraAngles(name, 2, 'xz');
-      T.near(a.theta, -Math.PI / 2, 1e-9, name + ' theta');
+      var a = App.Viewport.cameraAngles(name, 2);
+      T.near(a.theta, Math.PI / 2, 1e-9, name + ' theta');
       T.near(a.phi, Math.PI / 2, 1e-9, name + ' phi');
     });
   });
 
-  test('a plan section looks down, at the same tilt as the frozen top view', function () {
-    // Not straight down: 0.035 rad is what js/viewport.js's `top` preset uses, and
-    // the next test says why it cannot be zero.
-    T.near(App.Viewport.cameraAngles('iso', 2, 'xy').phi, 0.035, 1e-9);
-    // ...and the other elevation looks along -x.
-    T.near(App.Viewport.cameraAngles('iso', 2, 'yz').theta, 0, 1e-9);
-    T.near(App.Viewport.cameraAngles('iso', 2, 'yz').phi, Math.PI / 2, 1e-9);
+  test('the section view is square on, with no tilt to dodge a degenerate basis', function () {
+    /* The frozen Z-up controller hard-codes camera.up = (0, 0, 1), so an elevation
+       had to be nudged off the pole or lookAt() built a degenerate basis and three.js
+       drew nothing at all -- an empty viewport, no error. live/js/orbit.js stands the
+       camera up on +y instead, and the section looks along -z, which is square to it:
+       |forward x up| is exactly 1. */
+    var a = App.Viewport.cameraAngles('iso', 2);
+    T.near(Math.abs(Math.sin(a.phi)), 1, 1e-12);
   });
 
-  test('no section camera is degenerate against the fixed up vector', function () {
-    /* js/orbit.js:32 hard-codes camera.up = (0, 0, 1). If a view direction is
-       parallel to that, lookAt() builds a degenerate basis and three.js draws
-       nothing at all -- an empty viewport with no error in the console, which is
-       exactly what a phi of 0.0001 produced. |forward x up| is sin(phi), so the
-       test is really "keep the camera off the pole". */
-    ['xz', 'yz', 'xy'].forEach(function (plane) {
-      var a = App.Viewport.cameraAngles('iso', 2, plane);
-      var separation = Math.abs(Math.sin(a.phi));
-      T.ok(separation > 0.02,
-           plane + ' camera is degenerate: |forward x up| = ' + separation);
-    });
+  test('only the top view still needs a tilt, since it looks along the up vector', function () {
+    var top = App.Viewport.cameraAngles('top', 3);
+    T.near(top.phi, 0.035, 1e-9);
+    T.ok(Math.abs(Math.sin(top.phi)) > 0.02,
+         'the 3D top view is degenerate: |forward x up| = ' + Math.sin(top.phi));
   });
 
   test('a drag that rotates out of the section view is clamped back', function () {
-    var clamped = App.Viewport.clampAngles({ theta: -1.1, phi: 0.4 }, 2, 'xz');
-    T.near(clamped.theta, -Math.PI / 2, 1e-9);
+    var clamped = App.Viewport.clampAngles({ theta: -1.1, phi: 0.4 }, 2);
+    T.near(clamped.theta, Math.PI / 2, 1e-9);
     T.near(clamped.phi, Math.PI / 2, 1e-9);
     T.ok(clamped.changed, 'the caller needs to know it has to re-render');
-
-    var plan = App.Viewport.clampAngles({ theta: -1.1, phi: 0.4 }, 2, 'xy');
-    T.near(plan.phi, 0.0001, 0.05);
-    T.ok(plan.changed);
   });
 
   test('clamping is a no-op in 3D and when already on the section plane', function () {
-    T.eq(App.Viewport.clampAngles({ theta: -1.1, phi: 0.4 }, 3, 'xz').changed, false);
-    T.eq(App.Viewport.clampAngles(
-      App.Viewport.cameraAngles('iso', 2, 'xz'), 2, 'xz').changed, false);
+    T.eq(App.Viewport.clampAngles({ theta: -1.1, phi: 0.4 }, 3).changed, false);
+    T.eq(App.Viewport.clampAngles(App.Viewport.cameraAngles('iso', 2), 2).changed, false);
   });
 
   test('in 2D the reference grid is the section plane itself, whatever the view', function () {
-    var box = [0, 0, -25, 50, 40, 0];
+    var box = [0, -25, 0, 50, 0, 40];
     ['top', 'iso', 'front', 'side'].forEach(function (name) {
-      T.eq(App.Viewport.gridReference(name, box, 'xz', 20), { plane: 'xz', offset: 20 }, name);
-      T.eq(App.Viewport.gridReference(name, box, 'xy', -6), { plane: 'xy', offset: -6 }, name);
+      T.eq(App.Viewport.gridReference(name, box, true), { plane: 'xy', offset: 0 }, name);
     });
   });
 
-  test('the section offset travels along the plane normal', function () {
-    var domain = { x0: 0, x1: 50, y0: 0, y1: 40, z_top: 0, z_bottom: -25 };
-    T.near(App.Viewport.sectionOffset({ domain: domain, section_plane: 'xz' }), 20, 1e-9);
-    T.near(App.Viewport.sectionOffset({ domain: domain, section_plane: 'xy' }), -12.5, 1e-9);
-    T.near(App.Viewport.sectionOffset({ domain: domain, section_plane: 'yz' }), 25, 1e-9);
-    T.near(App.Viewport.sectionOffset({ domain: domain, section_plane: 'xy',
-                                        section_offset: -6 }), -6, 1e-9);
+  test('the section offset travels along z, the axis the cut is normal to', function () {
+    var domain = { x0: 0, x1: 50, z0: 0, z1: 40, y_top: 0, y_bottom: -25 };
+    T.near(App.Viewport.sectionOffset({ domain: domain }), 20, 1e-9);
+    T.near(App.Viewport.sectionOffset({ domain: domain, section_offset: -6 }), -6, 1e-9);
     T.near(App.Viewport.sectionOffset(null), 0, 1e-9);
   });
 })();
+
 
 /* A project that is already 2D when it loads must come up in 2D. Without this the
    camera is a free 3D orbit over a flat section, which reads as a rendering fault. */
@@ -163,10 +153,9 @@
     var applied = [];
     App.state = {};
     try {
-      App.PROJECT = { dimension: 2, section_plane: 'xz', section_offset: 20,
-                      domain: { x0: 0, x1: 50, y0: 0, y1: 40, z_top: 0, z_bottom: -25 } };
+      App.PROJECT = { dimension: 2, section_offset: 20,
+                      domain: { x0: 0, x1: 50, z0: 0, z1: 40, y_top: 0, y_bottom: -25 } };
       T.eq(App.Viewport.viewModeOf(App.PROJECT), 'elevation');
-      T.eq(App.Viewport.viewModeOf({ dimension: 2, section_plane: 'xy' }), 'plan');
       T.eq(App.Viewport.viewModeOf({ dimension: 3 }), 'solid');
       T.eq(App.Viewport.viewModeOf(null), 'solid', 'no project yet means the 3D default');
     } finally {
@@ -183,42 +172,45 @@
    section's own extent instead. */
 
 (function () {
-  var BOX = [0, 0, -25, 50, 40, 0];
+  var BOX = [0, -25, 0, 50, 0, 40];
 
-  function fits(plane, width, height, aspect) {
+  function fits(width, height, aspect) {
     var frame = App.Buffers.bounds(BOX);
-    var s = App.Viewport.orthoHalfHeight(frame, plane, aspect);
+    var s = App.Viewport.orthoHalfHeight(frame, aspect);
     // js/orbit.js:40 sets camera.zoom = orthoBase / radius, so at the home radius
     // the visible half-height is s * homeRadius / orthoBase.
     var halfH = s * frame.homeRadius / App.Viewport.ORTHO_BASE;
     return { halfH: halfH, halfW: halfH * aspect, needH: height / 2, needW: width / 2 };
   }
 
-  test('the 2D frustum contains the whole section, on every plane', function () {
-    [['xz', 50, 25], ['xy', 50, 40], ['yz', 40, 25]].forEach(function (c) {
-      var f = fits(c[0], c[1], c[2], 2);
-      T.ok(f.halfH >= f.needH, c[0] + ' too short: ' + f.halfH + ' < ' + f.needH);
-      T.ok(f.halfW >= f.needW, c[0] + ' too narrow: ' + f.halfW + ' < ' + f.needW);
-    });
+  test('the 2D frustum contains the whole section', function () {
+    // The section is the x-y plane: 50 m across and 25 m down.
+    var f = fits(50, 25, 2);
+    T.ok(f.halfH >= f.needH, 'too short: ' + f.halfH + ' < ' + f.needH);
+    T.ok(f.halfW >= f.needW, 'too narrow: ' + f.halfW + ' < ' + f.needW);
   });
 
   test('...without leaving the section adrift in empty space', function () {
-    // The old constants put the xz section in a frustum 5x too tall. Anything under
+    // The old constants put the section in a frustum 5x too tall. Anything under
     // 1.5x the model is a fit a person would call a fit.
-    [['xz', 50, 25], ['xy', 50, 40], ['yz', 40, 25]].forEach(function (c) {
-      var f = fits(c[0], c[1], c[2], 2);
-      T.ok(f.halfH < f.needH * 1.5 || f.halfW < f.needW * 1.5,
-           c[0] + ' is padded out to ' + f.halfH + ' vs ' + f.needH);
-    });
+    var f = fits(50, 25, 2);
+    T.ok(f.halfH < f.needH * 1.5 || f.halfW < f.needW * 1.5,
+         'padded out to ' + f.halfH + ' vs ' + f.needH);
+  });
+
+  test('the out-of-plane depth cannot size the frustum', function () {
+    // 40 m of model behind the section is edge-on: it must not widen the view.
+    var f = fits(50, 25, 2);
+    T.ok(f.halfH < 40, 'the frustum is sized by x and y only: ' + f.halfH);
   });
 
   test('a tall, narrow viewport widens the frustum instead of clipping', function () {
-    var narrow = fits('xz', 50, 25, 0.5);
+    var narrow = fits(50, 25, 0.5);
     T.ok(narrow.halfW >= narrow.needW, 'the section must still fit across');
   });
 
   test('with no frame yet, the frozen constant is kept', function () {
-    T.eq(App.Viewport.orthoHalfHeight(null, 'xz', 1.5), 30);
+    T.eq(App.Viewport.orthoHalfHeight(null, 1.5), 30);
   });
 })();
 
@@ -268,27 +260,28 @@
   function normalOf(plane) { return [plane.normal.x, plane.normal.y, plane.normal.z]; }
 
   test('2D reads the cursor off the section plane it is looking at', function () {
-    T.eq(normalOf(App.Viewport.pickPlane(2, 'xz', 20)), [0, 1, 0]);
-    T.eq(App.Viewport.pickPlane(2, 'xz', 20).constant, -20, 'and at the section offset');
-    T.eq(normalOf(App.Viewport.pickPlane(2, 'yz', 3)), [1, 0, 0]);
-    T.eq(normalOf(App.Viewport.pickPlane(2, 'xy', -4)), [0, 0, 1]);
-  });
-
-  test('3D still reads off the ground', function () {
-    var plane = App.Viewport.pickPlane(3, 'xz', 20);
+    // The section is the x-y plane at z = 0: the cut is taken at `section_offset`
+    // but `build._section` moves the geometry there, so that is where a pick lands.
+    var plane = App.Viewport.pickPlane(2);
     T.eq(normalOf(plane), [0, 0, 1]);
     T.eq(plane.constant, 0);
   });
 
-  test('the elevation ray meets the section plane instead of running along it', function () {
-    // The camera the xz section uses: looking along +y, exactly parallel to z = 0.
-    var ray = new THREE.Ray(new THREE.Vector3(5, -100, -3),
-                            new THREE.Vector3(0, 1, 0));
-    var onSection = ray.intersectPlane(App.Viewport.pickPlane(2, 'xz', 20),
-                                       new THREE.Vector3());
+  test('3D still reads off the ground', function () {
+    var plane = App.Viewport.pickPlane(3);
+    T.eq(normalOf(plane), [0, 1, 0], 'with Y up the ground is a plane of constant y');
+    T.eq(plane.constant, 0);
+  });
+
+  test('the section ray meets the section plane instead of running along it', function () {
+    // The camera the section uses: looking along -z, exactly parallel to the
+    // horizontal ground plane.
+    var ray = new THREE.Ray(new THREE.Vector3(5, -3, 100),
+                            new THREE.Vector3(0, 0, -1));
+    var onSection = ray.intersectPlane(App.Viewport.pickPlane(2), new THREE.Vector3());
     T.ok(onSection, 'the section plane is square to the view: it always has a hit');
-    T.eq([onSection.x, onSection.y, onSection.z], [5, 20, -3]);
-    T.eq(ray.intersectPlane(App.Viewport.pickPlane(3, 'xz', 20), new THREE.Vector3()),
+    T.eq([onSection.x, onSection.y, onSection.z], [5, -3, 0]);
+    T.eq(ray.intersectPlane(App.Viewport.pickPlane(3), new THREE.Vector3()),
          null, 'the ground plane is the one that gave 2.2e14 m');
   });
 })();
@@ -465,20 +458,31 @@
 
 (function () {
   test('the triad shows the axes the model is drawn in', function () {
-    T.eq(App.Viewport.triadAxes(3, 'xz'), ['x', 'y', 'z']);
-    T.eq(App.Viewport.triadAxes(2, 'xz'), ['x', 'z'], 'an elevation is drawn in x and z');
-    T.eq(App.Viewport.triadAxes(2, 'xy'), ['x', 'y'], 'a plan is drawn in x and y');
-    T.eq(App.Viewport.triadAxes(2, 'yz'), ['y', 'z']);
+    T.eq(App.Viewport.triadAxes(3), ['x', 'y', 'z']);
+    T.eq(App.Viewport.triadAxes(2), ['x', 'y'], 'the section is drawn in x and y');
+  });
+
+  test('every camera stands up on the same axis the model does', function () {
+    /* The triad widget has its own camera, and it kept the frozen mockup's
+       up = (0, 0, 1) after the scene camera moved to Y-up. In the 2D section that
+       is parallel to the view direction, so lookAt() built a degenerate basis and
+       the widget drew nothing -- the same failure mode the section view itself
+       used to have. */
+    T.eq(App.Viewport.WORLD_UP, [0, 1, 0]);
+
+    // ...and it is square to the direction the section is viewed along.
+    var a = App.Viewport.cameraAngles('iso', 2);
+    var forward = [Math.sin(a.phi) * Math.cos(a.theta), Math.cos(a.phi),
+                   Math.sin(a.phi) * Math.sin(a.theta)];
+    var dot = forward[0] * App.Viewport.WORLD_UP[0]
+            + forward[1] * App.Viewport.WORLD_UP[1]
+            + forward[2] * App.Viewport.WORLD_UP[2];
+    T.near(dot, 0, 1e-12, 'the section view must not look along the up vector');
   });
 
   test('the axis normal to the section is the one left out', function () {
-    // Not simply "drop z in 2D": which axis goes depends on the plane being cut.
-    ['xz', 'xy', 'yz'].forEach(function (plane) {
-      var shown = App.Viewport.triadAxes(2, plane);
-      T.eq(shown.length, 2, plane + ' should show two axes');
-      shown.forEach(function (axis) {
-        T.ok(plane.indexOf(axis) >= 0, axis + ' lies in the ' + plane + ' plane');
-      });
-    });
+    // z is the out-of-plane axis: the camera cannot be turned towards it, so an
+    // arrow for it would point at nothing.
+    T.eq(App.Viewport.triadAxes(2).indexOf('z'), -1);
   });
 })();

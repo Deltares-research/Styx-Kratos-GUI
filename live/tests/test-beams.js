@@ -1,6 +1,6 @@
 /* Structure-mode piles and walls.
 
-   A sheet pile is a dimension-native (x, z) polyline in a section. The solid model
+   A sheet pile is a dimension-native (x, y) polyline in a section. The solid model
    holds the other two kinds: a *panel*, which is a wall in plan swept between two
    levels and meshed as shells, and a *member*, which is the same profile a sheet pile
    uses standing in space. Each kind belongs to one dimension and refuses the other
@@ -9,30 +9,30 @@
 (function () {
   function section(extra) {
     return Object.assign({
-      dimension: 2, section_plane: 'xz', section_offset: 20,
-      domain: { x0: 0, x1: 50, y0: 0, y1: 40, z_top: 0, z_bottom: -25 },
+      dimension: 2, section_offset: 20,
+      domain: { x0: 0, x1: 50, z0: 0, z1: 40, y_top: 0, y_bottom: -25 },
       loads: [], beams: [], beam_sections: []
     }, extra || {});
   }
   function solid() {
     return {
       dimension: 3,
-      domain: { x0: 0, x1: 50, y0: 0, y1: 40, z_top: 0, z_bottom: -25 },
+      domain: { x0: 0, x1: 50, z0: 0, z1: 40, y_top: 0, y_bottom: -25 },
       loads: [], beams: [], beam_sections: []
     };
   }
 
-  test('a sheet pile drafts as a dimension-native x-z polyline', function () {
-    var beam = App.Beams.draftFromPoints(section(), [[12, 20, 0], [12, 20, -14]]);
+  test('a sheet pile drafts as a dimension-native x-y polyline', function () {
+    var beam = App.Beams.draftFromPoints(section(), [[12, 0, 20], [12, -14, 20]]);
     T.eq(beam.points, [[12, 0], [12, -14]]);
     T.eq(beam.active, true);
-    T.eq('y' in beam || 'y0' in beam, false);
+    T.eq('z' in beam || 'z0' in beam, false);
     T.eq(beam.id, 'beam_1');
   });
 
   test('a drafted pile keeps every vertex of a multi-segment polyline', function () {
     var beam = App.Beams.draftFromPoints(section(),
-      [[12, 20, 0], [12, 20, -7], [15, 20, -12]]);
+      [[12, 0, 20], [12, -7, 20], [15, -12, 20]]);
     T.eq(beam.points, [[12, 0], [12, -7], [15, -12]]);
   });
 
@@ -41,14 +41,13 @@
     var d = section().domain;
     T.ok(beam.points.length === 2);
     T.ok(beam.points.every(function (p) {
-      return p[0] >= d.x0 && p[0] <= d.x1 && p[1] >= d.z_bottom && p[1] <= d.z_top;
+      return p[0] >= d.x0 && p[0] <= d.x1 && p[1] >= d.y_bottom && p[1] <= d.y_top;
     }), 'the default pile has to be inside the model');
   });
 
   test('each kind of structure is available in the dimension it belongs to', function () {
     T.eq(App.Beams.available(section(), 'beam'), true);
     T.eq(App.Beams.available(section(), 'panel'), false);
-    T.eq(App.Beams.available(section({ section_plane: 'xy' }), 'beam'), false);
     T.eq(App.Beams.available(solid(), 'panel'), true);
     T.eq(App.Beams.available(solid(), 'member'), true);
     T.eq(App.Beams.available(solid(), 'beam'), false);
@@ -77,9 +76,9 @@
     T.eq(panel.id, 'panel_1');
     T.ok(panel.footprint.length === 2);
     T.ok(panel.footprint.every(function (p) {
-      return p.length === 2 && p[0] >= d.x0 && p[0] <= d.x1 && p[1] >= d.y0 && p[1] <= d.y1;
+      return p.length === 2 && p[0] >= d.x0 && p[0] <= d.x1 && p[1] >= d.z0 && p[1] <= d.z1;
     }), 'the footprint is (x, y) inside the site');
-    T.ok(panel.z_top > panel.z_toe, 'a wall hangs down from its top');
+    T.ok(panel.y_top > panel.y_toe, 'a wall hangs down from its top');
     T.eq('points' in panel, false, 'a wall has no in-section polyline');
   });
 
@@ -88,7 +87,7 @@
     T.eq(member.kind, 'member');
     T.eq(member.id, 'member_1');
     T.ok(member.points.every(function (p) { return p.length === 3; }));
-    T.ok(member.points[0][2] > member.points[1][2], 'it stands downward');
+    T.ok(member.points[0][1] > member.points[1][1], 'it stands downward');
   });
 
   test('a wall brings a section with a thickness rather than an area', function () {
@@ -104,7 +103,7 @@
   test('a wall is validated on its own terms', function () {
     var panel = App.Beams.draft(solid(), 'panel');
     T.eq(App.Beams.validate(panel), null);
-    T.ok(App.Beams.validate(Object.assign({}, panel, { z_toe: panel.z_top })),
+    T.ok(App.Beams.validate(Object.assign({}, panel, { y_toe: panel.y_top })),
          'a wall of no height is refused');
     T.ok(App.Beams.validate(Object.assign({}, panel, { footprint: [[1, 1]] })),
          'a wall needs a run to sweep');

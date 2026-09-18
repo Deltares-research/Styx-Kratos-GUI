@@ -35,7 +35,6 @@ RAKING = {"id": "beam_2", "name": "Sheet pile 2", "kind": "beam", "section": "az
 def project_with(beams: list[dict], dimension: int = 2,
                  panel_sections: list[dict] | None = None) -> Project:
     payload = seed_project(simple=True).model_dump() | {"dimension": dimension}
-    payload["section_plane"] = "xz"
     payload["beam_sections"] = [SECTION]
     payload["panel_sections"] = panel_sections or []
     payload["beams"] = beams
@@ -71,14 +70,14 @@ def test_the_wall_spans_the_full_out_of_plane_width_to_begin_with():
     solid = applied(project_with([PILE]), 3)
     panel = panel_of(solid)
 
-    assert [point[1] for point in panel.footprint] == [solid.domain.y0, solid.domain.y1]
+    assert [point[1] for point in panel.footprint] == [solid.domain.z0, solid.domain.z1]
     assert {point[0] for point in panel.footprint} == {PILE_X}
 
 
 def test_the_wall_takes_its_levels_from_the_piles_polyline():
     panel = panel_of(applied(project_with([PILE]), 3))
 
-    assert (panel.z_top, panel.z_toe) == (PILE_TOP, PILE_TOE)
+    assert (panel.y_top, panel.y_toe) == (PILE_TOP, PILE_TOE)
 
 
 def test_the_wall_points_back_at_the_pile_and_is_named_for_its_own_kind():
@@ -128,7 +127,7 @@ def test_an_edit_made_in_3d_reaches_the_section():
     for beam in moved["beams"]:
         if beam["kind"] == "panel":
             beam["footprint"] = [[14.0, 0.0], [14.0, 20.0]]
-            beam["z_toe"] = -9.0
+            beam["y_toe"] = -9.0
 
     section = applied(Project.model_validate(moved), 2)
 
@@ -150,7 +149,7 @@ def test_an_edit_made_in_the_section_reaches_the_solid_model():
     panel = panel_of(again)
 
     assert {p[0] for p in panel.footprint} == {3.0}
-    assert (panel.z_top, panel.z_toe) == (0.0, -4.0)
+    assert (panel.y_top, panel.y_toe) == (0.0, -4.0)
 
 
 # ── The piles with no panel form ────────────────────────────────────────────

@@ -1,7 +1,9 @@
 """The seed project — a faithful port of the frozen mockup's hard-coded model.
 
 Every number here is traceable to the frozen demo, and tests/test_parity.py proves it
-stays that way. Sources:
+stays that way -- by name only, because the frame changed and the names with it: the
+mockup is Z-up, this model is X across, Y up and Z out of plane. The values are the
+same. Sources:
 
   domain, excavation, wall, strut, water levels   js/viewport.js:12-16
   wall thickness                                  js/viewport.js:109
@@ -78,18 +80,18 @@ def blank_project() -> Project:
     return Project(
         name="Untitled project",
         simple_example=True,
-        domain=Domain(x0=0.0, x1=20.0, y0=0.0, y1=20.0, z_top=0.0, z_bottom=-15.0),
+        domain=Domain(x0=0.0, x1=20.0, z0=0.0, z1=20.0, y_top=0.0, y_bottom=-15.0),
         boreholes=[Borehole(id="bh1", name="BH-1", x=0.0, y=0.0, head=0.0, water=-1.5)],
         materials=[],
         layers=[],
-        excavation=Excavation(x0=0.0, x1=1.0, y0=0.0, y1=1.0, floor_z=-1.0),
-        wall=Wall(thickness=0.5, top_z=0.0, toe_z=-1.0),
-        struts=Struts(xs=[], z=0.0, radius=0.1),
-        anchor_rows=AnchorRows(xs=[], head_z=0.0, length=1.0, inclination_deg=45.0, radius=0.1),
-        piles=Piles(xs=[], ys=[], radius=0.1, length=1.0, top_z=0.0),
+        excavation=Excavation(x0=0.0, x1=1.0, z0=0.0, z1=1.0, floor_y=-1.0),
+        wall=Wall(thickness=0.5, top_y=0.0, toe_y=-1.0),
+        struts=Struts(xs=[], y=0.0, radius=0.1),
+        anchor_rows=AnchorRows(xs=[], head_y=0.0, length=1.0, inclination_deg=45.0, radius=0.1),
+        piles=Piles(xs=[], zs=[], radius=0.1, length=1.0, top_y=0.0),
         loads=[],
-        wells=Wells(positions=[], radius=0.1, top_z=0.0, length=1.0),
-        water=WaterLevel(z=-1.5),
+        wells=Wells(positions=[], radius=0.1, top_y=0.0, length=1.0),
+        water=WaterLevel(y=-1.5),
         mesh=MeshSettings(),
     )
 
@@ -99,31 +101,31 @@ def seed_project(simple: bool = True) -> Project:
     return Project(
         name="Deep excavation — Rotterdam Zuid",
         simple_example=simple,
-        domain=(Domain(x0=0.0, x1=25.0, y0=0.0, y1=25.0, z_top=0.0, z_bottom=-25.0)
+        domain=(Domain(x0=0.0, x1=25.0, z0=0.0, z1=25.0, y_top=0.0, y_bottom=-25.0)
                 if simple else
-                Domain(x0=0.0, x1=50.0, y0=0.0, y1=40.0, z_top=0.0, z_bottom=-25.0)),
+                Domain(x0=0.0, x1=50.0, z0=0.0, z1=40.0, y_top=0.0, y_bottom=-25.0)),
         boreholes=[b.model_copy(deep=True) for b in _BOREHOLES],
         materials=[m.model_copy(deep=True) for m in _MATERIALS],
         layers=[l.model_copy(deep=True) for l in _LAYERS],
-        excavation=Excavation(x0=12.0, x1=38.0, y0=10.0, y1=30.0, floor_z=-7.0),
-        wall=Wall(thickness=0.8, top_z=0.6, toe_z=-14.0),
+        excavation=Excavation(x0=12.0, x1=38.0, z0=10.0, z1=30.0, floor_y=-7.0),
+        wall=Wall(thickness=0.8, top_y=0.6, toe_y=-14.0),
         # js/viewport.js:120 — length PY1-PY0+1.6, i.e. 0.8 m past each pit face.
-        struts=Struts(xs=[14.0, 20.0, 26.0, 32.0], z=-3.0, radius=0.28, overhang=0.8,
+        struts=Struts(xs=[14.0, 20.0, 26.0, 32.0], y=-3.0, radius=0.28, overhang=0.8,
                       waler_width=0.5, waler_height=0.6),
         # js/viewport.js:141-155 — two rows, outward and downward at 35 degrees.
-        anchor_rows=AnchorRows(xs=[15.0, 21.0, 27.0, 33.0], head_z=-4.5, length=11.0,
+        anchor_rows=AnchorRows(xs=[15.0, 21.0, 27.0, 33.0], head_y=-4.5, length=11.0,
                         inclination_deg=35.0, radius=0.11),
         # js/viewport.js:166-171 — 4x3 grid hanging from the pit floor.
-        piles=Piles(xs=[16.0, 22.0, 28.0, 34.0], ys=[14.0, 20.0, 26.0],
-                    radius=0.3, length=9.0, top_z=-7.0),
+        piles=Piles(xs=[16.0, 22.0, 28.0, 34.0], zs=[14.0, 20.0, 26.0],
+                    radius=0.3, length=9.0, top_y=-7.0),
         # js/viewport.js:180 — 9 x 12 m pad centred at (5.5, 20); magnitude js/data.js:426.
         loads=[SurfaceLoad(
             id="load", name="SurfaceLoad_1",
-            x0=1.0, x1=10.0, y0=14.0, y1=26.0, thickness=0.25,
-            components=(0.0, 0.0, -20.0),
+            x0=1.0, x1=10.0, z0=14.0, z1=26.0, thickness=0.25,
+            components=(0.0, -20.0, 0.0),
         )],
         # js/viewport.js:215-227 — 15 m pipes hanging from the surface.
-        wells=Wells(positions=[(18.0, 15.0), (32.0, 25.0)], radius=0.35, top_z=0.0, length=15.0),
-        water=WaterLevel(z=-1.5),
+        wells=Wells(positions=[(18.0, 15.0), (32.0, 25.0)], radius=0.35, top_y=0.0, length=15.0),
+        water=WaterLevel(y=-1.5),
         mesh=MeshSettings(element_size=2.5, order=2),
     )

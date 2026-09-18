@@ -14,46 +14,35 @@
 (function () {
   var D = App.SoilVolumeDialog;
   var project = {
-    dimension: 2, section_plane: 'xz', section_offset: 12.5,
-    domain: { x0: 0, x1: 50, y0: 0, y1: 40, z_top: 0, z_bottom: -25 }
+    dimension: 2, section_offset: 12.5,
+    domain: { x0: 0, x1: 50, z0: 0, z1: 40, y_top: 0, y_bottom: -25 }
   };
 
-  test('the section plane decides which two axes the user types', function () {
-    T.eq(D.sectionAxes('xz').inPlane, [0, 2]);
-    T.eq(D.sectionAxes('xz').normal, 1);
-    T.eq(D.sectionAxes('xz').labels, ['x', 'z']);
-    T.eq(D.sectionAxes('xy').inPlane, [0, 1]);
-    T.eq(D.sectionAxes('xy').normal, 2);
-    T.eq(D.sectionAxes('yz').inPlane, [1, 2]);
-    T.eq(D.sectionAxes('yz').normal, 0);
+  test('the section is the x-y plane, so those are the two axes the user types', function () {
+    T.eq(D.sectionAxes().inPlane, [0, 1]);
+    T.eq(D.sectionAxes().normal, 2);
+    T.eq(D.sectionAxes().labels, ['x', 'y']);
   });
 
   test('an outline becomes a prism spanning the whole domain', function () {
     var prism = D.prismFor(project, [[0, 0], [12, 0], [12, 3]]);
     // Placed at the near face of the domain...
-    T.eq(prism.vertices, [[0, 0, 0], [12, 0, 0], [12, 0, 3]]);
-    // ...and swept the full 40 m across it, so any section plane cuts it.
-    T.eq(prism.extrusion, [0, 40, 0]);
+    T.eq(prism.vertices, [[0, 0, 0], [12, 0, 0], [12, 3, 0]]);
+    // ...and swept the full 40 m out of plane, so any section plane cuts it.
+    T.eq(prism.extrusion, [0, 0, 40]);
   });
 
   test('the prism crosses the section plane wherever the plane sits', function () {
     var prism = D.prismFor(project, [[0, 0], [10, 0], [10, 5]]);
-    var y0 = prism.vertices[0][1], y1 = y0 + prism.extrusion[1];
-    T.ok(y0 < project.section_offset && project.section_offset < y1,
-         'the cut at y = ' + project.section_offset + ' falls inside [' + y0 + ', ' + y1 + ']');
-  });
-
-  test('a plan section builds its prism along z instead', function () {
-    var plan = Object.assign({}, project, { section_plane: 'xy', section_offset: -6 });
-    var prism = D.prismFor(plan, [[0, 0], [10, 0], [10, 10]]);
-    T.eq(prism.vertices[0], [0, 0, -25]);
-    T.eq(prism.extrusion, [0, 0, 25]);
+    var z0 = prism.vertices[0][2], z1 = z0 + prism.extrusion[2];
+    T.ok(z0 < project.section_offset && project.section_offset < z1,
+         'the cut at z = ' + project.section_offset + ' falls inside [' + z0 + ', ' + z1 + ']');
   });
 
   test('a stored prism reads back as the outline that made it', function () {
     var points = [[0, 0], [3, 3], [9, 3], [12, 0]];
     var prism = D.prismFor(project, points);
-    T.eq(D.outlineOf({ vertices: prism.vertices }, 'xz'), points);
+    T.eq(D.outlineOf({ vertices: prism.vertices }), points);
   });
 
   test('area is the shoelace of the outline, not a volume', function () {
@@ -78,13 +67,13 @@
     T.eq(D.formFor({ dimension: 3 }, null), 'volume');
     T.eq(D.formFor(project, null), 'surface', 'a new body in 2D is a surface');
 
-    var prism = { recipe: { kind: 'polygon_extrude', extrusion: [0, 40, 0] } };
+    var prism = { recipe: { kind: 'polygon_extrude', extrusion: [0, 0, 40] } };
     T.eq(D.formFor(project, prism), 'surface', 'extruded across the plane');
 
-    var alongPlane = { recipe: { kind: 'polygon_extrude', extrusion: [0, 0, 5] } };
+    var alongPlane = { recipe: { kind: 'polygon_extrude', extrusion: [0, 5, 0] } };
     T.eq(D.formFor(project, alongPlane), 'volume', 'not a prism through this plane');
 
-    var skew = { recipe: { kind: 'polygon_extrude', extrusion: [2, 40, 0] } };
+    var skew = { recipe: { kind: 'polygon_extrude', extrusion: [2, 0, 40] } };
     T.eq(D.formFor(project, skew), 'volume', 'skew to the plane normal');
   });
 
@@ -106,7 +95,7 @@
   });
 
   test('a body that is not a prism through the plane keeps its volume', function () {
-    var along = { vertices: [[0, 0, 0], [3, 0, 3], [9, 0, 3]], extrusion: [0, 0, 5] };
+    var along = { vertices: [[0, 0, 0], [3, 3, 0], [9, 3, 0]], extrusion: [0, 5, 0] };
     T.eq(D.measure(project, along).label, 'Volume');
   });
 

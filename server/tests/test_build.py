@@ -77,18 +77,18 @@ def _expected_soil_volume(p: Project) -> float:
     d, e, w = p.domain, p.excavation, p.wall
 
     domain = d.dx * d.dy * d.dz
-    pit = (e.x1 - e.x0) * (e.y1 - e.y0) * (d.z_top - e.floor_z)
+    pit = (e.x1 - e.x0) * (e.z1 - e.z0) * (d.y_top - e.floor_y)
 
     # Wall ring: outboard of the pit face, only the part below ground displaces soil.
     t = w.thickness
-    ring_area = (e.x1 - e.x0 + 2 * t) * (e.y1 - e.y0 + 2 * t) - (e.x1 - e.x0) * (e.y1 - e.y0)
-    wall = ring_area * (min(w.top_z, d.z_top) - w.toe_z)
+    ring_area = (e.x1 - e.x0 + 2 * t) * (e.z1 - e.z0 + 2 * t) - (e.x1 - e.x0) * (e.z1 - e.z0)
+    wall = ring_area * (min(w.top_y, d.y_top) - w.toe_y)
 
-    piles = len(p.piles.xs) * len(p.piles.ys) * math.pi * p.piles.radius**2 * p.piles.length
+    piles = len(p.piles.xs) * len(p.piles.zs) * math.pi * p.piles.radius**2 * p.piles.length
 
     # Both wells stand inside the pit footprint, so only the length below the pit floor
     # is still surrounded by soil; the rest passes through the excavated void.
-    wells = len(p.wells.positions) * math.pi * p.wells.radius**2 * (e.floor_z - (p.wells.top_z - p.wells.length))
+    wells = len(p.wells.positions) * math.pi * p.wells.radius**2 * (e.floor_y - (p.wells.top_y - p.wells.length))
 
     # Anchor heads bear on the wall, so the first stretch of each shaft is inside wall
     # material, not soil. head_offset is measured inward from the wall's outer face.
@@ -125,9 +125,9 @@ def test_the_pit_is_actually_empty(result, project):
 
     e, d = project.excavation, project.domain
     probes = [
-        ((e.x0 + e.x1) / 2, (e.y0 + e.y1) / 2, (e.floor_z + d.z_top) / 2),
-        (e.x0 + 0.5, e.y0 + 0.5, e.floor_z + 0.5),
-        (e.x1 - 0.5, e.y1 - 0.5, d.z_top - 0.5),
+        ((e.x0 + e.x1) / 2, (e.floor_y + d.y_top) / 2, (e.z0 + e.z1) / 2),
+        (e.x0 + 0.5, e.floor_y + 0.5, e.z0 + 0.5),
+        (e.x1 - 0.5, d.y_top - 0.5, e.z1 - 0.5),
     ]
     soil_tags = [t for key in result.volumes if key.startswith("soil_") for t in result.volumes[key]]
     for x, y, z in probes:
@@ -140,7 +140,7 @@ def test_soil_survives_below_the_pit_floor(result, project):
     import gmsh
 
     e = project.excavation
-    x, y, z = (e.x0 + e.x1) / 2, (e.y0 + e.y1) / 2, e.floor_z - 3.0
+    x, y, z = (e.x0 + e.x1) / 2, e.floor_y - 3.0, (e.z0 + e.z1) / 2
     soil_tags = [t for key in result.volumes if key.startswith("soil_") for t in result.volumes[key]]
     assert any(gmsh.model.isInside(3, t, [x, y, z]) for t in soil_tags)
 
@@ -160,42 +160,40 @@ def test_wall_is_a_ring_not_a_slab(result, project):
     e, w, t = project.excavation, project.wall, project.wall.thickness
     assert_bounds(
         build.bounding_box(result.volumes["wall"]),
-        (e.x0 - t, e.y0 - t, w.toe_z, e.x1 + t, e.y1 + t, w.top_z),
+        (e.x0 - t, w.toe_y, e.z0 - t, e.x1 + t, w.top_y, e.z1 + t),
     )
 
     # Mid-pit, at wall depth: inside the ring's bounding box but outside the ring.
-    x, y, z = (e.x0 + e.x1) / 2, (e.y0 + e.y1) / 2, (w.toe_z + e.floor_z) / 2
+    x, y, z = (e.x0 + e.x1) / 2, (w.toe_y + e.floor_y) / 2, (e.z0 + e.z1) / 2
     assert not any(gmsh.model.isInside(3, tag, [x, y, z]) for tag in result.volumes["wall"])
 
     # An upper bound: the ring can only ever be thinner than its full extrusion.
-    ring_area = (e.x1 - e.x0 + 2 * t) * (e.y1 - e.y0 + 2 * t) - (e.x1 - e.x0) * (e.y1 - e.y0)
-    assert 0 < result.mass["wall"] < ring_area * (w.top_z - w.toe_z)
+    ring_area = (e.x1 - e.x0 + 2 * t) * (e.z1 - e.z0 + 2 * t) - (e.x1 - e.x0) * (e.z1 - e.z0)
+    assert 0 < result.mass["wall"] < ring_area * (w.top_y - w.toe_y)
 
 
 def test_struts_span_the_pit_horizontally(result, project):
-    """js/viewport.js:123 sets rotation.x = PI/2, which under this Z-up scene
-    (js/orbit.js:32) points the cylinder along +Z — vertical. Both the `// align along
-    +Y` comment and the PY1-PY0+1.6 length say it was meant to span the pit in Y.
-    The backend builds what a strut actually is."""
+    """A strut spans the pit out of plane, which is the Z axis: the frozen mockup's
+    PY1-PY0+1.6 length is that span. Its vertical extent is the beam depth only."""
     import gmsh
 
     s, e = project.struts, project.excavation
     tags = result.volumes["struts"]
     xmin, ymin, zmin, xmax, ymax, zmax = build.bounding_box(tags)
 
-    assert ymin == pytest.approx(e.y0 - s.overhang, abs=1e-6)
-    assert ymax == pytest.approx(e.y1 + s.overhang, abs=1e-6)
+    assert zmin == pytest.approx(e.z0 - s.overhang, abs=1e-6)
+    assert zmax == pytest.approx(e.z1 + s.overhang, abs=1e-6)
     # Vertical extent is the beam depth only, nowhere near the 21.6 m span.
-    assert zmax - zmin == pytest.approx(s.waler_height, abs=1e-6)
+    assert ymax - ymin == pytest.approx(s.waler_height, abs=1e-6)
 
 
 def test_piles_hang_below_the_pit_floor(result, project):
     p = project
     xmin, ymin, zmin, xmax, ymax, zmax = build.bounding_box(result.volumes["piles"])
-    assert zmax == pytest.approx(p.piles.top_z, abs=1e-6)
-    assert zmin == pytest.approx(p.piles.top_z - p.piles.length, abs=1e-6)
+    assert ymax == pytest.approx(p.piles.top_y, abs=1e-6)
+    assert ymin == pytest.approx(p.piles.top_y - p.piles.length, abs=1e-6)
     assert result.mass["piles"] == pytest.approx(
-        len(p.piles.xs) * len(p.piles.ys) * math.pi * p.piles.radius**2 * p.piles.length, rel=1e-6
+        len(p.piles.xs) * len(p.piles.zs) * math.pi * p.piles.radius**2 * p.piles.length, rel=1e-6
     )
 
 
@@ -205,13 +203,13 @@ def test_anchors_rake_outward_and_downward_from_both_walls(result, project):
     a, e, t = project.anchor_rows, project.excavation, project.wall.thickness
     inc = math.radians(a.inclination_deg)
     reach, drop = a.length * math.cos(inc), a.length * math.sin(inc)
-    head_y0, head_y1 = e.y0 - t + a.head_offset, e.y1 + t - a.head_offset
+    head_z0, head_z1 = e.z0 - t + a.head_offset, e.z1 + t - a.head_offset
 
     assert_bounds(
         build.bounding_box(result.volumes["anchors"]),
         (
-            min(a.xs) - a.radius, head_y0 - reach, a.head_z - drop,
-            max(a.xs) + a.radius, head_y1 + reach, a.head_z + a.radius * math.cos(inc),
+            min(a.xs) - a.radius, a.head_y - drop, head_z0 - reach,
+            max(a.xs) + a.radius, a.head_y + a.radius * math.cos(inc), head_z1 + reach,
         ),
     )
 
@@ -227,7 +225,7 @@ def test_anchors_rake_outward_and_downward_from_both_walls(result, project):
 def test_wells_are_vertical_pipes_through_the_full_drawdown_depth(result, project):
     w = project.wells
     xmin, ymin, zmin, xmax, ymax, zmax = build.bounding_box(result.volumes["wells"])
-    assert zmin == pytest.approx(w.top_z - w.length, abs=1e-6)
+    assert ymin == pytest.approx(w.top_y - w.length, abs=1e-6)
     assert (xmax - xmin) == pytest.approx(
         max(x for x, _ in w.positions) - min(x for x, _ in w.positions) + 2 * w.radius, abs=1e-6
     )
@@ -246,7 +244,7 @@ def test_load_and_water_do_not_carve_the_soil(result, project):
 
 def test_water_plane_sits_at_the_phreatic_level(result, project):
     xmin, ymin, zmin, xmax, ymax, zmax = build.bounding_box(result.volumes["water"])
-    assert (zmin + zmax) / 2 == pytest.approx(project.water.z, abs=1e-6)
+    assert (ymin + ymax) / 2 == pytest.approx(project.water.y, abs=1e-6)
 
 
 # ── Model-wide ──────────────────────────────────────────────────────────────
@@ -254,10 +252,10 @@ def test_water_plane_sits_at_the_phreatic_level(result, project):
 def test_bounding_box_covers_the_domain(result, project):
     d = project.domain
     xmin, ymin, zmin, xmax, ymax, zmax = result.bbox
-    assert xmin <= d.x0 and ymin <= d.y0
-    assert xmax >= d.x1 and ymax >= d.y1
-    assert zmin == pytest.approx(d.z_bottom, abs=1e-6)
-    assert zmax >= project.wall.top_z
+    assert xmin <= d.x0 and zmin <= d.z0
+    assert xmax >= d.x1 and zmax >= d.z1
+    assert ymin == pytest.approx(d.y_bottom, abs=1e-6)
+    assert ymax >= project.wall.top_y
 
 
 def test_custom_parts_are_integrated_and_prioritized(project):
@@ -363,7 +361,7 @@ def test_build_is_repeatable(project):
 # ── Load footprint imprint ──────────────────────────────────────────────────
 
 def _top_faces(slack: float = 1e-5) -> list[tuple[float, ...]]:
-    """Bounding boxes of every face lying flat on z = 0, the domain's top plane.
+    """Bounding boxes of every face lying flat on y = 0, the domain's top plane.
 
     `slack` rather than an exact comparison: OCC pads a bounding box by about 1.5e-7,
     so a face on the plane reports a hair above it.
@@ -371,7 +369,7 @@ def _top_faces(slack: float = 1e-5) -> list[tuple[float, ...]]:
     import gmsh
     return [box for box in (gmsh.model.getBoundingBox(2, tag)
                             for _, tag in gmsh.model.getEntities(2))
-            if abs(box[2] - box[5]) < slack and abs(box[5]) < slack]
+            if abs(box[1] - box[4]) < slack and abs(box[4]) < slack]
 
 
 def test_a_load_footprint_splits_the_top_face_at_its_own_edges():
@@ -379,7 +377,7 @@ def test_a_load_footprint_splits_the_top_face_at_its_own_edges():
 
     On the simple example, whose ground surface is the flat plane the 3D surface-load
     export requires. The full project interpolates its top from the boreholes, so it has
-    no face at `z_top` for a surface load to sit on in the first place.
+    no face at `y_top` for a surface load to sit on in the first place.
     """
     project = seed_project()
     load = project.loads[0]
@@ -389,9 +387,9 @@ def test_a_load_footprint_splits_the_top_face_at_its_own_edges():
                       if box[0] == pytest.approx(load.x0) and box[3] == pytest.approx(load.x1)]
 
     assert len(footprints) == 1
-    assert footprints[0][1] == pytest.approx(load.y0)
+    assert footprints[0][2] == pytest.approx(load.z0)
     # Clipped where the pad overhangs the domain; see the overhang test below.
-    assert footprints[0][4] == pytest.approx(min(load.y1, project.domain.y1))
+    assert footprints[0][5] == pytest.approx(min(load.z1, project.domain.z1))
 
 
 def test_the_imprint_splits_no_material_and_leaves_nothing_behind():
@@ -418,6 +416,6 @@ def test_a_footprint_overhanging_the_domain_leaves_no_free_floating_surface():
     project = seed_project()
     with build.session():
         build.build_geometry(project)
-        overhang = [box for box in _top_faces() if box[4] > project.domain.y1 + 1e-5]
+        overhang = [box for box in _top_faces() if box[5] > project.domain.z1 + 1e-5]
 
     assert overhang == []

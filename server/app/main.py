@@ -6,8 +6,11 @@ Two things it deliberately does not do:
     mounted where they already live, so the served app and the one that opens straight
     off `file://` are the same bytes and cannot drift apart.
 *   It does not modify them. The backend-connected frontend lives in `live/`, loads the
-    frozen scripts verbatim, and substitutes only `js/viewport.js` -- which is the one
-    module that has to change, because it is the only one that invents geometry.
+    frozen scripts verbatim, and replaces exactly two: `js/viewport.js`, the one module
+    that invents geometry, and `js/orbit.js`, which is hard-wired to a Z-up world the
+    model no longer uses. The orbit controller is *overridden* rather than dropped --
+    `App.Orbit` is a plain global assignment, so the frozen file is still loaded and
+    `live/js/orbit.js` after it wins.
 """
 
 from __future__ import annotations
@@ -191,7 +194,7 @@ async def patch_structures(update: StructuresUpdate) -> dict:
 
 @app.patch("/api/project/dimension")
 async def patch_dimension(update: DimensionUpdate) -> dict:
-    """Switch between the solid model and the plane-strain x-z section.
+    """Switch between the solid model and the plane-strain x-y section.
 
     Everything downstream is invalidated, the model tree included: a part that does not
     cross the section plane is not in a 2D model at all, so the explorer has to be
@@ -200,12 +203,8 @@ async def patch_dimension(update: DimensionUpdate) -> dict:
     current = store.get()
     payload = current.model_dump()
     payload["dimension"] = update.dimension
-    payload["section_plane"] = update.section_plane
     # An explicit offset replaces the stored one; omitted, going to 2D lets the Project
-    # validator resolve the midpoint. The previous offset is never carried over
-    # silently: it is measured along the *old* plane's normal, so reusing it after a
-    # plan/elevation switch would place the cut somewhere arbitrary or outside the
-    # domain entirely.
+    # validator resolve the midpoint.
     payload["section_offset"] = update.section_offset
     # A load is the one thing that changes shape with the dimension: a pressure over a
     # footprint in the solid model is a pressure per metre run in the cut. Translated
@@ -448,10 +447,10 @@ async def import_mdpa(file: UploadFile = File(...)) -> dict:
     except ImportError_ as failure:
         raise HTTPException(status_code=422, detail=str(failure)) from failure
 
-    project = store.get()
-    # A 3D project never resolved its own section offset; `cut_at` falls back to the
-    # mid-plane the dimension-2 validator would have picked.
-    return model.to_dict(project.section_plane, project.cut_at())
+    # A deck's node table is already the world frame in either dimension -- a 2D deck
+    # is the x-y plane at z = 0, which is where a 2D model lives -- so nothing about
+    # the open project is needed to place it.
+    return model.to_dict()
 
 
 # ── Static ──────────────────────────────────────────────────────────────────

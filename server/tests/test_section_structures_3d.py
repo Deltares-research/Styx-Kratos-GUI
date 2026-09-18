@@ -23,7 +23,7 @@ from app.seed import seed_project
 
 PILE_X = 10.0
 PILE_TOP, PILE_TOE = 0.0, -8.0
-OFFSET = 12.5          # the seed domain's mid-plane, which xz sections default to
+OFFSET = 12.5          # the seed domain's mid-plane, where the section defaults to
 SPACING = 2.0
 
 
@@ -35,7 +35,6 @@ def project_with_2d_structures(dimension: int, simple: bool = True) -> Project:
     either dimension and would prove nothing here.
     """
     payload = seed_project(simple=simple).model_dump() | {"dimension": dimension}
-    payload["section_plane"] = "xz"
     payload["section_offset"] = OFFSET
     payload["beam_sections"] = [{
         "id": "bs1", "name": "AZ18", "E": 2.1e8, "nu": 0.3,
@@ -54,7 +53,7 @@ def project_with_2d_structures(dimension: int, simple: bool = True) -> Project:
     }]
     payload["loads"] = [{
         "id": "load1", "name": "LineLoad_1", "kind": "line",
-        "x0": 2.0, "x1": 8.0, "z": 0.0, "components": [0.0, -10.0],
+        "x0": 2.0, "x1": 8.0, "y": 0.0, "components": [0.0, -10.0],
     }]
     return Project.model_validate(payload)
 
@@ -89,13 +88,13 @@ def test_the_sheet_pile_is_no_longer_logged_as_excluded(solid):
 
 
 def test_the_sheet_pile_is_swept_across_the_section_plane(solid):
-    """Centred on the cut, one profile spacing wide, and nowhere near the y extremes."""
+    """Centred on the cut, one profile spacing wide, and nowhere near the z extremes."""
     _, result = solid
     with build.session():
         boxes = [gmsh.model.occ.getBoundingBox(2, tag) for tag in result.faces["pile1"]]
-    y0, y1 = min(b[1] for b in boxes), max(b[4] for b in boxes)
-    assert y0 == pytest.approx(OFFSET - SPACING / 2, abs=1e-6)
-    assert y1 == pytest.approx(OFFSET + SPACING / 2, abs=1e-6)
+    z0, z1 = min(b[2] for b in boxes), max(b[5] for b in boxes)
+    assert z0 == pytest.approx(OFFSET - SPACING / 2, abs=1e-6)
+    assert z1 == pytest.approx(OFFSET + SPACING / 2, abs=1e-6)
 
 
 def test_the_sheet_pile_keeps_its_in_plane_position_and_depth(solid):
@@ -104,7 +103,7 @@ def test_the_sheet_pile_keeps_its_in_plane_position_and_depth(solid):
         boxes = [gmsh.model.occ.getBoundingBox(2, tag) for tag in result.faces["pile1"]]
     assert min(b[0] for b in boxes) == pytest.approx(PILE_X, abs=1e-6)
     assert max(b[3] for b in boxes) == pytest.approx(PILE_X, abs=1e-6)
-    assert min(b[2] for b in boxes) == pytest.approx(PILE_TOE, abs=1e-6)
+    assert min(b[1] for b in boxes) == pytest.approx(PILE_TOE, abs=1e-6)
 
 
 # ── The anchor ──────────────────────────────────────────────────────────────
@@ -120,8 +119,8 @@ def test_the_plane_anchor_lies_on_the_section_plane(solid):
     with build.session():
         boxes = [gmsh.model.occ.getBoundingBox(1, tag) for tag in result.ties["anchor1"]]
     for box in boxes:
-        assert box[1] == pytest.approx(OFFSET, abs=1e-6)
-        assert box[4] == pytest.approx(OFFSET, abs=1e-6)
+        assert box[2] == pytest.approx(OFFSET, abs=1e-6)
+        assert box[5] == pytest.approx(OFFSET, abs=1e-6)
 
 
 def test_the_plane_anchor_gets_a_tail_node(solid):
@@ -139,8 +138,8 @@ def test_a_two_dimensional_load_is_imprinted_in_the_solid_model(solid):
         edges = [gmsh.model.occ.getBoundingBox(1, tag)
                  for _, tag in gmsh.model.getEntities(1)]
     on_plane_at_top = [b for b in edges
-                       if abs(b[1] - OFFSET) < 1e-6 and abs(b[4] - OFFSET) < 1e-6
-                       and abs(b[2] - project.domain.z_top) < 1e-6]
+                       if abs(b[2] - OFFSET) < 1e-6 and abs(b[5] - OFFSET) < 1e-6
+                       and abs(b[1] - project.domain.y_top) < 1e-6]
     assert on_plane_at_top, "no imprinted edge on the section plane at the surface"
 
 

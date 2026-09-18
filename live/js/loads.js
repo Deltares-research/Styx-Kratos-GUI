@@ -6,7 +6,7 @@ var App = window.App || {};
 App.Loads = (function () {
 
   /* How far the model reaches, which is not the same as the borehole domain: a drawn
-     or imported part may stand above `z_top`, and a structure placed on one is on
+     or imported part may stand above `y_top`, and a structure placed on one is on
      model geometry. `App.Model.extentOf` mirrors the server's `Project.extent`; the
      fallback keeps this module usable in a page that has no App.Model. */
   function extent(project) {
@@ -42,11 +42,8 @@ App.Loads = (function () {
       throw new Error('A load needs exactly two picked corners.');
     }
     var a = points[0], b = points[1], d = project.domain;
-    var x0, x1, y0, y1;
+    var x0, x1, z0, z1;
     if (project.dimension === 2) {
-      if ((project.section_plane || 'xz') !== 'xz') {
-        throw new Error('2D structural loads are authored in the x-z section.');
-      }
       x0 = Math.min(a[0], b[0]); x1 = Math.max(a[0], b[0]);
       if (!(x1 > x0)) throw new Error('The load must have a non-zero width.');
       var span = extent(project);
@@ -57,18 +54,18 @@ App.Loads = (function () {
       return {
         id: 'load_' + lineNumber, name: 'LineLoad_' + lineNumber, kind: 'line',
         // The top of the model, not of the borehole block: a load drawn on a raised
-        // embankment belongs on it, and one left at `domain.z_top` would sit buried
+        // embankment belongs on it, and one left at `domain.y_top` would sit buried
         // inside the fill and would not translate to a surface load (server/app/
-        // loads.py compares against `Project.ground_z`).
-        x0: x0, x1: x1, z: span.z_top, thickness: 0.15,
+        // loads.py compares against `Project.ground_y`).
+        x0: x0, x1: x1, y: span.y_top, thickness: 0.15,
         components: [0, -20], distribution: 'Uniform', active: true
       };
     } else {
       x0 = Math.min(a[0], b[0]); x1 = Math.max(a[0], b[0]);
-      y0 = Math.min(a[1], b[1]); y1 = Math.max(a[1], b[1]);
+      z0 = Math.min(a[1], b[1]); z1 = Math.max(a[1], b[1]);
     }
-    if (!(x1 > x0) || !(y1 > y0)) throw new Error('The load must have a non-zero width.');
-    if (x0 < d.x0 || x1 > d.x1 || y0 < d.y0 || y1 > d.y1) {
+    if (!(x1 > x0) || !(z1 > z0)) throw new Error('The load must have a non-zero width.');
+    if (x0 < d.x0 || x1 > d.x1 || z0 < d.z0 || z1 > d.z1) {
       throw new Error('The load footprint must stay inside the model domain.');
     }
     var number = nextNumber(project);
@@ -79,29 +76,28 @@ App.Loads = (function () {
       // The elevation is carried, not rederived: the server places the pad from it
       // (`Project.elevation_of`), and rederiving from a gmsh bounding box is padded
       // by 1e-7 and lands just above the face it should imprint.
-      x0: x0, x1: x1, y0: y0, y1: y1, z: extent(project).z_top,
+      x0: x0, x1: x1, z0: z0, z1: z1, y: extent(project).y_top,
       thickness: 0.15,
-      components: [0, 0, -20],
+      components: [0, -20, 0],
       distribution: 'Uniform', active: true
     };
   }
 
   function draftPoint(project, coordinate) {
-    if (!project || project.dimension !== 2 || !project.domain ||
-        (project.section_plane || 'xz') !== 'xz' || !coordinate || coordinate.length !== 2 ||
-        !coordinate.every(Number.isFinite)) {
-      throw new Error('A 2D point load needs one finite x-z coordinate.');
+    if (!project || project.dimension !== 2 || !project.domain || !coordinate ||
+        coordinate.length !== 2 || !coordinate.every(Number.isFinite)) {
+      throw new Error('A 2D point load needs one finite x-y coordinate.');
     }
     var d = project.domain;
     var span = extent(project);
     if (coordinate[0] < span.x0 || coordinate[0] > span.x1 ||
-        coordinate[1] < span.z_bottom || coordinate[1] > span.z_top) {
+        coordinate[1] < span.y_bottom || coordinate[1] > span.y_top) {
       throw new Error('The point-load coordinate must stay inside the model domain.');
     }
     var number = nextNumber(project);
     return {
       id: 'load_' + number, name: 'PointLoad_' + number, kind: 'point',
-      x: coordinate[0], z: coordinate[1], thickness: 0.25,
+      x: coordinate[0], y: coordinate[1], thickness: 0.25,
       components: [0, -20], distribution: 'Uniform', active: true
     };
   }
@@ -111,24 +107,24 @@ App.Loads = (function () {
       throw new Error('A surface load needs a 3D model domain.');
     }
     var d = project.domain;
-    var dx = d.x1 - d.x0, dy = d.y1 - d.y0;
+    var dx = d.x1 - d.x0, dz = d.z1 - d.z0;
     return draftFromPoints(project, [
-      [d.x0 + dx * 0.4, d.y0 + dy * 0.4, d.z_top],
-      [d.x0 + dx * 0.6, d.y0 + dy * 0.6, d.z_top]
+      [d.x0 + dx * 0.4, d.z0 + dz * 0.4],
+      [d.x0 + dx * 0.6, d.z0 + dz * 0.6]
     ]);
   }
 
   function validate(load) {
     if (!load.name || !load.name.trim()) return 'Name cannot be empty.';
     if (load.kind === 'point') {
-      if (![load.x, load.z].every(Number.isFinite)) {
+      if (![load.x, load.y].every(Number.isFinite)) {
         return 'Every point-load coordinate must be a number.';
       }
     } else if (load.kind === 'line') {
-      if (!(load.x1 > load.x0) || !Number.isFinite(load.z)) {
-        return 'The line load must have a non-zero width and finite z coordinate.';
+      if (!(load.x1 > load.x0) || !Number.isFinite(load.y)) {
+        return 'The line load must have a non-zero width and finite y coordinate.';
       }
-    } else if (!(load.x1 > load.x0) || !(load.y1 > load.y0)) {
+    } else if (!(load.x1 > load.x0) || !(load.z1 > load.z0)) {
       return 'The load must have a non-zero width.';
     }
     if (!(load.thickness > 0)) return 'Indicator thickness must be greater than zero.';
@@ -212,17 +208,15 @@ App.Loads = (function () {
       );
       return;
     }
-    if ((kind === 'line' || kind === 'point') && App.PROJECT.section_plane !== 'xz') {
-      if (App.Command) App.Command.note('Switch to the x-z section to create a 2D structural load.');
-      return;
-    }
     var d = App.PROJECT.domain;
     try {
+      // A 2D record is dimension-native `(x, y)`: the section's own two axes, which
+      // are the world's X and Y.
       open(kind === 'point' ? draftPoint(App.PROJECT, [
-        (d.x0 + d.x1) / 2, d.z_top
+        (d.x0 + d.x1) / 2, d.y_top
       ]) : (kind === 'line' ? draftFromPoints(App.PROJECT, [
-        [d.x0 + (d.x1 - d.x0) * 0.4, App.PROJECT.section_offset, d.z_top],
-        [d.x0 + (d.x1 - d.x0) * 0.6, App.PROJECT.section_offset, d.z_top]
+        [d.x0 + (d.x1 - d.x0) * 0.4, d.y_top],
+        [d.x0 + (d.x1 - d.x0) * 0.6, d.y_top]
       ]) : draftSurface(App.PROJECT)), kind);
     } catch (error) {
       if (App.Command && App.Command.err) App.Command.err(error.message);
@@ -235,7 +229,7 @@ App.Loads = (function () {
       pointLoad: kind === 'point',
       onComplete: function (points) {
         try {
-          open(kind === 'point' ? draftPoint(App.PROJECT, [points[0][0], points[0][2]])
+          open(kind === 'point' ? draftPoint(App.PROJECT, [points[0][0], points[0][1]])
                                 : draftFromPoints(App.PROJECT, points), kind);
         } catch (error) {
           if (App.Command && App.Command.err) App.Command.err(error.message);
@@ -260,11 +254,17 @@ App.Loads = (function () {
 
     function submit() {
       load.name = controls.name.value.trim();
-      ['x0', 'x1', 'y0', 'y1', 'thickness'].forEach(function (key) {
+      ['x0', 'x1', 'z0', 'z1', 'thickness'].forEach(function (key) {
         if (controls[key]) load[key] = Number(controls[key].value);
       });
-      ['x', 'z'].forEach(function (key) {
-        if (controls[key]) load[key] = Number(controls[key].value);
+      ['x', 'y'].forEach(function (key) {
+        if (!controls[key]) return;
+        /* A surface load's y is optional: blank means "the top of the model", which
+           the server resolves against ground_y (SurfaceLoad.y). Number('') is 0, so
+           reading it like the others would quietly drop the pad to datum. A point or
+           line load left blank becomes null too, and validate() refuses it there. */
+        var raw = controls[key].value.trim();
+        load[key] = raw === '' ? null : Number(raw);
       });
       load.components.forEach(function (_, axis) {
         load.components[axis] = Number(controls['q' + axis].value);
@@ -284,7 +284,7 @@ App.Loads = (function () {
       title: (source.id && collection().some(function (item) { return item.id === source.id; }))
         ? 'Edit ' + displayKind + ' load'
         : 'Create ' + displayKind + ' load',
-      width: 590, height: App.PROJECT.dimension === 2 ? 430 : 500,
+      width: 590, height: App.PROJECT.dimension === 2 ? 430 : 540,
       buttons: [
         { label: 'Pick on model…', onClick: function () { pick(load.kind); } },
         { label: 'Save', primary: true, keepOpen: true, onClick: submit },
@@ -303,21 +303,23 @@ App.Loads = (function () {
         row('Name', controls.name, 'Shown in the Model explorer and Kratos submodel part.');
 
         if (load.kind === 'point') {
-          controls.x = input(load.x); controls.z = input(load.z);
+          controls.x = input(load.x); controls.y = input(load.y);
           row('x', controls.x, 'World x coordinate [m].');
-          row('z', controls.z, 'World z coordinate [m].');
+          row('y', controls.y, 'World y coordinate, the elevation [m].');
         } else if (load.kind === 'line') {
-          controls.x0 = input(load.x0); controls.x1 = input(load.x1); controls.z = input(load.z);
+          controls.x0 = input(load.x0); controls.x1 = input(load.x1); controls.y = input(load.y);
           row('x min', controls.x0, 'Start of the loaded interval [m].');
           row('x max', controls.x1, 'End of the loaded interval [m].');
-          row('z', controls.z, 'Elevation of the loaded interval [m].');
+          row('y', controls.y, 'Elevation of the loaded interval [m].');
         } else {
           controls.x0 = input(load.x0); controls.x1 = input(load.x1);
-          controls.y0 = input(load.y0); controls.y1 = input(load.y1);
+          controls.z0 = input(load.z0); controls.z1 = input(load.z1);
           row('x min', controls.x0, 'Start of the loaded footprint.');
           row('x max', controls.x1, 'End of the loaded footprint.');
-          row('y min', controls.y0, 'Front edge of the surface load.');
-          row('y max', controls.y1, 'Back edge of the surface load.');
+          controls.y = input(Number.isFinite(load.y) ? load.y : '');
+          row('y', controls.y, 'Elevation of the pad [m]. Blank puts it on top of the model.');
+          row('z min', controls.z0, 'Front edge of the surface load.');
+          row('z max', controls.z1, 'Back edge of the surface load.');
         }
         controls.thickness = input(load.thickness, '0.01');
         row('Indicator thickness', controls.thickness, 'Display only; it does not enter the FE mesh.');
@@ -327,11 +329,9 @@ App.Loads = (function () {
         if (load.kind === 'surface') controls.q2 = input(load.components[2]);
         var unit = load.kind === 'point' ? 'kN' : (load.kind === 'line' ? 'kN/m' : 'kN/m²');
         row('qx', controls.q0, 'World x component [' + unit + '].');
+        row('qy', controls.q1, 'World y component [' + unit + ']; downward is negative.');
         if (load.kind === 'surface') {
-          row('qy', controls.q1, 'World y component [' + unit + '].');
-          row('qz', controls.q2, 'World z component [' + unit + ']; downward is negative.');
-        } else {
-          row('qz', controls.q1, 'World z component [' + unit + ']; downward is negative.');
+          row('qz', controls.q2, 'World z component [' + unit + '].');
         }
 
         controls.active = el('input.mesh-setting-control', { type: 'checkbox' });

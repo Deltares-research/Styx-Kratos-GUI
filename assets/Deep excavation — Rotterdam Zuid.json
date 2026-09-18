@@ -2,15 +2,14 @@
   "name": "Deep excavation — Rotterdam Zuid",
   "simple_example": true,
   "dimension": 3,
-  "section_plane": "xz",
   "section_offset": null,
   "domain": {
     "x0": 0,
     "x1": 25,
-    "y0": 0,
-    "y1": 25,
-    "z_top": 0,
-    "z_bottom": -25
+    "z0": 0,
+    "z1": 25,
+    "y_top": 0,
+    "y_bottom": -25
   },
   "boreholes": [
     {
@@ -171,14 +170,14 @@
   "excavation": {
     "x0": 12,
     "x1": 38,
-    "y0": 10,
-    "y1": 30,
-    "floor_z": -7
+    "z0": 10,
+    "z1": 30,
+    "floor_y": -7
   },
   "wall": {
     "thickness": 0.8,
-    "top_z": 0.6,
-    "toe_z": -14
+    "top_y": 0.6,
+    "toe_y": -14
   },
   "struts": {
     "xs": [
@@ -187,12 +186,12 @@
       26,
       32
     ],
-    "z": -3,
     "radius": 0.28,
     "overhang": 0.8,
     "waler_width": 0.5,
     "waler_height": 0.6,
-    "waler_offset": 0.5
+    "waler_offset": 0.5,
+    "y": -3
   },
   "anchors": {
     "xs": [
@@ -201,7 +200,7 @@
       27,
       33
     ],
-    "head_z": -4.5,
+    "head_y": -4.5,
     "length": 11,
     "inclination_deg": 35,
     "radius": 0.11,
@@ -214,14 +213,14 @@
       28,
       34
     ],
-    "ys": [
+    "zs": [
       14,
       20,
       26
     ],
     "radius": 0.3,
     "length": 9,
-    "top_z": -7
+    "top_y": -7
   },
   "loads": [
     {
@@ -229,13 +228,13 @@
       "name": "SurfaceLoad_1",
       "x0": 1,
       "x1": 10,
-      "y0": 14,
-      "y1": 26,
+      "z0": 14,
+      "z1": 26,
       "thickness": 0.25,
       "components": [
         0,
-        0,
-        -20
+        -20,
+        0
       ],
       "distribution": "Uniform",
       "active": true
@@ -253,13 +252,13 @@
       ]
     ],
     "radius": 0.35,
-    "top_z": 0,
+    "top_y": 0,
     "length": 15
   },
   "water": {
-    "z": -1.5,
     "margin": 3,
-    "thickness": 0.06
+    "thickness": 0.06,
+    "y": -1.5
   },
   "mesh": {
     "element_size": 2.5,

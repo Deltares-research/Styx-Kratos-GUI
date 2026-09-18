@@ -65,11 +65,12 @@ def test_only_the_parts_present_in_the_section_are_drawable(full):
     assert {"soil_L1", "soil_L2", "wall", "struts", "piles"} <= drawn
 
 
-def test_the_payload_is_flat_in_y(simple):
-    project, display = simple
+def test_the_payload_is_flat_in_z(simple):
+    """The section is the x-y plane at z = 0, so every drawn vertex has z zero."""
+    _, display = simple
     for section in display.sections:
-        for y in section.positions[1::3]:
-            assert y == pytest.approx(project.section_offset, abs=1e-3)
+        for z in section.positions[2::3]:
+            assert z == pytest.approx(0.0, abs=1e-3)
 
 
 def test_every_face_is_wound_both_ways(simple):
@@ -111,15 +112,15 @@ def test_soil_takes_its_colour_from_its_material(simple):
 
 
 def test_the_bbox_is_the_flat_section(simple):
-    project, display = simple
-    assert display.bbox[1] == pytest.approx(project.section_offset, abs=1e-6)
-    assert display.bbox[4] == pytest.approx(project.section_offset, abs=1e-6)
+    _, display = simple
+    assert display.bbox[2] == pytest.approx(0.0, abs=1e-6)
+    assert display.bbox[5] == pytest.approx(0.0, abs=1e-6)
 
 
 def test_a_sheet_pile_is_drawn_as_edges_with_no_surface():
     """1D geometry: the viewport gets a line to draw, not a sliver of a face."""
     payload = seed_project(simple=True).model_dump()
-    payload.update(dimension=2, section_plane="xz")
+    payload.update(dimension=2)
     payload["beam_sections"] = [{"id": "az26", "name": "AZ 26-700", "E": 2.1e8,
                                  "nu": 0.3, "area": 0.0198, "inertia": 5.52e-4,
                                  "density": 7850.0, "spacing": 1.0}]
@@ -133,14 +134,14 @@ def test_a_sheet_pile_is_drawn_as_edges_with_no_surface():
     section = next(s for s in model.sections if s.key == "sheetpile_1")
     assert section.edges, "the pile has to be drawable"
     assert not section.indices, "a curve has nothing to triangulate"
-    assert min(section.edges[2::3]) == pytest.approx(-14.0, abs=1e-5)
-    assert max(section.edges[2::3]) == pytest.approx(0.0, abs=1e-5)
+    assert min(section.edges[1::3]) == pytest.approx(-14.0, abs=1e-5)
+    assert max(section.edges[1::3]) == pytest.approx(0.0, abs=1e-5)
 
 
 def test_every_part_key_still_gets_a_section_when_a_pile_is_present():
     """The frontend's userData.key namespace has to stay complete."""
     payload = seed_project(simple=True).model_dump()
-    payload.update(dimension=2, section_plane="xz")
+    payload.update(dimension=2)
     payload["beam_sections"] = [{"id": "az26", "name": "AZ 26-700", "E": 2.1e8,
                                  "nu": 0.3, "area": 0.0198, "inertia": 5.52e-4,
                                  "density": 7850.0, "spacing": 1.0}]
@@ -156,7 +157,7 @@ def test_every_part_key_still_gets_a_section_when_a_pile_is_present():
 
 def test_an_anchor_is_drawn_as_edges_like_the_pile_it_hangs_from():
     payload = seed_project(simple=True).model_dump()
-    payload.update(dimension=2, section_plane="xz")
+    payload.update(dimension=2)
     payload["beam_sections"] = [{"id": "az26", "name": "AZ 26-700", "E": 2.1e8,
                                  "nu": 0.3, "area": 0.0198, "inertia": 5.52e-4,
                                  "density": 7850.0, "spacing": 1}]

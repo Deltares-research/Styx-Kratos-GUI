@@ -14,7 +14,7 @@ App.DrawInput = (function () {
   
   var raycaster = new THREE.Raycaster();
   var pointer = new THREE.Vector2();
-  var groundPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+  var groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   
   var canvas, scene, cam;
   var boundClick, boundMove, boundKey;
@@ -149,14 +149,13 @@ App.DrawInput = (function () {
     var plane = groundPlane;
     var project = App.PROJECT;
     if (activeMode === 'load' && project) {
-      var top = project.domain.z_top;
+      var top = project.domain.y_top;
       if (project.dimension === 2) {
-        var normal = { xz: [0, 1, 0], yz: [1, 0, 0], xy: [0, 0, 1] }
-          [project.section_plane || 'xz'];
-        plane = new THREE.Plane(new THREE.Vector3(normal[0], normal[1], normal[2]),
-          -project.section_offset);
+        // The section is the x-y plane at z = 0, so that is what a pick lands on.
+        plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
       } else {
-        plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), -top);
+        // The ground surface, which with Y up is a plane of constant y.
+        plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -top);
       }
     }
     if (raycaster.ray.intersectPlane(plane, p)) {
@@ -169,7 +168,7 @@ App.DrawInput = (function () {
       if (activeMode === 'load' && project && !(activeOptions && activeOptions.pointLoad)) {
         // Loads authored in a section belong to its ground boundary. The pointer's
         // vertical position chooses no extra degree of freedom.
-        p.z = project.domain.z_top;
+        p.y = project.domain.y_top;
       }
       return [p.x, p.y, p.z];
     }

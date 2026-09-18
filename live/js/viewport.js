@@ -7,8 +7,10 @@
    nothing here invents a box or a cylinder. The model is built by OpenCASCADE
    in the Python worker and arrives as buffers.
 
-   Coordinates still follow geotechnical convention: X east, Y north, Z up,
-   metres.
+   Coordinates are X across, Y up and Z out of plane, metres, y = 0 at the
+   ground datum. A 2D model is the x-y plane at z = 0; a 3D model extrudes it
+   along Z. The frozen js/orbit.js is hard-wired to a Z-up world, so
+   live/js/orbit.js overrides it -- see live/index.html.
    ══════════════════════════════════════════════════════════════════ */
 
 var App = window.App || {};
@@ -18,6 +20,14 @@ App.Viewport = (function () {
   var renderer, scene, camPersp, camOrtho, cam, orbit, canvas, host;
   var triadGroup;
   var triadRenderer, triadScene, triadCam, triadCanvas;
+
+  /* Which way is up, for every camera in this module -- the scene's and the triad
+     widget's alike. The model is Y-up, and the 2D section looks along -z; a camera
+     still standing on +z (the frozen mockup's convention) would have its up vector
+     parallel to that view direction, which leaves lookAt() with a degenerate basis
+     and renders nothing at all. See live/js/orbit.js, which stands the scene camera
+     up on the same axis. */
+  var WORLD_UP = [0, 1, 0];
   var raycaster = new THREE.Raycaster(), pointer = new THREE.Vector2();
   var groups = {}, boxHelper = null;
   var importedMeshGroup = null;  // a foreign .mdpa's mesh: outside `groups`, so
@@ -30,7 +40,7 @@ App.Viewport = (function () {
   var showGrid = true, gridGroup, boundsGroup, referenceGrid;
   var activeView = 'iso';
   var dimension = 3;             // 3 = the full solid model, 2 = a planar section
-  var sectionPlane = 'xz';       // which plane a 2D model lies in
+
   var needsRender = true, meshBuilt = false;
 
   var frame = null;              // camera framing derived from the server bbox
@@ -153,15 +163,15 @@ App.Viewport = (function () {
      extends opposite to the force vector. Keeping this as a pure specification makes
      the 2D/3D placement rules testable without a renderer. */
   /* Where a load lies, whichever kind it is. Mirrors `Project.elevation_of` on the
-     server: a point or line load carries its own z, and a surface load may leave it
+     server: a point or line load carries its own y, and a surface load may leave it
      unset, which means the top of the model -- the reading every such load had before
-     the field existed, and which a drawn embankment raises above `domain.z_top`. */
+     the field existed, and which a drawn embankment raises above `domain.y_top`. */
   function loadElevation(load, project) {
-    if (load.kind !== 'surface') return load.z;
-    if (load.z !== null && load.z !== undefined) return load.z;
+    if (load.kind !== 'surface') return load.y;
+    if (load.y !== null && load.y !== undefined) return load.y;
     var span = (App.Model && App.Model.extentOf)
       ? App.Model.extentOf(project) : project.domain;
-    return span.z_top;
+    return span.y_top;
   }
 
   /* The extent a symbol is sized against: what is drawn, not what is declared.
@@ -172,22 +182,22 @@ App.Viewport = (function () {
   function modelSpan(project, size) {
     var d = project.domain;
     var x = size ? size[0] : d.x1 - d.x0;
-    var y = size ? size[1] : d.y1 - d.y0;
-    var z = size ? size[2] : d.z_top - d.z_bottom;
+    var y = size ? size[1] : d.y_top - d.y_bottom;
+    var z = size ? size[2] : d.z1 - d.z0;
     if (project.dimension !== 2) return Math.max(x, y, z);
-    var plane = planeOf(project);
-    return plane === 'xy' ? Math.max(x, y) : plane === 'yz' ? Math.max(y, z) : Math.max(x, z);
+    // In 2D only the section's own axes count; z is edge-on to the camera.
+    return Math.max(x, y);
   }
 
   function loadGlyphSpec(load, project) {
     var vector = project.dimension === 2
-      ? [load.components[0], 0, load.components[1]]
+      ? [load.components[0], load.components[1], 0]
       : (load.components || [0, 0, 0]);
     var magnitude = Math.sqrt(vector[0] * vector[0] + vector[1] * vector[1] +
                               vector[2] * vector[2]);
     var direction = magnitude > 0
       ? vector.map(function (component) { return component / magnitude; })
-      : [0, 0, -1];
+      : [0, -1, 0];
     var span = modelSpan(project, frame && frame.size);
     var spec = {
       kind: load.kind === 'point' ? 'point' : (project.dimension === 2 ? 'line' : 'surface'),
@@ -198,7 +208,7 @@ App.Viewport = (function () {
       anchors: [], active: load.active !== false, zero: magnitude === 0
     };
     if (load.kind === 'point') {
-      spec.anchors.push([load.x, sectionOffset(project), load.z]);
+      spec.anchors.push([load.x, load.y, sectionOffset(project)]);
       return spec;
     }
     function samples(first, last, count) {
@@ -209,17 +219,17 @@ App.Viewport = (function () {
     if (project.dimension === 2) {
       var offset = sectionOffset(project);
       samples(load.x0, load.x1, 5).forEach(function (x) {
-        spec.anchors.push([x, offset, load.z]);
+        spec.anchors.push([x, load.y, offset]);
       });
       return spec;
     }
-    // The load's own elevation, not `d.z_top`: the domain is only the borehole block,
+    // The load's own elevation, not `d.y_top`: the domain is only the borehole block,
     // so a pad on a drawn embankment was being dragged down onto the borehole soil the
     // moment the model switched to 3D. Mirrors the server's `Project.elevation_of`,
-    // including what an unset z means -- see `loadElevation`.
-    var z = loadElevation(load, project);
+    // including what an unset level means -- see `loadElevation`.
+    var y = loadElevation(load, project);
     samples(load.x0, load.x1, 3).forEach(function (x) {
-      samples(load.y0, load.y1, 3).forEach(function (y) {
+      samples(load.z0, load.z1, 3).forEach(function (z) {
         spec.anchors.push([x, y, z]);
       });
     });
@@ -274,9 +284,9 @@ App.Viewport = (function () {
         // borehole soil while the arrows move up onto the embankment.
         var pad = loadElevation(load, project);
         outlinePoints = [
-          [load.x0, load.y0, pad], [load.x1, load.y0, pad],
-          [load.x1, load.y1, pad], [load.x0, load.y1, pad],
-          [load.x0, load.y0, pad]
+          [load.x0, pad, load.z0], [load.x1, pad, load.z0],
+          [load.x1, pad, load.z1], [load.x0, pad, load.z1],
+          [load.x0, pad, load.z0]
         ];
       }
       var outline = new THREE.Line(
@@ -443,12 +453,10 @@ App.Viewport = (function () {
     gridGroup.add(referenceGrid);
   }
 
-  /* The in-plane coordinates the camera is centred on. */
+  /* The in-plane coordinates the camera is centred on: the section is the x-y
+     plane, so those are its own two axes. */
   function sectionCenter() {
-    var t = orbit.target;
-    if (sectionPlane === 'xy') return [t.x, t.y];
-    if (sectionPlane === 'yz') return [t.y, t.z];
-    return [t.x, t.z];
+    return [orbit.target.x, orbit.target.y];
   }
 
   function visibleHalfExtent() {
@@ -480,7 +488,6 @@ App.Viewport = (function () {
     var view = on ? visibleHalfExtent() : { halfW: 0, halfH: 0 };
     App.Ruler.sync({
       active: on,
-      plane: sectionPlane,
       center: on ? sectionCenter() : [0, 0],
       halfW: view.halfW, halfH: view.halfH
     });
@@ -610,7 +617,6 @@ App.Viewport = (function () {
         // reloaded from the server must not come up under a free 3D orbit.
         var mode = viewModeOf(App.PROJECT);
         dimension = mode === 'solid' ? 3 : 2;
-        sectionPlane = planeOf(App.PROJECT);
         App.state.viewMode = mode;
         App.state.dimension = dimension;
         if (App.LivePatches && App.LivePatches.syncViewMode) {
@@ -763,12 +769,12 @@ App.Viewport = (function () {
 
     orbit = new App.Orbit(canvas, {
       tx: frame.center[0], ty: frame.center[1], tz: frame.center[2],
-      radius: frame.homeRadius, theta: -Math.PI * 0.68, phi: Math.PI * 0.33,
+      radius: frame.homeRadius, theta: VIEWS.iso.theta, phi: VIEWS.iso.phi,
       minRadius: radiusLimits(frame).min, maxRadius: radiusLimits(frame).max,
       orthoBase: ORTHO_BASE
     });
     orbit.onChange = function () {
-      var fixed = clampAngles(orbit, dimension, sectionPlane);
+      var fixed = clampAngles(orbit, dimension);
       if (fixed.changed) { orbit.theta = fixed.theta; orbit.phi = fixed.phi; }
       needsRender = true;
     };
@@ -797,20 +803,18 @@ App.Viewport = (function () {
 
   /* ── Axis triad (its own tiny renderer) ─────────────────────── */
 
-  /* All three in 3D; in 2D only the two the section is drawn in. Which two depends
-     on the plane being cut, not on a fixed "drop z": the camera cannot be turned
-     towards the third, so an arrow for it would point at nothing. */
+  /* All three in 3D; in 2D only the two the section is drawn in, which are x and
+     y. The camera cannot be turned towards z, so an arrow for it would point at
+     nothing. */
   var AXES = [
     { name: 'x', dir: [1, 0, 0], color: 0xd23b3b },
     { name: 'y', dir: [0, 1, 0], color: 0x2f9e44 },
     { name: 'z', dir: [0, 0, 1], color: 0x2b6cd4 }
   ];
 
-  function triadAxes(dim, plane) {
+  function triadAxes(dim) {
     if (dim !== 2) return AXES.map(function (a) { return a.name; });
-    var inPlane = SECTION_VIEWS[plane] ? plane : 'xz';
-    return AXES.filter(function (a) { return inPlane.indexOf(a.name) >= 0; })
-               .map(function (a) { return a.name; });
+    return ['x', 'y'];
   }
 
   function buildTriad() {
@@ -837,7 +841,7 @@ App.Viewport = (function () {
     disposeGroup(triadGroup);
     triadGroup = new THREE.Group();
 
-    var shown = triadAxes(dimension, sectionPlane);
+    var shown = triadAxes(dimension);
     AXES.forEach(function (a) {
       if (shown.indexOf(a.name) < 0) return;
       var dir = new THREE.Vector3(a.dir[0], a.dir[1], a.dir[2]);
@@ -868,18 +872,19 @@ App.Viewport = (function () {
     return hits.length ? hits[0] : null;
   }
 
-  var groundPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+  var groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
   var scratch = new THREE.Vector3();
 
-  var PLANE_NORMALS = { xz: [0, 1, 0], yz: [1, 0, 0], xy: [0, 0, 1] };
+
 
   /* The plane the coordinate readout is taken off. In 2D it has to be the section
      itself: the camera looks straight down that plane's normal, so a ray cast at
      the z = 0 ground runs almost parallel to it and lands 1e14 m away. */
-  function pickPlane(dim, plane, offset) {
+  /* The 2D section is the x-y plane, cut at `offset` along z but drawn at z = 0
+     (build._section moves it there), so that is where a pointer lands. */
+  function pickPlane(dim) {
     if (dim !== 2) return groundPlane;
-    var n = PLANE_NORMALS[plane] || PLANE_NORMALS.xz;
-    return new THREE.Plane(new THREE.Vector3(n[0], n[1], n[2]), -(offset || 0));
+    return new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
   }
 
   function bindPointer() {
@@ -895,7 +900,7 @@ App.Viewport = (function () {
       }
 
       var p = hit ? hit.point : raycaster.ray.intersectPlane(
-        pickPlane(dimension, sectionPlane, sectionOffset(App.PROJECT)), scratch);
+        pickPlane(dimension), scratch);
       if (p) App.setCoords(p.x, p.y, p.z);
     });
 
@@ -1165,26 +1170,24 @@ App.Viewport = (function () {
   }
 
   /* ── Camera presets ─────────────────────────────────────────── */
+  /* Angles on the Y-up basis live/js/orbit.js uses: phi is polar from +Y, and
+     position = target + r*(sin phi*cos theta, cos phi, sin phi*sin theta).
+
+     `top` looks along the up vector, which is the one direction lookAt() cannot
+     resolve -- a degenerate basis renders nothing at all, with no error. It keeps
+     the frozen mockup's 0.035 rad tilt for exactly that reason. Nothing else needs
+     one: the 2D section looks along -z, which is square to +y. */
   var VIEWS = {
-    iso:   { theta: -Math.PI * 0.68, phi: Math.PI * 0.33 },
-    front: { theta: -Math.PI / 2,    phi: Math.PI / 2 },
-    side:  { theta: 0,               phi: Math.PI / 2 },
-    top:   { theta: -Math.PI / 2,    phi: 0.035 }
+    iso:   { theta: Math.PI * 0.25,  phi: Math.PI * 0.33 },
+    front: { theta: Math.PI / 2,     phi: Math.PI / 2 },   // along -z, the section view
+    side:  { theta: 0,               phi: Math.PI / 2 },   // along -x
+    top:   { theta: Math.PI / 2,     phi: 0.035 }          // (nearly) down the up vector
   };
 
-  /* The one camera each section plane has: looking down its normal.
-
-     The plan does NOT look straight down. js/orbit.js:32 hard-codes
-     camera.up = (0, 0, 1), so a view direction parallel to it leaves lookAt() with
-     a degenerate basis and three.js renders nothing at all -- an empty viewport,
-     no error. VIEWS.top has carried the same 0.035 rad tilt since the frozen
-     mockup for exactly this reason; the plan section reuses it rather than
-     inventing a smaller one. */
-  var SECTION_VIEWS = {
-    xz: { theta: -Math.PI / 2, phi: Math.PI / 2 },   // elevation, looking along +y
-    yz: { theta: 0,            phi: Math.PI / 2 },   // the other elevation, along +x
-    xy: { theta: -Math.PI / 2, phi: VIEWS.top.phi }  // plan, looking (nearly) down
-  };
+  /* The one camera a 2D model has: square on to the x-y plane, looking along -z
+     with +y up. A true, untilted view -- there is no degenerate direction to dodge
+     now that the controller stands the camera up on Y. */
+  var SECTION_VIEW = { theta: VIEWS.front.theta, phi: VIEWS.front.phi };
 
   /* js/orbit.js:40 sets camera.zoom = ORTHO_BASE / radius on an orthographic camera,
      and the frozen resize() pairs that with a fixed half-height of 30. Both numbers
@@ -1221,41 +1224,26 @@ App.Viewport = (function () {
      fit at frame.homeRadius gives a frustum that then dollies correctly with the
      wheel. Width is checked too: a tall, narrow viewport has to widen the frustum
      rather than clip the section's ends. */
-  function orthoHalfHeight(frame, plane, aspect) {
+  function orthoHalfHeight(frame, aspect) {
     if (!frame) return ORTHO_HALF_HEIGHT;
-    var size = frame.size;
-    var span = { xz: [size[0], size[2]], yz: [size[1], size[2]], xy: [size[0], size[1]] }[plane]
-               || [size[0], size[2]];
+    // The section's own two axes: x across and y up.
+    var span = [frame.size[0], frame.size[1]];
     var needed = Math.max(span[1] / 2, (span[0] / 2) / Math.max(aspect, 1e-4)) * ORTHO_MARGIN;
     return needed * ORTHO_BASE / frame.homeRadius;
   }
 
-  /* Which axis a section plane travels along, and the domain fields that bound it. */
-  var PLANE_TRAVEL = {
-    xz: ['y0', 'y1'], xy: ['z_bottom', 'z_top'], yz: ['x0', 'x1']
-  };
-
-  function planeOf(project) {
-    var p = project && project.section_plane;
-    return SECTION_VIEWS[p] ? p : 'xz';
-  }
-
-  /* Where the section sits along its normal. Explicit when the project carries an
-     offset; otherwise the middle of the domain, which is where a section through a
-     symmetric excavation belongs. */
+  /* Where the section sits along its normal, which is always z. Explicit when the
+     project carries an offset; otherwise the middle of the domain's out-of-plane
+     depth, which is where a section through a symmetric excavation belongs. */
   function sectionOffset(project) {
     if (project && typeof project.section_offset === 'number') return project.section_offset;
     var d = project && project.domain;
     if (!d) return 0;
-    var travel = PLANE_TRAVEL[planeOf(project)];
-    return (d[travel[0]] + d[travel[1]]) / 2;
+    return (d.z0 + d.z1) / 2;
   }
 
-  function cameraAngles(name, dim, plane) {
-    if (dim === 2) {
-      var v = SECTION_VIEWS[plane] || SECTION_VIEWS.xz;
-      return { theta: v.theta, phi: v.phi };
-    }
+  function cameraAngles(name, dim) {
+    if (dim === 2) return { theta: SECTION_VIEW.theta, phi: SECTION_VIEW.phi };
     return VIEWS[name] || VIEWS.iso;
   }
 
@@ -1263,9 +1251,9 @@ App.Viewport = (function () {
      has no locked mode. Rather than fork the frozen controller, the section angles
      are restored from its onChange, which fires after every drag step. Pan and
      dolly leave the angles alone, so both keep working in 2D. */
-  function clampAngles(state, dim, plane) {
+  function clampAngles(state, dim) {
     if (dim !== 2) return { theta: state.theta, phi: state.phi, changed: false };
-    var v = cameraAngles(null, 2, plane);
+    var v = cameraAngles(null, 2);
     return {
       theta: v.theta, phi: v.phi,
       changed: Math.abs(state.theta - v.theta) > 1e-9
@@ -1273,31 +1261,37 @@ App.Viewport = (function () {
     };
   }
 
-  /* `sectionPlane` + `offset` is the 2D case: the grid *is* the section plane, so no
-     view preset can move it. Omitted, the 3D behaviour is unchanged. */
-  function gridReference(name, bbox, sectionPlane, offset) {
-    if (sectionPlane) return { plane: sectionPlane, offset: offset };
-    if (name === 'front') return { plane: 'xz', offset: bbox[1] };
+  /* Which plane the reference grid lies in, and where it sits along that plane's
+     own normal. In 2D the grid *is* the section, so no view preset can move it: the
+     x-y plane at z = 0, where `build._section` put the geometry.
+
+     In 3D each preset backs the grid onto the far face of the model box: the front
+     view gets the x-y plane at the near z, the side view the y-z plane at the far x,
+     and the top view the x-z plane at the model's floor. */
+  function gridReference(name, bbox, section) {
+    if (section) return { plane: 'xy', offset: 0 };
+    if (name === 'front') return { plane: 'xy', offset: bbox[2] };
     if (name === 'side') return { plane: 'yz', offset: bbox[3] };
-    return { plane: 'xy', offset: bbox[2] };
+    return { plane: 'xz', offset: bbox[1] };
   }
 
   /* `center` is the in-plane point the grid is drawn around -- the model in 3D, the
-     camera's own centre in 2D, where the grid follows the view. */
+     camera's own centre in 2D, where the grid follows the view.
+
+     THREE.GridHelper is built in the x-z plane, so the horizontal grid needs no
+     rotation and the two vertical ones are stood up out of it. */
   function orientReferenceGrid(name, bbox, center) {
     if (!referenceGrid) return;
-    var ref = gridReference(name, bbox,
-                            dimension === 2 ? sectionPlane : null,
-                            sectionOffset(App.PROJECT));
-    var c = center || (ref.plane === 'xy' ? [frame.center[0], frame.center[1]]
-                     : ref.plane === 'xz' ? [frame.center[0], frame.center[2]]
+    var ref = gridReference(name, bbox, dimension === 2);
+    var c = center || (ref.plane === 'xz' ? [frame.center[0], frame.center[2]]
+                     : ref.plane === 'xy' ? [frame.center[0], frame.center[1]]
                                           : [frame.center[1], frame.center[2]]);
     referenceGrid.rotation.set(0, 0, 0);
-    if (ref.plane === 'xy') {
+    if (ref.plane === 'xz') {
+      referenceGrid.position.set(c[0], ref.offset, c[1]);
+    } else if (ref.plane === 'xy') {
       referenceGrid.rotation.x = Math.PI / 2;
       referenceGrid.position.set(c[0], c[1], ref.offset - 0.02);
-    } else if (ref.plane === 'xz') {
-      referenceGrid.position.set(c[0], ref.offset, c[1]);
     } else {
       referenceGrid.rotation.z = Math.PI / 2;
       referenceGrid.position.set(ref.offset, c[0], c[1]);
@@ -1307,25 +1301,23 @@ App.Viewport = (function () {
   function setView(name) {
     activeView = VIEWS[name] ? name : 'iso';
     if (!orbit || !frame) return;          // no WebGL: nothing to aim
-    var v = cameraAngles(name, dimension, sectionPlane);
+    var v = cameraAngles(name, dimension);
     orientReferenceGrid(activeView, frameBBox());
     orbit.animateTo({ theta: v.theta, phi: v.phi, radius: frame.homeRadius,
-                      tx: frame.center[0], ty: targetY(), tz: frame.center[2] });
+                      tx: frame.center[0], ty: frame.center[1], tz: targetZ() });
     needsRender = true;
   }
 
-  /* In 2D the orbit target sits on the section plane, so panning slides along it
-     instead of drifting the camera off to one side of the model. Only the elevation
-     needs this: a plan section is offset in z, which is already the target's own
-     axis, and the yz elevation in x. */
-  function targetY() {
-    return dimension === 2 && sectionPlane === 'xz'
-      ? sectionOffset(App.PROJECT) : frame.center[1];
+  /* In 2D the orbit target sits on the section plane -- z = 0, where the geometry
+     is -- so panning slides along it instead of drifting the camera off to one side
+     of the model. */
+  function targetZ() {
+    return dimension === 2 ? 0 : frame.center[2];
   }
 
   function zoomFit() {
     if (!orbit || !frame) return;
-    orbit.animateTo({ tx: frame.center[0], ty: targetY(), tz: frame.center[2],
+    orbit.animateTo({ tx: frame.center[0], ty: frame.center[1], tz: targetZ(),
                       radius: frame.homeRadius });
     needsRender = true;
   }
@@ -1375,33 +1367,28 @@ App.Viewport = (function () {
     needsRender = true;
   }
 
-  /* View-only for now: the solids and the mesh are still the 3D ones built by the
-     server. What changes is that the camera is pinned to the x-z section plane and
-     cannot be rotated off it, and the reference grid becomes that plane. Sectioning
-     the geometry itself is the next step -- see plan/plan_2d_mode.md. */
+  /* In 2D the camera is pinned square on to the x-y section plane and cannot be
+     rotated off it, and the reference grid becomes that plane. */
   function setViewMode(mode) {
     dimension = mode === 'solid' ? 3 : 2;
-    sectionPlane = mode === 'plan' ? 'xy' : (mode === 'elevation_yz' ? 'yz' : 'xz');
     // A section drawn in perspective is not a section: parallel lines in the plane
     // have to stay parallel for anything measured off it to mean something.
     setProjection(dimension === 2 ? false : App.state.projection !== false);
     // 3D goes back to a grid the size of the model; 2D re-derives one from the camera
     // on the next tick.
     resetReferenceGrid();
-    fillTriad();                   // the axes shown depend on the mode and the plane
-    resize();                      // the frustum depends on the mode and the plane
+    fillTriad();                   // the axes shown depend on the mode
+    resize();                      // the frustum depends on the mode
     setView(activeView);
     needsRender = true;
   }
 
   function is2D() { return dimension === 2; }
 
-  /* The view mode a loaded project is in, defaulting to the solid model. */
+  /* The view mode a loaded project is in, defaulting to the solid model. There is
+     one 2D view now -- the x-y section -- so the dimension decides it outright. */
   function viewModeOf(project) {
-    if (!project || project.dimension !== 2) return 'solid';
-    if (project.section_plane === 'xy') return 'plan';
-    if (project.section_plane === 'yz') return 'elevation_yz';
-    return 'elevation';
+    return (project && project.dimension === 2) ? 'elevation' : 'solid';
   }
 
   function setGrid(on) {
@@ -1421,7 +1408,7 @@ App.Viewport = (function () {
     camPersp.aspect = w / h;
     camPersp.updateProjectionMatrix();
     var a = w / h;
-    var s = dimension === 2 ? orthoHalfHeight(frame, sectionPlane, a) : ORTHO_HALF_HEIGHT;
+    var s = dimension === 2 ? orthoHalfHeight(frame, a) : ORTHO_HALF_HEIGHT;
     camOrtho.left = -s * a; camOrtho.right = s * a;
     camOrtho.top = s; camOrtho.bottom = -s;
     camOrtho.updateProjectionMatrix();
@@ -1442,7 +1429,7 @@ App.Viewport = (function () {
 
     if (triadRenderer) {
       triadCam.position.copy(cam.position).sub(orbit.target).normalize().multiplyScalar(4);
-      triadCam.up.set(0, 0, 1);
+      triadCam.up.set(WORLD_UP[0], WORLD_UP[1], WORLD_UP[2]);
       triadCam.lookAt(0, 0, 0);
       triadRenderer.render(triadScene, triadCam);
     }
@@ -1465,6 +1452,7 @@ App.Viewport = (function () {
     SOFTWARE_HELP: SOFTWARE_HELP,
     sectionOffset: sectionOffset, viewModeOf: viewModeOf,
     cameraAngles: cameraAngles, clampAngles: clampAngles, triadAxes: triadAxes,
+    WORLD_UP: WORLD_UP,
     generateMesh: generateMesh, hasMesh: hasMesh, resize: resize,
     showImportedMesh: showImportedMesh, clearImportedMesh: clearImportedMesh,
     hasImportedMesh: hasImportedMesh, removeImportedSection: removeImportedSection,

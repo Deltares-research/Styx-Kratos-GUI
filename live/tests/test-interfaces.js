@@ -16,8 +16,8 @@
 
   function section(extra) {
     return Object.assign({
-      dimension: 2, section_plane: 'xz', section_offset: 20,
-      domain: { x0: 0, x1: 50, y0: 0, y1: 40, z_top: 0, z_bottom: -25 },
+      dimension: 2, section_offset: 20,
+      domain: { x0: 0, x1: 50, z0: 0, z1: 40, y_top: 0, y_bottom: -25 },
       materials: [{ id: 'mat_sand', name: 'Sand' }],
       loads: [], beams: [pile()], beam_sections: [],
       interfaces: [], interface_sections: []
@@ -34,10 +34,9 @@
 
   /* ── Where an interface can be made ─────────────────────────────────── */
 
-  test('interfaces are authored in the x-z section and nowhere else', function () {
+  test('interfaces are authored in the 2D section and nowhere else', function () {
     T.eq(App.Interfaces.available(section()), true);
     T.eq(App.Interfaces.available(solid()), false);
-    T.eq(App.Interfaces.available(section({ section_plane: 'xy' })), false);
     T.ok(App.Interfaces.unavailableMessage(solid()));
   });
 

@@ -22,7 +22,7 @@ var App = window.App || {};
 App.Anchors = (function () {
 
   /* How far the model reaches, which is not the same as the borehole domain: a drawn
-     or imported part may stand above `z_top`, and a structure placed on one is on
+     or imported part may stand above `y_top`, and a structure placed on one is on
      model geometry. `App.Model.extentOf` mirrors the server's `Project.extent`; the
      fallback keeps this module usable in a page that has no App.Model. */
   function extent(project) {
@@ -72,7 +72,7 @@ App.Anchors = (function () {
   /* An anchor needs something to hang from, in the dimension it is drawn in. */
   function available(project) {
     if (!project || livePiles(project).length === 0) return false;
-    return spatial(project) || (project.section_plane || 'xz') === 'xz';
+    return spatial(project) || project.dimension === 2;
   }
 
   /* The closest point on a polyline, in however many dimensions it is given. */
@@ -100,11 +100,11 @@ App.Anchors = (function () {
      splits: the plan position rides on the footprint, and the level is simply
      clamped between the wall's own two. */
   function nearestOnPanel(panel, point) {
-    var plan = nearestOnPolyline(panel.footprint, [point[0], point[1]]);
+    var plan = nearestOnPolyline(panel.footprint, [point[0], point[2]]);
     if (!plan) return null;
-    var z = Math.max(panel.z_toe, Math.min(panel.z_top, point[2]));
-    var on = [plan.point[0], plan.point[1], z];
-    return { point: on, distance: Math.hypot(plan.distance, point[2] - z) };
+    var y = Math.max(panel.y_toe, Math.min(panel.y_top, point[1]));
+    var on = [plan.point[0], y, plan.point[1]];
+    return { point: on, distance: Math.hypot(plan.distance, point[1] - y) };
   }
 
   /* The closest point on any live structure, with how far away it was. Snapping is
@@ -132,7 +132,7 @@ App.Anchors = (function () {
     if (livePiles(project).length) {
       return spatial(project)
         ? 'Anchors are created in the 3D model.'
-        : 'Anchors are created in the 2D x-z section.';
+        : 'Anchors are created in the 2D x-y section.';
     }
     return spatial(project)
       ? 'An anchor hangs from a wall or a member; create one first.'
@@ -145,21 +145,21 @@ App.Anchors = (function () {
   function nativePoint(project, point) {
     return spatial(project)
       ? [point[0], point[1] === undefined ? 0 : point[1],
-         point[2] === undefined ? point[1] : point[2]]
-      : [point[0], point[2] === undefined ? point[1] : point[2]];
+         point[2] === undefined ? 0 : point[2]]
+      : [point[0], point[1]];
   }
 
   function insideDomain(project, point) {
     // The extent, not the domain: an anchor may be tied into a drawn embankment that
-    // stands above `z_top`. Mirrors the server's `Project.extent`.
+    // stands above `y_top`. Mirrors the server's `Project.extent`.
     var d = extent(project);
     if (!spatial(project)) {
       return point[0] >= d.x0 && point[0] <= d.x1
-        && point[1] >= d.z_bottom && point[1] <= d.z_top;
+        && point[1] >= d.y_bottom && point[1] <= d.y_top;
     }
     return point[0] >= d.x0 && point[0] <= d.x1
-      && point[1] >= d.y0 && point[1] <= d.y1
-      && point[2] >= d.z_bottom && point[2] <= d.z_top;
+      && point[1] >= d.y_bottom && point[1] <= d.y_top
+      && point[2] >= d.z0 && point[2] <= d.z1;
   }
 
   function draftFromPoints(project, points) {
@@ -218,8 +218,8 @@ App.Anchors = (function () {
       var tail = [head[0] + into * length * Math.cos(radians),
                   head[1] - length * Math.sin(radians)];
       tail[0] = Math.max(d.x0, Math.min(d.x1, tail[0]));
-      tail[1] = Math.max(d.z_bottom, Math.min(d.z_top, tail[1]));
-      return draftFromPoints(project, [[head[0], 0, head[1]], [tail[0], 0, tail[1]]]);
+      tail[1] = Math.max(d.y_bottom, Math.min(d.y_top, tail[1]));
+      return draftFromPoints(project, [[head[0], head[1]], [tail[0], tail[1]]]);
     }
 
     // In space the head sits a quarter of the way down the structure, at the middle
@@ -229,10 +229,10 @@ App.Anchors = (function () {
       ? midOfPanel(pile)
       : midOfMember(pile);
     var away = (d.x1 - spot[0]) >= (spot[0] - d.x0) ? 1 : -1;
-    var end = [spot[0] + away * length * Math.cos(radians), spot[1],
-               spot[2] - length * Math.sin(radians)];
+    var end = [spot[0] + away * length * Math.cos(radians),
+               spot[1] - length * Math.sin(radians), spot[2]];
     end[0] = Math.max(d.x0, Math.min(d.x1, end[0]));
-    end[2] = Math.max(d.z_bottom, Math.min(d.z_top, end[2]));
+    end[1] = Math.max(d.y_bottom, Math.min(d.y_top, end[1]));
     return draftFromPoints(project, [spot, end]);
   }
 
@@ -240,14 +240,15 @@ App.Anchors = (function () {
   function midOfPanel(panel) {
     var first = panel.footprint[0];
     var last = panel.footprint[panel.footprint.length - 1];
-    return [(first[0] + last[0]) / 2, (first[1] + last[1]) / 2,
-            panel.z_top + (panel.z_toe - panel.z_top) * 0.25];
+    return [(first[0] + last[0]) / 2,
+            panel.y_top + (panel.y_toe - panel.y_top) * 0.25,
+            (first[1] + last[1]) / 2];
   }
 
   function midOfMember(member) {
     var top = member.points[0];
     var toe = member.points[member.points.length - 1];
-    return [top[0], top[1], top[2] + (toe[2] - top[2]) * 0.25];
+    return [top[0], top[1] + (toe[1] - top[1]) * 0.25, top[2]];
   }
 
   function sectionsFor(project, anchor) {

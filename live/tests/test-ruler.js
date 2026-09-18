@@ -94,17 +94,14 @@
 
   /* ── Which world axes the screen axes are ──────────────────────── */
 
-  test('each section plane names the axes its screen edges measure', function () {
-    T.eq(R.axesOf('xz'), ['x', 'z'], 'the elevation: x across, z up');
-    T.eq(R.axesOf('yz'), ['y', 'z']);
-    T.eq(R.axesOf('xy'), ['x', 'y'], 'the plan: x across, y up');
-    T.eq(R.axesOf(undefined), ['x', 'z'], 'an unknown plane falls back to the elevation');
+  test('the section names the axes its screen edges measure', function () {
+    T.eq(R.axesOf(), ['x', 'y'], 'the 2D section: x across, y up');
   });
 
   /* ── The plan drawn from a camera ──────────────────────────────── */
 
   function state(over) {
-    var s = { plane: 'xz', center: [10, 4], halfW: 20, halfH: 10,
+    var s = { center: [10, 4], halfW: 20, halfH: 10,
               width: 800, height: 400, minSpacing: 60 };
     Object.keys(over || {}).forEach(function (k) { s[k] = over[k]; });
     return s;
@@ -112,7 +109,7 @@
 
   test('the visible rectangle becomes the two rulers\' ranges', function () {
     var p = R.plan(state());
-    T.eq([p.h.axis, p.v.axis], ['x', 'z']);
+    T.eq([p.h.axis, p.v.axis], ['x', 'y']);
     T.eq([p.h.min, p.h.max], [-10, 30], 'centre 10 ± halfW 20');
     T.eq([p.v.min, p.v.max], [-6, 14], 'centre 4 ± halfH 10');
     T.ok(p.h.minor.length && p.v.minor.length, 'both rulers carry their minor ticks');
@@ -175,7 +172,7 @@
            ['bottom', 'left', 'right', 'top']);
 
       R.setEnabled(true);
-      var drawn = R.sync({ active: true, plane: 'xz', center: [0, 0], halfW: 10, halfH: 5,
+      var drawn = R.sync({ active: true, center: [0, 0], halfW: 10, halfH: 5,
                            width: 800, height: 400 });
       T.eq(edges[0].hidden, false, 'a 2D section with the switch on shows them');
       T.eq(drawn.h.axis, 'x', 'sync reports the scale it painted');

@@ -1,7 +1,7 @@
 """Where a structure is allowed to be: the model, not the borehole box.
 
 `Domain` is the soil block the boreholes describe. A drawn or imported part is not held
-to it -- an embankment sits *above* `z_top`, and `build.SECTION_PAD` already says so in
+to it -- an embankment sits *above* `y_top`, and `build.SECTION_PAD` already says so in
 as many words: "the wall top and any drawn or imported part can legitimately stick out
 of the declared domain".
 
@@ -22,7 +22,7 @@ from app.seed import seed_project
 
 EMBANKMENT = {"key": "drawn_1", "label": "Embankment", "source": "gui",
               "source_file": "x.brep", "color": "#cccccc",
-              "bbox": [0.0, 0.0, 0.0, 25.0, 25.0, 4.0]}
+              "bbox": [0.0, 0.0, 0.0, 25.0, 4.0, 25.0]}
 
 
 def project_with(**fields) -> dict:
@@ -32,9 +32,9 @@ def project_with(**fields) -> dict:
     return payload
 
 
-def line_at(z: float) -> dict:
+def line_at(y: float) -> dict:
     return {"id": "load_1", "name": "LineLoad_1", "kind": "line",
-            "x0": 4.0, "x1": 16.0, "z": z, "components": [0.0, -20.0]}
+            "x0": 4.0, "x1": 16.0, "y": y, "components": [0.0, -20.0]}
 
 
 # ── The extent itself ───────────────────────────────────────────────────────
@@ -42,8 +42,8 @@ def line_at(z: float) -> dict:
 def test_the_extent_grows_to_cover_a_custom_part():
     project = Project.model_validate(project_with())
 
-    assert project.extent().z_top == 4.0
-    assert project.extent().z_bottom == project.domain.z_bottom
+    assert project.extent().y_top == 4.0
+    assert project.extent().y_bottom == project.domain.y_bottom
 
 
 def test_the_extent_is_the_domain_when_nothing_sticks_out():
@@ -99,4 +99,4 @@ def test_an_anchor_in_a_custom_layer_above_ground_is_accepted():
 def test_a_point_load_on_a_custom_layer_above_ground_is_accepted():
     Project.model_validate(project_with(
         loads=[{"id": "load_1", "name": "PointLoad_1", "kind": "point",
-                "x": 10.0, "z": 3.0, "components": [0.0, -30.0]}]))
+                "x": 10.0, "y": 3.0, "components": [0.0, -30.0]}]))
