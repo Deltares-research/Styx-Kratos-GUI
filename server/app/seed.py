@@ -69,6 +69,10 @@ _LAYERS = [
 def blank_project() -> Project:
     """What the server starts with: no soil, no structures -- an empty site.
 
+    Plane strain, because that is what this app is for: the document opens as the
+    x-y section, and the client comes up in it rather than drawing the solid model
+    first and replacing it once the project arrives.
+
     The schema still requires an excavation/wall/strut/anchor/pile/load/well block
     each (there is no "absent" state for them), but `simple_example` mode -- the mode
     a blank project opens in -- never reads any of those fields when building geometry
@@ -80,6 +84,7 @@ def blank_project() -> Project:
     return Project(
         name="Untitled project",
         simple_example=True,
+        dimension=2,
         domain=Domain(x0=0.0, x1=20.0, z0=0.0, z1=20.0, y_top=0.0, y_bottom=-15.0),
         boreholes=[Borehole(id="bh1", name="BH-1", x=0.0, y=0.0, head=0.0, water=-1.5)],
         materials=[],

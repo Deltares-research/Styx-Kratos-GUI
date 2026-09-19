@@ -157,11 +157,25 @@
                       domain: { x0: 0, x1: 50, z0: 0, z1: 40, y_top: 0, y_bottom: -25 } };
       T.eq(App.Viewport.viewModeOf(App.PROJECT), 'elevation');
       T.eq(App.Viewport.viewModeOf({ dimension: 3 }), 'solid');
-      T.eq(App.Viewport.viewModeOf(null), 'solid', 'no project yet means the 3D default');
+      T.eq(App.Viewport.viewModeOf(null), 'elevation',
+           'no project yet means the 2D default the app opens on');
     } finally {
       App.PROJECT = saved.project; App.state = saved.state;
     }
     T.eq(applied, []);
+  });
+
+  /* The app is a 2D modeller, and the server opens on a plane-strain project. Booting
+     the camera in 3D and correcting it when /api/geometry answers is a visible flip
+     through a view the user never asked for, so the section angles and the parallel
+     projection have to be what the first frame is drawn with. */
+  test('the camera starts on the section rather than flipping to it a second later',
+       function () {
+    T.eq(App.Viewport.DEFAULT_VIEW_MODE, 'elevation');
+    T.eq(App.Viewport.DEFAULT_DIMENSION, 2);
+    T.eq(App.Viewport.cameraAngles('iso', App.Viewport.DEFAULT_DIMENSION),
+         App.Viewport.cameraAngles(null, 2),
+         'the opening angles are the section angles, not the iso ones');
   });
 })();
 

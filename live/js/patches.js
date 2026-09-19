@@ -93,6 +93,10 @@ App.LivePatches = (function () {
       viewport: 'solid' }
   ];
 
+  /* The mode the app opens in, matching the document the server opens on
+     (server/app/seed.py blank_project). This is a 2D modeller first. */
+  var DEFAULT_MODEL_MODE = '2d';
+
   var modeInFlight = false;
 
   function modeDef(id) {
@@ -115,7 +119,7 @@ App.LivePatches = (function () {
      and a rebuild of the whole model is not nothing. */
   function setModelMode(id) {
     var def = modeDef(id);
-    var already = (App.state.modelMode || '3d') === def.id;
+    var already = (App.state.modelMode || DEFAULT_MODEL_MODE) === def.id;
     if (modeInFlight || already) return Promise.resolve();
     modeInFlight = true;
 
@@ -202,6 +206,29 @@ App.LivePatches = (function () {
      vocabulary. */
   function syncViewMode(viewportMode) {
     syncModelMode(viewportMode === 'solid' ? '3d' : '2d');
+  }
+
+  /* The opening mode, applied before anything has been fetched. Waiting for the first
+     /api/geometry to gate the chrome would show the 3D toolbar, rail, menus and view
+     cube for as long as that takes, and then take them away -- the app would appear to
+     start in 3D and change its mind. Only ever fills a blank: a mode already chosen (a
+     test's stub, or a switch that has happened) is left alone.
+
+     The state is seeded now and the DOM gated after boot, because js/app.js mounts the
+     toolbar and the rail from its own DOMContentLoaded handler, which is registered
+     before this one and so runs before it. */
+  function openOnDefaultMode() {
+    App.state = App.state || {};
+    if (App.state.modelMode) return;
+    App.state.modelMode = DEFAULT_MODEL_MODE;
+    App.state.dimension = DEFAULT_MODEL_MODE === '2d' ? 2 : 3;
+    function gate() { syncModelMode(App.state.modelMode || DEFAULT_MODEL_MODE); }
+    if (typeof document === 'undefined') return;
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', gate);
+    } else {
+      gate();
+    }
   }
 
   /* ── Making failure visible ──────────────────────────────────────────────
@@ -954,6 +981,8 @@ App.LivePatches = (function () {
     var stale = missingViewportApi(App.Viewport);
     if (stale.length) App.Command.err(staleMessage(stale));
 
+    openOnDefaultMode();
+
     if (typeof window !== 'undefined' && !window.__liveErrorsWired) {
       window.__liveErrorsWired = true;
       window.addEventListener('error', reportUncaught);
@@ -1152,7 +1181,7 @@ App.LivePatches = (function () {
                  tip: m.id === '2d'
                    ? '2D model — a plane-strain cross-section, meshed with triangles'
                    : '3D model — the full solid, meshed with tetrahedra',
-                 on: m.id === '3d' };
+                 on: m.id === DEFAULT_MODEL_MODE };
       });
       App.TOOLBAR.splice.apply(App.TOOLBAR, [at, 0].concat(buttons).concat(['|']));
     }
@@ -1669,6 +1698,7 @@ App.LivePatches = (function () {
     snapshotSoil: snapshotSoil, restoreSoil: restoreSoil, pitRefinement: pitRefinement,
     isDeletableCustomPart: isDeletableCustomPart, tagTreeRowsWithObjKeys: tagTreeRowsWithObjKeys,
     MODES: MODES, patchFor: patchFor, sectionLabel: sectionLabel,
+    DEFAULT_MODEL_MODE: DEFAULT_MODEL_MODE,
     missingViewportApi: missingViewportApi, staleMessage: staleMessage,
     reportUncaught: reportUncaught,
     setModelMode: setModelMode, syncModelMode: syncModelMode, syncViewMode: syncViewMode,

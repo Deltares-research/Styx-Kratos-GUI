@@ -39,7 +39,12 @@ App.Viewport = (function () {
   var modeGroups = {};
   var showGrid = true, gridGroup, boundsGroup, referenceGrid;
   var activeView = 'iso';
-  var dimension = 3;             // 3 = the full solid model, 2 = a planar section
+  /* The section, not the solid model: the server opens on a plane-strain project
+     (server/app/seed.py blank_project), so starting in 3D would only mean drawing a
+     view the first /api/geometry answer immediately takes away. */
+  var DEFAULT_VIEW_MODE = 'elevation';
+  var DEFAULT_DIMENSION = 2;
+  var dimension = DEFAULT_DIMENSION;   // 3 = the full solid model, 2 = a planar section
 
   var needsRender = true, meshBuilt = false;
 
@@ -861,7 +866,9 @@ App.Viewport = (function () {
 
     camPersp = new THREE.PerspectiveCamera(App.Buffers.FOV_DEG, 1, 0.5, 3000);
     camOrtho = new THREE.OrthographicCamera(-1, 1, 1, -1, -2000, 4000);
-    cam = camPersp;
+    // A section is drawn in parallel projection from the first frame, not from the
+    // frame after the project arrives.
+    cam = dimension === 2 ? camOrtho : camPersp;
 
     // Before the controller exists: at the target, listeners run in the order they
     // were registered, and this one has to see the mousedown first to rewrite it.
@@ -869,9 +876,10 @@ App.Viewport = (function () {
       forcePanIfNeeded(event, effectiveNavMode());
     });
 
+    var opening = cameraAngles(activeView, dimension);
     orbit = new App.Orbit(canvas, {
       tx: frame.center[0], ty: frame.center[1], tz: frame.center[2],
-      radius: frame.homeRadius, theta: VIEWS.iso.theta, phi: VIEWS.iso.phi,
+      radius: frame.homeRadius, theta: opening.theta, phi: opening.phi,
       minRadius: radiusLimits(frame).min, maxRadius: radiusLimits(frame).max,
       orthoBase: ORTHO_BASE
     });
@@ -1487,10 +1495,11 @@ App.Viewport = (function () {
 
   function is2D() { return dimension === 2; }
 
-  /* The view mode a loaded project is in, defaulting to the solid model. There is
-     one 2D view now -- the x-y section -- so the dimension decides it outright. */
+  /* The view mode a loaded project is in, defaulting to the section the app opens on.
+     There is one 2D view now -- the x-y section -- so the dimension decides it
+     outright. */
   function viewModeOf(project) {
-    return (project && project.dimension === 2) ? 'elevation' : 'solid';
+    return (project && project.dimension === 3) ? 'solid' : DEFAULT_VIEW_MODE;
   }
 
   function setGrid(on) {
@@ -1553,6 +1562,7 @@ App.Viewport = (function () {
     makeRenderer: makeRenderer, WEBGL_HELP: WEBGL_HELP,
     SOFTWARE_HELP: SOFTWARE_HELP,
     sectionOffset: sectionOffset, viewModeOf: viewModeOf,
+    DEFAULT_VIEW_MODE: DEFAULT_VIEW_MODE, DEFAULT_DIMENSION: DEFAULT_DIMENSION,
     cameraAngles: cameraAngles, clampAngles: clampAngles, triadAxes: triadAxes,
     WORLD_UP: WORLD_UP,
     generateMesh: generateMesh, hasMesh: hasMesh, resize: resize,

@@ -118,6 +118,26 @@ def test_post_project_new_starts_an_empty_project(client):
     client.put("/api/project", json=seed_project().model_dump())
 
 
+def test_the_project_the_server_opens_on_is_plane_strain(client):
+    """The app is a 2D modeller first: the document it comes up on is the section, so
+    the client never has to switch into it -- and never shows a 3D view it is about to
+    replace. The offset is resolved here too, so the viewport reads one number."""
+    from app.seed import blank_project
+
+    blank = blank_project()
+
+    assert blank.dimension == 2
+    assert blank.section_offset == pytest.approx((blank.domain.z0 + blank.domain.z1) / 2)
+
+    try:
+        assert client.post("/api/project/new").json()["project"]["dimension"] == 2
+        # An empty site draws nothing, but it still has to build: the viewport asks for
+        # this before the user has added anything.
+        assert client.get("/api/geometry").status_code == 200
+    finally:
+        client.put("/api/project", json=seed_project().model_dump())
+
+
 def test_put_project_rejects_a_model_that_breaks_the_layer_stack(client):
     """js/dialogs.js edits layer depths with no validation at all, so this is the first
     place a gap in the stack can be caught rather than silently rendered."""

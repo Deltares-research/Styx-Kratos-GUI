@@ -486,6 +486,34 @@
     });
   });
 
+  /* The server opens on a plane-strain document, so the app does too. A switch that
+     only agreed with that after /api/geometry answered would show the 3D toolbar,
+     rail and camera for the second it took -- and then take them away again. */
+  test('the app opens in 2D, so 2D is the no-op and 3D is the switch that costs',
+       function () {
+    var calls = 0;
+    T.eq(App.LivePatches.DEFAULT_MODEL_MODE, '2d');
+    return withStubs(stubs({
+      state: { mode: 'soil' },          // nothing has said a dimension yet
+      Api: Object.assign({}, App.Api, {
+        patch: function (path, body) {
+          calls++;
+          return Promise.resolve({ project: { dimension: body.dimension } });
+        }
+      })
+    }), function () {
+      T.eq(App.state.modelMode, '2d', 'install() opens the document in the section');
+      T.eq(App.state.dimension, 2);
+      return App.LivePatches.setModelMode('2d').then(function () {
+        T.eq(calls, 0, 'the project is already the section the server opened on');
+        return App.LivePatches.setModelMode('3d');
+      }).then(function () {
+        T.eq(calls, 1, 'leaving the section is the switch that costs a rebuild');
+        T.eq(App.state.modelMode, '3d');
+      });
+    });
+  });
+
   test('a second switch is ignored while the first is still in flight', function () {
     var calls = 0, release;
     var pending = new Promise(function (resolve) { release = resolve; });
