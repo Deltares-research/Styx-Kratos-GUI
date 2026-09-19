@@ -311,6 +311,10 @@ def _section_dict(nodes: dict[int, tuple[float, float, float]], key: str, color:
     edge_coords = [c for a, b in edges for c in (*nodes[a], *nodes[b])]
     return {
         "key": key, "color": color, "part": part, "kind": kind,
+        # The deck's own node numbers, one per position triple and in the same order, so
+        # the viewport can label a drawn node without carrying the whole node table: the
+        # section is already local to `used`, and this is what `used` was.
+        "node_ids": used,
         "positions": [c for tag in used for c in nodes[tag]],
         "indices": [index_of[node] for triangle in triangles for node in triangle],
         "edges": edge_coords,

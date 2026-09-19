@@ -1012,14 +1012,16 @@ def test_the_live_shell_replaces_only_the_viewport_and_the_orbit_controller(clie
     assert set(frozen) == {"data.js", "ui.js", "orbit.js", "menubar.js",
                            "toolbars.js", "explorer.js", "command.js", "dialogs.js", "app.js"}
     # Additions rather than substitutions -- they have no frozen counterpart:
-    # soil-volume-dialog.js, canvas-renderer.js, ruler.js, download.js, zip.js.
+    # soil-volume-dialog.js, canvas-renderer.js, ruler.js, node-labels.js,
+    # download.js, zip.js.
     # The assertion above is the one that guards the portability claim.
     assert set(replaced) == {"api.js", "buffers.js", "model.js", "viewport.js", "patches.js",
                              "mesh-settings.js", "import-dialog.js", "mdpa-import-dialog.js",
                              "draw-input.js", "soil-volume-dialog.js", "canvas-renderer.js",
                              "export.js", "history.js", "loads.js", "beams.js", "anchors.js",
                              "interfaces.js", "normal-loads.js", "material-library.js",
-                             "orbit.js", "ruler.js", "download.js", "zip.js"}
+                             "orbit.js", "ruler.js", "node-labels.js",
+                             "download.js", "zip.js"}
     assert body.index('/js/orbit.js') < body.index('/live/js/orbit.js'), (
         "the Y-up controller has to be loaded after the frozen one it overrides")
 

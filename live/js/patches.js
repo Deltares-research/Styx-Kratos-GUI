@@ -970,9 +970,69 @@ App.LivePatches = (function () {
                      + ' along the viewport edges.');
   }
 
+  /* ══════════════════════════════════════════════════════════════════════════
+     Viewport right-click: "Show labels ▸ Node IDs".
+
+     A mesh is read by node number -- a solver names node 4711 and the only way to find
+     it is to see the number on the mesh -- so the numbers belong on the thing itself,
+     one right-click away from wherever the reader is already looking. The overlay and
+     its arithmetic are live/js/node-labels.js; this is the way in.
+     ══════════════════════════════════════════════════════════════════════════ */
+
+  /* The frozen viewport menu (js/app.js:60) plus the labels row. Kept as a function of
+     its own so the row's place in the menu is testable without opening one. */
+  function withLabelRows(items) {
+    if (!App.NodeLabels) return items;
+    return items.concat(['-', App.NodeLabels.menuItem()]);
+  }
+
+  function toggleNodeLabels() {
+    var on = !App.Viewport.nodeLabelsOn();
+    App.state.nodeLabels = on;
+    App.Viewport.setNodeLabels(on, function (count) {
+      if (!on) return App.Command.note('Node ID labels hidden.');
+      if (count === null) { App.state.nodeLabels = false; return; }  // already reported
+      if (!count) {
+        App.state.nodeLabels = false;
+        App.Viewport.setNodeLabels(false);
+        return App.Command.note(
+          'Nothing to label — generate a mesh (F9) or import a .mdpa first.');
+      }
+      App.Command.note('Node IDs shown: ' + count
+        + ' nodes, in the numbering the .mdpa is written with. '
+        + 'Where they crowd, only the nearest is drawn — zoom in for the rest.');
+    });
+  }
+
+  /* The frozen menu is *wrapped*, not rewritten: it builds its items in a closure and
+     hands them straight to App.Menu.openAt, so lending it a one-shot openAt is what
+     lets a row be added without copying the eleven it already has -- and without this
+     module having to keep them in step. */
+  function extendViewportMenu() {
+    var frozen = App.viewportContextMenu;
+    if (typeof frozen !== 'function') return;
+    App.viewportContextMenu = function (event, key) {
+      var openAt = App.Menu.openAt;
+      App.Menu.openAt = function (items, x, y, onPick) {
+        App.Menu.openAt = openAt;
+        openAt(withLabelRows(items), x, y, function (item) {
+          if (item && item.action === 'toggleNodeLabels') return toggleNodeLabels();
+          if (onPick) onPick(item);
+        });
+      };
+      try {
+        frozen(event, key);
+      } finally {
+        App.Menu.openAt = openAt;
+      }
+    };
+  }
+
   function install() {
     if (installed || typeof App.runAction !== 'function' || !App.Command) return;
     installed = true;
+
+    extendViewportMenu();
 
     if (!App.Command.err) {
       App.Command.err = function (text) { App.Command.write('err', text); };
@@ -1022,6 +1082,8 @@ App.LivePatches = (function () {
       if (item && /^nav(Pan|Rotate)$/.test(item.action || '')) {
         return setNavigation(item.action === 'navPan' ? 'pan' : 'rotate');
       }
+
+      if (item && item.action === 'toggleNodeLabels') { toggleNodeLabels(); return; }
 
       if (item && item.action === 'importModel') {
         if (App.ImportDialog) App.ImportDialog.open();
@@ -1710,6 +1772,8 @@ App.LivePatches = (function () {
     projectNameFromFile: projectNameFromFile,
     setNavigation: setNavigation, gateRail: gateRail,
     rulersOn: rulersOn, toggleRulers: toggleRulers, applyRulers: applyRulers,
+    withLabelRows: withLabelRows, toggleNodeLabels: toggleNodeLabels,
+    extendViewportMenu: extendViewportMenu,
     orderStructuresRail: orderStructuresRail,
     STRUCTURES_RAIL_GROUPS: STRUCTURES_RAIL_GROUPS,
     nameSoilBodyActions: nameSoilBodyActions,

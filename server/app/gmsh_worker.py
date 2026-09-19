@@ -94,6 +94,22 @@ def mesh_job(project_json: str, settings_json: str) -> dict:
     ).to_dict()
 
 
+def mesh_nodes_job(project_json: str, settings_json: str) -> dict:
+    """Just the node table of the deck this project would export.
+
+    The whole export runs -- it is the only thing that knows a node's Kratos ID -- but
+    only the numbering comes back, because that is all the viewport's node-ID labels
+    need and an .mdpa's text is megabytes the overlay would only throw away.
+    """
+    from app import kratos
+    from app.schemas import MeshRequest, Project
+
+    project = Project.model_validate_json(project_json)
+    settings = MeshRequest.model_validate_json(settings_json)
+    result = kratos.export_project(project, settings, include_materials=False)
+    return {"nodes": result["nodes"], "stats": result["stats"]}
+
+
 def import_job(filepath: str, extension: str) -> dict:
     from app import importer
     return importer.process_import(filepath, extension)

@@ -166,7 +166,7 @@ def export_project(project: Project, settings: MeshRequest,
                    include_materials: bool = True) -> dict:
     """Mesh the project and render it as a Kratos deck.
 
-    Returns `{"mdpa", "materials", "stats", "meshed_keys", "warnings", "log"}`, all
+    Returns `{"mdpa", "nodes", "materials", "stats", "meshed_keys", "warnings", "log"}`, all
     JSON-safe, so it can cross the gmsh worker's process boundary unchanged.
     `materials` is None when the companion MaterialParameters.json is not wanted.
     """
@@ -306,6 +306,13 @@ def export_project(project: Project, settings: MeshRequest,
     )
     return {
         "mdpa": _render(coordinates, node_id, numbered, condition_blocks, parts),
+        # The node table on its own, in the deck's own numbering. The viewport's node-ID
+        # labels can only be drawn from here: a gmsh tag is not a Kratos ID -- `node_id`
+        # above renumbers 1..N over the tags the blocks actually use, and the interface
+        # split has already added nodes of its own -- so nothing short of this pass knows
+        # what number a node will carry in the file.
+        "nodes": [[index, *coordinates[tag]]
+                  for tag, index in sorted(node_id.items(), key=lambda item: item[1])],
         "materials": materials,
         "project_parameters": processes,
         "stats": mesh.stats.to_dict(),

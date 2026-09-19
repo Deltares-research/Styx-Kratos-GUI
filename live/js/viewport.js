@@ -34,6 +34,13 @@ App.Viewport = (function () {
                                   // rebuildGroups()/refresh() never touches it
   var importedSectionGroups = {};    // section.key -> its own THREE.Group, for the
   var importedSectionBBoxes = {};    // checklist's per-part toggle/frame buttons
+  /* section.key -> {node_ids, positions}: the deck's own node numbers, kept so the
+     node-ID overlay can label an imported mesh without re-reading the file. */
+  var importedSectionNodes = {};
+  /* The generated mesh's Kratos numbering, from POST /api/mesh/nodes. Null until the
+     labels are asked for -- it costs a full export pass -- and back to null whenever a
+     new mesh replaces the one it numbered. */
+  var generatedNodeTable = null;
   var hovered = null, selected = null, selectedKeys = [];
   var visible = {};              // key -> bool, driven by the Model explorer
   var modeGroups = {};
@@ -736,6 +743,9 @@ App.Viewport = (function () {
         rebuildFrame(payload.bbox);
         buildGroups(payload);
         meshBuilt = false;
+        // The geometry moved, so the mesh that was numbered is gone with it.
+        generatedNodeTable = null;
+        refreshNodeLabels();
 
         var triangles = payload.sections.reduce(function (n, s) {
           return n + s.indices.length / 3;
@@ -902,6 +912,9 @@ App.Viewport = (function () {
     // The edge rulers live in the viewport's DOM, not in the scene: they measure the
     // screen, so they are painted in screen pixels rather than projected like geometry.
     if (App.Ruler) App.Ruler.install(host);
+    // Same arrangement, same reason: node numbers are screen furniture over the scene,
+    // not objects in it.
+    if (App.NodeLabels) App.NodeLabels.install(host);
 
     if (window.ResizeObserver) new ResizeObserver(resize).observe(host);
     window.addEventListener('resize', resize);
@@ -1081,6 +1094,7 @@ App.Viewport = (function () {
     if (importedSectionGroups[key]) {
       importedSectionGroups[key].visible = on;
       if (!on && selectedKeys.indexOf(key) >= 0) select(null);
+      refreshNodeLabels();
       needsRender = true;
       return;
     }
@@ -1090,6 +1104,9 @@ App.Viewport = (function () {
     groups[key].visible = on && wanted.indexOf(key) >= 0;
     if (key === 'mesh' && !meshBuilt && groups.mesh) groups.mesh.visible = false;
     if (!on && selectedKeys.indexOf(key) >= 0) select(null);
+    // A hidden mesh has no nodes to number: the labels follow the eye, or they float
+    // over a part that is no longer there.
+    if (key === 'mesh') refreshNodeLabels();
     needsRender = true;
   }
 
@@ -1103,12 +1120,120 @@ App.Viewport = (function () {
     return visible[key] !== false;
   }
 
-  /* ── Mesh generation ────────────────────────────────────────── */
-  function generateMesh(done) {
-    var ui = overlay();
-    ui.show('Meshing with gmsh…', 20);
+  /* ── Node-ID labels ─────────────────────────────────────────── */
 
-    var settings = Object.assign({}, App.PROJECT ? App.PROJECT.mesh : {
+  /* The overlay is painted in screen pixels (live/js/node-labels.js), so it needs the
+     camera's own answer for where a world point lands. Kept here because the camera is
+     here, and handed over as a function so that module stays free of three.js. */
+  var labelPoint = new THREE.Vector3();
+  function projectToScreen(x, y, z) {
+    labelPoint.set(x, y, z).project(cam);
+    // Past the far plane, or behind a perspective camera -- where project() mirrors the
+    // point through the origin and would draw a number on the wrong side of the screen.
+    if (labelPoint.z > 1) return null;
+    return {
+      x: (labelPoint.x * 0.5 + 0.5) * host.clientWidth,
+      y: (-labelPoint.y * 0.5 + 0.5) * host.clientHeight,
+      depth: labelPoint.z
+    };
+  }
+
+  /* Every node currently on screen that has a number, from whichever meshes are drawn.
+     An imported deck brings its own numbering with it; a generated mesh's has to be
+     asked for, so it is only included once `generatedNodeTable` has arrived. */
+  function labelledNodes() {
+    var list = [];
+    if (App.NodeLabels && importedMeshGroup) {
+      var sections = Object.keys(importedSectionNodes)
+        .filter(function (key) {
+          var group = importedSectionGroups[key];
+          return group && group.visible;
+        })
+        .map(function (key) { return importedSectionNodes[key]; });
+      list = list.concat(App.NodeLabels.nodesFromSections(sections));
+    }
+    if (App.NodeLabels && generatedNodeTable && meshBuilt && visible.mesh !== false) {
+      list = list.concat(App.NodeLabels.nodesFromTable(generatedNodeTable));
+    }
+    return list;
+  }
+
+  /* Re-gather without re-asking the server: called whenever what is drawn changes. A
+     no-op while the labels are off, so nothing pays for a feature it is not using. */
+  function refreshNodeLabels() {
+    if (!App.NodeLabels || App.NodeLabels.mode() !== 'nodes') return;
+    App.NodeLabels.setNodes(labelledNodes());
+    needsRender = true;
+  }
+
+  /* Turn the node numbers on or off. `done` is called with the plan's own account of
+     what fitted on screen (null when switched off or when the numbering failed), which
+     is what the caller writes to the command log.
+
+     A generated mesh's numbering is fetched once and cached: it costs a full export
+     pass on the server, and nothing but a new mesh can change it. */
+  function setNodeLabels(on, done) {
+    if (!App.NodeLabels) { if (done) done(null); return; }
+    if (!on) {
+      App.NodeLabels.setMode(null);
+      App.NodeLabels.hide();
+      needsRender = true;
+      if (done) done(null);
+      return;
+    }
+
+    App.NodeLabels.setMode('nodes');
+    var needsNumbering = meshBuilt && visible.mesh !== false && !generatedNodeTable;
+    if (!needsNumbering) {
+      App.NodeLabels.setNodes(labelledNodes());
+      needsRender = true;
+      if (done) done(App.NodeLabels.count());
+      return;
+    }
+
+    var ui = overlay();
+    ui.show('Numbering mesh nodes…', 40);
+    App.Api.post('/api/mesh/nodes', meshSettings()).then(function (result) {
+      generatedNodeTable = result.nodes || [];
+      App.NodeLabels.setNodes(labelledNodes());
+      ui.hide();
+      needsRender = true;
+      if (done) done(App.NodeLabels.count());
+    }).catch(function (err) {
+      ui.hide();
+      // Off again rather than left on and empty: a label layer showing nothing looks
+      // like a mesh with no nodes.
+      App.NodeLabels.setMode(null);
+      App.NodeLabels.hide();
+      fail(err);
+      if (done) done(null);
+    });
+  }
+
+  function nodeLabelsOn() {
+    return !!(App.NodeLabels && App.NodeLabels.mode() === 'nodes');
+  }
+
+  /* Painted from the render tick with the camera that drew the frame, the same way the
+     rulers are: a label that lagged a frame behind would slide off its node on every
+     orbit. */
+  function syncNodeLabels() {
+    if (!App.NodeLabels || !host) return;
+    App.NodeLabels.sync({
+      active: nodeLabelsOn(),
+      width: host.clientWidth, height: host.clientHeight,
+      project: projectToScreen
+    });
+  }
+
+  /* ── Mesh generation ────────────────────────────────────────── */
+
+  /* What the mesher is asked for. Its own function because two endpoints take it: the
+     mesh itself, and the node numbering the ID labels are drawn from -- and a numbering
+     taken from different settings than the mesh on screen would be numbers for a mesh
+     nobody is looking at. */
+  function meshSettings() {
+    return Object.assign({}, App.PROJECT ? App.PROJECT.mesh : {
       element_size: 2.5, order: 2, algorithm_3d: 'delaunay', optimization: 'gmsh',
       smoothing: 10, curvature_points: 16, size_min_factor: 0.05,
       second_order_linear: true
@@ -1118,6 +1243,13 @@ App.Viewport = (function () {
         ? App.MESH_BODY_SELECTION.slice()
         : App.MeshSettings.meshTargets(App.PROJECT, App.state.selection, isVisible)
     });
+  }
+
+  function generateMesh(done) {
+    var ui = overlay();
+    ui.show('Meshing with gmsh…', 20);
+
+    var settings = meshSettings();
     App.Api.post('/api/mesh', settings).then(function (result) {
       ui.show('Uploading mesh…', 90);
 
@@ -1144,6 +1276,9 @@ App.Viewport = (function () {
       if (!(('mesh') in visible)) visible.mesh = true;
 
       meshBuilt = true;
+      // Different mesh, different nodes: whatever was numbered before is now numbering
+      // a mesh that no longer exists.
+      generatedNodeTable = null;
       App.MESH_STATS = result.stats;
       if (App.Model && App.Model.setMeshStats) App.Model.setMeshStats(result.stats);
       (result.log || []).filter(function (line) { return /warning|error/i.test(line); })
@@ -1154,6 +1289,10 @@ App.Viewport = (function () {
       ui.hide();
       setMode(App.state.mode);
       needsRender = true;
+      // Last, and only if the numbers are on screen: re-numbering means a second trip
+      // to the server with its own progress overlay, which must not start under this
+      // one's.
+      if (nodeLabelsOn()) setNodeLabels(true);
       if (done) done(result.stats);
     }).catch(function (err) {
       ui.hide();
@@ -1175,6 +1314,7 @@ App.Viewport = (function () {
     importedMeshGroup = null;
     importedSectionGroups = {};
     importedSectionBBoxes = {};
+    importedSectionNodes = {};
     delete groupKeys['group:imported'];
     needsRender = true;
   }
@@ -1239,8 +1379,13 @@ App.Viewport = (function () {
       importedMeshGroup.add(group);
       importedSectionGroups[section.key] = group;
       if (section.bbox) importedSectionBBoxes[section.key] = section.bbox;
+      if (section.node_ids) {
+        importedSectionNodes[section.key] =
+          { node_ids: section.node_ids, positions: section.positions };
+      }
     });
     scene.add(importedMeshGroup);
+    refreshNodeLabels();
     needsRender = true;
 
     if (orbit && model.bbox) {
@@ -1258,6 +1403,8 @@ App.Viewport = (function () {
     disposeGroup(importedSectionGroups[key]);
     delete importedSectionGroups[key];
     delete importedSectionBBoxes[key];
+    delete importedSectionNodes[key];
+    refreshNodeLabels();
   }
 
   /* "Imported mesh" in the Model explorer is one group row standing for whichever
@@ -1537,6 +1684,7 @@ App.Viewport = (function () {
     syncSectionGrid();                     // needs the camera the frame is drawn with
     syncRulers();                          // same: the visible rectangle is known here
     renderer.render(scene, cam);
+    syncNodeLabels();                      // over the frame just drawn, with its camera
 
     if (triadRenderer) {
       triadCam.position.copy(cam.position).sub(orbit.target).normalize().multiplyScalar(4);
@@ -1566,6 +1714,10 @@ App.Viewport = (function () {
     cameraAngles: cameraAngles, clampAngles: clampAngles, triadAxes: triadAxes,
     WORLD_UP: WORLD_UP,
     generateMesh: generateMesh, hasMesh: hasMesh, resize: resize,
+    meshSettings: meshSettings,
+    setNodeLabels: setNodeLabels, nodeLabelsOn: nodeLabelsOn,
+    refreshNodeLabels: refreshNodeLabels, syncNodeLabels: syncNodeLabels,
+    projectToScreen: projectToScreen,
     showImportedMesh: showImportedMesh, clearImportedMesh: clearImportedMesh,
     hasImportedMesh: hasImportedMesh, removeImportedSection: removeImportedSection,
     setImportedGroupKeys: setImportedGroupKeys,

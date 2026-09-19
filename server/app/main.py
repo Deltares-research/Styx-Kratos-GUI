@@ -402,6 +402,29 @@ async def generate_mesh(settings: MeshRequest) -> dict:
         raise HTTPException(status_code=500, detail=str(failure)) from failure
 
 
+@app.post("/api/mesh/nodes")
+async def mesh_nodes(settings: MeshRequest) -> dict:
+    """The node table -- Kratos ID and coordinates -- of the deck this project exports.
+
+    What the viewport's "Show labels -> Node IDs" overlay draws from. Deliberately a
+    route of its own rather than a field on `POST /api/mesh`: the numbering costs a full
+    export pass (interface splitting included), and a mesh is generated far more often
+    than its node numbers are looked at.
+    """
+    project = store.get()
+    unknown = sorted((set(settings.volume_keys or []) | set(settings.body_sizes))
+                     - set(project.part_keys()))
+    if unknown:
+        raise HTTPException(status_code=422, detail="unknown mesh body key(s): " + ", ".join(unknown))
+    try:
+        return await gmsh_worker.run(
+            gmsh_worker.mesh_nodes_job,
+            project.model_dump_json(), settings.model_dump_json(),
+        )
+    except (GeometryError, MeshingError, ExportError) as failure:
+        raise HTTPException(status_code=500, detail=str(failure)) from failure
+
+
 @app.post("/api/export/mdpa")
 async def export_mdpa(settings: ExportRequest) -> dict:
     """Mesh the project and return a Kratos deck as text, ready to be saved.
