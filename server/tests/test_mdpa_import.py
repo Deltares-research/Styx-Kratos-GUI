@@ -240,7 +240,7 @@ def test_to_dict_includes_render_ready_sections(reimported):
     assert sections
     for section in sections:
         assert set(section) == {"key", "color", "part", "kind", "positions", "indices",
-                                "edges", "bbox", "node_ids"}
+                                "edges", "bbox", "node_ids", "elements"}
 
 
 # ── One section per body sub-model part ──────────────────────────────────────

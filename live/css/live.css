@@ -160,12 +160,12 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
 #viewport.rulers-on #vp-viewcube    { top: 28px; right: 30px; }
 #viewport.rulers-on #vp-triad       { left: 26px; bottom: 26px; }
 
-/* ── Node-ID labels ─────────────────────────────────────────────────
-   One canvas over the whole viewport, painted by live/js/node-labels.js from the
+/* ── ID labels ─────────────────────────────────────────────────
+   One canvas over the whole viewport, painted by live/js/mesh-labels.js from the
    render tick. Under the rulers (z-index 2) so an edge number is never covered by
    a node number, and inert like them: the labels are a reading aid over the scene,
    and nothing behind them may become unclickable. */
-.vp-node-labels {
+.vp-mesh-labels {
   position: absolute;
   inset: 0;
   z-index: 1;
@@ -174,4 +174,4 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
   height: 100%;
   pointer-events: none;
 }
-.vp-node-labels[hidden] { display: none; }
+.vp-mesh-labels[hidden] { display: none; }

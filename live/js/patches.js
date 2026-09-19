@@ -971,35 +971,39 @@ App.LivePatches = (function () {
   }
 
   /* ══════════════════════════════════════════════════════════════════════════
-     Viewport right-click: "Show labels ▸ Node IDs".
+     Viewport right-click: "Show labels ▸ Node IDs / Element IDs".
 
-     A mesh is read by node number -- a solver names node 4711 and the only way to find
-     it is to see the number on the mesh -- so the numbers belong on the thing itself,
-     one right-click away from wherever the reader is already looking. The overlay and
-     its arithmetic are live/js/node-labels.js; this is the way in.
+     A mesh is read by number -- a solver names node 4711 or element 902, and the only way
+     to find it is to see the number on the mesh -- so the numbers belong on the thing
+     itself, one right-click away from wherever the reader is already looking. The overlay
+     and its arithmetic are live/js/mesh-labels.js; this is the way in.
      ══════════════════════════════════════════════════════════════════════════ */
 
   /* The frozen viewport menu (js/app.js:60) plus the labels row. Kept as a function of
      its own so the row's place in the menu is testable without opening one. */
   function withLabelRows(items) {
-    if (!App.NodeLabels) return items;
-    return items.concat(['-', App.NodeLabels.menuItem()]);
+    if (!App.MeshLabels) return items;
+    return items.concat(['-', App.MeshLabels.menuItem()]);
   }
 
-  function toggleNodeLabels() {
-    var on = !App.Viewport.nodeLabelsOn();
-    App.state.nodeLabels = on;
-    App.Viewport.setNodeLabels(on, function (count) {
-      if (!on) return App.Command.note('Node ID labels hidden.');
-      if (count === null) { App.state.nodeLabels = false; return; }  // already reported
+  var LABEL_NOUNS = { nodes: 'Node', elements: 'Element' };
+
+  /* One toggle per kind, each independent of the other: a node number and the number of
+     the element around it are read together as often as apart. */
+  function toggleLabels(kind) {
+    var noun = LABEL_NOUNS[kind] || 'ID';
+    var on = !App.Viewport.labelsOn(kind);
+    App.Viewport.setLabels(kind, on, function (count) {
+      if (!on) return App.Command.note(noun + ' ID labels hidden.');
+      if (count === null) return;                            // already reported
       if (!count) {
-        App.state.nodeLabels = false;
-        App.Viewport.setNodeLabels(false);
+        App.Viewport.setLabels(kind, false);
         return App.Command.note(
           'Nothing to label — generate a mesh (F9) or import a .mdpa first.');
       }
-      App.Command.note('Node IDs shown: ' + count
-        + ' nodes, in the numbering the .mdpa is written with. '
+      App.Command.note(noun + ' IDs shown: ' + count + ' '
+        + (kind === 'elements' ? 'elements' : 'nodes')
+        + ', in the numbering the .mdpa is written with. '
         + 'Where they crowd, only the nearest is drawn — zoom in for the rest.');
     });
   }
@@ -1016,7 +1020,8 @@ App.LivePatches = (function () {
       App.Menu.openAt = function (items, x, y, onPick) {
         App.Menu.openAt = openAt;
         openAt(withLabelRows(items), x, y, function (item) {
-          if (item && item.action === 'toggleNodeLabels') return toggleNodeLabels();
+          if (item && item.action === 'toggleNodeLabels') return toggleLabels('nodes');
+          if (item && item.action === 'toggleElementLabels') return toggleLabels('elements');
           if (onPick) onPick(item);
         });
       };
@@ -1083,7 +1088,8 @@ App.LivePatches = (function () {
         return setNavigation(item.action === 'navPan' ? 'pan' : 'rotate');
       }
 
-      if (item && item.action === 'toggleNodeLabels') { toggleNodeLabels(); return; }
+      if (item && item.action === 'toggleNodeLabels') { toggleLabels('nodes'); return; }
+      if (item && item.action === 'toggleElementLabels') { toggleLabels('elements'); return; }
 
       if (item && item.action === 'importModel') {
         if (App.ImportDialog) App.ImportDialog.open();
@@ -1772,7 +1778,7 @@ App.LivePatches = (function () {
     projectNameFromFile: projectNameFromFile,
     setNavigation: setNavigation, gateRail: gateRail,
     rulersOn: rulersOn, toggleRulers: toggleRulers, applyRulers: applyRulers,
-    withLabelRows: withLabelRows, toggleNodeLabels: toggleNodeLabels,
+    withLabelRows: withLabelRows, toggleLabels: toggleLabels,
     extendViewportMenu: extendViewportMenu,
     orderStructuresRail: orderStructuresRail,
     STRUCTURES_RAIL_GROUPS: STRUCTURES_RAIL_GROUPS,

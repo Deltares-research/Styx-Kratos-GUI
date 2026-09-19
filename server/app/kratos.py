@@ -166,7 +166,8 @@ def export_project(project: Project, settings: MeshRequest,
                    include_materials: bool = True) -> dict:
     """Mesh the project and render it as a Kratos deck.
 
-    Returns `{"mdpa", "nodes", "materials", "stats", "meshed_keys", "warnings", "log"}`, all
+    Returns `{"mdpa", "nodes", "elements", "materials", "stats", "meshed_keys",
+    "warnings", "log"}`, all
     JSON-safe, so it can cross the gmsh worker's process boundary unchanged.
     `materials` is None when the companion MaterialParameters.json is not wanted.
     """
@@ -313,6 +314,10 @@ def export_project(project: Project, settings: MeshRequest,
         # what number a node will carry in the file.
         "nodes": [[index, *coordinates[tag]]
                   for tag, index in sorted(node_id.items(), key=lambda item: item[1])],
+        # Where each element's number goes when the viewport draws it: its own centre.
+        # Same pass, same reason as the node table -- an element id is assigned here, in
+        # emission order, and exists nowhere before this function runs.
+        "elements": _element_labels(coordinates, node_id, numbered),
         "materials": materials,
         "project_parameters": processes,
         "stats": mesh.stats.to_dict(),
@@ -1061,6 +1066,30 @@ def _part_materials(project: Project, names: dict[str, str],
         if entry[1] and entry not in seen:
             seen.append(entry)
     return seen
+
+
+def _element_labels(coordinates: dict[int, tuple[float, float, float]],
+                    node_id: dict[int, int],
+                    elements: list[tuple[str, list[tuple[int, int, list[int]]]]]
+                    ) -> list[list[float]]:
+    """`[element id, x, y, z]` per element, the point being its centroid.
+
+    The mean of *all* the element's nodes, not just its corners: for the simplices this
+    exporter writes the two agree exactly, because a quadratic element's extra nodes are
+    edge midpoints and the mean of the midpoints of a simplex's edges is its centroid.
+    So an element's label needs no knowledge of its order to be placed in the middle of
+    it.
+    """
+    placed = {index: coordinates[tag] for tag, index in node_id.items()}
+    labels: list[list[float]] = []
+    for _class_name, entries in elements:
+        for entry_id, _property_id, connectivity in entries:
+            corners = [placed[node] for node in connectivity]
+            count = len(corners)
+            labels.append([entry_id] + [sum(corner[axis] for corner in corners) / count
+                                        for axis in range(3)])
+    labels.sort(key=lambda row: row[0])
+    return labels
 
 
 # ── Rendering ───────────────────────────────────────────────────────────────

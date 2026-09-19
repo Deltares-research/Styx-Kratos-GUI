@@ -280,6 +280,26 @@ def _tet_boundary_triangles(conns: list[list[int]]) -> list[list[int]]:
     return [face for key, face in faces.items() if counts[key] == 1]
 
 
+def _element_labels(nodes: dict[int, tuple[float, float, float]],
+                    conns_by_id: list[tuple[int, list[int]]]) -> list[list[float]]:
+    """`[element id, x, y, z]` per element, the point being the mean of its own nodes.
+
+    The same rule the exporter labels a generated mesh by (`kratos._element_labels`), and
+    exact for the simplices either side writes: a quadratic element's extra nodes are
+    edge midpoints, whose mean is the corners' mean again. An element naming a node the
+    file does not define is skipped rather than guessed at.
+    """
+    labels: list[list[float]] = []
+    for element_id, conn in conns_by_id:
+        corners = [nodes[node] for node in conn if node in nodes]
+        if not corners:
+            continue
+        labels.append([element_id] + [sum(corner[axis] for corner in corners) / len(corners)
+                                      for axis in range(3)])
+    labels.sort(key=lambda row: row[0])
+    return labels
+
+
 def _triangles_and_edges(conns_by_kind: dict[str, list[list[int]]],
                          dim: int) -> tuple[list[list[int]], list[tuple[int, int]]]:
     """A set of elements, split out by kind already, as drawable triangles and line
@@ -298,7 +318,8 @@ def _triangles_and_edges(conns_by_kind: dict[str, list[list[int]]],
 
 def _section_dict(nodes: dict[int, tuple[float, float, float]], key: str, color: str,
                   part: str | None, kind: str | None, triangles: list[list[int]],
-                  edges: list[tuple[int, int]]) -> dict | None:
+                  edges: list[tuple[int, int]],
+                  elements: list[list[float]] | None = None) -> dict | None:
     """A render-ready section local to just the nodes it actually uses -- not the
     whole deck's node table -- so a payload with one section per body part does not
     multiply its size by the number of bodies, and so its own bbox is tight enough to
@@ -315,6 +336,10 @@ def _section_dict(nodes: dict[int, tuple[float, float, float]], key: str, color:
         # the viewport can label a drawn node without carrying the whole node table: the
         # section is already local to `used`, and this is what `used` was.
         "node_ids": used,
+        # And the elements this section draws, each with the point its number goes at.
+        # Per section for the same reason the nodes are: the overlay labels what is on
+        # screen, and a part the checklist left unchecked is not.
+        "elements": elements or [],
         "positions": [c for tag in used for c in nodes[tag]],
         "indices": [index_of[node] for triangle in triangles for node in triangle],
         "edges": edge_coords,
@@ -349,11 +374,13 @@ def to_sections(model: MdpaModel) -> list[dict]:
         if part.kind != "body":
             continue
         conns_by_kind: dict[str, list[list[int]]] = {}
+        drawn: list[tuple[int, list[int]]] = []
         for element_id in part.elements:
             claimed.add(element_id)
             kind, conn = by_id.get(element_id, (None, None))
             if kind in ("continuum", "shell", "beam", "truss"):
                 conns_by_kind.setdefault(kind, []).append(conn)
+                drawn.append((element_id, conn))
         triangles, edges = _triangles_and_edges(conns_by_kind, model.dimension)
         # Indexed by sections actually drawn so far, not by position among body parts:
         # an "Interface_..." part (elements this exporter cannot draw) must not burn a
@@ -362,22 +389,26 @@ def to_sections(model: MdpaModel) -> list[dict]:
         color = PART_PALETTE[len(sections) % len(PART_PALETTE)]
         dominant = next(iter(conns_by_kind), None)
         section = _section_dict(nodes, f"imported:{part.name}", color, part.name,
-                                dominant, triangles, edges)
+                                dominant, triangles, edges,
+                                _element_labels(nodes, drawn))
         if section:
             sections.append(section)
 
     leftover_by_kind: dict[str, list[list[int]]] = {}
+    leftover_ids: dict[str, list[tuple[int, list[int]]]] = {}
     for element_id, (kind, conn) in by_id.items():
         if element_id in claimed or kind not in ("continuum", "shell", "beam", "truss"):
             continue
         leftover_by_kind.setdefault(kind, []).append(conn)
+        leftover_ids.setdefault(kind, []).append((element_id, conn))
     for kind in ("continuum", "shell", "beam", "truss"):
         conns = leftover_by_kind.get(kind, [])
         if not conns:
             continue
         triangles, edges = _triangles_and_edges({kind: conns}, model.dimension)
         section = _section_dict(nodes, f"imported_{kind}", SECTION_COLORS[kind],
-                                None, kind, triangles, edges)
+                                None, kind, triangles, edges,
+                                _element_labels(nodes, leftover_ids.get(kind, [])))
         if section:
             sections.append(section)
     return sections

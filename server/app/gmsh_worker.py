@@ -94,12 +94,14 @@ def mesh_job(project_json: str, settings_json: str) -> dict:
     ).to_dict()
 
 
-def mesh_nodes_job(project_json: str, settings_json: str) -> dict:
-    """Just the node table of the deck this project would export.
+def mesh_labels_job(project_json: str, settings_json: str) -> dict:
+    """Just the node and element tables of the deck this project would export.
 
-    The whole export runs -- it is the only thing that knows a node's Kratos ID -- but
-    only the numbering comes back, because that is all the viewport's node-ID labels
-    need and an .mdpa's text is megabytes the overlay would only throw away.
+    The whole export runs -- it is the only thing that knows a node's or an element's
+    Kratos ID -- but only the numbering comes back, because that is all the viewport's
+    ID labels need and an .mdpa's text is megabytes the overlay would only throw away.
+    Both tables travel together: they come out of one pass, and fetching them separately
+    would mean meshing the project twice to say what it already said.
     """
     from app import kratos
     from app.schemas import MeshRequest, Project
@@ -107,7 +109,8 @@ def mesh_nodes_job(project_json: str, settings_json: str) -> dict:
     project = Project.model_validate_json(project_json)
     settings = MeshRequest.model_validate_json(settings_json)
     result = kratos.export_project(project, settings, include_materials=False)
-    return {"nodes": result["nodes"], "stats": result["stats"]}
+    return {"nodes": result["nodes"], "elements": result["elements"],
+            "stats": result["stats"]}
 
 
 def import_job(filepath: str, extension: str) -> dict:
