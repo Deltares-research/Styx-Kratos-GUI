@@ -57,7 +57,8 @@ App.Viewport = (function () {
 
   /* Pure, for the same reason computeModeGroups is: this is the map the Model
      explorer's checkboxes are wired through. */
-  function computeGroupKeys(soils, customs, loads, beams, anchors, contacts) {
+  function computeGroupKeys(soils, customs, loads, beams, anchors, contacts,
+                            normalLoads) {
     return {
       soil: (soils || []).slice(),
       'group:custom': (customs || []).slice(),
@@ -67,7 +68,10 @@ App.Viewport = (function () {
       // A contact along a pile draws nothing of its own -- it is the pile's line --
       // so this is empty unless the interface was given a line of its own, which the
       // build tags under the interface's own key.
-      'group:interfaces': (contacts || []).slice()
+      'group:interfaces': (contacts || []).slice(),
+      // Its own row rather than a share of 'group:loads': the Model explorer lists
+      // normal loads separately, and an eye has to toggle what its own row names.
+      'group:normal_loads': (normalLoads || []).slice()
     };
   }
 
@@ -236,6 +240,84 @@ App.Viewport = (function () {
     return spec;
   }
 
+  /* A normal load pushes perpendicular to its own line, so unlike the three vector
+     kinds there is no single direction for the whole symbol: each segment carries its
+     own. Pure, for the same reason `loadGlyphSpec` is.
+
+     Walking the line in the order its points are stored, a positive pressure pushes to
+     the right of the walking direction -- so a line drawn left to right along the top
+     of the ground pushes down into it, which is the reading anyone expects. A negative
+     pressure flips the arrows. This is the symbol's convention; the sign Kratos itself
+     applies comes from the condition's own node order (server/app/kratos.py). */
+  function normalLoadGlyphSpec(load, project) {
+    var points = load.points || [];
+    var span = modelSpan(project, frame && frame.size);
+    var length = span > 0 ? span * 0.08 : 1;
+    var sign = load.pressure < 0 ? -1 : 1;
+    var offset = sectionOffset(project);
+    // The two modes are drawn identically: what a load is sized by is a property of
+    // the load, not of how it looks, and a symbol that came and went with the mode
+    // read as the load itself coming and going. A load in the model is a load on
+    // screen, hydrostatic or uniform, whatever its magnitude.
+    var spec = { arrows: [], length: length, active: load.active !== false };
+    // Arrows and nothing else. A line along the loaded face -- the outline a line
+    // load's glyph draws, or the strip the build used to make -- reads as a bar laid
+    // on top of the model rather than as a load applied to it.
+    for (var i = 1; i < points.length; i += 1) {
+      var start = points[i - 1], end = points[i];
+      var dx = end[0] - start[0], dy = end[1] - start[1];
+      var len = Math.sqrt(dx * dx + dy * dy);
+      if (!len) continue;
+      var direction = [sign * dy / len, -sign * dx / len, 0];
+      // Three to a segment, and the shared vertex is not given two arrows.
+      for (var step = i === 1 ? 0 : 1; step <= 2; step += 1) {
+        var t = step / 2;
+        spec.arrows.push({
+          tip: [start[0] + dx * t, start[1] + dy * t, offset],
+          direction: direction
+        });
+      }
+    }
+    return spec;
+  }
+
+  function normalLoadGlyphGroup(load, project) {
+    var spec = normalLoadGlyphSpec(load, project);
+    var group = new THREE.Group();
+    group.name = load.id + '-load-symbols';
+    // A normal load's own blue, dark enough to hold its own against the section it is
+    // drawn over, and not the red the three vector load kinds share -- this one is a
+    // pressure on a face, usually water. Darker than the water slab's #2f8fd8 so the
+    // two are still told apart where both are on screen.
+    var color = spec.active ? 0x1f6fb0 : 0x777777;
+
+    function mark(object) {
+      object.traverse(function (child) {
+        child.userData.key = load.id;
+        child.userData.loadGlyph = true;
+        if (child.material) {
+          child.material.depthTest = false;
+          child.material.transparent = true;
+          child.material.opacity = spec.active ? 1 : 0.45;
+        }
+        child.renderOrder = 18;
+      });
+    }
+
+    spec.arrows.forEach(function (entry) {
+      var direction = new THREE.Vector3(
+        entry.direction[0], entry.direction[1], entry.direction[2]);
+      var tip = new THREE.Vector3(entry.tip[0], entry.tip[1], entry.tip[2]);
+      var arrow = new THREE.ArrowHelper(
+        direction, tip.clone().addScaledVector(direction, -spec.length),
+        spec.length, color, spec.length * 0.16, spec.length * 0.09);
+      mark(arrow);
+      group.add(arrow);
+    });
+
+    return group;
+  }
+
   function loadGlyphGroup(load, project) {
     var spec = loadGlyphSpec(load, project);
     var group = new THREE.Group();
@@ -303,15 +385,25 @@ App.Viewport = (function () {
   }
 
   function addLoadGlyphs() {
-    ((App.PROJECT && App.PROJECT.loads) || []).forEach(function (load) {
-      if (App.Loads && !App.Loads.compatible(load, App.PROJECT)) return;
-      var group = groups[load.id];
+    function groupFor(id) {
+      var group = groups[id];
       if (!group) {
-        group = groups[load.id] = new THREE.Group();
-        group.name = load.id;
+        group = groups[id] = new THREE.Group();
+        group.name = id;
         scene.add(group);
       }
-      group.add(loadGlyphGroup(load, App.PROJECT));
+      return group;
+    }
+    ((App.PROJECT && App.PROJECT.loads) || []).forEach(function (load) {
+      if (App.Loads && !App.Loads.compatible(load, App.PROJECT)) return;
+      groupFor(load.id).add(loadGlyphGroup(load, App.PROJECT));
+    });
+    // Plane strain only, like the record itself: in 3D there is no line on screen for
+    // an arrow to stand on.
+    if (!App.PROJECT || App.PROJECT.dimension !== 2) return;
+    (App.PROJECT.normal_loads || []).forEach(function (load) {
+      if (load.active === false) return;
+      groupFor(load.id).add(normalLoadGlyphGroup(load, App.PROJECT));
     });
   }
 
@@ -347,12 +439,17 @@ App.Viewport = (function () {
      modeGroups[mode], so a custom part left out here is created (buildGroups gives
      every section its own THREE.Group) and then invisible forever, in every mode,
      no matter what the eye toggle says. */
-  function computeModeGroups(soilKeys, customKeys, simpleExample, loadKeys, memberKeys) {
+  function computeModeGroups(soilKeys, customKeys, simpleExample, loadKeys, memberKeys,
+                             normalLoadKeys) {
     customKeys = customKeys || [];
     loadKeys = loadKeys || [];
     // Sheet piles and anchors are sections of their own (server/app/tessellate.py
     // :112-126). Leaving them out of every mode is what kept them invisible.
     memberKeys = memberKeys || [];
+    // And a normal load is a section of its own too -- the strip the build draws
+    // along its line -- so it needs naming here for the same reason, in the modes a
+    // load belongs to.
+    loadKeys = loadKeys.concat(normalLoadKeys || []);
     if (simpleExample) {
       var visibleKeys = soilKeys.concat(customKeys);
       return { soil: visibleKeys, structures: visibleKeys.concat(loadKeys, memberKeys),
@@ -381,14 +478,19 @@ App.Viewport = (function () {
     // live/js/model.js -- a 3D project keeps its piles saved but draws none.
     var beamKeys = (App.BEAMS || []).map(function (beam) { return beam.id; });
     var anchorKeys = (App.ANCHORS || []).map(function (anchor) { return anchor.id; });
+    // Plane strain only, like a free interface: in 3D the record is kept but the
+    // build draws nothing for it, so naming it in a mode would name an empty group.
+    var normalLoadKeys = (App.PROJECT && App.PROJECT.dimension === 2)
+      ? (App.NORMAL_LOADS || []).map(function (item) { return item.id; })
+      : [];
     modeGroups = computeModeGroups(
       soilKeys, customKeys, !!(App.PROJECT && App.PROJECT.simple_example), loadKeys,
-      beamKeys.concat(anchorKeys));
+      beamKeys.concat(anchorKeys), normalLoadKeys);
     var contactKeys = (App.INTERFACES || []).filter(function (item) {
       return !item.structure;
     }).map(function (item) { return item.id; });
     groupKeys = computeGroupKeys(soilKeys, customKeys, loadKeys, beamKeys, anchorKeys,
-                                 contactKeys);
+                                 contactKeys, normalLoadKeys);
   }
 
   /* ══════════════════════════════════════════════════════════════
@@ -1468,6 +1570,7 @@ App.Viewport = (function () {
     refresh: refresh, gridReference: gridReference, computeModeGroups: computeModeGroups,
     computeGroupKeys: computeGroupKeys,
     loadGlyphSpec: loadGlyphSpec, loadGlyphGroup: loadGlyphGroup,
+    normalLoadGlyphSpec: normalLoadGlyphSpec,
     getScene: function() { return scene; },
     getCamera: function() { return cam; },
     getCanvas: function() { return canvas; }

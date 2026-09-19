@@ -51,9 +51,16 @@ def deck_of(export: dict) -> mdpa.Deck:
     return mdpa.parse(export["mdpa"])
 
 
-def _load_process(export: dict, part_name: str) -> dict:
+def _stage_settings(export: dict) -> dict:
+    """The lone stage's settings, found by position rather than by name -- the
+    orchestrator can name its one stage however it likes."""
     doc = json.loads(export["project_parameters"])
-    return next(p["Parameters"] for p in doc["processes"]["loads_process_list"]
+    return next(iter(doc["stages"].values()))["stage_settings"]
+
+
+def _load_process(export: dict, part_name: str) -> dict:
+    processes = _stage_settings(export)["processes"]
+    return next(p["Parameters"] for p in processes["loads_process_list"]
                 if p["Parameters"]["model_part_name"] == f"PorousDomain.{part_name}")
 
 
@@ -487,31 +494,44 @@ def test_3d_surface_load_conditions_cover_its_footprint_exactly(solid):
 
 # ── ProjectParameters.json (partial) ────────────────────────────────────────
 #
+# The whole file sits under one orchestrator running one named stage -- the same shape
+# a real multi-stage GeoMechanics deck uses, so a project that later grows staged
+# construction of its own needs no reshaping here, only more entries in `stages`.
+#
 # solver_settings and problem_data stay empty until the project schema carries a
 # solver type, time stepping and linear-solver choice -- see the "Later" plan note.
-# The constraints/loads process shapes follow Kratos GeoMechanicsApplication's own
-# apply_vector_constraint_table_process / apply_load_by_table_process convention, but
-# unlike the .mdpa property-id fix there is no real solver-generated
-# ProjectParameters.json in examples/ to check them against yet.
+# The constraints/loads process shapes both use Kratos GeoMechanicsApplication's
+# apply_vector_constraint_table_process / ApplyVectorConstraintTableProcess -- a load
+# omits `is_fixed` and sits in loads_process_list instead of constraints_process_list.
+# Confirmed against a real staged GeoMechanics benchmark deck (sheet-pile-wall
+# excavation with a LINE_LOAD surcharge), not just inferred from Kratos source.
+
+def test_the_deck_runs_as_one_stage_under_the_sequential_orchestrator(section):
+    doc = json.loads(section["project_parameters"])
+    assert doc["orchestrator"]["name"] == \
+        "Orchestrators.KratosMultiphysics.SequentialOrchestrator"
+    (stage_name,) = doc["orchestrator"]["settings"]["execution_list"]
+    assert list(doc["stages"]) == [stage_name]
+    assert doc["stages"][stage_name]["stage_settings"]["analysis_stage"] == \
+        "Stages.KratosMultiphysics.GeoMechanicsApplication.GeoMechanicsAnalysis"
+
 
 def test_solver_settings_and_problem_data_are_left_empty_for_now(section):
-    doc = json.loads(section["project_parameters"])
-    assert doc["solver_settings"] == {}
-    assert doc["problem_data"] == {}
+    settings = _stage_settings(section)
+    assert settings["solver_settings"] == {}
+    assert settings["problem_data"] == {}
 
 
 def test_the_top_surface_is_never_constrained(section):
     """It is the free/loaded surface, not a fixed boundary."""
-    doc = json.loads(section["project_parameters"])
     names = [p["Parameters"]["model_part_name"]
-             for p in doc["processes"]["constraints_process_list"]]
+             for p in _stage_settings(section)["processes"]["constraints_process_list"]]
     assert "PorousDomain.Top_Surface" not in names
 
 
 def test_the_section_pins_the_bottom_and_rolls_the_sides(section):
-    doc = json.loads(section["project_parameters"])
     constraints = {p["Parameters"]["model_part_name"]: p["Parameters"]
-                   for p in doc["processes"]["constraints_process_list"]}
+                   for p in _stage_settings(section)["processes"]["constraints_process_list"]}
 
     bottom = constraints["PorousDomain.Bottom_Fixed"]
     assert bottom["variable_name"] == "DISPLACEMENT"
@@ -524,9 +544,8 @@ def test_the_section_pins_the_bottom_and_rolls_the_sides(section):
 
 
 def test_the_3d_model_pins_the_bottom_and_rolls_all_four_sides(solid):
-    doc = json.loads(solid["project_parameters"])
     constraints = {p["Parameters"]["model_part_name"]: p["Parameters"]
-                   for p in doc["processes"]["constraints_process_list"]}
+                   for p in _stage_settings(solid)["processes"]["constraints_process_list"]}
 
     assert constraints["PorousDomain.Bottom_Fixed"]["is_fixed"] == [True, True, True]
     assert constraints["PorousDomain.Left_Edge"]["is_fixed"] == [True, False, False]
@@ -536,9 +555,8 @@ def test_the_3d_model_pins_the_bottom_and_rolls_all_four_sides(solid):
 
 
 def test_the_active_load_becomes_a_load_process(section):
-    doc = json.loads(section["project_parameters"])
     loads = {p["Parameters"]["model_part_name"]: p["Parameters"]
-             for p in doc["processes"]["loads_process_list"]}
+             for p in _stage_settings(section)["processes"]["loads_process_list"]}
 
     load = loads["PorousDomain.LineLoad_1"]
     assert load["variable_name"] == "LINE_LOAD"
@@ -548,9 +566,8 @@ def test_the_active_load_becomes_a_load_process(section):
 
 
 def test_the_3d_surface_load_process_is_fully_active(solid):
-    doc = json.loads(solid["project_parameters"])
     loads = {p["Parameters"]["model_part_name"]: p["Parameters"]
-             for p in doc["processes"]["loads_process_list"]}
+             for p in _stage_settings(solid)["processes"]["loads_process_list"]}
     load = loads["PorousDomain.SurfaceLoad_1"]
     assert load["value"] == [0.0, -20.0, 0.0]
     assert load["active"] == [True, True, True]
@@ -560,8 +577,7 @@ def test_an_inactive_load_gets_no_process(session):
     project = seed_project()
     project.loads[0].active = False
     exported = kratos.export_project(project, MeshRequest(element_size=6.0, order=1))
-    doc = json.loads(exported["project_parameters"])
-    assert doc["processes"]["loads_process_list"] == []
+    assert _stage_settings(exported)["processes"]["loads_process_list"] == []
 
 
 # ── Sheet piles as beam elements ────────────────────────────────────────────
@@ -634,6 +650,47 @@ def test_the_sheet_pile_gets_its_own_sub_model_part(piled):
     assert set(part.elements) == set(block.entries)
     assert not part.conditions
     assert part.nodes == sorted({n for e in part.elements for n in block.entries[e]})
+
+
+def test_a_sheet_pile_is_installed_in_its_own_stage(piled):
+    """A pile does not exist before it is installed: the deck sequences it rather
+    than having it present from the first stage like the soil around it."""
+    doc = json.loads(piled["project_parameters"])
+    execution_list = doc["orchestrator"]["settings"]["execution_list"]
+
+    assert execution_list == ["1_Initial_stage", "2_Wall_installation"]
+    assert list(doc["stages"]) == execution_list
+
+    initial = doc["stages"]["1_Initial_stage"]["stage_preprocess"]["operations"]
+    installation = doc["stages"]["2_Wall_installation"]["stage_preprocess"]["operations"]
+    assert initial == [{
+        "name": "Operations.KratosMultiphysics.GeoMechanicsApplication."
+                "DeactivateModelPartOperation",
+        "Parameters": {"model_part_name_list": ["PorousDomain.Sheet_pile_1"]},
+    }]
+    assert installation == [{
+        "name": "Operations.KratosMultiphysics.GeoMechanicsApplication."
+                "ActivateModelPartOperation",
+        "Parameters": {"model_part_name_list": ["PorousDomain.Sheet_pile_1"]},
+    }]
+
+
+def test_both_pile_stages_carry_the_same_constraints_and_loads(piled):
+    """Nothing in `Project` says a boundary condition starts partway through
+    construction, so both stages repeat the same process lists unchanged."""
+    doc = json.loads(piled["project_parameters"])
+    stages = [stage["stage_settings"]["processes"] for stage in doc["stages"].values()]
+
+    assert stages[0] == stages[1]
+    assert stages[0]["constraints_process_list"]
+
+
+def test_a_soil_only_deck_still_runs_as_a_single_stage(section):
+    """No sheet pile, nothing to sequence: the plain single-stage shape is unchanged."""
+    doc = json.loads(section["project_parameters"])
+    assert doc["orchestrator"]["settings"]["execution_list"] == ["1_Stage"]
+    assert list(doc["stages"]) == ["1_Stage"]
+    assert "stage_preprocess" not in doc["stages"]["1_Stage"]
 
 
 def test_every_beam_node_is_a_soil_node_in_the_written_deck(piled):
@@ -770,9 +827,8 @@ def test_the_anchor_gets_its_own_part_and_a_support_group_for_its_tail(anchored)
 
 
 def test_the_tail_support_is_fixed_in_the_process_file(anchored):
-    doc = json.loads(anchored["project_parameters"])
     constraints = {p["Parameters"]["model_part_name"]: p["Parameters"]
-                   for p in doc["processes"]["constraints_process_list"]}
+                   for p in _stage_settings(anchored)["processes"]["constraints_process_list"]}
 
     assert constraints["PorousDomain.Anchor_1_Support"]["is_fixed"] == [True, True, False]
 

@@ -102,6 +102,11 @@ def tessellate(project: Project) -> DisplayModel:
     custom_colors = {p.key: p.color for p in project.custom_parts}
 
     sections = []
+    # A normal load owns a curve -- the line its condition is written on (app/kratos.py)
+    # -- but nothing to draw from it. Its symbol is the arrows the viewport puts on that
+    # line, and drawing the curve as well would lay a stray line over the loaded face,
+    # which is what a sheet pile's hairline would look like there.
+    drawn_as_glyphs = {load.id for load in project.normal_loads}
     for key in project.part_keys():
         if key in result.overlays:
             sections.append(_overlay_section(key, custom_colors[key], result.overlays[key], coords))
@@ -115,7 +120,7 @@ def tessellate(project: Project) -> DisplayModel:
                 [(1, tag) for tag in result.ties[key]], coords,
             ))
             continue
-        if result.curves.get(key):
+        if result.curves.get(key) and key not in drawn_as_glyphs:
             # A sheet pile is 1D geometry, which `_overlay_section` already draws from
             # its endpoints alone -- the same treatment a drawn line gets, and for the
             # same reason: there is no surface to triangulate. A 3D member is the same

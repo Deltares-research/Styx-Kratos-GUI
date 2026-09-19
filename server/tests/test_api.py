@@ -998,8 +998,8 @@ def test_the_live_shell_replaces_only_the_viewport_and_the_orbit_controller(clie
                              "mesh-settings.js", "import-dialog.js", "mdpa-import-dialog.js",
                              "draw-input.js", "soil-volume-dialog.js", "canvas-renderer.js",
                              "export.js", "history.js", "loads.js", "beams.js", "anchors.js",
-                             "interfaces.js", "material-library.js", "orbit.js", "ruler.js",
-                             "download.js", "zip.js"}
+                             "interfaces.js", "normal-loads.js", "material-library.js",
+                             "orbit.js", "ruler.js", "download.js", "zip.js"}
     assert body.index('/js/orbit.js') < body.index('/live/js/orbit.js'), (
         "the Y-up controller has to be loaded after the frozen one it overrides")
 
@@ -1106,7 +1106,9 @@ def test_export_returns_a_deck_and_its_material_file(client):
     assert body["mdpa"].startswith("Begin Properties 0")
     assert "Begin Nodes" in body["mdpa"] and "Begin SubModelPart Soil_1" in body["mdpa"]
     assert json.loads(body["materials"])["properties"]
-    assert json.loads(body["project_parameters"])["processes"]["loads_process_list"]
+    parameters = json.loads(body["project_parameters"])
+    stage_settings = next(iter(parameters["stages"].values()))["stage_settings"]
+    assert stage_settings["processes"]["loads_process_list"]
     assert body["stats"]["elements"] > 0
 
 

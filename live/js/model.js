@@ -132,7 +132,11 @@ App.Model = (function () {
       INTERFACES: (project.interfaces || [])
         .map(function (i) { return JSON.parse(JSON.stringify(i)); }),
       INTERFACE_SECTIONS: (project.interface_sections || [])
-        .map(function (s) { return JSON.parse(JSON.stringify(s)); })
+        .map(function (s) { return JSON.parse(JSON.stringify(s)); }),
+      // Shown in 3D too, for the same reason an interface is: the polyline is part of
+      // the solid model even though the pressure it applies is plane strain only.
+      NORMAL_LOADS: (project.normal_loads || [])
+        .map(function (n) { return JSON.parse(JSON.stringify(n)); })
     };
   }
 
@@ -187,6 +191,7 @@ App.Model = (function () {
     App.ANCHOR_SECTIONS = mapped.ANCHOR_SECTIONS;
     App.INTERFACES = mapped.INTERFACES;
     App.INTERFACE_SECTIONS = mapped.INTERFACE_SECTIONS;
+    App.NORMAL_LOADS = mapped.NORMAL_LOADS;
     App.PROJECT = project;
     rebuildDerived();
     syncTitle(project);
@@ -248,6 +253,8 @@ App.Model = (function () {
   var previousAnchorKeys = [];
   var interfaceNode = null;
   var previousInterfaceKeys = [];
+  var normalLoadNode = null;
+  var previousNormalLoadKeys = [];
 
   /* Top level only, deliberately: js/data.js:688 also has a "Loads" node *inside*
      the Attributes library, and that one lists load definitions, not the loads in
@@ -322,6 +329,14 @@ App.Model = (function () {
     return interfaceNode;
   }
 
+  function ensureNormalLoadNode() {
+    if (!normalLoadNode) {
+      normalLoadNode = { label: 'Normal loads', icon: 'load', count: 0,
+                         eye: true, obj: 'group:normal_loads', children: [] };
+    }
+    return normalLoadNode;
+  }
+
   /* ── One tree, in one order ──────────────────────────────────────────────
      The Model explorer is remounted from App.TREES[mode] on every mode change,
      and the live nodes were pushed into the Structures tree alone: Loads, Sheet
@@ -332,8 +347,8 @@ App.Model = (function () {
      than being dropped. */
   var TREE_ORDER = [
     'Attributes library', 'Soil', 'Boreholes', 'Geometry', 'Custom geometry',
-    'Imported mesh', 'Structures', 'Sheet piles', 'Anchors', 'Interfaces', 'Loads',
-    'Mesh', 'Flow conditions', 'Model conditions'
+    'Imported mesh', 'Structures', 'Sheet piles', 'Anchors', 'Interfaces',
+    'Normal loads', 'Loads', 'Mesh', 'Flow conditions', 'Model conditions'
   ];
 
   function containsNode(nodes, node) {
@@ -383,7 +398,7 @@ App.Model = (function () {
   function syncTrees(simpleExample, soil) {
     var top = simpleExample ? (soil ? [soil] : []) : topLevelUnion();
     [customGeometryNode, importedMeshNode, sheetPileNode, anchorNode, interfaceNode,
-     loadConditionsNode]
+     normalLoadNode, loadConditionsNode]
       .forEach(function (node) {
         if (node && !containsNode(top, node)) top.push(node);
       });
@@ -662,7 +677,9 @@ App.Model = (function () {
         'General': [
           ['Section', section.name || panel.section, '', true],
           ['Vertices', String(panel.footprint.length), '', true],
-          ['Active', panel.active !== false, '', true]
+          ['Active', panel.active !== false, '', true],
+          ['Edit', '', '', false, { kind: 'button', text: 'Edit wall…',
+            run: function () { if (App.Beams) App.Beams.edit(panel.id); } }]
         ],
         'Section': [
           ['E', String(section.E), 'kN/m²', false,
@@ -698,7 +715,9 @@ App.Model = (function () {
         'General': [
           ['Section', section.name || member.section, '', true],
           ['Vertices', String(member.points.length), '', true],
-          ['Active', member.active !== false, '', true]
+          ['Active', member.active !== false, '', true],
+          ['Edit', '', '', false, { kind: 'button', text: 'Edit member…',
+            run: function () { if (App.Beams) App.Beams.edit(member.id); } }]
         ],
         'Section': [
           ['E', String(section.E), 'kN/m²', false,
@@ -737,7 +756,9 @@ App.Model = (function () {
         'General': [
           ['Section', section.name || beam.section, '', true],
           ['Vertices', String(beam.points.length), '', true],
-          ['Active', beam.active !== false, '', true]
+          ['Active', beam.active !== false, '', true],
+          ['Edit', '', '', false, { kind: 'button', text: 'Edit sheet pile…',
+            run: function () { if (App.Beams) App.Beams.edit(beam.id); } }]
         ],
         'Section': [
           ["E", String(section.E), 'kN/m²', false,
@@ -1046,6 +1067,96 @@ App.Model = (function () {
     };
   }
 
+  /* ── Normal loads ────────────────────────────────────────────────────────
+     A pressure normal to a free polyline, sized one of two ways: tracking the
+     project's own water level ("Hydrostatic", the usual case for an exposed
+     excavation face) or a fixed value along the whole line ("Uniform"). See
+     server/app/schemas.py's NormalLoad and server/app/kratos_processes.py's
+     ApplyNormalLoadTableProcess. */
+
+  function normalLoadPointEditor(record, index, axis) {
+    return {
+      kind: 'number', decimals: 3, unit: 'm',
+      get: function () { return record.points[index][axis]; },
+      set: function (value) {
+        if (!Number.isFinite(value)) return 'Every coordinate must be a number.';
+        var was = record.points[index][axis];
+        record.points[index][axis] = value;
+        var problem = App.NormalLoads
+          ? App.NormalLoads.validate(record, App.PROJECT) : null;
+        if (problem) { record.points[index][axis] = was; return problem; }
+        return null;
+      }
+    };
+  }
+
+  function normalLoadFluidPressureTypeEditor(record) {
+    return {
+      kind: 'select',
+      options: function () {
+        return [{ value: 'Hydrostatic', text: 'Hydrostatic (tracks the water level)' },
+                { value: 'Uniform', text: 'Uniform pressure' }];
+      },
+      get: function () { return record.fluid_pressure_type; },
+      set: function (value) { record.fluid_pressure_type = value; return null; }
+    };
+  }
+
+  function normalLoadPressureEditor(record) {
+    return {
+      kind: 'number', decimals: 1, unit: 'kN/m²',
+      get: function () { return record.pressure; },
+      set: function (value) {
+        if (!Number.isFinite(value)) return 'The pressure must be a number.';
+        record.pressure = value;
+        return null;
+      }
+    };
+  }
+
+  function normalLoadProps(record) {
+    var hydrostatic = record.fluid_pressure_type === 'Hydrostatic';
+    var geometry = [];
+    (record.points || []).forEach(function (point, index) {
+      geometry.push(['x' + (index + 1), fixed(point[0]), 'm', false,
+                     normalLoadPointEditor(record, index, 0)]);
+      geometry.push(['y' + (index + 1), fixed(point[1]), 'm', false,
+                     normalLoadPointEditor(record, index, 1)]);
+    });
+    geometry.push(['Length',
+                   fixed(App.NormalLoads ? App.NormalLoads.length(record) : 0), 'm', true]);
+    geometry.push(['Delete', '', '', false, { kind: 'button', text: 'Delete normal load',
+      run: function () { if (App.NormalLoads) App.NormalLoads.remove(record.id); } }]);
+
+    /* The magnitude is always here and always editable, whichever mode the load is
+       in: it is the field people come to this panel to change, and one that appears
+       and vanishes with the type reads as a missing feature. It is written into the
+       deck either way (see kratos_processes' `_normal_load`). */
+    var sizing = [
+      ['Type', hydrostatic ? 'Hydrostatic' : 'Uniform', '', false,
+       normalLoadFluidPressureTypeEditor(record)],
+      ['Pressure', String(record.pressure), 'kN/m²', false,
+       normalLoadPressureEditor(record)]
+    ];
+    if (hydrostatic) {
+      sizing.push(['Water level', fixed((App.PROJECT && App.PROJECT.water
+                                         && App.PROJECT.water.y) || 0), 'm', true]);
+    }
+
+    return {
+      title: record.name, icon: 'load',
+      groups: {
+        'General': [
+          ['Active', record.active !== false, '', true],
+          ['Edit', '', '', false, { kind: 'button', text: 'Edit normal load…',
+            run: function () { if (App.NormalLoads) App.NormalLoads.edit(record.id); } }]
+        ],
+        'Sizing': sizing,
+        'Geometry': geometry
+      }
+    };
+  }
+
   function loadProps(load) {
     var point = load.kind === 'point';
     var line = load.kind === 'line';
@@ -1236,6 +1347,19 @@ App.Model = (function () {
       App.OBJECT_PROPS[record.id] = interfaceProps(record);
     });
     previousInterfaceKeys = contacts.map(function (record) { return record.id; });
+
+    var normalLoads = App.NORMAL_LOADS || [];
+    var normalLoadTreeNode = ensureNormalLoadNode();
+    normalLoadTreeNode.count = normalLoads.length;
+    normalLoadTreeNode.children = normalLoads.map(function (record) {
+      return { label: record.name, icon: 'load', leaf: true, eye: true,
+               obj: record.id };
+    });
+    previousNormalLoadKeys.forEach(function (key) { delete App.OBJECT_PROPS[key]; });
+    normalLoads.forEach(function (record) {
+      App.OBJECT_PROPS[record.id] = normalLoadProps(record);
+    });
+    previousNormalLoadKeys = normalLoads.map(function (record) { return record.id; });
 
     // Last, so every node it has to place already exists.
     syncTrees(!!(App.PROJECT && App.PROJECT.simple_example), sharedSoilNodes[0]);

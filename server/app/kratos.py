@@ -102,6 +102,18 @@ CONDITIONS: dict[tuple[int, int], tuple[str, tuple[int, ...]]] = {
     (3, 9): ("SurfaceLoadDiffOrderCondition3D6N", (0, 1, 2, 3, 4, 5)),
 }
 
+# A `NormalLoad`'s condition, keyed by node count rather than gmsh element type --
+# `_normal_load_conditions` reads its rows off `_segments`, which already discards the
+# type and hands back gmsh's own line order (already Kratos'), the same way `INTERFACES`
+# is keyed. 2D only, like a free interface. Both names are confirmed against a working
+# reference (Deltares/FEA-Tools' MiscellaneousTools/InterfaceInserter,
+# test_create_interfaces.py for the linear class, examples/crow_config.json for the
+# quadratic one).
+NORMAL_LOAD_CONDITIONS: dict[tuple[int, int], str] = {
+    (2, 2): "LineNormalLoadCondition2D2N",
+    (2, 3): "LineNormalLoadDiffOrderCondition2D3N",
+}
+
 # The edges of a 2D continuum element, in the order its own geometry generates them.
 # Kratos matches a condition to its element by exact node-id sequence -- its
 # NeighbouringElementFinder rotates faces only, never a line, and reverse search is off
@@ -172,7 +184,16 @@ def export_project(project: Project, settings: MeshRequest,
     # Collected from here down rather than only out of the materials file: the deck
     # itself has things to say -- an interface a 3D model cannot carry, a wall written
     # one order below the soil around it.
-    warnings: list[str] = []
+    #
+    # Seeded from `mesh.log`'s own curated notes -- every `app.build` line meant for a
+    # person rather than gmsh's own chatter carries this exact "Info    : " padding
+    # (gmsh's raw logger writes "Info: ..." instead, one space, so the two never
+    # collide). A pile that never touches the soil, a wall drawn in the wrong mode --
+    # these already explain themselves at build time; only `export.js` never asked to
+    # see them before, so a structure could vanish from the deck with nothing in the
+    # UI to say why.
+    warnings: list[str] = [note[len("Info    : "):] for note in mesh.log
+                           if note.startswith("Info    : ")]
 
     world = _world_coordinates()
     coordinates = _kratos_coordinates(world, dim)
@@ -191,13 +212,14 @@ def export_project(project: Project, settings: MeshRequest,
     blocks.extend(panel_blocks)
     anchor_blocks, anchor_supports = _anchor_ties(project, dim, _world_coordinates())
     blocks.extend(anchor_blocks)
-    conditions = _load_conditions(project, dim, world, warnings)
+    conditions = (_load_conditions(project, dim, world, warnings) +
+                 _normal_load_conditions(project, dim, warnings))
     # Last, because it rewrites what everything above produced: the interface unglues
     # the soil from the structures already harvested, so it needs their connectivity in
     # hand -- and the nodes it adds have to be in `world` before the boundary groups and
     # the node table are read off it.
-    interface_blocks = _interface_elements(project, dim, soil_blocks, beam_blocks,
-                                           conditions, world, coordinates, warnings)
+    interface_blocks, interface_ties = _interface_elements(
+        project, dim, soil_blocks, beam_blocks, conditions, world, coordinates, warnings)
     blocks.extend(interface_blocks)
     # After the interface split, so each condition is aligned to the copy of the soil it
     # ended up on rather than to the element it left behind.
@@ -217,10 +239,23 @@ def export_project(project: Project, settings: MeshRequest,
     supports = [(f"{names[key]}_Support", [node_id[tag]], [], [])
                 for key, tag in anchor_supports.items() if tag in node_id]
     parts.extend(supports)
+    # A node-only part per side of every tie `_split_ties` found, so the process below
+    # can name them; see `_interface_elements`.
+    ties = {}
+    for key, master, slave in interface_ties:
+        master_name, slave_name = f"{names[key]}_Master", f"{names[key]}_Slave"
+        parts.append((master_name, sorted({node_id[tag] for tag in master}), [], []))
+        parts.append((slave_name, sorted({node_id[tag] for tag in slave}), [], []))
+        ties[key] = (master_name, slave_name)
 
     condition_keys = {key for key, _, rows in conditions if rows}
     active_loads = [(names[load.id], *_load_variable(load, dim))
                     for load in project.loads if load.id in condition_keys]
+    normal_load_processes = [
+        (names[load.id], load.fluid_pressure_type, load.pressure,
+         project.water.y, project.water.specific_weight)
+        for load in project.active_normal_loads if load.id in condition_keys
+    ]
     beam_properties = [(names[key], project.beam_section(_beam_of(project, key).section),
                         dim)
                        for key, _, _ in beam_blocks]
@@ -253,9 +288,21 @@ def export_project(project: Project, settings: MeshRequest,
     # The far end of every anchor is pinned: in this formulation the grouted body is a
     # fixed point, so the tie reacts against a restraint rather than against the soil.
     anchor_fixities = [(name, list(load_mask)) for name, _, _, _ in supports]
+    # A sheet pile does not exist before it is installed: it and whichever interface(s)
+    # tie it to the soil are staged together, deactivated in the deck's initial state and
+    # activated in a wall-installation stage -- see `staged_construction.json`. Members
+    # (3D) have no interface of their own kind and are not staged; nothing here invents a
+    # construction sequence for them.
+    wall_parts = ([names[key] for key, _, _ in beam_blocks] +
+                  [names[key] for key, _, _ in interface_blocks
+                   if _interface_of(project, key).structure is not None]) if dim == 2 else []
+    staged_ties = list(ties.values()) if dim == 2 else []
     processes = kratos_processes.project_parameters(
         _boundary_constraints(project, dim, boundaries) + anchor_fixities,
         [(name, variable, load_mask, value) for name, variable, value in active_loads],
+        wall_parts,
+        staged_ties,
+        normal_load_processes,
     )
     return {
         "mdpa": _render(coordinates, node_id, numbered, condition_blocks, parts),
@@ -279,7 +326,8 @@ def _interface_elements(project: Project, dim: int,
                         world: dict[int, tuple[float, float, float]],
                         coordinates: dict[int, tuple[float, float, float]],
                         warnings: list[str]
-                        ) -> list[tuple[str, str, list[list[int]]]]:
+                        ) -> tuple[list[tuple[str, str, list[list[int]]]],
+                                   list[tuple[str, list[int], list[int]]]]:
     """Unglue the soil along every active interface and write the contact elements.
 
     The topology is `app.interfaces`' job and is done on connectivity alone; what
@@ -290,6 +338,10 @@ def _interface_elements(project: Project, dim: int,
     than being left on the wall's own node.
 
     A 3D project exports no interface: see the `INTERFACES` table for why.
+
+    Also returns, per interface that follows a staged structure, the raw node tags to
+    tie together with a master/slave constraint while that structure is not installed
+    yet -- see `_split_ties`.
     """
     active = project.active_interfaces
     if not active:
@@ -298,7 +350,7 @@ def _interface_elements(project: Project, dim: int,
                 "interfaces are plane-strain only and none was written into this 3D "
                 "deck; the structures are meshed bonded to the soil."
             )
-        return []
+        return [], []
 
     beam_rows = {key: rows for key, _, rows in beam_blocks}
     specs = []
@@ -340,6 +392,7 @@ def _interface_elements(project: Project, dim: int,
     _follow_the_soil(conditions, before, split)
 
     out = []
+    ties = []
     for interface in active:
         rows = split.elements.get(interface.id) or []
         if not rows:
@@ -352,7 +405,44 @@ def _interface_elements(project: Project, dim: int,
                 f"{dim}D. Mesh the section with linear or quadratic triangles."
             )
         out.append((interface.id, name, rows))
-    return out
+        if interface.structure is not None:
+            master, slave = _split_ties(rows, per_side, split.duplicates)
+            if master and slave:
+                ties.append((interface.id, master, slave))
+    return out, ties
+
+
+def _split_ties(rows: list[list[int]], per_side: int, duplicates: dict[int, int]
+                ) -> tuple[list[int], list[int]]:
+    """Pair up the soil-side copies of every node the interface split into two.
+
+    A node in the middle of the line gets exactly two copies, one per face (see
+    `app.interfaces`'s module docstring) -- while the structure that owns the line is
+    staged (deactivated, then activated on installation -- see `kratos_processes`),
+    nothing else holds those two copies together, so they need a master/slave tie for
+    the stage(s) before installation. A node with only one copy is the toe, where the
+    ground closes under the structure and is already continuous; it needs no tie.
+
+    `minimum_number_of_neighbouring_nodes` in `kratos_processes._master_slave_constraint`
+    is deliberately 1, not the 2 a generic nearest-neighbour tie would ask for: the
+    pairing here is exact, not discovered by search, so each node in one list has
+    exactly one true partner, at zero distance, in the other.
+    """
+    by_original: dict[int, set[int]] = {}
+    for row in rows:
+        for node in row[per_side:]:
+            original = duplicates.get(node)
+            if original is not None:
+                by_original.setdefault(original, set()).add(node)
+
+    master, slave = [], []
+    for copies in by_original.values():
+        if len(copies) != 2:
+            continue
+        first, second = sorted(copies)
+        master.append(first)
+        slave.append(second)
+    return master, slave
 
 
 def _segments(entities: list[int]) -> list[list[int]]:
@@ -535,7 +625,11 @@ def _bodies(project: Project, dim: int) -> dict[str, list[int]]:
     for group_dim, tag in gmsh.model.getPhysicalGroups(dim):
         name = gmsh.model.getPhysicalName(group_dim, tag)
         tagged[name] = [int(t) for t in gmsh.model.getEntitiesForPhysicalGroup(group_dim, tag)]
-    load_keys = {load.id for load in project.loads}
+    # A normal load's key names a display ribbon at this dimension (build's
+    # `_build_display_only`) and the line its condition sits on one dimension down, so
+    # it is excluded here for the same reason a load id is: the symbol is not a body.
+    load_keys = ({load.id for load in project.loads}
+                 | {load.id for load in project.normal_loads})
     return {key: tagged[key] for key in project.part_keys()
             if key in tagged and key not in NOT_MATERIAL and key not in load_keys}
 
@@ -711,6 +805,41 @@ def _load_conditions(project: Project, dim: int,
     return out
 
 
+def _normal_load_conditions(project: Project, dim: int, warnings: list[str]
+                            ) -> list[tuple[str, str, list[list[int]]]]:
+    """One condition per active `NormalLoad`, off the line `build._embed_beams` already
+    gave its own physical group -- the same way a free interface's line is found.
+
+    Unlike `_load_conditions`, this does not scan the boundary at a fixed elevation: a
+    normal load can run down a vertical face, which has no single elevation to scan
+    for, so it is read straight off the mesh instead.
+    """
+    if project.dimension != 2 and any(n.active for n in project.normal_loads):
+        warnings.append(
+            "a normal load is plane-strain only and none was written into this 3D "
+            "deck; it is drawn at the section plane but applies no pressure."
+        )
+    out = []
+    for load in project.active_normal_loads:
+        rows = _segments(_tagged(1).get(load.id, []))
+        if not rows:
+            raise ExportError(
+                f"normal load {load.name!r} has no mesh along its line -- the line it "
+                "follows lies outside the soil in this section, so there is nothing "
+                "for the condition to hold."
+            )
+        per_row = len(rows[0])
+        name = NORMAL_LOAD_CONDITIONS.get((dim, per_row))
+        if name is None:
+            raise ExportError(
+                f"no Kratos condition is mapped for a normal load with {per_row} "
+                f"nodes a segment in {dim}D. Mesh the section with linear or "
+                "quadratic elements."
+            )
+        out.append((load.id, name, rows))
+    return out
+
+
 def _align_conditions(conditions: list[tuple[str, str, list[list[int]]]],
                       soil_blocks: list[tuple[str, str, list[list[int]]]]) -> None:
     """Rewrite each boundary condition onto the element edge it stands on.
@@ -767,6 +896,8 @@ def _part_names(project: Project) -> dict[str, str]:
         names[anchor.id] = _unique(_sanitise(anchor.name) or anchor.id, used)
     for interface in project.interfaces:
         names[interface.id] = _unique(_sanitise(interface.name) or interface.id, used)
+    for load in project.normal_loads:
+        names[load.id] = _unique(_sanitise(load.name) or load.id, used)
     for key in project.part_keys():
         names.setdefault(key, _unique(key, used))
     return names

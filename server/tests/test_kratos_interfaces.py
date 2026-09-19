@@ -116,6 +116,116 @@ def test_the_pile_is_no_longer_welded_to_the_soil(contacted):
     assert not beam_nodes(deck) & soil_nodes(deck)
 
 
+# ── Wall installation staging ────────────────────────────────────────────────
+
+def test_the_contact_is_installed_together_with_its_pile(contacted):
+    """A wall's interface does not exist before the wall does either: both parts are
+    deactivated in the initial stage and activated together in wall installation."""
+    doc = json.loads(contacted["project_parameters"])
+    assert doc["orchestrator"]["settings"]["execution_list"] == \
+        ["1_Initial_stage", "2_Wall_installation"]
+
+    installed = set(doc["stages"]["2_Wall_installation"]["stage_preprocess"]
+                    ["operations"][0]["Parameters"]["model_part_name_list"])
+    assert installed == {"PorousDomain.Sheet_pile_1", "PorousDomain.Wall_contact"}
+
+
+def test_a_soil_to_soil_interface_is_not_staged(session):
+    """`structure is None` means this interface splits soil from soil -- there is no
+    installation moment for it to wait for, so it is not deactivated up front."""
+    project = interfaced_project(side="left", structure=None,
+                                 points=[[8.0, 0.0], [8.0, -10.0]])
+    export = kratos.export_project(project, MeshRequest(element_size=3.0, order=2))
+    doc = json.loads(export["project_parameters"])
+
+    assert doc["orchestrator"]["settings"]["execution_list"] == \
+        ["1_Initial_stage", "2_Wall_installation"]
+    staged = set(doc["stages"]["2_Wall_installation"]["stage_preprocess"]
+                ["operations"][0]["Parameters"]["model_part_name_list"])
+    assert staged == {"PorousDomain.Sheet_pile_1"}, \
+        "the soil-to-soil interface must not be in the staged list, only the pile"
+
+
+def test_the_split_sides_are_tied_together_before_the_wall_is_installed(contacted):
+    """Deactivating the pile and its interface (above) leaves nothing else holding the
+    two soil copies the interface split apart -- without a tie the initial stage models
+    ground that is silently torn in two along the future wall line."""
+    deck = deck_of(contacted)
+    master, slave = deck.parts["Wall_contact_Master"], deck.parts["Wall_contact_Slave"]
+
+    assert master.nodes and slave.nodes
+    assert not master.elements and not master.conditions
+    assert not slave.elements and not slave.conditions
+    assert not set(master.nodes) & set(slave.nodes)
+    assert len(master.nodes) == len(slave.nodes)
+    assert {deck.nodes[n] for n in master.nodes} == {deck.nodes[n] for n in slave.nodes}, \
+        "every master node has a slave at the exact same point, and vice versa"
+
+
+def test_the_toe_does_not_need_a_tie(contacted):
+    """Where the ground closes under the pile's toe the two faces already share one
+    node (see test_each_face_of_the_wall_gets_its_own_copy_of_the_soil below): it is
+    already continuous and must not appear in either tie part."""
+    deck = deck_of(contacted)
+    block = interface_block(deck)
+    by_segment: dict[frozenset[int], list[list[int]]] = {}
+    for nodes in block.entries.values():
+        half = len(nodes) // 2
+        by_segment.setdefault(frozenset(nodes[:half]), []).append(nodes[half:])
+    shared = {n for faces in by_segment.values() if len(faces) == 2
+              for n in set(faces[0]) & set(faces[1])}
+    assert shared, "the fixture's pile has a toe with exactly one shared node"
+
+    tied = (set(deck.parts["Wall_contact_Master"].nodes) |
+            set(deck.parts["Wall_contact_Slave"].nodes))
+    assert not shared & tied
+
+
+def test_the_tie_is_only_needed_before_installation(contacted):
+    """Once the wall is installed its own interface ties the sides together; asking for
+    both would double-constrain the same nodes."""
+    doc = json.loads(contacted["project_parameters"])
+    initial = (doc["stages"]["1_Initial_stage"]["stage_settings"]["processes"]
+              ["constraints_process_list"])
+    installed = (doc["stages"]["2_Wall_installation"]["stage_settings"]["processes"]
+                ["constraints_process_list"])
+
+    tie = next(p for p in initial
+              if p["process_name"] == "AssignMasterSlaveConstraintsToNeighboursUtility")
+    assert tie["Parameters"]["master_model_part_name"] == "PorousDomain.Wall_contact_Master"
+    assert tie["Parameters"]["slave_model_part_name"] == "PorousDomain.Wall_contact_Slave"
+    assert tie["Parameters"]["minimum_number_of_neighbouring_nodes"] == 1
+
+    assert not any(p["process_name"] == "AssignMasterSlaveConstraintsToNeighboursUtility"
+                  for p in installed)
+
+
+def test_a_single_sided_interface_needs_no_tie(session):
+    """Soil only exists on one face, so there is nothing on the other to reconnect."""
+    export = kratos.export_project(interfaced_project(side="left"),
+                                   MeshRequest(element_size=3.0, order=2))
+    deck = deck_of(export)
+    assert "Wall_contact_Master" not in deck.parts
+    assert "Wall_contact_Slave" not in deck.parts
+
+    doc = json.loads(export["project_parameters"])
+    initial = (doc["stages"]["1_Initial_stage"]["stage_settings"]["processes"]
+              ["constraints_process_list"])
+    assert not any(p["process_name"] == "AssignMasterSlaveConstraintsToNeighboursUtility"
+                  for p in initial)
+
+
+def test_a_soil_to_soil_interface_needs_no_tie(session):
+    """`structure is None` interfaces are never staged (see
+    test_a_soil_to_soil_interface_is_not_staged), so nothing installs later to make a
+    tie-back necessary."""
+    project = interfaced_project(side="left", structure=None,
+                                 points=[[8.0, 0.0], [8.0, -10.0]])
+    export = kratos.export_project(project, MeshRequest(element_size=3.0, order=2))
+    deck = deck_of(export)
+    assert not any(name.endswith(("_Master", "_Slave")) for name in deck.parts)
+
+
 def test_each_face_of_the_wall_gets_its_own_copy_of_the_soil(contacted):
     """Two elements per pile segment, whose soil halves are disjoint -- one per face."""
     deck = deck_of(contacted)

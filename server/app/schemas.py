@@ -548,6 +548,71 @@ class Interface(Base):
         return self
 
 
+class NormalLoad(Base):
+    """A pressure load normal to a free polyline -- an exposed excavation face, a
+    sloped boundary -- rather than a fixed x/y vector on a flat horizontal run like
+    `LineLoad`.
+
+    Dimension-native `(x, y)`, like a free `Interface`'s points: 2D (plane strain)
+    only, with no 3D translation -- `Project.active_normal_loads` is gated the same
+    way `active_interfaces` is. The line is embedded into the section the same way a
+    free interface's is (`app/build.py:_embed_beams`), and its condition is harvested
+    directly off that embedding (`app/kratos.py:_normal_load_conditions`) rather than
+    by scanning the boundary at a fixed elevation the way `LineLoad` is, which is what
+    lets it run down a vertical face.
+
+    Two ways to size it, picked by `fluid_pressure_type`, matching Kratos
+    GeoMechanics' own `ApplyNormalLoadTableProcess`:
+
+    *   `"Hydrostatic"` derives the pressure from `Project.water` at export time --
+        zero at the phreatic level, increasing with depth below it -- so the load
+        tracks the water table rather than a value copied onto each stage's record.
+        This is the CROW reference case's `WaterLoad_StageN` arrangement.
+    *   `"Uniform"` applies `pressure` everywhere along the line instead, for a load
+        that is not water: a surcharge normal to a sloped face, say.
+    """
+    id: Ident
+    name: str
+    kind: Literal["normal"] = "normal"
+    points: list[tuple[float, float]]
+    fluid_pressure_type: Literal["Uniform", "Hydrostatic"] = "Uniform"
+    """`"Uniform"` by default, so a load given a magnitude applies it. Hydrostatic is
+    the water case and derives the pressure from `Project.water` instead, ignoring
+    `pressure` -- the wrong thing to fall into without asking for it."""
+    pressure: float = 0.0
+    """kN/m2, compression positive. Read only when `fluid_pressure_type` is
+    `"Uniform"`; a hydrostatic load is derived from `Project.water` instead."""
+    active: bool = True
+
+    @model_validator(mode="before")
+    @classmethod
+    def _drop_indicator_thickness(cls, value: object) -> object:
+        """A normal load used to carry a `thickness`, for a strip drawn along its line
+        the way a line load's pad is drawn. The strip stood proud of the model -- a bar
+        laid on top of the loaded face rather than a load applied to it -- and the
+        arrows say the same thing better, so it is gone. Saved projects still carry the
+        field, and `extra: forbid` would refuse them over a number nothing reads."""
+        if isinstance(value, dict) and "thickness" in value:
+            value = {k: v for k, v in value.items() if k != "thickness"}
+        return value
+
+    @model_validator(mode="after")
+    def _usable_polyline(self) -> NormalLoad:
+        if len(self.points) < 2:
+            raise ValueError(f"normal load {self.id!r} needs at least two points")
+        if not all(math.isfinite(v) for point in self.points for v in point):
+            raise ValueError(f"normal load {self.id!r} has a non-finite coordinate")
+        for first, second in zip(self.points, self.points[1:]):
+            if first == second:
+                raise ValueError(
+                    f"normal load {self.id!r} repeats the point {first}; every "
+                    "segment needs length"
+                )
+        if not math.isfinite(self.pressure):
+            raise ValueError(f"normal load {self.id!r} has a non-finite pressure")
+        return self
+
+
 # ── 3D structures ───────────────────────────────────────────────────────────
 #
 # A 3D wall is not a 2D sheet pile one dimension up. In plan it is a panel: a footprint
@@ -735,6 +800,10 @@ class WaterLevel(Base):
     # (js/viewport.js:201). It takes no part in the geometry booleans.
     margin: float = Field(default=3.0, ge=0)
     thickness: float = Field(default=0.06, gt=0)
+    specific_weight: float = Field(default=10.0, gt=0)
+    """kN/m3. Read by a `NormalLoad` in `"Hydrostatic"` mode
+    (`app/kratos_processes.py:_normal_load`); otherwise unused. One value for the whole
+    project, the same way `y` is one phreatic level -- not a per-load setting."""
 
 
 class MeshSettings(Base):
@@ -792,6 +861,7 @@ class StructuresUpdate(Base):
     anchors: list[Anchor | SpaceAnchor] | None = None
     interface_sections: list[InterfaceSection] | None = None
     interfaces: list[Interface] | None = None
+    normal_loads: list[NormalLoad] | None = None
 
 
 class DimensionUpdate(Base):
@@ -891,6 +961,10 @@ class Project(Base):
     # viewport and the exporter name it the same way they name a pile.
     interface_sections: list[InterfaceSection] = Field(default_factory=list)
     interfaces: list[Interface] = Field(default_factory=list)
+    # Its own collection, not folded into `loads[]`: a normal load is dimension-native
+    # like a free interface (an arbitrary polyline, no 3D translation), not a
+    # translated x/y vector like the three kinds `loads[]` already holds.
+    normal_loads: list[NormalLoad] = Field(default_factory=list)
     wells: Wells
     water: WaterLevel
     mesh: MeshSettings = Field(default_factory=MeshSettings)
@@ -958,6 +1032,7 @@ class Project(Base):
         _reject_duplicates([load.id for load in self.loads], "load")
         _reject_duplicates([s.id for s in self.interface_sections], "interface_section")
         _reject_duplicates([i.id for i in self.interfaces], "interface")
+        _reject_duplicates([n.id for n in self.normal_loads], "normal_load")
 
         # Interfaces are the one collection whose references are checked here rather
         # than left to blow up in the exporter: an interface names a section *and* a
@@ -1254,6 +1329,13 @@ class Project(Base):
         return [i for i in self.interfaces
                 if i.active and (i.structure is None or i.structure in live)]
 
+    @property
+    def active_normal_loads(self) -> list[NormalLoad]:
+        """The normal loads this model actually builds: 2D only, like `active_interfaces`."""
+        if self.dimension != 2:
+            return []
+        return [n for n in self.normal_loads if n.active]
+
     # The kind-wise views of the two mixed collections. Every consumer wants one
     # dimension's worth at a time -- the 2D build, the 3D build, the exporter's element
     # tables -- and `isinstance` scattered through all of them would say much less about
@@ -1308,10 +1390,14 @@ class Project(Base):
         beams = ([beam.id for beam in self.beams] + [a.id for a in self.anchors]
                  + [i.id for i in self.interfaces])
         if self.simple_example:
-            return soils + beams + customs
+            # Normal loads travel with the structures rather than with `loads[]`: the
+            # simple example draws no load pads, but it does draw what the user has
+            # drawn in it, and a symbol missing from this list is never tessellated.
+            return soils + beams + [n.id for n in self.normal_loads] + customs
         return soils + [
             "excavation", "wall", "struts", "anchors", "piles",
-        ] + [load.id for load in self.loads] + beams + ["water", "wells"] + customs
+        ] + [load.id for load in self.loads] + [n.id for n in self.normal_loads] \
+          + beams + ["water", "wells"] + customs
 
 
 def _reject_duplicates(ids: list[str], what: str) -> None:

@@ -394,6 +394,12 @@ def _build_display_only(project: Project, dim: int = 3,
                 load.x0, project.elevation_of(load), load.z0,
                 load.x1 - load.x0, load.thickness, load.z1 - load.z0,
             )]
+
+    # A normal load draws no solid of its own: its symbol is the arrows the viewport
+    # puts on the loaded line (live/js/viewport.js's `normalLoadGlyphSpec`). The strip
+    # that used to be built here stood proud of the model -- a bar lying on top of the
+    # loaded face rather than a load applied to it.
+
     wa = p.water
     water = gmsh.model.occ.addBox(
         d.x0 - wa.margin, wa.y - wa.thickness / 2, d.z0 - wa.margin,
@@ -604,8 +610,9 @@ def _embed_beams(project: Project, owners: dict[int, set[str]], dim: int,
     tools are clipped to the model first, so a pile drawn past the domain edge or over
     the excavated void contributes only the part that has soil around it.
 
-    Returns the rebuilt owners, the beam key -> curve tags map, and the panel key ->
-    face tags map (3D only; a 2D section has no wall panels in it).
+    Returns the rebuilt owners, the beam key -> curve tags map (also holding every
+    free interface's and normal load's own curves, embedded the same way), and the
+    panel key -> face tags map (3D only; a 2D section has no wall panels in it).
     """
     if dim == 3:
         return _embed_3d_structures(project, owners, log)
@@ -621,7 +628,8 @@ def _embed_beams(project: Project, owners: dict[int, set[str]], dim: int,
             log.append(f"Info    : {structure.id} is {noun}, which is built in the 3D "
                        "model only; it is not part of this section")
     free = [i for i in project.active_interfaces if i.structure is None]
-    if not active and not free:
+    normal_loads = project.active_normal_loads
+    if not active and not free and not normal_loads:
         return owners, {}, {}
 
     def point(x: float, y: float) -> int:
@@ -646,6 +654,16 @@ def _embed_beams(project: Project, owners: dict[int, set[str]], dim: int,
         for start, end in zip(vertices, vertices[1:]):
             tools.append((1, gmsh.model.occ.addLine(start, end)))
             owner_of_tool.append(interface.id)
+
+    # A normal load's polyline is embedded the same way and for the same reason: it
+    # needs its own mesh edges to harvest a condition off, which is what lets
+    # `kratos._normal_load_conditions` find it without scanning the boundary at a
+    # fixed elevation the way `_load_conditions` does for a flat `LineLoad`.
+    for load in normal_loads:
+        vertices = [point(x, y) for x, y in load.points]
+        for start, end in zip(vertices, vertices[1:]):
+            tools.append((1, gmsh.model.occ.addLine(start, end)))
+            owner_of_tool.append(load.id)
 
     inputs = [(dim, tag) for tag in owners]
     kept, kept_owners = [], []
@@ -1098,7 +1116,8 @@ def _verify(
     # A structure may legitimately contribute nothing: one drawn outside the soil, or
     # of the other dimension's kind, which `_embed_beams` has already logged.
     exempt = ({beam.id for beam in project.beams} | {a.id for a in project.anchors}
-              | {i.id for i in project.interfaces})
+              | {i.id for i in project.interfaces}
+              | {n.id for n in project.normal_loads})
     # So may the half of a translated load pair that this dimension does not build: the
     # pair is one load with two records, and `loads_for` picks which one is the model's.
     # Its key stays in `part_keys` so the frontend's namespace does not change.

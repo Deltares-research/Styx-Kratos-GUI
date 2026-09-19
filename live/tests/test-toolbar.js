@@ -64,12 +64,17 @@
        reference deck that has one is plane strain, and the 3D element is a surface
        with a different node layout and no fixture to pin it -- so the tool is closed
        in 3D rather than writing something nobody has checked. */
+    /* A normal load is plane strain for the same reason: the condition it writes
+       is a line one (see NORMAL_LOAD_CONDITIONS in server/app/kratos.py). */
     /* And the rulers, which measure the two named axes of one section plane: in 3D
        the screen edges are three axes mixed by the orbit. See test-ruler.js. */
-    T.eq(App.LivePatches.TWO_D_ONLY, ['interface', 'toggleRuler']);
+    T.eq(App.LivePatches.TWO_D_ONLY,
+         ['interface', 'createNormalLoad', 'toggleRuler']);
     T.eq(App.LivePatches.availableIn3D('interface'), false);
+    T.eq(App.LivePatches.availableIn3D('createNormalLoad'), false);
     T.eq(App.LivePatches.availableIn3D('createSheetPile'), true);
     T.eq(App.LivePatches.availableIn2D('interface'), true);
+    T.eq(App.LivePatches.availableIn2D('createNormalLoad'), true);
   });
 
   test('the frozen interface button and menu item are given a live action', function () {

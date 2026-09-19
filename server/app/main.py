@@ -184,6 +184,8 @@ async def patch_structures(update: StructuresUpdate) -> dict:
         payload["interface_sections"] = [s.model_dump() for s in update.interface_sections]
     if update.interfaces is not None:
         payload["interfaces"] = [i.model_dump() for i in update.interfaces]
+    if update.normal_loads is not None:
+        payload["normal_loads"] = [n.model_dump() for n in update.normal_loads]
     try:
         project = Project.model_validate(payload)
     except ValidationError as failure:

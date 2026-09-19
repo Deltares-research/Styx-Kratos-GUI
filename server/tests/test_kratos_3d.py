@@ -24,6 +24,13 @@ from app.schemas import MeshRequest, Project
 from app.seed import seed_project
 from tests import mdpa
 
+
+def _stage_settings(export: dict) -> dict:
+    """The lone stage's settings, found by position rather than by name -- the
+    orchestrator can name its one stage however it likes."""
+    doc = json.loads(export["project_parameters"])
+    return next(iter(doc["stages"].values()))["stage_settings"]
+
 SECTION_AZ26 = {"id": "az26", "name": "AZ 26-700", "E": 2.1e8, "nu": 0.3,
                 "area": 0.0198, "inertia": 5.52e-4, "density": 7850.0, "spacing": 1.0}
 WALL_AZ26 = {"id": "az26_wall", "name": "AZ 26-700 wall", "E": 2.1e8, "nu": 0.3,
@@ -243,9 +250,8 @@ def test_the_anchor_gets_its_own_part_and_a_support_group_for_its_tail(walled):
 
 
 def test_the_tail_support_is_fixed_in_all_three_directions(walled):
-    doc = json.loads(walled["project_parameters"])
     constraints = {p["Parameters"]["model_part_name"]: p["Parameters"]
-                   for p in doc["processes"]["constraints_process_list"]}
+                   for p in _stage_settings(walled)["processes"]["constraints_process_list"]}
     fixity = constraints["PorousDomain.Anchor_1_Support"]
 
     assert fixity["is_fixed"] == [True, True, True], "a 3D tail is pinned in space"
@@ -369,13 +375,13 @@ def test_a_plane_anchor_reaches_the_3d_deck_as_a_truss(sectioned):
 
 def test_the_plane_anchors_tail_is_pinned_in_all_three_directions(sectioned):
     """A 3D deck restrains z as well; the 2D origin of the record changes nothing."""
-    parameters = json.loads(sectioned["project_parameters"])
+    processes = _stage_settings(sectioned)["processes"]
     constraints = [
-        p for p in parameters["processes"]["constraints_process_list"]
+        p for p in processes["constraints_process_list"]
         if "anchor_2d" in p["Parameters"]["model_part_name"].lower()
     ]
 
-    assert constraints, parameters["processes"]["constraints_process_list"]
+    assert constraints, processes["constraints_process_list"]
     assert constraints[0]["Parameters"]["is_fixed"] == [True, True, True]
 
 

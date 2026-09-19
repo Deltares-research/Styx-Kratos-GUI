@@ -249,6 +249,7 @@ App.LivePatches = (function () {
     if (App.Beams && App.Beams.isBeamKey(key)) return 'beam';
     if (App.Anchors && App.Anchors.isAnchorKey(key)) return 'anchor';
     if (App.Interfaces && App.Interfaces.isInterfaceKey(key)) return 'interface';
+    if (App.NormalLoads && App.NormalLoads.isNormalLoadKey(key)) return 'normal_load';
     if (App.Loads && App.Loads.isLoadKey(key)) return 'load';
     return null;
   }
@@ -274,11 +275,16 @@ App.LivePatches = (function () {
     return (App.INTERFACES || []).filter(function (item) { return item.id === key; })[0];
   }
 
+  function normalLoadByKey(key) {
+    return (App.NORMAL_LOADS || []).filter(function (item) { return item.id === key; })[0];
+  }
+
   function objectName(kind, key) {
     var obj = kind === 'part' ? partByKey(key)
       : kind === 'beam' ? beamByKey(key)
       : kind === 'anchor' ? anchorByKey(key)
       : kind === 'interface' ? interfaceByKey(key)
+      : kind === 'normal_load' ? normalLoadByKey(key)
       : kind === 'load' ? loadByKey(key) : null;
     return obj ? (kind === 'part' ? obj.label : obj.name) : '';
   }
@@ -323,6 +329,12 @@ App.LivePatches = (function () {
       return App.Interfaces.save(contact, copy(App.INTERFACE_SECTIONS || []))
         .catch(reportRenameError);
     }
+    if (kind === 'normal_load') {
+      var normalLoad = normalLoadByKey(key);
+      if (!normalLoad) return;
+      normalLoad.name = name;
+      return App.NormalLoads.save(normalLoad).catch(reportRenameError);
+    }
     if (kind === 'load') {
       var load = loadByKey(key);
       if (!load) return;
@@ -336,6 +348,7 @@ App.LivePatches = (function () {
     if (kind === 'beam') return App.Beams.remove(key);
     if (kind === 'anchor') return App.Anchors.remove(key);
     if (kind === 'interface') return App.Interfaces.remove(key);
+    if (kind === 'normal_load') return App.NormalLoads.remove(key);
     if (kind === 'load') return App.Loads.remove(key);
   }
 
@@ -513,6 +526,22 @@ App.LivePatches = (function () {
     if (hint) pane.insertBefore(section, hint); else pane.appendChild(section);
   }
 
+  /* "Properties…" has been on this menu since the frozen mockup drew it, and did
+     nothing for any kind: the callback below handled delete, rename and the eye, and
+     let every other label fall off the end. A kind with a form of its own opens it --
+     the same form the tool and the panel's Edit button open. The rest have no form;
+     they keep their properties in the Selection explorer, so selecting the object is
+     what "properties" means for them, and is at least what the label promises. */
+  function openProperties(kind, key) {
+    var owner = kind === 'load' ? App.Loads
+      : kind === 'normal_load' ? App.NormalLoads
+      : kind === 'beam' ? App.Beams : null;
+    // Anchors and interfaces are deliberately not here: their `edit` saves the record
+    // rather than opening anything, so calling it would write, not show.
+    if (owner && owner.edit) return owner.edit(key);
+    if (App.selectObject) App.selectObject(key, 'tree');
+  }
+
   function onTreeContextMenu(event) {
     var row = event.target.closest && event.target.closest('.tree-row');
     var key = row && row.dataset.obj;
@@ -534,6 +563,7 @@ App.LivePatches = (function () {
       if (it.action === 'deleteObject') return deleteObject(kind, key);
       if (it.action === 'renameObject') return renameObject(kind, key);
       if (it.action) { App.runAction(it); return; }
+      if (/^Properties/.test(it.label)) return openProperties(kind, key);
       if (/Hide|Show/.test(it.label)) {
         var on = !App.Viewport.isVisible(key);
         App.Viewport.setVisible(key, on);
@@ -571,7 +601,7 @@ App.LivePatches = (function () {
      element is a surface with a different node layout and no fixture to pin it. */
   /* The rulers measure two named axes of one plane. In 3D the screen edges are three
      axes mixed by the orbit, so a number on an edge would be a number for nothing. */
-  var TWO_D_ONLY = ['interface', 'toggleRuler'];
+  var TWO_D_ONLY = ['interface', 'createNormalLoad', 'toggleRuler'];
 
   function availableIn2D(action) { return THREE_D_ONLY.indexOf(action) < 0; }
 
@@ -695,6 +725,9 @@ App.LivePatches = (function () {
     (((App.RAILS || {}).structures || []).filter(function (tool) {
       return tool && tool.icon === 'load';
     })[0] || { flyout: [] }).flyout.forEach(function (item) {
+      // A normal load is plane strain like an interface, and carries no loadKind to
+      // sort it by -- see TWO_D_ONLY, which gates its menu twin the same way.
+      if (item.action === 'createNormalLoad') { item.disabled = !is2d; return; }
       item.disabled = is2d ? item.loadKind === 'surface' : item.loadKind !== 'surface';
     });
 
@@ -1012,6 +1045,10 @@ App.LivePatches = (function () {
         if (App.Interfaces) App.Interfaces.start();
         return;
       }
+      if (item && item.action === 'createNormalLoad') {
+        if (App.NormalLoads) App.NormalLoads.start();
+        return;
+      }
       if (item && item.action === 'exportModel') {
         if (App.Export) App.Export.run();
         return;
@@ -1204,10 +1241,24 @@ App.LivePatches = (function () {
         if (tool.icon === 'load') {
           tool.action = 'createLoad';
           (tool.flyout || []).forEach(function (item) {
+            // The normal load below is not one of the three vector kinds: it is
+            // owned by App.NormalLoads and carries its own action, so the label
+            // test that sorts the frozen three must not claim it.
+            if (item.action === 'createNormalLoad') return;
             item.action = 'createLoad';
             item.loadKind = /point/i.test(item.label) ? 'point'
               : (/line/i.test(item.label) ? 'line' : 'surface');
           });
+          // A pressure normal to a polyline rather than a vector on a flat run, so
+          // App.Loads cannot make it -- but a user looking for a load looks here,
+          // not in a tool of its own, so it joins the flyout the other three are in.
+          if (!(tool.flyout || []).some(function (item) {
+            return item && item.action === 'createNormalLoad';
+          })) {
+            tool.flyout = (tool.flyout || []).concat([
+              { icon: 'load', label: 'Normal load', action: 'createNormalLoad' }
+            ]);
+          }
         }
       });
       
@@ -1289,6 +1340,12 @@ App.LivePatches = (function () {
       })) {
         structuresMenu.items.push({ label: 'Create interface',
                                     action: 'interface', sub: false });
+      }
+      if (!structuresMenu.items.some(function (item) {
+        return item && item.action === 'createNormalLoad';
+      })) {
+        structuresMenu.items.push({ label: 'Create normal load',
+                                    action: 'createNormalLoad', sub: false });
       }
     }
 
@@ -1432,6 +1489,15 @@ App.LivePatches = (function () {
         // Same as the pile: the Contact rows edit the shared property set in place,
         // so the whole library rides along in the one validated write.
         if (contact) return App.Interfaces.save(contact, copy(App.INTERFACE_SECTIONS || []));
+      }
+
+      if (App.NormalLoads && App.NormalLoads.isNormalLoadKey(reselect)) {
+        var normalLoad = (App.NORMAL_LOADS || []).filter(function (item) {
+          return item.id === reselect;
+        })[0];
+        // Nothing shared to carry: a normal load holds its own coordinates and its
+        // own magnitude, so the record is the whole write.
+        if (normalLoad) return App.NormalLoads.save(normalLoad);
       }
 
       function remount() {

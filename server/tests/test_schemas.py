@@ -994,3 +994,75 @@ def test_interfaces_are_plane_strain_only():
 
     assert project.interfaces, "the record is kept, like every other 2D record"
     assert project.active_interfaces == [], "but nothing is built from it in 3D"
+
+
+# ── Normal loads ─────────────────────────────────────────────────────────────
+
+def _normal_load(**overrides) -> dict:
+    return {"id": "normal_1", "name": "River load", "kind": "normal",
+            "points": [[8.0, 0.0], [8.0, -3.5], [20.0, -3.5]],
+            "fluid_pressure_type": "Hydrostatic", "pressure": 0.0,
+            "active": True} | overrides
+
+
+def _with_normal_loads(records: list[dict]) -> dict:
+    payload = seed_project(simple=False).model_dump()
+    payload["dimension"] = 2
+    payload["normal_loads"] = records
+    return payload
+
+
+def test_a_normal_load_defaults_to_the_magnitude_it_was_given():
+    """Uniform, not hydrostatic: a load carrying a pressure has to apply it. The
+    hydrostatic mode derives its pressure from the water level and ignores the field,
+    which is right for water and wrong to fall into by default."""
+    load = schemas.NormalLoad(**{k: v for k, v in _normal_load().items()
+                                 if k != "fluid_pressure_type"})
+    assert load.fluid_pressure_type == "Uniform"
+    assert load.points == [(8.0, 0.0), (8.0, -3.5), (20.0, -3.5)]
+
+
+def test_a_normal_load_can_be_a_fixed_uniform_pressure():
+    load = schemas.NormalLoad(
+        **_normal_load(fluid_pressure_type="Uniform", pressure=25.0))
+    assert load.fluid_pressure_type == "Uniform"
+    assert load.pressure == 25.0
+
+
+def test_a_normal_load_needs_a_usable_polyline():
+    for points in ([[8.0, 0.0]], [[8.0, 0.0], [8.0, 0.0]],
+                  [[8.0, 0.0], [8.0, float("nan")]]):
+        with pytest.raises(ValidationError):
+            schemas.NormalLoad(**_normal_load(points=points))
+
+
+def test_a_normal_load_rejects_a_non_finite_pressure():
+    with pytest.raises(ValidationError):
+        schemas.NormalLoad(**_normal_load(pressure=float("nan")))
+
+
+def test_duplicate_normal_load_ids_are_rejected():
+    with pytest.raises(ValidationError):
+        schemas.Project.model_validate(
+            _with_normal_loads([_normal_load(), _normal_load(name="Twin")]))
+
+
+def test_a_normal_load_becomes_a_part_key_so_the_frontend_can_pick_it():
+    project = schemas.Project.model_validate(_with_normal_loads([_normal_load()]))
+    assert "normal_1" in project.part_keys()
+
+
+def test_only_active_normal_loads_are_built():
+    payload = _with_normal_loads([_normal_load(),
+                                  _normal_load(id="normal_2", name="Off", active=False)])
+    project = schemas.Project.model_validate(payload)
+    assert [n.id for n in project.active_normal_loads] == ["normal_1"]
+
+
+def test_normal_loads_are_plane_strain_only():
+    payload = _with_normal_loads([_normal_load()])
+    payload["dimension"] = 3
+    project = schemas.Project.model_validate(payload)
+
+    assert project.normal_loads, "the record is kept, like every other 2D record"
+    assert project.active_normal_loads == [], "but nothing is built from it in 3D"

@@ -220,10 +220,11 @@ def test_the_pile_and_tendon_values_survive_into_the_material_file(materials):
 
 def test_the_load_value_and_the_anchor_support_reach_the_process_file(golden, deck):
     doc = json.loads(golden["project_parameters"])
+    processes = next(iter(doc["stages"].values()))["stage_settings"]["processes"]
     loads = {p["Parameters"]["model_part_name"]: p["Parameters"]
-             for p in doc["processes"]["loads_process_list"]}
+             for p in processes["loads_process_list"]}
     constraints = {p["Parameters"]["model_part_name"]
-                   for p in doc["processes"]["constraints_process_list"]}
+                   for p in processes["constraints_process_list"]}
 
     assert loads["PorousDomain.Surcharge"]["value"] == [0.0, -20.0, 0.0]
     assert "PorousDomain.Anchor_1_Support" in constraints
