@@ -445,6 +445,20 @@
   /* An imported .mdpa's preview lives outside `groups`/`frame` entirely (viewport.js's
      importedMeshGroup), so it must not need a real scene to be called safely -- the
      same "no WebGL, no throw" contract refresh() and setMode() already hold above. */
+
+  /* A contact lies along the very line of the wall it holds, so the two would otherwise
+     be decided by insertion order -- and the interface, having no width of its own, is
+     the one that disappears. */
+  test('an imported interface draws over the structure it shares a line with',
+       function () {
+    var wall = App.Viewport.importedLineOrder({ key: 'imported:Wall', kind: 'beam' });
+    var contact = App.Viewport.importedLineOrder({ key: 'imported:Contact',
+                                                   kind: 'interface' });
+    T.ok(contact > wall, 'the contact is painted last');
+    T.eq(App.Viewport.importedLineOrder({ kind: 'continuum' }), wall,
+         'everything else keeps the one order it had');
+  });
+
   test('an imported-mesh preview survives an empty scene', function () {
     App.Viewport.showImportedMesh({
       bbox: [0, 0, 0, 1, 1, 1],

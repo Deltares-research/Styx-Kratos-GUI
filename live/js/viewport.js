@@ -1387,13 +1387,26 @@ App.Viewport = (function () {
      transparent, and three.js draws that whole pass after every opaque object whatever
      its renderOrder -- so an opaque pile is painted over by the mesh it sits in. Sharing
      the pass puts renderOrder back in charge. */
+  var IMPORTED_LINE_ORDER = 18, INTERFACE_LINE_ORDER = 19;
+
+  /* A zero-thickness contact is drawn along exactly the line of the structure it holds
+     -- the same nodes, the same pixels -- so at equal render order the two fight and
+     whichever was added last wins, at random from the reader's point of view. The
+     contact goes on top, because it is the one with nothing else to be seen by: a sheet
+     pile still reads as a sheet pile under it, and the interface is what the reader
+     turned on to look for. Each still has its own eye in the Model explorer. */
+  function importedLineOrder(section) {
+    return section && section.kind === 'interface'
+      ? INTERFACE_LINE_ORDER : IMPORTED_LINE_ORDER;
+  }
+
   function importedSectionLines(section) {
     var lines = new THREE.LineSegments(App.Buffers.edges(section),
       new THREE.LineBasicMaterial({ color: new THREE.Color(section.color),
                                     depthTest: false,
                                     transparent: true, opacity: 1 }));
     lines.userData.noPick = true;
-    lines.renderOrder = 18;
+    lines.renderOrder = importedLineOrder(section);
     return lines;
   }
 
@@ -1754,7 +1767,7 @@ App.Viewport = (function () {
     projectToScreen: projectToScreen,
     showImportedMesh: showImportedMesh, clearImportedMesh: clearImportedMesh,
     hasImportedMesh: hasImportedMesh, removeImportedSection: removeImportedSection,
-    setImportedGroupKeys: setImportedGroupKeys,
+    setImportedGroupKeys: setImportedGroupKeys, importedLineOrder: importedLineOrder,
     frameImportedSection: frameImportedSection,
     // js/viewport.js rebuilds its soil boxes from App.LAYERS client-side. Here the soil
     // geometry is the server's, tessellated by /api/geometry, so there is nothing to

@@ -326,16 +326,19 @@ def test_with_no_sub_model_parts_declared_everything_falls_back_to_one_section_p
     assert sections[0]["part"] is None
 
 
-def test_an_interface_only_body_part_has_no_section_of_its_own():
+def test_an_interface_only_body_part_draws_the_line_it_lies_along():
     """crow_case.mdpa's "Interface_..." parts own only zero-thickness interface
-    elements -- a class this exporter does not recognise -- so, like an unclaimed
-    unknown-class element, they contribute no drawable geometry."""
+    elements. They are drawn -- as line work, since there is no thickness to fill -- so
+    each gets its own checklist row and its own eye in the Model explorer."""
     model = mdpa_import.import_mdpa((EXAMPLES / "crow_case.mdpa").read_text())
 
-    keys = {s["key"] for s in mdpa_import.to_sections(model)}
+    sections = {s["key"]: s for s in mdpa_import.to_sections(model)}
 
-    assert "imported:Interface_Top_Right" not in keys
-    assert any(k.startswith("imported:") for k in keys), "the real bodies still draw"
+    contact = sections["imported:Interface_Top_Right"]
+    assert contact["kind"] == "interface"
+    assert contact["edges"], "a contact is line work, not a surface"
+    assert contact["indices"] == []
+    assert any(k.startswith("imported:") for k in sections), "the real bodies still draw"
 
 
 def test_an_invisible_body_part_does_not_burn_a_palette_slot():
@@ -456,3 +459,112 @@ def test_a_beams_line_work_is_in_the_same_frame_as_the_soil_it_shares_nodes_with
                  if s["key"] == "imported_truss")
 
     assert truss["edges"] == [4.0, 0.0, 0.0, 4.0, -5.0, 0.0]
+
+
+# ── Interfaces ──────────────────────────────────────────────────────────────
+#
+# A zero-thickness contact is geometry with no thickness to fill: `kratos.INTERFACES`
+# writes one element per segment per detached face, its first half the nodes of the line
+# and its second half their coincident copies on the soil (see `interfaces._emit`). So it
+# is drawn the way a beam is -- as the line its first two nodes span -- and never as a
+# triangle, which would be degenerate and invisible whichever way it was wound.
+
+INTERFACE_DECK = (
+    "Begin Properties 0\nEnd Properties\n\n"
+    "Begin Nodes\n"
+    "1 4.0 0.0 0.0\n2 4.0 -5.0 0.0\n3 4.0 -2.5 0.0\n"
+    # The soil-side copies: the same three places, three more numbers.
+    "4 4.0 0.0 0.0\n5 4.0 -5.0 0.0\n6 4.0 -2.5 0.0\n"
+    "End Nodes\n\n"
+    "Begin Elements Geo_UPwLineInterfacePlaneStrainDiffOrderElement3Plus3N\n"
+    "1 0 1 2 3 4 5 6\n"
+    "End Elements\n\n"
+    "Begin SubModelPart Interface_Wall_Left\n"
+    "    Begin SubModelPartElements\n1\n    End SubModelPartElements\n"
+    "End SubModelPart\n"
+)
+
+
+def test_an_interface_class_is_recognised_rather_than_unknown():
+    model = mdpa_import.import_mdpa(INTERFACE_DECK)
+
+    entity = model.elements[0]
+    assert entity.kind == "interface"
+    assert entity.dim == 2
+    assert len(entity.entries) == 1
+
+
+def test_an_interface_is_drawn_as_the_line_its_first_two_nodes_span():
+    model = mdpa_import.import_mdpa(INTERFACE_DECK)
+
+    section = next(s for s in mdpa_import.to_sections(model)
+                   if s["part"] == "Interface_Wall_Left")
+
+    assert section["kind"] == "interface"
+    assert section["indices"] == [], "zero thickness is not a triangle"
+    # End to end, not end to midside: the third node of a quadratic segment is its
+    # middle, and drawing to it would cover half the interface.
+    assert section["edges"] == [4.0, 0.0, 0.0, 4.0, -5.0, 0.0]
+
+
+def test_an_interface_part_gets_its_own_row_and_its_own_colour():
+    """The Model explorer's "Imported mesh" node is built from these sections alone
+    (live/js/mdpa-import-dialog.js), so a part with no section has no row and no eye."""
+    model = mdpa_import.import_mdpa(INTERFACE_DECK)
+
+    section = next(s for s in mdpa_import.to_sections(model)
+                   if s["part"] == "Interface_Wall_Left")
+
+    assert section["key"] == "imported:Interface_Wall_Left"
+    assert section["color"]
+    assert section["elements"] == [[1, 4.0, -2.5, 0.0]], "labelled at its own centre"
+
+
+def test_an_unclaimed_interface_still_draws_under_its_kind():
+    model = mdpa_import.import_mdpa(
+        INTERFACE_DECK.replace("Begin SubModelPart Interface_Wall_Left", "Begin SubModelPart Empty")
+                      .replace("\n1\n    End SubModelPartElements", "\n    End SubModelPartElements")
+    )
+
+    section = next(s for s in mdpa_import.to_sections(model)
+                   if s["key"] == "imported_interface")
+
+    assert section["edges"] == [4.0, 0.0, 0.0, 4.0, -5.0, 0.0]
+
+
+def test_a_linear_interface_is_drawn_the_same_way():
+    text = (
+        "Begin Properties 0\nEnd Properties\n\n"
+        "Begin Nodes\n1 0.0 0.0 0.0\n2 3.0 0.0 0.0\n3 0.0 0.0 0.0\n4 3.0 0.0 0.0\n"
+        "End Nodes\n\n"
+        "Begin Elements Geo_UPwLineInterfacePlaneStrainElement2Plus2N\n"
+        "1 0 1 2 3 4\nEnd Elements\n"
+    )
+    model = mdpa_import.import_mdpa(text)
+
+    section = next(s for s in mdpa_import.to_sections(model)
+                   if s["key"] == "imported_interface")
+
+    assert section["edges"] == [0.0, 0.0, 0.0, 3.0, 0.0, 0.0]
+
+
+def test_a_sheet_pile_and_its_interfaces_all_survive_the_round_trip(session):
+    """The arrangement the user meets: a wall with soil unglued from both its faces.
+    Every part the deck names as a body has to come back drawable -- the pile and both
+    contacts -- or the checklist silently loses one."""
+    from tests.test_kratos_interfaces import interfaced_project
+
+    exported = kratos.export_project(interfaced_project(),
+                                     MeshRequest(element_size=3.0, order=2))
+    model = mdpa_import.import_mdpa(exported["mdpa"])
+
+    sections = [s for s in mdpa_import.to_sections(model) if s["part"]]
+    kinds = {s["part"]: s["kind"] for s in sections}
+
+    # Named after the project's own interface ("Wall contact"), not after its class --
+    # the deck carries the part's name, so that is what the checklist shows.
+    assert "beam" in kinds.values(), f"the sheet pile draws: {kinds}"
+    assert "interface" in kinds.values(), f"the contacts draw nothing: {kinds}"
+    contact = next(s for s in sections if s["kind"] == "interface")
+    assert contact["edges"], "a contact is line work"
+    assert contact["elements"], "and its elements can be labelled"
