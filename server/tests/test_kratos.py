@@ -5,7 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from app import build, kratos
+from app import build, kratos, schemas
+from app.kratos_materials import KILO
 from app.schemas import LineLoad, MeshRequest, PointLoad
 from app.seed import seed_project
 from tests import mdpa
@@ -310,7 +311,7 @@ def test_load_conditions_keep_property_zero_like_a_gid_deck(section):
 def test_the_2d_line_load_value_reaches_the_process_file(section):
     """The .mdpa names the part and its conditions; the magnitude is a process against
     that part, which is the only place a Kratos GeoMechanics deck reads it from."""
-    assert _load_process(section, "LineLoad_1")["value"] == [0.0, -20.0, 0.0]
+    assert _load_process(section, "LineLoad_1")["value"] == [0.0, -20000.0, 0.0]
 
 
 def test_line_load_has_no_material_parameters_entry(section):
@@ -332,7 +333,7 @@ def test_3d_surface_load_condition_keeps_property_zero(solid):
 
 
 def test_the_3d_surface_load_value_reaches_the_process_file(solid):
-    assert _load_process(solid, "SurfaceLoad_1")["value"] == [0.0, -20.0, 0.0]
+    assert _load_process(solid, "SurfaceLoad_1")["value"] == [0.0, -20000.0, 0.0]
 
 
 def test_surface_load_has_no_material_parameters_entry(solid):
@@ -356,7 +357,7 @@ def test_a_2d_point_load_is_exported_as_a_3d_point_condition(session):
     exported = kratos.export_project(project, MeshRequest(element_size=6.0, order=1))
     deck = deck_of(exported)
     assert "Crane_reaction" in deck.parts
-    assert _load_process(exported, "Crane_reaction")["value"] == [15.0, -120.0]
+    assert _load_process(exported, "Crane_reaction")["value"] == [15000.0, -120000.0]
     assert all(item["model_part_name"] != "PorousDomain.Crane_reaction"
                for item in json.loads(exported["materials"])["properties"])
 
@@ -373,7 +374,7 @@ def test_point_load_coordinates_export_in_a_2d_section(session):
     deck = deck_of(exported)
 
     assert any(block.name == "PointLoadCondition2D1N" for block in deck.conditions)
-    assert _load_process(exported, "Jack")["value"] == [15.0, -120.0, 0.0]
+    assert _load_process(exported, "Jack")["value"] == [15000.0, -120000.0, 0.0]
     assert all(item["model_part_name"] != "PorousDomain.Jack"
                for item in json.loads(exported["materials"])["properties"])
 
@@ -418,7 +419,7 @@ def test_material_variables_come_from_the_project_material(solid):
     material = project.material(project.layers[0].mat)
     variables = entry["Material"]["Variables"]
     assert entry["Material"]["constitutive_law"]["name"]
-    assert variables["YOUNG_MODULUS"] == pytest.approx(material.E)
+    assert variables["YOUNG_MODULUS"] == pytest.approx(material.E * KILO)
     assert variables["POISSON_RATIO"] == pytest.approx(material.nu)
 
 
@@ -516,10 +517,12 @@ def test_the_deck_runs_as_one_stage_under_the_sequential_orchestrator(section):
         "Stages.KratosMultiphysics.GeoMechanicsApplication.GeoMechanicsAnalysis"
 
 
-def test_solver_settings_and_problem_data_are_left_empty_for_now(section):
+def test_the_stage_carries_an_analysis_it_can_be_run_with(section):
+    """Both blocks used to be left `{}`, which made the deck readable and not runnable.
+    They now hold a default analysis; what is in it is tests/test_kratos_solver.py."""
     settings = _stage_settings(section)
-    assert settings["solver_settings"] == {}
-    assert settings["problem_data"] == {}
+    assert settings["solver_settings"]["solver_type"]
+    assert settings["problem_data"]["problem_name"]
 
 
 def test_the_top_surface_is_never_constrained(section):
@@ -560,7 +563,7 @@ def test_the_active_load_becomes_a_load_process(section):
 
     load = loads["PorousDomain.LineLoad_1"]
     assert load["variable_name"] == "LINE_LOAD"
-    assert load["value"] == [0.0, -20.0, 0.0]
+    assert load["value"] == [0.0, -20000.0, 0.0]
     assert load["active"] == [True, True, False]
     assert load["table"] == [0, 0, 0]
 
@@ -569,7 +572,7 @@ def test_the_3d_surface_load_process_is_fully_active(solid):
     loads = {p["Parameters"]["model_part_name"]: p["Parameters"]
              for p in _stage_settings(solid)["processes"]["loads_process_list"]}
     load = loads["PorousDomain.SurfaceLoad_1"]
-    assert load["value"] == [0.0, -20.0, 0.0]
+    assert load["value"] == [0.0, -20000.0, 0.0]
     assert load["active"] == [True, True, True]
 
 
@@ -577,7 +580,10 @@ def test_an_inactive_load_gets_no_process(session):
     project = seed_project()
     project.loads[0].active = False
     exported = kratos.export_project(project, MeshRequest(element_size=6.0, order=1))
-    assert _stage_settings(exported)["processes"]["loads_process_list"] == []
+    # Gravity stays: it is a body load on the whole model, not one of the loads the
+    # project draws, and switching a surcharge off does not make the ground weightless.
+    assert [p["Parameters"]["variable_name"]
+            for p in _stage_settings(exported)["processes"]["loads_process_list"]] ==         ["VOLUME_ACCELERATION"]
 
 
 # ── Sheet piles as beam elements ────────────────────────────────────────────
@@ -711,11 +717,14 @@ def test_the_beam_section_becomes_a_material_entry_mapped_to_its_part(piled):
     variables = entry["Material"]["Variables"]
 
     assert entry["Material"]["constitutive_law"]["name"]
-    assert variables["YOUNG_MODULUS"] == pytest.approx(2.1e8)
+    assert variables["YOUNG_MODULUS"] == pytest.approx(2.1e8 * KILO)
     assert variables["POISSON_RATIO"] == pytest.approx(0.3)
     assert variables["CROSS_AREA"] == pytest.approx(0.0198)
     assert variables["I33"] == pytest.approx(5.52e-4)
     assert variables["DENSITY"] == pytest.approx(7850.0)
+    # A Timoshenko beam shears as well as bends, and stops on the first element check
+    # without a shear area to do it with.
+    assert variables["AREA_EFFECTIVE_Y"] == pytest.approx(0.0198)
 
 
 def test_the_beam_property_id_is_unique_and_non_zero_in_the_material_file(piled):
@@ -839,10 +848,44 @@ def test_the_tendon_becomes_a_material_entry_with_its_prestress(anchored):
     variables = entry["Material"]["Variables"]
 
     assert entry["Material"]["constitutive_law"]["name"]
-    assert variables["YOUNG_MODULUS"] == pytest.approx(1.95e8)
+    assert variables["YOUNG_MODULUS"] == pytest.approx(1.95e8 * KILO)
     # Per metre run: a tendon every 2.5 m carries 1/2.5 of its steel in plane strain.
     assert variables["CROSS_AREA"] == pytest.approx(0.0006 / 2.5)
-    assert variables["TRUSS_PRESTRESS_PK2"] == pytest.approx(250.0 / 2.5)
+    assert variables["TRUSS_PRESTRESS_PK2"] == pytest.approx(250.0 * KILO / 2.5)
+
+
+def test_the_soil_says_how_it_drains_in_the_name_kratos_still_reads(section):
+    """`IGNORE_UNDRAINED`, which this used to write, is deprecated: Kratos converts it
+    into GEO_DRAINAGE_TYPE and erases it. A staged deck reads its materials once per
+    stage, so the second read met a property set holding both and stopped the run.
+
+    The value follows the material's own drainage type -- the seed's two layers are a
+    Drained sand over an Undrained (A) clay, so the deck carries both answers. Which
+    type maps to which is `kratos_materials._drainage`, covered in
+    `tests/test_kratos_units.py`.
+    """
+    entries = json.loads(section["materials"])["properties"]
+    project = seed_project()
+    by_part = {e["model_part_name"]: e["Material"]["Variables"] for e in entries}
+    assert not any("IGNORE_UNDRAINED" in v for v in by_part.values())
+
+    drainage = {by_part[f"PorousDomain.{layer.name}"]["GEO_DRAINAGE_TYPE"]
+                for layer in project.layers}
+    assert drainage == {"CONSTANT_PW_FIELD", "FULLY_COUPLED"}
+
+
+def test_the_tendon_limits_are_left_out_and_said_out_loud(anchored):
+    """Kratos defines no property for a tendon's tension or compression limit -- the
+    names this used to write, MAX_TENSION_STRESS and MAX_COMPRESSION_STRESS, exist
+    nowhere in its source -- and reading a material file naming one is a hard error
+    before the first node is solved. So the limits stay out of the deck, and the export
+    says they did rather than letting a capacity check be silently believed in."""
+    entries = json.loads(anchored["materials"])["properties"]
+    entry = next(e for e in entries if e["model_part_name"] == "PorousDomain.Anchor_1")
+
+    assert "MAX_TENSION_STRESS" not in entry["Material"]["Variables"]
+    assert "MAX_COMPRESSION_STRESS" not in entry["Material"]["Variables"]
+    assert any("limit" in warning for warning in anchored["warnings"])
 
 
 def test_every_material_property_id_stays_unique_with_soil_pile_and_anchor(anchored):
@@ -867,3 +910,307 @@ def test_an_anchor_saved_in_a_3d_project_is_not_exported(session):
                                    MeshRequest(element_size=6.0, order=2))
 
     assert not any(b.name == "LinearTrussElement2D2N" for b in deck_of(export).elements)
+
+
+# ── Staged excavation: bodies, their edges and their materials ──────────────
+#
+# A staged deck keeps the excavated soil so each lift can be deactivated in its own
+# phase (plan/staged-construction-plan.md sec A1). Three things follow from that, and
+# none of them is true of an unstaged deck: every lift is its own sub-model part, every
+# lift carries its layer's material, and the domain edge a lift touches is segmented so
+# the lift's own edge constraint can leave the deck with it.
+
+
+def staged_project(dimension: int = 2):
+    """The CROW arrangement: three layers, three lifts, pit against the left edge."""
+    from app.schemas import Project
+    p = seed_project(simple=False).model_dump() | {"dimension": dimension}
+    if dimension == 2:
+        p["section_offset"] = 20.0
+    p["domain"] |= {"y_top": 0.0, "y_bottom": -60.0}
+    p["boreholes"] = [p["boreholes"][0]]
+    bh = p["boreholes"][0]["id"]
+    p["layers"] = [
+        {"id": "L1", "name": "Upper_Sand", "mat": p["materials"][0]["id"],
+         "tops": {bh: 0.0}, "bots": {bh: -8.0}},
+        {"id": "L2", "name": "Middle_Clay", "mat": p["materials"][0]["id"],
+         "tops": {bh: -8.0}, "bots": {bh: -12.0}},
+        {"id": "L3", "name": "Deep_Sand", "mat": p["materials"][1]["id"],
+         "tops": {bh: -12.0}, "bots": {bh: -60.0}},
+    ]
+    p["excavation"] = {k: v for k, v in p["excavation"].items() if k != "floor_y"}
+    p["excavation"] |= {"x0": 0.0, "x1": 5.0, "levels": [-2.0, -5.0, -8.0]}
+    p["wall"] |= {"top_y": 0.0, "toe_y": -13.0}
+    return Project.model_validate(p)
+
+
+@pytest.fixture(scope="module")
+def staged(session):
+    return kratos.export_project(staged_project(), MeshRequest(element_size=4.0, order=2))
+
+
+def test_every_staged_body_is_its_own_sub_model_part(staged):
+    """One lift, one part: what a phase's Deactivate operation names."""
+    deck = deck_of(staged)
+    names = {kratos._part_names(staged_project())[key]
+             for key, *_ in staged_project().soil_bodies()}
+    for name in names:
+        assert name in deck.parts, f"{name} is missing from the deck"
+        assert deck.parts[name].elements, f"{name} carries no elements"
+
+
+def test_a_lift_is_named_after_the_layer_it_is_dug_out_of(staged):
+    names = kratos._part_names(staged_project())
+    assert names["soil_L1__lift1"] == "Upper_Sand_lift1"
+    assert names["soil_L2__pit"] == "Middle_Clay_pit"
+    assert names["soil_L1"] == "Upper_Sand"
+
+
+def test_every_staged_body_carries_its_layer_material(staged):
+    """A lift is still the layer it was dug out of, so it cannot lose its material on
+    the way through the split."""
+    entries = json.loads(staged["materials"])["properties"]
+    named = {e["model_part_name"].split(".")[-1] for e in entries}
+    names = kratos._part_names(staged_project())
+    for key, *_ in staged_project().soil_bodies():
+        assert names[key] in named, f"{names[key]} has no material"
+
+
+def test_the_edge_a_lift_touches_is_segmented_per_lift(staged):
+    """The reference deck's Excavated_Soil_N_Left_Edge: as a lift is dug away its own
+    stretch of the domain edge goes with it, so the constraint can leave too."""
+    deck = deck_of(staged)
+    for lift in ("Upper_Sand_lift1", "Upper_Sand_lift2", "Upper_Sand_lift3"):
+        assert f"{lift}_Left_Edge" in deck.parts, f"{lift} has no edge segment"
+        assert deck.parts[f"{lift}_Left_Edge"].nodes
+
+
+def test_an_edge_segment_holds_only_that_lift_s_nodes(staged):
+    """A segment spans its own lift and no more, or deactivating one lift would free
+    the ground above or below it."""
+    deck = deck_of(staged)
+    for lift, top, bottom in (("Upper_Sand_lift1", 0.0, -2.0),
+                              ("Upper_Sand_lift2", -2.0, -5.0),
+                              ("Upper_Sand_lift3", -5.0, -8.0)):
+        ys = [deck.nodes[n][1] for n in deck.parts[f"{lift}_Left_Edge"].nodes]
+        assert min(ys) == pytest.approx(bottom, abs=1e-6), lift
+        assert max(ys) == pytest.approx(top, abs=1e-6), lift
+
+
+def test_the_permanent_edge_keeps_the_ground_below_the_pit(staged):
+    """`Left_Edge` shrinks to what is never dug, and keeps the seam node it shares with
+    the last lift -- the soil below it still has to be held."""
+    deck = deck_of(staged)
+    ys = [deck.nodes[n][1] for n in deck.parts["Left_Edge"].nodes]
+    assert max(ys) == pytest.approx(-8.0, abs=1e-6), "it must reach up to the final floor"
+    assert min(ys) == pytest.approx(-60.0, abs=1e-6)
+
+
+def test_an_edge_no_lift_touches_is_left_whole(staged):
+    """Only the edge the excavation reaches is segmented. Nothing is ever deactivated
+    on the far side or the bottom, so splitting those would buy nothing."""
+    deck = deck_of(staged)
+    assert "Right_Edge" in deck.parts and "Bottom_Fixed" in deck.parts
+    assert not any(name.endswith("_Right_Edge") for name in deck.parts)
+    assert not any(name.endswith("_Bottom_Fixed") for name in deck.parts)
+
+
+def test_each_edge_segment_is_constrained_like_the_edge_it_came_from(staged):
+    """A roller on the x axis, the same as the whole edge was."""
+    constraints = _stage_settings(staged)["processes"]["constraints_process_list"]
+    fixities = {p["Parameters"]["model_part_name"].split(".")[-1]:
+                p["Parameters"]["is_fixed"] for p in constraints
+                if "is_fixed" in p["Parameters"]}
+    for name in ("Left_Edge", "Upper_Sand_lift1_Left_Edge"):
+        assert fixities[name] == [True, False, False], name
+
+
+def test_an_unstaged_deck_keeps_one_whole_edge(section):
+    """The gate again: nothing about an unstaged project changes."""
+    deck = deck_of(section)
+    assert "Left_Edge" in deck.parts
+    assert not any(name.endswith("_Left_Edge") for name in deck.parts)
+
+
+# ── The anchor's far end (the reference's Strut_Support) ────────────────────
+
+def test_the_anchor_support_is_its_own_named_part(anchored):
+    """One node, in no element but the truss: what the reference calls Strut_Support
+    and pins from the phase the anchor arrives in."""
+    deck = deck_of(anchored)
+    part = deck.parts["Anchor_1_Support"]
+
+    assert len(part.nodes) == 1
+    assert not part.elements and not part.conditions
+    truss_nodes = set(next(iter(truss_of(deck).entries.values())))
+    assert part.nodes[0] in truss_nodes, "the support must be an end of the tie"
+
+
+def test_the_anchor_support_is_pinned(anchored):
+    constraints = _stage_settings(anchored)["processes"]["constraints_process_list"]
+    pinned = next(p["Parameters"] for p in constraints
+                  if p["Parameters"]["model_part_name"].endswith("Anchor_1_Support"))
+    assert pinned["is_fixed"] == [True, True, False]
+    assert pinned["value"] == [0.0, 0.0, 0.0]
+
+
+# -- Gravity -----------------------------------------------------------------
+# `VOLUME_ACCELERATION` on the computational model part, which is what gives the
+# continuum elements their self weight. Every reference deck in the repo carries it in
+# every stage, and this exporter carried it in none until Milestone C's task 19 compared
+# the two decks process by process (plan sec 7.1).
+
+
+def _gravity_processes(export: dict) -> list[dict]:
+    doc = json.loads(export["project_parameters"])
+    return [[p for p in stage["stage_settings"]["processes"]["loads_process_list"]
+             if p["Parameters"]["variable_name"] == "VOLUME_ACCELERATION"]
+            for stage in doc["stages"].values()]
+
+
+def test_every_stage_of_every_deck_has_weight(section, solid, piled):
+    """Not a staging question and not an option: a deck without it solves a weightless
+    model, which is never what anyone meant. One per stage, in all three shapes this
+    exporter writes -- a 2D section, a 3D solid, and the two-stage sheet-pile deck."""
+    for export in (section, solid, piled):
+        found = _gravity_processes(export)
+        assert found and all(len(stage) == 1 for stage in found), export["deck_name"]
+
+
+def test_gravity_acts_on_the_whole_computational_model_part(section):
+    """Not on the bodies one by one. The computational model part is what the solver
+    assembles out of the active bodies, so a body deactivated in a stage drops out of it
+    without gravity having to be restated -- which is why the reference never varies
+    this process between stages."""
+    (process,) = _gravity_processes(section)[0]
+    assert process["Parameters"]["model_part_name"] ==         "PorousDomain.porous_computational_model_part"
+
+
+def test_gravity_points_down_the_vertical_axis_only(section):
+    (process,) = _gravity_processes(section)[0]
+    parameters = process["Parameters"]
+    assert parameters["active"] == [False, True, False]
+    assert parameters["value"] == [0.0, -9.81, 0.0]
+    assert parameters["table"] == [0, 0, 0]
+
+
+def test_gravity_in_a_3d_deck_still_points_down_y(solid):
+    """Y is up in both dimensions here -- the same axis 1 the constraint and normal-load
+    processes already write as `gravity_direction`."""
+    (process,) = _gravity_processes(solid)[0]
+    assert process["Parameters"]["active"] == [False, True, False]
+    assert process["Parameters"]["value"] == [0.0, -9.81, 0.0]
+
+
+def test_gravity_is_the_same_number_the_densities_were_derived_with():
+    """`kratos_materials` turns a unit weight into a density by dividing by g. If the
+    two ever disagreed, a soil's weight in the deck would not be its unit weight, and
+    nothing in the run would say so."""
+    from app import kratos_materials, kratos_processes
+    assert kratos_processes.GRAVITY == kratos_materials.GRAVITY
+
+
+def test_gravity_is_applied_before_the_loads_that_sit_on_the_model(piled):
+    """The reference's own order. Kratos does not care, and a reader does."""
+    doc = json.loads(piled["project_parameters"])
+    for stage in doc["stages"].values():
+        loads = stage["stage_settings"]["processes"]["loads_process_list"]
+        assert loads[0]["Parameters"]["variable_name"] == "VOLUME_ACCELERATION"
+
+
+# -- The pore-pressure field -------------------------------------------------
+# `WATER_PRESSURE`, hydrostatic about `Project.water`, fixed over the whole porous
+# domain. Every reference deck carries it in every stage, and this exporter carried it in
+# none until Milestone C's task 19 (plan sec 7.2). Like gravity it is a whole-model
+# condition rather than anything a phase switches, so it is not filtered and does not
+# vary between stages.
+
+
+def _pressure_processes(export: dict) -> list[list[dict]]:
+    doc = json.loads(export["project_parameters"])
+    return [[p for p in stage["stage_settings"]["processes"]["constraints_process_list"]
+             if p["python_module"] == "apply_scalar_constraint_table_process"]
+            for stage in doc["stages"].values()]
+
+
+def test_every_stage_of_every_deck_fixes_the_pore_pressure(section, solid, piled):
+    for export in (section, solid, piled):
+        found = _pressure_processes(export)
+        assert found and all(len(stage) == 1 for stage in found), export["deck_name"]
+
+
+def test_the_pore_pressure_field_covers_the_whole_porous_domain(section):
+    """`PorousDomain` itself, not the computational model part gravity uses: the water
+    table is a property of the ground, present whether or not a body is active in a
+    given stage."""
+    (process,) = _pressure_processes(section)[0]
+    assert process["Parameters"]["model_part_name"] == "PorousDomain"
+    assert process["process_name"] == "ApplyScalarConstraintTableProcess"
+
+
+def test_the_pore_pressure_is_read_off_the_projects_own_water_level(session):
+    """Not a number of this module's own. The same `Project.water` a hydrostatic
+    `NormalLoad` already reads, so the water table and the water loads on it cannot
+    disagree."""
+    project = seed_project()
+    project.water.y = -4.25
+    project.water.specific_weight = 9.9
+    exported = kratos.export_project(project, MeshRequest(element_size=6.0, order=1))
+    (process,) = _pressure_processes(exported)[0]
+    parameters = process["Parameters"]
+    assert parameters["reference_coordinate"] == -4.25
+    assert parameters["specific_weight"] == 9900.0
+    assert parameters["gravity_direction"] == 1
+    assert parameters["is_fixed"] is True
+    # A scalar variable, so one table rather than one per axis. Kratos rejects a list
+    # here, which is the kind of thing only a reference deck tells you.
+    assert parameters["table"] == 0
+
+
+def test_the_two_water_processes_agree_with_each_other(session):
+    """A hydrostatic `NormalLoad` and the field it acts in are derived from the same two
+    numbers. If they ever came from different places, a deck could carry a water load
+    referenced to one level inside ground pressurised about another."""
+    project = seed_project()
+    project.water.y = -2.75
+    exported = kratos.export_project(project, MeshRequest(element_size=6.0, order=1))
+    doc = json.loads(exported["project_parameters"])
+    stage = next(iter(doc["stages"].values()))["stage_settings"]["processes"]
+    water = [p["Parameters"] for p in stage["constraints_process_list"]
+             + stage["loads_process_list"]
+             if p["Parameters"].get("fluid_pressure_type") == "Hydrostatic"]
+    assert water
+    assert {p["reference_coordinate"] for p in water} == {-2.75}
+    assert len({p["specific_weight"] for p in water}) == 1
+
+
+def test_a_section_without_a_shear_area_takes_the_whole_one(session):
+    """What every project written before the field carried, and still the default."""
+    from app import kratos_materials
+    section = schemas.BeamSection(id="s", name="S", E=2.1e8, nu=0.3, area=0.02,
+                                  inertia=5.5e-4, density=7850.0)
+    assert section.shear_area is None
+    variables = kratos_materials._beam_variables(section, 2)
+    assert variables["AREA_EFFECTIVE_Y"] == variables["CROSS_AREA"]
+
+
+def test_a_section_may_say_how_much_of_it_carries_shear(session):
+    """Less than the whole section for a rolled profile, which shears in its web; far
+    more than it for a model that means shear deformation to be negligible."""
+    from app import kratos_materials
+    section = schemas.BeamSection(id="s", name="S", E=2.1e8, nu=0.3, area=0.02,
+                                  inertia=5.5e-4, density=7850.0, shear_area=0.008)
+    variables = kratos_materials._beam_variables(section, 2)
+    assert variables["AREA_EFFECTIVE_Y"] == pytest.approx(0.008)
+    assert variables["CROSS_AREA"] == pytest.approx(0.02)
+
+
+def test_a_shear_area_is_smeared_over_spacing_like_the_rest(session):
+    """A row of piles at 2.5 m centres contributes two-fifths of its shear area to the
+    metre run, the same way it does its area and its inertia."""
+    from app import kratos_materials
+    section = schemas.BeamSection(id="s", name="S", E=2.1e8, nu=0.3, area=0.02,
+                                  inertia=5.5e-4, density=7850.0, shear_area=0.008,
+                                  spacing=2.5)
+    variables = kratos_materials._beam_variables(section, 2)
+    assert variables["AREA_EFFECTIVE_Y"] == pytest.approx(0.008 / 2.5)

@@ -15,6 +15,7 @@ Two things it deliberately does not do:
 
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -27,7 +28,7 @@ from pydantic import ValidationError
 import os
 import tempfile
 
-from app import gmsh_worker, store
+from app import calculate, gmsh_worker, store
 from app.loads import translate as translate_loads
 from app.walls import translate as translate_walls
 from app.build import GeometryError
@@ -100,6 +101,36 @@ async def reset_project() -> dict:
     """Restore the seed (demo) model."""
     project = store.reset()
     return {"project": project, "invalidates": ["project", "tree", "geometry", "mesh"]}
+
+
+@app.post("/api/project/script")
+async def run_script(request: dict) -> dict:
+    """Build the model by running a Python file: the command line's `run <file.py>`.
+
+    The file is executed here, in the server's own interpreter, and whatever `Project`
+    it describes becomes the open model. See `app.script` for the three ways a script
+    can hand one back, and for why this route is local-only by construction.
+    """
+    from app import script as script_module
+
+    path = (request or {}).get("path")
+    if not path:
+        raise HTTPException(status_code=422, detail="run needs a path to a .py file")
+    try:
+        project = store.put(script_module.load_project(path))
+    except script_module.ScriptError as failure:
+        # 400, not 500: the file is the caller's, and every one of these messages is
+        # written to be read by whoever typed the command.
+        raise HTTPException(status_code=400, detail=str(failure)) from failure
+    return {"project": project, "path": str(path),
+            "invalidates": ["project", "tree", "geometry", "mesh"]}
+
+
+# There is no `/api/project/crow`. It opened the CROW staged-excavation case, back when
+# a File menu item asked for it; both are gone. An example model is opened the way any
+# model is -- `run examples/crow/crow.py` in the command box, through
+# `/api/project/script` -- which works for every model rather than for the one somebody
+# wired an endpoint to.
 
 
 @app.post("/api/project/new")
@@ -445,6 +476,47 @@ async def export_mdpa(settings: ExportRequest) -> dict:
         )
     except (GeometryError, MeshingError, ExportError) as failure:
         raise HTTPException(status_code=500, detail=str(failure)) from failure
+
+
+@app.post("/api/calculate")
+async def calculate_project(settings: ExportRequest) -> dict:
+    """Mesh the project, write its deck to a directory of its own, and run it.
+
+    The deck is exported here rather than taken from whatever the client last
+    downloaded: an export is the only thing that knows the mesh it was made from, and a
+    calculation run against a stale one would answer a question nobody asked. The
+    materials file is written whatever `include_materials` says -- Kratos cannot solve
+    without it, and this is not a download.
+
+    The run happens in a thread because it is a blocking wait on a subprocess that owns
+    the machine for as long as it takes; the event loop stays free, so the rest of the
+    app keeps answering while a solver works. A model Kratos rejects comes back 200 with
+    `ok` false and its reason: that is an answer about the model, not a broken server.
+    """
+    project = store.get()
+    unknown = sorted((set(settings.volume_keys or []) | set(settings.body_sizes))
+                     - set(project.part_keys()))
+    if unknown:
+        raise HTTPException(status_code=422, detail="unknown mesh body key(s): " + ", ".join(unknown))
+    try:
+        export = await gmsh_worker.run(
+            gmsh_worker.export_job,
+            project.model_dump_json(),
+            settings.model_copy(update={"include_materials": True}).model_dump_json(),
+        )
+    except (GeometryError, MeshingError, ExportError) as failure:
+        raise HTTPException(status_code=500, detail=str(failure)) from failure
+
+    try:
+        result = await asyncio.to_thread(calculate.run, export)
+    except calculate.Busy as busy:
+        raise HTTPException(status_code=409, detail=str(busy)) from busy
+    except calculate.CalculationError as failure:
+        raise HTTPException(status_code=500, detail=str(failure)) from failure
+
+    # The mesh the run was made from, said in the same breath as the run: the deck was
+    # exported here, so this is the only place that can report both.
+    return result | {"stats": export["stats"], "warnings": export["warnings"]}
 
 
 @app.post("/api/import/mdpa")

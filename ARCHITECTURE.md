@@ -35,7 +35,8 @@ mesh them with Gmsh, export Kratos MultiPhysics `.mdpa` decks.
 | 3. Draw | `server/app/tessellate.py` | OCC `importStl()`, ~0.1 s — not an FE mesh |
 | 4. Mesh | `server/app/meshing.py` | Real tet/tri mesh, re-derived from geometry |
 | 5. Split | `server/app/interfaces.py` | Duplicate nodes, zero-thickness contacts |
-| 6. Export | `server/app/kratos.py` | `.mdpa` + `MaterialParameters.json` |
+| 6. Export | `server/app/kratos.py` | `.mdpa` + `MaterialParameters.json` + `ProjectParameters.json` |
+| 7. Solve | `server/app/calculate.py` | Kratos in a subprocess, in a run directory of its own |
 
 ## Three ideas that carry the design
 

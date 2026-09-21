@@ -19,7 +19,8 @@ import json
 
 import pytest
 
-from app import build, kratos
+from app import build, kratos, schemas
+from app.kratos_materials import KILO
 from app.schemas import MeshRequest, Project
 from app.seed import seed_project
 from tests import mdpa
@@ -44,7 +45,9 @@ def interfaced_project(side: str = "both", active: bool = True, dimension: int =
     payload["beams"] = [{"id": "sheetpile_1", "name": "Sheet pile 1", "section": "az26",
                          "points": [[12.0, 0.0], [12.0, -14.0]], "active": True}]
     material = payload["materials"][0]["id"]
-    payload["interface_sections"] = [{**SECTION, **(section or {}), "material": material}]
+    # `material` first, so an override of it -- including to None, which asks for the
+    # per-adjacent-body derivation -- actually takes.
+    payload["interface_sections"] = [{**SECTION, "material": material, **(section or {})}]
     payload["interfaces"] = [{"id": "interface_1", "name": "Wall contact",
                               "section": SECTION["id"], "structure": structure,
                               "points": points, "side": side, "active": active}]
@@ -58,7 +61,40 @@ def contacted(session):
 
 
 def interface_block(deck: mdpa.Deck) -> mdpa.Block:
-    return next(b for b in deck.elements if "Interface" in b.name)
+    """Every contact element in the deck, as one block.
+
+    The deck writes one block per soil body the contact runs against, so a lift can be
+    deactivated together with the interface along it (`kratos._interface_by_body`).
+    Tests about the contact as a whole want all of them; the split itself is what
+    `test_the_contact_is_split_per_soil_body_it_runs_against` checks.
+    """
+    blocks = [b for b in deck.elements if "Interface" in b.name]
+    merged = mdpa.Block(name=blocks[0].name)
+    for block in blocks:
+        merged.entries.update(block.entries)
+        merged.properties.update(block.properties)
+    return merged
+
+
+def interface_material(export: dict) -> dict:
+    """The contact's material variables.
+
+    One entry per sub-model part, so one per soil body the contact runs against, and
+    they are the same property set under different names -- the section is the
+    interface's, not the body's. Any of them answers what the section became.
+    """
+    entries = [e for e in entries_of(export)
+               if e["model_part_name"].startswith("PorousDomain.Wall_contact")]
+    assert entries, "the contact has no material entry"
+    variables = [e["Material"]["Variables"] for e in entries]
+    assert all(v == variables[0] for v in variables),         "a section naming a material cannot become two different property sets"
+    return variables[0]
+
+
+def interface_parts(deck: mdpa.Deck) -> dict[str, mdpa.Part]:
+    """The contact's sub-model parts, one per soil body it holds."""
+    return {name: part for name, part in deck.parts.items()
+            if name.startswith("Wall_contact") and not name.endswith(("_Master", "_Slave"))}
 
 
 def soil_nodes(deck: mdpa.Deck) -> set[int]:
@@ -127,7 +163,8 @@ def test_the_contact_is_installed_together_with_its_pile(contacted):
 
     installed = set(doc["stages"]["2_Wall_installation"]["stage_preprocess"]
                     ["operations"][0]["Parameters"]["model_part_name_list"])
-    assert installed == {"PorousDomain.Sheet_pile_1", "PorousDomain.Wall_contact"}
+    assert installed == {"PorousDomain.Sheet_pile_1"} | {
+        f"PorousDomain.{name}" for name in interface_parts(deck_of(contacted))}
 
 
 def test_a_soil_to_soil_interface_is_not_staged(session):
@@ -194,10 +231,39 @@ def test_the_tie_is_only_needed_before_installation(contacted):
               if p["process_name"] == "AssignMasterSlaveConstraintsToNeighboursUtility")
     assert tie["Parameters"]["master_model_part_name"] == "PorousDomain.Wall_contact_Master"
     assert tie["Parameters"]["slave_model_part_name"] == "PorousDomain.Wall_contact_Slave"
-    assert tie["Parameters"]["minimum_number_of_neighbouring_nodes"] == 1
-
     assert not any(p["process_name"] == "AssignMasterSlaveConstraintsToNeighboursUtility"
                   for p in installed)
+
+
+def tie_of(export: dict) -> dict:
+    doc = json.loads(export["project_parameters"])
+    first = next(iter(doc["stages"].values()))["stage_settings"]["processes"]
+    return next(p["Parameters"] for p in first["constraints_process_list"]
+                if p["process_name"] == "AssignMasterSlaveConstraintsToNeighboursUtility")
+
+
+def test_the_tie_asks_for_two_neighbours_not_one(contacted):
+    """One is what the pairing needs and what Kratos cannot do.
+
+    This asked for 1 on the reasoning that the pairing is already exact -- each slave has
+    one true master at zero distance, so a second neighbour could only be an unrelated
+    node. Running the deck showed that reasoning to be wrong in a way no amount of
+    reading the parameters would have revealed: with a cloud of one node,
+    `rbf_shape_functions_utility.cpp` derives its shape parameter from the distance to
+    the *nearest other* point in that cloud, the inner loop never runs, the distance
+    stays `DBL_MAX`, and the guard throws "Reference distance close to zero". The
+    utility needs two points to interpolate between, whether or not the second one adds
+    anything.
+    """
+    assert tie_of(contacted)["minimum_number_of_neighbouring_nodes"] == 2
+
+
+def test_the_tie_searches_over_a_radius_it_can_reach_a_neighbour_in(contacted):
+    """`assign_master_slave_constraints_to_neighbours_utility.cpp` grows the radius in
+    steps of `search_radius` until it has enough neighbours. At the 1e-6 this used to
+    carry -- chosen to clear floating-point noise and nothing more -- reaching a node a
+    few centimetres away takes on the order of 10,000 iterations."""
+    assert tie_of(contacted)["search_radius"] == 0.01
 
 
 def test_a_single_sided_interface_needs_no_tie(session):
@@ -278,14 +344,40 @@ def test_each_element_normal_points_into_the_soil_it_holds(contacted):
 
 # ── Where it lands in the deck ──────────────────────────────────────────────
 
-def test_the_interface_gets_its_own_sub_model_part(contacted):
+def test_the_interface_gets_its_own_sub_model_parts(contacted):
     deck = deck_of(contacted)
-    part = deck.parts["Wall_contact"]
+    parts = interface_parts(deck)
     block = interface_block(deck)
 
-    assert set(part.elements) == set(block.entries)
-    assert part.nodes == sorted({n for e in part.elements for n in block.entries[e]})
-    assert not part.conditions
+    assert {e for part in parts.values() for e in part.elements} == set(block.entries)
+    for part in parts.values():
+        assert part.nodes == sorted({n for e in part.elements for n in block.entries[e]})
+        assert not part.conditions
+
+
+def test_the_contact_is_split_per_soil_body_it_runs_against(contacted):
+    """One part per body, named for it, and every element in exactly one of them.
+
+    A lift is dug away in its own phase and the contact along that lift has to go with
+    it -- an interface still holding a face whose soil has been removed would carry
+    shear against nothing. The reference deck splits the same way
+    (plan/staged-construction-plan.md sec 0.1).
+    """
+    deck = deck_of(contacted)
+    parts = interface_parts(deck)
+    soil = {name for name, part in deck.parts.items()
+            if part.elements and name.startswith("Soil")}
+
+    assert len(parts) > 1, "a two-sided contact runs against at least two bodies"
+    for name in parts:
+        body = name[len("Wall_contact_"):]
+        assert body in soil, f"{name} is not named after a soil body"
+
+    owners: dict[int, str] = {}
+    for name, part in parts.items():
+        for element in part.elements:
+            assert element not in owners, f"element {element} is in two contact parts"
+            owners[element] = name
 
 
 def test_the_split_nodes_are_in_the_node_table_and_nothing_is_orphaned(contacted):
@@ -406,44 +498,90 @@ def entries_of(export: dict) -> list[dict]:
 
 
 def test_the_interface_section_becomes_a_material_entry_mapped_to_its_part(contacted):
-    entry = next(e for e in entries_of(contacted)
-                 if e["model_part_name"] == "PorousDomain.Wall_contact")
-    variables = entry["Material"]["Variables"]
+    variables = interface_material(contacted)
+    entries = [e for e in entries_of(contacted)
+               if e["model_part_name"].startswith("PorousDomain.Wall_contact")]
 
-    assert entry["Material"]["constitutive_law"]["name"]
+    assert all(e["Material"]["constitutive_law"]["name"] for e in entries)
     assert variables["INTERFACE_NORMAL_STIFFNESS"] > 0
     assert variables["INTERFACE_SHEAR_STIFFNESS"] > 0
 
 
-def test_the_stiffness_is_the_soil_s_over_the_virtual_thickness(contacted):
-    soil = seed_project().materials[0]
-    variables = next(e["Material"]["Variables"] for e in entries_of(contacted)
-                     if e["model_part_name"] == "PorousDomain.Wall_contact")
+def test_the_shear_stiffness_is_the_soils_shear_modulus_over_the_element_size(contacted):
+    """`G / t`, with `G = E / 2(1 + nu)` and `t` the element size normal to the contact.
 
-    assert variables["INTERFACE_NORMAL_STIFFNESS"] == pytest.approx(soil.E / 0.01)
+    Verified against `MaterialParameters_for_generated_mesh.json`, whose two interface
+    property sets are exactly `G` for its two soils at `t = 1`
+    (`tests/test_kratos_units.py`).
+    """
+    soil = seed_project().materials[0]
+    thickness = interfaced_project().interface_sections[0].virtual_thickness
+    variables = interface_material(contacted)
+
     assert variables["INTERFACE_SHEAR_STIFFNESS"] == pytest.approx(
-        soil.E / (2 * (1 + soil.nu) * 0.01))
+        soil.E * KILO / (2 * (1 + soil.nu) * thickness))
+
+
+def test_the_normal_stiffness_is_ten_times_the_shear(contacted):
+    """A fixed ratio, not a second formula: the reference's two property sets are 10x
+    their own shear at two different Poisson ratios (0.2 and 0.3), so nothing about the
+    soil's compressibility is in it. It keeps the contact effectively rigid across the
+    joint while leaving it free to slip along it."""
+    variables = interface_material(contacted)
+    assert variables["INTERFACE_NORMAL_STIFFNESS"] == pytest.approx(
+        10.0 * variables["INTERFACE_SHEAR_STIFFNESS"])
+
+
+def test_a_contact_takes_the_stiffness_of_each_soil_it_runs_against(session):
+    """The reference groups its interfaces by the soil behind them -- one property set
+    for the contacts against the clay, another for those against the sand -- because a
+    contact's stiffness is a property of the ground it slides on, not of the wall.
+
+    So a section naming no material derives per adjacent body. Which body each contact
+    element runs against is already known: the deck writes one part per body
+    (`app/kratos.py:_interface_by_body`)."""
+    project = interfaced_project(section={"material": None, "virtual_thickness": 1.0})
+    export = kratos.export_project(project, MeshRequest(element_size=3.0, order=2))
+    variables = [e["Material"]["Variables"] for e in entries_of(export)
+                 if e["model_part_name"].startswith("PorousDomain.Wall_contact")]
+    shears = {round(v["INTERFACE_SHEAR_STIFFNESS"], 6) for v in variables}
+
+    def shear_of(layer):
+        soil = project.material(layer.mat)
+        return round(soil.E * KILO / (2 * (1 + soil.nu)), 6)
+
+    assert shears == {shear_of(layer) for layer in project.layers}
+    assert len(shears) == 2, "two layers, two different soils, two stiffnesses"
+
+
+def test_a_section_that_names_a_material_uses_it_for_the_whole_contact(contacted):
+    """The override, and why it stays: a user who has typed an interface material means
+    it for that contact, whatever the contact happens to touch."""
+    variables = [e["Material"]["Variables"] for e in entries_of(contacted)
+                 if e["model_part_name"].startswith("PorousDomain.Wall_contact")]
+    assert len({v["INTERFACE_SHEAR_STIFFNESS"] for v in variables}) == 1
 
 
 def test_an_explicit_stiffness_is_used_as_it_stands(session):
     export = kratos.export_project(
         interfaced_project(section={"normal_stiffness": 1.5e6, "shear_stiffness": 5.0e5}),
         MeshRequest(element_size=3.0, order=2))
-    variables = next(e["Material"]["Variables"] for e in entries_of(export)
-                     if e["model_part_name"] == "PorousDomain.Wall_contact")
+    variables = interface_material(export)
 
-    assert variables["INTERFACE_NORMAL_STIFFNESS"] == pytest.approx(1.5e6)
-    assert variables["INTERFACE_SHEAR_STIFFNESS"] == pytest.approx(5.0e5)
+    assert variables["INTERFACE_NORMAL_STIFFNESS"] == pytest.approx(1.5e6 * KILO)
+    assert variables["INTERFACE_SHEAR_STIFFNESS"] == pytest.approx(5.0e5 * KILO)
+    # Not 10x the shear: an explicit pair is used as it stands, both of them.
+    assert variables["INTERFACE_NORMAL_STIFFNESS"] != pytest.approx(
+        10.0 * variables["INTERFACE_SHEAR_STIFFNESS"])
 
 
 def test_the_strength_is_the_soil_s_reduced_by_r_inter(contacted):
     """That is what the factor means: tan(delta) = r_inter * tan(phi), c_i = r_inter * c."""
     import math
     soil = seed_project().materials[0]
-    variables = next(e["Material"]["Variables"] for e in entries_of(contacted)
-                     if e["model_part_name"] == "PorousDomain.Wall_contact")
+    variables = interface_material(contacted)
 
-    assert variables["GEO_COHESION"] == pytest.approx(soil.c * 0.67)
+    assert variables["GEO_COHESION"] == pytest.approx(soil.c * 0.67 * KILO)
     assert variables["GEO_FRICTION_ANGLE"] == pytest.approx(
         math.degrees(math.atan(math.tan(math.radians(soil.phi)) * 0.67)))
 
@@ -452,3 +590,50 @@ def test_the_interface_property_id_is_unique_and_non_zero(contacted):
     ids = [entry["properties_id"] for entry in entries_of(contacted)]
     assert len(set(ids)) == len(ids)
     assert all(i > 0 for i in ids)
+
+
+# ── Drainage ────────────────────────────────────────────────────────────────
+
+def test_an_interface_says_how_it_drains(contacted):
+    """Without it Kratos defaults a material to `FULLY_COUPLED`, with a deprecation
+    warning and nothing else to say what went wrong.
+
+    That default is fatal here. A fully coupled element evaluates the poro-elastic
+    coupling terms, and a zero-thickness interface carries none of what they need -- no
+    `BULK_MODULUS_FLUID`, `BULK_MODULUS_SOLID`, `POROSITY`, `BIOT_COEFFICIENT`,
+    `DYNAMIC_VISCOSITY` or permeability. They default to zero, the water-pressure block
+    divides zero by zero, and the stage that installs the wall fails to converge on NaN.
+    Found by running the deck, not by reading it: the eight warnings are the only sign.
+    """
+    assert interface_material(contacted)["GEO_DRAINAGE_TYPE"] == "CONSTANT_PW_FIELD"
+
+
+def test_every_interface_property_set_says_it(contacted):
+    """One drawn interface becomes one deck part per soil body it runs against, and the
+    warning fires once per property set -- eight of them in the CROW deck."""
+    entries = [e for e in entries_of(contacted)
+               if e["model_part_name"].startswith("PorousDomain.Wall_contact")]
+    assert entries
+    for entry in entries:
+        assert "GEO_DRAINAGE_TYPE" in entry["Material"]["Variables"], \
+            entry["model_part_name"]
+
+
+def test_an_interface_drains_as_a_constant_field_whatever_the_soil_does(session):
+    """Not inherited from the adjacent soil, unlike its stiffness and its strength.
+
+    A `FULLY_COUPLED` interface would need the fluid-storage properties an interface
+    section does not carry, so the value is fixed by what is written rather than chosen:
+    if interfaces ever gain those properties this can follow the soil, and until then
+    following it would only reproduce the NaN above for an undrained model.
+    """
+    project = interfaced_project()
+    undrained = project.model_dump()
+    for material in undrained["materials"]:
+        material["type"] = "Undrained (A)"
+    export = kratos.export_project(Project.model_validate(undrained),
+                                   MeshRequest(element_size=3.0, order=2))
+    soils = [e["Material"]["Variables"]["GEO_DRAINAGE_TYPE"] for e in entries_of(export)
+             if e["model_part_name"].startswith("PorousDomain.Soil")]
+    assert set(soils) == {"FULLY_COUPLED"}, "the soil follows its own drainage type"
+    assert interface_material(export)["GEO_DRAINAGE_TYPE"] == "CONSTANT_PW_FIELD"

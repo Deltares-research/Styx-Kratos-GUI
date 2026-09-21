@@ -146,7 +146,11 @@ def build_geometry(project: Project) -> BuildResult:
         gmsh.model.add("model")
 
         owners, overlays = _build_solids(project)
-        owners = _cut_the_pit(project, owners)
+        # One excavation level is an unstaged pit: a void, cut away before anything else
+        # touches it. Several means it is dug in lifts, each removed in its own phase,
+        # so the soil has to stay in the model to be staged (`_stage_bodies`).
+        owners = (_stage_bodies(project, owners) if len(project.excavation.levels) > 1
+                  else _cut_the_pit(project, owners))
 
         dim, notes = 3, []
         if project.dimension == 2:
@@ -222,7 +226,13 @@ def _build_simple_example(project: Project) -> BuildResult:
             bottom, top = layer.bots[borehole], layer.tops[borehole]
             tag = gmsh.model.occ.addBox(d.x0, bottom, d.z0, d.dx, top - bottom, d.dz)
             owners[tag] = {f"soil_{layer.id}"}
-            
+
+        # Same gate as the full build: several excavation levels means the soil in the
+        # pit is dug lift by lift and has to stay in the model to be staged. This path
+        # never cuts a pit at all, so an unstaged project is untouched by it.
+        if len(project.excavation.levels) > 1:
+            owners = _stage_bodies(project, owners)
+
         custom_volumes, overlays = _import_custom_parts(project.custom_parts)
         for tag, key in custom_volumes.items():
             owners[tag] = {key}
@@ -437,6 +447,85 @@ def _cut_the_pit(project: Project, owners: dict[int, set[str]]) -> dict[int, set
     for (_, old), pieces in zip(soil, mapping):
         for _, tag in pieces:
             rebuilt.setdefault(tag, set()).update(owners[old])
+    return rebuilt
+
+
+def _stage_bodies(project: Project, owners: dict[int, set[str]]) -> dict[int, set[str]]:
+    """Keep the excavated soil, split into the lifts it is dug in.
+
+    The staged counterpart of `_cut_the_pit`, and its opposite: a staged excavation is
+    dug lift by lift, each in its own phase, so the soil that will be removed has to
+    exist in the mesh in order to be deactivated later. Cutting it away here would leave
+    nothing to stage.
+
+    The split is done by fragmenting the soil against one box per lift, which is what
+    makes the seams conformal -- the two sides share their curves, and later their nodes,
+    so `interfaces.py` still sees one set of shared nodes to duplicate rather than a
+    mesh that is already torn. The pieces are then classified by centre of mass against
+    `Project.soil_bodies`, the one authority on which bodies a project has: deriving the
+    key from the geometry rather than from the boolean's output map is what keeps the
+    two from disagreeing about how many bodies there are.
+    """
+    e, d = project.excavation, project.domain
+    soil = [(3, tag) for tag, keys in owners.items()
+            if any(k.startswith("soil_") for k in keys)]
+
+    # One box per lift, plus one for the outline below the final floor: together they
+    # cover the pit's full depth, so every seam the bodies need is cut exactly once.
+    tools, ceiling = [], d.y_top
+    for level in list(e.levels) + [d.y_bottom]:
+        tools.append((3, gmsh.model.occ.addBox(e.x0, level, e.z0,
+                                               e.x1 - e.x0, ceiling - level,
+                                               e.z1 - e.z0)))
+        ceiling = level
+
+    _, mapping = gmsh.model.occ.fragment(soil, tools)
+
+    # Only the pieces the soil became are soil. A tool covers ground the soil already
+    # occupies, so its own pieces are the same entities; anything left over is the part
+    # of a box outside every layer and is removed rather than left to be meshed.
+    rebuilt = {tag: keys for tag, keys in owners.items() if (3, tag) not in soil}
+    kept: set[int] = set()
+    for (_, old), pieces in zip(soil, mapping[:len(soil)]):
+        for _, tag in pieces:
+            kept.add(tag)
+            rebuilt.setdefault(tag, set()).update(owners[old])
+    leftover = [(3, tag) for _, pieces in zip(tools, mapping[len(soil):])
+                for _, tag in pieces if tag not in kept]
+    if leftover:
+        gmsh.model.occ.remove(leftover, recursive=True)
+
+    return _key_staged_bodies(project, rebuilt, kept)
+
+
+def _key_staged_bodies(project: Project, owners: dict[int, set[str]],
+                       soil_tags: set[int]) -> dict[int, set[str]]:
+    """Re-key each soil piece to the body it turned out to be.
+
+    A piece inherited its layer's key from the fragment; which *body* of that layer it
+    is -- a lift, the ground below the floor, or the untouched soil outside the outline
+    -- is a question about where it ended up, so it is answered from its centre of mass
+    against `Project.soil_bodies` rather than tracked through the boolean.
+    """
+    e = project.excavation
+    bodies = project.soil_bodies()
+    rebuilt: dict[int, set[str]] = {}
+    for tag, keys in owners.items():
+        if tag not in soil_tags:
+            rebuilt[tag] = keys
+            continue
+        x, y, z = gmsh.model.occ.getCenterOfMass(3, tag)
+        inside = (e.x0 < x < e.x1) and (e.z0 < z < e.z1)
+        layer_keys = {k for k in keys if k.startswith("soil_")}
+        match = next(
+            (key for key, bottom, top, body_inside in bodies
+             if body_inside == inside and bottom < y < top
+             and key.split("__")[0] in layer_keys),
+            None,
+        )
+        # No match means the piece is soil the body list does not describe, which would
+        # otherwise be meshed under a layer key and silently double-count that layer.
+        rebuilt[tag] = ({match} | (keys - layer_keys)) if match else keys
     return rebuilt
 
 
@@ -666,37 +755,54 @@ def _embed_beams(project: Project, owners: dict[int, set[str]], dim: int,
             owner_of_tool.append(load.id)
 
     inputs = [(dim, tag) for tag in owners]
-    kept, kept_owners = [], []
-    for tool, key in zip(tools, owner_of_tool):
-        pieces, _ = gmsh.model.occ.intersect(
-            [tool], inputs, removeObject=True, removeTool=False,
-        )
-        for piece in pieces:
-            if piece[0] == 1:
-                kept.append(piece)
-                kept_owners.append(key)
-    if not kept:
-        if log is not None:
-            for beam in active:
-                log.append(f"Info    : {beam.id} lies outside the soil in this section "
-                           "and is not part of the model")
-        return owners, {}, {}
 
-    _, mapping = gmsh.model.occ.fragment(inputs, kept, removeTool=False)
+    # One fragment, tools included, rather than clipping each tool against the soil
+    # first and fragmenting what survived. The clip cannot be done separately once a
+    # line can lie *on* a face boundary rather than inside a face: a retaining wall
+    # drawn along the edge of the pit is exactly that -- `_stage_bodies` leaves a seam
+    # there between the ground being dug and the ground being retained -- and an
+    # `occ.intersect` of a line with the surfaces it borders returns only parts of it,
+    # so most of the wall would quietly vanish. Fragmenting together instead unifies
+    # the line with the seam it lies on, which is what makes both sides share it.
+    _, mapping = gmsh.model.occ.fragment(inputs, tools, removeTool=False)
+    gmsh.model.occ.synchronize()
 
     rebuilt: dict[int, set[str]] = {}
     for (_, old), pieces in zip(inputs, mapping[:len(inputs)]):
         for _, tag in pieces:
             rebuilt.setdefault(tag, set()).update(owners[old])
 
+    # The clip, done on the result rather than on the tools. A curve belongs to the
+    # model if it either bounds one of the faces the fragment produced or runs through
+    # the middle of one, and it takes both tests to tell those from a curve that is
+    # simply outside:
+    #
+    # *   a curve that cuts a face in two, or lies on a seam between two, *bounds* them;
+    # *   a curve that stops inside a face -- a pile that ends in the ground, which this
+    #     function's docstring calls out -- bounds nothing at all, and gmsh reports no
+    #     adjacency for it. By that test alone it is indistinguishable from a curve
+    #     drawn off the edge of the model, so its midpoint is asked instead.
+    def in_the_model(tag: int) -> bool:
+        if any(surface in rebuilt for surface in gmsh.model.getAdjacencies(1, tag)[0]):
+            return True
+        x0, y0, z0, x1, y1, z1 = gmsh.model.getBoundingBox(1, tag)
+        middle = [(x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2]
+        return any(gmsh.model.isInside(2, surface, middle) for surface in rebuilt)
+
     # The tool half of the map: a curve the fragment split becomes several curves, and
     # every one of them still belongs to the beam it was drawn for.
     beam_curves: dict[str, list[int]] = {}
-    for key, pieces in zip(kept_owners, mapping[len(inputs):]):
+    for key, pieces in zip(owner_of_tool, mapping[len(inputs):]):
         beam_curves.setdefault(key, []).extend(
-            tag for piece_dim, tag in pieces if piece_dim == 1
+            tag for piece_dim, tag in pieces
+            if piece_dim == 1 and in_the_model(tag)
         )
-    return rebuilt, {key: sorted(set(tags)) for key, tags in beam_curves.items()}, {}
+    beam_curves = {key: sorted(set(tags)) for key, tags in beam_curves.items() if tags}
+    if not beam_curves and log is not None:
+        for beam in active:
+            log.append(f"Info    : {beam.id} lies outside the soil in this section "
+                       "and is not part of the model")
+    return rebuilt, beam_curves, {}
 
 
 def _section_sweeps(project: Project, log: list[str] | None = None

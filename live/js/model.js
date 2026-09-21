@@ -220,10 +220,33 @@ App.Model = (function () {
     return found;
   }
 
-  function layerChild(layer) {
+  /* One tree row per soil *body*, not per layer.
+
+     A staged excavation splits the soil inside the pit into the lifts it is dug in, so
+     one layer can be four bodies (server/app/schemas.py, `Project.soil_bodies`). Each
+     is separately meshed, separately deactivated in a phase, and separately shown or
+     hidden -- so each needs its own row with its own eye, or the excavated side has no
+     representation in the tree at all.
+
+     The project publishes both the keys and what to call them; deriving either here
+     would be a second implementation of the split to keep in step. A project that
+     publishes neither -- an older server, the frozen mockup -- still gets its one row
+     per layer, which is what this always used to do. */
+  function layerBodies(layer) {
+    var published = (App.PROJECT && App.PROJECT.soil_body_keys) || [];
+    var mine = published.filter(function (key) {
+      return key.split('__')[0] === 'soil_' + layer.id;
+    });
+    return mine.length ? mine : ['soil_' + layer.id];
+  }
+
+  function layerChildren(layer) {
     var m = App.matById(layer.mat);
-    return { label: layer.name + '  ·  ' + m.name, swatch: m.color,
-             leaf: true, eye: true, obj: 'soil_' + layer.id };
+    var labels = (App.PROJECT && App.PROJECT.soil_body_labels) || {};
+    return layerBodies(layer).map(function (key) {
+      return { label: (labels[key] || layer.name) + '  ·  ' + m.name,
+               swatch: m.color, leaf: true, eye: true, obj: key };
+    });
   }
 
   /* Drawn/imported geometry has no place in App.TREES -- js/data.js:572-577 builds
@@ -1281,8 +1304,13 @@ App.Model = (function () {
 
     var sharedSoilNodes = soilNodes();
     sharedSoilNodes.forEach(function (node) {
-      node.count = layers.length + soilBodies.length;
-      node.children = layers.map(layerChild).concat(soilBodies.map(soilBodyChild));
+      // Flattened: a staged layer contributes one row per body, so the count is the
+      // number of rows the user can actually see and toggle, not the number of layers.
+      var layerRows = layers.reduce(function (rows, layer) {
+        return rows.concat(layerChildren(layer));
+      }, []);
+      node.count = layerRows.length + soilBodies.length;
+      node.children = layerRows.concat(soilBodies.map(soilBodyChild));
     });
 
     customGeometryNode.count = plainParts.length;
@@ -1293,7 +1321,13 @@ App.Model = (function () {
       if (key.indexOf('soil_') === 0) delete App.OBJECT_PROPS[key];
     });
     layers.forEach(function (layer, i) {
-      App.OBJECT_PROPS['soil_' + layer.id] = layerProps(layer, i);
+      // Every body of the layer, not just the layer's own key: clicking a lift in the
+      // viewport or the tree selects `soil_<id>__lift2`, and a Selection explorer with
+      // no entry for it shows nothing at all. A lift is the layer it was dug out of, so
+      // it shows the layer's properties.
+      layerBodies(layer).forEach(function (key) {
+        App.OBJECT_PROPS[key] = layerProps(layer, i);
+      });
     });
 
     var currentPartKeys = {};

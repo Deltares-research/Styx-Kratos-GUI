@@ -223,3 +223,41 @@ def test_an_anchor_is_drawn_as_edges_like_the_pile_it_hangs_from():
     assert anchor.edges and not anchor.indices
     assert min(anchor.edges[0::3]) == pytest.approx(12.0, abs=1e-5)
     assert max(anchor.edges[0::3]) == pytest.approx(20.0, abs=1e-5)
+
+
+# ── Staged excavation ───────────────────────────────────────────────────────
+
+def test_a_staged_excavation_is_drawable():
+    """The whole CROW model, through the path the viewport uses.
+
+    Every soil body has to be drawable, and colour is what this catches: a lift takes
+    the colour of the layer it was dug out of, and one that is not given one used to
+    take the whole geometry endpoint down with a KeyError rather than simply arriving
+    grey.
+    """
+    from tests.crow_example import crow
+    crow_project = crow.crow_project
+    project = crow_project()
+    with build.session():
+        display = tessellate.tessellate(project)
+
+    drawn = {section.key for section in display.sections}
+    for key, *_ in project.soil_bodies():
+        assert key in drawn, f"{key} is not drawable"
+    assert "sheetpile" in drawn, "the wall must be drawn"
+    assert "strut" in drawn, "the anchor must be drawn"
+
+
+def test_a_lift_is_drawn_in_the_colour_of_the_layer_it_came_from():
+    from tests.crow_example import crow
+    crow_project = crow.crow_project
+    project = crow_project()
+    with build.session():
+        display = tessellate.tessellate(project)
+
+    colours = {}
+    for section in display.sections:
+        colours.setdefault(section.key, set()).add(section.color)
+    for key, *_ in project.soil_bodies():
+        layer = next(l for l in project.layers if f"soil_{l.id}" == key.partition("__")[0])
+        assert colours[key] == {project.material(layer.mat).color}, key

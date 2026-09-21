@@ -176,12 +176,18 @@ def _node_coordinates() -> dict[int, tuple[float, float, float]]:
 
 def _colors_by_volume(project: Project, result: build.BuildResult) -> dict[int, str]:
     colors: dict[int, str] = {}
-    for layer in project.layers:
-        color = project.material(layer.mat).color
+    # Keyed by body rather than by layer: a staged excavation splits a layer into the
+    # lifts it is dug in, and a lift is still the layer it came out of, so it is drawn
+    # in that layer's material colour. Colouring only `soil_<layer id>` left every lift
+    # without one, which `_group_by_color` reports as a KeyError that takes the whole
+    # model view down rather than drawing one body grey.
+    layer_color = {f"soil_{layer.id}": project.material(layer.mat).color
+                   for layer in project.layers}
+    for key, *_ in project.soil_bodies():
         # .get, not [...]: in a 2D section a layer that does not cross the plane keeps
         # its key but owns nothing.
-        for tag in result.volumes.get(f"soil_{layer.id}", []):
-            colors[tag] = color
+        for tag in result.volumes.get(key, []):
+            colors[tag] = layer_color[key.partition("__")[0]]
     for key, color in PART_COLORS.items():
         for tag in result.volumes.get(key, []):
             colors[tag] = color

@@ -958,4 +958,45 @@
     });
   });
 
+
+
+  /* A staged excavation is more bodies than layers, and each one is separately
+     meshed, deactivated and shown -- so each needs its own row in the Model explorer.
+     Listing layers alone left the whole excavated side out of the tree. */
+
+  var STAGED = {
+    soil_body_keys: ['soil_L1', 'soil_L2', 'soil_L1__lift1', 'soil_L1__lift2'],
+    soil_body_labels: {
+      soil_L1: 'Soil_1', soil_L2: 'Soil_2',
+      soil_L1__lift1: 'Soil_1 · lift 1', soil_L1__lift2: 'Soil_1 · lift 2'
+    }
+  };
+
+  test('every staged soil body gets its own row in the Model explorer', function () {
+    var p = Object.assign(project(TWO), STAGED);
+    withProject(p, function () {
+      var node = soilNode(App.TREES.soil);
+      var objs = (node.children || []).map(function (c) { return c.obj; });
+      T.eq(objs, STAGED.soil_body_keys, 'one row per body, in the order published');
+      T.eq(node.count, 4, 'the count is rows, not layers');
+      T.ok(/lift 1/.test(node.children[2].label), 'and says which part of the layer');
+    });
+  });
+
+  test('a lift shows the properties of the layer it was dug out of', function () {
+    var p = Object.assign(project(TWO), STAGED);
+    withProject(p, function () {
+      T.ok(App.OBJECT_PROPS['soil_L1__lift1'], 'a lift has a Selection explorer entry');
+      T.eq(App.OBJECT_PROPS['soil_L1__lift1'].title,
+           App.OBJECT_PROPS['soil_L1'].title, 'the same one the layer has');
+    });
+  });
+
+  test('a project that publishes no bodies still lists one row per layer', function () {
+    withProject(project(TWO), function () {
+      var node = soilNode(App.TREES.soil);
+      T.eq((node.children || []).map(function (c) { return c.obj; }),
+           ['soil_L1', 'soil_L2']);
+    });
+  });
 })();

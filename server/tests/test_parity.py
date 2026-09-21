@@ -75,8 +75,20 @@ def test_layers_match_frozen_data_js():
 
 
 def test_materials_match_frozen_data_js():
-    got = [m.model_dump() for m in seed_project(simple=False).materials]
-    assert got == frozen.materials()
+    """Compared on the fields the mockup actually defines, the way the layers test above
+    already is.
+
+    `js/data.js` is frozen in the strong sense -- one commit, never edited since -- so a
+    solver input it never carried is backend-only by construction rather than drift for
+    this guard to catch. `k0_nc` is the first of those: it exists for the initial stage's
+    k0 procedure (plan/staged-construction-plan.md sec C4), which postdates the mockup
+    entirely. Every field the mockup *does* define is still pinned.
+    """
+    expected = frozen.materials()
+    assert expected, "frozen MATERIALS parsed as empty -- the guard would pass vacuously"
+    got = [{k: v for k, v in m.model_dump().items() if k in expected[0]}
+           for m in seed_project(simple=False).materials]
+    assert got == expected
 
 
 def test_seed_layers_reach_the_domain_floor(vp):
