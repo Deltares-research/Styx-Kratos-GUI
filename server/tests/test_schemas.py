@@ -56,6 +56,41 @@ def test_material_allows_null_cohesion_and_friction_for_non_porous_rock():
     assert m.c is None and m.phi is None
 
 
+# ── K0, for the initial stage ───────────────────────────────────────────────
+#
+# `apply_k0_procedure_process` settles the initial stress field, and reads K0_NC off
+# each soil property (plan/staged-construction-plan.md sec C4). Nothing in `Project`
+# carried it before.
+
+def _sand(**overrides) -> schemas.Material:
+    base = dict(id="m2", name="Sand, loose", model="Hardening Soil", type="Drained",
+                color="#c4a86a", g_unsat=18.0, g_sat=20.5, E=25000, nu=0.28,
+                c=0.5, phi=30.0, k=1.5)
+    return schemas.Material(**{**base, **overrides})
+
+
+def test_k0_defaults_to_jaky_from_the_friction_angle():
+    """1 - sin(phi). Both values in the CROW reference sit on this formula (0.62 at
+    22.3 deg, 0.46 at 32.7 deg), which is what says it is the right default."""
+    assert _sand(phi=30.0).k0_normally_consolidated() == pytest.approx(0.5)
+    assert _sand(phi=22.3).k0_normally_consolidated() == pytest.approx(0.62, abs=5e-3)
+
+
+def test_an_explicit_k0_overrides_the_formula():
+    assert _sand(phi=30.0, k0_nc=0.62).k0_normally_consolidated() == pytest.approx(0.62)
+
+
+def test_a_material_with_no_friction_angle_has_no_k0():
+    """Non-porous rock carries neither, and nothing should be invented for it."""
+    assert _sand(phi=None).k0_normally_consolidated() is None
+
+
+def test_k0_must_be_a_plausible_ratio():
+    for bad in (0.0, -0.3):
+        with pytest.raises(ValidationError):
+            _sand(k0_nc=bad)
+
+
 # ── Soil layers ─────────────────────────────────────────────────────────────
 
 def test_layer_stack_must_be_contiguous_per_borehole():
@@ -114,6 +149,142 @@ def test_excavation_must_sit_inside_the_domain():
     bad["excavation"]["x1"] = 500.0
     with pytest.raises(ValidationError, match="domain"):
         schemas.Project.model_validate(bad)
+
+
+# ── Staged excavation levels ────────────────────────────────────────────────
+#
+# A staged excavation is dug in lifts, and each lift is a separately deactivatable body
+# in the deck (plan/staged-construction-plan.md sec 0.1: Excavated_Soil_1/2/3). `levels`
+# is that sequence; `floor_y` is the last of them, kept as the name everything already
+# reads.
+
+def test_excavation_without_levels_is_a_single_lift_at_its_floor():
+    """Every saved project predates `levels` and must keep opening."""
+    e = schemas.Excavation(x0=0, x1=10, z0=0, z1=10, floor_y=-7.0)
+    assert e.levels == [-7.0]
+
+
+def test_excavation_levels_set_the_floor():
+    """Giving `levels` alone is enough: `floor_y` follows from the last of them."""
+    e = schemas.Excavation(x0=0, x1=10, z0=0, z1=10, levels=[-2.0, -5.0, -8.0])
+    assert e.floor_y == -8.0
+    assert e.levels == [-2.0, -5.0, -8.0]
+
+
+def test_excavation_levels_must_descend():
+    for levels in ([-5.0, -2.0], [-2.0, -2.0], [-2.0, -8.0, -5.0]):
+        with pytest.raises(ValidationError, match="descend"):
+            schemas.Excavation(x0=0, x1=10, z0=0, z1=10, levels=levels)
+
+
+def test_an_empty_level_list_means_unspecified_not_invalid():
+    """`[]` is what an old record round-tripped through a client that knows the field
+    but has nothing to put in it looks like; it is the `floor_y` case, not an error."""
+    e = schemas.Excavation(x0=0, x1=10, z0=0, z1=10, floor_y=-7.0, levels=[])
+    assert e.levels == [-7.0]
+
+
+def test_every_excavation_level_must_lie_inside_the_domain():
+    """Not just the floor: an intermediate lift above the ground is just as wrong."""
+    p = seed_project(simple=False)
+    bad = p.model_dump()
+    bad["excavation"]["levels"] = [5.0, bad["excavation"]["floor_y"]]
+    with pytest.raises(ValidationError, match="domain"):
+        schemas.Project.model_validate(bad)
+
+
+@pytest.mark.parametrize("levels", [[-7.0], [-2.0, -5.0, -8.0]])
+def test_a_floor_disagreeing_with_its_levels_is_refused_not_guessed(levels):
+    """Whichever field the caller edited, the other must not silently overwrite it --
+    and the payload cannot say which that was, so neither is allowed to win."""
+    with pytest.raises(ValidationError, match="disagrees"):
+        schemas.Excavation(x0=0, x1=10, z0=0, z1=10, floor_y=-9.0, levels=levels)
+
+
+def _crow_like() -> schemas.Project:
+    """The CROW reference's soil arrangement: three layers, three excavation lifts.
+
+    Layer 1 spans 0..-8 and is dug away in three lifts; layer 2 (-8..-12) and layer 3
+    (-12..-60) are never dug. That produces the reference deck's eight bodies -- see
+    plan/staged-construction-plan.md sec 0.1.
+    """
+    p = seed_project(simple=False).model_dump()
+    p["domain"] |= {"y_top": 0.0, "y_bottom": -60.0}
+    p["boreholes"] = [p["boreholes"][0]]
+    bh = p["boreholes"][0]["id"]
+    p["layers"] = [
+        {"id": "L1", "name": "Soil_1", "mat": p["materials"][0]["id"],
+         "tops": {bh: 0.0}, "bots": {bh: -8.0}},
+        {"id": "L2", "name": "Soil_2", "mat": p["materials"][0]["id"],
+         "tops": {bh: -8.0}, "bots": {bh: -12.0}},
+        {"id": "L3", "name": "Soil_3", "mat": p["materials"][1]["id"],
+         "tops": {bh: -12.0}, "bots": {bh: -60.0}},
+    ]
+    # `levels` supersedes the seed's `floor_y`, and the two may not disagree.
+    p["excavation"] = {k: v for k, v in p["excavation"].items() if k != "floor_y"}
+    p["excavation"] |= {"x0": 0.0, "x1": 5.0, "levels": [-2.0, -5.0, -8.0]}
+    p["wall"] |= {"top_y": 0.0, "toe_y": -13.0}
+    return schemas.Project.model_validate(p)
+
+
+def test_an_unstaged_project_has_one_soil_body_per_layer():
+    """The pit is a void cut out of the soil, so nothing is renamed and nothing splits."""
+    p = seed_project(simple=False)
+    assert [key for key, *_ in p.soil_bodies()] == [f"soil_{l.id}" for l in p.layers]
+
+
+def test_a_staged_excavation_splits_the_soil_inside_the_pit_into_lifts():
+    bodies = {key: (y0, y1) for key, y0, y1, _ in _crow_like().soil_bodies()}
+    assert bodies == {
+        # Outside the pit outline the layers are untouched and keep their own keys.
+        "soil_L1": (-8.0, 0.0),
+        "soil_L2": (-12.0, -8.0),
+        "soil_L3": (-60.0, -12.0),
+        # Inside it, layer 1 is dug away one lift per phase ...
+        "soil_L1__lift1": (-2.0, 0.0),
+        "soil_L1__lift2": (-5.0, -2.0),
+        "soil_L1__lift3": (-8.0, -5.0),
+        # ... and what is never dug is still its own body, because it sits on the
+        # excavated side of the wall.
+        "soil_L2__pit": (-12.0, -8.0),
+        "soil_L3__pit": (-60.0, -12.0),
+    }
+
+
+def test_a_lift_crossing_a_layer_boundary_yields_one_body_per_layer():
+    """Bodies are the intersection of a layer with a lift, so a lift deeper than the
+    layer it starts in cannot produce one body spanning two materials."""
+    p = _crow_like().model_dump()
+    # The first lift is dug straight through L1 and on into L2. `floor_y` follows
+    # `levels` rather than the other way round, so it goes out with the levels it
+    # belonged to.
+    p["excavation"] = {k: v for k, v in p["excavation"].items() if k != "floor_y"}
+    p["excavation"]["levels"] = [-10.0, -11.0]
+    bodies = {key: (y0, y1)
+              for key, y0, y1, _ in schemas.Project.model_validate(p).soil_bodies()}
+    assert bodies["soil_L1__lift1"] == (-8.0, 0.0)     # the part of lift 1 in L1 ...
+    assert bodies["soil_L2__lift1"] == (-10.0, -8.0)   # ... and the part in L2
+    assert bodies["soil_L2__pit"] == (-12.0, -11.0)    # below the floor, still in L2
+
+
+def test_staged_soil_bodies_are_part_keys():
+    """Anything with geometry needs a key, or the viewport and the exporter cannot
+    name it (`Project.part_keys` is that namespace)."""
+    p = _crow_like()
+    keys = p.part_keys()
+    assert len(keys) == len(set(keys)), "part keys must stay unique"
+    for key, *_ in p.soil_bodies():
+        assert key in keys
+
+
+def test_excavation_levels_survive_a_round_trip():
+    p = seed_project(simple=False)
+    raw = p.model_dump()
+    raw["excavation"]["levels"] = [-2.0, -5.0, -7.0]
+    reloaded = schemas.Project.model_validate(
+        schemas.Project.model_validate(raw).model_dump())
+    assert reloaded.excavation.levels == [-2.0, -5.0, -7.0]
+    assert reloaded.excavation.floor_y == -7.0
 
 
 # ── Load conditions ────────────────────────────────────────────────────────
@@ -577,12 +748,19 @@ def test_an_anchor_rejects_a_degenerate_line(change, message):
 
 
 @pytest.mark.parametrize("change", [
-    {"E": 0.0}, {"area": -1.0}, {"density": 0.0}, {"spacing": 0.0},
+    {"E": 0.0}, {"area": -1.0}, {"density": -1.0}, {"spacing": 0.0},
     {"tension_limit": 0.0}, {"compression_limit": -5.0},
 ])
 def test_an_anchor_section_rejects_unusable_property_values(change):
     with pytest.raises(ValidationError):
         schemas.AnchorSection(**_anchor_section(**change))
+
+
+def test_a_tendon_may_be_massless():
+    """Zero density used to be refused along with the negative one. A prestressed strut
+    whose own weight is beside the point next to the force it carries is an ordinary
+    thing to model, and the reference deck's tendon is exactly that."""
+    assert schemas.AnchorSection(**_anchor_section(density=0.0)).density == 0.0
 
 
 def test_project_rejects_duplicate_anchor_and_section_ids():
@@ -915,14 +1093,25 @@ def test_an_interface_section_is_a_reusable_named_property_set():
     assert section.normal_stiffness is None, "derived from the soil unless given"
 
 
-def test_an_interface_section_needs_a_soil_or_both_stiffnesses():
-    """There is nothing else to derive a zero-thickness element's stiffness from."""
-    with pytest.raises(ValidationError):
-        schemas.InterfaceSection(**_contact(material=None))
-
-    section = schemas.InterfaceSection(
-        **_contact(material=None, normal_stiffness=1.0e6, shear_stiffness=4.0e5))
+def test_an_interface_section_needs_no_soil_of_its_own():
+    """It used to be refused without either a material or both stiffnesses. That is the
+    ordinary case now: such a section derives each stretch of the contact from the soil
+    body it actually runs against, which is a fact about the mesh and unknowable here.
+    The contact that really has nothing to derive from -- no adjacent soil either -- is
+    refused at export instead (`tests/test_kratos_interfaces.py`)."""
+    section = schemas.InterfaceSection(**_contact(material=None))
     assert section.material is None
+    assert section.normal_stiffness is None
+
+    typed = schemas.InterfaceSection(
+        **_contact(material=None, normal_stiffness=1.0e6, shear_stiffness=4.0e5))
+    assert typed.normal_stiffness == 1.0e6
+
+
+def test_the_element_size_normal_to_an_interface_defaults_to_one_metre():
+    """The reference deck's own, and what its stiffnesses are the soil's shear modulus
+    over. It was 0.01, which made every derived contact 100x too stiff."""
+    assert schemas.InterfaceSection.model_fields["virtual_thickness"].default == 1.0
 
 
 def test_an_interface_follows_a_structure_or_its_own_points_but_never_both():
@@ -1066,3 +1255,223 @@ def test_normal_loads_are_plane_strain_only():
 
     assert project.normal_loads, "the record is kept, like every other 2D record"
     assert project.active_normal_loads == [], "but nothing is built from it in 3D"
+
+
+def test_asking_for_a_layer_asks_for_the_lifts_dug_out_of_it():
+    """The Mesh dialog lists layers, not bodies (live/js/mesh-settings.js:73).
+
+    A staged layer is several bodies, and naming the layer has to mean all of them --
+    otherwise checking `Soil_Top` in that dialog meshes the retained side and silently
+    leaves the whole excavation out of the model.
+    """
+    p = _crow_like()
+    assert set(p.expand_body_keys(["soil_L1"])) == {
+        "soil_L1", "soil_L1__lift1", "soil_L1__lift2", "soil_L1__lift3"}
+    assert p.expand_body_keys(["soil_L3"]) == ["soil_L3", "soil_L3__pit"]
+    # Anything that is not a soil layer is passed through untouched.
+    assert p.expand_body_keys(["wall", "soil_L2__pit"]) == ["wall", "soil_L2__pit"]
+
+
+def test_expanding_body_keys_is_a_no_op_when_nothing_is_staged():
+    p = seed_project(simple=False)
+    keys = [f"soil_{layer.id}" for layer in p.layers]
+    assert p.expand_body_keys(keys) == keys
+
+
+def test_the_project_publishes_its_soil_body_keys():
+    """The viewport cannot derive these for itself.
+
+    It used to build its visible-soil list from `project.layers`, which named three
+    bodies where a staged project has eight -- the five inside the pit were drawn and
+    then left out of every mode, so the whole excavated side was invisible. Deriving it
+    in the browser instead would be a second implementation of `soil_bodies` to keep in
+    step, so the project says it.
+    """
+    p = _crow_like()
+    assert p.soil_body_keys == [key for key, *_ in p.soil_bodies()]
+    assert len(p.soil_body_keys) == 8
+
+
+def test_soil_body_keys_survive_a_round_trip():
+    """It is published, not accepted: a client that sends the project back must not be
+    rejected for echoing a field it was given."""
+    p = _crow_like()
+    dumped = p.model_dump()
+    assert "soil_body_keys" in dumped
+    assert schemas.Project.model_validate(dumped).soil_body_keys == p.soil_body_keys
+
+
+def test_a_project_with_no_ground_in_it_has_no_soil_bodies():
+    """`part_keys` reads these, and runs during validation on the empty site the server
+    opens on. Asking a project with no layers what bodies it has is not an error."""
+    from app.seed import blank_project
+    blank = blank_project()
+    assert blank.soil_bodies() == []
+    assert blank.soil_body_keys == []
+    stripped = blank.model_dump() | {"boreholes": [], "layers": []}
+    assert schemas.Project.model_validate(stripped).soil_bodies() == []
+
+
+def test_a_load_cannot_take_a_staged_body_s_name():
+    """One part-key namespace: a load named after a lift would collide in the deck."""
+    p = _crow_like().model_dump()
+    p["loads"] = [{"id": "soil_L1__lift1", "name": "Surcharge", "kind": "line",
+                   "x0": 0.0, "x1": 5.0, "y": 0.0, "components": [0.0, -10.0]}]
+    with pytest.raises(ValidationError, match="collides"):
+        schemas.Project.model_validate(p)
+
+
+def test_each_soil_body_has_a_label_saying_which_part_of_its_layer_it_is():
+    """The Model explorer lists bodies, and three keys that differ only by a `__lift2`
+    suffix are not something to put in front of a user."""
+    p = _crow_like()
+    labels = p.soil_body_labels
+    assert set(labels) == set(p.soil_body_keys)
+    assert labels["soil_L1"] == "Soil_1"
+    assert labels["soil_L1__lift1"] == "Soil_1 · lift 1"
+    assert labels["soil_L1__lift3"] == "Soil_1 · lift 3"
+    assert labels["soil_L2__pit"] == "Soil_2 · below the pit"
+
+
+def test_an_unstaged_layer_is_labelled_with_nothing_but_its_name():
+    p = seed_project(simple=False)
+    assert p.soil_body_labels == {f"soil_{l.id}": l.name for l in p.layers}
+
+
+# ── Phases ──────────────────────────────────────────────────────────────────
+#
+# A construction phase, in the sense the GUI already draws (js/data.js:559) and
+# the sense the reference deck's seven stages have. See
+# plan/staged-construction-plan.md sec B1 for why a phase stores a *diff* against its
+# parent rather than an absolute state.
+
+def _phased(*phases) -> schemas.Project:
+    return schemas.Project.model_validate(_crow_like().model_dump() | {"phases": list(phases)})
+
+
+def _phase(id_, parent=None, **kw) -> dict:
+    return {"id": id_, "name": id_.replace("_", " ").title(), "parent": parent, **kw}
+
+
+def test_a_project_has_no_phases_until_one_is_made():
+    """The compatibility contract: an unphased project is every project written before
+    staged construction, and must behave exactly as it did."""
+    assert seed_project(simple=False).phases == []
+
+
+def test_a_phase_stores_what_it_changes_not_the_whole_model_state():
+    p = _phased(
+        _phase("initial", calculation="K0 procedure"),
+        _phase("dig_1", parent="initial", deactivate=["soil_L1__lift1"]),
+    )
+    assert p.phases[1].deactivate == ["soil_L1__lift1"]
+    assert p.phases[1].activate == []
+    assert p.phases[0].calculation == "K0 procedure"
+    # The defaults are the reference deck's own initial-stage numbers.
+    assert p.phases[1].max_iterations == 15
+    assert p.phases[1].reset_displacements is False
+
+
+def test_the_first_phase_starts_from_nothing_and_the_rest_from_a_parent():
+    with pytest.raises(ValidationError, match="root"):
+        _phased(_phase("a", parent=None), _phase("b", parent=None))
+    with pytest.raises(ValidationError, match="root"):
+        _phased(_phase("a", parent="a"))
+
+
+def test_a_phase_must_start_from_a_phase_that_exists():
+    with pytest.raises(ValidationError, match="nowhere"):
+        _phased(_phase("initial"), _phase("dig", parent="ghost"))
+
+
+def test_phases_may_not_form_a_cycle():
+    with pytest.raises(ValidationError, match="cycle|nowhere"):
+        _phased(_phase("initial"), _phase("a", parent="b"), _phase("b", parent="a"))
+
+
+def test_phase_ids_are_unique():
+    with pytest.raises(ValidationError, match="duplicate"):
+        _phased(_phase("initial"), _phase("initial", parent="initial"))
+
+
+def test_a_phase_may_only_name_parts_the_model_has():
+    with pytest.raises(ValidationError, match="no such part"):
+        _phased(_phase("initial"), _phase("dig", parent="initial",
+                                          deactivate=["soil_does_not_exist"]))
+
+
+def test_a_phase_cannot_both_activate_and_deactivate_the_same_part():
+    """Two contradictory instructions in one diff have no defined order."""
+    with pytest.raises(ValidationError, match="both"):
+        _phased(_phase("initial"),
+                _phase("dig", parent="initial",
+                       activate=["sheetpile"], deactivate=["sheetpile"]))
+
+
+def test_a_phase_carries_the_solver_settings_the_reference_varies():
+    """The three the reference deck actually changes between stages, and nothing else
+    (plan sec 0.2): iterations, tolerance, and resetting displacements."""
+    p = _phased(_phase("initial"),
+                _phase("install", parent="initial", reset_displacements=True,
+                       max_iterations=150, tolerated_error=1e-3))
+    install = p.phases[1]
+    assert (install.reset_displacements, install.max_iterations,
+            install.tolerated_error) == (True, 150, 1e-3)
+
+
+def test_phases_survive_a_round_trip():
+    p = _phased(_phase("initial", calculation="K0 procedure"),
+                _phase("dig", parent="initial", deactivate=["soil_L1__lift1"]))
+    reloaded = schemas.Project.model_validate(p.model_dump())
+    assert [ph.id for ph in reloaded.phases] == ["initial", "dig"]
+    assert reloaded.phases[1].deactivate == ["soil_L1__lift1"]
+
+
+# ── What a phase may name ───────────────────────────────────────────────────
+# `part_keys` is the *render* namespace, in draw order, and the simple example
+# deliberately draws no load pads -- so its line loads are missing from it. They are
+# still real parts of the deck, and the reference stages one (`Load` arrives with the
+# wall and stays), so they have to be nameable in a phase. Hence a second, wider list.
+
+def _simple_with_a_load() -> schemas.Project:
+    p = _crow_like().model_dump()
+    p["simple_example"] = True
+    p["loads"] = [{"id": "surcharge", "name": "Load", "kind": "line",
+                   "x0": 5.0, "x1": p["domain"]["x1"], "y": 0.0,
+                   "components": [0.0, -20.0]}]
+    p["normal_loads"] = [
+        {"id": f"water_{n}", "name": f"WaterLoad_Stage{n}", "kind": "normal",
+         "fluid_pressure_type": "Hydrostatic",
+         "points": [[5.0, 0.0], [5.0, level], [0.0, level]]}
+        for n, level in enumerate((-2.0, -5.0, -8.0), start=1)
+    ]
+    return schemas.Project.model_validate(p)
+
+
+def test_a_load_the_viewport_never_draws_is_still_stageable():
+    p = _simple_with_a_load()
+    assert "surcharge" not in p.part_keys()
+    assert "surcharge" in p.stageable_keys()
+
+
+def test_everything_drawn_is_stageable():
+    """The wider list is a superset, not a different list: a part that can be seen and
+    not switched off would be a hole in the phase editor."""
+    for project in (seed_project(simple=False), seed_project(simple=True),
+                    _simple_with_a_load()):
+        assert set(project.part_keys()) <= set(project.stageable_keys())
+    assert len(set(p := _simple_with_a_load().stageable_keys())) == len(p)
+
+
+def test_a_phase_may_switch_a_load_off_and_on_again():
+    """This is how the reference stages water: `WaterLoad_Stage2` arrives as
+    `WaterLoad_Stage1` leaves. No separate per-load phase field -- the diff already
+    says it, and two mechanisms for one question is one authority too many."""
+    p = schemas.Project.model_validate(
+        _simple_with_a_load().model_dump() | {"phases": [
+            _phase("initial", deactivate=["surcharge", "water_2"]),
+            _phase("build", parent="initial", activate=["surcharge"]),
+            _phase("dig", parent="build",
+                   activate=["water_2"], deactivate=["water_1"]),
+        ]})
+    assert p.phases[2].activate == ["water_2"]

@@ -514,3 +514,83 @@
     T.eq(App.Viewport.triadAxes(2).indexOf('z'), -1);
   });
 })();
+
+(function () {
+  /* A staged excavation is more bodies than layers. The viewport has to show all of
+     them, and cannot work out the split for itself -- the project publishes it. */
+
+  var LAYERS = [{ id: 'L_top' }, { id: 'L_mid' }, { id: 'L_bot' }];
+  var BODIES = ['soil_L_top', 'soil_L_mid', 'soil_L_bot',
+                'soil_L_top__lift1', 'soil_L_top__lift2', 'soil_L_top__lift3',
+                'soil_L_mid__pit', 'soil_L_bot__pit'];
+
+  test('the soil bodies come from the project, not from its layers', function () {
+    T.eq(App.Viewport.soilKeysOf({ soil_body_keys: BODIES }, LAYERS), BODIES);
+  });
+
+  test('a project that publishes no bodies falls back to one key per layer', function () {
+    T.eq(App.Viewport.soilKeysOf({}, LAYERS),
+         ['soil_L_top', 'soil_L_mid', 'soil_L_bot']);
+    T.eq(App.Viewport.soilKeysOf(null, LAYERS),
+         ['soil_L_top', 'soil_L_mid', 'soil_L_bot']);
+  });
+
+  test('every staged body is visible in the modes soil is visible in', function () {
+    var groups = App.Viewport.computeModeGroups(BODIES, [], true);
+    BODIES.forEach(function (key) {
+      T.ok(groups.soil.indexOf(key) >= 0, 'soil mode is missing ' + key);
+    });
+  });
+})();
+
+(function () {
+  /* Which refinements a mesh is built with. A model can carry a graded mesh of its own
+     (server/app/crow.py refines its excavation and grades out to the far field), and
+     `meshSettings` used to overwrite that with `App.MESH_REFINEMENTS || []` -- so the
+     Generate-mesh button flattened a grading the project had asked for. */
+
+  var BOX = { kind: 'box', size: 0.75, thickness: 45, x_min: -1, x_max: 8,
+              y_min: -16, y_max: 1, z_min: -1, z_max: 11 };
+
+  function withState(local, project, run) {
+    var saved = { refinements: App.MESH_REFINEMENTS, project: App.PROJECT };
+    App.MESH_REFINEMENTS = local;
+    App.PROJECT = project;
+    try { run(); } finally {
+      App.MESH_REFINEMENTS = saved.refinements;
+      App.PROJECT = saved.project;
+    }
+  }
+
+  test("a model's own refinements are used when none is set this session", function () {
+    withState(undefined, { mesh: { refinements: [BOX] } }, function () {
+      T.eq(App.Viewport.meshRefinements().length, 1);
+      T.eq(App.Viewport.meshRefinements()[0].thickness, 45);
+    });
+  });
+
+  test('a refinement set from the toolbar wins over the model\'s', function () {
+    var local = [{ kind: 'box', size: 0.2, x_min: 0, x_max: 1,
+                   y_min: 0, y_max: 1, z_min: 0, z_max: 1 }];
+    withState(local, { mesh: { refinements: [BOX] } }, function () {
+      T.eq(App.Viewport.meshRefinements()[0].size, 0.2);
+    });
+  });
+
+  test('resetting the local refinement falls back to the model, not to none', function () {
+    /* "Reset" leaves an empty array behind, and an empty array is truthy -- so a plain
+       `||` would read it as a choice and mesh the model flat. */
+    withState([], { mesh: { refinements: [BOX] } }, function () {
+      T.eq(App.Viewport.meshRefinements().length, 1);
+    });
+  });
+
+  test('a project that asks for no refinement gets none', function () {
+    withState(undefined, { mesh: {} }, function () {
+      T.eq(App.Viewport.meshRefinements(), []);
+    });
+    withState(undefined, null, function () {
+      T.eq(App.Viewport.meshRefinements(), []);
+    });
+  });
+})();

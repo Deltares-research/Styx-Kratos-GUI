@@ -112,6 +112,127 @@ def test_the_excavated_pit_is_missing_from_the_soil_section(full):
     assert soil < d.dx * d.dz - pit + 1e-6
 
 
+# ── Staged excavation: the pit is kept, not cut away ────────────────────────
+#
+# With more than one excavation level the soil inside the pit outline stays in the
+# model, split into the lifts it is dug in, because each lift is deactivated in its own
+# phase (plan/staged-construction-plan.md sec A1). `Project.soil_bodies` names them;
+# these tests are what says the geometry agrees with those names.
+
+
+def staged_project() -> Project:
+    """The CROW arrangement in plane strain: three layers, three lifts, pit on the left.
+
+    Areas below are recomputed from these numbers rather than read off the build, for
+    the reason this module's docstring gives: gmsh's failure mode is to succeed with
+    empty results.
+    """
+    p = seed_project(simple=False).model_dump() | {"dimension": 2}
+    p["domain"] |= {"y_top": 0.0, "y_bottom": -60.0}
+    p["boreholes"] = [p["boreholes"][0]]
+    bh = p["boreholes"][0]["id"]
+    p["layers"] = [
+        {"id": "L1", "name": "Soil_1", "mat": p["materials"][0]["id"],
+         "tops": {bh: 0.0}, "bots": {bh: -8.0}},
+        {"id": "L2", "name": "Soil_2", "mat": p["materials"][0]["id"],
+         "tops": {bh: -8.0}, "bots": {bh: -12.0}},
+        {"id": "L3", "name": "Soil_3", "mat": p["materials"][1]["id"],
+         "tops": {bh: -12.0}, "bots": {bh: -60.0}},
+    ]
+    p["excavation"] = {k: v for k, v in p["excavation"].items() if k != "floor_y"}
+    p["excavation"] |= {"x0": 0.0, "x1": 5.0, "levels": [-2.0, -5.0, -8.0]}
+    p["wall"] |= {"top_y": 0.0, "toe_y": -13.0}
+    return Project.model_validate(p)
+
+
+@pytest.fixture(scope="module")
+def staged():
+    project = staged_project()
+    with build.session():
+        yield project, build.build_geometry(project)
+
+
+def test_the_staged_pit_is_still_there(staged):
+    """The opposite of test_the_excavated_pit_is_missing_from_the_soil_section: with
+    lifts to dig, the soil has to survive in order to be dug."""
+    project, result = staged
+    for key, *_ in project.soil_bodies():
+        assert result.volumes[key], f"{key} has no geometry"
+
+
+def test_every_staged_body_occupies_the_band_and_side_it_is_named_for(staged):
+    """Each body is where `soil_bodies` says it is.
+
+    Checked on extents rather than area: the section's structures displace soil out of
+    whichever bodies they pass through, so an area comparison would measure the wall
+    rather than the split. Where a body *is* answers the question this step exists for
+    -- is lift 2 the ground between the first and second dig? -- and is untouched by
+    what stands in it.
+    """
+    project, result = staged
+    e = project.excavation
+    for key, bottom, top, inside in project.soil_bodies():
+        x0, y0, _, x1, y1, _ = build.bounding_box(result.volumes[key], dim=2)
+        assert (y0, y1) == pytest.approx((bottom, top), abs=1e-3), f"{key} y-extent"
+        if inside:
+            assert x0 == pytest.approx(e.x0, abs=1e-3), f"{key} should start at the pit"
+            assert x1 == pytest.approx(e.x1, abs=1e-3), f"{key} should end at the wall"
+        else:
+            assert x1 > e.x1, f"{key} should reach beyond the pit"
+
+
+def test_the_excavated_ground_is_still_in_the_model(staged):
+    """The whole point of staging it: soil covers more than the domain minus the pit.
+
+    Stated as an inequality rather than an area identity. Soil plus structures does not
+    add up to the domain here -- the wall ring is built outboard of the pit face
+    (`_build_solids`), and this fixture puts that face on the domain edge the way the
+    CROW case's symmetry plane does, so part of the wall stands outside the soil
+    entirely.
+    """
+    project, result = staged
+    d, e = project.domain, project.excavation
+    soil = sum(result.mass[key] for key, *_ in project.soil_bodies())
+    assert soil > d.dx * d.dy - (e.x1 - e.x0) * d.dy, "the pit was cut away, not staged"
+    assert soil <= d.dx * d.dy + 1e-6, "soil cannot exceed the domain it fills"
+
+
+def test_no_entity_belongs_to_two_staged_bodies(staged):
+    """The re-keying risk, tested where it lives.
+
+    Each piece is assigned to a body by where its centre of mass fell, so a piece
+    matching two bands -- or a band matching two pieces of the same layer -- would be
+    meshed twice and counted twice in every area above. Tags are what says it did not
+    happen; areas only say the total came out plausible.
+    """
+    project, result = staged
+    seen: dict[int, str] = {}
+    for key, *_ in project.soil_bodies():
+        for tag in result.volumes[key]:
+            assert tag not in seen, f"entity {tag} is both {seen.get(tag)} and {key}"
+            seen[tag] = key
+
+
+def test_each_staged_body_is_its_own_physical_group(staged):
+    """One body, one group, one sub-model part -- which is what lets a phase deactivate
+    one lift without taking its neighbour with it."""
+    project, result = staged
+    groups = {gmsh.model.getPhysicalName(dim, tag): (dim, tag)
+              for dim, tag in gmsh.model.getPhysicalGroups(2)}
+    for key, *_ in project.soil_bodies():
+        assert key in groups, f"{key} is not a physical group"
+    assert len({groups[key] for key, *_ in project.soil_bodies()}) == \
+        len(project.soil_bodies()), "two bodies share one group"
+
+
+def test_an_unstaged_project_still_cuts_the_pit_away(full):
+    """The gate: one excavation level means the old behaviour, unchanged."""
+    project, _ = full
+    assert len(project.excavation.levels) == 1
+    assert [key for key, *_ in project.soil_bodies()] == \
+        [f"soil_{layer.id}" for layer in project.layers]
+
+
 # ── A part that does not reach the plane ────────────────────────────────────
 
 @pytest.mark.parametrize("key", ["wells", "anchors"])

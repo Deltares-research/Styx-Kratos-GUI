@@ -5,6 +5,12 @@ var App = window.App || {};
 App.LivePatches = (function () {
   var installed = false;
   var inFlight = false;
+
+  /* The command box's own recall, and the guard that keeps a second install() from
+     binding a second Enter handler onto the same box -- which would run every command
+     twice. Module scope, because install() may be called more than once (the tests do)
+     and neither may be reset when it is. */
+  var cmdHistory = [], cmdIndex = 0, commandBoxBound = false;
   var activeLayerEdit = null;
 
   function copy(value) { return JSON.parse(JSON.stringify(value)); }
@@ -1150,6 +1156,10 @@ App.LivePatches = (function () {
         if (App.Export) App.Export.run();
         return;
       }
+      if (item && item.action === 'calculate') {
+        if (App.Calculate) App.Calculate.run();
+        return;
+      }
 
       if (item && item.action === 'toggleRuler') return toggleRulers();
 
@@ -1163,8 +1173,9 @@ App.LivePatches = (function () {
       }
       if (item && /^(refineMesh|coarsenMesh|resetMeshRefinement)$/.test(item.action)) {
         if (item.action === 'resetMeshRefinement') {
-          App.MESH_REFINEMENTS = [];
-          App.Command.note('Local mesh refinements reset.');
+          App.MESH_REFINEMENTS = null;
+          App.Command.note(
+            "Local mesh refinement reset; the model's own is used again.");
         } else {
           var factor = item.action === 'refineMesh' ? 0.5 : 2;
           App.MESH_REFINEMENTS = [pitRefinement(App.PROJECT, factor)];
@@ -1292,6 +1303,10 @@ App.LivePatches = (function () {
           item.action = 'exportModel';
         }
       });
+      /* There is deliberately no menu item for the CROW example. Models are opened by
+         running the Python that builds them -- `run app/crow.py` in the command box --
+         which works for any model, not only the one example somebody thought to add a
+         button for. See `runScript`. */
       if (!fileMenu.items.some(function (item) { return item && item.action === 'importMdpa'; })) {
         // Belongs beside Export model -- the same File > Print/Export group -- not
         // tacked on after Exit, which is where a plain push would leave it.
@@ -1459,6 +1474,18 @@ App.LivePatches = (function () {
       if (treeHost) treeHost.addEventListener('contextmenu', onTreeContextMenu, true);
     }
 
+    /* `help` is a canned list in the frozen mockup (js/data.js:866). The commands this
+       build really has belong in it, or the only way to find them is to read the
+       source. Spliced above the mode-jump line so the scripting entry point is the
+       first thing in the list rather than the last. */
+    if (App.CMD_RESPONSES && App.CMD_RESPONSES.help &&
+        !App.CMD_RESPONSES.help.some(function (line) { return /run </.test(line[1]); })) {
+      App.CMD_RESPONSES.help.splice(1, 0,
+        ['note', '  run <file.py>         build the model from a Python file'],
+        ['note', '  export                write the Kratos deck'],
+        ['note', '  cleargeometry         remove drawn/imported custom geometry']);
+    }
+
     var frozenRun = App.Command.run;
     App.Command.run = function (text) {
       if (App.DrawInput && App.DrawInput.handleCommand(text)) return;
@@ -1476,6 +1503,31 @@ App.LivePatches = (function () {
         return;
       }
       
+      /* run <file.py> -- build the model from a Python file.
+
+         The scripting interface every modeller of this kind has, and the reason the
+         command line is here rather than being a log: the file says what the model is,
+         the server runs it, and what comes back is adopted and meshed. Errors are the
+         server's own message verbatim -- app/script.py writes them to be read here,
+         with no stack trace on screen to fall back on. */
+      if (cmd === 'run' || cmd === 'load') {
+        var scriptPath = (text || '').trim().slice(cmd.length).trim();
+        if (App.Command.write) App.Command.write('echo', '> ' + (text || '').trim());
+        if (!scriptPath) {
+          if (App.Command.err) App.Command.err('Usage: run <path to a .py file>');
+          return;
+        }
+        return App.Api.post('/api/project/script', { path: scriptPath })
+          .then(function (result) {
+            return adoptProject(result.project,
+              'Ran ' + scriptPath + ' — model built. Meshing it now.');
+          })
+          .then(function () { requestMesh(true, null); })
+          .catch(function (error) {
+            if (App.Command.err) App.Command.err(error.message);
+          });
+      }
+
       if (cmd === 'export') {
         if (App.Command.write) App.Command.write('echo', '> ' + text.trim());
         if (App.Export) App.Export.run();
@@ -1727,20 +1779,48 @@ App.LivePatches = (function () {
         App.runAction({ action: action });
       });
 
-      // The command module's input handler calls a private `run`, so intercept the one
-      // live command whose frozen callback contains invented mesh counts.
-      document.addEventListener('keydown', function (event) {
+      /* The command box, routed through the live interpreter.
+
+         js/command.js binds its input to a *private* `run`, so replacing the exported
+         `App.Command.run` does not change what typing into the box does: the frozen
+         interpreter answers, and every live command reads as "Unknown command". This
+         used to intercept `mesh` alone, which is why it was not noticed -- every other
+         live command (`run`, `export`, `cleargeometry`, and anything `DrawInput`
+         handles) was being answered by the frozen one.
+
+         So the interception is now unconditional: Enter always goes to
+         `App.Command.run`, whose wrapper falls back to the frozen interpreter for
+         anything the live layer does not implement. Recall has to be reimplemented with
+         it -- the frozen history is private to the same closure, and stopping its
+         handler is what stops it being filled. */
+      var alreadyBound = commandBoxBound;
+      commandBoxBound = true;
+      if (!alreadyBound) document.addEventListener('keydown', function (event) {
         if (event.key === 'Escape' && activeLayerEdit && !activeLayerEdit.committed) {
           // activeLayerEdit.snapshot is a {layers, boreholes} pair, not a bare array.
           restoreSoil(activeLayerEdit.snapshot);
           activeLayerEdit = null;
         }
         var entry = document.getElementById('cmd-entry');
-        if (event.key === 'Enter' && event.target === entry
-            && /^_?mesh(?:\s|$)/i.test(entry.value.trim())) {
+        if (entry && event.target === entry && event.key === 'Enter') {
+          var text = entry.value.trim();
+          if (!text) return;
           event.preventDefault(); event.stopImmediatePropagation();
-          var text = entry.value.trim(); entry.value = '';
+          cmdHistory.push(text); cmdIndex = cmdHistory.length;
+          entry.value = '';
           App.Command.run(text);
+          return;
+        }
+        if (entry && event.target === entry
+            && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
+          event.preventDefault(); event.stopImmediatePropagation();
+          if (event.key === 'ArrowUp') {
+            if (cmdIndex > 0) entry.value = cmdHistory[--cmdIndex];
+          } else if (cmdIndex < cmdHistory.length - 1) {
+            entry.value = cmdHistory[++cmdIndex];
+          } else {
+            cmdIndex = cmdHistory.length; entry.value = '';
+          }
           return;
         }
         // The frozen shell double-books F9 as Calculate. In Mesh mode it means mesh.

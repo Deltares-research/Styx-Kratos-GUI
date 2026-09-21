@@ -20,6 +20,7 @@ import json
 import pytest
 
 from app import build, kratos
+from app.kratos_materials import KILO
 from app.schemas import MeshRequest, Project
 from app.seed import seed_project
 from tests import mdpa
@@ -143,7 +144,7 @@ def test_the_panel_section_becomes_a_material_entry_mapped_to_its_part(walled):
     variables = entry["Material"]["Variables"]
 
     assert entry["Material"]["constitutive_law"]["name"]
-    assert variables["YOUNG_MODULUS"] == pytest.approx(2.1e8)
+    assert variables["YOUNG_MODULUS"] == pytest.approx(2.1e8 * KILO)
     assert variables["POISSON_RATIO"] == pytest.approx(0.3)
     assert variables["THICKNESS"] == pytest.approx(0.4)
     assert variables["DENSITY"] == pytest.approx(7850.0)
@@ -192,7 +193,7 @@ def test_the_member_takes_the_sheet_piles_profile_library(walled):
     entry = next(e for e in entries if e["model_part_name"] == "PorousDomain.King_post_1")
     variables = entry["Material"]["Variables"]
 
-    assert variables["YOUNG_MODULUS"] == pytest.approx(2.1e8)
+    assert variables["YOUNG_MODULUS"] == pytest.approx(2.1e8 * KILO)
     assert variables["CROSS_AREA"] == pytest.approx(0.0198)
     assert variables["I33"] == pytest.approx(5.52e-4)
     # A beam in space bends about two axes and twists about the third.
@@ -263,11 +264,11 @@ def test_the_tendon_becomes_a_material_entry_with_its_prestress(walled):
     entry = next(e for e in entries if e["model_part_name"] == "PorousDomain.Anchor_1")
     variables = entry["Material"]["Variables"]
 
-    assert variables["YOUNG_MODULUS"] == pytest.approx(1.95e8)
+    assert variables["YOUNG_MODULUS"] == pytest.approx(1.95e8 * KILO)
     # Discrete in 3D: the plane-strain smear over the out-of-plane spacing is exactly
     # what a 3D model does not do, because the anchor is where the user put it.
     assert variables["CROSS_AREA"] == pytest.approx(0.0006)
-    assert variables["TRUSS_PRESTRESS_PK2"] == pytest.approx(250.0)
+    assert variables["TRUSS_PRESTRESS_PK2"] == pytest.approx(250.0 * KILO)
 
 
 def test_an_anchor_may_hang_from_a_member_instead_of_a_wall(session):

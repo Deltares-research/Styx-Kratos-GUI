@@ -8,6 +8,8 @@ the one that opens off `file://`.
 
 import json
 import re
+import sys
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -519,11 +521,13 @@ BEAM = {"id": "sheetpile_1", "name": "Sheet pile 1", "section": "az26",
         "points": [[12.0, 0.0], [12.0, -14.0]], "active": True}
 # What comes back: `kind` is defaulted in, which is how a project written before the
 # 3D pile kinds existed still loads as the 2D sheet pile it was saved as, and the
-# section gains the two inertias only a member in space has any use for.
+# section gains the two inertias only a member in space has any use for, and the shear
+# area that `None` means "take the whole section" for.
 # `derived_from` comes back on every structure: it is how a translated pair is linked
 # (app/walls.py), and a pile the client authored is nobody's translation.
 STORED_BEAM = BEAM | {"kind": "beam", "derived_from": None}
-STORED_SECTION = SECTION | {"inertia_minor": None, "torsional_inertia": None}
+STORED_SECTION = SECTION | {"shear_area": None, "inertia_minor": None,
+                            "torsional_inertia": None}
 
 
 def test_patch_structures_creates_a_sheet_pile_and_its_section(client):
@@ -1018,7 +1022,8 @@ def test_the_live_shell_replaces_only_the_viewport_and_the_orbit_controller(clie
     assert set(replaced) == {"api.js", "buffers.js", "model.js", "viewport.js", "patches.js",
                              "mesh-settings.js", "import-dialog.js", "mdpa-import-dialog.js",
                              "draw-input.js", "soil-volume-dialog.js", "canvas-renderer.js",
-                             "export.js", "history.js", "loads.js", "beams.js", "anchors.js",
+                             "export.js", "calculate.js", "history.js", "loads.js",
+                             "beams.js", "anchors.js",
                              "interfaces.js", "normal-loads.js", "material-library.js",
                              "orbit.js", "ruler.js", "mesh-labels.js",
                              "download.js", "zip.js"}
@@ -1139,6 +1144,54 @@ def test_export_can_leave_the_material_file_out(client):
                        json={"element_size": 8.0, "include_materials": False}).json()
     assert body["materials"] is None
     assert body["mdpa"]
+
+
+def test_calculate_meshes_exports_and_runs_the_deck(client, monkeypatch, tmp_path):
+    """The whole button, with a stand-in for Kratos: the project is meshed and exported
+    as usual, the three files land in a directory of their own, and what comes back is
+    where they went and what the run produced."""
+    from app import calculate
+
+    monkeypatch.setenv(calculate.RUNS_ENV, str(tmp_path / "runs"))
+    monkeypatch.setenv(calculate.PYTHON_ENV, sys.executable)
+    monkeypatch.setattr(calculate, "COMMAND",
+                        ["-c", "open('results.post.res', 'w').close()"])
+
+    body = client.post("/api/calculate", json={"element_size": 8.0}).json()
+
+    assert body["ok"] is True
+    directory = Path(body["directory"])
+    assert directory.parent == tmp_path / "runs"
+    assert sorted(body["inputs"]) == sorted(p.name for p in directory.iterdir()
+                                            if p.suffix in (".mdpa",) or p.name.endswith("Parameters.json"))
+    assert body["outputs"] == ["results.post.res"]
+    assert body["stats"]["elements"] > 0
+
+
+def test_calculate_reports_a_failed_run_rather_than_raising(client, monkeypatch,
+                                                            tmp_path):
+    """A model Kratos refuses is an answer about the model, not a broken server: it
+    comes back 200 with `ok` false and what Kratos said."""
+    from app import calculate
+
+    monkeypatch.setenv(calculate.RUNS_ENV, str(tmp_path / "runs"))
+    monkeypatch.setenv(calculate.PYTHON_ENV, sys.executable)
+    monkeypatch.setattr(calculate, "COMMAND",
+                        ["-c", "import sys; print('Error: nope'); sys.exit(1)"])
+
+    response = client.post("/api/calculate", json={"element_size": 8.0})
+
+    assert response.status_code == 200
+    assert response.json()["ok"] is False
+    assert "nope" in response.json()["error"]
+
+
+def test_calculate_refuses_a_second_run_while_one_is_going(client, monkeypatch):
+    from app import calculate
+
+    monkeypatch.setattr(calculate, "_running", True)
+
+    assert client.post("/api/calculate", json={"element_size": 8.0}).status_code == 409
 
 
 def test_export_rejects_an_unknown_body_key(client):
@@ -1324,3 +1377,28 @@ def test_a_2d_model_survives_a_round_trip_through_the_solid_model(client, restor
     assert back["components"] == [0.0, -20.0]
 
     client.put("/api/project", json=seed_project().model_dump())
+
+
+def test_the_crow_case_can_be_opened_and_drawn(client):
+    """The staged-excavation model, through the routes the browser actually calls --
+    which is `run examples/crow/crow.py` in the command box, and nothing of its own.
+
+    `test_crow_reference.py` says the deck is right; this says the model can be looked
+    at, which is a different failure -- a body with no colour, or a key the viewport
+    cannot name, takes the geometry endpoint down without touching the export.
+    """
+    from tests.crow_example import PATH
+    loaded = client.post("/api/project/script", json={"path": str(PATH)})
+    assert loaded.status_code == 200, loaded.text
+    project = loaded.json()["project"]
+    assert project["dimension"] == 2
+    assert len(project["excavation"]["levels"]) == 3
+    assert project["beams"] and project["anchors"] and project["normal_loads"]
+
+    geometry = client.get("/api/geometry")
+    assert geometry.status_code == 200
+    drawn = {section["key"] for section in geometry.json()["sections"]}
+    # Eight soil bodies, the wall and the strut. The loads are arrow glyphs the
+    # viewport draws from the project itself, so they are not in this payload.
+    assert len([k for k in drawn if k.startswith("soil_")]) == 8
+    assert {"sheetpile", "strut"} <= drawn

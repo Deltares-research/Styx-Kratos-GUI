@@ -14,7 +14,7 @@ from __future__ import annotations
 import math
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, computed_field, model_validator
 
 Hex = Annotated[str, Field(pattern=r"^#[0-9a-fA-F]{6}$")]
 Ident = Annotated[str, Field(min_length=1, max_length=64)]
@@ -22,6 +22,11 @@ PositiveSize = Annotated[float, Field(gt=0)]
 
 ATTACHMENT_TOLERANCE = 1e-6
 """Metres. How close an anchor head must be to a sheet pile to count as on it."""
+
+_LEVEL_TOLERANCE = 1e-9
+"""Metres. Below this a layer and an excavation lift merely touch rather than overlap,
+and no body lies between them -- the common case where a lift is dug exactly to a layer
+boundary (`Project.soil_bodies`)."""
 
 
 class Base(BaseModel):
@@ -121,6 +126,37 @@ class Material(Base):
     r_inter: float = Field(default=0.70, gt=0, le=1)
     interface_permeability: Literal["Neutral", "Drain", "Impermeable"] = "Neutral"
 
+    porosity: float | None = Field(default=None, ge=0, lt=1)
+    """Voids as a fraction of total volume. None falls back to
+    `app/kratos_materials.py:DEFAULT_POROSITY`, which is what every project written
+    before this field existed carries. A number here is the user's, and is written."""
+
+    k0_nc: float | None = Field(default=None, gt=0, le=2)
+    """Coefficient of earth pressure at rest, normally consolidated (Kratos' `K0_NC`).
+
+    `None` means "use Jaky's formula" -- see `k0_normally_consolidated`. It is optional
+    rather than defaulted because only a material with a friction angle has an answer,
+    and non-porous rock has neither.
+    """
+
+    def k0_normally_consolidated(self) -> float | None:
+        """K0 for the initial stage, or `None` if this material cannot say.
+
+        Jaky's `1 - sin(phi)` when nothing overrides it: the standard correlation, and
+        the one the CROW reference deck's own numbers follow (0.62 and 0.46 are Jaky at
+        22.3 deg and 32.7 deg). Deriving it rather than defaulting to a constant keeps a
+        stiff soil and a loose one from being handed the same initial stress ratio.
+
+        `None` for a material with no friction angle -- non-porous rock -- because there
+        is nothing to derive it from. The caller omits `K0_NC` in that case and leaves
+        the k0 procedure on its own default rather than inventing one here.
+        """
+        if self.k0_nc is not None:
+            return self.k0_nc
+        if self.phi is None:
+            return None
+        return 1.0 - math.sin(math.radians(self.phi))
+
 
 class SoilLayer(Base):
     id: Ident
@@ -165,11 +201,61 @@ class Excavation(Base):
     z0: float
     z1: float
     floor_y: float
+    """The final floor: the deepest level, and the one an unstaged project digs to in
+    one go. Always `levels[-1]` -- see `_levels_are_the_truth`."""
+
+    levels: list[float] = Field(default_factory=list)
+    """The lifts the pit is dug in, shallowest first, each strictly below the last.
+
+    A staged excavation is not one hole that appears at once: each lift is its own body
+    in the mesh, deactivated in its own phase (`Excavated_Soil_1/2/3` in the CROW
+    reference deck). One level means an unstaged pit, which is what every project
+    written before this field had, and is why it defaults to `[floor_y]` rather than to
+    empty.
+    """
+
+    @model_validator(mode="before")
+    @classmethod
+    def _reconcile_floor_and_levels(cls, value: object) -> object:
+        """Keep `floor_y` and `levels` from ever disagreeing, without guessing.
+
+        Two fields describing one hole can drift, so the pair is reconciled on the way
+        in. Three cases, and the third is the reason this is not a one-liner:
+
+        *   **No `levels`** -- every project saved before this field. It becomes a
+            single lift at `floor_y`, so old files keep opening.
+        *   **They agree, or only `levels` is given** -- `floor_y` is (re)derived from
+            the last level. This is the round-trip case, and the common one.
+        *   **They disagree** -- refused, whatever the level count. Which field the
+            caller meant to edit is not knowable from the payload, and silently
+            rewriting the one they just changed is the outcome that must not happen.
+            Editing the pit floor therefore means editing `levels`, and omitting
+            `floor_y` is always allowed.
+        """
+        if not isinstance(value, dict):
+            return value
+        levels, floor = value.get("levels"), value.get("floor_y")
+        if not levels:
+            return value if floor is None else {**value, "levels": [floor]}
+        if floor is None or floor == levels[-1]:
+            return {**value, "floor_y": levels[-1]}
+        raise ValueError(
+            f"excavation floor_y ({floor}) disagrees with the last of its "
+            f"{len(levels)} levels ({levels[-1]}); edit levels, which floor_y follows"
+        )
 
     @model_validator(mode="after")
     def _ordered(self) -> Excavation:
         if self.x1 <= self.x0 or self.z1 <= self.z0:
             raise ValueError("excavation extents must be strictly increasing")
+        if not all(math.isfinite(level) for level in self.levels):
+            raise ValueError("excavation levels must all be finite")
+        for upper, lower in zip(self.levels, self.levels[1:]):
+            if lower >= upper:
+                raise ValueError(
+                    f"excavation levels must descend: {lower} does not lie below "
+                    f"{upper}"
+                )
         return self
 
 
@@ -338,6 +424,15 @@ class BeamSection(Base):
     nu: float = Field(ge=0, lt=0.5)
     area: float = Field(gt=0)              # m2 per metre run
     inertia: float = Field(gt=0)           # m4 per metre run, about the out-of-plane axis
+    shear_area: float | None = Field(default=None, gt=0)   # m2 per metre run
+    """The area that carries shear, which is less than the whole section -- a rolled
+    profile shears in its web. None takes the full section, which is what this exported
+    before the field existed and is the shear-stiff end of the range.
+
+    It is also how a model says shear deformation is not part of it: a value far larger
+    than the section makes `GA_s` large enough that the beam bends as a Bernoulli one.
+    The CROW reference does exactly that (`THICKNESS_EFFECTIVE_Y` twenty times its own
+    thickness), which is why this is a field and not a derivation."""
     density: float = Field(gt=0)           # kg/m3
     spacing: float = Field(default=1.0, gt=0)
     """Out-of-plane spacing in metres. 1.0 is a continuous wall -- the usual sheet
@@ -402,7 +497,7 @@ class AnchorSection(Base):
     name: str
     E: float = Field(gt=0)                 # kN/m2
     area: float = Field(gt=0)              # m2 of steel per anchor
-    density: float = Field(gt=0)           # kg/m3
+    density: float = Field(ge=0)           # kg/m3; 0 for a tendon modelled massless
     spacing: float = Field(default=2.5, gt=0)
     tension_limit: float | None = Field(default=None, gt=0)      # kN per anchor
     compression_limit: float | None = Field(default=None, gt=0)
@@ -462,9 +557,12 @@ class InterfaceSection(Base):
 
     Zero thickness means there is no modulus here: the element's stiffness is a stiffness
     *per unit area*, kN/m3, and its strength is the adjacent soil's reduced by `r_inter`.
-    Left unset, the two stiffnesses are derived from the soil's own E over
-    `virtual_thickness` -- the device every geotechnical preprocessor uses, and the
-    reason `material` is worth carrying.
+    Left unset, the two are derived from the soil the contact runs against -- shear is
+    its shear modulus over `virtual_thickness`, normal is ten times that -- which is what
+    `app/kratos_materials.py` does and where the reasoning for it lives.
+
+    *Which* soil is the adjacent body's by default, one property set per body, as the
+    reference deck does it. `material` overrides that for the whole contact.
 
     `r_inter` and `permeability` mirror the fields the soil `Material` already has, so
     the material library's interface presets (js/material-library.js) drop straight in.
@@ -472,24 +570,25 @@ class InterfaceSection(Base):
     id: Ident
     name: str
     material: Ident | None = None
-    """The soil the interface slides against. Its E, cohesion and friction angle are what
-    `r_inter` reduces. None leaves the stiffnesses to be given explicitly."""
+    """One soil for the whole contact, overriding the per-body default. Its E, cohesion
+    and friction angle are what `r_inter` reduces. None -- the usual case -- derives each
+    stretch of contact from the body it actually runs against."""
     r_inter: float = Field(default=0.7, gt=0, le=1)
-    virtual_thickness: float = Field(default=0.01, gt=0)      # m
+    virtual_thickness: float = Field(default=1.0, gt=0)       # m
+    """The element size normal to the interface, which the derived stiffnesses are the
+    soil's shear modulus over. 1.0 is the reference deck's own
+    (`MaterialParameters_for_generated_mesh.json`); it was 0.01 until the stiffnesses
+    were checked against it."""
     normal_stiffness: float | None = Field(default=None, gt=0)   # kN/m3
     shear_stiffness: float | None = Field(default=None, gt=0)    # kN/m3
     permeability: Literal["Neutral", "Drain", "Impermeable"] = "Neutral"
 
-    @model_validator(mode="after")
-    def _has_something_to_derive_from(self) -> InterfaceSection:
-        if self.material is None and (self.normal_stiffness is None
-                                      or self.shear_stiffness is None):
-            raise ValueError(
-                f"interface section {self.id!r} needs either a soil material to reduce "
-                "or both a normal and a shear stiffness; there is nothing to derive the "
-                "contact's stiffness from otherwise"
-            )
-        return self
+    # There used to be a validator here refusing a section with neither a material nor
+    # explicit stiffnesses. That is the ordinary case now: such a section derives from
+    # whatever soil each stretch of the contact runs against, which is a fact about the
+    # mesh and cannot be known here. The one case that really has nothing to derive from
+    # -- a contact with no soil on either side -- is still refused, at export, where the
+    # adjacent bodies are known (`app/kratos_materials.py:_interface_variables`).
 
 
 class Interface(Base):
@@ -806,6 +905,71 @@ class WaterLevel(Base):
     project, the same way `y` is one phreatic level -- not a per-load setting."""
 
 
+class Phase(Base):
+    """One construction phase: what changes about the model, and how it is solved.
+
+    The field names follow the phase panel the GUI already draws (js/data.js:559),
+    because that is the UI this feeds and a second vocabulary would have to be
+    translated twice.
+
+    **A phase stores a diff, not a state.** `activate` and `deactivate` say what this
+    phase changes about the model it inherits from `parent`; they do not describe the
+    whole model. Two reasons, and both matter: the reference deck's `stage_preprocess`
+    *is* that diff, so nothing has to be reconstructed on export; and storing absolute
+    state would mean rewriting every later phase whenever a part is added to the model.
+    Resolving diff to state is one function, in `app.phases`, which is the only place
+    that walks the parent chain.
+
+    `parent` makes a tree, and a tree can branch. Kratos cannot run one: its orchestrator
+    runs a flat `execution_list`. Linearising the tree, and refusing one that cannot be
+    linearised, is the export's job (`app.phases`) rather than this class's -- a branch
+    is a legitimate thing to have half-built in the editor, and refusing it here would
+    make it impossible to type.
+
+    Out of scope deliberately: a per-phase phreatic level ("Pore
+    pressure calculation type" in the phase panel). The reference deck never varies
+    it -- it changes which water *load* is active, not the water table -- so there is
+    no worked example to follow and inventing one would be guessing. See
+    plan/staged-construction-plan.md sec 7.
+    """
+    id: Ident
+    name: str
+    parent: Ident | None = None
+    """The phase this one starts from. `None` only for the first, which starts from the
+    model as built."""
+
+    calculation: Literal["K0 procedure", "Plastic", "Null step"] = "Plastic"
+    loading: Literal["Staged construction"] = "Staged construction"
+
+    activate: list[Ident] = Field(default_factory=list)
+    deactivate: list[Ident] = Field(default_factory=list)
+
+    # The three the reference deck actually varies between its stages (see
+    # plan sec 0.2). Their defaults are its initial stage's own values, so a phase that
+    # says nothing solves the way that one does.
+    reset_displacements: bool = False
+    """Kratos' `reset_totals`: start this phase's displacements from zero. The reference
+    turns it on when the wall is installed, so the wall's own deflection is measured
+    from the ground it was built into rather than from the undisturbed state."""
+
+    max_iterations: int = Field(default=15, gt=0)
+    tolerated_error: float = Field(default=1e-4, gt=0)
+    """Kratos' `residual_relative_tolerance`."""
+
+    time_interval: float = Field(default=0.0, ge=0)
+    """Days. Zero for the static phases this exporter writes; carried because the phase
+    panel has it and a consolidation phase would need it."""
+
+    @model_validator(mode="after")
+    def _one_instruction_per_part(self) -> Phase:
+        both = sorted(set(self.activate) & set(self.deactivate))
+        if both:
+            raise ValueError(
+                f"phase {self.id!r} both activates and deactivates: {', '.join(both)}"
+            )
+        return self
+
+
 class MeshSettings(Base):
     element_size: float = Field(default=2.5, gt=0)
     order: Literal[1, 2] = 2
@@ -819,6 +983,13 @@ class MeshSettings(Base):
     size_min_factor: float = Field(default=0.05, gt=0, le=1)
     second_order_linear: bool = True
     body_sizes: dict[Ident, PositiveSize] = Field(default_factory=dict)
+    refinements: list[BoxRefinement | CylinderRefinement] = Field(default_factory=list)
+    """Local size fields, finer than `element_size`, in the region each one covers.
+
+    On the settings rather than on the mesh *request*, where this used to live, because
+    a refinement is part of what a model is: a deep excavation wants a fine mesh around
+    its wall whoever opens it and whichever button they press. Left on the request, it
+    had to be re-typed for every mesh and could not travel in a saved project at all."""
 
 
 class LayersUpdate(Base):
@@ -874,6 +1045,13 @@ class DimensionUpdate(Base):
 class BoxRefinement(Base):
     kind: Literal["box"]
     size: float = Field(gt=0)
+    thickness: float = Field(default=0.0, ge=0)
+    """The width of the band outside the box over which the element size grows from
+    `size` back to the model's own. Zero -- the default, and what every refinement
+    written before this field carried -- steps straight from one to the other, which is
+    what a refinement drawn as a box means. A band is what turns a box around a
+    structure into a graded mesh: fine where the answer is read, coarse where it is
+    not, and no sudden change in element size in between."""
     x_min: float
     x_max: float
     z_min: float
@@ -907,7 +1085,6 @@ class CylinderRefinement(Base):
 
 
 class MeshRequest(MeshSettings):
-    refinements: list[BoxRefinement | CylinderRefinement] = Field(default_factory=list)
     volume_keys: list[Ident] | None = Field(default=None, min_length=1)
 
 
@@ -969,6 +1146,26 @@ class Project(Base):
     water: WaterLevel
     mesh: MeshSettings = Field(default_factory=MeshSettings)
     custom_parts: list[CustomPart] = Field(default_factory=list)
+    phases: list[Phase] = Field(default_factory=list)
+    """The construction sequence, in creation order. Empty means an unphased project --
+    every project written before staged construction -- which exports exactly what it
+    always did. That is the compatibility contract; see `test_export_golden.py`."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _drop_derived(cls, value: object) -> object:
+        """Ignore fields the project publishes but does not accept.
+
+        `soil_body_keys` and `soil_body_labels` are computed from the layers and the
+        excavation, and go out with every project so the viewport knows which bodies
+        exist and the Model explorer knows what to call them. A client that edits a
+        project and PUTs it back sends the whole document, these fields included, and
+        `extra: forbid` would refuse it over values the server itself produced.
+        """
+        derived = ("soil_body_keys", "soil_body_labels")
+        if not isinstance(value, dict) or not any(k in value for k in derived):
+            return value
+        return {k: v for k, v in value.items() if k not in derived}
 
     @model_validator(mode="before")
     @classmethod
@@ -1062,8 +1259,7 @@ class Project(Base):
 
         occupied = {
             "excavation", "wall", "struts", "anchors", "piles", "water", "wells",
-        } | {f"soil_{layer.id}" for layer in self.layers} \
-          | {part.key for part in self.custom_parts}
+        } | set(self.soil_body_keys) | {part.key for part in self.custom_parts}
         collisions = sorted(load.id for load in self.loads if load.id in occupied)
         if collisions:
             raise ValueError(
@@ -1084,6 +1280,8 @@ class Project(Base):
             raise ValueError(
                 "anchor id collides with an existing model part key: " + ", ".join(collisions)
             )
+
+        self._check_phases()
 
         known = {m.id for m in self.materials}
         for layer in self.layers:
@@ -1209,8 +1407,13 @@ class Project(Base):
             e = self.excavation
             if not self.domain.contains_plan(e.x0, e.x1, e.z0, e.z1):
                 raise ValueError("excavation extends outside the domain in plan")
-            if not (self.domain.y_bottom < e.floor_y < self.domain.y_top):
-                raise ValueError("excavation floor must lie inside the domain depth range")
+            # Every lift, not only the last: an intermediate level above the ground or
+            # below the model is as unbuildable as a floor there, and saying so here
+            # means the geometry step never has to check.
+            if not all(self.domain.y_bottom < level < self.domain.y_top
+                       for level in e.levels):
+                raise ValueError(
+                    "every excavation level must lie inside the domain depth range")
         return self
 
     def section_normal(self) -> str:
@@ -1383,9 +1586,181 @@ class Project(Base):
         """Everything a 3D model builds structure from, in `beams[]` order."""
         return [b for b in self.beams if isinstance(b, (Panel, Member))]
 
+    def _check_phases(self) -> None:
+        """The construction sequence is a tree of real phases over real parts.
+
+        Structure only. Whether the tree can be flattened into the one sequence Kratos
+        runs is the export's question, not this one -- a branch is a legitimate thing to
+        have half-built in the editor, and refusing it here would make it impossible to
+        type (see `Phase`).
+        """
+        if not self.phases:
+            return
+        _reject_duplicates([phase.id for phase in self.phases], "phase")
+
+        ids = {phase.id for phase in self.phases}
+        roots = [phase.id for phase in self.phases if phase.parent is None]
+        if len(roots) != 1:
+            raise ValueError(
+                "a construction sequence needs exactly one root phase -- the one that "
+                f"starts from the model as built -- but {len(roots)} have no parent"
+            )
+        for phase in self.phases:
+            if phase.parent is not None and phase.parent not in ids:
+                raise ValueError(
+                    f"phase {phase.id!r} starts from nowhere: there is no phase "
+                    f"{phase.parent!r}"
+                )
+            if phase.parent == phase.id:
+                raise ValueError(f"phase {phase.id!r} starts from itself")
+
+        # Every phase has to reach the root by following parents. Anything that does not
+        # is in a cycle, which would make `app.phases` walk for ever.
+        parents = {phase.id: phase.parent for phase in self.phases}
+        for start in ids:
+            seen, at = set(), start
+            while at is not None:
+                if at in seen:
+                    raise ValueError(
+                        f"phases form a cycle through {at!r}; every phase must lead "
+                        "back to the one that starts from the model as built"
+                    )
+                seen.add(at)
+                at = parents[at]
+
+        # A phase may only name parts the model actually has. Caught here rather than at
+        # export because a phase naming a deleted structure is a modelling mistake the
+        # user can fix, and finding it only when Calculate is pressed would be late.
+        parts = set(self.stageable_keys())
+        for phase in self.phases:
+            unknown = sorted({key for key in phase.activate + phase.deactivate
+                              if key not in parts})
+            if unknown:
+                raise ValueError(
+                    f"phase {phase.id!r} names no such part: {', '.join(unknown)}"
+                )
+
+    @computed_field
+    @property
+    def soil_body_keys(self) -> list[str]:
+        """The part keys of `soil_bodies`, published with the project.
+
+        Read by the viewport, which needs to know which soil bodies exist in order to
+        show them and cannot work it out for itself: deriving the lift split in the
+        browser would be a second implementation of `soil_bodies` to keep in step with
+        this one. It is published, not accepted -- `_drop_derived` removes it on the way
+        back in -- so a client that echoes the project it was given is not rejected for
+        a field it did not invent.
+        """
+        return [key for key, *_ in self.soil_bodies()]
+
+    @computed_field
+    @property
+    def soil_body_labels(self) -> dict[str, str]:
+        """What to call each soil body in front of a user, keyed by part key.
+
+        The Model explorer lists bodies, and three keys differing only by a `__lift2`
+        suffix are not something to show anyone. A body that is the whole of its layer
+        is just the layer's name; one that is part of a staged layer says which part.
+
+        Published beside `soil_body_keys` rather than derived in the browser from the
+        key's suffix, for the same reason: the split is this class's to describe.
+        """
+        names = {f"soil_{layer.id}": layer.name for layer in self.layers}
+        labels: dict[str, str] = {}
+        for key, *_ in self.soil_bodies():
+            stem, _, suffix = key.partition("__")
+            name = names.get(stem, stem)
+            if not suffix:
+                labels[key] = name
+            elif suffix.startswith("lift"):
+                labels[key] = f"{name} · lift {suffix[len('lift'):]}"
+            else:
+                labels[key] = f"{name} · below the pit"
+        return labels
+
+    def soil_bodies(self) -> list[tuple[str, float, float, bool]]:
+        """Every soil body the excavation splits the layers into, as
+        `(part key, y_bottom, y_top, inside the pit outline)`.
+
+        With one excavation level nothing is split: the pit is a void cut out of the
+        soil (`build._cut_the_pit`) and each layer is one body under its own key, which
+        is what every project did before staged construction existed.
+
+        With several, the soil inside the pit's plan outline is *kept* -- it has to be,
+        because each lift is deactivated in its own phase -- and split into the lifts it
+        is dug in. A body is the intersection of one layer with one lift, so a lift
+        deeper than the layer it starts in cannot produce a single body spanning two
+        materials. What lies below the final floor but still inside the outline is its
+        own body too: it is never dug, but it sits on the excavated side of the wall and
+        has to be nameable apart from the same layer on the retained side.
+
+        Soil outside the outline keeps the layer's own key, so a body that was never
+        staged never changes name. Ordered outside-first, then by lift, so the key list
+        is stable for the viewport and the exporter.
+        """
+        boreholes = self.borehole_ids()
+        if not boreholes or not self.layers:
+            # Called from `part_keys`, which runs during validation and on a project
+            # that has no ground in it yet -- the site the server opens on. No layers
+            # means no bodies, and it must not be an error to ask.
+            return []
+        bh = boreholes[0]
+        layers = [(f"soil_{layer.id}", layer.bots[bh], layer.tops[bh])
+                  for layer in self.layers]
+        outside = [(key, bottom, top, False) for key, bottom, top in layers]
+        if len(self.excavation.levels) < 2:
+            return outside
+
+        # The lifts, top down, then the ground below the final floor. `None` marks that
+        # last one: it is the part of the outline that is never dug.
+        bands: list[tuple[str | None, float, float]] = []
+        ceiling = self.domain.y_top
+        for index, level in enumerate(self.excavation.levels, start=1):
+            bands.append((f"lift{index}", level, ceiling))
+            ceiling = level
+        bands.append((None, self.domain.y_bottom, ceiling))
+
+        inside = []
+        for key, bottom, top in layers:
+            for suffix, band_bottom, band_top in bands:
+                low, high = max(bottom, band_bottom), min(top, band_top)
+                if high - low <= _LEVEL_TOLERANCE:
+                    continue     # this layer does not reach this band
+                inside.append((f"{key}__{suffix or 'pit'}", low, high, True))
+        return outside + inside
+
+    def expand_body_keys(self, keys: list[str]) -> list[str]:
+        """Turn a list that may name soil *layers* into one naming soil *bodies*.
+
+        A staged layer is several bodies -- the lifts it is dug in, plus what is left
+        below the floor -- and the parts of the app that let a user pick soil pick
+        layers, because that is what a user drew: the Mesh properties dialog lists
+        `project.layers` (`live/js/mesh-settings.js`). Naming a layer therefore has to
+        mean every body dug out of it, or checking one there would mesh the retained
+        side and leave the entire excavation out of the model.
+
+        Anything that is not a soil layer passes through untouched, and a key that
+        already names a body is kept as it stands, so this is safe to apply to any list
+        and is a no-op on a project with nothing staged.
+        """
+        bodies: dict[str, list[str]] = {}
+        for key, *_ in self.soil_bodies():
+            bodies.setdefault(key.partition("__")[0], []).append(key)
+        out: list[str] = []
+        for key in keys:
+            for expanded in bodies.get(key, [key]):
+                if expanded not in out:
+                    out.append(expanded)
+        return out
+
     def part_keys(self) -> list[str]:
         """The frontend's userData.key namespace, in render order."""
-        soils = [f"soil_{layer.id}" for layer in self.layers]
+        # `soil_bodies` is the authority on what soil there is: one key per layer while
+        # the pit is a void, and one per (layer, lift) once it is staged. Deriving both
+        # from it keeps the namespace and the geometry from disagreeing about how many
+        # soil bodies a project has.
+        soils = [key for key, *_ in self.soil_bodies()]
         customs = [p.key for p in self.custom_parts]
         beams = ([beam.id for beam in self.beams] + [a.id for a in self.anchors]
                  + [i.id for i in self.interfaces])
@@ -1398,6 +1773,28 @@ class Project(Base):
             "excavation", "wall", "struts", "anchors", "piles",
         ] + [load.id for load in self.loads] + [n.id for n in self.normal_loads] \
           + beams + ["water", "wells"] + customs
+
+    def stageable_keys(self) -> list[str]:
+        """What a phase may switch on and off, which is wider than what is drawn.
+
+        `part_keys` is the *render* namespace, in draw order, and the simple example
+        deliberately draws no load pads -- so a project built that way has line loads
+        that appear nowhere in it. They are still real parts of the deck: the reference
+        stages one, `Load`, which arrives with the wall and stays. A phase has to be
+        able to name them, so the staging namespace is `part_keys` plus every load id.
+
+        Everything drawn is stageable; not everything stageable is drawn. The two are
+        kept as separate lists rather than by widening `part_keys`, which would change
+        draw order: `part_keys` feeds tessellation, and a key appearing there makes the
+        viewport look for geometry that a load pad in the simple example does not have.
+        """
+        keys = list(self.part_keys())
+        seen = set(keys)
+        for load in [l.id for l in self.loads] + [n.id for n in self.normal_loads]:
+            if load not in seen:
+                seen.add(load)
+                keys.append(load)
+        return keys
 
 
 def _reject_duplicates(ids: list[str], what: str) -> None:

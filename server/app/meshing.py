@@ -86,12 +86,21 @@ def mesh_project(project: Project, element_size: float | None = None,
 
     started = time.perf_counter()
     built = build.build_geometry(project)
-    meshed_keys = volume_keys or project.part_keys()
+    # Expanded, because what picks these picks *layers*: the Mesh properties dialog
+    # lists `project.layers`, and a staged layer is several bodies. Naming the layer has
+    # to bring the lifts dug out of it, or a project whose pit is staged meshes only the
+    # ground outside it -- see `Project.expand_body_keys`. A no-op when nothing is
+    # staged, and on a list that already names bodies.
+    meshed_keys = project.expand_body_keys(volume_keys) if volume_keys \
+        else project.part_keys()
     unknown = sorted(set(meshed_keys) - set(project.part_keys()))
     if unknown:
         raise ValueError("unknown mesh body key(s): " + ", ".join(unknown))
     finite_element_tags = _finite_element_volumes(project, built, meshed_keys)
     requested_sizes = project.mesh.body_sizes if body_sizes is None else body_sizes
+    # A size asked for a layer applies to every body dug out of it, for the same reason.
+    requested_sizes = {key: size for layer_key, size in requested_sizes.items()
+                       for key in project.expand_body_keys([layer_key])}
     unknown_sizes = sorted(set(requested_sizes) - set(project.part_keys()))
     if unknown_sizes:
         raise ValueError("unknown mesh body size key(s): " + ", ".join(unknown_sizes))
@@ -100,10 +109,27 @@ def mesh_project(project: Project, element_size: float | None = None,
         for key in meshed_keys
         for tag in built.volumes.get(key, [])
     }
+    # The same sizes, for the parts that are curves rather than bodies: a sheet pile, a
+    # member, an anchor, the line an interface or a normal load follows. They have part
+    # keys like everything else, so a size could always be *asked* for one -- it was
+    # looked up in `built.volumes`, which holds nothing for them, and silently dropped.
+    # A wall meshed finer than the ground it stands in is the ordinary thing to want:
+    # the wall is where the bending moments are read, and the reference deck meshes its
+    # own at 1 m inside soil at 2 m.
+    #
+    # Only the sizes actually asked for, unlike the bodies above. Pinning every curve to
+    # the base size would stop the mesh grading along it, and a curve that nobody sized
+    # should take whatever the surface around it is doing.
+    curve_sizes = {
+        tag: requested_sizes[key]
+        for key in meshed_keys if key in requested_sizes
+        for tag in built.curves.get(key, [])
+    }
 
     gmsh.logger.start()
     try:
         _configure(size, finite_element_tags, refinements or [], volume_sizes=volume_sizes,
+                   curve_sizes=curve_sizes,
                    algorithm_3d=algorithm, algorithm_2d=algorithm_planar, dim=dim,
                    smoothing=smooth, curvature_points=curvature,
                    size_min_factor=minimum_factor, second_order_linear=linear_order_two,
@@ -146,6 +172,7 @@ def _finite_element_volumes(project: Project, result: build.BuildResult,
 def _configure(element_size: float, volume_tags: list[int],
                refinements: list[BoxRefinement | CylinderRefinement] | None = None,
                *, volume_sizes: dict[int, float] | None = None,
+               curve_sizes: dict[int, float] | None = None,
                algorithm_3d: str = "delaunay", algorithm_2d: str = "frontal",
                dim: int = 3, smoothing: int = 10,
                curvature_points: int = 16, size_min_factor: float = 0.05,
@@ -161,7 +188,8 @@ def _configure(element_size: float, volume_tags: list[int],
         "Mesh.MeshSizeMax",
         max([element_size]
             + [r.size for r in refinements or []]
-            + list((volume_sizes or {}).values())),
+            + list((volume_sizes or {}).values())
+            + list((curve_sizes or {}).values())),
     )
     gmsh.option.setNumber("Mesh.MeshSizeExtendFromBoundary", 0)
     gmsh.option.setNumber("Mesh.MeshSizeFromPoints", 0)
@@ -185,13 +213,15 @@ def _configure(element_size: float, volume_tags: list[int],
     if structural:
         gmsh.model.setVisibility(structural, 1, recursive=True)
     gmsh.option.setNumber("Mesh.MeshOnlyVisible", 1)
-    _apply_refinements(element_size, refinements or [], volume_sizes or {}, dim)
+    _apply_refinements(element_size, refinements or [], volume_sizes or {}, dim,
+                       curve_sizes or {})
 
 
 def _apply_refinements(base_size: float,
                        refinements: list[BoxRefinement | CylinderRefinement],
                        volume_sizes: dict[int, float] | None = None,
-                       dim: int = 3) -> int:
+                       dim: int = 3,
+                       curve_sizes: dict[int, float] | None = None) -> int:
     """Create local size fields and return the background Min field tag, or zero.
 
     A size is restricted to each OCC volume instead of meshing the volumes in
@@ -210,6 +240,9 @@ def _apply_refinements(base_size: float,
                 ("XMin", refinement.x_min), ("XMax", refinement.x_max),
                 ("YMin", refinement.y_min), ("YMax", refinement.y_max),
                 ("ZMin", refinement.z_min), ("ZMax", refinement.z_max),
+                # gmsh grows the size from VIn back to VOut across this band outside
+                # the box. Zero is a step, which is what a box with no band means.
+                ("Thickness", refinement.thickness),
             ):
                 fields.setNumber(tag, option, value)
         else:
@@ -231,6 +264,18 @@ def _apply_refinements(base_size: float,
         # silently ignored -- every element comes out the base size instead.
         fields.setNumbers(restricted, "SurfacesList" if dim == 2 else "VolumesList",
                           [volume_tag])
+        field_tags.append(restricted)
+
+    for curve_tag, curve_size in (curve_sizes or {}).items():
+        constant = fields.add("MathEval")
+        fields.setString(constant, "F", repr(curve_size))
+        restricted = fields.add("Restrict")
+        fields.setNumber(restricted, "InField", constant)
+        # `CurvesList` whatever the model's dimension: a structure is a curve in a plane
+        # section and a curve in a solid alike. Restricted to the curve, so a finely
+        # meshed wall pulls the elements that touch it finer -- they have to share its
+        # nodes -- and leaves the far field alone.
+        fields.setNumbers(restricted, "CurvesList", [curve_tag])
         field_tags.append(restricted)
 
     if not field_tags:

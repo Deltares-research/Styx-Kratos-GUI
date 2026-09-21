@@ -49,6 +49,41 @@ separate, so the same checkout can safely move between Windows and Linux. Run `r
   free interface line through the soil instead, which splits soil from soil. Interfaces
   are plane strain, so the tool is closed in the 3D model.
 
+## Calculating
+
+**Calculate** (toolbar, or **F9** outside Mesh mode) meshes the project, writes the deck --
+`<project>.mdpa`, `MaterialParameters.json`, `ProjectParameters.json` -- into a directory of its
+own, and runs it through Kratos' orchestrator. Nothing changes on screen: the command log says
+whether the run succeeded and where the files went. Each run gets its own directory and nothing is
+cleaned up.
+
+Kratos is not installed by `run.bat`, and its compiled extensions are bound to the exact Python
+they were built for, which is usually not the one running the server. So the calculation runs as a
+subprocess, and the server has to be told which interpreter to use:
+
+| Variable | What | Example |
+|---|---|---|
+| `KRATOS_GUI_PYTHON` | The interpreter your Kratos build was made for. Defaults to the server's own. | `C:\Kratos\.venv\Scripts\python.exe` |
+| `KRATOS_GUI_KRATOS` | The build directory, holding `KratosMultiphysics\` and `libs\`. Leave unset if the interpreter already finds Kratos. | `C:\Kratos\bin\Release` |
+| `KRATOS_GUI_RUNS` | Where run directories are made. | `~/KratosGUI/runs` (default) |
+| `KRATOS_GUI_TIMEOUT` | Seconds before a run is given up on. | `3600` (default) |
+
+The first two can also be written down instead of exported, which is usually what you want --
+`run.bat` is started by double-clicking it and inherits no shell you set variables in. Create
+`server\kratos.local.json`:
+
+```json
+{
+    "python": "C:\\Kratos\\.venv\\Scripts\\python.exe",
+    "kratos": "C:\\Kratos\\bin\\Release"
+}
+```
+
+That file is machine-specific and git-ignored; an environment variable still wins over it. Both
+are read on every run, so a machine can be set up and Calculate pressed again without restarting
+the server. If Kratos cannot be found, the command log says exactly what to write where; the deck
+is written either way, so it can also just be run by hand.
+
 Run backend tests with `server/.venv-linux/bin/python -m pytest -q` on Linux, or
 `server\.venv-windows\Scripts\python.exe -m pytest -q` on Windows. JavaScript logic tests are in
 `live/tests/index.html` and require no build step.

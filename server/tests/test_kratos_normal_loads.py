@@ -126,7 +126,7 @@ def test_a_hydrostatic_normal_load_writes_the_reference_process(hydrostatic):
     assert parameters["fluid_pressure_type"] == "Hydrostatic"
     assert parameters["gravity_direction"] == 1
     assert parameters["reference_coordinate"] == -3.5
-    assert parameters["specific_weight"] == 10.0
+    assert parameters["specific_weight"] == 10000.0
 
 
 def test_the_magnitude_is_written_whichever_mode_the_load_is_in(session):
@@ -138,7 +138,7 @@ def test_the_magnitude_is_written_whichever_mode_the_load_is_in(session):
             normal_load_project(fluid_pressure_type=mode, pressure=17.5),
             MeshRequest(element_size=3.0, order=2))
         parameters = process_of(export)["Parameters"]
-        assert parameters["value"][0] == pytest.approx(17.5), mode
+        assert parameters["value"][0] == pytest.approx(17500.0), mode
 
 
 def test_a_uniform_normal_load_writes_its_own_value_instead(session):
@@ -148,7 +148,7 @@ def test_a_uniform_normal_load_writes_its_own_value_instead(session):
     parameters = process_of(export)["Parameters"]
 
     assert parameters["fluid_pressure_type"] == "Uniform"
-    assert parameters["value"][0] == pytest.approx(25.0)
+    assert parameters["value"][0] == pytest.approx(25000.0)
     assert "reference_coordinate" not in parameters
     # Only what the process declares: Kratos validates its parameters against its own
     # defaults and stops on a key it does not know, so nothing is invented here.
@@ -168,7 +168,7 @@ def test_a_normal_load_applies_the_magnitude_it_was_given(session):
 
     parameters = process_of(export)["Parameters"]
     assert parameters["fluid_pressure_type"] == "Uniform"
-    assert parameters["value"][0] == pytest.approx(42.0)
+    assert parameters["value"][0] == pytest.approx(42000.0)
 
 
 def test_an_inactive_normal_load_writes_no_process(session):
@@ -198,7 +198,7 @@ def test_the_line_the_gui_drafts_by_default_exports_a_condition(session):
     assert block.name == "LineNormalLoadDiffOrderCondition2D3N"
     assert block.entries, "the drafted line has mesh on it"
     # The form's own defaults, so the first load anyone makes carries its magnitude.
-    assert process_of(export)["Parameters"]["value"][0] == pytest.approx(15.0)
+    assert process_of(export)["Parameters"]["value"][0] == pytest.approx(15000.0)
 
 
 def test_a_staged_project_applies_the_normal_load_in_every_stage(session):

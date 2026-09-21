@@ -480,8 +480,25 @@ App.Viewport = (function () {
     };
   }
 
+  /* Which soil bodies there are to show.
+
+     Not one per layer: a staged excavation splits the soil inside the pit into the
+     lifts it is dug in, so three layers can be eight bodies (server/app/schemas.py,
+     `Project.soil_bodies`). Deriving that split here would be a second implementation
+     of it to keep in step, so the project publishes the answer and this reads it.
+
+     Naming one key per layer is what used to leave every body inside the pit out of
+     `modeGroups` -- built by buildGroups, then invisible in every mode, which is the
+     whole excavated side of the model missing. The fallback is for a project that
+     carries no such list: an older server, or the frozen mockup's own data. */
+  function soilKeysOf(project, layers) {
+    var published = project && project.soil_body_keys;
+    if (Array.isArray(published) && published.length) return published.slice();
+    return (layers || []).map(function (l) { return 'soil_' + l.id; });
+  }
+
   function rebuildModeGroups() {
-    soilKeys = (App.LAYERS || []).map(function (l) { return 'soil_' + l.id; });
+    soilKeys = soilKeysOf(App.PROJECT, App.LAYERS);
     var customKeys = ((App.PROJECT && App.PROJECT.custom_parts) || [])
       .map(function (p) { return p.key; });
     var loadKeys = ((App.PROJECT && App.PROJECT.loads) || []).filter(function (load) {
@@ -1269,13 +1286,29 @@ App.Viewport = (function () {
      mesh itself, and the node numbering the ID labels are drawn from -- and a numbering
      taken from different settings than the mesh on screen would be numbers for a mesh
      nobody is looking at. */
+  /* The refinements a mesh is built with: the ones set from the toolbar this session
+     if there are any, and otherwise the model's own (`MeshSettings.refinements`). A
+     model can carry a graded mesh -- server/app/crow.py refines its excavation and
+     grades out to the far field -- and it has to mesh that way from the Generate-mesh
+     button and from Export alike, not only from a script.
+
+     Length, not truthiness: "Reset local mesh refinement" leaves an empty array behind,
+     and an empty array is truthy. Reset means "back to what the model asks for", not
+     "no refinement at all". */
+  function meshRefinements() {
+    var local = App.MESH_REFINEMENTS;
+    if (local && local.length) return local.slice();
+    var mesh = App.PROJECT && App.PROJECT.mesh;
+    return (mesh && mesh.refinements) ? mesh.refinements.slice() : [];
+  }
+
   function meshSettings() {
     return Object.assign({}, App.PROJECT ? App.PROJECT.mesh : {
       element_size: 2.5, order: 2, algorithm_3d: 'delaunay', optimization: 'gmsh',
       smoothing: 10, curvature_points: 16, size_min_factor: 0.05,
       second_order_linear: true
     }, {
-      refinements: App.MESH_REFINEMENTS || [],
+      refinements: meshRefinements(),
       volume_keys: Array.isArray(App.MESH_BODY_SELECTION)
         ? App.MESH_BODY_SELECTION.slice()
         : App.MeshSettings.meshTargets(App.PROJECT, App.state.selection, isVisible)
@@ -1760,7 +1793,8 @@ App.Viewport = (function () {
     DEFAULT_VIEW_MODE: DEFAULT_VIEW_MODE, DEFAULT_DIMENSION: DEFAULT_DIMENSION,
     cameraAngles: cameraAngles, clampAngles: clampAngles, triadAxes: triadAxes,
     WORLD_UP: WORLD_UP,
-    generateMesh: generateMesh, hasMesh: hasMesh, resize: resize,
+    generateMesh: generateMesh, meshRefinements: meshRefinements,
+    hasMesh: hasMesh, resize: resize,
     meshSettings: meshSettings,
     setLabels: setLabels, labelsOn: labelsOn,
     refreshLabels: refreshLabels, syncLabels: syncLabels,
@@ -1777,6 +1811,7 @@ App.Viewport = (function () {
     // client-side edit they just made.
     rebuildSoil: function () {},
     refresh: refresh, gridReference: gridReference, computeModeGroups: computeModeGroups,
+    soilKeysOf: soilKeysOf,
     computeGroupKeys: computeGroupKeys,
     loadGlyphSpec: loadGlyphSpec, loadGlyphGroup: loadGlyphGroup,
     normalLoadGlyphSpec: normalLoadGlyphSpec,
