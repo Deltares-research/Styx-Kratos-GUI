@@ -115,10 +115,17 @@ it at the strength `r_inter` sets."""
 
 ASSUMPTIONS = (
     "Material variables are derived: densities from unit weights at g=9.81 m/s2, "
-    f"porosity fixed at {DEFAULT_POROSITY}, permeability converted from m/day to m/s, "
+    f"porosity {DEFAULT_POROSITY} where a material does not give one, "
+    "permeability converted from m/day to m/s, "
     "and everything carrying a force converted from the project's kN to the deck's N. "
     "Check them against the Kratos version you run."
 )
+"""What the deck decided rather than read, said once per export.
+
+Porosity is worded as a fallback rather than as a fixed value on purpose: it stopped
+being fixed when `Material.porosity` arrived (plan sec 7.4, "the user owns the value"),
+and the material editor now has a row for it -- so a notice claiming it is pinned at
+0.3 would contradict a control the user is looking at."""
 
 
 def material_parameters(

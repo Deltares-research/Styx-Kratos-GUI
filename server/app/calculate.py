@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import time
 from datetime import datetime
@@ -69,6 +70,21 @@ INITIAL_MATERIALS_NAME = "initial_materials.json"
 """The K0 stage's own materials file. Written only when the deck has a stage that
 reads it; the name matches `kratos_processes.INITIAL_MATERIALS_FILENAME`."""
 LOG_NAME = "kratos.log"
+
+# Imported rather than restated: `kratos_runner` prints these markers and this
+# parses them, so there is one spelling in one place. Safe to import from here --
+# the runner is a script that imports Kratos only inside `run()`, which is what
+# lets the server read its constants without a Kratos build (see its docstring).
+from app.kratos_runner import STAGE_MARKER
+
+_STAGE_LINE = re.compile(
+    re.escape(STAGE_MARKER) + r" (begin|end) (\d+)/(\d+) (.*?)\s*$", re.MULTILINE)
+"""One stage marker.
+
+The name runs to the end of the line because `Stage.name` comes from `Phase.name`,
+which the user types and may well put a space in. Not anchored at the start,
+because Kratos writes from C++ and from Python into the same pipe and the two
+interleave -- a marker can arrive with someone else's half-line in front of it."""
 
 DEFAULT_TIMEOUT = 3600.0
 
@@ -248,9 +264,14 @@ def run(export: dict) -> dict:
         _running = False
 
     (directory / LOG_NAME).write_text(output, encoding="utf-8")
+    stage = failed_stage(output)
     return {
         "ok": returncode == 0,
         "returncode": returncode,
+        # Which stage the run died in, for the command log to name. Null on a run
+        # that finished, and on one that never reached a stage at all.
+        "stage": None if stage is None else
+                 {"index": stage[0], "of": stage[1], "name": stage[2]},
         "seconds": round(time.monotonic() - started, 1),
         "directory": str(directory),
         "inputs": inputs,
@@ -259,15 +280,35 @@ def run(export: dict) -> dict:
         # quietly leave out whichever one nobody thought of.
         "outputs": sorted(_contents(directory) - before - {LOG_NAME}),
         "log": LOG_NAME,
-        "error": None if returncode == 0 else _explain(output),
+        "error": None if returncode == 0 else _explain(output, stage=stage),
     }
+
+
+def failed_stage(output: str) -> tuple[int, int, str] | None:
+    """The stage that started and never finished, as `(index, of, name)`.
+
+    `None` when there is nothing to blame, which is three different situations and
+    all three are right to stay quiet about: a deck with no markers at all (every
+    one written before this existed), a run that died before the first stage was
+    reached (Kratos missing, the mdpa unreadable), and a run whose every stage
+    ended -- if the sequence finished, whatever went wrong afterwards is not a
+    stage's fault and naming the last one would be a lie.
+    """
+    started: tuple[int, int, str] | None = None
+    for event, index, total, name in _STAGE_LINE.findall(output):
+        if event == "begin":
+            started = (int(index), int(total), name)
+        else:
+            started = None
+    return started
 
 
 def _contents(directory: Path) -> set[str]:
     return {path.name for path in directory.iterdir()}
 
 
-def _explain(output: str, lines: int = 30) -> str:
+def _explain(output: str, lines: int = 30,
+             stage: tuple[int, int, str] | None = None) -> str:
     """Why the run failed, as far as anything here can tell.
 
     Kratos puts its reason at the end -- the error line, then the C++ stack that raised
@@ -282,5 +323,14 @@ def _explain(output: str, lines: int = 30) -> str:
                                             python_env=PYTHON_ENV, kratos_env=KRATOS_ENV)
     if any(marker in output for marker in UNLOADABLE_KRATOS):
         return UNLOADABLE_KRATOS_ADVICE.format(settings=SETTINGS_FILE)
-    tail = [line for line in output.strip().splitlines() if line.strip()][-lines:]
-    return "\n".join(tail) or "Kratos exited without saying why; see the log."
+    # The stage markers are scaffolding, not output. Left in, forty of them would
+    # push Kratos' own reason off the end of the message they exist to improve.
+    tail = [line for line in output.strip().splitlines()
+            if line.strip() and STAGE_MARKER not in line][-lines:]
+    reason = "\n".join(tail) or "Kratos exited without saying why; see the log."
+    if stage is None:
+        return reason
+    # In front of the reason, not instead of it: where it failed and why are both
+    # wanted, and Kratos is the only one that knows the second.
+    index, total, name = stage
+    return f"{name} (stage {index} of {total}) failed:\n{reason}"

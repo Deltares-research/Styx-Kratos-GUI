@@ -424,3 +424,77 @@ def test_a_buried_line_load_in_3d_warns_rather_than_vanishing(session):
                                    MeshRequest(element_size=6.0, order=1))
 
     assert any("LineLoad_2" in w for w in export["warnings"]), export["warnings"]
+
+
+# ── Staged construction in 3D ───────────────────────────────────────────────
+# `kratos.py`'s two `if dim == 2 else []` guards keep a 3D deck from staging its
+# structures: no automatic wall-installation stage, and no master/slave tie. That is
+# the restriction plan sec 7.13 says to keep -- but it used to be silent, and the
+# phases panel is visible in 3D projects, so a user could build a sequence here and
+# never be told which part of it the deck dropped.
+#
+# What the guards do *not* stop is the phase list itself, and these tests say so in
+# both directions: the warning is about the structures, not about staging as a whole.
+
+def _phased(project: Project, activate: list[str]) -> Project:
+    payload = project.model_dump()
+    payload["phases"] = [
+        {"id": "initial", "name": "Initial", "calculation": "K0 procedure",
+         "deactivate": activate},
+        {"id": "build", "name": "Build", "parent": "initial", "activate": activate},
+    ]
+    return Project.model_validate(payload)
+
+
+def test_a_3d_phase_list_still_activates_and_deactivates_its_parts(session):
+    """The restriction is narrower than "staging is 2D only", and a warning that
+    claimed otherwise would send a user to redraw a model that works.
+
+    A panel and an anchor switched off in the first phase and on in the second come
+    out as a Deactivate and an Activate operation, exactly as they would in plane
+    strain. Only the *implicit* sheet-pile staging and the interface ties are dropped.
+    """
+    export = kratos.export_project(
+        _phased(structured([PANEL, MEMBER], [ANCHOR]), ["panel_1", "anchor_1"]),
+        MeshRequest(element_size=6.0, order=1))
+    doc = json.loads(export["project_parameters"])
+
+    assert doc["orchestrator"]["settings"]["execution_list"] == ["1_Initial", "2_Build"]
+    operations = {
+        name: [op["Parameters"]["model_part_name_list"]
+               for op in stage.get("stage_preprocess", {}).get("operations", [])]
+        for name, stage in doc["stages"].items()
+    }
+    assert operations["1_Initial"] == [["PorousDomain.Wall_1", "PorousDomain.Anchor_1"]]
+    assert operations["2_Build"] == [["PorousDomain.Wall_1", "PorousDomain.Anchor_1"]]
+
+
+def test_a_3d_project_with_structures_says_they_are_not_staged(session):
+    """The silent skip, made audible. A 2D deck installs its wall in a stage of its
+    own even with no phases at all; the same model in 3D gets one stage and said
+    nothing about the difference."""
+    export = kratos.export_project(structured([PANEL, MEMBER], [ANCHOR]),
+                                   MeshRequest(element_size=6.0, order=1))
+
+    note = [w for w in export["warnings"] if "not staged" in w]
+    assert note, export["warnings"]
+    assert "3D" in note[0] or "plane strain" in note[0]
+
+
+def test_the_note_is_absent_from_a_3d_project_with_nothing_to_stage(session):
+    """No structures, nothing withheld, nothing to say. A warning that fires on every
+    3D export is one people learn to skip past."""
+    export = kratos.export_project(seed_project(simple=True),
+                                   MeshRequest(element_size=6.0, order=1))
+
+    assert not any("not staged" in w for w in export["warnings"]), export["warnings"]
+
+
+def test_the_note_is_absent_in_plane_strain(session):
+    """2D is the case where the structures *are* staged."""
+    payload = structured([PANEL, MEMBER], [ANCHOR]).model_dump()
+    payload["dimension"] = 2
+    export = kratos.export_project(Project.model_validate(payload),
+                                   MeshRequest(element_size=6.0, order=1))
+
+    assert not any("not staged" in w for w in export["warnings"]), export["warnings"]

@@ -138,8 +138,8 @@ def bounding_box(tags: list[int], dim: int = 3,
 
 def build_geometry(project: Project) -> BuildResult:
     """Rebuild the current gmsh model from the project. Returns tags per part key."""
-    if project.simple_example:
-        return _build_simple_example(project)
+    if project.layered_soil:
+        return _build_layered_soil(project)
     gmsh.logger.start()
     try:
         gmsh.clear()
@@ -213,8 +213,16 @@ def build_geometry(project: Project) -> BuildResult:
         gmsh.logger.stop()
 
 
-def _build_simple_example(project: Project) -> BuildResult:
-    """A stable, structure-free layered block for the current UI example."""
+def _build_layered_soil(project: Project) -> BuildResult:
+    """Soil as the layer stack itself, plus whatever the user drew.
+
+    One box per layer across the whole domain, the drawn beams/anchors/interfaces/custom
+    parts embedded in it, and no excavation void unless the pit is staged. What this
+    path does *not* do is raise the seeded demo structures -- the 3D wall ring, strut
+    frame and pile group `_build_solids` makes -- which is the whole of the difference
+    and the reason `Project.layered_soil` is named for the soil rather than for the
+    example it was first written to serve.
+    """
     gmsh.logger.start()
     try:
         gmsh.clear()

@@ -14,17 +14,17 @@
   /* A drawn/imported part's THREE.Group exists (buildGroups makes one per section key)
      but setMode() only shows keys present in modeGroups[mode] -- so a custom part that
      computeModeGroups leaves out of every mode is created, then invisible forever,
-     regardless of the eye toggle. The default project has simple_example: true, which
+     regardless of the eye toggle. The default project has layered_soil: true, which
      used to hard-code modeGroups to soilKeys only. */
 
-  test('a custom part is visible in every mode of a simple_example project', function () {
+  test('a custom part is visible in every mode of a layered_soil project', function () {
     var groups = App.Viewport.computeModeGroups(['soil_L1', 'soil_L2'], ['drawn_0'], true);
     ['soil', 'structures', 'mesh', 'flow', 'staged'].forEach(function (mode) {
       T.ok(groups[mode].indexOf('drawn_0') >= 0, mode + ' is missing the custom part');
     });
   });
 
-  test('in a full (non-simple_example) project, a custom part follows the structural ' +
+  test('in a full (non-layered_soil) project, a custom part follows the structural ' +
        'parts -- everywhere but the soil-only mode', function () {
     var groups = App.Viewport.computeModeGroups(['soil_L1'], ['drawn_0'], false);
     ['structures', 'mesh', 'flow', 'staged'].forEach(function (mode) {
@@ -49,7 +49,7 @@
       ['structures', 'mesh', 'staged'].forEach(function (mode) {
         ['beam_1', 'anchor_1'].forEach(function (key) {
           T.ok(groups[mode].indexOf(key) >= 0,
-               mode + ' hides ' + key + (simple ? ' (simple_example)' : ''));
+               mode + ' hides ' + key + (simple ? ' (layered_soil)' : ''));
         });
       });
       T.eq(groups.soil.indexOf('beam_1'), -1, 'soil mode stays soil-only');

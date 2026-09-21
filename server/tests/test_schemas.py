@@ -438,8 +438,8 @@ def test_project_part_keys_match_the_frontend_userdata_key_namespace():
     ]
 
 
-def test_simple_example_exposes_only_soil_geometry():
-    assert seed_project().simple_example is True
+def test_layered_soil_exposes_only_soil_geometry():
+    assert seed_project().layered_soil is True
     assert seed_project().part_keys() == ["soil_L1", "soil_L2"]
     domain = seed_project().domain
     assert domain.dx == domain.dy == domain.dz
@@ -1428,14 +1428,14 @@ def test_phases_survive_a_round_trip():
 
 
 # ── What a phase may name ───────────────────────────────────────────────────
-# `part_keys` is the *render* namespace, in draw order, and the simple example
+# `part_keys` is the *render* namespace, in draw order, and a `layered_soil` project
 # deliberately draws no load pads -- so its line loads are missing from it. They are
 # still real parts of the deck, and the reference stages one (`Load` arrives with the
 # wall and stays), so they have to be nameable in a phase. Hence a second, wider list.
 
 def _simple_with_a_load() -> schemas.Project:
     p = _crow_like().model_dump()
-    p["simple_example"] = True
+    p["layered_soil"] = True
     p["loads"] = [{"id": "surcharge", "name": "Load", "kind": "line",
                    "x0": 5.0, "x1": p["domain"]["x1"], "y": 0.0,
                    "components": [0.0, -20.0]}]
@@ -1475,3 +1475,56 @@ def test_a_phase_may_switch_a_load_off_and_on_again():
                    activate=["water_2"], deactivate=["water_1"]),
         ]})
     assert p.phases[2].activate == ["water_2"]
+
+
+# ── layered_soil (was simple_example) ───────────────────────────────────────
+# The rename is `plan/staged-construction-plan.md` sec 7.14: the flag never meant "this
+# model is simple", it meant "build the soil out of the layer stack and whatever the
+# user drew, rather than raising the seeded demo wall ring, strut frame and pile group".
+# `examples/crow/crow.py` sets it on a model nobody would call simple, which is what
+# made the old name worth the churn.
+
+def test_layered_soil_accepts_the_old_simple_example_name():
+    """Every project file written before the rename carries `simple_example`.
+
+    Backwards compatibility is the hard requirement in sec 7.18, and a saved project is
+    the one artefact this application cannot re-derive, so the old spelling stays
+    readable for good rather than for a deprecation window.
+    """
+    # The full-build seed, because `layered_soil=False` is the path that reads the
+    # excavation block, and the simple seed's placeholder pit is outside its domain.
+    payload = seed_project(simple=False).model_dump()
+    payload.pop("layered_soil", None)
+    payload["simple_example"] = False
+    assert schemas.Project.model_validate(payload).layered_soil is False
+
+    payload = seed_project().model_dump()
+    payload.pop("layered_soil", None)
+    payload["simple_example"] = True
+    assert schemas.Project.model_validate(payload).layered_soil is True
+
+
+def test_layered_soil_round_trips_under_its_new_name():
+    payload = seed_project().model_dump()
+    assert payload["layered_soil"] is True
+    assert "simple_example" not in payload
+    assert schemas.Project.model_validate(payload).layered_soil is True
+
+
+def test_the_two_names_may_not_disagree():
+    """Sent both, and differing, the payload does not say which the caller meant.
+
+    Same reasoning as `Excavation._reconcile_floor_and_levels`: two fields describing
+    one thing are reconciled on the way in, and an irreconcilable pair is refused
+    rather than silently resolved to whichever pydantic happens to read last.
+    """
+    payload = seed_project().model_dump()
+    payload["simple_example"] = False
+    with pytest.raises(ValidationError, match="simple_example"):
+        schemas.Project.model_validate(payload)
+
+
+def test_the_two_names_agreeing_is_accepted():
+    payload = seed_project().model_dump()
+    payload["simple_example"] = payload["layered_soil"]
+    assert schemas.Project.model_validate(payload).layered_soil is True
