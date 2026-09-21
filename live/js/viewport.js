@@ -397,6 +397,67 @@ App.Viewport = (function () {
     return group;
   }
 
+  /* ── The water line ──────────────────────────────────────────────────────
+     The phreatic level, drawn by the client rather than tessellated by the server.
+
+     A `layered_soil` project has no water geometry at all -- `Project.part_keys`
+     omits "water" on that path, so the thin slab the full build raises is never
+     meshed and the level cannot be seen. That is the path the blank project and
+     `examples/crow/crow.py` both take, so the level being invisible is the normal
+     case rather than an edge one, and a deck whose every pore pressure is stated
+     about a number nobody can see is the thing worth fixing (plan sec 7.2).
+
+     Pure, and separated from the THREE objects below for the same reason
+     `loadGlyphSpec` is: this is the half with the arithmetic, and it is the half a
+     test can reach. */
+  function waterLineSpec(project) {
+    var d = project && project.domain;
+    var w = project && project.water;
+    if (!d || !w || typeof w.y !== 'number') return null;
+    if (typeof d.x0 !== 'number' || typeof d.x1 !== 'number') return null;
+
+    // The same overhang the slab has, and for the same reason WaterLevel's own
+    // comment gives: the level has to read against the model's outside faces rather
+    // than stopping flush with them.
+    var m = typeof w.margin === 'number' ? w.margin : 0;
+    var x0 = d.x0 - m, x1 = d.x1 + m, y = w.y;
+
+    if (project.dimension === 2) {
+      var z = sectionOffset(project);
+      return { y: y, points: [[x0, y, z], [x1, y, z]] };
+    }
+    // A single line in 3D would be an arbitrary chord through the model. The level is
+    // a plane there, so the outline of that plane is the honest drawing of it.
+    var z0 = d.z0 - m, z1 = d.z1 + m;
+    return { y: y, points: [[x0, y, z0], [x1, y, z0], [x1, y, z1], [x0, y, z1],
+                            [x0, y, z0]] };
+  }
+
+  function addWaterLine() {
+    var spec = waterLineSpec(App.PROJECT);
+    if (!spec) return;
+    var group = groups.water;
+    if (!group) {
+      group = groups.water = new THREE.Group();
+      group.name = 'water';
+      scene.add(group);
+    }
+    var line = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints(spec.points.map(function (point) {
+        return new THREE.Vector3(point[0], point[1], point[2]);
+      })),
+      // The slab's own blue (#2f8fd8), so the drawn level and a tessellated one read
+      // as the same object in a project that has both. depthTest off because the
+      // level is a reference plane, not a solid: it is meant to be legible through
+      // the ground it passes behind.
+      new THREE.LineBasicMaterial({ color: 0x2f8fd8, depthTest: false }));
+    // Never a pick target -- it is edited from the Selection explorer's rows, and a
+    // line lying inside the soil would otherwise steal clicks meant for the soil.
+    line.userData.noPick = true;
+    line.renderOrder = 17;
+    group.add(line);
+  }
+
   function addLoadGlyphs() {
     function groupFor(id) {
       var group = groups[id];
@@ -438,6 +499,10 @@ App.Viewport = (function () {
 
     addLoadGlyphs();
 
+    // Before the visibility sweep below, so the group it creates is given its
+    // `visible` entry like every other one.
+    addWaterLine();
+
     groups.mesh = groups.mesh || new THREE.Group();     // filled by generateMesh
     groups.mesh.name = 'mesh';
     if (!groups.mesh.parent) scene.add(groups.mesh);
@@ -452,7 +517,7 @@ App.Viewport = (function () {
      modeGroups[mode], so a custom part left out here is created (buildGroups gives
      every section its own THREE.Group) and then invisible forever, in every mode,
      no matter what the eye toggle says. */
-  function computeModeGroups(soilKeys, customKeys, simpleExample, loadKeys, memberKeys,
+  function computeModeGroups(soilKeys, customKeys, layeredSoil, loadKeys, memberKeys,
                              normalLoadKeys) {
     customKeys = customKeys || [];
     loadKeys = loadKeys || [];
@@ -463,11 +528,15 @@ App.Viewport = (function () {
     // along its line -- so it needs naming here for the same reason, in the modes a
     // load belongs to.
     loadKeys = loadKeys.concat(normalLoadKeys || []);
-    if (simpleExample) {
+    if (layeredSoil) {
       var visibleKeys = soilKeys.concat(customKeys);
+      // "water" in the same two modes the full build shows it in -- the level is what
+      // Flow conditions mode is for, and a staged excavation is read against it. Left
+      // out of soil/structures/mesh so those keep reading as they did.
       return { soil: visibleKeys, structures: visibleKeys.concat(loadKeys, memberKeys),
                mesh: visibleKeys.concat(['mesh'], memberKeys),
-               flow: visibleKeys, staged: visibleKeys.concat(memberKeys) };
+               flow: visibleKeys.concat(['water']),
+               staged: visibleKeys.concat(memberKeys, ['water']) };
     }
     return {
       soil:       soilKeys.slice(),
@@ -514,7 +583,7 @@ App.Viewport = (function () {
       ? (App.NORMAL_LOADS || []).map(function (item) { return item.id; })
       : [];
     modeGroups = computeModeGroups(
-      soilKeys, customKeys, !!(App.PROJECT && App.PROJECT.simple_example), loadKeys,
+      soilKeys, customKeys, !!(App.PROJECT && App.PROJECT.layered_soil), loadKeys,
       beamKeys.concat(anchorKeys), normalLoadKeys);
     var contactKeys = (App.INTERFACES || []).filter(function (item) {
       return !item.structure;
@@ -1090,10 +1159,39 @@ App.Viewport = (function () {
   }
 
   /* ── Mode / visibility ──────────────────────────────────────── */
+
+  /* Parts the selected phase has switched off, as `{key: true}`.
+
+     A third gate on top of the two that already exist -- the mode the user is in, and
+     the eye toggle on the row -- rather than a new mechanism: a group is drawn when
+     all three agree. Which is why this is a lookup rebuilt on demand rather than
+     something written into `visible`: the eye is the user's own state and must
+     survive stepping through the phases, so a phase may not overwrite it.
+
+     `App.Phases` owns the rule (live/js/phases.js), and is held to the server's
+     answers by `server/tests/test_phase_parity.py`. Empty whenever it cannot say. */
+  function phaseHidden() {
+    if (!App.Phases || !App.Phases.hiddenKeys) return {};
+    var hidden = {};
+    App.Phases.hiddenKeys(App.PROJECT, App.state && App.state.phase,
+                          App.state && App.state.mode)
+      .forEach(function (key) { hidden[key] = true; });
+    return hidden;
+  }
+
+  /* Redraw after the selected phase changes. The mode pass is the whole of it --
+     nothing about the geometry changes when a phase is selected, only which of it
+     is in the model at that moment. */
+  function applyPhaseVisibility() {
+    setMode(App.state && App.state.mode);
+  }
+
   function setMode(mode) {
     var wanted = modeGroups[mode] || [];
+    var hidden = phaseHidden();
     Object.keys(groups).forEach(function (k) {
-      groups[k].visible = wanted.indexOf(k) >= 0 && visible[k] !== false;
+      groups[k].visible = wanted.indexOf(k) >= 0 && visible[k] !== false
+                          && !hidden[k];
     });
     if (mode === 'mesh' && !meshBuilt && groups.mesh) groups.mesh.visible = false;
     if (selected && !selectedKeys.every(function (k) { return groups[k] && groups[k].visible; })) select(null);
@@ -1119,7 +1217,9 @@ App.Viewport = (function () {
     if (!(key in groups)) return;
     visible[key] = on;
     var wanted = modeGroups[App.state.mode] || [];
-    groups[key].visible = on && wanted.indexOf(key) >= 0;
+    // The phase gate applies here too, or turning an eye back on would draw a part
+    // the selected phase has not built yet.
+    groups[key].visible = on && wanted.indexOf(key) >= 0 && !phaseHidden()[key];
     if (key === 'mesh' && !meshBuilt && groups.mesh) groups.mesh.visible = false;
     if (!on && selectedKeys.indexOf(key) >= 0) select(null);
     // A hidden mesh has nothing to number: the labels follow the eye, or they float
@@ -1814,6 +1914,8 @@ App.Viewport = (function () {
     soilKeysOf: soilKeysOf,
     computeGroupKeys: computeGroupKeys,
     loadGlyphSpec: loadGlyphSpec, loadGlyphGroup: loadGlyphGroup,
+    waterLineSpec: waterLineSpec,
+    applyPhaseVisibility: applyPhaseVisibility,
     normalLoadGlyphSpec: normalLoadGlyphSpec,
     getScene: function() { return scene; },
     getCamera: function() { return cam; },

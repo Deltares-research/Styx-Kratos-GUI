@@ -1003,6 +1003,16 @@ class LayersUpdate(Base):
     # The plan extents, edited from the Selection explorer's Geometry rows.
     # Same reasoning: one request, one validation of the resulting model.
     domain: Domain | None = None
+    # The phreatic level and the fluid's specific weight, edited from the same
+    # explorer. One object for the whole project, exactly like `domain`, and carried
+    # here rather than on an endpoint of its own for the same reason: the water level
+    # is validated against the model it belongs to, not on its own.
+    #
+    # It is not merely cosmetic. `kratos_processes._pore_pressure` states the whole
+    # ground's water pressure from these two numbers, `_normal_load` sizes every
+    # hydrostatic load from them, and `kratos_materials` derives DENSITY_WATER from
+    # the specific weight -- so this row is the deck's water table.
+    water: WaterLevel | None = None
     # Custom soil bodies, so reassigning one's material is validated against the
     # same library in the same request.
     custom_parts: list[CustomPart] | None = None
@@ -1033,6 +1043,22 @@ class StructuresUpdate(Base):
     interface_sections: list[InterfaceSection] | None = None
     interfaces: list[Interface] | None = None
     normal_loads: list[NormalLoad] | None = None
+
+
+class PhasesUpdate(Base):
+    """The construction sequence, replaced wholesale.
+
+    Its own endpoint rather than a ride-along on `StructuresUpdate`, because a phase is
+    the one collection that is *about* the others: `activate`/`deactivate` name part
+    keys, so the list can only be validated against a model that has already settled.
+    Sent together with a structure edit, which of the two the keys should be checked
+    against would depend on the order they were applied in.
+
+    Required rather than optional, and `[]` is meaningful: it is how a project goes
+    back to being unphased, which must export exactly the deck it exported before
+    staged construction existed (plan sec 7.18).
+    """
+    phases: list[Phase]
 
 
 class DimensionUpdate(Base):
@@ -1102,7 +1128,21 @@ class ExportRequest(MeshRequest):
 
 class Project(Base):
     name: str = "Deep excavation — Rotterdam Zuid"
-    simple_example: bool = True
+
+    layered_soil: bool = True
+    """Build the soil out of the layer stack and whatever the user drew, rather than
+    also raising the seeded demo structures.
+
+    `True` takes `build._build_layered_soil`: one box per layer across the whole domain,
+    plus the drawn beams, anchors, interfaces and custom parts, and no pit cut unless
+    the excavation is staged. `False` takes the full path, which additionally raises the
+    seeded 3D wall ring, strut frame and pile group and cuts the excavation void.
+
+    Named `simple_example` until the phase editor made it user-visible, which was the
+    wrong name twice over: it is not about examples, and the models that set it are not
+    simple -- `examples/crow/crow.py` sets it. The old spelling is still accepted on the
+    way in (see `_reconcile_layered_soil`); nothing writes it any more.
+    """
 
     dimension: Literal[2, 3] = 3
     """3 builds the solid model. 2 builds a planar section through it."""
@@ -1162,10 +1202,39 @@ class Project(Base):
         project and PUTs it back sends the whole document, these fields included, and
         `extra: forbid` would refuse it over values the server itself produced.
         """
-        derived = ("soil_body_keys", "soil_body_labels")
+        derived = ("soil_body_keys", "soil_body_labels", "stageable_parts")
         if not isinstance(value, dict) or not any(k in value for k in derived):
             return value
         return {k: v for k, v in value.items() if k not in derived}
+
+    @model_validator(mode="before")
+    @classmethod
+    def _reconcile_layered_soil(cls, value: object) -> object:
+        """Accept `simple_example`, the name `layered_soil` carried until sec 7.14.
+
+        Every project file written before the rename spells it the old way, and a saved
+        project is the one thing this application cannot re-derive -- so the old key is
+        read for good rather than for a deprecation window. `extra: forbid` is what
+        makes this a validator rather than a plain `alias`: the key has to be taken out
+        of the payload, not merely mapped, or an old file is refused over the very field
+        being migrated.
+
+        Both present and disagreeing is refused. Which one the caller meant to edit is
+        not knowable from the payload -- the same reasoning, and the same answer, as
+        `Excavation._reconcile_floor_and_levels`.
+        """
+        if not isinstance(value, dict) or "simple_example" not in value:
+            return value
+        migrated = dict(value)
+        legacy = migrated.pop("simple_example")
+        current = migrated.get("layered_soil")
+        if current is not None and bool(current) != bool(legacy):
+            raise ValueError(
+                f"layered_soil ({current}) and its old name simple_example ({legacy}) "
+                f"disagree; send one of them"
+            )
+        migrated["layered_soil"] = legacy
+        return migrated
 
     @model_validator(mode="before")
     @classmethod
@@ -1403,7 +1472,7 @@ class Project(Base):
         # In 3D these are inert and deliberately unchecked: editing the domain while in
         # 3D must not fail on a stale section plane the user cannot even see.
 
-        if not self.simple_example:
+        if not self.layered_soil:
             e = self.excavation
             if not self.domain.contains_plan(e.x0, e.x1, e.z0, e.z1):
                 raise ValueError("excavation extends outside the domain in plan")
@@ -1764,7 +1833,7 @@ class Project(Base):
         customs = [p.key for p in self.custom_parts]
         beams = ([beam.id for beam in self.beams] + [a.id for a in self.anchors]
                  + [i.id for i in self.interfaces])
-        if self.simple_example:
+        if self.layered_soil:
             # Normal loads travel with the structures rather than with `loads[]`: the
             # simple example draws no load pads, but it does draw what the user has
             # drawn in it, and a symbol missing from this list is never tessellated.
@@ -1773,6 +1842,22 @@ class Project(Base):
             "excavation", "wall", "struts", "anchors", "piles",
         ] + [load.id for load in self.loads] + [n.id for n in self.normal_loads] \
           + beams + ["water", "wells"] + customs
+
+    @computed_field
+    @property
+    def stageable_parts(self) -> list[str]:
+        """`stageable_keys`, published with the project.
+
+        The browser resolves the phase tree too (`live/js/phases.js`), and resolving it
+        starts from "everything is active" -- so it needs the same namespace the server
+        starts from. It cannot derive it: the staging namespace is `part_keys` plus
+        every load id, and a `layered_soil` project draws no load pads, so a load that
+        a phase may legitimately name appears nowhere the viewport can see.
+
+        Named `stageable_parts` rather than `stageable_keys` because a computed field
+        may not share a name with a method on the same model.
+        """
+        return self.stageable_keys()
 
     def stageable_keys(self) -> list[str]:
         """What a phase may switch on and off, which is wider than what is drawn.

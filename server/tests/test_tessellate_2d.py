@@ -160,7 +160,7 @@ def test_a_normal_load_draws_no_geometry_of_its_own():
 
 
 def test_a_normal_load_still_draws_nothing_in_the_project_the_server_opens_on():
-    """The blank project takes a different build path (`_build_simple_example`), which
+    """The blank project takes a different build path (`_build_layered_soil`), which
     once drew the strip separately; it must not grow one back."""
     from app.seed import blank_project
 

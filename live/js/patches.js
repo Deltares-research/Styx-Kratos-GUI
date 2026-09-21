@@ -1039,6 +1039,483 @@ App.LivePatches = (function () {
     };
   }
 
+  /* ── The phases panel ────────────────────────────────────────────────────
+     `Explorer.mountPhases` (js/explorer.js:281) already draws everything the
+     screenshots show: an indented list, a state dot per row, and a property grid for
+     the selected phase. What it draws them from is `App.PHASES`, seven hardcoded rows
+     in js/data.js:559 describing a project nobody has open -- so the panel was a
+     picture of a phase list rather than a phase list.
+
+     Replaced wholesale rather than patched around, because almost every line of it
+     reads the frozen globals. What is kept is the markup and the class names, which
+     is what the stylesheet is written against (css/components.css:214-226).
+
+     `App.Phases` is the model; this is only the drawing and the buttons. Every edit
+     goes the same way round: build a new list, PATCH it, take the stored project
+     back. Nothing is mutated in place, so a rejected save leaves the panel showing
+     what the server actually holds rather than what the user hoped for. */
+
+  /* What the last calculation reported, for the state dots. `{completed: n}`, worked
+     out from the stage the run died in: everything before it finished. A run that
+     succeeded completed all of them; a run that never reached a stage completed
+     none. Cleared when the phase list changes, because a dot describing a sequence
+     that no longer exists is worse than a grey one. */
+  var phaseRun = null;
+
+  function rememberRun(result) {
+    var total = ((App.PROJECT && App.PROJECT.phases) || []).length;
+    if (!result) { phaseRun = null; }
+    else if (result.ok) { phaseRun = { completed: total }; }
+    else if (result.stage) { phaseRun = { completed: result.stage.index - 1 }; }
+    else { phaseRun = { completed: 0 }; }
+    mountLivePhases();
+  }
+
+  function selectedPhaseId() {
+    var list = (App.PROJECT && App.PROJECT.phases) || [];
+    if (!list.length) return null;
+    var wanted = App.state && App.state.phase;
+    var found = list.filter(function (ph) { return ph.id === wanted; })[0];
+    return found ? found.id : list[0].id;
+  }
+
+  function phaseById(id) {
+    return ((App.PROJECT && App.PROJECT.phases) || []).filter(function (ph) {
+      return ph.id === id;
+    })[0] || null;
+  }
+
+  /* Send a phase list and adopt whatever comes back.
+
+     The server is the authority on what a valid sequence is -- it refuses a branch, a
+     part key nothing answers to, and a phase that both activates and deactivates the
+     same thing -- so the reply replaces the list rather than the request confirming
+     it. On a refusal the project is reloaded, which is what puts the panel back in
+     step after an edit that could not be kept. */
+  function savePhases(list, note) {
+    return App.Api.patch('/api/project/phases', { phases: list })
+      .then(function (response) {
+        App.Model.apply(response.project);
+        // The sequence has changed, so what the last run reached no longer maps onto
+        // it. Better a row of grey dots than a green one against a phase that did
+        // not exist when the run happened.
+        phaseRun = null;
+        if (note) App.Command.ok(note);
+        mountLivePhases();
+        return App.Viewport.refresh();
+      })
+      .catch(function (error) {
+        App.Command.err(error.message);
+        return App.Model.load().then(mountLivePhases);
+      });
+  }
+
+  function phaseToolbar() {
+    var el = App.UI.el;
+    var icon = App.UI.icon;
+    var bar = el('div.dlg-toolbar.phase-toolbar');
+    var selected = selectedPhaseId();
+
+    /* The icon row at the top left of both Plaxis screenshots. `new`/`copy`/`delete`
+       are the mockup's own icon names (js/data.js:63-76); `phase` stands in for
+       insert, which has no icon of its own in the frozen set. */
+    [['new', 'Add phase', function () {
+        return App.Phases.added(App.PROJECT);
+      }, 'Phase added.'],
+     ['phase', 'Insert phase above the selected one', function () {
+        return selected ? App.Phases.inserted(App.PROJECT, selected) : null;
+      }, 'Phase inserted.'],
+     ['copy', 'Duplicate the selected phase', function () {
+        return selected ? App.Phases.copied(App.PROJECT, selected) : null;
+      }, 'Phase duplicated.'],
+     ['delete', 'Delete the selected phase', function () {
+        return selected ? App.Phases.removed(App.PROJECT, selected) : null;
+      }, 'Phase deleted.']
+    ].forEach(function (spec) {
+      var button = el('button.tbtn', { type: 'button' });
+      button.appendChild(icon(spec[0]));
+      App.UI.attachTip(button, spec[1]);
+      button.disabled = spec[0] !== 'new' && !selected;
+      button.addEventListener('click', function () {
+        App.UI.hideTip();
+        var list = spec[2]();
+        if (!list) { App.Command.err('Select a phase first.'); return; }
+        savePhases(list, spec[3]);
+      });
+      bar.appendChild(button);
+    });
+
+    bar.appendChild(el('span.tbsep'));
+
+    var dialog = el('button.btn.btn-sm', { text: 'Phases…', type: 'button' });
+    dialog.addEventListener('click', function () { phasesDialog(); });
+    bar.appendChild(dialog);
+
+    return bar;
+  }
+
+  /* The empty state, which is the one every project starts in.
+
+     A panel with nothing in it and no way out of it would be the commonest thing
+     anybody sees, so it carries the button that fills it. `default_phases` on the
+     server builds the sequence -- settle, build, then alternate digging and propping
+     -- from the model as it stands, which for the CROW model is its seven stages
+     exactly. */
+  function emptyPhaseState() {
+    var el = App.UI.el;
+    var wrap = el('div.lay-hint', { style: 'padding:10px' });
+    wrap.appendChild(el('div', { text:
+      'This project has no construction sequence: it exports as a single stage, ' +
+      'the way it always has.' }));
+    var button = el('button.btn.btn-sm', {
+      text: 'Create default phases', type: 'button',
+      style: 'margin-top:8px'
+    });
+    button.addEventListener('click', function () {
+      App.Api.post('/api/project/phases/defaults', {})
+        .then(function (response) {
+          App.Model.apply(response.project);
+          App.Command.ok('Created ' + response.project.phases.length +
+                         ' phases from the model. Edit them in the Phases panel.');
+          mountLivePhases();
+          return App.Viewport.refresh();
+        })
+        .catch(function (error) { App.Command.err(error.message); });
+    });
+    wrap.appendChild(button);
+    return wrap;
+  }
+
+  /* Clicking a part in staged mode switches it on or off for the selected phase.
+
+     Which is the behaviour the first screenshot shows, and the reason staged mode
+     exists as a mode rather than a filter. Wrapped around `App.selectObject` rather
+     than bound to the canvas, because that is the one funnel every pick already goes
+     through -- viewport click, context menu and tree row alike -- so a part cannot be
+     toggled by one route and merely selected by another.
+
+     Selection still happens. Toggling instead of selecting would leave the property
+     panel showing whatever was picked last, which is how you end up editing the wrong
+     load; and the panel is the only place the part's name is written down. */
+  function togglePartForPhase(key) {
+    var phase = selectedPhaseId();
+    if (!phase) { App.Command.err('Select a phase first.'); return false; }
+    if (App.Phases.stageableKeys(App.PROJECT).indexOf(key) < 0) return false;
+
+    var was = (App.Phases.activeParts(App.PROJECT, phase) || []).indexOf(key) >= 0;
+    var owned = App.Phases.ownership(App.PROJECT, phase, key);
+    var list = App.Phases.toggled(App.PROJECT, phase, key);
+    var label = (App.PROJECT.soil_body_labels || {})[key] || key;
+    savePhases(list, label + (was ? ' switched off in ' : ' switched on in ') +
+                     (phaseById(phase) || {}).name +
+                     (owned === 'inherited'
+                        ? ' (it was inherited from an earlier phase until now).'
+                        : '.'));
+    return true;
+  }
+
+  function mountLivePhases() {
+    if (typeof document === 'undefined') return;
+    var host = document.getElementById('list-phases');
+    if (!host) return;
+    var el = App.UI.el;
+    var icon = App.UI.icon;
+    App.UI.clear(host);
+
+    host.appendChild(phaseToolbar());
+
+    var phases = (App.PROJECT && App.PROJECT.phases) || [];
+    if (!phases.length) {
+      host.appendChild(emptyPhaseState());
+      return;
+    }
+
+    /* A branching tree has no execution order, so it has no stage list and cannot be
+       run. Said here, where it can still be fixed, rather than at Calculate -- and
+       said without hiding the rows, because the way out of it is to edit one of the
+       phases that branch. */
+    var problem = App.Phases.branchProblem(App.PROJECT);
+    if (problem) {
+      host.appendChild(el('div.lay-hint.invalid', { text: problem,
+                                                    style: 'padding:6px 10px' }));
+    }
+
+    var selected = selectedPhaseId();
+    var list = el('div.phase-list');
+    App.Phases.rows(App.PROJECT, phaseRun).forEach(function (row) {
+      var node = el('div.phase-row' + (row.id === selected ? '.selected' : ''));
+      node.style.paddingLeft = (8 + row.depth * 10) + 'px';
+      node.appendChild(el('span.phase-dot.' + row.state));
+      node.appendChild(el('span.phase-name', { text: row.name }));
+      node.appendChild(el('span.phase-kind', { text: row.kind }));
+      node.addEventListener('click', function () {
+        App.state.phase = row.id;
+        mountLivePhases();
+        // Staged mode draws the model as of the selected phase, so moving the
+        // selection moves the viewport with it.
+        if (App.Viewport.applyPhaseVisibility) App.Viewport.applyPhaseVisibility();
+        App.Command.note('Current phase: ' + row.name);
+      });
+      list.appendChild(node);
+    });
+    host.appendChild(list);
+
+    var phase = phaseById(selected);
+    if (!phase) return;
+    var grid = el('div.pgrid');
+    var head = el('div.pgrid-header');
+    head.appendChild(icon('phase'));
+    head.appendChild(el('span', { text: phase.name }));
+    grid.appendChild(head);
+    var groups = phaseProps(phase);
+    Object.keys(groups).forEach(function (name) {
+      grid.appendChild(el('div.pgrid-group', { text: name }));
+      groups[name].forEach(function (row) {
+        grid.appendChild(phasePropRow(phase, row));
+      });
+    });
+    host.appendChild(grid);
+  }
+
+  /* The property grid for one phase.
+
+     Field names follow the Plaxis panel the frozen mockup already draws
+     (js/data.js:569), because that is the UI this feeds. What it does *not* do is
+     keep the mockup's rows this exporter has nothing behind -- "Max unloading steps",
+     "Arc-length control", "Updated mesh", "Ignore undrained behaviour". A row that
+     looks editable and is thrown away on save is worse than an absent one, and the
+     three groups below are exactly what `schemas.Phase` carries.
+
+     "Pore pressure calc." stays, read-only, saying what it actually is: the reference
+     deck never varies it and a per-phase phreatic level is deliberately out of scope
+     (plan sec 7.11). "Global water level" is the honest version of the Plaxis row. */
+  function phaseProps(phase) {
+    var parent = phase.parent == null ? null : phaseById(phase.parent);
+    return {
+      'General': [
+        ['Name', 'text', 'name'],
+        ['Start from phase', 'static', parent ? parent.name : 'the model as built'],
+        ['Calculation type', 'select', 'calculation',
+         ['K0 procedure', 'Plastic', 'Null step']],
+        ['Loading type', 'static', phase.loading || 'Staged construction'],
+        ['Pore pressure calc.', 'static', 'Global water level'],
+        ['Time interval', 'number', 'time_interval', { min: 0 }, 'day']
+      ],
+      'Deformation control': [
+        ['Reset displacements to zero', 'check', 'reset_displacements']
+      ],
+      'Numerical control': [
+        ['Max iterations', 'number', 'max_iterations', { min: 1, integer: true }],
+        ['Tolerated error', 'number', 'tolerated_error', { exclusiveMin: 0 }]
+      ]
+    };
+  }
+
+  /* One row, and the edit behind it.
+
+     Every committed edit PATCHes the whole phase list, because that is what the
+     endpoint takes -- there is no per-field write, and inventing one would be a
+     second way for the list to get out of step with the server. The reply replaces
+     the list, so a value the server normalises shows the normalised one. */
+  function phasePropRow(phase, spec) {
+    var el = App.UI.el;
+    var label = spec[0], kind = spec[1];
+    var key = el('div.pgrid-key', { text: label });
+
+    function commit(value) {
+      var list = ((App.PROJECT && App.PROJECT.phases) || []).map(function (each) {
+        var edited = copy(each);
+        if (each.id === phase.id) edited[spec[2]] = value;
+        return edited;
+      });
+      savePhases(list);
+    }
+
+    if (kind === 'static') {
+      return el('div.pgrid-row', null,
+                [key, el('div.pgrid-val.readonly', { text: String(spec[2]) })]);
+    }
+
+    var control;
+    if (kind === 'text') {
+      control = el('input.cell-input', { value: phase[spec[2]] || '' });
+      control.addEventListener('change', function () {
+        var text = control.value.trim();
+        if (!text) {
+          control.value = phase[spec[2]];
+          App.Command.err('A phase name cannot be empty.');
+          return;
+        }
+        commit(text);
+      });
+    } else if (kind === 'select') {
+      control = el('select');
+      spec[3].forEach(function (option) {
+        var node = el('option', { value: option, text: option });
+        if (option === phase[spec[2]]) node.selected = true;
+        control.appendChild(node);
+      });
+      control.addEventListener('change', function () { commit(control.value); });
+    } else if (kind === 'check') {
+      control = el('input.pgrid-check', { type: 'checkbox' });
+      control.checked = !!phase[spec[2]];
+      control.addEventListener('change', function () { commit(control.checked); });
+    } else {
+      var bounds = spec[3] || {};
+      control = el('input.cell-input.cell-num', {
+        value: String(phase[spec[2]] == null ? '' : phase[spec[2]])
+      });
+      control.addEventListener('change', function () {
+        var value = parseFloat(control.value.trim().replace(',', '.'));
+        var problem = null;
+        if (!isFinite(value)) problem = label + ' must be a number.';
+        else if (bounds.integer && value !== Math.round(value)) {
+          problem = label + ' must be a whole number.';
+        } else if (bounds.min !== undefined && value < bounds.min) {
+          problem = label + ' must be at least ' + bounds.min + '.';
+        } else if (bounds.exclusiveMin !== undefined && value <= bounds.exclusiveMin) {
+          problem = label + ' must be greater than ' + bounds.exclusiveMin + '.';
+        }
+        if (problem) {
+          control.value = String(phase[spec[2]]);
+          App.Command.err(problem);
+          return;
+        }
+        commit(value);
+      });
+    }
+
+    var cell = el('div.pgrid-val.editable.field', null, [control]);
+    if (spec[4]) cell.appendChild(el('span.unit', { text: spec[4] }));
+    return el('div.pgrid-row', null, [key, cell]);
+  }
+
+  /* ── The Phases dialog ───────────────────────────────────────────────────
+     The second screenshot: the full-page phase editor, list on the left and the same
+     three groups on the right, larger. Same rows and the same edit path as the panel
+     -- it is the same grid given room -- so a phase field is described in one place
+     and written one way.
+
+     What the dialog adds is the parts list: what this phase switches on and off,
+     which there is no room for beside a 220-pixel dock. */
+  function phasesDialog() {
+    var el = App.UI.el;
+    if (!App.Dialogs || !App.Dialogs.open) {
+      App.Command.err('The dialog layer is not available.');
+      return;
+    }
+
+    var selected = selectedPhaseId();
+
+    App.Dialogs.open({
+      title: 'Phases',
+      width: 820, height: 520,
+      buttons: [{ label: 'Close', primary: true }],
+      build: function (body) {
+        var wrap = el('div.dlg-simple', {
+          style: 'display:flex;gap:12px;padding:0;height:100%'
+        });
+        var left = el('div', {
+          style: 'flex:0 0 260px;overflow:auto;border-right:1px solid var(--c-line)'
+        });
+        var right = el('div', { style: 'flex:1;overflow:auto;padding-right:4px' });
+        wrap.appendChild(left);
+        wrap.appendChild(right);
+        body.appendChild(wrap);
+
+        function draw() {
+          App.UI.clear(left);
+          App.UI.clear(right);
+
+          var phases = (App.PROJECT && App.PROJECT.phases) || [];
+          if (!phases.length) {
+            right.appendChild(el('p', { text:
+              'This project has no phases yet. Close this and use ' +
+              '"Create default phases" in the Phases panel.' }));
+            return;
+          }
+
+          var list = el('div.phase-list');
+          App.Phases.rows(App.PROJECT, phaseRun).forEach(function (row) {
+            var node = el('div.phase-row' + (row.id === selected ? '.selected' : ''));
+            node.style.paddingLeft = (8 + row.depth * 10) + 'px';
+            node.appendChild(el('span.phase-dot.' + row.state));
+            node.appendChild(el('span.phase-name', { text: row.name }));
+            node.addEventListener('click', function () {
+              selected = row.id;
+              App.state.phase = row.id;
+              draw();
+            });
+            list.appendChild(node);
+          });
+          left.appendChild(list);
+
+          var phase = phaseById(selected);
+          if (!phase) { selected = phases[0].id; draw(); return; }
+
+          var grid = el('div.pgrid');
+          var groups = phaseProps(phase);
+          Object.keys(groups).forEach(function (name) {
+            grid.appendChild(el('div.pgrid-group', { text: name }));
+            groups[name].forEach(function (row) {
+              grid.appendChild(phasePropRow(phase, row));
+            });
+          });
+          right.appendChild(grid);
+
+          /* What this phase changes. Read-only here: the way to change it is to
+             click the part in the viewport, which is the only place you can see
+             which part you are naming. */
+          var on = phase.activate || [], off = phase.deactivate || [];
+          var active = App.Phases.activeParts(App.PROJECT, phase.id) || [];
+          var changes = el('div.pgrid');
+          changes.appendChild(el('div.pgrid-group', { text: 'Staged construction' }));
+          [['Activated here', on.length ? on.join(', ') : '—'],
+           ['Deactivated here', off.length ? off.join(', ') : '—'],
+           ['Active in this phase', active.length + ' of ' +
+            App.Phases.stageableKeys(App.PROJECT).length + ' parts']
+          ].forEach(function (row) {
+            changes.appendChild(el('div.pgrid-row', null, [
+              el('div.pgrid-key', { text: row[0] }),
+              el('div.pgrid-val.readonly', { text: row[1] })
+            ]));
+          });
+          right.appendChild(changes);
+
+          /* The way back. A part this phase has switched off is not drawn in the
+             viewport, so it cannot be clicked to bring it back -- which would make
+             the toggle one-way, and the mistake unrecoverable without editing the
+             phase before it. Listed here with a button each. */
+          var hidden = App.Phases.hiddenKeys(App.PROJECT, phase.id, 'staged');
+          if (hidden.length) {
+            var back = el('div.pgrid');
+            back.appendChild(el('div.pgrid-group', { text: 'Not in the model here' }));
+            hidden.forEach(function (key) {
+              var label = (App.PROJECT.soil_body_labels || {})[key] || key;
+              var button = el('button.btn.btn-sm', { text: 'Switch on', type: 'button' });
+              button.addEventListener('click', function () {
+                savePhases(App.Phases.toggled(App.PROJECT, phase.id, key),
+                           label + ' switched on in ' + phase.name + '.')
+                  .then(draw);
+              });
+              back.appendChild(el('div.pgrid-row', null, [
+                el('div.pgrid-key', { text: label }),
+                el('div.pgrid-val', null, [button])
+              ]));
+            });
+            right.appendChild(back);
+          }
+
+          right.appendChild(el('div.lay-hint', { text:
+            'Click a soil body or a structure in the viewport, in Staged ' +
+            'construction mode, to switch it off for the selected phase.' }));
+        }
+
+        draw();
+      }
+    });
+  }
+
   function install() {
     if (installed || typeof App.runAction !== 'function' || !App.Command) return;
     installed = true;
@@ -1461,6 +1938,41 @@ App.LivePatches = (function () {
       }
     }
 
+    /* The phases panel, on the project's own phases. `App.setMode` calls
+       `mountPhases` whenever staged mode is entered (js/app.js:33), and the frozen
+       one reads `App.PHASES` -- so replacing the function is what makes every entry
+       into the mode draw the real sequence. */
+    if (App.Explorer && App.Explorer.mountPhases) {
+      App.Explorer.mountPhases = mountLivePhases;
+      if (App.state && App.state.mode === 'staged') mountLivePhases();
+    }
+
+    /* The stage dots follow the last run: `calculate.js` hands the result over and
+       the panel colours the phases that completed. */
+    if (App.Calculate && App.Calculate.run && !App.Calculate.run.__phases) {
+      var frozenCalcRun = App.Calculate.run;
+      App.Calculate.run = function (done) {
+        return frozenCalcRun(function (result) {
+          rememberRun(result);
+          if (done) done(result);
+        });
+      };
+      App.Calculate.run.__phases = true;
+    }
+
+    /* Staged construction editing: a pick in staged mode is also a toggle. */
+    if (typeof App.selectObject === 'function' && !App.selectObject.__staged) {
+      var frozenSelect = App.selectObject;
+      App.selectObject = function (key, source) {
+        frozenSelect(key, source);
+        if (!key || source !== 'viewport') return;
+        if (!App.state || App.state.mode !== 'staged') return;
+        if (!App.PROJECT || !(App.PROJECT.phases || []).length) return;
+        togglePartForPhase(key);
+      };
+      App.selectObject.__staged = true;
+    }
+
     // Model explorer: enable Delete for drawn/imported geometry (see onTreeContextMenu).
     if (App.Explorer && App.Explorer.mountTree) {
       var frozenMountTree = App.Explorer.mountTree;
@@ -1658,6 +2170,12 @@ App.LivePatches = (function () {
         layers: copy(App.LAYERS),
         boreholes: copy(App.BOREHOLES),
         domain: copy(App.Model.pendingDomain()),
+        // Rides along with the domain because it is edited from the same panel and is
+        // the same kind of thing: one object for the whole project. Sent on every
+        // commit rather than only when the water rows were the ones touched -- the
+        // endpoint takes the whole object or none of it, and working out which rows
+        // the user visited would be a second source of truth about the same edit.
+        water: copy(App.Model.pendingWater()),
         custom_parts: copy((App.PROJECT && App.PROJECT.custom_parts) || [])
       })
         .then(function (response) {

@@ -360,6 +360,23 @@ def export_project(project: Project, settings: MeshRequest,
                   [names[key] for key, _, _ in interface_blocks
                    if _interface_of(project, key).structure is not None]) if dim == 2 else []
     staged_ties = list(ties.values()) if dim == 2 else []
+    # Said out loud rather than left to be noticed in the deck (plan sec 7.13). The
+    # restriction above stays -- nothing here invents a construction sequence for a 3D
+    # structure -- but the phases panel is visible in 3D projects, so a user can build a
+    # sequence in one and would otherwise get a deck quietly missing a part of it.
+    #
+    # Scoped to the case where the guards actually withhold something. A 3D project with
+    # no structures loses nothing to them, and a warning on every 3D export is one people
+    # stop reading. Deliberately *not* a claim that staging is plane-strain only: an
+    # explicit phase list activates and deactivates its parts in 3D exactly as in 2D, and
+    # `test_kratos_3d.py` holds both halves of that.
+    if dim == 3 and (beam_blocks or interface_blocks):
+        warnings.append(
+            "staged construction is plane strain only where structures are concerned: "
+            "this 3D model's walls, members and contacts are not staged, so they are "
+            "present in every stage and get no installation stage of their own. A phase "
+            "list still switches soil bodies, panels and anchors on and off as usual."
+        )
 
     # Which model keys each deck part needs alive. Parts not named here own nothing and
     # are in every stage: the domain's own faces, and the node groups a tie holds.

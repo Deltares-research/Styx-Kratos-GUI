@@ -24,6 +24,60 @@ import sys
 from pathlib import Path
 
 
+STAGE_MARKER = "[kratos-gui] stage"
+"""How this script names the stage it is on, for `app.calculate` to read back.
+
+Ours rather than Kratos': `SequentialOrchestrator.Run` loops over the execution list
+calling `CheckStageSettings`, `CreateStage`, `RunCurrentStagePreprocess`, the stage's
+own `Run`, then `RunCurrentStagePostprocess`, and prints nothing naming the stage
+through any of it. Confirmed by reading the orchestrator and by a real seven-stage run
+log, both of which say the same thing: there is no banner to parse.
+
+So a deck that dies in the middle used to come back as "it failed", with the reason but
+not the place. On seven stages that is most of the message missing.
+"""
+
+
+def announcing(orchestrator_class):
+    """`orchestrator_class`, wrapped so that it says which stage it is starting.
+
+    A subclass of whatever the registry named, overriding the two per-stage hooks the
+    base `Orchestrator` publishes. Deliberately *not* a reimplementation of `Run`: that
+    loop also does checkpointing, output settings and the final-data dictionary, and a
+    copy of it here would go stale silently the first time Kratos changed it. The
+    hooks are called once per stage and in a defined place, which is all this needs.
+
+    `begin` is printed *before* the preprocess rather than after, because the
+    preprocess is itself a place a deck fails -- it is where the Activate and
+    Deactivate operations run, so a phase naming a part the mdpa does not have throws
+    here. `end` is printed after the postprocess, so a stage is only finished once
+    everything belonging to it is.
+
+    Flushed on every line: stdout is a pipe, and a run that dies takes an unflushed
+    buffer with it -- which would lose exactly the marker that says where it died.
+    """
+    class Announcing(orchestrator_class):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+            self._stage_index = 0
+
+        def _announce(self, event: str, stage_name: str) -> None:
+            print(f"{STAGE_MARKER} {event} {self._stage_index}/"
+                  f"{self.GetNumberOfStages()} {stage_name}", flush=True)
+
+        def RunCurrentStagePreprocess(self, stage_name, data=None):
+            self._stage_index += 1
+            self._announce("begin", stage_name)
+            super().RunCurrentStagePreprocess(stage_name, data)
+
+        def RunCurrentStagePostprocess(self, stage_name, data=None):
+            super().RunCurrentStagePostprocess(stage_name, data)
+            self._announce("end", stage_name)
+
+    Announcing.__name__ = f"Announcing{orchestrator_class.__name__}"
+    return Announcing
+
+
 def run(parameters_path: Path) -> None:
     """Run the deck `parameters_path` names, in whatever directory it sits in.
 
@@ -41,7 +95,7 @@ def run(parameters_path: Path) -> None:
     entry = Kratos.Registry[project.GetSettings()["orchestrator"]["name"].GetString()]
     orchestrator = getattr(importlib.import_module(entry["ModuleName"]),
                            entry["ClassName"])
-    orchestrator(project).Run()
+    announcing(orchestrator)(project).Run()
 
 
 def main(argv: list[str]) -> int:

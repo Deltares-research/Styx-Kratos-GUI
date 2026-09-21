@@ -133,14 +133,57 @@ def brackets(code: str) -> list[str]:
     return [f"line {stack[-1][1]}: {stack[-1][0]!r} is never closed"] if stack else []
 
 
+try:
+    import esprima
+except ImportError:                                  # pragma: no cover - optional
+    esprima = None
+
+PARSER_HINT = (
+    "no real parser: `pip install esprima` turns this into a full syntax check "
+    "instead of a bracket and string one"
+)
+
+
+def parsed(source: str) -> list[str]:
+    """A real parse, when one is available.
+
+    The two heuristics below catch the class of error that has actually happened here,
+    but they are heuristics: `foo().[1]` balances its brackets and closes its strings,
+    and takes the file out just the same. esprima is a JavaScript parser written in
+    Python, so it runs on a machine with no Node -- which is the whole constraint this
+    file exists under (plan sec 7.17).
+
+    Optional rather than required, and the heuristics still run either way: this check
+    has to keep working on a clean checkout with nothing installed, and a syntax check
+    that cannot run is worth less than a partial one that can.
+    """
+    if esprima is None:
+        return []
+    try:
+        esprima.parseScript(source)
+    except Exception as failure:                     # esprima raises its own Error
+        return [f"{failure}"]
+    return []
+
+
 def main(paths: list[str]) -> int:
+    # `js/` is the frozen mockup, and it is in the default scan for the same reason
+    # `live/js` is: the live layer patches the mockup's own dialogs and explorer in
+    # place, so a syntax error there takes out exactly as much of the running app --
+    # and the phase editor edits both trees at once.
     files = [pathlib.Path(p) for p in paths] or sorted(
+        pathlib.Path("js").glob("*.js")) + sorted(
         pathlib.Path("live/js").glob("*.js")) + sorted(
         pathlib.Path("live/tests").glob("*.js"))
+    if esprima is None:
+        print(f"note: {PARSER_HINT}")
+        print()
     bad = 0
     for path in files:
-        problems, code = scan(path.read_text(encoding="utf-8"))
+        source = path.read_text(encoding="utf-8")
+        problems, code = scan(source)
         problems += brackets(code)
+        problems += parsed(source)
         if problems:
             bad += 1
             for problem in problems:

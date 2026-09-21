@@ -242,3 +242,201 @@ def test_only_one_calculation_runs_at_a_time(runs, monkeypatch):
 
     with pytest.raises(calculate.CalculationError):
         calculate.run(DECK)
+
+
+# ── Which stage failed ──────────────────────────────────────────────────────
+# "It failed" and "phase 5 failed" are a very different message on a seven-stage deck,
+# and the deck has no stage banner of its own to read: `SequentialOrchestrator.Run`
+# loops over the execution list printing nothing that names the stage. Checked against
+# Kratos' own source and against a real seven-stage run log, not inferred -- see
+# plan sec 7.8 for why that distinction is written down.
+#
+# So the markers are ours. `kratos_runner` subclasses the orchestrator and announces
+# each stage from the two public per-stage hooks; everything below parses what it
+# prints, which is why none of it needs Kratos.
+
+def marker(event: str, index: int, total: int, name: str) -> str:
+    return f"{calculate.STAGE_MARKER} {event} {index}/{total} {name}"
+
+
+def test_no_markers_means_nothing_to_say():
+    """Every deck written before this existed, and every failure before the first
+    stage was reached -- a deck Kratos could not even read."""
+    assert calculate.failed_stage("Error: something went wrong") is None
+    assert calculate.failed_stage("") is None
+
+
+def test_the_stage_that_began_and_never_ended_is_the_one_that_failed():
+    output = "\n".join([
+        marker("begin", 1, 7, "1_Initial_stage"),
+        marker("end", 1, 7, "1_Initial_stage"),
+        marker("begin", 2, 7, "2_Null_step"),
+        marker("end", 2, 7, "2_Null_step"),
+        marker("begin", 3, 7, "3_SheetPileWall_installation"),
+        "RuntimeError: Error: Reference distance close to zero.",
+    ])
+    assert calculate.failed_stage(output) == (3, 7, "3_SheetPileWall_installation")
+
+
+def test_a_run_where_every_stage_ended_blames_none_of_them():
+    """The deck finished. Whatever went wrong after that is not a stage's fault, and
+    naming the last one would be a lie."""
+    output = "\n".join([marker("begin", 1, 2, "a"), marker("end", 1, 2, "a"),
+                        marker("begin", 2, 2, "b"), marker("end", 2, 2, "b")])
+    assert calculate.failed_stage(output) is None
+
+
+def test_a_failure_in_the_very_first_stage_is_named(): 
+    output = marker("begin", 1, 7, "1_Initial_stage") + "\nboom"
+    assert calculate.failed_stage(output) == (1, 7, "1_Initial_stage")
+
+
+def test_a_stage_name_may_contain_spaces():
+    """`Stage.name` comes from `Phase.name`, which the user types."""
+    output = marker("begin", 2, 3, "Dig to -4.5 m")
+    assert calculate.failed_stage(output) == (2, 3, "Dig to -4.5 m")
+
+
+def test_the_markers_do_not_have_to_be_alone_on_their_line():
+    """Kratos writes from C++ and from Python into the same pipe, and the two
+    interleave -- a marker can arrive with someone else's half-line in front of it."""
+    output = "BuilderAndSolver: Clear Function called " + marker("begin", 2, 3, "b")
+    assert calculate.failed_stage(output) == (2, 3, "b")
+
+
+def test_the_failure_explanation_names_the_stage(runs, monkeypatch):
+    """The whole point of the exercise, end to end through `run`."""
+    script = (
+        "import sys;"
+        f"print({marker('begin', 1, 2, '1_Initial_stage')!r});"
+        f"print({marker('end', 1, 2, '1_Initial_stage')!r});"
+        f"print({marker('begin', 2, 2, '2_Dig')!r});"
+        "print('Error: Reference distance close to zero.');"
+        "sys.exit(1)"
+    )
+    stand_in(monkeypatch, script)
+
+    result = calculate.run(DECK)
+
+    assert result["ok"] is False
+    assert result["stage"] == {"index": 2, "of": 2, "name": "2_Dig"}
+    assert "2_Dig" in result["error"]
+    assert "stage 2 of 2" in result["error"]
+    # Kratos' own reason survives; the stage is added in front of it, not instead.
+    assert "Reference distance close to zero" in result["error"]
+
+
+def test_a_run_that_works_reports_no_failed_stage(runs, monkeypatch):
+    stand_in(monkeypatch, f"print({marker('begin', 1, 1, '1_Stage')!r});"
+                          f"print({marker('end', 1, 1, '1_Stage')!r})")
+
+    result = calculate.run(DECK)
+
+    assert result["ok"] is True
+    assert result["stage"] is None
+
+
+def test_the_stage_markers_are_kept_out_of_the_tail_shown_to_the_user():
+    """They are scaffolding, not output. Thirty lines of them would push Kratos' own
+    reason off the end of the message they exist to improve."""
+    noise = [marker("begin", n, 40, f"{n}_Stage") for n in range(1, 40)]
+    output = "\n".join(noise + ["Error: the thing that actually went wrong"])
+
+    explained = calculate._explain(output)
+
+    assert "the thing that actually went wrong" in explained
+    assert calculate.STAGE_MARKER not in explained
+
+
+# ── The markers at the other end: kratos_runner's orchestrator wrapper ──────
+# `app.kratos_runner` is a script for Kratos' interpreter, but it imports Kratos only
+# inside `run()`, so the wrapper itself is ordinary Python and testable here against a
+# stand-in base class. What the stand-in reproduces is the contract read off Kratos'
+# own `Orchestrator`: `RunCurrentStagePreprocess(stage_name, data=None)` before each
+# stage, `RunCurrentStagePostprocess(stage_name, data=None)` after it, and
+# `GetNumberOfStages()`.
+
+class FakeOrchestrator:
+    """Kratos' `Orchestrator`, as far as the wrapper is concerned."""
+
+    def __init__(self, stages):
+        self.stages = stages
+        self.calls = []
+
+    def GetNumberOfStages(self):
+        return len(self.stages)
+
+    def RunCurrentStagePreprocess(self, stage_name, data=None):
+        self.calls.append(("pre", stage_name))
+
+    def RunCurrentStagePostprocess(self, stage_name, data=None):
+        self.calls.append(("post", stage_name))
+
+    def Run(self):
+        for name in self.stages:
+            self.RunCurrentStagePreprocess(name)
+            self.RunCurrentStagePostprocess(name)
+
+
+def test_the_wrapper_announces_every_stage_in_order(capsys):
+    from app import kratos_runner
+
+    kratos_runner.announcing(FakeOrchestrator)(["a", "b", "c"]).Run()
+
+    printed = capsys.readouterr().out.strip().splitlines()
+    assert printed == [
+        f"{kratos_runner.STAGE_MARKER} begin 1/3 a",
+        f"{kratos_runner.STAGE_MARKER} end 1/3 a",
+        f"{kratos_runner.STAGE_MARKER} begin 2/3 b",
+        f"{kratos_runner.STAGE_MARKER} end 2/3 b",
+        f"{kratos_runner.STAGE_MARKER} begin 3/3 c",
+        f"{kratos_runner.STAGE_MARKER} end 3/3 c",
+    ]
+
+
+def test_the_wrapper_still_does_the_base_class_work(capsys):
+    """It announces around Kratos' own hooks, it does not replace them. Dropping the
+    super() call would silently stop every Activate and Deactivate operation, which is
+    the whole of staged construction."""
+    from app import kratos_runner
+
+    orchestrator = kratos_runner.announcing(FakeOrchestrator)(["a", "b"])
+    orchestrator.Run()
+
+    assert orchestrator.calls == [("pre", "a"), ("post", "a"),
+                                  ("pre", "b"), ("post", "b")]
+
+
+def test_begin_is_printed_before_the_preprocess_runs(capsys):
+    """The preprocess is itself a place a deck fails -- it is where the Activate and
+    Deactivate operations execute, so a phase naming a part the mdpa does not carry
+    throws there. Announced after it, that failure would be blamed on the stage
+    before."""
+    from app import kratos_runner
+
+    class Exploding(FakeOrchestrator):
+        def RunCurrentStagePreprocess(self, stage_name, data=None):
+            raise RuntimeError("no such sub model part")
+
+    with pytest.raises(RuntimeError):
+        kratos_runner.announcing(Exploding)(["a", "b"]).Run()
+
+    assert f"{kratos_runner.STAGE_MARKER} begin 1/2 a" in capsys.readouterr().out
+
+
+def test_the_two_ends_agree_on_the_marker(capsys):
+    """The round trip: what the runner prints is what `calculate` reads. They share
+    the constant, but not the format string, and a change to one is only caught here."""
+    from app import kratos_runner
+
+    class Failing(FakeOrchestrator):
+        def Run(self):
+            self.RunCurrentStagePreprocess("1_Initial")
+            self.RunCurrentStagePostprocess("1_Initial")
+            self.RunCurrentStagePreprocess("2_Dig to -4.5 m")
+            raise RuntimeError("boom")
+
+    with pytest.raises(RuntimeError):
+        kratos_runner.announcing(Failing)(["1_Initial", "2_Dig to -4.5 m"]).Run()
+
+    assert calculate.failed_stage(capsys.readouterr().out) == (2, 2, "2_Dig to -4.5 m")

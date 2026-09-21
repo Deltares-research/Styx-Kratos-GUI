@@ -28,14 +28,14 @@ from pydantic import ValidationError
 import os
 import tempfile
 
-from app import calculate, gmsh_worker, store
+from app import calculate, gmsh_worker, phases as phase_model, store
 from app.loads import translate as translate_loads
 from app.walls import translate as translate_walls
 from app.build import GeometryError
 from app.kratos import ExportError
 from app.meshing import MeshingError
 from app.schemas import (DimensionUpdate, ExportRequest, LayersUpdate, MaterialsUpdate,
-                         MeshRequest, Project, StructuresUpdate)
+                         MeshRequest, PhasesUpdate, Project, StructuresUpdate)
 
 FROZEN = Path(__file__).resolve().parents[2]
 LIVE = FROZEN / "live"
@@ -156,6 +156,8 @@ async def patch_layers(update: LayersUpdate) -> dict:
         payload["boreholes"] = [borehole.model_dump() for borehole in update.boreholes]
     if update.domain is not None:
         payload["domain"] = update.domain.model_dump()
+    if update.water is not None:
+        payload["water"] = update.water.model_dump()
     if update.custom_parts is not None:
         payload["custom_parts"] = [part.model_dump() for part in update.custom_parts]
     try:
@@ -223,6 +225,68 @@ async def patch_structures(update: StructuresUpdate) -> dict:
         raise RequestValidationError(failure.errors()) from failure
     store.put(project)
     return {"project": project, "invalidates": ["project", "tree", "geometry", "mesh"]}
+
+
+@app.patch("/api/project/phases")
+async def patch_phases(update: PhasesUpdate) -> dict:
+    """Replace the construction sequence.
+
+    Two validations, and they are different things. The schema's own checks run first
+    -- one root, no cycles, no part both activated and deactivated in one phase, every
+    key a key the model has -- and reject the payload field by field. Then the tree has
+    to *linearise*: Kratos runs one flat `execution_list`, so two phases starting from
+    the same parent have no order to run in.
+
+    `linearise` is deliberately not a schema validator (see `app.phases.PhaseError`):
+    a branch is a legitimate thing to have half-built in an editor, and refusing it in
+    `Project` would make it impossible to type. It is refused *here* instead of at
+    export because this is where the user can still see what they did -- the message
+    names the phases that branch.
+
+    Only `project` is invalidated. A phase list changes the deck and the panel, not the
+    geometry or the mesh: every part it names already exists, which is what makes a
+    key valid in the first place.
+    """
+    payload = store.get().model_dump()
+    payload["phases"] = [phase.model_dump() for phase in update.phases]
+    try:
+        project = Project.model_validate(payload)
+    except ValidationError as failure:
+        raise RequestValidationError(failure.errors()) from failure
+    try:
+        phase_model.linearise(project)
+    except phase_model.PhaseError as failure:
+        raise RequestValidationError([{
+            "type": "value_error", "loc": ("body", "phases"), "msg": str(failure),
+            "input": payload["phases"],
+        }]) from failure
+    store.put(project)
+    return {"project": project, "invalidates": ["project"]}
+
+
+@app.post("/api/project/phases/defaults")
+async def seed_default_phases() -> dict:
+    """The sequence the phases panel opens on, built from the model as it stands.
+
+    `phases.default_phases` is the authority on its shape -- settle the ground, build
+    the wall, then alternate digging with propping -- and reproduces the CROW
+    reference's seven stages exactly for that model. This endpoint is only the way the
+    GUI reaches it.
+
+    It replaces whatever is there rather than refusing when phases already exist. That
+    is the point: it is the way back out of a sequence the user has broken, and a
+    "reset to defaults" that declines to reset is not one.
+    """
+    current = store.get()
+    payload = current.model_dump()
+    payload["phases"] = [phase.model_dump()
+                         for phase in phase_model.default_phases(current)]
+    try:
+        project = Project.model_validate(payload)
+    except ValidationError as failure:
+        raise RequestValidationError(failure.errors()) from failure
+    store.put(project)
+    return {"project": project, "invalidates": ["project"]}
 
 
 @app.patch("/api/project/dimension")

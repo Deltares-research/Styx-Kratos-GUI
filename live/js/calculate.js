@@ -57,6 +57,17 @@ App.Calculate = (function () {
                 + integer(result.stats.nodes) + ' nodes).');
       return;
     }
+    /* Which stage it died in, first and on its own line.
+
+       `result.stage` is what `calculate.failed_stage` worked out from the markers
+       `kratos_runner` prints around each stage; null on a deck that finished, and on
+       one that never reached a stage at all. On a seven-stage deck the difference
+       between "it failed" and "phase 5 failed" is most of the message, so it is said
+       before the reason rather than buried in it. */
+    if (result.stage) {
+      log('err', 'Phase ' + result.stage.index + ' of ' + result.stage.of + ' ("'
+                 + result.stage.name + '") failed. The phases before it ran.');
+    }
     // The server sends the tail of Kratos' output, which is where its reason is. The
     // whole of it is on disk, so the log file is named rather than the tail extended:
     // a stack trace in the command log buries everything else the user did.

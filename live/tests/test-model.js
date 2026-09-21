@@ -6,10 +6,10 @@
 
 (function () {
 
-  function project(layers, customParts, simpleExample) {
+  function project(layers, customParts, layeredSoil) {
     return {
       name: 'Test site',
-      simple_example: !!simpleExample,
+      layered_soil: !!layeredSoil,
       domain: { x0: 0, x1: 50, z0: 0, z1: 40, y_top: 0, y_bottom: -25 },
       boreholes: [
         { id: 'bh1', name: 'BH-1', x: 0, y: 0, head: 0, water: -1.5 },
@@ -46,7 +46,7 @@
       ANCHORS: App.ANCHORS, ANCHOR_SECTIONS: App.ANCHOR_SECTIONS,
       INTERFACES: App.INTERFACES, INTERFACE_SECTIONS: App.INTERFACE_SECTIONS
     };
-    // A simple_example project replaces App.TREES[mode] wholesale (js/model.js), which
+    // A layered_soil project replaces App.TREES[mode] wholesale (js/model.js), which
     // would otherwise permanently discard the rich per-mode structure for every test
     // that runs after this one in the same page.
     Object.keys(App.TREES || {}).forEach(function (mode) { saved.trees[mode] = App.TREES[mode]; });
@@ -585,16 +585,16 @@
      Before this, rebuildDerived() never looked at project.custom_parts at all: a
      drawn line, box or surface got no tree node and no OBJECT_PROPS entry, so there
      was nothing in the Model explorer to select or delete -- exactly the reported bug.
-     Worse, the default project has simple_example: true, which collapses every mode's
+     Worse, the default project has layered_soil: true, which collapses every mode's
      tree down to just the Soil node, discarding anything else that isn't re-added. */
 
   var PART = { key: 'drawn_0', label: 'Box_1', color: '#4b6ea8', source: 'gui' };
   var PART2 = { key: 'imported_0', label: 'my_model.step', color: '#888888', source: 'import' };
 
-  test('a drawn part appears in the model tree with the simple_example project', function () {
+  test('a drawn part appears in the model tree with the layered_soil project', function () {
     withProject(project(TWO, [PART], true), function () {
       var node = customGeometryNode(App.TREES.soil);
-      T.ok(node, 'no "Custom geometry" node in the simple_example tree');
+      T.ok(node, 'no "Custom geometry" node in the layered_soil tree');
       T.eq(node.count, 1);
       T.eq(node.children.map(function (c) { return c.obj; }), ['drawn_0']);
       T.eq(node.children[0].label, 'Box_1');

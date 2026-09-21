@@ -20,6 +20,16 @@ App.Model = (function () {
      the module is usable before the first fetch resolves. */
   var domain = { x0: 0, x1: 50, z0: 0, z1: 40, y_top: 0, y_bottom: -25 };
 
+  /* The water table, held beside the domain and for the same reason: it is one object
+     for the whole project rather than a property of anything selected, and the
+     Selection explorer edits it in place before a single PATCH sends it.
+
+     `margin` and `thickness` are how the slab is *drawn* (WaterLevel's own comment
+     calls it a reference plane overhanging the domain, not a solid). They are not
+     editable and are carried untouched, because the layers PATCH replaces the whole
+     object and dropping them would reset the drawing to its defaults. */
+  var water = { y: -1.5, margin: 3.0, thickness: 0.06, specific_weight: 10.0 };
+
   /* ── Mapping ─────────────────────────────────────────────────── */
 
   /* Mirrors `Project.loads_for` in server/app/schemas.py, and has to stay in step
@@ -91,6 +101,7 @@ App.Model = (function () {
   function fromProject(project) {
     return {
       domain: project.domain,
+      water: project.water,
       BOREHOLES: project.boreholes.map(function (b) {
         return { id: b.id, name: b.name, x: b.x, y: b.y, head: b.head, water: b.water };
       }),
@@ -98,7 +109,13 @@ App.Model = (function () {
       MATERIALS: project.materials.map(function (m) {
         return { id: m.id, name: m.name, model: m.model, type: m.type, color: m.color,
                  gUnsat: m.g_unsat, gSat: m.g_sat, E: m.E, nu: m.nu, c: m.c, phi: m.phi, k: m.k,
-                 rInter: m.r_inter, interfacePerm: m.interface_permeability };
+                 rInter: m.r_inter, interfacePerm: m.interface_permeability,
+                 // Both optional, and both meaning "the user typed this, so use it
+                 // rather than deriving one" (server/app/schemas.py's Material). They
+                 // are carried even though only the deck reads them: the library goes
+                 // back in one PATCH that replaces it wholesale, so a field this
+                 // record does not hold is a field the next save deletes.
+                 porosity: nullable(m.porosity), k0nc: nullable(m.k0_nc) };
       }),
       LAYERS: project.layers.map(function (l) {
         return { id: l.id, name: l.name, mat: l.mat,
@@ -143,11 +160,18 @@ App.Model = (function () {
   /* The inverse of the MATERIALS mapping above, for the material-set write path.
      Everything the server's Material schema requires has to be present and
      named its way; an unknown or missing key is a 422. */
+  /* undefined and null both mean "not set" here, and only one of them survives
+     JSON.stringify -- an undefined property is dropped from the body entirely. The
+     server reads an absent optional the same way as an explicit null, so the two agree
+     either way; sending null says it on purpose rather than by accident. */
+  function nullable(value) { return value === undefined ? null : value; }
+
   function materialsToServer(materials) {
     return materials.map(function (m) {
       return { id: m.id, name: m.name, model: m.model, type: m.type, color: m.color,
                g_unsat: m.gUnsat, g_sat: m.gSat, E: m.E, nu: m.nu, c: m.c, phi: m.phi,
-               k: m.k, r_inter: m.rInter, interface_permeability: m.interfacePerm };
+               k: m.k, r_inter: m.rInter, interface_permeability: m.interfacePerm,
+               porosity: nullable(m.porosity), k0_nc: nullable(m.k0nc) };
     });
   }
 
@@ -180,6 +204,11 @@ App.Model = (function () {
   function apply(project) {
     var mapped = fromProject(project);
     domain = mapped.domain;
+    // Copied rather than aliased: the editors below mutate this object in place, and
+    // aliasing App.PROJECT.water would make a rejected edit visible to everything
+    // that reads the project before the PATCH that would have justified it.
+    water = Object.assign({ y: -1.5, margin: 3.0, thickness: 0.06,
+                            specific_weight: 10.0 }, mapped.water || {});
     App.BOREHOLES = mapped.BOREHOLES;
     App.MATERIALS = mapped.MATERIALS;
     App.LAYERS = mapped.LAYERS;
@@ -279,6 +308,32 @@ App.Model = (function () {
   var normalLoadNode = null;
   var previousNormalLoadKeys = [];
 
+  /* The frozen tree's "Water levels" node lists two mockup levels from js/data.js:677
+     and a layered_soil project discards it along with the rest of that tree, so the
+     water rows had nowhere to be clicked from. One node, one child, because the
+     project has exactly one water level -- `Project.water` is a single object, not a
+     collection, and a per-phase level is explicitly out of scope (plan sec 7.11).
+
+     Top level, and deliberately not the frozen one: js/data.js:677 puts a "Water
+     levels" node *inside* the Attributes library, and that one lists level
+     definitions rather than the level this model is at. Exactly the distinction
+     `findLoadConditionsNode` draws for "Loads", and settled the same way -- the
+     library node is left alone rather than repurposed. */
+  var waterLevelNode = null;
+
+  function ensureWaterLevelNode() {
+    if (!waterLevelNode) {
+      waterLevelNode = { label: 'Water levels', icon: 'waterlevel', count: 1,
+                         eye: true, obj: 'group:water', children: [] };
+    }
+    waterLevelNode.children = [{
+      label: 'Global water level  ·  ' + water.y.toFixed(2) + ' m',
+      icon: 'water', leaf: true, eye: true, obj: 'water'
+    }];
+    waterLevelNode.count = 1;
+    return waterLevelNode;
+  }
+
   /* Top level only, deliberately: js/data.js:688 also has a "Loads" node *inside*
      the Attributes library, and that one lists load definitions, not the loads in
      the model. Reusing it made the live loads land in a different place depending
@@ -371,7 +426,8 @@ App.Model = (function () {
   var TREE_ORDER = [
     'Attributes library', 'Soil', 'Boreholes', 'Geometry', 'Custom geometry',
     'Imported mesh', 'Structures', 'Sheet piles', 'Anchors', 'Interfaces',
-    'Normal loads', 'Loads', 'Mesh', 'Flow conditions', 'Model conditions'
+    'Normal loads', 'Loads', 'Water levels', 'Mesh', 'Flow conditions',
+    'Model conditions'
   ];
 
   function containsNode(nodes, node) {
@@ -414,14 +470,14 @@ App.Model = (function () {
      still expanded in Structures mode -- and so a count rebuilt here shows up
      wherever the user happens to be standing.
 
-     A simple_example project has none of the frozen demo structure behind it, so
+     A layered_soil project has none of the frozen demo structure behind it, so
      its tree is the live nodes alone; a full project keeps its frozen nodes and
      gains the live ones. Either way a live node that is already in the tree stays
      where it is rather than being added a second time. */
-  function syncTrees(simpleExample, soil) {
-    var top = simpleExample ? (soil ? [soil] : []) : topLevelUnion();
+  function syncTrees(layeredSoil, soil) {
+    var top = layeredSoil ? (soil ? [soil] : []) : topLevelUnion();
     [customGeometryNode, importedMeshNode, sheetPileNode, anchorNode, interfaceNode,
-     normalLoadNode, loadConditionsNode]
+     normalLoadNode, loadConditionsNode, waterLevelNode]
       .forEach(function (node) {
         if (node && !containsNode(top, node)) top.push(node);
       });
@@ -545,6 +601,77 @@ App.Model = (function () {
   }
 
   function pendingDomain() { return domain; }
+
+  function pendingWater() { return water; }
+
+  /* ── The water line ──────────────────────────────────────────────────────
+     Two numbers, and both of them are the deck's: `y` is the level
+     `kratos_processes._pore_pressure` states the whole ground's water pressure about,
+     and `specific_weight` scales that pressure, every hydrostatic normal load, and
+     DENSITY_WATER in the materials file. Nothing in the GUI could change either until
+     now -- the frozen `water` entry in js/data.js:631 lists three borehole levels from
+     a different project altogether.
+
+     Bounds mirror the server's rather than inventing any: `gt=0` on the weight, and
+     the domain on the level. See plan sec 7.2. */
+
+  function waterLevelEditor() {
+    return {
+      kind: 'number', decimals: 3, unit: 'm',
+      get: function () { return water.y; },
+      set: function (value) {
+        if (!Number.isFinite(value)) return 'The water level must be a number.';
+        // A phreatic level outside the model describes nothing: above it every
+        // element is submerged whatever the number, below it none is.
+        if (value <= domain.y_bottom || value >= domain.y_top) {
+          return 'The water level must lie between ' + fixed(domain.y_bottom) +
+                 ' and ' + fixed(domain.y_top) + ' m.';
+        }
+        water.y = value;
+        return null;
+      }
+    };
+  }
+
+  function waterWeightEditor() {
+    return {
+      kind: 'number', decimals: 2, unit: 'kN/m³',
+      get: function () { return water.specific_weight; },
+      set: function (value) {
+        if (!Number.isFinite(value)) return 'The specific weight must be a number.';
+        // Mirrors WaterLevel's gt=0. Zero is not merely wrong, it divides by zero
+        // where kratos_materials derives DENSITY_WATER from it.
+        if (value <= 0) return 'The specific weight must be greater than zero.';
+        water.specific_weight = value;
+        return null;
+      }
+    };
+  }
+
+  function waterProps() {
+    return {
+      title: 'Water level (global)', icon: 'waterlevel',
+      groups: {
+        'General': [
+          ['Type', 'Global phreatic level', '', true],
+          ['Specific weight', String(water.specific_weight), 'kN/m³', false,
+           waterWeightEditor()]
+        ],
+        'Geometry': [
+          ['Level', fixed(water.y), 'm', false, waterLevelEditor()],
+          // Said here because it is the question the panel invites next, and the
+          // answer is not obvious from a level alone.
+          ['Depth below ground', fixed(domain.y_top - water.y), 'm', true]
+        ],
+        'Conditions': [
+          ['Distribution', 'Hydrostatic', '', true],
+          // The honest state of sec 7.11: Plaxis has a per-phase pore-pressure type,
+          // the reference deck never varies it, and inventing one would be guessing.
+          ['Per-phase level', 'Not supported', '', true]
+        ]
+      }
+    };
+  }
 
   function loadNumberEditor(load, field, component) {
     return {
@@ -1320,6 +1447,10 @@ App.Model = (function () {
     Object.keys(App.OBJECT_PROPS).forEach(function (key) {
       if (key.indexOf('soil_') === 0) delete App.OBJECT_PROPS[key];
     });
+    // Replaces the frozen mockup's three borehole rows wholesale, the same way the
+    // soil rows are replaced above: they describe a project nobody has open.
+    App.OBJECT_PROPS.water = waterProps();
+    ensureWaterLevelNode();
     layers.forEach(function (layer, i) {
       // Every body of the layer, not just the layer's own key: clicking a lift in the
       // viewport or the tree selects `soil_<id>__lift2`, and a Selection explorer with
@@ -1396,7 +1527,7 @@ App.Model = (function () {
     previousNormalLoadKeys = normalLoads.map(function (record) { return record.id; });
 
     // Last, so every node it has to place already exists.
-    syncTrees(!!(App.PROJECT && App.PROJECT.simple_example), sharedSoilNodes[0]);
+    syncTrees(!!(App.PROJECT && App.PROJECT.layered_soil), sharedSoilNodes[0]);
   }
 
   /* Volumes are measured by the geometry build, not the project, so they arrive
@@ -1460,14 +1591,15 @@ App.Model = (function () {
     if (App.Viewport && App.Viewport.setImportedGroupKeys) {
       App.Viewport.setImportedGroupKeys(parts.map(function (part) { return part.key; }));
     }
-    syncTrees(!!(App.PROJECT && App.PROJECT.simple_example), soilNodes()[0]);
+    syncTrees(!!(App.PROJECT && App.PROJECT.layered_soil), soilNodes()[0]);
     if (App.Explorer && App.state) App.Explorer.mountTree(App.state.mode);
   }
 
   return {
     fromProject: fromProject, materialsToServer: materialsToServer,
     extentOf: extentOf,
-    pendingDomain: pendingDomain, outOfPlaneAxis: outOfPlaneAxis,
+    pendingDomain: pendingDomain, pendingWater: pendingWater,
+    outOfPlaneAxis: outOfPlaneAxis,
     apply: apply, load: load,
     projectTitle: projectTitle, syncTitle: syncTitle,
     rebuildDerived: rebuildDerived, setVolumes: setVolumes, setMeshStats: setMeshStats,

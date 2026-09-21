@@ -279,3 +279,18 @@ def test_a_tendon_may_be_massless(exported):
     all -- a prestressed tendon whose own weight is beside the point is an ordinary
     thing to model."""
     assert variables(exported, "Strut")["DENSITY"] == 0.0
+
+
+# ── The derived-variables notice tells the truth about porosity ─────────────
+
+def test_the_assumptions_notice_does_not_claim_porosity_is_fixed():
+    """`Material.porosity` made the user the owner of this number (plan sec 7.4), and
+    the material dialog now has a row for it -- so a notice that still says "porosity
+    fixed at 0.3" contradicts a control the user can see, which is worse than saying
+    nothing. 0.3 survives as the *fallback*, and the notice says that instead.
+    """
+    notice = kratos_materials.ASSUMPTIONS
+    assert "fixed at" not in notice
+    assert str(kratos_materials.DEFAULT_POROSITY) in notice
+    # The other three derivations are still real and must keep their mention.
+    assert "9.81" in notice and "m/day" in notice and "kN" in notice
