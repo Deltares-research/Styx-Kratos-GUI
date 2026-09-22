@@ -39,6 +39,22 @@ SUITES = {
         [TESTS / "fixtures" / "phase-cases.js", JS / "phases.js"],
         TESTS / "test-phases.js",
     ),
+    # `results.js` loads no other module and touches no DOM, by design -- see its
+    # header. Everything it reaches the world through, the suite replaces.
+    # Arithmetic only, and the reason it is a module of its own: no DOM means the
+    # headless runner can execute it, which is the only automated check JavaScript
+    # gets on this machine.
+    "results-render": (
+        [JS / "results-render.js"],
+        TESTS / "test-results-render.js",
+    ),
+    "results": (
+        # calculate.js comes along because the handoff between the two is the whole of
+        # task P0.4: what Calculate just wrote has to become the run `results` opens.
+        # It touches no DOM either, so it loads here as cleanly as results.js does.
+        [JS / "results-render.js", JS / "results.js", JS / "calculate.js"],
+        TESTS / "test-results.js",
+    ),
 }
 
 

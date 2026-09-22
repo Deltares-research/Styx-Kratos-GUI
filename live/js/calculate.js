@@ -5,9 +5,11 @@
    three files the export writes, and runs them through Kratos' orchestrator in a
    directory of its own; this asks for that and turns the answer into command-log lines.
 
-   Nothing else happens in the app. The viewport does not change, no results are read
-   back and no mode is entered: a calculation produces files, and this says where they
-   are. Reading them back into the viewport is the next feature, not this one.
+   Nothing else happens in the app. The viewport does not change, nothing is read back
+   and no mode is entered: a calculation produces files, and this says where they are.
+   The one thing it does hand on is the run's *name*, to `App.Results`, so that what
+   was just written is the run `results` opens without anyone having to find it again.
+   Reading the results themselves into the viewport is the next feature, not this one.
 
    Two things it deliberately does not do:
 
@@ -55,6 +57,8 @@ App.Calculate = (function () {
                 + results(result.outputs) + ' written to ' + result.directory
                 + ' (' + integer(result.stats.elements) + ' elements, '
                 + integer(result.stats.nodes) + ' nodes).');
+      log('note', 'It is now the open run: "results files" lists what it wrote, '
+                  + '"results zip" downloads all of it.');
       return;
     }
     /* Which stage it died in, first and on its own line.
@@ -89,6 +93,11 @@ App.Calculate = (function () {
 
     return App.Api.post('/api/calculate', request()).then(function (result) {
       inFlight = false;
+      /* The run just written becomes the one `results` opens, before anything is
+         printed about it. No round trip: the response already carries the run id,
+         so pressing Calculate and then typing `results files` works with nothing
+         in between. */
+      if (App.Results) App.Results.remember(result);
       report(result);
       if (done) done(result);
       return result;

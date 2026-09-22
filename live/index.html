@@ -91,6 +91,14 @@
         <header class="dock-head"><span class="dock-caret">▾</span> Phases explorer</header>
         <div class="dock-body" id="list-phases"></div>
       </section>
+
+      <!-- Results mode's own panel. Empty here: live/js/patches.js fills it from the
+           open run, and every control in it runs the same `results ...` command the
+           command box does, so there is one code path and not two. -->
+      <section class="dock-panel" id="panel-results" hidden>
+        <header class="dock-head"><span class="dock-caret">▾</span> Results explorer</header>
+        <div class="dock-body" id="panel-results-body"></div>
+      </section>
     </aside>
   </main>
 
@@ -185,6 +193,14 @@
 <script src="/live/js/mdpa-import-dialog.js"></script>
 <script src="/live/js/soil-volume-dialog.js"></script>
 <script src="/live/js/export.js"></script>
+<!-- Reading back what a calculation wrote. `results-render.js` first: it is the
+     arithmetic both of the others use, and the only part with no DOM in it, which is
+     what lets live/tests/run_headless.py execute it. Then the command set, then the
+     three.js that draws what it decides. All before calculate.js, which hands over the
+     run just finished, and before patches.js, which routes `results ...` into it. -->
+<script src="/live/js/results-render.js"></script>
+<script src="/live/js/results.js"></script>
+<script src="/live/js/results-view.js"></script>
 <script src="/live/js/calculate.js"></script>
 <script src="/live/js/patches.js"></script>
 </body>
