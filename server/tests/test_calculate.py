@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-from app import calculate
+from app import calculate, kratos, mdpa_import
 
 DECK = {
     "deck_name": "Test_model",
@@ -82,6 +82,49 @@ def test_the_mdpa_is_named_exactly_what_the_parameters_ask_kratos_for(tmp_path):
     calculate.write_deck(deck, tmp_path)
 
     assert (tmp_path / "Test_model.mdpa").exists()
+
+
+def test_the_deck_lands_on_disk_as_the_bytes_it_was_rendered_as(tmp_path):
+    r"""An .mdpa is written with CRLF endings on purpose -- `kratos.LINE_END` keeps the
+    deck byte-comparable with the GiD-authored references it is checked against.
+    Writing it in text mode on Windows then translates the "\n" of each of those pairs
+    a second time, and every line lands as "\r\r\n".
+
+    Kratos tolerates it, which is why seven real runs went green over a malformed deck;
+    nothing else does. `app.mdpa_import` reads every second line as blank, and a file
+    that cannot be read back by the program that wrote it is a bug whether or not the
+    solver minded.
+    """
+    body = "Begin Nodes" + kratos.LINE_END + "    1 0.0 0.0 0.0" + kratos.LINE_END \
+           + "End Nodes" + kratos.LINE_END
+
+    calculate.write_deck(dict(DECK, mdpa=body), tmp_path)
+
+    written = (tmp_path / "Test_model.mdpa").read_bytes()
+    assert b"\r\r\n" not in written
+    assert written == body.encode("utf-8")
+
+
+def test_a_written_deck_can_be_read_back_by_this_project(tmp_path):
+    """The end-to-end form of the case above, and the one that actually bit: the
+    postprocessor reads the .mdpa beside the results to learn which elements belong to
+    which part, and it could not read one this project had written."""
+    mdpa = kratos.LINE_END.join([
+        "Begin Properties 0", "End Properties", "",
+        "Begin Nodes", "    1   0.0   0.0   0.0", "    2   1.0   0.0   0.0",
+        "    3   0.0   1.0   0.0", "End Nodes", "",
+        "Begin Elements UPwSmallStrainElement2D3N", "    1  1  1  2  3",
+        "End Elements", "",
+        "Begin SubModelPart Soil_Top", "    Begin SubModelPartElements", "    1",
+        "    End SubModelPartElements", "End SubModelPart", "",
+    ])
+    calculate.write_deck(dict(DECK, mdpa=mdpa), tmp_path)
+
+    model = mdpa_import.import_mdpa(
+        (tmp_path / "Test_model.mdpa").read_text(encoding="utf-8"))
+
+    assert len(model.nodes) == 3
+    assert model.parts["Soil_Top"].elements == [1]
 
 
 # ── The interpreter it hands them to ────────────────────────────────────────

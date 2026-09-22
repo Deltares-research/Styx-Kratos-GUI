@@ -568,3 +568,39 @@ def test_a_sheet_pile_and_its_interfaces_all_survive_the_round_trip(session):
     contact = next(s for s in sections if s["kind"] == "interface")
     assert contact["edges"], "a contact is line work"
     assert contact["elements"], "and its elements can be labelled"
+
+
+def test_blank_lines_inside_a_block_are_skipped():
+    """A GiD-authored deck packs its blocks tight; nothing says one has to.
+
+    This was found the hard way. Every .mdpa written into a run directory on Windows
+    carried doubled carriage returns (see
+    `test_calculate.test_the_deck_lands_on_disk_as_the_bytes_it_was_rendered_as`), so
+    read back it was blank-line-separated throughout -- and this parser took the whole
+    import down with "list index out of range" on the first one. The two defects
+    together meant `app.mdpa_import` could not read a single deck this project had
+    ever exported.
+
+    The line-ending bug is fixed; this is the other half, and it is worth having on its
+    own merit: a deck somebody has opened and saved in an editor is not malformed.
+    """
+    text = "\n".join([
+        "Begin Properties 0", "End Properties", "",
+        "Begin Nodes", "", "1 0.0 0.0 0.0", "", "2 1.0 0.0 0.0", "",
+        "3 0.0 1.0 0.0", "End Nodes", "",
+        "Begin Elements UPwSmallStrainElement2D3N", "", "1 1 1 2 3", "",
+        "End Elements", "",
+        "Begin SubModelPart Soil_Top", "",
+        "    Begin SubModelPartNodes", "", "1", "", "2",
+        "    End SubModelPartNodes", "",
+        "    Begin SubModelPartElements", "", "1",
+        "    End SubModelPartElements", "",
+        "End SubModelPart", "",
+    ])
+
+    model = mdpa_import.import_mdpa(text)
+
+    assert len(model.nodes) == 3
+    assert model.parts["Soil_Top"].nodes == [1, 2]
+    assert model.parts["Soil_Top"].elements == [1]
+    assert model.parts["Soil_Top"].kind == "body"

@@ -193,7 +193,12 @@ def import_mdpa(text: str) -> MdpaModel:
 def _nodes(lines: list[str], index: int, model: MdpaModel) -> int:
     while lines[index] != "End Nodes":
         parts = lines[index].split()
-        model.nodes[int(parts[0])] = tuple(float(v) for v in parts[1:4])
+        # A blank line inside a block is legal and common -- our own exporter leaves
+        # them, and so does anyone who opens a deck in an editor. Skipping them here
+        # rather than pre-filtering the whole file keeps the line indices this parser
+        # returns meaningful, which is what every caller of these helpers relies on.
+        if parts:
+            model.nodes[int(parts[0])] = tuple(float(v) for v in parts[1:4])
         index += 1
     return index + 1
 
@@ -204,8 +209,9 @@ def _entities(lines: list[str], index: int, into: list[Entity], name: str,
     entity = Entity(kratos_class=name, kind=kind, dim=dim)
     while not lines[index].startswith("End "):
         values = [int(v) for v in lines[index].split()]
-        entity.entries[values[0]] = values[2:]
-        entity.properties[values[0]] = values[1]
+        if values:  # a blank line inside the block; see `_nodes`
+            entity.entries[values[0]] = values[2:]
+            entity.properties[values[0]] = values[1]
         index += 1
     into.append(entity)
     return index + 1
@@ -226,7 +232,8 @@ def _part(lines: list[str], index: int, model: MdpaModel, name: str) -> int:
             continue
         target = field_of[match.group(1)]
         while not lines[index].startswith("End "):
-            target.append(int(lines[index]))
+            if lines[index]:  # a blank line inside the block; see `_nodes`
+                target.append(int(lines[index]))
             index += 1
         index += 1
     part.kind = ("body" if part.elements else

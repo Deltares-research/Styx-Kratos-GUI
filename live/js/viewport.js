@@ -1919,6 +1919,11 @@ App.Viewport = (function () {
     normalLoadGlyphSpec: normalLoadGlyphSpec,
     getScene: function() { return scene; },
     getCamera: function() { return cam; },
-    getCanvas: function() { return canvas; }
+    getCanvas: function() { return canvas; },
+    // Ask for one frame. The loop is gated on `needsRender`, so anything that adds to
+    // the scene from outside this module -- `App.ResultsView` draws a whole contoured
+    // mesh into it -- otherwise changes nothing until the camera happens to move.
+    requestRender: function () { needsRender = true; },
+    getOrbit: function () { return orbit; }
   };
 })();

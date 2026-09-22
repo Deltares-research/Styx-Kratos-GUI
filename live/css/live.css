@@ -175,3 +175,137 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
   pointer-events: none;
 }
 .vp-mesh-labels[hidden] { display: none; }
+
+/* ── Results mode ────────────────────────────────────────────────────────
+   The colour legend over the viewport, and the Results explorer in the dock.
+   Both are filled in by live/js/results-view.js and live/js/patches.js.       */
+
+.vp-legend {
+  position: absolute;
+  right: 12px;
+  bottom: 56px;
+  width: 104px;
+  padding: 8px 10px 6px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--c-border);
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--c-ink);
+  pointer-events: none;
+}
+.vp-legend[hidden] { display: none; }
+
+.vp-legend-title {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.vp-legend-unit,
+.vp-legend-foot { color: var(--c-ink-soft); font-size: 10px; }
+.vp-legend-foot { margin-top: 4px; }
+
+/* The ramp and its ticks share one box, so a tick can be positioned as a
+   percentage of the ramp's own height and stay beside the colour it names. */
+.vp-legend-body {
+  position: relative;
+  height: 150px;
+  margin: 6px 0 2px;
+}
+.vp-legend-body > i {
+  position: absolute;
+  top: 0; left: 0; bottom: 0;
+  width: 16px;
+  border: 1px solid var(--c-border-soft);
+}
+.vp-legend-body > ul {
+  position: absolute;
+  top: 0; left: 22px; right: 0; bottom: 0;
+  margin: 0; padding: 0;
+  list-style: none;
+}
+.vp-legend-body > ul > li {
+  position: absolute;
+  left: 0;
+  transform: translateY(-50%);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ── The Results explorer ─────────────────────────────────────────────── */
+
+.res-grid { display: flex; flex-direction: column; gap: 4px; padding: 6px 8px; }
+
+.res-row {
+  display: grid;
+  grid-template-columns: 62px 1fr;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+.res-row > span:first-child { color: var(--c-ink-soft); }
+.res-row select { width: 100%; font-size: 11px; }
+/* A grid item stretches to its column by default, which on a checkbox leaves a wide
+   dead strip that still toggles when clicked. */
+.res-row input[type="checkbox"] { justify-self: start; width: auto; margin: 0; }
+
+.res-run {
+  font-size: 10px;
+  color: var(--c-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.res-range { font-variant-numeric: tabular-nums; }
+
+.res-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px 8px 8px;
+}
+.res-actions button { font-size: 11px; padding: 2px 8px; }
+
+.dock-empty {
+  margin: 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--c-ink-soft);
+}
+.dock-empty code {
+  background: var(--c-panel);
+  border: 1px solid var(--c-border-soft);
+  border-radius: 3px;
+  padding: 0 3px;
+}
+
+/* The Results chooser in a window of its own: the same controls as the dock panel,
+   given the room a dock column does not have.
+
+   `.dlg-body` is a flex *row* (css/components.css:313) because a dialog's body is
+   normally one pane, or a list beside a detail view. Here it is a single block of
+   controls that must fill the width, so the row is given one item that grows. The
+   window's buttons live in the footer beside Close, not in here.                   */
+
+.dlg-results .dlg-body { overflow: auto; padding: 4px 6px; }
+
+.dlg-results .res-grid {
+  flex: 1 1 auto;
+  min-width: 0;
+  gap: 10px;
+  padding: 12px 14px;
+}
+
+.dlg-results .res-row {
+  grid-template-columns: 104px 1fr;
+  gap: 12px;
+  font-size: 12px;
+}
+.dlg-results .res-row select { padding: 2px 4px; }
+.dlg-results .res-run { font-size: 11px; }
+
+.dlg-results .dock-empty { margin: 16px; font-size: 12px; }
+
+/* Three actions and a Close is more than the footer's 82px minimum was sized for. */
+.dlg-results .dlg-foot { gap: 6px; }
+.dlg-results .dlg-foot .btn { min-width: 0; padding: 0 12px; }

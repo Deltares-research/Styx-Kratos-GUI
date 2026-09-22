@@ -22,13 +22,13 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 import os
 import tempfile
 
-from app import calculate, gmsh_worker, phases as phase_model, store
+from app import calculate, gmsh_worker, phases as phase_model, results, store
 from app.loads import translate as translate_loads
 from app.walls import translate as translate_walls
 from app.build import GeometryError
@@ -579,8 +579,169 @@ async def calculate_project(settings: ExportRequest) -> dict:
         raise HTTPException(status_code=500, detail=str(failure)) from failure
 
     # The mesh the run was made from, said in the same breath as the run: the deck was
-    # exported here, so this is the only place that can report both.
-    return result | {"stats": export["stats"], "warnings": export["warnings"]}
+    # exported here, so this is the only place that can report both. `run` is the
+    # directory's bare name, which is the id every `/api/results` route takes -- sent
+    # rather than left to the client to split off the path, because the two platforms
+    # spell a path separator differently and the client would have to know which.
+    return result | {"stats": export["stats"], "warnings": export["warnings"],
+                     "run": Path(result["directory"]).name}
+
+
+# ── Results ─────────────────────────────────────────────────────────────────
+#
+# Reading back what a calculation left behind. The registry only *finds* things in
+# this milestone -- which runs exist, which stages each got through, which files are
+# in it; parsing a result is the next one (`plan/postprocessing-plan.md`, P1).
+
+
+def _results_error(failure: results.ResultsError) -> HTTPException:
+    """404 for something that is not there, 400 for something that may not be asked.
+
+    The distinction matters for exactly one case: a filename that tries to climb out
+    of the run directory is refused as a bad request whether or not it names something
+    real, so the answer cannot be used to find out what is on the machine.
+    """
+    status = 400 if isinstance(failure, results.UnsafeName) else 404
+    return HTTPException(status_code=status, detail=str(failure))
+
+
+@app.get("/api/results/runs")
+async def results_runs() -> dict:
+    """Every run on this machine, newest first. Cheap: names and sizes, no parsing."""
+    return {"runs": results.runs(), "root": str(calculate.runs_root())}
+
+
+@app.get("/api/results/runs/{run_id}")
+async def results_run(run_id: str) -> dict:
+    try:
+        return results.describe(run_id)
+    except results.ResultsError as failure:
+        raise _results_error(failure) from failure
+
+
+@app.get("/api/results/runs/{run_id}/stages/{index}/fields")
+async def results_stage_fields(run_id: str, index: int) -> dict:
+    """What this stage can be asked to show.
+
+    Derived from the file, never from a list in the source: a variable Kratos declined
+    to write -- or wrote an empty block for, because the element does not implement it
+    -- costs one missing menu entry and breaks nothing. See `app.result_fields`.
+    """
+    try:
+        return results.stage_fields(run_id, index)
+    except results.ResultsError as failure:
+        raise _results_error(failure) from failure
+
+
+@app.get("/api/results/runs/{run_id}/stages/{index}/mesh")
+async def results_stage_mesh(run_id: str, index: int) -> dict:
+    """The stage's mesh as drawable buffers, one section per named part.
+
+    Vertex *i* of a section is the deck's node `node_ids[i]`, at
+    `positions[3i..3i+2]`. That correspondence is what lets a field -- which comes back
+    keyed by node id -- become a vertex-colour buffer without a second request.
+    """
+    try:
+        return results.stage_geometry(run_id, index)
+    except results.ResultsError as failure:
+        raise _results_error(failure) from failure
+
+
+@app.get("/api/results/runs/{run_id}/stages/{index}/displacement")
+async def results_stage_displacement(run_id: str, index: int) -> dict:
+    """The displacement vectors this stage's mesh is deformed by.
+
+    Its own route because it is the one quantity the viewer needs all three components
+    of; everything in the field catalogue derives a single number.
+    """
+    try:
+        return results.stage_displacement(run_id, index)
+    except results.ResultsError as failure:
+        raise _results_error(failure) from failure
+
+
+@app.get("/api/results/runs/{run_id}/stages/{index}/at/{node}")
+async def results_stage_at(run_id: str, index: int, node: int) -> dict:
+    """Every field of this stage at one node, in one request.
+
+    `results at <id>` is how a number gets checked against a hand calculation without
+    leaving the app, and doing it a field at a time would be twenty-odd round trips.
+    """
+    from app import result_fields
+
+    try:
+        return results.stage_at_node(run_id, index, node)
+    except result_fields.UnknownField as failure:
+        raise HTTPException(status_code=422, detail=str(failure)) from failure
+    except results.ResultsError as failure:
+        raise _results_error(failure) from failure
+
+
+@app.get("/api/results/runs/{run_id}/stages/{index}/parts")
+async def results_stage_parts(run_id: str, index: int) -> dict:
+    """The deck's named parts as this stage saw them, and which were live in it."""
+    try:
+        return results.stage_parts(run_id, index)
+    except results.ResultsError as failure:
+        raise _results_error(failure) from failure
+
+
+@app.get("/api/results/runs/{run_id}/stages/{index}/field/{name}")
+async def results_stage_field(run_id: str, index: int, name: str,
+                              location: str = "nodes") -> dict:
+    """One field: the ids it is defined on, the numbers on them, and their range.
+
+    The range travels with the values so that a colour legend and the colours it
+    explains can never be computed from two different things.
+    """
+    from app import result_fields
+
+    try:
+        return results.stage_field(run_id, index, name, location)
+    except result_fields.UnknownField as failure:
+        # 422 rather than 404: the run and the stage are both there, and what is wrong
+        # is the question -- a field this stage does not carry, or a location it
+        # cannot be drawn at.
+        raise HTTPException(status_code=422, detail=str(failure)) from failure
+    except results.ResultsError as failure:
+        raise _results_error(failure) from failure
+
+
+@app.get("/api/results/runs/{run_id}/files/{name}")
+async def results_file(run_id: str, name: str) -> FileResponse:
+    """One file of one run, as a download.
+
+    The first route in this project that opens a file the caller named. Every check
+    is in `results.file_path`, which refuses anything that is not a plain filename in
+    that one flat directory -- see its docstring for why the check is spelled out
+    rather than left to `Path`.
+    """
+    try:
+        path = results.file_path(run_id, name)
+    except results.ResultsError as failure:
+        raise _results_error(failure) from failure
+    # `media_type` is not sniffed: a .post.res is text and a .mdpa is text, but both
+    # are megabytes nobody wants rendered in a tab. Everything here is a download.
+    return FileResponse(path, filename=path.name,
+                        media_type="application/octet-stream")
+
+
+@app.get("/api/results/runs/{run_id}/archive")
+async def results_archive(run_id: str) -> Response:
+    """The whole run directory as one zip -- the deck, the results and the log.
+
+    Server-side rather than zipped in the browser from `live/js/zip.js`: the client
+    would have to fetch every file first, which is the same megabytes twice over and
+    one request per file, to produce an archive of what the server already has laid
+    out in a directory.
+    """
+    try:
+        buffer = results.archive(run_id)
+    except results.ResultsError as failure:
+        raise _results_error(failure) from failure
+    return Response(
+        content=buffer.getvalue(), media_type="application/zip",
+        headers={"content-disposition": f'attachment; filename="{run_id}.zip"'})
 
 
 @app.post("/api/import/mdpa")

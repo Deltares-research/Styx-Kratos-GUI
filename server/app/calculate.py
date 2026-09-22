@@ -161,18 +161,35 @@ def write_deck(export: dict, directory: Path) -> list[str]:
     """
     name = export["deck_name"]
     written = [f"{name}.mdpa"]
-    (directory / f"{name}.mdpa").write_text(export["mdpa"], encoding="utf-8")
+    _write(directory / f"{name}.mdpa", export["mdpa"])
     if export.get("materials"):
-        (directory / MATERIALS_NAME).write_text(export["materials"], encoding="utf-8")
+        _write(directory / MATERIALS_NAME, export["materials"])
         written.append(MATERIALS_NAME)
     if export.get("initial_materials"):
-        (directory / INITIAL_MATERIALS_NAME).write_text(export["initial_materials"],
-                                                        encoding="utf-8")
+        _write(directory / INITIAL_MATERIALS_NAME, export["initial_materials"])
         written.append(INITIAL_MATERIALS_NAME)
-    (directory / PARAMETERS_NAME).write_text(export["project_parameters"],
-                                             encoding="utf-8")
+    _write(directory / PARAMETERS_NAME, export["project_parameters"])
     written.append(PARAMETERS_NAME)
     return written
+
+
+def _write(path: Path, text: str) -> None:
+    r"""Write `text` to `path` exactly as it is.
+
+    `newline=""` is the whole of it, and it is not a style choice. `app.kratos` renders
+    the deck with CRLF endings on purpose -- `kratos.LINE_END` -- so that what this
+    exporter produces stays byte-comparable with the GiD-authored reference decks it is
+    checked against. Writing that in Python's default text mode on Windows translates
+    the "\n" of every one of those pairs a second time, and each line goes to disk as
+    "\r\r\n".
+
+    Kratos never complained, so seven real runs went green over a deck in that state.
+    What did complain was this project: `app.mdpa_import` reads a file like that as
+    blank-line-separated and used to fail outright on the first one, which meant the
+    postprocessor could not open the .mdpa sitting beside the results it was reading.
+    """
+    with open(path, "w", encoding="utf-8", newline="") as handle:
+        handle.write(text)
 
 
 # ── Who runs it ─────────────────────────────────────────────────────────────
