@@ -13,7 +13,7 @@ mesh them with Gmsh, export Kratos MultiPhysics `.mdpa` decks.
 | Numerics | NumPy 2.2.1 |
 | State | In-memory single project (`server/app/store.py`) — no DB, no auth |
 | Concurrency | `ProcessPoolExecutor(max_workers=1)` (`server/app/gmsh_worker.py`) |
-| Tests | pytest 8.3.4 + httpx TestClient, ~5.5k lines |
+| Tests | pytest 8.3.4 + httpx TestClient, ~17k lines, 1158 cases. `python -m pytest -q` from `server/` |
 
 ## Frontend
 
@@ -24,7 +24,7 @@ mesh them with Gmsh, export Kratos MultiPhysics `.mdpa` decks.
 | Style | ES5 IIFE modules on a global `App` namespace, ~25 `<script>` tags |
 | Fallback renderer | Hand-written CPU painter (`live/js/canvas-renderer.js`) |
 | HTTP | `fetch` wrapper (`live/js/api.js`) |
-| Tests | ~90-line browser harness (`live/tests/`), 22 files |
+| Tests | ~90-line browser harness (`live/tests/`), 32 files. The DOM-free suites also run headless: `python live/tests/run_headless.py` (quickjs), 142 cases |
 
 ## Core pipeline
 

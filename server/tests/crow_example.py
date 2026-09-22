@@ -1,57 +1,46 @@
-"""The CROW example model, loaded from outside the package.
+"""The CROW example model, and the reference decks it is checked against.
 
-`examples/crow/crow.py` is an *example*, not part of the application: it builds one
-specific model, the way a user's own script would, and the GUI opens it the same way a
-user would -- `run examples/crow/crow.py` in the command box. So it lives with the
-reference decks it is checked against rather than in `server/app/`, and like them it is
-not in the repository (see `.gitignore`).
+The model itself is `app.crow` and is in the repository: it builds one specific project
+out of the ordinary schema and exports it through the ordinary pipeline, and
+`examples/crow/crow.py` is only a launcher that calls it (`run examples/crow/crow.py` in
+the command box). Tests import it from the package, so they run on a fresh clone.
 
-That leaves the tests that compare against it needing to load a module by path and to
-say something useful when it is absent. Both happen here, once, so no test file has to
-know where the example lives or repeat the skip.
+The *reference decks* are a different matter. They are copies of files from the
+GeoMechanicsApplication's test suite, they are large, and they are not ours to vendor, so
+they are gitignored and live beside the launcher in `examples/crow/`. `reference(name)`
+is where a test asks for one, and a test that needs one skips -- itself, not the whole
+module -- when it is not on disk::
 
-Every test module that needs it does:
+    from tests.crow_example import crow, reference
 
-    from tests.crow_example import crow
+    DECK = reference("crow_validation_model.mdpa")
 
-and is skipped whole if the example is not on disk -- the same way
-`test_crow_reference.py` already skips when a reference deck is missing. A clone without
-`examples/` still runs green rather than erroring during collection.
+    @pytest.mark.skipif(not DECK.exists(), reason="reference deck not in this clone")
+    def test_something(): ...
+
+This module used to load the model by path from `examples/crow/crow.py` as well, and
+skipped every module that imported it when the example was absent -- 21 cases that a
+clone without `examples/` never ran, although the model they exercise was tracked all
+along. Only the comparisons against the gitignored decks need to skip.
 """
 
 from __future__ import annotations
 
-import importlib.util
 import pathlib
-import sys
 
-import pytest
+from app import crow                              # noqa: F401  (re-exported)
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 EXAMPLES = ROOT / "examples" / "crow"
 PATH = EXAMPLES / "crow.py"
+"""The launcher. Nothing here imports it; it is named so a test can say where the
+user-facing entry point is meant to be."""
 
 
 def reference(name: str) -> pathlib.Path:
-    """A reference deck beside the example, by file name."""
+    """A reference deck beside the launcher, by file name.
+
+    Returns the path whether or not it exists -- the caller decides whether a missing
+    deck is a skip or a failure.
+    """
     return EXAMPLES / name
-
-
-def _load():
-    if not PATH.exists():                      # pragma: no cover - depends on the clone
-        pytest.skip(f"{PATH} is not present; the CROW example and the reference decks "
-                    "it is checked against are kept out of the repository",
-                    allow_module_level=True)
-    # A module name of its own, not `app.crow`: the example is not part of the package,
-    # and importing it under a package name would put it into `app`'s namespace for
-    # every later import in the session.
-    specification = importlib.util.spec_from_file_location("crow_example_model", PATH)
-    module = importlib.util.module_from_spec(specification)
-    # Registered before it runs, so that its own `__main__` guard and anything that
-    # inspects `sys.modules` behave as they would on a normal import.
-    sys.modules[specification.name] = module
-    specification.loader.exec_module(module)
-    return module
-
-
-crow = _load()

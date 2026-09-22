@@ -45,7 +45,9 @@ SUITES = {
     # headless runner can execute it, which is the only automated check JavaScript
     # gets on this machine.
     "results-render": (
-        [JS / "results-render.js"],
+        # The CROW fixture first: a real section and its fields, so the arithmetic is
+        # exercised on a mesh rather than only on four-vertex squares.
+        [TESTS / "fixtures" / "crow-field.js", JS / "results-render.js"],
         TESTS / "test-results-render.js",
     ),
     "results": (
