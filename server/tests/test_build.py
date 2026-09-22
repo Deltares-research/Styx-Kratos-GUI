@@ -258,24 +258,27 @@ def test_bounding_box_covers_the_domain(result, project):
     assert ymax >= project.wall.top_y
 
 
-def test_custom_parts_are_integrated_and_prioritized(project):
+def test_custom_parts_are_integrated_and_prioritized(project, tmp_path):
     from app.schemas import CustomPart
     from app import gmsh_worker, build
-    import os
-    
+
     # We create a dummy .brep file representing a box cutting through the soil
     p = project.model_copy(deep=True)
-    
+
     import gmsh
     with build.session():
         # A box spanning from x=5, y=5, z=-2 to x=10, y=10, z=-5
         gmsh.clear()
         gmsh.model.occ.addBox(5, 5, -2, 5, 5, -3)
         gmsh.model.occ.synchronize()
-        brep_path = "/tmp/test_custom.brep"
+        # `tmp_path`, not "/tmp": there is no /tmp on Windows, and gmsh wrote the brep
+        # somewhere the import then could not find -- which surfaced as "the geometry
+        # build produced no volume for custom_1", a failure that reads like a boolean
+        # problem and is not one.
+        brep_path = str(tmp_path / "test_custom.brep")
         gmsh.write(brep_path)
         gmsh.clear()
-        
+
     p.custom_parts.append(CustomPart(
         key="custom_1",
         label="My Custom Box",
@@ -289,9 +292,6 @@ def test_custom_parts_are_integrated_and_prioritized(project):
     assert "custom_1" in res.volumes
     # Volume is 5 * 5 * 3 = 75
     assert res.mass["custom_1"] == pytest.approx(75.0, rel=1e-6)
-    
-    if os.path.exists(brep_path):
-        os.remove(brep_path)
 
 
 def test_custom_line_and_surface_parts_are_display_only_overlays(project, tmp_path):

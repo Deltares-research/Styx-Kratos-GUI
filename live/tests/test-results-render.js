@@ -406,4 +406,76 @@
     T.eq(rows[2], '2,');
   });
 
+  /* ── One real section, out of the CROW run ─────────────────────────────
+
+     Everything above is four vertices wide, which is how an edge case should be
+     written and is no way to notice that a whole mesh comes out grey. `crow-field.js`
+     is Soil_Middle_pit in the last stage of the real run: 215 vertices, 376 triangles,
+     p' at the nodes, p' per element and the vertical displacement, all as the server
+     sends them. The point of these cases is coverage of shape rather than of arithmetic
+     -- that nothing is dropped, nothing is null, and nothing lands outside the range
+     the legend is drawn for. */
+
+  var CROW = window.CROW_FIXTURE;
+
+  test('a real section takes a value on every vertex it draws', function () {
+    var vertex = R.vertexValues(CROW.section, CROW.fields.p_nodes);
+
+    T.eq(vertex.values.length, CROW.section.node_ids.length);
+    T.eq(vertex.missing, 0, 'holes in a body that is whole in this stage');
+  });
+
+  test("a real section's values all lie inside the range the legend is drawn for",
+    function () {
+      var field = CROW.fields.p_nodes;
+      var vertex = R.vertexValues(CROW.section, field);
+      var outside = vertex.values.filter(function (v) {
+        return v < field.min - 1e-9 || v > field.max + 1e-9;
+      });
+
+      T.eq(outside.length, 0, 'values outside [min, max]: ' + outside.slice(0, 3));
+    });
+
+  test('a per-element field reaches every vertex through triangle_elements',
+    function () {
+      /* The element ids are not the triangle ids -- a six-node triangle makes four --
+         so this is the case that fails if `triangle_elements` is ever dropped from the
+         payload or mis-ordered. */
+      var vertex = R.vertexValues(CROW.section, CROW.fields.p_elements);
+
+      T.eq(vertex.values.length, CROW.section.node_ids.length);
+      T.eq(vertex.missing, 0);
+    });
+
+  test('every vertex of a real section gets a colour in range', function () {
+    var field = CROW.fields.uy;
+    var vertex = R.vertexValues(CROW.section, field);
+    var rgb = R.colors(vertex, { min: field.min, max: field.max });
+
+    T.eq(rgb.length, vertex.values.length * 3);
+    var bad = 0;
+    for (var i = 0; i < rgb.length; i++) if (!(rgb[i] >= 0 && rgb[i] <= 1)) bad++;
+    T.eq(bad, 0, 'components outside [0, 1]');
+  });
+
+  test('the legend of a compression-negative field runs from its top down', function () {
+    var field = CROW.fields.p_nodes;
+    var ticks = R.legend({ min: field.min, max: field.max }, 6);
+
+    T.eq(ticks.length, 6);
+    T.near(ticks[0].value, field.max, 1e-9, 'the first tick is the top of the ramp');
+    T.near(ticks[5].value, field.min, 1e-9);
+    /* p is negative in compression, so "the top" is the smallest magnitude. Nothing
+       here flips a sign, and this is where that would show up as an upside-down bar. */
+    T.ok(ticks[0].value > ticks[5].value);
+    T.ok(ticks[0].value < 0);
+  });
+
+  test('a real field exports one CSV row per value it carries', function () {
+    var field = CROW.fields.p_nodes;
+    var rows = R.csv(field, {}).trim().split("\n");
+
+    T.eq(rows.length, field.ids.length + 1, 'header plus one row per id');
+  });
+
 })();
