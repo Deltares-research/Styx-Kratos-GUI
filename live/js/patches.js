@@ -1532,6 +1532,34 @@ App.LivePatches = (function () {
     });
   }
 
+  /* ── The Results explorer's own collapse ────────────────────────────
+     Every other dock panel collapses by its header, wired by `js/ui.js`. That one
+     works off DOCK_ROWS, which lists the three panels the frozen page has -- and a
+     panel missing from it gets no handler at all, so the Results explorer drew a
+     caret that did nothing. It is live-only markup (live/index.html), so it is wired
+     here rather than by widening a frozen table.
+
+     It needs no grid row of its own on the way: `#dock`'s `grid-template-rows` stops
+     at the phases panel, so this one already sits in an implicit `auto` row that
+     shrinks to the header as soon as `.collapsed` hides the body. */
+  function resultsCaret(panel) {
+    var caret = panel.querySelector('.dock-caret');
+    if (caret) caret.textContent = panel.classList.contains('collapsed') ? '▸' : '▾';
+  }
+
+  function collapsibleResultsPanel(dock) {
+    var panel = dock && dock.querySelector('#panel-results');
+    var head = panel && panel.querySelector('.dock-head');
+    // install() may run more than once; a second handler would toggle it straight back.
+    if (!head || head.__resultsCollapse) return;
+    head.__resultsCollapse = true;
+    head.addEventListener('click', function () {
+      panel.classList.toggle('collapsed');
+      resultsCaret(panel);
+    });
+    resultsCaret(panel);
+  }
+
   function install() {
     if (installed || typeof App.runAction !== 'function' || !App.Command) return;
     installed = true;
@@ -2118,6 +2146,7 @@ App.LivePatches = (function () {
 
       installResultsIcon();
       installResultsMenu();
+      collapsibleResultsPanel(document.getElementById('dock'));
 
       /* The panel and the menu both redraw themselves whenever the model behind them
          changes. Without this they are built once, from whatever was true when the
@@ -2973,6 +3002,7 @@ App.LivePatches = (function () {
 
   return {
     install: install, meshSummary: meshSummary,
+    collapsibleResultsPanel: collapsibleResultsPanel,
     snapshotLayers: snapshotLayers, restoreLayers: restoreLayers,
     snapshotSoil: snapshotSoil, restoreSoil: restoreSoil, pitRefinement: pitRefinement,
     isDeletableCustomPart: isDeletableCustomPart, tagTreeRowsWithObjKeys: tagTreeRowsWithObjKeys,
