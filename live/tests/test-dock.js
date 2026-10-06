@@ -1,4 +1,5 @@
-/* Collapsible right-dock panels (js/ui.js). */
+/* Collapsible right-dock panels (js/ui.js), and the live-only one
+   (live/js/patches.js) that js/ui.js has never heard of. */
 
 function dockFixture(options) {
   options = options || {};
@@ -44,6 +45,9 @@ function dockFixture(options) {
   var phases = panel('panel-phases');
   phases.hidden = !options.phases;
   dock.appendChild(phases);
+  var results = panel('panel-results');
+  results.hidden = !options.results;
+  dock.appendChild(results);
   document.body.appendChild(dock);
   return dock;
 }
@@ -131,5 +135,55 @@ test('a splitter that would resize a collapsed panel is disabled', function () {
 
     head(dock, 'panel-phases').click();
     T.ok(dock.querySelector('#split-dock2').classList.contains('disabled'));
+  });
+});
+
+/* The Results explorer is markup only the live page has, so `js/ui.js` cannot wire it:
+   DOCK_ROWS names the three frozen panels and a panel missing from it gets no click
+   handler at all. The live layer wires this one. */
+function withResultsDock(body) {
+  var dock = dockFixture({ phases: true, results: true });
+  App.UI.collapsibleDock(dock);
+  App.LivePatches.collapsibleResultsPanel(dock);
+  try {
+    return body(dock);
+  } finally {
+    document.body.removeChild(dock);
+  }
+}
+
+test('clicking the Results explorer header collapses it', function () {
+  withResultsDock(function (dock) {
+    var panel = dock.querySelector('#panel-results');
+    T.eq(caretOf(dock, 'panel-results'), '▾', 'starts open');
+
+    head(dock, 'panel-results').click();
+    T.ok(panel.classList.contains('collapsed'), 'the panel is marked collapsed');
+    T.eq(caretOf(dock, 'panel-results'), '▸', 'the caret points at the closed panel');
+
+    head(dock, 'panel-results').click();
+    T.ok(!panel.classList.contains('collapsed'), 'and it opens again');
+    T.eq(caretOf(dock, 'panel-results'), '▾');
+  });
+});
+
+test('collapsing the Results explorer touches none of the grid rows', function () {
+  withResultsDock(function (dock) {
+    head(dock, 'panel-results').click();
+    /* It sits in an implicit `auto` row -- #dock's grid-template-rows stops at the
+       phases panel -- so hiding its body is the whole of the collapse. */
+    T.eq(dock.style.getPropertyValue('--r-model'), '');
+    T.eq(dock.style.getPropertyValue('--r-selection'), '');
+    T.eq(dock.style.getPropertyValue('--r-phases'), '');
+  });
+});
+
+test('wiring the Results explorer twice still collapses on one click', function () {
+  withResultsDock(function (dock) {
+    /* install() runs more than once (the tests alone do it), and a second handler on
+       the same header would toggle the panel straight back open. */
+    App.LivePatches.collapsibleResultsPanel(dock);
+    head(dock, 'panel-results').click();
+    T.ok(dock.querySelector('#panel-results').classList.contains('collapsed'));
   });
 });

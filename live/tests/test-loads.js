@@ -331,18 +331,44 @@
     })[0];
     T.ok(tool, 'load tool exists');
     T.eq(tool.action, 'createLoad');
-    T.ok(tool.flyout.every(function (item) { return item.action === 'createLoad'; }));
-    T.eq(tool.flyout.map(function (item) { return item.loadKind; }), ['point', 'line', 'surface']);
+    var vectorKinds = tool.flyout.filter(function (item) {
+      return item.action === 'createLoad';
+    });
+    T.eq(vectorKinds.map(function (item) { return item.loadKind; }),
+         ['point', 'line', 'surface']);
+  });
+
+  test('the load flyout offers the normal load beside the three vector kinds', function () {
+    /* A pressure on a polyline is not something App.Loads makes, but it is still a
+       load as far as anyone looking for one is concerned, so it shares this flyout
+       and carries its own action through to App.NormalLoads. */
+    var tool = (App.RAILS.structures || []).filter(function (item) {
+      return item && item.icon === 'load';
+    })[0];
+    var normal = tool.flyout.filter(function (item) {
+      return item.action === 'createNormalLoad';
+    });
+    T.eq(normal.length, 1, 'exactly one, however many times the patch runs');
+    T.eq(normal[0].loadKind, undefined, 'it is not one of the three vector kinds');
   });
 
   test('the load flyout enables point and line in 2D, and only surface in 3D', function () {
     var tool = (App.RAILS.structures || []).filter(function (item) {
       return item && item.icon === 'load';
     })[0];
+    function disabledByAction() {
+      var out = {};
+      tool.flyout.forEach(function (item) {
+        out[item.loadKind || item.action] = !!item.disabled;
+      });
+      return out;
+    }
     App.LivePatches.syncDimensionAvailability(true);
-    T.eq(tool.flyout.map(function (item) { return !!item.disabled; }), [false, false, true]);
+    T.eq(disabledByAction(), { point: false, line: false, surface: true,
+                               createNormalLoad: false });
     App.LivePatches.syncDimensionAvailability(false);
-    T.eq(tool.flyout.map(function (item) { return !!item.disabled; }), [true, true, false]);
+    T.eq(disabledByAction(), { point: true, line: true, surface: false,
+                               createNormalLoad: true });
   });
 
   test('the Structures menu invokes load creation directly', function () {

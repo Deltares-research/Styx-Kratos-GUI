@@ -69,17 +69,22 @@ _LAYERS = [
 def blank_project() -> Project:
     """What the server starts with: no soil, no structures -- an empty site.
 
+    Plane strain, because that is what this app is for: the document opens as the
+    x-y section, and the client comes up in it rather than drawing the solid model
+    first and replacing it once the project arrives.
+
     The schema still requires an excavation/wall/strut/anchor/pile/load/well block
-    each (there is no "absent" state for them), but `simple_example` mode -- the mode
+    each (there is no "absent" state for them), but `layered_soil` mode -- the mode
     a blank project opens in -- never reads any of those fields when building geometry
-    (see `_build_simple_example`); they carry harmless placeholder values so the model
-    validates. `boreholes` needs exactly the one entry `_build_simple_example` indexes
+    (see `_build_layered_soil`); they carry harmless placeholder values so the model
+    validates. `boreholes` needs exactly the one entry `_build_layered_soil` indexes
     for its reference column, even though `layers` being empty means it never reads a
     depth off it.
     """
     return Project(
         name="Untitled project",
-        simple_example=True,
+        layered_soil=True,
+        dimension=2,
         domain=Domain(x0=0.0, x1=20.0, z0=0.0, z1=20.0, y_top=0.0, y_bottom=-15.0),
         boreholes=[Borehole(id="bh1", name="BH-1", x=0.0, y=0.0, head=0.0, water=-1.5)],
         materials=[],
@@ -100,7 +105,7 @@ def seed_project(simple: bool = True) -> Project:
     """A fresh, independently-mutable copy of the demo model."""
     return Project(
         name="Deep excavation — Rotterdam Zuid",
-        simple_example=simple,
+        layered_soil=simple,
         domain=(Domain(x0=0.0, x1=25.0, z0=0.0, z1=25.0, y_top=0.0, y_bottom=-25.0)
                 if simple else
                 Domain(x0=0.0, x1=50.0, z0=0.0, z1=40.0, y_top=0.0, y_bottom=-25.0)),

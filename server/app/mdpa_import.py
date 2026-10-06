@@ -26,7 +26,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import re
 
-from app.kratos import BEAMS, BOUNDARIES, CONDITIONS, ELEMENTS, SHELLS, TRUSSES
+from app.kratos import (BEAMS, BOUNDARIES, CONDITIONS, ELEMENTS, INTERFACES, SHELLS,
+                        TRUSSES)
 
 TOLERANCE = 1e-6
 """Metres. A node's z counts as zero, i.e. the deck is a 2D plane-strain model,
@@ -51,11 +52,19 @@ def _reverse_trusses() -> dict[str, tuple[str, int, int]]:
     return {name: ("truss", dim, 2) for dim, name in TRUSSES.items()}
 
 
+def _reverse_interfaces() -> dict[str, tuple[str, int, int]]:
+    """`kratos.INTERFACES` is keyed by nodes *per side*, and a contact element carries
+    both sides: the line's own nodes, then their coincident copies."""
+    return {name: ("interface", dim, per_side * 2)
+            for (dim, per_side), name in INTERFACES.items()}
+
+
 CLASS_KIND: dict[str, tuple[str, int, int]] = {
     **_reverse(ELEMENTS, "continuum"),
     **_reverse(BEAMS, "beam"),
     **_reverse(SHELLS, "shell"),
     **_reverse_trusses(),
+    **_reverse_interfaces(),
 }
 """Kratos element class name -> (kind, dimension, node count)."""
 
@@ -184,7 +193,12 @@ def import_mdpa(text: str) -> MdpaModel:
 def _nodes(lines: list[str], index: int, model: MdpaModel) -> int:
     while lines[index] != "End Nodes":
         parts = lines[index].split()
-        model.nodes[int(parts[0])] = tuple(float(v) for v in parts[1:4])
+        # A blank line inside a block is legal and common -- our own exporter leaves
+        # them, and so does anyone who opens a deck in an editor. Skipping them here
+        # rather than pre-filtering the whole file keeps the line indices this parser
+        # returns meaningful, which is what every caller of these helpers relies on.
+        if parts:
+            model.nodes[int(parts[0])] = tuple(float(v) for v in parts[1:4])
         index += 1
     return index + 1
 
@@ -195,8 +209,9 @@ def _entities(lines: list[str], index: int, into: list[Entity], name: str,
     entity = Entity(kratos_class=name, kind=kind, dim=dim)
     while not lines[index].startswith("End "):
         values = [int(v) for v in lines[index].split()]
-        entity.entries[values[0]] = values[2:]
-        entity.properties[values[0]] = values[1]
+        if values:  # a blank line inside the block; see `_nodes`
+            entity.entries[values[0]] = values[2:]
+            entity.properties[values[0]] = values[1]
         index += 1
     into.append(entity)
     return index + 1
@@ -217,7 +232,8 @@ def _part(lines: list[str], index: int, model: MdpaModel, name: str) -> int:
             continue
         target = field_of[match.group(1)]
         while not lines[index].startswith("End "):
-            target.append(int(lines[index]))
+            if lines[index]:  # a blank line inside the block; see `_nodes`
+                target.append(int(lines[index]))
             index += 1
         index += 1
     part.kind = ("body" if part.elements else
@@ -243,14 +259,21 @@ def _part(lines: list[str], index: int, model: MdpaModel, name: str) -> int:
 # SubModelParts at all -- falls back to one section per *kind* instead, exactly as
 # before this was per-part; a synthetic deck with no parts still draws.
 
+DRAWABLE = ("continuum", "shell", "beam", "truss", "interface")
+"""The element kinds that become geometry. Anything else -- a class this codebase's
+exporter never writes -- is counted in the stats and drawn not at all, because its
+topology is not known here and guessing at one risks drawing what is not in the deck."""
+
 SECTION_COLORS = {"continuum": "#d9dee6", "shell": "#4b6ea8", "beam": "#b5573a",
-                  "truss": "#2f6f4f"}
+                  "truss": "#2f6f4f", "interface": "#d4a017"}
 """Colours for the *kind*-grouped fallback sections (unclaimed elements) -- all from
 the app's own palette: continuum is meshing.MESH_COLOR, and the rest are
 tessellate.PART_COLORS' wall, struts and anchors. Structural line work takes the two
 saturated entries rather than PART_COLORS' beam grey, because a beam shares the soil's
 nodes -- it is drawn as a line lying inside the mesh's own wireframe, and grey on grey
-is a sheet pile nobody can see."""
+is a sheet pile nobody can see. An interface is amber, its own colour and no part's:
+it lies exactly along the structure it holds, so sharing a hue with one would read as
+the structure drawn twice."""
 
 PART_PALETTE = (
     "#c9a35c", "#5b8dbd", "#7fae6f", "#b5573a", "#8f7ab5",
@@ -280,6 +303,26 @@ def _tet_boundary_triangles(conns: list[list[int]]) -> list[list[int]]:
     return [face for key, face in faces.items() if counts[key] == 1]
 
 
+def _element_labels(nodes: dict[int, tuple[float, float, float]],
+                    conns_by_id: list[tuple[int, list[int]]]) -> list[list[float]]:
+    """`[element id, x, y, z]` per element, the point being the mean of its own nodes.
+
+    The same rule the exporter labels a generated mesh by (`kratos._element_labels`), and
+    exact for the simplices either side writes: a quadratic element's extra nodes are
+    edge midpoints, whose mean is the corners' mean again. An element naming a node the
+    file does not define is skipped rather than guessed at.
+    """
+    labels: list[list[float]] = []
+    for element_id, conn in conns_by_id:
+        corners = [nodes[node] for node in conn if node in nodes]
+        if not corners:
+            continue
+        labels.append([element_id] + [sum(corner[axis] for corner in corners) / len(corners)
+                                      for axis in range(3)])
+    labels.sort(key=lambda row: row[0])
+    return labels
+
+
 def _triangles_and_edges(conns_by_kind: dict[str, list[list[int]]],
                          dim: int) -> tuple[list[list[int]], list[tuple[int, int]]]:
     """A set of elements, split out by kind already, as drawable triangles and line
@@ -293,12 +336,18 @@ def _triangles_and_edges(conns_by_kind: dict[str, list[list[int]]],
     # half of each element and renders a sheet pile as a dashed line.
     edges = [(conn[0], conn[1]) for conn in conns_by_kind.get("beam", [])]
     edges += [(conn[0], conn[1]) for conn in conns_by_kind.get("truss", [])]
+    # A zero-thickness contact: its first half is the line it lies along, its second half
+    # that line's coincident copies on the soil (`interfaces._emit`). So the first two
+    # nodes are the segment's two ends whatever the order -- the same (end, end, midside)
+    # shape a quadratic beam has -- and there is no thickness for a triangle to span.
+    edges += [(conn[0], conn[1]) for conn in conns_by_kind.get("interface", [])]
     return triangles, edges
 
 
 def _section_dict(nodes: dict[int, tuple[float, float, float]], key: str, color: str,
                   part: str | None, kind: str | None, triangles: list[list[int]],
-                  edges: list[tuple[int, int]]) -> dict | None:
+                  edges: list[tuple[int, int]],
+                  elements: list[list[float]] | None = None) -> dict | None:
     """A render-ready section local to just the nodes it actually uses -- not the
     whole deck's node table -- so a payload with one section per body part does not
     multiply its size by the number of bodies, and so its own bbox is tight enough to
@@ -311,6 +360,14 @@ def _section_dict(nodes: dict[int, tuple[float, float, float]], key: str, color:
     edge_coords = [c for a, b in edges for c in (*nodes[a], *nodes[b])]
     return {
         "key": key, "color": color, "part": part, "kind": kind,
+        # The deck's own node numbers, one per position triple and in the same order, so
+        # the viewport can label a drawn node without carrying the whole node table: the
+        # section is already local to `used`, and this is what `used` was.
+        "node_ids": used,
+        # And the elements this section draws, each with the point its number goes at.
+        # Per section for the same reason the nodes are: the overlay labels what is on
+        # screen, and a part the checklist left unchecked is not.
+        "elements": elements or [],
         "positions": [c for tag in used for c in nodes[tag]],
         "indices": [index_of[node] for triangle in triangles for node in triangle],
         "edges": edge_coords,
@@ -324,12 +381,11 @@ def to_sections(model: MdpaModel) -> list[dict]:
     body), each with its own colour, local geometry and bbox; anything no body part
     claims falls back to one section per element kind, coloured by `SECTION_COLORS`.
 
-    A class this exporter does not recognise (`Entity.kind == "unknown"`, e.g. an
-    interface element) contributes no geometry -- its topology is not known here, so
-    guessing at a triangulation would risk drawing something that is not actually in
-    the deck. It still counts in `MdpaModel.to_dict()`'s per-class stats, and a body
-    part made entirely of such elements (an "Interface_..." part, say) simply has no
-    section of its own.
+    A class this exporter does not recognise (`Entity.kind == "unknown"`) contributes no
+    geometry -- its topology is not known here, so guessing at a triangulation would risk
+    drawing something that is not actually in the deck. It still counts in
+    `MdpaModel.to_dict()`'s per-class stats, and a body part made entirely of such
+    elements simply has no section of its own, hence no checklist row and no eye.
     """
     if not model.nodes:
         return []
@@ -345,11 +401,13 @@ def to_sections(model: MdpaModel) -> list[dict]:
         if part.kind != "body":
             continue
         conns_by_kind: dict[str, list[list[int]]] = {}
+        drawn: list[tuple[int, list[int]]] = []
         for element_id in part.elements:
             claimed.add(element_id)
             kind, conn = by_id.get(element_id, (None, None))
-            if kind in ("continuum", "shell", "beam", "truss"):
+            if kind in DRAWABLE:
                 conns_by_kind.setdefault(kind, []).append(conn)
+                drawn.append((element_id, conn))
         triangles, edges = _triangles_and_edges(conns_by_kind, model.dimension)
         # Indexed by sections actually drawn so far, not by position among body parts:
         # an "Interface_..." part (elements this exporter cannot draw) must not burn a
@@ -358,22 +416,26 @@ def to_sections(model: MdpaModel) -> list[dict]:
         color = PART_PALETTE[len(sections) % len(PART_PALETTE)]
         dominant = next(iter(conns_by_kind), None)
         section = _section_dict(nodes, f"imported:{part.name}", color, part.name,
-                                dominant, triangles, edges)
+                                dominant, triangles, edges,
+                                _element_labels(nodes, drawn))
         if section:
             sections.append(section)
 
     leftover_by_kind: dict[str, list[list[int]]] = {}
+    leftover_ids: dict[str, list[tuple[int, list[int]]]] = {}
     for element_id, (kind, conn) in by_id.items():
-        if element_id in claimed or kind not in ("continuum", "shell", "beam", "truss"):
+        if element_id in claimed or kind not in DRAWABLE:
             continue
         leftover_by_kind.setdefault(kind, []).append(conn)
-    for kind in ("continuum", "shell", "beam", "truss"):
+        leftover_ids.setdefault(kind, []).append((element_id, conn))
+    for kind in DRAWABLE:
         conns = leftover_by_kind.get(kind, [])
         if not conns:
             continue
         triangles, edges = _triangles_and_edges({kind: conns}, model.dimension)
         section = _section_dict(nodes, f"imported_{kind}", SECTION_COLORS[kind],
-                                None, kind, triangles, edges)
+                                None, kind, triangles, edges,
+                                _element_labels(nodes, leftover_ids.get(kind, [])))
         if section:
             sections.append(section)
     return sections

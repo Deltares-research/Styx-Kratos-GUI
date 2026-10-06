@@ -5,6 +5,12 @@ var App = window.App || {};
 App.LivePatches = (function () {
   var installed = false;
   var inFlight = false;
+
+  /* The command box's own recall, and the guard that keeps a second install() from
+     binding a second Enter handler onto the same box -- which would run every command
+     twice. Module scope, because install() may be called more than once (the tests do)
+     and neither may be reset when it is. */
+  var cmdHistory = [], cmdIndex = 0, commandBoxBound = false;
   var activeLayerEdit = null;
 
   function copy(value) { return JSON.parse(JSON.stringify(value)); }
@@ -93,6 +99,10 @@ App.LivePatches = (function () {
       viewport: 'solid' }
   ];
 
+  /* The mode the app opens in, matching the document the server opens on
+     (server/app/seed.py blank_project). This is a 2D modeller first. */
+  var DEFAULT_MODEL_MODE = '2d';
+
   var modeInFlight = false;
 
   function modeDef(id) {
@@ -115,7 +125,7 @@ App.LivePatches = (function () {
      and a rebuild of the whole model is not nothing. */
   function setModelMode(id) {
     var def = modeDef(id);
-    var already = (App.state.modelMode || '3d') === def.id;
+    var already = (App.state.modelMode || DEFAULT_MODEL_MODE) === def.id;
     if (modeInFlight || already) return Promise.resolve();
     modeInFlight = true;
 
@@ -204,6 +214,29 @@ App.LivePatches = (function () {
     syncModelMode(viewportMode === 'solid' ? '3d' : '2d');
   }
 
+  /* The opening mode, applied before anything has been fetched. Waiting for the first
+     /api/geometry to gate the chrome would show the 3D toolbar, rail, menus and view
+     cube for as long as that takes, and then take them away -- the app would appear to
+     start in 3D and change its mind. Only ever fills a blank: a mode already chosen (a
+     test's stub, or a switch that has happened) is left alone.
+
+     The state is seeded now and the DOM gated after boot, because js/app.js mounts the
+     toolbar and the rail from its own DOMContentLoaded handler, which is registered
+     before this one and so runs before it. */
+  function openOnDefaultMode() {
+    App.state = App.state || {};
+    if (App.state.modelMode) return;
+    App.state.modelMode = DEFAULT_MODEL_MODE;
+    App.state.dimension = DEFAULT_MODEL_MODE === '2d' ? 2 : 3;
+    function gate() { syncModelMode(App.state.modelMode || DEFAULT_MODEL_MODE); }
+    if (typeof document === 'undefined') return;
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', gate);
+    } else {
+      gate();
+    }
+  }
+
   /* ── Making failure visible ──────────────────────────────────────────────
      A blank viewport and a command log that simply stops is the worst thing this
      app can do: it looks like a modelling bug and the real reason is only in
@@ -249,6 +282,7 @@ App.LivePatches = (function () {
     if (App.Beams && App.Beams.isBeamKey(key)) return 'beam';
     if (App.Anchors && App.Anchors.isAnchorKey(key)) return 'anchor';
     if (App.Interfaces && App.Interfaces.isInterfaceKey(key)) return 'interface';
+    if (App.NormalLoads && App.NormalLoads.isNormalLoadKey(key)) return 'normal_load';
     if (App.Loads && App.Loads.isLoadKey(key)) return 'load';
     return null;
   }
@@ -274,11 +308,16 @@ App.LivePatches = (function () {
     return (App.INTERFACES || []).filter(function (item) { return item.id === key; })[0];
   }
 
+  function normalLoadByKey(key) {
+    return (App.NORMAL_LOADS || []).filter(function (item) { return item.id === key; })[0];
+  }
+
   function objectName(kind, key) {
     var obj = kind === 'part' ? partByKey(key)
       : kind === 'beam' ? beamByKey(key)
       : kind === 'anchor' ? anchorByKey(key)
       : kind === 'interface' ? interfaceByKey(key)
+      : kind === 'normal_load' ? normalLoadByKey(key)
       : kind === 'load' ? loadByKey(key) : null;
     return obj ? (kind === 'part' ? obj.label : obj.name) : '';
   }
@@ -323,6 +362,12 @@ App.LivePatches = (function () {
       return App.Interfaces.save(contact, copy(App.INTERFACE_SECTIONS || []))
         .catch(reportRenameError);
     }
+    if (kind === 'normal_load') {
+      var normalLoad = normalLoadByKey(key);
+      if (!normalLoad) return;
+      normalLoad.name = name;
+      return App.NormalLoads.save(normalLoad).catch(reportRenameError);
+    }
     if (kind === 'load') {
       var load = loadByKey(key);
       if (!load) return;
@@ -336,6 +381,7 @@ App.LivePatches = (function () {
     if (kind === 'beam') return App.Beams.remove(key);
     if (kind === 'anchor') return App.Anchors.remove(key);
     if (kind === 'interface') return App.Interfaces.remove(key);
+    if (kind === 'normal_load') return App.NormalLoads.remove(key);
     if (kind === 'load') return App.Loads.remove(key);
   }
 
@@ -513,6 +559,22 @@ App.LivePatches = (function () {
     if (hint) pane.insertBefore(section, hint); else pane.appendChild(section);
   }
 
+  /* "Properties…" has been on this menu since the frozen mockup drew it, and did
+     nothing for any kind: the callback below handled delete, rename and the eye, and
+     let every other label fall off the end. A kind with a form of its own opens it --
+     the same form the tool and the panel's Edit button open. The rest have no form;
+     they keep their properties in the Selection explorer, so selecting the object is
+     what "properties" means for them, and is at least what the label promises. */
+  function openProperties(kind, key) {
+    var owner = kind === 'load' ? App.Loads
+      : kind === 'normal_load' ? App.NormalLoads
+      : kind === 'beam' ? App.Beams : null;
+    // Anchors and interfaces are deliberately not here: their `edit` saves the record
+    // rather than opening anything, so calling it would write, not show.
+    if (owner && owner.edit) return owner.edit(key);
+    if (App.selectObject) App.selectObject(key, 'tree');
+  }
+
   function onTreeContextMenu(event) {
     var row = event.target.closest && event.target.closest('.tree-row');
     var key = row && row.dataset.obj;
@@ -534,6 +596,7 @@ App.LivePatches = (function () {
       if (it.action === 'deleteObject') return deleteObject(kind, key);
       if (it.action === 'renameObject') return renameObject(kind, key);
       if (it.action) { App.runAction(it); return; }
+      if (/^Properties/.test(it.label)) return openProperties(kind, key);
       if (/Hide|Show/.test(it.label)) {
         var on = !App.Viewport.isVisible(key);
         App.Viewport.setVisible(key, on);
@@ -571,7 +634,7 @@ App.LivePatches = (function () {
      element is a surface with a different node layout and no fixture to pin it. */
   /* The rulers measure two named axes of one plane. In 3D the screen edges are three
      axes mixed by the orbit, so a number on an edge would be a number for nothing. */
-  var TWO_D_ONLY = ['interface', 'toggleRuler'];
+  var TWO_D_ONLY = ['interface', 'createNormalLoad', 'toggleRuler'];
 
   function availableIn2D(action) { return THREE_D_ONLY.indexOf(action) < 0; }
 
@@ -695,6 +758,9 @@ App.LivePatches = (function () {
     (((App.RAILS || {}).structures || []).filter(function (tool) {
       return tool && tool.icon === 'load';
     })[0] || { flyout: [] }).flyout.forEach(function (item) {
+      // A normal load is plane strain like an interface, and carries no loadKind to
+      // sort it by -- see TWO_D_ONLY, which gates its menu twin the same way.
+      if (item.action === 'createNormalLoad') { item.disabled = !is2d; return; }
       item.disabled = is2d ? item.loadKind === 'surface' : item.loadKind !== 'surface';
     });
 
@@ -766,6 +832,22 @@ App.LivePatches = (function () {
       App.MdpaImportDialog.closeChecklist();
     }
     if (App.Model.setImportedParts) App.Model.setImportedParts([]);
+
+    /* And a calculation's results, for exactly the same reason as the .mdpa above:
+       they belong to the document that produced them. A different project is open
+       now, so the contour on screen is of a model nobody has any more -- and because
+       it lives in a group of its own, outside `groups`, `App.Viewport.refresh()` does
+       not touch it. It would sit there over the new site looking like the new site's
+       answer.
+
+       The run itself is only forgotten, not deleted: the directories on disk outlive
+       every project, and `results runs` still lists them. */
+    if (App.ResultsView) App.ResultsView.clear();
+    if (App.Results && App.Results.forget) App.Results.forget();
+    // Results mode with nothing to show is a dead end, so leave it -- for the mode a
+    // new project opens in anyway.
+    if (App.state && App.state.mode === 'results') App.setMode('soil');
+
     return Promise.resolve(App.Viewport.refresh()).then(function () {
       if (App.Explorer && App.state) App.Explorer.mountTree(App.state.mode);
       if (App.Command) App.Command.ok(message);
@@ -910,9 +992,591 @@ App.LivePatches = (function () {
                      + ' along the viewport edges.');
   }
 
+  /* ══════════════════════════════════════════════════════════════════════════
+     Viewport right-click: "Show labels ▸ Node IDs / Element IDs".
+
+     A mesh is read by number -- a solver names node 4711 or element 902, and the only way
+     to find it is to see the number on the mesh -- so the numbers belong on the thing
+     itself, one right-click away from wherever the reader is already looking. The overlay
+     and its arithmetic are live/js/mesh-labels.js; this is the way in.
+     ══════════════════════════════════════════════════════════════════════════ */
+
+  /* The frozen viewport menu (js/app.js:60) plus the labels row. Kept as a function of
+     its own so the row's place in the menu is testable without opening one. */
+  function withLabelRows(items) {
+    if (!App.MeshLabels) return items;
+    return items.concat(['-', App.MeshLabels.menuItem()]);
+  }
+
+  var LABEL_NOUNS = { nodes: 'Node', elements: 'Element' };
+
+  /* One toggle per kind, each independent of the other: a node number and the number of
+     the element around it are read together as often as apart. */
+  function toggleLabels(kind) {
+    var noun = LABEL_NOUNS[kind] || 'ID';
+    var on = !App.Viewport.labelsOn(kind);
+    App.Viewport.setLabels(kind, on, function (count) {
+      if (!on) return App.Command.note(noun + ' ID labels hidden.');
+      if (count === null) return;                            // already reported
+      if (!count) {
+        App.Viewport.setLabels(kind, false);
+        return App.Command.note(
+          'Nothing to label — generate a mesh (F9) or import a .mdpa first.');
+      }
+      App.Command.note(noun + ' IDs shown: ' + count + ' '
+        + (kind === 'elements' ? 'elements' : 'nodes')
+        + ', in the numbering the .mdpa is written with. '
+        + 'Where they crowd, only the nearest is drawn — zoom in for the rest.');
+    });
+  }
+
+  /* The frozen menu is *wrapped*, not rewritten: it builds its items in a closure and
+     hands them straight to App.Menu.openAt, so lending it a one-shot openAt is what
+     lets a row be added without copying the eleven it already has -- and without this
+     module having to keep them in step. */
+  function extendViewportMenu() {
+    var frozen = App.viewportContextMenu;
+    if (typeof frozen !== 'function') return;
+    App.viewportContextMenu = function (event, key) {
+      var openAt = App.Menu.openAt;
+      App.Menu.openAt = function (items, x, y, onPick) {
+        App.Menu.openAt = openAt;
+        openAt(withLabelRows(items), x, y, function (item) {
+          if (item && item.action === 'toggleNodeLabels') return toggleLabels('nodes');
+          if (item && item.action === 'toggleElementLabels') return toggleLabels('elements');
+          if (onPick) onPick(item);
+        });
+      };
+      try {
+        frozen(event, key);
+      } finally {
+        App.Menu.openAt = openAt;
+      }
+    };
+  }
+
+  /* ── The phases panel ────────────────────────────────────────────────────
+     `Explorer.mountPhases` (js/explorer.js:281) already draws everything the
+     screenshots show: an indented list, a state dot per row, and a property grid for
+     the selected phase. What it draws them from is `App.PHASES`, seven hardcoded rows
+     in js/data.js:559 describing a project nobody has open -- so the panel was a
+     picture of a phase list rather than a phase list.
+
+     Replaced wholesale rather than patched around, because almost every line of it
+     reads the frozen globals. What is kept is the markup and the class names, which
+     is what the stylesheet is written against (css/components.css:214-226).
+
+     `App.Phases` is the model; this is only the drawing and the buttons. Every edit
+     goes the same way round: build a new list, PATCH it, take the stored project
+     back. Nothing is mutated in place, so a rejected save leaves the panel showing
+     what the server actually holds rather than what the user hoped for. */
+
+  /* What the last calculation reported, for the state dots. `{completed: n}`, worked
+     out from the stage the run died in: everything before it finished. A run that
+     succeeded completed all of them; a run that never reached a stage completed
+     none. Cleared when the phase list changes, because a dot describing a sequence
+     that no longer exists is worse than a grey one. */
+  var phaseRun = null;
+
+  function rememberRun(result) {
+    var total = ((App.PROJECT && App.PROJECT.phases) || []).length;
+    if (!result) { phaseRun = null; }
+    else if (result.ok) { phaseRun = { completed: total }; }
+    else if (result.stage) { phaseRun = { completed: result.stage.index - 1 }; }
+    else { phaseRun = { completed: 0 }; }
+    mountLivePhases();
+  }
+
+  function selectedPhaseId() {
+    var list = (App.PROJECT && App.PROJECT.phases) || [];
+    if (!list.length) return null;
+    var wanted = App.state && App.state.phase;
+    var found = list.filter(function (ph) { return ph.id === wanted; })[0];
+    return found ? found.id : list[0].id;
+  }
+
+  function phaseById(id) {
+    return ((App.PROJECT && App.PROJECT.phases) || []).filter(function (ph) {
+      return ph.id === id;
+    })[0] || null;
+  }
+
+  /* Send a phase list and adopt whatever comes back.
+
+     The server is the authority on what a valid sequence is -- it refuses a branch, a
+     part key nothing answers to, and a phase that both activates and deactivates the
+     same thing -- so the reply replaces the list rather than the request confirming
+     it. On a refusal the project is reloaded, which is what puts the panel back in
+     step after an edit that could not be kept. */
+  function savePhases(list, note) {
+    return App.Api.patch('/api/project/phases', { phases: list })
+      .then(function (response) {
+        App.Model.apply(response.project);
+        // The sequence has changed, so what the last run reached no longer maps onto
+        // it. Better a row of grey dots than a green one against a phase that did
+        // not exist when the run happened.
+        phaseRun = null;
+        if (note) App.Command.ok(note);
+        mountLivePhases();
+        return App.Viewport.refresh();
+      })
+      .catch(function (error) {
+        App.Command.err(error.message);
+        return App.Model.load().then(mountLivePhases);
+      });
+  }
+
+  function phaseToolbar() {
+    var el = App.UI.el;
+    var icon = App.UI.icon;
+    var bar = el('div.dlg-toolbar.phase-toolbar');
+    var selected = selectedPhaseId();
+
+    /* The icon row at the top left of both Plaxis screenshots. `new`/`copy`/`delete`
+       are the mockup's own icon names (js/data.js:63-76); `phase` stands in for
+       insert, which has no icon of its own in the frozen set. */
+    [['new', 'Add phase', function () {
+        return App.Phases.added(App.PROJECT);
+      }, 'Phase added.'],
+     ['phase', 'Insert phase above the selected one', function () {
+        return selected ? App.Phases.inserted(App.PROJECT, selected) : null;
+      }, 'Phase inserted.'],
+     ['copy', 'Duplicate the selected phase', function () {
+        return selected ? App.Phases.copied(App.PROJECT, selected) : null;
+      }, 'Phase duplicated.'],
+     ['delete', 'Delete the selected phase', function () {
+        return selected ? App.Phases.removed(App.PROJECT, selected) : null;
+      }, 'Phase deleted.']
+    ].forEach(function (spec) {
+      var button = el('button.tbtn', { type: 'button' });
+      button.appendChild(icon(spec[0]));
+      App.UI.attachTip(button, spec[1]);
+      button.disabled = spec[0] !== 'new' && !selected;
+      button.addEventListener('click', function () {
+        App.UI.hideTip();
+        var list = spec[2]();
+        if (!list) { App.Command.err('Select a phase first.'); return; }
+        savePhases(list, spec[3]);
+      });
+      bar.appendChild(button);
+    });
+
+    bar.appendChild(el('span.tbsep'));
+
+    var dialog = el('button.btn.btn-sm', { text: 'Phases…', type: 'button' });
+    dialog.addEventListener('click', function () { phasesDialog(); });
+    bar.appendChild(dialog);
+
+    return bar;
+  }
+
+  /* The empty state, which is the one every project starts in.
+
+     A panel with nothing in it and no way out of it would be the commonest thing
+     anybody sees, so it carries the button that fills it. `default_phases` on the
+     server builds the sequence -- settle, build, then alternate digging and propping
+     -- from the model as it stands, which for the CROW model is its seven stages
+     exactly. */
+  function emptyPhaseState() {
+    var el = App.UI.el;
+    var wrap = el('div.lay-hint', { style: 'padding:10px' });
+    wrap.appendChild(el('div', { text:
+      'This project has no construction sequence: it exports as a single stage, ' +
+      'the way it always has.' }));
+    var button = el('button.btn.btn-sm', {
+      text: 'Create default phases', type: 'button',
+      style: 'margin-top:8px'
+    });
+    button.addEventListener('click', function () {
+      App.Api.post('/api/project/phases/defaults', {})
+        .then(function (response) {
+          App.Model.apply(response.project);
+          App.Command.ok('Created ' + response.project.phases.length +
+                         ' phases from the model. Edit them in the Phases panel.');
+          mountLivePhases();
+          return App.Viewport.refresh();
+        })
+        .catch(function (error) { App.Command.err(error.message); });
+    });
+    wrap.appendChild(button);
+    return wrap;
+  }
+
+  /* Clicking a part in staged mode switches it on or off for the selected phase.
+
+     Which is the behaviour the first screenshot shows, and the reason staged mode
+     exists as a mode rather than a filter. Wrapped around `App.selectObject` rather
+     than bound to the canvas, because that is the one funnel every pick already goes
+     through -- viewport click, context menu and tree row alike -- so a part cannot be
+     toggled by one route and merely selected by another.
+
+     Selection still happens. Toggling instead of selecting would leave the property
+     panel showing whatever was picked last, which is how you end up editing the wrong
+     load; and the panel is the only place the part's name is written down. */
+  function togglePartForPhase(key) {
+    var phase = selectedPhaseId();
+    if (!phase) { App.Command.err('Select a phase first.'); return false; }
+    if (App.Phases.stageableKeys(App.PROJECT).indexOf(key) < 0) return false;
+
+    var was = (App.Phases.activeParts(App.PROJECT, phase) || []).indexOf(key) >= 0;
+    var owned = App.Phases.ownership(App.PROJECT, phase, key);
+    var list = App.Phases.toggled(App.PROJECT, phase, key);
+    var label = (App.PROJECT.soil_body_labels || {})[key] || key;
+    savePhases(list, label + (was ? ' switched off in ' : ' switched on in ') +
+                     (phaseById(phase) || {}).name +
+                     (owned === 'inherited'
+                        ? ' (it was inherited from an earlier phase until now).'
+                        : '.'));
+    return true;
+  }
+
+  function mountLivePhases() {
+    if (typeof document === 'undefined') return;
+    var host = document.getElementById('list-phases');
+    if (!host) return;
+    var el = App.UI.el;
+    var icon = App.UI.icon;
+    App.UI.clear(host);
+
+    host.appendChild(phaseToolbar());
+
+    var phases = (App.PROJECT && App.PROJECT.phases) || [];
+    if (!phases.length) {
+      host.appendChild(emptyPhaseState());
+      return;
+    }
+
+    /* A branching tree has no execution order, so it has no stage list and cannot be
+       run. Said here, where it can still be fixed, rather than at Calculate -- and
+       said without hiding the rows, because the way out of it is to edit one of the
+       phases that branch. */
+    var problem = App.Phases.branchProblem(App.PROJECT);
+    if (problem) {
+      host.appendChild(el('div.lay-hint.invalid', { text: problem,
+                                                    style: 'padding:6px 10px' }));
+    }
+
+    var selected = selectedPhaseId();
+    var list = el('div.phase-list');
+    App.Phases.rows(App.PROJECT, phaseRun).forEach(function (row) {
+      var node = el('div.phase-row' + (row.id === selected ? '.selected' : ''));
+      node.style.paddingLeft = (8 + row.depth * 10) + 'px';
+      node.appendChild(el('span.phase-dot.' + row.state));
+      node.appendChild(el('span.phase-name', { text: row.name }));
+      node.appendChild(el('span.phase-kind', { text: row.kind }));
+      node.addEventListener('click', function () {
+        App.state.phase = row.id;
+        mountLivePhases();
+        // Staged mode draws the model as of the selected phase, so moving the
+        // selection moves the viewport with it.
+        if (App.Viewport.applyPhaseVisibility) App.Viewport.applyPhaseVisibility();
+        App.Command.note('Current phase: ' + row.name);
+      });
+      list.appendChild(node);
+    });
+    host.appendChild(list);
+
+    var phase = phaseById(selected);
+    if (!phase) return;
+    var grid = el('div.pgrid');
+    var head = el('div.pgrid-header');
+    head.appendChild(icon('phase'));
+    head.appendChild(el('span', { text: phase.name }));
+    grid.appendChild(head);
+    var groups = phaseProps(phase);
+    Object.keys(groups).forEach(function (name) {
+      grid.appendChild(el('div.pgrid-group', { text: name }));
+      groups[name].forEach(function (row) {
+        grid.appendChild(phasePropRow(phase, row));
+      });
+    });
+    host.appendChild(grid);
+  }
+
+  /* The property grid for one phase.
+
+     Field names follow the Plaxis panel the frozen mockup already draws
+     (js/data.js:569), because that is the UI this feeds. What it does *not* do is
+     keep the mockup's rows this exporter has nothing behind -- "Max unloading steps",
+     "Arc-length control", "Updated mesh", "Ignore undrained behaviour". A row that
+     looks editable and is thrown away on save is worse than an absent one, and the
+     three groups below are exactly what `schemas.Phase` carries.
+
+     "Pore pressure calc." stays, read-only, saying what it actually is: the reference
+     deck never varies it and a per-phase phreatic level is deliberately out of scope
+     (plan sec 7.11). "Global water level" is the honest version of the Plaxis row. */
+  function phaseProps(phase) {
+    var parent = phase.parent == null ? null : phaseById(phase.parent);
+    return {
+      'General': [
+        ['Name', 'text', 'name'],
+        ['Start from phase', 'static', parent ? parent.name : 'the model as built'],
+        ['Calculation type', 'select', 'calculation',
+         ['K0 procedure', 'Plastic', 'Null step']],
+        ['Loading type', 'static', phase.loading || 'Staged construction'],
+        ['Pore pressure calc.', 'static', 'Global water level'],
+        ['Time interval', 'number', 'time_interval', { min: 0 }, 'day']
+      ],
+      'Deformation control': [
+        ['Reset displacements to zero', 'check', 'reset_displacements']
+      ],
+      'Numerical control': [
+        ['Max iterations', 'number', 'max_iterations', { min: 1, integer: true }],
+        ['Tolerated error', 'number', 'tolerated_error', { exclusiveMin: 0 }]
+      ]
+    };
+  }
+
+  /* One row, and the edit behind it.
+
+     Every committed edit PATCHes the whole phase list, because that is what the
+     endpoint takes -- there is no per-field write, and inventing one would be a
+     second way for the list to get out of step with the server. The reply replaces
+     the list, so a value the server normalises shows the normalised one. */
+  function phasePropRow(phase, spec) {
+    var el = App.UI.el;
+    var label = spec[0], kind = spec[1];
+    var key = el('div.pgrid-key', { text: label });
+
+    function commit(value) {
+      var list = ((App.PROJECT && App.PROJECT.phases) || []).map(function (each) {
+        var edited = copy(each);
+        if (each.id === phase.id) edited[spec[2]] = value;
+        return edited;
+      });
+      savePhases(list);
+    }
+
+    if (kind === 'static') {
+      return el('div.pgrid-row', null,
+                [key, el('div.pgrid-val.readonly', { text: String(spec[2]) })]);
+    }
+
+    var control;
+    if (kind === 'text') {
+      control = el('input.cell-input', { value: phase[spec[2]] || '' });
+      control.addEventListener('change', function () {
+        var text = control.value.trim();
+        if (!text) {
+          control.value = phase[spec[2]];
+          App.Command.err('A phase name cannot be empty.');
+          return;
+        }
+        commit(text);
+      });
+    } else if (kind === 'select') {
+      control = el('select');
+      spec[3].forEach(function (option) {
+        var node = el('option', { value: option, text: option });
+        if (option === phase[spec[2]]) node.selected = true;
+        control.appendChild(node);
+      });
+      control.addEventListener('change', function () { commit(control.value); });
+    } else if (kind === 'check') {
+      control = el('input.pgrid-check', { type: 'checkbox' });
+      control.checked = !!phase[spec[2]];
+      control.addEventListener('change', function () { commit(control.checked); });
+    } else {
+      var bounds = spec[3] || {};
+      control = el('input.cell-input.cell-num', {
+        value: String(phase[spec[2]] == null ? '' : phase[spec[2]])
+      });
+      control.addEventListener('change', function () {
+        var value = parseFloat(control.value.trim().replace(',', '.'));
+        var problem = null;
+        if (!isFinite(value)) problem = label + ' must be a number.';
+        else if (bounds.integer && value !== Math.round(value)) {
+          problem = label + ' must be a whole number.';
+        } else if (bounds.min !== undefined && value < bounds.min) {
+          problem = label + ' must be at least ' + bounds.min + '.';
+        } else if (bounds.exclusiveMin !== undefined && value <= bounds.exclusiveMin) {
+          problem = label + ' must be greater than ' + bounds.exclusiveMin + '.';
+        }
+        if (problem) {
+          control.value = String(phase[spec[2]]);
+          App.Command.err(problem);
+          return;
+        }
+        commit(value);
+      });
+    }
+
+    var cell = el('div.pgrid-val.editable.field', null, [control]);
+    if (spec[4]) cell.appendChild(el('span.unit', { text: spec[4] }));
+    return el('div.pgrid-row', null, [key, cell]);
+  }
+
+  /* ── The Phases dialog ───────────────────────────────────────────────────
+     The second screenshot: the full-page phase editor, list on the left and the same
+     three groups on the right, larger. Same rows and the same edit path as the panel
+     -- it is the same grid given room -- so a phase field is described in one place
+     and written one way.
+
+     What the dialog adds is the parts list: what this phase switches on and off,
+     which there is no room for beside a 220-pixel dock. */
+  function phasesDialog() {
+    var el = App.UI.el;
+    if (!App.Dialogs || !App.Dialogs.open) {
+      App.Command.err('The dialog layer is not available.');
+      return;
+    }
+
+    var selected = selectedPhaseId();
+
+    App.Dialogs.open({
+      title: 'Phases',
+      width: 820, height: 520,
+      buttons: [{ label: 'Close', primary: true }],
+      build: function (body) {
+        var wrap = el('div.dlg-simple', {
+          style: 'display:flex;gap:12px;padding:0;height:100%'
+        });
+        var left = el('div', {
+          style: 'flex:0 0 260px;overflow:auto;border-right:1px solid var(--c-line)'
+        });
+        var right = el('div', { style: 'flex:1;overflow:auto;padding-right:4px' });
+        wrap.appendChild(left);
+        wrap.appendChild(right);
+        body.appendChild(wrap);
+
+        function draw() {
+          App.UI.clear(left);
+          App.UI.clear(right);
+
+          var phases = (App.PROJECT && App.PROJECT.phases) || [];
+          if (!phases.length) {
+            right.appendChild(el('p', { text:
+              'This project has no phases yet. Close this and use ' +
+              '"Create default phases" in the Phases panel.' }));
+            return;
+          }
+
+          var list = el('div.phase-list');
+          App.Phases.rows(App.PROJECT, phaseRun).forEach(function (row) {
+            var node = el('div.phase-row' + (row.id === selected ? '.selected' : ''));
+            node.style.paddingLeft = (8 + row.depth * 10) + 'px';
+            node.appendChild(el('span.phase-dot.' + row.state));
+            node.appendChild(el('span.phase-name', { text: row.name }));
+            node.addEventListener('click', function () {
+              selected = row.id;
+              App.state.phase = row.id;
+              draw();
+            });
+            list.appendChild(node);
+          });
+          left.appendChild(list);
+
+          var phase = phaseById(selected);
+          if (!phase) { selected = phases[0].id; draw(); return; }
+
+          var grid = el('div.pgrid');
+          var groups = phaseProps(phase);
+          Object.keys(groups).forEach(function (name) {
+            grid.appendChild(el('div.pgrid-group', { text: name }));
+            groups[name].forEach(function (row) {
+              grid.appendChild(phasePropRow(phase, row));
+            });
+          });
+          right.appendChild(grid);
+
+          /* What this phase changes. Read-only here: the way to change it is to
+             click the part in the viewport, which is the only place you can see
+             which part you are naming. */
+          var on = phase.activate || [], off = phase.deactivate || [];
+          var active = App.Phases.activeParts(App.PROJECT, phase.id) || [];
+          var changes = el('div.pgrid');
+          changes.appendChild(el('div.pgrid-group', { text: 'Staged construction' }));
+          [['Activated here', on.length ? on.join(', ') : '—'],
+           ['Deactivated here', off.length ? off.join(', ') : '—'],
+           ['Active in this phase', active.length + ' of ' +
+            App.Phases.stageableKeys(App.PROJECT).length + ' parts']
+          ].forEach(function (row) {
+            changes.appendChild(el('div.pgrid-row', null, [
+              el('div.pgrid-key', { text: row[0] }),
+              el('div.pgrid-val.readonly', { text: row[1] })
+            ]));
+          });
+          right.appendChild(changes);
+
+          /* The way back. A part this phase has switched off is not drawn in the
+             viewport, so it cannot be clicked to bring it back -- which would make
+             the toggle one-way, and the mistake unrecoverable without editing the
+             phase before it. Listed here with a button each. */
+          var hidden = App.Phases.hiddenKeys(App.PROJECT, phase.id, 'staged');
+          if (hidden.length) {
+            var back = el('div.pgrid');
+            back.appendChild(el('div.pgrid-group', { text: 'Not in the model here' }));
+            hidden.forEach(function (key) {
+              var label = (App.PROJECT.soil_body_labels || {})[key] || key;
+              var button = el('button.btn.btn-sm', { text: 'Switch on', type: 'button' });
+              button.addEventListener('click', function () {
+                savePhases(App.Phases.toggled(App.PROJECT, phase.id, key),
+                           label + ' switched on in ' + phase.name + '.')
+                  .then(draw);
+              });
+              back.appendChild(el('div.pgrid-row', null, [
+                el('div.pgrid-key', { text: label }),
+                el('div.pgrid-val', null, [button])
+              ]));
+            });
+            right.appendChild(back);
+          }
+
+          right.appendChild(el('div.lay-hint', { text:
+            'Click a soil body or a structure in the viewport, in Staged ' +
+            'construction mode, to switch it off for the selected phase.' }));
+        }
+
+        draw();
+      }
+    });
+  }
+
+  /* ── The Results explorer's own collapse ────────────────────────────
+     Every other dock panel collapses by its header, wired by `js/ui.js`. That one
+     works off DOCK_ROWS, which lists the three panels the frozen page has -- and a
+     panel missing from it gets no handler at all, so the Results explorer drew a
+     caret that did nothing. It is live-only markup (live/index.html), so it is wired
+     here rather than by widening a frozen table.
+
+     It needs no grid row of its own on the way: `#dock`'s `grid-template-rows` stops
+     at the phases panel, so this one already sits in an implicit `auto` row that
+     shrinks to the header as soon as `.collapsed` hides the body. */
+  function resultsCaret(panel) {
+    var caret = panel.querySelector('.dock-caret');
+    if (caret) caret.textContent = panel.classList.contains('collapsed') ? '▸' : '▾';
+  }
+
+  function collapsibleResultsPanel(dock) {
+    var panel = dock && dock.querySelector('#panel-results');
+    var head = panel && panel.querySelector('.dock-head');
+    // install() may run more than once; a second handler would toggle it straight back.
+    if (!head || head.__resultsCollapse) return;
+    head.__resultsCollapse = true;
+    head.addEventListener('click', function () {
+      panel.classList.toggle('collapsed');
+      resultsCaret(panel);
+    });
+    resultsCaret(panel);
+  }
+
   function install() {
     if (installed || typeof App.runAction !== 'function' || !App.Command) return;
     installed = true;
+
+    /* Results-mode state, declared here rather than beside the functions that use it.
+
+       `var` hoists the name but not the initialiser, and the installers below run
+       *during* this function -- so a `var resultsMenu = null` sitting further down
+       would run after `installResultsMenu()` had filled it and quietly set it back to
+       null, leaving the menu's Phase and Field submenus permanently empty. That is
+       not hypothetical: it is what happened, along with the toolbar drawing the info
+       glyph because `App.ICONS.viewresults` was assigned `undefined` the same way.
+       Anything the installers touch is declared before the first of them is called. */
+    var resultsMenu = null;      // the Results entry in App.MENUS, for refilling
+    var resultsWindow = null;    // the floating chooser, while it is open
+
+    extendViewportMenu();
 
     if (!App.Command.err) {
       App.Command.err = function (text) { App.Command.write('err', text); };
@@ -920,6 +1584,8 @@ App.LivePatches = (function () {
 
     var stale = missingViewportApi(App.Viewport);
     if (stale.length) App.Command.err(staleMessage(stale));
+
+    openOnDefaultMode();
 
     if (typeof window !== 'undefined' && !window.__liveErrorsWired) {
       window.__liveErrorsWired = true;
@@ -947,6 +1613,33 @@ App.LivePatches = (function () {
         return;
       }
 
+      // "View calculation results": the mockup's dialog, replaced by the mode that
+      // now exists. See `openResults`.
+      if (item && item.action === 'results') {
+        openResults();
+        return;
+      }
+
+      /* Every Results menu entry. One action carrying the command it stands for,
+         rather than one action name per entry: the menu is then a list of the same
+         strings the command box takes, and adding an entry is adding a line of data. */
+      if (item && item.action === 'resultsRun') {
+        if (App.state && App.state.mode !== 'results') App.setMode('results');
+        resultsCommand(item.cmd);
+        return;
+      }
+      if (item && item.action === 'resultsAtNode') {
+        askForNode();
+        return;
+      }
+      // The rail's "Choose results": reopen the window, or bring it forward if it is
+      // already up.
+      if (item && item.action === 'chooseResults') {
+        if (App.state && App.state.mode !== 'results') App.setMode('results');
+        else openResultsWindow();
+        return;
+      }
+
       if (item && item.action === 'newProject') {
         confirmDialog('New project',
           'This discards the current model and starts again from an empty project. '
@@ -960,6 +1653,9 @@ App.LivePatches = (function () {
       if (item && /^nav(Pan|Rotate)$/.test(item.action || '')) {
         return setNavigation(item.action === 'navPan' ? 'pan' : 'rotate');
       }
+
+      if (item && item.action === 'toggleNodeLabels') { toggleLabels('nodes'); return; }
+      if (item && item.action === 'toggleElementLabels') { toggleLabels('elements'); return; }
 
       if (item && item.action === 'importModel') {
         if (App.ImportDialog) App.ImportDialog.open();
@@ -1012,8 +1708,16 @@ App.LivePatches = (function () {
         if (App.Interfaces) App.Interfaces.start();
         return;
       }
+      if (item && item.action === 'createNormalLoad') {
+        if (App.NormalLoads) App.NormalLoads.start();
+        return;
+      }
       if (item && item.action === 'exportModel') {
         if (App.Export) App.Export.run();
+        return;
+      }
+      if (item && item.action === 'calculate') {
+        if (App.Calculate) App.Calculate.run();
         return;
       }
 
@@ -1029,8 +1733,9 @@ App.LivePatches = (function () {
       }
       if (item && /^(refineMesh|coarsenMesh|resetMeshRefinement)$/.test(item.action)) {
         if (item.action === 'resetMeshRefinement') {
-          App.MESH_REFINEMENTS = [];
-          App.Command.note('Local mesh refinements reset.');
+          App.MESH_REFINEMENTS = null;
+          App.Command.note(
+            "Local mesh refinement reset; the model's own is used again.");
         } else {
           var factor = item.action === 'refineMesh' ? 0.5 : 2;
           App.MESH_REFINEMENTS = [pitRefinement(App.PROJECT, factor)];
@@ -1115,7 +1820,7 @@ App.LivePatches = (function () {
                  tip: m.id === '2d'
                    ? '2D model — a plane-strain cross-section, meshed with triangles'
                    : '3D model — the full solid, meshed with tetrahedra',
-                 on: m.id === '3d' };
+                 on: m.id === DEFAULT_MODEL_MODE };
       });
       App.TOOLBAR.splice.apply(App.TOOLBAR, [at, 0].concat(buttons).concat(['|']));
     }
@@ -1158,6 +1863,10 @@ App.LivePatches = (function () {
           item.action = 'exportModel';
         }
       });
+      /* There is deliberately no menu item for the CROW example. Models are opened by
+         running the Python that builds them -- `run app/crow.py` in the command box --
+         which works for any model, not only the one example somebody thought to add a
+         button for. See `runScript`. */
       if (!fileMenu.items.some(function (item) { return item && item.action === 'importMdpa'; })) {
         // Belongs beside Export model -- the same File > Print/Export group -- not
         // tacked on after Exit, which is where a plain push would leave it.
@@ -1204,10 +1913,24 @@ App.LivePatches = (function () {
         if (tool.icon === 'load') {
           tool.action = 'createLoad';
           (tool.flyout || []).forEach(function (item) {
+            // The normal load below is not one of the three vector kinds: it is
+            // owned by App.NormalLoads and carries its own action, so the label
+            // test that sorts the frozen three must not claim it.
+            if (item.action === 'createNormalLoad') return;
             item.action = 'createLoad';
             item.loadKind = /point/i.test(item.label) ? 'point'
               : (/line/i.test(item.label) ? 'line' : 'surface');
           });
+          // A pressure normal to a polyline rather than a vector on a flat run, so
+          // App.Loads cannot make it -- but a user looking for a load looks here,
+          // not in a tool of its own, so it joins the flyout the other three are in.
+          if (!(tool.flyout || []).some(function (item) {
+            return item && item.action === 'createNormalLoad';
+          })) {
+            tool.flyout = (tool.flyout || []).concat([
+              { icon: 'load', label: 'Normal load', action: 'createNormalLoad' }
+            ]);
+          }
         }
       });
       
@@ -1290,6 +2013,60 @@ App.LivePatches = (function () {
         structuresMenu.items.push({ label: 'Create interface',
                                     action: 'interface', sub: false });
       }
+      if (!structuresMenu.items.some(function (item) {
+        return item && item.action === 'createNormalLoad';
+      })) {
+        structuresMenu.items.push({ label: 'Create normal load',
+                                    action: 'createNormalLoad', sub: false });
+      }
+    }
+
+    installResultsMode();
+
+    /* The phases panel, on the project's own phases. `App.setMode` calls
+       `mountPhases` whenever staged mode is entered (js/app.js:33), and the frozen
+       one reads `App.PHASES` -- so replacing the function is what makes every entry
+       into the mode draw the real sequence. */
+    if (App.Explorer && App.Explorer.mountPhases) {
+      App.Explorer.mountPhases = mountLivePhases;
+      if (App.state && App.state.mode === 'staged') mountLivePhases();
+    }
+
+    /* The stage dots follow the last run: `calculate.js` hands the result over and
+       the panel colours the phases that completed.
+
+       And then the app goes to Results. A calculation that produced something to look
+       at and left you on the phase editor is a calculation you have to go and find the
+       output of -- which is exactly what this whole milestone exists to stop. The
+       switch waits for `ready()`, because until the run has been read there are no
+       phases to show; and it is gated on there being a readable phase, so a run that
+       died before writing anything leaves you where you were, next to the error. */
+    if (App.Calculate && App.Calculate.run && !App.Calculate.run.__phases) {
+      var frozenCalcRun = App.Calculate.run;
+      App.Calculate.run = function (done) {
+        return frozenCalcRun(function (result) {
+          rememberRun(result);
+          if (done) done(result);
+          if (!result || !App.Results || !App.Results.ready) return;
+          App.Results.ready().then(function () {
+            if (App.Results.stage()) App.setMode('results');
+          });
+        });
+      };
+      App.Calculate.run.__phases = true;
+    }
+
+    /* Staged construction editing: a pick in staged mode is also a toggle. */
+    if (typeof App.selectObject === 'function' && !App.selectObject.__staged) {
+      var frozenSelect = App.selectObject;
+      App.selectObject = function (key, source) {
+        frozenSelect(key, source);
+        if (!key || source !== 'viewport') return;
+        if (!App.state || App.state.mode !== 'staged') return;
+        if (!App.PROJECT || !(App.PROJECT.phases || []).length) return;
+        togglePartForPhase(key);
+      };
+      App.selectObject.__staged = true;
     }
 
     // Model explorer: enable Delete for drawn/imported geometry (see onTreeContextMenu).
@@ -1305,9 +2082,567 @@ App.LivePatches = (function () {
       if (treeHost) treeHost.addEventListener('contextmenu', onTreeContextMenu, true);
     }
 
+    /* `help` is a canned list in the frozen mockup (js/data.js:866). The commands this
+       build really has belong in it, or the only way to find them is to read the
+       source. Spliced above the mode-jump line so the scripting entry point is the
+       first thing in the list rather than the last. */
+    if (App.CMD_RESPONSES && App.CMD_RESPONSES.help &&
+        !App.CMD_RESPONSES.help.some(function (line) { return /run </.test(line[1]); })) {
+      App.CMD_RESPONSES.help.splice(1, 0,
+        ['note', '  run <file.py>         build the model from a Python file'],
+        ['note', '  export                write the Kratos deck'],
+        ['note', '  cleargeometry         remove drawn/imported custom geometry'],
+        ['note', '  results               open what a calculation wrote (try "results runs")']);
+    }
+
+    /* ── Results mode ─────────────────────────────────────────────────────
+       A sixth mode tab, its own dock panel, and the pointer readout over a contoured
+       mesh. All of it is DOM, which on this machine means none of it is covered by an
+       automated test -- so every control below does its work by calling the *same*
+       `results ...` command the command box runs. There is one implementation of each
+       action, it is the tested one, and the panel is a keyboard for it. */
+
+    function installResultsMode() {
+      if (!App.MODES || App.MODES.some(function (m) { return m.id === 'results'; })) {
+        return;
+      }
+      /* Group 2, "Calculation", beside Mesh and Staged construction. Not a group of
+         its own: `MODE_GROUP_LABELS` is private to the frozen toolbar (js/toolbars.js:46)
+         and has no entry past 2, so a third group would draw with a blank label —
+         and editing a frozen file for a caption is not worth it. Reading a result is
+         the end of the calculation, so it sits there honestly enough. */
+      App.MODES.push({
+        id: 'results', label: 'Results', group: 2,
+        hint: 'Results mode — read back what a calculation wrote: choose a phase and a '
+            + 'quantity, or type "results fields" to see what this phase offers.'
+      });
+      App.RAILS = App.RAILS || {};
+      App.RAILS.results = [
+        { icon: 'select', tip: 'Select', toggle: true, on: true },
+        '-',
+        // The chooser opens with the mode; this is how it comes back once closed.
+        { icon: 'results', tip: 'Choose results', action: 'chooseResults' }
+      ];
+
+      /* `App.setMode` is frozen and knows only about the phases panel (js/app.js:25).
+         Wrapped rather than forked, the same way `App.selectObject` is. */
+      if (typeof App.setMode === 'function' && !App.setMode.__results) {
+        var frozenSetMode = App.setMode;
+        App.setMode = function (mode) {
+          frozenSetMode(mode);
+          syncResultsPanel(mode === 'results');
+        };
+        App.setMode.__results = true;
+      }
+
+      // The tabs are built from App.MODES once, at boot, and this runs after that --
+      // so they are built again, now that there is one more mode to draw.
+      if (App.Toolbars && App.Toolbars.mountModes) {
+        App.Toolbars.mountModes();
+        if (App.state && App.Toolbars.highlightMode) {
+          App.Toolbars.highlightMode(App.state.mode);
+        }
+      }
+
+      installResultsIcon();
+      installResultsMenu();
+      collapsibleResultsPanel(document.getElementById('dock'));
+
+      /* The panel and the menu both redraw themselves whenever the model behind them
+         changes. Without this they are built once, from whatever was true when the
+         mode was entered, and never again -- which is what made a finished calculation
+         show an empty phase list while the run was being read in the background. */
+      if (App.Results.onChange) {
+        App.Results.onChange(function () {
+          mountResultsPanel();
+          refreshResultsMenu();
+        });
+      }
+
+      bindResultsProbe();
+    }
+
+    /* ── The "View calculation results" button ────────────────────────────
+       The mockup gave it the bar chart it gives every chart-ish thing, and set it
+       flush against Calculate with nothing between them -- so the one button that
+       *starts* an hour of solving and the one that *reads* the answer sat as a pair,
+       looking like two halves of the same control.
+
+       Both are fixed here rather than in `js/data.js`: `App.UI.icon` looks the name up
+       in `App.ICONS` when it draws, and `mountMain` reads `App.TOOLBAR` when it
+       mounts, so adding to one and splicing the other is enough and the frozen file
+       stays as it is. */
+
+    function installResultsIcon() {
+      if (!App.ICONS || !App.TOOLBAR) return;
+
+      /* An eye over a chart: *view* the results.
+
+         The lens is the set's own `eye` (js/data.js:38) squashed into the top half --
+         same shape, so the two read as relatives rather than as two different eyes.
+         The pupil is 1.4 rather than the 1.2 a straight scale would give: the lens is
+         squashed vertically and not horizontally, so there is no ratio to preserve,
+         and 1.2 comes out a 1.6px dot at the size the toolbar draws this. Under it, a
+         baseline and three bars.
+
+         Drawn on the same 24x24 grid as every other entry in `App.ICONS`, stroked and
+         not filled, and everything sits inside 2.5..21.5 so it does not clip at the
+         16px the main toolbar draws it at.
+
+         Declared *in here*, not beside the other constants at the top of `install`.
+         It lived there and this drew the info glyph instead: `var` hoists its name but
+         not its value, `installResultsIcon` is called before that assignment runs, and
+         `App.UI.icon` falls back to `App.ICONS.info` for anything it cannot find. The
+         lookup is by name and silent, so the mistake showed up as the wrong picture
+         rather than as an error. */
+      var glyph =
+        '<path d="M3 8.5Q12 2.5 21 8.5Q12 14.5 3 8.5Z"/>'
+        + '<circle cx="12" cy="8.5" r="1.4"/>'
+        + '<path d="M6 20h12"/>'
+        + '<path d="M9 20v-3.5M12 20v-5.5M15 20v-2.5"/>';
+
+      App.ICONS.viewresults = glyph;
+
+      // The Phases menu carries the same action (js/data.js:177); one action, one
+      // icon, or the two ways in stop looking like the same thing.
+      (App.MENUS || []).forEach(function (menu) {
+        (menu.items || []).forEach(function (item) {
+          if (item && item.action === 'results') item.icon = 'viewresults';
+        });
+      });
+
+      var at = -1;
+      for (var i = 0; i < App.TOOLBAR.length; i++) {
+        if (App.TOOLBAR[i] && App.TOOLBAR[i].action === 'results') { at = i; break; }
+      }
+      if (at < 0) return;
+      App.TOOLBAR[at].icon = 'viewresults';
+      if (App.TOOLBAR[at - 1] !== '|') App.TOOLBAR.splice(at, 0, '|');
+      if (App.Toolbars && App.Toolbars.mountMain) App.Toolbars.mountMain();
+    }
+
+    /* ── The Results menu ─────────────────────────────────────────────────
+       The menu bar mirrors the modes -- Soil, Structures, Mesh, Flow conditions,
+       Phases -- and Results arrived without its half of that pairing. Everything in
+       it runs one of the `results ...` commands, so the menu, the panel and the
+       command box are three ways into one tested implementation.
+
+       `Phase` and `Field` are filled in from the open run. `App.Menu.build` reads
+       `it.sub` when the menu is opened rather than when it is mounted, so keeping the
+       same item objects and refilling their arrays is enough to keep them current. */
+
+    function installResultsMenu() {
+      if (!App.MENUS || App.MENUS.some(function (m) { return m.label === 'Results'; })) {
+        return;
+      }
+      resultsMenu = {
+        label: 'Results',
+        items: [
+          { label: 'Open run…', icon: 'results', action: 'resultsRun', cmd: 'results runs' },
+          '-',
+          { label: 'Phase', sub: [] },
+          { label: 'Previous phase', action: 'resultsRun', cmd: 'results phase -' },
+          { label: 'Next phase', action: 'resultsRun', cmd: 'results phase +' },
+          '-',
+          { label: 'Field', sub: [] },
+          { label: 'List fields', action: 'resultsRun', cmd: 'results fields' },
+          '-',
+          { label: 'Shading', sub: [
+            { label: 'Smooth', action: 'resultsRun', cmd: 'results smooth' },
+            { label: '8 bands', action: 'resultsRun', cmd: 'results bands 8' },
+            { label: '16 bands', action: 'resultsRun', cmd: 'results bands 16' },
+            { label: '32 bands', action: 'resultsRun', cmd: 'results bands 32' },
+            { label: '48 bands', action: 'resultsRun', cmd: 'results bands 48' }
+          ] },
+          { label: 'Colours', sub: [] },
+          { label: 'Deformed mesh', sub: [
+            { label: 'Off', action: 'resultsRun', cmd: 'results deform off' },
+            { label: 'Automatic', action: 'resultsRun', cmd: 'results deform auto' },
+            { label: 'True scale (×1)', action: 'resultsRun', cmd: 'results deform 1' },
+            { label: '×10', action: 'resultsRun', cmd: 'results deform 10' },
+            { label: '×100', action: 'resultsRun', cmd: 'results deform 100' }
+          ] },
+          { label: 'Fit range to this phase', action: 'resultsRun',
+            cmd: 'results range auto' },
+          '-',
+          { label: 'Value at a node…', action: 'resultsAtNode' },
+          { label: 'Save field as CSV', action: 'resultsRun', cmd: 'results csv' },
+          { label: 'Download run', action: 'resultsRun', cmd: 'results zip' }
+        ]
+      };
+
+      // Before Expert and Help, which are the two that trail every mode's own menu.
+      var at = App.MENUS.map(function (m) { return m.label; }).indexOf('Expert');
+      App.MENUS.splice(at < 0 ? App.MENUS.length : at, 0, resultsMenu);
+      refreshResultsMenu();
+      if (App.Menu && App.Menu.mountBar) App.Menu.mountBar();
+    }
+
+    /* The one menu entry that needs a value typed. A prompt rather than a dialog of
+       its own: it asks for one integer, and the answer is printed to the command log
+       by the same `results at` the command box runs. */
+    function askForNode() {
+      if (App.state && App.state.mode !== 'results') App.setMode('results');
+      var node = window.prompt('Show every field at which node number?');
+      if (node === null) return;
+      node = String(node).trim();
+      if (!/^\d+$/.test(node)) {
+        if (App.Command) App.Command.err('"' + node + '" is not a node number.');
+        return;
+      }
+      resultsCommand('results at ' + node);
+    }
+
+    function itemsOf(label) {
+      if (!resultsMenu) return null;
+      return resultsMenu.items.filter(function (it) {
+        return it && it.label === label;
+      })[0];
+    }
+
+    function refreshResultsMenu() {
+      var phase = itemsOf('Phase');
+      var field = itemsOf('Field');
+      if (!phase || !field || !App.Results) return;
+      var state = App.Results.state();
+
+      phase.sub = (state.stages || []).map(function (s) {
+        return {
+          label: s.index + '  ' + s.phase, checked: s.index === state.stage,
+          disabled: !s.results, action: 'resultsRun',
+          cmd: 'results phase ' + s.index
+        };
+      });
+      phase.disabled = !phase.sub.length;
+
+      field.sub = [];
+      ((state.catalogue && state.catalogue.groups) || []).forEach(function (group) {
+        field.sub.push({ title: group.name });
+        group.fields.forEach(function (entry) {
+          field.sub.push({
+            label: entry.label + '  (' + entry.unit + ')',
+            checked: !!(state.field && state.field.field === entry.name),
+            action: 'resultsRun', cmd: 'results field ' + entry.name
+          });
+        });
+      });
+      field.disabled = !field.sub.length;
+
+      var colours = itemsOf('Colours');
+      if (colours) {
+        var options = App.Results.options();
+        colours.sub = Object.keys(App.ResultsRender.MAPS).map(function (name) {
+          return { label: App.ResultsRender.MAP_LABELS[name] || name,
+                   checked: options.map === name,
+                   action: 'resultsRun', cmd: 'results map ' + name };
+        });
+        colours.sub.push('-');
+        colours.sub.push({
+          label: 'Reversed', checked: !!options.reversed, action: 'resultsRun',
+          cmd: 'results reverse ' + (options.reversed ? 'off' : 'on')
+        });
+      }
+    }
+
+    /* "View calculation results" -- the toolbar's chart button and the Phases menu
+       item, both `action: 'results'` (js/data.js:177, :222). The frozen handler opens
+       a "not implemented in this mockup" dialog (js/app.js:201), which is exactly what
+       it should have done until this milestone. Now there is somewhere to go. */
+    function openResults() {
+      App.setMode('results');
+      if (App.Results.current()) {
+        // Already open -- `setMode` has just drawn the panel for it.
+        return App.Results.ready();
+      }
+      // Nothing open: go to the newest run on the machine, which after a calculation
+      // is the one that just finished.
+      return App.Results.handleCommand('results runs').then(function (runs) {
+        if (runs && runs.length) return App.Results.handleCommand('results open 1');
+        if (App.Command) {
+          App.Command.note('Nothing has been calculated on this machine yet — '
+                           + 'press Calculate (F9) first.');
+        }
+      }).then(mountResultsPanel);
+    }
+
+    /* ── The Results window ───────────────────────────────────────────────
+       The same controls as the dock panel, in a window of their own: the dock is
+       narrow and shares its height with the Model and Selection explorers, and
+       choosing a phase and a quantity is the thing this mode is for.
+
+       Deliberately *modeless*. `App.Dialogs.open` lays a scrim over the page and every
+       other dialog in this app wants that -- they are edits you finish before carrying
+       on. This one is not: its whole purpose is to change what the model looks like
+       while you watch it, so the scrim is taken back out and the viewport stays live
+       underneath. Everything else the shell gives -- dragging, resizing, Esc -- is
+       exactly right and is kept. */
+
+    function openResultsWindow() {
+      if (resultsWindow) {
+        flashResultsWindow();
+        return resultsWindow;
+      }
+      if (!App.Dialogs || !App.Dialogs.open) return null;
+
+      /* The actions go in the footer beside Close, not in the body. `.dlg-body` is a
+         flex *row* (css/components.css:313), so a second block inside it lands next
+         to the controls rather than under them, and its buttons stretch to the full
+         height of the window. The footer is where a dialog's buttons belong anyway.
+
+         `keepOpen` on all three: fitting a range or saving a file is not finishing
+         with the window. */
+      var act = function (label, cmd) {
+        return { label: label, keepOpen: true,
+                 onClick: function () { resultsCommand(cmd); } };
+      };
+
+      var handle = App.Dialogs.open({
+        title: 'Choose results',
+        width: 430, height: 300,
+        buttons: [
+          act('Fit range', 'results range auto'),
+          act('Save CSV', 'results csv'),
+          act('Download run', 'results zip'),
+          { label: 'Close', primary: true }
+        ],
+        build: function (body) { renderResultsControls(body, false); },
+        onClose: function () { resultsWindow = null; }
+      });
+      handle.dialog.classList.add('dlg-results');
+
+      /* The scrim belongs to a modal dialog and this one is not modal. Removed rather
+         than hidden by CSS so that nothing is left over the viewport swallowing
+         pointer events -- which would take the orbit, the pick and the value readout
+         with it. */
+      var layer = document.getElementById('modal-layer');
+      var scrims = layer ? layer.querySelectorAll('.scrim') : [];
+      if (scrims.length) {
+        var scrim = scrims[scrims.length - 1];
+        if (scrim.parentNode) scrim.parentNode.removeChild(scrim);
+      }
+
+      resultsWindow = handle;
+      return handle;
+    }
+
+    /* Already open: nudge it rather than silently doing nothing. The same shake
+       `js/dialogs.js` uses when a modal's scrim is clicked -- reproduced rather than
+       imported because it is private to that closure. */
+    function flashResultsWindow() {
+      if (!resultsWindow || !resultsWindow.dialog.animate) return;
+      resultsWindow.dialog.animate(
+        [{ transform: 'translateX(0)' }, { transform: 'translateX(-4px)' },
+         { transform: 'translateX(4px)' }, { transform: 'translateX(0)' }],
+        { duration: 160 });
+    }
+
+    function closeResultsWindow() {
+      if (resultsWindow) resultsWindow.close();
+      resultsWindow = null;
+    }
+
+    function syncResultsPanel(on) {
+      var panel = document.getElementById('panel-results');
+      var dock = document.getElementById('dock');
+      if (!panel || !dock) return;
+      panel.hidden = !on;
+      if (App.UI && App.UI.syncDock) App.UI.syncDock(dock);
+      if (on) {
+        mountResultsPanel();
+        // Entering the mode opens the chooser, every time. It is what the mode is
+        // for, and the dock panel alone is easy to miss down the side of the page.
+        // The rail's "Choose results" reopens it after it has been closed. It fills
+        // itself as it is built, so there is nothing to render afterwards.
+        openResultsWindow();
+      } else {
+        // Leaving takes the contour off the model rather than leaving it behind under
+        // the geometry, where it would be neither editable nor explicable -- and the
+        // window with it, since it belongs to a mode that is no longer on.
+        closeResultsWindow();
+        if (App.ResultsView) App.ResultsView.clear();
+      }
+    }
+
+    /* Run one of the tested commands, then redraw the panel from the state it left. */
+    function resultsCommand(text) {
+      var answer = App.Results.handleCommand(text);
+      return Promise.resolve(answer === false ? null : answer)
+        .then(function () { mountResultsPanel(); });
+    }
+
+    /* Both mounts, every time anything changes. The dock panel is always there; the
+       window only while it is open. Neither keeps state of its own -- both are drawn
+       from `App.Results.state()`, so they cannot disagree with each other or with the
+       command box. */
+    function mountResultsPanel() {
+      // The dock panel has no footer, so it keeps the actions inline. The window puts
+      // them beside Close instead -- see `openResultsWindow`.
+      renderResultsControls(document.getElementById('panel-results-body'), true);
+      renderResultsControls(resultsWindow && resultsWindow.body, false);
+    }
+
+    function renderResultsControls(body, withActions) {
+      if (!body || !App.Results) return;
+      var run = App.Results.current();
+      if (!run) {
+        body.innerHTML = '<p class="dock-empty">No run is open.<br>'
+          + 'Press <b>Calculate</b> (F9), or type <code>results runs</code> '
+          + 'in the command box to list what is already on this machine.</p>';
+        return;
+      }
+
+      var state = App.Results.state ? App.Results.state() : {};
+      var options = App.Results.options();
+      var rows = [];
+
+      rows.push(row('Run', '<span class="res-run" title="' + esc(run) + '">'
+                           + esc(run) + '</span>'));
+      rows.push(row('Phase', select('phase', (state.stages || []).map(function (s) {
+        return { value: s.index, label: s.index + '  ' + s.phase,
+                 selected: s.index === state.stage, disabled: !s.results };
+      }))));
+
+      var fields = [];
+      ((state.catalogue && state.catalogue.groups) || []).forEach(function (group) {
+        group.fields.forEach(function (entry) {
+          fields.push({ value: entry.name,
+                        label: group.name + ' · ' + entry.label + '  (' + entry.unit + ')',
+                        selected: state.field && state.field.field === entry.name });
+        });
+      });
+      rows.push(row('Field', fields.length
+        ? select('field', fields)
+        : '<span class="dock-empty">this phase wrote nothing</span>'));
+
+      rows.push(row('Shading', select('bands', [0, 4, 8, 16, 24, 32, 48].map(function (n) {
+        return { value: n, label: n ? n + ' bands' : 'smooth',
+                 selected: options.bands === n };
+      }))));
+      rows.push(row('Colours', select('map',
+        Object.keys(App.ResultsRender.MAPS).map(function (name) {
+          return { value: name,
+                   label: App.ResultsRender.MAP_LABELS[name] || name,
+                   selected: options.map === name };
+        }))));
+      rows.push(row('Reverse', '<input type="checkbox" data-res="reverse"'
+                               + (options.reversed ? ' checked' : '') + '>'));
+      rows.push(row('Deformed', select('deform', [
+        { value: 'off', label: 'off', selected: !options.deform },
+        { value: 'auto', label: 'auto', selected: options.deform === 'auto' },
+        { value: '1', label: 'true scale (×1)', selected: options.deform === 1 },
+        { value: '10', label: '×10', selected: options.deform === 10 },
+        { value: '100', label: '×100', selected: options.deform === 100 }
+      ])));
+
+      if (state.field) {
+        rows.push(row('Range', '<span class="res-range">'
+          + esc(App.ResultsRender.format(options.min === null ? state.field.min : options.min))
+          + ' … '
+          + esc(App.ResultsRender.format(options.max === null ? state.field.max : options.max))
+          + ' ' + esc(state.field.unit) + '</span>'));
+      }
+
+      body.innerHTML = '<div class="res-grid">' + rows.join('') + '</div>'
+        + (withActions
+           ? '<div class="res-actions">'
+             + '<button data-cmd="results range auto">Fit range</button>'
+             + '<button data-cmd="results csv">Save CSV</button>'
+             + '<button data-cmd="results zip">Download run</button>'
+             + '</div>'
+           : '');
+
+      bind(body, 'phase', function (value) { return 'results phase ' + value; });
+      bind(body, 'field', function (value) { return 'results field ' + value; });
+      bind(body, 'bands', function (value) {
+        return value === '0' ? 'results smooth' : 'results bands ' + value;
+      });
+      bind(body, 'map', function (value) { return 'results map ' + value; });
+      var reverse = body.querySelector('[data-res="reverse"]');
+      if (reverse) {
+        reverse.addEventListener('change', function () {
+          // `on`/`off` rather than a bare toggle: the box already carries the state,
+          // and toggling from it would invert whatever the module happened to think.
+          resultsCommand('results reverse ' + (reverse.checked ? 'on' : 'off'));
+        });
+      }
+      bind(body, 'deform', function (value) { return 'results deform ' + value; });
+
+      Array.prototype.forEach.call(body.querySelectorAll('[data-cmd]'), function (button) {
+        button.addEventListener('click', function () {
+          resultsCommand(button.dataset.cmd);
+        });
+      });
+    }
+
+    /* Bound by data attribute, not by id: the controls are mounted twice at once --
+       once in the dock and once in the floating window -- and two elements sharing an
+       id is invalid, with `getElementById` silently answering for whichever came
+       first. */
+    function bind(body, name, toCommand) {
+      var control = body.querySelector('[data-res="' + name + '"]');
+      if (control) {
+        control.addEventListener('change', function () {
+          resultsCommand(toCommand(control.value));
+        });
+      }
+    }
+
+    function row(label, control) {
+      return '<label class="res-row"><span>' + esc(label) + '</span>' + control + '</label>';
+    }
+
+    function select(name, entries) {
+      return '<select data-res="' + name + '">' + entries.map(function (entry) {
+        return '<option value="' + esc(entry.value) + '"'
+             + (entry.selected ? ' selected' : '')
+             + (entry.disabled ? ' disabled' : '') + '>'
+             + esc(entry.label) + '</option>';
+      }).join('') + '</select>';
+    }
+
+    function esc(text) {
+      return String(text === undefined || text === null ? '' : text)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    /* The pointer readout: the value under the cursor, in the status bar, while a
+       contour is on screen.
+
+       Hung off `App.setCoords` rather than off a second raycast of our own. The
+       viewport already turns every pointer move into a world point -- against the
+       right plane for the dimension, with the camera the frame was drawn with -- and
+       hands it here (live/js/viewport.js:1113). Casting again would be a second
+       implementation of that, and would drift from it the first time the section
+       plane moved. */
+    function bindResultsProbe() {
+      if (typeof App.setCoords !== 'function' || App.setCoords.__results) return;
+      var frozenSetCoords = App.setCoords;
+      App.setCoords = function (x, y, z) {
+        frozenSetCoords(x, y, z);
+        if (!App.state || App.state.mode !== 'results') return;
+        if (!App.ResultsView || !App.ResultsView.isShowing()) return;
+        var hint = document.getElementById('sb-hint');
+        if (!hint) return;
+        var text = App.ResultsView.describeAt({ x: x, y: y, z: z });
+        if (text) hint.textContent = text;
+      };
+      App.setCoords.__results = true;
+    }
+
     var frozenRun = App.Command.run;
     App.Command.run = function (text) {
       if (App.DrawInput && App.DrawInput.handleCommand(text)) return;
+
+      /* The results commands, ahead of everything else and answering only their own:
+         `handleCommand` returns false for anything that is not `results ...`, which
+         is what keeps `mesh`, `run` and `export` with their owners below. It lives in
+         its own module because it has to stay free of the DOM -- that is what lets
+         `live/tests/run_headless.py` execute it here, where no browser can be. */
+      if (App.Results) {
+        var handledByResults = App.Results.handleCommand(text);
+        if (handledByResults !== false) return handledByResults;
+      }
       
       var cmd = (text || '').trim().split(/\s+/)[0].toLowerCase();
       if (cmd === 'cleargeometry') {
@@ -1322,6 +2657,31 @@ App.LivePatches = (function () {
         return;
       }
       
+      /* run <file.py> -- build the model from a Python file.
+
+         The scripting interface every modeller of this kind has, and the reason the
+         command line is here rather than being a log: the file says what the model is,
+         the server runs it, and what comes back is adopted and meshed. Errors are the
+         server's own message verbatim -- app/script.py writes them to be read here,
+         with no stack trace on screen to fall back on. */
+      if (cmd === 'run' || cmd === 'load') {
+        var scriptPath = (text || '').trim().slice(cmd.length).trim();
+        if (App.Command.write) App.Command.write('echo', '> ' + (text || '').trim());
+        if (!scriptPath) {
+          if (App.Command.err) App.Command.err('Usage: run <path to a .py file>');
+          return;
+        }
+        return App.Api.post('/api/project/script', { path: scriptPath })
+          .then(function (result) {
+            return adoptProject(result.project,
+              'Ran ' + scriptPath + ' — model built. Meshing it now.');
+          })
+          .then(function () { requestMesh(true, null); })
+          .catch(function (error) {
+            if (App.Command.err) App.Command.err(error.message);
+          });
+      }
+
       if (cmd === 'export') {
         if (App.Command.write) App.Command.write('echo', '> ' + text.trim());
         if (App.Export) App.Export.run();
@@ -1434,6 +2794,15 @@ App.LivePatches = (function () {
         if (contact) return App.Interfaces.save(contact, copy(App.INTERFACE_SECTIONS || []));
       }
 
+      if (App.NormalLoads && App.NormalLoads.isNormalLoadKey(reselect)) {
+        var normalLoad = (App.NORMAL_LOADS || []).filter(function (item) {
+          return item.id === reselect;
+        })[0];
+        // Nothing shared to carry: a normal load holds its own coordinates and its
+        // own magnitude, so the record is the whole write.
+        if (normalLoad) return App.NormalLoads.save(normalLoad);
+      }
+
       function remount() {
         App.Explorer.mountTree(App.state.mode);
         App.Explorer.mountSelection(reselect);
@@ -1443,6 +2812,12 @@ App.LivePatches = (function () {
         layers: copy(App.LAYERS),
         boreholes: copy(App.BOREHOLES),
         domain: copy(App.Model.pendingDomain()),
+        // Rides along with the domain because it is edited from the same panel and is
+        // the same kind of thing: one object for the whole project. Sent on every
+        // commit rather than only when the water rows were the ones touched -- the
+        // endpoint takes the whole object or none of it, and working out which rows
+        // the user visited would be a second source of truth about the same edit.
+        water: copy(App.Model.pendingWater()),
         custom_parts: copy((App.PROJECT && App.PROJECT.custom_parts) || [])
       })
         .then(function (response) {
@@ -1564,20 +2939,48 @@ App.LivePatches = (function () {
         App.runAction({ action: action });
       });
 
-      // The command module's input handler calls a private `run`, so intercept the one
-      // live command whose frozen callback contains invented mesh counts.
-      document.addEventListener('keydown', function (event) {
+      /* The command box, routed through the live interpreter.
+
+         js/command.js binds its input to a *private* `run`, so replacing the exported
+         `App.Command.run` does not change what typing into the box does: the frozen
+         interpreter answers, and every live command reads as "Unknown command". This
+         used to intercept `mesh` alone, which is why it was not noticed -- every other
+         live command (`run`, `export`, `cleargeometry`, and anything `DrawInput`
+         handles) was being answered by the frozen one.
+
+         So the interception is now unconditional: Enter always goes to
+         `App.Command.run`, whose wrapper falls back to the frozen interpreter for
+         anything the live layer does not implement. Recall has to be reimplemented with
+         it -- the frozen history is private to the same closure, and stopping its
+         handler is what stops it being filled. */
+      var alreadyBound = commandBoxBound;
+      commandBoxBound = true;
+      if (!alreadyBound) document.addEventListener('keydown', function (event) {
         if (event.key === 'Escape' && activeLayerEdit && !activeLayerEdit.committed) {
           // activeLayerEdit.snapshot is a {layers, boreholes} pair, not a bare array.
           restoreSoil(activeLayerEdit.snapshot);
           activeLayerEdit = null;
         }
         var entry = document.getElementById('cmd-entry');
-        if (event.key === 'Enter' && event.target === entry
-            && /^_?mesh(?:\s|$)/i.test(entry.value.trim())) {
+        if (entry && event.target === entry && event.key === 'Enter') {
+          var text = entry.value.trim();
+          if (!text) return;
           event.preventDefault(); event.stopImmediatePropagation();
-          var text = entry.value.trim(); entry.value = '';
+          cmdHistory.push(text); cmdIndex = cmdHistory.length;
+          entry.value = '';
           App.Command.run(text);
+          return;
+        }
+        if (entry && event.target === entry
+            && (event.key === 'ArrowUp' || event.key === 'ArrowDown')) {
+          event.preventDefault(); event.stopImmediatePropagation();
+          if (event.key === 'ArrowUp') {
+            if (cmdIndex > 0) entry.value = cmdHistory[--cmdIndex];
+          } else if (cmdIndex < cmdHistory.length - 1) {
+            entry.value = cmdHistory[++cmdIndex];
+          } else {
+            cmdIndex = cmdHistory.length; entry.value = '';
+          }
           return;
         }
         // The frozen shell double-books F9 as Calculate. In Mesh mode it means mesh.
@@ -1599,10 +3002,12 @@ App.LivePatches = (function () {
 
   return {
     install: install, meshSummary: meshSummary,
+    collapsibleResultsPanel: collapsibleResultsPanel,
     snapshotLayers: snapshotLayers, restoreLayers: restoreLayers,
     snapshotSoil: snapshotSoil, restoreSoil: restoreSoil, pitRefinement: pitRefinement,
     isDeletableCustomPart: isDeletableCustomPart, tagTreeRowsWithObjKeys: tagTreeRowsWithObjKeys,
     MODES: MODES, patchFor: patchFor, sectionLabel: sectionLabel,
+    DEFAULT_MODEL_MODE: DEFAULT_MODEL_MODE,
     missingViewportApi: missingViewportApi, staleMessage: staleMessage,
     reportUncaught: reportUncaught,
     setModelMode: setModelMode, syncModelMode: syncModelMode, syncViewMode: syncViewMode,
@@ -1614,6 +3019,8 @@ App.LivePatches = (function () {
     projectNameFromFile: projectNameFromFile,
     setNavigation: setNavigation, gateRail: gateRail,
     rulersOn: rulersOn, toggleRulers: toggleRulers, applyRulers: applyRulers,
+    withLabelRows: withLabelRows, toggleLabels: toggleLabels,
+    extendViewportMenu: extendViewportMenu,
     orderStructuresRail: orderStructuresRail,
     STRUCTURES_RAIL_GROUPS: STRUCTURES_RAIL_GROUPS,
     nameSoilBodyActions: nameSoilBodyActions,

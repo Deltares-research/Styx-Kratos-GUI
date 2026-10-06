@@ -6,10 +6,10 @@
 
 (function () {
 
-  function project(layers, customParts, simpleExample) {
+  function project(layers, customParts, layeredSoil) {
     return {
       name: 'Test site',
-      simple_example: !!simpleExample,
+      layered_soil: !!layeredSoil,
       domain: { x0: 0, x1: 50, z0: 0, z1: 40, y_top: 0, y_bottom: -25 },
       boreholes: [
         { id: 'bh1', name: 'BH-1', x: 0, y: 0, head: 0, water: -1.5 },
@@ -46,7 +46,7 @@
       ANCHORS: App.ANCHORS, ANCHOR_SECTIONS: App.ANCHOR_SECTIONS,
       INTERFACES: App.INTERFACES, INTERFACE_SECTIONS: App.INTERFACE_SECTIONS
     };
-    // A simple_example project replaces App.TREES[mode] wholesale (js/model.js), which
+    // A layered_soil project replaces App.TREES[mode] wholesale (js/model.js), which
     // would otherwise permanently discard the rich per-mode structure for every test
     // that runs after this one in the same page.
     Object.keys(App.TREES || {}).forEach(function (mode) { saved.trees[mode] = App.TREES[mode]; });
@@ -585,16 +585,16 @@
      Before this, rebuildDerived() never looked at project.custom_parts at all: a
      drawn line, box or surface got no tree node and no OBJECT_PROPS entry, so there
      was nothing in the Model explorer to select or delete -- exactly the reported bug.
-     Worse, the default project has simple_example: true, which collapses every mode's
+     Worse, the default project has layered_soil: true, which collapses every mode's
      tree down to just the Soil node, discarding anything else that isn't re-added. */
 
   var PART = { key: 'drawn_0', label: 'Box_1', color: '#4b6ea8', source: 'gui' };
   var PART2 = { key: 'imported_0', label: 'my_model.step', color: '#888888', source: 'import' };
 
-  test('a drawn part appears in the model tree with the simple_example project', function () {
+  test('a drawn part appears in the model tree with the layered_soil project', function () {
     withProject(project(TWO, [PART], true), function () {
       var node = customGeometryNode(App.TREES.soil);
-      T.ok(node, 'no "Custom geometry" node in the simple_example tree');
+      T.ok(node, 'no "Custom geometry" node in the layered_soil tree');
       T.eq(node.count, 1);
       T.eq(node.children.map(function (c) { return c.obj; }), ['drawn_0']);
       T.eq(node.children[0].label, 'Box_1');
@@ -899,7 +899,7 @@
     withProject(project(TWO, [], true), function () {
       T.eq(topLabels(App.TREES.soil),
            ['Soil', 'Custom geometry', 'Imported mesh', 'Sheet piles', 'Anchors',
-            'Interfaces', 'Loads']);
+            'Interfaces', 'Normal loads', 'Loads']);
     });
   });
 
@@ -958,4 +958,45 @@
     });
   });
 
+
+
+  /* A staged excavation is more bodies than layers, and each one is separately
+     meshed, deactivated and shown -- so each needs its own row in the Model explorer.
+     Listing layers alone left the whole excavated side out of the tree. */
+
+  var STAGED = {
+    soil_body_keys: ['soil_L1', 'soil_L2', 'soil_L1__lift1', 'soil_L1__lift2'],
+    soil_body_labels: {
+      soil_L1: 'Soil_1', soil_L2: 'Soil_2',
+      soil_L1__lift1: 'Soil_1 · lift 1', soil_L1__lift2: 'Soil_1 · lift 2'
+    }
+  };
+
+  test('every staged soil body gets its own row in the Model explorer', function () {
+    var p = Object.assign(project(TWO), STAGED);
+    withProject(p, function () {
+      var node = soilNode(App.TREES.soil);
+      var objs = (node.children || []).map(function (c) { return c.obj; });
+      T.eq(objs, STAGED.soil_body_keys, 'one row per body, in the order published');
+      T.eq(node.count, 4, 'the count is rows, not layers');
+      T.ok(/lift 1/.test(node.children[2].label), 'and says which part of the layer');
+    });
+  });
+
+  test('a lift shows the properties of the layer it was dug out of', function () {
+    var p = Object.assign(project(TWO), STAGED);
+    withProject(p, function () {
+      T.ok(App.OBJECT_PROPS['soil_L1__lift1'], 'a lift has a Selection explorer entry');
+      T.eq(App.OBJECT_PROPS['soil_L1__lift1'].title,
+           App.OBJECT_PROPS['soil_L1'].title, 'the same one the layer has');
+    });
+  });
+
+  test('a project that publishes no bodies still lists one row per layer', function () {
+    withProject(project(TWO), function () {
+      var node = soilNode(App.TREES.soil);
+      T.eq((node.children || []).map(function (c) { return c.obj; }),
+           ['soil_L1', 'soil_L2']);
+    });
+  });
 })();

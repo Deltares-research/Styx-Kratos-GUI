@@ -34,12 +34,25 @@ App.Viewport = (function () {
                                   // rebuildGroups()/refresh() never touches it
   var importedSectionGroups = {};    // section.key -> its own THREE.Group, for the
   var importedSectionBBoxes = {};    // checklist's per-part toggle/frame buttons
+  /* section.key -> the payload section itself, kept for its `node_ids` and `elements`:
+     the deck's own numbering, so the ID overlay can label an imported mesh without
+     re-reading the file. */
+  var importedSectionLabels = {};
+  /* The generated mesh's Kratos numbering, from POST /api/mesh/labels: {nodes, elements},
+     each a table of [id, x, y, z]. Null until the labels are asked for -- it costs a full
+     export pass -- and back to null whenever a new mesh replaces the one it numbered. */
+  var generatedLabels = null;
   var hovered = null, selected = null, selectedKeys = [];
   var visible = {};              // key -> bool, driven by the Model explorer
   var modeGroups = {};
   var showGrid = true, gridGroup, boundsGroup, referenceGrid;
   var activeView = 'iso';
-  var dimension = 3;             // 3 = the full solid model, 2 = a planar section
+  /* The section, not the solid model: the server opens on a plane-strain project
+     (server/app/seed.py blank_project), so starting in 3D would only mean drawing a
+     view the first /api/geometry answer immediately takes away. */
+  var DEFAULT_VIEW_MODE = 'elevation';
+  var DEFAULT_DIMENSION = 2;
+  var dimension = DEFAULT_DIMENSION;   // 3 = the full solid model, 2 = a planar section
 
   var needsRender = true, meshBuilt = false;
 
@@ -57,7 +70,8 @@ App.Viewport = (function () {
 
   /* Pure, for the same reason computeModeGroups is: this is the map the Model
      explorer's checkboxes are wired through. */
-  function computeGroupKeys(soils, customs, loads, beams, anchors, contacts) {
+  function computeGroupKeys(soils, customs, loads, beams, anchors, contacts,
+                            normalLoads) {
     return {
       soil: (soils || []).slice(),
       'group:custom': (customs || []).slice(),
@@ -67,7 +81,10 @@ App.Viewport = (function () {
       // A contact along a pile draws nothing of its own -- it is the pile's line --
       // so this is empty unless the interface was given a line of its own, which the
       // build tags under the interface's own key.
-      'group:interfaces': (contacts || []).slice()
+      'group:interfaces': (contacts || []).slice(),
+      // Its own row rather than a share of 'group:loads': the Model explorer lists
+      // normal loads separately, and an eye has to toggle what its own row names.
+      'group:normal_loads': (normalLoads || []).slice()
     };
   }
 
@@ -236,6 +253,84 @@ App.Viewport = (function () {
     return spec;
   }
 
+  /* A normal load pushes perpendicular to its own line, so unlike the three vector
+     kinds there is no single direction for the whole symbol: each segment carries its
+     own. Pure, for the same reason `loadGlyphSpec` is.
+
+     Walking the line in the order its points are stored, a positive pressure pushes to
+     the right of the walking direction -- so a line drawn left to right along the top
+     of the ground pushes down into it, which is the reading anyone expects. A negative
+     pressure flips the arrows. This is the symbol's convention; the sign Kratos itself
+     applies comes from the condition's own node order (server/app/kratos.py). */
+  function normalLoadGlyphSpec(load, project) {
+    var points = load.points || [];
+    var span = modelSpan(project, frame && frame.size);
+    var length = span > 0 ? span * 0.08 : 1;
+    var sign = load.pressure < 0 ? -1 : 1;
+    var offset = sectionOffset(project);
+    // The two modes are drawn identically: what a load is sized by is a property of
+    // the load, not of how it looks, and a symbol that came and went with the mode
+    // read as the load itself coming and going. A load in the model is a load on
+    // screen, hydrostatic or uniform, whatever its magnitude.
+    var spec = { arrows: [], length: length, active: load.active !== false };
+    // Arrows and nothing else. A line along the loaded face -- the outline a line
+    // load's glyph draws, or the strip the build used to make -- reads as a bar laid
+    // on top of the model rather than as a load applied to it.
+    for (var i = 1; i < points.length; i += 1) {
+      var start = points[i - 1], end = points[i];
+      var dx = end[0] - start[0], dy = end[1] - start[1];
+      var len = Math.sqrt(dx * dx + dy * dy);
+      if (!len) continue;
+      var direction = [sign * dy / len, -sign * dx / len, 0];
+      // Three to a segment, and the shared vertex is not given two arrows.
+      for (var step = i === 1 ? 0 : 1; step <= 2; step += 1) {
+        var t = step / 2;
+        spec.arrows.push({
+          tip: [start[0] + dx * t, start[1] + dy * t, offset],
+          direction: direction
+        });
+      }
+    }
+    return spec;
+  }
+
+  function normalLoadGlyphGroup(load, project) {
+    var spec = normalLoadGlyphSpec(load, project);
+    var group = new THREE.Group();
+    group.name = load.id + '-load-symbols';
+    // A normal load's own blue, dark enough to hold its own against the section it is
+    // drawn over, and not the red the three vector load kinds share -- this one is a
+    // pressure on a face, usually water. Darker than the water slab's #2f8fd8 so the
+    // two are still told apart where both are on screen.
+    var color = spec.active ? 0x1f6fb0 : 0x777777;
+
+    function mark(object) {
+      object.traverse(function (child) {
+        child.userData.key = load.id;
+        child.userData.loadGlyph = true;
+        if (child.material) {
+          child.material.depthTest = false;
+          child.material.transparent = true;
+          child.material.opacity = spec.active ? 1 : 0.45;
+        }
+        child.renderOrder = 18;
+      });
+    }
+
+    spec.arrows.forEach(function (entry) {
+      var direction = new THREE.Vector3(
+        entry.direction[0], entry.direction[1], entry.direction[2]);
+      var tip = new THREE.Vector3(entry.tip[0], entry.tip[1], entry.tip[2]);
+      var arrow = new THREE.ArrowHelper(
+        direction, tip.clone().addScaledVector(direction, -spec.length),
+        spec.length, color, spec.length * 0.16, spec.length * 0.09);
+      mark(arrow);
+      group.add(arrow);
+    });
+
+    return group;
+  }
+
   function loadGlyphGroup(load, project) {
     var spec = loadGlyphSpec(load, project);
     var group = new THREE.Group();
@@ -302,16 +397,87 @@ App.Viewport = (function () {
     return group;
   }
 
+  /* ── The water line ──────────────────────────────────────────────────────
+     The phreatic level, drawn by the client rather than tessellated by the server.
+
+     A `layered_soil` project has no water geometry at all -- `Project.part_keys`
+     omits "water" on that path, so the thin slab the full build raises is never
+     meshed and the level cannot be seen. That is the path the blank project and
+     `examples/crow/crow.py` both take, so the level being invisible is the normal
+     case rather than an edge one, and a deck whose every pore pressure is stated
+     about a number nobody can see is the thing worth fixing (plan sec 7.2).
+
+     Pure, and separated from the THREE objects below for the same reason
+     `loadGlyphSpec` is: this is the half with the arithmetic, and it is the half a
+     test can reach. */
+  function waterLineSpec(project) {
+    var d = project && project.domain;
+    var w = project && project.water;
+    if (!d || !w || typeof w.y !== 'number') return null;
+    if (typeof d.x0 !== 'number' || typeof d.x1 !== 'number') return null;
+
+    // The same overhang the slab has, and for the same reason WaterLevel's own
+    // comment gives: the level has to read against the model's outside faces rather
+    // than stopping flush with them.
+    var m = typeof w.margin === 'number' ? w.margin : 0;
+    var x0 = d.x0 - m, x1 = d.x1 + m, y = w.y;
+
+    if (project.dimension === 2) {
+      var z = sectionOffset(project);
+      return { y: y, points: [[x0, y, z], [x1, y, z]] };
+    }
+    // A single line in 3D would be an arbitrary chord through the model. The level is
+    // a plane there, so the outline of that plane is the honest drawing of it.
+    var z0 = d.z0 - m, z1 = d.z1 + m;
+    return { y: y, points: [[x0, y, z0], [x1, y, z0], [x1, y, z1], [x0, y, z1],
+                            [x0, y, z0]] };
+  }
+
+  function addWaterLine() {
+    var spec = waterLineSpec(App.PROJECT);
+    if (!spec) return;
+    var group = groups.water;
+    if (!group) {
+      group = groups.water = new THREE.Group();
+      group.name = 'water';
+      scene.add(group);
+    }
+    var line = new THREE.Line(
+      new THREE.BufferGeometry().setFromPoints(spec.points.map(function (point) {
+        return new THREE.Vector3(point[0], point[1], point[2]);
+      })),
+      // The slab's own blue (#2f8fd8), so the drawn level and a tessellated one read
+      // as the same object in a project that has both. depthTest off because the
+      // level is a reference plane, not a solid: it is meant to be legible through
+      // the ground it passes behind.
+      new THREE.LineBasicMaterial({ color: 0x2f8fd8, depthTest: false }));
+    // Never a pick target -- it is edited from the Selection explorer's rows, and a
+    // line lying inside the soil would otherwise steal clicks meant for the soil.
+    line.userData.noPick = true;
+    line.renderOrder = 17;
+    group.add(line);
+  }
+
   function addLoadGlyphs() {
-    ((App.PROJECT && App.PROJECT.loads) || []).forEach(function (load) {
-      if (App.Loads && !App.Loads.compatible(load, App.PROJECT)) return;
-      var group = groups[load.id];
+    function groupFor(id) {
+      var group = groups[id];
       if (!group) {
-        group = groups[load.id] = new THREE.Group();
-        group.name = load.id;
+        group = groups[id] = new THREE.Group();
+        group.name = id;
         scene.add(group);
       }
-      group.add(loadGlyphGroup(load, App.PROJECT));
+      return group;
+    }
+    ((App.PROJECT && App.PROJECT.loads) || []).forEach(function (load) {
+      if (App.Loads && !App.Loads.compatible(load, App.PROJECT)) return;
+      groupFor(load.id).add(loadGlyphGroup(load, App.PROJECT));
+    });
+    // Plane strain only, like the record itself: in 3D there is no line on screen for
+    // an arrow to stand on.
+    if (!App.PROJECT || App.PROJECT.dimension !== 2) return;
+    (App.PROJECT.normal_loads || []).forEach(function (load) {
+      if (load.active === false) return;
+      groupFor(load.id).add(normalLoadGlyphGroup(load, App.PROJECT));
     });
   }
 
@@ -333,6 +499,10 @@ App.Viewport = (function () {
 
     addLoadGlyphs();
 
+    // Before the visibility sweep below, so the group it creates is given its
+    // `visible` entry like every other one.
+    addWaterLine();
+
     groups.mesh = groups.mesh || new THREE.Group();     // filled by generateMesh
     groups.mesh.name = 'mesh';
     if (!groups.mesh.parent) scene.add(groups.mesh);
@@ -347,17 +517,26 @@ App.Viewport = (function () {
      modeGroups[mode], so a custom part left out here is created (buildGroups gives
      every section its own THREE.Group) and then invisible forever, in every mode,
      no matter what the eye toggle says. */
-  function computeModeGroups(soilKeys, customKeys, simpleExample, loadKeys, memberKeys) {
+  function computeModeGroups(soilKeys, customKeys, layeredSoil, loadKeys, memberKeys,
+                             normalLoadKeys) {
     customKeys = customKeys || [];
     loadKeys = loadKeys || [];
     // Sheet piles and anchors are sections of their own (server/app/tessellate.py
     // :112-126). Leaving them out of every mode is what kept them invisible.
     memberKeys = memberKeys || [];
-    if (simpleExample) {
+    // And a normal load is a section of its own too -- the strip the build draws
+    // along its line -- so it needs naming here for the same reason, in the modes a
+    // load belongs to.
+    loadKeys = loadKeys.concat(normalLoadKeys || []);
+    if (layeredSoil) {
       var visibleKeys = soilKeys.concat(customKeys);
+      // "water" in the same two modes the full build shows it in -- the level is what
+      // Flow conditions mode is for, and a staged excavation is read against it. Left
+      // out of soil/structures/mesh so those keep reading as they did.
       return { soil: visibleKeys, structures: visibleKeys.concat(loadKeys, memberKeys),
                mesh: visibleKeys.concat(['mesh'], memberKeys),
-               flow: visibleKeys, staged: visibleKeys.concat(memberKeys) };
+               flow: visibleKeys.concat(['water']),
+               staged: visibleKeys.concat(memberKeys, ['water']) };
     }
     return {
       soil:       soilKeys.slice(),
@@ -370,8 +549,25 @@ App.Viewport = (function () {
     };
   }
 
+  /* Which soil bodies there are to show.
+
+     Not one per layer: a staged excavation splits the soil inside the pit into the
+     lifts it is dug in, so three layers can be eight bodies (server/app/schemas.py,
+     `Project.soil_bodies`). Deriving that split here would be a second implementation
+     of it to keep in step, so the project publishes the answer and this reads it.
+
+     Naming one key per layer is what used to leave every body inside the pit out of
+     `modeGroups` -- built by buildGroups, then invisible in every mode, which is the
+     whole excavated side of the model missing. The fallback is for a project that
+     carries no such list: an older server, or the frozen mockup's own data. */
+  function soilKeysOf(project, layers) {
+    var published = project && project.soil_body_keys;
+    if (Array.isArray(published) && published.length) return published.slice();
+    return (layers || []).map(function (l) { return 'soil_' + l.id; });
+  }
+
   function rebuildModeGroups() {
-    soilKeys = (App.LAYERS || []).map(function (l) { return 'soil_' + l.id; });
+    soilKeys = soilKeysOf(App.PROJECT, App.LAYERS);
     var customKeys = ((App.PROJECT && App.PROJECT.custom_parts) || [])
       .map(function (p) { return p.key; });
     var loadKeys = ((App.PROJECT && App.PROJECT.loads) || []).filter(function (load) {
@@ -381,14 +577,19 @@ App.Viewport = (function () {
     // live/js/model.js -- a 3D project keeps its piles saved but draws none.
     var beamKeys = (App.BEAMS || []).map(function (beam) { return beam.id; });
     var anchorKeys = (App.ANCHORS || []).map(function (anchor) { return anchor.id; });
+    // Plane strain only, like a free interface: in 3D the record is kept but the
+    // build draws nothing for it, so naming it in a mode would name an empty group.
+    var normalLoadKeys = (App.PROJECT && App.PROJECT.dimension === 2)
+      ? (App.NORMAL_LOADS || []).map(function (item) { return item.id; })
+      : [];
     modeGroups = computeModeGroups(
-      soilKeys, customKeys, !!(App.PROJECT && App.PROJECT.simple_example), loadKeys,
-      beamKeys.concat(anchorKeys));
+      soilKeys, customKeys, !!(App.PROJECT && App.PROJECT.layered_soil), loadKeys,
+      beamKeys.concat(anchorKeys), normalLoadKeys);
     var contactKeys = (App.INTERFACES || []).filter(function (item) {
       return !item.structure;
     }).map(function (item) { return item.id; });
     groupKeys = computeGroupKeys(soilKeys, customKeys, loadKeys, beamKeys, anchorKeys,
-                                 contactKeys);
+                                 contactKeys, normalLoadKeys);
   }
 
   /* ══════════════════════════════════════════════════════════════
@@ -629,6 +830,9 @@ App.Viewport = (function () {
         rebuildFrame(payload.bbox);
         buildGroups(payload);
         meshBuilt = false;
+        // The geometry moved, so the mesh that was numbered is gone with it.
+        generatedLabels = null;
+        refreshLabels();
 
         var triangles = payload.sections.reduce(function (n, s) {
           return n + s.indices.length / 3;
@@ -759,7 +963,9 @@ App.Viewport = (function () {
 
     camPersp = new THREE.PerspectiveCamera(App.Buffers.FOV_DEG, 1, 0.5, 3000);
     camOrtho = new THREE.OrthographicCamera(-1, 1, 1, -1, -2000, 4000);
-    cam = camPersp;
+    // A section is drawn in parallel projection from the first frame, not from the
+    // frame after the project arrives.
+    cam = dimension === 2 ? camOrtho : camPersp;
 
     // Before the controller exists: at the target, listeners run in the order they
     // were registered, and this one has to see the mousedown first to rewrite it.
@@ -767,9 +973,10 @@ App.Viewport = (function () {
       forcePanIfNeeded(event, effectiveNavMode());
     });
 
+    var opening = cameraAngles(activeView, dimension);
     orbit = new App.Orbit(canvas, {
       tx: frame.center[0], ty: frame.center[1], tz: frame.center[2],
-      radius: frame.homeRadius, theta: VIEWS.iso.theta, phi: VIEWS.iso.phi,
+      radius: frame.homeRadius, theta: opening.theta, phi: opening.phi,
       minRadius: radiusLimits(frame).min, maxRadius: radiusLimits(frame).max,
       orthoBase: ORTHO_BASE
     });
@@ -792,6 +999,9 @@ App.Viewport = (function () {
     // The edge rulers live in the viewport's DOM, not in the scene: they measure the
     // screen, so they are painted in screen pixels rather than projected like geometry.
     if (App.Ruler) App.Ruler.install(host);
+    // Same arrangement, same reason: node numbers are screen furniture over the scene,
+    // not objects in it.
+    if (App.MeshLabels) App.MeshLabels.install(host);
 
     if (window.ResizeObserver) new ResizeObserver(resize).observe(host);
     window.addEventListener('resize', resize);
@@ -949,10 +1159,39 @@ App.Viewport = (function () {
   }
 
   /* ── Mode / visibility ──────────────────────────────────────── */
+
+  /* Parts the selected phase has switched off, as `{key: true}`.
+
+     A third gate on top of the two that already exist -- the mode the user is in, and
+     the eye toggle on the row -- rather than a new mechanism: a group is drawn when
+     all three agree. Which is why this is a lookup rebuilt on demand rather than
+     something written into `visible`: the eye is the user's own state and must
+     survive stepping through the phases, so a phase may not overwrite it.
+
+     `App.Phases` owns the rule (live/js/phases.js), and is held to the server's
+     answers by `server/tests/test_phase_parity.py`. Empty whenever it cannot say. */
+  function phaseHidden() {
+    if (!App.Phases || !App.Phases.hiddenKeys) return {};
+    var hidden = {};
+    App.Phases.hiddenKeys(App.PROJECT, App.state && App.state.phase,
+                          App.state && App.state.mode)
+      .forEach(function (key) { hidden[key] = true; });
+    return hidden;
+  }
+
+  /* Redraw after the selected phase changes. The mode pass is the whole of it --
+     nothing about the geometry changes when a phase is selected, only which of it
+     is in the model at that moment. */
+  function applyPhaseVisibility() {
+    setMode(App.state && App.state.mode);
+  }
+
   function setMode(mode) {
     var wanted = modeGroups[mode] || [];
+    var hidden = phaseHidden();
     Object.keys(groups).forEach(function (k) {
-      groups[k].visible = wanted.indexOf(k) >= 0 && visible[k] !== false;
+      groups[k].visible = wanted.indexOf(k) >= 0 && visible[k] !== false
+                          && !hidden[k];
     });
     if (mode === 'mesh' && !meshBuilt && groups.mesh) groups.mesh.visible = false;
     if (selected && !selectedKeys.every(function (k) { return groups[k] && groups[k].visible; })) select(null);
@@ -971,15 +1210,21 @@ App.Viewport = (function () {
     if (importedSectionGroups[key]) {
       importedSectionGroups[key].visible = on;
       if (!on && selectedKeys.indexOf(key) >= 0) select(null);
+      refreshLabels();
       needsRender = true;
       return;
     }
     if (!(key in groups)) return;
     visible[key] = on;
     var wanted = modeGroups[App.state.mode] || [];
-    groups[key].visible = on && wanted.indexOf(key) >= 0;
+    // The phase gate applies here too, or turning an eye back on would draw a part
+    // the selected phase has not built yet.
+    groups[key].visible = on && wanted.indexOf(key) >= 0 && !phaseHidden()[key];
     if (key === 'mesh' && !meshBuilt && groups.mesh) groups.mesh.visible = false;
     if (!on && selectedKeys.indexOf(key) >= 0) select(null);
+    // A hidden mesh has nothing to number: the labels follow the eye, or they float
+    // over a part that is no longer there.
+    if (key === 'mesh') refreshLabels();
     needsRender = true;
   }
 
@@ -993,21 +1238,188 @@ App.Viewport = (function () {
     return visible[key] !== false;
   }
 
-  /* ── Mesh generation ────────────────────────────────────────── */
-  function generateMesh(done) {
-    var ui = overlay();
-    ui.show('Meshing with gmsh…', 20);
+  /* ── ID labels (nodes, elements) ────────────────────────────── */
 
-    var settings = Object.assign({}, App.PROJECT ? App.PROJECT.mesh : {
+  /* The overlay is painted in screen pixels (live/js/mesh-labels.js), so it needs the
+     camera's own answer for where a world point lands. Kept here because the camera is
+     here, and handed over as a function so that module stays free of three.js. */
+  var labelPoint = new THREE.Vector3();
+  function projectToScreen(x, y, z) {
+    labelPoint.set(x, y, z).project(cam);
+    // Past the far plane, or behind a perspective camera -- where project() mirrors the
+    // point through the origin and would draw a number on the wrong side of the screen.
+    if (labelPoint.z > 1) return null;
+    return {
+      x: (labelPoint.x * 0.5 + 0.5) * host.clientWidth,
+      y: (-labelPoint.y * 0.5 + 0.5) * host.clientHeight,
+      depth: labelPoint.z
+    };
+  }
+
+  /* Everything currently on screen that has a number, for one kind of label. An
+     imported deck brings its own numbering with it, section by section, so a part the
+     eye is closed on is not labelled; a generated mesh's has to be asked for, so it only
+     joins in once `generatedLabels` has arrived. */
+  function labelledPoints(kind) {
+    var list = [];
+    if (!App.MeshLabels) return list;
+    if (importedMeshGroup) {
+      var sections = Object.keys(importedSectionLabels)
+        .filter(function (key) {
+          var group = importedSectionGroups[key];
+          return group && group.visible;
+        })
+        .map(function (key) { return importedSectionLabels[key]; });
+      list = list.concat(kind === 'elements'
+        ? App.MeshLabels.elementsFromSections(sections)
+        : App.MeshLabels.nodesFromSections(sections));
+    }
+    if (generatedLabels && meshBuilt && visible.mesh !== false) {
+      list = list.concat(App.MeshLabels.pointsFromTable(generatedLabels[kind]));
+    }
+    return list;
+  }
+
+  /* Re-gather without re-asking the server: called whenever what is drawn changes. Only
+     the kinds that are on are gathered, so nothing pays for a label it is not showing. */
+  function refreshLabels() {
+    if (!App.MeshLabels) return;
+    App.MeshLabels.KINDS.forEach(function (kind) {
+      if (!App.MeshLabels.isActive(kind)) return;
+      App.MeshLabels.setPoints(kind, labelledPoints(kind));
+    });
+    needsRender = true;
+  }
+
+  /* Whether the server has to be asked before a kind can be drawn. Only a generated mesh
+     needs asking, and only once: the numbering costs a full export pass, and nothing but
+     a new mesh can change it. */
+  function needsNumbering() {
+    return meshBuilt && visible.mesh !== false && !generatedLabels;
+  }
+
+  /* Fetch both tables at once. They come out of one export pass on the server, so asking
+     for them separately would mean meshing the project twice to learn what it already
+     said -- which is also why turning the second kind on afterwards is free. */
+  function fetchLabels() {
+    var ui = overlay();
+    ui.show('Numbering mesh nodes and elements…', 40);
+    return App.Api.post('/api/mesh/labels', meshSettings()).then(function (result) {
+      generatedLabels = { nodes: result.nodes || [], elements: result.elements || [] };
+      ui.hide();
+      return generatedLabels;
+    }).catch(function (err) {
+      ui.hide();
+      throw err;
+    });
+  }
+
+  /* Turn one kind of label on or off. `done` is called with how many entities are
+     labelled (null when switched off, or when the numbering failed and has already been
+     reported), which is what the caller writes to the command log.
+
+     The two kinds are independent: switching one off leaves the other drawn. */
+  function setLabels(kind, on, done) {
+    if (!App.MeshLabels) { if (done) done(null); return; }
+    if (!on) {
+      App.MeshLabels.setActive(kind, false);
+      App.MeshLabels.setPoints(kind, []);
+      if (!App.MeshLabels.anyActive()) App.MeshLabels.hide();
+      needsRender = true;
+      if (done) done(null);
+      return;
+    }
+
+    App.MeshLabels.setActive(kind, true);
+    if (!needsNumbering()) {
+      refreshLabels();
+      if (done) done(App.MeshLabels.count(kind));
+      return;
+    }
+
+    fetchLabels().then(function () {
+      refreshLabels();
+      if (done) done(App.MeshLabels.count(kind));
+    }).catch(function (err) {
+      // Off again rather than left on and empty: a label layer showing nothing looks
+      // like a mesh with no nodes in it.
+      App.MeshLabels.setActive(kind, false);
+      if (!App.MeshLabels.anyActive()) App.MeshLabels.hide();
+      fail(err);
+      if (done) done(null);
+    });
+  }
+
+  /* A fresh mesh with the labels still on: re-ask for the numbering it invalidated. */
+  function renumberLabels() {
+    if (!App.MeshLabels || !App.MeshLabels.anyActive() || !needsNumbering()) {
+      refreshLabels();
+      return;
+    }
+    fetchLabels().then(refreshLabels).catch(function (err) {
+      App.MeshLabels.KINDS.forEach(function (kind) { App.MeshLabels.setActive(kind, false); });
+      App.MeshLabels.hide();
+      fail(err);
+    });
+  }
+
+  function labelsOn(kind) {
+    return !!(App.MeshLabels && (kind ? App.MeshLabels.isActive(kind)
+                                      : App.MeshLabels.anyActive()));
+  }
+
+  /* Painted from the render tick with the camera that drew the frame, the same way the
+     rulers are: a label that lagged a frame behind would slide off its node on every
+     orbit. */
+  function syncLabels() {
+    if (!App.MeshLabels || !host) return;
+    App.MeshLabels.sync({
+      active: labelsOn(),
+      width: host.clientWidth, height: host.clientHeight,
+      project: projectToScreen
+    });
+  }
+
+  /* ── Mesh generation ────────────────────────────────────────── */
+
+  /* What the mesher is asked for. Its own function because two endpoints take it: the
+     mesh itself, and the node numbering the ID labels are drawn from -- and a numbering
+     taken from different settings than the mesh on screen would be numbers for a mesh
+     nobody is looking at. */
+  /* The refinements a mesh is built with: the ones set from the toolbar this session
+     if there are any, and otherwise the model's own (`MeshSettings.refinements`). A
+     model can carry a graded mesh -- server/app/crow.py refines its excavation and
+     grades out to the far field -- and it has to mesh that way from the Generate-mesh
+     button and from Export alike, not only from a script.
+
+     Length, not truthiness: "Reset local mesh refinement" leaves an empty array behind,
+     and an empty array is truthy. Reset means "back to what the model asks for", not
+     "no refinement at all". */
+  function meshRefinements() {
+    var local = App.MESH_REFINEMENTS;
+    if (local && local.length) return local.slice();
+    var mesh = App.PROJECT && App.PROJECT.mesh;
+    return (mesh && mesh.refinements) ? mesh.refinements.slice() : [];
+  }
+
+  function meshSettings() {
+    return Object.assign({}, App.PROJECT ? App.PROJECT.mesh : {
       element_size: 2.5, order: 2, algorithm_3d: 'delaunay', optimization: 'gmsh',
       smoothing: 10, curvature_points: 16, size_min_factor: 0.05,
       second_order_linear: true
     }, {
-      refinements: App.MESH_REFINEMENTS || [],
+      refinements: meshRefinements(),
       volume_keys: Array.isArray(App.MESH_BODY_SELECTION)
         ? App.MESH_BODY_SELECTION.slice()
         : App.MeshSettings.meshTargets(App.PROJECT, App.state.selection, isVisible)
     });
+  }
+
+  function generateMesh(done) {
+    var ui = overlay();
+    ui.show('Meshing with gmsh…', 20);
+
+    var settings = meshSettings();
     App.Api.post('/api/mesh', settings).then(function (result) {
       ui.show('Uploading mesh…', 90);
 
@@ -1034,6 +1446,9 @@ App.Viewport = (function () {
       if (!(('mesh') in visible)) visible.mesh = true;
 
       meshBuilt = true;
+      // Different mesh, different nodes: whatever was numbered before is now numbering
+      // a mesh that no longer exists.
+      generatedLabels = null;
       App.MESH_STATS = result.stats;
       if (App.Model && App.Model.setMeshStats) App.Model.setMeshStats(result.stats);
       (result.log || []).filter(function (line) { return /warning|error/i.test(line); })
@@ -1044,6 +1459,10 @@ App.Viewport = (function () {
       ui.hide();
       setMode(App.state.mode);
       needsRender = true;
+      // Last, and only if the numbers are on screen: re-numbering means a second trip
+      // to the server with its own progress overlay, which must not start under this
+      // one's.
+      if (App.MeshLabels && App.MeshLabels.anyActive()) renumberLabels();
       if (done) done(result.stats);
     }).catch(function (err) {
       ui.hide();
@@ -1065,6 +1484,7 @@ App.Viewport = (function () {
     importedMeshGroup = null;
     importedSectionGroups = {};
     importedSectionBBoxes = {};
+    importedSectionLabels = {};
     delete groupKeys['group:imported'];
     needsRender = true;
   }
@@ -1100,13 +1520,26 @@ App.Viewport = (function () {
      transparent, and three.js draws that whole pass after every opaque object whatever
      its renderOrder -- so an opaque pile is painted over by the mesh it sits in. Sharing
      the pass puts renderOrder back in charge. */
+  var IMPORTED_LINE_ORDER = 18, INTERFACE_LINE_ORDER = 19;
+
+  /* A zero-thickness contact is drawn along exactly the line of the structure it holds
+     -- the same nodes, the same pixels -- so at equal render order the two fight and
+     whichever was added last wins, at random from the reader's point of view. The
+     contact goes on top, because it is the one with nothing else to be seen by: a sheet
+     pile still reads as a sheet pile under it, and the interface is what the reader
+     turned on to look for. Each still has its own eye in the Model explorer. */
+  function importedLineOrder(section) {
+    return section && section.kind === 'interface'
+      ? INTERFACE_LINE_ORDER : IMPORTED_LINE_ORDER;
+  }
+
   function importedSectionLines(section) {
     var lines = new THREE.LineSegments(App.Buffers.edges(section),
       new THREE.LineBasicMaterial({ color: new THREE.Color(section.color),
                                     depthTest: false,
                                     transparent: true, opacity: 1 }));
     lines.userData.noPick = true;
-    lines.renderOrder = 18;
+    lines.renderOrder = importedLineOrder(section);
     return lines;
   }
 
@@ -1129,8 +1562,10 @@ App.Viewport = (function () {
       importedMeshGroup.add(group);
       importedSectionGroups[section.key] = group;
       if (section.bbox) importedSectionBBoxes[section.key] = section.bbox;
+      if (section.node_ids || section.elements) importedSectionLabels[section.key] = section;
     });
     scene.add(importedMeshGroup);
+    refreshLabels();
     needsRender = true;
 
     if (orbit && model.bbox) {
@@ -1148,6 +1583,8 @@ App.Viewport = (function () {
     disposeGroup(importedSectionGroups[key]);
     delete importedSectionGroups[key];
     delete importedSectionBBoxes[key];
+    delete importedSectionLabels[key];
+    refreshLabels();
   }
 
   /* "Imported mesh" in the Model explorer is one group row standing for whichever
@@ -1385,10 +1822,11 @@ App.Viewport = (function () {
 
   function is2D() { return dimension === 2; }
 
-  /* The view mode a loaded project is in, defaulting to the solid model. There is
-     one 2D view now -- the x-y section -- so the dimension decides it outright. */
+  /* The view mode a loaded project is in, defaulting to the section the app opens on.
+     There is one 2D view now -- the x-y section -- so the dimension decides it
+     outright. */
   function viewModeOf(project) {
-    return (project && project.dimension === 2) ? 'elevation' : 'solid';
+    return (project && project.dimension === 3) ? 'solid' : DEFAULT_VIEW_MODE;
   }
 
   function setGrid(on) {
@@ -1426,6 +1864,7 @@ App.Viewport = (function () {
     syncSectionGrid();                     // needs the camera the frame is drawn with
     syncRulers();                          // same: the visible rectangle is known here
     renderer.render(scene, cam);
+    syncLabels();                          // over the frame just drawn, with its camera
 
     if (triadRenderer) {
       triadCam.position.copy(cam.position).sub(orbit.target).normalize().multiplyScalar(4);
@@ -1451,12 +1890,18 @@ App.Viewport = (function () {
     makeRenderer: makeRenderer, WEBGL_HELP: WEBGL_HELP,
     SOFTWARE_HELP: SOFTWARE_HELP,
     sectionOffset: sectionOffset, viewModeOf: viewModeOf,
+    DEFAULT_VIEW_MODE: DEFAULT_VIEW_MODE, DEFAULT_DIMENSION: DEFAULT_DIMENSION,
     cameraAngles: cameraAngles, clampAngles: clampAngles, triadAxes: triadAxes,
     WORLD_UP: WORLD_UP,
-    generateMesh: generateMesh, hasMesh: hasMesh, resize: resize,
+    generateMesh: generateMesh, meshRefinements: meshRefinements,
+    hasMesh: hasMesh, resize: resize,
+    meshSettings: meshSettings,
+    setLabels: setLabels, labelsOn: labelsOn,
+    refreshLabels: refreshLabels, syncLabels: syncLabels,
+    projectToScreen: projectToScreen,
     showImportedMesh: showImportedMesh, clearImportedMesh: clearImportedMesh,
     hasImportedMesh: hasImportedMesh, removeImportedSection: removeImportedSection,
-    setImportedGroupKeys: setImportedGroupKeys,
+    setImportedGroupKeys: setImportedGroupKeys, importedLineOrder: importedLineOrder,
     frameImportedSection: frameImportedSection,
     // js/viewport.js rebuilds its soil boxes from App.LAYERS client-side. Here the soil
     // geometry is the server's, tessellated by /api/geometry, so there is nothing to
@@ -1466,10 +1911,19 @@ App.Viewport = (function () {
     // client-side edit they just made.
     rebuildSoil: function () {},
     refresh: refresh, gridReference: gridReference, computeModeGroups: computeModeGroups,
+    soilKeysOf: soilKeysOf,
     computeGroupKeys: computeGroupKeys,
     loadGlyphSpec: loadGlyphSpec, loadGlyphGroup: loadGlyphGroup,
+    waterLineSpec: waterLineSpec,
+    applyPhaseVisibility: applyPhaseVisibility,
+    normalLoadGlyphSpec: normalLoadGlyphSpec,
     getScene: function() { return scene; },
     getCamera: function() { return cam; },
-    getCanvas: function() { return canvas; }
+    getCanvas: function() { return canvas; },
+    // Ask for one frame. The loop is gated on `needsRender`, so anything that adds to
+    // the scene from outside this module -- `App.ResultsView` draws a whole contoured
+    // mesh into it -- otherwise changes nothing until the camera happens to move.
+    requestRender: function () { needsRender = true; },
+    getOrbit: function () { return orbit; }
   };
 })();

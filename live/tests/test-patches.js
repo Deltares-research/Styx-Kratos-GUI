@@ -486,6 +486,34 @@
     });
   });
 
+  /* The server opens on a plane-strain document, so the app does too. A switch that
+     only agreed with that after /api/geometry answered would show the 3D toolbar,
+     rail and camera for the second it took -- and then take them away again. */
+  test('the app opens in 2D, so 2D is the no-op and 3D is the switch that costs',
+       function () {
+    var calls = 0;
+    T.eq(App.LivePatches.DEFAULT_MODEL_MODE, '2d');
+    return withStubs(stubs({
+      state: { mode: 'soil' },          // nothing has said a dimension yet
+      Api: Object.assign({}, App.Api, {
+        patch: function (path, body) {
+          calls++;
+          return Promise.resolve({ project: { dimension: body.dimension } });
+        }
+      })
+    }), function () {
+      T.eq(App.state.modelMode, '2d', 'install() opens the document in the section');
+      T.eq(App.state.dimension, 2);
+      return App.LivePatches.setModelMode('2d').then(function () {
+        T.eq(calls, 0, 'the project is already the section the server opened on');
+        return App.LivePatches.setModelMode('3d');
+      }).then(function () {
+        T.eq(calls, 1, 'leaving the section is the switch that costs a rebuild');
+        T.eq(App.state.modelMode, '3d');
+      });
+    });
+  });
+
   test('a second switch is ignored while the first is still in flight', function () {
     var calls = 0, release;
     var pending = new Promise(function (resolve) { release = resolve; });
@@ -663,5 +691,104 @@
     } finally {
       App.MENUS = saved.menus; App.RAILS = saved.rails;
     }
+  });
+})();
+
+(function () {
+  /* There is no menu item for the CROW example, and that is the point. Models are
+     opened by running the Python that builds them -- `run app/crow.py` in the command
+     box, covered below -- which works for any model rather than only the one somebody
+     thought to add a button for. A menu item for it existed and was removed; this is
+     what stops it coming back. */
+
+  test('no example model is loadable from the File menu', function () {
+    App.LivePatches.install();
+    var file = (App.MENUS || []).filter(function (m) { return m.label === 'File'; })[0];
+    var items = file.items || [];
+    T.ok(!items.some(function (i) { return i && /crow/i.test(i.label || ''); }),
+      'the File menu offers no CROW example');
+    T.ok(!items.some(function (i) { return i && /Example$/.test(i.action || ''); }),
+      'nor any other one-click example model');
+  });
+})();
+
+(function () {
+  /* The command line's `run <file.py>`: the scripting entry point. */
+
+  function harness(overrides) {
+    var saved = {
+      api: App.Api, viewport: App.Viewport, command: App.Command, state: App.state,
+      setMode: App.setMode, select: App.selectObject, model: App.Model,
+      history: App.History, project: App.PROJECT
+    };
+    var ctx = { posted: [], lines: [], meshed: 0, applied: null, saved: saved };
+    App.state = { mode: 'soil' };
+    App.setMode = function (m) { App.state.mode = m; };
+    App.selectObject = function () {};
+    App.Command = App.Command || {};
+    App.Command = Object.assign({}, App.Command, {
+      write: function () {}, ok: function (t) { ctx.lines.push('ok:' + t); },
+      note: function () {}, err: function (t) { ctx.lines.push('err:' + t); },
+      run: App.Command.run
+    });
+    App.Api = { post: function (path, body) {
+      ctx.posted.push({ path: path, body: body });
+      return (overrides && overrides.post) ? overrides.post(path, body)
+        : Promise.resolve({ project: { name: 'scripted', mesh: {} } });
+    } };
+    App.Model = { apply: function (p) { ctx.applied = p; }, setImportedParts: function () {} };
+    App.History = { reset: function () {} };
+    App.Viewport = {
+      refresh: function () { return Promise.resolve(); },
+      generateMesh: function (done) { ctx.meshed += 1; done({ elements: 1, nodes: 1, seconds: 0 }); }
+    };
+    return ctx;
+  }
+
+  function restore(ctx) {
+    var s = ctx.saved;
+    App.Api = s.api; App.Viewport = s.viewport; App.Command = s.command;
+    App.state = s.state; App.setMode = s.setMode; App.selectObject = s.select;
+    App.Model = s.model; App.History = s.history; App.PROJECT = s.project;
+  }
+
+  test('run <file.py> builds the model from a script and meshes it', function () {
+    App.LivePatches.install();
+    var ctx = harness();
+    return Promise.resolve(App.Command.run('run app/crow.py')).then(function () {
+      T.eq(ctx.posted[0].path, '/api/project/script');
+      T.eq(ctx.posted[0].body.path, 'app/crow.py');
+      T.ok(ctx.applied && ctx.applied.name === 'scripted', 'the project is adopted');
+      T.eq(ctx.meshed, 1, 'and meshed without a second command');
+    }).then(function () { restore(ctx); }, function (e) { restore(ctx); throw e; });
+  });
+
+  test('run keeps a path with spaces in it intact', function () {
+    App.LivePatches.install();
+    var ctx = harness();
+    return Promise.resolve(App.Command.run('run C:/my models/crow.py')).then(function () {
+      T.eq(ctx.posted[0].body.path, 'C:/my models/crow.py');
+    }).then(function () { restore(ctx); }, function (e) { restore(ctx); throw e; });
+  });
+
+  test('run with no path explains itself instead of posting', function () {
+    App.LivePatches.install();
+    var ctx = harness();
+    return Promise.resolve(App.Command.run('run')).then(function () {
+      T.eq(ctx.posted.length, 0);
+      T.ok(ctx.lines.some(function (l) { return /Usage: run/.test(l); }), 'says how');
+    }).then(function () { restore(ctx); }, function (e) { restore(ctx); throw e; });
+  });
+
+  test("a script error is shown as the server's own message", function () {
+    App.LivePatches.install();
+    var ctx = harness({ post: function () {
+      return Promise.reject(new Error("model.py needs the Python package 'STEM'"));
+    } });
+    return Promise.resolve(App.Command.run('run model.py')).then(function () {
+      T.ok(ctx.lines.some(function (l) { return /needs the Python package/.test(l); }),
+           'the reason reaches the log');
+      T.eq(ctx.meshed, 0, 'and nothing is meshed');
+    }).then(function () { restore(ctx); }, function (e) { restore(ctx); throw e; });
   });
 })();

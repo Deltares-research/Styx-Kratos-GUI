@@ -29,7 +29,9 @@ App.Menu = (function () {
           row.addEventListener('mouseenter', function () {
             App.UI.closePopups(depth + 1);
             var r = row.getBoundingClientRect();
-            var sub = build(demoSubmenu(it), onPick);
+            // A real submenu when the caller supplied one (live/js/mesh-labels.js's
+            // "Show labels" is the first); the mockup's placeholder otherwise.
+            var sub = build(Array.isArray(it.sub) ? it.sub : demoSubmenu(it), onPick);
             App.UI.popup(sub, r.right - 2, r.top - 4, { flipX: r.left });
           });
         } else {

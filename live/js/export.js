@@ -40,7 +40,9 @@ App.Export = (function () {
   function meshRequest() {
     var project = App.PROJECT || {};
     var settings = Object.assign({}, project.mesh || {}, {
-      refinements: App.MESH_REFINEMENTS || []
+      /* The same rule the viewport meshes by (`App.Viewport.meshRefinements`), so the
+         deck is built from the mesh the user is looking at rather than a flatter one. */
+      refinements: App.Viewport.meshRefinements()
     });
     if (Array.isArray(App.MESH_BODY_SELECTION) && App.MESH_BODY_SELECTION.length) {
       settings.volume_keys = App.MESH_BODY_SELECTION.slice();
@@ -60,11 +62,15 @@ App.Export = (function () {
     return App.Download.write(target, filename, text, mime || 'text/plain');
   }
 
-  /* The deck's three files, named as they are inside the archive. */
+  /* The deck's files, named as they are inside the archive. Four rather than three
+     for a staged deck: its K0 stage reads a materials file of its own. */
   function files(result, deckName) {
     var written = [{ name: deckName, text: result.mdpa }];
     if (result.materials) {
       written.push({ name: 'MaterialParameters.json', text: result.materials });
+    }
+    if (result.initial_materials) {
+      written.push({ name: 'initial_materials.json', text: result.initial_materials });
     }
     if (result.project_parameters) {
       written.push({ name: 'ProjectParameters.json', text: result.project_parameters });
@@ -95,7 +101,11 @@ App.Export = (function () {
       log('note', 'Meshing and writing the Kratos deck…');
 
       return App.Api.post('/api/export/mdpa', meshRequest()).then(function (result) {
-        var deck = baseName(App.PROJECT) + '.mdpa';
+        // The server's name for the deck, not this module's: ProjectParameters.json
+        // already names the .mdpa in `model_import_settings.input_filename`, and a file
+        // named anything else is an archive Kratos cannot run once it is unpacked.
+        // Both rules agree today; only one of them is in the file.
+        var deck = (result.deck_name || baseName(App.PROJECT)) + '.mdpa';
         // Through the module object, so a test can record what would be written
         // instead of making the browser save a file.
         return Promise.resolve(App.Export.save(archive, App.Zip.create(files(result, deck)),

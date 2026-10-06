@@ -8,6 +8,8 @@ the one that opens off `file://`.
 
 import json
 import re
+import sys
+from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
@@ -116,6 +118,26 @@ def test_post_project_new_starts_an_empty_project(client):
     assert client.get("/api/project").json() == blank_project().model_dump(mode="json")
 
     client.put("/api/project", json=seed_project().model_dump())
+
+
+def test_the_project_the_server_opens_on_is_plane_strain(client):
+    """The app is a 2D modeller first: the document it comes up on is the section, so
+    the client never has to switch into it -- and never shows a 3D view it is about to
+    replace. The offset is resolved here too, so the viewport reads one number."""
+    from app.seed import blank_project
+
+    blank = blank_project()
+
+    assert blank.dimension == 2
+    assert blank.section_offset == pytest.approx((blank.domain.z0 + blank.domain.z1) / 2)
+
+    try:
+        assert client.post("/api/project/new").json()["project"]["dimension"] == 2
+        # An empty site draws nothing, but it still has to build: the viewport asks for
+        # this before the user has added anything.
+        assert client.get("/api/geometry").status_code == 200
+    finally:
+        client.put("/api/project", json=seed_project().model_dump())
 
 
 def test_put_project_rejects_a_model_that_breaks_the_layer_stack(client):
@@ -499,11 +521,13 @@ BEAM = {"id": "sheetpile_1", "name": "Sheet pile 1", "section": "az26",
         "points": [[12.0, 0.0], [12.0, -14.0]], "active": True}
 # What comes back: `kind` is defaulted in, which is how a project written before the
 # 3D pile kinds existed still loads as the 2D sheet pile it was saved as, and the
-# section gains the two inertias only a member in space has any use for.
+# section gains the two inertias only a member in space has any use for, and the shear
+# area that `None` means "take the whole section" for.
 # `derived_from` comes back on every structure: it is how a translated pair is linked
 # (app/walls.py), and a pile the client authored is nobody's translation.
 STORED_BEAM = BEAM | {"kind": "beam", "derived_from": None}
-STORED_SECTION = SECTION | {"inertia_minor": None, "torsional_inertia": None}
+STORED_SECTION = SECTION | {"shear_area": None, "inertia_minor": None,
+                            "torsional_inertia": None}
 
 
 def test_patch_structures_creates_a_sheet_pile_and_its_section(client):
@@ -774,6 +798,80 @@ def test_patch_layers_can_resize_the_domain(client):
     client.put("/api/project", json=seed_project().model_dump())
 
 
+# ── The water line ──────────────────────────────────────────────────────────
+# `Project.water` holds the two numbers the deck's hydrostatic processes read -- the
+# phreatic level and the fluid's specific weight (plan sec 7.2) -- and until now
+# nothing in the GUI could change either. It rides along on the layers PATCH for the
+# same reason the domain does: it is one object for the whole project, edited from the
+# same Selection explorer rows, and one request means one validation of the result.
+
+def test_patch_layers_can_move_the_water_line(client):
+    project = seed_project()
+    water = project.water.model_dump()
+    water.update(y=-4.0)
+
+    response = client.patch("/api/project/layers", json={
+        "layers": [layer.model_dump() for layer in project.layers],
+        "water": water,
+    })
+    assert response.status_code == 200
+    # The mesh is not invalidated by it: the phreatic level is a reference plane and
+    # takes no part in the geometry booleans (see WaterLevel's own comment), so the
+    # elements do not change when it moves.
+    assert "geometry" in response.json()["invalidates"]
+
+    assert client.get("/api/project").json()["water"]["y"] == -4.0
+
+    client.put("/api/project", json=seed_project().model_dump())
+
+
+def test_patch_layers_can_change_the_specific_weight(client):
+    """The other half of the pair, and the one that silently scales every hydrostatic
+    pressure in the deck -- `_pore_pressure` and `_normal_load` both read it."""
+    project = seed_project()
+    water = project.water.model_dump()
+    water.update(specific_weight=9.81)
+
+    assert client.patch("/api/project/layers", json={
+        "layers": [layer.model_dump() for layer in project.layers],
+        "water": water,
+    }).status_code == 200
+    assert client.get("/api/project").json()["water"]["specific_weight"] == 9.81
+
+    client.put("/api/project", json=seed_project().model_dump())
+
+
+def test_patch_layers_rejects_a_weightless_fluid(client):
+    """Zero specific weight is a division by zero waiting in the materials file --
+    DENSITY_WATER is derived from it -- and it is not water in any case."""
+    project = seed_project()
+    water = project.water.model_dump()
+    water["specific_weight"] = 0.0
+
+    response = client.patch("/api/project/layers", json={
+        "layers": [layer.model_dump() for layer in project.layers],
+        "water": water,
+    })
+    assert response.status_code == 422
+    assert client.get("/api/project").json()["water"]["specific_weight"] ==         seed_project().water.specific_weight
+
+
+def test_patch_layers_leaves_the_water_alone_when_it_is_not_sent(client):
+    """Omitted means "leave it", the same as every other ride-along on this endpoint.
+    A client editing only the layer stack must not reset the water table by silence."""
+    project = seed_project()
+    water = project.water.model_dump()
+    water["y"] = -6.5
+    client.patch("/api/project/layers", json={
+        "layers": [layer.model_dump() for layer in project.layers], "water": water})
+
+    assert client.patch("/api/project/layers", json={
+        "layers": [layer.model_dump() for layer in project.layers]}).status_code == 200
+    assert client.get("/api/project").json()["water"]["y"] == -6.5
+
+    client.put("/api/project", json=seed_project().model_dump())
+
+
 def test_patch_layers_rejects_an_inverted_domain(client):
     project = seed_project()
     domain = project.domain.model_dump()
@@ -803,6 +901,43 @@ def test_patch_materials_saves_edited_values_including_the_interface_fields(clie
     assert (saved["r_inter"], saved["interface_permeability"]) == (0.65, "Drain")
 
     client.put("/api/project", json=seed_project().model_dump())
+
+
+def test_patch_materials_keeps_the_porosity_and_k0_nc_the_user_typed(client):
+    """The server half of the round trip the material dialog depends on.
+
+    Both fields mean "the user owns this value" (plan sec 7.4): a number here is
+    written to the deck, and null is what makes it fall back to DEFAULT_POROSITY and to
+    Jaky. The library is replaced wholesale by this endpoint, so a client that does not
+    send them back deletes them -- which is exactly what the browser used to do, and
+    what `live/tests/test-material-library.js` now holds the other end of.
+    """
+    materials = [m.model_dump() for m in seed_project().materials]
+    materials[0].update(porosity=0.42, k0_nc=0.62)
+
+    assert client.patch("/api/project/materials",
+                        json={"materials": materials}).status_code == 200
+    saved = client.get("/api/project").json()["materials"][0]
+    assert (saved["porosity"], saved["k0_nc"]) == (0.42, 0.62)
+
+    # And null really does mean "derive it" rather than being refused as missing.
+    materials[0].update(porosity=None, k0_nc=None)
+    assert client.patch("/api/project/materials",
+                        json={"materials": materials}).status_code == 200
+    saved = client.get("/api/project").json()["materials"][0]
+    assert (saved["porosity"], saved["k0_nc"]) == (None, None)
+
+    client.put("/api/project", json=seed_project().model_dump())
+
+
+def test_patch_materials_rejects_a_porosity_outside_the_unit_range(client):
+    """The bounds the dialog's own numRow mirrors (js/dialogs.js). Soil with no voids
+    at all, or nothing but voids, is not soil."""
+    materials = [m.model_dump() for m in seed_project().materials]
+    for bad in (1.0, -0.1):
+        materials[0]["porosity"] = bad
+        assert client.patch("/api/project/materials",
+                            json={"materials": materials}).status_code == 422
 
 
 def test_patch_materials_accepts_a_newly_added_material(client):
@@ -992,14 +1127,18 @@ def test_the_live_shell_replaces_only_the_viewport_and_the_orbit_controller(clie
     assert set(frozen) == {"data.js", "ui.js", "orbit.js", "menubar.js",
                            "toolbars.js", "explorer.js", "command.js", "dialogs.js", "app.js"}
     # Additions rather than substitutions -- they have no frozen counterpart:
-    # soil-volume-dialog.js, canvas-renderer.js, ruler.js, download.js, zip.js.
+    # soil-volume-dialog.js, canvas-renderer.js, ruler.js, mesh-labels.js,
+    # download.js, zip.js, phases.js, results.js, results-render.js, results-view.js.
     # The assertion above is the one that guards the portability claim.
     assert set(replaced) == {"api.js", "buffers.js", "model.js", "viewport.js", "patches.js",
                              "mesh-settings.js", "import-dialog.js", "mdpa-import-dialog.js",
                              "draw-input.js", "soil-volume-dialog.js", "canvas-renderer.js",
-                             "export.js", "history.js", "loads.js", "beams.js", "anchors.js",
-                             "interfaces.js", "material-library.js", "orbit.js", "ruler.js",
-                             "download.js", "zip.js"}
+                             "export.js", "calculate.js", "history.js", "loads.js",
+                             "beams.js", "anchors.js",
+                             "interfaces.js", "normal-loads.js", "material-library.js",
+                             "orbit.js", "ruler.js", "mesh-labels.js",
+                             "download.js", "zip.js", "phases.js", "results.js",
+                             "results-render.js", "results-view.js"}
     assert body.index('/js/orbit.js') < body.index('/live/js/orbit.js'), (
         "the Y-up controller has to be loaded after the frozen one it overrides")
 
@@ -1106,7 +1245,9 @@ def test_export_returns_a_deck_and_its_material_file(client):
     assert body["mdpa"].startswith("Begin Properties 0")
     assert "Begin Nodes" in body["mdpa"] and "Begin SubModelPart Soil_1" in body["mdpa"]
     assert json.loads(body["materials"])["properties"]
-    assert json.loads(body["project_parameters"])["processes"]["loads_process_list"]
+    parameters = json.loads(body["project_parameters"])
+    stage_settings = next(iter(parameters["stages"].values()))["stage_settings"]
+    assert stage_settings["processes"]["loads_process_list"]
     assert body["stats"]["elements"] > 0
 
 
@@ -1115,6 +1256,54 @@ def test_export_can_leave_the_material_file_out(client):
                        json={"element_size": 8.0, "include_materials": False}).json()
     assert body["materials"] is None
     assert body["mdpa"]
+
+
+def test_calculate_meshes_exports_and_runs_the_deck(client, monkeypatch, tmp_path):
+    """The whole button, with a stand-in for Kratos: the project is meshed and exported
+    as usual, the three files land in a directory of their own, and what comes back is
+    where they went and what the run produced."""
+    from app import calculate
+
+    monkeypatch.setenv(calculate.RUNS_ENV, str(tmp_path / "runs"))
+    monkeypatch.setenv(calculate.PYTHON_ENV, sys.executable)
+    monkeypatch.setattr(calculate, "COMMAND",
+                        ["-c", "open('results.post.res', 'w').close()"])
+
+    body = client.post("/api/calculate", json={"element_size": 8.0}).json()
+
+    assert body["ok"] is True
+    directory = Path(body["directory"])
+    assert directory.parent == tmp_path / "runs"
+    assert sorted(body["inputs"]) == sorted(p.name for p in directory.iterdir()
+                                            if p.suffix in (".mdpa",) or p.name.endswith("Parameters.json"))
+    assert body["outputs"] == ["results.post.res"]
+    assert body["stats"]["elements"] > 0
+
+
+def test_calculate_reports_a_failed_run_rather_than_raising(client, monkeypatch,
+                                                            tmp_path):
+    """A model Kratos refuses is an answer about the model, not a broken server: it
+    comes back 200 with `ok` false and what Kratos said."""
+    from app import calculate
+
+    monkeypatch.setenv(calculate.RUNS_ENV, str(tmp_path / "runs"))
+    monkeypatch.setenv(calculate.PYTHON_ENV, sys.executable)
+    monkeypatch.setattr(calculate, "COMMAND",
+                        ["-c", "import sys; print('Error: nope'); sys.exit(1)"])
+
+    response = client.post("/api/calculate", json={"element_size": 8.0})
+
+    assert response.status_code == 200
+    assert response.json()["ok"] is False
+    assert "nope" in response.json()["error"]
+
+
+def test_calculate_refuses_a_second_run_while_one_is_going(client, monkeypatch):
+    from app import calculate
+
+    monkeypatch.setattr(calculate, "_running", True)
+
+    assert client.post("/api/calculate", json={"element_size": 8.0}).status_code == 409
 
 
 def test_export_rejects_an_unknown_body_key(client):
@@ -1298,5 +1487,157 @@ def test_a_2d_model_survives_a_round_trip_through_the_solid_model(client, restor
     back = one("loads", "line")
     assert (back["x0"], back["x1"], back["y"]) == (4.0, 16.0, 0.0)
     assert back["components"] == [0.0, -20.0]
+
+    client.put("/api/project", json=seed_project().model_dump())
+
+
+def test_the_crow_case_can_be_opened_and_drawn(client):
+    """The staged-excavation model, through the routes the browser actually calls --
+    which is `run examples/crow/crow.py` in the command box, and nothing of its own.
+
+    `test_crow_reference.py` says the deck is right; this says the model can be looked
+    at, which is a different failure -- a body with no colour, or a key the viewport
+    cannot name, takes the geometry endpoint down without touching the export.
+    """
+    from tests.crow_example import PATH
+    loaded = client.post("/api/project/script", json={"path": str(PATH)})
+    assert loaded.status_code == 200, loaded.text
+    project = loaded.json()["project"]
+    assert project["dimension"] == 2
+    assert len(project["excavation"]["levels"]) == 3
+    assert project["beams"] and project["anchors"] and project["normal_loads"]
+
+    geometry = client.get("/api/geometry")
+    assert geometry.status_code == 200
+    drawn = {section["key"] for section in geometry.json()["sections"]}
+    # Eight soil bodies, the wall and the strut. The loads are arrow glyphs the
+    # viewport draws from the project itself, so they are not in this payload.
+    assert len([k for k in drawn if k.startswith("soil_")]) == 8
+    assert {"sheetpile", "strut"} <= drawn
+
+
+# ── Phases ──────────────────────────────────────────────────────────────────
+# Milestone D's write path. The phase list is its own endpoint rather than a
+# ride-along on `structures`, because it is the one collection that is *about* the
+# others: a phase names part keys, so it has to be validated against a model that is
+# already settled, and sending both in one request would leave the order ambiguous.
+
+def _staged_project() -> dict:
+    """The seed with a pit dug in three lifts, so there is something to stage."""
+    payload = seed_project(simple=False).model_dump()
+    payload["excavation"] = {k: v for k, v in payload["excavation"].items()
+                             if k != "floor_y"}
+    payload["excavation"] |= {"levels": [-3.0, -5.0, -7.0]}
+    return payload
+
+
+def test_a_reset_project_has_no_phases(client):
+    """Unphased is the compatibility contract (plan sec 7.18), and it is the state a
+    project is in until somebody asks for a sequence.
+
+    Resets first rather than reading whatever the store happens to hold: this module's
+    `client` is one shared project that every test borrows and puts back, so a claim
+    about "the" project is only meaningful about one this test put there itself.
+    """
+    client.post("/api/project/reset")
+    assert client.get("/api/project").json()["phases"] == []
+
+
+def test_patch_phases_stores_a_sequence(client):
+    client.put("/api/project", json=_staged_project())
+    phases = [
+        {"id": "initial", "name": "Initial stage", "calculation": "K0 procedure"},
+        {"id": "dig1", "name": "Dig to -3", "parent": "initial",
+         "deactivate": ["soil_L1__lift1"]},
+    ]
+
+    response = client.patch("/api/project/phases", json={"phases": phases})
+    assert response.status_code == 200
+    # The stage list changes, so the deck does; the geometry does not.
+    assert "project" in response.json()["invalidates"]
+
+    saved = client.get("/api/project").json()["phases"]
+    assert [p["id"] for p in saved] == ["initial", "dig1"]
+    assert saved[1]["deactivate"] == ["soil_L1__lift1"]
+
+    client.put("/api/project", json=seed_project().model_dump())
+
+
+def test_patch_phases_refuses_a_part_that_does_not_exist(client):
+    """A phase names part keys, and a key nothing answers to would export a stage
+    switching off a model part Kratos has never heard of."""
+    client.put("/api/project", json=_staged_project())
+    response = client.patch("/api/project/phases", json={"phases": [
+        {"id": "initial", "name": "Initial stage"},
+        {"id": "oops", "name": "Dig", "parent": "initial",
+         "deactivate": ["no_such_part"]},
+    ]})
+    assert response.status_code == 422
+    assert client.get("/api/project").json()["phases"] == []
+
+    client.put("/api/project", json=seed_project().model_dump())
+
+
+def test_patch_phases_refuses_a_branch(client):
+    """Two phases starting from the same parent have no single execution order.
+    Refused at the endpoint, with the names in the message, rather than at export --
+    the editor is where it can still be fixed."""
+    client.put("/api/project", json=_staged_project())
+    response = client.patch("/api/project/phases", json={"phases": [
+        {"id": "initial", "name": "Initial stage"},
+        {"id": "a", "name": "A", "parent": "initial"},
+        {"id": "b", "name": "B", "parent": "initial"},
+    ]})
+    assert response.status_code == 422
+    detail = str(response.json()["detail"])
+    assert "'a'" in detail and "'b'" in detail
+
+    client.put("/api/project", json=seed_project().model_dump())
+
+
+def test_patch_phases_can_clear_the_sequence(client):
+    """Back to unphased, which must export exactly what it exported before staged
+    construction existed. An empty list is how the user says so."""
+    client.put("/api/project", json=_staged_project())
+    client.patch("/api/project/phases", json={"phases": [
+        {"id": "initial", "name": "Initial stage"}]})
+
+    assert client.patch("/api/project/phases",
+                        json={"phases": []}).status_code == 200
+    assert client.get("/api/project").json()["phases"] == []
+
+    client.put("/api/project", json=seed_project().model_dump())
+
+
+def test_post_default_phases_seeds_the_reference_shaped_sequence(client):
+    """What the phases panel opens on. `phases.default_phases` already builds it and
+    is tested against CROW's seven stages; this is the way the GUI reaches it."""
+    client.put("/api/project", json=_staged_project())
+
+    response = client.post("/api/project/phases/defaults")
+    assert response.status_code == 200
+    seeded = response.json()["project"]["phases"]
+    assert [p["id"] for p in seeded][:2] == ["initial", "null_step"]
+    assert seeded[0]["calculation"] == "K0 procedure"
+    # One dig phase per lift, and they chain rather than branch.
+    assert sum(1 for p in seeded if p["id"].startswith("dig_")) == 3
+    assert seeded[0]["parent"] is None
+    assert all(p["parent"] is not None for p in seeded[1:])
+
+    assert client.get("/api/project").json()["phases"] == seeded
+
+    client.put("/api/project", json=seed_project().model_dump())
+
+
+def test_post_default_phases_replaces_what_is_there(client):
+    """"Reset to defaults" is the only way back out of a sequence the user has broken,
+    so it overwrites rather than refusing because phases already exist."""
+    client.put("/api/project", json=_staged_project())
+    client.patch("/api/project/phases", json={"phases": [
+        {"id": "mine", "name": "Just the one"}]})
+
+    seeded = client.post("/api/project/phases/defaults").json()["project"]["phases"]
+    assert [p["id"] for p in seeded][0] == "initial"
+    assert "mine" not in [p["id"] for p in seeded]
 
     client.put("/api/project", json=seed_project().model_dump())
