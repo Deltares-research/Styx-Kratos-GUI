@@ -906,7 +906,29 @@ App.Dialogs = (function () {
       'Groundwater': function () {
         return [
           numRow('k (permeability)', 'm/day', { min: 0, decimals: 4 },
-                 function () { return m.k; }, function (v) { m.k = v; })
+                 function () { return m.k; }, function (v) { m.k = v; }),
+          /* Kratos' POROSITY. Blank means "not stated", and the deck then falls back
+             to kratos_materials.DEFAULT_POROSITY -- which is what every project
+             written before the field existed carries. Bounds mirror the server's
+             (0 <= n < 1) so an impossible value is refused here rather than at save.
+             Drainage type is not here but on the General tab, where it already was:
+             it decides how the analysis is run as much as how the water moves, and
+             moving it now would change a control people already use. */
+          numRow('n (porosity)', '', { min: 0, exclusiveMax: 1, nullable: true, decimals: 3 },
+                 function () { return m.porosity; }, function (v) { m.porosity = v; })
+        ];
+      },
+      /* K0,nc is the one number the k0 procedure needs and the only place the user can
+         state it, so it gets a tab rather than being buried among the strength
+         parameters -- a staged deck's first stage is built on it. Blank is Jaky's
+         1 - sin(phi), computed from the Parameters tab's own friction angle; a
+         material with no friction angle has no answer either way, which is why the
+         field is nullable rather than defaulted. */
+      'Initial': function () {
+        return [
+          numRow('K0,nc (at-rest earth pressure)', '',
+                 { exclusiveMin: 0, max: 2, nullable: true, decimals: 3 },
+                 function () { return m.k0nc; }, function (v) { m.k0nc = v; })
         ];
       },
       'Interfaces': function () {

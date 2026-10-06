@@ -1,0 +1,50 @@
+{
+  "written_by": "tests/make_crow_fixture.py",
+  "git_sha": "f6aebc86f859e8a9eb44caf94785da320df05d86",
+  "run": {
+    "run": "CROW_excavation_wall_2026-09-22_16-28",
+    "from": "C:\\Users\\fathian\\KratosGUI\\runs\\CROW_excavation_wall_2026-09-22_16-28",
+    "deck_name": "CROW_excavation_wall",
+    "kratos": "10.4.\"2\"-geo/run_CROW_case_with_Geometry_Generator-6554120db17-Release-x86_64",
+    "stages_with_gid_output": [
+      "1_Initial_stage",
+      "7_Third_excavation"
+    ],
+    "our_wall_part": "SheetPileWall"
+  },
+  "expected": {
+    "from": "C:\\Checkouts\\KratosProjects\\yek\\applications\\GeoMechanicsApplication\\tests\\crow_validation\\linear_elastic\\staged_construction",
+    "reference_deck": "C:\\Checkouts\\KratosProjects\\yek\\applications\\GeoMechanicsApplication\\tests\\crow_validation\\common\\model.mdpa",
+    "reference_wall_part": "Sheet_Pile_Wall",
+    "files": {
+      "3_SheetPileWall_installation": "3_Wall_installation__expected_results_wall.csv",
+      "4_First_excavation": "4_First_excavation__expected_results_wall.csv",
+      "6_Second_excavation": "6_Second_excavation__expected_results_wall.csv",
+      "7_Third_excavation": "7_Third_excavation__expected_results_wall.csv"
+    }
+  },
+  "values": {
+    "probes": [
+      "far field, upper ground",
+      "far field, middle ground",
+      "far field, deep sand",
+      "behind the wall, above the first lift",
+      "under the pit floor",
+      "the wall's top",
+      "the wall's toe"
+    ],
+    "stages": [
+      1,
+      7
+    ]
+  },
+  "javascript": {
+    "section": "results:Soil_Middle_pit",
+    "stage": 7,
+    "fields": [
+      "p_elements",
+      "p_nodes",
+      "uy"
+    ]
+  }
+}

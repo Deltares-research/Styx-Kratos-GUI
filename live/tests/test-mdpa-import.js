@@ -224,6 +224,65 @@ test('the File menu offers Import mesh (.mdpa)…', function () {
     });
   });
 
+  /* ── Interfaces ───────────────────────────────────────────────────── */
+
+  /* A wall and the zero-thickness contacts that hold the soil to it: the arrangement a
+     .mdpa with a sheet pile actually contains. The contact draws as line work (there is
+     no thickness for a face to span -- server/app/mdpa_import.py `_triangles_and_edges`),
+     and nothing here treats it differently from any other part: it earns a checklist
+     row, an eye in the Model explorer and a colour of its own by being a section. */
+  var WALLED = {
+    dimension: 2, nodes: 6, parts: [], bbox: [0, -5, 0, 4, 0, 0],
+    sections: [
+      { key: 'imported:Sheet_pile_1', color: '#c9a35c', part: 'Sheet_pile_1',
+        kind: 'beam', positions: [], indices: [], edges: [4, 0, 0, 4, -5, 0],
+        node_ids: [], elements: [], bbox: [4, -5, 0, 4, 0, 0] },
+      { key: 'imported:Wall_contact', color: '#d4a017', part: 'Wall_contact',
+        kind: 'interface', positions: [], indices: [], edges: [4, 0, 0, 4, -5, 0],
+        node_ids: [], elements: [[1, 4, -2.5, 0]], bbox: [4, -5, 0, 4, 0, 0] }
+    ]
+  };
+
+  test('an interface part gets its own checklist row, next to the wall it holds',
+       function () {
+    withDom(function () {
+      App.MdpaImportDialog.openChecklist(WALLED, 'walled.mdpa');
+      var labels = Array.prototype.map.call(
+        document.querySelectorAll('#mdpa-checklist input[type="checkbox"]'),
+        function (cb) { return cb.parentNode.textContent.replace('⌖', '').trim(); });
+      T.eq(labels, ['Sheet_pile_1', 'Wall_contact']);
+    });
+  });
+
+  test('an accepted interface reaches the Model explorer as a row of its own',
+       function () {
+    withDom(function () {
+      var savedParts = null;
+      App.Model = { setImportedParts: function (parts) { savedParts = parts; } };
+      App.Viewport = { removeImportedSection: function () {} };
+      App.MdpaImportDialog.openChecklist(WALLED, 'walled.mdpa');
+
+      document.querySelector('#mdpa-checklist .btn-primary').click();
+
+      T.eq(savedParts, [
+        { key: 'imported:Sheet_pile_1', label: 'Sheet_pile_1', color: '#c9a35c' },
+        { key: 'imported:Wall_contact', label: 'Wall_contact', color: '#d4a017' }
+      ]);
+    });
+  });
+
+  test('an interface can be turned off on its own, leaving the wall drawn', function () {
+    withDom(function () {
+      var calls = [];
+      App.Viewport = { setVisible: function (key, on) { calls.push([key, on]); } };
+      App.MdpaImportDialog.openChecklist(WALLED, 'walled.mdpa');
+      var contact = document.querySelectorAll('#mdpa-checklist input[type="checkbox"]')[1];
+      contact.checked = false;
+      contact.dispatchEvent(new Event('change'));
+      T.eq(calls, [['imported:Wall_contact', false]]);
+    });
+  });
+
   test('Accept closes the checklist but does not clear the whole preview', function () {
     withDom(function () {
       var cleared = 0;

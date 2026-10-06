@@ -234,3 +234,144 @@ def test_the_anchor_tail_gets_exactly_one_node_belonging_to_nothing_else():
 
     assert len(at_tail) == 1
     assert at_tail[0] not in used, "the tail must not be bonded to soil, pile or anything"
+
+
+# ── Per-structure element size ──────────────────────────────────────────────
+# `MeshSettings.body_sizes` is keyed by part key, and a beam, an anchor and an interface
+# all have one -- so a size could always be *asked* for a structure. It was read out of
+# `BuildResult.volumes`, which holds nothing for a structure (they are curves, and live
+# in `.curves`), so the request was accepted by the schema and then silently dropped:
+# the wall came out at whatever size the soil around it happened to be.
+#
+# The reference deck meshes its wall at 1 m inside soil at 2 m, which is the ordinary
+# thing to want: the wall is where the bending moments are read.
+
+
+def crow_like():
+    from tests.crow_example import crow
+    return crow.crow_project(staged=False)
+
+
+def crow_deck(**sizes):
+    """The CROW model exported with the given per-part sizes, parsed back."""
+    from app import kratos
+    from tests.crow_example import crow
+    from app.schemas import MeshRequest
+    from tests import mdpa
+    project = crow.crow_project(staged=False)
+    base = {f"soil_{layer.id}": 2.0 for layer in project.layers}
+    with build.session():
+        exported = kratos.export_project(
+            project, MeshRequest(element_size=8.0, order=2,
+                                 body_sizes=base | sizes))
+    return mdpa.parse(exported["mdpa"])
+
+
+def wall_elements(deck) -> int:
+    return sum(len(b.entries) for b in deck.elements
+               if b.name == "LinearTimoshenkoCurvedBeamElement2D3N")
+
+
+def test_a_size_asked_for_a_structure_reaches_the_mesh():
+    """Coarse wall, fine wall, same soil: the wall's own size is what changes it."""
+    coarse = wall_elements(crow_deck())
+    fine = wall_elements(crow_deck(sheetpile=0.5))
+    assert fine > coarse * 2, (coarse, fine)
+
+
+def test_the_contact_follows_the_wall_it_holds():
+    """The interface is split off the same curve, so refining the wall refines it too --
+    one element a side, which is what keeps the two conformal."""
+    deck = crow_deck(sheetpile=0.5)
+    contacts = sum(len(b.entries) for b in deck.elements
+                   if b.name.startswith("Geo_UPwLineInterface"))
+    assert contacts == 2 * wall_elements(deck)
+
+
+def test_a_finer_wall_does_not_refine_the_far_field():
+    """A `Restrict` field applies to the entities it names. Asking for a fine wall must
+    not drag the whole model finer -- the bottom boundary is 60 m down and has no reason
+    to notice."""
+    plain = len(crow_deck().parts["Bottom_Fixed"].nodes)
+    refined = len(crow_deck(sheetpile=0.5).parts["Bottom_Fixed"].nodes)
+    assert refined == plain
+
+
+def test_the_structure_size_is_the_same_field_the_soil_uses():
+    """One mechanism, not two: `body_sizes` is keyed by part key and a structure has
+    one, so nothing new is asked of the user or of the Mesh properties dialog."""
+    assert "sheetpile" in crow_like().part_keys()
+
+
+# ── A graded mesh ───────────────────────────────────────────────────────────
+# Fine where the answer is read, coarse where it is not. Until `BoxRefinement.thickness`
+# existed, a refinement could only step: `size` inside the box and the model's own size
+# immediately outside it, which puts a jump in element size wherever the box edge falls.
+# A band is what turns that step into a grade.
+
+
+def edge_lengths_by_band(project, **kw):
+    """Mean longest triangle edge, in 10 m bands of x."""
+    import math
+    import gmsh
+    with build.session():
+        meshing.mesh_project(project, order=2, **kw)
+        types, _, connectivity = gmsh.model.mesh.getElements(2)
+        tags, coords, _ = gmsh.model.mesh.getNodes()
+        at = {int(t): (coords[3 * i], coords[3 * i + 1]) for i, t in enumerate(tags)}
+        bands = {}
+        for element_type, flat in zip(types, connectivity):
+            stride = gmsh.model.mesh.getElementProperties(int(element_type))[3]
+            for start in range(0, len(flat), stride):
+                corners = [at[int(t)] for t in flat[start:start + stride][:3]]
+                longest = max(math.dist(corners[a], corners[b])
+                              for a, b in ((0, 1), (1, 2), (2, 0)))
+                band = int(sum(p[0] for p in corners) / 3 // 10) * 10
+                bands.setdefault(band, []).append(longest)
+    return {band: sum(v) / len(v) for band, v in sorted(bands.items())}
+
+
+def a_box(**kw):
+    from app.schemas import BoxRefinement
+    return BoxRefinement(kind="box", size=0.75, x_min=-1.0, x_max=8.0,
+                         y_min=-16.0, y_max=1.0, z_min=-1e6, z_max=1e6, **kw)
+
+
+def test_a_box_without_a_band_steps_straight_back_to_the_model_size():
+    """The behaviour every refinement had before `thickness`, and still the default."""
+    bands = edge_lengths_by_band(crow_like(), element_size=8.0, refinements=[a_box()])
+    assert bands[0] < 1.5
+    assert bands[20] > 4.0, "without a band the size jumps at the edge of the box"
+
+
+def test_a_band_grades_the_size_back_out_instead_of_stepping():
+    """Growing outwards, and gradually.
+
+    Not strictly monotone: out where the band has run out and every element is the model
+    size, the means wobble by a few percent from one 10 m strip to the next, which is
+    the mesher and not the grading. The two things that matter are that no strip is
+    *smaller* than the one inside it by more than that noise, and that no strip is more
+    than twice the one inside it -- a step of four or more is the jump a bare box makes.
+    """
+    bands = edge_lengths_by_band(crow_like(), element_size=8.0,
+                                 refinements=[a_box(thickness=45.0)])
+    sizes = [bands[b] for b in sorted(bands)]
+    assert sizes[0] < 1.5 and sizes[-1] > 6.0
+    assert all(b > 0.9 * a for a, b in zip(sizes, sizes[1:])), sizes
+    assert all(b < 2.5 * a for a, b in zip(sizes, sizes[1:])), sizes
+
+
+def test_the_crow_model_carries_its_own_graded_mesh():
+    """`examples/crow/crow.py` is the model a user opens, so the grading has to travel with the
+    project rather than being typed into a mesh dialog afterwards."""
+    project = crow_like()
+    assert project.mesh.refinements, "the project carries its refinement"
+    bands = edge_lengths_by_band(
+        project, element_size=project.mesh.element_size,
+        body_sizes=project.mesh.body_sizes,
+        refinements=[r.model_copy() for r in project.mesh.refinements])
+    sizes = [bands[b] for b in sorted(bands)]
+    coarse = project.mesh.element_size
+    assert sizes[0] < 0.25 * coarse, "fine at the excavation"
+    assert sizes[-1] > 0.7 * coarse, "back to the model's own size at the far boundary"
+    assert sizes[-1] > 4 * sizes[0], "and genuinely graded between them"

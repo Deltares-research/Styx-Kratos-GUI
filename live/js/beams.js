@@ -381,6 +381,121 @@ App.Beams = (function () {
                        isPanel(beam) ? DEFAULT_PANEL_SECTION : DEFAULT_SECTION);
   }
 
+  function input(value, step) {
+    return App.UI.el('input.mesh-setting-control', {
+      type: 'number', step: step || '0.1', value: String(value)
+    });
+  }
+
+  /* One row per section field, matching exactly what `validateSection` checks for
+     the kind: a wall carries a thickness where a pile or member carries an area,
+     an inertia and a spacing. `step` is picked for the field's usual magnitude,
+     not derived from its decimals -- a derived step can round-trip through
+     exponential notation (1e-7), which is legal HTML but not what this needs. */
+  function sectionFields(kind) {
+    return kind === 'panel'
+      ? [['E', 'kN/m²', '1000'], ['nu', '', '0.01'],
+         ['thickness', 'm', '0.01'], ['density', 'kg/m³', '10']]
+      : [['E', 'kN/m²', '1000'], ['nu', '', '0.01'], ['area', 'm²', '0.0001'],
+         ['inertia', 'm⁴', '0.000001'], ['density', 'kg/m³', '10'],
+         ['spacing', 'm', '0.1']];
+  }
+
+  /* The dialog every kind this module authors shares: a name, its polyline (plus
+     the two levels a wall hangs between), whether it is active, and the numbers of
+     whichever section it points at -- mirroring loads.js's own `open()`, which is
+     the pattern this was missing until now (`App.Dialogs.beam` was checked for but
+     never implemented, so a pile used to be drafted and saved with no review at
+     all). Editing the section here edits the shared profile, exactly as the
+     Selection explorer's own fields already do. */
+  function open(source, kind) {
+    if (!App.Dialogs || !App.Dialogs.open) return;
+    var beam = copy(source);
+    kind = kind || kindOf(beam);
+    var editing = collection().some(function (item) { return item.id === beam.id; });
+    var library = sectionsFor(App.PROJECT, beam);
+    var section = copy(library.filter(function (s) { return s.id === beam.section; })[0]
+                       || library[0]);
+    var field = kind === 'panel' ? 'footprint' : 'points';
+    var axisLabels = kind === 'panel' ? ['x', 'z'] : (kind === 'member' ? ['x', 'y', 'z'] : ['x', 'y']);
+    var el = App.UI.el, controls = {}, pointRows = [], sectionControls = {};
+    var shell, message;
+
+    function submit() {
+      beam.name = controls.name.value.trim();
+      beam[field] = pointRows.map(function (row) {
+        return row.map(function (control) { return Number(control.value); });
+      });
+      if (kind === 'panel') {
+        beam.y_top = Number(controls.y_top.value);
+        beam.y_toe = Number(controls.y_toe.value);
+      }
+      beam.active = controls.active.checked;
+      Object.keys(sectionControls).forEach(function (key) {
+        section[key] = Number(sectionControls[key].value);
+      });
+      var problem = validate(beam) || validateSection(section);
+      if (problem) { message.textContent = problem; return; }
+      var profiles = library.map(function (s) { return s.id === section.id ? section : s; });
+      save(beam, profiles).then(function () { shell.close(); }, function (error) {
+        message.textContent = error.message;
+      });
+    }
+
+    shell = App.Dialogs.open({
+      title: (editing ? 'Edit ' : 'Create ') + noun(beam),
+      width: 520, height: kind === 'panel' ? 580 : 520,
+      buttons: [
+        { label: 'Save', primary: true, keepOpen: true, onClick: submit },
+        { label: 'Cancel' }
+      ],
+      build: function (body) {
+        body.classList.add('mesh-settings-body');
+        var form = el('div.mesh-settings-form');
+        body.appendChild(form);
+        function row(label, control, help) {
+          form.appendChild(el('label.mesh-setting-label', { text: label }));
+          form.appendChild(control);
+          form.appendChild(el('div.mesh-setting-help', { text: help || '' }));
+        }
+
+        controls.name = el('input.mesh-setting-control', { type: 'text', value: beam.name });
+        row('Name', controls.name, 'Shown in the Model explorer and Kratos submodel part.');
+
+        beam[field].forEach(function (point, index) {
+          var rowControls = point.map(function (value) { return input(value); });
+          pointRows.push(rowControls);
+          rowControls.forEach(function (control, axis) {
+            row(axisLabels[axis] + (index + 1), control,
+                'Vertex ' + (index + 1) + ', world ' + axisLabels[axis] + ' [m].');
+          });
+        });
+
+        if (kind === 'panel') {
+          controls.y_top = input(beam.y_top);
+          controls.y_toe = input(beam.y_toe);
+          row('Top level', controls.y_top, 'Elevation the wall hangs from [m].');
+          row('Toe level', controls.y_toe, 'Elevation of the wall toe [m].');
+        }
+
+        controls.active = el('input.mesh-setting-control', { type: 'checkbox' });
+        controls.active.checked = beam.active !== false;
+        row('Active', controls.active, 'Inactive structures remain in the project but are not exported.');
+
+        sectionFields(kind).forEach(function (spec) {
+          var key = spec[0], unit = spec[1], step = spec[2];
+          var control = input(section[key], step);
+          sectionControls[key] = control;
+          row(key === 'nu' ? "Poisson's ratio" : key, control,
+              unit ? 'Section ' + key + ' [' + unit + '].' : '');
+        });
+
+        message = el('div.mesh-settings-message');
+        row('', message, '');
+      }
+    });
+  }
+
   /* `kind` comes from the tool the user picked: the rail's flyout offers a wall and
      a member in 3D, and the plain sheet pile in 2D. Left out, each dimension gets
      the structure it is usually asked for. */
@@ -391,20 +506,13 @@ App.Beams = (function () {
       if (App.Command) App.Command.note(unavailableMessage(App.PROJECT, wanted));
       return;
     }
-    var beam = draft(App.PROJECT, wanted);
-    var sections = sectionsFor(App.PROJECT, beam);
-    if (App.Dialogs && App.Dialogs.beam) return App.Dialogs.beam(beam, sections);
-    return save(beam, sections);
+    return open(draft(App.PROJECT, wanted), wanted);
   }
 
   function edit(id) {
     var beam = collection().filter(function (item) { return item.id === id; })[0];
     if (!beam) return;
-    // A wall's library is the panel sections, a pile's and a member's the beam
-    // sections: sending the wrong one would ask the server to empty the other.
-    var library = copy(isPanel(beam) ? storedPanelSections() : storedSections());
-    if (App.Dialogs && App.Dialogs.beam) return App.Dialogs.beam(copy(beam), library);
-    return save(copy(beam), library);
+    return open(beam, kindOf(beam));
   }
 
   function isBeamKey(key) {
@@ -418,7 +526,7 @@ App.Beams = (function () {
     kindsFor: kindsFor, kindOf: kindOf, unavailableMessage: unavailableMessage,
     sectionsFor: sectionsFor, sectionOf: sectionOf,
     validate: validate, validateSection: validateSection,
-    save: save, remove: remove, start: start, edit: edit,
+    save: save, remove: remove, start: start, edit: edit, open: open,
     DEFAULT_SECTION: DEFAULT_SECTION, DEFAULT_PANEL_SECTION: DEFAULT_PANEL_SECTION
   };
 })();

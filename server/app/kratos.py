@@ -27,9 +27,13 @@ would clear it.
 
 from __future__ import annotations
 
+import math
+import re
+from dataclasses import dataclass
+
 import gmsh
 
-from app import build, interfaces, meshing
+from app import build, interfaces, meshing, phases
 from app import kratos_processes
 from app.kratos_materials import material_parameters
 from app.schemas import (Beam, LineLoad, MeshRequest, PanelSection, PointLoad,
@@ -102,6 +106,18 @@ CONDITIONS: dict[tuple[int, int], tuple[str, tuple[int, ...]]] = {
     (3, 9): ("SurfaceLoadDiffOrderCondition3D6N", (0, 1, 2, 3, 4, 5)),
 }
 
+# A `NormalLoad`'s condition, keyed by node count rather than gmsh element type --
+# `_normal_load_conditions` reads its rows off `_segments`, which already discards the
+# type and hands back gmsh's own line order (already Kratos'), the same way `INTERFACES`
+# is keyed. 2D only, like a free interface. Both names are confirmed against a working
+# reference (Deltares/FEA-Tools' MiscellaneousTools/InterfaceInserter,
+# test_create_interfaces.py for the linear class, examples/crow_config.json for the
+# quadratic one).
+NORMAL_LOAD_CONDITIONS: dict[tuple[int, int], str] = {
+    (2, 2): "LineNormalLoadCondition2D2N",
+    (2, 3): "LineNormalLoadDiffOrderCondition2D3N",
+}
+
 # The edges of a 2D continuum element, in the order its own geometry generates them.
 # Kratos matches a condition to its element by exact node-id sequence -- its
 # NeighbouringElementFinder rotates faces only, never a line, and reverse search is off
@@ -154,9 +170,11 @@ def export_project(project: Project, settings: MeshRequest,
                    include_materials: bool = True) -> dict:
     """Mesh the project and render it as a Kratos deck.
 
-    Returns `{"mdpa", "materials", "stats", "meshed_keys", "warnings", "log"}`, all
-    JSON-safe, so it can cross the gmsh worker's process boundary unchanged.
-    `materials` is None when the companion MaterialParameters.json is not wanted.
+    Returns `{"mdpa", "nodes", "elements", "materials", "initial_materials", "stats",
+    "meshed_keys", "warnings", "log"}`, all JSON-safe, so it can cross the gmsh
+    worker's process boundary unchanged. `materials` is None when the companion
+    MaterialParameters.json is not wanted, and `initial_materials` is None unless some
+    stage reads one -- only a deck with a K0 stage does (plan sec C4).
     """
     mesh = meshing.mesh_project(
         project, element_size=settings.element_size, order=settings.order,
@@ -172,7 +190,16 @@ def export_project(project: Project, settings: MeshRequest,
     # Collected from here down rather than only out of the materials file: the deck
     # itself has things to say -- an interface a 3D model cannot carry, a wall written
     # one order below the soil around it.
-    warnings: list[str] = []
+    #
+    # Seeded from `mesh.log`'s own curated notes -- every `app.build` line meant for a
+    # person rather than gmsh's own chatter carries this exact "Info    : " padding
+    # (gmsh's raw logger writes "Info: ..." instead, one space, so the two never
+    # collide). A pile that never touches the soil, a wall drawn in the wrong mode --
+    # these already explain themselves at build time; only `export.js` never asked to
+    # see them before, so a structure could vanish from the deck with nothing in the
+    # UI to say why.
+    warnings: list[str] = [note[len("Info    : "):] for note in mesh.log
+                           if note.startswith("Info    : ")]
 
     world = _world_coordinates()
     coordinates = _kratos_coordinates(world, dim)
@@ -184,6 +211,13 @@ def export_project(project: Project, settings: MeshRequest,
     # its 3-node form would collide with the triangle entry in `FLIP`. The mesher
     # already emits each segment in the order the beam was drawn.
     beam_blocks = _harvest(_beam_bodies(project, dim), 1, BEAMS, model_dim=dim)
+    # A beam's node order is its local axis, and the sign of every force it reports
+    # follows it, so it runs the way the user drew it rather than the way gmsh built
+    # the curve. Done here, before the interface split reads these rows: which face of
+    # the wall is which is settled by the drawn path too (`app/interfaces.py`), so both
+    # answer to the same statement of intent.
+    beam_blocks = [(key, name, _drawn_order(rows, _beam_of(project, key).points, world))
+                   for key, name, rows in beam_blocks]
     blocks.extend(beam_blocks)
     # Nor are the wall shells: a sheet of steel has two faces and no "inside out", so
     # there is no signed area to correct -- only a normal, which is the wall's own.
@@ -191,14 +225,22 @@ def export_project(project: Project, settings: MeshRequest,
     blocks.extend(panel_blocks)
     anchor_blocks, anchor_supports = _anchor_ties(project, dim, _world_coordinates())
     blocks.extend(anchor_blocks)
-    conditions = _load_conditions(project, dim, world, warnings)
+    conditions = (_load_conditions(project, dim, world, warnings) +
+                 _normal_load_conditions(project, dim, warnings, world))
     # Last, because it rewrites what everything above produced: the interface unglues
     # the soil from the structures already harvested, so it needs their connectivity in
     # hand -- and the nodes it adds have to be in `world` before the boundary groups and
     # the node table are read off it.
-    interface_blocks = _interface_elements(project, dim, soil_blocks, beam_blocks,
-                                           conditions, world, coordinates, warnings)
+    interface_blocks, interface_ties = _interface_elements(
+        project, dim, soil_blocks, beam_blocks, conditions, world, coordinates, warnings)
     blocks.extend(interface_blocks)
+    # Named here rather than in `_part_names`: which bodies a contact actually runs
+    # against is a fact about the mesh, not about the project, and is not known until
+    # the split above has run. `Interface_Soil_Top_lift1` -- the contact's own name,
+    # then the body it holds -- which is how the reference deck names them too.
+    for key, _, _ in interface_blocks:
+        stem, _, body = key.partition("__")
+        names.setdefault(key, f"{names[stem]}_{names[body]}" if body else names[stem])
     # After the interface split, so each condition is aligned to the copy of the soil it
     # ended up on rather than to the element it left behind.
     _align_conditions(conditions, soil_blocks)
@@ -209,18 +251,67 @@ def export_project(project: Project, settings: MeshRequest,
 
     part_materials = _part_materials(project, names, blocks)
     numbered, parts = _number_elements(blocks, names, node_id)
+    # Read here rather than off `parts` below: everything appended to it from this point
+    # is a node- or condition-only group (a boundary, a load, an anchor support, a tie),
+    # and the solver's domain lists may name only parts that carry elements.
+    body_parts = [name for name, _, elements, _ in parts if elements]
     condition_blocks, load_parts = _number_conditions(conditions, names, node_id)
-    body_tags = {tag for _, _, rows in soil_blocks for row in rows for tag in row}
+    # Soil only, which is what `_boundary_nodes` documents it measures the domain faces
+    # from. `soil_blocks` is every continuum body, structures included: in 3D the wall
+    # ring, the struts and the piles are solids too, and the ring is built *outboard* of
+    # the pit face (`build._build_solids`), so a pit against the domain edge puts wall
+    # outside the soil. Measured with it, the left face follows the wall and the soil's
+    # own edge -- the one the excavation is dug against -- is not a boundary at all.
+    body_tags = {tag for key, _, rows in soil_blocks if key.startswith("soil_")
+                 for row in rows for tag in row}
     boundaries = _boundary_nodes(project, dim, world, node_id, body_tags)
+    # Read off the harvested blocks rather than the geometry: after the interface split
+    # a body's nodes are the copies it actually ended up with, and those are the ones a
+    # constraint has to name.
+    boundaries, boundary_owners = _segment_boundaries(
+        project, boundaries,
+        {key: {node_id[tag] for row in rows for tag in row if tag in node_id}
+         for key, _, rows in soil_blocks if key.startswith("soil_")},
+        names)
     parts.extend(_boundary_parts(boundaries))
     parts.extend(load_parts)
     supports = [(f"{names[key]}_Support", [node_id[tag]], [], [])
                 for key, tag in anchor_supports.items() if tag in node_id]
     parts.extend(supports)
+    # A node-only part per side of every tie `_split_ties` found, so the process below
+    # can name them; see `_interface_elements`.
+    ties = {}
+    for key, master, slave in interface_ties:
+        master_name, slave_name = f"{names[key]}_Master", f"{names[key]}_Slave"
+        parts.append((master_name, sorted({node_id[tag] for tag in master}), [], []))
+        parts.append((slave_name, sorted({node_id[tag] for tag in slave}), [], []))
+        ties[key] = (master_name, slave_name)
+
+    # The retained-side copies of the retained-side interfaces' nodes, as one node-only
+    # part. An interface element's second half is its soil-side copy of the split nodes
+    # (`_interface_by_body`), so the group is those halves, for the contacts that run
+    # against soil outside the pit. Written only for a staged deck, which is the only
+    # thing that reads it (plan sec C7).
+    outside = {key for key, _, _, inside in project.soil_bodies() if not inside}
+    retained_blocks = [(key, rows) for key, _, rows in interface_blocks
+                       if key.partition("__")[2] in outside]
+    right_side_part = None
+    if project.phases and retained_blocks:
+        retained_nodes = sorted({node_id[tag] for _, rows in retained_blocks
+                                 for row in rows for tag in row[len(row) // 2:]
+                                 if tag in node_id})
+        if retained_nodes:
+            right_side_part = RIGHT_SIDE_PART
+            parts.append((right_side_part, retained_nodes, [], []))
 
     condition_keys = {key for key, _, rows in conditions if rows}
     active_loads = [(names[load.id], *_load_variable(load, dim))
                     for load in project.loads if load.id in condition_keys]
+    normal_load_processes = [
+        (names[load.id], load.fluid_pressure_type, load.pressure,
+         project.water.y, project.water.specific_weight)
+        for load in project.active_normal_loads if load.id in condition_keys
+    ]
     beam_properties = [(names[key], project.beam_section(_beam_of(project, key).section),
                         dim)
                        for key, _, _ in beam_blocks]
@@ -229,9 +320,16 @@ def export_project(project: Project, settings: MeshRequest,
     anchor_properties = [(names[key], project.anchor_section(_anchor_of(project, key).section),
                           _anchor_of(project, key).prestress, dim)
                          for key, _, _ in anchor_blocks]
-    interface_properties = [(names[key], project.interface_section(
-                                 _interface_of(project, key).section))
-                            for key, _, _ in interface_blocks]
+    # Third entry: the material of the soil body this stretch of contact runs against,
+    # which is what its stiffness and strength are derived from unless the section names
+    # one of its own. The body is in the block's own key -- `<interface>__<body>` -- and
+    # `part_materials` has already worked out what every body is made of, so this is a
+    # lookup rather than a second copy of that rule.
+    material_by_part = dict(part_materials)
+    interface_properties = [
+        (names[key], project.interface_section(_interface_of(project, key).section),
+         _adjacent_material(project, key, names, material_by_part))
+        for key, _, _ in interface_blocks]
     materials, material_warnings = (
         material_parameters(project, part_materials, dim, beam_properties,
                             anchor_properties, panel_properties, interface_properties)
@@ -253,13 +351,108 @@ def export_project(project: Project, settings: MeshRequest,
     # The far end of every anchor is pinned: in this formulation the grouted body is a
     # fixed point, so the tie reacts against a restraint rather than against the soil.
     anchor_fixities = [(name, list(load_mask)) for name, _, _, _ in supports]
+    # A sheet pile does not exist before it is installed: it and whichever interface(s)
+    # tie it to the soil are staged together, deactivated in the deck's initial state and
+    # activated in a wall-installation stage -- see `staged_construction.json`. Members
+    # (3D) have no interface of their own kind and are not staged; nothing here invents a
+    # construction sequence for them.
+    wall_parts = ([names[key] for key, _, _ in beam_blocks] +
+                  [names[key] for key, _, _ in interface_blocks
+                   if _interface_of(project, key).structure is not None]) if dim == 2 else []
+    staged_ties = list(ties.values()) if dim == 2 else []
+    # Said out loud rather than left to be noticed in the deck (plan sec 7.13). The
+    # restriction above stays -- nothing here invents a construction sequence for a 3D
+    # structure -- but the phases panel is visible in 3D projects, so a user can build a
+    # sequence in one and would otherwise get a deck quietly missing a part of it.
+    #
+    # Scoped to the case where the guards actually withhold something. A 3D project with
+    # no structures loses nothing to them, and a warning on every 3D export is one people
+    # stop reading. Deliberately *not* a claim that staging is plane-strain only: an
+    # explicit phase list activates and deactivates its parts in 3D exactly as in 2D, and
+    # `test_kratos_3d.py` holds both halves of that.
+    if dim == 3 and (beam_blocks or interface_blocks):
+        warnings.append(
+            "staged construction is plane strain only where structures are concerned: "
+            "this 3D model's walls, members and contacts are not staged, so they are "
+            "present in every stage and get no installation stage of their own. A phase "
+            "list still switches soil bodies, panels and anchors on and off as usual."
+        )
+
+    # Which model keys each deck part needs alive. Parts not named here own nothing and
+    # are in every stage: the domain's own faces, and the node groups a tie holds.
+    stageable = set(project.stageable_keys())
+    owners: dict[str, tuple[str, ...]] = {name: () for name, *_ in parts}
+    for key, _, _ in blocks:
+        if key in stageable:
+            owners[names[key]] = (key,)
+        else:
+            # An interface block is `<interface>__<body>`: it needs both, which is what
+            # makes digging a lift out take the contact against it too.
+            stem, _, body = key.partition("__")
+            owners[names[key]] = tuple(k for k in (stem, body) if k in stageable)
+    owners.update({name: (key,) for name, key in boundary_owners.items()})
+    owners.update({names[key]: (key,) for key in condition_keys if key in stageable})
+    owners.update({f"{names[key]}_Support": (key,) for key in anchor_supports
+                   if key in stageable})
+
+    interface_parts = tuple(names[key] for key, _, _ in interface_blocks)
+    deck = _Deck(
+        name=deck_name(project),
+        owners=owners,
+        bodies=tuple(body_parts),
+        soils=tuple(names[key] for key, _, _ in soil_blocks
+                    if key.startswith("soil_")),
+        interfaces=interface_parts,
+        retained=tuple(names[key] for key, _ in retained_blocks),
+        beams=tuple(names[key] for key, _, _ in beam_blocks),
+        structures=tuple(names[key] for key, _, _ in beam_blocks + anchor_blocks),
+        ties=tuple((master, slave, key) for key, (master, slave) in ties.items())
+             if dim == 2 else (),
+        right_side=right_side_part,
+    )
+    stages = _stages(project, deck, wall_parts, staged_ties)
+    # The initial stage reads a materials file of its own. Rendered only when a stage
+    # actually names it, so an unphased deck is not shipped a file nothing opens.
+    initial_materials = None
+    if include_materials and any(
+            stage.materials_filename == kratos_processes.INITIAL_MATERIALS_FILENAME
+            for stage in stages):
+        initial_materials, _ = material_parameters(
+            project, part_materials, dim, beam_properties, anchor_properties,
+            panel_properties, interface_properties, k0=True)
     processes = kratos_processes.project_parameters(
         _boundary_constraints(project, dim, boundaries) + anchor_fixities,
         [(name, variable, load_mask, value) for name, variable, value in active_loads],
+        stages,
+        normal_load_processes,
+        water=(project.water.y, project.water.specific_weight),
+        deck_name=deck_name(project),
+        domain_size=dim,
+        body_parts=body_parts,
+        # A Timoshenko beam and a shell carry rotations; soil, a truss tendon and an
+        # interface do not, and dofs no element uses cost memory for nothing.
+        rotation_dofs=bool(beam_blocks or panel_blocks),
     )
     return {
         "mdpa": _render(coordinates, node_id, numbered, condition_blocks, parts),
+        # What the deck's files are named after -- the .mdpa itself, the results, and
+        # `model_import_settings.input_filename` inside the parameters above, which is
+        # how Kratos finds the .mdpa again. Returned rather than re-derived by whoever
+        # writes the files, so the name in the deck and the name on disk cannot drift.
+        "deck_name": deck_name(project),
+        # The node table on its own, in the deck's own numbering. The viewport's node-ID
+        # labels can only be drawn from here: a gmsh tag is not a Kratos ID -- `node_id`
+        # above renumbers 1..N over the tags the blocks actually use, and the interface
+        # split has already added nodes of its own -- so nothing short of this pass knows
+        # what number a node will carry in the file.
+        "nodes": [[index, *coordinates[tag]]
+                  for tag, index in sorted(node_id.items(), key=lambda item: item[1])],
+        # Where each element's number goes when the viewport draws it: its own centre.
+        # Same pass, same reason as the node table -- an element id is assigned here, in
+        # emission order, and exists nowhere before this function runs.
+        "elements": _element_labels(coordinates, node_id, numbered),
         "materials": materials,
+        "initial_materials": initial_materials,
         "project_parameters": processes,
         "stats": mesh.stats.to_dict(),
         "meshed_keys": mesh.meshed_keys,
@@ -268,6 +461,176 @@ def export_project(project: Project, settings: MeshRequest,
     }
 
 
+
+
+def _adjacent_material(project: Project, key: str, names: dict[str, str],
+                       material_by_part: dict[str, str]):
+    """The material of the soil body an interface block runs against, or None.
+
+    None for a contact with no soil behind it -- a free interface in air, or a body with
+    no material -- in which case the section has to carry the answer itself.
+    """
+    body = key.partition("__")[2]
+    material_id = material_by_part.get(names.get(body, ""))
+    return project.material(material_id) if material_id else None
+
+
+# ── Stages ──────────────────────────────────────────────────────────────────
+# Turning `Project.phases` into the deck's stages. The phase model speaks the user's
+# vocabulary -- one drawn `Interface`, one soil body per lift -- and the deck speaks its
+# own, in which that interface is eight parts and each of them is tied to the body it
+# runs against. Translating between the two is this section's whole job, and it is why
+# `app.phases` knows nothing about Kratos: the model has no business knowing that
+# digging out a lift also removes a contact.
+
+WALL_OUTPUT_VARIABLES = ("BENDING_MOMENT", "SHEAR_FORCE", "AXIAL_FORCE",
+                         "TOTAL_DISPLACEMENT")
+WALL_EXTRAPOLATED = ("AXIAL_FORCE", "BENDING_MOMENT", "SHEAR_FORCE")
+INTERFACE_VARIABLES = ("GEO_EFFECTIVE_TRACTION_VECTOR",)
+RIGHT_SIDE_PART = "Right_Side_Of_Right_Interfaces"
+"""The retained-side nodes of the retained-side interfaces, as a node-only sub-model
+part. Written only when something reads it -- the `JsonOutputProcess` a staged deck
+carries -- so an unphased project does not grow a part it never names (plan sec C7)."""
+
+
+@dataclass(frozen=True)
+class _Deck:
+    """What the stage builder needs to know about the deck it is staging.
+
+    Everything here is in *deck* part names except `owners`, which is the bridge: for
+    each deck part, the model keys it needs alive. A part with no owners -- the domain's
+    own `Bottom_Fixed`, a tie's node groups -- is in every stage.
+    """
+    name: str
+    owners: dict[str, tuple[str, ...]]
+    bodies: tuple[str, ...]
+    soils: tuple[str, ...]
+    interfaces: tuple[str, ...]
+    retained: tuple[str, ...]
+    beams: tuple[str, ...]
+    structures: tuple[str, ...]
+    ties: tuple[tuple[str, str, str], ...] = ()
+    right_side: str | None = None
+
+
+def _deck_active(deck: _Deck, keys: set[str]) -> frozenset[str]:
+    """The deck parts alive when `keys` are the model's active parts.
+
+    One rule, applied to everything: a deck part is alive while every model key it was
+    built from is. That is what pairs an interface with the soil body it holds (it is
+    owned by both, so digging the body away takes it too) and what makes a lift's
+    stretch of the left edge vanish with the lift -- without either being written down
+    as a special case anywhere.
+    """
+    return frozenset(name for name, owned in deck.owners.items()
+                     if all(key in keys for key in owned))
+
+
+def _stages(project: Project, deck: _Deck, staged_parts: list[str],
+            staged_ties: list[tuple[str, str]]) -> list[kratos_processes.Stage]:
+    """The deck's stages, in execution order.
+
+    A project with no phases exports exactly the deck it exported before staged
+    construction existed -- one stage, or the implicit two a sheet pile has always
+    produced. That is the compatibility contract, and it is a gate rather than a
+    special case of the staged path so that nothing in the staged path can reach a
+    project that never asked for it.
+    """
+    if not project.phases:
+        if not staged_parts:
+            return [kratos_processes.Stage(name=kratos_processes.STAGE_NAME)]
+        return [
+            kratos_processes.Stage(
+                name=kratos_processes.INITIAL_STAGE_NAME, modeler=True,
+                deactivate=tuple(staged_parts), ties=tuple(staged_ties)),
+            kratos_processes.Stage(
+                name=kratos_processes.WALL_INSTALLATION_STAGE_NAME,
+                activate=tuple(staged_parts), start_time=1.0),
+        ]
+    return _phased_stages(project, deck)
+
+
+def _phased_stages(project: Project, deck: _Deck) -> list[kratos_processes.Stage]:
+    """One stage per phase. Raises `phases.PhaseError` if the tree does not linearise."""
+    steps = phases.transitions(project)
+
+    # The reference deck starts at -2.0: its K0 stage and its null step sit at negative
+    # time so that real construction starts at 0 and two runs' result files line up
+    # stage for stage. Cosmetic to Kratos, and free to reproduce -- the leading run of
+    # phases that are not ordinary plastic steps is exactly what "before construction"
+    # means.
+    settling = 0
+    for phase, _, _ in steps:
+        if phase.calculation == "Plastic":
+            break
+        settling += 1
+
+    out: list[kratos_processes.Stage] = []
+    keys = set(project.stageable_keys())
+    live = _deck_active(deck, keys)
+    for index, (phase, switched_on, switched_off) in enumerate(steps):
+        was, before = live, keys
+        keys = (set(keys) - switched_off) | switched_on
+        live = _deck_active(deck, keys)
+
+        # The operations name element-carrying parts only, which is what Activate and
+        # Deactivate act on; a node group vanishes from the process lists instead, by
+        # way of the filter `Stage.active` drives. Derived from the two states rather
+        # than from the phase's own lists, so the interface that goes with a body needs
+        # no rule of its own here.
+        activate = tuple(name for name in deck.bodies if name in live and name not in was)
+        deactivate = tuple(name for name in deck.bodies
+                           if name in was and name not in live)
+
+        k0 = phase.calculation == "K0 procedure"
+        arriving = [name for name in deck.interfaces if name in activate]
+        # Stresses carry over for what was already there *and* still is. A part being
+        # installed in this stage has no previous stress to carry, which is why the
+        # reference leaves the anchor out of stage 5 and puts it back in stage 6.
+        carried = tuple(name for name in deck.interfaces + deck.structures
+                        if name in live and name in was)
+        beams = tuple(name for name in deck.beams if name in live)
+        retained = tuple(name for name in deck.retained if name in live)
+
+        extrapolate = ()
+        if beams:
+            extrapolate += ((beams, WALL_EXTRAPOLATED),)
+        if retained:
+            extrapolate += ((retained, INTERFACE_VARIABLES),)
+
+        output = ()
+        if beams:
+            output += ((beams[0], "output_wall", WALL_OUTPUT_VARIABLES),)
+        if retained and deck.right_side:
+            output += ((deck.right_side, "output_interface", INTERFACE_VARIABLES),)
+
+        out.append(kratos_processes.Stage(
+            name=kratos_processes.stage_name(index, phase.name),
+            activate=activate,
+            deactivate=deactivate,
+            active=live,
+            bodies=tuple(name for name in deck.bodies if name in live),
+            start_time=float(index - settling),
+            modeler=index == 0,
+            # The tie holds the two copies of a split node together for as long as the
+            # structure that split them is not installed. Derived from the interface's
+            # own activation rather than counted: in the reference that is stages 1 and
+            # 2, and in a project whose wall goes in later it is however many stages
+            # come first.
+            ties=tuple((master, slave) for master, slave, key in deck.ties
+                       if key not in keys),
+            k0_parts=tuple(name for name in deck.soils if name in live) if k0 else (),
+            find_neighbours=tuple(arriving),
+            final_stresses=carried,
+            extrapolate=extrapolate,
+            json_output=output,
+            reset_displacements=phase.reset_displacements,
+            max_iterations=phase.max_iterations,
+            tolerated_error=phase.tolerated_error,
+            materials_filename=(kratos_processes.INITIAL_MATERIALS_FILENAME if k0
+                                else kratos_processes.MATERIALS_FILENAME),
+        ))
+    return out
 
 
 # ── Interfaces ──────────────────────────────────────────────────────────────
@@ -279,7 +642,8 @@ def _interface_elements(project: Project, dim: int,
                         world: dict[int, tuple[float, float, float]],
                         coordinates: dict[int, tuple[float, float, float]],
                         warnings: list[str]
-                        ) -> list[tuple[str, str, list[list[int]]]]:
+                        ) -> tuple[list[tuple[str, str, list[list[int]]]],
+                                   list[tuple[str, list[int], list[int]]]]:
     """Unglue the soil along every active interface and write the contact elements.
 
     The topology is `app.interfaces`' job and is done on connectivity alone; what
@@ -290,6 +654,10 @@ def _interface_elements(project: Project, dim: int,
     than being left on the wall's own node.
 
     A 3D project exports no interface: see the `INTERFACES` table for why.
+
+    Also returns, per interface that follows a staged structure, the raw node tags to
+    tie together with a master/slave constraint while that structure is not installed
+    yet -- see `_split_ties`.
     """
     active = project.active_interfaces
     if not active:
@@ -298,7 +666,7 @@ def _interface_elements(project: Project, dim: int,
                 "interfaces are plane-strain only and none was written into this 3D "
                 "deck; the structures are meshed bonded to the soil."
             )
-        return []
+        return [], []
 
     beam_rows = {key: rows for key, _, rows in beam_blocks}
     specs = []
@@ -337,9 +705,14 @@ def _interface_elements(project: Project, dim: int,
     for new_tag, source in split.duplicates.items():
         coordinates[new_tag] = coordinates[source]
         world[new_tag] = world[source]
-    _follow_the_soil(conditions, before, split)
+    # The nodes the structures own, so a load standing on one is not dragged onto the
+    # soil beside it. Beams only: a panel is a 3D wall and interfaces are plane strain.
+    _follow_the_soil(conditions, before, split,
+                     frozenset(node for _, _, rows in beam_blocks
+                               for row in rows for node in row))
 
     out = []
+    ties = []
     for interface in active:
         rows = split.elements.get(interface.id) or []
         if not rows:
@@ -351,8 +724,92 @@ def _interface_elements(project: Project, dim: int,
                 f"no Kratos interface element is mapped for {per_side} nodes a side in "
                 f"{dim}D. Mesh the section with linear or quadratic triangles."
             )
-        out.append((interface.id, name, rows))
-    return out
+        # One block per soil body the contact runs against, not one per interface. A
+        # lift is deactivated in its own phase and the contact along it has to go at the
+        # same moment: an interface still holding a face whose soil has been dug away
+        # would carry shear against nothing. The reference deck splits the same way --
+        # `Interface_Excavated_Soil_1` beside `Interface_Soil_Top_Right` -- and a
+        # `side="both"` contact contributes to two bodies at once, one per face.
+        for body_key, body_rows in _interface_by_body(rows, per_side, soil_blocks):
+            out.append((f"{interface.id}__{body_key}", name, body_rows))
+        # Ties stay per interface. They hold the two copies of a split node together
+        # while the structure is not installed, which is one question about the whole
+        # line, not one per body it happens to pass.
+        if interface.structure is not None:
+            master, slave = _split_ties(rows, per_side, split.duplicates)
+            if master and slave:
+                ties.append((interface.id, master, slave))
+    return out, ties
+
+
+def _interface_by_body(rows: list[list[int]], per_side: int,
+                       soil_blocks: list[tuple[str, str, list[list[int]]]]
+                       ) -> list[tuple[str, list[list[int]]]]:
+    """Group contact elements by the soil body each one runs against.
+
+    An interface element's second half is its soil-side copy of the split nodes (see
+    `_split_ties`), and those nodes came out of exactly one soil element, so they answer
+    which body this stretch of contact belongs to. A node on the seam between two bodies
+    belongs to both, so the body is the one *all* of the element's soil-side nodes
+    agree on; where they cannot agree -- which happens only if a contact element spans a
+    seam -- the first in block order is taken, so the grouping is deterministic rather
+    than dependent on set iteration.
+    """
+    bodies: dict[int, list[str]] = {}
+    for key, _, body_rows in soil_blocks:
+        if not key.startswith("soil_"):
+            continue
+        for row in body_rows:
+            for node in row:
+                if key not in bodies.setdefault(node, []):
+                    bodies[node].append(key)
+
+    grouped: dict[str, list[list[int]]] = {}
+    for row in rows:
+        shared: list[str] | None = None
+        for node in row[per_side:]:
+            owners = bodies.get(node, [])
+            shared = owners if shared is None else [k for k in shared if k in owners]
+        if not shared:
+            # No soil on this side at all: the contact runs against the structure only,
+            # which nothing in the deck can name a body for.
+            continue
+        grouped.setdefault(shared[0], []).append(row)
+    return list(grouped.items())
+
+
+def _split_ties(rows: list[list[int]], per_side: int, duplicates: dict[int, int]
+                ) -> tuple[list[int], list[int]]:
+    """Pair up the soil-side copies of every node the interface split into two.
+
+    A node in the middle of the line gets exactly two copies, one per face (see
+    `app.interfaces`'s module docstring) -- while the structure that owns the line is
+    staged (deactivated, then activated on installation -- see `kratos_processes`),
+    nothing else holds those two copies together, so they need a master/slave tie for
+    the stage(s) before installation. A node with only one copy is the toe, where the
+    ground closes under the structure and is already continuous; it needs no tie.
+
+    The pairing is exact, not discovered by search: each node in one list has exactly one
+    true partner, at zero distance, in the other. That made
+    `minimum_number_of_neighbouring_nodes` 1 here for a while, and running the deck
+    showed why it cannot be -- see `kratos_processes.MASTER_SLAVE_NEIGHBOURS`. The
+    geometry below is unchanged by that; only what Kratos is asked to do with it.
+    """
+    by_original: dict[int, set[int]] = {}
+    for row in rows:
+        for node in row[per_side:]:
+            original = duplicates.get(node)
+            if original is not None:
+                by_original.setdefault(original, set()).add(node)
+
+    master, slave = [], []
+    for copies in by_original.values():
+        if len(copies) != 2:
+            continue
+        first, second = sorted(copies)
+        master.append(first)
+        slave.append(second)
+    return master, slave
 
 
 def _segments(entities: list[int]) -> list[list[int]]:
@@ -369,17 +826,32 @@ def _segments(entities: list[int]) -> list[list[int]]:
 
 
 def _follow_the_soil(conditions: list[tuple[str, str, list[list[int]]]],
-                     before: list[list[int]], split: interfaces.Split) -> None:
+                     before: list[list[int]], split: interfaces.Split,
+                     structural: frozenset[int] = frozenset()) -> None:
     """Move every condition standing on a split node onto the copy its own soil got.
 
-    A condition is a face of one continuum element, so the element that contained all of
-    its nodes before the split is the body it belongs to, and it is renamed exactly as
-    that element was.
+    A condition is usually a face of one continuum element, so the element that
+    contained all of its nodes before the split is the body it belongs to, and it is
+    renamed exactly as that element was.
+
+    **Unless it stands on a structure.** A load running down a wall is on the wall, not
+    on either copy of the ground beside it, and the wall keeps the original nodes while
+    both soil sides take copies. Left to the rule above, such a condition finds whichever
+    soil element happens to hold all its nodes first -- the retained side -- and moves
+    there. The excavation's own water load then pressed the retained ground *away* from
+    the wall instead of pressing on the exposed face, and the retained interface's
+    traction fell to zero and went into tension as the pit was dug. Found by running the
+    deck and comparing tractions stage by stage; nothing in the file looks wrong.
+
+    So a row whose nodes all belong to a structure is left where it is, which is on the
+    structure.
     """
     sources = set(split.duplicates.values())
     for _, _, rows in conditions:
         for index, row in enumerate(rows):
             if not sources.intersection(row):
+                continue
+            if structural and set(row) <= structural:
                 continue
             owner = next((i for i, element in enumerate(before)
                           if set(row) <= set(element)), None)
@@ -389,7 +861,11 @@ def _follow_the_soil(conditions: list[tuple[str, str, list[list[int]]]],
 
 
 def _interface_of(project: Project, key: str):
-    return next(interface for interface in project.interfaces if interface.id == key)
+    """The interface a block key names. Blocks are emitted one per soil body the
+    contact runs against (`_interface_by_body`), so the key carries the body after a
+    `__` and the interface's own id is what comes before it."""
+    stem = key.partition("__")[0]
+    return next(interface for interface in project.interfaces if interface.id == stem)
 
 def _anchor_ties(project: Project, dim: int,
                  world: dict[int, tuple[float, float, float]]
@@ -535,7 +1011,11 @@ def _bodies(project: Project, dim: int) -> dict[str, list[int]]:
     for group_dim, tag in gmsh.model.getPhysicalGroups(dim):
         name = gmsh.model.getPhysicalName(group_dim, tag)
         tagged[name] = [int(t) for t in gmsh.model.getEntitiesForPhysicalGroup(group_dim, tag)]
-    load_keys = {load.id for load in project.loads}
+    # A normal load's key names a display ribbon at this dimension (build's
+    # `_build_display_only`) and the line its condition sits on one dimension down, so
+    # it is excluded here for the same reason a load id is: the symbol is not a body.
+    load_keys = ({load.id for load in project.loads}
+                 | {load.id for load in project.normal_loads})
     return {key: tagged[key] for key in project.part_keys()
             if key in tagged and key not in NOT_MATERIAL and key not in load_keys}
 
@@ -711,6 +1191,92 @@ def _load_conditions(project: Project, dim: int,
     return out
 
 
+def _normal_load_conditions(project: Project, dim: int, warnings: list[str],
+                            world: dict[int, tuple[float, float, float]] | None = None
+                            ) -> list[tuple[str, str, list[list[int]]]]:
+    """One condition per active `NormalLoad`, off the line `build._embed_beams` already
+    gave its own physical group -- the same way a free interface's line is found.
+
+    Unlike `_load_conditions`, this does not scan the boundary at a fixed elevation: a
+    normal load can run down a vertical face, which has no single elevation to scan
+    for, so it is read straight off the mesh instead.
+    """
+    if project.dimension != 2 and any(n.active for n in project.normal_loads):
+        warnings.append(
+            "a normal load is plane-strain only and none was written into this 3D "
+            "deck; it is drawn at the section plane but applies no pressure."
+        )
+    out = []
+    for load in project.active_normal_loads:
+        rows = _segments(_tagged(1).get(load.id, []))
+        if not rows:
+            raise ExportError(
+                f"normal load {load.name!r} has no mesh along its line -- the line it "
+                "follows lies outside the soil in this section, so there is nothing "
+                "for the condition to hold."
+            )
+        per_row = len(rows[0])
+        name = NORMAL_LOAD_CONDITIONS.get((dim, per_row))
+        if name is None:
+            raise ExportError(
+                f"no Kratos condition is mapped for a normal load with {per_row} "
+                f"nodes a segment in {dim}D. Mesh the section with linear or "
+                "quadratic elements."
+            )
+        # Along the drawn line, so the whole loaded surface carries one outward
+        # normal; `_align_conditions` then keeps that direction when it puts each
+        # segment onto an element edge.
+        if world is not None:
+            rows = _drawn_order(rows, [tuple(point) for point in load.points], world)
+        out.append((load.id, name, rows))
+    return out
+
+
+def _drawn_order(rows: list[list[int]], path: list[tuple[float, float]],
+                 world: dict[int, tuple[float, float, float]]) -> list[list[int]]:
+    """Turn each harvested segment to run the way its line was drawn.
+
+    gmsh hands a curve's elements out in the direction it happened to build the curve,
+    which is not always the direction the user drew it, and for a line the node order is
+    not bookkeeping:
+
+    *   a beam's order is its local axis, so reversing it flips the sign of the axial
+        force, bending moment and shear that come back out of the run;
+    *   a normal load's order is its normal -- the pressure acts along the 90-degree
+        rotation of the tangent -- so a reversed segment pushes the wrong way.
+
+    The drawn polyline is the one statement of intent there is, so each segment is
+    ordered by how far along it its two ends lie. Measuring along the whole polyline
+    rather than per leg is what makes a corner work: the segments either side of it are
+    ordered by the same rule, without either needing to know which leg it sits on.
+    """
+    # Two components for a drawn 2D line, three for a member in space: the path says
+    # which, and `world` is always (x, y, z), so the comparison is simply truncated to
+    # however many the path carries.
+    if len(path) < 2:
+        return rows
+    span = len(path[0])
+
+    def along(tag: int) -> float:
+        point = world[tag][:span]
+        best, travelled = None, 0.0
+        for start, end in zip(path, path[1:]):
+            step = [b - a for a, b in zip(start, end)]
+            length = math.sqrt(sum(d * d for d in step))
+            if not length:
+                continue
+            offset = [p - a for p, a in zip(point, start)]
+            reach = min(1.0, max(0.0, sum(o * d for o, d in zip(offset, step))
+                                 / length ** 2))
+            away = math.sqrt(sum((o - d * reach) ** 2 for o, d in zip(offset, step)))
+            if best is None or away < best[0]:
+                best = (away, travelled + reach * length)
+            travelled += length
+        return 0.0 if best is None else best[1]
+    return [[row[1], row[0], *row[2:]] if along(row[1]) < along(row[0]) else row
+            for row in rows]
+
+
 def _align_conditions(conditions: list[tuple[str, str, list[list[int]]]],
                       soil_blocks: list[tuple[str, str, list[list[int]]]]) -> None:
     """Rewrite each boundary condition onto the element edge it stands on.
@@ -720,21 +1286,34 @@ def _align_conditions(conditions: list[tuple[str, str, list[list[int]]]],
     flips elements the mesher gave inside out, moving the edge again. Kratos wants the
     element's order exactly -- see `EDGES` for what it does with anything else.
 
-    A boundary edge belongs to one element, so the first ordering found for a set of
-    nodes is the only one a condition can sit on. 3D faces are left alone: Kratos rotates
-    those itself, and only the continuum blocks are offered here in any case.
+    A boundary edge on the outside of the model belongs to one element, and there is
+    one ordering to take. An edge *inside* it belongs to two, which face each other and
+    traverse it in opposite directions -- the floor of an excavation is the case that
+    matters, shared between the lift being dug out and the ground that stays. Taking
+    whichever was seen first put the water load on the pit floor the wrong way up, so
+    where both exist the one already agreeing with the condition is kept. That is the
+    direction the line was drawn in (`_drawn_order`), which is the only statement of
+    which side of an internal face the load acts on.
+
+    3D faces are left alone: Kratos rotates those itself, and only the continuum blocks
+    are offered here in any case.
     """
-    edges: dict[frozenset[int], tuple[int, ...]] = {}
+    edges: dict[frozenset[int], list[tuple[int, ...]]] = {}
     for _, _, rows in soil_blocks:
         for row in rows:
             for order in EDGES.get(len(row), ()):
                 edge = tuple(row[index] for index in order)
-                edges.setdefault(frozenset(edge), edge)
+                found = edges.setdefault(frozenset(edge), [])
+                if edge not in found:
+                    found.append(edge)
     for _, _, rows in conditions:
         for index, row in enumerate(rows):
-            edge = edges.get(frozenset(row))
-            if edge is not None and len(edge) == len(row):
-                rows[index] = list(edge)
+            found = [edge for edge in edges.get(frozenset(row), ())
+                     if len(edge) == len(row)]
+            if not found:
+                continue
+            rows[index] = list(next((edge for edge in found if list(edge) == row),
+                                    found[0]))
 
 
 def _under_load(corners: list[int], world: dict[int, tuple[float, float, float]],
@@ -755,8 +1334,16 @@ def _part_names(project: Project) -> dict[str, str]:
     """Part key -> sub-model part name, unique and safe for a Kratos deck."""
     used = set(RESERVED)
     names: dict[str, str] = {}
-    for layer in project.layers:
-        names[f"soil_{layer.id}"] = _unique(_sanitise(layer.name) or layer.id, used)
+    # In body order, not layer order, so a lift is named after the layer it was dug out
+    # of: `Upper_Sand`, then `Upper_Sand_lift1`. A staged body has no name of its own in
+    # the project -- the user named the layer, not the lift -- so it takes the layer's
+    # and says which part of it this is.
+    layers = {f"soil_{layer.id}": layer for layer in project.layers}
+    for key, *_ in project.soil_bodies():
+        stem, _, suffix = key.partition("__")
+        layer = layers[stem]
+        base = _sanitise(layer.name) or layer.id
+        names[key] = _unique(f"{base}_{suffix}" if suffix else base, used)
     for part in project.custom_parts:
         names[part.key] = _unique(_sanitise(part.label) or part.key, used)
     for load in project.loads:
@@ -767,9 +1354,24 @@ def _part_names(project: Project) -> dict[str, str]:
         names[anchor.id] = _unique(_sanitise(anchor.name) or anchor.id, used)
     for interface in project.interfaces:
         names[interface.id] = _unique(_sanitise(interface.name) or interface.id, used)
+    for load in project.normal_loads:
+        names[load.id] = _unique(_sanitise(load.name) or load.id, used)
     for key in project.part_keys():
         names.setdefault(key, _unique(key, used))
     return names
+
+
+def deck_name(project: Project) -> str:
+    """The stem the deck's files share: `<name>.mdpa`, `<name>_<stage>.post.res`, and
+    `model_import_settings.input_filename` inside ProjectParameters.json.
+
+    The project's own name, reduced to what every filesystem accepts -- the same rule
+    `live/js/export.js` applies when it names the archive, so the file a download writes
+    and the file a calculation runs are named alike. Public because two callers need the
+    same answer: the export that puts it in the parameters, and `app.calculate`, which
+    has to write the .mdpa under exactly the name those parameters ask Kratos for.
+    """
+    return re.sub(r"[^A-Za-z0-9]+", "_", project.name).strip("_") or "model"
 
 
 def _sanitise(name: str) -> str:
@@ -885,6 +1487,62 @@ def _boundary_parts(boundaries: list[tuple[str, int, list[int]]]
     return [(name, nodes, [], []) for name, _, nodes in boundaries]
 
 
+def _segment_boundaries(project: Project, boundaries: list[tuple[str, int, list[int]]],
+                        body_nodes: dict[str, set[int]], names: dict[str, str],
+                        ) -> tuple[list[tuple[str, int, list[int]]], dict[str, str]]:
+    """Split a domain face wherever an excavation lift meets it.
+
+    A lift is deactivated in its own phase, and its stretch of the domain edge has to
+    go with it: a roller still holding the ground that was just dug away would restrain
+    soil that is no longer there. So the face the pit reaches becomes one part per lift
+    -- the reference deck's `Excavated_Soil_N_Left_Edge` -- plus what is left, which
+    keeps the face's own name and holds the ground that is never dug.
+
+    Only where it is needed. A face no lift touches (the far side, the bottom) never
+    loses a body, so splitting it would buy nothing and add parts to every process list
+    that names it. `Top_Surface` is skipped even where a lift does reach it: it is the
+    free surface and is never constrained (`_boundary_constraints`), so segmenting it
+    would produce parts nothing reads.
+
+    Segments overlap by one node at each seam, and deliberately: the node between two
+    lifts belongs to both, and the node at the final floor belongs to the last lift
+    *and* to the ground below it. Whichever of the two is deactivated, the other still
+    names that node and still holds it.
+
+    Returns the boundaries and, beside them, which soil body each new segment belongs
+    to. A constraint on a segment has to vanish in the stage its lift is dug out in
+    (plan sec C3), and reading that back off the part's name afterwards would be a
+    second, weaker copy of the naming rule below.
+    """
+    lifts = [key for key, _, _, inside in project.soil_bodies()
+             if inside and "__lift" in key]
+    if not lifts:
+        return boundaries, {}
+
+    # Nodes that exist only in lifts. Subtracting these rather than all lift nodes is
+    # what leaves the seams in the remainder -- and it leaves structural nodes lying on
+    # the face alone, which belong to no soil body at all.
+    permanent = set().union(*(nodes for key, nodes in body_nodes.items()
+                              if key not in lifts)) if body_nodes else set()
+    exclusive = set().union(*(body_nodes.get(key, set()) for key in lifts)) - permanent
+
+    out: list[tuple[str, int, list[int]]] = []
+    owners: dict[str, str] = {}
+    for name, axis, nodes in boundaries:
+        touching = [key for key in lifts
+                    if body_nodes.get(key, set()) & set(nodes)] if name != "Top_Surface" \
+            else []
+        if not touching:
+            out.append((name, axis, nodes))
+            continue
+        for key in touching:
+            segment = sorted(set(nodes) & body_nodes[key])
+            out.append((f"{names[key]}_{name}", axis, segment))
+            owners[f"{names[key]}_{name}"] = key
+        out.append((name, axis, [n for n in nodes if n not in exclusive]))
+    return out, owners
+
+
 
 
 
@@ -915,7 +1573,12 @@ def _boundary_constraints(project: Project, dim: int,
 def _part_materials(project: Project, names: dict[str, str],
                     blocks: list[tuple[str, str, list[list[int]]]]) -> list[tuple[str, str]]:
     """(sub-model part name, material id) for every exported body that has a material."""
+    # Keyed by body, not by layer: a lift is still the layer it was dug out of, so
+    # `soil_L1__lift1` has to find `soil_L1`'s material or the deck exports a body with
+    # no material at all.
     material_of = {f"soil_{layer.id}": layer.mat for layer in project.layers}
+    material_of.update({key: material_of[key.partition("__")[0]]
+                        for key, *_ in project.soil_bodies()})
     material_of.update({p.key: p.mat for p in project.custom_parts if p.mat})
     seen: list[tuple[str, str]] = []
     for key, _, _ in blocks:
@@ -923,6 +1586,30 @@ def _part_materials(project: Project, names: dict[str, str],
         if entry[1] and entry not in seen:
             seen.append(entry)
     return seen
+
+
+def _element_labels(coordinates: dict[int, tuple[float, float, float]],
+                    node_id: dict[int, int],
+                    elements: list[tuple[str, list[tuple[int, int, list[int]]]]]
+                    ) -> list[list[float]]:
+    """`[element id, x, y, z]` per element, the point being its centroid.
+
+    The mean of *all* the element's nodes, not just its corners: for the simplices this
+    exporter writes the two agree exactly, because a quadratic element's extra nodes are
+    edge midpoints and the mean of the midpoints of a simplex's edges is its centroid.
+    So an element's label needs no knowledge of its order to be placed in the middle of
+    it.
+    """
+    placed = {index: coordinates[tag] for tag, index in node_id.items()}
+    labels: list[list[float]] = []
+    for _class_name, entries in elements:
+        for entry_id, _property_id, connectivity in entries:
+            corners = [placed[node] for node in connectivity]
+            count = len(corners)
+            labels.append([entry_id] + [sum(corner[axis] for corner in corners) / count
+                                        for axis in range(3)])
+    labels.sort(key=lambda row: row[0])
+    return labels
 
 
 # ── Rendering ───────────────────────────────────────────────────────────────

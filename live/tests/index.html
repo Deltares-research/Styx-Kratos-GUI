@@ -46,6 +46,7 @@
 <script src="../js/buffers.js"></script>
 <script src="../js/model.js"></script>
 <script src="../js/ruler.js"></script>
+<script src="../js/mesh-labels.js"></script>
 <script src="../js/patches.js"></script>
 <script src="../js/canvas-renderer.js"></script>
 <script src="../js/viewport.js"></script>
@@ -55,10 +56,16 @@
 <script src="../js/beams.js"></script>
 <script src="../js/anchors.js"></script>
 <script src="../js/interfaces.js"></script>
+<script src="../js/normal-loads.js"></script>
+<script src="../js/phases.js"></script>
 <script src="../js/import-dialog.js"></script>
 <script src="../js/mdpa-import-dialog.js"></script>
 <script src="../js/soil-volume-dialog.js"></script>
 <script src="../js/export.js"></script>
+<script src="../js/results-render.js"></script>
+<script src="../js/results.js"></script>
+<script src="../js/results-view.js"></script>
+<script src="../js/calculate.js"></script>
 
 <script src="harness.js"></script>
 <script src="test-api.js"></script>
@@ -68,6 +75,7 @@
 <script src="test-canvas-renderer.js"></script>
 <script src="test-viewport.js"></script>
 <script src="test-ruler.js"></script>
+<script src="test-mesh-labels.js"></script>
 <script src="test-mesh-settings.js"></script>
 <script src="test-soil-surface.js"></script>
 <script src="test-layout.js"></script>
@@ -78,13 +86,23 @@
 <script src="test-beams.js"></script>
 <script src="test-anchors.js"></script>
 <script src="test-interfaces.js"></script>
+<script src="test-normal-loads.js"></script>
 <script src="test-toolbar.js"></script>
 <script src="test-dock.js"></script>
 <script src="test-export.js"></script>
+<script src="test-calculate.js"></script>
+<script src="test-results.js"></script>
+<script src="test-results-render.js"></script>
 <script src="test-download.js"></script>
 <script src="test-zip.js"></script>
 <script src="test-empty-layers.js"></script>
 <script src="test-material-library.js"></script>
+<script src="test-water.js"></script>
+<!-- The generated parity fixture, before the suite that reads it. Owned by
+     server/tests/test_phase_parity.py; see live/tests/run_headless.py to run
+     these particular tests without a browser. -->
+<script src="fixtures/phase-cases.js"></script>
+<script src="test-phases.js"></script>
 
 <script>
 T.run().then(function (results) {

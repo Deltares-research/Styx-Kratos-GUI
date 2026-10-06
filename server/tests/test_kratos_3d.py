@@ -20,9 +20,17 @@ import json
 import pytest
 
 from app import build, kratos
+from app.kratos_materials import KILO
 from app.schemas import MeshRequest, Project
 from app.seed import seed_project
 from tests import mdpa
+
+
+def _stage_settings(export: dict) -> dict:
+    """The lone stage's settings, found by position rather than by name -- the
+    orchestrator can name its one stage however it likes."""
+    doc = json.loads(export["project_parameters"])
+    return next(iter(doc["stages"].values()))["stage_settings"]
 
 SECTION_AZ26 = {"id": "az26", "name": "AZ 26-700", "E": 2.1e8, "nu": 0.3,
                 "area": 0.0198, "inertia": 5.52e-4, "density": 7850.0, "spacing": 1.0}
@@ -136,7 +144,7 @@ def test_the_panel_section_becomes_a_material_entry_mapped_to_its_part(walled):
     variables = entry["Material"]["Variables"]
 
     assert entry["Material"]["constitutive_law"]["name"]
-    assert variables["YOUNG_MODULUS"] == pytest.approx(2.1e8)
+    assert variables["YOUNG_MODULUS"] == pytest.approx(2.1e8 * KILO)
     assert variables["POISSON_RATIO"] == pytest.approx(0.3)
     assert variables["THICKNESS"] == pytest.approx(0.4)
     assert variables["DENSITY"] == pytest.approx(7850.0)
@@ -185,7 +193,7 @@ def test_the_member_takes_the_sheet_piles_profile_library(walled):
     entry = next(e for e in entries if e["model_part_name"] == "PorousDomain.King_post_1")
     variables = entry["Material"]["Variables"]
 
-    assert variables["YOUNG_MODULUS"] == pytest.approx(2.1e8)
+    assert variables["YOUNG_MODULUS"] == pytest.approx(2.1e8 * KILO)
     assert variables["CROSS_AREA"] == pytest.approx(0.0198)
     assert variables["I33"] == pytest.approx(5.52e-4)
     # A beam in space bends about two axes and twists about the third.
@@ -243,9 +251,8 @@ def test_the_anchor_gets_its_own_part_and_a_support_group_for_its_tail(walled):
 
 
 def test_the_tail_support_is_fixed_in_all_three_directions(walled):
-    doc = json.loads(walled["project_parameters"])
     constraints = {p["Parameters"]["model_part_name"]: p["Parameters"]
-                   for p in doc["processes"]["constraints_process_list"]}
+                   for p in _stage_settings(walled)["processes"]["constraints_process_list"]}
     fixity = constraints["PorousDomain.Anchor_1_Support"]
 
     assert fixity["is_fixed"] == [True, True, True], "a 3D tail is pinned in space"
@@ -257,11 +264,11 @@ def test_the_tendon_becomes_a_material_entry_with_its_prestress(walled):
     entry = next(e for e in entries if e["model_part_name"] == "PorousDomain.Anchor_1")
     variables = entry["Material"]["Variables"]
 
-    assert variables["YOUNG_MODULUS"] == pytest.approx(1.95e8)
+    assert variables["YOUNG_MODULUS"] == pytest.approx(1.95e8 * KILO)
     # Discrete in 3D: the plane-strain smear over the out-of-plane spacing is exactly
     # what a 3D model does not do, because the anchor is where the user put it.
     assert variables["CROSS_AREA"] == pytest.approx(0.0006)
-    assert variables["TRUSS_PRESTRESS_PK2"] == pytest.approx(250.0)
+    assert variables["TRUSS_PRESTRESS_PK2"] == pytest.approx(250.0 * KILO)
 
 
 def test_an_anchor_may_hang_from_a_member_instead_of_a_wall(session):
@@ -369,13 +376,13 @@ def test_a_plane_anchor_reaches_the_3d_deck_as_a_truss(sectioned):
 
 def test_the_plane_anchors_tail_is_pinned_in_all_three_directions(sectioned):
     """A 3D deck restrains z as well; the 2D origin of the record changes nothing."""
-    parameters = json.loads(sectioned["project_parameters"])
+    processes = _stage_settings(sectioned)["processes"]
     constraints = [
-        p for p in parameters["processes"]["constraints_process_list"]
+        p for p in processes["constraints_process_list"]
         if "anchor_2d" in p["Parameters"]["model_part_name"].lower()
     ]
 
-    assert constraints, parameters["processes"]["constraints_process_list"]
+    assert constraints, processes["constraints_process_list"]
     assert constraints[0]["Parameters"]["is_fixed"] == [True, True, True]
 
 
@@ -417,3 +424,77 @@ def test_a_buried_line_load_in_3d_warns_rather_than_vanishing(session):
                                    MeshRequest(element_size=6.0, order=1))
 
     assert any("LineLoad_2" in w for w in export["warnings"]), export["warnings"]
+
+
+# ── Staged construction in 3D ───────────────────────────────────────────────
+# `kratos.py`'s two `if dim == 2 else []` guards keep a 3D deck from staging its
+# structures: no automatic wall-installation stage, and no master/slave tie. That is
+# the restriction plan sec 7.13 says to keep -- but it used to be silent, and the
+# phases panel is visible in 3D projects, so a user could build a sequence here and
+# never be told which part of it the deck dropped.
+#
+# What the guards do *not* stop is the phase list itself, and these tests say so in
+# both directions: the warning is about the structures, not about staging as a whole.
+
+def _phased(project: Project, activate: list[str]) -> Project:
+    payload = project.model_dump()
+    payload["phases"] = [
+        {"id": "initial", "name": "Initial", "calculation": "K0 procedure",
+         "deactivate": activate},
+        {"id": "build", "name": "Build", "parent": "initial", "activate": activate},
+    ]
+    return Project.model_validate(payload)
+
+
+def test_a_3d_phase_list_still_activates_and_deactivates_its_parts(session):
+    """The restriction is narrower than "staging is 2D only", and a warning that
+    claimed otherwise would send a user to redraw a model that works.
+
+    A panel and an anchor switched off in the first phase and on in the second come
+    out as a Deactivate and an Activate operation, exactly as they would in plane
+    strain. Only the *implicit* sheet-pile staging and the interface ties are dropped.
+    """
+    export = kratos.export_project(
+        _phased(structured([PANEL, MEMBER], [ANCHOR]), ["panel_1", "anchor_1"]),
+        MeshRequest(element_size=6.0, order=1))
+    doc = json.loads(export["project_parameters"])
+
+    assert doc["orchestrator"]["settings"]["execution_list"] == ["1_Initial", "2_Build"]
+    operations = {
+        name: [op["Parameters"]["model_part_name_list"]
+               for op in stage.get("stage_preprocess", {}).get("operations", [])]
+        for name, stage in doc["stages"].items()
+    }
+    assert operations["1_Initial"] == [["PorousDomain.Wall_1", "PorousDomain.Anchor_1"]]
+    assert operations["2_Build"] == [["PorousDomain.Wall_1", "PorousDomain.Anchor_1"]]
+
+
+def test_a_3d_project_with_structures_says_they_are_not_staged(session):
+    """The silent skip, made audible. A 2D deck installs its wall in a stage of its
+    own even with no phases at all; the same model in 3D gets one stage and said
+    nothing about the difference."""
+    export = kratos.export_project(structured([PANEL, MEMBER], [ANCHOR]),
+                                   MeshRequest(element_size=6.0, order=1))
+
+    note = [w for w in export["warnings"] if "not staged" in w]
+    assert note, export["warnings"]
+    assert "3D" in note[0] or "plane strain" in note[0]
+
+
+def test_the_note_is_absent_from_a_3d_project_with_nothing_to_stage(session):
+    """No structures, nothing withheld, nothing to say. A warning that fires on every
+    3D export is one people learn to skip past."""
+    export = kratos.export_project(seed_project(simple=True),
+                                   MeshRequest(element_size=6.0, order=1))
+
+    assert not any("not staged" in w for w in export["warnings"]), export["warnings"]
+
+
+def test_the_note_is_absent_in_plane_strain(session):
+    """2D is the case where the structures *are* staged."""
+    payload = structured([PANEL, MEMBER], [ANCHOR]).model_dump()
+    payload["dimension"] = 2
+    export = kratos.export_project(Project.model_validate(payload),
+                                   MeshRequest(element_size=6.0, order=1))
+
+    assert not any("not staged" in w for w in export["warnings"]), export["warnings"]

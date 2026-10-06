@@ -14,17 +14,17 @@
   /* A drawn/imported part's THREE.Group exists (buildGroups makes one per section key)
      but setMode() only shows keys present in modeGroups[mode] -- so a custom part that
      computeModeGroups leaves out of every mode is created, then invisible forever,
-     regardless of the eye toggle. The default project has simple_example: true, which
+     regardless of the eye toggle. The default project has layered_soil: true, which
      used to hard-code modeGroups to soilKeys only. */
 
-  test('a custom part is visible in every mode of a simple_example project', function () {
+  test('a custom part is visible in every mode of a layered_soil project', function () {
     var groups = App.Viewport.computeModeGroups(['soil_L1', 'soil_L2'], ['drawn_0'], true);
     ['soil', 'structures', 'mesh', 'flow', 'staged'].forEach(function (mode) {
       T.ok(groups[mode].indexOf('drawn_0') >= 0, mode + ' is missing the custom part');
     });
   });
 
-  test('in a full (non-simple_example) project, a custom part follows the structural ' +
+  test('in a full (non-layered_soil) project, a custom part follows the structural ' +
        'parts -- everywhere but the soil-only mode', function () {
     var groups = App.Viewport.computeModeGroups(['soil_L1'], ['drawn_0'], false);
     ['structures', 'mesh', 'flow', 'staged'].forEach(function (mode) {
@@ -49,7 +49,7 @@
       ['structures', 'mesh', 'staged'].forEach(function (mode) {
         ['beam_1', 'anchor_1'].forEach(function (key) {
           T.ok(groups[mode].indexOf(key) >= 0,
-               mode + ' hides ' + key + (simple ? ' (simple_example)' : ''));
+               mode + ' hides ' + key + (simple ? ' (layered_soil)' : ''));
         });
       });
       T.eq(groups.soil.indexOf('beam_1'), -1, 'soil mode stays soil-only');
@@ -157,11 +157,25 @@
                       domain: { x0: 0, x1: 50, z0: 0, z1: 40, y_top: 0, y_bottom: -25 } };
       T.eq(App.Viewport.viewModeOf(App.PROJECT), 'elevation');
       T.eq(App.Viewport.viewModeOf({ dimension: 3 }), 'solid');
-      T.eq(App.Viewport.viewModeOf(null), 'solid', 'no project yet means the 3D default');
+      T.eq(App.Viewport.viewModeOf(null), 'elevation',
+           'no project yet means the 2D default the app opens on');
     } finally {
       App.PROJECT = saved.project; App.state = saved.state;
     }
     T.eq(applied, []);
+  });
+
+  /* The app is a 2D modeller, and the server opens on a plane-strain project. Booting
+     the camera in 3D and correcting it when /api/geometry answers is a visible flip
+     through a view the user never asked for, so the section angles and the parallel
+     projection have to be what the first frame is drawn with. */
+  test('the camera starts on the section rather than flipping to it a second later',
+       function () {
+    T.eq(App.Viewport.DEFAULT_VIEW_MODE, 'elevation');
+    T.eq(App.Viewport.DEFAULT_DIMENSION, 2);
+    T.eq(App.Viewport.cameraAngles('iso', App.Viewport.DEFAULT_DIMENSION),
+         App.Viewport.cameraAngles(null, 2),
+         'the opening angles are the section angles, not the iso ones');
   });
 })();
 
@@ -431,6 +445,20 @@
   /* An imported .mdpa's preview lives outside `groups`/`frame` entirely (viewport.js's
      importedMeshGroup), so it must not need a real scene to be called safely -- the
      same "no WebGL, no throw" contract refresh() and setMode() already hold above. */
+
+  /* A contact lies along the very line of the wall it holds, so the two would otherwise
+     be decided by insertion order -- and the interface, having no width of its own, is
+     the one that disappears. */
+  test('an imported interface draws over the structure it shares a line with',
+       function () {
+    var wall = App.Viewport.importedLineOrder({ key: 'imported:Wall', kind: 'beam' });
+    var contact = App.Viewport.importedLineOrder({ key: 'imported:Contact',
+                                                   kind: 'interface' });
+    T.ok(contact > wall, 'the contact is painted last');
+    T.eq(App.Viewport.importedLineOrder({ kind: 'continuum' }), wall,
+         'everything else keeps the one order it had');
+  });
+
   test('an imported-mesh preview survives an empty scene', function () {
     App.Viewport.showImportedMesh({
       bbox: [0, 0, 0, 1, 1, 1],
@@ -484,5 +512,85 @@
     // z is the out-of-plane axis: the camera cannot be turned towards it, so an
     // arrow for it would point at nothing.
     T.eq(App.Viewport.triadAxes(2).indexOf('z'), -1);
+  });
+})();
+
+(function () {
+  /* A staged excavation is more bodies than layers. The viewport has to show all of
+     them, and cannot work out the split for itself -- the project publishes it. */
+
+  var LAYERS = [{ id: 'L_top' }, { id: 'L_mid' }, { id: 'L_bot' }];
+  var BODIES = ['soil_L_top', 'soil_L_mid', 'soil_L_bot',
+                'soil_L_top__lift1', 'soil_L_top__lift2', 'soil_L_top__lift3',
+                'soil_L_mid__pit', 'soil_L_bot__pit'];
+
+  test('the soil bodies come from the project, not from its layers', function () {
+    T.eq(App.Viewport.soilKeysOf({ soil_body_keys: BODIES }, LAYERS), BODIES);
+  });
+
+  test('a project that publishes no bodies falls back to one key per layer', function () {
+    T.eq(App.Viewport.soilKeysOf({}, LAYERS),
+         ['soil_L_top', 'soil_L_mid', 'soil_L_bot']);
+    T.eq(App.Viewport.soilKeysOf(null, LAYERS),
+         ['soil_L_top', 'soil_L_mid', 'soil_L_bot']);
+  });
+
+  test('every staged body is visible in the modes soil is visible in', function () {
+    var groups = App.Viewport.computeModeGroups(BODIES, [], true);
+    BODIES.forEach(function (key) {
+      T.ok(groups.soil.indexOf(key) >= 0, 'soil mode is missing ' + key);
+    });
+  });
+})();
+
+(function () {
+  /* Which refinements a mesh is built with. A model can carry a graded mesh of its own
+     (server/app/crow.py refines its excavation and grades out to the far field), and
+     `meshSettings` used to overwrite that with `App.MESH_REFINEMENTS || []` -- so the
+     Generate-mesh button flattened a grading the project had asked for. */
+
+  var BOX = { kind: 'box', size: 0.75, thickness: 45, x_min: -1, x_max: 8,
+              y_min: -16, y_max: 1, z_min: -1, z_max: 11 };
+
+  function withState(local, project, run) {
+    var saved = { refinements: App.MESH_REFINEMENTS, project: App.PROJECT };
+    App.MESH_REFINEMENTS = local;
+    App.PROJECT = project;
+    try { run(); } finally {
+      App.MESH_REFINEMENTS = saved.refinements;
+      App.PROJECT = saved.project;
+    }
+  }
+
+  test("a model's own refinements are used when none is set this session", function () {
+    withState(undefined, { mesh: { refinements: [BOX] } }, function () {
+      T.eq(App.Viewport.meshRefinements().length, 1);
+      T.eq(App.Viewport.meshRefinements()[0].thickness, 45);
+    });
+  });
+
+  test('a refinement set from the toolbar wins over the model\'s', function () {
+    var local = [{ kind: 'box', size: 0.2, x_min: 0, x_max: 1,
+                   y_min: 0, y_max: 1, z_min: 0, z_max: 1 }];
+    withState(local, { mesh: { refinements: [BOX] } }, function () {
+      T.eq(App.Viewport.meshRefinements()[0].size, 0.2);
+    });
+  });
+
+  test('resetting the local refinement falls back to the model, not to none', function () {
+    /* "Reset" leaves an empty array behind, and an empty array is truthy -- so a plain
+       `||` would read it as a choice and mesh the model flat. */
+    withState([], { mesh: { refinements: [BOX] } }, function () {
+      T.eq(App.Viewport.meshRefinements().length, 1);
+    });
+  });
+
+  test('a project that asks for no refinement gets none', function () {
+    withState(undefined, { mesh: {} }, function () {
+      T.eq(App.Viewport.meshRefinements(), []);
+    });
+    withState(undefined, null, function () {
+      T.eq(App.Viewport.meshRefinements(), []);
+    });
   });
 })();

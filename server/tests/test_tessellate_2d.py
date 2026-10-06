@@ -138,6 +138,49 @@ def test_a_sheet_pile_is_drawn_as_edges_with_no_surface():
     assert max(section.edges[1::3]) == pytest.approx(0.0, abs=1e-5)
 
 
+def test_a_normal_load_draws_no_geometry_of_its_own():
+    """Its symbol is the arrows the viewport puts on the loaded line, and nothing
+    else. The strip the build used to make stood proud of the model -- on a 0.1 x 1 m
+    column it was a bar lying across the top of the loaded face rather than a load
+    applied to it -- and the curve the condition is written on must not be drawn as a
+    sheet pile's hairline either."""
+    payload = seed_project(simple=False).model_dump()
+    payload.update(dimension=2, section_offset=20.0)
+    payload["normal_loads"] = [{"id": "normal_1", "name": "River load", "kind": "normal",
+                                "points": [[10.0, 0.0], [10.0, -5.0], [16.0, -5.0]],
+                                "fluid_pressure_type": "Uniform", "pressure": 20.0,
+                                "active": True}]
+    project = Project.model_validate(payload)
+    assert "normal_1" in project.part_keys(), "the key stays in the namespace"
+
+    with build.session():
+        model = tessellate.tessellate(project)
+
+    assert not [s for s in model.sections if s.key == "normal_1"]
+
+
+def test_a_normal_load_still_draws_nothing_in_the_project_the_server_opens_on():
+    """The blank project takes a different build path (`_build_layered_soil`), which
+    once drew the strip separately; it must not grow one back."""
+    from app.seed import blank_project
+
+    payload = blank_project().model_dump()
+    payload.update(dimension=2, section_offset=0.5)
+    payload["domain"] = {"x0": 0.0, "x1": 0.1, "z0": 0.0, "z1": 1.0,
+                         "y_top": 1.0, "y_bottom": 0.0}
+    payload["normal_loads"] = [{"id": "normalload_1", "name": "Normal load 1",
+                                "kind": "normal",
+                                "points": [[0.0, 1.0], [0.1, 1.0]],
+                                "fluid_pressure_type": "Uniform", "pressure": 20.0,
+                                "active": True}]
+    project = Project.model_validate(payload)
+
+    with build.session():
+        model = tessellate.tessellate(project)
+
+    assert not [s for s in model.sections if s.key == "normalload_1"]
+
+
 def test_every_part_key_still_gets_a_section_when_a_pile_is_present():
     """The frontend's userData.key namespace has to stay complete."""
     payload = seed_project(simple=True).model_dump()
@@ -180,3 +223,41 @@ def test_an_anchor_is_drawn_as_edges_like_the_pile_it_hangs_from():
     assert anchor.edges and not anchor.indices
     assert min(anchor.edges[0::3]) == pytest.approx(12.0, abs=1e-5)
     assert max(anchor.edges[0::3]) == pytest.approx(20.0, abs=1e-5)
+
+
+# ── Staged excavation ───────────────────────────────────────────────────────
+
+def test_a_staged_excavation_is_drawable():
+    """The whole CROW model, through the path the viewport uses.
+
+    Every soil body has to be drawable, and colour is what this catches: a lift takes
+    the colour of the layer it was dug out of, and one that is not given one used to
+    take the whole geometry endpoint down with a KeyError rather than simply arriving
+    grey.
+    """
+    from tests.crow_example import crow
+    crow_project = crow.crow_project
+    project = crow_project()
+    with build.session():
+        display = tessellate.tessellate(project)
+
+    drawn = {section.key for section in display.sections}
+    for key, *_ in project.soil_bodies():
+        assert key in drawn, f"{key} is not drawable"
+    assert "sheetpile" in drawn, "the wall must be drawn"
+    assert "strut" in drawn, "the anchor must be drawn"
+
+
+def test_a_lift_is_drawn_in_the_colour_of_the_layer_it_came_from():
+    from tests.crow_example import crow
+    crow_project = crow.crow_project
+    project = crow_project()
+    with build.session():
+        display = tessellate.tessellate(project)
+
+    colours = {}
+    for section in display.sections:
+        colours.setdefault(section.key, set()).add(section.color)
+    for key, *_ in project.soil_bodies():
+        layer = next(l for l in project.layers if f"soil_{l.id}" == key.partition("__")[0])
+        assert colours[key] == {project.material(layer.mat).color}, key

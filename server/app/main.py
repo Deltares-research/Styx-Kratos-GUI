@@ -15,26 +15,27 @@ Two things it deliberately does not do:
 
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 import os
 import tempfile
 
-from app import gmsh_worker, store
+from app import calculate, gmsh_worker, phases as phase_model, results, store
 from app.loads import translate as translate_loads
 from app.walls import translate as translate_walls
 from app.build import GeometryError
 from app.kratos import ExportError
 from app.meshing import MeshingError
 from app.schemas import (DimensionUpdate, ExportRequest, LayersUpdate, MaterialsUpdate,
-                         MeshRequest, Project, StructuresUpdate)
+                         MeshRequest, PhasesUpdate, Project, StructuresUpdate)
 
 FROZEN = Path(__file__).resolve().parents[2]
 LIVE = FROZEN / "live"
@@ -102,6 +103,36 @@ async def reset_project() -> dict:
     return {"project": project, "invalidates": ["project", "tree", "geometry", "mesh"]}
 
 
+@app.post("/api/project/script")
+async def run_script(request: dict) -> dict:
+    """Build the model by running a Python file: the command line's `run <file.py>`.
+
+    The file is executed here, in the server's own interpreter, and whatever `Project`
+    it describes becomes the open model. See `app.script` for the three ways a script
+    can hand one back, and for why this route is local-only by construction.
+    """
+    from app import script as script_module
+
+    path = (request or {}).get("path")
+    if not path:
+        raise HTTPException(status_code=422, detail="run needs a path to a .py file")
+    try:
+        project = store.put(script_module.load_project(path))
+    except script_module.ScriptError as failure:
+        # 400, not 500: the file is the caller's, and every one of these messages is
+        # written to be read by whoever typed the command.
+        raise HTTPException(status_code=400, detail=str(failure)) from failure
+    return {"project": project, "path": str(path),
+            "invalidates": ["project", "tree", "geometry", "mesh"]}
+
+
+# There is no `/api/project/crow`. It opened the CROW staged-excavation case, back when
+# a File menu item asked for it; both are gone. An example model is opened the way any
+# model is -- `run examples/crow/crow.py` in the command box, through
+# `/api/project/script` -- which works for every model rather than for the one somebody
+# wired an endpoint to.
+
+
 @app.post("/api/project/new")
 async def new_project() -> dict:
     """Start over from an empty site -- what the toolbar's "New project" does.
@@ -125,6 +156,8 @@ async def patch_layers(update: LayersUpdate) -> dict:
         payload["boreholes"] = [borehole.model_dump() for borehole in update.boreholes]
     if update.domain is not None:
         payload["domain"] = update.domain.model_dump()
+    if update.water is not None:
+        payload["water"] = update.water.model_dump()
     if update.custom_parts is not None:
         payload["custom_parts"] = [part.model_dump() for part in update.custom_parts]
     try:
@@ -184,12 +217,76 @@ async def patch_structures(update: StructuresUpdate) -> dict:
         payload["interface_sections"] = [s.model_dump() for s in update.interface_sections]
     if update.interfaces is not None:
         payload["interfaces"] = [i.model_dump() for i in update.interfaces]
+    if update.normal_loads is not None:
+        payload["normal_loads"] = [n.model_dump() for n in update.normal_loads]
     try:
         project = Project.model_validate(payload)
     except ValidationError as failure:
         raise RequestValidationError(failure.errors()) from failure
     store.put(project)
     return {"project": project, "invalidates": ["project", "tree", "geometry", "mesh"]}
+
+
+@app.patch("/api/project/phases")
+async def patch_phases(update: PhasesUpdate) -> dict:
+    """Replace the construction sequence.
+
+    Two validations, and they are different things. The schema's own checks run first
+    -- one root, no cycles, no part both activated and deactivated in one phase, every
+    key a key the model has -- and reject the payload field by field. Then the tree has
+    to *linearise*: Kratos runs one flat `execution_list`, so two phases starting from
+    the same parent have no order to run in.
+
+    `linearise` is deliberately not a schema validator (see `app.phases.PhaseError`):
+    a branch is a legitimate thing to have half-built in an editor, and refusing it in
+    `Project` would make it impossible to type. It is refused *here* instead of at
+    export because this is where the user can still see what they did -- the message
+    names the phases that branch.
+
+    Only `project` is invalidated. A phase list changes the deck and the panel, not the
+    geometry or the mesh: every part it names already exists, which is what makes a
+    key valid in the first place.
+    """
+    payload = store.get().model_dump()
+    payload["phases"] = [phase.model_dump() for phase in update.phases]
+    try:
+        project = Project.model_validate(payload)
+    except ValidationError as failure:
+        raise RequestValidationError(failure.errors()) from failure
+    try:
+        phase_model.linearise(project)
+    except phase_model.PhaseError as failure:
+        raise RequestValidationError([{
+            "type": "value_error", "loc": ("body", "phases"), "msg": str(failure),
+            "input": payload["phases"],
+        }]) from failure
+    store.put(project)
+    return {"project": project, "invalidates": ["project"]}
+
+
+@app.post("/api/project/phases/defaults")
+async def seed_default_phases() -> dict:
+    """The sequence the phases panel opens on, built from the model as it stands.
+
+    `phases.default_phases` is the authority on its shape -- settle the ground, build
+    the wall, then alternate digging with propping -- and reproduces the CROW
+    reference's seven stages exactly for that model. This endpoint is only the way the
+    GUI reaches it.
+
+    It replaces whatever is there rather than refusing when phases already exist. That
+    is the point: it is the way back out of a sequence the user has broken, and a
+    "reset to defaults" that declines to reset is not one.
+    """
+    current = store.get()
+    payload = current.model_dump()
+    payload["phases"] = [phase.model_dump()
+                         for phase in phase_model.default_phases(current)]
+    try:
+        project = Project.model_validate(payload)
+    except ValidationError as failure:
+        raise RequestValidationError(failure.errors()) from failure
+    store.put(project)
+    return {"project": project, "invalidates": ["project"]}
 
 
 @app.patch("/api/project/dimension")
@@ -400,6 +497,30 @@ async def generate_mesh(settings: MeshRequest) -> dict:
         raise HTTPException(status_code=500, detail=str(failure)) from failure
 
 
+@app.post("/api/mesh/labels")
+async def mesh_labels(settings: MeshRequest) -> dict:
+    """The node and element tables -- Kratos ID and where to draw it -- of the deck this
+    project exports. A node's point is itself; an element's is its centroid.
+
+    What the viewport's "Show labels" overlay draws from. Deliberately a route of its own
+    rather than a field on `POST /api/mesh`: the numbering costs a full export pass
+    (interface splitting included), and a mesh is generated far more often than its
+    numbers are looked at.
+    """
+    project = store.get()
+    unknown = sorted((set(settings.volume_keys or []) | set(settings.body_sizes))
+                     - set(project.part_keys()))
+    if unknown:
+        raise HTTPException(status_code=422, detail="unknown mesh body key(s): " + ", ".join(unknown))
+    try:
+        return await gmsh_worker.run(
+            gmsh_worker.mesh_labels_job,
+            project.model_dump_json(), settings.model_dump_json(),
+        )
+    except (GeometryError, MeshingError, ExportError) as failure:
+        raise HTTPException(status_code=500, detail=str(failure)) from failure
+
+
 @app.post("/api/export/mdpa")
 async def export_mdpa(settings: ExportRequest) -> dict:
     """Mesh the project and return a Kratos deck as text, ready to be saved.
@@ -419,6 +540,208 @@ async def export_mdpa(settings: ExportRequest) -> dict:
         )
     except (GeometryError, MeshingError, ExportError) as failure:
         raise HTTPException(status_code=500, detail=str(failure)) from failure
+
+
+@app.post("/api/calculate")
+async def calculate_project(settings: ExportRequest) -> dict:
+    """Mesh the project, write its deck to a directory of its own, and run it.
+
+    The deck is exported here rather than taken from whatever the client last
+    downloaded: an export is the only thing that knows the mesh it was made from, and a
+    calculation run against a stale one would answer a question nobody asked. The
+    materials file is written whatever `include_materials` says -- Kratos cannot solve
+    without it, and this is not a download.
+
+    The run happens in a thread because it is a blocking wait on a subprocess that owns
+    the machine for as long as it takes; the event loop stays free, so the rest of the
+    app keeps answering while a solver works. A model Kratos rejects comes back 200 with
+    `ok` false and its reason: that is an answer about the model, not a broken server.
+    """
+    project = store.get()
+    unknown = sorted((set(settings.volume_keys or []) | set(settings.body_sizes))
+                     - set(project.part_keys()))
+    if unknown:
+        raise HTTPException(status_code=422, detail="unknown mesh body key(s): " + ", ".join(unknown))
+    try:
+        export = await gmsh_worker.run(
+            gmsh_worker.export_job,
+            project.model_dump_json(),
+            settings.model_copy(update={"include_materials": True}).model_dump_json(),
+        )
+    except (GeometryError, MeshingError, ExportError) as failure:
+        raise HTTPException(status_code=500, detail=str(failure)) from failure
+
+    try:
+        result = await asyncio.to_thread(calculate.run, export)
+    except calculate.Busy as busy:
+        raise HTTPException(status_code=409, detail=str(busy)) from busy
+    except calculate.CalculationError as failure:
+        raise HTTPException(status_code=500, detail=str(failure)) from failure
+
+    # The mesh the run was made from, said in the same breath as the run: the deck was
+    # exported here, so this is the only place that can report both. `run` is the
+    # directory's bare name, which is the id every `/api/results` route takes -- sent
+    # rather than left to the client to split off the path, because the two platforms
+    # spell a path separator differently and the client would have to know which.
+    return result | {"stats": export["stats"], "warnings": export["warnings"],
+                     "run": Path(result["directory"]).name}
+
+
+# ── Results ─────────────────────────────────────────────────────────────────
+#
+# Reading back what a calculation left behind. The registry only *finds* things in
+# this milestone -- which runs exist, which stages each got through, which files are
+# in it; parsing a result is the next one (`plan/postprocessing-plan.md`, P1).
+
+
+def _results_error(failure: results.ResultsError) -> HTTPException:
+    """404 for something that is not there, 400 for something that may not be asked.
+
+    The distinction matters for exactly one case: a filename that tries to climb out
+    of the run directory is refused as a bad request whether or not it names something
+    real, so the answer cannot be used to find out what is on the machine.
+    """
+    status = 400 if isinstance(failure, results.UnsafeName) else 404
+    return HTTPException(status_code=status, detail=str(failure))
+
+
+@app.get("/api/results/runs")
+async def results_runs() -> dict:
+    """Every run on this machine, newest first. Cheap: names and sizes, no parsing."""
+    return {"runs": results.runs(), "root": str(calculate.runs_root())}
+
+
+@app.get("/api/results/runs/{run_id}")
+async def results_run(run_id: str) -> dict:
+    try:
+        return results.describe(run_id)
+    except results.ResultsError as failure:
+        raise _results_error(failure) from failure
+
+
+@app.get("/api/results/runs/{run_id}/stages/{index}/fields")
+async def results_stage_fields(run_id: str, index: int) -> dict:
+    """What this stage can be asked to show.
+
+    Derived from the file, never from a list in the source: a variable Kratos declined
+    to write -- or wrote an empty block for, because the element does not implement it
+    -- costs one missing menu entry and breaks nothing. See `app.result_fields`.
+    """
+    try:
+        return results.stage_fields(run_id, index)
+    except results.ResultsError as failure:
+        raise _results_error(failure) from failure
+
+
+@app.get("/api/results/runs/{run_id}/stages/{index}/mesh")
+async def results_stage_mesh(run_id: str, index: int) -> dict:
+    """The stage's mesh as drawable buffers, one section per named part.
+
+    Vertex *i* of a section is the deck's node `node_ids[i]`, at
+    `positions[3i..3i+2]`. That correspondence is what lets a field -- which comes back
+    keyed by node id -- become a vertex-colour buffer without a second request.
+    """
+    try:
+        return results.stage_geometry(run_id, index)
+    except results.ResultsError as failure:
+        raise _results_error(failure) from failure
+
+
+@app.get("/api/results/runs/{run_id}/stages/{index}/displacement")
+async def results_stage_displacement(run_id: str, index: int) -> dict:
+    """The displacement vectors this stage's mesh is deformed by.
+
+    Its own route because it is the one quantity the viewer needs all three components
+    of; everything in the field catalogue derives a single number.
+    """
+    try:
+        return results.stage_displacement(run_id, index)
+    except results.ResultsError as failure:
+        raise _results_error(failure) from failure
+
+
+@app.get("/api/results/runs/{run_id}/stages/{index}/at/{node}")
+async def results_stage_at(run_id: str, index: int, node: int) -> dict:
+    """Every field of this stage at one node, in one request.
+
+    `results at <id>` is how a number gets checked against a hand calculation without
+    leaving the app, and doing it a field at a time would be twenty-odd round trips.
+    """
+    from app import result_fields
+
+    try:
+        return results.stage_at_node(run_id, index, node)
+    except result_fields.UnknownField as failure:
+        raise HTTPException(status_code=422, detail=str(failure)) from failure
+    except results.ResultsError as failure:
+        raise _results_error(failure) from failure
+
+
+@app.get("/api/results/runs/{run_id}/stages/{index}/parts")
+async def results_stage_parts(run_id: str, index: int) -> dict:
+    """The deck's named parts as this stage saw them, and which were live in it."""
+    try:
+        return results.stage_parts(run_id, index)
+    except results.ResultsError as failure:
+        raise _results_error(failure) from failure
+
+
+@app.get("/api/results/runs/{run_id}/stages/{index}/field/{name}")
+async def results_stage_field(run_id: str, index: int, name: str,
+                              location: str = "nodes") -> dict:
+    """One field: the ids it is defined on, the numbers on them, and their range.
+
+    The range travels with the values so that a colour legend and the colours it
+    explains can never be computed from two different things.
+    """
+    from app import result_fields
+
+    try:
+        return results.stage_field(run_id, index, name, location)
+    except result_fields.UnknownField as failure:
+        # 422 rather than 404: the run and the stage are both there, and what is wrong
+        # is the question -- a field this stage does not carry, or a location it
+        # cannot be drawn at.
+        raise HTTPException(status_code=422, detail=str(failure)) from failure
+    except results.ResultsError as failure:
+        raise _results_error(failure) from failure
+
+
+@app.get("/api/results/runs/{run_id}/files/{name}")
+async def results_file(run_id: str, name: str) -> FileResponse:
+    """One file of one run, as a download.
+
+    The first route in this project that opens a file the caller named. Every check
+    is in `results.file_path`, which refuses anything that is not a plain filename in
+    that one flat directory -- see its docstring for why the check is spelled out
+    rather than left to `Path`.
+    """
+    try:
+        path = results.file_path(run_id, name)
+    except results.ResultsError as failure:
+        raise _results_error(failure) from failure
+    # `media_type` is not sniffed: a .post.res is text and a .mdpa is text, but both
+    # are megabytes nobody wants rendered in a tab. Everything here is a download.
+    return FileResponse(path, filename=path.name,
+                        media_type="application/octet-stream")
+
+
+@app.get("/api/results/runs/{run_id}/archive")
+async def results_archive(run_id: str) -> Response:
+    """The whole run directory as one zip -- the deck, the results and the log.
+
+    Server-side rather than zipped in the browser from `live/js/zip.js`: the client
+    would have to fetch every file first, which is the same megabytes twice over and
+    one request per file, to produce an archive of what the server already has laid
+    out in a directory.
+    """
+    try:
+        buffer = results.archive(run_id)
+    except results.ResultsError as failure:
+        raise _results_error(failure) from failure
+    return Response(
+        content=buffer.getvalue(), media_type="application/zip",
+        headers={"content-disposition": f'attachment; filename="{run_id}.zip"'})
 
 
 @app.post("/api/import/mdpa")

@@ -7,8 +7,8 @@
 var App = window.App || {};
 
 App.PRODUCT = {
-  name: 'D-Kratos',
-  version: 'CE V1.0',
+  name: 'Styx',
+  version: 'Prototype V1.0',
   project: 'Untitled project'
 };
 
