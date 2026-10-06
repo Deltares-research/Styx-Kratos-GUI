@@ -41,9 +41,12 @@
   });
 
   test('material dialog adds library soil, applies interface preset and cancels both', function () {
-    var saved = App.MATERIALS;
+    var saved = App.MATERIALS, savedLayers = App.LAYERS;
     var host = document.createElement('div'); host.id = 'modal-layer'; document.body.appendChild(host);
-    App.MATERIALS = [];
+    // Closing the dialog remounts the Model explorer, which needs its host.
+    var tree = document.createElement('div'); tree.id = 'tree-model'; document.body.appendChild(tree);
+    // No materials means no layers: a layer pointing at a missing material is not a state the app can be in.
+    App.MATERIALS = []; App.LAYERS = [];
     try {
       App.Dialogs.materials();
       var apply = host.querySelector('[data-action="apply-interface-preset"]');
@@ -59,7 +62,7 @@
       T.eq(App.MATERIALS.length, 0);
     } finally {
       if (host.querySelector('.dlg-x')) host.querySelector('.dlg-x').click();
-      host.remove(); App.MATERIALS = saved;
+      host.remove(); tree.remove(); App.MATERIALS = saved; App.LAYERS = savedLayers;
     }
   });
 })();

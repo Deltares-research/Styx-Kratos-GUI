@@ -1500,6 +1500,8 @@ def test_the_crow_case_can_be_opened_and_drawn(client):
     cannot name, takes the geometry endpoint down without touching the export.
     """
     from tests.crow_example import PATH
+    if not PATH.exists():
+        pytest.skip(f"launcher {PATH} is not in this checkout")
     loaded = client.post("/api/project/script", json={"path": str(PATH)})
     assert loaded.status_code == 200, loaded.text
     project = loaded.json()["project"]

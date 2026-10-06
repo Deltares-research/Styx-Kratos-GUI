@@ -27,3 +27,11 @@ test/
 __pycache__/
 .pytest_cache/
 *.py[cod]
+
+# Coverage output (pytest --cov, and the JS summary from --js-coverage)
+server/.coverage
+server/.coverage.*
+server/htmlcov/
+server/htmlcov-js/
+# Playwright traces kept for failed tests (--tracing retain-on-failure)
+server/test-results/
