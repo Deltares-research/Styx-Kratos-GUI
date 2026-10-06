@@ -1,7 +1,7 @@
 /* Calculate — handing the deck to Kratos and reporting what came back. */
 
 function withCalculateStubs(body) {
-  var saved = { Api: App.Api, Command: App.Command, PROJECT: App.PROJECT,
+  var saved = { Api: App.Api, Command: App.Command, PROJECT: App.PROJECT, Results: App.Results,
                 REFINEMENTS: App.MESH_REFINEMENTS, SELECTION: App.MESH_BODY_SELECTION };
   var logged = [];
   App.Command = {
@@ -10,6 +10,11 @@ function withCalculateStubs(body) {
     err: function (line) { logged.push(['err', line]); },
     write: function (kind, line) { logged.push([kind, line]); }
   };
+  // Reading the run back is App.Results' job (test-results.js); here it is only handed on.
+  App.Results = { remembered: [], remember: function (result) {
+    App.Results.remembered.push(result);
+    return Promise.resolve();
+  } };
   App.PROJECT = { name: 'Deep excavation — Rotterdam Zuid',
                   mesh: { element_size: 2.5, order: 2 } };
   App.MESH_REFINEMENTS = [];
@@ -17,6 +22,7 @@ function withCalculateStubs(body) {
 
   function restore() {
     App.Api = saved.Api; App.Command = saved.Command; App.PROJECT = saved.PROJECT;
+    App.Results = saved.Results;
     App.MESH_REFINEMENTS = saved.REFINEMENTS;
     App.MESH_BODY_SELECTION = saved.SELECTION;
   }
@@ -74,6 +80,7 @@ test('a successful calculation says where the results were written', function ()
       T.ok(logged.some(function (line) {
         return line[1].indexOf('Model_1_Stage.post.res') !== -1;
       }), 'the result files are named, not just counted');
+      T.eq(App.Results.remembered.length, 1, 'the run is handed to Results to open');
     });
   });
 });

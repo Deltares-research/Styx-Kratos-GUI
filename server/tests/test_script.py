@@ -59,6 +59,8 @@ def test_the_crow_example_runs(tmp_path):
         run examples/crow/crow.py
     """
     from tests.crow_example import PATH
+    if not PATH.exists():
+        pytest.skip(f"launcher {PATH} is not in this checkout")
     loaded = script.load_project(PATH)
     assert isinstance(loaded, Project)
     assert len(loaded.excavation.levels) == 3

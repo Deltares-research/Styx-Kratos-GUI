@@ -55,6 +55,8 @@
     api = { calls: [] };
 
     window.App = window.App || {};
+    // The page shell's mode switch, which a finished calculation calls to open Results.
+    if (typeof App.setMode !== 'function') App.setMode = function () {};
     App.Command = {
       note: function (line) { log.push(['note', line]); },
       ok:   function (line) { log.push(['ok', line]); },

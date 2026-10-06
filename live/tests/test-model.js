@@ -899,7 +899,7 @@
     withProject(project(TWO, [], true), function () {
       T.eq(topLabels(App.TREES.soil),
            ['Soil', 'Custom geometry', 'Imported mesh', 'Sheet piles', 'Anchors',
-            'Interfaces', 'Normal loads', 'Loads']);
+            'Interfaces', 'Normal loads', 'Loads', 'Water levels']);
     });
   });
 
@@ -977,9 +977,11 @@
     withProject(p, function () {
       var node = soilNode(App.TREES.soil);
       var objs = (node.children || []).map(function (c) { return c.obj; });
-      T.eq(objs, STAGED.soil_body_keys, 'one row per body, in the order published');
+      // Grouped by layer (model.js layerBodies), not in the server's outside-first order.
+      T.eq(objs, ['soil_L1', 'soil_L1__lift1', 'soil_L1__lift2', 'soil_L2'],
+           'one row per body, each lift right after the layer it was dug out of');
       T.eq(node.count, 4, 'the count is rows, not layers');
-      T.ok(/lift 1/.test(node.children[2].label), 'and says which part of the layer');
+      T.ok(/lift 1/.test(node.children[1].label), 'and says which part of the layer');
     });
   });
 

@@ -1,0 +1,18 @@
+# Coverage for `pytest --cov` (plan/alpha-test-plan.md Task 0.5).
+[run]
+source = app
+# Run by Kratos' interpreter and by the launcher's own bootstrap; covered by the kratos and smoke tiers.
+omit =
+    app/kratos_runner.py
+    app/launcher.py
+# gmsh runs in a worker process (app/gmsh_worker.py); without this its modules look untested.
+concurrency = multiprocessing, thread
+parallel = true
+sigterm = true
+
+[report]
+show_missing = true
+skip_empty = true
+
+[html]
+directory = htmlcov

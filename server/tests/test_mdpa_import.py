@@ -17,6 +17,14 @@ from app.seed import seed_project
 EXAMPLES = Path(__file__).resolve().parents[2] / "examples"
 
 
+def reference_deck(filename: str) -> str:
+    """A GiD-authored deck from the gitignored examples/, or a skip naming the missing path."""
+    path = EXAMPLES / filename
+    if not path.exists():
+        pytest.skip(f"reference deck {path} is not in this checkout")
+    return path.read_text()
+
+
 @pytest.fixture(scope="module")
 def session():
     with build.session():
@@ -106,7 +114,7 @@ def test_to_dict_is_json_safe(reimported):
     "Deep_excavation_Rotterdam_Zuid.mdpa",
 ])
 def test_reference_decks_parse_without_error(filename):
-    text = (EXAMPLES / filename).read_text()
+    text = reference_deck(filename)
 
     model = mdpa_import.import_mdpa(text)
 
@@ -211,7 +219,7 @@ def test_a_quadratic_beam_spans_end_to_end_not_end_to_midside():
 def test_a_beams_segments_join_up_into_one_unbroken_run():
     """The end of each element is the start of the next -- what makes a sheet pile draw
     as a continuous line rather than a row of dashes."""
-    model = mdpa_import.import_mdpa((EXAMPLES / "crow_case.mdpa").read_text())
+    model = mdpa_import.import_mdpa(reference_deck("crow_case.mdpa"))
 
     # crow_case.mdpa's sheet pile is its own body sub-model part ("Sheet_Pile_Wall"),
     # not a leftover -- see test_a_body_sub_model_part_becomes_its_own_section below.
@@ -330,7 +338,7 @@ def test_an_interface_only_body_part_draws_the_line_it_lies_along():
     """crow_case.mdpa's "Interface_..." parts own only zero-thickness interface
     elements. They are drawn -- as line work, since there is no thickness to fill -- so
     each gets its own checklist row and its own eye in the Model explorer."""
-    model = mdpa_import.import_mdpa((EXAMPLES / "crow_case.mdpa").read_text())
+    model = mdpa_import.import_mdpa(reference_deck("crow_case.mdpa"))
 
     sections = {s["key"]: s for s in mdpa_import.to_sections(model)}
 
@@ -386,7 +394,7 @@ def test_an_invisible_body_part_does_not_burn_a_palette_slot():
     "Deep_excavation_Rotterdam_Zuid.mdpa",
 ])
 def test_reference_decks_produce_at_least_one_drawable_section(filename):
-    model = mdpa_import.import_mdpa((EXAMPLES / filename).read_text())
+    model = mdpa_import.import_mdpa(reference_deck(filename))
 
     sections = mdpa_import.to_sections(model)
 

@@ -26,6 +26,10 @@
 <ul id="list"></ul>
 <div id="detail"></div>
 
+<!-- Hosts the real chrome mounts into (LivePatches.install() remounts the toolbar and mode
+     tabs), hidden so they do not crowd the report. -->
+<div hidden><div id="maintoolbar"></div><div id="modetabs"></div><div id="toolrail"></div></div>
+
 <!-- Real dependencies, not stubs: these tests exercise the same three.js and the
      same frozen data.js that the app loads. -->
 <script src="../../vendor/three.min.js"></script>
@@ -36,6 +40,7 @@
 <!-- The Y-up controller, loaded after the frozen Z-up one it replaces. -->
 <script src="../js/orbit.js"></script>
 <script src="../../js/menubar.js"></script>
+<script src="../../js/toolbars.js"></script>
 <script src="../../js/explorer.js"></script>
 <script src="../../js/dialogs.js"></script>
 
@@ -92,6 +97,8 @@
 <script src="test-export.js"></script>
 <script src="test-calculate.js"></script>
 <script src="test-results.js"></script>
+<!-- A real CROW section and its fields, before the suite that reads it (as in run_headless.py). -->
+<script src="fixtures/crow-field.js"></script>
 <script src="test-results-render.js"></script>
 <script src="test-download.js"></script>
 <script src="test-zip.js"></script>
