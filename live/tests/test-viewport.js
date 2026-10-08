@@ -253,8 +253,9 @@
     T.ok(limits.max > COLUMN.homeRadius, 'zooming out has to move too');
   });
 
-  test('the demo domain keeps the reach the frozen constants gave it', function () {
-    var limits = App.Viewport.radiusLimits(DEMO);
+  test('the demo domain keeps the reach the frozen constants gave it in 3D', function () {
+    // The floor that also keeps the perspective camera's near plane out of the model.
+    var limits = App.Viewport.radiusLimits(DEMO, 3);
     T.near(limits.min, 8, 0.5, 'the frozen minRadius, now expressed as a fraction');
     T.near(limits.max, DEMO.homeRadius * 6, 1e-9);
   });
@@ -262,6 +263,18 @@
   test('with no frame yet there are still limits, and they are ordered', function () {
     var limits = App.Viewport.radiusLimits(null);
     T.ok(limits.min > 0 && limits.max > limits.min);
+  });
+
+  /* An imported deck crowds dozens of nodes into the last few centimetres beside a
+     sheet pile; 12.5x of a 70 m section still showed them as one smear. A 2D section
+     is seen through the orthographic camera, whose near plane is far behind it, so
+     there is nothing to clip however close it gets. 3D keeps its floor: the
+     perspective camera's near plane (0.5) would cut into the model. */
+  test('a 2D section can be zoomed in a thousand times or more', function () {
+    var limits = App.Viewport.radiusLimits(DEMO, 2);
+    T.ok(DEMO.homeRadius / limits.min >= 1000,
+         'only ' + DEMO.homeRadius / limits.min + 'x');
+    T.near(limits.max, DEMO.homeRadius * 6, 1e-9, 'zooming out is unchanged');
   });
 })();
 
