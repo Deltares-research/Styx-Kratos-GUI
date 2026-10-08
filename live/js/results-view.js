@@ -91,6 +91,12 @@ App.ResultsView = (function () {
       if (section.edge_indices && section.edge_indices.length) {
         objects.push(lines(section, position, color));
       }
+      // Built only when asked for: on a 5 000-element deck the outlines are most of
+      // the index data, and the contour is read without them most of the time.
+      var outline = payload.options && payload.options.mesh
+        && section.wire_indices && section.wire_indices.length
+        ? wire(section, position) : null;
+      if (outline) objects.push(outline);
       objects.forEach(function (object) { group.add(object); });
       drawn.push({ section: section, values: values.values, positions: positions,
                    objects: objects });
@@ -130,6 +136,24 @@ App.ResultsView = (function () {
     mesh.name = section.key;
     mesh.userData.key = section.key;
     return mesh;
+  }
+
+  /* `results mesh on`: each element's own sides over the shading (the server's
+     `wire_indices`, through the mid-side nodes). The shading's position buffer, not a
+     copy, so the outline deforms with it. Dark and partly transparent, so the colours
+     still read through a fine mesh; below the structural line work (renderOrder 20),
+     so a sheet pile is not hatched over by the soil it sits in. */
+  function wire(section, position) {
+    var geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', position);
+    geometry.setIndex(section.wire_indices);
+    var material = new THREE.LineBasicMaterial({
+      color: 0x37474f, transparent: true, opacity: 0.6, depthTest: false
+    });
+    var outline = new THREE.LineSegments(geometry, material);
+    outline.name = section.key + ':mesh';
+    outline.renderOrder = 15;
+    return outline;
   }
 
   function lines(section, position, color) {

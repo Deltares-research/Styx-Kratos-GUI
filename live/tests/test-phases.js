@@ -448,4 +448,64 @@
     T.eq(App.Phases.hiddenKeys(project(), null, 'staged'), []);
     T.eq(App.Phases.hiddenKeys(project(), 'no_such_phase', 'staged'), []);
   });
+
+  /* ── The Phases overview ───────────────────────────────────────────────
+     The Plaxis "Phases" window: every phase on one line with how long it lasts and
+     the time reached at its end, and -- beside it -- what the last calculation made
+     of it. The window is DOM (patches.js `phasesDialog`); what it says is here. */
+
+  function dike() {
+    function phase(id, name, parent, calculation, days) {
+      return { id: id, name: name, parent: parent, calculation: calculation,
+               activate: [], deactivate: [], time_interval: days };
+    }
+    return { stageable_parts: [], phases: [
+      phase('1_Initial_stage', 'Initial stage', null, 'K0 procedure', 0),
+      phase('2_Null_step', 'Null step', '1_Initial_stage', 'Null step', 0),
+      phase('3_Slag_1', 'Slag 1', '2_Null_step', 'Plastic', 17),
+      phase('4_Slag_2', 'Slag 2', '3_Slag_1', 'Plastic', 22),
+      phase('5_Kraan', 'Kraan load', '4_Slag_2', 'Plastic', 0.5)
+    ] };
+  }
+
+  test('the overview lists every phase, numbered, in run order', function () {
+    var rows = App.Phases.overview(dike(), null);
+    T.eq(rows.map(function (r) { return r.number; }), [1, 2, 3, 4, 5]);
+    T.eq(rows.map(function (r) { return r.id; }),
+         ['1_Initial_stage', '2_Null_step', '3_Slag_1', '4_Slag_2', '5_Kraan']);
+    T.eq(rows[0].kind, 'K0 procedure');
+  });
+
+  test('T is the time reached at the end of a phase, summed along its chain', function () {
+    var rows = App.Phases.overview(dike(), null);
+    T.eq(rows.map(function (r) { return r.total; }), [0, 0, 17, 39, 39.5]);
+    T.eq(rows[3].interval, 22);
+  });
+
+  test('a row reads like the Plaxis list: name, duration, T, and its id', function () {
+    var rows = App.Phases.overview(dike(), null);
+    T.eq(rows[3].label, 'Slag 2 - 22 d, T = 39 d [4_Slag_2]');
+    T.eq(rows[4].label, 'Kraan load - 0.5 d, T = 39.5 d [5_Kraan]');
+    T.eq(rows[0].label, 'Initial stage [1_Initial_stage]', 'no time, no times');
+  });
+
+  test('before any calculation every phase says so', function () {
+    App.Phases.overview(dike(), null).forEach(function (row) {
+      T.eq(row.log, 'Not calculated');
+    });
+  });
+
+  test('a finished run marks every phase OK', function () {
+    App.Phases.overview(dike(), { completed: 5 }).forEach(function (row) {
+      T.eq(row.log, 'OK');
+      T.eq(row.state, row.number === 1 ? 'initial' : 'done');
+    });
+  });
+
+  test('a failed run names the phase it stopped in, and nothing after it ran', function () {
+    var rows = App.Phases.overview(dike(), { completed: 2, failed: true });
+    T.eq(rows.map(function (r) { return r.log; }),
+         ['OK', 'OK', 'Failed', 'Not calculated', 'Not calculated']);
+    T.eq(rows[2].state, 'failed');
+  });
 })();
