@@ -96,7 +96,7 @@ def blank_project() -> Project:
         piles=Piles(xs=[], zs=[], radius=0.1, length=1.0, top_y=0.0),
         loads=[],
         wells=Wells(positions=[], radius=0.1, top_y=0.0, length=1.0),
-        water=WaterLevel(y=-1.5),
+        # No water level: a new model has none until its author sets one.
         mesh=MeshSettings(),
     )
 

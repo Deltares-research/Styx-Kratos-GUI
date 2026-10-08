@@ -173,7 +173,7 @@ def material_parameters(
             "Material": {
                 "constitutive_law": {"name": law},
                 "Variables": _variables(material, dim, k0,
-                                        project.water.specific_weight),
+                                        project.water_specific_weight),
                 "Tables": {},
             },
         })

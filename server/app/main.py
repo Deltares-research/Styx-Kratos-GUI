@@ -35,7 +35,8 @@ from app.build import GeometryError
 from app.kratos import ExportError
 from app.meshing import MeshingError
 from app.schemas import (DimensionUpdate, ExportRequest, LayersUpdate, MaterialsUpdate,
-                         MeshRequest, PhasesUpdate, Project, StructuresUpdate)
+                         MeshRequest, PhasesUpdate, Project, StructuresUpdate,
+                         WaterUpdate)
 
 FROZEN = Path(__file__).resolve().parents[2]
 LIVE = FROZEN / "live"
@@ -170,6 +171,24 @@ async def patch_layers(update: LayersUpdate) -> dict:
     return {"project": project, "invalidates": ["project", "tree", "geometry", "mesh"]}
 
 
+@app.put("/api/project/water")
+async def put_water(update: WaterUpdate) -> dict:
+    """Set the project's water level, or remove it with `{"water": null}`.
+
+    Its own route because removing is the one edit `PATCH /api/project/layers` cannot
+    express: there, an omitted `water` means "leave it alone". What the `water` command
+    calls (live/js/patches.js).
+    """
+    payload = store.get().model_dump()
+    payload["water"] = update.water.model_dump() if update.water is not None else None
+    try:
+        project = Project.model_validate(payload)
+    except ValidationError as failure:
+        raise RequestValidationError(failure.errors()) from failure
+    store.put(project)
+    return {"project": project, "invalidates": ["project", "tree", "geometry", "mesh"]}
+
+
 @app.patch("/api/project/materials")
 async def patch_materials(update: MaterialsUpdate) -> dict:
     """Replace the material library.
@@ -266,12 +285,10 @@ async def patch_phases(update: PhasesUpdate) -> dict:
 
 @app.post("/api/project/phases/defaults")
 async def seed_default_phases() -> dict:
-    """The sequence the phases panel opens on, built from the model as it stands.
+    """What "Create default phases" gives: the initial stage, then the null step.
 
-    `phases.default_phases` is the authority on its shape -- settle the ground, build
-    the wall, then alternate digging with propping -- and reproduces the CROW
-    reference's seven stages exactly for that model. This endpoint is only the way the
-    GUI reaches it.
+    `phases.default_phases` is the authority on it; every further phase is the user's to
+    add. This endpoint is only the way the GUI reaches it.
 
     It replaces whatever is there rather than refusing when phases already exist. That
     is the point: it is the way back out of a sequence the user has broken, and a

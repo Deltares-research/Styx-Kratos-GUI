@@ -402,6 +402,208 @@ App.LivePatches = (function () {
     })((App.TREES && App.TREES[mode]) || []);
   }
 
+  /* ── The colour toggle ──────────────────────────────────────────────────
+     In Mesh mode every row with meshed parts under it gets a small square beside its
+     eye. A click draws those parts in their own colour over the grey mesh (and again
+     takes it off); the eye still only shows and hides. A group row (Sheet piles, Soil)
+     toggles every part under it and shows half-filled while only some are on.
+
+     The square only acts through `App.PartColors` and `App.Viewport.syncPartColors`,
+     the same two things the `colour` command uses, so the tested half decides what
+     each click means. Found by walking the rows in the same order as
+     `tagTreeRowsWithObjKeys`, for the same reason: the frozen explorer keeps its own
+     row-to-node map private. */
+  function addPartColorToggles(mode) {
+    var host = document.getElementById('tree-model');
+    if (!host || !App.PartColors || mode !== 'mesh') return;
+    var meshed = App.Viewport.coloredPartKeys ? App.Viewport.coloredPartKeys() : [];
+    if (!meshed.length) return;
+    var rows = host.querySelectorAll('.tree-row');
+    var i = 0;
+    (function walk(nodes) {
+      (nodes || []).forEach(function (node) {
+        var row = rows[i++];
+        var keys = App.PartColors.keysUnder(node, meshed);
+        if (row && keys.length) addPartColorToggle(row, keys, node);
+        else if (row) addPartColorSlot(row);
+        walk(node.children || []);
+      });
+    })((App.TREES && App.TREES[mode]) || []);
+    syncPartColorToggles();
+  }
+
+  function addPartColorToggle(row, keys, node) {
+    var square = document.createElement('span');
+    square.className = 'tree-paint';
+    square.dataset.keys = keys.join('\n');
+    // A single part shows its own colour; a group, the colour of its first member.
+    square.style.setProperty('--paint', App.Viewport.partColor(keys[0]) || '#e6194b');
+    square.title = keys.length === 1 ? 'Draw this part of the mesh in its own colour'
+                                     : 'Draw these ' + keys.length + ' parts in their own colours';
+    square.addEventListener('click', function (event) {
+      event.stopPropagation();
+      var on = App.PartColors.on.toggle(keys);
+      App.Viewport.syncPartColors();
+      syncPartColorToggles();
+      if (App.Command && App.Command.note) {
+        App.Command.note((on ? 'Coloured: ' : 'No longer coloured: ')
+                         + String(node.label || '').split('  ·  ')[0]);
+      }
+    });
+    var eye = row.querySelector('.tree-eye');
+    row.insertBefore(square, eye ? eye.nextSibling : row.firstChild);
+  }
+
+  /* An empty square's worth of space, so the labels stay in one column. */
+  function addPartColorSlot(row) {
+    var slot = document.createElement('span');
+    slot.className = 'tree-paint empty-slot';
+    var eye = row.querySelector('.tree-eye');
+    row.insertBefore(slot, eye ? eye.nextSibling : row.firstChild);
+  }
+
+  function syncPartColorToggles() {
+    var host = document.getElementById('tree-model');
+    if (!host || !App.PartColors) return;
+    Array.prototype.forEach.call(host.querySelectorAll('.tree-paint:not(.empty-slot)'), function (square) {
+      var state = App.PartColors.on.stateOf(square.dataset.keys.split('\n'));
+      square.classList.toggle('on', state === 'on');
+      square.classList.toggle('mixed', state === 'mixed');
+    });
+  }
+
+  /* ── The Model explorer in Staged construction mode ──────────────────────
+     The row's checkbox stops being "shown" and becomes "in the model in the selected
+     phase", the way Plaxis has it. Ticking or unticking edits that phase alone
+     (`App.Phases.setActive`); the phases after it inherit the change until one of them
+     says otherwise, which is how Kratos runs its stages. Every part keeps its row and
+     its checkbox in every phase, so a part an earlier phase took out can be put back
+     in any later one -- before this, a switched-off part was not drawn, so in the
+     phases after it there was nothing left to click to bring it back.
+
+     A group row (Sheet piles, Soil, Loads) sets every part under it, and shows a dash
+     while they differ. A tick a phase inherited rather than set itself is drawn grey,
+     so what this phase decided stands out from what it was handed. */
+  function addPhaseChecks(mode) {
+    var host = document.getElementById('tree-model');
+    if (!host || mode !== 'staged' || !App.Phases || !App.PartColors) return;
+    if (!selectedPhaseId()) return;
+    var stageable = App.Phases.stageableKeys(App.PROJECT);
+    var rows = host.querySelectorAll('.tree-row');
+    var i = 0;
+    (function walk(nodes) {
+      (nodes || []).forEach(function (node) {
+        var row = rows[i++];
+        var keys = App.PartColors.keysUnder(node, stageable);
+        if (row && keys.length) addPhaseCheck(row, keys, node);
+        walk(node.children || []);
+      });
+    })((App.TREES && App.TREES[mode]) || []);
+    paintPhaseChecks();
+  }
+
+  function addPhaseCheck(row, keys, node) {
+    var check = document.createElement('span');
+    check.className = 'tree-eye phase-check';
+    check.dataset.keys = keys.join('\n');
+    check.title = 'In the model in the selected phase';
+    check.addEventListener('click', function (event) {
+      event.stopPropagation();
+      var phase = selectedPhaseId();
+      if (!phase) return;
+      var wanted = App.Phases.stateIn(App.PROJECT, phase, keys) !== 'on';
+      var label = String(node.label || keys[0]).split('  ·  ')[0];
+      savePhases(App.Phases.setActive(App.PROJECT, phase, keys, wanted),
+                 label + (wanted ? ' switched on in ' : ' switched off in ')
+                 + (phaseById(phase) || {}).name + '.');
+    });
+    // In place of the eye, which in this mode would be a second, competing on/off.
+    var eye = row.querySelector('.tree-eye');
+    if (eye) row.replaceChild(check, eye);
+    else row.insertBefore(check, row.firstChild);
+  }
+
+  /* After the phase or the sequence changed. The tree is mounted again only when the
+     checkboxes have to appear (the first phases were just created) or go (the last
+     phase was deleted, so the eyes come back); otherwise they are repainted in place.
+     Never called from a mount, so it cannot loop. */
+  function syncPhaseChecks() {
+    if (typeof document === 'undefined') return;
+    var host = document.getElementById('tree-model');
+    if (!host || !App.state || App.state.mode !== 'staged') return;
+    var phase = selectedPhaseId();
+    var present = !!host.querySelector('.phase-check');
+    if (!!phase !== present) {
+      if (App.Explorer) App.Explorer.mountTree('staged');
+      return;
+    }
+    paintPhaseChecks();
+  }
+
+  function paintPhaseChecks() {
+    var host = document.getElementById('tree-model');
+    if (!host) return;
+    var phase = selectedPhaseId();
+    Array.prototype.forEach.call(host.querySelectorAll('.phase-check'), function (check) {
+      var keys = check.dataset.keys.split('\n');
+      var state = phase ? App.Phases.stateIn(App.PROJECT, phase, keys) : 'on';
+      check.classList.toggle('off', state === 'off');
+      check.classList.toggle('mixed', state === 'mixed');
+      check.classList.toggle('inherited', keys.length === 1 && !!phase
+        && App.Phases.ownership(App.PROJECT, phase, keys[0]) === 'inherited');
+    });
+  }
+
+  /* `colour ...`, typed. `false` when it is not this command. */
+  function runColourCommand(text) {
+    if (!App.PartColors) return false;
+    var mode = App.state && App.state.mode;
+    var answer = App.PartColors.command(text, {
+      tree: (App.TREES && App.TREES[mode]) || [],
+      meshed: App.Viewport.coloredPartKeys ? App.Viewport.coloredPartKeys() : [],
+      on: App.PartColors.on
+    });
+    if (answer === false) return false;
+    if (App.Command.write) App.Command.write('echo', '> ' + String(text).trim());
+    if (answer.changed) {
+      App.Viewport.syncPartColors();
+      syncPartColorToggles();
+    }
+    var message = answer.message;
+    if (answer.ok && answer.changed && mode !== 'mesh') {
+      message += ' Coloured parts are drawn on the mesh, in Mesh mode.';
+    }
+    if (answer.ok) App.Command.ok(message);
+    else App.Command.err(message);
+    return true;
+  }
+
+  /* `water ...`, typed: set, show or remove the project's water level. What to send is
+     `App.WaterCommand`'s (tested headless); this sends it and redraws from the project
+     the server stored. `false` when it is not this command. */
+  function runWaterCommand(text) {
+    if (!App.WaterCommand) return false;
+    var answer = App.WaterCommand.command(text, {
+      water: App.PROJECT ? App.PROJECT.water : null,
+      domain: App.PROJECT ? App.PROJECT.domain : null
+    });
+    if (answer === false) return false;
+    if (App.Command.write) App.Command.write('echo', '> ' + String(text).trim());
+    if (!answer.ok) { App.Command.err(answer.message); return true; }
+    if (!answer.body) { App.Command.note(answer.message); return true; }
+    App.Api.put('/api/project/water', answer.body)
+      .then(function (result) {
+        App.Model.apply(result.project);
+        return App.Viewport.refresh();
+      })
+      .then(function () {
+        if (App.Explorer && App.state) App.Explorer.mountTree(App.state.mode);
+        App.Command.ok(answer.message);
+      })
+      .catch(function (error) { App.Command.err(error.message); });
+    return true;
+  }
+
   function deleteCustomPart(key) {
     if (App.Command && App.Command.note) App.Command.note('Deleting ' + key + '…');
     return fetch(App.Api.base + '/api/geometry/parts/' + encodeURIComponent(key), { method: 'DELETE' })
@@ -832,6 +1034,8 @@ App.LivePatches = (function () {
       App.MdpaImportDialog.closeChecklist();
     }
     if (App.Model.setImportedParts) App.Model.setImportedParts([]);
+    // Coloured parts were parts of the document that is no longer open.
+    if (App.PartColors) App.PartColors.on.clear();
 
     /* And a calculation's results, for exactly the same reason as the .mdpa above:
        they belong to the document that produced them. A different project is open
@@ -1241,6 +1445,9 @@ App.LivePatches = (function () {
     host.appendChild(phaseToolbar());
 
     var phases = (App.PROJECT && App.PROJECT.phases) || [];
+    // The Model explorer's checkboxes follow the selected phase. Every route that
+    // changes the phase or the sequence comes through here.
+    syncPhaseChecks();
     if (!phases.length) {
       host.appendChild(emptyPhaseState());
       return;
@@ -1523,8 +1730,9 @@ App.LivePatches = (function () {
           }
 
           right.appendChild(el('div.lay-hint', { text:
-            'Click a soil body or a structure in the viewport, in Staged ' +
-            'construction mode, to switch it off for the selected phase.' }));
+            'In Staged construction mode, tick or untick a part in the Model ' +
+            'explorer to put it in or take it out of the selected phase. The ' +
+            'phases after it follow until one of them changes it again.' }));
         }
 
         draw();
@@ -2075,6 +2283,8 @@ App.LivePatches = (function () {
       App.Explorer.mountTree = function (mode) {
         frozenMountTree(mode);
         tagTreeRowsWithObjKeys(mode);
+        addPartColorToggles(mode);
+        addPhaseChecks(mode);
       };
     }
     if (typeof document !== 'undefined') {
@@ -2092,7 +2302,9 @@ App.LivePatches = (function () {
         ['note', '  run <file.py>         build the model from a Python file'],
         ['note', '  export                write the Kratos deck'],
         ['note', '  cleargeometry         remove drawn/imported custom geometry'],
-        ['note', '  results               open what a calculation wrote (try "results runs")']);
+        ['note', '  results               open what a calculation wrote (try "results runs")'],
+        ['note', '  colour <part>|all|off draw a part of the mesh in its own colour'],
+        ['note', '  water <level>|off     set or remove the water level, e.g. water -1.5']);
     }
 
     /* ── Results mode ─────────────────────────────────────────────────────
@@ -2643,7 +2855,12 @@ App.LivePatches = (function () {
         var handledByResults = App.Results.handleCommand(text);
         if (handledByResults !== false) return handledByResults;
       }
-      
+
+      // `colour <part>`: the Model explorer's colour toggle, typed.
+      if (runColourCommand(text)) return;
+      // `water <level>` / `water off`: the project's water level.
+      if (runWaterCommand(text)) return;
+
       var cmd = (text || '').trim().split(/\s+/)[0].toLowerCase();
       if (cmd === 'cleargeometry') {
         if (App.Command.note) App.Command.note('Clearing custom geometry...');

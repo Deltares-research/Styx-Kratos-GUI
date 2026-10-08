@@ -169,6 +169,8 @@ App.Viewport = (function () {
     if (!group) return;
     group.traverse(function (o) {
       if (o.geometry) o.geometry.dispose();
+      // A badge's letter is a texture of its own (labelInterfaceFaces).
+      if (o.material && o.material.map) o.material.map.dispose();
       if (o.material) o.material.dispose();
     });
     // The triad has its own scene, so remove from whichever one adopted the group.
@@ -536,7 +538,10 @@ App.Viewport = (function () {
       return { soil: visibleKeys, structures: visibleKeys.concat(loadKeys, memberKeys),
                mesh: visibleKeys.concat(['mesh'], memberKeys),
                flow: visibleKeys.concat(['water']),
-               staged: visibleKeys.concat(memberKeys, ['water']) };
+               // Loads too: Staged construction is where a load is switched on and
+               // off, so it has to be on screen there (`phaseHidden` still hides one
+               // the selected phase has switched off).
+               staged: visibleKeys.concat(loadKeys, memberKeys, ['water']) };
     }
     return {
       soil:       soilKeys.slice(),
@@ -1132,6 +1137,28 @@ App.Viewport = (function () {
     });
   }
 
+  /* The box around what a group draws. Not `Box3.setFromObject`, which counts hidden
+     children as well: the mesh group holds the coloured-part overlays, hidden until
+     switched on, and the water level's line among them overhangs the model by its
+     margin -- so selecting the mesh drew a box 3 m wider than the mesh on each side.
+     Invisible subtrees are skipped, and so is anything marked `noBounds` (the overlay
+     itself, which is a view of the mesh rather than part of it). */
+  function boundsOf(object) {
+    var box = new THREE.Box3();
+    object.updateMatrixWorld(true);
+    (function walk(o) {
+      if (!o.visible || (o.userData && o.userData.noBounds)) return;
+      if (o.geometry) {
+        if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+        if (!o.geometry.boundingBox.isEmpty()) {
+          box.union(o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld));
+        }
+      }
+      o.children.forEach(walk);
+    })(object);
+    return box;
+  }
+
   /* ── Selection ──────────────────────────────────────────────── */
   function select(key) {
     if (!scene) return;
@@ -1146,7 +1173,7 @@ App.Viewport = (function () {
     var box = new THREE.Box3();
     keys.forEach(function (k) {
       setEmissive(k, 0x1f3b70);
-      box.union(new THREE.Box3().setFromObject(groups[k]));
+      box.union(boundsOf(groups[k]));
     });
     if (!box.isEmpty()) {
       boxHelper = new THREE.Box3Helper(box, 0x2f7fe0);
@@ -1195,6 +1222,8 @@ App.Viewport = (function () {
     });
     if (mode === 'mesh' && !meshBuilt && groups.mesh) groups.mesh.visible = false;
     if (selected && !selectedKeys.every(function (k) { return groups[k] && groups[k].visible; })) select(null);
+    // A phase may have switched a part off, and a coloured part follows that.
+    syncPartColors();
     needsRender = true;
   }
 
@@ -1225,6 +1254,8 @@ App.Viewport = (function () {
     // A hidden mesh has nothing to number: the labels follow the eye, or they float
     // over a part that is no longer there.
     if (key === 'mesh') refreshLabels();
+    // A coloured part follows its own eye: hidden, it is not drawn coloured either.
+    syncPartColors();
     needsRender = true;
   }
 
@@ -1442,6 +1473,7 @@ App.Viewport = (function () {
         wire.userData.noPick = true;
         groups.mesh.add(wire);
       });
+      buildPartColors(result.parts || []);
       scene.add(groups.mesh);
       if (!(('mesh') in visible)) visible.mesh = true;
 
@@ -1458,6 +1490,9 @@ App.Viewport = (function () {
         });
       ui.hide();
       setMode(App.state.mode);
+      // The Model explorer's colour toggles are only drawn for parts that have mesh
+      // elements, so the tree is mounted again now that there are some.
+      if (App.Explorer && App.Explorer.mountTree) App.Explorer.mountTree(App.state.mode);
       needsRender = true;
       // Last, and only if the numbers are on screen: re-numbering means a second trip
       // to the server with its own progress overlay, which must not start under this
@@ -1472,6 +1507,143 @@ App.Viewport = (function () {
   }
 
   function hasMesh() { return meshBuilt; }
+
+  /* ── Parts in a colour of their own ────────────────────────────────────
+     The grey mesh is one sheet. `result.parts` is the same mesh cut along part keys
+     (server/app/meshing.py `_part_sections`), and each part is built here once, hidden,
+     inside the mesh group -- so it lives and dies with the mesh, and is only ever on
+     screen where the mesh is (Mesh mode, mesh eye on). `App.PartColors` decides which
+     are switched on; `syncPartColors` shows exactly those that are also shown by their
+     own eye and built by the selected phase.
+
+     A body is a tinted fill over the grey, with its own wireframe on top. A structure
+     is its segments plus a dot on every node: a one-pixel line in a dense mesh is easy
+     to lose, and the dots are the part's nodes, which is what it is being looked at
+     for. */
+  var meshPartKeys = [];
+  var meshPartGroups = {};
+
+  function buildPartColors(parts) {
+    meshPartGroups = {};
+    meshPartKeys = parts.map(function (section) { return section.key; });
+    // The server sends them in `Project.part_keys` order, so a part keeps its colour
+    // across a re-mesh that adds a structure after it.
+    var palette = App.PartColors ? App.PartColors.colors(meshPartKeys) : {};
+    var holder = new THREE.Group();
+    holder.name = 'meshParts';
+    // A view of the mesh, not part of it: never in a selection box (`boundsOf`).
+    holder.userData.noBounds = true;
+    parts.forEach(function (section) {
+      var colour = new THREE.Color(palette[section.key] || '#e6194b');
+      var group = new THREE.Group();
+      group.name = 'meshPart:' + section.key;
+      group.visible = false;
+      if (section.indices.length) {
+        var fill = new THREE.Mesh(App.Buffers.geometry(section), new THREE.MeshBasicMaterial({
+          color: colour, transparent: true, opacity: 0.8, side: THREE.DoubleSide,
+          // In front of the grey mesh (which sits at +1), behind the lines (at 0).
+          polygonOffset: true, polygonOffsetFactor: 0.5, polygonOffsetUnits: 0.5
+        }));
+        fill.userData.noPick = true;
+        group.add(fill);
+        if (section.edges.length) {
+          var wire = new THREE.LineSegments(App.Buffers.edges(section),
+            new THREE.LineBasicMaterial({ color: 0x263238 }));
+          wire.userData.noPick = true;
+          group.add(wire);
+        }
+      } else if (section.edges.length) {
+        var lines = new THREE.LineSegments(App.Buffers.edges(section),
+          new THREE.LineBasicMaterial({ color: colour, depthTest: false }));
+        lines.renderOrder = 10;
+        lines.userData.noPick = true;
+        group.add(lines);
+        var dots = new THREE.Points(App.Buffers.edges(section), new THREE.PointsMaterial({
+          color: colour, size: 6, sizeAttenuation: false, depthTest: false
+        }));
+        dots.renderOrder = 11;
+        dots.userData.noPick = true;
+        group.add(dots);
+      }
+      meshPartGroups[section.key] = group;
+      holder.add(group);
+    });
+    labelInterfaceFaces(parts, palette);
+    groups.mesh.add(holder);
+    if (App.PartColors) App.PartColors.on.keep(meshPartKeys);
+    syncPartColors();
+  }
+
+  /* An interface's two faces lie on one line, drawn a hair apart toward their own
+     sides (meshing.py `_interface_sections`). A round L or R badge in the face's colour
+     says which is which. With both faces present the badge goes a little further out
+     than its line, away from the other face; a lone face is labelled where it is. */
+  function labelInterfaceFaces(parts, palette) {
+    if (!App.PartColors || typeof document === 'undefined') return;
+    var middles = {};
+    parts.forEach(function (section) {
+      if (!App.PartColors.sideOf(section.key) || !section.edges.length) return;
+      var segments = section.edges.length / 6;
+      var at = Math.floor(segments / 2) * 6;
+      var e = section.edges;
+      middles[section.key] = new THREE.Vector3((e[at] + e[at + 3]) / 2,
+                                               (e[at + 1] + e[at + 4]) / 2,
+                                               (e[at + 2] + e[at + 5]) / 2);
+    });
+    Object.keys(middles).forEach(function (key) {
+      var side = App.PartColors.sideOf(key);
+      var other = App.PartColors.baseOf(key) + ':' + (side === 'L' ? 'R' : 'L');
+      var at = middles[key].clone();
+      if (middles[other]) at.add(middles[key].clone().sub(middles[other]).multiplyScalar(2));
+      var badge = letterBadge(side, palette[key] || '#e6194b');
+      badge.position.copy(at);
+      meshPartGroups[key].add(badge);
+    });
+  }
+
+  function letterBadge(letter, colour) {
+    var canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 64;
+    var ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(32, 32, 28, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = colour;
+    ctx.stroke();
+    ctx.fillStyle = colour;
+    ctx.font = 'bold 34px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(letter, 32, 34);
+    var sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: new THREE.CanvasTexture(canvas), depthTest: false, sizeAttenuation: false
+    }));
+    // A fixed size on screen, whatever the zoom: about 3.5% of the viewport's height.
+    sprite.scale.set(0.035, 0.035, 1);
+    sprite.renderOrder = 12;
+    sprite.userData.noPick = true;
+    return sprite;
+  }
+
+  function syncPartColors() {
+    if (!App.PartColors) return;
+    var hidden = phaseHidden();
+    var drawn = App.PartColors.drawn(meshPartKeys, App.PartColors.on, function (key) {
+      return isVisible(key) && !hidden[key];
+    });
+    Object.keys(meshPartGroups || {}).forEach(function (key) {
+      meshPartGroups[key].visible = drawn.indexOf(key) >= 0;
+    });
+    needsRender = true;
+  }
+
+  function partColor(key) {
+    return App.PartColors ? App.PartColors.colors(meshPartKeys)[key] : null;
+  }
+
+  function coloredPartKeys() { return meshBuilt ? meshPartKeys.slice() : []; }
 
   /* A previewed .mdpa: drawn straight into the scene, not into `groups`, because it is
      not part of the project -- a project refresh() must not touch it. Its own parts
@@ -1900,6 +2072,8 @@ App.Viewport = (function () {
     refreshLabels: refreshLabels, syncLabels: syncLabels,
     projectToScreen: projectToScreen,
     showImportedMesh: showImportedMesh, clearImportedMesh: clearImportedMesh,
+    syncPartColors: syncPartColors, coloredPartKeys: coloredPartKeys, partColor: partColor,
+    boundsOf: boundsOf,
     hasImportedMesh: hasImportedMesh, removeImportedSection: removeImportedSection,
     setImportedGroupKeys: setImportedGroupKeys, importedLineOrder: importedLineOrder,
     frameImportedSection: frameImportedSection,

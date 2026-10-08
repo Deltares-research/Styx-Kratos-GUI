@@ -309,3 +309,24 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
 /* Three actions and a Close is more than the footer's 82px minimum was sized for. */
 .dlg-results .dlg-foot { gap: 6px; }
 .dlg-results .dlg-foot .btn { min-width: 0; padding: 0 12px; }
+
+/* The Model explorer's colour toggle (Mesh mode): beside the eye, a square in the part's
+   own colour -- outlined while off, filled while on, half filled for a group that is
+   partly on. See addPartColorToggles in live/js/patches.js. */
+.tree-paint {
+  width: 11px; height: 11px; flex: 0 0 auto; margin-left: 3px; box-sizing: border-box;
+  border: 2px solid var(--paint, #e6194b); border-radius: 2px; background: #fff;
+  cursor: pointer;
+}
+.tree-paint.on { background: var(--paint, #e6194b); }
+.tree-paint.mixed { background: linear-gradient(135deg, var(--paint, #e6194b) 50%, #fff 50%); }
+.tree-paint.empty-slot { visibility: hidden; cursor: default; }
+
+/* The Model explorer's checkbox in Staged construction mode means "in the model in the
+   selected phase" (addPhaseChecks in live/js/patches.js). A group whose parts differ
+   shows a dash; a state this phase inherited rather than set itself is ticked in grey. */
+.tree-eye.phase-check.mixed::after {
+  opacity: 1; width: 7px; height: 0; transform: none;
+  border: 0; border-bottom: 1.6px solid var(--brand-primary);
+}
+.tree-eye.phase-check.inherited::after { border-color: var(--c-ink-faint); }

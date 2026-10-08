@@ -351,31 +351,56 @@ App.Phases = (function () {
      that outright, so producing it here would mean the server rejecting an edit that
      is already on screen. */
   function toggled(project, id, key) {
+    var current = (activeParts(project, id) || []).indexOf(key) >= 0;
+    return setActive(project, id, [key], !current);
+  }
+
+  /* Make each of `keys` be `wanted` (in the model, or not) in phase `id` -- what the
+     Model explorer's checkbox does in Staged construction mode, for one part or for a
+     group row's every part.
+
+     Only phase `id` is edited, so no phase before it changes; the ones after it inherit
+     the new state until one of them says otherwise, which is how Kratos runs its
+     stages -- one model, carried from stage to stage. Each key ends up with the
+     smallest instruction that gives the wanted state: none at all when the parent
+     already gives it (which is also how switching back drops an instruction rather
+     than stacking a second one), and never both lists for one part, which the server
+     refuses (`Phase._one_instruction_per_part`). */
+  function setActive(project, id, keys, wanted) {
     var byId = index(project);
     if (!byId[id]) return copy(phasesOf(project));
 
-    var chain = chainTo(project, id);
-    var inheritedActive = true;      // everything starts in the model
-    chain.slice(0, -1).forEach(function (phase) {
-      if (listOf(phase, 'deactivate').indexOf(key) >= 0) inheritedActive = false;
-      if (listOf(phase, 'activate').indexOf(key) >= 0) inheritedActive = true;
-    });
-
-    var current = (activeParts(project, id) || []).indexOf(key) >= 0;
-    var wanted = !current;
+    var before = chainTo(project, id).slice(0, -1);
+    function inheritedActive(key) {
+      var active = true;      // everything starts in the model
+      before.forEach(function (phase) {
+        if (listOf(phase, 'deactivate').indexOf(key) >= 0) active = false;
+        if (listOf(phase, 'activate').indexOf(key) >= 0) active = true;
+      });
+      return active;
+    }
 
     return copy(phasesOf(project)).map(function (phase) {
       if (phase.id !== id) return phase;
-      var activate = listOf(phase, 'activate').filter(function (k) { return k !== key; });
-      var deactivate = listOf(phase, 'deactivate').filter(function (k) { return k !== key; });
-      // Only state an instruction the parent does not already give.
-      if (wanted !== inheritedActive) {
-        (wanted ? activate : deactivate).push(key);
-      }
+      var activate = listOf(phase, 'activate').slice();
+      var deactivate = listOf(phase, 'deactivate').slice();
+      keys.forEach(function (key) {
+        activate = activate.filter(function (k) { return k !== key; });
+        deactivate = deactivate.filter(function (k) { return k !== key; });
+        // Only state an instruction the parent does not already give.
+        if (wanted !== inheritedActive(key)) (wanted ? activate : deactivate).push(key);
+      });
       phase.activate = activate;
       phase.deactivate = deactivate;
       return phase;
     });
+  }
+
+  /* 'on', 'off' or -- for a group row whose parts differ -- 'mixed', in phase `id`. */
+  function stateIn(project, id, keys) {
+    var active = activeParts(project, id) || [];
+    var on = keys.filter(function (key) { return active.indexOf(key) >= 0; }).length;
+    return !on ? 'off' : on === keys.length ? 'on' : 'mixed';
   }
 
   /* Which part keys the viewport should not draw, given the selected phase.
@@ -404,6 +429,6 @@ App.Phases = (function () {
     hiddenKeys: hiddenKeys,
     order: order, branchProblem: branchProblem, rows: rows,
     added: added, inserted: inserted, removed: removed, copied: copied,
-    ownership: ownership, toggled: toggled
+    ownership: ownership, toggled: toggled, setActive: setActive, stateIn: stateIn
   };
 })();

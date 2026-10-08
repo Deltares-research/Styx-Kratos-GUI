@@ -259,7 +259,7 @@ def staged(session):
     project = golden_project()
     project = Project.model_validate(
         project.model_dump()
-        | {"phases": [phase.model_dump() for phase in phases.default_phases(project)]})
+        | {"phases": [phase.model_dump() for phase in phases.staged_excavation_phases(project)]})
     return kratos.export_project(project, MeshRequest(element_size=4.0, order=2))
 
 
@@ -360,7 +360,7 @@ def test_a_staged_export_is_deterministic(session):
     project = golden_project()
     project = Project.model_validate(
         project.model_dump()
-        | {"phases": [phase.model_dump() for phase in phases.default_phases(project)]})
+        | {"phases": [phase.model_dump() for phase in phases.staged_excavation_phases(project)]})
     first = kratos.export_project(project, MeshRequest(element_size=4.0, order=2))
     second = kratos.export_project(project, MeshRequest(element_size=4.0, order=2))
     assert first["project_parameters"] == second["project_parameters"]

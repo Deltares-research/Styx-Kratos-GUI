@@ -307,9 +307,12 @@ def export_project(project: Project, settings: MeshRequest,
     condition_keys = {key for key, _, rows in conditions if rows}
     active_loads = [(names[load.id], *_load_variable(load, dim))
                     for load in project.loads if load.id in condition_keys]
+    # A hydrostatic load cannot exist without a water level (`Project` rejects it), so
+    # the level read here is only ever missing for a uniform load, which ignores it.
     normal_load_processes = [
         (names[load.id], load.fluid_pressure_type, load.pressure,
-         project.water.y, project.water.specific_weight)
+         project.water.y if project.water is not None else project.domain.y_bottom,
+         project.water_specific_weight)
         for load in project.active_normal_loads if load.id in condition_keys
     ]
     beam_properties = [(names[key], project.beam_section(_beam_of(project, key).section),
@@ -425,7 +428,7 @@ def export_project(project: Project, settings: MeshRequest,
         [(name, variable, load_mask, value) for name, variable, value in active_loads],
         stages,
         normal_load_processes,
-        water=(project.water.y, project.water.specific_weight),
+        water=_phreatic(project),
         deck_name=deck_name(project),
         domain_size=dim,
         body_parts=body_parts,
@@ -975,6 +978,21 @@ def _load_variable(load: PointLoad | LineLoad | SurfaceLoad,
 
 
 # ── Reading the mesh back out of gmsh ───────────────────────────────────────
+
+def _phreatic(project: Project) -> tuple[float, float]:
+    """(level, specific weight) the pore pressure is fixed about.
+
+    A dry model has no level, and its pressure degrees of freedom still need fixing. The
+    level is then the bottom of the model: Kratos writes
+    `min(-gamma * (level - y), pressure_tension_cut_off)` at each node and the cut-off
+    defaults to 0 (GeoMechanicsApplication, apply_constant_hydrostatic_pressure_process.cpp),
+    so every node at or above it -- which is every node -- gets exactly zero, fixed. The
+    same process the validated decks use, so nothing new is asked of Kratos.
+    """
+    if project.water is None:
+        return (project.domain.y_bottom, project.water_specific_weight)
+    return (project.water.y, project.water.specific_weight)
+
 
 def _world_coordinates() -> dict[int, tuple[float, float, float]]:
     tags, flat, _ = gmsh.model.mesh.getNodes()
