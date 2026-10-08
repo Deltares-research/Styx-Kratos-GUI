@@ -211,11 +211,28 @@ def _stages_from_deck(directory: Path) -> list[tuple[str, str]]:
         if not isinstance(name, str):
             continue
         stage = stages.get(name, {}) if isinstance(stages, dict) else {}
-        problem = (stage.get("stage_settings", {})
-                        .get("problem_data", {})
-                        .get("problem_name")) if isinstance(stage, dict) else None
-        out.append((name, problem if isinstance(problem, str) and problem else None))
+        base = _gid_output_name(stage) or ((stage.get("stage_settings", {})
+                                            .get("problem_data", {})
+                                            .get("problem_name"))
+                                           if isinstance(stage, dict) else None)
+        out.append((name, base if isinstance(base, str) and base else None))
     return out
+
+
+def _gid_output_name(stage: object) -> str | None:
+    """The base name the GiD writer was handed, which is what its files are called.
+
+    Our own decks give it the stage's `problem_name`, so the two never differed until a
+    deck written elsewhere was run (`app.deck`): there they can, and the file on disk is
+    named by this one. Only the last path component, because a run directory is flat --
+    `deck.stage` cuts any directory off before the run.
+    """
+    try:
+        processes = stage["stage_settings"]["output_processes"]["gid_output"]
+        name = processes[0]["Parameters"]["output_name"]
+    except (KeyError, IndexError, TypeError):
+        return None
+    return PureWindowsPath(name).name if isinstance(name, str) and name else None
 
 
 def _stages_from_files(directory: Path) -> list[tuple[str, str]]:

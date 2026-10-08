@@ -420,6 +420,7 @@ window.PHASE_FIXTURE =
         "time_interval": 0.0
       }
     ],
+    "deck": null,
     "soil_body_keys": [
       "soil_L1",
       "soil_L2",

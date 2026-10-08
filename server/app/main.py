@@ -114,17 +114,36 @@ async def run_script(request: dict) -> dict:
     """
     from app import script as script_module
 
+    from app import deck as decks
+
     path = (request or {}).get("path")
     if not path:
         raise HTTPException(status_code=422, detail="run needs a path to a .py file")
     try:
-        project = store.put(script_module.load_project(path))
-    except script_module.ScriptError as failure:
+        project = script_module.load_project(path)
+        # A deck case comes with its mesh -- there is nothing to generate -- so it goes
+        # back in the same answer, and the client shows it instead of meshing.
+        mesh = decks.preview(project.deck) if project.deck else None
+    except (script_module.ScriptError, decks.DeckError) as failure:
         # 400, not 500: the file is the caller's, and every one of these messages is
         # written to be read by whoever typed the command.
         raise HTTPException(status_code=400, detail=str(failure)) from failure
-    return {"project": project, "path": str(path),
+    store.put(project)
+    return {"project": project, "path": str(path), "mesh": mesh,
             "invalidates": ["project", "tree", "geometry", "mesh"]}
+
+
+def _not_for_a_deck(project: Project, what: str) -> None:
+    """Refuse to mesh or export a project that is a deck already (`app.deck`).
+
+    Everything but its deck is the empty site the schema requires, so going ahead would
+    mesh nothing and answer as though that were the model.
+    """
+    if project.deck is not None:
+        raise HTTPException(status_code=422, detail=(
+            f"{project.name} is a Kratos deck ({project.deck.parameters} in "
+            f"{project.deck.directory}), so it is not {what} here: its mesh is the "
+            f"deck's own. Calculate runs it as it is."))
 
 
 # There is no `/api/project/crow`. It opened the CROW staged-excavation case, back when
@@ -266,6 +285,7 @@ async def patch_phases(update: PhasesUpdate) -> dict:
     geometry or the mesh: every part it names already exists, which is what makes a
     key valid in the first place.
     """
+    _phases_of_a_deck_are_read_only(store.get())
     payload = store.get().model_dump()
     payload["phases"] = [phase.model_dump() for phase in update.phases]
     try:
@@ -283,6 +303,17 @@ async def patch_phases(update: PhasesUpdate) -> dict:
     return {"project": project, "invalidates": ["project"]}
 
 
+def _phases_of_a_deck_are_read_only(project: Project) -> None:
+    """A deck's phases are its stages, read from it (`app.deck`); the deck is what
+    Calculate runs, so an edit made here would show in the panel and change nothing
+    that is calculated."""
+    if project.deck is not None:
+        raise HTTPException(status_code=422, detail=(
+            f"The phases of {project.name} are the stages of its Kratos deck "
+            f"({project.deck.parameters} in {project.deck.directory}), shown as they "
+            f"are. Edit the deck to change them, then run its script again."))
+
+
 @app.post("/api/project/phases/defaults")
 async def seed_default_phases() -> dict:
     """What "Create default phases" gives: the initial stage, then the null step.
@@ -295,6 +326,7 @@ async def seed_default_phases() -> dict:
     "reset to defaults" that declines to reset is not one.
     """
     current = store.get()
+    _phases_of_a_deck_are_read_only(current)
     payload = current.model_dump()
     payload["phases"] = [phase.model_dump()
                          for phase in phase_model.default_phases(current)]
@@ -501,6 +533,7 @@ async def create_geometry(recipe: dict) -> dict:
 @app.post("/api/mesh")
 async def generate_mesh(settings: MeshRequest) -> dict:
     project = store.get()
+    _not_for_a_deck(project, "meshed")
     unknown = sorted((set(settings.volume_keys or []) | set(settings.body_sizes))
                      - set(project.part_keys()))
     if unknown:
@@ -525,6 +558,7 @@ async def mesh_labels(settings: MeshRequest) -> dict:
     numbers are looked at.
     """
     project = store.get()
+    _not_for_a_deck(project, "meshed")
     unknown = sorted((set(settings.volume_keys or []) | set(settings.body_sizes))
                      - set(project.part_keys()))
     if unknown:
@@ -547,6 +581,7 @@ async def mesh_node_parts(settings: MeshRequest) -> dict:
     costs a full export pass, and is asked for far less often than a mesh.
     """
     project = store.get()
+    _not_for_a_deck(project, "meshed")
     unknown = sorted((set(settings.volume_keys or []) | set(settings.body_sizes))
                      - set(project.part_keys()))
     if unknown:
@@ -568,6 +603,7 @@ async def export_mdpa(settings: ExportRequest) -> dict:
     put the exporter's warnings in the command log; gzip already covers the size.
     """
     project = store.get()
+    _not_for_a_deck(project, "exported")
     unknown = sorted((set(settings.volume_keys or []) | set(settings.body_sizes))
                      - set(project.part_keys()))
     if unknown:
@@ -595,8 +631,13 @@ async def calculate_project(settings: ExportRequest) -> dict:
     the machine for as long as it takes; the event loop stays free, so the rest of the
     app keeps answering while a solver works. A model Kratos rejects comes back 200 with
     `ok` false and its reason: that is an answer about the model, not a broken server.
+
+    A project that is a deck already (`app.deck`) skips the export: its own files are
+    copied into the run directory and run as they are.
     """
     project = store.get()
+    if project.deck is not None:
+        return await _calculate_deck(project)
     unknown = sorted((set(settings.volume_keys or []) | set(settings.body_sizes))
                      - set(project.part_keys()))
     if unknown:
@@ -623,6 +664,22 @@ async def calculate_project(settings: ExportRequest) -> dict:
     # rather than left to the client to split off the path, because the two platforms
     # spell a path separator differently and the client would have to know which.
     return result | {"stats": export["stats"], "warnings": export["warnings"],
+                     "run": Path(result["directory"]).name}
+
+
+async def _calculate_deck(project: Project) -> dict:
+    from app import deck as decks
+
+    try:
+        stats = decks.stats(project.deck)
+        result = await asyncio.to_thread(calculate.run_deck, project.deck)
+    except decks.DeckError as failure:
+        raise HTTPException(status_code=400, detail=str(failure)) from failure
+    except calculate.Busy as busy:
+        raise HTTPException(status_code=409, detail=str(busy)) from busy
+    except calculate.CalculationError as failure:
+        raise HTTPException(status_code=500, detail=str(failure)) from failure
+    return result | {"stats": stats, "warnings": [],
                      "run": Path(result["directory"]).name}
 
 

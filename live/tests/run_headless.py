@@ -74,6 +74,12 @@ SUITES = {
         [JS / "mesh-settings.js"],
         TESTS / "test-mesh-settings.js",
     ),
+    # `run <case.py>` for a deck case: whether its mesh came along, the Model explorer
+    # rows and the log line. Showing it and switching to the Mesh tab are DOM.
+    "deck": (
+        [JS / "phases.js", JS / "deck.js"],
+        TESTS / "test-deck.js",
+    ),
     "results": (
         # calculate.js comes along because the handoff between the two is the whole of
         # task P0.4: what Calculate just wrote has to become the run `results` opens.

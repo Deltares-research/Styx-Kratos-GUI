@@ -1133,6 +1133,26 @@ class ExportRequest(MeshRequest):
 
 # ── Project ─────────────────────────────────────────────────────────────────
 
+class Deck(Base):
+    """A Kratos deck that already exists on disk, standing in for the parametric model.
+
+    Set by `app.deck.deck_project` for a case that is written as a deck rather than
+    built from layers -- the Eemdijk case, with its twenty stages, three material sets
+    and phreatic multi-lines, none of which this schema can say. The deck is shown as
+    its own mesh and calculated as the files it is; nothing is exported. Every other
+    field of a project carrying one is the empty site `seed.blank_project` is, there
+    because the schema requires it.
+    """
+    directory: str
+    """Absolute. The files the parameters name are read from here."""
+    parameters: str = "ProjectParameters.json"
+    """The orchestrator file, by name inside `directory`. It names everything else."""
+    parts: list[str] = Field(default_factory=list)
+    """The deck's parts that some stage computes on or loads, in the order the stages
+    first name them -- what this project's phases switch on and off (`stageable_keys`).
+    Read off the deck when it is opened, so that validating a project never has to."""
+
+
 class Project(Base):
     name: str = "Deep excavation — Rotterdam Zuid"
 
@@ -1201,6 +1221,8 @@ class Project(Base):
     """The construction sequence, in creation order. Empty means an unphased project --
     every project written before staged construction -- which exports exactly what it
     always did. That is the compatibility contract; see `test_export_golden.py`."""
+    deck: Deck | None = None
+    """A deck this project *is*, rather than one it exports. See `Deck`."""
 
     @model_validator(mode="before")
     @classmethod
@@ -1907,6 +1929,9 @@ class Project(Base):
         draw order: `part_keys` feeds tessellation, and a key appearing there makes the
         viewport look for geometry that a load pad in the simple example does not have.
         """
+        if self.deck is not None:
+            # A deck's phases are its stages, and they switch the deck's own parts.
+            return list(self.deck.parts)
         keys = list(self.part_keys())
         seen = set(keys)
         for load in [l.id for l in self.loads] + [n.id for n in self.normal_loads]:

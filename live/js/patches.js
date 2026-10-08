@@ -71,6 +71,24 @@ App.LivePatches = (function () {
     });
   }
 
+  /* A deck case's own mesh, on the Mesh tab, with every one of its parts listed in the
+     Model explorer under "Imported mesh" -- what the .mdpa import's checklist leads to
+     once accepted, without the checklist: a case is opened to be looked at whole.
+     What is listed and said is App.Deck's (live/js/deck.js). */
+  function showDeck(mesh, project) {
+    if (App.state.mode !== 'mesh') App.setMode('mesh');
+    App.Viewport.showImportedMesh(mesh);
+    App.Model.setImportedParts(App.Deck.parts(mesh));
+    App.Command.ok(App.Deck.summary(mesh, project.name));
+    var stages = (project.phases || []).length;
+    if (stages) {
+      App.Command.note('Its ' + stages + ' stages are the phases on the Staged '
+        + 'construction tab, read from the deck: select one to see the parts it has.');
+    }
+    App.Command.note('Calculate (F9) runs the deck as it is; `results` then reads back '
+      + 'what it wrote.');
+  }
+
   /* Model explorer: "Delete" for drawn/imported geometry.
 
      js/explorer.js:91 hard-codes { label: 'Delete', disabled: true } on every tree
@@ -2359,6 +2377,11 @@ App.LivePatches = (function () {
          and has no entry past 2, so a third group would draw with a blank label —
          and editing a frozen file for a caption is not worth it. Reading a result is
          the end of the calculation, so it sits there honestly enough. */
+      /* The Model explorer beside the results. Every mode is handed the same tree
+         (App.Model's syncTrees), but only for modes App.TREES already has a key for,
+         and the frozen js/data.js knows five -- so Results had none and showed an
+         empty dock. One key, and the next sync fills it like the rest. */
+      if (App.TREES && !App.TREES.results) App.TREES.results = App.TREES.mesh || [];
       App.MODES.push({
         id: 'results', label: 'Results', group: 2,
         hint: 'Results mode — read back what a calculation wrote: choose a phase and a '
@@ -2928,10 +2951,17 @@ App.LivePatches = (function () {
         }
         return App.Api.post('/api/project/script', { path: scriptPath })
           .then(function (result) {
+            // A deck case (examples/eemdijk/eemdijk.py) brings its own mesh: show
+            // that, rather than meshing the empty site its project carries.
+            if (App.Deck && App.Deck.hasMesh(result)) {
+              return adoptProject(result.project, 'Ran ' + scriptPath
+                + ' — a Kratos deck, opened with its own mesh.')
+                .then(function () { showDeck(result.mesh, result.project); });
+            }
             return adoptProject(result.project,
-              'Ran ' + scriptPath + ' — model built. Meshing it now.');
+              'Ran ' + scriptPath + ' — model built. Meshing it now.')
+              .then(function () { requestMesh(true, null); });
           })
-          .then(function () { requestMesh(true, null); })
           .catch(function (error) {
             if (App.Command.err) App.Command.err(error.message);
           });

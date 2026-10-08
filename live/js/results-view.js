@@ -83,18 +83,35 @@ App.ResultsView = (function () {
 
       var position = new THREE.BufferAttribute(positions, 3);
       var color = new THREE.BufferAttribute(colors, 3);
+      var objects = [];
 
       if (section.indices && section.indices.length) {
-        group.add(surface(section, position, color));
+        objects.push(surface(section, position, color));
       }
       if (section.edge_indices && section.edge_indices.length) {
-        group.add(lines(section, position, color));
+        objects.push(lines(section, position, color));
       }
-      drawn.push({ section: section, values: values.values, positions: positions });
+      objects.forEach(function (object) { group.add(object); });
+      drawn.push({ section: section, values: values.values, positions: positions,
+                   objects: objects });
     });
 
     host.add(group);
+    syncVisibility();
     showLegend(payload);
+    render();
+  }
+
+  /* Each part's contour follows the eye of its row in the Model explorer -- the deck
+     part of the same name, for a deck case (App.Deck.resultShown). A part with no row
+     there is always drawn. */
+  function syncVisibility() {
+    var eyeOf = App.Viewport && App.Viewport.importedEye;
+    if (!eyeOf || !App.Deck) return;
+    drawn.forEach(function (entry) {
+      var on = App.Deck.resultShown(entry.section.part, eyeOf);
+      (entry.objects || []).forEach(function (object) { object.visible = on; });
+    });
     render();
   }
 
@@ -284,7 +301,7 @@ App.ResultsView = (function () {
   }
 
   return {
-    draw: draw, clear: clear, isShowing: isShowing,
+    draw: draw, clear: clear, isShowing: isShowing, syncVisibility: syncVisibility,
     describeAt: describeAt, nearest: nearest, extremes: extremes,
     showLegend: showLegend
   };
