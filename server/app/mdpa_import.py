@@ -26,8 +26,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import re
 
-from app.kratos import (BEAMS, BOUNDARIES, CONDITIONS, ELEMENTS, INTERFACES, SHELLS,
-                        TRUSSES)
+from app.kratos import (BEAMS, BOUNDARIES, CONDITIONS, ELEMENTS, INTERFACES,
+                        NORMAL_LOAD_CONDITIONS, SHELLS, TRUSSES)
 
 TOLERANCE = 1e-6
 """Metres. A node's z counts as zero, i.e. the deck is a 2D plane-strain model,
@@ -59,8 +59,18 @@ def _reverse_interfaces() -> dict[str, tuple[str, int, int]]:
             for (dim, per_side), name in INTERFACES.items()}
 
 
+QUADRILATERALS: dict[str, tuple[str, int, int]] = {
+    "UPwSmallStrainElement2D4N": ("continuum", 2, 4),
+    "SmallStrainUPwDiffOrderElement2D8N": ("continuum", 2, 8),
+    "SmallStrainUPwDiffOrderElement2D9N": ("continuum", 2, 9),
+}
+"""Soil classes this codebase's exporter never writes -- it only meshes triangles -- but
+that a deck from elsewhere often is mostly made of (e.g. the Eemdijk deck's 8-node
+quads). Corners first, counter-clockwise, then midsides, as Kratos orders them."""
+
 CLASS_KIND: dict[str, tuple[str, int, int]] = {
     **_reverse(ELEMENTS, "continuum"),
+    **QUADRILATERALS,
     **_reverse(BEAMS, "beam"),
     **_reverse(SHELLS, "shell"),
     **_reverse_trusses(),
@@ -68,7 +78,11 @@ CLASS_KIND: dict[str, tuple[str, int, int]] = {
 }
 """Kratos element class name -> (kind, dimension, node count)."""
 
-CONDITION_KIND: dict[str, tuple[str, int, int]] = _reverse(CONDITIONS, "condition")
+CONDITION_KIND: dict[str, tuple[str, int, int]] = {
+    **_reverse(CONDITIONS, "condition"),
+    # Keyed by (dimension, node count), like `INTERFACES`.
+    **{name: ("condition", dim, n) for (dim, n), name in NORMAL_LOAD_CONDITIONS.items()},
+}
 """Kratos condition class name -> ("condition", dimension, node count)."""
 
 
@@ -323,13 +337,24 @@ def _element_labels(nodes: dict[int, tuple[float, float, float]],
     return labels
 
 
+def _plane_triangles(conn: list[int]) -> list[list[int]]:
+    """A 2D soil element as triangles over its corners alone. The node count tells the
+    shape apart -- a triangle has 3 or 6 nodes, a quadrilateral 4, 8 or 9 -- and a quad
+    splits along its first-to-third-corner diagonal."""
+    if len(conn) in (4, 8, 9):
+        return [[conn[0], conn[1], conn[2]], [conn[0], conn[2], conn[3]]]
+    return [conn[:3]]
+
+
 def _triangles_and_edges(conns_by_kind: dict[str, list[list[int]]],
                          dim: int) -> tuple[list[list[int]], list[tuple[int, int]]]:
     """A set of elements, split out by kind already, as drawable triangles and line
     segments. `dim` picks how a continuum element becomes a triangle: a 2D one already
-    is one, a 3D one is a tetrahedron whose outer skin has to be found."""
+    is one (or, for a quadrilateral, two), a 3D one is a tetrahedron whose outer skin has
+    to be found."""
     triangles = (_tet_boundary_triangles(conns_by_kind.get("continuum", [])) if dim == 3
-                else [conn[:3] for conn in conns_by_kind.get("continuum", [])])
+                else [tri for conn in conns_by_kind.get("continuum", [])
+                      for tri in _plane_triangles(conn)])
     triangles += [conn[:3] for conn in conns_by_kind.get("shell", [])]
     # The far end is the *second* node, never the last: a quadratic beam is written
     # (end, end, midside) -- see `kratos.BEAMS` -- so drawing to the last node covers

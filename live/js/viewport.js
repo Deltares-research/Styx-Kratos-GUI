@@ -983,7 +983,8 @@ App.Viewport = (function () {
     orbit = new App.Orbit(canvas, {
       tx: frame.center[0], ty: frame.center[1], tz: frame.center[2],
       radius: frame.homeRadius, theta: opening.theta, phi: opening.phi,
-      minRadius: radiusLimits(frame).min, maxRadius: radiusLimits(frame).max,
+      minRadius: radiusLimits(frame, dimension).min,
+      maxRadius: radiusLimits(frame, dimension).max,
       orthoBase: ORTHO_BASE
     });
     orbit.onChange = function () {
@@ -2063,14 +2064,24 @@ App.Viewport = (function () {
   var MIN_RADIUS_FRACTION = 0.08;
   var MAX_RADIUS_FACTOR = 6;
 
-  function radiusLimits(frame) {
+  /* A 2D section is seen through the orthographic camera, whose near plane sits far
+     behind the model, so nothing clips however close it gets -- and an imported deck
+     crowds dozens of nodes into the last few centimetres beside a sheet pile, which
+     12.5x of a 70 m section still showed as one smear. 0.0002 is 5000x: about a
+     centimetre across the viewport on that section. 3D keeps the floor above, which
+     keeps the perspective camera's near plane (0.5) out of the model. */
+  var MIN_RADIUS_FRACTION_2D = 0.0002;
+
+  function radiusLimits(frame, dim) {
     var home = (frame && frame.homeRadius) || ORTHO_HALF_HEIGHT;
-    return { min: home * MIN_RADIUS_FRACTION, max: home * MAX_RADIUS_FACTOR };
+    var fraction = (dim === undefined ? dimension : dim) === 2
+      ? MIN_RADIUS_FRACTION_2D : MIN_RADIUS_FRACTION;
+    return { min: home * fraction, max: home * MAX_RADIUS_FACTOR };
   }
 
   function applyRadiusLimits() {
     if (!orbit || !frame) return;
-    var limits = radiusLimits(frame);
+    var limits = radiusLimits(frame, dimension);
     orbit.minRadius = limits.min;
     orbit.maxRadius = limits.max;
     orbit.radius = Math.max(limits.min, Math.min(limits.max, orbit.radius));
@@ -2236,6 +2247,7 @@ App.Viewport = (function () {
     // on the next tick.
     resetReferenceGrid();
     fillTriad();                   // the axes shown depend on the mode
+    applyRadiusLimits();           // so does how close the wheel may get
     resize();                      // the frustum depends on the mode
     setView(activeView);
     needsRender = true;
