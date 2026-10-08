@@ -837,6 +837,7 @@ App.Viewport = (function () {
         meshBuilt = false;
         // The geometry moved, so the mesh that was numbered is gone with it.
         generatedLabels = null;
+        forgetNodeParts();
         refreshLabels();
 
         var triangles = payload.sections.reduce(function (n, s) {
@@ -1117,6 +1118,7 @@ App.Viewport = (function () {
       var p = hit ? hit.point : raycaster.ray.intersectPlane(
         pickPlane(dimension), scratch);
       if (p) App.setCoords(p.x, p.y, p.z);
+      hoverImportedNode(ev);
     });
 
     canvas.addEventListener('mouseleave', function () {
@@ -1126,6 +1128,7 @@ App.Viewport = (function () {
 
     canvas.addEventListener('click', function (ev) {
       if (ev.detail === 0) return;
+      if (pickImportedNode(ev)) return;
       var hit = pickAt(ev);
       App.selectObject(hit ? hit.object.userData.key : null, 'viewport');
     });
@@ -1238,6 +1241,8 @@ App.Viewport = (function () {
     // it with.
     if (importedSectionGroups[key]) {
       importedSectionGroups[key].visible = on;
+      importedPickable = null;
+      needsRender = true;
       if (!on && selectedKeys.indexOf(key) >= 0) select(null);
       refreshLabels();
       needsRender = true;
@@ -1481,6 +1486,7 @@ App.Viewport = (function () {
       // Different mesh, different nodes: whatever was numbered before is now numbering
       // a mesh that no longer exists.
       generatedLabels = null;
+      forgetNodeParts();
       App.MESH_STATS = result.stats;
       if (App.Model && App.Model.setMeshStats) App.Model.setMeshStats(result.stats);
       (result.log || []).filter(function (line) { return /warning|error/i.test(line); })
@@ -1507,6 +1513,66 @@ App.Viewport = (function () {
   }
 
   function hasMesh() { return meshBuilt; }
+
+  /* ── Which SubModelParts a node is in ──────────────────────────────────
+     The node -> parts index of the deck this project exports (`/api/mesh/node-parts`,
+     built by `App.NodeParts`), fetched the first time it is asked for and kept until
+     the mesh changes -- it costs an export pass, like the labels. `nodePartsLoaded` is
+     the no-fetch read the hover uses, so moving the pointer never starts one. */
+  var nodePartsIndex = null;
+  var nodeMarker = null;
+
+  function nodeParts() {
+    // An imported deck on screen is the deck being asked about.
+    if (importedNodeIndex) return Promise.resolve(importedNodeIndex);
+    if (nodePartsIndex) return Promise.resolve(nodePartsIndex);
+    if (!meshBuilt) {
+      return Promise.reject(new Error('There is no mesh yet. Generate one (mesh, or F9) '
+        + 'first: node numbers come from the deck, and the deck is made from the mesh.'));
+    }
+    var ui = overlay();
+    ui.show('Reading SubModelParts off the deck…', 40);
+    return App.Api.post('/api/mesh/node-parts', meshSettings()).then(function (result) {
+      nodePartsIndex = App.NodeParts.build(result);
+      ui.hide();
+      return nodePartsIndex;
+    }).catch(function (err) {
+      ui.hide();
+      throw err;
+    });
+  }
+
+  function nodePartsLoaded() { return nodePartsIndex; }
+
+  function forgetNodeParts() {
+    nodePartsIndex = null;
+    clearNodeMark();
+  }
+
+  /* A dot on each of `points` ([x, y, z]): the node `node <id>` reported, and the
+     nodes at its position. Drawn over everything, since a node inside the soil is the
+     usual case. One marking at a time. */
+  function markNodes(points) {
+    clearNodeMark();
+    if (!scene || !points.length) return;
+    var geometry = new THREE.BufferGeometry().setFromPoints(points.map(function (p) {
+      return new THREE.Vector3(p[0], p[1], p[2]);
+    }));
+    nodeMarker = new THREE.Points(geometry, new THREE.PointsMaterial({
+      color: 0xe6194b, size: 11, sizeAttenuation: false, depthTest: false
+    }));
+    nodeMarker.renderOrder = 30;
+    nodeMarker.userData.noPick = true;
+    scene.add(nodeMarker);
+    needsRender = true;
+  }
+
+  function clearNodeMark() {
+    if (!nodeMarker) return;
+    disposeGroup(nodeMarker);
+    nodeMarker = null;
+    needsRender = true;
+  }
 
   /* ── Parts in a colour of their own ────────────────────────────────────
      The grey mesh is one sheet. `result.parts` is the same mesh cut along part keys
@@ -1654,6 +1720,9 @@ App.Viewport = (function () {
   function clearImportedMesh() {
     disposeGroup(importedMeshGroup);
     importedMeshGroup = null;
+    importedNodeIndex = null;
+    importedPickable = null;
+    forgetPickedNode();
     importedSectionGroups = {};
     importedSectionBBoxes = {};
     importedSectionLabels = {};
@@ -1736,6 +1805,13 @@ App.Viewport = (function () {
       if (section.bbox) importedSectionBBoxes[section.key] = section.bbox;
       if (section.node_ids || section.elements) importedSectionLabels[section.key] = section;
     });
+    if (model.node_parts && App.NodeParts) {
+      importedNodeIndex = App.NodeParts.build(model.node_parts);
+      Object.keys(importedSectionGroups).forEach(function (key) {
+        var dots = importedNodeDots(importedSectionLabels[key]);
+        if (dots) importedSectionGroups[key].add(dots);
+      });
+    }
     scene.add(importedMeshGroup);
     refreshLabels();
     needsRender = true;
@@ -1749,9 +1825,182 @@ App.Viewport = (function () {
 
   function hasImportedMesh() { return !!importedMeshGroup; }
 
+  /* ── Picking a node of an imported deck ────────────────────────────────
+     The first part of the Imported mesh feature, after Node_ViZ and Deltares'
+     visualize_mdpa_project.py: the nodes are drawn, a click on one selects it, and the
+     Selection explorer says which SubModelParts it is in -- and which parts hold every
+     other node at its position, which is how the two sides of an interface are told
+     apart. The hover says the same in one line in the status bar.
+
+     Picked on screen (`App.NodeParts.pickOnScreen`): a node is "clicked" when it is
+     within PICK_PX pixels of the pointer, at any zoom and in 2D and 3D alike. A click
+     further from every node is an ordinary click. Only the nodes of the parts that are
+     shown can be picked. */
+  var PICK_PX = 8;
+  /* Overlapping nodes -- an interface split leaves two or three at one point -- are
+     fanned around it on screen, FAN_PX out, each on a leader line, so each can be
+     clicked (Node_ViZ's way). The angles are the node labels' own (mesh-labels.js
+     `fanOffsets`), so a dot sits under its own number; FAN_PX is shorter than the
+     labels' 24 so the number stays clear of the dot. A point fans only when the next
+     position is at least FAN_ROOM_PX away on screen: zoomed out it stays one dot. */
+  var FAN_PX = 14;
+  var FAN_ROOM_PX = 3 * FAN_PX;
+  var nodeFanCanvas = null;
+  var importedNodeIndex = null;
+  var importedPickable = null;     // {id: true} for the shown parts, rebuilt on demand
+  var pickedNode = null;
+
+  /* Each part's own nodes as dots, inside that part's group, so hiding the part hides
+     them and they are drawn only where the part is. */
+  function importedNodeDots(section) {
+    if (!section || !section.node_ids || !importedNodeIndex) return null;
+    var points = [];
+    section.node_ids.forEach(function (id) {
+      var c = importedNodeIndex.coords[id];
+      if (c) points.push(new THREE.Vector3(c[0], c[1], c[2]));
+    });
+    if (!points.length) return null;
+    var dots = new THREE.Points(new THREE.BufferGeometry().setFromPoints(points),
+      new THREE.PointsMaterial({ color: 0x263238, size: 4, sizeAttenuation: false }));
+    dots.renderOrder = 5;
+    dots.userData.noPick = true;
+    return dots;
+  }
+
+  function pickableNodes() {
+    if (importedPickable) return importedPickable;
+    importedPickable = {};
+    Object.keys(importedSectionGroups).forEach(function (key) {
+      if (!importedSectionGroups[key].visible) return;
+      var section = importedSectionLabels[key];
+      ((section && section.node_ids) || []).forEach(function (id) {
+        importedPickable[id] = true;
+      });
+    });
+    return importedPickable;
+  }
+
+  function projectNode(xyz) { return projectToScreen(xyz[0], xyz[1], xyz[2]); }
+
+  function fanOffsets(count) {
+    return App.MeshLabels ? App.MeshLabels.fanOffsets(count, FAN_PX) : null;
+  }
+
+  function nodeUnderPointer(ev) {
+    if (!importedNodeIndex || !importedMeshGroup || !importedMeshGroup.visible) return null;
+    var r = canvas.getBoundingClientRect();
+    var click = { x: ev.clientX - r.left, y: ev.clientY - r.top };
+    return App.NodeParts.pickOnScreen(importedNodeIndex, projectNode, click, PICK_PX,
+                                      pickableNodes(), fanOffsets, FAN_ROOM_PX);
+  }
+
+  /* The fans, painted over the frame just drawn with its camera -- the offsets are
+     pixels, so they have to be worked out again whenever the view moves. The picked
+     node is red, the rest dark, each on a leader line back to the shared point. */
+  function paintNodeFans() {
+    var shown = importedNodeIndex && importedMeshGroup && importedMeshGroup.visible
+                && App.NodeParts && host;
+    if (!shown) {
+      if (nodeFanCanvas) nodeFanCanvas.hidden = true;
+      return;
+    }
+    if (!nodeFanCanvas) {
+      nodeFanCanvas = document.createElement('canvas');
+      nodeFanCanvas.className = 'vp-node-fans';
+      host.appendChild(nodeFanCanvas);
+    }
+    var ratio = window.devicePixelRatio || 1;
+    var width = host.clientWidth, height = host.clientHeight;
+    if (nodeFanCanvas.width !== Math.round(width * ratio)
+        || nodeFanCanvas.height !== Math.round(height * ratio)) {
+      nodeFanCanvas.width = Math.round(width * ratio);
+      nodeFanCanvas.height = Math.round(height * ratio);
+    }
+    nodeFanCanvas.hidden = false;
+    var ctx = nodeFanCanvas.getContext('2d');
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    ctx.clearRect(0, 0, width, height);
+    var fanned = App.NodeParts.screenTargets(importedNodeIndex, projectNode, fanOffsets,
+                                             pickableNodes(), FAN_ROOM_PX)
+      .filter(function (target) {
+        return target.fanned && target.ax > -FAN_PX && target.ax < width + FAN_PX
+               && target.ay > -FAN_PX && target.ay < height + FAN_PX;
+      });
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(38, 50, 56, 0.7)';
+    fanned.forEach(function (target) {
+      ctx.beginPath();
+      ctx.moveTo(target.ax, target.ay);
+      ctx.lineTo(target.x, target.y);
+      ctx.stroke();
+    });
+    fanned.forEach(function (target) {
+      ctx.beginPath();
+      ctx.arc(target.x, target.y, 4, 0, 2 * Math.PI);
+      ctx.fillStyle = target.id === pickedNode ? '#e6194b' : '#263238';
+      ctx.fill();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = '#ffffff';
+      ctx.stroke();
+    });
+  }
+
+  function pickImportedNode(ev) {
+    var id = nodeUnderPointer(ev);
+    if (id === null) {
+      forgetPickedNode();
+      return false;
+    }
+    showNode(id);
+    return true;
+  }
+
+  function hoverImportedNode(ev) {
+    if (!importedNodeIndex) return;
+    var id = nodeUnderPointer(ev);
+    if (id === null) {
+      canvas.style.cursor = hovered ? 'pointer' : '';
+      return;
+    }
+    canvas.style.cursor = 'pointer';
+    var hint = document.getElementById('sb-hint');
+    if (hint) hint.textContent = App.NodeParts.hint(importedNodeIndex, id);
+  }
+
+  /* Select node `id` of the imported deck: mark it and the nodes at its position, and
+     put what it is in into the Selection explorer. Also what `node <id>` does while an
+     imported deck is shown. */
+  function showNode(id) {
+    if (!importedNodeIndex || !App.NodeParts.partsOf(importedNodeIndex, id)) return false;
+    pickedNode = id;
+    needsRender = true;
+    select(null);
+    markNodes(App.NodeParts.samePosition(importedNodeIndex, id).map(function (other) {
+      return importedNodeIndex.coords[other];
+    }));
+    App.OBJECT_PROPS = App.OBJECT_PROPS || {};
+    App.OBJECT_PROPS['node:' + id] = App.NodeParts.selectionProps(importedNodeIndex, id);
+    if (App.Explorer && App.Explorer.mountSelection) App.Explorer.mountSelection('node:' + id);
+    if (App.Command && App.Command.note) {
+      App.Command.note(App.NodeParts.hint(importedNodeIndex, id));
+    }
+    return true;
+  }
+
+  function forgetPickedNode() {
+    if (pickedNode === null) return;
+    if (App.OBJECT_PROPS) delete App.OBJECT_PROPS['node:' + pickedNode];
+    pickedNode = null;
+    needsRender = true;
+    clearNodeMark();
+  }
+
+  function importedNodes() { return importedNodeIndex; }
+
   /* Drops one section entirely -- what "Accept" does with a part the checklist left
      unchecked: not merely hidden, gone, the same as if it had never been drawn. */
   function removeImportedSection(key) {
+    importedPickable = null;
     disposeGroup(importedSectionGroups[key]);
     delete importedSectionGroups[key];
     delete importedSectionBBoxes[key];
@@ -2037,6 +2286,7 @@ App.Viewport = (function () {
     syncRulers();                          // same: the visible rectangle is known here
     renderer.render(scene, cam);
     syncLabels();                          // over the frame just drawn, with its camera
+    paintNodeFans();                       // likewise: the fans are in pixels
 
     if (triadRenderer) {
       triadCam.position.copy(cam.position).sub(orbit.target).normalize().multiplyScalar(4);
@@ -2074,6 +2324,9 @@ App.Viewport = (function () {
     showImportedMesh: showImportedMesh, clearImportedMesh: clearImportedMesh,
     syncPartColors: syncPartColors, coloredPartKeys: coloredPartKeys, partColor: partColor,
     boundsOf: boundsOf,
+    nodeParts: nodeParts, nodePartsLoaded: nodePartsLoaded, markNodes: markNodes,
+    showNode: showNode, importedNodes: importedNodes,
+    clearNodeMark: clearNodeMark,
     hasImportedMesh: hasImportedMesh, removeImportedSection: removeImportedSection,
     setImportedGroupKeys: setImportedGroupKeys, importedLineOrder: importedLineOrder,
     frameImportedSection: frameImportedSection,
