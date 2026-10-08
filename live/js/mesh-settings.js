@@ -1,4 +1,5 @@
-/* Gmsh controls shown when the Mesh mode tab is clicked. */
+/* Mesh properties: shown when the Mesh mode tab is clicked before there is a mesh,
+   and from the toolbar's mesh-settings button at any time. */
 
 var App = window.App || {};
 
@@ -8,6 +9,26 @@ App.MeshSettings = (function () {
     optimization: 'gmsh', smoothing: 10, curvature_points: 16, size_min_factor: 0.05,
     second_order_linear: true, body_sizes: {}
   };
+
+  var TITLE = 'Mesh properties';
+
+  /* The values are what the server's mesher takes; only the labels are the user's.
+     'gmsh' is the mesher's own optimizer, so it is shown as the standard one. */
+  function optimizationChoices() {
+    return [['none', 'None'], ['gmsh', 'Standard'], ['netgen', 'Netgen']];
+  }
+
+  function optimizationHelp(planar) {
+    return planar
+      ? 'Improves triangle quality after initial generation. Netgen is 3D-only and falls back to Standard.'
+      : 'Improves tetrahedron quality after initial generation.';
+  }
+
+  /* The Mesh tab is also how you go back to look at a mesh, so once there is one the
+     dialog stays shut: switching tabs must not put a regenerate button in front of it. */
+  function opensOnModeTab(hasMesh) {
+    return !hasMesh;
+  }
 
   function fromProject(project) {
     return Object.assign({}, defaults, (project && project.mesh) || {});
@@ -111,7 +132,7 @@ App.MeshSettings = (function () {
     dialog.style.top = Math.max(20, (window.innerHeight - 570) / 2) + 'px';
 
     var closeButton = el('button.dlg-x', { text: '✕', type: 'button' });
-    var head = el('div.dlg-head', null, [el('span.dlg-title', { text: 'Gmsh mesh properties' }), closeButton]);
+    var head = el('div.dlg-head', null, [el('span.dlg-title', { text: TITLE }), closeButton]);
     dialog.appendChild(head);
     App.Dialogs.draggable(head, dialog);
     var body = el('div.dlg-body.mesh-settings-body');
@@ -180,9 +201,7 @@ App.MeshSettings = (function () {
         'Quadratic elements add midside nodes after the mesh is generated.');
     var algorithm = algorithmRow(App.PROJECT);
     row(algorithm.label, select(algorithm.name, algorithm.choices), algorithm.help);
-    row('Optimization', select('optimization', [['none', 'None'], ['gmsh', 'Gmsh'], ['netgen', 'Netgen']]),
-        planar ? 'Improves triangle quality after initial generation. Netgen is 3D-only and falls back to Gmsh.'
-               : 'Improves tetrahedron quality after initial generation.');
+    row('Optimization', select('optimization', optimizationChoices()), optimizationHelp(planar));
     row('Smoothing steps', input('smoothing', 'number', { min: '0', max: '100', step: '1' }),
         'Surface-mesh smoothing iterations. Ten is a balanced default.');
     row('Curvature points', input('curvature_points', 'number', { min: '0', max: '100', step: '1' }),
@@ -251,11 +270,15 @@ App.MeshSettings = (function () {
 
   if (typeof document !== 'undefined') {
     document.addEventListener('click', function (event) {
-      if (event.target.closest && event.target.closest('.mode-tab[data-mode="mesh"]')) open();
+      if (!(event.target.closest && event.target.closest('.mode-tab[data-mode="mesh"]'))) return;
+      var hasMesh = !!(App.Viewport && App.Viewport.hasMesh && App.Viewport.hasMesh());
+      if (opensOnModeTab(hasMesh)) open();
     });
   }
   return {
     fromProject: fromProject, validate: validate, meshTargets: meshTargets,
-    bodyControls: bodyControls, algorithmRow: algorithmRow, merge: merge, open: open
+    bodyControls: bodyControls, algorithmRow: algorithmRow, merge: merge, open: open,
+    TITLE: TITLE, optimizationChoices: optimizationChoices, optimizationHelp: optimizationHelp,
+    opensOnModeTab: opensOnModeTab
   };
 })();

@@ -68,6 +68,12 @@ SUITES = {
         [JS / "node-parts.js"],
         TESTS / "test-node-parts.js",
     ),
+    # The Mesh properties dialog: its settings, validation and when the Mesh tab opens
+    # it. The dialog itself is DOM, built only when `open()` runs.
+    "mesh-settings": (
+        [JS / "mesh-settings.js"],
+        TESTS / "test-mesh-settings.js",
+    ),
     "results": (
         # calculate.js comes along because the handoff between the two is the whole of
         # task P0.4: what Calculate just wrote has to become the run `results` opens.

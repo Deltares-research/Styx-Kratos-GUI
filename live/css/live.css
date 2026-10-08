@@ -234,6 +234,11 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
 
 /* ── The Results explorer ─────────────────────────────────────────────── */
 
+/* A mode's own dock panel (Phases, Results) is put away with `hidden` when its tab is
+   left. `.dock-panel { display: flex }` in the frozen css/layout.css outranks the
+   browser's `[hidden]` rule, so without this both stayed on screen in every tab. */
+.dock-panel[hidden] { display: none; }
+
 .res-grid { display: flex; flex-direction: column; gap: 4px; padding: 6px 8px; }
 
 .res-row {
