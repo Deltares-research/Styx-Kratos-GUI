@@ -330,3 +330,17 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
   border: 0; border-bottom: 1.6px solid var(--brand-primary);
 }
 .tree-eye.phase-check.inherited::after { border-color: var(--c-ink-faint); }
+
+/* Overlapping nodes of an imported deck, fanned apart (paintNodeFans in
+   live/js/viewport.js). Inert like the labels' overlay: clicks go through to the canvas,
+   where the same fanned positions are what a click picks. */
+.vp-node-fans {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.vp-node-fans[hidden] { display: none; }

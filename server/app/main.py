@@ -538,6 +538,28 @@ async def mesh_labels(settings: MeshRequest) -> dict:
         raise HTTPException(status_code=500, detail=str(failure)) from failure
 
 
+@app.post("/api/mesh/node-parts")
+async def mesh_node_parts(settings: MeshRequest) -> dict:
+    """Which SubModelParts each node of this project's deck is in: the node table and,
+    per part, the nodes it names -- in the same Kratos numbering `/api/mesh/labels`
+    puts on the mesh. What `node <id>` and the viewport's node inspection read
+    (live/js/node-parts.js). A route of its own for the reason the labels have one: it
+    costs a full export pass, and is asked for far less often than a mesh.
+    """
+    project = store.get()
+    unknown = sorted((set(settings.volume_keys or []) | set(settings.body_sizes))
+                     - set(project.part_keys()))
+    if unknown:
+        raise HTTPException(status_code=422, detail="unknown mesh body key(s): " + ", ".join(unknown))
+    try:
+        return await gmsh_worker.run(
+            gmsh_worker.node_parts_job,
+            project.model_dump_json(), settings.model_dump_json(),
+        )
+    except (GeometryError, MeshingError, ExportError) as failure:
+        raise HTTPException(status_code=500, detail=str(failure)) from failure
+
+
 @app.post("/api/export/mdpa")
 async def export_mdpa(settings: ExportRequest) -> dict:
     """Mesh the project and return a Kratos deck as text, ready to be saved.
@@ -790,7 +812,11 @@ async def import_mdpa(file: UploadFile = File(...)) -> dict:
     # A deck's node table is already the world frame in either dimension -- a 2D deck
     # is the x-y plane at z = 0, which is where a 2D model lives -- so nothing about
     # the open project is needed to place it.
-    return model.to_dict()
+    #
+    # `node_parts` is what lets the preview answer "which SubModelParts is this node
+    # in" when a node is clicked (live/js/node-parts.js).
+    from app import node_parts
+    return {**model.to_dict(), "node_parts": node_parts.of_model(model)}
 
 
 # ── Static ──────────────────────────────────────────────────────────────────

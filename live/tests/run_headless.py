@@ -62,6 +62,12 @@ SUITES = {
         [JS / "water-command.js"],
         TESTS / "test-water-command.js",
     ),
+    # `node <id>`, the right-click "which parts is this node in" and the hover: the
+    # node -> parts index and the text. The fetch, the marker and the menu are DOM.
+    "node-parts": (
+        [JS / "node-parts.js"],
+        TESTS / "test-node-parts.js",
+    ),
     "results": (
         # calculate.js comes along because the handoff between the two is the whole of
         # task P0.4: what Calculate just wrote has to become the run `results` opens.

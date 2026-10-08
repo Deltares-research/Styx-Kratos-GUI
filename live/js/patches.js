@@ -554,6 +554,41 @@ App.LivePatches = (function () {
     });
   }
 
+  /* ── Which SubModelParts a node is in ────────────────────────────────────
+     `node <id>` writes the node's parts to the command log -- and those of every node
+     at its position, which is how the two sides of an interface are told apart. With
+     an imported deck on screen it also selects the node there, exactly as clicking it
+     does (viewport.js `showNode`); otherwise it asks the open project's deck and marks
+     the node on its mesh. Clicking a node is the viewport's own (`pickImportedNode`);
+     the arithmetic is `App.NodeParts`'s, tested headless. */
+
+  function runNodeCommand(text) {
+    if (!App.NodeParts) return false;
+    var parsed = App.NodeParts.parse(text);
+    if (parsed === false) return false;
+    if (App.Command.write) App.Command.write('echo', '> ' + String(text).trim());
+    if (parsed.error) { App.Command.err(parsed.error); return true; }
+    App.Viewport.nodeParts()
+      .then(function (index) {
+        var lines = App.NodeParts.report(index, parsed.id);
+        if (App.NodeParts.partsOf(index, parsed.id) === null) {
+          App.Command.err(lines[0]);
+          return;
+        }
+        lines.forEach(function (line, i) {
+          if (i === 0) App.Command.ok(line); else App.Command.note(line);
+        });
+        if (App.Viewport.importedNodes && App.Viewport.importedNodes() === index) {
+          App.Viewport.showNode(parsed.id);
+          return;
+        }
+        App.Viewport.markNodes(App.NodeParts.samePosition(index, parsed.id)
+          .map(function (id) { return index.coords[id]; }));
+      })
+      .catch(function (error) { App.Command.err(error.message); });
+    return true;
+  }
+
   /* `colour ...`, typed. `false` when it is not this command. */
   function runColourCommand(text) {
     if (!App.PartColors) return false;
@@ -2304,7 +2339,8 @@ App.LivePatches = (function () {
         ['note', '  cleargeometry         remove drawn/imported custom geometry'],
         ['note', '  results               open what a calculation wrote (try "results runs")'],
         ['note', '  colour <part>|all|off draw a part of the mesh in its own colour'],
-        ['note', '  water <level>|off     set or remove the water level, e.g. water -1.5']);
+        ['note', '  water <level>|off     set or remove the water level, e.g. water -1.5'],
+        ['note', '  node <id>             which SubModelParts a node is in']);
     }
 
     /* ── Results mode ─────────────────────────────────────────────────────
@@ -2860,6 +2896,8 @@ App.LivePatches = (function () {
       if (runColourCommand(text)) return;
       // `water <level>` / `water off`: the project's water level.
       if (runWaterCommand(text)) return;
+      // `node <id>`: which SubModelParts a node is in.
+      if (runNodeCommand(text)) return;
 
       var cmd = (text || '').trim().split(/\s+/)[0].toLowerCase();
       if (cmd === 'cleargeometry') {
