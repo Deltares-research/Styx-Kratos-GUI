@@ -37,6 +37,7 @@ import json
 import os
 import re
 import subprocess
+import threading
 import time
 from datetime import datetime
 from pathlib import Path
@@ -116,6 +117,9 @@ _running = False
 """One calculation at a time. A solver takes the machine's cores and an unknown amount
 of time, so a second press is refused with a message rather than queued invisibly
 behind the first."""
+
+# The route runs `run` on a worker thread, so the check and the set must be one step.
+_claim = threading.Lock()
 
 
 class CalculationError(RuntimeError):
@@ -209,6 +213,12 @@ def interpreter() -> tuple[str, dict[str, str]]:
         raise CalculationError(
             f"The python to run Kratos with was given as {python}, which does not "
             f"exist. Correct it in {SETTINGS_FILE} or in {PYTHON_ENV}.")
+    if Path(python).is_dir():
+        raise CalculationError(
+            f"The python to run Kratos with was given as {python}, which is a "
+            f"directory -- it has to be the interpreter itself (python.exe, or "
+            f"bin/python in a virtual environment). Correct it in {SETTINGS_FILE} or "
+            f"in {PYTHON_ENV}.")
 
     environment = dict(os.environ)
     paths = [str(SERVER)]
@@ -255,15 +265,27 @@ def run(export: dict) -> dict:
     be started at all raises.
     """
     global _running
-    if _running:
-        raise Busy("A calculation is already running.")
+    with _claim:
+        if _running:
+            raise Busy("A calculation is already running.")
+        _running = True
+    try:
+        return _run(export)
+    finally:
+        _running = False
 
+
+def _run(export: dict) -> dict:
     python, environment = interpreter()
-    directory = new_run_directory(export["deck_name"])
-    inputs = write_deck(export, directory)
+    try:
+        directory = new_run_directory(export["deck_name"])
+        inputs = write_deck(export, directory)
+    except OSError as failure:
+        raise CalculationError(
+            f"The deck could not be written under {runs_root()}: {failure}. Set "
+            f"{RUNS_ENV} to a directory that can be written to.") from failure
     before = _contents(directory)
 
-    _running = True
     started = time.monotonic()
     try:
         completed = subprocess.run(
@@ -273,12 +295,15 @@ def run(export: dict) -> dict:
         )
         output, returncode = completed.stdout, completed.returncode
     except subprocess.TimeoutExpired as expired:
-        output = (expired.output or "") + (
+        output = _text(expired.output) + (
             f"\n\nGiven up on after {timeout():.0f} s. Raise {TIMEOUT_ENV} if the "
             "model is meant to take this long.")
         returncode = None
-    finally:
-        _running = False
+    except OSError as failure:
+        raise CalculationError(
+            f"The python to run Kratos with, {python}, could not be started: "
+            f"{failure}. It has to be a python interpreter; correct it in "
+            f"{SETTINGS_FILE} or in {PYTHON_ENV}.") from failure
 
     (directory / LOG_NAME).write_text(output, encoding="utf-8")
     stage = failed_stage(output)
@@ -322,6 +347,13 @@ def failed_stage(output: str) -> tuple[int, int, str] | None:
 
 def _contents(directory: Path) -> set[str]:
     return {path.name for path in directory.iterdir()}
+
+
+def _text(output: str | bytes | None) -> str:
+    # TimeoutExpired.output is bytes on POSIX even with text=True.
+    if isinstance(output, bytes):
+        return output.decode("utf-8", errors="replace")
+    return output or ""
 
 
 def _explain(output: str, lines: int = 30,

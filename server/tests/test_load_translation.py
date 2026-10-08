@@ -18,9 +18,12 @@ from app.schemas import Project
 from app.seed import seed_project
 
 
+# Narrower than the model (z 0..25) and across its section plane (z 12.5).
 SURFACE = {"id": "surfaceload_1", "name": "SurfaceLoad_1", "kind": "surface",
-           "x0": 4.0, "x1": 16.0, "z0": 5.0, "z1": 10.0, "thickness": 0.3,
+           "x0": 4.0, "x1": 16.0, "z0": 10.0, "z1": 15.0, "thickness": 0.3,
            "components": [0.0, -25.0, 0.0]}
+OFF_CUT = SURFACE | {"id": "surfaceload_2", "name": "SurfaceLoad_2",
+                     "z0": 2.0, "z1": 6.0}
 LINE = {"id": "lineload_1", "name": "LineLoad_1", "kind": "line",
         "x0": 4.0, "x1": 16.0, "y": 0.0, "components": [0.0, -25.0]}
 POINT = {"id": "pointload_1", "name": "PointLoad_1", "kind": "point",
@@ -106,7 +109,7 @@ def test_a_new_surface_counterpart_spans_the_full_out_of_plane_width():
 # ── The round trip ──────────────────────────────────────────────────────────
 
 def test_a_round_trip_keeps_the_original_footprint():
-    """The reason both records are kept: y = 5..10 must not become the whole model."""
+    """The reason both records are kept: z = 10..15 must not become the whole model."""
     project = project_with([SURFACE])
 
     down = project_with([l.model_dump() for l in translate.translate(project, 2)],
@@ -172,6 +175,112 @@ def test_a_load_with_no_counterpart_is_built_in_both_dimensions():
 
     assert kinds(project.loads_for(3)) == ["line", "point"]
     assert kinds(project.loads_for(2)) == ["line", "point"]
+
+
+# ── Repeated switches (plan Task 1.6) ───────────────────────────────────────
+
+def switched(project: Project, dimension: int, **extra) -> Project:
+    """`project` after a mode switch, the way the route does it."""
+    loads = [l.model_dump() for l in translate.translate(project, dimension)]
+    payload = project.model_dump() | {"dimension": dimension, "loads": loads}
+    payload.setdefault("section_offset", None)
+    payload.update(extra)
+    return Project.model_validate(payload)
+
+
+def test_a_point_load_survives_a_round_trip_unchanged():
+    project = project_with([POINT, BURIED], dimension=2)
+
+    back = switched(switched(project, 3), 2)
+
+    assert [l.model_dump() for l in back.loads] == [l.model_dump() for l in project.loads]
+
+
+def test_a_pair_stays_one_pair_over_many_switches():
+    """Each switch refreshes the partner it already has; none of them makes another."""
+    project = project_with([LINE], dimension=2)
+    first = switched(project, 3)
+    pair = [(l.id, l.kind, l.derived_from) for l in first.loads]
+
+    later = first
+    for dimension in (2, 3, 2, 3):
+        later = switched(later, dimension)
+
+    assert [(l.id, l.kind, l.derived_from) for l in later.loads] == pair
+    assert pair == [("lineload_1", "line", None),
+                    ("lineload_1_3d", "surface", "lineload_1")]
+
+
+def test_a_pair_made_in_3d_stays_one_pair_too():
+    later = project_with([SURFACE])
+    for dimension in (2, 3, 2):
+        later = switched(later, dimension)
+
+    assert [(l.id, l.derived_from) for l in later.loads] == [
+        ("surfaceload_1", None), ("surfaceload_1_2d", "surfaceload_1")]
+
+
+# ── A footprint that misses the section plane ───────────────────────────────
+# Plane strain is the model *at the cut*. A pad at z = 2..6 with the cut at z = 12.5
+# does not load the section at all, and translating it into one put a load in the 2D
+# model -- and the 2D deck -- that is nowhere near it.
+
+def test_a_surface_load_clear_of_the_cut_is_not_in_the_section():
+    project = switched(project_with([SURFACE, OFF_CUT]), 2)
+
+    built = {l.derived_from for l in project.loads_for(2)}
+    assert built == {"surfaceload_1"}
+
+
+def test_the_switch_says_the_load_is_clear_of_the_cut():
+    notes: list[str] = []
+    translate.translate(project_with([OFF_CUT]), 2, notes)
+
+    assert any("SurfaceLoad_2" in note and "section plane" in note
+               and "12.5" in note for note in notes), notes
+
+
+def test_the_record_is_kept_so_moving_the_cut_onto_it_brings_it_back():
+    project = switched(project_with([OFF_CUT]), 2, section_offset=4.0)
+
+    assert [l.derived_from for l in project.loads_for(2)] == ["surfaceload_2"]
+
+
+def test_a_footprint_narrowed_off_the_cut_in_3d_leaves_the_section():
+    """The line half was authored in 2D; the user then moved its pad in 3D."""
+    in_3d = switched(project_with([LINE], dimension=2), 3)
+    payload = in_3d.model_dump()
+    for load in payload["loads"]:
+        if load["kind"] == "surface":
+            load["z0"], load["z1"] = 20.0, 25.0
+    back = switched(Project.model_validate(payload), 2)
+
+    assert back.loads_for(2) == []
+
+
+def test_a_footprint_touching_the_cut_is_in_the_section():
+    edge = SURFACE | {"z0": 12.5, "z1": 20.0}
+    project = switched(project_with([edge]), 2)
+
+    assert [l.kind for l in project.loads_for(2)] == ["line"]
+
+
+def test_the_section_deck_leaves_out_a_load_clear_of_the_cut():
+    """End to end through the route and the exporter's own load selection."""
+    from fastapi.testclient import TestClient
+
+    from app.main import app
+
+    with TestClient(app) as client:
+        client.post("/api/project/reset")
+        client.patch("/api/project/structures", json={"loads": [SURFACE, OFF_CUT]})
+        down = client.patch("/api/project/dimension", json={"dimension": 2})
+        assert down.status_code == 200, down.text
+        assert any("SurfaceLoad_2" in n for n in down.json()["notes"])
+        project = Project.model_validate(down.json()["project"])
+        client.post("/api/project/reset")
+
+    assert [l.id for l in project.loads_for(2)] == ["surfaceload_1_2d"]
 
 
 # ── Through the API, which is where the mode switch actually happens ────────

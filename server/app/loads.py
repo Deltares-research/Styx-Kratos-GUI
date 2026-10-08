@@ -143,7 +143,8 @@ def _partner_of(load: Load, by_id: dict[str, Load], derived: dict[str, Load]
 
 
 def translate(project: Project, dimension: int,
-              log: list[str] | None = None) -> list[Load]:
+              log: list[str] | None = None,
+              section_offset: float | None = None) -> list[Load]:
     """`project.loads`, with each load's counterpart in `dimension` made or refreshed.
 
     Runs in the direction of travel: entering 3D pushes every line load into its
@@ -152,12 +153,17 @@ def translate(project: Project, dimension: int,
     and because the *partner* is rewritten rather than the record itself, the half they
     edited is never overwritten by its own translation.
 
+    `section_offset` is where the section plane will be (None: the mid-plane, as the
+    Project validator resolves it); only the notes read it.
+
     Returns a new list in the original's order, with any newly derived record appended
     after the one it came from, so the tree does not reshuffle on a mode switch.
     """
     if dimension == project.dimension:
         return list(project.loads)
     noun = "line load" if dimension == 2 else "surface load"
+    low, high = project.section_bounds()
+    cut = section_offset if section_offset is not None else (low + high) / 2
 
     def note(message: str) -> None:
         """A translated record appearing on its own is a surprise; say what happened."""
@@ -184,6 +190,9 @@ def translate(project: Project, dimension: int,
                 added.append((position[load.id], _surface_from(load, project, None)))
                 note(f"{load.name} is now also a {noun}, spanning the model width.")
         elif dimension == 2 and load.kind == "surface":
+            if not load.z0 - 1e-9 <= cut <= load.z1 + 1e-9:
+                note(f"{load.name} lies at z = {load.z0:g}..{load.z1:g}, clear of the "
+                     f"section plane at z = {cut:g}, so it is not in the section.")
             if partner is not None and partner.kind == "line":
                 out[position[partner.id]] = _line_from(load, project, partner)
                 note(f"{load.name}'s {noun} is updated from the solid model.")

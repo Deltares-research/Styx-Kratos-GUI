@@ -22,7 +22,7 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 import os
@@ -32,6 +32,7 @@ from app import calculate, gmsh_worker, phases as phase_model, results, store
 from app.loads import translate as translate_loads
 from app.walls import translate as translate_walls
 from app.build import GeometryError
+from app.importer import ImportRefused
 from app.kratos import ExportError
 from app.meshing import MeshingError
 from app.schemas import (DimensionUpdate, ExportRequest, LayersUpdate, MaterialsUpdate,
@@ -52,6 +53,13 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="kratos-GUI backend", lifespan=lifespan)
+
+
+@app.exception_handler(gmsh_worker.WorkerCrashed)
+async def worker_crashed(_request, failure: gmsh_worker.WorkerCrashed):
+    """Any route that reaches gmsh: the request that crashed the worker fails with a reason
+    the command log can show, and the worker is already being replaced for the next one."""
+    return JSONResponse(status_code=500, content={"detail": str(failure)})
 
 # The geometry payload is flat arrays of decimal digits: highly repetitive, and roughly
 # an order of magnitude smaller gzipped. This is what makes JSON the right format here.
@@ -309,7 +317,8 @@ async def patch_dimension(update: DimensionUpdate) -> dict:
     # deck all see the same pair. See app/loads.py for what is and is not translatable.
     notes: list[str] = []
     payload["loads"] = [load.model_dump()
-                        for load in translate_loads(current, update.dimension, notes)]
+                        for load in translate_loads(current, update.dimension, notes,
+                                                    update.section_offset)]
     # A wall changes shape with the dimension the same way: a sheet pile in the section
     # is a panel swept between two levels in the solid model, which is what gives it a
     # plan footprint to edit. See app/walls.py for what is and is not translatable.
@@ -370,6 +379,9 @@ async def import_geometry(file: UploadFile = File(...)) -> dict:
             f.write(await file.read())
             
         res = await gmsh_worker.run(gmsh_worker.import_job, path, ext)
+    except ImportRefused as refused:
+        # The file's problem, not the server's: the message says what to change in it.
+        raise HTTPException(status_code=422, detail=str(refused)) from refused
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
     finally:
@@ -378,7 +390,11 @@ async def import_geometry(file: UploadFile = File(...)) -> dict:
             
     project = store.get()
     
-    idx = len([p for p in project.custom_parts if p.key.startswith("imported_")])
+    # After the highest key in use, not the count: a deleted imported_0 must not let the next
+    # import take a key that imported_1 still holds.
+    taken = [int(p.key.split("_", 1)[1]) for p in project.custom_parts
+             if p.key.startswith("imported_") and p.key.split("_", 1)[1].isdigit()]
+    idx = max(taken, default=-1) + 1
     key = f"imported_{idx}"
     
     part = CustomPart(

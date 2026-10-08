@@ -42,7 +42,19 @@ App.Model = (function () {
   function loadsFor(project) {
     var loads = project.loads || [];
     if (project.dimension === 2) {
-      return loads.filter(function (load) { return load.kind !== 'surface'; });
+      // A pad clear of the section plane does not load the section (loads_for(2)).
+      var d = project.domain || domain;
+      var cut = project.section_offset != null ? project.section_offset : (d.z0 + d.z1) / 2;
+      var off = {};
+      loads.forEach(function (load) {
+        if (load.kind !== 'surface') return;
+        if (load.z0 - 1e-9 <= cut && cut <= load.z1 + 1e-9) return;
+        if (load.derived_from) off[load.derived_from] = true;
+        loads.forEach(function (other) {
+          if (other.derived_from === load.id) off[other.id] = true;
+        });
+      });
+      return loads.filter(function (load) { return load.kind !== 'surface' && !off[load.id]; });
     }
     var paired = {};
     loads.forEach(function (load) {
