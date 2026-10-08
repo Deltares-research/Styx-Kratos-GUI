@@ -32,6 +32,8 @@ App.Viewport = (function () {
   var groups = {}, boxHelper = null;
   var importedMeshGroup = null;  // a foreign .mdpa's mesh: outside `groups`, so
                                   // rebuildGroups()/refresh() never touches it
+  var importedEyes = {};             // section.key -> false when its eye is off
+  var importedSectionParts = {};     // section.key -> the deck part it draws
   var importedSectionGroups = {};    // section.key -> its own THREE.Group, for the
   var importedSectionBBoxes = {};    // checklist's per-part toggle/frame buttons
   /* section.key -> the payload section itself, kept for its `node_ids` and `elements`:
@@ -1228,7 +1230,35 @@ App.Viewport = (function () {
     if (selected && !selectedKeys.every(function (k) { return groups[k] && groups[k].visible; })) select(null);
     // A phase may have switched a part off, and a coloured part follows that.
     syncPartColors();
+    applyImportedVisibility(mode);
     needsRender = true;
+  }
+
+  /* An imported deck's sections, drawn or not. Outside `groups`, so the pass above
+     never reaches them; this is their pass. Three things decide, and App.Deck (tested
+     headlessly) is the one that combines them: the part's eye, the stage selected on
+     the Staged construction tab -- a deck case's phases are its stages -- and Results,
+     which draws its own contoured copy of the mesh, so the grey one steps aside. */
+  function applyImportedVisibility(mode) {
+    if (!importedMeshGroup) return;
+    importedMeshGroup.visible = mode !== 'results';
+    var active = App.Deck
+      ? App.Deck.activeForView(App.PROJECT, App.state && App.state.phase, mode) : null;
+    Object.keys(importedSectionGroups).forEach(function (key) {
+      importedSectionGroups[key].visible = App.Deck
+        ? App.Deck.sectionShown(importedSectionParts[key], importedEyes[key], active)
+        : importedEyes[key] !== false;
+    });
+    importedPickable = null;
+    refreshLabels();
+    needsRender = true;
+  }
+
+  /* The eye of an imported part: true or false, or undefined for a key with no
+     imported section -- which is how App.ResultsView tells a deck part from anything
+     else. */
+  function importedEye(key) {
+    return importedSectionGroups[key] ? importedEyes[key] !== false : undefined;
   }
 
   function setVisible(key, on) {
@@ -1236,17 +1266,14 @@ App.Viewport = (function () {
       groupKeys[key].forEach(function (k) { setVisible(k, on); });
       return;
     }
-    // An accepted .mdpa part: no mode gates it (it belongs to no project mode, it is
-    // outside `groups` entirely), so the group's own `.visible` is the whole state --
-    // unlike a real part, there is no separate `wanted`/`modeGroups` gate to combine
-    // it with.
+    // An imported .mdpa part: outside `groups`, so its eye is kept on its own and
+    // `applyImportedVisibility` combines it with the selected stage. In Results the
+    // same eye shows and hides that part's contour.
     if (importedSectionGroups[key]) {
-      importedSectionGroups[key].visible = on;
-      importedPickable = null;
-      needsRender = true;
+      importedEyes[key] = on;
+      applyImportedVisibility(App.state && App.state.mode);
       if (!on && selectedKeys.indexOf(key) >= 0) select(null);
-      refreshLabels();
-      needsRender = true;
+      if (App.ResultsView && App.ResultsView.syncVisibility) App.ResultsView.syncVisibility();
       return;
     }
     if (!(key in groups)) return;
@@ -1271,7 +1298,7 @@ App.Viewport = (function () {
     if (groupKeys[key]) {
       return groupKeys[key].every(function (k) { return isVisible(k); });
     }
-    if (importedSectionGroups[key]) return importedSectionGroups[key].visible;
+    if (importedSectionGroups[key]) return importedEyes[key] !== false;
     return visible[key] !== false;
   }
 
@@ -1725,6 +1752,8 @@ App.Viewport = (function () {
     importedPickable = null;
     forgetPickedNode();
     importedSectionGroups = {};
+    importedEyes = {};
+    importedSectionParts = {};
     importedSectionBBoxes = {};
     importedSectionLabels = {};
     delete groupKeys['group:imported'];
@@ -1803,6 +1832,7 @@ App.Viewport = (function () {
       }
       importedMeshGroup.add(group);
       importedSectionGroups[section.key] = group;
+      importedSectionParts[section.key] = section.part || null;
       if (section.bbox) importedSectionBBoxes[section.key] = section.bbox;
       if (section.node_ids || section.elements) importedSectionLabels[section.key] = section;
     });
@@ -1814,8 +1844,7 @@ App.Viewport = (function () {
       });
     }
     scene.add(importedMeshGroup);
-    refreshLabels();
-    needsRender = true;
+    applyImportedVisibility(App.state && App.state.mode);
 
     if (orbit && model.bbox) {
       var bounds = App.Buffers.bounds(model.bbox);
@@ -2004,6 +2033,8 @@ App.Viewport = (function () {
     importedPickable = null;
     disposeGroup(importedSectionGroups[key]);
     delete importedSectionGroups[key];
+    delete importedEyes[key];
+    delete importedSectionParts[key];
     delete importedSectionBBoxes[key];
     delete importedSectionLabels[key];
     refreshLabels();
@@ -2340,6 +2371,7 @@ App.Viewport = (function () {
     showNode: showNode, importedNodes: importedNodes,
     clearNodeMark: clearNodeMark,
     hasImportedMesh: hasImportedMesh, removeImportedSection: removeImportedSection,
+    importedEye: importedEye,
     setImportedGroupKeys: setImportedGroupKeys, importedLineOrder: importedLineOrder,
     frameImportedSection: frameImportedSection,
     // js/viewport.js rebuilds its soil boxes from App.LAYERS client-side. Here the soil
