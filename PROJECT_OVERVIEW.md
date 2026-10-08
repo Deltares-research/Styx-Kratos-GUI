@@ -1,41 +1,61 @@
 # Project overview — code size
 
-Snapshot of the source tree: lines of code, classes and functions per module, split into backend (Python server) and frontend (browser app).
+Snapshot of the source tree on 2026-10-09 (after the wall-plot window, commit `93205af`):
+lines of code, classes and functions per module, split into backend (Python server) and
+frontend (browser app).
+
+Styx is a Deltares/Kratos geotechnical modeller: build a soil and excavation model, mesh it
+with Gmsh, export and run a Kratos GeoMechanics deck in construction phases, and read the
+results back in a Plaxis-style Results mode. How the pieces fit is in
+[ARCHITECTURE.md](ARCHITECTURE.md); what works and what does not is in
+[FEATURES.md](FEATURES.md); how to install and run it is in [README.md](README.md).
 
 ## How it is counted
 
 - **Lines** = every physical line. **Code** = lines minus blank lines minus comment-only lines (Python docstrings count as comments).
 - **Python**: parsed with `ast`. *Classes* include nested classes; *Functions* are module-level and nested functions; *Methods* are functions defined directly in a class body.
-- **JavaScript**: counted from source text with comments and strings stripped. The frontend is plain ES5 (IIFE modules hung off a global `App` namespace) with no `class`, arrow functions or method shorthand, so it has 0 classes and every function is a `function` keyword. *Functions* counts named declarations plus anonymous `function (...)` expressions (callbacks, object-literal members). JS figures are close estimates, not parser-exact.
+- **JavaScript**: counted from source text with comments, strings and regular-expression literals stripped. The frontend is plain ES5 (IIFE modules hung off a global `App` namespace) with no `class`, arrow functions or method shorthand, so it has 0 classes and every function is a `function` keyword. *Functions* counts every `function` keyword left after stripping: named declarations, anonymous `function (...)` expressions (callbacks, object-literal members) and `function(...)` written without the space. JS figures are close estimates, not parser-exact.
 - Excluded: `vendor/` (three.js), `htmlcov*/`, virtual environments, `__pycache__`, and the ignored `examples/`, `test/`, `plan/`, `tools/`, `graphify-out/` folders.
+- **Comparing with the previous snapshot (2026-10-08):** lines, code and comments are counted the same way and compare directly. JS function counts are a few percent higher than that snapshot showed for the same files, because `function(` without a space is now included. Recounted this way, the previous snapshot had 1,750 live, 494 shell and 1,976 test functions, against the 1,743, 471 and 1,898 it printed.
+
+## What changed since the previous snapshot
+
+| Area | Change | Code lines |
+|---|---|--:|
+| `server/app/result_members.py` (new) | A structural member's results as curves along it — the data behind the wall-plot window | +83 |
+| `server/app/results.py`, `main.py` | `stage_members`, `member_profiles`, and the two `/members` routes | +66 |
+| `live/js/results-plot.js` (new) | `results plot …` command and the SVG figure, DOM-free and tested headless | +356 |
+| `live/js/patches.js`, `results.js`, `live/css/live.css` | The plot window and its buttons; legend Min/Max limits; legend moved clear of the ruler | +204 |
+| `server/tests/test_result_members.py` (new) | The plot data against Kratos' own CROW run (the orange benchmark line) | +184 |
+| `live/tests/test-results-plot.js` (new), `test-results.js` | The figure, the command and the legend limits | +404 |
 
 ## Overview
 
 | Area | Language | Files | Lines | Code | Classes | Functions | Methods | Functions + methods |
 |---|---|--:|--:|--:|--:|--:|--:|--:|
-| Backend — Application (`server/app`) | Python | 33 | 13,056 | 6,994 | 76 | 377 | 86 | 463 |
-| Backend — Tests (`server/tests`) | Python | 51 | 18,502 | 10,934 | 9 | 1432 | 16 | 1448 |
-| Frontend — Live app JS (`live/js`) | JavaScript | 33 | 15,554 | 11,169 | 0 | 1743 | 0 | 1743 |
-| Frontend — Shell JS (`js/`) | JavaScript | 10 | 4,171 | 3,412 | 0 | 471 | 0 | 471 |
-| Frontend — Tests (`live/tests`, JS) | JavaScript | 38 | 10,911 | 8,686 | 0 | 1898 | 0 | 1898 |
-| Frontend — Test runners (`live/tests`, Python) | Python | 2 | 359 | 228 | 0 | 7 | 0 | 7 |
-| Frontend — Stylesheets (`css/`, `live/css`) | CSS | 4 | 1,126 | 940 | 0 | 0 | 0 | 0 |
-| Frontend — HTML pages | HTML | 3 | 495 | 391 | 0 | 0 | 0 | 0 |
-| **Backend total** | | **84** | **31,558** | **17,928** | **85** | **1809** | **102** | **1911** |
-| **Frontend total** | | **90** | **32,616** | **24,826** | **0** | **4119** | **0** | **4119** |
-| **Grand total** | | **174** | **64,174** | **42,754** | **85** | **5928** | **102** | **6030** |
+| Backend — Application (`server/app`) | Python | 34 | 13,313 | 7,143 | 78 | 389 | 87 | 476 |
+| Backend — Tests (`server/tests`) | Python | 52 | 18,969 | 11,201 | 9 | 1468 | 16 | 1484 |
+| Frontend — Live app JS (`live/js`) | JavaScript | 34 | 16,256 | 11,698 | 0 | 1839 | 0 | 1839 |
+| Frontend — Shell JS (`js/`) | JavaScript | 10 | 4,171 | 3,412 | 0 | 494 | 0 | 494 |
+| Frontend — Tests (`live/tests`, JS) | JavaScript | 39 | 11,419 | 9,090 | 0 | 2087 | 0 | 2087 |
+| Frontend — Test runners (`live/tests`, Python) | Python | 2 | 365 | 232 | 0 | 7 | 0 | 7 |
+| Frontend — Stylesheets (`css/`, `live/css`) | CSS | 4 | 1,167 | 971 | 0 | 0 | 0 | 0 |
+| Frontend — HTML pages | HTML | 3 | 498 | 392 | 0 | 0 | 0 | 0 |
+| **Backend total** | | **86** | **32,282** | **18,344** | **87** | **1857** | **103** | **1960** |
+| **Frontend total** | | **92** | **33,876** | **25,795** | **0** | **4427** | **0** | **4427** |
+| **Grand total** | | **178** | **66,158** | **44,139** | **87** | **6284** | **103** | **6387** |
 
 ### Production code vs tests
 
 | Scope | Files | Lines | Code | Classes | Functions + methods |
 |---|--:|--:|--:|--:|--:|
-| Backend application | 33 | 13,056 | 6,994 | 76 | 463 |
-| Frontend application (JS + CSS + HTML) | 49 | 21,208 | 15,788 | 0 | 2214 |
-| **Production total** | 82 | 34,264 | 22,782 | 76 | 2677 |
-| Backend tests | 51 | 18,502 | 10,934 | 9 | 1448 |
-| Frontend tests | 41 | 11,408 | 9,038 | 0 | 1905 |
-| **Test total** | 92 | 29,910 | 19,972 | 9 | 3353 |
-| **Everything** | 174 | 64,174 | 42,754 | 85 | 6030 |
+| Backend application | 34 | 13,313 | 7,143 | 78 | 476 |
+| Frontend application (JS + CSS + HTML) | 51 | 22,092 | 16,473 | 0 | 2333 |
+| **Production total** | 85 | 35,405 | 23,616 | 78 | 2809 |
+| Backend tests | 52 | 18,969 | 11,201 | 9 | 1484 |
+| Frontend tests | 41 | 11,784 | 9,322 | 0 | 2094 |
+| **Test total** | 93 | 30,753 | 20,523 | 9 | 3578 |
+| **Everything** | 178 | 66,158 | 44,139 | 87 | 6387 |
 
 ## Backend (Python, `server/`)
 
@@ -46,11 +66,11 @@ Snapshot of the source tree: lines of code, classes and functions per module, sp
 | `schemas.py` | 1,949 | 1,036 | 636 | 277 | 41 | 4 | 63 |
 | `kratos.py` | 1,670 | 946 | 517 | 207 | 2 | 49 | 0 |
 | `build.py` | 1,253 | 683 | 378 | 192 | 2 | 37 | 0 |
-| `main.py` | 891 | 514 | 225 | 152 | 0 | 41 | 0 |
+| `main.py` | 918 | 529 | 231 | 158 | 0 | 43 | 0 |
 | `meshing.py` | 594 | 412 | 110 | 72 | 3 | 18 | 2 |
 | `kratos_processes.py` | 795 | 395 | 297 | 103 | 1 | 22 | 0 |
 | `mdpa_import.py` | 483 | 282 | 133 | 68 | 4 | 15 | 5 |
-| `results.py` | 473 | 230 | 143 | 100 | 3 | 25 | 0 |
+| `results.py` | 551 | 281 | 153 | 117 | 3 | 29 | 0 |
 | `kratos_materials.py` | 479 | 224 | 192 | 63 | 1 | 8 | 0 |
 | `tessellate.py` | 387 | 214 | 107 | 66 | 2 | 12 | 2 |
 | `interfaces.py` | 364 | 204 | 92 | 68 | 3 | 16 | 0 |
@@ -65,6 +85,7 @@ Snapshot of the source tree: lines of code, classes and functions per module, sp
 | `walls.py` | 173 | 93 | 45 | 35 | 0 | 9 | 0 |
 | `launcher.py` | 128 | 91 | 8 | 29 | 0 | 9 | 0 |
 | `loads.py` | 203 | 88 | 74 | 41 | 0 | 9 | 0 |
+| `result_members.py` | 152 | 83 | 40 | 29 | 2 | 6 | 1 |
 | `gmsh_worker.py` | 150 | 76 | 33 | 41 | 0 | 12 | 0 |
 | `script.py` | 158 | 74 | 59 | 25 | 1 | 4 | 0 |
 | `creator.py` | 104 | 68 | 11 | 25 | 0 | 2 | 0 |
@@ -76,25 +97,25 @@ Snapshot of the source tree: lines of code, classes and functions per module, sp
 | `eemdijk.py` | 32 | 9 | 13 | 10 | 0 | 1 | 0 |
 | `__init__.py` | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | `routes/__init__.py` | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
-| **Total (33 files)** | **13,056** | **6,994** | **3,988** | **2,074** | **76** | **377** | **86** |
+| **Total (34 files)** | **13,313** | **7,143** | **4,044** | **2,126** | **78** | **389** | **87** |
 
 ### Tests — `server/tests`
 
 | Module | Lines | Code | Comments/docs | Blank | Classes | Functions | Methods |
 |---|--:|--:|--:|--:|--:|--:|--:|
-| `test_api.py` | 1,643 | 1,028 | 208 | 407 | 0 | 108 | 0 |
+| `test_api.py` | 1,644 | 1,029 | 208 | 407 | 0 | 108 | 0 |
 | `test_schemas.py` | 1,530 | 943 | 190 | 397 | 0 | 161 | 0 |
 | `test_kratos.py` | 1,216 | 754 | 178 | 284 | 0 | 110 | 0 |
 | `test_crow_reference.py` | 886 | 482 | 224 | 180 | 0 | 68 | 0 |
 | `test_mdpa_import.py` | 680 | 430 | 80 | 170 | 0 | 44 | 0 |
 | `test_deck.py` | 556 | 383 | 49 | 124 | 0 | 43 | 0 |
 | `test_kratos_interfaces.py` | 639 | 367 | 123 | 149 | 0 | 52 | 0 |
+| `make_crow_fixture.py` | 519 | 337 | 97 | 85 | 0 | 16 | 0 |
 | `test_build_2d.py` | 528 | 306 | 95 | 127 | 0 | 42 | 0 |
 | `test_kratos_3d.py` | 500 | 285 | 72 | 143 | 0 | 45 | 0 |
 | `test_result_mesh.py` | 442 | 281 | 55 | 106 | 0 | 30 | 0 |
 | `test_results.py` | 480 | 281 | 54 | 145 | 0 | 40 | 0 |
 | `test_calculate.py` | 485 | 261 | 89 | 135 | 3 | 35 | 7 |
-| `make_crow_fixture.py` | 402 | 258 | 75 | 69 | 0 | 12 | 0 |
 | `test_result_fields.py` | 453 | 238 | 86 | 129 | 0 | 33 | 0 |
 | `test_build.py` | 421 | 235 | 82 | 104 | 0 | 27 | 0 |
 | `test_meshing_2d.py` | 377 | 232 | 56 | 89 | 0 | 33 | 0 |
@@ -104,6 +125,7 @@ Snapshot of the source tree: lines of code, classes and functions per module, sp
 | `test_build_3d.py` | 316 | 198 | 38 | 80 | 0 | 22 | 0 |
 | `test_kratos_stage_processes.py` | 320 | 190 | 50 | 80 | 0 | 37 | 0 |
 | `test_tessellate.py` | 306 | 187 | 46 | 73 | 0 | 23 | 0 |
+| `test_result_members.py` | 342 | 184 | 51 | 107 | 0 | 32 | 0 |
 | `test_gid_results.py` | 310 | 183 | 43 | 84 | 0 | 23 | 0 |
 | `test_tessellate_2d.py` | 263 | 169 | 35 | 59 | 0 | 19 | 0 |
 | `test_phases.py` | 274 | 151 | 62 | 61 | 0 | 26 | 0 |
@@ -126,14 +148,14 @@ Snapshot of the source tree: lines of code, classes and functions per module, sp
 | `frozen.py` | 131 | 96 | 14 | 21 | 0 | 8 | 0 |
 | `test_water_level.py` | 159 | 91 | 26 | 42 | 0 | 15 | 0 |
 | `test_mesh_labels.py` | 146 | 88 | 19 | 39 | 0 | 11 | 0 |
-| `crow_run.py` | 161 | 74 | 44 | 43 | 0 | 10 | 0 |
+| `crow_run.py` | 168 | 77 | 47 | 44 | 0 | 10 | 0 |
 | `test_model_extent.py` | 102 | 53 | 17 | 32 | 0 | 10 | 0 |
 | `test_parity.py` | 98 | 49 | 22 | 27 | 0 | 11 | 0 |
 | `test_launcher.py` | 63 | 41 | 4 | 18 | 3 | 0 | 6 |
 | `test_importer.py` | 31 | 24 | 4 | 3 | 0 | 1 | 0 |
 | `crow_example.py` | 46 | 8 | 25 | 13 | 0 | 1 | 0 |
 | `__init__.py` | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
-| **Total (51 files)** | **18,502** | **10,934** | **3,016** | **4,552** | **9** | **1432** | **16** |
+| **Total (52 files)** | **18,969** | **11,201** | **3,092** | **4,676** | **9** | **1468** | **16** |
 
 ## Frontend (browser)
 
@@ -141,11 +163,12 @@ Snapshot of the source tree: lines of code, classes and functions per module, sp
 
 | Module | Lines | Code | Comments | Blank | Functions |
 |---|--:|--:|--:|--:|--:|
-| `patches.js` | 3,421 | 2,479 | 619 | 323 | 380 |
-| `viewport.js` | 2,400 | 1,669 | 493 | 238 | 225 |
+| `patches.js` | 3,604 | 2,617 | 648 | 339 | 400 |
+| `viewport.js` | 2,400 | 1,669 | 493 | 238 | 229 |
 | `model.js` | 1,633 | 1,259 | 251 | 123 | 242 |
-| `results.js` | 871 | 607 | 164 | 100 | 89 |
+| `results.js` | 914 | 642 | 170 | 102 | 91 |
 | `beams.js` | 532 | 411 | 69 | 52 | 72 |
+| `results-plot.js` | 476 | 356 | 55 | 65 | 67 |
 | `soil-volume-dialog.js` | 453 | 340 | 59 | 54 | 50 |
 | `anchors.js` | 428 | 332 | 52 | 44 | 63 |
 | `loads.js` | 362 | 315 | 19 | 28 | 46 |
@@ -164,7 +187,7 @@ Snapshot of the source tree: lines of code, classes and functions per module, sp
 | `canvas-renderer.js` | 271 | 177 | 50 | 44 | 18 |
 | `orbit.js` | 167 | 117 | 29 | 21 | 13 |
 | `import-dialog.js` | 126 | 104 | 2 | 20 | 16 |
-| `history.js` | 142 | 96 | 25 | 21 | 25 |
+| `history.js` | 142 | 96 | 25 | 21 | 28 |
 | `zip.js` | 112 | 82 | 15 | 15 | 10 |
 | `export.js` | 132 | 80 | 36 | 16 | 13 |
 | `calculate.js` | 112 | 60 | 35 | 17 | 10 |
@@ -174,7 +197,7 @@ Snapshot of the source tree: lines of code, classes and functions per module, sp
 | `download.js` | 80 | 45 | 22 | 13 | 12 |
 | `buffers.js` | 71 | 37 | 20 | 14 | 4 |
 | `water-command.js` | 70 | 37 | 20 | 13 | 3 |
-| **Total (33 files)** | **15,554** | **11,169** | **2,729** | **1,656** | **1743** |
+| **Total (34 files)** | **16,256** | **11,698** | **2,819** | **1,739** | **1839** |
 
 ### Shell modules — `js/`
 
@@ -182,85 +205,86 @@ The frozen UI shell served alongside `live/`; `live/js` swaps in its own viewpor
 
 | Module | Lines | Code | Comments | Blank | Functions |
 |---|--:|--:|--:|--:|--:|
-| `dialogs.js` | 1,105 | 912 | 94 | 99 | 157 |
+| `dialogs.js` | 1,105 | 912 | 94 | 99 | 177 |
 | `data.js` | 881 | 749 | 74 | 58 | 54 |
 | `viewport.js` | 817 | 662 | 66 | 89 | 93 |
 | `explorer.js` | 319 | 257 | 24 | 38 | 42 |
-| `app.js` | 299 | 236 | 22 | 41 | 26 |
-| `ui.js` | 225 | 177 | 24 | 24 | 33 |
+| `app.js` | 299 | 236 | 22 | 41 | 28 |
+| `ui.js` | 225 | 177 | 24 | 24 | 34 |
 | `orbit.js` | 146 | 117 | 12 | 17 | 13 |
 | `toolbars.js` | 147 | 115 | 10 | 22 | 24 |
 | `command.js` | 120 | 100 | 5 | 15 | 15 |
 | `menubar.js` | 112 | 87 | 11 | 14 | 14 |
-| **Total (10 files)** | **4,171** | **3,412** | **342** | **417** | **471** |
+| **Total (10 files)** | **4,171** | **3,412** | **342** | **417** | **494** |
 
 ### Tests — `live/tests`
 
 | Module | Lines | Code | Comments | Blank | Functions |
 |---|--:|--:|--:|--:|--:|
-| `test-results.js` | 1,014 | 820 | 86 | 108 | 206 |
-| `test-model.js` | 1,002 | 813 | 83 | 106 | 202 |
-| `test-patches.js` | 794 | 663 | 54 | 77 | 192 |
+| `test-results.js` | 1,079 | 872 | 91 | 116 | 236 |
+| `test-model.js` | 1,002 | 813 | 83 | 106 | 205 |
+| `test-patches.js` | 794 | 663 | 54 | 77 | 195 |
 | `fixtures/phase-cases.js` | 591 | 579 | 10 | 2 | 0 |
 | `test-loads.js` | 590 | 490 | 37 | 63 | 133 |
-| `test-viewport.js` | 670 | 455 | 134 | 81 | 95 |
-| `test-phases.js` | 511 | 376 | 63 | 72 | 95 |
-| `test-normal-loads.js` | 405 | 326 | 39 | 40 | 92 |
-| `test-results-render.js` | 481 | 315 | 68 | 98 | 55 |
-| `test-toolbar.js` | 373 | 304 | 28 | 41 | 84 |
-| `test-mdpa-import.js` | 299 | 245 | 14 | 40 | 52 |
+| `test-viewport.js` | 670 | 455 | 134 | 81 | 100 |
+| `test-phases.js` | 511 | 376 | 63 | 72 | 97 |
+| `test-results-plot.js` | 443 | 352 | 31 | 60 | 90 |
+| `test-normal-loads.js` | 405 | 326 | 39 | 40 | 96 |
+| `test-results-render.js` | 481 | 315 | 68 | 98 | 61 |
+| `test-toolbar.js` | 373 | 304 | 28 | 41 | 87 |
+| `test-mdpa-import.js` | 299 | 245 | 14 | 40 | 56 |
 | `test-part-colors.js` | 292 | 225 | 20 | 47 | 40 |
-| `test-mesh-labels.js` | 284 | 219 | 25 | 40 | 31 |
-| `test-beams.js` | 241 | 210 | 7 | 24 | 43 |
-| `test-water.js` | 294 | 208 | 48 | 38 | 46 |
-| `test-interfaces.js` | 241 | 201 | 12 | 28 | 42 |
-| `test-anchors.js` | 225 | 195 | 8 | 22 | 28 |
-| `test-node-parts.js` | 263 | 178 | 34 | 51 | 45 |
+| `test-mesh-labels.js` | 284 | 219 | 25 | 40 | 38 |
+| `test-beams.js` | 241 | 210 | 7 | 24 | 45 |
+| `test-water.js` | 294 | 208 | 48 | 38 | 53 |
+| `test-interfaces.js` | 241 | 201 | 12 | 28 | 44 |
+| `test-anchors.js` | 225 | 195 | 8 | 22 | 35 |
+| `test-node-parts.js` | 263 | 178 | 34 | 51 | 48 |
 | `test-ruler.js` | 215 | 167 | 11 | 37 | 43 |
 | `test-dock.js` | 204 | 164 | 16 | 24 | 30 |
-| `test-download.js` | 170 | 149 | 6 | 15 | 46 |
-| `test-export.js` | 152 | 138 | 4 | 10 | 39 |
-| `test-calculate.js` | 145 | 134 | 1 | 10 | 41 |
+| `test-download.js` | 170 | 149 | 6 | 15 | 48 |
+| `test-export.js` | 152 | 138 | 4 | 10 | 40 |
+| `test-calculate.js` | 145 | 134 | 1 | 10 | 42 |
 | `test-canvas-renderer.js` | 174 | 128 | 24 | 22 | 19 |
-| `test-draw-input.js` | 128 | 102 | 6 | 20 | 26 |
+| `test-draw-input.js` | 128 | 102 | 6 | 20 | 28 |
 | `test-mesh-settings.js` | 130 | 102 | 13 | 15 | 25 |
 | `test-deck.js` | 131 | 98 | 11 | 22 | 18 |
-| `test-material-library.js` | 127 | 98 | 18 | 11 | 16 |
-| `test-api.js` | 120 | 91 | 10 | 19 | 28 |
+| `test-material-library.js` | 127 | 98 | 18 | 11 | 18 |
+| `test-api.js` | 120 | 91 | 10 | 19 | 29 |
 | `test-buffers.js` | 102 | 70 | 15 | 17 | 13 |
 | `test-soil-surface.js` | 108 | 69 | 22 | 17 | 11 |
 | `test-layout.js` | 69 | 66 | 0 | 3 | 6 |
-| `harness.js` | 81 | 59 | 10 | 12 | 15 |
+| `harness.js` | 81 | 59 | 10 | 12 | 17 |
 | `test-empty-layers.js` | 58 | 58 | 0 | 0 | 15 |
 | `test-water-command.js` | 80 | 58 | 8 | 14 | 12 |
 | `test-zip.js` | 70 | 55 | 6 | 9 | 10 |
 | `test-import.js` | 41 | 33 | 2 | 6 | 4 |
 | `fixtures/crow-field.js` | 36 | 25 | 9 | 2 | 0 |
-| **Total (38 files)** | **10,911** | **8,686** | **962** | **1,263** | **1898** |
+| **Total (39 files)** | **11,419** | **9,090** | **998** | **1,331** | **2087** |
 
 Test runners:
 
 | Module | Lines | Code | Comments/docs | Blank | Classes | Functions | Methods |
 |---|--:|--:|--:|--:|--:|--:|--:|
 | `syntax_check.py` | 198 | 135 | 38 | 25 | 0 | 4 | 0 |
-| `run_headless.py` | 161 | 93 | 46 | 22 | 0 | 3 | 0 |
-| **Total (2 files)** | **359** | **228** | **84** | **47** | **0** | **7** | **0** |
+| `run_headless.py` | 167 | 97 | 48 | 22 | 0 | 3 | 0 |
+| **Total (2 files)** | **365** | **232** | **86** | **47** | **0** | **7** | **0** |
 
 ### Stylesheets
 
 | File | Lines | Code | Comments | Blank |
 |---|--:|--:|--:|--:|
 | `css/components.css` | 442 | 398 | 25 | 19 |
-| `live/css/live.css` | 364 | 277 | 57 | 30 |
+| `live/css/live.css` | 405 | 308 | 65 | 32 |
 | `css/layout.css` | 238 | 206 | 16 | 16 |
 | `css/tokens.css` | 82 | 59 | 12 | 11 |
-| **Total (4 files)** | **1,126** | **940** | **110** | **76** |
+| **Total (4 files)** | **1,167** | **971** | **118** | **78** |
 
 ### HTML pages
 
 | File | Lines | Code | Comments | Blank |
 |---|--:|--:|--:|--:|
-| `live/index.html` | 211 | 152 | 31 | 28 |
-| `live/tests/index.html` | 138 | 124 | 6 | 8 |
+| `live/index.html` | 212 | 151 | 33 | 28 |
+| `live/tests/index.html` | 140 | 126 | 6 | 8 |
 | `index.html` | 146 | 115 | 8 | 23 |
-| **Total (3 files)** | **495** | **391** | **45** | **59** |
+| **Total (3 files)** | **498** | **392** | **47** | **59** |
