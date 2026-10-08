@@ -187,6 +187,7 @@ App.Results = (function () {
     options = { map: DEFAULTS.map, bands: DEFAULTS.bands, deform: DEFAULTS.deform,
                 reversed: DEFAULTS.reversed, mesh: DEFAULTS.mesh,
                 min: DEFAULTS.min, max: DEFAULTS.max };
+    if (App.ResultsPlot) App.ResultsPlot.forget();
     changed();
   }
 
@@ -337,6 +338,8 @@ App.Results = (function () {
     'results reverse         flip the colour ramp end for end',
     'results mesh [on|off]   draw the element outlines over the shading',
     'results csv             the field on screen, as a file',
+    'results plot [member] [quantity]   M, Q, N, ux, tn, ts along the wall, per phase;',
+    '                        `results plot members` lists them, `plot csv`/`svg` saves',
     'results files / get <file> / zip     the run directory itself'
   ];
 
@@ -754,6 +757,43 @@ App.Results = (function () {
          + '.';
   }
 
+  /* The legend's Min and Max boxes, as the `results range` they mean -- or `null`, with
+     the reason logged, when they mean nothing. Both empty is the automatic range; one
+     empty keeps that end where the legend has it now, so typing a single limit does
+     what it looks like it does. A decimal comma is read as a point: half the people
+     reading these numbers write 0,5. */
+  function limitsCommand(minText, maxText) {
+    if (!view.field) {
+      log('err', 'Nothing is on screen yet, so there is no legend to set limits on.');
+      return null;
+    }
+    var typed = [minText, maxText].map(function (text) {
+      return String(text === undefined || text === null ? '' : text).trim();
+    });
+    if (!typed[0] && !typed[1]) return 'results range auto';
+
+    var shown = [options.min === null ? view.field.min : options.min,
+                 options.max === null ? view.field.max : options.max];
+    var limits = [];
+    for (var i = 0; i < 2; i++) {
+      if (!typed[i]) { limits.push(shown[i]); continue; }
+      var text = typed[i].replace(',', '.');
+      var value = /^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i.test(text) ? parseFloat(text) : NaN;
+      if (!isFinite(value)) {
+        log('err', '"' + typed[i] + '" is not a number, so it cannot be the legend\'s '
+                   + (i ? 'maximum' : 'minimum') + '.');
+        return null;
+      }
+      limits.push(value);
+    }
+    if (limits[0] === limits[1]) {
+      log('err', 'The minimum and the maximum are both ' + limits[0]
+                 + ' — there would be no colours between them.');
+      return null;
+    }
+    return 'results range ' + limits[0] + ' ' + limits[1];
+  }
+
   /* ── Probing and exporting ────────────────────────────────────────────── */
 
   function atNode(token) {
@@ -847,6 +887,8 @@ App.Results = (function () {
     }
     if (verb === 'at') return atNode(parts[2]);
     if (verb === 'csv') return exportCsv();
+    // The wall and interface curves, phase by phase: live/js/results-plot.js.
+    if (verb === 'plot' && App.ResultsPlot) return App.ResultsPlot.command(rest);
     if (verb === 'bands' || verb === 'smooth' || verb === 'map'
         || verb === 'deform' || verb === 'range' || verb === 'mesh'
         || verb === 'reverse' || verb === 'reversed') {
@@ -866,6 +908,7 @@ App.Results = (function () {
     fileUrl: fileUrl, archiveUrl: archiveUrl, download: download,
     draw: draw, present: present, redraw: redraw,
     options: function () { return options; },
+    limitsCommand: limitsCommand,
     size: size, when: when, runLine: runLine
   };
 })();

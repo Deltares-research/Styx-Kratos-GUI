@@ -813,6 +813,71 @@
     });
   });
 
+  /* The legend's Min and Max boxes in the Results panel. They do not set anything
+     themselves: `limitsCommand` turns what was typed into the `results range` above,
+     so the boxes, the command box and the menu are one implementation. */
+
+  test('two typed limits become results range', function () {
+    return showing().then(function () {
+      return App.Results.handleCommand('results field uy');
+    }).then(function () {
+      T.eq(App.Results.limitsCommand('-2', '0.5'), 'results range -2 0.5');
+    });
+  });
+
+  test('both limits emptied is the automatic range again', function () {
+    return showing().then(function () {
+      return App.Results.handleCommand('results field uy');
+    }).then(function () {
+      T.eq(App.Results.limitsCommand('', '  '), 'results range auto');
+    });
+  });
+
+  test('one limit typed keeps the other end where the legend has it', function () {
+    return showing().then(function () {
+      return App.Results.handleCommand('results field uy');
+    }).then(function () {
+      // uy here runs -1 .. 0, so leaving Max empty keeps 0.
+      T.eq(App.Results.limitsCommand('-0.5', ''), 'results range -0.5 0');
+      return App.Results.handleCommand('results range -3 2');
+    }).then(function () {
+      // A typed range is what the legend has now, so it is the end that is kept.
+      T.eq(App.Results.limitsCommand('', '5'), 'results range -3 5');
+    });
+  });
+
+  test('a decimal comma is read as a decimal point', function () {
+    return showing().then(function () {
+      return App.Results.handleCommand('results field uy');
+    }).then(function () {
+      T.eq(App.Results.limitsCommand('-0,25', '1,5'), 'results range -0.25 1.5');
+    });
+  });
+
+  test('a limit that is not a number is refused with a reason', function () {
+    return showing().then(function () {
+      return App.Results.handleCommand('results field uy');
+    }).then(function () {
+      log.length = 0;
+      T.eq(App.Results.limitsCommand('abc', '1'), null);
+      T.ok(log.some(function (line) { return line[0] === 'err' && /abc/.test(line[1]); }),
+           JSON.stringify(log));
+    });
+  });
+
+  test('equal limits are refused, since there would be no colours between them', function () {
+    return showing().then(function () {
+      return App.Results.handleCommand('results field uy');
+    }).then(function () {
+      T.eq(App.Results.limitsCommand('2', '2'), null);
+    });
+  });
+
+  test('limits with nothing on screen are refused', function () {
+    setup();
+    T.eq(App.Results.limitsCommand('1', '2'), null);
+  });
+
   test('results deform takes a factor, auto, or off', function () {
     return showing().then(function () {
       return App.Results.handleCommand('results field uy');
