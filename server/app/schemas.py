@@ -1564,7 +1564,16 @@ class Project(Base):
         and are carried at the section plane instead (`build._load_footprint_tools`).
         """
         if dimension == 2:
-            return [load for load in self.loads if load.kind != "surface"]
+            # A pad whose footprint misses the section plane does not load the section;
+            # its 2D half is kept, so moving the plane onto it brings it back.
+            cut = self.cut_at()
+            clear = {load.id: load.derived_from for load in self.loads
+                     if load.kind == "surface"
+                     and not load.z0 - 1e-9 <= cut <= load.z1 + 1e-9}
+            off = set(clear.values()) | {load.id for load in self.loads
+                                         if load.derived_from in clear}
+            return [load for load in self.loads
+                    if load.kind != "surface" and load.id not in off]
         # Both ends of every pair, so a 2D half is recognised whether it was the record
         # the user authored or the one translated from a surface load.
         paired = {id for load in self.loads if load.derived_from is not None

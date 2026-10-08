@@ -287,6 +287,171 @@ def test_only_one_calculation_runs_at_a_time(runs, monkeypatch):
         calculate.run(DECK)
 
 
+def test_two_presses_at_the_same_moment_start_one_run(runs, monkeypatch):
+    """The route runs `run` on a worker thread, so two presses are two threads. Both
+    must not get past the check before either has claimed the machine."""
+    import threading
+    stand_in(monkeypatch, "pass")
+    both_inside = threading.Barrier(2, timeout=2)
+    write_deck = calculate.write_deck
+
+    def slow_write(export, directory):
+        try:
+            both_inside.wait()
+        except threading.BrokenBarrierError:
+            pass
+        return write_deck(export, directory)
+
+    monkeypatch.setattr(calculate, "write_deck", slow_write)
+    outcomes = []
+
+    def press():
+        try:
+            outcomes.append(calculate.run(DECK)["ok"])
+        except calculate.Busy:
+            outcomes.append("busy")
+
+    threads = [threading.Thread(target=press) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join(timeout=30)
+
+    assert sorted(outcomes, key=str) == [True, "busy"]
+    assert len(list(runs.iterdir())) == 1
+
+
+# ── Runs that never get going ───────────────────────────────────────────────
+
+def test_an_interpreter_that_is_a_directory_is_reported_not_crashed_on(
+        runs, monkeypatch, tmp_path):
+    """Pointing "python" at the venv instead of the python.exe inside it is the easy
+    mistake. It exists, so it got past the check, and then failed to start as a bare
+    OSError -- a 500 that says nothing."""
+    monkeypatch.setenv(calculate.PYTHON_ENV, str(tmp_path))
+
+    with pytest.raises(calculate.CalculationError) as failure:
+        calculate.run(DECK)
+
+    assert str(tmp_path) in str(failure.value)
+    assert calculate.PYTHON_ENV in str(failure.value)
+
+
+def test_an_interpreter_that_will_not_start_is_reported(runs, monkeypatch, tmp_path):
+    not_a_program = tmp_path / "python.txt"
+    not_a_program.write_text("not a program", encoding="utf-8")
+    monkeypatch.setenv(calculate.PYTHON_ENV, str(not_a_program))
+
+    with pytest.raises(calculate.CalculationError) as failure:
+        calculate.run(DECK)
+
+    assert str(not_a_program) in str(failure.value)
+    # And the button works again afterwards.
+    stand_in(monkeypatch, "pass")
+    assert calculate.run(DECK)["ok"] is True
+
+
+def test_a_runs_directory_that_cannot_be_made_is_reported(monkeypatch, tmp_path):
+    blocker = tmp_path / "a-file"
+    blocker.write_text("", encoding="utf-8")
+    monkeypatch.setenv(calculate.RUNS_ENV, str(blocker / "runs"))
+    stand_in(monkeypatch, "pass")
+
+    with pytest.raises(calculate.CalculationError) as failure:
+        calculate.run(DECK)
+
+    assert calculate.RUNS_ENV in str(failure.value)
+
+
+def test_a_deck_that_cannot_be_written_frees_the_button(runs, monkeypatch):
+    stand_in(monkeypatch, "pass")
+    write_deck = calculate.write_deck
+
+    def disk_full(export, directory):
+        raise OSError(28, "No space left on device")
+
+    monkeypatch.setattr(calculate, "write_deck", disk_full)
+    with pytest.raises(calculate.CalculationError, match="No space left"):
+        calculate.run(DECK)
+
+    monkeypatch.setattr(calculate, "write_deck", write_deck)
+    assert calculate.run(DECK)["ok"] is True
+
+
+# ── A run that takes too long ───────────────────────────────────────────────
+
+def test_a_run_past_the_timeout_is_given_up_on_and_says_where(runs, monkeypatch):
+    monkeypatch.setenv(calculate.TIMEOUT_ENV, "1")
+    stand_in(monkeypatch,
+             f"import time; print({marker('begin', 1, 2, '1_Initial')!r}, flush=True);"
+             "time.sleep(30)")
+
+    result = calculate.run(DECK)
+
+    assert result["ok"] is False
+    assert result["returncode"] is None
+    assert result["seconds"] < 20
+    assert "Given up on after 1 s" in result["error"]
+    assert calculate.TIMEOUT_ENV in result["error"]
+    assert result["stage"] == {"index": 1, "of": 2, "name": "1_Initial"}
+    log = (Path(result["directory"]) / calculate.LOG_NAME).read_text(encoding="utf-8")
+    assert "1_Initial" in log and "Given up on" in log
+
+    stand_in(monkeypatch, "pass")
+    assert calculate.run(DECK)["ok"] is True, "the button is free again"
+
+
+def test_a_timeout_with_its_output_in_bytes_is_still_reported(runs, monkeypatch):
+    """`TimeoutExpired.output` is bytes even with text=True on POSIX (the subprocess
+    docs say so), whatever Windows hands back."""
+    import subprocess
+
+    def timed_out(command, **kwargs):
+        raise subprocess.TimeoutExpired(
+            command, 1, output=(marker("begin", 2, 3, "2_Dig") + "\nhalf a l\xe9ne")
+            .encode("utf-8"))
+
+    monkeypatch.setenv(calculate.PYTHON_ENV, sys.executable)
+    monkeypatch.setattr(calculate.subprocess, "run", timed_out)
+
+    result = calculate.run(DECK)
+
+    assert result["ok"] is False
+    assert result["stage"] == {"index": 2, "of": 3, "name": "2_Dig"}
+    assert "half a l\xe9ne" in result["error"]
+
+
+def test_a_timeout_that_is_not_a_number_falls_back_to_the_default(monkeypatch):
+    monkeypatch.setenv(calculate.TIMEOUT_ENV, "an hour")
+    assert calculate.timeout() == calculate.DEFAULT_TIMEOUT
+
+
+# ── What a run produced ─────────────────────────────────────────────────────
+
+def test_outputs_are_exactly_what_the_run_added(runs, monkeypatch):
+    """Including directories (VTK output writes one), and not an input the run
+    rewrote: that is still an input."""
+    stand_in(monkeypatch,
+             "import os, glob;"
+             "open('a.post.res', 'w').close();"
+             "os.mkdir('vtk_output');"
+             "open('vtk_output/b.vtk', 'w').close();"
+             "open(glob.glob('*.mdpa')[0], 'a').write('// touched');")
+
+    result = calculate.run(DECK)
+
+    assert result["ok"] is True
+    assert result["outputs"] == ["a.post.res", "vtk_output"]
+    assert result["inputs"] == ["Test_model.mdpa", calculate.MATERIALS_NAME,
+                                calculate.PARAMETERS_NAME]
+
+
+def test_markers_with_windows_line_endings_are_read(): 
+    output = "\r\n".join([marker("begin", 1, 2, "a"), marker("end", 1, 2, "a"),
+                          marker("begin", 2, 2, "Dig to -4.5 m"), "boom"]) + "\r\n"
+    assert calculate.failed_stage(output) == (2, 2, "Dig to -4.5 m")
+
+
 # ── Which stage failed ──────────────────────────────────────────────────────
 # "It failed" and "phase 5 failed" are a very different message on a seven-stage deck,
 # and the deck has no stage banner of its own to read: `SequentialOrchestrator.Run`

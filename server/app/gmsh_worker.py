@@ -10,8 +10,9 @@ event loop. That buys three things:
 *   access is serialised by construction, with no locking discipline to get wrong;
 *   the event loop stays responsive while a mesh runs for tens of seconds;
 *   a hard crash is contained. OCC booleans on thin solids can abort the process
-    outright, and that must not take the API down with them -- the pool simply starts a
-    replacement worker on the next call.
+    outright, and that must not take the API down with them -- `run` discards the
+    broken pool and raises `WorkerCrashed`, and the next call starts a replacement
+    worker.
 
 gmsh is initialised once per worker, at startup, and the model is cleared per request:
 repeated `initialize()`/`finalize()` cycles are a documented source of trouble.
@@ -21,9 +22,19 @@ from __future__ import annotations
 
 import asyncio
 from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures.process import BrokenProcessPool
 from typing import Any, Callable
 
 _executor: ProcessPoolExecutor | None = None
+
+
+class WorkerCrashed(RuntimeError):
+    """The gmsh worker died during a job -- an OCC abort, or the process being killed.
+
+    Only the request that was running fails: the dead pool is discarded here, so the next
+    call starts a fresh worker. `ProcessPoolExecutor` itself never recovers; left alone,
+    one crash would fail every gmsh request until the server restarted.
+    """
 
 
 def _init_worker() -> None:
@@ -46,7 +57,24 @@ def executor() -> ProcessPoolExecutor:
 async def run(job: Callable[..., Any], *args: Any) -> Any:
     """Run `job` in the gmsh worker. `job` and its arguments must be picklable."""
     loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(executor(), job, *args)
+    pool = executor()
+    try:
+        return await loop.run_in_executor(pool, job, *args)
+    except BrokenProcessPool as broken:
+        _discard(pool)
+        raise WorkerCrashed(
+            "The geometry engine (gmsh) stopped unexpectedly while working on this "
+            "request -- typically an OpenCASCADE failure on a degenerate shape. It has been "
+            "restarted; the request can be retried, and a change to the geometry that "
+            "triggered it may be needed.") from broken
+
+
+def _discard(pool: ProcessPoolExecutor) -> None:
+    """Drop a broken pool, unless a concurrent request has already replaced it."""
+    global _executor
+    if _executor is pool:
+        _executor = None
+    pool.shutdown(wait=False, cancel_futures=True)
 
 
 def shutdown() -> None:

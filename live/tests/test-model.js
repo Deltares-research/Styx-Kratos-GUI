@@ -344,7 +344,7 @@
   function pairedLoads() {
     return [
       { id: 'surfaceload_1', name: 'SurfaceLoad_1', kind: 'surface', x0: 4, x1: 16,
-        z0: 5, z1: 10, thickness: 0.3, components: [0, 0, -25],
+        z0: 15, z1: 25, thickness: 0.3, components: [0, 0, -25],
         distribution: 'Uniform', active: true, derived_from: null },
       { id: 'surfaceload_1_2d', name: 'SurfaceLoad_1', kind: 'line', x0: 4, x1: 16,
         y: 0, thickness: 0.3, components: [0, -25], distribution: 'Uniform',
@@ -424,6 +424,38 @@
     withProject(p, function () {
       T.eq(App.LOADS.map(function (l) { return l.id; }), ['surfaceload_1_2d']);
       T.eq(nodeLabelled(App.TREES.structures, 'Loads').count, 1);
+    });
+  });
+
+  test('a pair whose pad is clear of the section plane is not in the section', function () {
+    /* Mirrors Project.loads_for(2): the pad at z 15..25 does not load a cut at z 5. */
+    var p = project(TWO);
+    p.dimension = 2; p.section_offset = 5;
+    p.loads = pairedLoads();
+    withProject(p, function () {
+      T.eq(App.LOADS.map(function (l) { return l.id; }), []);
+    });
+  });
+
+  test('a pair clear of the plane is still a load when the 2D half was authored', function () {
+    /* The derived half is the surface one here; the rule follows the pad either way. */
+    var p = project(TWO);
+    p.dimension = 2; p.section_offset = 5;
+    p.loads = [
+      { id: 'lineload_1', name: 'LineLoad_1', kind: 'line', x0: 4, x1: 16, y: 0,
+        thickness: 0.15, components: [0, -25], distribution: 'Uniform',
+        active: true, derived_from: null },
+      { id: 'lineload_1_3d', name: 'SurfaceLoad_1', kind: 'surface', x0: 4, x1: 16,
+        z0: 15, z1: 25, thickness: 0.15, components: [0, -25, 0],
+        distribution: 'Uniform', active: true, derived_from: 'lineload_1' }
+    ];
+    withProject(p, function () {
+      T.eq(App.LOADS.map(function (l) { return l.id; }), []);
+      p.section_offset = 20;
+    });
+    withProject(p, function () {
+      T.eq(App.LOADS.map(function (l) { return l.id; }), ['lineload_1'],
+           'moving the plane onto the pad brings it back');
     });
   });
 
