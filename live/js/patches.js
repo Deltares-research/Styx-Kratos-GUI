@@ -1339,8 +1339,11 @@ App.LivePatches = (function () {
     var total = ((App.PROJECT && App.PROJECT.phases) || []).length;
     if (!result) { phaseRun = null; }
     else if (result.ok) { phaseRun = { completed: total }; }
-    else if (result.stage) { phaseRun = { completed: result.stage.index - 1 }; }
-    else { phaseRun = { completed: 0 }; }
+    else if (result.stage) {
+      phaseRun = { completed: result.stage.index - 1, failed: true,
+                   error: result.error || null };
+    }
+    else { phaseRun = { completed: 0, failed: true, error: result.error || null }; }
     mountLivePhases();
   }
 
@@ -1611,6 +1614,15 @@ App.LivePatches = (function () {
       return el('div.pgrid-row', null,
                 [key, el('div.pgrid-val.readonly', { text: String(spec[2]) })]);
     }
+    /* A deck case's phases are its stages, read from the deck that Calculate runs
+       (server/app/deck.py); the server refuses an edit, so none is offered. */
+    if (App.PROJECT && App.PROJECT.deck) {
+      var shown = phase[spec[2]];
+      if (kind === 'check') shown = shown ? 'Yes' : 'No';
+      return el('div.pgrid-row', null, [key, el('div.pgrid-val.readonly', {
+        text: (shown == null ? '' : String(shown)) + (spec[4] ? ' ' + spec[4] : '')
+      })]);
+    }
 
     var control;
     if (kind === 'text') {
@@ -1685,23 +1697,30 @@ App.LivePatches = (function () {
 
     App.Dialogs.open({
       title: 'Phases',
-      width: 820, height: 520,
+      width: Math.min(1180, window.innerWidth - 40),
+      height: Math.min(720, window.innerHeight - 40),
       buttons: [{ label: 'Close', primary: true }],
       build: function (body) {
-        var wrap = el('div.dlg-simple', {
+        var wrap = el('div.dlg-simple.phases-overview', {
           style: 'display:flex;gap:12px;padding:0;height:100%'
         });
-        var left = el('div', {
-          style: 'flex:0 0 260px;overflow:auto;border-right:1px solid var(--c-line)'
+        var left = el('div.phases-overview-list', {
+          style: 'flex:0 0 380px;overflow:auto;border-right:1px solid var(--c-line)'
         });
         var right = el('div', { style: 'flex:1;overflow:auto;padding-right:4px' });
+        var log = el('div.phases-overview-log', {
+          style: 'flex:0 0 260px;overflow:auto;border-left:1px solid var(--c-line);'
+               + 'padding:0 8px'
+        });
         wrap.appendChild(left);
         wrap.appendChild(right);
+        wrap.appendChild(log);
         body.appendChild(wrap);
 
         function draw() {
           App.UI.clear(left);
           App.UI.clear(right);
+          App.UI.clear(log);
 
           var phases = (App.PROJECT && App.PROJECT.phases) || [];
           if (!phases.length) {
@@ -1711,15 +1730,24 @@ App.LivePatches = (function () {
             return;
           }
 
+          /* One line per phase: status, name, duration,
+             the time T reached, the id -- then the calculation type. What each line
+             says is App.Phases.overview's (tested headlessly). */
+          var overview = App.Phases.overview(App.PROJECT, phaseRun);
           var list = el('div.phase-list');
-          App.Phases.rows(App.PROJECT, phaseRun).forEach(function (row) {
+          overview.forEach(function (row) {
             var node = el('div.phase-row' + (row.id === selected ? '.selected' : ''));
-            node.style.paddingLeft = (8 + row.depth * 10) + 'px';
+            node.style.paddingLeft = (8 + row.depth * 4) + 'px';
+            node.title = row.label + ' · ' + row.kind;
             node.appendChild(el('span.phase-dot.' + row.state));
-            node.appendChild(el('span.phase-name', { text: row.name }));
+            node.appendChild(el('span.phase-name', { text: row.label }));
+            node.appendChild(el('span.phase-kind', { text: row.kind }));
             node.addEventListener('click', function () {
               selected = row.id;
               App.state.phase = row.id;
+              // The viewport follows, as it does from the dock's own list.
+              if (App.Viewport.applyPhaseVisibility) App.Viewport.applyPhaseVisibility();
+              mountLivePhases();
               draw();
             });
             list.appendChild(node);
@@ -1728,6 +1756,8 @@ App.LivePatches = (function () {
 
           var phase = phaseById(selected);
           if (!phase) { selected = phases[0].id; draw(); return; }
+          var current = overview.filter(function (row) { return row.id === phase.id; })[0];
+          phaseLog(log, current);
 
           var grid = el('div.pgrid');
           var groups = phaseProps(phase);
@@ -1762,7 +1792,8 @@ App.LivePatches = (function () {
              viewport, so it cannot be clicked to bring it back -- which would make
              the toggle one-way, and the mistake unrecoverable without editing the
              phase before it. Listed here with a button each. */
-          var hidden = App.Phases.hiddenKeys(App.PROJECT, phase.id, 'staged');
+          var hidden = App.PROJECT.deck ? []
+            : App.Phases.hiddenKeys(App.PROJECT, phase.id, 'staged');
           if (hidden.length) {
             var back = el('div.pgrid');
             back.appendChild(el('div.pgrid-group', { text: 'Not in the model here' }));
@@ -1782,15 +1813,62 @@ App.LivePatches = (function () {
             right.appendChild(back);
           }
 
-          right.appendChild(el('div.lay-hint', { text:
-            'In Staged construction mode, tick or untick a part in the Model ' +
-            'explorer to put it in or take it out of the selected phase. The ' +
-            'phases after it follow until one of them changes it again.' }));
+          right.appendChild(el('div.lay-hint', { text: App.PROJECT.deck
+            ? 'These phases are the stages of the Kratos deck ' + App.PROJECT.deck.parameters
+              + ', shown as they are. Edit the deck to change them, then run its '
+              + 'script again.'
+            : 'In Staged construction mode, tick or untick a part in the Model ' +
+              'explorer to put it in or take it out of the selected phase. The ' +
+              'phases after it follow until one of them changes it again.' }));
         }
 
         draw();
       }
     });
+  }
+
+  /* The Phases window has three ways in, all the one action: a button on the Staged
+     construction rail (beside Calculate), the Phases menu's "Edit phases…" -- which
+     the frozen mockup draws and wires to nothing -- and `phases` on the command line. */
+  function installPhasesOverview() {
+    var staged = App.RAILS && App.RAILS.staged;
+    if (staged && !staged.some(function (tool) { return tool && tool.action === 'phases'; })) {
+      var at = staged.length;
+      staged.forEach(function (tool, i) { if (tool && tool.action === 'calculate') at = i; });
+      staged.splice(at, 0, { icon: 'phase', tip: 'Phases overview…', action: 'phases' });
+    }
+    (App.MENUS || []).forEach(function (menu) {
+      (menu.items || []).forEach(function (item) {
+        if (item && item.label === 'Edit phases…') item.action = 'phases';
+      });
+    });
+  }
+
+  /* The right-hand column of the Phases window: what the last calculation made of
+     the selected phase, and the time it reaches -- the "Log info for last
+     calculation" and "Reached values". Only what this app knows: a Kratos run says
+     whether each stage finished, not reached forces or safety factors. */
+  function phaseLog(host, row) {
+    var el = App.UI.el;
+    if (!row) return;
+    host.appendChild(el('div.pgrid-group', { text: 'Log info for last calculation' }));
+    var box = el('div.phases-overview-box.' + row.state, { text: row.log });
+    host.appendChild(box);
+    if (row.state === 'failed' && phaseRun && phaseRun.error) {
+      host.appendChild(el('pre.phases-overview-error', { text: phaseRun.error }));
+    }
+    var reached = el('div.pgrid');
+    reached.appendChild(el('div.pgrid-group', { text: 'Reached values' }));
+    [['Phase', row.number + ' of ' + ((App.PROJECT.phases || []).length)],
+     ['Time interval', row.interval + ' day'],
+     ['Reached total time', row.total + ' day']
+    ].forEach(function (pair) {
+      reached.appendChild(el('div.pgrid-row', null, [
+        el('div.pgrid-key', { text: pair[0] }),
+        el('div.pgrid-val.readonly', { text: pair[1] })
+      ]));
+    });
+    host.appendChild(reached);
   }
 
   /* ── The Results explorer's own collapse ────────────────────────────
@@ -1979,6 +2057,10 @@ App.LivePatches = (function () {
       }
       if (item && item.action === 'calculate') {
         if (App.Calculate) App.Calculate.run();
+        return;
+      }
+      if (item && item.action === 'phases') {
+        phasesDialog();
         return;
       }
 
@@ -2283,6 +2365,7 @@ App.LivePatches = (function () {
     }
 
     installResultsMode();
+    installPhasesOverview();
 
     /* The phases panel, on the project's own phases. `App.setMode` calls
        `mountPhases` whenever staged mode is entered (js/app.js:33), and the frozen
@@ -2358,7 +2441,8 @@ App.LivePatches = (function () {
         ['note', '  results               open what a calculation wrote (try "results runs")'],
         ['note', '  colour <part>|all|off draw a part of the mesh in its own colour'],
         ['note', '  water <level>|off     set or remove the water level, e.g. water -1.5'],
-        ['note', '  node <id>             which SubModelParts a node is in']);
+        ['note', '  node <id>             which SubModelParts a node is in'],
+        ['note', '  phases                the Phases overview: every phase, its time and result']);
     }
 
     /* ── Results mode ─────────────────────────────────────────────────────
@@ -2612,6 +2696,10 @@ App.LivePatches = (function () {
           label: 'Reversed', checked: !!options.reversed, action: 'resultsRun',
           cmd: 'results reverse ' + (options.reversed ? 'off' : 'on')
         });
+        colours.sub.push({
+          label: 'Show mesh', checked: !!options.mesh, action: 'resultsRun',
+          cmd: 'results mesh ' + (options.mesh ? 'off' : 'on')
+        });
       }
     }
 
@@ -2797,6 +2885,8 @@ App.LivePatches = (function () {
         }))));
       rows.push(row('Reverse', '<input type="checkbox" data-res="reverse"'
                                + (options.reversed ? ' checked' : '') + '>'));
+      rows.push(row('Mesh', '<input type="checkbox" data-res="mesh"'
+                            + (options.mesh ? ' checked' : '') + '>'));
       rows.push(row('Deformed', select('deform', [
         { value: 'off', label: 'off', selected: !options.deform },
         { value: 'auto', label: 'auto', selected: options.deform === 'auto' },
@@ -2834,6 +2924,13 @@ App.LivePatches = (function () {
           // `on`/`off` rather than a bare toggle: the box already carries the state,
           // and toggling from it would invert whatever the module happened to think.
           resultsCommand('results reverse ' + (reverse.checked ? 'on' : 'off'));
+        });
+      }
+      var meshBox = body.querySelector('[data-res="mesh"]');
+      if (meshBox) {
+        meshBox.addEventListener('change', function () {
+          // on/off, like Reverse: the box already carries the state.
+          resultsCommand('results mesh ' + (meshBox.checked ? 'on' : 'off'));
         });
       }
       bind(body, 'deform', function (value) { return 'results deform ' + value; });
@@ -2923,6 +3020,11 @@ App.LivePatches = (function () {
       if (runNodeCommand(text)) return;
 
       var cmd = (text || '').trim().split(/\s+/)[0].toLowerCase();
+      if (cmd === 'phases') {
+        if (App.Command.write) App.Command.write('echo', '> ' + text.trim());
+        phasesDialog();
+        return;
+      }
       if (cmd === 'cleargeometry') {
         if (App.Command.note) App.Command.note('Clearing custom geometry...');
         fetch(App.Api.base + '/api/project/custom_parts', { method: 'DELETE' })

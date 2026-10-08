@@ -865,6 +865,43 @@
     });
   });
 
+  test('results mesh draws the element outlines over the shading, and takes it off', function () {
+    /* Off by default: a contour is read for its colours, and the line work is asked
+       for when the mesh itself is the question. Toggled like `reverse`, and set
+       outright by on/off so the panel's checkbox and the menu's tick cannot drift. */
+    return showing().then(function () {
+      T.eq(App.Results.options().mesh, false, 'no mesh by default');
+      T.eq(drawn[drawn.length - 1].options.mesh, false, 'and the viewport is told so');
+      return App.Results.handleCommand('results mesh');
+    }).then(function () {
+      T.eq(App.Results.options().mesh, true);
+      T.eq(drawn[drawn.length - 1].options.mesh, true, 'it reaches the viewport');
+      T.ok(log.some(function (line) { return /mesh on/.test(line[1]); }),
+           'the settings line says so');
+      return App.Results.handleCommand('results mesh');
+    }).then(function () {
+      T.eq(App.Results.options().mesh, false);
+      return App.Results.handleCommand('results mesh on');
+    }).then(function () {
+      return App.Results.handleCommand('results mesh on');
+    }).then(function () {
+      T.eq(App.Results.options().mesh, true, 'setting it twice is not a toggle');
+      return App.Results.handleCommand('results mesh off');
+    }).then(function () {
+      T.eq(App.Results.options().mesh, false);
+    });
+  });
+
+  test('the mesh setting is kept from one phase to the next', function () {
+    return showing().then(function () {
+      return App.Results.handleCommand('results mesh on');
+    }).then(function () {
+      return App.Results.handleCommand('results field uy');
+    }).then(function () {
+      T.eq(drawn[drawn.length - 1].options.mesh, true);
+    });
+  });
+
   test('every colour map on offer can actually be selected', function () {
     /* The pickers are built from `ResultsRender.MAPS`, so anything listed there has to
        be a name this command takes. */

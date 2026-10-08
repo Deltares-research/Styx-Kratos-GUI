@@ -209,6 +209,40 @@ App.Phases = (function () {
     });
   }
 
+  /* The Phases overview (patches.js `phasesDialog`): `rows`, plus what the phase list
+     puts on each line -- the phase's duration, the time T reached at its end (summed
+     along its chain), its id -- and what the last calculation made of it.
+
+     `run` is `{completed, failed}`: how many phases the last run got through, and
+     whether it stopped short. A failed run failed in the phase after the last one it
+     completed. */
+  function days(value) {
+    return String(Math.round(value * 1000) / 1000) + ' d';
+  }
+
+  function overview(project, run) {
+    var byId = index(project);
+    var completed = (run && run.completed) || 0;
+    return rows(project, run).map(function (row, position) {
+      var phase = byId[row.id] || {};
+      var total = 0;
+      chainTo(project, row.id).forEach(function (each) {
+        total += Number(each.time_interval) || 0;
+      });
+      total = Math.round(total * 1000) / 1000;
+      var interval = Number(phase.time_interval) || 0;
+      var failedHere = !!(run && run.failed) && position === completed;
+      return {
+        number: position + 1, id: row.id, name: row.name, kind: row.kind,
+        depth: row.depth, interval: interval, total: total,
+        state: failedHere ? 'failed' : row.state,
+        label: row.name + (interval || total
+          ? ' - ' + days(interval) + ', T = ' + days(total) : '') + ' [' + row.id + ']',
+        log: position < completed ? 'OK' : failedHere ? 'Failed' : 'Not calculated'
+      };
+    });
+  }
+
   /* ── Editing: every one of these returns a new list ──────────────────── */
 
   function freshId(project, stem) {
@@ -427,7 +461,7 @@ App.Phases = (function () {
   return {
     chainTo: chainTo, activeParts: activeParts, stageableKeys: stageableKeys,
     hiddenKeys: hiddenKeys,
-    order: order, branchProblem: branchProblem, rows: rows,
+    order: order, branchProblem: branchProblem, rows: rows, overview: overview,
     added: added, inserted: inserted, removed: removed, copied: copied,
     ownership: ownership, toggled: toggled, setActive: setActive, stateIn: stateIn
   };
