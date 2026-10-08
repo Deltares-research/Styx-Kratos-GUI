@@ -53,9 +53,24 @@ separate, so the same checkout can safely move between Windows and Linux. Run `r
 
 **Calculate** (toolbar, or **F9** outside Mesh mode) meshes the project, writes the deck --
 `<project>.mdpa`, `MaterialParameters.json`, `ProjectParameters.json` -- into a directory of its
-own, and runs it through Kratos' orchestrator. Nothing changes on screen: the command log says
-whether the run succeeded and where the files went. Each run gets its own directory and nothing is
-cleaned up.
+own, and runs it through Kratos' orchestrator. The command log says whether the run succeeded and
+where the files went, and the app switches to **Results** to show it. Each run gets its own
+directory and nothing is cleaned up.
+
+## Results
+
+The **Results** tab reads a run back from its directory, so it also opens runs from earlier
+sessions (`results runs`, then `results open <n>`).
+
+- **Contours.** Choose a phase and a field in the Results panel or the **Choose results**
+  window: bands or smooth shading, colour map, deformed mesh, and **Limits** for the legend's
+  minimum and maximum (empty follows the phase; `results range <min> <max>` does the same).
+- **Plot along the wall.** The rail button, **Plot wall…** or `results plot` opens a window with
+  bending moment, shear force, normal force, displacements and interface tractions plotted
+  against the level, one panel per phase. **Save SVG** and **Save CSV** save the figure or its
+  numbers.
+- `results at <node>` prints every field at one node, `results csv` saves the field on screen,
+  and `results zip` downloads the whole run directory.
 
 Kratos is not installed by `run.bat`, and its compiled extensions are bound to the exact Python
 they were built for, which is usually not the one running the server. So the calculation runs as a
@@ -84,6 +99,16 @@ are read on every run, so a machine can be set up and Calculate pressed again wi
 the server. If Kratos cannot be found, the command log says exactly what to write where; the deck
 is written either way, so it can also just be run by hand.
 
+## Tests
+
 Run backend tests with `server/.venv-linux/bin/python -m pytest -q` on Linux, or
-`server\.venv-windows\Scripts\python.exe -m pytest -q` on Windows. JavaScript logic tests are in
-`live/tests/index.html` and require no build step.
+`server\.venv-windows\Scripts\python.exe -m pytest -q` on Windows. JavaScript tests are in
+`live/tests/index.html` and require no build step. The DOM-free JavaScript suites also run without
+a browser (`pip install quickjs` first), and every JavaScript file can be parse-checked:
+
+```bash
+python live/tests/run_headless.py
+python live/tests/syntax_check.py
+```
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for how the pieces fit together.
