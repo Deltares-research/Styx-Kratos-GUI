@@ -803,6 +803,33 @@ async def results_stage_field(run_id: str, index: int, name: str,
         raise _results_error(failure) from failure
 
 
+@app.get("/api/results/runs/{run_id}/members")
+async def results_members(run_id: str) -> dict:
+    """The structural members this run wrote curves for -- the wall, its interface --
+    with the stages each has and the quantities each can be plotted for."""
+    try:
+        return results.stage_members(run_id)
+    except results.ResultsError as failure:
+        raise _results_error(failure) from failure
+
+
+@app.get("/api/results/runs/{run_id}/members/{member}/{quantity}")
+async def results_member_plot(run_id: str, member: str, quantity: str) -> dict:
+    """One quantity along one member, a curve per stage: what the plot window draws.
+
+    422 for a quantity this member does not carry, like an unknown field: the run and
+    the member are there, and what is wrong is the question.
+    """
+    from app import result_members
+
+    try:
+        return results.member_profiles(run_id, member, quantity)
+    except result_members.UnknownQuantity as failure:
+        raise HTTPException(status_code=422, detail=str(failure)) from failure
+    except results.ResultsError as failure:
+        raise _results_error(failure) from failure
+
+
 @app.get("/api/results/runs/{run_id}/files/{name}")
 async def results_file(run_id: str, name: str) -> FileResponse:
     """One file of one run, as a download.

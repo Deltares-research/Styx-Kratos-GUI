@@ -46,5 +46,35 @@
       "p_nodes",
       "uy"
     ]
+  },
+  "members": {
+    "run_files": [
+      "3_SheetPileWall_installation__output_interface.json",
+      "3_SheetPileWall_installation__output_wall.json",
+      "4_First_excavation__output_interface.json",
+      "4_First_excavation__output_wall.json",
+      "5_Strut_installation__output_interface.json",
+      "5_Strut_installation__output_wall.json",
+      "6_Second_excavation__output_interface.json",
+      "6_Second_excavation__output_wall.json",
+      "7_Third_excavation__output_interface.json",
+      "7_Third_excavation__output_wall.json"
+    ],
+    "expected": {
+      "from": "C:\\Checkouts\\KratosProjects\\yek\\applications\\GeoMechanicsApplication\\tests\\crow_validation\\linear_elastic\\staged_construction\\as-is",
+      "reference_deck": "C:\\Checkouts\\KratosProjects\\yek\\applications\\GeoMechanicsApplication\\tests\\crow_validation\\common\\model.mdpa",
+      "files": {
+        "3_SheetPileWall_installation__wall.csv": "3_Wall_installation__output_wall.json",
+        "3_SheetPileWall_installation__interface.csv": "3_Wall_installation__output_interface.json",
+        "4_First_excavation__wall.csv": "4_First_excavation__output_wall.json",
+        "4_First_excavation__interface.csv": "4_First_excavation__output_interface.json",
+        "5_Strut_installation__wall.csv": "5_Anchor_installation__output_wall.json",
+        "5_Strut_installation__interface.csv": "5_Anchor_installation__output_interface.json",
+        "6_Second_excavation__wall.csv": "6_Second_excavation__output_wall.json",
+        "6_Second_excavation__interface.csv": "6_Second_excavation__output_interface.json",
+        "7_Third_excavation__wall.csv": "7_Third_excavation__output_wall.json",
+        "7_Third_excavation__interface.csv": "7_Third_excavation__output_interface.json"
+      }
+    }
   }
 }

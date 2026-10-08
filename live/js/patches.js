@@ -1914,6 +1914,9 @@ App.LivePatches = (function () {
        Anything the installers touch is declared before the first of them is called. */
     var resultsMenu = null;      // the Results entry in App.MENUS, for refilling
     var resultsWindow = null;    // the floating chooser, while it is open
+    var plotWindow = null;       // the wall/interface plot window, while it is open
+    var plotColumns = 0;         // panels per row it was last drawn with
+    var plotReloading = null;    // the run a reload of the plot is under way for
 
     extendViewportMenu();
 
@@ -1976,6 +1979,13 @@ App.LivePatches = (function () {
       if (item && item.action === 'chooseResults') {
         if (App.state && App.state.mode !== 'results') App.setMode('results');
         else openResultsWindow();
+        return;
+      }
+      // The rail's "Plot along the wall": the same `results plot` the command box runs,
+      // which opens the plot window when it has something to draw.
+      if (item && item.action === 'plotResults') {
+        if (App.state && App.state.mode !== 'results') App.setMode('results');
+        resultsCommand('results plot');
         return;
       }
 
@@ -2471,12 +2481,24 @@ App.LivePatches = (function () {
         hint: 'Results mode — read back what a calculation wrote: choose a phase and a '
             + 'quantity, or type "results fields" to see what this phase offers.'
       });
+      /* The plot button's glyph: a wall's axis down the left and a moment curve bellied
+         out from it, on the 24x24 grid every App.ICONS entry uses. Assigned here, in the
+         function that mounts the rail, for the hoisting reason `installResultsIcon`
+         spells out. */
+      if (App.ICONS && !App.ICONS.wallplot) {
+        App.ICONS.wallplot = '<path d="M6 3v18"/><path d="M4 3h4M4 21h4"/>'
+          + '<path d="M6 4.5C15 7 18 10.5 17.5 12.5S12 18 6 19.5"/>'
+          + '<circle cx="17.5" cy="12.5" r="1.3"/>';
+      }
+
       App.RAILS = App.RAILS || {};
       App.RAILS.results = [
         { icon: 'select', tip: 'Select', toggle: true, on: true },
         '-',
         // The chooser opens with the mode; this is how it comes back once closed.
-        { icon: 'results', tip: 'Choose results', action: 'chooseResults' }
+        { icon: 'results', tip: 'Choose results', action: 'chooseResults' },
+        { icon: 'wallplot', tip: 'Plot along the wall — M, Q, N, ux and the earth '
+            + 'pressure on it, every phase', action: 'plotResults' }
       ];
 
       /* `App.setMode` is frozen and knows only about the phases panel (js/app.js:25).
@@ -2511,6 +2533,16 @@ App.LivePatches = (function () {
         App.Results.onChange(function () {
           mountResultsPanel();
           refreshResultsMenu();
+          followRunInPlot();
+        });
+      }
+
+      /* The plot window is drawn from `App.ResultsPlot.state()` and nothing else, and
+         opens when a `results plot` asks for it -- typed, or from any button. */
+      if (App.ResultsPlot && App.ResultsPlot.onChange) {
+        App.ResultsPlot.onChange(function (event) {
+          if (event && event.open) openPlotWindow();
+          renderPlotWindow(true);
         });
       }
 
@@ -2621,6 +2653,8 @@ App.LivePatches = (function () {
             cmd: 'results range auto' },
           '-',
           { label: 'Value at a node…', action: 'resultsAtNode' },
+          { label: 'Plot along the wall…', icon: 'wallplot', action: 'resultsRun',
+            cmd: 'results plot' },
           { label: 'Save field as CSV', action: 'resultsRun', cmd: 'results csv' },
           { label: 'Download run', action: 'resultsRun', cmd: 'results zip' }
         ]
@@ -2757,8 +2791,12 @@ App.LivePatches = (function () {
 
       var handle = App.Dialogs.open({
         title: 'Choose results',
-        width: 430, height: 300,
+        // Tall enough for every row without a scrollbar, and wide enough for the four
+        // actions and Close on one line each. At 430 x 300 the last rows were cut off
+        // and "Plot wall…" / "Download run" broke over two lines.
+        width: 580, height: 440,
         buttons: [
+          act('Plot wall…', 'results plot'),
           act('Fit range', 'results range auto'),
           act('Save CSV', 'results csv'),
           act('Download run', 'results zip'),
@@ -2800,6 +2838,116 @@ App.LivePatches = (function () {
       resultsWindow = null;
     }
 
+    /* ── The plot window ──────────────────────────────────────────────────
+       A member's results along it, a panel per phase -- the figure is
+       `App.ResultsPlot.svg()`, a tested string, and this window only hosts it. Modeless
+       like the chooser, for the same reason: it is read beside the model, not finished
+       and dismissed. Its controls are the `results plot ...` commands, so the window,
+       the menu and the command box cannot disagree. */
+
+    function openPlotWindow() {
+      if (plotWindow) return plotWindow;
+      if (!App.Dialogs || !App.Dialogs.open) return null;
+
+      var act = function (label, cmd) {
+        return { label: label, keepOpen: true,
+                 onClick: function () { resultsCommand(cmd); } };
+      };
+      var handle = App.Dialogs.open({
+        title: 'Plot along the wall',
+        width: 1180, height: 560,
+        buttons: [
+          act('Save SVG', 'results plot svg'),
+          act('Save CSV', 'results plot csv'),
+          { label: 'Close', primary: true }
+        ],
+        onClose: function () { plotWindow = null; plotColumns = 0; }
+      });
+      handle.dialog.classList.add('dlg-plot');
+
+      var layer = document.getElementById('modal-layer');
+      var scrims = layer ? layer.querySelectorAll('.scrim') : [];
+      if (scrims.length) {
+        var scrim = scrims[scrims.length - 1];
+        if (scrim.parentNode) scrim.parentNode.removeChild(scrim);
+      }
+
+      plotWindow = handle;
+      renderPlotWindow(true);
+
+      // Panels per row follow the window's width, so widening it puts the phases side
+      // by side and narrowing it wraps them -- redrawn only when that count changes.
+      if (typeof ResizeObserver === 'function') {
+        new ResizeObserver(function () { renderPlotWindow(false); }).observe(handle.body);
+      }
+      return handle;
+    }
+
+    function closePlotWindow() {
+      if (plotWindow) plotWindow.close();
+      plotWindow = null;
+      plotColumns = 0;
+    }
+
+    /* Panels per row for the body's current width: as many 220 px panels as fit, never
+       more than five (the reference figure's row) nor more than there are phases. */
+    function plotColumnsFor(body, stages) {
+      var width = body.clientWidth || 1100;
+      return Math.max(1, Math.min(5, stages || 1, Math.floor(width / 220)));
+    }
+
+    function renderPlotWindow(force) {
+      if (!plotWindow || !App.ResultsPlot) return;
+      var body = plotWindow.body;
+      var state = App.ResultsPlot.state();
+      var plot = state.plot;
+      var columns = plotColumnsFor(body, plot ? plot.stages.length : 1);
+      if (!force && columns === plotColumns) return;
+      plotColumns = columns;
+
+      if (!plot) {
+        body.innerHTML = '<p class="dock-empty">Nothing is plotted. Type '
+          + '<code>results plot</code>, or <code>results plot members</code> to see what '
+          + 'this run can show.</p>';
+        return;
+      }
+
+      var members = state.members || [];
+      var member = members.filter(function (m) { return m.name === plot.member; })[0];
+      var controls = '<div class="rp-controls">'
+        + '<label>Member ' + select('plot-member', members.map(function (m) {
+          return { value: m.name, label: m.name, selected: m.name === plot.member };
+        })) + '</label>'
+        + '<label>Quantity ' + select('plot-quantity',
+          ((member && member.quantities) || []).map(function (q) {
+            return { value: q.name, label: q.label + '  (' + q.unit + ')',
+                     selected: q.name === plot.quantity };
+          })) + '</label>'
+        + '<span class="rp-run" title="' + esc(state.run) + '">' + esc(state.run)
+        + '</span></div>';
+
+      body.innerHTML = '<div class="rp-window">' + controls
+        + '<div class="rp-host">' + App.ResultsPlot.svg(plot, { columns: columns })
+        + '</div></div>';
+
+      bind(body, 'plot-member', function (value) { return 'results plot ' + value; });
+      bind(body, 'plot-quantity', function (value) {
+        return 'results plot ' + plot.member + ' ' + value;
+      });
+    }
+
+    /* A different run opened while the window is up: plot that one instead, rather
+       than go on showing the last run's wall under the new run's name. */
+    function followRunInPlot() {
+      if (!plotWindow || !App.ResultsPlot) return;
+      var run = App.Results.current();
+      var shown = App.ResultsPlot.state().run;
+      if (!run || run === shown || run === plotReloading) return;
+      plotReloading = run;
+      resultsCommand('results plot').then(function () { plotReloading = null; },
+                                          function () { plotReloading = null; });
+    }
+
     function syncResultsPanel(on) {
       var panel = document.getElementById('panel-results');
       var dock = document.getElementById('dock');
@@ -2818,6 +2966,7 @@ App.LivePatches = (function () {
         // the geometry, where it would be neither editable nor explicable -- and the
         // window with it, since it belongs to a mode that is no longer on.
         closeResultsWindow();
+        closePlotWindow();
         if (App.ResultsView) App.ResultsView.clear();
       }
     }
@@ -2883,6 +3032,27 @@ App.LivePatches = (function () {
                    label: App.ResultsRender.MAP_LABELS[name] || name,
                    selected: options.map === name };
         }))));
+      /* The legend's limits. An empty box follows the phase -- its own value is the
+         placeholder -- so typing one limit leaves the other exact rather than the
+         rounded number a filled-in box would hand back. What was typed goes through
+         `App.Results.limitsCommand`, which is tested, to the `results range` that is. */
+      if (state.field) {
+        var limit = function (name, typed, auto, tip) {
+          return '<input type="text" inputmode="decimal" data-res="' + name + '"'
+            + ' value="' + esc(typed === null ? '' : typed) + '"'
+            + ' placeholder="' + esc(App.ResultsRender.format(auto)) + '"'
+            + ' title="' + esc(tip) + '">';
+        };
+        rows.push(row('Limits', '<span class="res-limits">'
+          + limit('lim-min', options.min, state.field.min,
+                  'Legend minimum — leave empty to follow the phase')
+          + '<span class="res-limits-to">…</span>'
+          + limit('lim-max', options.max, state.field.max,
+                  'Legend maximum — leave empty to follow the phase')
+          + '<button type="button" data-res="lim-auto"'
+          + " title=\"Back to this phase's own range\">Auto</button>"
+          + '<span class="res-limits-unit">' + esc(state.field.unit) + '</span></span>'));
+      }
       rows.push(row('Reverse', '<input type="checkbox" data-res="reverse"'
                                + (options.reversed ? ' checked' : '') + '>'));
       rows.push(row('Mesh', '<input type="checkbox" data-res="mesh"'
@@ -2895,17 +3065,10 @@ App.LivePatches = (function () {
         { value: '100', label: '×100', selected: options.deform === 100 }
       ])));
 
-      if (state.field) {
-        rows.push(row('Range', '<span class="res-range">'
-          + esc(App.ResultsRender.format(options.min === null ? state.field.min : options.min))
-          + ' … '
-          + esc(App.ResultsRender.format(options.max === null ? state.field.max : options.max))
-          + ' ' + esc(state.field.unit) + '</span>'));
-      }
-
       body.innerHTML = '<div class="res-grid">' + rows.join('') + '</div>'
         + (withActions
            ? '<div class="res-actions">'
+             + '<button data-cmd="results plot">Plot wall…</button>'
              + '<button data-cmd="results range auto">Fit range</button>'
              + '<button data-cmd="results csv">Save CSV</button>'
              + '<button data-cmd="results zip">Download run</button>'
@@ -2934,6 +3097,26 @@ App.LivePatches = (function () {
         });
       }
       bind(body, 'deform', function (value) { return 'results deform ' + value; });
+
+      var minBox = body.querySelector('[data-res="lim-min"]');
+      var maxBox = body.querySelector('[data-res="lim-max"]');
+      var onLimits = function () {
+        // `change` fires on Enter and on leaving the box, not on every keystroke, so a
+        // half-typed "-0." is never sent.
+        var cmd = App.Results.limitsCommand(minBox.value, maxBox.value);
+        if (cmd) resultsCommand(cmd);
+      };
+      if (minBox && maxBox) {
+        minBox.addEventListener('change', onLimits);
+        maxBox.addEventListener('change', onLimits);
+      }
+      var autoButton = body.querySelector('[data-res="lim-auto"]');
+      if (autoButton) {
+        autoButton.addEventListener('click', function (event) {
+          event.preventDefault();   // inside a <label>: do not also focus the first box
+          resultsCommand('results range auto');
+        });
+      }
 
       Array.prototype.forEach.call(body.querySelectorAll('[data-cmd]'), function (button) {
         button.addEventListener('click', function () {

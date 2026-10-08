@@ -80,6 +80,12 @@ SUITES = {
         [JS / "phases.js", JS / "deck.js"],
         TESTS / "test-deck.js",
     ),
+    # `results plot` and the figure it draws: the wall and interface curves per stage.
+    # results.js comes along because it is what routes the command here.
+    "results-plot": (
+        [JS / "results-render.js", JS / "results.js", JS / "results-plot.js"],
+        TESTS / "test-results-plot.js",
+    ),
     "results": (
         # calculate.js comes along because the handoff between the two is the whole of
         # task P0.4: what Calculate just wrote has to become the run `results` opens.

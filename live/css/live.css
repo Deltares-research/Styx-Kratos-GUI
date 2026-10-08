@@ -180,9 +180,11 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
    The colour legend over the viewport, and the Results explorer in the dock.
    Both are filled in by live/js/results-view.js and live/js/patches.js.       */
 
+/* 40px in from the right, not 12: the right-hand ruler is 22px wide (ruler.js SIZE)
+   and the legend sat on top of it, covering its numbers. */
 .vp-legend {
   position: absolute;
-  right: 12px;
+  right: 40px;
   bottom: 56px;
   width: 104px;
   padding: 8px 10px 6px;
@@ -261,7 +263,17 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.res-range { font-variant-numeric: tabular-nums; }
+/* The legend's Min ... Max boxes: two equal boxes that shrink with the dock column,
+   then Auto and the unit. An empty box shows the phase's own value as its placeholder. */
+.res-limits { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.res-limits input {
+  flex: 1 1 0; min-width: 0; width: 0;
+  font-size: 11px; padding: 1px 3px;
+  font-variant-numeric: tabular-nums;
+}
+.res-limits-to { color: var(--c-ink-faint); }
+.res-limits button { flex: 0 0 auto; font-size: 10px; padding: 1px 5px; }
+.res-limits-unit { flex: 0 0 auto; color: var(--c-ink-soft); font-size: 10px; }
 
 .res-actions {
   display: flex;
@@ -313,7 +325,36 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
 
 /* Three actions and a Close is more than the footer's 82px minimum was sized for. */
 .dlg-results .dlg-foot { gap: 6px; }
-.dlg-results .dlg-foot .btn { min-width: 0; padding: 0 12px; }
+.dlg-results .dlg-foot .btn { min-width: 0; padding: 0 12px; white-space: nowrap; }
+.dlg-results .res-limits input { font-size: 12px; padding: 2px 4px; }
+.dlg-results .res-limits button { font-size: 11px; padding: 2px 8px; }
+
+/* The plot window (patches.js `openPlotWindow`): a member's results along it, a panel
+   per phase. The figure is one SVG drawn by live/js/results-plot.js; it is scaled to the
+   window's width and scrolls vertically when its rows do not fit. `.dlg-body` is a flex
+   row, so the window's content is one column that fills it. */
+.dlg-plot .dlg-body { overflow: hidden; padding: 0; }
+.dlg-plot .dock-empty { margin: 16px; font-size: 12px; }
+.dlg-plot .dlg-foot { gap: 6px; }
+.dlg-plot .dlg-foot .btn { min-width: 0; padding: 0 12px; white-space: nowrap; }
+
+.rp-window {
+  flex: 1 1 auto; min-width: 0;
+  display: flex; flex-direction: column;
+}
+.rp-controls {
+  display: flex; align-items: center; gap: 16px; flex: 0 0 auto;
+  padding: 8px 12px; font-size: 12px;
+  border-bottom: 1px solid var(--c-border-soft);
+}
+.rp-controls label { display: flex; align-items: center; gap: 6px; color: var(--c-ink-soft); }
+.rp-controls select { font-size: 12px; padding: 2px 4px; }
+.rp-run {
+  margin-left: auto; min-width: 0; font-size: 11px; color: var(--c-ink-faint);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.rp-host { flex: 1 1 auto; min-height: 0; overflow: auto; background: #fff; }
+.rp-host svg { display: block; width: 100%; height: auto; }
 
 /* The Model explorer's colour toggle (Mesh mode): beside the eye, a square in the part's
    own colour -- outlined while off, filled while on, half filled for a group that is

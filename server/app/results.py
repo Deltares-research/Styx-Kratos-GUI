@@ -456,6 +456,84 @@ def stage_parts(run_id: str, index: int) -> dict:
         for part in parts]}
 
 
+# ── Structural members ──────────────────────────────────────────────────────
+
+def _member_files(run_id: str) -> dict[str, list[tuple[dict, Path]]]:
+    """{member: [(stage row, its json_output file), ...]}, in stage order."""
+    from app import result_members
+
+    directory = run_directory(run_id)
+    found: dict[str, list[tuple[dict, Path]]] = {}
+    for stage in stage_list(directory):
+        for filename in stage["json"]:
+            member = result_members.member_name(filename, stage["name"])
+            if member:
+                found.setdefault(member, []).append((stage, directory / filename))
+    return found
+
+
+def _member_output(path: Path) -> dict:
+    from app import result_members
+
+    return _parsed(path, result_members.read_output)
+
+
+def stage_members(run_id: str) -> dict:
+    """The members this run wrote curves for, the stages each has, and what each offers.
+
+    Read off the files rather than the deck: a member is plottable because its output is
+    there, and a quantity is offered because the file carries it.
+    """
+    from app import result_members
+
+    members = []
+    for name, files in sorted(_member_files(run_id).items()):
+        outputs = [_member_output(path) for _, path in files]
+        members.append({
+            "name": name,
+            "stages": [stage["index"] for stage, _ in files],
+            "quantities": [entry.summary()
+                           for entry in result_members.available(outputs)],
+        })
+    return {"members": members}
+
+
+def member_profiles(run_id: str, member: str, quantity: str) -> dict:
+    """One quantity along one member, a panel per stage that wrote it.
+
+    The y of each node comes from the run's own `.mdpa`, undeformed -- the level on the
+    wall, which is what the vertical axis of this plot means.
+    """
+    from app import mdpa_import, result_members
+
+    files = _member_files(run_id)
+    if member not in files:
+        raise UnknownRun(f"{run_id!r} wrote no output for a member called {member!r}; "
+                         f"it has {', '.join(sorted(files)) or 'none'}.")
+    entry = result_members.quantity(quantity)
+    outputs = [(stage, _member_output(path)) for stage, path in files[member]]
+    if entry not in result_members.available(output for _, output in outputs):
+        raise result_members.UnknownQuantity(
+            f"The {member} output carries no {entry.label.lower()} ({quantity}).")
+
+    directory = run_directory(run_id)
+    deck = next((path for path in directory.glob("*.mdpa")), None)
+    if deck is None:
+        raise UnknownRun(f"{run_id!r} has no .mdpa, so its members cannot be placed.")
+    coordinates = _parsed(deck, mdpa_import.import_mdpa).nodes
+
+    return {
+        "member": member,
+        "quantity": entry.name,
+        "label": entry.label,
+        "unit": entry.unit,
+        "stages": [{"index": stage["index"], "name": stage["name"],
+                    "phase": stage["phase"]}
+                   | result_members.profile(output, coordinates, entry)
+                   for stage, output in outputs],
+    }
+
+
 def archive(run_id: str) -> io.BytesIO:
     """The whole run directory as one zip, in memory.
 
