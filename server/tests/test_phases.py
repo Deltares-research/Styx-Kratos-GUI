@@ -146,7 +146,10 @@ def test_a_transition_reports_only_what_actually_changes():
     ]
 
 
-# -- default_phases ----------------------------------------------------------
+# -- staged_excavation_phases ----------------------------------------------------------
+# The CROW model's own sequence (`app.crow` builds its phases with it). Not what
+# "Create default phases" gives any more -- that is `default_phases`, below.
+#
 # The reference deck's seven stages, from `staged_construction_for_generated_mesh.json`:
 #
 #   1 Initial stage     K0     deactivate the wall, the anchor and every interface
@@ -169,10 +172,10 @@ def _crow():
 def _staged(project) -> schemas.Project:
     return schemas.Project.model_validate(
         project.model_dump()
-        | {"phases": [ph.model_dump() for ph in phases.default_phases(project)]})
+        | {"phases": [ph.model_dump() for ph in phases.staged_excavation_phases(project)]})
 
 
-def test_default_phases_reproduce_the_reference_sequence():
+def test_staged_excavation_phases_reproduce_the_reference_sequence():
     got = [(ph.id, sorted(on), sorted(off))
            for ph, on, off in phases.transitions(_staged(_crow()))]
     assert got == [
@@ -187,7 +190,7 @@ def test_default_phases_reproduce_the_reference_sequence():
     ]
 
 
-def test_default_phases_leave_the_ground_under_the_pit_alone():
+def test_staged_excavation_phases_leave_the_ground_under_the_pit_alone():
     """`Soil_Below_Pit` is on the dug side of the wall but is never dug, and stays
     active in all seven reference stages. Only the lifts come out."""
     last = phases.active_parts(_staged(_crow()), "dig_3")
@@ -195,21 +198,21 @@ def test_default_phases_leave_the_ground_under_the_pit_alone():
     assert not {"soil_L_top__lift1", "soil_L_top__lift2", "soil_L_top__lift3"} & last
 
 
-def test_default_phases_reset_displacements_when_the_wall_goes_in():
+def test_staged_excavation_phases_reset_displacements_when_the_wall_goes_in():
     """The reference sets `reset_totals` true in exactly one stage, the wall's, so the
     wall's deflection is measured from the ground it was built into."""
-    made = phases.default_phases(_crow())
+    made = phases.staged_excavation_phases(_crow())
     assert [ph.id for ph in made if ph.reset_displacements] == ["install_sheetpile"]
 
 
-def test_the_first_default_phase_is_the_only_k0_one():
-    made = phases.default_phases(_crow())
+def test_the_first_staged_phase_is_the_only_k0_one():
+    made = phases.staged_excavation_phases(_crow())
     assert made[0].calculation == "K0 procedure"
     assert made[1].calculation == "Null step"
     assert all(ph.calculation == "Plastic" for ph in made[2:])
 
 
-def test_default_phases_make_a_project_that_validates():
+def test_staged_excavation_phases_make_a_project_that_validates():
     """They are written straight into `Project.phases`, so every id, parent and part key
     has to satisfy the schema's own cross-checks, and the chain has to linearise."""
     staged = _staged(_crow())
@@ -220,8 +223,45 @@ def test_default_phases_make_a_project_that_validates():
 def test_an_anchor_is_installed_after_the_lift_that_exposes_it():
     """The reference installs the strut at -1.5 after the first lift reaches -2.0, not
     before: you cannot fix a strut to a wall face that is still buried."""
-    order = [ph.id for ph in phases.default_phases(_crow())]
+    order = [ph.id for ph in phases.staged_excavation_phases(_crow())]
     assert order.index("dig_1") < order.index("install_strut") < order.index("dig_2")
+
+
+# -- default_phases ----------------------------------------------------------
+# What "Create default phases" gives: Initial stage, then Null step, and nothing else.
+# Every further phase is the user's to add. The CROW-shaped sequence above used to be
+# the default, and on a new model it produced a "First excavation" that dug nothing --
+# the blank project's placeholder excavation has a level but no soil to remove.
+
+def test_the_default_is_the_initial_stage_then_the_null_step():
+    made = phases.default_phases(_crow())
+    assert [(ph.id, ph.name, ph.parent) for ph in made] == [
+        ("initial", "Initial stage", None),
+        ("null_step", "Null step", "initial"),
+    ]
+    assert made[0].calculation == "K0 procedure"
+    assert made[1].calculation == "Null step"
+    assert made[1].max_iterations == 150
+
+
+def test_a_new_model_gets_no_excavation_phase():
+    from app.seed import blank_project
+
+    assert [ph.id for ph in phases.default_phases(blank_project())] ==         ["initial", "null_step"]
+
+
+def test_the_default_switches_nothing_off():
+    """With no phase after them to switch anything back on, every part has to be active
+    from the start: a part that is off in every phase is missing from the deck."""
+    for ph in phases.default_phases(_crow()):
+        assert not ph.activate and not ph.deactivate, ph.id
+
+
+def test_the_default_makes_a_project_that_validates_and_linearises():
+    staged = schemas.Project.model_validate(
+        _crow().model_dump()
+        | {"phases": [ph.model_dump() for ph in phases.default_phases(_crow())]})
+    assert [ph.id for ph in phases.linearise(staged)] == ["initial", "null_step"]
 
 
 def test_an_unexcavated_project_still_gets_a_sequence():
@@ -229,6 +269,6 @@ def test_an_unexcavated_project_still_gets_a_sequence():
     invalid list -- the phase editor has to have something to show."""
     p = seed_project(simple=False)
     made = phases.default_phases(p)
-    assert [ph.id for ph in made][:2] == ["initial", "null_step"]
+    assert [ph.id for ph in made] == ["initial", "null_step"]
     schemas.Project.model_validate(
         p.model_dump() | {"phases": [ph.model_dump() for ph in made]})

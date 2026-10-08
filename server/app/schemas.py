@@ -992,6 +992,13 @@ class MeshSettings(Base):
     had to be re-typed for every mesh and could not travel in a saved project at all."""
 
 
+class WaterUpdate(Base):
+    """`PUT /api/project/water`: the project's water level, or `None` to remove it.
+    Required rather than defaulted, so an empty body is an error instead of a quiet
+    removal."""
+    water: WaterLevel | None
+
+
 class LayersUpdate(Base):
     layers: list[SoilLayer]
     materials: list[Material] | None = None
@@ -1183,7 +1190,11 @@ class Project(Base):
     # translated x/y vector like the three kinds `loads[]` already holds.
     normal_loads: list[NormalLoad] = Field(default_factory=list)
     wells: Wells
-    water: WaterLevel
+    water: WaterLevel | None = None
+    """The phreatic level, or `None` for a model without one -- which is what a new
+    project starts as. A model is not born with a water table at somebody else's depth;
+    it has one when its author sets one. Without it the deck is dry: zero pore pressure,
+    still fixed (`kratos_processes._pore_pressure`)."""
     mesh: MeshSettings = Field(default_factory=MeshSettings)
     custom_parts: list[CustomPart] = Field(default_factory=list)
     phases: list[Phase] = Field(default_factory=list)
@@ -1288,6 +1299,29 @@ class Project(Base):
             normalised.append(load)
         migrated["loads"] = normalised
         return migrated
+
+    @model_validator(mode="after")
+    def _water_for_hydrostatic_loads(self) -> Project:
+        """A hydrostatic normal load's pressure is derived from `water` at export time.
+        With no water level there is nothing to derive it from, and quietly writing zero
+        would be a wall with no water against it."""
+        if self.water is None:
+            for load in self.normal_loads:
+                if load.fluid_pressure_type == "Hydrostatic":
+                    raise ValueError(
+                        f"normal load {load.name!r} is hydrostatic, which needs a water "
+                        "level to measure its pressure from; set one, or make the load "
+                        "uniform"
+                    )
+        return self
+
+    @property
+    def water_specific_weight(self) -> float:
+        """kN/m3: the project's own, or `WaterLevel`'s default for a dry model -- the
+        materials still need a unit weight of water for their permeability."""
+        if self.water is not None:
+            return self.water.specific_weight
+        return WaterLevel.model_fields["specific_weight"].default
 
     @model_validator(mode="after")
     def _cross_references(self) -> Project:
@@ -1841,7 +1875,7 @@ class Project(Base):
         return soils + [
             "excavation", "wall", "struts", "anchors", "piles",
         ] + [load.id for load in self.loads] + [n.id for n in self.normal_loads] \
-          + beams + ["water", "wells"] + customs
+          + beams + (["water"] if self.water is not None else []) + ["wells"] + customs
 
     @computed_field
     @property

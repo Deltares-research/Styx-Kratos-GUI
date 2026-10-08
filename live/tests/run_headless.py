@@ -50,6 +50,18 @@ SUITES = {
         [TESTS / "fixtures" / "crow-field.js", JS / "results-render.js"],
         TESTS / "test-results-render.js",
     ),
+    # The Model explorer's colour toggle and the `colour` command. The toggle and the
+    # mesh drawing are DOM; which parts are on, in which colour, is not.
+    "part-colors": (
+        [JS / "part-colors.js"],
+        TESTS / "test-part-colors.js",
+    ),
+    # `water <level>` / `water off`: what was asked and what to send. The request and
+    # the redraw are patches.js's.
+    "water": (
+        [JS / "water-command.js"],
+        TESTS / "test-water-command.js",
+    ),
     "results": (
         # calculate.js comes along because the handoff between the two is the whole of
         # task P0.4: what Calculate just wrote has to become the run `results` opens.

@@ -356,6 +356,94 @@
     T.eq(App.Phases.hiddenKeys(p, null, 'staged'), []);
   });
 
+  /* ── The Model explorer's checkbox, in Staged construction mode ─────────
+     Ticked means "in the model in the selected phase". Each phase is free to switch
+     any part on or off: a part an earlier phase took out is not stuck out, because the
+     checkbox is there in every phase to put it back. The state is still inherited
+     from the phase before -- that is how Kratos' stages run, one model carried from
+     stage to stage -- so switching a part off in one phase leaves it off in the
+     phases after it until one of them switches it back on. */
+
+  function phaseOf(list, id) {
+    return list.filter(function (ph) { return ph.id === id; })[0];
+  }
+
+  function activeAt(p, id, key) {
+    return App.Phases.activeParts(p, id).indexOf(key) >= 0;
+  }
+
+  test('setActive switches a part off in the selected phase', function () {
+    var p = project();
+    p.phases = App.Phases.setActive(p, 'prop', ['soil_L2'], false);
+    T.ok(!activeAt(p, 'prop', 'soil_L2'));
+  });
+
+  test('a part switched off earlier can be switched back on in a later phase', function () {
+    var p = project();
+    T.ok(!activeAt(p, 'prop', 'soil_L1__lift2'), 'the fixture has it on at prop');
+    p.phases = App.Phases.setActive(p, 'prop', ['soil_L1__lift2'], true);
+    T.ok(activeAt(p, 'prop', 'soil_L1__lift2'));
+    // ...and only from there: the phases before it are untouched.
+    var chain = App.Phases.chainTo(p, 'prop').map(function (ph) { return ph.id; });
+    chain.slice(0, -1).forEach(function (id) {
+      T.eq(activeAt(p, id, 'soil_L1__lift2'), activeAt(project(), id, 'soil_L1__lift2'),
+           id + ' changed');
+    });
+  });
+
+  test('switching a part in one phase changes no phase before it', function () {
+    var before = project();
+    var p = project();
+    p.phases = App.Phases.setActive(p, 'dig_2', ['soil_L2'], false);
+    App.Phases.chainTo(p, 'dig_2').slice(0, -1).forEach(function (ph) {
+      T.eq(JSON.stringify(phaseOf(p.phases, ph.id)),
+           JSON.stringify(phaseOf(before.phases, ph.id)), ph.id + ' was edited');
+    });
+  });
+
+  test('setting a part to the state it already has adds no instruction', function () {
+    var p = project();
+    var before = JSON.stringify(phaseOf(p.phases, 'prop'));
+    p.phases = App.Phases.setActive(p, 'prop', ['soil_L2'], true);
+    T.eq(JSON.stringify(phaseOf(p.phases, 'prop')), before);
+  });
+
+  test('switching back what this phase changed drops its instruction', function () {
+    var p = project();
+    var before = JSON.stringify(phaseOf(p.phases, 'prop'));
+    p.phases = App.Phases.setActive(p, 'prop', ['soil_L2'], false);
+    p.phases = App.Phases.setActive(p, 'prop', ['soil_L2'], true);
+    T.eq(JSON.stringify(phaseOf(p.phases, 'prop')), before);
+  });
+
+  test('a group row sets every part under it at once', function () {
+    var p = project();
+    var keys = ['soil_L2', 'soil_L1__lift2'];
+    p.phases = App.Phases.setActive(p, 'prop', keys, true);
+    keys.forEach(function (key) { T.ok(activeAt(p, 'prop', key), key); });
+    p.phases = App.Phases.setActive(p, 'prop', keys, false);
+    keys.forEach(function (key) { T.ok(!activeAt(p, 'prop', key), key); });
+  });
+
+  test('setActive never puts a part in both lists of one phase', function () {
+    var p = project();
+    ['soil_L2', 'wall', 'anchors', 'soil_L1__lift3'].forEach(function (key) {
+      p.phases = App.Phases.setActive(p, 'dig_2', [key], false);
+      p.phases = App.Phases.setActive(p, 'dig_2', [key], true);
+      var phase = phaseOf(p.phases, 'dig_2');
+      T.eq((phase.activate || []).filter(function (k) {
+        return (phase.deactivate || []).indexOf(k) >= 0;
+      }), [], 'both lists name ' + key);
+    });
+  });
+
+  test('the checkbox state: on, off, or mixed for a group', function () {
+    var p = project();
+    T.eq(App.Phases.stateIn(p, 'prop', ['soil_L2']), 'on');
+    T.eq(App.Phases.stateIn(p, 'prop', ['soil_L1__lift2']), 'off');
+    T.eq(App.Phases.stateIn(p, 'prop', ['soil_L2', 'soil_L1__lift2']), 'mixed');
+  });
+
   test('no selected phase hides nothing', function () {
     T.eq(App.Phases.hiddenKeys(project(), null, 'staged'), []);
     T.eq(App.Phases.hiddenKeys(project(), 'no_such_phase', 'staged'), []);
