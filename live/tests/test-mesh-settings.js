@@ -101,3 +101,30 @@
     T.ok(App.MeshSettings.algorithmRow({ dimension: 2 }).choices.length >= 2);
   });
 })();
+
+/* Clicking the Mesh tab is also how you look at a mesh you already have, so the
+   properties dialog only offers itself there while there is nothing to look at.
+   It is still one toolbar button away (`meshSettings`) once a mesh exists. */
+
+(function () {
+  test('the Mesh tab opens the properties dialog only while there is no mesh', function () {
+    T.eq(App.MeshSettings.opensOnModeTab(false), true);
+    T.eq(App.MeshSettings.opensOnModeTab(true), false);
+  });
+
+  test('the properties dialog does not name the mesher', function () {
+    T.ok(!/gmsh/i.test(App.MeshSettings.TITLE), App.MeshSettings.TITLE);
+    App.MeshSettings.optimizationChoices().forEach(function (choice) {
+      T.ok(!/gmsh/i.test(choice[1]), choice[1]);
+    });
+    [true, false].forEach(function (planar) {
+      var help = App.MeshSettings.optimizationHelp(planar);
+      T.ok(!/gmsh/i.test(help), help);
+    });
+  });
+
+  test('the optimizer values sent to the server are unchanged', function () {
+    T.eq(App.MeshSettings.optimizationChoices().map(function (c) { return c[0]; }),
+         ['none', 'gmsh', 'netgen']);
+  });
+})();
