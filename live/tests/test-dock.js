@@ -187,3 +187,18 @@ test('wiring the Results explorer twice still collapses on one click', function 
     T.ok(dock.querySelector('#panel-results').classList.contains('collapsed'));
   });
 });
+
+/* `.dock-panel { display: flex }` (css/layout.css) is an author rule, and it beats the
+   browser's own `[hidden] { display: none }`. So `panel.hidden = true`, which is how
+   leaving Staged construction or Results puts their explorers away, hid nothing: both
+   stayed on screen in every tab after. Computed style, because the attribute alone was
+   always set correctly. */
+test('a hidden dock panel is not drawn', function () {
+  withDock({ phases: false, results: false }, function (dock) {
+    ['panel-phases', 'panel-results'].forEach(function (id) {
+      T.eq(getComputedStyle(dock.querySelector('#' + id)).display, 'none', id);
+    });
+    T.eq(getComputedStyle(dock.querySelector('#panel-model')).display, 'flex',
+         'the panels that are shown keep their layout');
+  });
+});

@@ -815,6 +815,71 @@
     });
   });
 
+  /* The legend's Min and Max boxes in the Results panel. They do not set anything
+     themselves: `limitsCommand` turns what was typed into the `results range` above,
+     so the boxes, the command box and the menu are one implementation. */
+
+  test('two typed limits become results range', function () {
+    return showing().then(function () {
+      return App.Results.handleCommand('results field uy');
+    }).then(function () {
+      T.eq(App.Results.limitsCommand('-2', '0.5'), 'results range -2 0.5');
+    });
+  });
+
+  test('both limits emptied is the automatic range again', function () {
+    return showing().then(function () {
+      return App.Results.handleCommand('results field uy');
+    }).then(function () {
+      T.eq(App.Results.limitsCommand('', '  '), 'results range auto');
+    });
+  });
+
+  test('one limit typed keeps the other end where the legend has it', function () {
+    return showing().then(function () {
+      return App.Results.handleCommand('results field uy');
+    }).then(function () {
+      // uy here runs -1 .. 0, so leaving Max empty keeps 0.
+      T.eq(App.Results.limitsCommand('-0.5', ''), 'results range -0.5 0');
+      return App.Results.handleCommand('results range -3 2');
+    }).then(function () {
+      // A typed range is what the legend has now, so it is the end that is kept.
+      T.eq(App.Results.limitsCommand('', '5'), 'results range -3 5');
+    });
+  });
+
+  test('a decimal comma is read as a decimal point', function () {
+    return showing().then(function () {
+      return App.Results.handleCommand('results field uy');
+    }).then(function () {
+      T.eq(App.Results.limitsCommand('-0,25', '1,5'), 'results range -0.25 1.5');
+    });
+  });
+
+  test('a limit that is not a number is refused with a reason', function () {
+    return showing().then(function () {
+      return App.Results.handleCommand('results field uy');
+    }).then(function () {
+      log.length = 0;
+      T.eq(App.Results.limitsCommand('abc', '1'), null);
+      T.ok(log.some(function (line) { return line[0] === 'err' && /abc/.test(line[1]); }),
+           JSON.stringify(log));
+    });
+  });
+
+  test('equal limits are refused, since there would be no colours between them', function () {
+    return showing().then(function () {
+      return App.Results.handleCommand('results field uy');
+    }).then(function () {
+      T.eq(App.Results.limitsCommand('2', '2'), null);
+    });
+  });
+
+  test('limits with nothing on screen are refused', function () {
+    setup();
+    T.eq(App.Results.limitsCommand('1', '2'), null);
+  });
+
   test('results deform takes a factor, auto, or off', function () {
     return showing().then(function () {
       return App.Results.handleCommand('results field uy');
@@ -864,6 +929,43 @@
       return App.Results.handleCommand('results reverse off');
     }).then(function () {
       T.eq(App.Results.options().reversed, false);
+    });
+  });
+
+  test('results mesh draws the element outlines over the shading, and takes it off', function () {
+    /* Off by default: a contour is read for its colours, and the line work is asked
+       for when the mesh itself is the question. Toggled like `reverse`, and set
+       outright by on/off so the panel's checkbox and the menu's tick cannot drift. */
+    return showing().then(function () {
+      T.eq(App.Results.options().mesh, false, 'no mesh by default');
+      T.eq(drawn[drawn.length - 1].options.mesh, false, 'and the viewport is told so');
+      return App.Results.handleCommand('results mesh');
+    }).then(function () {
+      T.eq(App.Results.options().mesh, true);
+      T.eq(drawn[drawn.length - 1].options.mesh, true, 'it reaches the viewport');
+      T.ok(log.some(function (line) { return /mesh on/.test(line[1]); }),
+           'the settings line says so');
+      return App.Results.handleCommand('results mesh');
+    }).then(function () {
+      T.eq(App.Results.options().mesh, false);
+      return App.Results.handleCommand('results mesh on');
+    }).then(function () {
+      return App.Results.handleCommand('results mesh on');
+    }).then(function () {
+      T.eq(App.Results.options().mesh, true, 'setting it twice is not a toggle');
+      return App.Results.handleCommand('results mesh off');
+    }).then(function () {
+      T.eq(App.Results.options().mesh, false);
+    });
+  });
+
+  test('the mesh setting is kept from one phase to the next', function () {
+    return showing().then(function () {
+      return App.Results.handleCommand('results mesh on');
+    }).then(function () {
+      return App.Results.handleCommand('results field uy');
+    }).then(function () {
+      T.eq(drawn[drawn.length - 1].options.mesh, true);
     });
   });
 

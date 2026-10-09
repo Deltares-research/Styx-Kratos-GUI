@@ -1128,7 +1128,8 @@ def test_the_live_shell_replaces_only_the_viewport_and_the_orbit_controller(clie
                            "toolbars.js", "explorer.js", "command.js", "dialogs.js", "app.js"}
     # Additions rather than substitutions -- they have no frozen counterpart:
     # soil-volume-dialog.js, canvas-renderer.js, ruler.js, mesh-labels.js,
-    # download.js, zip.js, phases.js, results.js, results-render.js, results-view.js.
+    # download.js, zip.js, phases.js, results.js, results-render.js, results-view.js,
+    # part-colors.js, water-command.js, node-parts.js, deck.js, results-plot.js.
     # The assertion above is the one that guards the portability claim.
     assert set(replaced) == {"api.js", "buffers.js", "model.js", "viewport.js", "patches.js",
                              "mesh-settings.js", "import-dialog.js", "mdpa-import-dialog.js",
@@ -1138,7 +1139,9 @@ def test_the_live_shell_replaces_only_the_viewport_and_the_orbit_controller(clie
                              "interfaces.js", "normal-loads.js", "material-library.js",
                              "orbit.js", "ruler.js", "mesh-labels.js",
                              "download.js", "zip.js", "phases.js", "results.js",
-                             "results-render.js", "results-view.js"}
+                             "results-render.js", "results-view.js", "part-colors.js",
+                             "water-command.js", "node-parts.js", "deck.js",
+                             "results-plot.js"}
     assert body.index('/js/orbit.js') < body.index('/live/js/orbit.js'), (
         "the Y-up controller has to be loaded after the frozen one it overrides")
 
@@ -1611,20 +1614,18 @@ def test_patch_phases_can_clear_the_sequence(client):
     client.put("/api/project", json=seed_project().model_dump())
 
 
-def test_post_default_phases_seeds_the_reference_shaped_sequence(client):
-    """What the phases panel opens on. `phases.default_phases` already builds it and
-    is tested against CROW's seven stages; this is the way the GUI reaches it."""
+def test_post_default_phases_seeds_the_initial_stage_and_the_null_step(client):
+    """What "Create default phases" gives: `phases.default_phases`, the initial stage
+    and the null step, and nothing else -- even for a project with lifts to dig."""
     client.put("/api/project", json=_staged_project())
 
     response = client.post("/api/project/phases/defaults")
     assert response.status_code == 200
     seeded = response.json()["project"]["phases"]
-    assert [p["id"] for p in seeded][:2] == ["initial", "null_step"]
+    assert [p["id"] for p in seeded] == ["initial", "null_step"]
     assert seeded[0]["calculation"] == "K0 procedure"
-    # One dig phase per lift, and they chain rather than branch.
-    assert sum(1 for p in seeded if p["id"].startswith("dig_")) == 3
     assert seeded[0]["parent"] is None
-    assert all(p["parent"] is not None for p in seeded[1:])
+    assert seeded[1]["parent"] == "initial"
 
     assert client.get("/api/project").json()["phases"] == seeded
 

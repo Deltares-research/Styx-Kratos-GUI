@@ -27,8 +27,12 @@ App.Model = (function () {
      `margin` and `thickness` are how the slab is *drawn* (WaterLevel's own comment
      calls it a reference plane overhanging the domain, not a solid). They are not
      editable and are carried untouched, because the layers PATCH replaces the whole
-     object and dropping them would reset the drawing to its defaults. */
-  var water = { y: -1.5, margin: 3.0, thickness: 0.06, specific_weight: 10.0 };
+     object and dropping them would reset the drawing to its defaults.
+
+     `null` for a model without one, which is what a new project is: there is no
+     default level, so nothing about water is shown until `water <level>` sets one
+     (live/js/water-command.js). */
+  var water = null;
 
   /* ── Mapping ─────────────────────────────────────────────────── */
 
@@ -219,8 +223,8 @@ App.Model = (function () {
     // Copied rather than aliased: the editors below mutate this object in place, and
     // aliasing App.PROJECT.water would make a rejected edit visible to everything
     // that reads the project before the PATCH that would have justified it.
-    water = Object.assign({ y: -1.5, margin: 3.0, thickness: 0.06,
-                            specific_weight: 10.0 }, mapped.water || {});
+    water = mapped.water ? Object.assign({ margin: 3.0, thickness: 0.06,
+                                           specific_weight: 10.0 }, mapped.water) : null;
     App.BOREHOLES = mapped.BOREHOLES;
     App.MATERIALS = mapped.MATERIALS;
     App.LAYERS = mapped.LAYERS;
@@ -344,6 +348,20 @@ App.Model = (function () {
     }];
     waterLevelNode.count = 1;
     return waterLevelNode;
+  }
+
+  /* Takes the "Water levels" row out of every mode's tree, for a model with no level.
+     Top level only: the Attributes library's own "Water levels" node lists definitions,
+     not this model's level, and stays. */
+  function dropWaterLevelNode() {
+    if (!waterLevelNode) return;
+    var gone = waterLevelNode;
+    waterLevelNode = null;
+    Object.keys(App.TREES || {}).forEach(function (mode) {
+      var nodes = App.TREES[mode] || [];
+      var i = nodes.indexOf(gone);
+      if (i >= 0) nodes.splice(i, 1);
+    });
   }
 
   /* Top level only, deliberately: js/data.js:688 also has a "Loads" node *inside*
@@ -1461,8 +1479,14 @@ App.Model = (function () {
     });
     // Replaces the frozen mockup's three borehole rows wholesale, the same way the
     // soil rows are replaced above: they describe a project nobody has open.
-    App.OBJECT_PROPS.water = waterProps();
-    ensureWaterLevelNode();
+    // A model without a water level has no row and no property grid for one.
+    if (water) {
+      App.OBJECT_PROPS.water = waterProps();
+      ensureWaterLevelNode();
+    } else {
+      delete App.OBJECT_PROPS.water;
+      dropWaterLevelNode();
+    }
     layers.forEach(function (layer, i) {
       // Every body of the layer, not just the layer's own key: clicking a lift in the
       // viewport or the tree selects `soil_<id>__lift2`, and a Selection explorer with

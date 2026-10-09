@@ -71,6 +71,24 @@ App.LivePatches = (function () {
     });
   }
 
+  /* A deck case's own mesh, on the Mesh tab, with every one of its parts listed in the
+     Model explorer under "Imported mesh" -- what the .mdpa import's checklist leads to
+     once accepted, without the checklist: a case is opened to be looked at whole.
+     What is listed and said is App.Deck's (live/js/deck.js). */
+  function showDeck(mesh, project) {
+    if (App.state.mode !== 'mesh') App.setMode('mesh');
+    App.Viewport.showImportedMesh(mesh);
+    App.Model.setImportedParts(App.Deck.parts(mesh));
+    App.Command.ok(App.Deck.summary(mesh, project.name));
+    var stages = (project.phases || []).length;
+    if (stages) {
+      App.Command.note('Its ' + stages + ' stages are the phases on the Staged '
+        + 'construction tab, read from the deck: select one to see the parts it has.');
+    }
+    App.Command.note('Calculate (F9) runs the deck as it is; `results` then reads back '
+      + 'what it wrote.');
+  }
+
   /* Model explorer: "Delete" for drawn/imported geometry.
 
      js/explorer.js:91 hard-codes { label: 'Delete', disabled: true } on every tree
@@ -400,6 +418,243 @@ App.LivePatches = (function () {
         walk(n.children || []);
       });
     })((App.TREES && App.TREES[mode]) || []);
+  }
+
+  /* ── The colour toggle ──────────────────────────────────────────────────
+     In Mesh mode every row with meshed parts under it gets a small square beside its
+     eye. A click draws those parts in their own colour over the grey mesh (and again
+     takes it off); the eye still only shows and hides. A group row (Sheet piles, Soil)
+     toggles every part under it and shows half-filled while only some are on.
+
+     The square only acts through `App.PartColors` and `App.Viewport.syncPartColors`,
+     the same two things the `colour` command uses, so the tested half decides what
+     each click means. Found by walking the rows in the same order as
+     `tagTreeRowsWithObjKeys`, for the same reason: the frozen explorer keeps its own
+     row-to-node map private. */
+  function addPartColorToggles(mode) {
+    var host = document.getElementById('tree-model');
+    if (!host || !App.PartColors || mode !== 'mesh') return;
+    var meshed = App.Viewport.coloredPartKeys ? App.Viewport.coloredPartKeys() : [];
+    if (!meshed.length) return;
+    var rows = host.querySelectorAll('.tree-row');
+    var i = 0;
+    (function walk(nodes) {
+      (nodes || []).forEach(function (node) {
+        var row = rows[i++];
+        var keys = App.PartColors.keysUnder(node, meshed);
+        if (row && keys.length) addPartColorToggle(row, keys, node);
+        else if (row) addPartColorSlot(row);
+        walk(node.children || []);
+      });
+    })((App.TREES && App.TREES[mode]) || []);
+    syncPartColorToggles();
+  }
+
+  function addPartColorToggle(row, keys, node) {
+    var square = document.createElement('span');
+    square.className = 'tree-paint';
+    square.dataset.keys = keys.join('\n');
+    // A single part shows its own colour; a group, the colour of its first member.
+    square.style.setProperty('--paint', App.Viewport.partColor(keys[0]) || '#e6194b');
+    square.title = keys.length === 1 ? 'Draw this part of the mesh in its own colour'
+                                     : 'Draw these ' + keys.length + ' parts in their own colours';
+    square.addEventListener('click', function (event) {
+      event.stopPropagation();
+      var on = App.PartColors.on.toggle(keys);
+      App.Viewport.syncPartColors();
+      syncPartColorToggles();
+      if (App.Command && App.Command.note) {
+        App.Command.note((on ? 'Coloured: ' : 'No longer coloured: ')
+                         + String(node.label || '').split('  ·  ')[0]);
+      }
+    });
+    var eye = row.querySelector('.tree-eye');
+    row.insertBefore(square, eye ? eye.nextSibling : row.firstChild);
+  }
+
+  /* An empty square's worth of space, so the labels stay in one column. */
+  function addPartColorSlot(row) {
+    var slot = document.createElement('span');
+    slot.className = 'tree-paint empty-slot';
+    var eye = row.querySelector('.tree-eye');
+    row.insertBefore(slot, eye ? eye.nextSibling : row.firstChild);
+  }
+
+  function syncPartColorToggles() {
+    var host = document.getElementById('tree-model');
+    if (!host || !App.PartColors) return;
+    Array.prototype.forEach.call(host.querySelectorAll('.tree-paint:not(.empty-slot)'), function (square) {
+      var state = App.PartColors.on.stateOf(square.dataset.keys.split('\n'));
+      square.classList.toggle('on', state === 'on');
+      square.classList.toggle('mixed', state === 'mixed');
+    });
+  }
+
+  /* ── The Model explorer in Staged construction mode ──────────────────────
+     The row's checkbox stops being "shown" and becomes "in the model in the selected
+     phase". Ticking or unticking edits that phase alone
+     (`App.Phases.setActive`); the phases after it inherit the change until one of them
+     says otherwise, which is how Kratos runs its stages. Every part keeps its row and
+     its checkbox in every phase, so a part an earlier phase took out can be put back
+     in any later one -- before this, a switched-off part was not drawn, so in the
+     phases after it there was nothing left to click to bring it back.
+
+     A group row (Sheet piles, Soil, Loads) sets every part under it, and shows a dash
+     while they differ. A tick a phase inherited rather than set itself is drawn grey,
+     so what this phase decided stands out from what it was handed. */
+  function addPhaseChecks(mode) {
+    var host = document.getElementById('tree-model');
+    if (!host || mode !== 'staged' || !App.Phases || !App.PartColors) return;
+    if (!selectedPhaseId()) return;
+    var stageable = App.Phases.stageableKeys(App.PROJECT);
+    var rows = host.querySelectorAll('.tree-row');
+    var i = 0;
+    (function walk(nodes) {
+      (nodes || []).forEach(function (node) {
+        var row = rows[i++];
+        var keys = App.PartColors.keysUnder(node, stageable);
+        if (row && keys.length) addPhaseCheck(row, keys, node);
+        walk(node.children || []);
+      });
+    })((App.TREES && App.TREES[mode]) || []);
+    paintPhaseChecks();
+  }
+
+  function addPhaseCheck(row, keys, node) {
+    var check = document.createElement('span');
+    check.className = 'tree-eye phase-check';
+    check.dataset.keys = keys.join('\n');
+    check.title = 'In the model in the selected phase';
+    check.addEventListener('click', function (event) {
+      event.stopPropagation();
+      var phase = selectedPhaseId();
+      if (!phase) return;
+      var wanted = App.Phases.stateIn(App.PROJECT, phase, keys) !== 'on';
+      var label = String(node.label || keys[0]).split('  ·  ')[0];
+      savePhases(App.Phases.setActive(App.PROJECT, phase, keys, wanted),
+                 label + (wanted ? ' switched on in ' : ' switched off in ')
+                 + (phaseById(phase) || {}).name + '.');
+    });
+    // In place of the eye, which in this mode would be a second, competing on/off.
+    var eye = row.querySelector('.tree-eye');
+    if (eye) row.replaceChild(check, eye);
+    else row.insertBefore(check, row.firstChild);
+  }
+
+  /* After the phase or the sequence changed. The tree is mounted again only when the
+     checkboxes have to appear (the first phases were just created) or go (the last
+     phase was deleted, so the eyes come back); otherwise they are repainted in place.
+     Never called from a mount, so it cannot loop. */
+  function syncPhaseChecks() {
+    if (typeof document === 'undefined') return;
+    var host = document.getElementById('tree-model');
+    if (!host || !App.state || App.state.mode !== 'staged') return;
+    var phase = selectedPhaseId();
+    var present = !!host.querySelector('.phase-check');
+    if (!!phase !== present) {
+      if (App.Explorer) App.Explorer.mountTree('staged');
+      return;
+    }
+    paintPhaseChecks();
+  }
+
+  function paintPhaseChecks() {
+    var host = document.getElementById('tree-model');
+    if (!host) return;
+    var phase = selectedPhaseId();
+    Array.prototype.forEach.call(host.querySelectorAll('.phase-check'), function (check) {
+      var keys = check.dataset.keys.split('\n');
+      var state = phase ? App.Phases.stateIn(App.PROJECT, phase, keys) : 'on';
+      check.classList.toggle('off', state === 'off');
+      check.classList.toggle('mixed', state === 'mixed');
+      check.classList.toggle('inherited', keys.length === 1 && !!phase
+        && App.Phases.ownership(App.PROJECT, phase, keys[0]) === 'inherited');
+    });
+  }
+
+  /* ── Which SubModelParts a node is in ────────────────────────────────────
+     `node <id>` writes the node's parts to the command log -- and those of every node
+     at its position, which is how the two sides of an interface are told apart. With
+     an imported deck on screen it also selects the node there, exactly as clicking it
+     does (viewport.js `showNode`); otherwise it asks the open project's deck and marks
+     the node on its mesh. Clicking a node is the viewport's own (`pickImportedNode`);
+     the arithmetic is `App.NodeParts`'s, tested headless. */
+
+  function runNodeCommand(text) {
+    if (!App.NodeParts) return false;
+    var parsed = App.NodeParts.parse(text);
+    if (parsed === false) return false;
+    if (App.Command.write) App.Command.write('echo', '> ' + String(text).trim());
+    if (parsed.error) { App.Command.err(parsed.error); return true; }
+    App.Viewport.nodeParts()
+      .then(function (index) {
+        var lines = App.NodeParts.report(index, parsed.id);
+        if (App.NodeParts.partsOf(index, parsed.id) === null) {
+          App.Command.err(lines[0]);
+          return;
+        }
+        lines.forEach(function (line, i) {
+          if (i === 0) App.Command.ok(line); else App.Command.note(line);
+        });
+        if (App.Viewport.importedNodes && App.Viewport.importedNodes() === index) {
+          App.Viewport.showNode(parsed.id);
+          return;
+        }
+        App.Viewport.markNodes(App.NodeParts.samePosition(index, parsed.id)
+          .map(function (id) { return index.coords[id]; }));
+      })
+      .catch(function (error) { App.Command.err(error.message); });
+    return true;
+  }
+
+  /* `colour ...`, typed. `false` when it is not this command. */
+  function runColourCommand(text) {
+    if (!App.PartColors) return false;
+    var mode = App.state && App.state.mode;
+    var answer = App.PartColors.command(text, {
+      tree: (App.TREES && App.TREES[mode]) || [],
+      meshed: App.Viewport.coloredPartKeys ? App.Viewport.coloredPartKeys() : [],
+      on: App.PartColors.on
+    });
+    if (answer === false) return false;
+    if (App.Command.write) App.Command.write('echo', '> ' + String(text).trim());
+    if (answer.changed) {
+      App.Viewport.syncPartColors();
+      syncPartColorToggles();
+    }
+    var message = answer.message;
+    if (answer.ok && answer.changed && mode !== 'mesh') {
+      message += ' Coloured parts are drawn on the mesh, in Mesh mode.';
+    }
+    if (answer.ok) App.Command.ok(message);
+    else App.Command.err(message);
+    return true;
+  }
+
+  /* `water ...`, typed: set, show or remove the project's water level. What to send is
+     `App.WaterCommand`'s (tested headless); this sends it and redraws from the project
+     the server stored. `false` when it is not this command. */
+  function runWaterCommand(text) {
+    if (!App.WaterCommand) return false;
+    var answer = App.WaterCommand.command(text, {
+      water: App.PROJECT ? App.PROJECT.water : null,
+      domain: App.PROJECT ? App.PROJECT.domain : null
+    });
+    if (answer === false) return false;
+    if (App.Command.write) App.Command.write('echo', '> ' + String(text).trim());
+    if (!answer.ok) { App.Command.err(answer.message); return true; }
+    if (!answer.body) { App.Command.note(answer.message); return true; }
+    App.Api.put('/api/project/water', answer.body)
+      .then(function (result) {
+        App.Model.apply(result.project);
+        return App.Viewport.refresh();
+      })
+      .then(function () {
+        if (App.Explorer && App.state) App.Explorer.mountTree(App.state.mode);
+        App.Command.ok(answer.message);
+      })
+      .catch(function (error) { App.Command.err(error.message); });
+    return true;
   }
 
   function deleteCustomPart(key) {
@@ -832,6 +1087,8 @@ App.LivePatches = (function () {
       App.MdpaImportDialog.closeChecklist();
     }
     if (App.Model.setImportedParts) App.Model.setImportedParts([]);
+    // Coloured parts were parts of the document that is no longer open.
+    if (App.PartColors) App.PartColors.on.clear();
 
     /* And a calculation's results, for exactly the same reason as the .mdpa above:
        they belong to the document that produced them. A different project is open
@@ -1082,8 +1339,11 @@ App.LivePatches = (function () {
     var total = ((App.PROJECT && App.PROJECT.phases) || []).length;
     if (!result) { phaseRun = null; }
     else if (result.ok) { phaseRun = { completed: total }; }
-    else if (result.stage) { phaseRun = { completed: result.stage.index - 1 }; }
-    else { phaseRun = { completed: 0 }; }
+    else if (result.stage) {
+      phaseRun = { completed: result.stage.index - 1, failed: true,
+                   error: result.error || null };
+    }
+    else { phaseRun = { completed: 0, failed: true, error: result.error || null }; }
     mountLivePhases();
   }
 
@@ -1241,6 +1501,9 @@ App.LivePatches = (function () {
     host.appendChild(phaseToolbar());
 
     var phases = (App.PROJECT && App.PROJECT.phases) || [];
+    // The Model explorer's checkboxes follow the selected phase. Every route that
+    // changes the phase or the sequence comes through here.
+    syncPhaseChecks();
     if (!phases.length) {
       host.appendChild(emptyPhaseState());
       return;
@@ -1351,6 +1614,15 @@ App.LivePatches = (function () {
       return el('div.pgrid-row', null,
                 [key, el('div.pgrid-val.readonly', { text: String(spec[2]) })]);
     }
+    /* A deck case's phases are its stages, read from the deck that Calculate runs
+       (server/app/deck.py); the server refuses an edit, so none is offered. */
+    if (App.PROJECT && App.PROJECT.deck) {
+      var shown = phase[spec[2]];
+      if (kind === 'check') shown = shown ? 'Yes' : 'No';
+      return el('div.pgrid-row', null, [key, el('div.pgrid-val.readonly', {
+        text: (shown == null ? '' : String(shown)) + (spec[4] ? ' ' + spec[4] : '')
+      })]);
+    }
 
     var control;
     if (kind === 'text') {
@@ -1425,23 +1697,30 @@ App.LivePatches = (function () {
 
     App.Dialogs.open({
       title: 'Phases',
-      width: 820, height: 520,
+      width: Math.min(1180, window.innerWidth - 40),
+      height: Math.min(720, window.innerHeight - 40),
       buttons: [{ label: 'Close', primary: true }],
       build: function (body) {
-        var wrap = el('div.dlg-simple', {
+        var wrap = el('div.dlg-simple.phases-overview', {
           style: 'display:flex;gap:12px;padding:0;height:100%'
         });
-        var left = el('div', {
-          style: 'flex:0 0 260px;overflow:auto;border-right:1px solid var(--c-line)'
+        var left = el('div.phases-overview-list', {
+          style: 'flex:0 0 380px;overflow:auto;border-right:1px solid var(--c-line)'
         });
         var right = el('div', { style: 'flex:1;overflow:auto;padding-right:4px' });
+        var log = el('div.phases-overview-log', {
+          style: 'flex:0 0 260px;overflow:auto;border-left:1px solid var(--c-line);'
+               + 'padding:0 8px'
+        });
         wrap.appendChild(left);
         wrap.appendChild(right);
+        wrap.appendChild(log);
         body.appendChild(wrap);
 
         function draw() {
           App.UI.clear(left);
           App.UI.clear(right);
+          App.UI.clear(log);
 
           var phases = (App.PROJECT && App.PROJECT.phases) || [];
           if (!phases.length) {
@@ -1451,15 +1730,24 @@ App.LivePatches = (function () {
             return;
           }
 
+          /* One line per phase: status, name, duration,
+             the time T reached, the id -- then the calculation type. What each line
+             says is App.Phases.overview's (tested headlessly). */
+          var overview = App.Phases.overview(App.PROJECT, phaseRun);
           var list = el('div.phase-list');
-          App.Phases.rows(App.PROJECT, phaseRun).forEach(function (row) {
+          overview.forEach(function (row) {
             var node = el('div.phase-row' + (row.id === selected ? '.selected' : ''));
-            node.style.paddingLeft = (8 + row.depth * 10) + 'px';
+            node.style.paddingLeft = (8 + row.depth * 4) + 'px';
+            node.title = row.label + ' · ' + row.kind;
             node.appendChild(el('span.phase-dot.' + row.state));
-            node.appendChild(el('span.phase-name', { text: row.name }));
+            node.appendChild(el('span.phase-name', { text: row.label }));
+            node.appendChild(el('span.phase-kind', { text: row.kind }));
             node.addEventListener('click', function () {
               selected = row.id;
               App.state.phase = row.id;
+              // The viewport follows, as it does from the dock's own list.
+              if (App.Viewport.applyPhaseVisibility) App.Viewport.applyPhaseVisibility();
+              mountLivePhases();
               draw();
             });
             list.appendChild(node);
@@ -1468,6 +1756,8 @@ App.LivePatches = (function () {
 
           var phase = phaseById(selected);
           if (!phase) { selected = phases[0].id; draw(); return; }
+          var current = overview.filter(function (row) { return row.id === phase.id; })[0];
+          phaseLog(log, current);
 
           var grid = el('div.pgrid');
           var groups = phaseProps(phase);
@@ -1502,7 +1792,8 @@ App.LivePatches = (function () {
              viewport, so it cannot be clicked to bring it back -- which would make
              the toggle one-way, and the mistake unrecoverable without editing the
              phase before it. Listed here with a button each. */
-          var hidden = App.Phases.hiddenKeys(App.PROJECT, phase.id, 'staged');
+          var hidden = App.PROJECT.deck ? []
+            : App.Phases.hiddenKeys(App.PROJECT, phase.id, 'staged');
           if (hidden.length) {
             var back = el('div.pgrid');
             back.appendChild(el('div.pgrid-group', { text: 'Not in the model here' }));
@@ -1522,14 +1813,62 @@ App.LivePatches = (function () {
             right.appendChild(back);
           }
 
-          right.appendChild(el('div.lay-hint', { text:
-            'Click a soil body or a structure in the viewport, in Staged ' +
-            'construction mode, to switch it off for the selected phase.' }));
+          right.appendChild(el('div.lay-hint', { text: App.PROJECT.deck
+            ? 'These phases are the stages of the Kratos deck ' + App.PROJECT.deck.parameters
+              + ', shown as they are. Edit the deck to change them, then run its '
+              + 'script again.'
+            : 'In Staged construction mode, tick or untick a part in the Model ' +
+              'explorer to put it in or take it out of the selected phase. The ' +
+              'phases after it follow until one of them changes it again.' }));
         }
 
         draw();
       }
     });
+  }
+
+  /* The Phases window has three ways in, all the one action: a button on the Staged
+     construction rail (beside Calculate), the Phases menu's "Edit phases…" -- which
+     the frozen mockup draws and wires to nothing -- and `phases` on the command line. */
+  function installPhasesOverview() {
+    var staged = App.RAILS && App.RAILS.staged;
+    if (staged && !staged.some(function (tool) { return tool && tool.action === 'phases'; })) {
+      var at = staged.length;
+      staged.forEach(function (tool, i) { if (tool && tool.action === 'calculate') at = i; });
+      staged.splice(at, 0, { icon: 'phase', tip: 'Phases overview…', action: 'phases' });
+    }
+    (App.MENUS || []).forEach(function (menu) {
+      (menu.items || []).forEach(function (item) {
+        if (item && item.label === 'Edit phases…') item.action = 'phases';
+      });
+    });
+  }
+
+  /* The right-hand column of the Phases window: what the last calculation made of
+     the selected phase, and the time it reaches -- the "Log info for last
+     calculation" and "Reached values". Only what this app knows: a Kratos run says
+     whether each stage finished, not reached forces or safety factors. */
+  function phaseLog(host, row) {
+    var el = App.UI.el;
+    if (!row) return;
+    host.appendChild(el('div.pgrid-group', { text: 'Log info for last calculation' }));
+    var box = el('div.phases-overview-box.' + row.state, { text: row.log });
+    host.appendChild(box);
+    if (row.state === 'failed' && phaseRun && phaseRun.error) {
+      host.appendChild(el('pre.phases-overview-error', { text: phaseRun.error }));
+    }
+    var reached = el('div.pgrid');
+    reached.appendChild(el('div.pgrid-group', { text: 'Reached values' }));
+    [['Phase', row.number + ' of ' + ((App.PROJECT.phases || []).length)],
+     ['Time interval', row.interval + ' day'],
+     ['Reached total time', row.total + ' day']
+    ].forEach(function (pair) {
+      reached.appendChild(el('div.pgrid-row', null, [
+        el('div.pgrid-key', { text: pair[0] }),
+        el('div.pgrid-val.readonly', { text: pair[1] })
+      ]));
+    });
+    host.appendChild(reached);
   }
 
   /* ── The Results explorer's own collapse ────────────────────────────
@@ -1575,6 +1914,9 @@ App.LivePatches = (function () {
        Anything the installers touch is declared before the first of them is called. */
     var resultsMenu = null;      // the Results entry in App.MENUS, for refilling
     var resultsWindow = null;    // the floating chooser, while it is open
+    var plotWindow = null;       // the wall/interface plot window, while it is open
+    var plotColumns = 0;         // panels per row it was last drawn with
+    var plotReloading = null;    // the run a reload of the plot is under way for
 
     extendViewportMenu();
 
@@ -1637,6 +1979,13 @@ App.LivePatches = (function () {
       if (item && item.action === 'chooseResults') {
         if (App.state && App.state.mode !== 'results') App.setMode('results');
         else openResultsWindow();
+        return;
+      }
+      // The rail's "Plot along the wall": the same `results plot` the command box runs,
+      // which opens the plot window when it has something to draw.
+      if (item && item.action === 'plotResults') {
+        if (App.state && App.state.mode !== 'results') App.setMode('results');
+        resultsCommand('results plot');
         return;
       }
 
@@ -1718,6 +2067,10 @@ App.LivePatches = (function () {
       }
       if (item && item.action === 'calculate') {
         if (App.Calculate) App.Calculate.run();
+        return;
+      }
+      if (item && item.action === 'phases') {
+        phasesDialog();
         return;
       }
 
@@ -2022,6 +2375,7 @@ App.LivePatches = (function () {
     }
 
     installResultsMode();
+    installPhasesOverview();
 
     /* The phases panel, on the project's own phases. `App.setMode` calls
        `mountPhases` whenever staged mode is entered (js/app.js:33), and the frozen
@@ -2075,6 +2429,8 @@ App.LivePatches = (function () {
       App.Explorer.mountTree = function (mode) {
         frozenMountTree(mode);
         tagTreeRowsWithObjKeys(mode);
+        addPartColorToggles(mode);
+        addPhaseChecks(mode);
       };
     }
     if (typeof document !== 'undefined') {
@@ -2092,7 +2448,11 @@ App.LivePatches = (function () {
         ['note', '  run <file.py>         build the model from a Python file'],
         ['note', '  export                write the Kratos deck'],
         ['note', '  cleargeometry         remove drawn/imported custom geometry'],
-        ['note', '  results               open what a calculation wrote (try "results runs")']);
+        ['note', '  results               open what a calculation wrote (try "results runs")'],
+        ['note', '  colour <part>|all|off draw a part of the mesh in its own colour'],
+        ['note', '  water <level>|off     set or remove the water level, e.g. water -1.5'],
+        ['note', '  node <id>             which SubModelParts a node is in'],
+        ['note', '  phases                the Phases overview: every phase, its time and result']);
     }
 
     /* ── Results mode ─────────────────────────────────────────────────────
@@ -2111,17 +2471,34 @@ App.LivePatches = (function () {
          and has no entry past 2, so a third group would draw with a blank label —
          and editing a frozen file for a caption is not worth it. Reading a result is
          the end of the calculation, so it sits there honestly enough. */
+      /* The Model explorer beside the results. Every mode is handed the same tree
+         (App.Model's syncTrees), but only for modes App.TREES already has a key for,
+         and the frozen js/data.js knows five -- so Results had none and showed an
+         empty dock. One key, and the next sync fills it like the rest. */
+      if (App.TREES && !App.TREES.results) App.TREES.results = App.TREES.mesh || [];
       App.MODES.push({
         id: 'results', label: 'Results', group: 2,
         hint: 'Results mode — read back what a calculation wrote: choose a phase and a '
             + 'quantity, or type "results fields" to see what this phase offers.'
       });
+      /* The plot button's glyph: a wall's axis down the left and a moment curve bellied
+         out from it, on the 24x24 grid every App.ICONS entry uses. Assigned here, in the
+         function that mounts the rail, for the hoisting reason `installResultsIcon`
+         spells out. */
+      if (App.ICONS && !App.ICONS.wallplot) {
+        App.ICONS.wallplot = '<path d="M6 3v18"/><path d="M4 3h4M4 21h4"/>'
+          + '<path d="M6 4.5C15 7 18 10.5 17.5 12.5S12 18 6 19.5"/>'
+          + '<circle cx="17.5" cy="12.5" r="1.3"/>';
+      }
+
       App.RAILS = App.RAILS || {};
       App.RAILS.results = [
         { icon: 'select', tip: 'Select', toggle: true, on: true },
         '-',
         // The chooser opens with the mode; this is how it comes back once closed.
-        { icon: 'results', tip: 'Choose results', action: 'chooseResults' }
+        { icon: 'results', tip: 'Choose results', action: 'chooseResults' },
+        { icon: 'wallplot', tip: 'Plot along the wall — M, Q, N, ux and the earth '
+            + 'pressure on it, every phase', action: 'plotResults' }
       ];
 
       /* `App.setMode` is frozen and knows only about the phases panel (js/app.js:25).
@@ -2156,6 +2533,16 @@ App.LivePatches = (function () {
         App.Results.onChange(function () {
           mountResultsPanel();
           refreshResultsMenu();
+          followRunInPlot();
+        });
+      }
+
+      /* The plot window is drawn from `App.ResultsPlot.state()` and nothing else, and
+         opens when a `results plot` asks for it -- typed, or from any button. */
+      if (App.ResultsPlot && App.ResultsPlot.onChange) {
+        App.ResultsPlot.onChange(function (event) {
+          if (event && event.open) openPlotWindow();
+          renderPlotWindow(true);
         });
       }
 
@@ -2266,6 +2653,8 @@ App.LivePatches = (function () {
             cmd: 'results range auto' },
           '-',
           { label: 'Value at a node…', action: 'resultsAtNode' },
+          { label: 'Plot along the wall…', icon: 'wallplot', action: 'resultsRun',
+            cmd: 'results plot' },
           { label: 'Save field as CSV', action: 'resultsRun', cmd: 'results csv' },
           { label: 'Download run', action: 'resultsRun', cmd: 'results zip' }
         ]
@@ -2341,6 +2730,10 @@ App.LivePatches = (function () {
           label: 'Reversed', checked: !!options.reversed, action: 'resultsRun',
           cmd: 'results reverse ' + (options.reversed ? 'off' : 'on')
         });
+        colours.sub.push({
+          label: 'Show mesh', checked: !!options.mesh, action: 'resultsRun',
+          cmd: 'results mesh ' + (options.mesh ? 'off' : 'on')
+        });
       }
     }
 
@@ -2398,8 +2791,12 @@ App.LivePatches = (function () {
 
       var handle = App.Dialogs.open({
         title: 'Choose results',
-        width: 430, height: 300,
+        // Tall enough for every row without a scrollbar, and wide enough for the four
+        // actions and Close on one line each. At 430 x 300 the last rows were cut off
+        // and "Plot wall…" / "Download run" broke over two lines.
+        width: 580, height: 440,
         buttons: [
+          act('Plot wall…', 'results plot'),
           act('Fit range', 'results range auto'),
           act('Save CSV', 'results csv'),
           act('Download run', 'results zip'),
@@ -2441,6 +2838,116 @@ App.LivePatches = (function () {
       resultsWindow = null;
     }
 
+    /* ── The plot window ──────────────────────────────────────────────────
+       A member's results along it, a panel per phase -- the figure is
+       `App.ResultsPlot.svg()`, a tested string, and this window only hosts it. Modeless
+       like the chooser, for the same reason: it is read beside the model, not finished
+       and dismissed. Its controls are the `results plot ...` commands, so the window,
+       the menu and the command box cannot disagree. */
+
+    function openPlotWindow() {
+      if (plotWindow) return plotWindow;
+      if (!App.Dialogs || !App.Dialogs.open) return null;
+
+      var act = function (label, cmd) {
+        return { label: label, keepOpen: true,
+                 onClick: function () { resultsCommand(cmd); } };
+      };
+      var handle = App.Dialogs.open({
+        title: 'Plot along the wall',
+        width: 1180, height: 560,
+        buttons: [
+          act('Save SVG', 'results plot svg'),
+          act('Save CSV', 'results plot csv'),
+          { label: 'Close', primary: true }
+        ],
+        onClose: function () { plotWindow = null; plotColumns = 0; }
+      });
+      handle.dialog.classList.add('dlg-plot');
+
+      var layer = document.getElementById('modal-layer');
+      var scrims = layer ? layer.querySelectorAll('.scrim') : [];
+      if (scrims.length) {
+        var scrim = scrims[scrims.length - 1];
+        if (scrim.parentNode) scrim.parentNode.removeChild(scrim);
+      }
+
+      plotWindow = handle;
+      renderPlotWindow(true);
+
+      // Panels per row follow the window's width, so widening it puts the phases side
+      // by side and narrowing it wraps them -- redrawn only when that count changes.
+      if (typeof ResizeObserver === 'function') {
+        new ResizeObserver(function () { renderPlotWindow(false); }).observe(handle.body);
+      }
+      return handle;
+    }
+
+    function closePlotWindow() {
+      if (plotWindow) plotWindow.close();
+      plotWindow = null;
+      plotColumns = 0;
+    }
+
+    /* Panels per row for the body's current width: as many 220 px panels as fit, never
+       more than five (the reference figure's row) nor more than there are phases. */
+    function plotColumnsFor(body, stages) {
+      var width = body.clientWidth || 1100;
+      return Math.max(1, Math.min(5, stages || 1, Math.floor(width / 220)));
+    }
+
+    function renderPlotWindow(force) {
+      if (!plotWindow || !App.ResultsPlot) return;
+      var body = plotWindow.body;
+      var state = App.ResultsPlot.state();
+      var plot = state.plot;
+      var columns = plotColumnsFor(body, plot ? plot.stages.length : 1);
+      if (!force && columns === plotColumns) return;
+      plotColumns = columns;
+
+      if (!plot) {
+        body.innerHTML = '<p class="dock-empty">Nothing is plotted. Type '
+          + '<code>results plot</code>, or <code>results plot members</code> to see what '
+          + 'this run can show.</p>';
+        return;
+      }
+
+      var members = state.members || [];
+      var member = members.filter(function (m) { return m.name === plot.member; })[0];
+      var controls = '<div class="rp-controls">'
+        + '<label>Member ' + select('plot-member', members.map(function (m) {
+          return { value: m.name, label: m.name, selected: m.name === plot.member };
+        })) + '</label>'
+        + '<label>Quantity ' + select('plot-quantity',
+          ((member && member.quantities) || []).map(function (q) {
+            return { value: q.name, label: q.label + '  (' + q.unit + ')',
+                     selected: q.name === plot.quantity };
+          })) + '</label>'
+        + '<span class="rp-run" title="' + esc(state.run) + '">' + esc(state.run)
+        + '</span></div>';
+
+      body.innerHTML = '<div class="rp-window">' + controls
+        + '<div class="rp-host">' + App.ResultsPlot.svg(plot, { columns: columns })
+        + '</div></div>';
+
+      bind(body, 'plot-member', function (value) { return 'results plot ' + value; });
+      bind(body, 'plot-quantity', function (value) {
+        return 'results plot ' + plot.member + ' ' + value;
+      });
+    }
+
+    /* A different run opened while the window is up: plot that one instead, rather
+       than go on showing the last run's wall under the new run's name. */
+    function followRunInPlot() {
+      if (!plotWindow || !App.ResultsPlot) return;
+      var run = App.Results.current();
+      var shown = App.ResultsPlot.state().run;
+      if (!run || run === shown || run === plotReloading) return;
+      plotReloading = run;
+      resultsCommand('results plot').then(function () { plotReloading = null; },
+                                          function () { plotReloading = null; });
+    }
+
     function syncResultsPanel(on) {
       var panel = document.getElementById('panel-results');
       var dock = document.getElementById('dock');
@@ -2459,6 +2966,7 @@ App.LivePatches = (function () {
         // the geometry, where it would be neither editable nor explicable -- and the
         // window with it, since it belongs to a mode that is no longer on.
         closeResultsWindow();
+        closePlotWindow();
         if (App.ResultsView) App.ResultsView.clear();
       }
     }
@@ -2524,8 +3032,31 @@ App.LivePatches = (function () {
                    label: App.ResultsRender.MAP_LABELS[name] || name,
                    selected: options.map === name };
         }))));
+      /* The legend's limits. An empty box follows the phase -- its own value is the
+         placeholder -- so typing one limit leaves the other exact rather than the
+         rounded number a filled-in box would hand back. What was typed goes through
+         `App.Results.limitsCommand`, which is tested, to the `results range` that is. */
+      if (state.field) {
+        var limit = function (name, typed, auto, tip) {
+          return '<input type="text" inputmode="decimal" data-res="' + name + '"'
+            + ' value="' + esc(typed === null ? '' : typed) + '"'
+            + ' placeholder="' + esc(App.ResultsRender.format(auto)) + '"'
+            + ' title="' + esc(tip) + '">';
+        };
+        rows.push(row('Limits', '<span class="res-limits">'
+          + limit('lim-min', options.min, state.field.min,
+                  'Legend minimum — leave empty to follow the phase')
+          + '<span class="res-limits-to">…</span>'
+          + limit('lim-max', options.max, state.field.max,
+                  'Legend maximum — leave empty to follow the phase')
+          + '<button type="button" data-res="lim-auto"'
+          + " title=\"Back to this phase's own range\">Auto</button>"
+          + '<span class="res-limits-unit">' + esc(state.field.unit) + '</span></span>'));
+      }
       rows.push(row('Reverse', '<input type="checkbox" data-res="reverse"'
                                + (options.reversed ? ' checked' : '') + '>'));
+      rows.push(row('Mesh', '<input type="checkbox" data-res="mesh"'
+                            + (options.mesh ? ' checked' : '') + '>'));
       rows.push(row('Deformed', select('deform', [
         { value: 'off', label: 'off', selected: !options.deform },
         { value: 'auto', label: 'auto', selected: options.deform === 'auto' },
@@ -2534,17 +3065,10 @@ App.LivePatches = (function () {
         { value: '100', label: '×100', selected: options.deform === 100 }
       ])));
 
-      if (state.field) {
-        rows.push(row('Range', '<span class="res-range">'
-          + esc(App.ResultsRender.format(options.min === null ? state.field.min : options.min))
-          + ' … '
-          + esc(App.ResultsRender.format(options.max === null ? state.field.max : options.max))
-          + ' ' + esc(state.field.unit) + '</span>'));
-      }
-
       body.innerHTML = '<div class="res-grid">' + rows.join('') + '</div>'
         + (withActions
            ? '<div class="res-actions">'
+             + '<button data-cmd="results plot">Plot wall…</button>'
              + '<button data-cmd="results range auto">Fit range</button>'
              + '<button data-cmd="results csv">Save CSV</button>'
              + '<button data-cmd="results zip">Download run</button>'
@@ -2565,7 +3089,34 @@ App.LivePatches = (function () {
           resultsCommand('results reverse ' + (reverse.checked ? 'on' : 'off'));
         });
       }
+      var meshBox = body.querySelector('[data-res="mesh"]');
+      if (meshBox) {
+        meshBox.addEventListener('change', function () {
+          // on/off, like Reverse: the box already carries the state.
+          resultsCommand('results mesh ' + (meshBox.checked ? 'on' : 'off'));
+        });
+      }
       bind(body, 'deform', function (value) { return 'results deform ' + value; });
+
+      var minBox = body.querySelector('[data-res="lim-min"]');
+      var maxBox = body.querySelector('[data-res="lim-max"]');
+      var onLimits = function () {
+        // `change` fires on Enter and on leaving the box, not on every keystroke, so a
+        // half-typed "-0." is never sent.
+        var cmd = App.Results.limitsCommand(minBox.value, maxBox.value);
+        if (cmd) resultsCommand(cmd);
+      };
+      if (minBox && maxBox) {
+        minBox.addEventListener('change', onLimits);
+        maxBox.addEventListener('change', onLimits);
+      }
+      var autoButton = body.querySelector('[data-res="lim-auto"]');
+      if (autoButton) {
+        autoButton.addEventListener('click', function (event) {
+          event.preventDefault();   // inside a <label>: do not also focus the first box
+          resultsCommand('results range auto');
+        });
+      }
 
       Array.prototype.forEach.call(body.querySelectorAll('[data-cmd]'), function (button) {
         button.addEventListener('click', function () {
@@ -2643,8 +3194,20 @@ App.LivePatches = (function () {
         var handledByResults = App.Results.handleCommand(text);
         if (handledByResults !== false) return handledByResults;
       }
-      
+
+      // `colour <part>`: the Model explorer's colour toggle, typed.
+      if (runColourCommand(text)) return;
+      // `water <level>` / `water off`: the project's water level.
+      if (runWaterCommand(text)) return;
+      // `node <id>`: which SubModelParts a node is in.
+      if (runNodeCommand(text)) return;
+
       var cmd = (text || '').trim().split(/\s+/)[0].toLowerCase();
+      if (cmd === 'phases') {
+        if (App.Command.write) App.Command.write('echo', '> ' + text.trim());
+        phasesDialog();
+        return;
+      }
       if (cmd === 'cleargeometry') {
         if (App.Command.note) App.Command.note('Clearing custom geometry...');
         fetch(App.Api.base + '/api/project/custom_parts', { method: 'DELETE' })
@@ -2673,10 +3236,17 @@ App.LivePatches = (function () {
         }
         return App.Api.post('/api/project/script', { path: scriptPath })
           .then(function (result) {
+            // A deck case (examples/eemdijk/eemdijk.py) brings its own mesh: show
+            // that, rather than meshing the empty site its project carries.
+            if (App.Deck && App.Deck.hasMesh(result)) {
+              return adoptProject(result.project, 'Ran ' + scriptPath
+                + ' — a Kratos deck, opened with its own mesh.')
+                .then(function () { showDeck(result.mesh, result.project); });
+            }
             return adoptProject(result.project,
-              'Ran ' + scriptPath + ' — model built. Meshing it now.');
+              'Ran ' + scriptPath + ' — model built. Meshing it now.')
+              .then(function () { requestMesh(true, null); });
           })
-          .then(function () { requestMesh(true, null); })
           .catch(function (error) {
             if (App.Command.err) App.Command.err(error.message);
           });

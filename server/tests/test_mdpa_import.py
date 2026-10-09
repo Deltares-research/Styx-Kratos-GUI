@@ -139,6 +139,20 @@ def test_an_unmapped_class_name_is_kept_as_unknown_rather_than_failing():
     assert model.elements[0].dim is None
 
 
+@pytest.mark.parametrize("name, nodes", [("LineNormalLoadCondition2D2N", 2),
+                                         ("LineNormalLoadDiffOrderCondition2D3N", 3)])
+def test_a_normal_load_condition_is_a_condition_rather_than_unknown(name, nodes):
+    """`kratos.NORMAL_LOAD_CONDITIONS` is written by the exporter, so reading it back
+    must not report it as unknown."""
+    model = mdpa_import.import_mdpa(
+        "Begin Nodes\n1 0.0 0.0 0.0\n2 1.0 0.0 0.0\n3 0.5 0.0 0.0\nEnd Nodes\n\n"
+        f"Begin Conditions {name}\n1 0 " + " ".join(str(i) for i in range(1, nodes + 1))
+        + "\nEnd Conditions\n")
+
+    condition = model.conditions[0]
+    assert (condition.kind, condition.dim) == ("condition", 2)
+
+
 def test_malformed_deck_raises_import_error():
     with pytest.raises(mdpa_import.ImportError_):
         mdpa_import.import_mdpa("Begin Nodes\n1 not-a-number 0 0\nEnd Nodes\n")
@@ -195,6 +209,66 @@ def test_a_2d_deck_draws_its_triangles_directly_with_no_boundary_extraction():
 
     soil = next(s for s in sections if s["key"] == "imported_continuum")
     assert len(soil["indices"]) == 3
+
+
+@pytest.mark.parametrize("name", ["UPwSmallStrainElement2D4N",
+                                  "SmallStrainUPwDiffOrderElement2D8N",
+                                  "SmallStrainUPwDiffOrderElement2D9N"])
+def test_a_2d_quadrilateral_class_is_soil_rather_than_unknown(name):
+    """This app's exporter only ever writes triangles, but a deck from elsewhere (the
+    Eemdijk one is almost all 8-node quads) is mostly quadrilaterals -- unknown, they
+    were counted and never drawn, leaving a scatter of the deck's few triangles."""
+    nodes = {"4N": 4, "8N": 8, "9N": 9}[name[-2:]]
+    model = mdpa_import.import_mdpa(
+        "Begin Nodes\n" + "".join(f"{i} {i}.0 0.0 0.0\n" for i in range(1, nodes + 1))
+        + "End Nodes\n\n"
+        f"Begin Elements {name}\n1 0 " + " ".join(str(i) for i in range(1, nodes + 1))
+        + "\nEnd Elements\n")
+
+    entity = model.elements[0]
+    assert (entity.kind, entity.dim) == ("continuum", 2)
+
+
+def test_a_quadratic_quadrilateral_draws_as_two_triangles_over_its_four_corners():
+    """Corners first, counter-clockwise, then the midsides (Kratos' Quadrilateral2D8
+    order) -- so the quad is the two triangles either side of the 1-3 diagonal, and no
+    midside node is ever a triangle's corner."""
+    text = (
+        "Begin Properties 0\nEnd Properties\n\n"
+        "Begin Nodes\n"
+        "1 0.0 0.0 0.0\n2 2.0 0.0 0.0\n3 2.0 2.0 0.0\n4 0.0 2.0 0.0\n"
+        "5 1.0 0.0 0.0\n6 2.0 1.0 0.0\n7 1.0 2.0 0.0\n8 0.0 1.0 0.0\n"
+        "End Nodes\n\n"
+        "Begin Elements SmallStrainUPwDiffOrderElement2D8N\n1 0 1 2 3 4 5 6 7 8\n"
+        "End Elements\n"
+    )
+    model = mdpa_import.import_mdpa(text)
+
+    soil = next(s for s in mdpa_import.to_sections(model) if s["key"] == "imported_continuum")
+
+    corners = [tuple(soil["positions"][i * 3:i * 3 + 3]) for i in soil["indices"]]
+    assert len(corners) == 2 * 3
+    assert set(corners) == {(0.0, 0.0, 0.0), (2.0, 0.0, 0.0), (2.0, 2.0, 0.0),
+                            (0.0, 2.0, 0.0)}
+    first, second = corners[:3], corners[3:]
+    assert (0.0, 0.0, 0.0) in first and (0.0, 0.0, 0.0) in second, "split on the 1-3 diagonal"
+    assert (2.0, 2.0, 0.0) in first and (2.0, 2.0, 0.0) in second
+
+
+def test_a_deck_mixing_triangles_and_quads_draws_both():
+    text = (
+        "Begin Properties 0\nEnd Properties\n\n"
+        "Begin Nodes\n"
+        "1 0.0 0.0 0.0\n2 1.0 0.0 0.0\n3 1.0 1.0 0.0\n4 0.0 1.0 0.0\n5 2.0 0.0 0.0\n"
+        "End Nodes\n\n"
+        "Begin Elements UPwSmallStrainElement2D3N\n1 0 2 5 3\nEnd Elements\n\n"
+        "Begin Elements UPwSmallStrainElement2D4N\n2 0 1 2 3 4\nEnd Elements\n"
+    )
+    model = mdpa_import.import_mdpa(text)
+
+    soil = next(s for s in mdpa_import.to_sections(model) if s["key"] == "imported_continuum")
+
+    assert len(soil["indices"]) == (1 + 2) * 3
 
 
 def test_a_quadratic_beam_spans_end_to_end_not_end_to_midside():

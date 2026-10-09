@@ -76,6 +76,34 @@ CSV_FIELDS = {
     "horizontal_total_displacement": "horizontal_total_displacement_in_m",
 }
 
+MEMBER_STAGES = {
+    # reference stage -> ours. Every stage with a wall in it: the five that Kratos' own
+    # CROW plots draw (`test_CROW_case_testGUI_mesh.py`), strut stage included.
+    "3_Wall_installation": "3_SheetPileWall_installation",
+    "4_First_excavation": "4_First_excavation",
+    "5_Anchor_installation": "5_Strut_installation",
+    "6_Second_excavation": "6_Second_excavation",
+    "7_Third_excavation": "7_Third_excavation",
+}
+
+EXPECTED_MEMBERS = FIXTURE / "expected_members"
+
+MEMBER_COLUMNS = {
+    # member -> {column: (variable in Kratos' json_output, component or None)}. SI, as
+    # Kratos wrote them: N*m/m, N/m, m, N/m2.
+    "wall": {
+        "BENDING_MOMENT": ("BENDING_MOMENT", None),
+        "SHEAR_FORCE": ("SHEAR_FORCE", None),
+        "AXIAL_FORCE": ("AXIAL_FORCE", None),
+        "TOTAL_DISPLACEMENT_X": ("TOTAL_DISPLACEMENT_X", None),
+    },
+    "interface": {
+        "GEO_EFFECTIVE_TRACTION_VECTOR_0": ("GEO_EFFECTIVE_TRACTION_VECTOR", 0),
+        "GEO_EFFECTIVE_TRACTION_VECTOR_1": ("GEO_EFFECTIVE_TRACTION_VECTOR", 1),
+    },
+}
+"""What the reference plots draw per member, and so what `expected_members/` records."""
+
 KEPT_STAGES = ["1_Initial_stage", "7_Third_excavation"]
 """The two stages whose GiD output is committed: the k0 state, where everything the deck
 has is present, and the last excavation, where three bodies have been dug away. The
@@ -161,9 +189,7 @@ def copy_run(run: pathlib.Path) -> dict:
     compressed += [f"{deck_name}_{stage}.post.{kind}"
                    for stage in KEPT_STAGES for kind in ("msh", "res")]
     plain = ["MaterialParameters.json", "initial_materials.json"]
-    plain += sorted(path.name for path in run.glob("*__output_wall.json")
-                    if path.name.split("__")[0] in STAGES.values())
-    plain += [f"{max(STAGES.values())}__output_interface.json"]
+    plain += member_outputs(run)
 
     total = 0
     for name in compressed:
@@ -194,6 +220,83 @@ def copy_run(run: pathlib.Path) -> dict:
         "stages_with_gid_output": KEPT_STAGES,
         "our_wall_part": OUR_WALL_PART,
     }
+
+
+def member_outputs(run: pathlib.Path) -> list[str]:
+    """Every `<stage>__output_<member>.json` of the stages that have a wall. Small --
+    15 KB a file -- and what the Results plot window draws."""
+    return sorted(path.name for path in run.glob("*__output_*.json")
+                  if path.name.split("__")[0] in MEMBER_STAGES.values())
+
+
+def copy_member_outputs(run: pathlib.Path) -> list[str]:
+    """`--members`: add the member output to an existing fixture, touching nothing else.
+
+    Additive on purpose. A full `--write` re-gzips every file and gzip stamps the time
+    into its header, so the whole fixture would show as changed for no change at all.
+    """
+    copied = []
+    for name in member_outputs(run):
+        shutil.copyfile(run / name, RUN_FILES / name)
+        copied.append(name)
+    print(f"  run/: {len(copied)} member output files")
+    return copied
+
+
+def member_curve(output: dict, y_by_node: dict[int, float],
+                 columns: dict[str, tuple[str, int | None]]) -> list[dict[str, float]]:
+    """One reference member output, re-keyed from node id to y and sorted by y.
+
+    The last value of each series, which is the end of the stage; Kratos' reference
+    writes once per stage, so it is also the only one.
+    """
+    rows = []
+    for key, values in output.items():
+        if not key.startswith("NODE_"):
+            continue
+        row = {"y": y_by_node[int(key[len("NODE_"):])]}
+        for column, (variable, component) in columns.items():
+            value = values[variable][-1]
+            row[column] = value if component is None else value[component]
+        rows.append(row)
+    return sorted(rows, key=lambda row: row["y"])
+
+
+def write_expected_members(kratos_tests: pathlib.Path) -> dict:
+    """Kratos' own CROW results along the wall and its interface, for every wall stage.
+
+    The orange line in Kratos' comparison plots ("Kratos - mesh in repository"): the
+    reference deck's `as-is` run, per stage and per member. `expected_wall/` holds the
+    same wall numbers for the four stages Kratos *checks*; this adds the strut stage and
+    the interface, which Kratos only plots, so the Results plot window can be held to
+    every panel of that figure.
+    """
+    validation = kratos_tests / "crow_validation"
+    reference_deck = validation / "common" / "model.mdpa"
+    outputs = validation / "linear_elastic" / "staged_construction" / "as-is"
+    if not reference_deck.exists():
+        raise SystemExit(f"no reference deck at {reference_deck}; pass --kratos-tests")
+
+    nodes = mdpa.parse(reference_deck.read_text(errors="replace")).nodes
+    y_by_node = {node: xyz[1] for node, xyz in nodes.items()}
+    EXPECTED_MEMBERS.mkdir(parents=True, exist_ok=True)
+    written = {}
+    for reference_stage, our_stage in MEMBER_STAGES.items():
+        for member, columns in MEMBER_COLUMNS.items():
+            source = outputs / f"{reference_stage}__output_{member}.json"
+            rows = member_curve(json.loads(source.read_text(encoding="utf-8")),
+                                y_by_node, columns)
+            target = EXPECTED_MEMBERS / f"{our_stage}__{member}.csv"
+            with open(target, "w", newline="") as handle:
+                writer = csv.DictWriter(handle, fieldnames=["y", *columns])
+                writer.writeheader()
+                for row in rows:
+                    writer.writerow({"y": f"{row['y']:.6f}"}
+                                    | {name: f"{row[name]:.6}" for name in columns})
+            written[target.name] = source.name
+            print(f"  expected_members/{target.name}: {len(rows)} points")
+    return {"from": str(outputs), "reference_deck": str(reference_deck),
+            "files": written}
 
 
 PROBES = [
@@ -368,6 +471,9 @@ def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--write", action="store_true",
                         help="actually write the fixture (required)")
+    parser.add_argument("--members", action="store_true",
+                        help="with --write: only add the member output and Kratos' "
+                             "reference member curves, leaving every other file as it is")
     parser.add_argument("--run", type=pathlib.Path,
                         help="the run directory to distil; default is the newest CROW "
                              "run under the runs root")
@@ -384,6 +490,15 @@ def main(argv: list[str]) -> int:
     print(f"run:      {run}")
     print(f"expected: {arguments.kratos_tests}")
 
+    if arguments.members:
+        manifest = json.loads((FIXTURE / "manifest.json").read_text(encoding="utf-8"))
+        manifest["members"] = {"run_files": copy_member_outputs(run),
+                               "expected": write_expected_members(arguments.kratos_tests)}
+        (FIXTURE / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n",
+                                               encoding="utf-8")
+        print(f"wrote the member output into {FIXTURE}")
+        return 0
+
     manifest = {
         "written_by": "tests/make_crow_fixture.py",
         "git_sha": git_sha(),
@@ -391,6 +506,8 @@ def main(argv: list[str]) -> int:
         "expected": write_expected(arguments.kratos_tests),
         "values": write_expected_values(run),
         "javascript": write_js_fixture(run),
+        "members": {"run_files": member_outputs(run),
+                    "expected": write_expected_members(arguments.kratos_tests)},
     }
     (FIXTURE / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n",
                                            encoding="utf-8")

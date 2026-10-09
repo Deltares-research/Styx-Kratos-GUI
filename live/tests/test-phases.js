@@ -356,8 +356,156 @@
     T.eq(App.Phases.hiddenKeys(p, null, 'staged'), []);
   });
 
+  /* ── The Model explorer's checkbox, in Staged construction mode ─────────
+     Ticked means "in the model in the selected phase". Each phase is free to switch
+     any part on or off: a part an earlier phase took out is not stuck out, because the
+     checkbox is there in every phase to put it back. The state is still inherited
+     from the phase before -- that is how Kratos' stages run, one model carried from
+     stage to stage -- so switching a part off in one phase leaves it off in the
+     phases after it until one of them switches it back on. */
+
+  function phaseOf(list, id) {
+    return list.filter(function (ph) { return ph.id === id; })[0];
+  }
+
+  function activeAt(p, id, key) {
+    return App.Phases.activeParts(p, id).indexOf(key) >= 0;
+  }
+
+  test('setActive switches a part off in the selected phase', function () {
+    var p = project();
+    p.phases = App.Phases.setActive(p, 'prop', ['soil_L2'], false);
+    T.ok(!activeAt(p, 'prop', 'soil_L2'));
+  });
+
+  test('a part switched off earlier can be switched back on in a later phase', function () {
+    var p = project();
+    T.ok(!activeAt(p, 'prop', 'soil_L1__lift2'), 'the fixture has it on at prop');
+    p.phases = App.Phases.setActive(p, 'prop', ['soil_L1__lift2'], true);
+    T.ok(activeAt(p, 'prop', 'soil_L1__lift2'));
+    // ...and only from there: the phases before it are untouched.
+    var chain = App.Phases.chainTo(p, 'prop').map(function (ph) { return ph.id; });
+    chain.slice(0, -1).forEach(function (id) {
+      T.eq(activeAt(p, id, 'soil_L1__lift2'), activeAt(project(), id, 'soil_L1__lift2'),
+           id + ' changed');
+    });
+  });
+
+  test('switching a part in one phase changes no phase before it', function () {
+    var before = project();
+    var p = project();
+    p.phases = App.Phases.setActive(p, 'dig_2', ['soil_L2'], false);
+    App.Phases.chainTo(p, 'dig_2').slice(0, -1).forEach(function (ph) {
+      T.eq(JSON.stringify(phaseOf(p.phases, ph.id)),
+           JSON.stringify(phaseOf(before.phases, ph.id)), ph.id + ' was edited');
+    });
+  });
+
+  test('setting a part to the state it already has adds no instruction', function () {
+    var p = project();
+    var before = JSON.stringify(phaseOf(p.phases, 'prop'));
+    p.phases = App.Phases.setActive(p, 'prop', ['soil_L2'], true);
+    T.eq(JSON.stringify(phaseOf(p.phases, 'prop')), before);
+  });
+
+  test('switching back what this phase changed drops its instruction', function () {
+    var p = project();
+    var before = JSON.stringify(phaseOf(p.phases, 'prop'));
+    p.phases = App.Phases.setActive(p, 'prop', ['soil_L2'], false);
+    p.phases = App.Phases.setActive(p, 'prop', ['soil_L2'], true);
+    T.eq(JSON.stringify(phaseOf(p.phases, 'prop')), before);
+  });
+
+  test('a group row sets every part under it at once', function () {
+    var p = project();
+    var keys = ['soil_L2', 'soil_L1__lift2'];
+    p.phases = App.Phases.setActive(p, 'prop', keys, true);
+    keys.forEach(function (key) { T.ok(activeAt(p, 'prop', key), key); });
+    p.phases = App.Phases.setActive(p, 'prop', keys, false);
+    keys.forEach(function (key) { T.ok(!activeAt(p, 'prop', key), key); });
+  });
+
+  test('setActive never puts a part in both lists of one phase', function () {
+    var p = project();
+    ['soil_L2', 'wall', 'anchors', 'soil_L1__lift3'].forEach(function (key) {
+      p.phases = App.Phases.setActive(p, 'dig_2', [key], false);
+      p.phases = App.Phases.setActive(p, 'dig_2', [key], true);
+      var phase = phaseOf(p.phases, 'dig_2');
+      T.eq((phase.activate || []).filter(function (k) {
+        return (phase.deactivate || []).indexOf(k) >= 0;
+      }), [], 'both lists name ' + key);
+    });
+  });
+
+  test('the checkbox state: on, off, or mixed for a group', function () {
+    var p = project();
+    T.eq(App.Phases.stateIn(p, 'prop', ['soil_L2']), 'on');
+    T.eq(App.Phases.stateIn(p, 'prop', ['soil_L1__lift2']), 'off');
+    T.eq(App.Phases.stateIn(p, 'prop', ['soil_L2', 'soil_L1__lift2']), 'mixed');
+  });
+
   test('no selected phase hides nothing', function () {
     T.eq(App.Phases.hiddenKeys(project(), null, 'staged'), []);
     T.eq(App.Phases.hiddenKeys(project(), 'no_such_phase', 'staged'), []);
+  });
+
+  /* ── The Phases overview ───────────────────────────────────────────────
+     The "Phases" window: every phase on one line with how long it lasts and
+     the time reached at its end, and -- beside it -- what the last calculation made
+     of it. The window is DOM (patches.js `phasesDialog`); what it says is here. */
+
+  function dike() {
+    function phase(id, name, parent, calculation, days) {
+      return { id: id, name: name, parent: parent, calculation: calculation,
+               activate: [], deactivate: [], time_interval: days };
+    }
+    return { stageable_parts: [], phases: [
+      phase('1_Initial_stage', 'Initial stage', null, 'K0 procedure', 0),
+      phase('2_Null_step', 'Null step', '1_Initial_stage', 'Null step', 0),
+      phase('3_Slag_1', 'Slag 1', '2_Null_step', 'Plastic', 17),
+      phase('4_Slag_2', 'Slag 2', '3_Slag_1', 'Plastic', 22),
+      phase('5_Kraan', 'Kraan load', '4_Slag_2', 'Plastic', 0.5)
+    ] };
+  }
+
+  test('the overview lists every phase, numbered, in run order', function () {
+    var rows = App.Phases.overview(dike(), null);
+    T.eq(rows.map(function (r) { return r.number; }), [1, 2, 3, 4, 5]);
+    T.eq(rows.map(function (r) { return r.id; }),
+         ['1_Initial_stage', '2_Null_step', '3_Slag_1', '4_Slag_2', '5_Kraan']);
+    T.eq(rows[0].kind, 'K0 procedure');
+  });
+
+  test('T is the time reached at the end of a phase, summed along its chain', function () {
+    var rows = App.Phases.overview(dike(), null);
+    T.eq(rows.map(function (r) { return r.total; }), [0, 0, 17, 39, 39.5]);
+    T.eq(rows[3].interval, 22);
+  });
+
+  test('a row lists its name, duration, T, and its id', function () {
+    var rows = App.Phases.overview(dike(), null);
+    T.eq(rows[3].label, 'Slag 2 - 22 d, T = 39 d [4_Slag_2]');
+    T.eq(rows[4].label, 'Kraan load - 0.5 d, T = 39.5 d [5_Kraan]');
+    T.eq(rows[0].label, 'Initial stage [1_Initial_stage]', 'no time, no times');
+  });
+
+  test('before any calculation every phase says so', function () {
+    App.Phases.overview(dike(), null).forEach(function (row) {
+      T.eq(row.log, 'Not calculated');
+    });
+  });
+
+  test('a finished run marks every phase OK', function () {
+    App.Phases.overview(dike(), { completed: 5 }).forEach(function (row) {
+      T.eq(row.log, 'OK');
+      T.eq(row.state, row.number === 1 ? 'initial' : 'done');
+    });
+  });
+
+  test('a failed run names the phase it stopped in, and nothing after it ran', function () {
+    var rows = App.Phases.overview(dike(), { completed: 2, failed: true });
+    T.eq(rows.map(function (r) { return r.log; }),
+         ['OK', 'OK', 'Failed', 'Not calculated', 'Not calculated']);
+    T.eq(rows[2].state, 'failed');
   });
 })();

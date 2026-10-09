@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import math
 import time
 
 import gmsh
@@ -46,6 +47,11 @@ class MeshModel:
     sections: list[Section]
     log: list[str] = field(default_factory=list)
     meshed_keys: list[str] = field(default_factory=list)
+    parts: list[Section] = field(default_factory=list)
+    """The same mesh cut along part keys, one section per part that owns elements: a
+    soil body's triangles (in 3D, its own skin), or a structure's line segments. What
+    the Model explorer's colour toggle draws, so a user can see which elements are the
+    sheet pile's. `sections` stays the one grey buffer the mesh is normally drawn as."""
 
     def to_dict(self) -> dict:
         return {
@@ -54,6 +60,7 @@ class MeshModel:
             "sections": [section.to_dict() for section in self.sections],
             "log": self.log,
             "meshed_keys": self.meshed_keys,
+            "parts": [section.to_dict() for section in self.parts],
         }
 
 
@@ -145,6 +152,7 @@ def mesh_project(project: Project, element_size: float | None = None,
 
         stats = _stats(time.perf_counter() - started, dim)
         sections = [_boundary_section(finite_element_tags, dim)]
+        parts = _part_sections(project, built, meshed_keys, dim)
         log = built.log + gmsh.logger.get()
     except Exception as error:
         raise MeshingError(f"gmsh could not generate the volume mesh: {error}") from error
@@ -152,7 +160,7 @@ def mesh_project(project: Project, element_size: float | None = None,
         gmsh.logger.stop()
 
     return MeshModel(bbox=built.bbox, stats=stats, sections=sections, log=log,
-                     meshed_keys=list(meshed_keys))
+                     meshed_keys=list(meshed_keys), parts=parts)
 
 
 def _structural_entities(result: build.BuildResult) -> list[tuple[int, int]]:
@@ -330,8 +338,13 @@ def _boundary_section(volume_tags: list[int], dim: int = 3) -> Section:
     exactly one meshed volume. In 2D the meshed faces *are* the payload -- a plane mesh
     has no skin to walk -- so they are emitted directly.
     """
+    surfaces = _boundary_surfaces(volume_tags) if dim == 3 else sorted(volume_tags)
+    return _surface_section("mesh", surfaces, _node_coordinates())
+
+
+def _node_coordinates() -> dict[int, tuple[float, float, float]]:
     node_tags, flat_coordinates, _ = gmsh.model.mesh.getNodes()
-    coordinates = {
+    return {
         int(tag): (
             float(flat_coordinates[3 * index]),
             float(flat_coordinates[3 * index + 1]),
@@ -339,7 +352,211 @@ def _boundary_section(volume_tags: list[int], dim: int = 3) -> Section:
         )
         for index, tag in enumerate(node_tags)
     }
-    section = Section(key="mesh", color=MESH_COLOR)
+
+
+def _part_sections(project: Project, built: build.BuildResult, meshed_keys: list[str],
+                   dim: int) -> list[Section]:
+    """One section per part key that owns elements, in `Project.part_keys` order, then
+    the loads that order leaves out.
+
+    A body is its triangles: the faces it owns in 2D, its own skin in 3D (the skin of
+    that body alone, so a body buried inside the model still has something to draw), and
+    a 3D wall's panels. A structure is its line elements' segments. An interface is one
+    section per face it unglues (`_interface_sections`), and a load is the boundary
+    edges the deck applies it on (`_load_sections`).
+
+    `excavation` is left out: it is an alias for the soil bodies, not a part, and
+    drawing it would paint every soil triangle a second time.
+    """
+    coordinates = _node_coordinates()
+    meshed = set(meshed_keys)
+    interfaces = {interface.id: interface for interface in project.active_interfaces}
+    loads = _load_sections(project, dim, coordinates)
+    keys = project.part_keys()
+    # A layered-soil project draws no load pads, so its loads are not part keys -- but
+    # they are rows in the Model explorer and conditions in the deck all the same.
+    keys = keys + [key for key in loads if key not in keys]
+    # The water level likewise: a row in the Model explorer whenever the project has one,
+    # whether or not the build raises a slab for it.
+    if project.water is not None and "water" not in keys:
+        keys.append("water")
+    sections = []
+    for key in keys:
+        if key == "excavation":
+            continue
+        if key == "water":
+            if project.water is not None:
+                sections.append(_water_section(project, dim))
+            continue
+        if key in loads:
+            sections.append(loads[key])
+            continue
+        if key in interfaces:
+            sections.extend(_interface_sections(interfaces[key], project, built,
+                                                coordinates))
+            continue
+        bodies = built.volumes.get(key, []) if key in meshed else []
+        surfaces = (_boundary_surfaces(bodies) if dim == 3 else sorted(bodies)) \
+            + built.faces.get(key, [])
+        section = _surface_section(key, surfaces, coordinates)
+        for start, end in _line_segments(built.curves.get(key, []), coordinates):
+            section.edges.extend(start + end)
+        _add_tie_segments(section, built.ties.get(key, []))
+        if section.indices or section.edges:
+            sections.append(section)
+    return sections
+
+
+def _water_section(project: Project, dim: int) -> Section:
+    """The phreatic level as lines: across the section in 2D, the outline of the level's
+    plane in 3D. With the slab's own overhang, as the viewport's water line has it
+    (live/js/viewport.js `waterLineSpec`), so the level reads past the model's edges."""
+    water, d = project.water, project.domain
+    x0, x1 = d.x0 - water.margin, d.x1 + water.margin
+    if dim == 2:
+        corners = [(x0, water.y, 0.0), (x1, water.y, 0.0)]
+        pairs = [(corners[0], corners[1])]
+    else:
+        z0, z1 = d.z0 - water.margin, d.z1 + water.margin
+        corners = [(x0, water.y, z0), (x1, water.y, z0), (x1, water.y, z1),
+                   (x0, water.y, z1)]
+        pairs = list(zip(corners, corners[1:] + corners[:1]))
+    section = Section(key="water", color=MESH_COLOR)
+    for start, end in pairs:
+        section.edges.extend(round(value, DECIMALS) for value in start + end)
+    return section
+
+
+INTERFACE_SIDES = {"both": ("L", "R"), "left": ("L",), "right": ("R",)}
+"""The faces an interface unglues, by `Interface.side`, as the suffix of their key."""
+
+SIDE_OFFSET = 0.15
+"""How far each face of an interface is drawn off its line, as a fraction of the
+shortest segment along it. Both faces lie exactly on the line, so drawn there one would
+hide the other; this much is enough to see two and little enough to still read as the
+line."""
+
+
+def _interface_sections(interface, project: Project, built: build.BuildResult,
+                        coordinates: dict[int, tuple[float, float, float]]
+                        ) -> list[Section]:
+    """`<key>:L` and/or `<key>:R`: one section per face the interface unglues.
+
+    The deck has a contact element per face (`app.interfaces`), and which face a user is
+    looking at matters -- one holds the retained soil, the other the excavated side. An
+    interface on a structure owns no curve of its own, so its segments are the
+    structure's. Left is a +90 degree turn from walking the line in its stored order
+    (`schemas.Interface`), so each segment is pushed toward its side using the
+    direction of the leg of that line it lies along, not the direction gmsh happened to
+    build the curve in. The drawn segments are therefore *not* node positions: they are
+    `SIDE_OFFSET` of a segment away from them.
+    """
+    if interface.structure is not None:
+        curves = built.curves.get(interface.structure, [])
+        path = next(beam.points for beam in project.beams
+                    if beam.id == interface.structure)
+    else:
+        curves = built.curves.get(interface.id, [])
+        path = interface.points
+    pieces = _line_segments(curves, coordinates)
+    if not pieces:
+        return []
+    lengths = [math.dist(start, end) for start, end in pieces]
+    offset = SIDE_OFFSET * min(length for length in lengths if length > 0)
+    sections = []
+    for side in INTERFACE_SIDES[interface.side]:
+        sign = 1.0 if side == "L" else -1.0
+        section = Section(key=f"{interface.id}:{side}", color=MESH_COLOR)
+        for start, end in pieces:
+            nx, ny = _left_of(path, start, end)
+            dx, dy = sign * offset * nx, sign * offset * ny
+            section.edges.extend(round(value, DECIMALS) for value in (
+                start[0] + dx, start[1] + dy, start[2], end[0] + dx, end[1] + dy, end[2]))
+        sections.append(section)
+    return sections
+
+
+def _left_of(path: list[tuple[float, float]], start: tuple[float, float, float],
+             end: tuple[float, float, float]) -> tuple[float, float]:
+    """The unit left normal of the leg of `path` a segment lies along: the leg nearest
+    the segment's midpoint."""
+    mx, my = (start[0] + end[0]) / 2, (start[1] + end[1]) / 2
+    best = None
+    for (ax, ay), (bx, by) in zip(path, path[1:]):
+        lx, ly = bx - ax, by - ay
+        length_sq = lx * lx + ly * ly
+        if length_sq == 0:
+            continue
+        along = max(0.0, min(1.0, ((mx - ax) * lx + (my - ay) * ly) / length_sq))
+        distance = math.hypot(ax + along * lx - mx, ay + along * ly - my)
+        if best is None or distance < best[0]:
+            best = (distance, lx, ly)
+    if best is None:
+        return (0.0, 0.0)
+    _, lx, ly = best
+    length = math.hypot(lx, ly)
+    return (-ly / length, lx / length)
+
+
+def _load_sections(project: Project, dim: int,
+                   coordinates: dict[int, tuple[float, float, float]]
+                   ) -> dict[str, Section]:
+    """Each load, as the edges the deck applies it on.
+
+    Asked of `kratos._load_conditions` itself rather than worked out again here, so the
+    line a user sees coloured is exactly the one Kratos is told to load. A point load is
+    one node, drawn as a segment of no length so it still gets its dot. A 3D surface
+    load is drawn by the edges of its faces.
+    """
+    from app import kratos
+
+    out: dict[str, Section] = {}
+    for key, _, rows in kratos._load_conditions(project, dim, coordinates):
+        section = out.setdefault(key, Section(key=key, color=MESH_COLOR))
+        for row in rows:
+            corners = row[:dim]
+            pairs = ([(corners[0], corners[0])] if len(corners) == 1 else
+                     [(corners[0], corners[1])] if len(corners) == 2 else
+                     list(zip(corners, corners[1:] + corners[:1])))
+            for first, second in pairs:
+                for tag in (first, second):
+                    section.edges.extend(round(value, DECIMALS)
+                                         for value in coordinates[tag])
+    return out
+
+
+def _line_segments(curves: list[int], coordinates: dict[int, tuple[float, float, float]]
+                   ) -> list[tuple[tuple[float, float, float], tuple[float, float, float]]]:
+    """Each line element on `curves`, corner to corner, rounded for the payload. A
+    quadratic line's mid node is skipped, the same way a six-node triangle is drawn by
+    its three corners."""
+    out = []
+    for curve in curves:
+        types, _, connectivities = gmsh.model.mesh.getElements(1, curve)
+        for element_type, connectivity in zip(types, connectivities):
+            node_count = gmsh.model.mesh.getElementProperties(int(element_type))[3]
+            for offset in range(0, len(connectivity), node_count):
+                out.append(tuple(
+                    tuple(round(value, DECIMALS) for value in coordinates[int(tag)])
+                    for tag in (connectivity[offset], connectivity[offset + 1])))
+    return out
+
+
+def _add_tie_segments(section: Section, curves: list[int]) -> None:
+    """An anchor is one two-node truss from head to tail whatever the mesh does along
+    its curve (`kratos._anchor_ties`), so it is drawn as that one segment: the curve's
+    two end points."""
+    for curve in curves:
+        ends = gmsh.model.getBoundary([(1, curve)], oriented=False)
+        for _, point in ends[:2]:
+            section.edges.extend(round(float(value), DECIMALS)
+                                 for value in gmsh.model.getValue(0, abs(point), []))
+
+
+def _surface_section(key: str, surfaces: list[int],
+                     coordinates: dict[int, tuple[float, float, float]]) -> Section:
+    """The triangles on `surfaces`, with their unique edges as a wireframe."""
+    section = Section(key=key, color=MESH_COLOR)
     local: dict[int, int] = {}
     unique_edges: set[tuple[int, int]] = set()
 
@@ -349,7 +566,6 @@ def _boundary_section(volume_tags: list[int], dim: int = 3) -> Section:
             section.positions.extend(round(value, DECIMALS) for value in coordinates[tag])
         return local[tag]
 
-    surfaces = _boundary_surfaces(volume_tags) if dim == 3 else sorted(volume_tags)
     for surface in surfaces:
         types, _, connectivities = gmsh.model.mesh.getElements(2, surface)
         for element_type, connectivity in zip(types, connectivities):
