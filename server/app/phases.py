@@ -139,9 +139,30 @@ def _ordinal(n: int) -> str:
 
 
 def default_phases(project: Project) -> list[Phase]:
-    """The sequence a project gets the first time staged construction is opened.
+    """What "Create default phases" gives: the initial stage, then the null step.
 
-    Shaped like the reference deck, because the reference deck is a normal excavation
+    Nothing more. Every further phase -- installing a wall, digging a lift -- is the
+    user's to add, the way a Plaxis project starts from its initial phase. This used to
+    be the whole reference-shaped sequence (`staged_excavation_phases`), and on a new
+    model that produced a "First excavation" which dug nothing: the blank project's
+    placeholder excavation has a level but no soil to remove.
+
+    Nothing is switched off. There is no later phase to switch it back on, and a part
+    that is off in every phase is missing from the deck altogether. `project` is taken
+    for symmetry with `staged_excavation_phases`; the two phases do not depend on it.
+    """
+    return [
+        Phase(id="initial", name="Initial stage", calculation="K0 procedure"),
+        Phase(id="null_step", name="Null step", parent="initial",
+              calculation="Null step", max_iterations=150),
+    ]
+
+
+def staged_excavation_phases(project: Project) -> list[Phase]:
+    """A whole staged-excavation sequence, built from the model: the CROW case's.
+
+    What `app.crow` gives its model, and what `default_phases` used to give every
+    model. Shaped like the reference deck, because the reference deck is a normal excavation
     and the shape generalises: settle the ground, build the wall, then alternate digging
     with propping. For CROW it reproduces all seven stages exactly
     (`tests/test_phases.py`).

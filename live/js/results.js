@@ -15,6 +15,7 @@
        results field <name>    draw it
        results at <node id>    every field at one node
        results bands <n> | smooth | map <name> | deform <f|auto|off>
+       results mesh [on|off]   the element outlines over the shading
        results range auto | <min> <max>
        results csv             the field on screen, as a file
        results files | get <file> | zip     the run directory itself
@@ -69,7 +70,7 @@ App.Results = (function () {
      that the steps mean something. All three are changeable per run, and `results map
      viridis` / `results smooth` are a keystroke away. */
   var DEFAULTS = { map: 'rainbow', bands: 32, deform: 0, reversed: false,
-                   min: null, max: null };
+                   mesh: false, min: null, max: null };
 
   /* The field to draw when a stage is opened and nothing has been asked for, most
      wanted first. Vertical phase displacement is what settles after an excavation
@@ -80,7 +81,7 @@ App.Results = (function () {
 
   var options = {
     map: DEFAULTS.map, bands: DEFAULTS.bands, deform: DEFAULTS.deform,
-    reversed: DEFAULTS.reversed,
+    reversed: DEFAULTS.reversed, mesh: DEFAULTS.mesh,
     /* null means "follow the field". A typed range is kept across a change of stage
        on purpose: a range that re-fits itself every phase makes every phase look
        identical, which is the opposite of what stepping through them is for. */
@@ -184,8 +185,9 @@ App.Results = (function () {
     view = { stage: null, mesh: null, catalogue: null, field: null,
              location: 'nodes', displacement: null };
     options = { map: DEFAULTS.map, bands: DEFAULTS.bands, deform: DEFAULTS.deform,
-                reversed: DEFAULTS.reversed,
+                reversed: DEFAULTS.reversed, mesh: DEFAULTS.mesh,
                 min: DEFAULTS.min, max: DEFAULTS.max };
+    if (App.ResultsPlot) App.ResultsPlot.forget();
     changed();
   }
 
@@ -234,7 +236,7 @@ App.Results = (function () {
       displacement: view.displacement,
       options: {
         map: options.map, bands: options.bands, deform: options.deform,
-        reversed: options.reversed,
+        reversed: options.reversed, mesh: options.mesh,
         min: range.min, max: range.max
       }
     });
@@ -334,7 +336,10 @@ App.Results = (function () {
     'results map <name>      rainbow, turbo, viridis, plasma, inferno, diverging,',
     '                        spectral, blues or greyscale',
     'results reverse         flip the colour ramp end for end',
+    'results mesh [on|off]   draw the element outlines over the shading',
     'results csv             the field on screen, as a file',
+    'results plot [member] [quantity]   M, Q, N, ux, tn, ts along the wall, per phase;',
+    '                        `results plot members` lists them, `plot csv`/`svg` saves',
     'results files / get <file> / zip     the run directory itself'
   ];
 
@@ -718,6 +723,10 @@ App.Results = (function () {
       // of step with the tick beside its own label.
       options.reversed = token === '' ? !options.reversed
                        : !(token === 'off' || token === 'no' || token === 'false');
+    } else if (verb === 'mesh') {
+      // The element outlines over the shading. Toggled and set exactly like `reverse`.
+      options.mesh = token === '' ? !options.mesh
+                   : !(token === 'off' || token === 'no' || token === 'false');
     } else if (verb === 'range') {
       if (token === 'auto' || token === '') { options.min = options.max = null; }
       else {
@@ -743,8 +752,46 @@ App.Results = (function () {
          + ', map ' + options.map + (options.reversed ? ' reversed' : '')
          + ', deformation ' + (options.deform === 'auto' ? 'auto'
                                : options.deform ? '×' + options.deform : 'off')
+         + ', mesh ' + (options.mesh ? 'on' : 'off')
          + ', range ' + (options.min === null ? 'auto' : options.min + ' to ' + options.max)
          + '.';
+  }
+
+  /* The legend's Min and Max boxes, as the `results range` they mean -- or `null`, with
+     the reason logged, when they mean nothing. Both empty is the automatic range; one
+     empty keeps that end where the legend has it now, so typing a single limit does
+     what it looks like it does. A decimal comma is read as a point: half the people
+     reading these numbers write 0,5. */
+  function limitsCommand(minText, maxText) {
+    if (!view.field) {
+      log('err', 'Nothing is on screen yet, so there is no legend to set limits on.');
+      return null;
+    }
+    var typed = [minText, maxText].map(function (text) {
+      return String(text === undefined || text === null ? '' : text).trim();
+    });
+    if (!typed[0] && !typed[1]) return 'results range auto';
+
+    var shown = [options.min === null ? view.field.min : options.min,
+                 options.max === null ? view.field.max : options.max];
+    var limits = [];
+    for (var i = 0; i < 2; i++) {
+      if (!typed[i]) { limits.push(shown[i]); continue; }
+      var text = typed[i].replace(',', '.');
+      var value = /^[-+]?(\d+\.?\d*|\.\d+)(e[-+]?\d+)?$/i.test(text) ? parseFloat(text) : NaN;
+      if (!isFinite(value)) {
+        log('err', '"' + typed[i] + '" is not a number, so it cannot be the legend\'s '
+                   + (i ? 'maximum' : 'minimum') + '.');
+        return null;
+      }
+      limits.push(value);
+    }
+    if (limits[0] === limits[1]) {
+      log('err', 'The minimum and the maximum are both ' + limits[0]
+                 + ' — there would be no colours between them.');
+      return null;
+    }
+    return 'results range ' + limits[0] + ' ' + limits[1];
   }
 
   /* ── Probing and exporting ────────────────────────────────────────────── */
@@ -840,8 +887,10 @@ App.Results = (function () {
     }
     if (verb === 'at') return atNode(parts[2]);
     if (verb === 'csv') return exportCsv();
+    // The wall and interface curves, phase by phase: live/js/results-plot.js.
+    if (verb === 'plot' && App.ResultsPlot) return App.ResultsPlot.command(rest);
     if (verb === 'bands' || verb === 'smooth' || verb === 'map'
-        || verb === 'deform' || verb === 'range'
+        || verb === 'deform' || verb === 'range' || verb === 'mesh'
         || verb === 'reverse' || verb === 'reversed') {
       return setOption(verb, rest);
     }
@@ -859,6 +908,7 @@ App.Results = (function () {
     fileUrl: fileUrl, archiveUrl: archiveUrl, download: download,
     draw: draw, present: present, redraw: redraw,
     options: function () { return options; },
+    limitsCommand: limitsCommand,
     size: size, when: when, runLine: runLine
   };
 })();

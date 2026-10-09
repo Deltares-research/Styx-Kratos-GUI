@@ -992,6 +992,13 @@ class MeshSettings(Base):
     had to be re-typed for every mesh and could not travel in a saved project at all."""
 
 
+class WaterUpdate(Base):
+    """`PUT /api/project/water`: the project's water level, or `None` to remove it.
+    Required rather than defaulted, so an empty body is an error instead of a quiet
+    removal."""
+    water: WaterLevel | None
+
+
 class LayersUpdate(Base):
     layers: list[SoilLayer]
     materials: list[Material] | None = None
@@ -1126,6 +1133,26 @@ class ExportRequest(MeshRequest):
 
 # ── Project ─────────────────────────────────────────────────────────────────
 
+class Deck(Base):
+    """A Kratos deck that already exists on disk, standing in for the parametric model.
+
+    Set by `app.deck.deck_project` for a case that is written as a deck rather than
+    built from layers -- the Eemdijk case, with its twenty stages, three material sets
+    and phreatic multi-lines, none of which this schema can say. The deck is shown as
+    its own mesh and calculated as the files it is; nothing is exported. Every other
+    field of a project carrying one is the empty site `seed.blank_project` is, there
+    because the schema requires it.
+    """
+    directory: str
+    """Absolute. The files the parameters name are read from here."""
+    parameters: str = "ProjectParameters.json"
+    """The orchestrator file, by name inside `directory`. It names everything else."""
+    parts: list[str] = Field(default_factory=list)
+    """The deck's parts that some stage computes on or loads, in the order the stages
+    first name them -- what this project's phases switch on and off (`stageable_keys`).
+    Read off the deck when it is opened, so that validating a project never has to."""
+
+
 class Project(Base):
     name: str = "Deep excavation — Rotterdam Zuid"
 
@@ -1183,13 +1210,19 @@ class Project(Base):
     # translated x/y vector like the three kinds `loads[]` already holds.
     normal_loads: list[NormalLoad] = Field(default_factory=list)
     wells: Wells
-    water: WaterLevel
+    water: WaterLevel | None = None
+    """The phreatic level, or `None` for a model without one -- which is what a new
+    project starts as. A model is not born with a water table at somebody else's depth;
+    it has one when its author sets one. Without it the deck is dry: zero pore pressure,
+    still fixed (`kratos_processes._pore_pressure`)."""
     mesh: MeshSettings = Field(default_factory=MeshSettings)
     custom_parts: list[CustomPart] = Field(default_factory=list)
     phases: list[Phase] = Field(default_factory=list)
     """The construction sequence, in creation order. Empty means an unphased project --
     every project written before staged construction -- which exports exactly what it
     always did. That is the compatibility contract; see `test_export_golden.py`."""
+    deck: Deck | None = None
+    """A deck this project *is*, rather than one it exports. See `Deck`."""
 
     @model_validator(mode="before")
     @classmethod
@@ -1288,6 +1321,29 @@ class Project(Base):
             normalised.append(load)
         migrated["loads"] = normalised
         return migrated
+
+    @model_validator(mode="after")
+    def _water_for_hydrostatic_loads(self) -> Project:
+        """A hydrostatic normal load's pressure is derived from `water` at export time.
+        With no water level there is nothing to derive it from, and quietly writing zero
+        would be a wall with no water against it."""
+        if self.water is None:
+            for load in self.normal_loads:
+                if load.fluid_pressure_type == "Hydrostatic":
+                    raise ValueError(
+                        f"normal load {load.name!r} is hydrostatic, which needs a water "
+                        "level to measure its pressure from; set one, or make the load "
+                        "uniform"
+                    )
+        return self
+
+    @property
+    def water_specific_weight(self) -> float:
+        """kN/m3: the project's own, or `WaterLevel`'s default for a dry model -- the
+        materials still need a unit weight of water for their permeability."""
+        if self.water is not None:
+            return self.water.specific_weight
+        return WaterLevel.model_fields["specific_weight"].default
 
     @model_validator(mode="after")
     def _cross_references(self) -> Project:
@@ -1841,7 +1897,7 @@ class Project(Base):
         return soils + [
             "excavation", "wall", "struts", "anchors", "piles",
         ] + [load.id for load in self.loads] + [n.id for n in self.normal_loads] \
-          + beams + ["water", "wells"] + customs
+          + beams + (["water"] if self.water is not None else []) + ["wells"] + customs
 
     @computed_field
     @property
@@ -1873,6 +1929,9 @@ class Project(Base):
         draw order: `part_keys` feeds tessellation, and a key appearing there makes the
         viewport look for geometry that a load pad in the simple example does not have.
         """
+        if self.deck is not None:
+            # A deck's phases are its stages, and they switch the deck's own parts.
+            return list(self.deck.parts)
         keys = list(self.part_keys())
         seen = set(keys)
         for load in [l.id for l in self.loads] + [n.id for n in self.normal_loads]:

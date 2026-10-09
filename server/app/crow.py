@@ -107,7 +107,7 @@ SECTION_Z = 5.0
 def crow_project(staged: bool = True) -> Project:
     """The CROW model, as this application's user would have built it.
 
-    `staged` fills in `Project.phases` with `phases.default_phases`, which for this
+    `staged` fills in `Project.phases` with `phases.staged_excavation_phases`, which for this
     model reproduces the reference deck's seven stages exactly -- so the export is the
     seven-stage deck `staged_construction_for_generated_mesh.json` is, not a single
     stage of it. Pass `staged=False` for the same geometry with no construction
@@ -263,7 +263,7 @@ def crow_project(staged: bool = True) -> Project:
         return project
     return Project.model_validate(
         project.model_dump()
-        | {"phases": [phase.model_dump() for phase in phases.default_phases(project)]})
+        | {"phases": [phase.model_dump() for phase in phases.staged_excavation_phases(project)]})
 
 
 def export(project: Project | None = None) -> dict:

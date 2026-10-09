@@ -32,6 +32,8 @@ App.Viewport = (function () {
   var groups = {}, boxHelper = null;
   var importedMeshGroup = null;  // a foreign .mdpa's mesh: outside `groups`, so
                                   // rebuildGroups()/refresh() never touches it
+  var importedEyes = {};             // section.key -> false when its eye is off
+  var importedSectionParts = {};     // section.key -> the deck part it draws
   var importedSectionGroups = {};    // section.key -> its own THREE.Group, for the
   var importedSectionBBoxes = {};    // checklist's per-part toggle/frame buttons
   /* section.key -> the payload section itself, kept for its `node_ids` and `elements`:
@@ -169,6 +171,8 @@ App.Viewport = (function () {
     if (!group) return;
     group.traverse(function (o) {
       if (o.geometry) o.geometry.dispose();
+      // A badge's letter is a texture of its own (labelInterfaceFaces).
+      if (o.material && o.material.map) o.material.map.dispose();
       if (o.material) o.material.dispose();
     });
     // The triad has its own scene, so remove from whichever one adopted the group.
@@ -536,7 +540,10 @@ App.Viewport = (function () {
       return { soil: visibleKeys, structures: visibleKeys.concat(loadKeys, memberKeys),
                mesh: visibleKeys.concat(['mesh'], memberKeys),
                flow: visibleKeys.concat(['water']),
-               staged: visibleKeys.concat(memberKeys, ['water']) };
+               // Loads too: Staged construction is where a load is switched on and
+               // off, so it has to be on screen there (`phaseHidden` still hides one
+               // the selected phase has switched off).
+               staged: visibleKeys.concat(loadKeys, memberKeys, ['water']) };
     }
     return {
       soil:       soilKeys.slice(),
@@ -832,6 +839,7 @@ App.Viewport = (function () {
         meshBuilt = false;
         // The geometry moved, so the mesh that was numbered is gone with it.
         generatedLabels = null;
+        forgetNodeParts();
         refreshLabels();
 
         var triangles = payload.sections.reduce(function (n, s) {
@@ -977,7 +985,8 @@ App.Viewport = (function () {
     orbit = new App.Orbit(canvas, {
       tx: frame.center[0], ty: frame.center[1], tz: frame.center[2],
       radius: frame.homeRadius, theta: opening.theta, phi: opening.phi,
-      minRadius: radiusLimits(frame).min, maxRadius: radiusLimits(frame).max,
+      minRadius: radiusLimits(frame, dimension).min,
+      maxRadius: radiusLimits(frame, dimension).max,
       orthoBase: ORTHO_BASE
     });
     orbit.onChange = function () {
@@ -1112,6 +1121,7 @@ App.Viewport = (function () {
       var p = hit ? hit.point : raycaster.ray.intersectPlane(
         pickPlane(dimension), scratch);
       if (p) App.setCoords(p.x, p.y, p.z);
+      hoverImportedNode(ev);
     });
 
     canvas.addEventListener('mouseleave', function () {
@@ -1121,6 +1131,7 @@ App.Viewport = (function () {
 
     canvas.addEventListener('click', function (ev) {
       if (ev.detail === 0) return;
+      if (pickImportedNode(ev)) return;
       var hit = pickAt(ev);
       App.selectObject(hit ? hit.object.userData.key : null, 'viewport');
     });
@@ -1130,6 +1141,28 @@ App.Viewport = (function () {
       var hit = pickAt(ev);
       App.viewportContextMenu(ev, hit ? hit.object.userData.key : null);
     });
+  }
+
+  /* The box around what a group draws. Not `Box3.setFromObject`, which counts hidden
+     children as well: the mesh group holds the coloured-part overlays, hidden until
+     switched on, and the water level's line among them overhangs the model by its
+     margin -- so selecting the mesh drew a box 3 m wider than the mesh on each side.
+     Invisible subtrees are skipped, and so is anything marked `noBounds` (the overlay
+     itself, which is a view of the mesh rather than part of it). */
+  function boundsOf(object) {
+    var box = new THREE.Box3();
+    object.updateMatrixWorld(true);
+    (function walk(o) {
+      if (!o.visible || (o.userData && o.userData.noBounds)) return;
+      if (o.geometry) {
+        if (!o.geometry.boundingBox) o.geometry.computeBoundingBox();
+        if (!o.geometry.boundingBox.isEmpty()) {
+          box.union(o.geometry.boundingBox.clone().applyMatrix4(o.matrixWorld));
+        }
+      }
+      o.children.forEach(walk);
+    })(object);
+    return box;
   }
 
   /* ── Selection ──────────────────────────────────────────────── */
@@ -1146,7 +1179,7 @@ App.Viewport = (function () {
     var box = new THREE.Box3();
     keys.forEach(function (k) {
       setEmissive(k, 0x1f3b70);
-      box.union(new THREE.Box3().setFromObject(groups[k]));
+      box.union(boundsOf(groups[k]));
     });
     if (!box.isEmpty()) {
       boxHelper = new THREE.Box3Helper(box, 0x2f7fe0);
@@ -1195,7 +1228,37 @@ App.Viewport = (function () {
     });
     if (mode === 'mesh' && !meshBuilt && groups.mesh) groups.mesh.visible = false;
     if (selected && !selectedKeys.every(function (k) { return groups[k] && groups[k].visible; })) select(null);
+    // A phase may have switched a part off, and a coloured part follows that.
+    syncPartColors();
+    applyImportedVisibility(mode);
     needsRender = true;
+  }
+
+  /* An imported deck's sections, drawn or not. Outside `groups`, so the pass above
+     never reaches them; this is their pass. Three things decide, and App.Deck (tested
+     headlessly) is the one that combines them: the part's eye, the stage selected on
+     the Staged construction tab -- a deck case's phases are its stages -- and Results,
+     which draws its own contoured copy of the mesh, so the grey one steps aside. */
+  function applyImportedVisibility(mode) {
+    if (!importedMeshGroup) return;
+    importedMeshGroup.visible = mode !== 'results';
+    var active = App.Deck
+      ? App.Deck.activeForView(App.PROJECT, App.state && App.state.phase, mode) : null;
+    Object.keys(importedSectionGroups).forEach(function (key) {
+      importedSectionGroups[key].visible = App.Deck
+        ? App.Deck.sectionShown(importedSectionParts[key], importedEyes[key], active)
+        : importedEyes[key] !== false;
+    });
+    importedPickable = null;
+    refreshLabels();
+    needsRender = true;
+  }
+
+  /* The eye of an imported part: true or false, or undefined for a key with no
+     imported section -- which is how App.ResultsView tells a deck part from anything
+     else. */
+  function importedEye(key) {
+    return importedSectionGroups[key] ? importedEyes[key] !== false : undefined;
   }
 
   function setVisible(key, on) {
@@ -1203,15 +1266,14 @@ App.Viewport = (function () {
       groupKeys[key].forEach(function (k) { setVisible(k, on); });
       return;
     }
-    // An accepted .mdpa part: no mode gates it (it belongs to no project mode, it is
-    // outside `groups` entirely), so the group's own `.visible` is the whole state --
-    // unlike a real part, there is no separate `wanted`/`modeGroups` gate to combine
-    // it with.
+    // An imported .mdpa part: outside `groups`, so its eye is kept on its own and
+    // `applyImportedVisibility` combines it with the selected stage. In Results the
+    // same eye shows and hides that part's contour.
     if (importedSectionGroups[key]) {
-      importedSectionGroups[key].visible = on;
+      importedEyes[key] = on;
+      applyImportedVisibility(App.state && App.state.mode);
       if (!on && selectedKeys.indexOf(key) >= 0) select(null);
-      refreshLabels();
-      needsRender = true;
+      if (App.ResultsView && App.ResultsView.syncVisibility) App.ResultsView.syncVisibility();
       return;
     }
     if (!(key in groups)) return;
@@ -1225,6 +1287,8 @@ App.Viewport = (function () {
     // A hidden mesh has nothing to number: the labels follow the eye, or they float
     // over a part that is no longer there.
     if (key === 'mesh') refreshLabels();
+    // A coloured part follows its own eye: hidden, it is not drawn coloured either.
+    syncPartColors();
     needsRender = true;
   }
 
@@ -1234,7 +1298,7 @@ App.Viewport = (function () {
     if (groupKeys[key]) {
       return groupKeys[key].every(function (k) { return isVisible(k); });
     }
-    if (importedSectionGroups[key]) return importedSectionGroups[key].visible;
+    if (importedSectionGroups[key]) return importedEyes[key] !== false;
     return visible[key] !== false;
   }
 
@@ -1442,6 +1506,7 @@ App.Viewport = (function () {
         wire.userData.noPick = true;
         groups.mesh.add(wire);
       });
+      buildPartColors(result.parts || []);
       scene.add(groups.mesh);
       if (!(('mesh') in visible)) visible.mesh = true;
 
@@ -1449,6 +1514,7 @@ App.Viewport = (function () {
       // Different mesh, different nodes: whatever was numbered before is now numbering
       // a mesh that no longer exists.
       generatedLabels = null;
+      forgetNodeParts();
       App.MESH_STATS = result.stats;
       if (App.Model && App.Model.setMeshStats) App.Model.setMeshStats(result.stats);
       (result.log || []).filter(function (line) { return /warning|error/i.test(line); })
@@ -1458,6 +1524,9 @@ App.Viewport = (function () {
         });
       ui.hide();
       setMode(App.state.mode);
+      // The Model explorer's colour toggles are only drawn for parts that have mesh
+      // elements, so the tree is mounted again now that there are some.
+      if (App.Explorer && App.Explorer.mountTree) App.Explorer.mountTree(App.state.mode);
       needsRender = true;
       // Last, and only if the numbers are on screen: re-numbering means a second trip
       // to the server with its own progress overlay, which must not start under this
@@ -1473,6 +1542,203 @@ App.Viewport = (function () {
 
   function hasMesh() { return meshBuilt; }
 
+  /* ── Which SubModelParts a node is in ──────────────────────────────────
+     The node -> parts index of the deck this project exports (`/api/mesh/node-parts`,
+     built by `App.NodeParts`), fetched the first time it is asked for and kept until
+     the mesh changes -- it costs an export pass, like the labels. `nodePartsLoaded` is
+     the no-fetch read the hover uses, so moving the pointer never starts one. */
+  var nodePartsIndex = null;
+  var nodeMarker = null;
+
+  function nodeParts() {
+    // An imported deck on screen is the deck being asked about.
+    if (importedNodeIndex) return Promise.resolve(importedNodeIndex);
+    if (nodePartsIndex) return Promise.resolve(nodePartsIndex);
+    if (!meshBuilt) {
+      return Promise.reject(new Error('There is no mesh yet. Generate one (mesh, or F9) '
+        + 'first: node numbers come from the deck, and the deck is made from the mesh.'));
+    }
+    var ui = overlay();
+    ui.show('Reading SubModelParts off the deck…', 40);
+    return App.Api.post('/api/mesh/node-parts', meshSettings()).then(function (result) {
+      nodePartsIndex = App.NodeParts.build(result);
+      ui.hide();
+      return nodePartsIndex;
+    }).catch(function (err) {
+      ui.hide();
+      throw err;
+    });
+  }
+
+  function nodePartsLoaded() { return nodePartsIndex; }
+
+  function forgetNodeParts() {
+    nodePartsIndex = null;
+    clearNodeMark();
+  }
+
+  /* A dot on each of `points` ([x, y, z]): the node `node <id>` reported, and the
+     nodes at its position. Drawn over everything, since a node inside the soil is the
+     usual case. One marking at a time. */
+  function markNodes(points) {
+    clearNodeMark();
+    if (!scene || !points.length) return;
+    var geometry = new THREE.BufferGeometry().setFromPoints(points.map(function (p) {
+      return new THREE.Vector3(p[0], p[1], p[2]);
+    }));
+    nodeMarker = new THREE.Points(geometry, new THREE.PointsMaterial({
+      color: 0xe6194b, size: 11, sizeAttenuation: false, depthTest: false
+    }));
+    nodeMarker.renderOrder = 30;
+    nodeMarker.userData.noPick = true;
+    scene.add(nodeMarker);
+    needsRender = true;
+  }
+
+  function clearNodeMark() {
+    if (!nodeMarker) return;
+    disposeGroup(nodeMarker);
+    nodeMarker = null;
+    needsRender = true;
+  }
+
+  /* ── Parts in a colour of their own ────────────────────────────────────
+     The grey mesh is one sheet. `result.parts` is the same mesh cut along part keys
+     (server/app/meshing.py `_part_sections`), and each part is built here once, hidden,
+     inside the mesh group -- so it lives and dies with the mesh, and is only ever on
+     screen where the mesh is (Mesh mode, mesh eye on). `App.PartColors` decides which
+     are switched on; `syncPartColors` shows exactly those that are also shown by their
+     own eye and built by the selected phase.
+
+     A body is a tinted fill over the grey, with its own wireframe on top. A structure
+     is its segments plus a dot on every node: a one-pixel line in a dense mesh is easy
+     to lose, and the dots are the part's nodes, which is what it is being looked at
+     for. */
+  var meshPartKeys = [];
+  var meshPartGroups = {};
+
+  function buildPartColors(parts) {
+    meshPartGroups = {};
+    meshPartKeys = parts.map(function (section) { return section.key; });
+    // The server sends them in `Project.part_keys` order, so a part keeps its colour
+    // across a re-mesh that adds a structure after it.
+    var palette = App.PartColors ? App.PartColors.colors(meshPartKeys) : {};
+    var holder = new THREE.Group();
+    holder.name = 'meshParts';
+    // A view of the mesh, not part of it: never in a selection box (`boundsOf`).
+    holder.userData.noBounds = true;
+    parts.forEach(function (section) {
+      var colour = new THREE.Color(palette[section.key] || '#e6194b');
+      var group = new THREE.Group();
+      group.name = 'meshPart:' + section.key;
+      group.visible = false;
+      if (section.indices.length) {
+        var fill = new THREE.Mesh(App.Buffers.geometry(section), new THREE.MeshBasicMaterial({
+          color: colour, transparent: true, opacity: 0.8, side: THREE.DoubleSide,
+          // In front of the grey mesh (which sits at +1), behind the lines (at 0).
+          polygonOffset: true, polygonOffsetFactor: 0.5, polygonOffsetUnits: 0.5
+        }));
+        fill.userData.noPick = true;
+        group.add(fill);
+        if (section.edges.length) {
+          var wire = new THREE.LineSegments(App.Buffers.edges(section),
+            new THREE.LineBasicMaterial({ color: 0x263238 }));
+          wire.userData.noPick = true;
+          group.add(wire);
+        }
+      } else if (section.edges.length) {
+        var lines = new THREE.LineSegments(App.Buffers.edges(section),
+          new THREE.LineBasicMaterial({ color: colour, depthTest: false }));
+        lines.renderOrder = 10;
+        lines.userData.noPick = true;
+        group.add(lines);
+        var dots = new THREE.Points(App.Buffers.edges(section), new THREE.PointsMaterial({
+          color: colour, size: 6, sizeAttenuation: false, depthTest: false
+        }));
+        dots.renderOrder = 11;
+        dots.userData.noPick = true;
+        group.add(dots);
+      }
+      meshPartGroups[section.key] = group;
+      holder.add(group);
+    });
+    labelInterfaceFaces(parts, palette);
+    groups.mesh.add(holder);
+    if (App.PartColors) App.PartColors.on.keep(meshPartKeys);
+    syncPartColors();
+  }
+
+  /* An interface's two faces lie on one line, drawn a hair apart toward their own
+     sides (meshing.py `_interface_sections`). A round L or R badge in the face's colour
+     says which is which. With both faces present the badge goes a little further out
+     than its line, away from the other face; a lone face is labelled where it is. */
+  function labelInterfaceFaces(parts, palette) {
+    if (!App.PartColors || typeof document === 'undefined') return;
+    var middles = {};
+    parts.forEach(function (section) {
+      if (!App.PartColors.sideOf(section.key) || !section.edges.length) return;
+      var segments = section.edges.length / 6;
+      var at = Math.floor(segments / 2) * 6;
+      var e = section.edges;
+      middles[section.key] = new THREE.Vector3((e[at] + e[at + 3]) / 2,
+                                               (e[at + 1] + e[at + 4]) / 2,
+                                               (e[at + 2] + e[at + 5]) / 2);
+    });
+    Object.keys(middles).forEach(function (key) {
+      var side = App.PartColors.sideOf(key);
+      var other = App.PartColors.baseOf(key) + ':' + (side === 'L' ? 'R' : 'L');
+      var at = middles[key].clone();
+      if (middles[other]) at.add(middles[key].clone().sub(middles[other]).multiplyScalar(2));
+      var badge = letterBadge(side, palette[key] || '#e6194b');
+      badge.position.copy(at);
+      meshPartGroups[key].add(badge);
+    });
+  }
+
+  function letterBadge(letter, colour) {
+    var canvas = document.createElement('canvas');
+    canvas.width = canvas.height = 64;
+    var ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.beginPath();
+    ctx.arc(32, 32, 28, 0, 2 * Math.PI);
+    ctx.fill();
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = colour;
+    ctx.stroke();
+    ctx.fillStyle = colour;
+    ctx.font = 'bold 34px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(letter, 32, 34);
+    var sprite = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: new THREE.CanvasTexture(canvas), depthTest: false, sizeAttenuation: false
+    }));
+    // A fixed size on screen, whatever the zoom: about 3.5% of the viewport's height.
+    sprite.scale.set(0.035, 0.035, 1);
+    sprite.renderOrder = 12;
+    sprite.userData.noPick = true;
+    return sprite;
+  }
+
+  function syncPartColors() {
+    if (!App.PartColors) return;
+    var hidden = phaseHidden();
+    var drawn = App.PartColors.drawn(meshPartKeys, App.PartColors.on, function (key) {
+      return isVisible(key) && !hidden[key];
+    });
+    Object.keys(meshPartGroups || {}).forEach(function (key) {
+      meshPartGroups[key].visible = drawn.indexOf(key) >= 0;
+    });
+    needsRender = true;
+  }
+
+  function partColor(key) {
+    return App.PartColors ? App.PartColors.colors(meshPartKeys)[key] : null;
+  }
+
+  function coloredPartKeys() { return meshBuilt ? meshPartKeys.slice() : []; }
+
   /* A previewed .mdpa: drawn straight into the scene, not into `groups`, because it is
      not part of the project -- a project refresh() must not touch it. Its own parts
      are still reachable by key from the Model explorer's "Imported mesh" node
@@ -1482,7 +1748,12 @@ App.Viewport = (function () {
   function clearImportedMesh() {
     disposeGroup(importedMeshGroup);
     importedMeshGroup = null;
+    importedNodeIndex = null;
+    importedPickable = null;
+    forgetPickedNode();
     importedSectionGroups = {};
+    importedEyes = {};
+    importedSectionParts = {};
     importedSectionBBoxes = {};
     importedSectionLabels = {};
     delete groupKeys['group:imported'];
@@ -1561,12 +1832,19 @@ App.Viewport = (function () {
       }
       importedMeshGroup.add(group);
       importedSectionGroups[section.key] = group;
+      importedSectionParts[section.key] = section.part || null;
       if (section.bbox) importedSectionBBoxes[section.key] = section.bbox;
       if (section.node_ids || section.elements) importedSectionLabels[section.key] = section;
     });
+    if (model.node_parts && App.NodeParts) {
+      importedNodeIndex = App.NodeParts.build(model.node_parts);
+      Object.keys(importedSectionGroups).forEach(function (key) {
+        var dots = importedNodeDots(importedSectionLabels[key]);
+        if (dots) importedSectionGroups[key].add(dots);
+      });
+    }
     scene.add(importedMeshGroup);
-    refreshLabels();
-    needsRender = true;
+    applyImportedVisibility(App.state && App.state.mode);
 
     if (orbit && model.bbox) {
       var bounds = App.Buffers.bounds(model.bbox);
@@ -1577,11 +1855,186 @@ App.Viewport = (function () {
 
   function hasImportedMesh() { return !!importedMeshGroup; }
 
+  /* ── Picking a node of an imported deck ────────────────────────────────
+     The first part of the Imported mesh feature, after Node_ViZ and Deltares'
+     visualize_mdpa_project.py: the nodes are drawn, a click on one selects it, and the
+     Selection explorer says which SubModelParts it is in -- and which parts hold every
+     other node at its position, which is how the two sides of an interface are told
+     apart. The hover says the same in one line in the status bar.
+
+     Picked on screen (`App.NodeParts.pickOnScreen`): a node is "clicked" when it is
+     within PICK_PX pixels of the pointer, at any zoom and in 2D and 3D alike. A click
+     further from every node is an ordinary click. Only the nodes of the parts that are
+     shown can be picked. */
+  var PICK_PX = 8;
+  /* Overlapping nodes -- an interface split leaves two or three at one point -- are
+     fanned around it on screen, FAN_PX out, each on a leader line, so each can be
+     clicked (Node_ViZ's way). The angles are the node labels' own (mesh-labels.js
+     `fanOffsets`), so a dot sits under its own number; FAN_PX is shorter than the
+     labels' 24 so the number stays clear of the dot. A point fans only when the next
+     position is at least FAN_ROOM_PX away on screen: zoomed out it stays one dot. */
+  var FAN_PX = 14;
+  var FAN_ROOM_PX = 3 * FAN_PX;
+  var nodeFanCanvas = null;
+  var importedNodeIndex = null;
+  var importedPickable = null;     // {id: true} for the shown parts, rebuilt on demand
+  var pickedNode = null;
+
+  /* Each part's own nodes as dots, inside that part's group, so hiding the part hides
+     them and they are drawn only where the part is. */
+  function importedNodeDots(section) {
+    if (!section || !section.node_ids || !importedNodeIndex) return null;
+    var points = [];
+    section.node_ids.forEach(function (id) {
+      var c = importedNodeIndex.coords[id];
+      if (c) points.push(new THREE.Vector3(c[0], c[1], c[2]));
+    });
+    if (!points.length) return null;
+    var dots = new THREE.Points(new THREE.BufferGeometry().setFromPoints(points),
+      new THREE.PointsMaterial({ color: 0x263238, size: 4, sizeAttenuation: false }));
+    dots.renderOrder = 5;
+    dots.userData.noPick = true;
+    return dots;
+  }
+
+  function pickableNodes() {
+    if (importedPickable) return importedPickable;
+    importedPickable = {};
+    Object.keys(importedSectionGroups).forEach(function (key) {
+      if (!importedSectionGroups[key].visible) return;
+      var section = importedSectionLabels[key];
+      ((section && section.node_ids) || []).forEach(function (id) {
+        importedPickable[id] = true;
+      });
+    });
+    return importedPickable;
+  }
+
+  function projectNode(xyz) { return projectToScreen(xyz[0], xyz[1], xyz[2]); }
+
+  function fanOffsets(count) {
+    return App.MeshLabels ? App.MeshLabels.fanOffsets(count, FAN_PX) : null;
+  }
+
+  function nodeUnderPointer(ev) {
+    if (!importedNodeIndex || !importedMeshGroup || !importedMeshGroup.visible) return null;
+    var r = canvas.getBoundingClientRect();
+    var click = { x: ev.clientX - r.left, y: ev.clientY - r.top };
+    return App.NodeParts.pickOnScreen(importedNodeIndex, projectNode, click, PICK_PX,
+                                      pickableNodes(), fanOffsets, FAN_ROOM_PX);
+  }
+
+  /* The fans, painted over the frame just drawn with its camera -- the offsets are
+     pixels, so they have to be worked out again whenever the view moves. The picked
+     node is red, the rest dark, each on a leader line back to the shared point. */
+  function paintNodeFans() {
+    var shown = importedNodeIndex && importedMeshGroup && importedMeshGroup.visible
+                && App.NodeParts && host;
+    if (!shown) {
+      if (nodeFanCanvas) nodeFanCanvas.hidden = true;
+      return;
+    }
+    if (!nodeFanCanvas) {
+      nodeFanCanvas = document.createElement('canvas');
+      nodeFanCanvas.className = 'vp-node-fans';
+      host.appendChild(nodeFanCanvas);
+    }
+    var ratio = window.devicePixelRatio || 1;
+    var width = host.clientWidth, height = host.clientHeight;
+    if (nodeFanCanvas.width !== Math.round(width * ratio)
+        || nodeFanCanvas.height !== Math.round(height * ratio)) {
+      nodeFanCanvas.width = Math.round(width * ratio);
+      nodeFanCanvas.height = Math.round(height * ratio);
+    }
+    nodeFanCanvas.hidden = false;
+    var ctx = nodeFanCanvas.getContext('2d');
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+    ctx.clearRect(0, 0, width, height);
+    var fanned = App.NodeParts.screenTargets(importedNodeIndex, projectNode, fanOffsets,
+                                             pickableNodes(), FAN_ROOM_PX)
+      .filter(function (target) {
+        return target.fanned && target.ax > -FAN_PX && target.ax < width + FAN_PX
+               && target.ay > -FAN_PX && target.ay < height + FAN_PX;
+      });
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = 'rgba(38, 50, 56, 0.7)';
+    fanned.forEach(function (target) {
+      ctx.beginPath();
+      ctx.moveTo(target.ax, target.ay);
+      ctx.lineTo(target.x, target.y);
+      ctx.stroke();
+    });
+    fanned.forEach(function (target) {
+      ctx.beginPath();
+      ctx.arc(target.x, target.y, 4, 0, 2 * Math.PI);
+      ctx.fillStyle = target.id === pickedNode ? '#e6194b' : '#263238';
+      ctx.fill();
+      ctx.lineWidth = 1.5;
+      ctx.strokeStyle = '#ffffff';
+      ctx.stroke();
+    });
+  }
+
+  function pickImportedNode(ev) {
+    var id = nodeUnderPointer(ev);
+    if (id === null) {
+      forgetPickedNode();
+      return false;
+    }
+    showNode(id);
+    return true;
+  }
+
+  function hoverImportedNode(ev) {
+    if (!importedNodeIndex) return;
+    var id = nodeUnderPointer(ev);
+    if (id === null) {
+      canvas.style.cursor = hovered ? 'pointer' : '';
+      return;
+    }
+    canvas.style.cursor = 'pointer';
+    var hint = document.getElementById('sb-hint');
+    if (hint) hint.textContent = App.NodeParts.hint(importedNodeIndex, id);
+  }
+
+  /* Select node `id` of the imported deck: mark it and the nodes at its position, and
+     put what it is in into the Selection explorer. Also what `node <id>` does while an
+     imported deck is shown. */
+  function showNode(id) {
+    if (!importedNodeIndex || !App.NodeParts.partsOf(importedNodeIndex, id)) return false;
+    pickedNode = id;
+    needsRender = true;
+    select(null);
+    markNodes(App.NodeParts.samePosition(importedNodeIndex, id).map(function (other) {
+      return importedNodeIndex.coords[other];
+    }));
+    App.OBJECT_PROPS = App.OBJECT_PROPS || {};
+    App.OBJECT_PROPS['node:' + id] = App.NodeParts.selectionProps(importedNodeIndex, id);
+    if (App.Explorer && App.Explorer.mountSelection) App.Explorer.mountSelection('node:' + id);
+    if (App.Command && App.Command.note) {
+      App.Command.note(App.NodeParts.hint(importedNodeIndex, id));
+    }
+    return true;
+  }
+
+  function forgetPickedNode() {
+    if (pickedNode === null) return;
+    if (App.OBJECT_PROPS) delete App.OBJECT_PROPS['node:' + pickedNode];
+    pickedNode = null;
+    needsRender = true;
+    clearNodeMark();
+  }
+
+  function importedNodes() { return importedNodeIndex; }
+
   /* Drops one section entirely -- what "Accept" does with a part the checklist left
      unchecked: not merely hidden, gone, the same as if it had never been drawn. */
   function removeImportedSection(key) {
+    importedPickable = null;
     disposeGroup(importedSectionGroups[key]);
     delete importedSectionGroups[key];
+    delete importedEyes[key];
+    delete importedSectionParts[key];
     delete importedSectionBBoxes[key];
     delete importedSectionLabels[key];
     refreshLabels();
@@ -1642,14 +2095,24 @@ App.Viewport = (function () {
   var MIN_RADIUS_FRACTION = 0.08;
   var MAX_RADIUS_FACTOR = 6;
 
-  function radiusLimits(frame) {
+  /* A 2D section is seen through the orthographic camera, whose near plane sits far
+     behind the model, so nothing clips however close it gets -- and an imported deck
+     crowds dozens of nodes into the last few centimetres beside a sheet pile, which
+     12.5x of a 70 m section still showed as one smear. 0.0002 is 5000x: about a
+     centimetre across the viewport on that section. 3D keeps the floor above, which
+     keeps the perspective camera's near plane (0.5) out of the model. */
+  var MIN_RADIUS_FRACTION_2D = 0.0002;
+
+  function radiusLimits(frame, dim) {
     var home = (frame && frame.homeRadius) || ORTHO_HALF_HEIGHT;
-    return { min: home * MIN_RADIUS_FRACTION, max: home * MAX_RADIUS_FACTOR };
+    var fraction = (dim === undefined ? dimension : dim) === 2
+      ? MIN_RADIUS_FRACTION_2D : MIN_RADIUS_FRACTION;
+    return { min: home * fraction, max: home * MAX_RADIUS_FACTOR };
   }
 
   function applyRadiusLimits() {
     if (!orbit || !frame) return;
-    var limits = radiusLimits(frame);
+    var limits = radiusLimits(frame, dimension);
     orbit.minRadius = limits.min;
     orbit.maxRadius = limits.max;
     orbit.radius = Math.max(limits.min, Math.min(limits.max, orbit.radius));
@@ -1815,6 +2278,7 @@ App.Viewport = (function () {
     // on the next tick.
     resetReferenceGrid();
     fillTriad();                   // the axes shown depend on the mode
+    applyRadiusLimits();           // so does how close the wheel may get
     resize();                      // the frustum depends on the mode
     setView(activeView);
     needsRender = true;
@@ -1865,6 +2329,7 @@ App.Viewport = (function () {
     syncRulers();                          // same: the visible rectangle is known here
     renderer.render(scene, cam);
     syncLabels();                          // over the frame just drawn, with its camera
+    paintNodeFans();                       // likewise: the fans are in pixels
 
     if (triadRenderer) {
       triadCam.position.copy(cam.position).sub(orbit.target).normalize().multiplyScalar(4);
@@ -1900,7 +2365,13 @@ App.Viewport = (function () {
     refreshLabels: refreshLabels, syncLabels: syncLabels,
     projectToScreen: projectToScreen,
     showImportedMesh: showImportedMesh, clearImportedMesh: clearImportedMesh,
+    syncPartColors: syncPartColors, coloredPartKeys: coloredPartKeys, partColor: partColor,
+    boundsOf: boundsOf,
+    nodeParts: nodeParts, nodePartsLoaded: nodePartsLoaded, markNodes: markNodes,
+    showNode: showNode, importedNodes: importedNodes,
+    clearNodeMark: clearNodeMark,
     hasImportedMesh: hasImportedMesh, removeImportedSection: removeImportedSection,
+    importedEye: importedEye,
     setImportedGroupKeys: setImportedGroupKeys, importedLineOrder: importedLineOrder,
     frameImportedSection: frameImportedSection,
     // js/viewport.js rebuilds its soil boxes from App.LAYERS client-side. Here the soil
