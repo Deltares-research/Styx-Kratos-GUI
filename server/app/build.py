@@ -418,12 +418,14 @@ def _build_display_only(project: Project, dim: int = 3,
     # that used to be built here stood proud of the model -- a bar lying on top of the
     # loaded face rather than a load applied to it.
 
+    built = dict(loads)
     wa = p.water
-    water = gmsh.model.occ.addBox(
-        d.x0 - wa.margin, wa.y - wa.thickness / 2, d.z0 - wa.margin,
-        d.dx + 2 * wa.margin, wa.thickness, d.dz + 2 * wa.margin,
-    )
-    built = {**loads, "water": [water]}
+    # A dry model has no level to draw.
+    if wa is not None:
+        built["water"] = [gmsh.model.occ.addBox(
+            d.x0 - wa.margin, wa.y - wa.thickness / 2, d.z0 - wa.margin,
+            d.dx + 2 * wa.margin, wa.thickness, d.dz + 2 * wa.margin,
+        )]
     if dim == 3:
         return built
 

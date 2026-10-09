@@ -113,6 +113,22 @@ def mesh_labels_job(project_json: str, settings_json: str) -> dict:
             "stats": result["stats"]}
 
 
+def node_parts_job(project_json: str, settings_json: str) -> dict:
+    """Which SubModelParts each node of the deck this project would export is in.
+
+    The whole export runs, like `mesh_labels_job`, because the deck is the only thing
+    that knows both a node's Kratos number and the parts that name it; the answer is
+    read back off the `.mdpa` text so it is the deck's own (`app.node_parts`).
+    """
+    from app import kratos, node_parts
+    from app.schemas import MeshRequest, Project
+
+    project = Project.model_validate_json(project_json)
+    settings = MeshRequest.model_validate_json(settings_json)
+    result = kratos.export_project(project, settings, include_materials=False)
+    return node_parts.node_parts(result["mdpa"])
+
+
 def import_job(filepath: str, extension: str) -> dict:
     from app import importer
     return importer.process_import(filepath, extension)

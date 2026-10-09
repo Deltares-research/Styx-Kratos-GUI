@@ -33,6 +33,13 @@ import pytest
 FIXTURE = pathlib.Path(__file__).resolve().parent / "fixtures" / "crow_run"
 RUN_FILES = FIXTURE / "run"
 EXPECTED_WALL = FIXTURE / "expected_wall"
+EXPECTED_MEMBERS = FIXTURE / "expected_members"
+"""Kratos' own CROW run along the wall and its interface, per stage, keyed by y -- the
+orange line of Kratos' comparison plots. See `make_crow_fixture.write_expected_members`."""
+
+MEMBER_STAGES = ["3_SheetPileWall_installation", "4_First_excavation",
+                 "5_Strut_installation", "6_Second_excavation", "7_Third_excavation"]
+"""Every stage with a wall, and so with member output committed for it."""
 
 RUN_ID = "CROW_excavation_wall_2026-09-22_16-28"
 """The expanded directory's name. It has to parse as a run id (`results.RUN_NAME`), and

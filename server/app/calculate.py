@@ -254,13 +254,33 @@ def run(export: dict) -> dict:
     A failed *analysis* is a result, not an exception: only a calculation that could not
     be started at all raises.
     """
-    global _running
     if _running:
         raise Busy("A calculation is already running.")
-
     python, environment = interpreter()
     directory = new_run_directory(export["deck_name"])
-    inputs = write_deck(export, directory)
+    return _execute(python, environment, directory, write_deck(export, directory))
+
+
+def run_deck(deck) -> dict:
+    """Run a deck that already exists (`app.deck`) rather than one exported here.
+
+    The same run in every way that matters -- a directory of its own, the same runner,
+    the same answer -- except that its inputs are copied from where the deck lives
+    instead of written from an export. `deck` is a `schemas.Deck`.
+    """
+    from app import deck as decks
+
+    if _running:
+        raise Busy("A calculation is already running.")
+    python, environment = interpreter()
+    directory = new_run_directory(decks.deck_name(deck))
+    return _execute(python, environment, directory, decks.stage(deck, directory))
+
+
+def _execute(python: str, environment: dict[str, str], directory: Path,
+             inputs: list[str]) -> dict:
+    """Run the deck already written into `directory`, and say what happened."""
+    global _running
     before = _contents(directory)
 
     _running = True

@@ -3,7 +3,9 @@
 The modeller's command line takes `run <file.py>`, and this is what that runs. The file
 is ordinary Python that hands back a `Project`; the server executes it, adopts what it
 returns and the model appears in the viewport. `examples/crow/crow.py` is one, and is the worked
-example to copy.
+example to copy. `examples/eemdijk/eemdijk.py` is the other kind: it builds nothing, and
+names a finished Kratos deck instead (`app.deck.deck_project`), which opens with its own
+mesh and is calculated as the files it already is.
 
 A script says what it built in one of three ways, looked for in this order:
 

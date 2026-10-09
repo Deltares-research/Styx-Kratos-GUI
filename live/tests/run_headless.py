@@ -50,6 +50,42 @@ SUITES = {
         [TESTS / "fixtures" / "crow-field.js", JS / "results-render.js"],
         TESTS / "test-results-render.js",
     ),
+    # The Model explorer's colour toggle and the `colour` command. The toggle and the
+    # mesh drawing are DOM; which parts are on, in which colour, is not.
+    "part-colors": (
+        [JS / "part-colors.js"],
+        TESTS / "test-part-colors.js",
+    ),
+    # `water <level>` / `water off`: what was asked and what to send. The request and
+    # the redraw are patches.js's.
+    "water": (
+        [JS / "water-command.js"],
+        TESTS / "test-water-command.js",
+    ),
+    # `node <id>`, the right-click "which parts is this node in" and the hover: the
+    # node -> parts index and the text. The fetch, the marker and the menu are DOM.
+    "node-parts": (
+        [JS / "node-parts.js"],
+        TESTS / "test-node-parts.js",
+    ),
+    # The Mesh properties dialog: its settings, validation and when the Mesh tab opens
+    # it. The dialog itself is DOM, built only when `open()` runs.
+    "mesh-settings": (
+        [JS / "mesh-settings.js"],
+        TESTS / "test-mesh-settings.js",
+    ),
+    # `run <case.py>` for a deck case: whether its mesh came along, the Model explorer
+    # rows and the log line. Showing it and switching to the Mesh tab are DOM.
+    "deck": (
+        [JS / "phases.js", JS / "deck.js"],
+        TESTS / "test-deck.js",
+    ),
+    # `results plot` and the figure it draws: the wall and interface curves per stage.
+    # results.js comes along because it is what routes the command here.
+    "results-plot": (
+        [JS / "results-render.js", JS / "results.js", JS / "results-plot.js"],
+        TESTS / "test-results-plot.js",
+    ),
     "results": (
         # calculate.js comes along because the handoff between the two is the whole of
         # task P0.4: what Calculate just wrote has to become the run `results` opens.

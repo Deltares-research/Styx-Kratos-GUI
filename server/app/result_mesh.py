@@ -40,6 +40,17 @@ T6_SUBTRIANGLES = ((0, 3, 5), (3, 1, 4), (5, 4, 2), (3, 4, 5))
 """How a six-node triangle splits. Corners 0,1,2; mid-sides 3 = (0,1), 4 = (1,2),
 5 = (2,0), which is Kratos' own ordering. Three corner triangles and the middle one."""
 
+Q8_SUBTRIANGLES = ((0, 4, 7), (4, 1, 5), (5, 2, 6), (7, 6, 3), (4, 5, 6), (4, 6, 7))
+"""How an eight-node quadrilateral splits, for the reason a six-node triangle does:
+corners 0-3, mid-sides 4 = (0,1), 5 = (1,2), 6 = (2,3), 7 = (3,0), as Kratos orders
+them. A triangle at each corner, and the inner quad of mid-sides as two more. Every
+node the solver computed is a vertex, and the outline (`outline_of`) runs through the
+mid-sides on vertices the shading has."""
+
+Q9_SUBTRIANGLES = ((0, 4, 8), (4, 1, 8), (1, 5, 8), (5, 2, 8),
+                   (2, 6, 8), (6, 3, 8), (3, 7, 8), (7, 0, 8))
+"""A nine-node quadrilateral: the same eight boundary nodes, fanned around the centre."""
+
 COLORS = {
     "continuum": "#b6ac97",
     "beam": "#4a6fa5",
@@ -71,12 +82,39 @@ def triangles_of(connectivity: list[int], nnode: int, element_type: str,
             return [[connectivity[i] for i in triple] for triple in T6_SUBTRIANGLES]
         return [connectivity[:3]]
     if kind.startswith("quad"):
-        # Two triangles across the quad's own diagonal; mid-side nodes ignored, as in
-        # 3D, because this project does not export quads and an untested subdivision
-        # is worse than a coarse one.
+        if nnode >= 9 and len(connectivity) >= 9:
+            return [[connectivity[i] for i in triple] for triple in Q9_SUBTRIANGLES]
+        if nnode >= 8 and len(connectivity) >= 8:
+            return [[connectivity[i] for i in triple] for triple in Q8_SUBTRIANGLES]
+        # Two triangles across the quad's own diagonal.
         corners = connectivity[:4]
         return [[corners[0], corners[1], corners[2]], [corners[0], corners[2], corners[3]]]
     return []
+
+
+def outline_of(connectivity: list[int], nnode: int,
+               element_type: str) -> list[tuple[int, int]]:
+    """One surface element's own sides, as node pairs -- what `results mesh on` draws.
+
+    Not the triangles it is shaded with: a six-node triangle is shaded as four and an
+    eight-node quadrilateral as two, and neither the inner edges nor the diagonal is a
+    side. A quadratic side goes corner, mid-side, corner (Kratos puts the corners first,
+    then the mid-sides in the same order), so the outline bends with the deformed mesh
+    exactly as the shading does. Anything that is not a 2D surface element has none.
+    """
+    kind = element_type.lower()
+    corners = 3 if kind.startswith("tri") else 4 if kind.startswith("quad") else 0
+    if not corners or len(connectivity) < corners:
+        return []
+    out: list[tuple[int, int]] = []
+    for side in range(corners):
+        a, b = connectivity[side], connectivity[(side + 1) % corners]
+        if nnode >= 2 * corners and len(connectivity) >= 2 * corners:
+            middle = connectivity[corners + side]
+            out += [(a, middle), (middle, b)]
+        else:
+            out.append((a, b))
+    return out
 
 
 def edges_of(connectivity: list[int], nnode: int, element_type: str) -> list[tuple[int, int]]:
@@ -111,7 +149,7 @@ def stage_sections(model: MdpaModel, mesh: GidMesh) -> dict:
         for element, connectivity in block.elements.items():
             name = owner.get(element, UNCLAIMED)
             bucket = grouped.setdefault(
-                name, {"triangles": [], "edges": [], "kind": None,
+                name, {"triangles": [], "edges": [], "kind": None, "outline": [],
                        "triangle_elements": [], "edge_elements": []})
             made = triangles_of(connectivity, block.nnode, block.element_type,
                                 mesh.dimension)
@@ -121,6 +159,9 @@ def stage_sections(model: MdpaModel, mesh: GidMesh) -> dict:
             # the n-th element, and a viewer colouring a per-element field by position
             # would smear each value across four neighbours.
             bucket["triangle_elements"] += [element] * len(made)
+            if mesh.dimension == 2:
+                bucket["outline"] += outline_of(connectivity, block.nnode,
+                                                block.element_type)
             segments = edges_of(connectivity, block.nnode, block.element_type)
             bucket["edges"] += segments
             bucket["edge_elements"] += [element] * len(segments)
@@ -145,6 +186,11 @@ def stage_sections(model: MdpaModel, mesh: GidMesh) -> dict:
             triangles=bucket["triangles"], edges=bucket["edges"])
         if section is not None:
             _index_edges(section, bucket["edges"])
+            # 3D draws only a part's skin, so its outline is the skin's own edges.
+            outline = (bucket["outline"] if mesh.dimension == 2 else
+                       [(t[i], t[(i + 1) % 3]) for t in bucket["triangles"]
+                        for i in range(3)])
+            _index_outline(section, outline)
             section["triangle_elements"] = bucket["triangle_elements"]
             section["edge_elements"] = bucket["edge_elements"]
             sections.append(section)
@@ -170,6 +216,25 @@ def _index_edges(section: dict, pairs: list[tuple[int, int]]) -> None:
     index_of = {tag: i for i, tag in enumerate(section["node_ids"])}
     section["edge_indices"] = [index_of[node] for pair in pairs for node in pair
                                if node in index_of]
+
+
+def _index_outline(section: dict, pairs: list[tuple[int, int]]) -> None:
+    """Add `wire_indices`: the element outlines as vertex-index pairs, each edge once.
+
+    Two neighbouring elements share a side, and drawing it twice would make every
+    interior line darker than the boundary. Indices into the section's own vertices,
+    like `edge_indices`, so the outline takes the deformation the shading takes.
+    """
+    index_of = {tag: i for i, tag in enumerate(section["node_ids"])}
+    seen: set[frozenset] = set()
+    flat: list[int] = []
+    for a, b in pairs:
+        key = frozenset((a, b))
+        if a == b or key in seen or a not in index_of or b not in index_of:
+            continue
+        seen.add(key)
+        flat += [index_of[a], index_of[b]]
+    section["wire_indices"] = flat
 
 
 def _skins(grouped: dict[str, dict], mesh: GidMesh, owner: dict[int, str],
