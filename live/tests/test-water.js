@@ -186,6 +186,32 @@
       T.eq(App.Model.pendingWater().thickness, 0.2);
     });
   });
+
+  /* ── A model without one ──────────────────────────────────────────────
+     A new project has no water level (server/app/seed.py `blank_project`), and the
+     GUI must not invent one: no -1.5 m row, no property grid for a level that is not
+     there. `water <level>` is how one is added. */
+
+  function dryProject() {
+    var p = project();
+    p.water = null;
+    return p;
+  }
+
+  test('a model with no water level has no water row in any mode', function () {
+    withProject(dryProject(), function () {
+      ['soil', 'structures', 'mesh', 'flow', 'staged'].forEach(function (mode) {
+        T.ok(!topNode(App.TREES[mode], 'Water levels'), mode + ' still shows a water row');
+      });
+    });
+  });
+
+  test('a model with no water level has no water level pending or to edit', function () {
+    withProject(dryProject(), function () {
+      T.eq(App.Model.pendingWater(), null);
+      T.ok(!App.OBJECT_PROPS.water, 'a property grid for a level that does not exist');
+    });
+  });
 })();
 
 /* ══════════════════════════════════════════════════════════════════

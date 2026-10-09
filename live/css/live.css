@@ -180,9 +180,11 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
    The colour legend over the viewport, and the Results explorer in the dock.
    Both are filled in by live/js/results-view.js and live/js/patches.js.       */
 
+/* 40px in from the right, not 12: the right-hand ruler is 22px wide (ruler.js SIZE)
+   and the legend sat on top of it, covering its numbers. */
 .vp-legend {
   position: absolute;
-  right: 12px;
+  right: 40px;
   bottom: 56px;
   width: 104px;
   padding: 8px 10px 6px;
@@ -234,6 +236,11 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
 
 /* ── The Results explorer ─────────────────────────────────────────────── */
 
+/* A mode's own dock panel (Phases, Results) is put away with `hidden` when its tab is
+   left. `.dock-panel { display: flex }` in the frozen css/layout.css outranks the
+   browser's `[hidden]` rule, so without this both stayed on screen in every tab. */
+.dock-panel[hidden] { display: none; }
+
 .res-grid { display: flex; flex-direction: column; gap: 4px; padding: 6px 8px; }
 
 .res-row {
@@ -256,7 +263,17 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.res-range { font-variant-numeric: tabular-nums; }
+/* The legend's Min ... Max boxes: two equal boxes that shrink with the dock column,
+   then Auto and the unit. An empty box shows the phase's own value as its placeholder. */
+.res-limits { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.res-limits input {
+  flex: 1 1 0; min-width: 0; width: 0;
+  font-size: 11px; padding: 1px 3px;
+  font-variant-numeric: tabular-nums;
+}
+.res-limits-to { color: var(--c-ink-faint); }
+.res-limits button { flex: 0 0 auto; font-size: 10px; padding: 1px 5px; }
+.res-limits-unit { flex: 0 0 auto; color: var(--c-ink-soft); font-size: 10px; }
 
 .res-actions {
   display: flex;
@@ -308,4 +325,81 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
 
 /* Three actions and a Close is more than the footer's 82px minimum was sized for. */
 .dlg-results .dlg-foot { gap: 6px; }
-.dlg-results .dlg-foot .btn { min-width: 0; padding: 0 12px; }
+.dlg-results .dlg-foot .btn { min-width: 0; padding: 0 12px; white-space: nowrap; }
+.dlg-results .res-limits input { font-size: 12px; padding: 2px 4px; }
+.dlg-results .res-limits button { font-size: 11px; padding: 2px 8px; }
+
+/* The plot window (patches.js `openPlotWindow`): a member's results along it, a panel
+   per phase. The figure is one SVG drawn by live/js/results-plot.js; it is scaled to the
+   window's width and scrolls vertically when its rows do not fit. `.dlg-body` is a flex
+   row, so the window's content is one column that fills it. */
+.dlg-plot .dlg-body { overflow: hidden; padding: 0; }
+.dlg-plot .dock-empty { margin: 16px; font-size: 12px; }
+.dlg-plot .dlg-foot { gap: 6px; }
+.dlg-plot .dlg-foot .btn { min-width: 0; padding: 0 12px; white-space: nowrap; }
+
+.rp-window {
+  flex: 1 1 auto; min-width: 0;
+  display: flex; flex-direction: column;
+}
+.rp-controls {
+  display: flex; align-items: center; gap: 16px; flex: 0 0 auto;
+  padding: 8px 12px; font-size: 12px;
+  border-bottom: 1px solid var(--c-border-soft);
+}
+.rp-controls label { display: flex; align-items: center; gap: 6px; color: var(--c-ink-soft); }
+.rp-controls select { font-size: 12px; padding: 2px 4px; }
+.rp-run {
+  margin-left: auto; min-width: 0; font-size: 11px; color: var(--c-ink-faint);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.rp-host { flex: 1 1 auto; min-height: 0; overflow: auto; background: #fff; }
+.rp-host svg { display: block; width: 100%; height: auto; }
+
+/* The Model explorer's colour toggle (Mesh mode): beside the eye, a square in the part's
+   own colour -- outlined while off, filled while on, half filled for a group that is
+   partly on. See addPartColorToggles in live/js/patches.js. */
+.tree-paint {
+  width: 11px; height: 11px; flex: 0 0 auto; margin-left: 3px; box-sizing: border-box;
+  border: 2px solid var(--paint, #e6194b); border-radius: 2px; background: #fff;
+  cursor: pointer;
+}
+.tree-paint.on { background: var(--paint, #e6194b); }
+.tree-paint.mixed { background: linear-gradient(135deg, var(--paint, #e6194b) 50%, #fff 50%); }
+.tree-paint.empty-slot { visibility: hidden; cursor: default; }
+
+/* The Model explorer's checkbox in Staged construction mode means "in the model in the
+   selected phase" (addPhaseChecks in live/js/patches.js). A group whose parts differ
+   shows a dash; a state this phase inherited rather than set itself is ticked in grey. */
+.tree-eye.phase-check.mixed::after {
+  opacity: 1; width: 7px; height: 0; transform: none;
+  border: 0; border-bottom: 1.6px solid var(--brand-primary);
+}
+.tree-eye.phase-check.inherited::after { border-color: var(--c-ink-faint); }
+
+/* Overlapping nodes of an imported deck, fanned apart (paintNodeFans in
+   live/js/viewport.js). Inert like the labels' overlay: clicks go through to the canvas,
+   where the same fanned positions are what a click picks. */
+.vp-node-fans {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.vp-node-fans[hidden] { display: none; }
+
+/* The Phases overview (patches.js `phasesDialog`): the Plaxis list, a line per phase. */
+.phases-overview-list .phase-row { gap: 6px; }
+.phases-overview-list .phase-name { flex: 1 1 auto; min-width: 0; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.phases-overview-list .phase-kind { flex: 0 0 auto; }
+.phase-dot.failed { background: #d64545; }
+.phases-overview-box { margin: 6px 0 10px; padding: 8px; min-height: 48px;
+  border: 1px solid var(--c-line); background: var(--c-panel-2); }
+.phases-overview-box.done, .phases-overview-box.initial { color: var(--brand-green); }
+.phases-overview-box.failed { color: #d64545; }
+.phases-overview-error { white-space: pre-wrap; font-size: var(--fs-sm); max-height: 200px;
+  overflow: auto; margin: 0 0 10px; }

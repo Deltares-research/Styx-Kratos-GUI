@@ -39,6 +39,7 @@ import re
 import subprocess
 import threading
 import time
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 import sys
@@ -264,26 +265,68 @@ def run(export: dict) -> dict:
     A failed *analysis* is a result, not an exception: only a calculation that could not
     be started at all raises.
     """
+    with _one_at_a_time():
+        python, environment = interpreter()
+        directory = _run_directory(export["deck_name"])
+        try:
+            inputs = write_deck(export, directory)
+        except OSError as failure:
+            raise CalculationError(
+                f"The deck could not be written under {runs_root()}: {failure}. Set "
+                f"{RUNS_ENV} to a directory that can be written to.") from failure
+        return _execute(python, environment, directory, inputs)
+
+
+def run_deck(deck) -> dict:
+    """Run a deck that already exists (`app.deck`) rather than one exported here.
+
+    The same run in every way that matters -- a directory of its own, the same runner,
+    the same answer -- except that its inputs are copied from where the deck lives
+    instead of written from an export. `deck` is a `schemas.Deck`.
+    """
+    from app import deck as decks
+
+    with _one_at_a_time():
+        python, environment = interpreter()
+        directory = _run_directory(decks.deck_name(deck))
+        try:
+            inputs = decks.stage(deck, directory)
+        except OSError as failure:
+            raise CalculationError(
+                f"The deck could not be copied into {directory}: {failure}.") from failure
+        return _execute(python, environment, directory, inputs)
+
+
+@contextmanager
+def _one_at_a_time():
+    """Claim `_running` for the length of the block, or raise `Busy`.
+
+    The routes run on worker threads, so the check and the set are one step under
+    `_claim` -- before any file is touched, or two presses at once both get through.
+    """
     global _running
     with _claim:
         if _running:
             raise Busy("A calculation is already running.")
         _running = True
     try:
-        return _run(export)
+        yield
     finally:
         _running = False
 
 
-def _run(export: dict) -> dict:
-    python, environment = interpreter()
+def _run_directory(deck_name: str) -> Path:
     try:
-        directory = new_run_directory(export["deck_name"])
-        inputs = write_deck(export, directory)
+        return new_run_directory(deck_name)
     except OSError as failure:
         raise CalculationError(
             f"The deck could not be written under {runs_root()}: {failure}. Set "
             f"{RUNS_ENV} to a directory that can be written to.") from failure
+
+
+def _execute(python: str, environment: dict[str, str], directory: Path,
+             inputs: list[str]) -> dict:
+    """Run the deck already written into `directory`, and say what happened."""
     before = _contents(directory)
 
     started = time.monotonic()

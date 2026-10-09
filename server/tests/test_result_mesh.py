@@ -277,3 +277,166 @@ def test_the_real_stages_show_the_excavation_disappearing():
     assert "Soil_Top_lift1" not in parts_drawn(4)
     assert "SheetPileWall" not in parts_drawn(1)
     assert "SheetPileWall" in parts_drawn(4)
+
+
+# ── The mesh drawn over the shading ─────────────────────────────────────────
+# `results mesh on` draws each element's outline over the contour. The outline is not
+# the triangles the shading is drawn with: a six-node triangle is shaded as four, and
+# its outline is still three sides. Through the mid-side nodes, so it bends with the
+# deformed mesh the way the shading does.
+
+def segments_of(section, key="wire_indices"):
+    ids = section["node_ids"]
+    flat = section[key]
+    return {frozenset((ids[flat[n]], ids[flat[n + 1]])) for n in range(0, len(flat), 2)}
+
+
+def test_a_quadratic_triangle_is_outlined_by_its_three_sides(stage):
+    soil = section_of(result_mesh.stage_sections(*stage), "Soil_Top")
+    # Corners 1,2,3 and mid-sides 4=(1,2), 5=(2,3), 6=(3,1): six half-sides, and not
+    # the inner edges 4-5, 5-6 and 6-4 of the subdivision.
+    assert segments_of(soil) == {frozenset(pair) for pair in
+                                 ((1, 4), (4, 2), (2, 5), (5, 3), (3, 6), (6, 1))}
+
+
+def test_every_outline_index_is_a_vertex_of_its_section(stage):
+    soil = section_of(result_mesh.stage_sections(*stage), "Soil_Top")
+    assert soil["wire_indices"]
+    assert all(0 <= i < len(soil["node_ids"]) for i in soil["wire_indices"])
+
+
+def test_a_line_element_has_no_outline_of_its_own(stage):
+    """It is line work already, drawn as `edge_indices`."""
+    wall = section_of(result_mesh.stage_sections(*stage), "SheetPileWall")
+    assert wall["wire_indices"] == []
+
+
+def test_a_linear_triangle_is_outlined_corner_to_corner():
+    assert result_mesh.outline_of([1, 2, 3], 3, "Triangle") == [(1, 2), (2, 3), (3, 1)]
+
+
+def test_a_quadrilateral_is_outlined_by_its_four_sides_not_its_diagonal():
+    """It is shaded as two triangles across a diagonal; the diagonal is not an edge."""
+    assert result_mesh.outline_of([1, 2, 3, 4], 4, "Quadrilateral") == [
+        (1, 2), (2, 3), (3, 4), (4, 1)]
+
+
+def test_an_eight_node_quadrilateral_is_outlined_through_its_midsides():
+    # Corners 1-4, then mid-sides 5=(1,2), 6=(2,3), 7=(3,4), 8=(4,1), as Kratos orders them.
+    assert result_mesh.outline_of([1, 2, 3, 4, 5, 6, 7, 8], 8, "Quadrilateral") == [
+        (1, 5), (5, 2), (2, 6), (6, 3), (3, 7), (7, 4), (4, 8), (8, 1)]
+
+
+def test_an_edge_two_elements_share_is_drawn_once():
+    mdpa = dedent("""
+        Begin Nodes
+        1 0.0 0.0 0.0
+        2 1.0 0.0 0.0
+        3 1.0 1.0 0.0
+        4 0.0 1.0 0.0
+        5 2.0 0.0 0.0
+        6 2.0 1.0 0.0
+        End Nodes
+
+        Begin Elements UPwSmallStrainElement2D4N
+        1 1 1 2 3 4
+        2 1 2 5 6 3
+        End Elements
+
+        Begin SubModelPart Soil
+            Begin SubModelPartElements
+            1
+            2
+            End SubModelPartElements
+        End SubModelPart
+        """)
+    msh = dedent("""
+        MESH "Kratos_Quadrilateral2D4_Mesh_1" dimension 2 ElemType Quadrilateral Nnode 4
+        Coordinates
+        1 0 0 0
+        2 1 0 0
+        3 1 1 0
+        4 0 1 0
+        5 2 0 0
+        6 2 1 0
+        End Coordinates
+        Elements
+        1 1 2 3 4 1
+        2 2 5 6 3 1
+        End Elements
+        """)
+    soil = section_of(result_mesh.stage_sections(mdpa_import.import_mdpa(mdpa),
+                                                 gid_results.read_mesh(msh)), "Soil")
+    assert len(soil["wire_indices"]) == 7 * 2, "seven edges, the shared 2-3 once"
+    assert frozenset((2, 3)) in segments_of(soil)
+
+
+# ── Quadratic quadrilaterals ────────────────────────────────────────────────
+# Eemdijk is mostly eight-node quadrilaterals. Shaded through the corners alone, their
+# four mid-side values never reach the screen -- and the mesh outline, which runs
+# through those mid-side nodes, has no vertex to be drawn from.
+
+def test_an_eight_node_quadrilateral_is_shaded_through_every_node():
+    made = result_mesh.triangles_of([1, 2, 3, 4, 5, 6, 7, 8], 8, "Quadrilateral", 2)
+    assert {frozenset(t) for t in made} == {
+        frozenset({1, 5, 8}), frozenset({5, 2, 6}), frozenset({6, 3, 7}),
+        frozenset({8, 7, 4}), frozenset({5, 6, 7}), frozenset({5, 7, 8})}
+    assert {node for t in made for node in t} == set(range(1, 9))
+
+
+def test_a_nine_node_quadrilateral_is_shaded_around_its_centre():
+    made = result_mesh.triangles_of([1, 2, 3, 4, 5, 6, 7, 8, 9], 9, "Quadrilateral", 2)
+    assert len(made) == 8
+    assert all(9 in t for t in made)
+    assert {node for t in made for node in t} == set(range(1, 10))
+
+
+def test_a_four_node_quadrilateral_is_still_two_triangles():
+    assert len(result_mesh.triangles_of([1, 2, 3, 4], 4, "Quadrilateral", 2)) == 2
+
+
+def test_an_eight_node_quadrilateral_section_is_outlined_through_its_midsides():
+    mdpa = dedent("""
+        Begin Nodes
+        1 0.0 0.0 0.0
+        2 2.0 0.0 0.0
+        3 2.0 2.0 0.0
+        4 0.0 2.0 0.0
+        5 1.0 0.0 0.0
+        6 2.0 1.0 0.0
+        7 1.0 2.0 0.0
+        8 0.0 1.0 0.0
+        End Nodes
+
+        Begin Elements SmallStrainUPwDiffOrderElement2D8N
+        1 1 1 2 3 4 5 6 7 8
+        End Elements
+
+        Begin SubModelPart Soil
+            Begin SubModelPartElements
+            1
+            End SubModelPartElements
+        End SubModelPart
+        """)
+    msh = dedent("""
+        MESH "Kratos_Quadrilateral2D8_Mesh_1" dimension 2 ElemType Quadrilateral Nnode 8
+        Coordinates
+        1 0 0 0
+        2 2 0 0
+        3 2 2 0
+        4 0 2 0
+        5 1 0 0
+        6 2 1 0
+        7 1 2 0
+        8 0 1 0
+        End Coordinates
+        Elements
+        1 1 2 3 4 5 6 7 8 1
+        End Elements
+        """)
+    soil = section_of(result_mesh.stage_sections(mdpa_import.import_mdpa(mdpa),
+                                                 gid_results.read_mesh(msh)), "Soil")
+    assert set(soil["node_ids"]) == set(range(1, 9))
+    assert segments_of(soil) == {frozenset(pair) for pair in
+                                 ((1, 5), (5, 2), (2, 6), (6, 3),
+                                  (3, 7), (7, 4), (4, 8), (8, 1))}

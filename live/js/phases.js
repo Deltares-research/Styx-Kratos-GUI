@@ -209,6 +209,40 @@ App.Phases = (function () {
     });
   }
 
+  /* The Phases overview (patches.js `phasesDialog`): `rows`, plus what the Plaxis list
+     puts on each line -- the phase's duration, the time T reached at its end (summed
+     along its chain), its id -- and what the last calculation made of it.
+
+     `run` is `{completed, failed}`: how many phases the last run got through, and
+     whether it stopped short. A failed run failed in the phase after the last one it
+     completed. */
+  function days(value) {
+    return String(Math.round(value * 1000) / 1000) + ' d';
+  }
+
+  function overview(project, run) {
+    var byId = index(project);
+    var completed = (run && run.completed) || 0;
+    return rows(project, run).map(function (row, position) {
+      var phase = byId[row.id] || {};
+      var total = 0;
+      chainTo(project, row.id).forEach(function (each) {
+        total += Number(each.time_interval) || 0;
+      });
+      total = Math.round(total * 1000) / 1000;
+      var interval = Number(phase.time_interval) || 0;
+      var failedHere = !!(run && run.failed) && position === completed;
+      return {
+        number: position + 1, id: row.id, name: row.name, kind: row.kind,
+        depth: row.depth, interval: interval, total: total,
+        state: failedHere ? 'failed' : row.state,
+        label: row.name + (interval || total
+          ? ' - ' + days(interval) + ', T = ' + days(total) : '') + ' [' + row.id + ']',
+        log: position < completed ? 'OK' : failedHere ? 'Failed' : 'Not calculated'
+      };
+    });
+  }
+
   /* ── Editing: every one of these returns a new list ──────────────────── */
 
   function freshId(project, stem) {
@@ -351,31 +385,56 @@ App.Phases = (function () {
      that outright, so producing it here would mean the server rejecting an edit that
      is already on screen. */
   function toggled(project, id, key) {
+    var current = (activeParts(project, id) || []).indexOf(key) >= 0;
+    return setActive(project, id, [key], !current);
+  }
+
+  /* Make each of `keys` be `wanted` (in the model, or not) in phase `id` -- what the
+     Model explorer's checkbox does in Staged construction mode, for one part or for a
+     group row's every part.
+
+     Only phase `id` is edited, so no phase before it changes; the ones after it inherit
+     the new state until one of them says otherwise, which is how Kratos runs its
+     stages -- one model, carried from stage to stage. Each key ends up with the
+     smallest instruction that gives the wanted state: none at all when the parent
+     already gives it (which is also how switching back drops an instruction rather
+     than stacking a second one), and never both lists for one part, which the server
+     refuses (`Phase._one_instruction_per_part`). */
+  function setActive(project, id, keys, wanted) {
     var byId = index(project);
     if (!byId[id]) return copy(phasesOf(project));
 
-    var chain = chainTo(project, id);
-    var inheritedActive = true;      // everything starts in the model
-    chain.slice(0, -1).forEach(function (phase) {
-      if (listOf(phase, 'deactivate').indexOf(key) >= 0) inheritedActive = false;
-      if (listOf(phase, 'activate').indexOf(key) >= 0) inheritedActive = true;
-    });
-
-    var current = (activeParts(project, id) || []).indexOf(key) >= 0;
-    var wanted = !current;
+    var before = chainTo(project, id).slice(0, -1);
+    function inheritedActive(key) {
+      var active = true;      // everything starts in the model
+      before.forEach(function (phase) {
+        if (listOf(phase, 'deactivate').indexOf(key) >= 0) active = false;
+        if (listOf(phase, 'activate').indexOf(key) >= 0) active = true;
+      });
+      return active;
+    }
 
     return copy(phasesOf(project)).map(function (phase) {
       if (phase.id !== id) return phase;
-      var activate = listOf(phase, 'activate').filter(function (k) { return k !== key; });
-      var deactivate = listOf(phase, 'deactivate').filter(function (k) { return k !== key; });
-      // Only state an instruction the parent does not already give.
-      if (wanted !== inheritedActive) {
-        (wanted ? activate : deactivate).push(key);
-      }
+      var activate = listOf(phase, 'activate').slice();
+      var deactivate = listOf(phase, 'deactivate').slice();
+      keys.forEach(function (key) {
+        activate = activate.filter(function (k) { return k !== key; });
+        deactivate = deactivate.filter(function (k) { return k !== key; });
+        // Only state an instruction the parent does not already give.
+        if (wanted !== inheritedActive(key)) (wanted ? activate : deactivate).push(key);
+      });
       phase.activate = activate;
       phase.deactivate = deactivate;
       return phase;
     });
+  }
+
+  /* 'on', 'off' or -- for a group row whose parts differ -- 'mixed', in phase `id`. */
+  function stateIn(project, id, keys) {
+    var active = activeParts(project, id) || [];
+    var on = keys.filter(function (key) { return active.indexOf(key) >= 0; }).length;
+    return !on ? 'off' : on === keys.length ? 'on' : 'mixed';
   }
 
   /* Which part keys the viewport should not draw, given the selected phase.
@@ -402,8 +461,8 @@ App.Phases = (function () {
   return {
     chainTo: chainTo, activeParts: activeParts, stageableKeys: stageableKeys,
     hiddenKeys: hiddenKeys,
-    order: order, branchProblem: branchProblem, rows: rows,
+    order: order, branchProblem: branchProblem, rows: rows, overview: overview,
     added: added, inserted: inserted, removed: removed, copied: copied,
-    ownership: ownership, toggled: toggled
+    ownership: ownership, toggled: toggled, setActive: setActive, stateIn: stateIn
   };
 })();

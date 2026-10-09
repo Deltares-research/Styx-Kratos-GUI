@@ -63,7 +63,7 @@ def test_boundary_payload_is_drawable_and_finite(quadratic_mesh):
 
 def test_result_serialises_to_the_frontend_contract(quadratic_mesh):
     payload = quadratic_mesh.to_dict()
-    assert set(payload) == {"bbox", "stats", "sections", "log", "meshed_keys"}
+    assert set(payload) == {"bbox", "stats", "sections", "log", "meshed_keys", "parts"}
     assert {"nodes", "elements", "by_type", "quality_histogram", "seconds"} <= payload["stats"].keys()
     assert set(payload["sections"][0]) == {"key", "color", "positions", "indices", "edges"}
 

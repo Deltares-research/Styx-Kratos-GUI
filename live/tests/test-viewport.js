@@ -253,8 +253,9 @@
     T.ok(limits.max > COLUMN.homeRadius, 'zooming out has to move too');
   });
 
-  test('the demo domain keeps the reach the frozen constants gave it', function () {
-    var limits = App.Viewport.radiusLimits(DEMO);
+  test('the demo domain keeps the reach the frozen constants gave it in 3D', function () {
+    // The floor that also keeps the perspective camera's near plane out of the model.
+    var limits = App.Viewport.radiusLimits(DEMO, 3);
     T.near(limits.min, 8, 0.5, 'the frozen minRadius, now expressed as a fraction');
     T.near(limits.max, DEMO.homeRadius * 6, 1e-9);
   });
@@ -262,6 +263,18 @@
   test('with no frame yet there are still limits, and they are ordered', function () {
     var limits = App.Viewport.radiusLimits(null);
     T.ok(limits.min > 0 && limits.max > limits.min);
+  });
+
+  /* An imported deck crowds dozens of nodes into the last few centimetres beside a
+     sheet pile; 12.5x of a 70 m section still showed them as one smear. A 2D section
+     is seen through the orthographic camera, whose near plane is far behind it, so
+     there is nothing to clip however close it gets. 3D keeps its floor: the
+     perspective camera's near plane (0.5) would cut into the model. */
+  test('a 2D section can be zoomed in a thousand times or more', function () {
+    var limits = App.Viewport.radiusLimits(DEMO, 2);
+    T.ok(DEMO.homeRadius / limits.min >= 1000,
+         'only ' + DEMO.homeRadius / limits.min + 'x');
+    T.near(limits.max, DEMO.homeRadius * 6, 1e-9, 'zooming out is unchanged');
   });
 })();
 
@@ -592,5 +605,66 @@
     withState(undefined, null, function () {
       T.eq(App.Viewport.meshRefinements(), []);
     });
+  });
+})();
+
+/* ── The selection box ────────────────────────────────────────────────────
+   Selecting the mesh drew a box 3 m wider than the model on both sides. The mesh group
+   also holds the coloured-part overlays (viewport.js `buildPartColors`), hidden until
+   switched on, and the water level's line among them overhangs the domain by its
+   margin. `Box3.setFromObject` counts hidden children, so the box took the overhang
+   as part of the mesh. `boundsOf` measures what is drawn, and never the overlay. */
+(function () {
+  function box(x0, x1) {
+    var mesh = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, 1, 1));
+    mesh.position.x = (x0 + x1) / 2;
+    return mesh;
+  }
+
+  test('a hidden child does not widen the selection box', function () {
+    var group = new THREE.Group();
+    group.add(box(0, 80));
+    var hidden = box(-3, 83);
+    hidden.visible = false;
+    group.add(hidden);
+    group.updateMatrixWorld(true);
+    var bounds = App.Viewport.boundsOf(group);
+    T.near(bounds.min.x, 0, 1e-9);
+    T.near(bounds.max.x, 80, 1e-9);
+  });
+
+  test('the coloured-part overlay is never part of the selection box', function () {
+    /* Even switched on: colouring the water level must not make the mesh look wider
+       than it is. */
+    var group = new THREE.Group();
+    group.add(box(0, 80));
+    var overlay = new THREE.Group();
+    overlay.userData.noBounds = true;
+    overlay.add(box(-3, 83));
+    group.add(overlay);
+    group.updateMatrixWorld(true);
+    var bounds = App.Viewport.boundsOf(group);
+    T.near(bounds.min.x, 0, 1e-9);
+    T.near(bounds.max.x, 80, 1e-9);
+  });
+
+  test('a group with nothing drawn has an empty box', function () {
+    T.ok(App.Viewport.boundsOf(new THREE.Group()).isEmpty());
+  });
+})();
+
+/* ── Loads in Staged construction ─────────────────────────────────────────
+   A layered-soil project (the blank project, CROW) drew its loads in Structures mode
+   and dropped them in Staged construction, the one mode where a load's phase matters:
+   the surcharge vanished as soon as the user moved on from Structures. A phase that
+   switches a load off still hides it -- that is `phaseHidden`'s job, not this one's. */
+(function () {
+  test('a layered project draws its loads in Staged construction', function () {
+    var groups = App.Viewport.computeModeGroups(
+      ['soil_L1'], [], true, ['surcharge'], ['sheetpile'], ['water_1']);
+    T.ok(groups.staged.indexOf('surcharge') >= 0, 'the surcharge is not drawn');
+    T.ok(groups.staged.indexOf('water_1') >= 0, 'the water load is not drawn');
+    T.ok(groups.staged.indexOf('sheetpile') >= 0);
+    T.ok(groups.staged.indexOf('water') >= 0);
   });
 })();
