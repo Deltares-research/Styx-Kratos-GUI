@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -95,8 +96,8 @@ WATER_Y = -1.5
 (`reference_coordinate: -1.5`), and the level its `WaterLoad_Stage*` loads are derived
 from."""
 
-SURCHARGE = -20.0
-"""kN/m per metre run, downward: the reference's `LINE_LOAD` of -20000 N/m on `Load`."""
+SURCHARGE = -20_000.0
+"""N/m, downward: the reference's `LINE_LOAD` of -20000 N/m on `Load`."""
 
 # The out-of-plane extent. A plane-strain model is a slice, and the section is taken
 # through the middle of it; the depth itself is arbitrary and never reaches the deck.
@@ -116,25 +117,36 @@ def crow_project(staged: bool = True) -> Project:
     """
     borehole = "bh1"
     # Two materials, as the reference's two soil property sets: the upper ground down to
-    # -12 and the stiffer sand below it. K0_NC, porosity and the drainage type are the
-    # reference's own rather than left to this exporter's defaults: the user owns those
-    # values. The reference's 0.62 and 0.46 are Jaky at these friction angles, so the
-    # typed numbers and the fallback agree here -- which is what makes checking them
-    # worth doing.
-    #
-    # `E` is kN/m2, like everything else in a `Project` (`app/schemas.py`). These two
-    # were typed as 9.0e3 and 7.43e4 until the export was compared against
-    # `MaterialParameters_for_generated_mesh.json`, which carries 9.0e5 Pa and 7.4286e6
-    # Pa -- a decimal slip of exactly 10x in both, which for a while cancelled half of
-    # the exporter's own 1000x units bug and made the deck look nearly right.
-    upper = Material(id="m_upper", name="Upper ground", model="Mohr-Coulomb",
-                     type="Drained", color="#c4a86a", g_unsat=18.0, g_sat=20.0,
-                     E=9.0e2, nu=0.2, c=1.0, phi=22.3, k=1.0,
-                     porosity=0.0, k0_nc=0.62)
-    lower = Material(id="m_lower", name="Deep sand", model="Mohr-Coulomb",
-                     type="Drained", color="#b08a6a", g_unsat=20.0, g_sat=22.0,
-                     E=7.4286e3, nu=0.3, c=0.0, phi=32.7, k=5.0,
-                     porosity=0.0, k0_nc=0.46)
+    # -12 and the stiffer sand below it. Written in what the reference's
+    # `MaterialParameters_for_generated_mesh.json` carries -- Kratos' names, SI -- which
+    # is what a project holds (`app/schemas.py:KratosPropertySet`). K0_NC, porosity and
+    # the drainage type are the reference's own; its 0.62 and 0.46 are Jaky at these
+    # friction angles, so the typed numbers and the fallback agree here.
+    def soil(id_, name, color, modulus, poisson, weight, cohesion, phi, permeability, k0):
+        return Material(id=id_, name=name, color=color,
+                        constitutive_law="GeoLinearElasticPlaneStrain2DLaw",
+                        variables={
+                            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+                            "YOUNG_MODULUS": modulus,
+                            "POISSON_RATIO": poisson,
+                            "DENSITY_SOLID": weight / 9.81,     # N/m3 over g: kg/m3
+                            "DENSITY_WATER": 10_000.0 / 9.81,
+                            "POROSITY": 0.0,
+                            "BULK_MODULUS_SOLID": 1.0e10,
+                            "BULK_MODULUS_FLUID": 2.2e9,
+                            "DYNAMIC_VISCOSITY": 1.0e-3,
+                            "PERMEABILITY_XX": permeability,
+                            "PERMEABILITY_YY": permeability,
+                            "PERMEABILITY_XY": 0.0,
+                            "GEO_COHESION": cohesion,
+                            "GEO_FRICTION_ANGLE": phi,
+                            "K0_NC": k0,
+                        })
+
+    upper = soil("m_upper", "Upper ground", "#c4a86a", 9.0e5, 0.2, 18_000.0, 1_000.0,
+                 22.3, 1.0 / 86_400, 0.62)
+    lower = soil("m_lower", "Deep sand", "#b08a6a", 7.4286e6, 0.3, 20_000.0, 0.0,
+                 32.7, 5.0 / 86_400, 0.46)
 
     # Three layers, not two: the reference splits the right-hand ground at -8 as well as
     # at -12 (Soil_Top_Right / Soil_Middle_Right), and -8 is where the digging stops.
@@ -166,15 +178,16 @@ def crow_project(staged: bool = True) -> Project:
     # bending. `tests/test_crow_reference.py` now compares EI, EA and GA_s rather than
     # the numbers they are spelled with, so the two cannot drift again.
     plate = 0.4924
-    sheet_pile = BeamSection(id="sheetpile", name="Sheet pile", E=8.4449e6, nu=0.0,
-                             area=plate, inertia=plate ** 3 / 12.0,
-                             # Twenty times the section: the reference's way of saying
-                             # that shear deformation is not part of this model.
-                             shear_area=10.0, density=298.36)
+    sheet_pile = BeamSection(id="sheetpile", name="Sheet pile", variables={
+        "YOUNG_MODULUS": 8.4449e9, "POISSON_RATIO": 0.0, "DENSITY": 298.36,
+        "CROSS_AREA": plate, "I33": plate ** 3 / 12.0,
+        # Twenty times the section: the reference's way of saying that shear
+        # deformation is not part of this model.
+        "AREA_EFFECTIVE_Y": 10.0})
     # Massless, as the reference's tendon is: a prestressed strut's own weight is
     # beside the point next to the force it carries.
-    strand = AnchorSection(id="strand", name="Strut", E=2.1e8, area=4.7619e-5,
-                           density=0.0, spacing=1.0)
+    strand = AnchorSection(id="strand", name="Strut", spacing=1.0, variables={
+        "YOUNG_MODULUS": 2.1e11, "CROSS_AREA": 4.7619e-5, "DENSITY": 0.0})
     # No `material`: each stretch of the contact takes the soil it actually runs
     # against, which is how the reference groups its eight interfaces into two property
     # sets -- one for the contacts on the upper ground, one for those on the sand.
@@ -266,6 +279,61 @@ def crow_project(staged: bool = True) -> Project:
         | {"phases": [phase.model_dump() for phase in phases.staged_excavation_phases(project)]})
 
 
+MOHR_COULOMB = "GeoMohrCoulombLawPlaneStrain"
+COULOMB_CONTACT = "GeoInterfaceCoulombLawPlaneStrain"
+
+RETENTION = {"BIOT_COEFFICIENT": 1.0, "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+             "SATURATED_SATURATION": 1.0, "RESIDUAL_SATURATION": 1.0e-10,
+             "MINIMUM_RELATIVE_PERMEABILITY": 1.0e-4}
+"""The retention block every property set of Kratos' Mohr-Coulomb CROW case carries.
+With porosity 0 it changes no weight; it is written because the reference writes it."""
+
+STRENGTHS = {
+    # material -> (GEO_COHESION in Pa, GEO_FRICTION_ANGLE, Rinter). The reference's
+    # contacts carry c = 1440.65 Pa, phi = 11.25 deg against the clay and phi = 20 deg
+    # against the sand: each soil's strength reduced by its own factor, tan(phi_i) =
+    # Rinter tan(phi) and c_i = Rinter c, which is 0.4802 for the clay (both agree) and
+    # 0.5714 for the sand.
+    "m_upper": (3_000.0, 22.5, math.tan(math.radians(11.25)) / math.tan(math.radians(22.5))),
+    "m_lower": (0.0, 32.5, math.tan(math.radians(20.0)) / math.tan(math.radians(32.5))),
+}
+
+
+MOHR_COULOMB_SOLVER = {"dig_1": (1e-3, 500), "dig_2": (1e-4, 300), "dig_3": (1e-2, 300)}
+"""phase id -> (residual relative tolerance, max iterations), the reference's own."""
+
+
+def crow_mohr_coulomb_project(staged: bool = True) -> Project:
+    """CROW as Kratos' `crow_validation/mohr_coulomb_clay-sand/` case has it: the same
+    geometry, wall and stages, its soils Mohr-Coulomb and its contacts Coulomb, every
+    number the reference's own (`tests/fixtures/crow_mc/MaterialParameters.json`).
+
+    Nothing here is mapped: the laws and variables are typed, as a user would type them
+    in the material editor. The K0 stage still runs elastic -- `kratos_materials` writes
+    the elastic counterparts into the K0 file, as the reference's stage 1 reads the
+    elastic `common/initial_materials.json`."""
+    data = crow_project(staged).model_dump(mode="json")
+    data["name"] = "CROW excavation wall, Mohr-Coulomb"
+    for material in data["materials"]:
+        cohesion, phi, r_inter = STRENGTHS[material["id"]]
+        material["constitutive_law"] = MOHR_COULOMB
+        material["variables"].update(GEO_COHESION=cohesion, GEO_FRICTION_ANGLE=phi,
+                                     GEO_ENABLE_TENSION_CUT_OFF=False,
+                                     GEO_DILATANCY_ANGLE=0.0, **RETENTION)
+        material["r_inter"] = r_inter
+    # Stiffness and strength from each soil it runs against, the strength by that soil's
+    # own Rinter (`InterfaceSection.r_inter` left unset).
+    contact = data["interface_sections"][0]
+    contact.update(constitutive_law=COULOMB_CONTACT, r_inter=None,
+                   variables={"GEO_ENABLE_TENSION_CUT_OFF": False, **RETENTION})
+    # Kratos' common stage deck gives the plastic stages more iterations, and the last
+    # two their own tolerances: typed per phase, as the phase editor offers them.
+    for phase in data["phases"]:
+        if phase["id"] in MOHR_COULOMB_SOLVER:
+            phase["tolerated_error"], phase["max_iterations"] = MOHR_COULOMB_SOLVER[phase["id"]]
+    return Project.model_validate(data)
+
+
 def export(project: Project | None = None) -> dict:
     """Mesh and export the model, in a gmsh session of this function's own.
 
@@ -283,9 +351,11 @@ def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", type=Path, default=Path("crow_out"),
                         help="directory to write the deck into")
+    parser.add_argument("--mohr-coulomb", action="store_true",
+                        help="the Mohr-Coulomb variant (crow_mohr_coulomb_project)")
     args = parser.parse_args(argv[1:])
 
-    result = export()
+    result = export(crow_mohr_coulomb_project() if args.mohr_coulomb else None)
     args.out.mkdir(parents=True, exist_ok=True)
     name = result["deck_name"]
     (args.out / f"{name}.mdpa").write_text(result["mdpa"], encoding="utf-8")

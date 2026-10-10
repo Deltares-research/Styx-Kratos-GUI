@@ -20,7 +20,7 @@ import json
 import pytest
 
 from app import build, kratos
-from app.kratos_materials import KILO
+KILO = 1000.0  # kN -> N: these tests write old-style projects, converted on load (app/legacy.py)
 from app.schemas import MeshRequest, Project
 from app.seed import seed_project
 from tests import mdpa
@@ -268,7 +268,7 @@ def test_the_tendon_becomes_a_material_entry_with_its_prestress(walled):
     # Discrete in 3D: the plane-strain smear over the out-of-plane spacing is exactly
     # what a 3D model does not do, because the anchor is where the user put it.
     assert variables["CROSS_AREA"] == pytest.approx(0.0006)
-    assert variables["TRUSS_PRESTRESS_PK2"] == pytest.approx(250.0 * KILO)
+    assert variables["TRUSS_PRESTRESS_PK2"] == 250.0
 
 
 def test_an_anchor_may_hang_from_a_member_instead_of_a_wall(session):

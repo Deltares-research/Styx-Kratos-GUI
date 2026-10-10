@@ -5,3 +5,4 @@
 playwright==1.63.0
 pytest-playwright==0.9.0
 pytest-cov==7.1.0
+hypothesis==6.168.5

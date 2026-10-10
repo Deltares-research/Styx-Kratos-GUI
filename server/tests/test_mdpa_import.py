@@ -686,3 +686,87 @@ def test_blank_lines_inside_a_block_are_skipped():
     assert model.parts["Soil_Top"].nodes == [1, 2]
     assert model.parts["Soil_Top"].elements == [1]
     assert model.parts["Soil_Top"].kind == "body"
+
+
+# ── Nested sub-model parts, data blanks, comments (finding F8, alpha 1.10) ──
+
+NESTED = "\n".join([
+    "Begin Properties 1", "End Properties",
+    "Begin Nodes",
+    "1 0.0 0.0 0.0", "2 1.0 0.0 0.0", "3 0.0 1.0 0.0", "4 1.0 1.0 0.0",
+    "End Nodes",
+    "Begin Elements UPwSmallStrainElement2D3N",
+    "1 1 1 2 3", "2 1 2 4 3",
+    "End Elements",
+    "Begin SubModelPart Soil",
+    "  Begin SubModelPartData",
+    "  End SubModelPartData",
+    "  Begin SubModelPartNodes", "  1", "  2", "  3", "  End SubModelPartNodes",
+    "  Begin SubModelPartElements", "  1", "  End SubModelPartElements",
+    "  Begin SubModelPart Clay",
+    "    Begin SubModelPartNodes", "    2", "    3", "    4", "    End SubModelPartNodes",
+    "    Begin SubModelPartElements", "    2", "    End SubModelPartElements",
+    "  End SubModelPart",
+    "  Begin SubModelPartConditions",
+    "  End SubModelPartConditions",
+    "End SubModelPart",
+    "Begin SubModelPart Bottom",
+    "  Begin SubModelPartNodes", "  1", "  2", "  End SubModelPartNodes",
+    "End SubModelPart",
+])
+
+
+def test_a_nested_sub_model_part_is_its_own_part_under_its_full_name():
+    """Kratos names a child `Parent.Child`, and two parents may each have a `Clay`."""
+    model = mdpa_import.import_mdpa(NESTED)
+
+    clay = model.parts["Soil.Clay"]
+    assert clay.nodes == [2, 3, 4]
+    assert clay.elements == [2]
+    assert clay.kind == "body"
+
+
+def test_a_parent_holds_its_children_as_kratos_does():
+    """Kratos adds a child's entities to every model part above it, so the parent is
+    its own blocks plus its children's -- and its blocks after the child still count."""
+    model = mdpa_import.import_mdpa(NESTED)
+
+    soil = model.parts["Soil"]
+    assert sorted(soil.nodes) == [1, 2, 3, 4]
+    assert sorted(soil.elements) == [1, 2]
+
+
+def test_the_child_does_not_end_its_parent():
+    """The child's `End SubModelPart` used to close the parent, so the next top-level
+    part was read as part of a block that had already ended."""
+    model = mdpa_import.import_mdpa(NESTED)
+
+    assert set(model.parts) == {"Soil", "Soil.Clay", "Bottom"}
+    assert model.parts["Bottom"].nodes == [1, 2]
+
+
+def test_a_blank_line_inside_sub_model_part_data_is_skipped():
+    text = NESTED.replace("  Begin SubModelPartData\n",
+                          "  Begin SubModelPartData\n\n  THICKNESS 0.5\n\n")
+
+    model = mdpa_import.import_mdpa(text)
+
+    assert model.parts["Soil"].data == {"THICKNESS": [0.5]}
+
+
+def test_comments_are_ignored_wherever_they_are():
+    text = "// written by hand\n" + NESTED.replace(
+        "1 1 1 2 3", "1 1 1 2 3 // first").replace("  2\n", "  2  // second\n", 1)
+
+    model = mdpa_import.import_mdpa(text)
+
+    assert model.elements[0].entries[1] == [1, 2, 3]
+    assert model.parts["Soil"].nodes[:3] == [1, 2, 3]
+
+
+def test_tabs_and_scientific_notation_are_read():
+    text = NESTED.replace("2 1.0 0.0 0.0", "2\t1.0E+00\t0.0\t0.0")
+
+    model = mdpa_import.import_mdpa(text)
+
+    assert model.nodes[2] == (1.0, 0.0, 0.0)

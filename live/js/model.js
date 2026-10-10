@@ -121,17 +121,17 @@ App.Model = (function () {
       BOREHOLES: project.boreholes.map(function (b) {
         return { id: b.id, name: b.name, x: b.x, y: b.y, head: b.head, water: b.water };
       }),
-      // The schema is snake_case; js/data.js:315 reads gUnsat/gSat.
+      // A soil is a Kratos property set (server/app/schemas.py Material): its law and
+      // its Variables, under Kratos' names, in the project's units -- carried as they
+      // are, because the library goes back in one PATCH that replaces it wholesale and
+      // a variable this record dropped is a variable the next save deletes. Only the
+      // two interface defaults are renamed, for the frozen library code that reads them.
       MATERIALS: project.materials.map(function (m) {
-        return { id: m.id, name: m.name, model: m.model, type: m.type, color: m.color,
-                 gUnsat: m.g_unsat, gSat: m.g_sat, E: m.E, nu: m.nu, c: m.c, phi: m.phi, k: m.k,
-                 rInter: m.r_inter, interfacePerm: m.interface_permeability,
-                 // Both optional, and both meaning "the user typed this, so use it
-                 // rather than deriving one" (server/app/schemas.py's Material). They
-                 // are carried even though only the deck reads them: the library goes
-                 // back in one PATCH that replaces it wholesale, so a field this
-                 // record does not hold is a field the next save deletes.
-                 porosity: nullable(m.porosity), k0nc: nullable(m.k0_nc) };
+        return { id: m.id, name: m.name, color: m.color,
+                 constitutive_law: m.constitutive_law,
+                 variables: JSON.parse(JSON.stringify(m.variables || {})),
+                 tables: JSON.parse(JSON.stringify(m.tables || {})),
+                 rInter: m.r_inter, interfacePerm: m.interface_permeability };
       }),
       LAYERS: project.layers.map(function (l) {
         return { id: l.id, name: l.name, mat: l.mat,
@@ -176,18 +176,13 @@ App.Model = (function () {
   /* The inverse of the MATERIALS mapping above, for the material-set write path.
      Everything the server's Material schema requires has to be present and
      named its way; an unknown or missing key is a 422. */
-  /* undefined and null both mean "not set" here, and only one of them survives
-     JSON.stringify -- an undefined property is dropped from the body entirely. The
-     server reads an absent optional the same way as an explicit null, so the two agree
-     either way; sending null says it on purpose rather than by accident. */
-  function nullable(value) { return value === undefined ? null : value; }
-
   function materialsToServer(materials) {
     return materials.map(function (m) {
-      return { id: m.id, name: m.name, model: m.model, type: m.type, color: m.color,
-               g_unsat: m.gUnsat, g_sat: m.gSat, E: m.E, nu: m.nu, c: m.c, phi: m.phi,
-               k: m.k, r_inter: m.rInter, interface_permeability: m.interfacePerm,
-               porosity: nullable(m.porosity), k0_nc: nullable(m.k0nc) };
+      return { id: m.id, name: m.name, color: m.color,
+               constitutive_law: m.constitutive_law,
+               variables: JSON.parse(JSON.stringify(m.variables || {})),
+               tables: JSON.parse(JSON.stringify(m.tables || {})),
+               r_inter: m.rInter, interface_permeability: m.interfacePerm };
     });
   }
 
@@ -213,6 +208,24 @@ App.Model = (function () {
     if (bar) bar.textContent = projectTitle(project);
   }
 
+  /* The status bar's units item said "m / kN / day" whatever the project held. It
+     names the project's own system now, and choosing another one there types the
+     `units` command (patches.js) -- the command line stays the way to do it. */
+  function syncUnits(project) {
+    var item = typeof document !== 'undefined' && document.getElementById('sb-units');
+    if (!item || !App.Units) return;
+    item.textContent = App.Units.statusText(project);
+    item.title = 'The unit system every value is in. Click to convert the project to another.';
+    if (item.dataset.wired) return;
+    item.dataset.wired = '1';
+    item.classList.add('sb-toggle');
+    item.addEventListener('click', function () {
+      var now = App.Units.current();
+      var other = App.Units.systems().filter(function (s) { return s.name !== now; })[0];
+      if (other && App.Command && App.Command.run) App.Command.run('units ' + other.name);
+    });
+  }
+
   /* Replaces the frozen js/data.js globals with the server's project. Until this
      runs the app is showing data.js's offline seed, which is still written in the
      mockup's Z-up frame -- deliberately, because that file is frozen. Nothing here
@@ -224,7 +237,7 @@ App.Model = (function () {
     // aliasing App.PROJECT.water would make a rejected edit visible to everything
     // that reads the project before the PATCH that would have justified it.
     water = mapped.water ? Object.assign({ margin: 3.0, thickness: 0.06,
-                                           specific_weight: 10.0 }, mapped.water) : null;
+                                           specific_weight: null }, mapped.water) : null;
     App.BOREHOLES = mapped.BOREHOLES;
     App.MATERIALS = mapped.MATERIALS;
     App.LAYERS = mapped.LAYERS;
@@ -240,6 +253,7 @@ App.Model = (function () {
     App.PROJECT = project;
     rebuildDerived();
     syncTitle(project);
+    syncUnits(project);
     return project;
   }
 
@@ -621,6 +635,9 @@ App.Model = (function () {
       kind: 'number', decimals: 3, unit: 'm',
       get: function () { return domain[field]; },
       set: function (v) {
+        // NaN fails both comparisons below, so without this it was stored as the
+        // domain's edge -- and reached the server as null.
+        if (!Number.isFinite(v)) return field + ' must be a number.';
         var other = LIMITS[field][0], side = LIMITS[field][1];
         if (side === 'below' && v >= domain[other]) return field + ' must stay below ' + other + '.';
         if (side === 'above' && v <= domain[other]) return field + ' must stay above ' + other + '.';
@@ -663,10 +680,18 @@ App.Model = (function () {
     };
   }
 
+  /* What the water weighs: the project's own, or water's 10 kN/m3 in its system when
+     the project leaves it to the server (WaterLevel.specific_weight is optional). */
+  function waterWeight() {
+    return water.specific_weight !== null && water.specific_weight !== undefined
+      ? water.specific_weight : App.Units.fromSI(10000, 'specific weight');
+  }
+
   function waterWeightEditor() {
     return {
-      kind: 'number', decimals: 2, unit: 'kN/m³',
-      get: function () { return water.specific_weight; },
+      kind: 'number', decimals: App.PropertySets.decimals(waterWeight()),
+      unit: App.Units.label('specific weight'),
+      get: function () { return waterWeight(); },
       set: function (value) {
         if (!Number.isFinite(value)) return 'The specific weight must be a number.';
         // Mirrors WaterLevel's gt=0. Zero is not merely wrong, it divides by zero
@@ -684,8 +709,8 @@ App.Model = (function () {
       groups: {
         'General': [
           ['Type', 'Global phreatic level', '', true],
-          ['Specific weight', String(water.specific_weight), 'kN/m³', false,
-           waterWeightEditor()]
+          ['Specific weight', String(waterWeight()), App.Units.label('specific weight'),
+           false, waterWeightEditor()]
         ],
         'Geometry': [
           ['Level', fixed(water.y), 'm', false, waterLevelEditor()],
@@ -703,9 +728,13 @@ App.Model = (function () {
     };
   }
 
+  function loadUnit(load) {
+    return App.Units.label({ point: 'force', line: 'line force' }[load.kind] || 'stress');
+  }
+
   function loadNumberEditor(load, field, component) {
     return {
-      kind: 'number', decimals: 3, unit: 'kN/m²',
+      kind: 'number', decimals: 3, unit: component === undefined ? 'm' : loadUnit(load),
       get: function () { return component === undefined ? load[field] : load.components[component]; },
       set: function (value) {
         if (!Number.isFinite(value)) return field + ' must be a finite number.';
@@ -752,6 +781,15 @@ App.Model = (function () {
         return null;
       }
     };
+  }
+
+  /* A profile's or wall's Kratos variables, edited in place through the same check the
+     sheet-pile dialog uses. */
+  function sectionRows(kind, section, dimension) {
+    return [['Law', section.constitutive_law || '', '', true]].concat(
+      App.PropertySets.rows(kind, section, dimension, function (s) {
+        return App.Beams ? App.Beams.validateSection(s) : null;
+      }));
   }
 
   function beamLength(beam) {
@@ -861,16 +899,7 @@ App.Model = (function () {
           ['Edit', '', '', false, { kind: 'button', text: 'Edit wall…',
             run: function () { if (App.Beams) App.Beams.edit(panel.id); } }]
         ],
-        'Section': [
-          ['E', String(section.E), 'kN/m²', false,
-           sectionNumberEditor(section, 'E', 'kN/m²', 0)],
-          ["Poisson's ratio", String(section.nu), '', false,
-           sectionNumberEditor(section, 'nu', '', 3)],
-          ['Thickness', String(section.thickness), 'm', false,
-           sectionNumberEditor(section, 'thickness', 'm', 3)],
-          ['Density', String(section.density), 'kg/m³', false,
-           sectionNumberEditor(section, 'density', 'kg/m³', 1)]
-        ],
+        'Section': sectionRows('panel', section, 3),
         'Geometry': geometry
       }
     };
@@ -899,18 +928,7 @@ App.Model = (function () {
           ['Edit', '', '', false, { kind: 'button', text: 'Edit member…',
             run: function () { if (App.Beams) App.Beams.edit(member.id); } }]
         ],
-        'Section': [
-          ['E', String(section.E), 'kN/m²', false,
-           sectionNumberEditor(section, 'E', 'kN/m²', 0)],
-          ["Poisson's ratio", String(section.nu), '', false,
-           sectionNumberEditor(section, 'nu', '', 3)],
-          ['Area', String(section.area), 'm²', false,
-           sectionNumberEditor(section, 'area', 'm²', 5)],
-          ['Inertia', String(section.inertia), 'm⁴', false,
-           sectionNumberEditor(section, 'inertia', 'm⁴', 7)],
-          ['Density', String(section.density), 'kg/m³', false,
-           sectionNumberEditor(section, 'density', 'kg/m³', 1)]
-        ],
+        'Section': sectionRows('beam', section, 3),
         'Geometry': geometry
       }
     };
@@ -940,20 +958,10 @@ App.Model = (function () {
           ['Edit', '', '', false, { kind: 'button', text: 'Edit sheet pile…',
             run: function () { if (App.Beams) App.Beams.edit(beam.id); } }]
         ],
-        'Section': [
-          ["E", String(section.E), 'kN/m²', false,
-           sectionNumberEditor(section, 'E', 'kN/m²', 0)],
-          ["Poisson's ratio", String(section.nu), '', false,
-           sectionNumberEditor(section, 'nu', '', 3)],
-          ['Area', String(section.area), 'm²/m', false,
-           sectionNumberEditor(section, 'area', 'm²/m', 5)],
-          ['Inertia', String(section.inertia), 'm⁴/m', false,
-           sectionNumberEditor(section, 'inertia', 'm⁴/m', 7)],
-          ['Density', String(section.density), 'kg/m³', false,
-           sectionNumberEditor(section, 'density', 'kg/m³', 1)],
+        'Section': sectionRows('beam', section, 2).concat([
           ['Spacing', String(section.spacing), 'm', false,
            sectionNumberEditor(section, 'spacing', 'm', 3)]
-        ],
+        ]),
         'Geometry': geometry
       }
     };
@@ -1002,6 +1010,13 @@ App.Model = (function () {
     };
   }
 
+  function tendonRows(tendon, dimension) {
+    return [['Law', tendon.constitutive_law || '', '', true]].concat(
+      App.PropertySets.rows('anchor', tendon, dimension, function (s) {
+        return App.Anchors ? App.Anchors.validateSection(s) : null;
+      }));
+  }
+
   /* The 3D anchor: both ends in space, and no out-of-plane spacing to smear over --
      it is the discrete member the user drew, where it was drawn. */
   function spaceAnchorProps(anchor) {
@@ -1024,18 +1039,12 @@ App.Model = (function () {
       groups: {
         'General': [
           ['Tendon', tendon.name || anchor.section, '', true],
-          ['Prestress', fixed(anchor.prestress), 'kN', false,
-           anchorNumberEditor(anchor, 'prestress', 'kN', 1)],
+          ['TRUSS_PRESTRESS_PK2', String(anchor.prestress), App.Units.label('stress'), false,
+           anchorNumberEditor(anchor, 'prestress', App.Units.label('stress'),
+                              App.PropertySets.decimals(anchor.prestress))],
           ['Active', anchor.active !== false, '', true]
         ],
-        'Tendon': [
-          ['E', String(tendon.E), 'kN/m²', false,
-           tendonNumberEditor(tendon, 'E', 'kN/m²', 0)],
-          ['Area', String(tendon.area), 'm²', false,
-           tendonNumberEditor(tendon, 'area', 'm²', 6)],
-          ['Density', String(tendon.density), 'kg/m³', false,
-           tendonNumberEditor(tendon, 'density', 'kg/m³', 1)]
-        ],
+        'Tendon': tendonRows(tendon, 3),
         'Geometry': geometry
       }
     };
@@ -1059,20 +1068,15 @@ App.Model = (function () {
       groups: {
         'General': [
           ['Tendon', tendon.name || anchor.section, '', true],
-          ['Prestress', fixed(anchor.prestress), 'kN', false,
-           anchorNumberEditor(anchor, 'prestress', 'kN', 1)],
+          ['TRUSS_PRESTRESS_PK2', String(anchor.prestress), App.Units.label('stress'), false,
+           anchorNumberEditor(anchor, 'prestress', App.Units.label('stress'),
+                              App.PropertySets.decimals(anchor.prestress))],
           ['Active', anchor.active !== false, '', true]
         ],
-        'Tendon': [
-          ['E', String(tendon.E), 'kN/m²', false,
-           tendonNumberEditor(tendon, 'E', 'kN/m²', 0)],
-          ['Area', String(tendon.area), 'm²', false,
-           tendonNumberEditor(tendon, 'area', 'm²', 6)],
-          ['Density', String(tendon.density), 'kg/m³', false,
-           tendonNumberEditor(tendon, 'density', 'kg/m³', 1)],
+        'Tendon': tendonRows(tendon, 2).concat([
           ['Spacing', String(tendon.spacing), 'm', false,
            tendonNumberEditor(tendon, 'spacing', 'm', 3)]
-        ],
+        ]),
         'Geometry': geometry
       }
     };
@@ -1155,18 +1159,23 @@ App.Model = (function () {
     };
   }
 
+  /* `null` is a choice, not a gap: a contact with no material of its own takes the
+     stiffness of whichever soil each stretch runs against (server/app/schemas.py,
+     InterfaceSection). A <select> carries strings, so it is offered as ''. */
+  var ADJACENT_SOIL = { value: '', text: 'From the soil it runs against' };
+
   function contactMaterialEditor(section) {
     return {
       kind: 'select',
       options: function () {
-        return (App.MATERIALS || []).map(function (m) {
+        return [ADJACENT_SOIL].concat((App.MATERIALS || []).map(function (m) {
           return { value: m.id, text: m.name };
-        });
+        }));
       },
-      get: function () { return section.material; },
+      get: function () { return section.material || ''; },
       set: function (value) {
         var was = section.material;
-        section.material = value;
+        section.material = value || null;
         var problem = App.Interfaces ? App.Interfaces.validateSection(section) : null;
         if (problem) { section.material = was; return problem; }
         return null;
@@ -1212,25 +1221,24 @@ App.Model = (function () {
 
     var properties = [
       ['Soil', (App.matById && contact.material
-                && (App.matById(contact.material) || {}).name) || contact.material || '—',
+                && (App.matById(contact.material) || {}).name) || contact.material
+               || ADJACENT_SOIL.text,
        '', false, contactMaterialEditor(contact)],
-      ['R_inter', String(contact.r_inter), '', false,
-       contactNumberEditor(contact, 'r_inter', '', 2)],
+      contact.r_inter === null || contact.r_inter === undefined
+        ? ['R_inter', 'each soil’s own', '', true]
+        : ['R_inter', String(contact.r_inter), '', false,
+           contactNumberEditor(contact, 'r_inter', '', 2)],
       ['Virtual thickness', String(contact.virtual_thickness), 'm', false,
        contactNumberEditor(contact, 'virtual_thickness', 'm', 4)],
       ['Permeability', contact.permeability || 'Neutral', '', false,
        contactPermeabilityEditor(contact)]
     ];
-    // Blank rather than zero when they are derived: showing 0 kN/m³ would read as a
-    // contact with no stiffness rather than one the soil's own E supplies.
-    if (contact.normal_stiffness || contact.shear_stiffness) {
-      properties.push(['Normal stiffness', String(contact.normal_stiffness), 'kN/m³',
-                       false, contactNumberEditor(contact, 'normal_stiffness', 'kN/m³', 0)]);
-      properties.push(['Shear stiffness', String(contact.shear_stiffness), 'kN/m³',
-                       false, contactNumberEditor(contact, 'shear_stiffness', 'kN/m³', 0)]);
-    } else {
-      properties.push(['Stiffness', 'derived from the soil', '', true]);
-    }
+    // Kratos' own variables. One the contact leaves out reads "derived" rather than
+    // zero: the soil's own E and strength supply it at export.
+    properties = properties.concat(App.PropertySets.rows('interface', contact,
+      App.PROJECT && App.PROJECT.dimension, function (s) {
+        return App.Interfaces ? App.Interfaces.validateSection(s) : null;
+      }));
 
     return {
       title: record.name, icon: 'interface',
@@ -1284,7 +1292,7 @@ App.Model = (function () {
 
   function normalLoadPressureEditor(record) {
     return {
-      kind: 'number', decimals: 1, unit: 'kN/m²',
+      kind: 'number', decimals: 1, unit: App.Units.label('stress'),
       get: function () { return record.pressure; },
       set: function (value) {
         if (!Number.isFinite(value)) return 'The pressure must be a number.';
@@ -1315,7 +1323,7 @@ App.Model = (function () {
     var sizing = [
       ['Type', hydrostatic ? 'Hydrostatic' : 'Uniform', '', false,
        normalLoadFluidPressureTypeEditor(record)],
-      ['Pressure', String(record.pressure), 'kN/m²', false,
+      ['Pressure', String(record.pressure), App.Units.label('stress'), false,
        normalLoadPressureEditor(record)]
     ];
     if (hydrostatic) {
@@ -1340,7 +1348,7 @@ App.Model = (function () {
   function loadProps(load) {
     var point = load.kind === 'point';
     var line = load.kind === 'line';
-    var unit = point ? 'kN' : (line ? 'kN/m' : 'kN/m²');
+    var unit = loadUnit(load);
     var geometry = point ? [
       ['x', fixed(load.x), 'm', false, loadNumberEditor(load, 'x')],
       ['y', fixed(load.y), 'm', false, loadNumberEditor(load, 'y')]
@@ -1427,6 +1435,16 @@ App.Model = (function () {
      because moving the section is a mode switch (PATCH /api/project/dimension), not
      a property edit. z stays either way: for the elevation sections it bounds the
      cut, and it is the layer's own stratigraphy rather than the domain. */
+  /* The frozen level editors (js/data.js App.LayerEditors) pass whatever they are given
+     to App.setLayerTopLevel/BottomLevel, and NaN fails every bound check in there, so
+     it was written into the stack as a level. Guarded here rather than edited there:
+     the frozen file stays frozen. */
+  function finiteOnly(editor) {
+    var set = editor.set;
+    editor.set = function (v) { return Number.isFinite(v) ? set(v) : 'The level must be a number.'; };
+    return editor;
+  }
+
   function geometryRows(bots, tops, layer) {
     var hidden = outOfPlaneAxis(App.PROJECT);
     var rows = [];
@@ -1435,9 +1453,9 @@ App.Model = (function () {
       rows.push(['x max', fixed(domain.x1), 'm', false, domainEditor('x1')]);
     }
     rows.push(['y min', fixed(Math.min.apply(null, bots)), 'm', false,
-               App.LayerEditors.bottomLevel(layer)]);
+               finiteOnly(App.LayerEditors.bottomLevel(layer))]);
     rows.push(['y max', fixed(Math.max.apply(null, tops)), 'm', false,
-               App.LayerEditors.topLevel(layer)]);
+               finiteOnly(App.LayerEditors.topLevel(layer))]);
     if (hidden !== 'z') {
       rows.push(['z min', fixed(domain.z0), 'm', false, domainEditor('z0')]);
       rows.push(['z max', fixed(domain.z1), 'm', false, domainEditor('z1')]);

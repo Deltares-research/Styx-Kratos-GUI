@@ -33,7 +33,9 @@ from __future__ import annotations
 import io
 import json
 import re
+import threading
 import zipfile
+from collections import OrderedDict
 from pathlib import Path, PureWindowsPath
 
 from app import calculate
@@ -121,19 +123,42 @@ def _summary(directory: Path, match: re.Match) -> dict:
 def run_directory(run_id: str) -> Path:
     """The directory `run_id` names, or `UnknownRun`.
 
-    The name is matched against `RUN_NAME` before it is used as a path component, which
-    is what makes `..` and an absolute path impossible rather than merely unlikely --
-    neither can match a pattern that ends in a timestamp.
+    Matching `RUN_NAME` is not enough on its own: its `deck` group is `.+`, so
+    `..\\secret_2026-01-01_00-00` matches, and on Windows that backslash is a separator.
+    A run id is one directory name directly under the runs root and nothing else, so
+    both separators are refused outright -- the same rule `file_path` applies, for the
+    same reason. Without one it is a single component, and ending in a timestamp it
+    cannot be `..` itself, so a deck called `model..v2` keeps its runs. The resolved
+    directory is checked against the runs root afterwards anyway.
     """
-    if not RUN_NAME.match(run_id or ""):
+    if (not RUN_NAME.match(run_id or "")
+            or "/" in run_id or "\\" in run_id
+            or PureWindowsPath(run_id).drive):
         raise UnknownRun(f"{run_id!r} is not a run.")
-    directory = calculate.runs_root() / run_id
+    root = calculate.runs_root()
+    directory = root / run_id
+    if directory.resolve().parent != root.resolve():
+        raise UnknownRun(f"{run_id!r} is not a run.")
     if not directory.is_dir():
         raise UnknownRun(f"There is no run called {run_id!r}.")
     return directory
 
 
 # ── Describing one ──────────────────────────────────────────────────────────
+
+def run_unit_system(run_id: str) -> str:
+    """The unit system a run's numbers are in: what its deck recorded beside it
+    (`calculate.UNITS_NAME`), or SI for a run without the record -- a deck case, or a
+    run older than the unit system, both of which are SI decks."""
+    from app import units
+
+    path = run_directory(run_id) / calculate.UNITS_NAME
+    try:
+        system = json.loads(path.read_text(encoding="utf-8")).get("unit_system")
+    except (OSError, ValueError, AttributeError):
+        return units.DEFAULT
+    return system if system in units.SYSTEMS else units.DEFAULT
+
 
 def describe(run_id: str) -> dict:
     """One run in full: its stages, its files, and whether it finished."""
@@ -149,6 +174,7 @@ def describe(run_id: str) -> dict:
         # says what Kratos said, and the files say what is there to look at. The
         # second is the question a postprocessor is actually asking.
         "complete": bool(stages) and all(stage["results"] for stage in stages),
+        "unit_system": run_unit_system(run_id),
         "failed_at": failed,
         "log": calculate.LOG_NAME if (directory / calculate.LOG_NAME).is_file() else None,
     }
@@ -317,35 +343,54 @@ def file_path(run_id: str, name: str) -> Path:
 
 # ── Reading one stage ───────────────────────────────────────────────────────
 
-_cache: dict[tuple, object] = {}
-"""Parsed files, keyed by path and what the filesystem says about it.
+_cache: OrderedDict[tuple, object] = OrderedDict()
+"""Parsed files, keyed by path and what the filesystem says about it, least recently
+used first.
 
-A stage is half a megabyte of ASCII and the viewer asks for one field at a time, so
-without this every change of field on the same stage would re-parse the same two files.
-The key carries size and mtime, so a run that is overwritten -- which `calculate` never
-does, but a user copying files in might -- is re-read rather than served stale.
+A stage is half a megabyte to several of ASCII and the viewer asks for one field at a
+time, so without this every change of field would re-parse the same files. The key
+carries size and mtime, so a run that is overwritten -- which `calculate` never does,
+but a user copying files in might -- is re-read rather than served stale.
 
-Bounded by throwing the whole thing away rather than by evicting the oldest: the working
-set is one stage, occasionally two while a comparison is being made, and a cache that
-needs an eviction policy here would be a cache that is the wrong size.
+The working set is a whole run, not one stage: `stage_parts` reads every stage's mesh
+(see there), so a 20-stage run is the deck, twenty meshes and whichever results files are
+being looked at. It used to be capped at 8 entries and cleared whole, which a 7-stage run
+overflowed on every phase switch. Now it is bounded by the size of what it parsed
+(`CACHE_BYTES`), dropping the least recently used first.
 """
 
-CACHE_LIMIT = 8
+CACHE_BYTES = 96 * 2**20
+"""Budget in bytes of *source file*. A 20-stage Eemdijk run is ~13 MB of meshes and ~4 MB
+per stage of results, so this holds a run's meshes and a dozen stages of results; the
+parsed objects are a few times larger than their text."""
+
+_cache_lock = threading.Lock()
+"""The routes run on worker threads (they are plain `def` so parsing stays off the event
+loop), so two requests can reach the cache at once."""
 
 
 def _parsed(path: Path, parse):
     stat = path.stat()
     key = (str(path), stat.st_mtime_ns, stat.st_size, parse.__name__)
-    if key not in _cache:
-        if len(_cache) >= CACHE_LIMIT:
-            _cache.clear()
-        _cache[key] = parse(path.read_text(encoding="utf-8", errors="replace"))
-    return _cache[key]
+    with _cache_lock:
+        if key in _cache:
+            _cache.move_to_end(key)
+            return _cache[key]
+    # Parsed outside the lock: a slow stage must not hold up a request for another one.
+    # Two requests for the same new file may both parse it; the second simply wins.
+    value = parse(path.read_text(encoding="utf-8", errors="replace"))
+    with _cache_lock:
+        _cache[key] = value
+        _cache.move_to_end(key)
+        while len(_cache) > 1 and sum(k[2] for k in _cache) > CACHE_BYTES:
+            _cache.popitem(last=False)
+    return value
 
 
 def forget_cache() -> None:
     """Drop everything parsed. For tests, and for a caller that knows better."""
-    _cache.clear()
+    with _cache_lock:
+        _cache.clear()
 
 
 def stage_record(run_id: str, index: int) -> dict:
@@ -402,7 +447,8 @@ def stage_fields(run_id: str, index: int) -> dict:
 
     stage = stage_record(run_id, index)
     return {"stage": stage,
-            "groups": result_fields.catalogue(stage_results(run_id, index))}
+            "groups": result_fields.catalogue(stage_results(run_id, index),
+                                              run_unit_system(run_id))}
 
 
 def stage_field(run_id: str, index: int, name: str, location: str = "nodes") -> dict:
@@ -410,7 +456,8 @@ def stage_field(run_id: str, index: int, name: str, location: str = "nodes") -> 
     from app import result_fields
 
     return result_fields.values(stage_results(run_id, index),
-                                stage_mesh(run_id, index), name, location)
+                                stage_mesh(run_id, index), name, location,
+                                run_unit_system(run_id))
 
 
 def stage_displacement(run_id: str, index: int) -> dict:
@@ -425,7 +472,7 @@ def stage_at_node(run_id: str, index: int, node: int) -> dict:
     from app import result_fields
 
     return result_fields.at_node(stage_results(run_id, index),
-                                 stage_mesh(run_id, index), node)
+                                 stage_mesh(run_id, index), node, run_unit_system(run_id))
 
 
 def stage_parts(run_id: str, index: int) -> dict:
@@ -492,7 +539,7 @@ def stage_members(run_id: str) -> dict:
         members.append({
             "name": name,
             "stages": [stage["index"] for stage, _ in files],
-            "quantities": [entry.summary()
+            "quantities": [entry.summary(run_unit_system(run_id))
                            for entry in result_members.available(outputs)],
         })
     return {"members": members}
@@ -526,7 +573,7 @@ def member_profiles(run_id: str, member: str, quantity: str) -> dict:
         "member": member,
         "quantity": entry.name,
         "label": entry.label,
-        "unit": entry.unit,
+        "unit": entry.unit(run_unit_system(run_id)),
         "stages": [{"index": stage["index"], "name": stage["name"],
                     "phase": stage["phase"]}
                    | result_members.profile(output, coordinates, entry)

@@ -171,9 +171,6 @@ def stage_sections(model: MdpaModel, mesh: GidMesh) -> dict:
     if mesh.dimension == 3:
         # The outer skin, per part, so two neighbouring bodies each keep their own
         # surface where they meet -- the same rule `mdpa_import` uses.
-        for bucket in grouped.values():
-            if bucket["triangles"]:
-                continue
         grouped = _skins(grouped, mesh, owner, kinds)
 
     sections = []

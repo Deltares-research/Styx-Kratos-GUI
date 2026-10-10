@@ -1,0 +1,87 @@
+{
+ "conditions": {
+  "UPwFaceLoadCondition3D3N": 4
+ },
+ "elements": {
+  "UPwSmallStrainElement3D4N": 160
+ },
+ "materials": {
+  "materials:PorousDomain.Soil_1": {
+   "law": "GeoIncrementalLinearElastic3DLaw",
+   "variables": {
+    "BULK_MODULUS_FLUID": 2200000000.0,
+    "BULK_MODULUS_SOLID": 10000000000.0,
+    "DENSITY_SOLID": 1834.8623853211009,
+    "DENSITY_WATER": 1019.367991845056,
+    "DYNAMIC_VISCOSITY": 0.001,
+    "GEO_COHESION": 500.0,
+    "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+    "GEO_FRICTION_ANGLE": 32.0,
+    "PERMEABILITY_XX": 1.736111111111111e-05,
+    "PERMEABILITY_XY": 0.0,
+    "PERMEABILITY_YY": 1.736111111111111e-05,
+    "PERMEABILITY_YZ": 0.0,
+    "PERMEABILITY_ZX": 0.0,
+    "PERMEABILITY_ZZ": 1.736111111111111e-05,
+    "POISSON_RATIO": 0.28,
+    "POROSITY": 0.3,
+    "YOUNG_MODULUS": 25000000.0
+   }
+  },
+  "materials:PorousDomain.Soil_2": {
+   "law": "GeoIncrementalLinearElastic3DLaw",
+   "variables": {
+    "BULK_MODULUS_FLUID": 2200000000.0,
+    "BULK_MODULUS_SOLID": 10000000000.0,
+    "DENSITY_SOLID": 1783.893985728848,
+    "DENSITY_WATER": 1019.367991845056,
+    "DYNAMIC_VISCOSITY": 0.001,
+    "GEO_COHESION": 15000.0,
+    "GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
+    "GEO_FRICTION_ANGLE": 25.0,
+    "PERMEABILITY_XX": 5.787037037037037e-09,
+    "PERMEABILITY_XY": 0.0,
+    "PERMEABILITY_YY": 5.787037037037037e-09,
+    "PERMEABILITY_YZ": 0.0,
+    "PERMEABILITY_ZX": 0.0,
+    "PERMEABILITY_ZZ": 5.787037037037037e-09,
+    "POISSON_RATIO": 0.33,
+    "POROSITY": 0.3,
+    "YOUNG_MODULUS": 12000000.0
+   }
+  }
+ },
+ "nodes": 100,
+ "parts": [
+  "Back_Edge",
+  "Bottom_Fixed",
+  "Front_Edge",
+  "Left_Edge",
+  "Right_Edge",
+  "Soil_1",
+  "Soil_2",
+  "SurfaceLoad_1",
+  "Top_Surface"
+ ],
+ "stages": {
+  "1_Stage": {
+   "materials": "MaterialParameters.json",
+   "operations": {},
+   "problem_domain": [
+    "Soil_1",
+    "Soil_2"
+   ],
+   "processes": [
+    [
+     "apply_scalar_constraint_table_process",
+     1
+    ],
+    [
+     "apply_vector_constraint_table_process",
+     7
+    ]
+   ],
+   "reset_totals": false
+  }
+ }
+}

@@ -32,18 +32,19 @@ App.Beams = (function () {
   }
 
 
-  /* S355 sheet piling, near an AZ 26-700 profile per metre run. A starting point
-     the user edits, not a claim about their wall. */
-  var DEFAULT_SECTION = {
-    name: 'Sheet pile section', E: 2.1e8, nu: 0.3,
-    area: 0.0198, inertia: 5.52e-4, density: 7850, spacing: 1
-  };
+  /* S355 sheet piling, near an AZ 26-700 profile per metre run: a Kratos property set
+     (App.PropertySets), in the project's units. A starting point the user edits, not a
+     claim about their wall. */
+  function defaultSection() {
+    return Object.assign({ name: 'Sheet pile section', spacing: 1 },
+                         App.PropertySets.defaults('beam'));
+  }
 
   /* The same steel as a panel rather than as a metre run of one: a wall is defined
      by how thick it is. 0.4 m is a diaphragm wall, the usual 3D case. */
-  var DEFAULT_PANEL_SECTION = {
-    name: 'Wall section', E: 2.1e8, nu: 0.3, thickness: 0.4, density: 7850
-  };
+  function defaultPanelSection() {
+    return Object.assign({ name: 'Wall section' }, App.PropertySets.defaults('panel'));
+  }
 
   /* Which kind of structure a project of this dimension holds. A 2D section holds
      sheet piles; the solid model holds walls and the members standing in it. */
@@ -238,7 +239,7 @@ App.Beams = (function () {
     var known = library.some(function (s) { return s.id === beam.section; });
     if (!known) {
       library.push(Object.assign({ id: beam.section },
-                                 isPanel(beam) ? DEFAULT_PANEL_SECTION : DEFAULT_SECTION));
+                                 isPanel(beam) ? defaultPanelSection() : defaultSection()));
     }
     return library;
   }
@@ -278,22 +279,18 @@ App.Beams = (function () {
     return validatePolyline(beam.points, 2, 'sheet pile');
   }
 
+  /* A wall's section is a shell's property set and carries no spacing; a pile's or a
+     member's is a beam's. Which one a section is shows in what it carries. */
+  function sectionKind(section) {
+    return section.spacing === undefined ? 'panel' : 'beam';
+  }
+
   function validateSection(section) {
     if (!section.name || !section.name.trim()) return 'Section name cannot be empty.';
-    // A wall carries a thickness where a pile carries an area and an inertia per
-    // metre run, so which numbers have to be positive is the section's own business.
-    var positive = section.thickness !== undefined
-      ? ['E', 'thickness', 'density']
-      : ['E', 'area', 'inertia', 'density', 'spacing'];
-    for (var i = 0; i < positive.length; i += 1) {
-      if (!(section[positive[i]] > 0)) {
-        return 'Section ' + positive[i] + ' must be greater than zero.';
-      }
+    if (section.spacing !== undefined && !(section.spacing > 0)) {
+      return 'Section spacing must be greater than zero.';
     }
-    if (!(section.nu >= 0 && section.nu < 0.5)) {
-      return "Poisson's ratio must be at least 0 and below 0.5.";
-    }
-    return null;
+    return App.PropertySets.validate(sectionKind(section), section);
   }
 
   /* Every write goes through the one structures endpoint, carrying the loads
@@ -378,7 +375,7 @@ App.Beams = (function () {
   function sectionOf(beam) {
     return sections(beam).filter(function (s) { return s.id === beam.section; })[0]
       || Object.assign({ id: beam.section },
-                       isPanel(beam) ? DEFAULT_PANEL_SECTION : DEFAULT_SECTION);
+                       isPanel(beam) ? defaultPanelSection() : defaultSection());
   }
 
   function input(value, step) {
@@ -387,18 +384,13 @@ App.Beams = (function () {
     });
   }
 
-  /* One row per section field, matching exactly what `validateSection` checks for
-     the kind: a wall carries a thickness where a pile or member carries an area,
-     an inertia and a spacing. `step` is picked for the field's usual magnitude,
-     not derived from its decimals -- a derived step can round-trip through
-     exponential notation (1e-7), which is legal HTML but not what this needs. */
-  function sectionFields(kind) {
-    return kind === 'panel'
-      ? [['E', 'kN/m²', '1000'], ['nu', '', '0.01'],
-         ['thickness', 'm', '0.01'], ['density', 'kg/m³', '10']]
-      : [['E', 'kN/m²', '1000'], ['nu', '', '0.01'], ['area', 'm²', '0.0001'],
-         ['inertia', 'm⁴', '0.000001'], ['density', 'kg/m³', '10'],
-         ['spacing', 'm', '0.1']];
+  /* A text box rather than a number box for a Kratos variable: it may be a flag, a
+     list or a name as well as a number (App.PropertySets.parse), and a number box
+     would round 2.1e11 into something unreadable. */
+  function variableInput(value) {
+    return App.UI.el('input.mesh-setting-control', {
+      type: 'text', value: App.PropertySets.format(value)
+    });
   }
 
   /* The dialog every kind this module authors shares: a name, its polyline (plus
@@ -431,8 +423,12 @@ App.Beams = (function () {
         beam.y_toe = Number(controls.y_toe.value);
       }
       beam.active = controls.active.checked;
+      section.variables = section.variables || {};
       Object.keys(sectionControls).forEach(function (key) {
-        section[key] = Number(sectionControls[key].value);
+        var value = App.PropertySets.parse(sectionControls[key].value);
+        if (key === 'spacing') { section.spacing = Number(sectionControls[key].value); return; }
+        if (value === undefined) delete section.variables[key];
+        else section.variables[key] = value;
       });
       var problem = validate(beam) || validateSection(section);
       if (problem) { message.textContent = problem; return; }
@@ -482,13 +478,23 @@ App.Beams = (function () {
         controls.active.checked = beam.active !== false;
         row('Active', controls.active, 'Inactive structures remain in the project but are not exported.');
 
-        sectionFields(kind).forEach(function (spec) {
-          var key = spec[0], unit = spec[1], step = spec[2];
-          var control = input(section[key], step);
+        // The section's Kratos variables, by Kratos' names and in the project's
+        // units; a blank one the server can derive is left to it.
+        var sectionKindName = kind === 'panel' ? 'panel' : 'beam';
+        App.PropertySets.names(sectionKindName, section,
+                               App.PROJECT && App.PROJECT.dimension).forEach(function (key) {
+          var control = variableInput((section.variables || {})[key]);
           sectionControls[key] = control;
-          row(key === 'nu' ? "Poisson's ratio" : key, control,
-              unit ? 'Section ' + key + ' [' + unit + '].' : '');
+          var unit = App.Units.variableLabel(key);
+          var derived = App.PropertySets.derivable(sectionKindName, key);
+          row(key, control, (unit ? '[' + unit + ']' : '')
+                            + (derived ? (unit ? ' ' : '') + 'Blank: derived at export.' : ''));
         });
+        if (kind !== 'panel') {
+          var spacing = input(section.spacing, '0.1');
+          sectionControls.spacing = spacing;
+          row('Spacing', spacing, 'Out-of-plane centres [m]; a 2D section smears the pile over them.');
+        }
 
         message = el('div.mesh-settings-message');
         row('', message, '');
@@ -527,6 +533,6 @@ App.Beams = (function () {
     sectionsFor: sectionsFor, sectionOf: sectionOf,
     validate: validate, validateSection: validateSection,
     save: save, remove: remove, start: start, edit: edit, open: open,
-    DEFAULT_SECTION: DEFAULT_SECTION, DEFAULT_PANEL_SECTION: DEFAULT_PANEL_SECTION
+    defaultSection: defaultSection, defaultPanelSection: defaultPanelSection
   };
 })();

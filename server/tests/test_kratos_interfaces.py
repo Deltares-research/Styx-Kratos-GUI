@@ -20,7 +20,7 @@ import json
 import pytest
 
 from app import build, kratos, schemas
-from app.kratos_materials import KILO
+KILO = 1000.0  # kN -> N: these tests write old-style projects, converted on load (app/legacy.py)
 from app.schemas import MeshRequest, Project
 from app.seed import seed_project
 from tests import mdpa
@@ -519,7 +519,8 @@ def test_the_shear_stiffness_is_the_soils_shear_modulus_over_the_element_size(co
     variables = interface_material(contacted)
 
     assert variables["INTERFACE_SHEAR_STIFFNESS"] == pytest.approx(
-        soil.E * KILO / (2 * (1 + soil.nu) * thickness))
+        soil.variables["YOUNG_MODULUS"]
+        / (2 * (1 + soil.variables["POISSON_RATIO"]) * thickness))
 
 
 def test_the_normal_stiffness_is_ten_times_the_shear(contacted):
@@ -548,7 +549,8 @@ def test_a_contact_takes_the_stiffness_of_each_soil_it_runs_against(session):
 
     def shear_of(layer):
         soil = project.material(layer.mat)
-        return round(soil.E * KILO / (2 * (1 + soil.nu)), 6)
+        return round(soil.variables["YOUNG_MODULUS"]
+                     / (2 * (1 + soil.variables["POISSON_RATIO"])), 6)
 
     assert shears == {shear_of(layer) for layer in project.layers}
     assert len(shears) == 2, "two layers, two different soils, two stiffnesses"
@@ -581,9 +583,9 @@ def test_the_strength_is_the_soil_s_reduced_by_r_inter(contacted):
     soil = seed_project().materials[0]
     variables = interface_material(contacted)
 
-    assert variables["GEO_COHESION"] == pytest.approx(soil.c * 0.67 * KILO)
-    assert variables["GEO_FRICTION_ANGLE"] == pytest.approx(
-        math.degrees(math.atan(math.tan(math.radians(soil.phi)) * 0.67)))
+    assert variables["GEO_COHESION"] == pytest.approx(soil.variables["GEO_COHESION"] * 0.67)
+    assert variables["GEO_FRICTION_ANGLE"] == pytest.approx(math.degrees(math.atan(
+        math.tan(math.radians(soil.variables["GEO_FRICTION_ANGLE"])) * 0.67)))
 
 
 def test_the_interface_property_id_is_unique_and_non_zero(contacted):
@@ -630,7 +632,7 @@ def test_an_interface_drains_as_a_constant_field_whatever_the_soil_does(session)
     project = interfaced_project()
     undrained = project.model_dump()
     for material in undrained["materials"]:
-        material["type"] = "Undrained (A)"
+        material["variables"]["GEO_DRAINAGE_TYPE"] = "FULLY_COUPLED"
     export = kratos.export_project(Project.model_validate(undrained),
                                    MeshRequest(element_size=3.0, order=2))
     soils = [e["Material"]["Variables"]["GEO_DRAINAGE_TYPE"] for e in entries_of(export)

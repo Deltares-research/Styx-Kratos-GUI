@@ -68,7 +68,7 @@ import json
 import re
 from dataclasses import dataclass
 
-from app import kratos_materials
+from app import kratos_materials, units
 
 ORCHESTRATOR = "Orchestrators.KratosMultiphysics.SequentialOrchestrator"
 ANALYSIS_STAGE = "Stages.KratosMultiphysics.GeoMechanicsApplication.GeoMechanicsAnalysis"
@@ -162,14 +162,10 @@ loop never runs, that distance stays `DBL_MAX`, the shape parameter comes out as
 utility needs two points to interpolate between whether or not the second one adds
 anything, so it gets two."""
 
-KILO = kratos_materials.KILO
-"""kN -> N. The project is in kN and the deck is SI; see `kratos_materials.KILO`."""
-
-GRAVITY = kratos_materials.GRAVITY
-"""m/s2. Imported rather than written again: `kratos_materials` divides a unit weight by
-this same g to get the density it writes into the materials file, so if the two ever
-disagreed a soil's weight in the deck would not be its unit weight and nothing in the
-run would say so."""
+GRAVITY = units.GRAVITY_SI
+"""m/s2 -- and the same number in every unit system the project can be in, since all of
+them measure length in metres and time in seconds (`app/units.py`). The loads, pressures
+and specific weights below are the project's own numbers, written as they stand."""
 
 JSON_OUTPUT_FREQUENCY = 0.9999999999
 """See `_json_output`: a shade under one stage, so it writes once."""
@@ -263,12 +259,8 @@ def project_parameters(
         # continuum elements their self weight, and it is not filtered because the part
         # it names is the one the solver assembles out of whatever is active.
         loads_processes = [_gravity()]
-        # The project's loads are in kN and kN/m; the deck is in N. Converted here
-        # rather than inside `_load`, which is a plain vector writer and is also what
-        # puts gravity above into the list -- an acceleration in m/s2, already SI, and
-        # the one entry that must not be scaled.
-        loads_processes += [_load(name, variable, active,
-                                  [component * KILO for component in value])
+        # In the project's units, which are the deck's: written as they stand.
+        loads_processes += [_load(name, variable, active, list(value))
                             for name, variable, active, value in loads if keep(name)]
         loads_processes += [
             _normal_load(name, fluid_pressure_type, pressure, water_y, specific_weight)
@@ -288,7 +280,7 @@ def project_parameters(
         process_parts = _process_parts(constraint_processes + loads_processes,
                                        stage.ties)
         solver = _solver_settings(deck_name, domain_size, bodies, process_parts,
-                                  rotation_dofs, imported=len(stages) > 1,
+                                  rotation_dofs, imported=stage.modeler or index > 0,
                                   stage=stage)
         rendered[stage.name] = _stage(stage, index, constraint_processes,
                                       loads_processes, auxiliary, solver, deck_name)
@@ -683,7 +675,7 @@ def _pore_pressure(water_y: float, specific_weight: float) -> dict:
             "fluid_pressure_type": "Hydrostatic",
             "gravity_direction": 1,
             "reference_coordinate": water_y,
-            "specific_weight": specific_weight * KILO,
+            "specific_weight": specific_weight,
         },
     }
 
@@ -740,14 +732,14 @@ def _normal_load(part_name: str, fluid_pressure_type: str, pressure: float,
         # dropped on the way out. Both branches share one parameter set, so the key is
         # one the process already declares -- it is not an invention that would trip
         # Kratos' validation against its own defaults.
-        "value": [pressure * KILO, 0.0],
+        "value": [pressure, 0.0],
         "table": [0, 0],
     }
     if fluid_pressure_type == "Hydrostatic":
         parameters.update({
             "gravity_direction": 1,
             "reference_coordinate": water_y,
-            "specific_weight": specific_weight * KILO,
+            "specific_weight": specific_weight,
         })
     return {
         "python_module": "apply_normal_load_table_process",

@@ -39,7 +39,7 @@ import pytest
 from app import crow, kratos, phases, results
 from tests import crow_run, mdpa
 
-WATER_UNIT_WEIGHT = 10.0
+WATER_UNIT_WEIGHT = 10_000.0   # N/m3: the run is SI
 """kN/m3, as the deck writes it. Not 9.81: the project's own water is 10.0, and a test
 that used 9.81 here would be testing a number nobody chose."""
 
@@ -302,15 +302,15 @@ def test_the_field_menu_is_exactly_what_this_deck_writes():
     }
 
 
-def test_the_units_offered_are_the_projects_own():
-    """The deck is SI and the project is m/kN/day. A stress read straight out of the file
-    is out by a thousand and looks perfectly reasonable on screen."""
+def test_the_units_offered_are_the_runs_own():
+    """The run is SI -- it records no other system -- so a stress is in pascals, and
+    labelled so. Kratos has no units: the label is the only thing that says which."""
     catalogue = results.stage_fields(crow_run.RUN_ID, 7)["groups"]
     units = {field["name"]: field["unit"]
              for group in catalogue for field in group["fields"]}
 
     assert units["u"] == "m"
-    assert units["p"] == units["q"] == units["pw"] == "kPa"
+    assert units["p"] == units["q"] == units["pw"] == "Pa"
 
 
 def test_pore_pressure_is_hydrostatic_below_the_water_table_and_zero_above_it():
@@ -325,8 +325,8 @@ def test_pore_pressure_is_hydrostatic_below_the_water_table_and_zero_above_it():
     for node, value in values.items():
         y = mesh.nodes[node][1]
         depth = max(0.0, crow.WATER_Y - y)
-        assert value == pytest.approx(-WATER_UNIT_WEIGHT * depth, abs=0.05), (
-            f"pore pressure {value} kPa at y = {y} m")
+        assert value == pytest.approx(-WATER_UNIT_WEIGHT * depth, abs=50.0), (
+            f"pore pressure {value} Pa at y = {y} m")
         checked += 1
 
     assert checked > 3000, f"only {checked} nodes carried a pore pressure"
@@ -344,14 +344,15 @@ def test_effective_stress_is_compression_negative_and_q_is_not():
 
     assert p["max"] < 0.0, "somewhere in this model the ground is in tension"
     assert q["min"] > 0.0
-    assert -400.0 < p["min"] < -100.0, f"p' bottoms out at {p['min']} kPa"
+    assert -400e3 < p["min"] < -100e3, f"p' bottoms out at {p['min']} Pa"
 
 
-def test_stresses_are_in_kilopascals_and_not_pascals():
-    """The 3990.4 trap: a number three orders of magnitude out is still a plausible
-    number, and nothing on screen says which it is."""
+def test_stresses_are_in_the_runs_pascals_not_scaled():
+    """The 3990.4 trap, the other way round: nothing scales a run's numbers any more, so
+    an SI run's p' is hundreds of thousands of pascals -- not hundreds."""
     p = results.stage_field(crow_run.RUN_ID, 7, "p", "nodes")
-    assert abs(p["min"]) < 5.0e3, "p' looks like pascals"
+    assert abs(p["min"]) > 5.0e3, "p' looks like kilopascals"
+    assert p["unit"] == "Pa"
 
 
 # ── One quantity, two writers ───────────────────────────────────────────────

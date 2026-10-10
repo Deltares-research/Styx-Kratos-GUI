@@ -515,8 +515,9 @@ def test_patch_structures_accepts_a_coordinate_defined_point_load(client):
     client.put("/api/project", json=seed_project().model_dump())
 
 
-SECTION = {"id": "az26", "name": "AZ 26-700", "E": 2.1e8, "nu": 0.3,
-           "area": 0.0198, "inertia": 5.52e-4, "density": 7850.0, "spacing": 1.0}
+SECTION = {"id": "az26", "name": "AZ 26-700", "spacing": 1.0, "variables": {
+    "YOUNG_MODULUS": 2.1e11, "POISSON_RATIO": 0.3, "CROSS_AREA": 0.0198, "I33": 5.52e-4,
+    "DENSITY": 7850.0}}
 BEAM = {"id": "sheetpile_1", "name": "Sheet pile 1", "section": "az26",
         "points": [[12.0, 0.0], [12.0, -14.0]], "active": True}
 # What comes back: `kind` is defaulted in, which is how a project written before the
@@ -526,8 +527,8 @@ BEAM = {"id": "sheetpile_1", "name": "Sheet pile 1", "section": "az26",
 # `derived_from` comes back on every structure: it is how a translated pair is linked
 # (app/walls.py), and a pile the client authored is nobody's translation.
 STORED_BEAM = BEAM | {"kind": "beam", "derived_from": None}
-STORED_SECTION = SECTION | {"shear_area": None, "inertia_minor": None,
-                            "torsional_inertia": None}
+STORED_SECTION = SECTION | {"constitutive_law": "TimoshenkoBeamElasticConstitutiveLaw",
+                            "tables": {}}
 
 
 def test_patch_structures_creates_a_sheet_pile_and_its_section(client):
@@ -585,9 +586,9 @@ def test_patch_structures_deletes_a_sheet_pile_with_an_explicit_empty_list(clien
     client.put("/api/project", json=seed_project().model_dump())
 
 
-ANCHOR_SECTION = {"id": "strand", "name": "4-strand tendon", "E": 1.95e8,
-                  "area": 0.0006, "density": 7850.0, "spacing": 2.5,
-                  "tension_limit": 900.0, "compression_limit": None}
+ANCHOR_SECTION = {"id": "strand", "name": "4-strand tendon", "spacing": 2.5,
+                  "tension_limit": 900_000.0, "compression_limit": None, "variables": {
+                      "YOUNG_MODULUS": 1.95e11, "CROSS_AREA": 0.0006, "DENSITY": 7850.0}}
 ANCHOR = {"id": "anchor_1", "name": "Anchor 1", "kind": "anchor", "section": "strand",
           "head": [12.0, -2.0], "tail": [20.0, -8.0], "prestress": 250.0, "active": True}
 
@@ -889,64 +890,61 @@ def test_patch_layers_rejects_an_inverted_domain(client):
 
 def test_patch_materials_saves_edited_values_including_the_interface_fields(client):
     materials = [m.model_dump() for m in seed_project().materials]
-    materials[1].update(name="Sand, medium", color="#ff0000", g_unsat=18.6,
+    materials[1].update(name="Sand, medium", color="#ff0000",
                         r_inter=0.65, interface_permeability="Drain")
+    materials[1]["variables"]["DENSITY_SOLID"] = 1896.0
 
     response = client.patch("/api/project/materials", json={"materials": materials})
     assert response.status_code == 200
     assert response.json()["invalidates"] == ["project", "tree", "geometry"]
 
     saved = client.get("/api/project").json()["materials"][1]
-    assert (saved["name"], saved["color"], saved["g_unsat"]) == ("Sand, medium", "#ff0000", 18.6)
+    assert (saved["name"], saved["color"], saved["variables"]["DENSITY_SOLID"]) == \
+        ("Sand, medium", "#ff0000", 1896.0)
     assert (saved["r_inter"], saved["interface_permeability"]) == (0.65, "Drain")
 
     client.put("/api/project", json=seed_project().model_dump())
 
 
-def test_patch_materials_keeps_the_porosity_and_k0_nc_the_user_typed(client):
-    """The server half of the round trip the material dialog depends on.
-
-    Both fields mean "the user owns this value" (plan sec 7.4): a number here is
-    written to the deck, and null is what makes it fall back to DEFAULT_POROSITY and to
-    Jaky. The library is replaced wholesale by this endpoint, so a client that does not
-    send them back deletes them -- which is exactly what the browser used to do, and
-    what `live/tests/test-material-library.js` now holds the other end of.
-    """
+def test_patch_materials_keeps_every_variable_the_user_typed(client):
+    """The server half of the round trip the material dialog depends on: the library is
+    replaced wholesale, so the Kratos block goes back exactly as it came -- a variable
+    added, a string, a list, a law nobody here knows."""
     materials = [m.model_dump() for m in seed_project().materials]
-    materials[0].update(porosity=0.42, k0_nc=0.62)
+    materials[0]["variables"].update(POROSITY=0.42, K0_NC=0.62, UDSM_PARAMETERS=[1.0, 2.0])
+    materials[0]["constitutive_law"] = "SmallStrainUDSM3DLaw"
 
     assert client.patch("/api/project/materials",
                         json={"materials": materials}).status_code == 200
     saved = client.get("/api/project").json()["materials"][0]
-    assert (saved["porosity"], saved["k0_nc"]) == (0.42, 0.62)
+    assert saved["variables"] == materials[0]["variables"]
+    assert saved["constitutive_law"] == "SmallStrainUDSM3DLaw"
 
-    # And null really does mean "derive it" rather than being refused as missing.
-    materials[0].update(porosity=None, k0_nc=None)
+    # And a variable taken out is gone, not kept: what is absent is derived.
+    del materials[0]["variables"]["POROSITY"]
     assert client.patch("/api/project/materials",
                         json={"materials": materials}).status_code == 200
-    saved = client.get("/api/project").json()["materials"][0]
-    assert (saved["porosity"], saved["k0_nc"]) == (None, None)
+    assert "POROSITY" not in client.get("/api/project").json()["materials"][0]["variables"]
 
     client.put("/api/project", json=seed_project().model_dump())
 
 
-def test_patch_materials_rejects_a_porosity_outside_the_unit_range(client):
-    """The bounds the dialog's own numRow mirrors (js/dialogs.js). Soil with no voids
-    at all, or nothing but voids, is not soil."""
+def test_patch_materials_rejects_what_kratos_could_not_read(client):
     materials = [m.model_dump() for m in seed_project().materials]
-    for bad in (1.0, -0.1):
-        materials[0]["porosity"] = bad
+    for bad in ({"porosity": 0.3}, {"variables": {"lower_case": 1.0}}):
+        attempt = [dict(materials[0], **bad)] + materials[1:]
         assert client.patch("/api/project/materials",
-                            json={"materials": materials}).status_code == 422
+                            json={"materials": attempt}).status_code == 422
 
 
 def test_patch_materials_accepts_a_newly_added_material(client):
     materials = [m.model_dump() for m in seed_project().materials]
     materials.append({
-        "id": "mx1", "name": "Peat, soft", "model": "Soft Soil", "type": "Undrained (A)",
-        "color": "#9aa7b4", "g_unsat": 11.0, "g_sat": 12.0, "E": 2000.0, "nu": 0.35,
-        "c": 2.0, "phi": 20.0, "k": 0.001, "r_inter": 0.5,
-        "interface_permeability": "Impermeable",
+        "id": "mx1", "name": "Peat, soft", "color": "#9aa7b4",
+        "constitutive_law": "GeoIncrementalLinearElastic3DLaw",
+        "variables": {"YOUNG_MODULUS": 2.0e6, "POISSON_RATIO": 0.35,
+                      "DENSITY_SOLID": 1121.3, "GEO_DRAINAGE_TYPE": "FULLY_COUPLED"},
+        "r_inter": 0.5, "interface_permeability": "Impermeable",
     })
 
     assert client.patch("/api/project/materials",
@@ -1095,7 +1093,7 @@ def test_replacing_an_unknown_part_is_a_404(client):
     "path",
     ["/css/tokens.css", "/css/layout.css", "/css/components.css",
      "/js/app.js", "/js/data.js", "/js/explorer.js", "/js/viewport.js",
-     "/vendor/three.min.js", "/assets/deltares-logo.svg"],
+     "/vendor/three.min.js", "/assets/deltares-logo.png"],
 )
 def test_frozen_assets_are_served(client, path):
     assert client.get(path).status_code == 200
@@ -1141,7 +1139,12 @@ def test_the_live_shell_replaces_only_the_viewport_and_the_orbit_controller(clie
                              "download.js", "zip.js", "phases.js", "results.js",
                              "results-render.js", "results-view.js", "part-colors.js",
                              "water-command.js", "node-parts.js", "deck.js",
-                             "results-plot.js"}
+                             "results-plot.js",
+                             # The unit system and the Kratos property sets the editors
+                             # show, and the Material sets dialog that replaces the frozen
+                             # one's old sheet (plan/kratos-native-inputs-plan.md).
+                             "unit-table.js", "units.js", "property-sets.js",
+                             "material-sets.js"}
     assert body.index('/js/orbit.js') < body.index('/live/js/orbit.js'), (
         "the Y-up controller has to be loaded after the frozen one it overrides")
 
@@ -1277,8 +1280,10 @@ def test_calculate_meshes_exports_and_runs_the_deck(client, monkeypatch, tmp_pat
     assert body["ok"] is True
     directory = Path(body["directory"])
     assert directory.parent == tmp_path / "runs"
-    assert sorted(body["inputs"]) == sorted(p.name for p in directory.iterdir()
-                                            if p.suffix in (".mdpa",) or p.name.endswith("Parameters.json"))
+    assert sorted(body["inputs"]) == sorted(
+        p.name for p in directory.iterdir()
+        if p.suffix in (".mdpa",) or p.name.endswith("Parameters.json")
+        or p.name == calculate.UNITS_NAME)
     assert body["outputs"] == ["results.post.res"]
     assert body["stats"]["elements"] > 0
 
@@ -1349,16 +1354,16 @@ def test_static_assets_may_still_be_cached(client):
 
 # ── 3D structures through the same one endpoint ─────────────────────────────
 
-PANEL_SECTION = {"id": "az26_wall", "name": "AZ 26-700 wall", "E": 2.1e8, "nu": 0.3,
-                 "thickness": 0.4, "density": 7850.0}
+PANEL_SECTION = {"id": "az26_wall", "name": "AZ 26-700 wall",
+                 "constitutive_law": "LinearElasticPlaneStress2DLaw", "tables": {},
+                 "variables": {"YOUNG_MODULUS": 2.1e11, "POISSON_RATIO": 0.3,
+                               "THICKNESS": 0.4, "DENSITY": 7850.0}}
 PANEL = {"id": "panel_1", "name": "Wall 1", "kind": "panel", "section": "az26_wall",
          "footprint": [[12.0, 4.0], [12.0, 20.0]], "y_top": 0.0, "y_toe": -14.0,
          "active": True}
 MEMBER = {"id": "member_1", "name": "King post 1", "kind": "member", "section": "az26",
           "points": [[18.0, 0.0, 10.0], [18.0, -12.0, 10.0]], "active": True}
-TENDON = {"id": "strand", "name": "4-strand tendon", "E": 1.95e8, "area": 0.0006,
-          "density": 7850.0, "spacing": 2.5, "tension_limit": 900.0,
-          "compression_limit": None}
+TENDON = ANCHOR_SECTION
 SPACE_ANCHOR = {"id": "anchor_1", "name": "Anchor 1", "kind": "anchor3d",
                 "section": "strand", "head": [12.0, -2.0, 10.0],
                 "tail": [17.0, -8.0, 10.0], "prestress": 250.0, "active": True}

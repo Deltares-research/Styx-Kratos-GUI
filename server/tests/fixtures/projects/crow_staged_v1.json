@@ -1,0 +1,513 @@
+{
+ "name": "CROW excavation wall",
+ "layered_soil": true,
+ "dimension": 2,
+ "section_offset": 5.0,
+ "domain": {
+  "x0": 0.0,
+  "x1": 80.0,
+  "z0": 0.0,
+  "z1": 10.0,
+  "y_top": 0.0,
+  "y_bottom": -60.0
+ },
+ "boreholes": [
+  {
+   "id": "bh1",
+   "name": "BH1",
+   "x": 0.0,
+   "y": 0.0,
+   "head": 0.0,
+   "water": -1.5
+  }
+ ],
+ "materials": [
+  {
+   "id": "m_upper",
+   "name": "Upper ground",
+   "model": "Mohr-Coulomb",
+   "type": "Drained",
+   "color": "#c4a86a",
+   "g_unsat": 18.0,
+   "g_sat": 20.0,
+   "E": 900.0,
+   "nu": 0.2,
+   "c": 1.0,
+   "phi": 22.3,
+   "k": 1.0,
+   "r_inter": 0.7,
+   "interface_permeability": "Neutral",
+   "porosity": 0.0,
+   "k0_nc": 0.62
+  },
+  {
+   "id": "m_lower",
+   "name": "Deep sand",
+   "model": "Mohr-Coulomb",
+   "type": "Drained",
+   "color": "#b08a6a",
+   "g_unsat": 20.0,
+   "g_sat": 22.0,
+   "E": 7428.6,
+   "nu": 0.3,
+   "c": 0.0,
+   "phi": 32.7,
+   "k": 5.0,
+   "r_inter": 0.7,
+   "interface_permeability": "Neutral",
+   "porosity": 0.0,
+   "k0_nc": 0.46
+  }
+ ],
+ "layers": [
+  {
+   "id": "L_top",
+   "name": "Soil_Top",
+   "mat": "m_upper",
+   "tops": {
+    "bh1": 0.0
+   },
+   "bots": {
+    "bh1": -8.0
+   }
+  },
+  {
+   "id": "L_mid",
+   "name": "Soil_Middle",
+   "mat": "m_upper",
+   "tops": {
+    "bh1": -8.0
+   },
+   "bots": {
+    "bh1": -12.0
+   }
+  },
+  {
+   "id": "L_bot",
+   "name": "Soil_Bottom",
+   "mat": "m_lower",
+   "tops": {
+    "bh1": -12.0
+   },
+   "bots": {
+    "bh1": -60.0
+   }
+  }
+ ],
+ "excavation": {
+  "x0": 0.0,
+  "x1": 5.0,
+  "z0": 0.0,
+  "z1": 10.0,
+  "floor_y": -8.0,
+  "levels": [
+   -2.0,
+   -5.0,
+   -8.0
+  ]
+ },
+ "wall": {
+  "thickness": 0.5,
+  "top_y": 0.0,
+  "toe_y": -13.0
+ },
+ "struts": {
+  "xs": [],
+  "y": -1.5,
+  "radius": 0.1,
+  "overhang": 0.8,
+  "waler_width": 0.5,
+  "waler_height": 0.6,
+  "waler_offset": 0.5
+ },
+ "anchor_rows": {
+  "xs": [],
+  "head_y": -1.5,
+  "length": 1.0,
+  "inclination_deg": 45.0,
+  "radius": 0.1,
+  "head_offset": 0.4
+ },
+ "piles": {
+  "xs": [],
+  "zs": [],
+  "radius": 0.1,
+  "length": 1.0,
+  "top_y": 0.0
+ },
+ "loads": [
+  {
+   "id": "surcharge",
+   "name": "Load",
+   "kind": "line",
+   "x0": 5.0,
+   "x1": 80.0,
+   "y": 0.0,
+   "thickness": 0.15,
+   "components": [
+    0.0,
+    -20.0
+   ],
+   "distribution": "Uniform",
+   "active": true,
+   "derived_from": null
+  }
+ ],
+ "beam_sections": [
+  {
+   "id": "sheetpile",
+   "name": "Sheet pile",
+   "E": 8444900.0,
+   "nu": 0.0,
+   "area": 0.4924,
+   "inertia": 0.009948850085333335,
+   "shear_area": 10.0,
+   "density": 298.36,
+   "spacing": 1.0,
+   "inertia_minor": null,
+   "torsional_inertia": null
+  }
+ ],
+ "panel_sections": [],
+ "beams": [
+  {
+   "id": "sheetpile",
+   "name": "SheetPileWall",
+   "kind": "beam",
+   "section": "sheetpile",
+   "points": [
+    [
+     5.0,
+     0.0
+    ],
+    [
+     5.0,
+     -13.0
+    ]
+   ],
+   "active": true,
+   "derived_from": null
+  }
+ ],
+ "anchor_sections": [
+  {
+   "id": "strand",
+   "name": "Strut",
+   "E": 210000000.0,
+   "area": 4.7619e-05,
+   "density": 0.0,
+   "spacing": 1.0,
+   "tension_limit": null,
+   "compression_limit": null
+  }
+ ],
+ "anchors": [
+  {
+   "id": "strut",
+   "name": "Strut",
+   "kind": "anchor",
+   "section": "strand",
+   "head": [
+    5.0,
+    -1.5
+   ],
+   "tail": [
+    4.0,
+    -1.5
+   ],
+   "prestress": 0.0,
+   "active": true
+  }
+ ],
+ "interface_sections": [
+  {
+   "id": "contact",
+   "name": "Wall contact",
+   "material": null,
+   "r_inter": 0.7,
+   "virtual_thickness": 1.0,
+   "normal_stiffness": null,
+   "shear_stiffness": null,
+   "permeability": "Neutral"
+  }
+ ],
+ "interfaces": [
+  {
+   "id": "wall_contact",
+   "name": "Interface",
+   "kind": "interface",
+   "section": "contact",
+   "structure": "sheetpile",
+   "points": null,
+   "side": "both",
+   "active": true
+  }
+ ],
+ "normal_loads": [
+  {
+   "id": "water_1",
+   "name": "WaterLoad_Stage1",
+   "kind": "normal",
+   "points": [
+    [
+     5.0,
+     -1.5
+    ],
+    [
+     5.0,
+     -2.0
+    ],
+    [
+     0.0,
+     -2.0
+    ]
+   ],
+   "fluid_pressure_type": "Hydrostatic",
+   "pressure": 0.0,
+   "active": true
+  },
+  {
+   "id": "water_2",
+   "name": "WaterLoad_Stage2",
+   "kind": "normal",
+   "points": [
+    [
+     5.0,
+     -1.5
+    ],
+    [
+     5.0,
+     -5.0
+    ],
+    [
+     0.0,
+     -5.0
+    ]
+   ],
+   "fluid_pressure_type": "Hydrostatic",
+   "pressure": 0.0,
+   "active": true
+  },
+  {
+   "id": "water_3",
+   "name": "WaterLoad_Stage3",
+   "kind": "normal",
+   "points": [
+    [
+     5.0,
+     -1.5
+    ],
+    [
+     5.0,
+     -8.0
+    ],
+    [
+     0.0,
+     -8.0
+    ]
+   ],
+   "fluid_pressure_type": "Hydrostatic",
+   "pressure": 0.0,
+   "active": true
+  }
+ ],
+ "wells": {
+  "positions": [],
+  "radius": 0.1,
+  "top_y": 0.0,
+  "length": 1.0
+ },
+ "water": {
+  "y": -1.5,
+  "margin": 3.0,
+  "thickness": 0.06,
+  "specific_weight": 10.0
+ },
+ "mesh": {
+  "element_size": 5.0,
+  "order": 2,
+  "algorithm_3d": "delaunay",
+  "algorithm_2d": "frontal",
+  "optimization": "gmsh",
+  "smoothing": 10,
+  "curvature_points": 16,
+  "size_min_factor": 0.05,
+  "second_order_linear": true,
+  "body_sizes": {
+   "sheetpile": 0.5
+  },
+  "refinements": [
+   {
+    "kind": "box",
+    "size": 0.75,
+    "thickness": 45.0,
+    "x_min": -1.0,
+    "x_max": 8.0,
+    "z_min": -1.0,
+    "z_max": 11.0,
+    "y_min": -16.0,
+    "y_max": 1.0
+   }
+  ]
+ },
+ "custom_parts": [],
+ "phases": [
+  {
+   "id": "initial",
+   "name": "Initial stage",
+   "parent": null,
+   "calculation": "K0 procedure",
+   "loading": "Staged construction",
+   "activate": [],
+   "deactivate": [
+    "sheetpile",
+    "strut",
+    "wall_contact",
+    "surcharge",
+    "water_1",
+    "water_2",
+    "water_3"
+   ],
+   "reset_displacements": false,
+   "max_iterations": 15,
+   "tolerated_error": 0.0001,
+   "time_interval": 0.0
+  },
+  {
+   "id": "null_step",
+   "name": "Null step",
+   "parent": "initial",
+   "calculation": "Null step",
+   "loading": "Staged construction",
+   "activate": [],
+   "deactivate": [],
+   "reset_displacements": false,
+   "max_iterations": 150,
+   "tolerated_error": 0.0001,
+   "time_interval": 0.0
+  },
+  {
+   "id": "install_sheetpile",
+   "name": "SheetPileWall installation",
+   "parent": "null_step",
+   "calculation": "Plastic",
+   "loading": "Staged construction",
+   "activate": [
+    "sheetpile",
+    "wall_contact",
+    "surcharge"
+   ],
+   "deactivate": [],
+   "reset_displacements": true,
+   "max_iterations": 150,
+   "tolerated_error": 0.001,
+   "time_interval": 0.0
+  },
+  {
+   "id": "dig_1",
+   "name": "First excavation",
+   "parent": "install_sheetpile",
+   "calculation": "Plastic",
+   "loading": "Staged construction",
+   "activate": [
+    "water_1"
+   ],
+   "deactivate": [
+    "soil_L_top__lift1"
+   ],
+   "reset_displacements": false,
+   "max_iterations": 150,
+   "tolerated_error": 0.001,
+   "time_interval": 0.0
+  },
+  {
+   "id": "install_strut",
+   "name": "Strut installation",
+   "parent": "dig_1",
+   "calculation": "Plastic",
+   "loading": "Staged construction",
+   "activate": [
+    "strut"
+   ],
+   "deactivate": [],
+   "reset_displacements": false,
+   "max_iterations": 150,
+   "tolerated_error": 0.001,
+   "time_interval": 0.0
+  },
+  {
+   "id": "dig_2",
+   "name": "Second excavation",
+   "parent": "install_strut",
+   "calculation": "Plastic",
+   "loading": "Staged construction",
+   "activate": [
+    "water_2"
+   ],
+   "deactivate": [
+    "soil_L_top__lift2",
+    "water_1"
+   ],
+   "reset_displacements": false,
+   "max_iterations": 150,
+   "tolerated_error": 0.001,
+   "time_interval": 0.0
+  },
+  {
+   "id": "dig_3",
+   "name": "Third excavation",
+   "parent": "dig_2",
+   "calculation": "Plastic",
+   "loading": "Staged construction",
+   "activate": [
+    "water_3"
+   ],
+   "deactivate": [
+    "soil_L_top__lift3",
+    "water_2"
+   ],
+   "reset_displacements": false,
+   "max_iterations": 150,
+   "tolerated_error": 0.001,
+   "time_interval": 0.0
+  }
+ ],
+ "deck": null,
+ "soil_body_keys": [
+  "soil_L_top",
+  "soil_L_mid",
+  "soil_L_bot",
+  "soil_L_top__lift1",
+  "soil_L_top__lift2",
+  "soil_L_top__lift3",
+  "soil_L_mid__pit",
+  "soil_L_bot__pit"
+ ],
+ "soil_body_labels": {
+  "soil_L_top": "Soil_Top",
+  "soil_L_mid": "Soil_Middle",
+  "soil_L_bot": "Soil_Bottom",
+  "soil_L_top__lift1": "Soil_Top · lift 1",
+  "soil_L_top__lift2": "Soil_Top · lift 2",
+  "soil_L_top__lift3": "Soil_Top · lift 3",
+  "soil_L_mid__pit": "Soil_Middle · below the pit",
+  "soil_L_bot__pit": "Soil_Bottom · below the pit"
+ },
+ "stageable_parts": [
+  "soil_L_top",
+  "soil_L_mid",
+  "soil_L_bot",
+  "soil_L_top__lift1",
+  "soil_L_top__lift2",
+  "soil_L_top__lift3",
+  "soil_L_mid__pit",
+  "soil_L_bot__pit",
+  "sheetpile",
+  "strut",
+  "wall_contact",
+  "water_1",
+  "water_2",
+  "water_3",
+  "surcharge"
+ ]
+}

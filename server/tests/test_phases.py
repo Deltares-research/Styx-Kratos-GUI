@@ -8,6 +8,7 @@ plan/staged-construction-plan.md sec 4.
 """
 
 import pytest
+from pydantic import ValidationError
 
 from app import phases, schemas
 from app.seed import seed_project
@@ -272,3 +273,59 @@ def test_an_unexcavated_project_still_gets_a_sequence():
     assert [ph.id for ph in made] == ["initial", "null_step"]
     schemas.Project.model_validate(
         p.model_dump() | {"phases": [ph.model_dump() for ph in made]})
+
+
+# -- structure refusals and long chains (alpha 1.7) -------------------------
+
+@pytest.mark.parametrize("records,message", [
+    ([_phase("initial"), _phase("dig", parent="nowhere")], "starts from nowhere"),
+    ([_phase("initial"), _phase("dig", parent="dig")], "starts from itself"),
+    ([_phase("initial"), _phase("other")], "exactly one root"),
+    ([_phase("initial"), _phase("a", parent="b"), _phase("b", parent="a")], "cycle"),
+])
+def test_a_phase_tree_that_is_not_a_tree_is_refused_by_name(records, message):
+    with pytest.raises(ValidationError, match=message):
+        _project(*records)
+
+
+def test_a_part_switched_both_ways_in_one_phase_is_refused():
+    with pytest.raises(ValidationError, match="soil_L1__lift1"):
+        _project(_phase("initial"),
+                 _phase("dig", parent="initial", activate=["soil_L1__lift1"],
+                        deactivate=["soil_L1__lift1"]))
+
+
+def test_a_fifty_phase_chain_runs_in_tree_order_however_it_is_listed():
+    records = [_phase("initial")] + [_phase(f"p{n}", parent="initial" if n == 1 else f"p{n-1}")
+                                     for n in range(1, 50)]
+    project = _project(*reversed(records))
+
+    order = [phase.id for phase in phases.linearise(project)]
+
+    assert order == ["initial"] + [f"p{n}" for n in range(1, 50)]
+
+
+def test_deactivating_a_part_already_gone_is_dropped_as_a_no_op():
+    project = _project(
+        _phase("initial"),
+        _phase("dig1", parent="initial", deactivate=["soil_L1__lift1"]),
+        _phase("dig2", parent="dig1", deactivate=["soil_L1__lift1", "soil_L1__lift2"]))
+
+    by_id = {phase.id: (on, off) for phase, on, off in phases.transitions(project)}
+
+    assert by_id["dig2"] == (set(), {"soil_L1__lift2"})
+
+
+def test_reactivating_a_part_brings_it_back_from_that_phase_on():
+    project = _project(
+        _phase("initial"),
+        _phase("dig", parent="initial", deactivate=["soil_L1__lift1"]),
+        _phase("fill", parent="dig", activate=["soil_L1__lift1"]))
+
+    assert "soil_L1__lift1" not in phases.active_parts(project, "dig")
+    assert "soil_L1__lift1" in phases.active_parts(project, "fill")
+
+
+def test_more_than_ten_lifts_are_still_named():
+    assert phases._ordinal(10) == "Tenth"
+    assert phases._ordinal(11) == "#11"

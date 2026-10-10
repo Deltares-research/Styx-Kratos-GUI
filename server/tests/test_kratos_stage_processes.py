@@ -292,11 +292,14 @@ def test_only_the_soil_carries_the_k0_variables(result):
 
 
 def test_k0_nc_is_jaky_unless_the_material_says_otherwise():
-    """0.62 and 0.46 in the reference, which are Jaky at its two friction angles."""
+    """0.62 and 0.46 in the reference, which are Jaky at its two friction angles -- so
+    CROW's typed K0_NC and the fallback agree."""
+    from app.kratos_materials import jaky
     project = crow.crow_project(staged=False)
-    upper = project.material("m_upper")
-    assert round(upper.k0_normally_consolidated(), 2) == 0.62
-    assert round(project.material("m_lower").k0_normally_consolidated(), 2) == 0.46
+    for key, k0 in (("m_upper", 0.62), ("m_lower", 0.46)):
+        material = project.material(key)
+        assert material.variables["K0_NC"] == k0
+        assert round(jaky(material), 2) == k0
 
 
 def test_an_unstaged_project_gets_no_second_materials_file():

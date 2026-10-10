@@ -149,7 +149,10 @@ App.LivePatches = (function () {
 
     return App.Api.patch('/api/project/dimension', patchFor(def.id))
       .then(function (result) {
-        App.PROJECT = result.project;
+        // Through App.Model.apply, the funnel App.History records from: the switch
+        // rewrites loads and walls, so it is an edit Undo has to be able to take back.
+        // Assigned straight to App.PROJECT it left the history nothing to undo.
+        App.Model.apply(result.project);
         App.state.modelMode = def.id;
         App.state.dimension = def.id === '2d' ? 2 : 3;
         syncModelMode(def.id);
@@ -657,13 +660,49 @@ App.LivePatches = (function () {
     return true;
   }
 
+  /* `units` / `units <system>`, typed: show the project's unit system, or convert the
+     whole project to another one. What to send is `App.Units`'s (tested headless); this
+     sends it, redraws from the project the server stored, and prints what the server
+     could not convert. `false` when it is not this command. */
+  function runUnitsCommand(text) {
+    if (!App.Units) return false;
+    var answer = App.Units.command(text, App.PROJECT);
+    if (answer === false) return false;
+    if (App.Command.write) App.Command.write('echo', '> ' + String(text).trim());
+    if (!answer.ok) { App.Command.err(answer.message); return true; }
+    if (!answer.body) { App.Command.note(answer.message); return true; }
+    App.Command.note(answer.message);
+    App.Api.patch('/api/project/units', answer.body)
+      .then(function (result) {
+        App.Model.apply(result.project);
+        return App.Viewport.refresh().then(function () { return result; });
+      })
+      .then(function (result) {
+        if (App.Explorer && App.state) App.Explorer.mountTree(App.state.mode);
+        (result.notes || []).forEach(function (note) {
+          if (App.Command.warn) App.Command.warn(note); else App.Command.note(note);
+        });
+        App.Command.ok('The project is now in ' + App.Units.title() + '.');
+      })
+      .catch(function (error) { App.Command.err(error.message); });
+    return true;
+  }
+
+  /* DELETE `path`, rejecting with the server's own `detail` when it refuses. A part a
+     phase still uses is refused with a sentence naming the phase (app/main.py
+     `_without_custom_parts`), and that sentence is the whole of what the user needs. */
+  function deleteRequest(path, fallback) {
+    return fetch(App.Api.base + path, { method: 'DELETE' }).then(function (res) {
+      if (res.ok) return res.json();
+      return res.json().catch(function () { return {}; }).then(function (body) {
+        throw new Error(typeof body.detail === 'string' ? body.detail : fallback);
+      });
+    });
+  }
+
   function deleteCustomPart(key) {
     if (App.Command && App.Command.note) App.Command.note('Deleting ' + key + '…');
-    return fetch(App.Api.base + '/api/geometry/parts/' + encodeURIComponent(key), { method: 'DELETE' })
-      .then(function (res) {
-        if (!res.ok) return res.json().then(function (err) { throw new Error(err.detail || 'Delete failed'); });
-        return res.json();
-      })
+    return deleteRequest('/api/geometry/parts/' + encodeURIComponent(key), 'Delete failed')
       .then(function () { return App.Model.load(); })
       .then(function () { return App.Viewport.refresh(); })
       .then(function () {
@@ -718,11 +757,10 @@ App.LivePatches = (function () {
         button.disabled = true;
         persistStack().then(function () {
           if (label === 'Delete') {
-            return fetch(App.Api.base + '/api/geometry/parts/' + encodeURIComponent(selected), { method: 'DELETE' })
-              .then(function (response) {
-                if (!response.ok) throw new Error('Could not delete the custom layer.');
-                return App.Model.load();
-              }).then(function () { return App.Viewport.refresh(); }).then(refreshBodies);
+            return deleteRequest('/api/geometry/parts/' + encodeURIComponent(selected),
+                                 'Could not delete the custom layer.')
+              .then(function () { return App.Model.load(); })
+              .then(function () { return App.Viewport.refresh(); }).then(refreshBodies);
           }
           App.SoilVolumeDialog.open(null, {
             insertBefore: label === 'Insert' ? selected : null, onSaved: refreshBodies
@@ -3199,6 +3237,8 @@ App.LivePatches = (function () {
       if (runColourCommand(text)) return;
       // `water <level>` / `water off`: the project's water level.
       if (runWaterCommand(text)) return;
+      // `units` / `units <system>`: the project's unit system.
+      if (runUnitsCommand(text)) return;
       // `node <id>`: which SubModelParts a node is in.
       if (runNodeCommand(text)) return;
 
@@ -3210,14 +3250,14 @@ App.LivePatches = (function () {
       }
       if (cmd === 'cleargeometry') {
         if (App.Command.note) App.Command.note('Clearing custom geometry...');
-        fetch(App.Api.base + '/api/project/custom_parts', { method: 'DELETE' })
+        return deleteRequest('/api/project/custom_parts', 'Could not clear custom geometry.')
           .then(function() { return App.Model.load(); })
           .then(function() { return App.Viewport.refresh(); })
           .then(function() {
              if (App.Explorer && App.state) App.Explorer.mountTree(App.state.mode);
              if (App.Command.ok) App.Command.ok('Custom geometry cleared.');
-          });
-        return;
+          })
+          .catch(function (error) { if (App.Command.err) App.Command.err(error.message); });
       }
       
       /* run <file.py> -- build the model from a Python file.

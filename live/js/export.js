@@ -62,8 +62,8 @@ App.Export = (function () {
     return App.Download.write(target, filename, text, mime || 'text/plain');
   }
 
-  /* The deck's files, named as they are inside the archive. Four rather than three
-     for a staged deck: its K0 stage reads a materials file of its own. */
+  /* The deck's files, named as they are inside the archive. One more for a staged
+     deck: its K0 stage reads a materials file of its own. */
   function files(result, deckName) {
     var written = [{ name: deckName, text: result.mdpa }];
     if (result.materials) {
@@ -74,6 +74,12 @@ App.Export = (function () {
     }
     if (result.project_parameters) {
       written.push({ name: 'ProjectParameters.json', text: result.project_parameters });
+    }
+    // Which unit system every number above is in. Kratos never reads it; opened again
+    // as a deck case, it is what labels the results (server/app/results.py).
+    if (result.unit_system) {
+      written.push({ name: 'kratos_gui_units.json',
+                     text: JSON.stringify({ unit_system: result.unit_system }) });
     }
     return written;
   }

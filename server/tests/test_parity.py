@@ -84,11 +84,16 @@ def test_materials_match_frozen_data_js():
     k0 procedure (plan/staged-construction-plan.md sec C4), which postdates the mockup
     entirely. Every field the mockup *does* define is still pinned.
     """
+    from app import legacy, seed
     expected = frozen.materials()
     assert expected, "frozen MATERIALS parsed as empty -- the guard would pass vacuously"
-    got = [{k: v for k, v in m.model_dump().items() if k in expected[0]}
-           for m in seed_project(simple=False).materials]
-    assert got == expected
+    demo = [{k: v for k, v in m.items() if k in expected[0]} for m in seed._DEMO_MATERIALS]
+    assert demo == expected
+    # And the seed is that table, as every project in that shape is converted.
+    project = seed_project(simple=False)
+    assert [m.model_dump() for m in project.materials] == [
+        seed.Material.model_validate(legacy.material(m, project.dimension)).model_dump()
+        for m in seed._DEMO_MATERIALS]
 
 
 def test_seed_layers_reach_the_domain_floor(vp):

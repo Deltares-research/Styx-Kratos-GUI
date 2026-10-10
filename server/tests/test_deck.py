@@ -599,3 +599,14 @@ def test_eemdijk_opens_with_its_twenty_stages():
     assert "kraan_load_p1" in phases.active_parts(loaded, loaded.phases[10].id)
     assert "kraan_load_p1" not in phases.active_parts(loaded, loaded.phases[12].id)
     assert "ontgraven_upper_layer" in loaded.phases[15].deactivate
+
+
+def test_staging_brings_the_units_record_when_the_deck_has_one(project, deck_dir, tmp_path):
+    """A deck this application exported records its unit system beside itself; opened
+    again as a deck case, the record goes into the run so its results are labelled in
+    that system (`results.run_unit_system`). A deck from elsewhere has none, and is SI."""
+    from app import calculate
+    (deck_dir / calculate.UNITS_NAME).write_text('{"unit_system": "kN"}', encoding="utf-8")
+    written = deck.stage(project.deck, tmp_path)
+    assert calculate.UNITS_NAME in written
+    assert (tmp_path / calculate.UNITS_NAME).read_text(encoding="utf-8") == '{"unit_system": "kN"}'
