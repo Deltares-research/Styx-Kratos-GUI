@@ -6,7 +6,13 @@
 App.Menu = (function () {
   var el = App.UI.el, icon = App.UI.icon;
 
-  /* Render a list of item descriptors into a floating .menu element. */
+  /**
+   * Renders a list of item descriptors into a floating .menu element.
+   * @param {!Array<(string|!Object)>} items Item descriptors; '-' is a separator
+   *     and an object with `title` is a heading.
+   * @param {?function(!Object)} onPick Called with the clicked item.
+   * @return {!Element} The unattached menu element.
+   */
   function build(items, onPick) {
     var menu = el('div.menu');
 
@@ -48,7 +54,11 @@ App.Menu = (function () {
     return menu;
   }
 
-  /* Placeholder content for the two menu entries that carry submenus. */
+  /**
+   * Returns placeholder content for the two menu entries that carry submenus.
+   * @param {!Object} it The parent item; its label picks the placeholder.
+   * @return {!Array<!Object>}
+   */
   function demoSubmenu(it) {
     if (/Recent/.test(it.label)) return [
       { label: 'Deep excavation — Rotterdam Zuid.p3d' },
@@ -68,13 +78,20 @@ App.Menu = (function () {
     ];
   }
 
-  /* Open a standalone menu (context menus, tool-rail flyouts). */
+  /**
+   * Opens a standalone menu (context menus, tool-rail flyouts), closing any other.
+   * @param {!Array<(string|!Object)>} items Item descriptors, as for build().
+   * @param {number} x Left edge in client pixels.
+   * @param {number} y Top edge in client pixels.
+   * @param {?function(!Object)=} onPick Defaults to App.runAction.
+   */
   function openAt(items, x, y, onPick) {
     App.UI.closePopups(0);
     App.UI.popup(build(items, onPick || App.runAction), x, y);
   }
 
-  /* ── The menu bar itself ─────────────────────────────────────── */
+  /* ── The menu bar itself ───────────────────────────────────────── */
+  /** Renders App.MENUS into #menubar and wires open, close and hover-switching. */
   function mountBar() {
     var bar = document.getElementById('menubar');
     App.UI.clear(bar);
@@ -83,6 +100,7 @@ App.Menu = (function () {
     App.MENUS.forEach(function (m, i) {
       var btn = el('button.mb-item', { text: m.label, type: 'button' });
 
+      /** Opens this button's drop-down beneath it, closing any other. */
       function open() {
         App.UI.closePopups(0);
         var r = btn.getBoundingClientRect();

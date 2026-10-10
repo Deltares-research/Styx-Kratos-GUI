@@ -1,34 +1,15 @@
-"""Read values back out of the frozen mockup so tests can assert against them.
+"""Read values back out of the base UI's sample data so tests can assert against them.
 
-The frozen files under kratos-GUI/ are the shippable demo and must never be edited. They are
-also, right now, the only record of the model's dimensions. These helpers parse them so
-test_parity.py can prove the Python seed project still agrees.
+`live/base/js/data.js` is never edited. These helpers parse it so test_parity.py can prove
+the Python seed project still agrees.
 """
 
 import re
 from pathlib import Path
 
-FROZEN_ROOT = Path(__file__).resolve().parents[2]
-VIEWPORT_JS = FROZEN_ROOT / "js" / "viewport.js"
-DATA_JS = FROZEN_ROOT / "js" / "data.js"
+DATA_JS = Path(__file__).resolve().parents[2] / "live" / "base" / "js" / "data.js"
 
 _NUMBER = r"-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?"
-
-
-def viewport_constants() -> dict[str, float]:
-    """The `var X0 = 0, X1 = 50, ...` block at js/viewport.js:12-16.
-
-    Scanned by `var` declaration rather than by position: the file is an IIFE
-    (`App.Viewport = (function () {` on line 9), so slicing at the first `function`
-    keyword would cut above the constants.
-    """
-    out: dict[str, float] = {}
-    for line in VIEWPORT_JS.read_text(encoding="utf-8").splitlines():
-        if not line.lstrip().startswith("var "):
-            continue
-        for name, value in re.findall(rf"\b([A-Z][A-Z0-9_]*)\s*=\s*({_NUMBER})\b", line):
-            out.setdefault(name, float(value))
-    return out
 
 
 def _object_literals(src: str, array_name: str) -> list[str]:

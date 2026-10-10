@@ -6,6 +6,7 @@ App.Toolbars = (function () {
   var el = App.UI.el, icon = App.UI.icon, tip = App.UI.attachTip;
 
   /* ── Main toolbar ────────────────────────────────────────────── */
+  /** Renders App.TOOLBAR into #maintoolbar; '|' entries become separators. */
   function mountMain() {
     var bar = App.UI.clear(document.getElementById('maintoolbar'));
 
@@ -36,7 +37,11 @@ App.Toolbars = (function () {
     });
   }
 
-  /* Reflect a toggle state (grid, snapping, projection) in the toolbar. */
+  /**
+   * Reflects a toggle state (grid, snapping, projection) in the toolbar.
+   * @param {string} action The button's action name.
+   * @param {boolean} on
+   */
   function setToolbarState(action, on) {
     var b = document.querySelector('#maintoolbar .tbtn[data-action="' + action + '"]');
     if (b) b.classList.toggle('active', !!on);
@@ -45,6 +50,7 @@ App.Toolbars = (function () {
   /* ── Mode tabs ───────────────────────────────────────────────── */
   var MODE_GROUP_LABELS = { 1: 'Geometry', 2: 'Calculation' };
 
+  /** Renders App.MODES into #modetabs, grouped under MODE_GROUP_LABELS. */
   function mountModes() {
     var bar = App.UI.clear(document.getElementById('modetabs'));
 
@@ -76,6 +82,10 @@ App.Toolbars = (function () {
     });
   }
 
+  /**
+   * Marks the tab of the given mode as active.
+   * @param {string} mode Mode id.
+   */
   function highlightMode(mode) {
     document.querySelectorAll('.mode-tab').forEach(function (t) {
       t.classList.toggle('active', t.dataset.mode === mode);
@@ -83,6 +93,11 @@ App.Toolbars = (function () {
   }
 
   /* ── Left tool rail ──────────────────────────────────────────── */
+  /**
+   * Renders the tool rail for a mode from App.RAILS. Tools with a flyout open it
+   * from the button's corner or on a long press.
+   * @param {string} mode Mode id.
+   */
   function mountRail(mode) {
     var rail = App.UI.clear(document.getElementById('toolrail'));
     var tools = App.RAILS[mode] || [];
@@ -134,6 +149,10 @@ App.Toolbars = (function () {
       rail.appendChild(btn);
     });
 
+    /**
+     * Marks one rail button as the active tool.
+     * @param {!Element} btn
+     */
     function setActive(btn) {
       rail.querySelectorAll('.rail-btn').forEach(function (b) { b.classList.remove('active'); });
       btn.classList.add('active');

@@ -8,6 +8,14 @@
      wheel         dolly
    ══════════════════════════════════════════════════════════════════ */
 
+/**
+ * Spherical camera controller around a target point, Z up.
+ * @param {!Element} domElement Element that receives mouse and wheel input.
+ * @param {?Object=} opts Initial state: tx, ty, tz (target), radius, theta
+ *     (azimuth), phi (polar angle from +Z), minRadius, maxRadius, and orthoBase
+ *     (radius-to-zoom factor for orthographic cameras).
+ * @constructor
+ */
 App.Orbit = function (domElement, opts) {
   opts = opts || {};
 
@@ -27,6 +35,10 @@ App.Orbit = function (domElement, opts) {
   var dragging = null, lastX = 0, lastY = 0;
 
   /* ── Apply the current spherical state to a camera ──────────── */
+  /**
+   * Positions and aims a camera from the current spherical state.
+   * @param {!THREE.Camera} camera
+   */
   this.apply = function (camera) {
     var sp = Math.sin(self.phi), cp = Math.cos(self.phi);
     camera.up.set(0, 0, 1);
@@ -44,6 +56,12 @@ App.Orbit = function (domElement, opts) {
 
   /* ── Animated transition to a new view ──────────────────────── */
   var anim = null;
+  /**
+   * Starts an eased transition to a new view; tick() advances it.
+   * @param {!Object} state Any of theta, phi, radius, tx, ty, tz; omitted ones keep
+   *     their current value. Theta takes the shorter way round.
+   * @param {number=} ms Duration; defaults to 420.
+   */
   this.animateTo = function (state, ms) {
     var from = { theta: self.theta, phi: self.phi, radius: self.radius,
                  tx: self.target.x, ty: self.target.y, tz: self.target.z };
@@ -69,16 +87,31 @@ App.Orbit = function (domElement, opts) {
       fire();
     };
   };
+  /**
+   * Advances a running transition by one frame.
+   * @return {boolean} Whether a transition is still running.
+   */
   this.tick = function () { if (anim) anim(performance.now()); return !!anim; };
 
+  /**
+   * Returns the angle equal to `to` (mod 2π) that lies closest to `from`.
+   * @param {number} from Radians.
+   * @param {number} to Radians.
+   * @return {number}
+   */
   function nearestAngle(from, to) {
     var d = ((to - from) % TWO_PI + TWO_PI + Math.PI) % TWO_PI - Math.PI;
     return from + d;
   }
 
+  /** Notifies the onChange listener, if any. */
   function fire() { if (self.onChange) self.onChange(); }
 
   /* ── Interaction ─────────────────────────────────────────────── */
+  /**
+   * Starts an orbit, or a pan for the middle button or Shift; ignores right clicks.
+   * @param {!MouseEvent} e
+   */
   function down(e) {
     if (!self.enabled || e.button === 2) return;
     dragging = (e.button === 1 || e.shiftKey) ? 'pan' : 'orbit';
@@ -90,6 +123,10 @@ App.Orbit = function (domElement, opts) {
     window.addEventListener('mouseup', up);
   }
 
+  /**
+   * Applies the drag delta as an orbit or a pan.
+   * @param {!MouseEvent} e
+   */
   function move(e) {
     if (!dragging) return;
     var dx = e.clientX - lastX, dy = e.clientY - lastY;
@@ -113,6 +150,7 @@ App.Orbit = function (domElement, opts) {
     fire();
   }
 
+  /** Ends the drag. */
   function up() {
     dragging = null;
     domElement.style.cursor = '';
@@ -120,6 +158,10 @@ App.Orbit = function (domElement, opts) {
     window.removeEventListener('mouseup', up);
   }
 
+  /**
+   * Dollies in or out by one step per wheel event.
+   * @param {!WheelEvent} e
+   */
   function wheel(e) {
     if (!self.enabled) return;
     e.preventDefault();
@@ -129,6 +171,10 @@ App.Orbit = function (domElement, opts) {
     fire();
   }
 
+  /**
+   * Dollies one step, as from the toolbar zoom buttons.
+   * @param {number} dir Positive moves closer, otherwise further away.
+   */
   this.dolly = function (dir) {
     anim = null;
     var f = dir > 0 ? 1 / dollyStep : dollyStep;
@@ -139,6 +185,7 @@ App.Orbit = function (domElement, opts) {
   domElement.addEventListener('mousedown', down);
   domElement.addEventListener('wheel', wheel, { passive: false });
 
+  /** Removes the listeners added to domElement. */
   this.dispose = function () {
     domElement.removeEventListener('mousedown', down);
     domElement.removeEventListener('wheel', wheel);

@@ -2,6 +2,7 @@
    app.js — application state, mode switching, action dispatch, boot.
    ══════════════════════════════════════════════════════════════════ */
 
+/** @type {!Object} UI state shared by every module. */
 App.state = {
   mode: 'soil',
   selection: null,
@@ -12,6 +13,10 @@ App.state = {
 };
 
 /* ── Mode switching ───────────────────────────────────────────── */
+/**
+ * Switches the application to another mode and remounts every mode-specific view.
+ * @param {string} mode Id of an entry in App.MODES; unknown ids are ignored.
+ */
 App.setMode = function (mode) {
   var def = App.MODES.filter(function (m) { return m.id === mode; })[0];
   if (!def) return;
@@ -45,6 +50,11 @@ App.setMode = function (mode) {
 };
 
 /* ── Selection ────────────────────────────────────────────────── */
+/**
+ * Selects an object in the viewport, Model explorer and Selection explorer.
+ * @param {?string} key Object key, or null to clear the selection.
+ * @param {string=} source Origin of the selection; 'viewport' also logs it.
+ */
 App.selectObject = function (key, source) {
   App.state.selection = key || null;
   App.Viewport.select(App.state.selection);
@@ -56,8 +66,11 @@ App.selectObject = function (key, source) {
   }
 };
 
-/* ── Viewport context menu ────────────────────────────────────── */
-App.viewportContextMenu = function (ev, key) {
+/* ── Viewport context menu ────────────────────────────────────── *//**
+ * Opens the viewport context menu at the cursor, selecting the clicked object first.
+ * @param {!MouseEvent} ev The contextmenu event.
+ * @param {?string} key Key of the object under the cursor, or null for empty space.
+ */App.viewportContextMenu = function (ev, key) {
   if (key) App.selectObject(key, 'viewport');
   var def = key && App.OBJECT_PROPS[key];
   var items = [];
@@ -95,6 +108,7 @@ App.viewportContextMenu = function (ev, key) {
   });
 };
 
+/** Makes every object group and load visible again. */
 App.showAll = function () {
   ['soil', 'excavation', 'wall', 'struts', 'anchors', 'piles',
    'water', 'wells', 'mesh'].concat((App.LOADS || []).map(function (load) {
@@ -106,9 +120,12 @@ App.showAll = function () {
   App.Command.note('All object groups shown.');
 };
 
-/* Applies an edit made in the Model or Selection explorer to everything
-   downstream. The live build replaces this in live/js/patches.js, where the
-   change goes to the server first. `objKey` is the row to re-select, or null. */
+/**
+ * Applies an edit made in the Model or Selection explorer to everything downstream.
+ * The live build replaces this in live/js/patches.js, where the change goes to the
+ * server first.
+ * @param {?string=} objKey Row to re-select, or null; omitted keeps the selection.
+ */
 App.commitSelectionEdit = function (objKey) {
   App.refreshSoilData();
   App.Viewport.rebuildSoil();
@@ -117,6 +134,11 @@ App.commitSelectionEdit = function (objKey) {
 };
 
 /* ── Action dispatch (menus, toolbar, context menus) ──────────── */
+/**
+ * Runs the action named by a menu, toolbar or context-menu item.
+ * Items without an action, or with an unknown one, only log a note.
+ * @param {?Object} item Item descriptor; its `action` and `label` are read.
+ */
 App.runAction = function (item) {
   var a = item && item.action;
 
@@ -209,6 +231,10 @@ App.runAction = function (item) {
   }
 };
 
+/**
+ * Moves the camera to a preset view and highlights its view-cube button.
+ * @param {string} name One of 'front', 'top', 'side' or 'iso'.
+ */
 function setView(name) {
   App.Viewport.setView(name);
   document.querySelectorAll('#vp-viewcube button').forEach(function (b) {
@@ -217,12 +243,22 @@ function setView(name) {
 }
 
 /* ── Status bar helpers (called from the viewport) ────────────── */
+/**
+ * Shows the cursor position in the status bar.
+ * @param {number} x Metres.
+ * @param {number} y Metres.
+ * @param {number} z Metres.
+ */
 App.setCoords = function (x, y, z) {
   document.getElementById('sb-coords').textContent =
     'x ' + App.UI.fixed(x, 3) + ' m   y ' + App.UI.fixed(y, 3) +
     ' m   z ' + App.UI.fixed(z, 3) + ' m';
 };
 
+/**
+ * Shows the zoom level in the status bar.
+ * @param {number} pct Zoom as a percentage.
+ */
 App.setZoom = function (pct) {
   var n = document.getElementById('sb-zoom');
   var t = 'Zoom ' + pct + '%';
@@ -231,6 +267,7 @@ App.setZoom = function (pct) {
 
 /* ── Command panel show / hide ────────────────────────────────── */
 var cmdHidden = false;
+/** Shows or hides the command panel and its splitter, then resizes the viewport. */
 function toggleCommandPanel() {
   cmdHidden = !cmdHidden;
   document.getElementById('cmdpanel').style.display = cmdHidden ? 'none' : '';
@@ -239,8 +276,7 @@ function toggleCommandPanel() {
   App.Viewport.resize();
 }
 
-/* ── Boot ─────────────────────────────────────────────────────── */
-function boot() {
+/* ── Boot ─────────────────────────────────────────────────────── *//** Mounts the UI, wires splitters and keyboard shortcuts, and enters Soil mode. */function boot() {
   document.getElementById('tb-title').textContent =
     App.PRODUCT.name + '  ' + App.PRODUCT.version + '  —  ' + App.PRODUCT.project + '  [Model]';
 

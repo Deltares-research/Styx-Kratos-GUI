@@ -1,9 +1,7 @@
 """HTTP contract tests.
 
-The frozen demo must keep working untouched: these assert the server mounts
-`kratos-GUI/css`, `js`, `assets` and `vendor` *in place* rather than copying them, so there
-is exactly one copy of each file on disk and no chance of the served app drifting from
-the one that opens off `file://`.
+The base UI under `live/base/` is served at `/css` and `/js`, and `assets` and `vendor`
+from the repository root, mounted in place so there is one copy of each file on disk.
 """
 
 import json
@@ -1087,16 +1085,23 @@ def test_replacing_an_unknown_part_is_a_404(client):
     assert client.get("/api/project").json()["custom_parts"] == []
 
 
-# ── The frozen demo is served in place ──────────────────────────────────────
+# ── The base UI is served in place ──────────────────────────────────────────
+
+BASE = Path(__file__).resolve().parents[2] / "live" / "base"
+
 
 @pytest.mark.parametrize(
     "path",
     ["/css/tokens.css", "/css/layout.css", "/css/components.css",
-     "/js/app.js", "/js/data.js", "/js/explorer.js", "/js/viewport.js",
+     "/js/app.js", "/js/data.js", "/js/explorer.js",
      "/vendor/three.min.js", "/assets/deltares-logo.png"],
 )
 def test_frozen_assets_are_served(client, path):
     assert client.get(path).status_code == 200
+
+
+def test_the_mockup_viewport_is_not_served(client):
+    assert client.get("/js/viewport.js").status_code == 404
 
 
 # ── The live shell ──────────────────────────────────────────────────────────
@@ -1149,32 +1154,26 @@ def test_the_live_shell_replaces_only_the_viewport_and_the_orbit_controller(clie
         "the Y-up controller has to be loaded after the frozen one it overrides")
 
 
+MOCKUP_VIEWPORT_API = {"dolly", "generateMesh", "hasMesh", "init", "isVisible",
+                       "rebuildSoil", "resize", "select", "setGrid", "setMode",
+                       "setProjection", "setView", "setVisible", "zoomFit"}
+"""What the mockup's viewport exported, and all js/app.js, toolbars.js and menubar.js
+ever reach the 3D through. Dropping one breaks a button silently."""
+
+
 def test_the_live_viewport_keeps_the_frozen_public_api(client):
-    """js/app.js, toolbars.js and menubar.js only ever reach the 3D through these
-    thirteen names (js/viewport.js:707-712). Dropping one breaks a button silently."""
-    from tests.frozen import FROZEN_ROOT
-
-    def exported(source: str) -> set[str]:
-        tail = source[source.rindex("return {"):]
-        return set(re.findall(r"(\w+)\s*:", tail[:tail.index("}")]))
-
-    frozen = exported((FROZEN_ROOT / "js/viewport.js").read_text(encoding="utf-8"))
-    live = exported(client.get("/live/js/viewport.js").text)
-    assert frozen <= live, f"missing from the live viewport: {sorted(frozen - live)}"
+    source = client.get("/live/js/viewport.js").text
+    tail = source[source.rindex("return {"):]
+    live = set(re.findall(r"(\w+)\s*:", tail[:tail.index("}")]))
+    missing = MOCKUP_VIEWPORT_API - live
+    assert not missing, f"missing from the live viewport: {sorted(missing)}"
 
 
-def test_the_frozen_viewport_is_still_served_for_the_file_url_demo(client):
-    """Mounted, not deleted. Opening kratos-GUI/index.html off disk must still work."""
-    assert "CylinderGeometry" in client.get("/js/viewport.js").text
-
-
-def test_served_frozen_files_are_byte_identical_to_the_originals(client):
-    """Mounted, not copied. A second copy would drift from the file:// demo."""
-    from tests.frozen import FROZEN_ROOT
-
-    for path in ("js/viewport.js", "css/tokens.css"):
+def test_served_base_files_are_byte_identical_to_the_originals(client):
+    """Mounted, not copied."""
+    for path in ("js/data.js", "css/tokens.css"):
         served = client.get("/" + path).content
-        assert served == (FROZEN_ROOT / path).read_bytes(), path
+        assert served == (BASE / path).read_bytes(), path
 
 
 # ── Model dimension ─────────────────────────────────────────────────────────

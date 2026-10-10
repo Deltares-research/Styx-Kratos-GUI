@@ -15,6 +15,8 @@ html, body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* The command-line row is clamped so the work area keeps its 120px minimum
+   however tall --h-cmd is dragged. */
 #app {
   height: 100vh;
   min-height: 0;
@@ -88,6 +90,7 @@ html, body {
   display: flex; flex-direction: column; align-items: center; gap: 1px;
   min-height: 0;
 }
+/* Thinner than the global 12px scrollbar so it doesn't crowd the narrow rail. */
 #toolrail::-webkit-scrollbar { width: 6px; }
 
 /* ── Viewport ──────────────────────────────────────────────────── */
@@ -128,6 +131,7 @@ html, body {
 #vp-viewcube button:hover { background: #fff; color: var(--c-ink); }
 #vp-viewcube button.active { background: var(--brand-primary); color: #fff; }
 
+/* Display-only: pointer events fall through so orbiting works over it. */
 #vp-triad {
   position: absolute; left: 8px; bottom: 8px;
   width: 86px; height: 86px; z-index: 3; pointer-events: none;
@@ -154,6 +158,7 @@ html, body {
 }
 .vp-loading-label { font-size: var(--fs-sm); color: var(--c-ink-soft); margin-bottom: 7px; }
 .vp-progress { height: 6px; background: #e3e7ee; border: 1px solid var(--c-border); overflow: hidden; }
+/* Fill bar; js/viewport.js sets its width as a percentage. */
 .vp-progress i { display: block; height: 100%; width: 0%; background: var(--brand-accent); transition: width .12s linear; }
 
 /* ── Right dock ────────────────────────────────────────────────── */
@@ -164,6 +169,7 @@ html, body {
   background: var(--c-panel);
   border-left: 1px solid var(--c-border);
   display: grid;
+  /* Capped so the Selection header always stays visible below it. */
   --r-model:
     minmax(var(--h-dockhead), min(var(--h-model-panel), calc(100% - var(--split) - var(--h-dockhead))));
   --r-selection: minmax(var(--h-dockhead), 1fr);
@@ -204,7 +210,7 @@ html, body {
 /* ── Command panel ─────────────────────────────────────────────── */
 #cmdpanel {
   display: grid;
-  grid-template-rows: 24px 1fr 26px;
+  grid-template-rows: 24px 1fr 26px;   /* tabs, log, input */
   background: var(--c-panel-2);
   border-top: 1px solid var(--c-border);
   min-height: 0;
@@ -218,15 +224,19 @@ html, body {
 .splitter:hover, .splitter.dragging { background: var(--c-active); }
 /* Nothing to resize while the panel it sizes is collapsed. */
 .splitter.disabled { pointer-events: none; cursor: default; }
+/* Centred grip mark. */
 .splitter::after {
   content: ""; position: absolute; background: var(--c-ink-faint); opacity: .5; border-radius: 2px;
 }
 .splitter-v::after { width: 1px; height: 22px; left: 1px; top: 50%; transform: translateY(-50%); }
 .splitter-h::after { height: 1px; width: 22px; top: 1px; left: 50%; transform: translateX(-50%); }
+/* Set during a splitter drag; stops the canvas from capturing the pointer. */
 body.resizing { cursor: inherit; user-select: none; }
 body.resizing #viewport { pointer-events: none; }
 
 /* ── Floating layers ───────────────────────────────────────────── */
+/* Full-screen overlays that let clicks through; only their children are
+   interactive. */
 #menu-layer, #modal-layer { position: fixed; inset: 0; pointer-events: none; z-index: 500; }
 #modal-layer { z-index: 600; }
 #menu-layer > *, #modal-layer > * { pointer-events: auto; }

@@ -14,7 +14,7 @@
     var before = App.Command;
     return new Promise(function (resolve, reject) {
       var script = document.createElement('script');
-      script.src = '../../js/command.js';
+      script.src = '../base/js/command.js';
       script.onload = function () {
         FrozenCommand = App.Command;
         App.Command = before;

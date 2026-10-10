@@ -8,6 +8,7 @@ App.Command = (function () {
   var log, hist, entry;
   var history = [], histIdx = -1;
 
+  /** Binds the panel's DOM, prints the welcome text and wires tabs and the entry line. */
   function mount() {
     log = document.getElementById('cmd-log');
     hist = document.getElementById('cmd-history');
@@ -51,16 +52,34 @@ App.Command = (function () {
     });
   }
 
+  /**
+   * Appends a line to the session log and scrolls it into view.
+   * @param {string} kind Line style: 'echo', 'ok', 'note' or 'err'.
+   * @param {string} text
+   */
   function write(kind, text) {
     if (!log) return;
     log.appendChild(el('div.cmd-line.' + kind, { text: text }));
     log.scrollTop = log.scrollHeight;
   }
 
+  /**
+   * Logs an informational line.
+   * @param {string} text
+   */
   function note(text) { write('note', text); }
+  /**
+   * Logs a success line.
+   * @param {string} text
+   */
   function ok(text)   { write('ok', text); }
 
   /* ── Demo command interpreter ────────────────────────────────── */
+  /**
+   * Echoes and executes one command line; unknown commands fall back to
+   * App.CMD_RESPONSES, then to an error line.
+   * @param {string} text The command, e.g. 'view iso' or 'borehole 10 5'.
+   */
   function run(text) {
     write('echo', '> ' + text);
     var parts = text.split(/\s+/);

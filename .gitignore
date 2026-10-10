@@ -9,6 +9,8 @@ server/kratos.local.json
 
 plan/
 graphify-out/
+# Local snapshot of the frozen mockup (index.html + css/js/vendor/assets).
+mockup/
 
 # Reference decks and example models. `examples/crow/` holds the CROW staged-excavation
 # case: the model script the GUI runs (`run examples/crow/crow.py`), the deck Kratos is
