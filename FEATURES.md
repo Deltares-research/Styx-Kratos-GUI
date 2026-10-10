@@ -30,7 +30,7 @@ Two limits run through everything below:
 | Linear solver | `skyline_lu_factorization` (direct), block builder, 1 OpenMP thread | ✅ fixed | same |
 | Tolerances | Relative 1e-4, absolute 1e-9, 6–15 iterations, reduction 0.5, increase 2.0 | ✅ max iterations and relative tolerance editable per phase | same |
 | Time stepping | One step per stage (dt = 1); settling stages sit at negative time, as in the reference deck | ✅ | [kratos.py](server/app/kratos.py) |
-| Units | Project in m / kN / day, converted to SI (N, Pa, m/s) on export | ✅ tested | [kratos_materials.py](server/app/kratos_materials.py) |
+| Units | A project unit system, SI (N, m, kg, s) or kN (kN, m, t, s), chosen with `units <system>` or the status bar; every input is in it, the deck carries it verbatim and the results come back in it. Property sets are Kratos' own law + `Variables` | ✅ tested, CROW run in both systems | [units.py](server/app/units.py), [kratos_materials.py](server/app/kratos_materials.py) |
 | Dynamics, consolidation, arc-length control, updated mesh | Not supported. A phase's `time_interval` is stored but not used | ❌ | [schemas.py](server/app/schemas.py) `Phase` |
 
 ### A2. Continuum (soil) elements
@@ -214,7 +214,7 @@ Mohr-Coulomb case does the same. The real law takes over from the next phase.
 |---|---|---|
 | Runs | List every run, open one, step through its phases | ✅ |
 | Quantities | \|u\|, u_x, u_y, u_z, both total and per phase; σ'xx, σ'yy, σ'zz, σ'xy, σ'yz, σ'xz; p', q, σ1, σ2, σ3, τ_max; pore pressure; total stresses, hydraulic head and saturation when Kratos wrote them | ✅ |
-| Signs and units | Compression is negative, as in Plaxis; stresses in kPa, lengths in m | ✅ tested |
+| Signs and units | Compression is negative, as in Plaxis; every quantity in the run's own unit system (Pa for SI, kPa for kN), lengths in m | ✅ tested |
 | Display | Colour bands or smooth shading, colour map, reversed scale, automatic or fixed range, deformed shape with a chosen or automatic scale | ✅ |
 | Node readout | Every quantity at one node (`results at <node>`) | ✅ |
 | Export | The field on screen as CSV; any file from a run, or the whole run as a zip | ✅ |

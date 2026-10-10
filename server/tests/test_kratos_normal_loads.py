@@ -32,7 +32,7 @@ def normal_load_project(fluid_pressure_type: str = "Hydrostatic", pressure: floa
                         points=None) -> Project:
     payload = seed_project().model_dump()
     payload.update(dimension=dimension, section_offset=20.0)
-    payload["water"] = {"y": -3.5, "specific_weight": 10.0}
+    payload["water"] = {"y": -3.5, "specific_weight": 10_000.0}   # N/m3: the project is SI
     payload["normal_loads"] = [{
         "id": "normal_1", "name": "River load", "kind": "normal",
         "points": points or [[8.0, 0.0], [8.0, -5.0], [16.0, -5.0]],
@@ -50,7 +50,8 @@ def hydrostatic(session):
 
 
 def condition_block(deck: mdpa.Deck) -> mdpa.Block:
-    return next(b for b in deck.conditions if "NormalLoad" in b.name)
+    return next(b for b in deck.conditions
+                if "NormalLoad" in b.name or "NormalFaceLoad" in b.name)
 
 
 def process_of(export: dict) -> dict:
@@ -71,7 +72,7 @@ def test_a_first_order_deck_writes_the_two_node_condition(session):
     export = kratos.export_project(normal_load_project(),
                                    MeshRequest(element_size=3.0, order=1))
     block = condition_block(mdpa.parse(export["mdpa"]))
-    assert block.name == "LineNormalLoadCondition2D2N"
+    assert block.name == "UPwNormalFaceLoadCondition2D2N"
     assert all(len(nodes) == 2 for nodes in block.entries.values())
 
 
@@ -135,7 +136,7 @@ def test_the_magnitude_is_written_whichever_mode_the_load_is_in(session):
     Both branches share one parameter set, so `value` is a key the process declares."""
     for mode in ("Uniform", "Hydrostatic"):
         export = kratos.export_project(
-            normal_load_project(fluid_pressure_type=mode, pressure=17.5),
+            normal_load_project(fluid_pressure_type=mode, pressure=17_500.0),
             MeshRequest(element_size=3.0, order=2))
         parameters = process_of(export)["Parameters"]
         assert parameters["value"][0] == pytest.approx(17500.0), mode
@@ -143,7 +144,7 @@ def test_the_magnitude_is_written_whichever_mode_the_load_is_in(session):
 
 def test_a_uniform_normal_load_writes_its_own_value_instead(session):
     export = kratos.export_project(
-        normal_load_project(fluid_pressure_type="Uniform", pressure=25.0),
+        normal_load_project(fluid_pressure_type="Uniform", pressure=25_000.0),
         MeshRequest(element_size=3.0, order=2))
     parameters = process_of(export)["Parameters"]
 
@@ -162,7 +163,7 @@ def test_a_normal_load_applies_the_magnitude_it_was_given(session):
     from the water level instead -- is the bug this pins."""
     payload = normal_load_project().model_dump()
     payload["normal_loads"][0].pop("fluid_pressure_type")
-    payload["normal_loads"][0]["pressure"] = 42.0
+    payload["normal_loads"][0]["pressure"] = 42_000.0
     export = kratos.export_project(Project.model_validate(payload),
                                    MeshRequest(element_size=3.0, order=2))
 
@@ -191,7 +192,7 @@ def test_the_line_the_gui_drafts_by_default_exports_a_condition(session):
                [x, domain.y_top - (domain.y_top - domain.y_bottom) * 0.5]]
     export = kratos.export_project(
         normal_load_project(points=drafted, fluid_pressure_type="Uniform",
-                            pressure=15.0),
+                            pressure=15_000.0),
         MeshRequest(element_size=3.0, order=2))
 
     block = condition_block(mdpa.parse(export["mdpa"]))

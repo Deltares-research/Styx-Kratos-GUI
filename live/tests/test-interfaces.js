@@ -28,9 +28,12 @@
     return Object.assign(section(), { dimension: 3 }, extra || {});
   }
 
+  // A Kratos property set like every other (server/app/schemas.py InterfaceSection):
+  // no stiffness of its own, so the soil each stretch runs against supplies it.
   var CONTACT = { id: 'interfacesection_1', name: 'Interface', material: 'mat_sand',
-                  r_inter: 0.7, virtual_thickness: 0.01, normal_stiffness: null,
-                  shear_stiffness: null, permeability: 'Neutral' };
+                  r_inter: 0.7, virtual_thickness: 0.01, permeability: 'Neutral',
+                  constitutive_law: 'GeoIncrementalLinearElasticInterfaceLaw',
+                  variables: {}, tables: {} };
 
   /* ── Where an interface can be made ─────────────────────────────────── */
 
@@ -129,15 +132,25 @@
       Object.assign({}, CONTACT, { virtual_thickness: 0 })));
     T.ok(App.Interfaces.validateSection(Object.assign({}, CONTACT, { name: '' })));
     T.ok(App.Interfaces.validateSection(
-      Object.assign({}, CONTACT, { normal_stiffness: -1 })));
+      Object.assign({}, CONTACT, { variables: { INTERFACE_NORMAL_STIFFNESS: -1 } })));
+    T.ok(App.Interfaces.validateSection(Object.assign({}, CONTACT, { constitutive_law: '' })));
   });
 
-  test('a contact with no soil needs both stiffnesses given outright', function () {
+  test('a contact with no Rinter of its own takes each soil’s', function () {
+    /* server/app/schemas.py InterfaceSection.r_inter: None is Plaxis' rule -- each
+       stretch of contact takes the Rinter of the soil it runs against. */
+    T.eq(App.Interfaces.validateSection(Object.assign({}, CONTACT, { r_inter: null })), null);
+  });
+
+  test('a contact with no soil of its own derives from the soil it runs against', function () {
+    /* The server's rule (InterfaceSection): no material and no stiffnesses is the
+       ordinary case -- CROW's own contact is one -- not an error. It used to be refused
+       here after the server had stopped refusing it, so any edit of such a contact
+       in the property grid failed. */
     var loose = Object.assign({}, CONTACT, { material: null });
-    T.ok(App.Interfaces.validateSection(loose),
-         'there would be nothing to derive the stiffness from');
-    T.eq(App.Interfaces.validateSection(
-      Object.assign({}, loose, { normal_stiffness: 1e6, shear_stiffness: 4e5 })), null);
+    T.eq(App.Interfaces.validateSection(loose), null);
+    T.eq(App.Interfaces.validateSection(Object.assign({}, loose, { variables: {
+      INTERFACE_NORMAL_STIFFNESS: 1e9, INTERFACE_SHEAR_STIFFNESS: 4e8 } })), null);
   });
 
   /* ── The line it runs along ─────────────────────────────────────────── */
@@ -237,5 +250,99 @@
         T.eq(called, false);
         Object.assign(App, saved);
       }, function (e) { Object.assign(App, saved); throw e; });
+  });
+})();
+
+/* The two entry points the menus and the Model explorer call: start and edit. */
+(function () {
+  function project(dimension) {
+    return {
+      dimension: dimension, section_offset: 20,
+      domain: { x0: 0, x1: 50, z0: 0, z1: 40, y_top: 0, y_bottom: -25 },
+      materials: [{ id: 'mat_sand', name: 'Sand' }],
+      loads: [], beam_sections: [],
+      beams: [{ id: 'beam_1', name: 'Sheet pile 1', kind: 'beam', section: 'az26',
+                points: [[12, 0], [12, -14]], active: true }],
+      interfaces: [{ id: 'interface_1', name: 'Wall contact', kind: 'interface',
+                     section: 'interfacesection_1', structure: 'beam_1', points: null,
+                     side: 'both', active: true }],
+      interface_sections: [{ id: 'interfacesection_1', name: 'Interface',
+                             material: 'mat_sand', r_inter: 0.7, virtual_thickness: 0.01,
+                             permeability: 'Neutral',
+                             constitutive_law: 'GeoIncrementalLinearElasticInterfaceLaw',
+                             variables: {}, tables: {} }]
+    };
+  }
+
+  function rig(dimension) {
+    var saved = { Api: App.Api, PROJECT: App.PROJECT, INTERFACES: App.INTERFACES,
+                  INTERFACE_SECTIONS: App.INTERFACE_SECTIONS, Model: App.Model,
+                  Viewport: App.Viewport, Command: App.Command, Explorer: App.Explorer,
+                  selectObject: App.selectObject, state: App.state };
+    var ctx = { sent: [], notes: [], selected: null };
+    App.PROJECT = project(dimension);
+    App.INTERFACES = App.PROJECT.interfaces.slice();
+    App.INTERFACE_SECTIONS = App.PROJECT.interface_sections.slice();
+    App.Api = { patch: function (path, body) {
+      ctx.sent.push({ path: path, body: body });
+      return Promise.resolve({ project: App.PROJECT });
+    } };
+    App.Model = { apply: function () {}, load: function () { return Promise.resolve(); } };
+    App.Viewport = { refresh: function () { return Promise.resolve(); } };
+    App.Command = { ok: function () {}, err: function () {},
+                    note: function (t) { ctx.notes.push(t); } };
+    App.Explorer = null;
+    App.state = { selection: null };
+    App.selectObject = function (key) { ctx.selected = key; };
+    ctx.done = function (promise) {
+      return Promise.resolve(promise).then(function (v) { Object.assign(App, saved); return v; },
+        function (e) { Object.assign(App, saved); throw e; });
+    };
+    return ctx;
+  }
+
+  test('start: in the section a new interface is drafted on the pile and saved', function () {
+    var ctx = rig(2);
+    return ctx.done(App.Interfaces.start('beam_1').then(function (record) {
+      T.eq(ctx.sent.length, 1);
+      T.eq(ctx.sent[0].path, '/api/project/structures');
+      T.eq(ctx.sent[0].body.interfaces.length, 2, 'added beside the existing one');
+      T.eq(record.structure, 'beam_1');
+      T.eq(ctx.selected, record.id, 'and selected, ready to edit');
+    }));
+  });
+
+  test('start: in the solid model it says why and sends nothing', function () {
+    var ctx = rig(3);
+    return ctx.done(Promise.resolve(App.Interfaces.start()).then(function (result) {
+      T.eq(result, undefined);
+      T.eq(ctx.sent.length, 0);
+      T.ok(/switch to 2D/.test(ctx.notes.join(' ')), ctx.notes.join(' | '));
+    }));
+  });
+
+  test('start: on a pile that is not there it says why and sends nothing', function () {
+    var ctx = rig(2);
+    return ctx.done(Promise.resolve(App.Interfaces.start('beam_9')).then(function () {
+      T.eq(ctx.sent.length, 0);
+      T.ok(/live sheet pile/.test(ctx.notes.join(' ')));
+    }));
+  });
+
+  test('edit: saves the interface as it stands, and an unknown id does nothing', function () {
+    var ctx = rig(2);
+    T.eq(App.Interfaces.edit('interface_9'), undefined);
+    return ctx.done(App.Interfaces.edit('interface_1').then(function (record) {
+      T.eq(record.id, 'interface_1');
+      T.eq(ctx.sent[0].body.interfaces.map(function (i) { return i.id; }), ['interface_1']);
+    }));
+  });
+
+  test('an interface key is recognised, anything else is not', function () {
+    var ctx = rig(2);
+    return ctx.done(Promise.resolve().then(function () {
+      T.ok(App.Interfaces.isInterfaceKey('interface_1'));
+      T.ok(!App.Interfaces.isInterfaceKey('beam_1'));
+    }));
   });
 })();

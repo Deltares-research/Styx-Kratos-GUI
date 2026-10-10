@@ -14,7 +14,9 @@ from tests.browser import js_coverage
 ROOT = pathlib.Path(__file__).resolve().parents[3]
 SUITE = ROOT / "live" / "tests" / "index.html"
 REPORT = ROOT / "server" / "htmlcov-js" / "summary.json"
-TARGET = 75.0
+TARGET = 80.0
+"""Per live module, in percent of functions run (plan/full-test-and-validation-plan.md M4).
+Enforced whenever the suite runs with --js-coverage."""
 
 pytestmark = pytest.mark.browser
 
@@ -32,18 +34,21 @@ def test_browser_unit_suite_has_no_failures(page, request):
     page.wait_for_function("window.__TEST_RESULTS__ !== undefined", timeout=180_000)
     results = page.evaluate("window.__TEST_RESULTS__")
 
+    under = []
     if profiler is not None:
-        _report(profiler.send("Profiler.takePreciseCoverage")["result"])
+        under = _report(profiler.send("Profiler.takePreciseCoverage")["result"])
 
     assert not uncaught, "uncaught errors while the suite loaded:\n" + "\n".join(uncaught)
     assert results["total"] > 0
     assert results["failed"] == 0, "\n\n".join(results["failures"])
+    assert not under, f"live modules below {TARGET:.0f} % of functions: {', '.join(under)}"
 
 
-def _report(entries: list[dict]) -> None:
+def _report(entries: list[dict]) -> list[str]:
     summary = js_coverage.summarise(entries)
     REPORT.parent.mkdir(exist_ok=True)
     REPORT.write_text(json.dumps(summary, indent=2), encoding="utf-8")
     under = js_coverage.below(summary, TARGET)
     print("\n" + js_coverage.table(summary))
     print(f"\nBelow {TARGET:.0f} % of functions: " + (", ".join(under) or "none"))
+    return under

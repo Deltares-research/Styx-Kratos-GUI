@@ -22,9 +22,10 @@
       domain: { x0: 0, x1: 50, z0: 0, z1: 40, y_top: 0, y_bottom: -25 },
       boreholes: [{ id: 'bh1', name: 'BH-1', x: 0, y: 0, head: 0, water: -1.5 }],
       materials: [
-        { id: 'm2', name: 'Sand', model: 'Mohr-Coulomb', type: 'Drained',
-          color: '#c4a86a', g_unsat: 18, g_sat: 20.5, E: 25000, nu: 0.28,
-          c: 0.5, phi: 32, k: 1.5 }
+{ id: 'm2', name: 'Sand', color: '#c4a86a',
+          constitutive_law: 'GeoLinearElasticPlaneStrain2DLaw',
+          variables: { YOUNG_MODULUS: 2.5e7, POISSON_RATIO: 0.28, DENSITY_SOLID: 1834.86,
+                       GEO_COHESION: 500, GEO_FRICTION_ANGLE: 32 } }
       ],
       layers: [{ id: 'L1', name: 'Soil_1', mat: 'm2',
                  tops: { bh1: 0 }, bots: { bh1: -25 } }],

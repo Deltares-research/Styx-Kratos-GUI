@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from app import build, kratos, schemas
-from app.kratos_materials import KILO
+KILO = 1000.0  # kN -> N: these tests write old-style projects, converted on load (app/legacy.py)
 from app.schemas import LineLoad, MeshRequest, PointLoad
 from app.seed import seed_project
 from tests import mdpa
@@ -43,7 +43,7 @@ def section(session):
     project.section_offset = 20.0
     project.loads = [LineLoad(
         id="load_line", name="LineLoad_1", x0=1.0, x1=10.0,
-        y=project.domain.y_top, thickness=0.25, components=(0.0, -20.0),
+        y=project.domain.y_top, thickness=0.25, components=(0.0, -20_000.0),
     )]
     return kratos.export_project(project, MeshRequest(element_size=6.0, order=2))
 
@@ -276,7 +276,7 @@ def test_the_2d_line_load_becomes_conditions_inside_its_interval(section):
     deck = deck_of(section)
     load = LineLoad(
         id="load_line", name="LineLoad_1", x0=1.0, x1=10.0,
-        y=seed_project().domain.y_top, thickness=0.25, components=(0.0, -20.0),
+        y=seed_project().domain.y_top, thickness=0.25, components=(0.0, -20_000.0),
     )
     assert deck.conditions and deck.conditions[0].name == "LineLoadDiffOrderCondition2D3N"
     part = deck.parts["LineLoad_1"]
@@ -351,7 +351,7 @@ def test_a_2d_point_load_is_exported_as_a_3d_point_condition(session):
         PointLoad(
             id="load_crane", name="Crane reaction", kind="point",
             x=5.0, y=0.0, thickness=0.25,
-            components=(15.0, -120.0), active=True,
+            components=(15_000.0, -120_000.0), active=True,
         )
     ]
     exported = kratos.export_project(project, MeshRequest(element_size=6.0, order=1))
@@ -368,7 +368,7 @@ def test_point_load_coordinates_export_in_a_2d_section(session):
     project.section_offset = 12.0
     project.loads = [PointLoad(
         id="load_jack", name="Jack", x=5.0, y=-4.0,
-        components=(15.0, -120.0),
+        components=(15_000.0, -120_000.0),
     )]
     exported = kratos.export_project(project, MeshRequest(element_size=6.0, order=1))
     deck = deck_of(exported)
@@ -419,14 +419,28 @@ def test_material_variables_come_from_the_project_material(solid):
     material = project.material(project.layers[0].mat)
     variables = entry["Material"]["Variables"]
     assert entry["Material"]["constitutive_law"]["name"]
-    assert variables["YOUNG_MODULUS"] == pytest.approx(material.E * KILO)
-    assert variables["POISSON_RATIO"] == pytest.approx(material.nu)
+    assert variables["YOUNG_MODULUS"] == material.variables["YOUNG_MODULUS"]
+    assert variables["POISSON_RATIO"] == material.variables["POISSON_RATIO"]
 
 
-def test_a_material_without_a_kratos_law_is_reported_not_silently_substituted(solid):
-    """Hardening Soil and Soft Soil have no direct Kratos GeoMechanics equivalent
-    here; the deck still exports, but the substitution is named in the response."""
-    assert any("Hardening Soil" in warning for warning in solid["warnings"])
+def test_each_material_is_written_with_its_own_law(solid):
+    """The law is the property set's, as typed: nothing is substituted any more."""
+    project = seed_project()
+    used = {project.material(layer.mat).constitutive_law for layer in project.layers}
+    written = {e["Material"]["constitutive_law"]["name"]
+               for e in json.loads(solid["materials"])["properties"]}
+    assert written == used
+
+
+def test_a_law_this_application_does_not_know_is_written_as_given(session):
+    project = seed_project()
+    for material in project.materials:
+        material.constitutive_law = "SmallStrainUDSM3DLaw"
+        material.variables["UDSM_NAME"] = "MohrCoulomb64.dll"
+    exported = kratos.export_project(project, MeshRequest(element_size=8.0, order=1))
+    entries = json.loads(exported["materials"])["properties"]
+    assert {e["Material"]["constitutive_law"]["name"] for e in entries} == {"SmallStrainUDSM3DLaw"}
+    assert all(e["Material"]["Variables"]["UDSM_NAME"] == "MohrCoulomb64.dll" for e in entries)
 
 
 # ── Parity with the GiD reference deck ──────────────────────────────────────
@@ -626,7 +640,7 @@ def test_a_first_order_deck_writes_the_two_node_beam(session):
                                    MeshRequest(element_size=3.0, order=1))
     names = {block.name for block in deck_of(export).elements}
 
-    assert "LinearTimoshenkoCurvedBeamElement2D2N" in names
+    assert "LinearTimoshenkoBeamElement2D2N" in names
 
 
 def test_the_beam_midside_node_is_the_midpoint_of_its_ends(piled):
@@ -851,7 +865,9 @@ def test_the_tendon_becomes_a_material_entry_with_its_prestress(anchored):
     assert variables["YOUNG_MODULUS"] == pytest.approx(1.95e8 * KILO)
     # Per metre run: a tendon every 2.5 m carries 1/2.5 of its steel in plane strain.
     assert variables["CROSS_AREA"] == pytest.approx(0.0006 / 2.5)
-    assert variables["TRUSS_PRESTRESS_PK2"] == pytest.approx(250.0 * KILO / 2.5)
+    # The anchor's prestress is its TRUSS_PRESTRESS_PK2, a stress: the smeared area
+    # already makes the force per metre run, so the stress itself is not smeared.
+    assert variables["TRUSS_PRESTRESS_PK2"] == 250.0
 
 
 def test_the_soil_says_how_it_drains_in_the_name_kratos_still_reads(section):
@@ -1102,12 +1118,11 @@ def test_gravity_in_a_3d_deck_still_points_down_y(solid):
     assert process["Parameters"]["value"] == [0.0, -9.81, 0.0]
 
 
-def test_gravity_is_the_same_number_the_densities_were_derived_with():
-    """`kratos_materials` turns a unit weight into a density by dividing by g. If the
-    two ever disagreed, a soil's weight in the deck would not be its unit weight, and
-    nothing in the run would say so."""
-    from app import kratos_materials, kratos_processes
-    assert kratos_processes.GRAVITY == kratos_materials.GRAVITY
+def test_gravity_is_the_same_number_in_every_unit_system():
+    """The deck's gravity is written once, whatever the project's units: every system on
+    offer measures length in metres and time in seconds."""
+    from app import kratos_processes, units
+    assert all(kratos_processes.GRAVITY == units.gravity(name) for name in units.SYSTEMS)
 
 
 def test_gravity_is_applied_before_the_loads_that_sit_on_the_model(piled):
@@ -1154,7 +1169,7 @@ def test_the_pore_pressure_is_read_off_the_projects_own_water_level(session):
     disagree."""
     project = seed_project()
     project.water.y = -4.25
-    project.water.specific_weight = 9.9
+    project.water.specific_weight = 9_900.0
     exported = kratos.export_project(project, MeshRequest(element_size=6.0, order=1))
     (process,) = _pressure_processes(exported)[0]
     parameters = process["Parameters"]
@@ -1184,12 +1199,15 @@ def test_the_two_water_processes_agree_with_each_other(session):
     assert len({p["specific_weight"] for p in water}) == 1
 
 
+STEEL = {"YOUNG_MODULUS": 2.1e11, "POISSON_RATIO": 0.3, "DENSITY": 7850.0,
+         "CROSS_AREA": 0.02, "I33": 5.5e-4}
+
+
 def test_a_section_without_a_shear_area_takes_the_whole_one(session):
     """What every project written before the field carried, and still the default."""
     from app import kratos_materials
-    section = schemas.BeamSection(id="s", name="S", E=2.1e8, nu=0.3, area=0.02,
-                                  inertia=5.5e-4, density=7850.0)
-    assert section.shear_area is None
+    section = schemas.BeamSection(id="s", name="S", variables=dict(STEEL))
+    assert "AREA_EFFECTIVE_Y" not in section.variables
     variables = kratos_materials._beam_variables(section, 2)
     assert variables["AREA_EFFECTIVE_Y"] == variables["CROSS_AREA"]
 
@@ -1198,8 +1216,8 @@ def test_a_section_may_say_how_much_of_it_carries_shear(session):
     """Less than the whole section for a rolled profile, which shears in its web; far
     more than it for a model that means shear deformation to be negligible."""
     from app import kratos_materials
-    section = schemas.BeamSection(id="s", name="S", E=2.1e8, nu=0.3, area=0.02,
-                                  inertia=5.5e-4, density=7850.0, shear_area=0.008)
+    section = schemas.BeamSection(id="s", name="S",
+                                  variables=STEEL | {"AREA_EFFECTIVE_Y": 0.008})
     variables = kratos_materials._beam_variables(section, 2)
     assert variables["AREA_EFFECTIVE_Y"] == pytest.approx(0.008)
     assert variables["CROSS_AREA"] == pytest.approx(0.02)
@@ -1209,8 +1227,7 @@ def test_a_shear_area_is_smeared_over_spacing_like_the_rest(session):
     """A row of piles at 2.5 m centres contributes two-fifths of its shear area to the
     metre run, the same way it does its area and its inertia."""
     from app import kratos_materials
-    section = schemas.BeamSection(id="s", name="S", E=2.1e8, nu=0.3, area=0.02,
-                                  inertia=5.5e-4, density=7850.0, shear_area=0.008,
-                                  spacing=2.5)
+    section = schemas.BeamSection(id="s", name="S", spacing=2.5,
+                                  variables=STEEL | {"AREA_EFFECTIVE_Y": 0.008})
     variables = kratos_materials._beam_variables(section, 2)
     assert variables["AREA_EFFECTIVE_Y"] == pytest.approx(0.008 / 2.5)

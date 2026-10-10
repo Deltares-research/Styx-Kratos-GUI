@@ -224,17 +224,42 @@ class Results:
         return [f for f in self.blocks if f.variable == variable]
 
     def field(self, variable: str, gauss_set: str | None = None) -> Field | None:
-        """One block, or `None` -- which is the normal answer, not an exception.
+        """The variable as the stage left it, or `None` -- which is the normal answer,
+        not an exception.
 
-        With no `gauss_set`, the block with something in it wins. That is what makes
-        the empty `lin2_element_gp` block harmless: asking for the stresses gets the
-        soil's, not the beam's declaration that it has none.
+        Two things make that more than "the block called `variable`":
+
+        * **Steps.** A stage cut into sub-steps on non-convergence writes one block per
+          step. The stage's result is its *last* step with values -- the latest time,
+          and for equal times the later block in the file. An empty last step is a
+          write that was cut off (a killed run), and the step before it is what there
+          is to see; a set that is empty at every step stays empty.
+        * **Gauss sets.** A Gauss variable is written once per element type, so with no
+          `gauss_set` the last step of every set is merged into one table keyed by
+          element id. An empty set -- the beam's `lin2_element_gp` declaring it has no
+          stresses -- adds nothing and hides nothing.
         """
-        found = [f for f in self.blocks if f.variable == variable
-                 and (gauss_set is None or f.gauss_set == gauss_set)]
-        if not found:
+        latest: dict[str | None, tuple[tuple[bool, float, int], int, Field]] = {}
+        for index, block in enumerate(self.blocks):
+            if block.variable != variable:
+                continue
+            if gauss_set is not None and block.gauss_set != gauss_set:
+                continue
+            key = (bool(block.values), block.time, index)
+            if block.gauss_set not in latest or key > latest[block.gauss_set][0]:
+                latest[block.gauss_set] = (key, index, block)
+        if not latest:
             return None
-        return next((f for f in found if f.values), found[0])
+        last = [block for _, _, block in sorted(latest.values(), key=lambda t: t[1])]
+        filled = [block for block in last if block.values]
+        if len(filled) <= 1:
+            return filled[0] if filled else last[-1]
+        first = filled[0]
+        merged = Field(variable=variable, kind=first.kind, location=first.location,
+                       time=max(block.time for block in filled), gauss_set=None)
+        for block in filled:
+            merged.values.update(block.values)
+        return merged
 
     def variables(self) -> set[str]:
         return {f.variable for f in self.blocks}

@@ -880,6 +880,121 @@
     T.eq(App.Results.limitsCommand('1', '2'), null);
   });
 
+  /* ── Replies that arrive after the user has moved on (finding F7) ────────
+
+     Pressing `results phase +` twice quickly, or picking one field and then another,
+     leaves the first request in flight. Its reply must not be taken for the second's:
+     it used to be tagged with whatever stage was current when it *arrived*, cached
+     under that stage, and drawn there. */
+
+  function held(pattern, answer) {
+    /* App.Api.get, with requests matching `pattern` held until `release()`. */
+    var waiting = [];
+    var base = App.Api.get;
+    App.Api.get = function (path) {
+      var match = path.match(pattern);
+      if (match) {
+        return new Promise(function (resolve) {
+          waiting.push(function () { resolve(answer(match)); });
+        });
+      }
+      return base(path);
+    };
+    return function release() {
+      App.Api.get = base;
+      waiting.splice(0).forEach(function (go) { go(); });
+    };
+  }
+
+  function markedMesh(stage) {
+    var mesh = JSON.parse(JSON.stringify(MESH));
+    mesh.which = stage;
+    return mesh;
+  }
+
+  test('a late reply for a phase already left is dropped', function () {
+    var release, first;
+    return showing().then(function () {
+      var base = App.Api.get;
+      App.Api.get = function (path) {
+        if (/\/stages\/2\/mesh$/.test(path)) return Promise.resolve(markedMesh(2));
+        return base(path);
+      };
+      release = held(/\/stages\/(1)\/mesh$/, function () { return markedMesh(1); });
+      first = App.Results.handleCommand('results phase 1');
+      return App.Results.handleCommand('results phase 2');
+    }).then(function () {
+      release();
+      return first;
+    }).then(function () {
+      T.eq(App.Results.stage(), 2, 'still on the phase chosen last');
+      var last = drawn[drawn.length - 1];
+      T.eq(last.stage, 2);
+      T.eq(last.mesh.which, 2, 'drawn on the mesh of the phase shown');
+    });
+  });
+
+  test("a late displacement reply is not cached as another phase's", function () {
+    var release, firstStep;
+    function vectors(stage) {
+      return { source: 'TOTAL_DISPLACEMENT', ids: [1, 2, 3],
+               values: [[stage, 0, 0], [stage, 0, 0], [stage, 0, 0]] };
+    }
+    return showing().then(function () {
+      return App.Results.handleCommand('results deform 10');
+    }).then(function () {
+      var base = App.Api.get;
+      App.Api.get = function (path) {
+        var at = path.match(/\/stages\/(2)\/displacement$/);
+        if (at) return Promise.resolve(vectors(2));
+        return base(path);
+      };
+      release = held(/\/stages\/(1)\/displacement$/, function () { return vectors(1); });
+      firstStep = App.Results.handleCommand('results phase 1');
+    }).then(function () {
+      return App.Results.handleCommand('results phase 2');
+    }).then(function () {
+      release();
+      return firstStep;
+    }).then(function () {
+      return App.Results.handleCommand('results deform 20');
+    }).then(function () {
+      var last = drawn[drawn.length - 1];
+      T.eq(last.stage, 2);
+      T.ok(last.displacement && last.displacement.stage === 2,
+           'displacement belongs to phase 2: ' + JSON.stringify(last.displacement));
+      T.eq(last.displacement.values[0][0], 2, "phase 2's own vectors");
+    });
+  });
+
+  test('a late field reply does not replace the field chosen after it', function () {
+    var release, first;
+    return showing().then(function () {
+      release = held(/\/field\/(p)\?/, function () { return FIELD('p', 'kPa', 'nodes'); });
+      first = App.Results.handleCommand('results field p');
+      return App.Results.handleCommand('results field uy');
+    }).then(function () {
+      release();
+      return first;
+    }).then(function () {
+      T.eq(App.Results.field().field, 'uy');
+      T.eq(drawn[drawn.length - 1].field.field, 'uy');
+    });
+  });
+
+  test('a reply for a run no longer open is dropped', function () {
+    var release, first;
+    return showing().then(function () {
+      release = held(/\/stages\/(1)\/fields$/, function () { return CATALOGUE; });
+      first = App.Results.handleCommand('results phase 1');
+      App.Results.forget();
+      release();
+      return first;
+    }).then(function () {
+      T.eq(App.Results.stage(), null, 'forgetting the run leaves nothing on screen');
+    });
+  });
+
   test('results deform takes a factor, auto, or off', function () {
     return showing().then(function () {
       return App.Results.handleCommand('results field uy');

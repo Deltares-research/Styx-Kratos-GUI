@@ -262,6 +262,12 @@ def stage(deck: Deck, directory: Path) -> list[str]:
     for name in input_files(deck)[1:]:
         shutil.copyfile(_path(deck, name), directory / name)
         written.append(name)
+    # A deck this application exported says which unit system its numbers are in;
+    # the run keeps the record, so its results are labelled in it. Kratos never reads it.
+    units = _path(deck, calculate.UNITS_NAME)
+    if units.is_file():
+        shutil.copyfile(units, directory / calculate.UNITS_NAME)
+        written.append(calculate.UNITS_NAME)
     return written
 
 

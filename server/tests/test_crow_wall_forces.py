@@ -287,3 +287,12 @@ def test_the_peak_moment_and_deflection_of_the_final_stage():
     assert top_displacement == pytest.approx(expected_top, abs=1.0), (
         f"wall-top deflection {top_displacement:.2f} mm against {expected_top:.2f} mm")
     assert top_displacement < 0.0, "the wall deflects towards the excavation"
+
+
+@pytest.mark.parametrize("stage", crow_run.WALL_OUTPUT_STAGES)
+def test_normal_force_matches_the_crow_reference(stage):
+    """The third force along the wall: the soil's friction carrying the wall's own weight
+    and the strut's vertical share. Small next to the moment, which is why the absolute
+    floor in Kratos' tolerance (2 % of the stage's largest value) is what governs most
+    nodes here."""
+    compare(stage, "normal_force")

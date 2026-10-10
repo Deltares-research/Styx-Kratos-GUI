@@ -32,11 +32,15 @@ App.Anchors = (function () {
   }
 
 
-  /* A four-strand tendon at 2.5 m centres. A starting point the user edits. */
-  var DEFAULT_SECTION = {
-    name: 'Anchor tendon', E: 1.95e8, area: 0.0006, density: 7850,
-    spacing: 2.5, tension_limit: 900, compression_limit: null
-  };
+  /* A four-strand tendon at 2.5 m centres, a Kratos property set in the project's
+     units (App.PropertySets). Its 900 kN working limit is a design value the deck
+     cannot carry, stated in the project's force unit. A starting point the user edits. */
+  function defaultSection() {
+    return Object.assign({ name: 'Anchor tendon', spacing: 2.5,
+                           tension_limit: App.Units.fromSI(900000, 'force'),
+                           compression_limit: null },
+                         App.PropertySets.defaults('anchor'));
+  }
 
   var SNAP_DISTANCE = 1.0;   // metres a picked head may be off the pile
 
@@ -193,7 +197,8 @@ App.Anchors = (function () {
       kind: spatial(project) ? 'anchor3d' : 'anchor',
       section: existing ? existing.id : 'tendon_1',
       head: head, tail: tail.map(round),
-      prestress: 250,
+      // TRUSS_PRESTRESS_PK2, a stress in the project's units: none until it is typed.
+      prestress: 0,
       active: true
     };
   }
@@ -254,7 +259,7 @@ App.Anchors = (function () {
   function sectionsFor(project, anchor) {
     var list = copy((project && project.anchor_sections) || []);
     if (!list.some(function (s) { return s.id === anchor.section; })) {
-      list.push(Object.assign({ id: anchor.section }, DEFAULT_SECTION));
+      list.push(Object.assign({ id: anchor.section }, defaultSection()));
     }
     return list;
   }
@@ -285,12 +290,11 @@ App.Anchors = (function () {
 
   function validateSection(section) {
     if (!section.name || !section.name.trim()) return 'Tendon name cannot be empty.';
-    var positive = ['E', 'area', 'density', 'spacing'];
-    for (var i = 0; i < positive.length; i += 1) {
-      if (!(section[positive[i]] > 0)) {
-        return 'Tendon ' + positive[i] + ' must be greater than zero.';
-      }
-    }
+    if (!(section.spacing > 0)) return 'Tendon spacing must be greater than zero.';
+    // DENSITY may be zero, as on the server: a tendon is often modelled massless --
+    // CROW's strut is.
+    var problem = App.PropertySets.validate('anchor', section);
+    if (problem) return problem;
     // Null is the honest value for a tendon, which takes no compression at all.
     var limits = ['tension_limit', 'compression_limit'];
     for (var j = 0; j < limits.length; j += 1) {
@@ -369,7 +373,7 @@ App.Anchors = (function () {
 
   function sectionOf(anchor) {
     return sections().filter(function (s) { return s.id === anchor.section; })[0]
-      || Object.assign({ id: anchor.section }, DEFAULT_SECTION);
+      || Object.assign({ id: anchor.section }, defaultSection());
   }
 
   function isAnchorKey(key) {
@@ -423,6 +427,6 @@ App.Anchors = (function () {
     validate: validate, validateSection: validateSection,
     save: save, remove: remove, start: start, edit: edit,
     isAnchorKey: isAnchorKey, length: length, inclination: inclination,
-    DEFAULT_SECTION: DEFAULT_SECTION
+    defaultSection: defaultSection
   };
 })();

@@ -33,5 +33,7 @@ server/.coverage
 server/.coverage.*
 server/htmlcov/
 server/htmlcov-js/
+# Benchmark runs and reports (python -m benchmarks run, from server/)
+server/benchmarks/reports/
 # Playwright traces kept for failed tests (--tracing retain-on-failure)
 server/test-results/

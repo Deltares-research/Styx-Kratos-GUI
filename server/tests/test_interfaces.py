@@ -232,3 +232,72 @@ def test_two_interfaces_on_one_line_are_refused_rather_than_silently_merged():
                            structural=True, sides="both")
     with pytest.raises(interfaces.InterfaceError):
         interfaces.split_mesh([spec("both"), twin], rows, dict(SQUARE_NODES))
+
+
+# ── Degenerate input and invariants (alpha 1.8) ─────────────────────────────
+
+@pytest.mark.parametrize("path", [[(0.0, 0.0)], []], ids=["one point", "no points"])
+def test_an_interface_path_needs_two_points(path):
+    """Built directly: `spec()` would put the default line back for an empty path. (A
+    path that repeats a point never gets this far -- `Interface` refuses it.)"""
+    lone = interfaces.Spec(key="iface_1", path=path, segments=[[2, 5]],
+                           structural=True, sides="both")
+    with pytest.raises(interfaces.InterfaceError, match="two points"):
+        interfaces.split_mesh([lone], rows_of(LEFT, RIGHT), dict(SQUARE_NODES))
+
+
+def _check_invariants(before_rows, rows, result, nodes, specs):
+    """What every split must keep, whatever the arrangement."""
+    assert len(rows) == len(before_rows), "no continuum element is added or lost"
+    known = set(nodes) | set(result.duplicates)
+    assert all(node in known for row in rows for node in row)
+    on_lines = {node for s in specs for segment in s.segments for node in segment}
+    assert set(result.duplicates.values()) <= on_lines, "only nodes on a line are copied"
+    assert not set(result.duplicates) & set(nodes), "a copy gets a new id"
+    for s in specs:
+        detached = len(interfaces.wanted_sides(s.sides))
+        assert len(result.elements[s.key]) == len(s.segments) * detached
+        for element in result.elements[s.key]:
+            half = len(element) // 2
+            for mine, theirs in zip(element[:half], element[half:]):
+                assert result.duplicates.get(theirs, theirs) == mine or \
+                    result.duplicates.get(mine, mine) == result.duplicates.get(theirs, theirs), \
+                    f"the two halves of {element} are not the same points"
+
+
+SCENARIOS = {
+    "both": ("both", True, LEFT + RIGHT, SQUARE_NODES),
+    "left": ("left", True, LEFT + RIGHT, SQUARE_NODES),
+    "right": ("right", True, LEFT + RIGHT, SQUARE_NODES),
+    "free": ("left", False, LEFT + RIGHT, SQUARE_NODES),
+    "toe": ("both", True, LEFT + RIGHT + BELOW, TOE_NODES),
+}
+
+
+@pytest.mark.parametrize("name", SCENARIOS)
+def test_every_split_keeps_the_invariants(name):
+    sides, structural, rows, nodes = SCENARIOS[name]
+    before = [list(r) for r in rows]
+    the_spec = spec(sides, structural)
+    rows = [list(r) for r in rows]
+
+    result = interfaces.split_mesh([the_spec], rows, dict(nodes))
+
+    _check_invariants(before, rows, result, nodes, [the_spec])
+
+
+def test_two_interfaces_meeting_at_a_node_split_it_like_one_line():
+    """A wall drawn as two pieces, end to end: where they meet the soil is on both sides,
+    so the shared node gets one copy per side -- exactly as for one unbroken line."""
+    lower = interfaces.Spec(key="lower", path=[(0.0, -1.0), (0.0, 0.0)],
+                            segments=[[8, 2]], structural=True, sides="both")
+    upper = interfaces.Spec(key="upper", path=[(0.0, 0.0), (0.0, 1.0)],
+                            segments=[[2, 5]], structural=True, sides="both")
+    rows = rows_of(LEFT, RIGHT, BELOW)
+    before = [list(r) for r in rows]
+
+    result = interfaces.split_mesh([lower, upper], rows, dict(TOE_NODES))
+
+    copies_of_2 = [new for new, old in result.duplicates.items() if old == 2]
+    assert len(copies_of_2) == 2
+    _check_invariants(before, rows, result, TOE_NODES, [lower, upper])

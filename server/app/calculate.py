@@ -69,6 +69,9 @@ path so it is read the same way wherever the server is installed."""
 PARAMETERS_NAME = "ProjectParameters.json"
 MATERIALS_NAME = "MaterialParameters.json"
 INITIAL_MATERIALS_NAME = "initial_materials.json"
+UNITS_NAME = "kratos_gui_units.json"
+"""Beside the deck: the unit system its numbers are in, so its results are labelled in it
+(`results.run_unit_system`). Kratos never reads it."""
 """The K0 stage's own materials file. Written only when the deck has a stage that
 reads it; the name matches `kratos_processes.INITIAL_MATERIALS_FILENAME`."""
 LOG_NAME = "kratos.log"
@@ -175,6 +178,9 @@ def write_deck(export: dict, directory: Path) -> list[str]:
         written.append(INITIAL_MATERIALS_NAME)
     _write(directory / PARAMETERS_NAME, export["project_parameters"])
     written.append(PARAMETERS_NAME)
+    if export.get("unit_system"):
+        _write(directory / UNITS_NAME, json.dumps({"unit_system": export["unit_system"]}))
+        written.append(UNITS_NAME)
     return written
 
 

@@ -35,6 +35,9 @@
      same frozen data.js that the app loads. -->
 <script src="../../vendor/three.min.js"></script>
 <script src="../../js/data.js"></script>
+<script src="../js/unit-table.js"></script>
+<script src="../js/units.js"></script>
+<script src="../js/property-sets.js"></script>
 <script src="../js/material-library.js"></script>
 <script src="../../js/ui.js"></script>
 <script src="../../js/orbit.js"></script>
@@ -44,6 +47,7 @@
 <script src="../../js/toolbars.js"></script>
 <script src="../../js/explorer.js"></script>
 <script src="../../js/dialogs.js"></script>
+<script src="../js/material-sets.js"></script>
 
 <script src="../js/api.js"></script>
 <script src="../js/download.js"></script>
@@ -82,23 +86,32 @@
 <script src="test-api.js"></script>
 <script src="test-buffers.js"></script>
 <script src="test-model.js"></script>
+<script src="test-model-props.js"></script>
 <script src="test-patches.js"></script>
+<script src="test-patches-phases.js"></script>
+<script src="test-patches-results.js"></script>
 <script src="test-canvas-renderer.js"></script>
 <script src="test-viewport.js"></script>
 <script src="test-ruler.js"></script>
+<script src="test-ruler-dom.js"></script>
+<script src="test-orbit.js"></script>
 <script src="test-mesh-labels.js"></script>
+<script src="test-mesh-labels-dom.js"></script>
 <script src="test-mesh-settings.js"></script>
 <script src="test-soil-surface.js"></script>
 <script src="test-layout.js"></script>
 <script src="test-import.js"></script>
 <script src="test-mdpa-import.js"></script>
+<script src="test-import-dialogs.js"></script>
 <script src="test-draw-input.js"></script>
+<script src="test-draw-pointer.js"></script>
 <script src="test-loads.js"></script>
 <script src="test-beams.js"></script>
 <script src="test-anchors.js"></script>
 <script src="test-interfaces.js"></script>
 <script src="test-normal-loads.js"></script>
 <script src="test-toolbar.js"></script>
+<script src="test-frozen-ui.js"></script>
 <script src="test-dock.js"></script>
 <script src="test-export.js"></script>
 <script src="test-calculate.js"></script>
@@ -107,10 +120,15 @@
 <script src="fixtures/crow-field.js"></script>
 <script src="test-results-render.js"></script>
 <script src="test-results-plot.js"></script>
+<script src="test-results-view.js"></script>
 <script src="test-download.js"></script>
 <script src="test-zip.js"></script>
 <script src="test-empty-layers.js"></script>
 <script src="test-material-library.js"></script>
+<script src="test-units.js"></script>
+<script src="test-property-sets.js"></script>
+<script src="test-material-sets.js"></script>
+<script src="test-shortcuts.js"></script>
 <script src="test-water.js"></script>
 <script src="test-water-command.js"></script>
 <script src="test-part-colors.js"></script>
@@ -121,6 +139,10 @@
      these particular tests without a browser. -->
 <script src="fixtures/phase-cases.js"></script>
 <script src="test-phases.js"></script>
+<!-- Last: it boots the one viewport, whose frame then sizes load glyphs etc. -->
+<script src="fixtures/viewport-payloads.js"></script>
+<script src="test-patches-modes.js"></script>
+<script src="test-viewport-live.js"></script>
 
 <script>
 T.run().then(function (results) {

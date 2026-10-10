@@ -95,8 +95,9 @@
     var panel = App.Beams.draft(project, 'panel');
     var sections = App.Beams.sectionsFor(project, panel);
     T.eq(sections.length, 1);
-    T.ok(sections[0].thickness > 0);
-    T.eq('area' in sections[0], false);
+    T.ok(sections[0].variables.THICKNESS > 0);
+    T.eq('CROSS_AREA' in sections[0].variables, false);
+    T.eq('spacing' in sections[0], false);
     T.eq(App.Beams.validateSection(sections[0]), null);
   });
 
@@ -131,14 +132,18 @@
     var project = section();
     var sections = App.Beams.sectionsFor(project, App.Beams.draft(project));
     T.eq(sections.length, 1);
-    T.ok(sections[0].E > 0 && sections[0].area > 0 && sections[0].inertia > 0);
+    var v = sections[0].variables;
+    T.ok(v.YOUNG_MODULUS > 0 && v.CROSS_AREA > 0 && v.I33 > 0);
+    T.eq(sections[0].constitutive_law, 'TimoshenkoBeamElasticConstitutiveLaw');
     T.eq(sections[0].spacing, 1);
   });
 
   test('a second pile reuses the section already in the project', function () {
     var project = section({
-      beam_sections: [{ id: 'az26', name: 'AZ 26-700', E: 2.1e8, nu: 0.3,
-                        area: 0.0198, inertia: 5.52e-4, density: 7850, spacing: 1 }]
+      beam_sections: [{ id: 'az26', name: 'AZ 26-700', spacing: 1,
+                        constitutive_law: 'TimoshenkoBeamElasticConstitutiveLaw', tables: {},
+                         variables: { YOUNG_MODULUS: 2.1e11, POISSON_RATIO: 0.3,
+                                      CROSS_AREA: 0.0198, I33: 5.52e-4, DENSITY: 7850 } }]
     });
     var beam = App.Beams.draft(project);
     T.eq(beam.section, 'az26');
@@ -149,8 +154,10 @@
     var project = section({
       beams: [{ id: 'beam_1', name: 'Sheet pile 1', section: 'az26',
                 points: [[12, 0], [12, -14]], active: true }],
-      beam_sections: [{ id: 'az26', name: 'AZ 26-700', E: 2.1e8, nu: 0.3,
-                        area: 0.0198, inertia: 5.52e-4, density: 7850, spacing: 1 }]
+      beam_sections: [{ id: 'az26', name: 'AZ 26-700', spacing: 1,
+                        constitutive_law: 'TimoshenkoBeamElasticConstitutiveLaw', tables: {},
+                         variables: { YOUNG_MODULUS: 2.1e11, POISSON_RATIO: 0.3,
+                                      CROSS_AREA: 0.0198, I33: 5.52e-4, DENSITY: 7850 } }]
     });
     T.eq(App.Beams.draft(project).id, 'beam_2');
   });
@@ -166,13 +173,18 @@
   });
 
   test('section validation refuses unusable structural properties', function () {
-    var ok = { id: 'az26', name: 'AZ 26-700', E: 2.1e8, nu: 0.3,
-               area: 0.0198, inertia: 5.52e-4, density: 7850, spacing: 1 };
+    var steel = { YOUNG_MODULUS: 2.1e11, POISSON_RATIO: 0.3, CROSS_AREA: 0.0198,
+                  I33: 5.52e-4, DENSITY: 7850 };
+    var ok = { id: 'az26', name: 'AZ 26-700', spacing: 1,
+               constitutive_law: 'TimoshenkoBeamElasticConstitutiveLaw', variables: steel };
+    function with_(variables) {
+      return Object.assign({}, ok, { variables: Object.assign({}, steel, variables) });
+    }
     T.eq(App.Beams.validateSection(ok), null);
-    T.ok(App.Beams.validateSection(Object.assign({}, ok, { E: 0 })));
-    T.ok(App.Beams.validateSection(Object.assign({}, ok, { area: -1 })));
-    T.ok(App.Beams.validateSection(Object.assign({}, ok, { inertia: 0 })));
-    T.ok(App.Beams.validateSection(Object.assign({}, ok, { nu: 0.5 })));
+    T.ok(App.Beams.validateSection(with_({ YOUNG_MODULUS: 0 })));
+    T.ok(App.Beams.validateSection(with_({ CROSS_AREA: -1 })));
+    T.ok(App.Beams.validateSection(with_({ I33: 0 })));
+    T.ok(App.Beams.validateSection(with_({ POISSON_RATIO: 0.5 })));
     T.ok(App.Beams.validateSection(Object.assign({}, ok, { spacing: 0 })));
     T.ok(App.Beams.validateSection(Object.assign({}, ok, { name: '' })));
   });
@@ -214,8 +226,10 @@
     var project = section({
       beams: [{ id: 'beam_1', name: 'Sheet pile 1', section: 'az26',
                 points: [[12, 0], [12, -14]], active: true }],
-      beam_sections: [{ id: 'az26', name: 'AZ 26-700', E: 2.1e8, nu: 0.3,
-                        area: 0.0198, inertia: 5.52e-4, density: 7850, spacing: 1 }]
+      beam_sections: [{ id: 'az26', name: 'AZ 26-700', spacing: 1,
+                        constitutive_law: 'TimoshenkoBeamElasticConstitutiveLaw', tables: {},
+                         variables: { YOUNG_MODULUS: 2.1e11, POISSON_RATIO: 0.3,
+                                      CROSS_AREA: 0.0198, I33: 5.52e-4, DENSITY: 7850 } }]
     });
     App.PROJECT = project;
     App.BEAMS = project.beams.slice();

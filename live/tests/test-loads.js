@@ -16,9 +16,15 @@
     var load = App.Loads.draftFromPoints(SECTION, [[9, 0, 20], [2, 0, 20]]);
     T.eq(load.kind, 'line');
     T.eq([load.x0, load.x1, load.y], [2, 9, 0]);
-    T.eq(load.components, [0, -20]);
+    T.eq(load.components, [0, -20000], '20 kN/m down, in the N/m of an SI project');
     T.eq('z' in load || 'z0' in load || 'z1' in load, false);
     T.eq(load.name, 'LineLoad_1');
+  });
+
+  test('a new load is stated in the units of its project', function () {
+    var kn = Object.assign({}, SECTION, { unit_system: 'kN' });
+    T.eq(App.Loads.draftFromPoints(kn, [[9, 0, 20], [2, 0, 20]]).components, [0, -20]);
+    T.eq(App.Loads.draftPoint(kn, [8.5, -3]).components, [0, -20]);
   });
 
   test('3D load capture becomes the rectangle drawn on the ground surface', function () {
@@ -31,7 +37,7 @@
     var load = App.Loads.draftPoint(SECTION, [8.5, -3]);
     T.eq(load.kind, 'point');
     T.eq([load.x, load.y], [8.5, -3]);
-    T.eq(load.components, [0, -20]);
+    T.eq(load.components, [0, -20000]);
     T.eq('z' in load, false);
     T.eq(load.name, 'PointLoad_1');
   });

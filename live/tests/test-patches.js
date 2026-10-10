@@ -439,6 +439,10 @@
                  note: function () {}, err: function () {} },
       Toolbars: { setToolbarState: function () {} },
       Viewport: { setViewMode: function () {}, refresh: function () { return Promise.resolve(); } },
+      // The switch adopts the server's answer through App.Model.apply (so Undo can take
+      // it back); these answers are two-field stand-ins, not projects a model can build.
+      Model: { apply: function (project) { App.PROJECT = project; },
+               load: function () { return Promise.resolve(); } },
       runAction: function () { throw new Error('frozen action should not run'); },
       PROJECT: null
     }, extra);
@@ -801,5 +805,29 @@
            'the reason reaches the log');
       T.eq(ctx.meshed, 0, 'and nothing is meshed');
     }).then(function () { restore(ctx); }, function (e) { restore(ctx); throw e; });
+  });
+
+  /* `cleargeometry` is refused while a phase still uses one of the parts (finding F3).
+     It used to report "cleared" whatever the server said. */
+  function refusingFetch(detail) {
+    var saved = window.fetch;
+    window.fetch = function () {
+      return Promise.resolve({ ok: false, status: 422,
+        json: function () { return Promise.resolve({ detail: detail }); } });
+    };
+    return function () { window.fetch = saved; };
+  }
+
+  test("cleargeometry refused by the server says why, and not that it cleared", function () {
+    var ctx = harness();
+    var loaded = 0;
+    App.Model.load = function () { loaded += 1; return Promise.resolve(); };
+    var unfetch = refusingFetch("cannot delete a part that a phase still uses (phase 'dig_1' names drawn_0)");
+    return Promise.resolve(App.Command.run('cleargeometry')).then(function () {
+      T.ok(ctx.lines.some(function (l) { return /^err:.*dig_1/.test(l); }), ctx.lines.join(' | '));
+      T.ok(!ctx.lines.some(function (l) { return /^ok:/.test(l); }), 'no success line');
+      T.eq(loaded, 0, 'the model is not reloaded for a refusal');
+    }).then(function () { unfetch(); restore(ctx); },
+            function (e) { unfetch(); restore(ctx); throw e; });
   });
 })();

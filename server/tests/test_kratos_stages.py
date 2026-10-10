@@ -235,3 +235,24 @@ def test_a_branching_phase_tree_is_refused_at_export():
     with pytest.raises(phases.PhaseError, match="alternative"):
         with session():
             kratos.export_project(project, MeshRequest(**project.mesh.model_dump()))
+
+
+def test_a_project_with_one_phase_imports_its_mesh_once():
+    """The first stage of a phased deck reads the .mdpa through its modeler; its solver
+    must then use that model, not read the file again -- even when it is the only stage.
+    It used to say `input_type: "mdpa"` whenever there was a single stage, so a one-phase
+    project (a K0 column) imported every element twice and Kratos stopped at element 1."""
+    import json as _json
+
+    from app import build, kratos as _kratos
+    from app.schemas import MeshRequest
+    from benchmarks import models
+
+    project = models.project()
+    with build.session():
+        export = _kratos.export_project(project, MeshRequest(element_size=1.0, order=1))
+    (stage,) = _json.loads(export["project_parameters"])["stages"].values()
+    modelers = stage.get("stage_preprocess", {}).get("modelers", [])
+    reads = len(modelers) + (stage["stage_settings"]["solver_settings"]
+                             ["model_import_settings"]["input_type"] == "mdpa")
+    assert reads == 1

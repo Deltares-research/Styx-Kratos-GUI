@@ -68,14 +68,15 @@ def test_a_profile_is_sorted_by_level_from_toe_to_top():
     assert found["nodes"] == [2, 3, 1]
 
 
-def test_forces_are_in_kilonewtons_and_displacements_in_metres():
+def test_forces_are_the_runs_own_numbers_and_displacements_in_metres():
+    """Nothing is scaled: a run's numbers are in its own unit system, and labelled."""
     read = {1: {"BENDING_MOMENT": 10e3, "TOTAL_DISPLACEMENT_X": -0.01}}
     coordinates = {1: COORDINATES[1]}
 
     moment = result_members.profile(read, coordinates, result_members.quantity("M"))
     ux = result_members.profile(read, coordinates, result_members.quantity("ux"))
 
-    assert moment["points"] == [[pytest.approx(10.0), 0.0]]
+    assert moment["points"] == [[pytest.approx(10e3), 0.0]]
     assert ux["points"] == [[pytest.approx(-0.01), 0.0]]
 
 
@@ -87,7 +88,7 @@ def test_the_sign_is_kratos_own():
     found = result_members.profile(read, {1: COORDINATES[1]},
                                    result_members.quantity("Q"))
 
-    assert found["points"][0][0] == pytest.approx(-5.0)
+    assert found["points"][0][0] == pytest.approx(-5e3)
 
 
 def test_traction_is_split_into_its_normal_and_shear_components():
@@ -97,8 +98,8 @@ def test_traction_is_split_into_its_normal_and_shear_components():
     normal = result_members.profile(read, coordinates, result_members.quantity("tn"))
     shear = result_members.profile(read, coordinates, result_members.quantity("ts"))
 
-    assert normal["points"][0][0] == pytest.approx(-12.0)
-    assert shear["points"][0][0] == pytest.approx(3.0)
+    assert normal["points"][0][0] == pytest.approx(-12e3)
+    assert shear["points"][0][0] == pytest.approx(3e3)
 
 
 def test_the_extremes_carry_the_level_they_occur_at():
@@ -107,8 +108,8 @@ def test_the_extremes_carry_the_level_they_occur_at():
 
     found = result_members.profile(read, COORDINATES, result_members.quantity("M"))
 
-    assert found["min"] == {"value": pytest.approx(-30.0), "y": -2.0}
-    assert found["max"] == {"value": pytest.approx(20.0), "y": -1.0}
+    assert found["min"] == {"value": pytest.approx(-30e3), "y": -2.0}
+    assert found["max"] == {"value": pytest.approx(20e3), "y": -1.0}
 
 
 def test_a_node_without_the_variable_is_left_out_rather_than_zero():
@@ -131,7 +132,7 @@ def test_the_two_faces_of_an_interface_are_one_point_not_two():
 
     found = result_members.profile(read, coordinates, result_members.quantity("tn"))
 
-    assert found["points"] == [[pytest.approx(-20.0), -1.0], [pytest.approx(-12.0), 0.0]]
+    assert found["points"] == [[pytest.approx(-20e3), -1.0], [pytest.approx(-12e3), 0.0]]
     assert found["nodes"] == [3, 1]
 
 
@@ -177,13 +178,13 @@ def test_the_run_offers_the_wall_and_the_interface(run):
         ["M", "Q", "N", "ux", "uy"]
     assert [q["name"] for q in members["interface"]["quantities"]] == ["tn", "ts"]
     assert members["wall"]["quantities"][0] == \
-        {"name": "M", "label": "Bending moment", "unit": "kNm/m"}
+        {"name": "M", "label": "Bending moment", "unit": "N·m/m"}
 
 
 def test_a_plot_has_one_panel_per_stage_with_the_wall_in_it(run):
     plot = results.member_profiles(run, "wall", "M")
 
-    assert (plot["member"], plot["quantity"], plot["unit"]) == ("wall", "M", "kNm/m")
+    assert (plot["member"], plot["quantity"], plot["unit"]) == ("wall", "M", "N·m/m")
     assert [s["index"] for s in plot["stages"]] == [3, 4, 5, 6, 7]
     assert [s["name"] for s in plot["stages"]] == crow_run.MEMBER_STAGES
     assert plot["stages"][0]["phase"] == "SheetPileWall installation"
@@ -212,13 +213,14 @@ RELATIVE_TOLERANCE = 0.02
 """Kratos' own, from `test_CROW_case_generated_mesh.py`."""
 
 COLUMNS = {
-    # quantity -> (member, column in expected_members/, scale to the plot's unit)
-    "M": ("wall", "BENDING_MOMENT", 1e-3),
-    "Q": ("wall", "SHEAR_FORCE", 1e-3),
-    "N": ("wall", "AXIAL_FORCE", 1e-3),
+    # quantity -> (member, column in expected_members/, scale to the plot's unit). The
+    # run is SI and so is Kratos' reference: nothing to scale.
+    "M": ("wall", "BENDING_MOMENT", 1.0),
+    "Q": ("wall", "SHEAR_FORCE", 1.0),
+    "N": ("wall", "AXIAL_FORCE", 1.0),
     "ux": ("wall", "TOTAL_DISPLACEMENT_X", 1.0),
-    "tn": ("interface", "GEO_EFFECTIVE_TRACTION_VECTOR_0", 1e-3),
-    "ts": ("interface", "GEO_EFFECTIVE_TRACTION_VECTOR_1", 1e-3),
+    "tn": ("interface", "GEO_EFFECTIVE_TRACTION_VECTOR_0", 1.0),
+    "ts": ("interface", "GEO_EFFECTIVE_TRACTION_VECTOR_1", 1.0),
 }
 
 
