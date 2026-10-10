@@ -11,6 +11,9 @@ plan/
 graphify-out/
 # Local snapshot of the frozen mockup (index.html + css/js/vendor/assets).
 mockup/
+# Old mockup locations; the app uses live/base/.
+/css/
+/js/
 
 # Reference decks and example models. `examples/crow/` holds the CROW staged-excavation
 # case: the model script the GUI runs (`run examples/crow/crow.py`), the deck Kratos is
