@@ -68,13 +68,15 @@
   --h-status:   23px;
   --h-dockhead: 23px;
 
+  /* Resizable sizes: the splitters in js/app.js write the --*-width/--*-height
+     overrides on :root; the fallbacks are the initial sizes. */
   --w-rail:  var(--rail-width, 40px);
   --w-dock:  var(--dock-width, 296px);
   --h-cmd:   var(--cmd-height, 150px);
   --h-model-panel: var(--model-panel-height, 320px);
   --h-phases: var(--phases-height, 250px);
 
-  --split: 5px;
+  --split: 5px;    /* splitter thickness */
   --radius: 2px;
 
   --shadow-menu: 0 6px 18px rgba(15, 23, 42, .22), 0 1px 3px rgba(15, 23, 42, .16);

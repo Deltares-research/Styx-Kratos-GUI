@@ -11,6 +11,11 @@ App.Explorer = (function () {
   /* ══════════════════════════════════════════════════════════════
      Model explorer
      ══════════════════════════════════════════════════════════════ */
+  /**
+   * Rebuilds the Model explorer tree for a workbench mode.
+   * Resets the row/checkbox lookups and re-applies the current selection.
+   * @param {string} mode One of 'soil', 'structures', 'mesh', 'flow', 'staged'.
+   */
   function mountTree(mode) {
     var host = App.UI.clear(document.getElementById('tree-model'));
     var tree = el('div.tree');
@@ -20,6 +25,13 @@ App.Explorer = (function () {
     syncSelection(App.state.selection);
   }
 
+  /**
+   * Builds a tree node (row plus collapsible children) from a tree descriptor.
+   * Registers bound rows and checkboxes in rowsByObj / eyesByObj.
+   * @param {!Object} data Tree descriptor; its `expanded` flag is set in place.
+   * @param {number} depth Nesting level, 0 for root nodes.
+   * @return {!Element} The node wrapper element.
+   */
   function node(data, depth) {
     if (data.expanded === undefined) data.expanded = depth === 0;
 
@@ -71,6 +83,7 @@ App.Explorer = (function () {
       row.addEventListener('dblclick', toggle);
     }
 
+    /** Toggles the node between expanded and collapsed. */
     function toggle() {
       data.expanded = !data.expanded;
       twisty.textContent = data.expanded ? '▼' : '▶';
@@ -114,16 +127,25 @@ App.Explorer = (function () {
     return wrap;
   }
 
+  /** Removes the selected highlight from every Model explorer row. */
   function clearRowHighlight() {
     document.querySelectorAll('#tree-model .tree-row.selected')
       .forEach(function (r) { r.classList.remove('selected'); });
   }
 
+  /**
+   * Updates every visibility checkbox bound to a viewport object.
+   * @param {string} obj Viewport object key.
+   * @param {boolean} on Whether the object is visible.
+   */
   function syncEyes(obj, on) {
     (eyesByObj[obj] || []).forEach(function (e) { e.classList.toggle('off', !on); });
   }
 
-  /* Highlight (and scroll to) the rows bound to a viewport object. */
+  /**
+   * Highlights (and scrolls to) the rows bound to a viewport object.
+   * @param {?string} obj Viewport object key, or null to clear the highlight.
+   */
   function syncSelection(obj) {
     clearRowHighlight();
     if (!obj) return;
@@ -136,6 +158,10 @@ App.Explorer = (function () {
     }
   }
 
+  /**
+   * Expands or collapses every node of the current mode's tree and remounts it.
+   * @param {boolean} on True to expand, false to collapse.
+   */
   function expandAll(on) {
     (function walk(list) {
       list.forEach(function (n) {
@@ -148,6 +174,10 @@ App.Explorer = (function () {
   /* ══════════════════════════════════════════════════════════════
      Selection explorer (property grid)
      ══════════════════════════════════════════════════════════════ */
+  /**
+   * Renders the Selection explorer property grid for an object.
+   * @param {?string} objKey Selection key, or null to show the empty state.
+   */
   function mountSelection(objKey) {
     var host = App.UI.clear(document.getElementById('grid-selection'));
     var def = objKey && App.OBJECT_PROPS[objKey];
@@ -172,10 +202,15 @@ App.Explorer = (function () {
     host.appendChild(grid);
   }
 
-  /* A property row. `r` is [key, value, unit, readonly, editor]; when an editor
-     descriptor is present the row renders a real control bound to the model
-     (see App.LayerEditors in js/data.js) and commits through
-     App.commitSelectionEdit, which each build defines for itself. */
+  /**
+   * Builds a property row from [key, value, unit, readonly, editor].
+   * With an editor descriptor (see App.LayerEditors in js/data.js) the row
+   * renders a live control that commits through App.commitSelectionEdit,
+   * which each build defines for itself.
+   * @param {!Array<*>} r Row descriptor.
+   * @param {?string=} objKey Selection key the row belongs to.
+   * @return {!Element} The row element.
+   */
   function propRow(r, objKey) {
     var key = r[0], val = r[1], unit = r[2] || '', ro = r[3], editor = r[4];
     var row = el('div.pgrid-row');
@@ -201,13 +236,21 @@ App.Explorer = (function () {
     return row;
   }
 
-  /* 'soil_L1' -> 'L1', and only when that layer really exists. */
+  /**
+   * Returns the soil layer id for a selection key ('soil_L1' -> 'L1').
+   * @param {?string} objKey Selection key.
+   * @return {?string} The layer id, or null when it is not an existing layer.
+   */
   function layerIdOf(objKey) {
     if (!objKey || objKey.indexOf('soil_') !== 0) return null;
     var id = objKey.slice(5);
     return App.layerById && App.layerById(id) ? id : null;
   }
 
+  /**
+   * Deletes a soil layer, clearing the selection if it pointed at that layer.
+   * @param {string} layerId
+   */
   function deleteLayerNode(layerId) {
     var layer = App.layerById(layerId);
     if (!layer) return;
@@ -218,6 +261,10 @@ App.Explorer = (function () {
     commit(null);
   }
 
+  /**
+   * Prompts for a new soil layer name and applies it.
+   * @param {string} layerId
+   */
   function renameLayerNode(layerId) {
     var layer = App.layerById(layerId);
     if (!layer) return;
@@ -230,14 +277,29 @@ App.Explorer = (function () {
     commit(App.state.selection);
   }
 
+  /**
+   * Commits a model edit through App.commitSelectionEdit, when the build defines it.
+   * @param {?string=} objKey Selection key that was edited.
+   */
   function commit(objKey) {
     if (App.commitSelectionEdit) App.commitSelectionEdit(objKey);
   }
 
+  /**
+   * Writes an edit error to the command line.
+   * @param {string} message
+   */
   function reportEditError(message) {
     App.Command.write('err', message);
   }
 
+  /**
+   * Builds the input control (button, select or numeric field) for an editor descriptor.
+   * @param {!Object} editor Editor descriptor with a `kind` and get/set callbacks.
+   * @param {string} label Property name, used in error messages.
+   * @param {?string=} objKey Selection key committed after a successful edit.
+   * @return {!Element} The control element.
+   */
   function editorControl(editor, label, objKey) {
     if (editor.kind === 'button') {
       var btn = el('button.btn.btn-sm', { type: 'button', text: editor.text });
@@ -278,6 +340,10 @@ App.Explorer = (function () {
   /* ══════════════════════════════════════════════════════════════
      Phases explorer
      ══════════════════════════════════════════════════════════════ */
+  /**
+   * Renders the Phases list and the property grid of the current phase.
+   * Clicking a row sets App.state.phase and remounts the list.
+   */
   function mountPhases() {
     var host = App.UI.clear(document.getElementById('list-phases'));
     var list = el('div.phase-list');

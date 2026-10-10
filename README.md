@@ -1,7 +1,6 @@
 # Gmsh-backed geotechnical modeller mockup
 
-The original static demonstration remains available by opening `index.html` directly. The live
-version uses FastAPI and Gmsh to build and mesh real OpenCASCADE solids.
+The app uses FastAPI and Gmsh to build and mesh real OpenCASCADE solids.
 
 ## Requirements
 

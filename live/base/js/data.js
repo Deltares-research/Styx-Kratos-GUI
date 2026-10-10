@@ -339,8 +339,12 @@ App.MATERIALS = [
     rInter:1.00, interfacePerm:'Impermeable' }
 ];
 
-/* Look a material up by id — used by the tree, the 3D scene and the
-   Modify soil layers dialog. */
+/**
+ * Looks a material up by id, falling back to the first material.
+ * Used by the tree, the 3D scene and the Modify soil layers dialog.
+ * @param {string} id
+ * @return {!Object} The matching material, or the first one when none matches.
+ */
 App.matById = function (id) {
   return App.MATERIALS.filter(function (m) { return m.id === id; })[0] || App.MATERIALS[0];
 };
@@ -368,14 +372,19 @@ App.LAYERS = [
                                       bots:{ bh1:-25.00, bh2:-25.00, bh3:-25.00 } }
 ];
 
-/* Adds a borehole (default position: offset from the last one), copying
-   each layer's top/bottom at the new borehole from the last borehole so
-   the stratigraphy stays well-formed. Shared by the "Modify soil layers"
-   dialog, the Soil-mode "Create borehole" tool/menu item, and the
-   command-line `borehole` command. Does not refresh the tree/3D scene —
-   callers that need the change reflected immediately must also call
-   App.refreshSoilData() and App.Viewport.rebuildSoil(). */
+// Counter behind the unique ids handed out by App.addBorehole.
 App._boreholeSeq = App.BOREHOLES.length;
+/**
+ * Adds a borehole, copying each layer's top/bottom from the last borehole so
+ * the stratigraphy stays well-formed.
+ * Shared by the "Modify soil layers" dialog, the Soil-mode "Create borehole"
+ * tool/menu item and the command-line `borehole` command.
+ * Does not refresh the tree/3D scene: callers must also call
+ * App.refreshSoilData() and App.Viewport.rebuildSoil().
+ * @param {number=} x Plan x in metres; defaults to 10 m past the last borehole.
+ * @param {number=} y Plan y in metres; defaults to the last borehole's y.
+ * @return {!Object} The new borehole.
+ */
 App.addBorehole = function (x, y) {
   var last = App.BOREHOLES[App.BOREHOLES.length - 1];
   App._boreholeSeq += 1;
@@ -400,8 +409,11 @@ App.addBorehole = function (x, y) {
 
 App._materialSeq = 0;
 
-/* Defaults chosen to satisfy every bound the server enforces, so a brand new
-   material can be saved without touching a single field first. */
+/**
+ * Builds a new material with a fresh unique id.
+ * Defaults satisfy every bound the server enforces, so it saves as-is.
+ * @return {!Object}
+ */
 App.newMaterialDefaults = function () {
   App._materialSeq += 1;
   return {
@@ -413,12 +425,21 @@ App.newMaterialDefaults = function () {
   };
 };
 
+/**
+ * Appends a default material to App.MATERIALS.
+ * @return {!Object} The new material.
+ */
 App.addMaterial = function () {
   var m = App.newMaterialDefaults();
   App.MATERIALS.push(m);
   return m;
 };
 
+/**
+ * Inserts a deep copy of a material, with a new id, right after the source.
+ * @param {!Object} src Material to copy; must be in App.MATERIALS.
+ * @return {!Object} The copy.
+ */
 App.duplicateMaterial = function (src) {
   var m = JSON.parse(JSON.stringify(src));
   App._materialSeq += 1;
@@ -428,7 +449,11 @@ App.duplicateMaterial = function (src) {
   return m;
 };
 
-/* The layers standing in the way of deleting a material, by name. */
+/**
+ * Returns the layers standing in the way of deleting a material.
+ * @param {string} id Material id.
+ * @return {!Array<string>} Names of the layers that reference it.
+ */
 App.layersUsingMaterial = function (id) {
   return App.LAYERS.filter(function (l) { return l.mat === id; })
                    .map(function (l) { return l.name; });
@@ -441,13 +466,22 @@ App.layersUsingMaterial = function (id) {
    layer never inverts, and the stack never gains a gap. They return an
    error string to refuse an edit, or null when it was applied. */
 
+/**
+ * Looks a layer up by id.
+ * @param {string} id
+ * @return {?Object} The layer, or null when none matches.
+ */
 App.layerById = function (id) {
   return App.LAYERS.filter(function (l) { return l.id === id; })[0] || null;
 };
 
-/* Removes a layer and closes the gap it leaves: the layer above takes over
-   its bottom, or — when the topmost one goes — the layer below takes over
-   its top. Refuses to remove the only layer. */
+/**
+ * Removes a layer and closes the gap it leaves: the layer above takes over
+ * its bottom, or, when the topmost one goes, the layer below takes over its
+ * top. Refuses to remove the only layer.
+ * @param {string} id
+ * @return {?string} An error message, or null when the layer was removed.
+ */
 App.deleteLayerById = function (id) {
   if (App.LAYERS.length <= 1) return 'A model needs at least one soil layer.';
   var i = -1;
@@ -463,9 +497,14 @@ App.deleteLayerById = function (id) {
   return null;
 };
 
-/* One level for the whole layer replaces any per-borehole variation, so say
-   so rather than quietly discarding a sloping boundary. Edit the individual
-   boreholes in "Modify soil layers" to keep the slope. */
+/**
+ * Notes on the command line when a sloping layer boundary was flattened.
+ * Says so rather than quietly discarding the slope; editing individual
+ * boreholes in "Modify soil layers" keeps it.
+ * @param {string} edge Which boundary changed: 'top' or 'bottom'.
+ * @param {string} layerName
+ * @param {!Array<number>} previous Boundary levels per borehole before the edit.
+ */
 function noteIfFlattened(edge, layerName, previous) {
   var varied = previous.some(function (z) { return Math.abs(z - previous[0]) > 1e-9; });
   if (varied && App.Command && App.Command.note) {
@@ -474,9 +513,13 @@ function noteIfFlattened(edge, layerName, previous) {
   }
 }
 
-/* Puts a layer's top at one level across every borehole, carrying the
-   boundary with the layer above. Flattens a sloping boundary by design —
-   it is a single level for the whole layer. */
+/**
+ * Puts a layer's top at one level across every borehole, carrying the
+ * boundary with the layer above. Flattens a sloping boundary by design.
+ * @param {string} id Layer id.
+ * @param {number} z New top level in metres.
+ * @return {?string} An error message, or null when the edit was applied.
+ */
 App.setLayerTopLevel = function (id, z) {
   var i = -1;
   App.LAYERS.forEach(function (l, n) { if (l.id === id) i = n; });
@@ -499,6 +542,13 @@ App.setLayerTopLevel = function (id, z) {
   return null;
 };
 
+/**
+ * Puts a layer's bottom at one level across every borehole, carrying the
+ * boundary with the layer below. Flattens a sloping boundary by design.
+ * @param {string} id Layer id.
+ * @param {number} z New bottom level in metres.
+ * @return {?string} An error message, or null when the edit was applied.
+ */
 App.setLayerBottomLevel = function (id, z) {
   var i = -1;
   App.LAYERS.forEach(function (l, n) { if (l.id === id) i = n; });
@@ -525,6 +575,11 @@ App.setLayerBottomLevel = function (id, z) {
    carries one renders a real control instead of static text
    (js/explorer.js propRow). */
 App.LayerEditors = {
+  /**
+   * Builds a dropdown editor for a layer's material.
+   * @param {!Object} layer
+   * @return {!Object} Editor descriptor.
+   */
   material: function (layer) {
     return {
       kind: 'select',
@@ -535,6 +590,11 @@ App.LayerEditors = {
       set: function (v) { layer.mat = v; return null; }
     };
   },
+  /**
+   * Builds a number editor for a layer's highest top level, in metres.
+   * @param {!Object} layer
+   * @return {!Object} Editor descriptor.
+   */
   topLevel: function (layer) {
     return {
       kind: 'number', decimals: 3, unit: 'm',
@@ -544,6 +604,11 @@ App.LayerEditors = {
       set: function (v) { return App.setLayerTopLevel(layer.id, v); }
     };
   },
+  /**
+   * Builds a number editor for a layer's lowest bottom level, in metres.
+   * @param {!Object} layer
+   * @return {!Object} Editor descriptor.
+   */
   bottomLevel: function (layer) {
     return {
       kind: 'number', decimals: 3, unit: 'm',
@@ -662,10 +727,19 @@ App.OBJECT_PROPS = {
 
 /* ── Model explorer trees, per mode ────────────────────────────── */
 (function () {
+  /**
+   * Builds a tree leaf for a material.
+   * @param {!Object} m Material.
+   * @return {!Object} Tree node.
+   */
   function mat(m) { return { label: m.name, icon: null, swatch: m.color, leaf: true }; }
 
-  /* One per Attributes library, rebuilt by App.refreshSoilData() so a material
-     renamed or recoloured in the material editor updates here too. */
+  /**
+   * Builds an empty "Soil materials" tree node, one per Attributes library.
+   * Its children are filled by App.refreshSoilData() so a material renamed or
+   * recoloured in the material editor updates here too.
+   * @return {!Object} Tree node.
+   */
   function soilMaterialsNode() {
     return { label: 'Soil materials', icon: 'materials', count: 0, children: [] };
   }
@@ -768,11 +842,12 @@ App.OBJECT_PROPS = {
     staged:     [structures, soilVolumes, flowNode, modelConditions]
   };
 
-  /* Rebuilds everything derived from App.LAYERS / App.BOREHOLES in place —
-     the Soil node's tree children, the Boreholes node's tree children, and
-     the per-layer/per-borehole Selection-explorer property sets — so the
-     Model explorer and property grid stay in sync after the "Modify soil
-     layers" dialog or the borehole tools change the underlying data. */
+  /**
+   * Rebuilds everything derived from App.LAYERS / App.BOREHOLES in place.
+   * Updates the material, Soil and Boreholes tree nodes and the per-layer and
+   * per-borehole entries of App.OBJECT_PROPS, so the Model explorer and
+   * property grid stay in sync after soil data changes.
+   */
   App.refreshSoilData = function () {
     soilMaterialLists.forEach(function (node) {
       node.count = App.MATERIALS.length;

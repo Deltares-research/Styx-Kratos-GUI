@@ -10,6 +10,12 @@ App.Dialogs = (function () {
   /* ══════════════════════════════════════════════════════════════
      Generic modal shell — draggable, resizable, Esc to close
      ══════════════════════════════════════════════════════════════ */
+  /**
+   * Opens a modal dialog centred in the window.
+   * @param {!Object} opts {title, width, height, toolbar, buttons, build, onClose};
+   *     each button is {label, primary, onClick, keepOpen}.
+   * @return {{close: function(), body: !Element, dialog: !Element}}
+   */
   function open(opts) {
     var layer = document.getElementById('modal-layer');
     var scrim = el('div.scrim');
@@ -52,9 +58,14 @@ App.Dialogs = (function () {
     drag(head, dlg);
     resize(grip, dlg);
 
+    /**
+     * Closes the dialog on Escape.
+     * @param {!KeyboardEvent} e
+     */
     function onKey(e) { if (e.key === 'Escape') close(); }
     document.addEventListener('keydown', onKey);
 
+    /** Removes the dialog and its scrim, then runs `opts.onClose`. */
     function close() {
       document.removeEventListener('keydown', onKey);
       if (scrim.parentNode) scrim.parentNode.removeChild(scrim);
@@ -68,35 +79,59 @@ App.Dialogs = (function () {
     return { close: close, body: body, dialog: dlg };
   }
 
+  /**
+   * Shakes the dialog briefly to signal that it is modal.
+   * @param {!Element} dlg
+   */
   function flash(dlg) {
     dlg.animate([{ transform: 'translateX(0)' }, { transform: 'translateX(-4px)' },
                  { transform: 'translateX(4px)' }, { transform: 'translateX(0)' }],
                 { duration: 160 });
   }
 
+  /**
+   * Makes a dialog movable by dragging its handle.
+   * @param {!Element} handle The element that starts the drag.
+   * @param {!Element} dlg The dialog to move.
+   */
   function drag(handle, dlg) {
     handle.addEventListener('mousedown', function (e) {
       if (e.target.closest('.dlg-x')) return;
       var sx = e.clientX, sy = e.clientY;
       var x0 = parseFloat(dlg.style.left), y0 = parseFloat(dlg.style.top);
+      /**
+       * Moves the dialog with the pointer, keeping it on screen.
+       * @param {!MouseEvent} ev
+       */
       function mv(ev) {
         dlg.style.left = Math.max(-40, Math.min(window.innerWidth - 80, x0 + ev.clientX - sx)) + 'px';
         dlg.style.top = Math.max(0, Math.min(window.innerHeight - 40, y0 + ev.clientY - sy)) + 'px';
       }
+      /** Ends the drag by removing the window listeners. */
       function up() { window.removeEventListener('mousemove', mv); window.removeEventListener('mouseup', up); }
       window.addEventListener('mousemove', mv); window.addEventListener('mouseup', up);
       e.preventDefault();
     });
   }
 
+  /**
+   * Makes a dialog resizable by dragging its grip.
+   * @param {!Element} grip The resize handle.
+   * @param {!Element} dlg The dialog to resize.
+   */
   function resize(grip, dlg) {
     grip.addEventListener('mousedown', function (e) {
       var sx = e.clientX, sy = e.clientY;
       var w0 = dlg.offsetWidth, h0 = dlg.offsetHeight;
+      /**
+       * Resizes the dialog with the pointer, down to a minimum of 420 x 240 px.
+       * @param {!MouseEvent} ev
+       */
       function mv(ev) {
         dlg.style.width = Math.max(420, w0 + ev.clientX - sx) + 'px';
         dlg.style.height = Math.max(240, h0 + ev.clientY - sy) + 'px';
       }
+      /** Ends the resize by removing the window listeners. */
       function up() { window.removeEventListener('mousemove', mv); window.removeEventListener('mouseup', up); }
       window.addEventListener('mousemove', mv); window.addEventListener('mouseup', up);
       e.preventDefault();
@@ -106,6 +141,10 @@ App.Dialogs = (function () {
   /* ══════════════════════════════════════════════════════════════
      Modify soil layers
      ══════════════════════════════════════════════════════════════ */
+  /**
+   * Opens the Modify soil layers dialog: borehole columns beside an editable layer table.
+   * Edits mutate App.LAYERS, App.BOREHOLES and App.MATERIALS live; Cancel restores them.
+   */
   function soilLayers() {
     var state = { bh: App.BOREHOLES[0].id, layer: 0 };
     var refreshAll;
@@ -114,6 +153,7 @@ App.Dialogs = (function () {
     var layersSnapshot = JSON.parse(JSON.stringify(App.LAYERS));
     var boreholesSnapshot = JSON.parse(JSON.stringify(App.BOREHOLES));
     var materialsSnapshot = JSON.parse(JSON.stringify(App.MATERIALS));
+    /** Puts layers, boreholes and materials back to their state when the dialog opened. */
     function restoreSnapshot() {
       App.LAYERS.length = 0;
       Array.prototype.push.apply(App.LAYERS, layersSnapshot);
@@ -156,6 +196,10 @@ App.Dialogs = (function () {
         var DEFAULT_HINT = 'Edit any level, thickness, material or borehole field — the columns ' +
                            'update immediately. Changing a bottom (or a thickness) moves the top ' +
                            'of the layer below it, keeping the stack gap-free.';
+        /**
+         * Shows a validation message in the hint bar, or the default hint.
+         * @param {?string} message Error text; null restores the default hint.
+         */
         function say(message) {
           hint.textContent = message || DEFAULT_HINT;
           hint.classList.toggle('invalid', !!message);
@@ -190,6 +234,7 @@ App.Dialogs = (function () {
         var sel = el('select');
         sel.addEventListener('change', function () { state.bh = sel.value; refreshAll(); });
 
+        /** Rebuilds the borehole picker options and selects the current borehole. */
         function renderBhSelect() {
           App.UI.clear(sel);
           App.BOREHOLES.forEach(function (b) {
@@ -214,11 +259,16 @@ App.Dialogs = (function () {
            re-render — destroying the very element the click was travelling to. */
         var rowRefs = [];
 
+        /**
+         * Sets an input's value unless the user is typing in it.
+         * @param {!Element} input
+         * @param {string} text
+         */
         function writeUnlessFocused(input, text) {
           if (document.activeElement !== input) input.value = text;
         }
 
-        /* Push the current App.LAYERS values back into the existing cells. */
+        /** Pushes the current App.LAYERS values back into the existing cells. */
         function syncValues() {
           App.LAYERS.forEach(function (L, i) {
             var ref = rowRefs[i];
@@ -234,8 +284,15 @@ App.Dialogs = (function () {
           renderColumns();
         }
 
-        /* A numeric cell that reads its value through `get`, so it never shows a
-           figure captured at render time. `accept` mirrors a server constraint. */
+        /**
+         * Builds a numeric cell that reads its value through `get`, so it never
+         * shows a figure captured at render time.
+         * @param {function(): number} get
+         * @param {function(number)} set
+         * @param {(function(number): boolean)=} accept Mirrors a server constraint.
+         * @param {string=} invalidMessage Shown when `accept` rejects a value.
+         * @return {!Element} The input element.
+         */
         function levelInput(get, set, accept, invalidMessage) {
           var inp = commitOnEnter(el('input.cell-input.cell-num', { value: fixed(get(), 3) }));
           inp.addEventListener('change', function () {
@@ -253,6 +310,7 @@ App.Dialogs = (function () {
           return inp;
         }
 
+        /** Rebuilds the layer table and its live cell references in `rowRefs`. */
         function renderTable() {
           App.UI.clear(tableWrap);
           rowRefs = [];
@@ -268,7 +326,10 @@ App.Dialogs = (function () {
           var tb = el('tbody');
           var rows = [];
 
-          /* Move the highlight only — see the note on rowRefs above. */
+          /**
+           * Moves the highlight only; see the note on rowRefs above.
+           * @param {number} i Layer index.
+           */
           function selectRow(i) {
             if (state.layer === i) return;
             state.layer = i;
@@ -328,6 +389,7 @@ App.Dialogs = (function () {
           tableWrap.appendChild(t);
         }
 
+        /** Redraws the borehole column graphic with layers, ground and water levels. */
         function renderColumns() {
           App.UI.clear(canvasWrap);
 
@@ -343,6 +405,13 @@ App.Dialogs = (function () {
           svg.setAttribute('height', H + PAD_T + 26);
           svg.setAttribute('viewBox', '0 0 ' + W + ' ' + (H + PAD_T + 26));
 
+          /**
+           * Creates an SVG element.
+           * @param {string} tag
+           * @param {!Object} attrs Attribute name to value.
+           * @param {string=} text Text content.
+           * @return {!Element}
+           */
           function n(tag, attrs, text) {
             var e = document.createElementNS('http://www.w3.org/2000/svg', tag);
             Object.keys(attrs).forEach(function (k) { e.setAttribute(k, attrs[k]); });
@@ -407,6 +476,7 @@ App.Dialogs = (function () {
         }
 
         /* ── Borehole properties (of the selected borehole) ───── */
+        /** Renders the property grid of the selected borehole. */
         function renderBhProps() {
           App.UI.clear(bhProps);
           var b = App.BOREHOLES.filter(function (x) { return x.id === state.bh; })[0];
@@ -442,6 +512,11 @@ App.Dialogs = (function () {
            bottom-above-top per layer, and a non-contiguous stack outright
            (server/app/schemas.py:110-135). Each setter cascades to its
            neighbour and refuses an edit that would cross it. */
+        /**
+         * Sets a layer's top in the current borehole and moves the bottom of the layer above.
+         * @param {number} i Layer index.
+         * @param {number} v Level [m].
+         */
         function setTop(i, v) {
           var L = App.LAYERS[i];
           if (v < L.bots[state.bh]) { say('Top must be at or above this layer\'s bottom.'); return; }
@@ -452,6 +527,11 @@ App.Dialogs = (function () {
           if (i > 0) App.LAYERS[i - 1].bots[state.bh] = v;
           syncValues();
         }
+        /**
+         * Sets a layer's bottom in the current borehole and moves the top of the layer below.
+         * @param {number} i Layer index.
+         * @param {number} v Level [m].
+         */
         function setBottom(i, v) {
           var L = App.LAYERS[i];
           if (v > L.tops[state.bh]) { say('Bottom must be at or below this layer\'s top.'); return; }
@@ -462,10 +542,15 @@ App.Dialogs = (function () {
           if (i < App.LAYERS.length - 1) App.LAYERS[i + 1].tops[state.bh] = v;
           syncValues();
         }
-        /* Thickness is the derived column: keep the top and move the bottom. */
+        /**
+         * Sets a layer's thickness by keeping its top and moving its bottom.
+         * @param {number} i Layer index.
+         * @param {number} v Thickness [m].
+         */
         function setThickness(i, v) {
           setBottom(i, App.LAYERS[i].tops[state.bh] - v);
         }
+        /** Appends a 5 m layer below the bottom one in every borehole and selects it. */
         function addLayer() {
           var last = App.LAYERS[App.LAYERS.length - 1];
           if (!App.MATERIALS.length) App.addMaterial();
@@ -478,11 +563,17 @@ App.Dialogs = (function () {
           state.layer = App.LAYERS.length - 1;
           refreshAll();
         }
+        /**
+         * Returns an empty layer with the first free `L<n>` id.
+         * @param {string} material Material id.
+         * @return {!Object}
+         */
         function newLayer(material) {
           var number = 1;
           while (App.LAYERS.some(function (layer) { return layer.id === 'L' + number; })) number++;
           return { id: 'L' + number, name: 'Soil_' + number, mat: material, tops: {}, bots: {} };
         }
+        /** Splits the selected layer in half, inserting the new layer below it. */
         function insertLayer() {
           if (!App.LAYERS.length) { addLayer(); return; }
           var i = state.layer, L = App.LAYERS[i];
@@ -496,6 +587,7 @@ App.Dialogs = (function () {
           App.LAYERS.splice(i + 1, 0, nu);
           refreshAll();
         }
+        /** Deletes the selected layer, extending a neighbour to close the gap. */
         function deleteLayer() {
           if (!App.LAYERS.length) return;
           var i = state.layer, L = App.LAYERS[i];
@@ -508,11 +600,13 @@ App.Dialogs = (function () {
           refreshAll();
         }
 
+        /** Adds a borehole and selects it. */
         function addBorehole() {
           var nb = App.addBorehole();
           state.bh = nb.id;
           refreshAll();
         }
+        /** Deletes the selected borehole and its layer levels; keeps at least one. */
         function deleteBorehole() {
           if (App.BOREHOLES.length <= 1) return;
           var idx = App.BOREHOLES.findIndex(function (b) { return b.id === state.bh; });
@@ -533,6 +627,11 @@ App.Dialogs = (function () {
     });
   }
 
+  /**
+   * Returns the material assigned to a layer.
+   * @param {!Object} layer
+   * @return {!Object}
+   */
   function matOf(layer) {
     return App.matById(layer.mat);
   }
@@ -540,9 +639,11 @@ App.Dialogs = (function () {
   /* ══════════════════════════════════════════════════════════════
      Material sets
      ══════════════════════════════════════════════════════════════ */
-  /* Applies material edits to everything downstream: tree labels and swatches,
-     the per-layer property sets, and the 3D soil colours. The live app replaces
-     this step in live/js/patches.js, where the edits go to the server first. */
+  /**
+   * Applies material edits downstream: tree labels and swatches, the per-layer
+   * property sets, and the 3D soil colours.
+   * The live app replaces this step in live/js/patches.js, where edits go to the server first.
+   */
   function commitMaterials() {
     App.refreshSoilData();
     App.Viewport.rebuildSoil();
@@ -550,12 +651,16 @@ App.Dialogs = (function () {
     App.Command.ok('Material sets updated — ' + App.MATERIALS.length + ' soil materials.');
   }
 
-  /* `onClose` lets the caller re-read App.MATERIALS afterwards — the soil layers
-     dialog uses it so a material added in here appears in its Material column. */
+  /**
+   * Opens the Material sets dialog.
+   * @param {function()=} onClose Runs on close so the caller can re-read App.MATERIALS;
+   *     the soil layers dialog uses it to show a material added here in its Material column.
+   */
   function materials(onClose) {
     // Property edits mutate App.MATERIALS live so the table and swatches react as
     // you type; Cancel puts the whole list back the way it was found.
     var snapshot = JSON.parse(JSON.stringify(App.MATERIALS));
+    /** Puts App.MATERIALS back to its state when the dialog opened. */
     function restoreSnapshot() {
       App.MATERIALS.length = 0;
       Array.prototype.push.apply(App.MATERIALS, snapshot);
@@ -565,6 +670,11 @@ App.Dialogs = (function () {
     var toolbar = el('div.dlg-toolbar');
     var hint;
 
+    /**
+     * Shows a message in the hint bar, or the default hint.
+     * @param {?string} message Text; null restores the default hint.
+     * @param {boolean=} invalid Whether to style it as an error.
+     */
     function say(message, invalid) {
       if (!hint) return;
       hint.textContent = message ||
@@ -597,10 +707,15 @@ App.Dialogs = (function () {
         var tb = el('tbody');
         t.appendChild(tb);
 
+        /**
+         * Returns the selected material, or null.
+         * @return {?Object}
+         */
         function selectedMaterial() {
           return App.MATERIALS.filter(function (m) { return m.id === selected; })[0] || null;
         }
 
+        /** Rebuilds the soil material table rows and the interface-apply button state. */
         function renderSoilTable() {
           App.UI.clear(tb);
           if (applyInterfaceButton) applyInterfaceButton.disabled = !selectedMaterial();
@@ -737,9 +852,13 @@ App.Dialogs = (function () {
     });
   }
 
-  /* `change` fires on blur, not on Enter, so a value typed and confirmed with
-     Enter would sit uncommitted until the field happened to lose focus. Blurring
-     on Enter runs the field's own change handler, validation and all. */
+  /**
+   * Makes Enter commit an input by blurring it.
+   * `change` fires on blur, not Enter; blurring runs the field's own change handler,
+   * validation and all.
+   * @param {!Element} input
+   * @return {!Element} The same input.
+   */
   function commitOnEnter(input) {
     input.addEventListener('keydown', function (e) {
       if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
@@ -755,14 +874,33 @@ App.Dialogs = (function () {
      server's Field(...) constraints so a value accepted here cannot come back
      from a save as a 422.
      ══════════════════════════════════════════════════════════════ */
+  /**
+   * Returns property-grid row builders bound to the given callbacks.
+   * @param {function(?string)} say Reports a rejected edit; null clears it.
+   * @param {function()} changed Runs after an accepted edit.
+   * @return {!Object} {row, textRow, numRow, selectRow, colorRow}.
+   */
   function fieldBuilders(say, changed) {
+    /**
+     * Builds a labelled property-grid row.
+     * @param {string} label
+     * @param {!Element} valueNode
+     * @param {string=} unit
+     * @return {!Element}
+     */
     function row(label, valueNode, unit) {
       var v = el('div.pgrid-val.editable.field', null, [valueNode]);
       if (unit) v.appendChild(el('span.unit', { text: unit }));
       return el('div.pgrid-row', null, [el('div.pgrid-key', { text: label }), v]);
     }
 
-    /* Text field. `apply` returns an error string to reject the edit. */
+    /**
+     * Builds a text field row.
+     * @param {string} label
+     * @param {function(): string} get
+     * @param {function(string): ?string} apply Returns an error string to reject the edit.
+     * @return {!Element}
+     */
     function textRow(label, get, apply) {
       var inp = commitOnEnter(el('input.cell-input', { value: get() }));
       inp.addEventListener('change', function () {
@@ -775,9 +913,21 @@ App.Dialogs = (function () {
       return row(label, inp);
     }
 
-    /* Numeric field. `bounds` = { min, max, exclusiveMin, exclusiveMax,
-       nullable, decimals }; decimals null shows the raw value. */
+    /**
+     * Builds a numeric field row validated against `bounds`.
+     * @param {string} label
+     * @param {string} unit
+     * @param {!Object} bounds {min, max, exclusiveMin, exclusiveMax, nullable,
+     *     decimals}; decimals null shows the raw value.
+     * @param {function(): ?number} get
+     * @param {function(?number)} set
+     * @return {!Element}
+     */
     function numRow(label, unit, bounds, get, set) {
+      /**
+       * Returns the current value formatted for display, or '' when unset.
+       * @return {string}
+       */
       function show() {
         var v = get();
         if (v === null || v === undefined) return '';
@@ -817,7 +967,14 @@ App.Dialogs = (function () {
       return row(label, inp, unit);
     }
 
-    /* Dropdown over a fixed value set. */
+    /**
+     * Builds a dropdown row over a fixed value set.
+     * @param {string} label
+     * @param {!Array<(string|{value: string, text: string})>} options
+     * @param {function(): string} get
+     * @param {function(string)} set
+     * @return {!Element}
+     */
     function selectRow(label, options, get, set) {
       var sel = el('select');
       options.forEach(function (o) {
@@ -832,8 +989,15 @@ App.Dialogs = (function () {
       return row(label, el('div.cell-mat', null, sel));
     }
 
-    /* Colour. <input type="color"> can only ever yield #rrggbb, which is exactly
-       what the server's Hex pattern wants, so this field cannot be invalid. */
+    /**
+     * Builds a colour picker row.
+     * <input type="color"> only yields #rrggbb, exactly the server's Hex pattern,
+     * so this field cannot be invalid.
+     * @param {string} label
+     * @param {function(): string} get
+     * @param {function(string)} set
+     * @return {!Element}
+     */
     function colorRow(label, get, set) {
       var pick = el('input', { type: 'color', value: get(),
                                style: 'width:34px;height:17px;border:0;background:none;padding:0' });
@@ -851,16 +1015,22 @@ App.Dialogs = (function () {
              selectRow: selectRow, colorRow: colorRow };
   }
 
-  /* Per-material property editor: General / Parameters / Groundwater /
-     Interfaces tabs over one App.MATERIALS entry. Every field is editable and
-     validated against the same bounds the server's Material schema enforces
-     (server/app/schemas.py:82-100). Edits are written straight to the material
-     object; the Material sets dialog's Cancel restores its snapshot. */
+  /**
+   * Opens the tabbed property editor for one App.MATERIALS entry.
+   * Fields use the server's Material schema bounds (server/app/schemas.py:82-100) and
+   * write straight to `m`; the Material sets dialog's Cancel restores its snapshot.
+   * @param {!Object} m The material to edit.
+   * @param {function()=} onChange Runs after each accepted edit.
+   */
   function materialEditor(m, onChange) {
     var hint, titleNode;
     var DEFAULT_HINT = 'Values are validated as you type. An out-of-range entry is rejected ' +
                        'and the previous value restored.';
 
+    /**
+     * Shows a validation message in the hint bar, or the default hint.
+     * @param {?string} message Error text; null restores the default hint.
+     */
     function say(message) {
       if (!hint) return;
       hint.textContent = message || DEFAULT_HINT;
@@ -957,6 +1127,10 @@ App.Dialogs = (function () {
         wrap.appendChild(hint);
         body.appendChild(wrap);
 
+        /**
+         * Activates a tab and fills the grid with its fields.
+         * @param {string} name Tab name.
+         */
         function show(name) {
           tabs.querySelectorAll('.mat-tab').forEach(function (b) {
             b.classList.toggle('active', b.dataset.tab === name);
@@ -979,6 +1153,7 @@ App.Dialogs = (function () {
   /* ══════════════════════════════════════════════════════════════
      Import soil layers
      ══════════════════════════════════════════════════════════════ */
+  /** Opens the Import soil layers dialog (file import is not wired up). */
   function importSoilLayers() {
     open({
       title: 'Import soil layers',
@@ -1002,6 +1177,7 @@ App.Dialogs = (function () {
   /* ══════════════════════════════════════════════════════════════
      Visibility settings
      ══════════════════════════════════════════════════════════════ */
+  /** Opens the Visibility settings dialog with a checkbox per object group. */
   function visibility() {
     var ITEMS = [
       ['soil', 'Soil volumes'], ['excavation', 'Soil volumes (staged)'],
@@ -1035,6 +1211,7 @@ App.Dialogs = (function () {
   /* ══════════════════════════════════════════════════════════════
      Small informational dialogs
      ══════════════════════════════════════════════════════════════ */
+  /** Opens the About dialog. */
   function about() {
     open({
       title: 'About ' + App.PRODUCT.name,
@@ -1054,6 +1231,7 @@ App.Dialogs = (function () {
     });
   }
 
+  /** Opens the Command reference dialog listing the demo commands. */
   function commandReference() {
     open({
       title: 'Command reference',
@@ -1082,6 +1260,11 @@ App.Dialogs = (function () {
     });
   }
 
+  /**
+   * Opens a placeholder dialog for a feature the mockup lacks.
+   * @param {string} title
+   * @param {string} text Explanation shown in the body.
+   */
   function notImplemented(title, text) {
     open({
       title: title, width: 460, height: 250,

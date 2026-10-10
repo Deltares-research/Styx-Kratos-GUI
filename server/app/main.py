@@ -1,16 +1,10 @@
 """The FastAPI app.
 
-Two things it deliberately does not do:
-
-*   It does not copy the frozen mockup. `kratos-GUI/css`, `js`, `assets` and `vendor` are
-    mounted where they already live, so the served app and the one that opens straight
-    off `file://` are the same bytes and cannot drift apart.
-*   It does not modify them. The backend-connected frontend lives in `live/`, loads the
-    frozen scripts verbatim, and replaces exactly two: `js/viewport.js`, the one module
-    that invents geometry, and `js/orbit.js`, which is hard-wired to a Z-up world the
-    model no longer uses. The orbit controller is *overridden* rather than dropped --
-    `App.Orbit` is a plain global assignment, so the frozen file is still loaded and
-    `live/js/orbit.js` after it wins.
+The frontend lives in `live/`. Its base UI -- menus, toolbars, explorer, dialogs and
+command box -- is in `live/base/css` and `live/base/js`, served at `/css` and `/js`;
+`assets` and `vendor` are served from the repository root. `live/js` builds on the base
+scripts without editing them, and replaces the orbit controller: `App.Orbit` is a plain
+global assignment, so `live/js/orbit.js`, loaded after the base one, wins.
 """
 
 from __future__ import annotations
@@ -42,8 +36,9 @@ from app.schemas import (DimensionUpdate, ExportRequest, LayersUpdate, Materials
                          MeshRequest, PhasesUpdate, Project, StructuresUpdate,
                          WaterUpdate)
 
-FROZEN = Path(__file__).resolve().parents[2]
-LIVE = FROZEN / "live"
+ROOT = Path(__file__).resolve().parents[2]
+LIVE = ROOT / "live"
+BASE = LIVE / "base"
 
 
 @asynccontextmanager
@@ -1049,12 +1044,12 @@ async def import_mdpa(file: UploadFile = File(...)) -> dict:
 
 @app.get("/")
 async def index() -> FileResponse:
-    live_index = LIVE / "index.html"
-    return FileResponse(live_index if live_index.exists() else FROZEN / "index.html")
+    return FileResponse(LIVE / "index.html")
 
 
-for folder in ("css", "js", "assets", "vendor"):
-    app.mount(f"/{folder}", StaticFiles(directory=FROZEN / folder), name=folder)
+for folder in ("css", "js"):
+    app.mount(f"/{folder}", StaticFiles(directory=BASE / folder), name=folder)
+for folder in ("assets", "vendor"):
+    app.mount(f"/{folder}", StaticFiles(directory=ROOT / folder), name=folder)
 
-if LIVE.exists():
-    app.mount("/live", StaticFiles(directory=LIVE), name="live")
+app.mount("/live", StaticFiles(directory=LIVE), name="live")
