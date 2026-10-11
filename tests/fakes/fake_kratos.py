@@ -1,8 +1,8 @@
-"""A stand-in for `core.run.calculate.run` in the GUI end-to-end tests (plan alpha 3.4).
+"""A stand-in for `core.analysis.calculation.run` in the GUI end-to-end tests (plan alpha 3.4).
 
 It does what a Kratos run leaves behind, for exactly the deck it is given: a run
-directory named the way `calculate.new_run_directory` names one, the deck written by
-`calculate.write_deck`, synthetic GiD output per stage (`tests/fakes/gid_writer.py`),
+directory named the way `calculation.new_run_directory` names one, the deck written by
+`calculation.write_deck`, synthetic GiD output per stage (`tests/fakes/gid_writer.py`),
 member output for the wall, a `kratos.log` with the stage markers the real runner prints
 -- and the same answer dict. The app has no fake mode: the end-to-end fixture swaps this
 in with a monkeypatch, so Results mode can be driven on a machine with no Kratos.
@@ -19,7 +19,7 @@ import json
 import time
 from pathlib import Path
 
-from core.run import calculate
+from core.analysis import calculation
 from tests import mdpa
 from tests.fakes import gid_writer
 
@@ -77,7 +77,7 @@ def _member_outputs(export: dict, directory: Path, params: dict) -> list[str]:
 
 def fake_run(export: dict) -> dict:
     started = time.monotonic()
-    directory = calculate.new_run_directory(export["deck_name"])
+    directory = calculation.new_run_directory(export["deck_name"])
     params = json.loads(export["project_parameters"])
     gid_writer.write_run(export, directory,
                          nodal={"TOTAL_DISPLACEMENT": _u, "DISPLACEMENT": _du,
@@ -87,13 +87,13 @@ def fake_run(export: dict) -> dict:
     order = params["orchestrator"]["settings"]["execution_list"]
     log = []
     for index, stage in enumerate(order, start=1):
-        log.append(f"{calculate.STAGE_MARKER} begin {index}/{len(order)} {stage}")
-        log.append(f"{calculate.STAGE_MARKER} end {index}/{len(order)} {stage}")
-    (directory / calculate.LOG_NAME).write_text("\n".join(log) + "\n", encoding="utf-8")
-    inputs = [f"{export['deck_name']}.mdpa", calculate.PARAMETERS_NAME]
+        log.append(f"{calculation.STAGE_MARKER} begin {index}/{len(order)} {stage}")
+        log.append(f"{calculation.STAGE_MARKER} end {index}/{len(order)} {stage}")
+    (directory / calculation.LOG_NAME).write_text("\n".join(log) + "\n", encoding="utf-8")
+    inputs = [f"{export['deck_name']}.mdpa", calculation.PARAMETERS_NAME]
     outputs = sorted(p.name for p in directory.iterdir()
-                     if p.name not in inputs and p.name != calculate.LOG_NAME
+                     if p.name not in inputs and p.name != calculation.LOG_NAME
                      and not p.name.endswith("aterials.json"))
     return {"ok": True, "returncode": 0, "stage": None,
             "seconds": round(time.monotonic() - started, 1), "directory": str(directory),
-            "inputs": inputs, "outputs": outputs, "log": calculate.LOG_NAME, "error": None}
+            "inputs": inputs, "outputs": outputs, "log": calculation.LOG_NAME, "error": None}

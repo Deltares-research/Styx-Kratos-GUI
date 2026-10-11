@@ -34,7 +34,7 @@ def record() -> dict:
     os.environ.setdefault("KRATOS_GUI_ALLOWED_HOSTS", "testserver")
     from fastapi.testclient import TestClient
 
-    from core.kratos import mdpa_import, node_parts
+    from core.kratos import mdpa_reader, node_parts
     from backend.main import app
     from tests.models import excavation
 
@@ -50,7 +50,7 @@ def record() -> dict:
             "nodeParts": client.post("/api/mesh/node-parts", json=SETTINGS).json(),
         }
         deck = client.post("/api/export/mdpa", json=SETTINGS).json()["mdpa"]
-        model = mdpa_import.import_mdpa(deck)
+        model = mdpa_reader.import_mdpa(deck)
         out["imported"] = {**model.to_dict(), "node_parts": node_parts.of_model(model)}
         # The same model in 3D -- the wall a panel, the strut a member -- with one drawn
         # box: what the solid model's property grids are built from.

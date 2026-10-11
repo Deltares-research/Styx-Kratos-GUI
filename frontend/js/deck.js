@@ -2,7 +2,7 @@
    deck.js — a model that is a Kratos deck already, opened with `run <case.py>`.
 
    A deck case script builds nothing: it names a finished deck
-   (core/kratos/deck.py), and `POST /api/project/script` sends that deck's mesh back
+   (core/kratos/external_deck.py), and `POST /api/project/script` sends that deck's mesh back
    with the project, in the shape `POST /api/import/mdpa` answers. There is nothing to
    generate, so instead of meshing, the command line goes straight to the Mesh tab
    with the deck's mesh drawn and its parts listed in the Model explorer.
@@ -58,7 +58,7 @@
   }
 
   /* ── Staged construction: a stage's own parts ─────────────────────────────
-     A deck's phases are its stages (core/kratos/deck.py `phases`), keyed by the deck's
+     A deck's phases are its stages (core/kratos/external_deck.py `phases`), keyed by the deck's
      own part names. The viewport draws a deck as imported sections, outside the
      project parts the frozen phase pass hides, so it asks this which parts the
      selected stage has. `null` means "draw by the eye alone": any tab but Staged

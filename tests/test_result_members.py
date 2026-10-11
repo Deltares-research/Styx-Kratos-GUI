@@ -20,7 +20,7 @@ import json
 
 import pytest
 
-from core.results import members as result_members, runs as results
+from core.results import members, catalog
 from tests import results_run
 
 
@@ -39,7 +39,7 @@ COORDINATES = {1: (5.0, 0.0, 0.0), 2: (5.0, -2.0, 0.0), 3: (5.0, -1.0, 0.0)}
 
 
 def test_reading_takes_the_last_time_of_each_series_and_skips_time():
-    read = result_members.read_output(json.dumps(output({
+    read = members.read_output(json.dumps(output({
         1: {"BENDING_MOMENT": [1000.0, 2000.0]},
         2: {"BENDING_MOMENT": [3000.0, 4000.0]},
     }, times=2)))
@@ -51,7 +51,7 @@ def test_a_profile_is_sorted_by_level_from_toe_to_top():
     read = {1: {"BENDING_MOMENT": 10e3}, 2: {"BENDING_MOMENT": 30e3},
             3: {"BENDING_MOMENT": 20e3}}
 
-    found = result_members.profile(read, COORDINATES, result_members.quantity("M"))
+    found = members.profile(read, COORDINATES, members.quantity("M"))
 
     assert [y for _, y in found["points"]] == [-2.0, -1.0, 0.0]
     assert found["nodes"] == [2, 3, 1]
@@ -62,8 +62,8 @@ def test_forces_are_the_runs_own_numbers_and_displacements_in_metres():
     read = {1: {"BENDING_MOMENT": 10e3, "TOTAL_DISPLACEMENT_X": -0.01}}
     coordinates = {1: COORDINATES[1]}
 
-    moment = result_members.profile(read, coordinates, result_members.quantity("M"))
-    ux = result_members.profile(read, coordinates, result_members.quantity("ux"))
+    moment = members.profile(read, coordinates, members.quantity("M"))
+    ux = members.profile(read, coordinates, members.quantity("ux"))
 
     assert moment["points"] == [[pytest.approx(10e3), 0.0]]
     assert ux["points"] == [[pytest.approx(-0.01), 0.0]]
@@ -74,8 +74,8 @@ def test_the_sign_is_kratos_own():
     Kratos' numbers as they are, and so does the window."""
     read = {1: {"SHEAR_FORCE": -5e3}}
 
-    found = result_members.profile(read, {1: COORDINATES[1]},
-                                   result_members.quantity("Q"))
+    found = members.profile(read, {1: COORDINATES[1]},
+                                   members.quantity("Q"))
 
     assert found["points"][0][0] == pytest.approx(-5e3)
 
@@ -84,8 +84,8 @@ def test_traction_is_split_into_its_normal_and_shear_components():
     read = {1: {"GEO_EFFECTIVE_TRACTION_VECTOR": [-12e3, 3e3]}}
     coordinates = {1: COORDINATES[1]}
 
-    normal = result_members.profile(read, coordinates, result_members.quantity("tn"))
-    shear = result_members.profile(read, coordinates, result_members.quantity("ts"))
+    normal = members.profile(read, coordinates, members.quantity("tn"))
+    shear = members.profile(read, coordinates, members.quantity("ts"))
 
     assert normal["points"][0][0] == pytest.approx(-12e3)
     assert shear["points"][0][0] == pytest.approx(3e3)
@@ -95,7 +95,7 @@ def test_the_extremes_carry_the_level_they_occur_at():
     read = {1: {"BENDING_MOMENT": 10e3}, 2: {"BENDING_MOMENT": -30e3},
             3: {"BENDING_MOMENT": 20e3}}
 
-    found = result_members.profile(read, COORDINATES, result_members.quantity("M"))
+    found = members.profile(read, COORDINATES, members.quantity("M"))
 
     assert found["min"] == {"value": pytest.approx(-30e3), "y": -2.0}
     assert found["max"] == {"value": pytest.approx(20e3), "y": -1.0}
@@ -104,7 +104,7 @@ def test_the_extremes_carry_the_level_they_occur_at():
 def test_a_node_without_the_variable_is_left_out_rather_than_zero():
     read = {1: {"BENDING_MOMENT": 10e3}, 2: {}}
 
-    found = result_members.profile(read, COORDINATES, result_members.quantity("M"))
+    found = members.profile(read, COORDINATES, members.quantity("M"))
 
     assert found["nodes"] == [1]
 
@@ -119,7 +119,7 @@ def test_the_two_faces_of_an_interface_are_one_point_not_two():
             3: {"GEO_EFFECTIVE_TRACTION_VECTOR": [-20e3, 1e3]}}
     coordinates = {1: (18.0, 0.0, 0.0), 9: (18.0, 0.0, 0.0), 3: (18.0, -1.0, 0.0)}
 
-    found = result_members.profile(read, coordinates, result_members.quantity("tn"))
+    found = members.profile(read, coordinates, members.quantity("tn"))
 
     assert found["points"] == [[pytest.approx(-20e3), -1.0], [pytest.approx(-12e3), 0.0]]
     assert found["nodes"] == [3, 1]
@@ -130,13 +130,13 @@ def test_only_what_an_output_carries_is_offered_in_catalogue_order():
                 "SHEAR_FORCE": 0.0}}
     interface = {7: {"GEO_EFFECTIVE_TRACTION_VECTOR": [0.0, 0.0]}}
 
-    assert [q.name for q in result_members.available([wall])] == ["M", "Q", "ux"]
-    assert [q.name for q in result_members.available([interface])] == ["tn", "ts"]
+    assert [q.name for q in members.available([wall])] == ["M", "Q", "ux"]
+    assert [q.name for q in members.available([interface])] == ["tn", "ts"]
 
 
 def test_an_unknown_quantity_is_refused_by_name():
-    with pytest.raises(result_members.UnknownQuantity, match="sigma"):
-        result_members.quantity("sigma")
+    with pytest.raises(members.UnknownQuantity, match="sigma"):
+        members.quantity("sigma")
 
 
 @pytest.mark.parametrize("filename, stage, member", [
@@ -147,7 +147,7 @@ def test_an_unknown_quantity_is_refused_by_name():
     ("6_Second_excavation__output_wall.json", "7_Third_excavation", None),
 ])
 def test_the_member_is_named_by_what_follows_the_stage(filename, stage, member):
-    assert result_members.member_name(filename, stage) == member
+    assert members.member_name(filename, stage) == member
 
 
 # ── The routes the plot window calls ────────────────────────────────────────
@@ -171,7 +171,7 @@ def test_the_members_route_lists_what_can_be_plotted(client, run):
     answer = client.get(f"/api/results/runs/{run}/members")
 
     assert answer.status_code == 200
-    assert answer.json() == results.stage_members(run)
+    assert answer.json() == catalog.stage_members(run)
 
 
 def test_the_plot_route_serves_one_quantity_along_one_member(client, run):

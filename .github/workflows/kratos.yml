@@ -5,7 +5,7 @@
 #   1. Register a runner on that machine: Settings > Actions > Runners > New self-hosted
 #      runner, and give it the extra label `kratos`.
 #   2. In the runner's .env file, set KRATOS_GUI_PYTHON and KRATOS_GUI_KRATOS (see
-#      core/run/calculate.py): a checkout starts clean, so kratos.local.json is not there.
+#      core/analysis/calculation.py): a checkout starts clean, so kratos.local.json is not there.
 #   3. Set the repository variable KRATOS_RUNNER to true. Until then every job is skipped
 #      instead of waiting a day for a runner that does not exist.
 #

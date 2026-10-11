@@ -21,7 +21,7 @@
 
    Plane strain only. Every reference deck is a section, and a 3D
    interface is a different element with a different node layout and no fixture
-   to pin it -- see the INTERFACES table in core/kratos/export.py.
+   to pin it -- see the INTERFACES table in core/kratos/writer.py.
    ══════════════════════════════════════════════════════════════════ */
 
 var App = window.App || {};

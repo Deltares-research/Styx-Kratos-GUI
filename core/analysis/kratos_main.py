@@ -2,9 +2,9 @@
 
 This module is not imported by the server. It is a script, handed to a *different*
 interpreter -- the one Kratos was built for, which is not the one running FastAPI (see
-`core.run.calculate`) -- with the deck's directory as its working directory:
+`core.analysis.calculation`) -- with the deck's directory as its working directory:
 
-    <kratos python> -m core.run.runner ProjectParameters.json
+    <kratos python> -m core.analysis.kratos_main ProjectParameters.json
 
 so `import core` must not pull the server in: nothing here imports FastAPI, pydantic or
 gmsh, and nothing in `core/__init__.py` may either. It talks to its caller the way any
@@ -25,7 +25,7 @@ from pathlib import Path
 
 
 STAGE_MARKER = "[kratos-gui] stage"
-"""How this script names the stage it is on, for `core.run.calculate` to read back.
+"""How this script names the stage it is on, for `core.analysis.calculation` to read back.
 
 Ours rather than Kratos': `SequentialOrchestrator.Run` loops over the execution list
 calling `CheckStageSettings`, `CreateStage`, `RunCurrentStagePreprocess`, the stage's
@@ -100,7 +100,7 @@ def run(parameters_path: Path) -> None:
 
 def main(argv: list[str]) -> int:
     if len(argv) != 2:
-        print("usage: python -m core.run.runner <ProjectParameters.json>", file=sys.stderr)
+        print("usage: python -m core.analysis.kratos_main <ProjectParameters.json>", file=sys.stderr)
         return 2
     run(Path(argv[1]))
     return 0

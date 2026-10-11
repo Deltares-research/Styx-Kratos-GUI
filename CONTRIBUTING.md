@@ -125,7 +125,7 @@ Kratos:
 1. Go to **Settings > Actions > Runners > New self-hosted runner**, follow the steps, and
    add the label `kratos`.
 2. In the runner's `.env` file, set `KRATOS_GUI_PYTHON` and `KRATOS_GUI_KRATOS`, as
-   described in `core/run/calculate.py`. Each run starts from a clean checkout, so
+   described in `core/analysis/calculation.py`. Each run starts from a clean checkout, so
    `kratos.local.json` is not there.
 3. Set the repository variable `KRATOS_RUNNER` to `true`.
 

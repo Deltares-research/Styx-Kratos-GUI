@@ -9,7 +9,7 @@ import pytest
 from pydantic import ValidationError
 
 from core.model import schemas
-from core.model.seed import seed_project
+from core.model.templates import seed_project
 
 
 # ── Domain ──────────────────────────────────────────────────────────────────
@@ -84,7 +84,7 @@ def test_a_material_without_strength_simply_leaves_it_out():
 
 def test_a_material_built_from_the_old_fields_is_converted():
     """A script written against the old fields still works: the record is read as an
-    old file's would be (`core/model/legacy.py`), in SI."""
+    old file's would be (`core/model/migration.py`), in SI."""
     m = schemas.Material(id="m2", name="Sand, loose", model="Hardening Soil",
                          type="Drained", color="#c4a86a", g_unsat=18.0, g_sat=20.5,
                          E=25000, nu=0.28, c=0.5, phi=32.0, k=1.5)
@@ -562,7 +562,7 @@ def test_a_project_is_three_dimensional_by_default():
 def test_switching_to_2d_fills_in_the_section_offset():
     """Left unset, the section goes through the middle of the domain.
 
-    Resolved here rather than in build.py so that everything downstream -- the
+    Resolved here rather than in solid_model.py so that everything downstream -- the
     geometry, the mesh and the viewport -- reads one authoritative number instead
     of each deriving its own.
     """
@@ -1345,7 +1345,7 @@ def test_soil_body_keys_survive_a_round_trip():
 def test_a_project_with_no_ground_in_it_has_no_soil_bodies():
     """`part_keys` reads these, and runs during validation on the empty site the server
     opens on. Asking a project with no layers what bodies it has is not an error."""
-    from core.model.seed import blank_project
+    from core.model.templates import blank_project
     blank = blank_project()
     assert blank.soil_bodies() == []
     assert blank.soil_body_keys == []

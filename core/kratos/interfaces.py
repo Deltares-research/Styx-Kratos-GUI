@@ -1,6 +1,6 @@
 """Split a conformal mesh along an interface line and tie it back with contact elements.
 
-`build._embed_beams` deliberately welds a sheet pile to the soil: it fragments the
+`solid_model._embed_beams` deliberately welds a sheet pile to the soil: it fragments the
 section with the pile so both share every node, which is what the reference decks show
 for a bonded wall. An interface is the opposite instruction. The wall has to be able to
 slide and to open, so the one node where the two meet must become several -- one per

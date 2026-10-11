@@ -6,7 +6,7 @@ for -- 3.11 for the build this was developed against -- while the server runs on
 whatever interpreter has FastAPI and gmsh in it. Those are, on a normal machine, two
 different interpreters, and no amount of `sys.path` makes one import the other's DLLs.
 So a calculation is a *subprocess*: a different python, given the deck's directory as
-its working directory and `core.run.runner` to run (`core/run/runner.py`, which
+its working directory and `core.analysis.kratos_main` to run (`core/analysis/kratos_main.py`, which
 imports nothing of the server).
 
 That leaves the machine to say which interpreter, and where its Kratos is. Either can be
@@ -44,7 +44,7 @@ from datetime import datetime
 from pathlib import Path
 import sys
 
-from core.kratos.files import (INITIAL_MATERIALS_NAME, MATERIALS_NAME, PARAMETERS_NAME,
+from core.kratos.deck_files import (INITIAL_MATERIALS_NAME, MATERIALS_NAME, PARAMETERS_NAME,
                                UNITS_NAME, write_text)
 
 PYTHON_ENV = "KRATOS_GUI_PYTHON"
@@ -66,17 +66,17 @@ set once. It is machine-specific and git-ignored, the environment still wins ove
 and it is optional in every direction -- absent, empty or malformed, the run falls back
 to this interpreter, which is right whenever the server itself can import Kratos."""
 
-COMMAND = ["-m", "core.run.runner", PARAMETERS_NAME]
+COMMAND = ["-m", "core.analysis.kratos_main", PARAMETERS_NAME]
 """What the interpreter is asked to do, after its own path. A module rather than a file
 path so it is read the same way wherever the server is installed."""
 
 LOG_NAME = "kratos.log"
 
-# Imported rather than restated: `core.run.runner` prints these markers and this
+# Imported rather than restated: `core.analysis.kratos_main` prints these markers and this
 # parses them, so there is one spelling in one place. Safe to import from here --
 # the runner is a script that imports Kratos only inside `run()`, which is what
 # lets the server read its constants without a Kratos build (see its docstring).
-from core.run.runner import STAGE_MARKER
+from core.analysis.kratos_main import STAGE_MARKER
 
 _STAGE_LINE = re.compile(
     re.escape(STAGE_MARKER) + r" (begin|end) (\d+)/(\d+) (.*?)\s*$", re.MULTILINE)
@@ -157,7 +157,7 @@ def new_run_directory(deck_name: str) -> Path:
 def write_deck(export: dict, directory: Path) -> list[str]:
     """The three files of the deck, written where Kratos will look for them.
 
-    The .mdpa's name is not a choice made here: `core.kratos.export.deck_name` decided it, the
+    The .mdpa's name is not a choice made here: `core.kratos.writer.deck_name` decided it, the
     parameters file already names it in `model_import_settings.input_filename`, and
     Kratos appends `.mdpa` to that. The other two are named by the parameters too -- the
     materials file by `material_import_settings`, and the parameters file by the command
@@ -261,19 +261,19 @@ def run(export: dict) -> dict:
 
 
 def run_deck(deck) -> dict:
-    """Run a deck that already exists (`core.kratos.deck`) rather than one exported here.
+    """Run a deck that already exists (`core.kratos.external_deck`) rather than one exported here.
 
     The same run in every way that matters -- a directory of its own, the same runner,
     the same answer -- except that its inputs are copied from where the deck lives
     instead of written from an export. `deck` is a `schemas.Deck`.
     """
-    from core.kratos import deck as decks
+    from core.kratos import external_deck
 
     with _one_at_a_time():
         python, environment = interpreter()
-        directory = _run_directory(decks.deck_name(deck))
+        directory = _run_directory(external_deck.deck_name(deck))
         try:
-            inputs = decks.stage(deck, directory)
+            inputs = external_deck.stage(deck, directory)
         except OSError as failure:
             raise CalculationError(
                 f"The deck could not be copied into {directory}: {failure}.") from failure

@@ -1,7 +1,7 @@
 """The Results routes: reading back what a calculation left behind.
 
 Which runs exist, which stages each got through, which files are in it, and what a stage
-can show -- its mesh, its fields, the curves along a wall. All of it is `core.results.runs`;
+can show -- its mesh, its fields, the curves along a wall. All of it is `core.results.catalog`;
 these routes only turn its refusals into status codes.
 """
 
@@ -10,34 +10,34 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse, Response
 
-from core.run import calculate
-from core.results import runs as results
+from core.analysis import calculation
+from core.results import catalog
 
 router = APIRouter()
 
 
-def _results_error(failure: results.ResultsError) -> HTTPException:
+def _results_error(failure: catalog.ResultsError) -> HTTPException:
     """404 for something that is not there, 400 for something that may not be asked.
 
     The distinction matters for exactly one case: a filename that tries to climb out
     of the run directory is refused as a bad request whether or not it names something
     real, so the answer cannot be used to find out what is on the machine.
     """
-    status = 400 if isinstance(failure, results.UnsafeName) else 404
+    status = 400 if isinstance(failure, catalog.UnsafeName) else 404
     return HTTPException(status_code=status, detail=str(failure))
 
 
 @router.get("/api/results/runs")
 def results_runs() -> dict:
     """Every run on this machine, newest first. Cheap: names and sizes, no parsing."""
-    return {"runs": results.runs(), "root": str(calculate.runs_root())}
+    return {"runs": catalog.runs(), "root": str(calculation.runs_root())}
 
 
 @router.get("/api/results/runs/{run_id}")
 def results_run(run_id: str) -> dict:
     try:
-        return results.describe(run_id)
-    except results.ResultsError as failure:
+        return catalog.describe(run_id)
+    except catalog.ResultsError as failure:
         raise _results_error(failure) from failure
 
 
@@ -50,8 +50,8 @@ def results_stage_fields(run_id: str, index: int) -> dict:
     -- costs one missing menu entry and breaks nothing. See `core.results.fields`.
     """
     try:
-        return results.stage_fields(run_id, index)
-    except results.ResultsError as failure:
+        return catalog.stage_fields(run_id, index)
+    except catalog.ResultsError as failure:
         raise _results_error(failure) from failure
 
 
@@ -64,8 +64,8 @@ def results_stage_mesh(run_id: str, index: int) -> dict:
     keyed by node id -- become a vertex-colour buffer without a second request.
     """
     try:
-        return results.stage_geometry(run_id, index)
-    except results.ResultsError as failure:
+        return catalog.stage_geometry(run_id, index)
+    except catalog.ResultsError as failure:
         raise _results_error(failure) from failure
 
 
@@ -77,8 +77,8 @@ def results_stage_displacement(run_id: str, index: int) -> dict:
     of; everything in the field catalogue derives a single number.
     """
     try:
-        return results.stage_displacement(run_id, index)
-    except results.ResultsError as failure:
+        return catalog.stage_displacement(run_id, index)
+    except catalog.ResultsError as failure:
         raise _results_error(failure) from failure
 
 
@@ -89,13 +89,13 @@ def results_stage_at(run_id: str, index: int, node: int) -> dict:
     `results at <id>` is how a number gets checked against a hand calculation without
     leaving the app, and doing it a field at a time would be twenty-odd round trips.
     """
-    from core.results import fields as result_fields
+    from core.results import fields
 
     try:
-        return results.stage_at_node(run_id, index, node)
-    except result_fields.UnknownField as failure:
+        return catalog.stage_at_node(run_id, index, node)
+    except fields.UnknownField as failure:
         raise HTTPException(status_code=422, detail=str(failure)) from failure
-    except results.ResultsError as failure:
+    except catalog.ResultsError as failure:
         raise _results_error(failure) from failure
 
 
@@ -103,8 +103,8 @@ def results_stage_at(run_id: str, index: int, node: int) -> dict:
 def results_stage_parts(run_id: str, index: int) -> dict:
     """The deck's named parts as this stage saw them, and which were live in it."""
     try:
-        return results.stage_parts(run_id, index)
-    except results.ResultsError as failure:
+        return catalog.stage_parts(run_id, index)
+    except catalog.ResultsError as failure:
         raise _results_error(failure) from failure
 
 
@@ -116,16 +116,16 @@ def results_stage_field(run_id: str, index: int, name: str,
     The range travels with the values so that a colour legend and the colours it
     explains can never be computed from two different things.
     """
-    from core.results import fields as result_fields
+    from core.results import fields
 
     try:
-        return results.stage_field(run_id, index, name, location)
-    except result_fields.UnknownField as failure:
+        return catalog.stage_field(run_id, index, name, location)
+    except fields.UnknownField as failure:
         # 422 rather than 404: the run and the stage are both there, and what is wrong
         # is the question -- a field this stage does not carry, or a location it
         # cannot be drawn at.
         raise HTTPException(status_code=422, detail=str(failure)) from failure
-    except results.ResultsError as failure:
+    except catalog.ResultsError as failure:
         raise _results_error(failure) from failure
 
 
@@ -134,8 +134,8 @@ def results_members(run_id: str) -> dict:
     """The structural members this run wrote curves for -- the wall, its interface --
     with the stages each has and the quantities each can be plotted for."""
     try:
-        return results.stage_members(run_id)
-    except results.ResultsError as failure:
+        return catalog.stage_members(run_id)
+    except catalog.ResultsError as failure:
         raise _results_error(failure) from failure
 
 
@@ -146,13 +146,13 @@ def results_member_plot(run_id: str, member: str, quantity: str) -> dict:
     422 for a quantity this member does not carry, like an unknown field: the run and
     the member are there, and what is wrong is the question.
     """
-    from core.results import members as result_members
+    from core.results import members
 
     try:
-        return results.member_profiles(run_id, member, quantity)
-    except result_members.UnknownQuantity as failure:
+        return catalog.member_profiles(run_id, member, quantity)
+    except members.UnknownQuantity as failure:
         raise HTTPException(status_code=422, detail=str(failure)) from failure
-    except results.ResultsError as failure:
+    except catalog.ResultsError as failure:
         raise _results_error(failure) from failure
 
 
@@ -161,13 +161,13 @@ def results_file(run_id: str, name: str) -> FileResponse:
     """One file of one run, as a download.
 
     The first route in this project that opens a file the caller named. Every check
-    is in `results.file_path`, which refuses anything that is not a plain filename in
+    is in `catalog.file_path`, which refuses anything that is not a plain filename in
     that one flat directory -- see its docstring for why the check is spelled out
     rather than left to `Path`.
     """
     try:
-        path = results.file_path(run_id, name)
-    except results.ResultsError as failure:
+        path = catalog.file_path(run_id, name)
+    except catalog.ResultsError as failure:
         raise _results_error(failure) from failure
     # `media_type` is not sniffed: a .post.res is text and a .mdpa is text, but both
     # are megabytes nobody wants rendered in a tab. Everything here is a download.
@@ -185,8 +185,8 @@ def results_archive(run_id: str) -> Response:
     out in a directory.
     """
     try:
-        buffer = results.archive(run_id)
-    except results.ResultsError as failure:
+        buffer = catalog.archive(run_id)
+    except catalog.ResultsError as failure:
         raise _results_error(failure) from failure
     return Response(
         content=buffer.getvalue(), media_type="application/zip",

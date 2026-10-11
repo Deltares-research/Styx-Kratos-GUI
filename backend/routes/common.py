@@ -37,7 +37,7 @@ def validated(payload: dict) -> Project:
 
 
 def not_for_a_deck(project: Project, what: str) -> None:
-    """Refuse to mesh or export a project that is a deck already (`core.kratos.deck`).
+    """Refuse to mesh or export a project that is a deck already (`core.kratos.external_deck`).
 
     Everything but its deck is the empty site the schema requires, so going ahead would
     mesh nothing and answer as though that were the model.

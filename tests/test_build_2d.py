@@ -7,16 +7,16 @@ that comes out is dim 2, and a part that does not reach the plane is simply not 
 the section.
 
 Areas are recomputed here from the project fields by a formula written independently
-of build.py, for the same reason test_build.py recomputes volumes: gmsh's failure mode
+of solid_model.py, for the same reason test_build.py recomputes volumes: gmsh's failure mode
 is to succeed with empty results.
 """
 
 import gmsh
 import pytest
 
-from core.geometry import build
+from core.geometry import solid_model
 from core.model.schemas import Project
-from core.model.seed import seed_project
+from core.model.templates import seed_project
 
 
 def section_project(simple: bool, z: float | None = None) -> Project:
@@ -29,15 +29,15 @@ def section_project(simple: bool, z: float | None = None) -> Project:
 @pytest.fixture(scope="module")
 def simple():
     project = section_project(simple=True)
-    with build.session():
-        yield project, build.build_geometry(project)
+    with solid_model.session():
+        yield project, solid_model.build_geometry(project)
 
 
 @pytest.fixture(scope="module")
 def full():
     project = section_project(simple=False)
-    with build.session():
-        yield project, build.build_geometry(project)
+    with solid_model.session():
+        yield project, solid_model.build_geometry(project)
 
 
 # ── The section is two-dimensional ──────────────────────────────────────────
@@ -49,7 +49,7 @@ def test_the_result_reports_its_dimension(simple):
 
 def test_every_entity_is_a_surface(simple):
     project, result = simple
-    with build.session():
+    with solid_model.session():
         for key in project.part_keys():
             for tag in result.volumes[key]:
                 # A dim-3 tag would still be a valid number here; asking gmsh which
@@ -148,8 +148,8 @@ def staged_project() -> Project:
 @pytest.fixture(scope="module")
 def staged():
     project = staged_project()
-    with build.session():
-        yield project, build.build_geometry(project)
+    with solid_model.session():
+        yield project, solid_model.build_geometry(project)
 
 
 def test_the_staged_pit_is_still_there(staged):
@@ -172,7 +172,7 @@ def test_every_staged_body_occupies_the_band_and_side_it_is_named_for(staged):
     project, result = staged
     e = project.excavation
     for key, bottom, top, inside in project.soil_bodies():
-        x0, y0, _, x1, y1, _ = build.bounding_box(result.volumes[key], dim=2)
+        x0, y0, _, x1, y1, _ = solid_model.bounding_box(result.volumes[key], dim=2)
         assert (y0, y1) == pytest.approx((bottom, top), abs=1e-3), f"{key} y-extent"
         if inside:
             assert x0 == pytest.approx(e.x0, abs=1e-3), f"{key} should start at the pit"
@@ -275,10 +275,10 @@ def test_the_offset_chooses_which_parts_the_section_catches():
     was taken -- what it *contains* has to. The piles stand on a z grid of
     14/20/26, so a cut between two rows misses them and a cut through one catches them.
     """
-    with build.session():
-        between = build.build_geometry(section_project(simple=False, z=17.0))
-    with build.session():
-        through = build.build_geometry(section_project(simple=False, z=20.0))
+    with solid_model.session():
+        between = solid_model.build_geometry(section_project(simple=False, z=17.0))
+    with solid_model.session():
+        through = solid_model.build_geometry(section_project(simple=False, z=20.0))
 
     assert between.volumes["piles"] == []
     assert through.volumes["piles"]
@@ -316,8 +316,8 @@ def test_a_line_load_puts_a_vertex_at_each_of_its_ends():
     """Both ends become model vertices, so the mesh cannot straddle them."""
     project = _loaded_section()
     load = project.loads[0]
-    with build.session():
-        build.build_geometry(project)
+    with solid_model.session():
+        solid_model.build_geometry(project)
         xs = _vertices_at(load.y)
 
     assert any(x == pytest.approx(load.x0) for x in xs)
@@ -327,8 +327,8 @@ def test_a_line_load_puts_a_vertex_at_each_of_its_ends():
 def test_a_point_load_puts_a_vertex_at_its_own_coordinate():
     project = _loaded_section(POINT_LOAD)
     load = project.loads[0]
-    with build.session():
-        build.build_geometry(project)
+    with solid_model.session():
+        solid_model.build_geometry(project)
         xs = _vertices_at(load.y)
 
     assert any(x == pytest.approx(load.x) for x in xs)
@@ -337,12 +337,12 @@ def test_a_point_load_puts_a_vertex_at_its_own_coordinate():
 def test_the_section_imprint_splits_no_area():
     """A load is a boundary condition: it must not cut the sectioned soil."""
     loaded, plain = _loaded_section(), section_project(simple=True)
-    with build.session():
-        with_load = build.build_geometry(loaded)
-        without_load = build.build_geometry(plain)
+    with solid_model.session():
+        with_load = solid_model.build_geometry(loaded)
+        without_load = solid_model.build_geometry(plain)
 
     for key, mass in without_load.mass.items():
-        if key not in build.DISPLAY_ONLY:
+        if key not in solid_model.DISPLAY_ONLY:
             assert with_load.mass[key] == pytest.approx(mass), key
 
 
@@ -363,8 +363,8 @@ def _piled_section(points, simple: bool = True) -> Project:
 def test_a_sheet_pile_becomes_named_one_dimensional_curves():
     """Not a thin solid: a sheet pile is 1D structural geometry inside a 2D model."""
     project = _piled_section([[12.0, 0.0], [12.0, -14.0]])
-    with build.session():
-        result = build.build_geometry(project)
+    with solid_model.session():
+        result = solid_model.build_geometry(project)
         groups = {gmsh.model.getPhysicalName(dim, tag): dim
                   for dim, tag in gmsh.model.getPhysicalGroups()}
 
@@ -377,8 +377,8 @@ def test_a_sheet_pile_becomes_named_one_dimensional_curves():
 
 def test_the_pile_curves_span_exactly_the_polyline_the_user_drew():
     project = _piled_section([[12.0, 0.0], [12.0, -14.0]])
-    with build.session():
-        result = build.build_geometry(project)
+    with solid_model.session():
+        result = solid_model.build_geometry(project)
         boxes = [gmsh.model.getBoundingBox(1, tag)
                  for tag in result.curves["sheetpile_1"]]
 
@@ -394,19 +394,19 @@ def test_the_pile_is_embedded_in_the_soil_rather_than_cutting_it_away():
     """It displaces no soil: the same area is there with and without the pile."""
     plain = section_project(simple=True)
     piled = _piled_section([[12.0, 0.0], [12.0, -14.0]])
-    with build.session():
-        without = build.build_geometry(plain)
-        with_pile = build.build_geometry(piled)
+    with solid_model.session():
+        without = solid_model.build_geometry(plain)
+        with_pile = solid_model.build_geometry(piled)
 
     for key, area in without.mass.items():
-        if key not in build.DISPLAY_ONLY:
+        if key not in solid_model.DISPLAY_ONLY:
             assert with_pile.mass[key] == pytest.approx(area), key
 
 
 def test_a_polyline_pile_keeps_every_segment():
     project = _piled_section([[12.0, 0.0], [12.0, -7.0], [14.0, -12.0]])
-    with build.session():
-        result = build.build_geometry(project)
+    with solid_model.session():
+        result = solid_model.build_geometry(project)
         boxes = [gmsh.model.getBoundingBox(1, tag)
                  for tag in result.curves["sheetpile_1"]]
 
@@ -420,8 +420,8 @@ def test_an_inactive_pile_is_kept_in_the_project_but_not_built():
     payload["beams"] = [{"id": "sheetpile_1", "name": "Sheet pile 1", "section": "az26",
                          "points": [[12.0, 0.0], [12.0, -14.0]], "active": False}]
     project = Project.model_validate(payload)
-    with build.session():
-        result = build.build_geometry(project)
+    with solid_model.session():
+        result = solid_model.build_geometry(project)
 
     assert result.curves.get("sheetpile_1", []) == []
 
@@ -430,7 +430,7 @@ def test_a_sheet_pile_is_swept_onto_the_section_plane_of_a_3d_model():
     """A 2D pile is not dropped by the solid model: it is built where it was drawn.
 
     It becomes a surface rather than the curve a section leaves, because a wall needs
-    an out-of-plane width to be meshed as a shell -- see `build._section_sweeps`, and
+    an out-of-plane width to be meshed as a shell -- see `solid_model._section_sweeps`, and
     tests/test_section_structures_3d.py for where the sweep is placed.
     """
     payload = seed_project(simple=True).model_dump()
@@ -438,8 +438,8 @@ def test_a_sheet_pile_is_swept_onto_the_section_plane_of_a_3d_model():
     payload["beams"] = [{"id": "sheetpile_1", "name": "Sheet pile 1", "section": "az26",
                          "points": [[12.0, 0.0], [12.0, -14.0]], "active": True}]
     project = Project.model_validate(payload)
-    with build.session():
-        result = build.build_geometry(project)
+    with solid_model.session():
+        result = solid_model.build_geometry(project)
 
     assert result.faces.get("sheetpile_1"), "the pile vanished from the solid model"
     assert not any("not part of this 3D model" in line for line in result.log)
@@ -462,8 +462,8 @@ def _anchored_section(head=(12.0, -2.0), tail=(20.0, -8.0), active=True) -> Proj
 
 
 def test_an_anchor_becomes_its_own_named_curve():
-    with build.session():
-        result = build.build_geometry(_anchored_section())
+    with solid_model.session():
+        result = solid_model.build_geometry(_anchored_section())
         groups = {gmsh.model.getPhysicalName(dim, tag): dim
                   for dim, tag in gmsh.model.getPhysicalGroups()}
 
@@ -475,17 +475,17 @@ def test_an_anchor_becomes_its_own_named_curve():
 def test_the_anchor_splits_the_pile_at_its_head():
     """The head has to become a vertex the beam shares, which is what makes it one
     node in the mesh, where the head sits in two beam elements."""
-    with build.session():
-        plain = build.build_geometry(_piled_section([[12.0, 0.0], [12.0, -14.0]]))
+    with solid_model.session():
+        plain = solid_model.build_geometry(_piled_section([[12.0, 0.0], [12.0, -14.0]]))
         plain_pieces = len(plain.curves["sheetpile_1"])
-        anchored = build.build_geometry(_anchored_section())
+        anchored = solid_model.build_geometry(_anchored_section())
 
     assert len(anchored.curves["sheetpile_1"]) == plain_pieces + 1
 
 
 def test_the_anchor_spans_exactly_the_head_and_tail_drawn():
-    with build.session():
-        result = build.build_geometry(_anchored_section())
+    with solid_model.session():
+        result = solid_model.build_geometry(_anchored_section())
         boxes = [gmsh.model.getBoundingBox(1, tag) for tag in result.ties["anchor_1"]]
 
     assert min(b[0] for b in boxes) == pytest.approx(12.0, abs=1e-5)
@@ -495,18 +495,18 @@ def test_the_anchor_spans_exactly_the_head_and_tail_drawn():
 
 
 def test_the_anchor_does_not_cut_or_displace_the_soil():
-    with build.session():
-        without = build.build_geometry(_piled_section([[12.0, 0.0], [12.0, -14.0]]))
-        with_anchor = build.build_geometry(_anchored_section())
+    with solid_model.session():
+        without = solid_model.build_geometry(_piled_section([[12.0, 0.0], [12.0, -14.0]]))
+        with_anchor = solid_model.build_geometry(_anchored_section())
 
     for key, area in without.mass.items():
-        if key not in build.DISPLAY_ONLY:
+        if key not in solid_model.DISPLAY_ONLY:
             assert with_anchor.mass[key] == pytest.approx(area), key
 
 
 def test_an_inactive_anchor_is_kept_in_the_project_but_not_built():
-    with build.session():
-        result = build.build_geometry(_anchored_section(active=False))
+    with solid_model.session():
+        result = solid_model.build_geometry(_anchored_section(active=False))
 
     assert result.ties.get("anchor_1", []) == []
 
@@ -521,8 +521,8 @@ def test_a_plane_anchor_is_built_on_the_section_plane_of_a_3d_model():
     payload["anchors"] = [{"id": "anchor_1", "name": "Anchor 1", "kind": "anchor",
                            "section": "strand", "head": [12.0, -2.0],
                            "tail": [20.0, -8.0], "prestress": 250.0, "active": True}]
-    with build.session():
-        result = build.build_geometry(Project.model_validate(payload))
+    with solid_model.session():
+        result = solid_model.build_geometry(Project.model_validate(payload))
 
     assert result.ties.get("anchor_1"), "the 2D anchor vanished from the solid model"
     assert "anchor_1" in result.tie_nodes

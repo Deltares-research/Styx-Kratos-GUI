@@ -113,16 +113,16 @@ def test_an_unknown_system_is_refused(client):
 def test_the_kn_deck_is_the_si_deck_in_kilonewtons(client):
     """Kratos has no units: the same model in the kN system writes every force-bearing
     number a thousand times smaller and everything else the same."""
-    from core.geometry import build
-    from core.kratos import export as kratos
+    from core.geometry import solid_model
+    from core.kratos import writer
     from core.model.schemas import MeshRequest
 
     si = excavation.excavation_project(staged=True)
     kn_payload, _ = units.convert_project(si.model_dump(mode="json"), "kN")
     kn = Project.model_validate(kn_payload)
-    with build.session():
-        a = kratos.export_project(si, MeshRequest(element_size=8.0, order=2))
-        b = kratos.export_project(kn, MeshRequest(element_size=8.0, order=2))
+    with solid_model.session():
+        a = writer.export_project(si, MeshRequest(element_size=8.0, order=2))
+        b = writer.export_project(kn, MeshRequest(element_size=8.0, order=2))
     assert a["mdpa"] == b["mdpa"]
     ma, mb = json.loads(a["materials"]), json.loads(b["materials"])
     for pa, pb in zip(ma["properties"], mb["properties"]):

@@ -20,10 +20,10 @@ from pathlib import Path
 
 import pytest
 
-from core.geometry import build
-from core.kratos import export as kratos
+from core.geometry import solid_model
+from core.kratos import writer
 from core.model.schemas import MeshRequest, Project
-from core.model.seed import seed_project
+from core.model.templates import seed_project
 from tests.models import excavation
 from tests.pipeline.deck_invariants import check_deck
 
@@ -37,7 +37,7 @@ ALLOWED_WARNINGS = [
 ]
 
 ALLOWED_3D_WARNINGS = [
-    # What the solid model cannot carry yet, each named in the export (core/kratos/export.py).
+    # What the solid model cannot carry yet, each named in the export (core/kratos/writer.py).
     r"^interfaces are plane-strain only and none was written into this 3D deck",
     r"^a normal load is plane-strain only and none was written into this 3D deck",
     r"^the wall panels are written as linear shells inside a quadratic soil mesh",
@@ -78,8 +78,8 @@ SIZES = {2: 8.0, 3: 12.0}
 def test_every_model_exports_a_sound_deck(name, order):
     project = MODELS[name]()
     settings = MeshRequest(element_size=SIZES[project.dimension], order=order)
-    with build.session():
-        export = kratos.export_project(project, settings)
+    with solid_model.session():
+        export = writer.export_project(project, settings)
 
     assert check_deck(export) == []
     allowed = ALLOWED_WARNINGS + (ALLOWED_3D_WARNINGS if project.dimension == 3 else [])

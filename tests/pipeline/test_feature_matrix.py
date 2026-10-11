@@ -13,8 +13,8 @@ import json
 
 import pytest
 
-from core.geometry import build
-from core.kratos import export as kratos
+from core.geometry import solid_model
+from core.kratos import writer
 from tests.models import excavation
 from core.model.schemas import MeshRequest, Project
 from tests import mdpa
@@ -52,8 +52,8 @@ def project_with(*features) -> Project:
 
 
 def export_of(*features, order=2):
-    with build.session():
-        export = kratos.export_project(project_with(*features),
+    with solid_model.session():
+        export = writer.export_project(project_with(*features),
                                        MeshRequest(element_size=8.0, order=order))
     assert check_deck(export) == []
     return export, mdpa.parse(export["mdpa"])

@@ -12,7 +12,7 @@ same. Sources:
   surface load magnitude                          js/data.js:426
 """
 
-from core.model import legacy
+from core.model import migration
 from core.model.schemas import (
     AnchorRows,
     Borehole,
@@ -52,11 +52,11 @@ _DEMO_MATERIALS = [
 ]
 """The frozen demo's material table, as js/data.js writes it (kN/m3, kN/m2, m/day). The
 project holds Kratos property sets, so the seed converts these the way every project
-saved in that shape is converted (`core/model/legacy.py`)."""
+saved in that shape is converted (`core/model/migration.py`)."""
 
 
 def _materials(dim: int) -> list[Material]:
-    return [Material.model_validate(legacy.material(m, dim)) for m in _DEMO_MATERIALS]
+    return [Material.model_validate(migration.material(m, dim)) for m in _DEMO_MATERIALS]
 
 
 _BOREHOLES = [

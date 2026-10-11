@@ -24,12 +24,12 @@ Two limits run through everything below:
 
 | Feature | What is written | Status | Source |
 |---|---|---|---|
-| Kratos application | GeoMechanicsApplication, `U_Pw` solver, model part `PorousDomain` | ✅ | [kratos/processes.py](../core/kratos/processes.py) `SOLVER` |
-| Orchestrator | `SequentialOrchestrator` over named stages, `GeoMechanicsAnalysis` stage | ✅ | [kratos/processes.py](../core/kratos/processes.py) `ORCHESTRATOR` |
-| Analysis type | Static, Newmark scheme, Newton-Raphson, residual criterion | ✅ fixed, not selectable | [kratos/processes.py](../core/kratos/processes.py) `SOLVER` |
+| Kratos application | GeoMechanicsApplication, `U_Pw` solver, model part `PorousDomain` | ✅ | [kratos/parameters.py](../core/kratos/parameters.py) `SOLVER` |
+| Orchestrator | `SequentialOrchestrator` over named stages, `GeoMechanicsAnalysis` stage | ✅ | [kratos/parameters.py](../core/kratos/parameters.py) `ORCHESTRATOR` |
+| Analysis type | Static, Newmark scheme, Newton-Raphson, residual criterion | ✅ fixed, not selectable | [kratos/parameters.py](../core/kratos/parameters.py) `SOLVER` |
 | Linear solver | `skyline_lu_factorization` (direct), block builder, 1 OpenMP thread | ✅ fixed | same |
 | Tolerances | Relative 1e-4, absolute 1e-9, 6–15 iterations, reduction 0.5, increase 2.0 | ✅ max iterations and relative tolerance editable per phase | same |
-| Time stepping | One step per stage (dt = 1); settling stages sit at negative time, as in the reference deck | ✅ | [kratos/export.py](../core/kratos/export.py) |
+| Time stepping | One step per stage (dt = 1); settling stages sit at negative time, as in the reference deck | ✅ | [kratos/writer.py](../core/kratos/writer.py) |
 | Units | A project unit system, SI (N, m, kg, s) or kN (kN, m, t, s), chosen with `units <system>` or the status bar; every input is in it, the deck carries it verbatim and the results come back in it. Property sets are Kratos' own law + `Variables` | ✅ tested, the test model run in both systems | [model/units.py](../core/model/units.py), [kratos/materials.py](../core/kratos/materials.py) |
 | Dynamics, consolidation, arc-length control, updated mesh | Not supported. A phase's `time_interval` is stored but not used | ❌ | [model/schemas.py](../core/model/schemas.py) `Phase` |
 
@@ -41,7 +41,7 @@ Two limits run through everything below:
 | 3D | `UPwSmallStrainElement3D4N` (tetrahedron) | `SmallStrainUPwDiffOrderElement3D10N` | 🟡 no 3D reference run |
 
 Triangles and tetrahedra only; quadrilaterals and hexahedra are not supported. See
-`ELEMENTS` in [kratos/export.py](../core/kratos/export.py).
+`ELEMENTS` in [kratos/writer.py](../core/kratos/writer.py).
 
 ### A3. Structural elements
 

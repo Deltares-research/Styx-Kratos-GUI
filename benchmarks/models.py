@@ -7,10 +7,10 @@ benchmark runner sends exactly that project through the REST API, the path the G
 
 from __future__ import annotations
 
-from core.model import legacy, phases
+from core.model import migration, phases
 from tests.models import excavation
 from core.model.schemas import Project
-from core.model.seed import blank_project
+from core.model.templates import blank_project
 
 
 def material(id_: str, name: str, gamma: float, k0: float | None = None,
@@ -76,8 +76,8 @@ def column(layers: list[tuple[float, float, dict]], width: float = 1.0,
             materials.append(mat)
     # The benchmark's own description of a soil is the engineer's (kN/m3, kN/m2, m/day),
     # which is what its analytical checks are written in; the project holds what Kratos
-    # reads, converted the way every project in that shape is (`core/model/legacy.py`).
-    p["materials"] = [mat["kratos"] if "kratos" in mat else legacy.material(mat, 2)
+    # reads, converted the way every project in that shape is (`core/model/migration.py`).
+    p["materials"] = [mat["kratos"] if "kratos" in mat else migration.material(mat, 2)
                       for mat in materials]
     p["layers"] = [{"id": f"L{i}", "name": f"Layer_{i}", "mat": mat["id"],
                     "tops": {"bh1": t}, "bots": {"bh1": b}}

@@ -13,7 +13,7 @@ comparison figure is the model -- same quantities and the same sign, which
 is Kratos' own and is not flipped to anybody else's convention. The numbers are the run's
 own, in its unit system (`core/model/units.py`), and labelled for it rather than scaled.
 
-Nothing here opens a file. `core.results.runs` finds them and caches them; this turns text into
+Nothing here opens a file. `core.results.catalog` finds them and caches them; this turns text into
 numbers and numbers into curves, so the tests can feed it three nodes.
 """
 

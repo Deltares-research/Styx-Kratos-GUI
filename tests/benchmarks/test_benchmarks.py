@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from core.run import calculate
+from core.analysis import calculation
 from benchmarks.cases import BY_ID, CASES
 from benchmarks.runner import run_case
 
@@ -22,8 +22,8 @@ _done: dict[str, object] = {}
 @pytest.fixture(scope="module")
 def runs(tmp_path_factory):
     try:
-        calculate.interpreter()
-    except calculate.CalculationError as failure:
+        calculation.interpreter()
+    except calculation.CalculationError as failure:
         pytest.skip(f"no Kratos configured: {failure}")
     return tmp_path_factory.mktemp("benchmark-runs")
 

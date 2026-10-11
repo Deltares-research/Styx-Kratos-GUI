@@ -1,6 +1,6 @@
 """What a user may ask to see, and what the number means when they do.
 
-`core.results.gid` reads the file; this decides what is in it worth looking at. The two
+`core.results.gid_reader` reads the file; this decides what is in it worth looking at. The two
 are separate because the first is a question about a text format and the second is a
 question about geotechnics, and only the second has opinions.
 
@@ -17,7 +17,7 @@ exactly that case, and it is in every run on this machine.
 
 Kratos has no units: a run's numbers are in whatever system its deck was written in,
 which is the project's (`core/model/units.py`), recorded beside the run
-(`runs.run_unit_system`). So nothing here is scaled. A stress is shown in Pa for an
+(`catalog.run_unit_system`). So nothing here is scaled. A stress is shown in Pa for an
 SI run and in kPa for a kN one, each labelled for what it is -- the only conversion that
 could go wrong by a factor of a thousand is the one this no longer makes.
 
@@ -50,7 +50,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 from core.model import units
-from core.results.gid import GidMesh, Results
+from core.results.gid_reader import GidMesh, Results
 
 COMPRESSION_POSITIVE = False
 """Whether stresses are flipped on the way out. They are not -- see the module

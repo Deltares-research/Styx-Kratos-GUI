@@ -14,16 +14,16 @@ import pytest
 
 from core.model import phases, schemas
 from tests.models import excavation
-from core.geometry.build import session
+from core.geometry.solid_model import session
 from core.model.schemas import MeshRequest
-from core.kratos import export as kratos
+from core.kratos import writer
 
 
 @pytest.fixture(scope="module")
 def staged_doc() -> dict:
     """The test model with its default seven phases, exported."""
     with session():
-        result = kratos.export_project(excavation.excavation_project(staged=True),
+        result = writer.export_project(excavation.excavation_project(staged=True),
                                        MeshRequest(**excavation.excavation_project().mesh.model_dump()))
     return json.loads(result["project_parameters"])
 
@@ -32,7 +32,7 @@ def staged_doc() -> dict:
 def unphased_doc() -> dict:
     project = excavation.excavation_project(staged=False)
     with session():
-        result = kratos.export_project(project,
+        result = writer.export_project(project,
                                        MeshRequest(**project.mesh.model_dump()))
     return json.loads(result["project_parameters"])
 
@@ -76,7 +76,7 @@ def test_a_phased_project_exports_one_stage_per_phase(staged_doc):
 def test_a_stage_is_numbered_and_its_phase_name_sanitised():
     """`1_Initial_stage`, the reference's own shape: the position in the sequence, then
     the phase's name with anything that cannot sit in a filename replaced."""
-    from core.kratos.processes import stage_name
+    from core.kratos.parameters import stage_name
     assert stage_name(0, "Initial stage") == "1_Initial_stage"
     assert stage_name(6, "Third excavation") == "7_Third_excavation"
     assert stage_name(2, "Dig / prop  (2)") == "3_Dig_prop_2"
@@ -114,7 +114,7 @@ def test_a_stage_that_changes_nothing_writes_no_operations(staged_doc):
 
 def test_deactivating_a_soil_body_takes_its_interface_with_it(staged_doc):
     """One drawn `Interface` is eight deck parts, one per soil body it runs against
-    (`core/kratos/export.py:_interface_by_body`). The phase model knows only the one key, so
+    (`core/kratos/writer.py:_interface_by_body`). The phase model knows only the one key, so
     export is what pairs the interface with the body: digging out a lift must remove the
     contact against it, or the deck holds a contact element against nothing."""
     off = operation(staged_doc, "4_First_excavation", "Deactivate")
@@ -216,7 +216,7 @@ def test_a_phases_solver_settings_reach_the_deck():
     edited[3] |= {"max_iterations": 321, "tolerated_error": 2e-3}
     project = schemas.Project.model_validate(project.model_dump() | {"phases": edited})
     with session():
-        doc = json.loads(kratos.export_project(
+        doc = json.loads(writer.export_project(
             project, MeshRequest(**project.mesh.model_dump()))["project_parameters"])
     assert solver(doc, "4_First_excavation")["max_iterations"] == 321
     assert solver(doc, "4_First_excavation")["residual_relative_tolerance"] == 2e-3
@@ -233,7 +233,7 @@ def test_a_branching_phase_tree_is_refused_at_export():
     project = schemas.Project.model_validate(project.model_dump() | {"phases": records})
     with pytest.raises(phases.PhaseError, match="alternative"):
         with session():
-            kratos.export_project(project, MeshRequest(**project.mesh.model_dump()))
+            writer.export_project(project, MeshRequest(**project.mesh.model_dump()))
 
 
 def test_a_project_with_one_phase_imports_its_mesh_once():
@@ -243,14 +243,14 @@ def test_a_project_with_one_phase_imports_its_mesh_once():
     project (a K0 column) imported every element twice and Kratos stopped at element 1."""
     import json as _json
 
-    from core.geometry import build
-    from core.kratos import export as _kratos
+    from core.geometry import solid_model
+    from core.kratos import writer
     from core.model.schemas import MeshRequest
     from benchmarks import models
 
     project = models.project()
-    with build.session():
-        export = _kratos.export_project(project, MeshRequest(element_size=1.0, order=1))
+    with solid_model.session():
+        export = writer.export_project(project, MeshRequest(element_size=1.0, order=1))
     (stage,) = _json.loads(export["project_parameters"])["stages"].values()
     modelers = stage.get("stage_preprocess", {}).get("modelers", [])
     reads = len(modelers) + (stage["stage_settings"]["solver_settings"]

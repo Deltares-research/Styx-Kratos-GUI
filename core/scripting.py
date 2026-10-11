@@ -3,7 +3,7 @@
 The modeller's command line takes `run <file.py>`, and this is what that runs. The file
 is ordinary Python that hands back a `Project`; the server executes it, adopts what it
 returns and the model appears in the viewport. `tests/models/excavation.py` is one. A
-script of the other kind builds nothing, and names a finished Kratos deck instead (`core.kratos.deck.deck_project`), which opens with its own
+script of the other kind builds nothing, and names a finished Kratos deck instead (`core.kratos.external_deck.deck_project`), which opens with its own
 mesh and is calculated as the files it already is.
 
 A script says what it built in one of three ways, looked for in this order:
@@ -190,7 +190,7 @@ def _find_project(namespace: dict, script: Path) -> tuple[Project | None, str | 
         complaint = f"PROJECT is a {type(direct).__name__}, not a Project"
 
     # Only functions the script itself defines. A script that does
-    # `from core.model.seed import seed_project` has imported a name ending in `_project` that
+    # `from core.model.templates import seed_project` has imported a name ending in `_project` that
     # builds a perfectly good model -- the wrong one -- and without this it would win
     # over the script's own builder and quietly load the seed instead. `runpy` puts the
     # executed module's name in `__name__`, and a function defined there carries it.

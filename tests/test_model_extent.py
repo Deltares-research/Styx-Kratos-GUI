@@ -1,7 +1,7 @@
 """Where a structure is allowed to be: the model, not the borehole box.
 
 `Domain` is the soil block the boreholes describe. A drawn or imported part is not held
-to it -- an embankment sits *above* `y_top`, and `build.SECTION_PAD` already says so in
+to it -- an embankment sits *above* `y_top`, and `solid_model.SECTION_PAD` already says so in
 as many words: "the wall top and any drawn or imported part can legitimately stick out
 of the declared domain".
 
@@ -17,7 +17,7 @@ project validates exactly as it used to.
 import pytest
 
 from core.model.schemas import Project
-from core.model.seed import seed_project
+from core.model.templates import seed_project
 
 
 EMBANKMENT = {"key": "drawn_1", "label": "Embankment", "source": "gui",

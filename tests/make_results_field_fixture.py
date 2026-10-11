@@ -7,7 +7,7 @@
 the right way to pin an edge case and the wrong way to notice that a whole mesh comes out
 grey. This records a whole soil body of the test model (`tests/models/excavation.py`) in
 its last stage, with p' at the nodes, p' per element and the vertical displacement, read
-through `core.results.runs` exactly as the server answers the page.
+through `core.results.catalog` exactly as the server answers the page.
 
 The run is synthetic -- `tests/fakes/gid_writer.py` with analytic fields -- so this needs
 no Kratos and writes the same file on every machine. The fields are the ones the fake
@@ -81,20 +81,20 @@ def compact_json(payload: dict, depth: int = 2, indent: int = 1) -> str:
 def record() -> dict:
     import os
 
-    from core.kratos import export as kratos
-    from core.run import calculate
-    from core.results import runs as results
+    from core.kratos import writer
+    from core.analysis import calculation
+    from core.results import catalog
     from tests.fakes import gid_writer
     from tests.models import excavation
 
-    export = kratos.export_project(excavation.excavation_project(staged=True))
+    export = writer.export_project(excavation.excavation_project(staged=True))
     with tempfile.TemporaryDirectory(prefix="results-field-") as root:
         gid_writer.write_run(export, Path(root) / RUN, nodal={"TOTAL_DISPLACEMENT": u},
                              gauss={"CAUCHY_STRESS_TENSOR": stress})
-        os.environ[calculate.RUNS_ENV] = root
-        results.forget_cache()
+        os.environ[calculation.RUNS_ENV] = root
+        catalog.forget_cache()
         try:
-            sections = results.stage_geometry(RUN, STAGE)["sections"]
+            sections = catalog.stage_geometry(RUN, STAGE)["sections"]
             section = next(one for one in sections if one["key"] == SECTION)
             wanted = {"nodes": set(section["node_ids"]),
                       # The ids the triangles were built from, not the part's own list.
@@ -103,7 +103,7 @@ def record() -> dict:
             def field(name: str, location: str) -> dict:
                 """One field, cut down to the ids this section draws. `min` and `max` stay
                 the whole stage's: the legend is drawn for the stage."""
-                found = results.stage_field(RUN, STAGE, name, location)
+                found = catalog.stage_field(RUN, STAGE, name, location)
                 kept = [(id, value) for id, value in zip(found["ids"], found["values"])
                         if id in wanted[location]]
                 return found | {"ids": [id for id, _ in kept],
@@ -114,7 +114,7 @@ def record() -> dict:
                                "p_elements": field("p", "elements"),
                                "uy": field("uy", "nodes")}}
         finally:
-            results.forget_cache()
+            catalog.forget_cache()
 
 
 def render(payload: dict) -> str:

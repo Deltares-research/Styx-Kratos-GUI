@@ -25,7 +25,7 @@ from dataclasses import dataclass, field
 
 import gmsh
 
-from core.geometry import build
+from core.geometry import solid_model
 from core.model.schemas import Project
 
 DECIMALS = 4
@@ -91,7 +91,7 @@ class DisplayModel:
 
 def tessellate(project: Project) -> DisplayModel:
     """Build the solid model and return display buffers for it."""
-    result = build.build_geometry(project)
+    result = solid_model.build_geometry(project)
 
     gmsh.option.setNumber("Mesh.StlLinearDeflection", STL_LINEAR_DEFLECTION)
     gmsh.option.setNumber("Mesh.StlAngularDeflection", STL_ANGULAR_DEFLECTION)
@@ -102,7 +102,7 @@ def tessellate(project: Project) -> DisplayModel:
     custom_colors = {p.key: p.color for p in project.custom_parts}
 
     sections = []
-    # A normal load owns a curve -- the line its condition is written on (core/kratos/export.py)
+    # A normal load owns a curve -- the line its condition is written on (core/kratos/writer.py)
     # -- but nothing to draw from it. Its symbol is the arrows the viewport puts on that
     # line, and drawing the curve as well would lay a stray line over the loaded face,
     # which is what a sheet pile's hairline would look like there.
@@ -152,7 +152,7 @@ def tessellate(project: Project) -> DisplayModel:
             continue
         # A part can end up owning no volume -- fragmenting two solids that occupy
         # the same space assigns the shared tags to one of them
-        # (`build._assign_by_priority`).
+        # (`solid_model._assign_by_priority`).
         # It then contributes no sections; it must not fail the whole model.
         for color, tags in _group_by_color(result.volumes.get(key, []), colors).items():
             sections.append(_section(key, color, tags, coords))
@@ -175,7 +175,7 @@ def _node_coordinates() -> dict[int, tuple[float, float, float]]:
 
 # ── Colour ──────────────────────────────────────────────────────────────────
 
-def _colors_by_volume(project: Project, result: build.BuildResult) -> dict[int, str]:
+def _colors_by_volume(project: Project, result: solid_model.BuildResult) -> dict[int, str]:
     colors: dict[int, str] = {}
     # Keyed by body rather than by layer: a staged excavation splits a layer into the
     # lifts it is dug in, and a lift is still the layer it came out of, so it is drawn
@@ -354,7 +354,7 @@ def _overlay_section(key: str, color: str, entities: list[tuple[int, int]],
         _add_edges(section, {tag: False for tag in surface_tags}, coords)
 
     for tag in (t for dim, t in entities if dim == 1):
-        # Straight curves only (creator.py builds lines from occ.addLine segments), so
+        # Straight curves only (primitives.py builds lines from occ.addLine segments), so
         # the two endpoints are the whole edge -- no need to mesh a free-standing curve,
         # which importStl() does not do (it tessellates faces; edges come along only as
         # a face's boundary, and a bare line borders no face).

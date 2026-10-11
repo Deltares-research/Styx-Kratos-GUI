@@ -187,7 +187,7 @@ App.Phases = (function () {
      `name` and `kind` off each, and nothing else.
 
      `run` is what the last calculation reported, `{completed: n}`: the run log names
-     the stage it reached (core/run/calculate.py's `failed_stage`), so the dots can
+     the stage it reached (core/analysis/calculation.py's `failed_stage`), so the dots can
      say how far it got instead of all staying grey. Omitted, nothing has been run and
      every phase after the first is pending. */
   function rows(project, run) {

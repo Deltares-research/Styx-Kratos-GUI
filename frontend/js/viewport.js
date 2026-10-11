@@ -50,7 +50,7 @@ App.Viewport = (function () {
   var showGrid = true, gridGroup, boundsGroup, referenceGrid;
   var activeView = 'iso';
   /* The section, not the solid model: the server opens on a plane-strain project
-     (core/model/seed.py blank_project), so starting in 3D would only mean drawing a
+     (core/model/templates.py blank_project), so starting in 3D would only mean drawing a
      view the first /api/geometry answer immediately takes away. */
   var DEFAULT_VIEW_MODE = 'elevation';
   var DEFAULT_DIMENSION = 2;
@@ -265,7 +265,7 @@ App.Viewport = (function () {
      the right of the walking direction -- so a line drawn left to right along the top
      of the ground pushes down into it, which is the reading anyone expects. A negative
      pressure flips the arrows. This is the symbol's convention; the sign Kratos itself
-     applies comes from the condition's own node order (core/kratos/export.py). */
+     applies comes from the condition's own node order (core/kratos/writer.py). */
   function normalLoadGlyphSpec(load, project) {
     var points = load.points || [];
     var span = modelSpan(project, frame && frame.size);
@@ -525,7 +525,7 @@ App.Viewport = (function () {
                              normalLoadKeys) {
     customKeys = customKeys || [];
     loadKeys = loadKeys || [];
-    // Sheet piles and anchors are sections of their own (core/geometry/tessellate.py
+    // Sheet piles and anchors are sections of their own (core/geometry/tessellation.py
     // :112-126). Leaving them out of every mode is what kept them invisible.
     memberKeys = memberKeys || [];
     // And a normal load is a section of its own too -- the strip the build draws
@@ -2049,7 +2049,7 @@ App.Viewport = (function () {
   }
 
   /* The checklist's per-row frame button: the bbox travels with the section (computed
-     server-side, local to just that part's own nodes -- see mdpa_import._section_dict),
+     server-side, local to just that part's own nodes -- see mdpa_reader._section_dict),
      so this needs no client-side geometry walk to find it. */
   function frameImportedSection(key) {
     var bbox = importedSectionBBoxes[key];

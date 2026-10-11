@@ -11,7 +11,7 @@ import pytest
 from pydantic import ValidationError
 
 from core.model import phases, schemas
-from core.model.seed import seed_project
+from core.model.templates import seed_project
 
 
 def _project(*phase_records) -> schemas.Project:
@@ -163,7 +163,7 @@ def test_a_transition_reports_only_what_actually_changes():
 #   7 Third excavation         deactivate lift 3
 #
 # The eight interface parts are one key below: one drawn `Interface` becomes eight deck
-# parts at export (`core/kratos/export.py:_interface_by_body`), which is export's business.
+# parts at export (`core/kratos/writer.py:_interface_by_body`), which is export's business.
 
 def _model():
     from tests.models import excavation
@@ -246,7 +246,7 @@ def test_the_default_is_the_initial_stage_then_the_null_step():
 
 
 def test_a_new_model_gets_no_excavation_phase():
-    from core.model.seed import blank_project
+    from core.model.templates import blank_project
 
     assert [ph.id for ph in phases.default_phases(blank_project())] ==         ["initial", "null_step"]
 

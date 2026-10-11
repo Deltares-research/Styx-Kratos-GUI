@@ -16,9 +16,9 @@ profile's own out-of-plane `spacing`.
 import gmsh
 import pytest
 
-from core.geometry import build
+from core.geometry import solid_model
 from core.model.schemas import Project
-from core.model.seed import seed_project
+from core.model.templates import seed_project
 
 
 PILE_X = 10.0
@@ -61,15 +61,15 @@ def project_with_2d_structures(dimension: int, simple: bool = True) -> Project:
 @pytest.fixture(scope="module")
 def solid():
     project = project_with_2d_structures(dimension=3)
-    with build.session():
-        yield project, build.build_geometry(project)
+    with solid_model.session():
+        yield project, solid_model.build_geometry(project)
 
 
 @pytest.fixture(scope="module")
 def section():
     project = project_with_2d_structures(dimension=2)
-    with build.session():
-        yield project, build.build_geometry(project)
+    with solid_model.session():
+        yield project, solid_model.build_geometry(project)
 
 
 # ── The sheet pile ──────────────────────────────────────────────────────────
@@ -90,7 +90,7 @@ def test_the_sheet_pile_is_no_longer_logged_as_excluded(solid):
 def test_the_sheet_pile_is_swept_across_the_section_plane(solid):
     """Centred on the cut, one profile spacing wide, and nowhere near the z extremes."""
     _, result = solid
-    with build.session():
+    with solid_model.session():
         boxes = [gmsh.model.occ.getBoundingBox(2, tag) for tag in result.faces["pile1"]]
     z0, z1 = min(b[2] for b in boxes), max(b[5] for b in boxes)
     assert z0 == pytest.approx(OFFSET - SPACING / 2, abs=1e-6)
@@ -99,7 +99,7 @@ def test_the_sheet_pile_is_swept_across_the_section_plane(solid):
 
 def test_the_sheet_pile_keeps_its_in_plane_position_and_depth(solid):
     _, result = solid
-    with build.session():
+    with solid_model.session():
         boxes = [gmsh.model.occ.getBoundingBox(2, tag) for tag in result.faces["pile1"]]
     assert min(b[0] for b in boxes) == pytest.approx(PILE_X, abs=1e-6)
     assert max(b[3] for b in boxes) == pytest.approx(PILE_X, abs=1e-6)
@@ -116,7 +116,7 @@ def test_a_plane_anchor_is_built_in_the_solid_model(solid):
 def test_the_plane_anchor_lies_on_the_section_plane(solid):
     """One anchor at the cut -- not a row smeared over the out-of-plane spacing."""
     _, result = solid
-    with build.session():
+    with solid_model.session():
         boxes = [gmsh.model.occ.getBoundingBox(1, tag) for tag in result.ties["anchor1"]]
     for box in boxes:
         assert box[2] == pytest.approx(OFFSET, abs=1e-6)
@@ -133,8 +133,8 @@ def test_the_plane_anchor_gets_a_tail_node(solid):
 def test_a_two_dimensional_load_is_imprinted_in_the_solid_model(solid):
     """The load's edges have to be mesh edges, or the exporter can only quantise it."""
     project, _ = solid
-    with build.session():
-        build.build_geometry(project)
+    with solid_model.session():
+        solid_model.build_geometry(project)
         edges = [gmsh.model.occ.getBoundingBox(1, tag)
                  for _, tag in gmsh.model.getEntities(1)]
     on_plane_at_top = [b for b in edges
@@ -155,15 +155,15 @@ def test_the_section_still_builds_its_structures(section):
 # ── What the viewport is handed ─────────────────────────────────────────────
 #
 # Building the geometry is only half of it: the bug reported was that the structures
-# "do not show" in 3D, and what shows is whatever `tessellate` puts in a section. These
+# "do not show" in 3D, and what shows is whatever `tessellation` puts in a section. These
 # close the loop from the build to the viewport.
 
 @pytest.fixture(scope="module")
 def drawn():
-    from core.geometry import tessellate
+    from core.geometry import tessellation
     project = project_with_2d_structures(dimension=3, simple=False)
-    with build.session():
-        yield tessellate.tessellate(project)
+    with solid_model.session():
+        yield tessellation.tessellate(project)
 
 
 def sections_of(display, key):

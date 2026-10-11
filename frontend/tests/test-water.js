@@ -1,7 +1,7 @@
 /* ══════════════════════════════════════════════════════════════════
    test-water.js — the water line.
 
-   `Project.water` is the deck's water table: `core.kratos.processes._pore_pressure` states
+   `Project.water` is the deck's water table: `core.kratos.parameters._pore_pressure` states
    the whole ground's pressure from its `y` and `specific_weight`, `_normal_load` sizes
    every hydrostatic load from the same two numbers, and `core.kratos.materials` derives
    DENSITY_WATER from the specific weight. Until now nothing in the GUI could change
@@ -189,7 +189,7 @@
   });
 
   /* ── A model without one ──────────────────────────────────────────────
-     A new project has no water level (core/model/seed.py `blank_project`), and the
+     A new project has no water level (core/model/templates.py `blank_project`), and the
      GUI must not invent one: no -1.5 m row, no property grid for a level that is not
      there. `water <level>` is how one is added. */
 

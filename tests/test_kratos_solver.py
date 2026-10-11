@@ -1,8 +1,8 @@
 """The half of ProjectParameters.json that makes the deck runnable.
 
-`core.kratos.processes` used to leave `problem_data` and `solver_settings` empty, which
+`core.kratos.parameters` used to leave `problem_data` and `solver_settings` empty, which
 made the export a deck Kratos could read and not one it could run. It now fills both
-from a documented default analysis (see `kratos_processes.DEFAULTS`), so that pressing
+from a documented default analysis (see `parameters.DEFAULTS`), so that pressing
 Calculate has something to hand the orchestrator.
 
 The two reference decks these are checked against both ship with Kratos itself:
@@ -15,10 +15,10 @@ import json
 
 import pytest
 
-from core.geometry import build
-from core.kratos import export as kratos, processes as kratos_processes
+from core.geometry import solid_model
+from core.kratos import writer, parameters
 from core.model.schemas import LineLoad, MeshRequest, Project
-from core.model.seed import seed_project
+from core.model.templates import seed_project
 
 PILE_SECTION = {"id": "az26", "name": "AZ 26-700", "E": 2.1e8, "nu": 0.3,
                 "area": 0.0198, "inertia": 5.52e-4, "density": 7850.0, "spacing": 1.0}
@@ -28,7 +28,7 @@ PILE = {"id": "pile_1", "name": "Sheet pile 1", "section": "az26",
 
 @pytest.fixture(scope="module")
 def session():
-    with build.session():
+    with solid_model.session():
         yield
 
 
@@ -41,12 +41,12 @@ def section(session):
         id="load_line", name="LineLoad_1", x0=1.0, x1=10.0,
         y=project.domain.y_top, thickness=0.25, components=(0.0, -20.0),
     )]
-    return kratos.export_project(project, MeshRequest(element_size=6.0, order=2))
+    return writer.export_project(project, MeshRequest(element_size=6.0, order=2))
 
 
 @pytest.fixture(scope="module")
 def solid(session):
-    return kratos.export_project(seed_project(), MeshRequest(element_size=6.0, order=2))
+    return writer.export_project(seed_project(), MeshRequest(element_size=6.0, order=2))
 
 
 @pytest.fixture(scope="module")
@@ -55,7 +55,7 @@ def piled(session):
     payload.update(dimension=2, section_offset=20.0,
                    beam_sections=[PILE_SECTION], beams=[PILE])
     project = Project.model_validate(payload)
-    return kratos.export_project(project, MeshRequest(element_size=6.0, order=1))
+    return writer.export_project(project, MeshRequest(element_size=6.0, order=1))
 
 
 def stages(export: dict) -> list[dict]:
@@ -157,7 +157,7 @@ def test_the_process_list_names_every_part_a_process_acts_on(section):
     # computational model part, which it assembles out of the lists beside this one
     # (gravity and the ties address it), and the root `PorousDomain` itself, which the
     # pore-pressure field is stated over.
-    named -= {kratos_processes.COMPUTATIONAL_MODEL_PART, ""}
+    named -= {parameters.COMPUTATIONAL_MODEL_PART, ""}
 
     listed = set(settings["solver_settings"]["processes_sub_model_part_list"])
     assert named <= listed
@@ -214,7 +214,7 @@ def test_each_stage_is_one_step_and_the_settling_stages_sit_before_zero():
     reference deck, so the construction starts at t = 0."""
     import json as _json
     from tests.models import excavation
-    params = _json.loads(kratos.export_project(excavation.excavation_project(staged=True))["project_parameters"])
+    params = _json.loads(writer.export_project(excavation.excavation_project(staged=True))["project_parameters"])
     order = params["orchestrator"]["settings"]["execution_list"]
     times = [(params["stages"][n]["stage_settings"]["problem_data"]["start_time"],
               params["stages"][n]["stage_settings"]["problem_data"]["end_time"]) for n in order]

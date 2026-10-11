@@ -14,9 +14,9 @@ tag -> index remap (garbage) in a single number.
 
 import pytest
 
-from core.geometry import build, tessellate
+from core.geometry import solid_model, tessellation
 from core.model.schemas import Project
-from core.model.seed import seed_project
+from core.model.templates import seed_project
 
 
 def section_project(simple: bool) -> Project:
@@ -26,15 +26,15 @@ def section_project(simple: bool) -> Project:
 @pytest.fixture(scope="module")
 def simple():
     project = section_project(simple=True)
-    with build.session():
-        yield project, tessellate.tessellate(project)
+    with solid_model.session():
+        yield project, tessellation.tessellate(project)
 
 
 @pytest.fixture(scope="module")
 def full():
     project = section_project(simple=False)
-    with build.session():
-        yield project, tessellate.tessellate(project)
+    with solid_model.session():
+        yield project, tessellation.tessellate(project)
 
 
 def sections_of(display, key):
@@ -89,8 +89,8 @@ def test_every_face_is_wound_both_ways(simple):
 
 def test_drawn_area_equals_the_area_occ_measured(simple):
     project, display = simple
-    with build.session():
-        built = build.build_geometry(project)
+    with solid_model.session():
+        built = solid_model.build_geometry(project)
     for layer in project.layers:
         key = f"soil_{layer.id}"
         drawn = sum(triangle_area(s) for s in sections_of(display, key))
@@ -128,8 +128,8 @@ def test_a_sheet_pile_is_drawn_as_edges_with_no_surface():
                          "points": [[12.0, 0.0], [12.0, -14.0]], "active": True}]
     project = Project.model_validate(payload)
 
-    with build.session():
-        model = tessellate.tessellate(project)
+    with solid_model.session():
+        model = tessellation.tessellate(project)
 
     section = next(s for s in model.sections if s.key == "sheetpile_1")
     assert section.edges, "the pile has to be drawable"
@@ -153,8 +153,8 @@ def test_a_normal_load_draws_no_geometry_of_its_own():
     project = Project.model_validate(payload)
     assert "normal_1" in project.part_keys(), "the key stays in the namespace"
 
-    with build.session():
-        model = tessellate.tessellate(project)
+    with solid_model.session():
+        model = tessellation.tessellate(project)
 
     assert not [s for s in model.sections if s.key == "normal_1"]
 
@@ -162,7 +162,7 @@ def test_a_normal_load_draws_no_geometry_of_its_own():
 def test_a_normal_load_still_draws_nothing_in_the_project_the_server_opens_on():
     """The blank project takes a different build path (`_build_layered_soil`), which
     once drew the strip separately; it must not grow one back."""
-    from core.model.seed import blank_project
+    from core.model.templates import blank_project
 
     payload = blank_project().model_dump()
     payload.update(dimension=2, section_offset=0.5)
@@ -175,8 +175,8 @@ def test_a_normal_load_still_draws_nothing_in_the_project_the_server_opens_on():
                                 "active": True}]
     project = Project.model_validate(payload)
 
-    with build.session():
-        model = tessellate.tessellate(project)
+    with solid_model.session():
+        model = tessellation.tessellate(project)
 
     assert not [s for s in model.sections if s.key == "normalload_1"]
 
@@ -192,8 +192,8 @@ def test_every_part_key_still_gets_a_section_when_a_pile_is_present():
                          "points": [[12.0, 0.0], [12.0, -14.0]], "active": True}]
     project = Project.model_validate(payload)
 
-    with build.session():
-        model = tessellate.tessellate(project)
+    with solid_model.session():
+        model = tessellation.tessellate(project)
 
     assert set(project.part_keys()) <= {s.key for s in model.sections}
 
@@ -214,8 +214,8 @@ def test_an_anchor_is_drawn_as_edges_like_the_pile_it_hangs_from():
                            "tail": [20.0, -8.0], "prestress": 250.0, "active": True}]
     project = Project.model_validate(payload)
 
-    with build.session():
-        model = tessellate.tessellate(project)
+    with solid_model.session():
+        model = tessellation.tessellate(project)
 
     drawn = {s.key for s in model.sections}
     assert set(project.part_keys()) <= drawn, "every part key stays selectable"
@@ -237,8 +237,8 @@ def test_a_staged_excavation_is_drawable():
     """
     from tests.models import excavation
     project = excavation.excavation_project()
-    with build.session():
-        display = tessellate.tessellate(project)
+    with solid_model.session():
+        display = tessellation.tessellate(project)
 
     drawn = {section.key for section in display.sections}
     for key, *_ in project.soil_bodies():
@@ -250,8 +250,8 @@ def test_a_staged_excavation_is_drawable():
 def test_a_lift_is_drawn_in_the_colour_of_the_layer_it_came_from():
     from tests.models import excavation
     project = excavation.excavation_project()
-    with build.session():
-        display = tessellate.tessellate(project)
+    with solid_model.session():
+        display = tessellation.tessellate(project)
 
     colours = {}
     for section in display.sections:

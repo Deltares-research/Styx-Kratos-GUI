@@ -10,9 +10,9 @@ from fastapi import APIRouter, File, HTTPException, UploadFile
 from backend import store
 from backend.routes.common import check_mesh_keys, not_for_a_deck, read_upload, run_mesh_job
 from core import gmsh_worker
-from core.run import calculate
-from core.geometry.build import GeometryError
-from core.kratos.export import ExportError
+from core.analysis import calculation
+from core.geometry.solid_model import GeometryError
+from core.kratos.writer import ExportError
 from core.geometry.meshing import MeshingError
 from core.model.schemas import ExportRequest, Project
 
@@ -48,7 +48,7 @@ async def calculate_project(settings: ExportRequest) -> dict:
     app keeps answering while a solver works. A model Kratos rejects comes back 200 with
     `ok` false and its reason: that is an answer about the model, not a broken server.
 
-    A project that is a deck already (`core.kratos.deck`) skips the export: its own files are
+    A project that is a deck already (`core.kratos.external_deck`) skips the export: its own files are
     copied into the run directory and run as they are.
     """
     project = store.get()
@@ -60,10 +60,10 @@ async def calculate_project(settings: ExportRequest) -> dict:
                                 (GeometryError, MeshingError, ExportError))
 
     try:
-        result = await asyncio.to_thread(calculate.run, export)
-    except calculate.Busy as busy:
+        result = await asyncio.to_thread(calculation.run, export)
+    except calculation.Busy as busy:
         raise HTTPException(status_code=409, detail=str(busy)) from busy
-    except calculate.CalculationError as failure:
+    except calculation.CalculationError as failure:
         raise HTTPException(status_code=500, detail=str(failure)) from failure
 
     # The mesh the run was made from, said in the same breath as the run: the deck was
@@ -76,16 +76,16 @@ async def calculate_project(settings: ExportRequest) -> dict:
 
 
 async def _calculate_deck(project: Project) -> dict:
-    from core.kratos import deck as decks
+    from core.kratos import external_deck
 
     try:
-        stats = decks.stats(project.deck)
-        result = await asyncio.to_thread(calculate.run_deck, project.deck)
-    except decks.DeckError as failure:
+        stats = external_deck.stats(project.deck)
+        result = await asyncio.to_thread(calculation.run_deck, project.deck)
+    except external_deck.DeckError as failure:
         raise HTTPException(status_code=400, detail=str(failure)) from failure
-    except calculate.Busy as busy:
+    except calculation.Busy as busy:
         raise HTTPException(status_code=409, detail=str(busy)) from busy
-    except calculate.CalculationError as failure:
+    except calculation.CalculationError as failure:
         raise HTTPException(status_code=500, detail=str(failure)) from failure
     return result | {"stats": stats, "warnings": [],
                      "run": Path(result["directory"]).name}
@@ -105,7 +105,7 @@ async def import_mdpa(file: UploadFile = File(...)) -> dict:
     app's 2D view looks, and it is the plane an export of this project would have
     flattened.
     """
-    from core.kratos.mdpa_import import ImportError_, import_mdpa as parse
+    from core.kratos.mdpa_reader import ImportError_, import_mdpa as parse
 
     ext = Path(file.filename or "").suffix.lower()
     if ext != ".mdpa":

@@ -1,4 +1,4 @@
-"""A stand-in for Kratos, for running `core.run.runner` where no Kratos is built.
+"""A stand-in for Kratos, for running `core.analysis.kratos_main` where no Kratos is built.
 
 Only what the runner touches: `Parameters`, `Registry`, `project.Project` and the two
 orchestrators. `SequentialOrchestrator.Run` keeps the real loop's order (Kratos'

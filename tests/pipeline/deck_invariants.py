@@ -1,8 +1,8 @@
 """Every structural rule a Kratos deck written by this tool must satisfy (plan alpha 2.1).
 
-`check_deck(export)` takes what `core.kratos.export.export_project` returns and gives back a list
+`check_deck(export)` takes what `core.kratos.writer.export_project` returns and gives back a list
 of violations, each a sentence naming the rule and the offending thing; empty means
-sound. It re-reads the deck through `tests.mdpa` -- independent of `core.kratos.export` -- so a
+sound. It re-reads the deck through `tests.mdpa` -- independent of `core.kratos.writer` -- so a
 rule that holds says the *files* are right, not that two copies of one helper agree.
 
 `tests/conftest.py` runs it on every deck any test exports, so a new feature that breaks
@@ -247,7 +247,7 @@ def _k0(deck, params, files) -> list[str]:
 # be *rotated*, a line not even that, and neither may be *reversed* -- a reversed one is
 # "found without any corresponding element" and the run stops before its first step.
 # The orders below are Kratos' own GenerateEdges / GenerateFaces (kratos/geometries/),
-# written here independently of core.kratos.export.
+# written here independently of core.kratos.writer.
 SOIL_EDGES = {3: ((0, 1), (1, 2), (2, 0)), 6: ((0, 1, 3), (1, 2, 4), (2, 0, 5))}
 SOIL_FACES = {4: ((2, 3, 1), (0, 3, 2), (0, 1, 3), (0, 2, 1)),
               10: ((0, 2, 1, 6, 5, 4), (0, 3, 2, 7, 9, 6), (0, 1, 3, 4, 8, 7),

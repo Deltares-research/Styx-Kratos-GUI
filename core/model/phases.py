@@ -21,7 +21,7 @@ and one more that is not about export at all:
 Pure model logic: no gmsh, no Kratos, no meshing. It works on part *keys*, the model's
 own namespace (`Project.stageable_keys`), not on deck part names -- one drawn
 `Interface` here is eight parts in the deck, and making that mapping is export's job
-(`core/kratos/export.py:_interface_by_body`).
+(`core/kratos/writer.py:_interface_by_body`).
 """
 
 from __future__ import annotations

@@ -65,7 +65,7 @@
        with a different node layout and no fixture to pin it -- so the tool is closed
        in 3D rather than writing something nobody has checked. */
     /* A normal load is plane strain for the same reason: the condition it writes
-       is a line one (see NORMAL_LOAD_CONDITIONS in core/kratos/export.py). */
+       is a line one (see NORMAL_LOAD_CONDITIONS in core/kratos/writer.py). */
     /* And the rulers, which measure the two named axes of one section plane: in 3D
        the screen edges are three axes mixed by the orbit. See test-ruler.js. */
     T.eq(App.LivePatches.TWO_D_ONLY,

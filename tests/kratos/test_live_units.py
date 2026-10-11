@@ -16,9 +16,9 @@ from pathlib import Path
 import pytest
 
 from core.model import units
-from core.kratos import export as kratos
-from core.run import calculate
-from core.results import runs as results
+from core.kratos import writer
+from core.analysis import calculation
+from core.results import catalog
 from core.model.schemas import Project
 from tests.models import excavation
 from tests.results_run import require_kratos
@@ -33,9 +33,9 @@ STAGES = ["3_SheetPileWall_installation", "4_First_excavation", "6_Second_excava
 def runs(tmp_path_factory):
     require_kratos()
     root = tmp_path_factory.mktemp("unit-runs")
-    previous = os.environ.get(calculate.RUNS_ENV)
-    os.environ[calculate.RUNS_ENV] = str(root)
-    results.forget_cache()
+    previous = os.environ.get(calculation.RUNS_ENV)
+    os.environ[calculation.RUNS_ENV] = str(root)
+    catalog.forget_cache()
     try:
         si = excavation.excavation_project(staged=True)
         payload, notes = units.convert_project(si.model_dump(mode="json"), "kN")
@@ -43,27 +43,27 @@ def runs(tmp_path_factory):
         kn = Project.model_validate(payload)
         out = {}
         for name, project in (("SI", si), ("kN", kn)):
-            outcome = calculate.run(kratos.export_project(project))
+            outcome = calculation.run(writer.export_project(project))
             assert outcome["ok"], outcome["error"]
             out[name] = Path(outcome["directory"])
         yield out
     finally:
         if previous is None:
-            os.environ.pop(calculate.RUNS_ENV, None)
+            os.environ.pop(calculation.RUNS_ENV, None)
         else:
-            os.environ[calculate.RUNS_ENV] = previous
-        results.forget_cache()
+            os.environ[calculation.RUNS_ENV] = previous
+        catalog.forget_cache()
 
 
 def wall(directory: Path, stage: str) -> dict:
-    from core.results import members as result_members
-    return result_members.read_output(
+    from core.results import members
+    return members.read_output(
         (directory / f"{stage}__output_wall.json").read_text(encoding="utf-8"))
 
 
 def test_the_kn_run_records_its_system(runs):
-    assert results.run_unit_system(runs["SI"].name) == "SI"
-    assert results.run_unit_system(runs["kN"].name) == "kN"
+    assert catalog.run_unit_system(runs["SI"].name) == "SI"
+    assert catalog.run_unit_system(runs["kN"].name) == "kN"
 
 
 @pytest.mark.parametrize("stage", STAGES)
@@ -84,14 +84,14 @@ def test_wall_forces_are_a_thousand_times_smaller_and_movements_the_same(runs, s
 def test_stresses_and_pore_pressures_scale_and_displacements_do_not(runs, index):
     """Field by field at every node, to the GiD file's six significant figures."""
     for field, scale in (("WATER_PRESSURE", 1000.0), ("TOTAL_DISPLACEMENT", 1.0)):
-        a = results.stage_results(runs["SI"].name, index).field(field).values
-        b = results.stage_results(runs["kN"].name, index).field(field).values
+        a = catalog.stage_results(runs["SI"].name, index).field(field).values
+        b = catalog.stage_results(runs["kN"].name, index).field(field).values
         peak = max(abs(c) for v in a.values() for c in v[:3])
         for node, values in a.items():
             for x, y in zip(values[:3], b[node][:3]):
                 assert y * scale == pytest.approx(x, abs=2e-6 * peak), (field, node)
-    a = results.stage_results(runs["SI"].name, index).field("CAUCHY_STRESS_TENSOR").values
-    b = results.stage_results(runs["kN"].name, index).field("CAUCHY_STRESS_TENSOR").values
+    a = catalog.stage_results(runs["SI"].name, index).field("CAUCHY_STRESS_TENSOR").values
+    b = catalog.stage_results(runs["kN"].name, index).field("CAUCHY_STRESS_TENSOR").values
     peak = max(abs(c) for points in a.values() for p in points for c in p)
     for element, points in a.items():
         for p, q in zip(points, b[element]):
@@ -100,6 +100,6 @@ def test_stresses_and_pore_pressures_scale_and_displacements_do_not(runs, index)
 
 
 def test_the_kn_results_are_labelled_in_kilopascals(runs):
-    field = results.stage_field(runs["kN"].name, 7, "p", "nodes")
+    field = catalog.stage_field(runs["kN"].name, 7, "p", "nodes")
     assert field["unit"] == "kPa"
     assert -400.0 < field["min"] < -100.0, "p' in kPa: hundreds, not hundreds of thousands"

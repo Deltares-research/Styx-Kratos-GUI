@@ -38,7 +38,7 @@ App.Model = (function () {
 
   /* Mirrors `Project.loads_for` in core/model/schemas.py, and has to stay in step
      with it: a surface load and a line load can be one load seen from two dimensions
-     (core/model/loads.py translates between them on the mode switch), and both records
+     (core/model/load_translation.py translates between them on the mode switch), and both records
      are kept so the round trip does not widen the footprint. Exactly one of a pair
      belongs to the model, or the tree lists the load twice and the viewport draws it
      twice. A 2D load nothing was translated from -- a point load, or a line load below
@@ -71,7 +71,7 @@ App.Model = (function () {
 
   /* Mirrors `Project.structures_for` in core/model/schemas.py, the way `loadsFor`
      mirrors `loads_for` and for the same reason: a sheet pile and a wall panel can be
-     one wall seen from two dimensions (core/model/walls.py translates between them on
+     one wall seen from two dimensions (core/model/wall_translation.py translates between them on
      the mode switch), and exactly one half of a pair belongs to the model or the tree
      lists the wall twice and the viewport draws it twice. A pile nothing was
      translated from -- a raking or stepped one, which has no panel form -- shows in
@@ -138,7 +138,7 @@ App.Model = (function () {
                  tops: Object.assign({}, l.tops), bots: Object.assign({}, l.bots) };
       }),
       // Every 2D-native record is built into the solid model too, on the section
-      // plane it was drawn on (core/geometry/build.py's `_section_sweeps`), so 3D shows
+      // plane it was drawn on (core/geometry/solid_model.py's `_section_sweeps`), so 3D shows
       // it rather than hiding it: a sheet pile the viewport drops is the bug this
       // filter used to cause. The traffic is one way -- a wall panel is drawn in plan
       // and genuinely has no place in a plane-strain cut -- so 2D still shows only
@@ -654,7 +654,7 @@ App.Model = (function () {
 
   /* ── The water line ──────────────────────────────────────────────────────
      Two numbers, and both of them are the deck's: `y` is the level
-     `core.kratos.processes._pore_pressure` states the whole ground's water pressure about,
+     `core.kratos.parameters._pore_pressure` states the whole ground's water pressure about,
      and `specific_weight` scales that pressure, every hydrostatic normal load, and
      DENSITY_WATER in the materials file. Nothing in the GUI could change either until
      now -- the frozen `water` entry in js/data.js:631 lists three borehole levels from
@@ -1260,7 +1260,7 @@ App.Model = (function () {
      A pressure normal to a free polyline, sized one of two ways: tracking the
      project's own water level ("Hydrostatic", the usual case for an exposed
      excavation face) or a fixed value along the whole line ("Uniform"). See
-     core/model/schemas.py's NormalLoad and core/kratos/processes.py's
+     core/model/schemas.py's NormalLoad and core/kratos/parameters.py's
      ApplyNormalLoadTableProcess. */
 
   function normalLoadPointEditor(record, index, axis) {
@@ -1320,7 +1320,7 @@ App.Model = (function () {
     /* The magnitude is always here and always editable, whichever mode the load is
        in: it is the field people come to this panel to change, and one that appears
        and vanishes with the type reads as a missing feature. It is written into the
-       deck either way (see core.kratos.processes' `_normal_load`). */
+       deck either way (see core.kratos.parameters' `_normal_load`). */
     var sizing = [
       ['Type', hydrostatic ? 'Hydrostatic' : 'Uniform', '', false,
        normalLoadFluidPressureTypeEditor(record)],

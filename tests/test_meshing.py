@@ -4,14 +4,14 @@ import math
 
 import pytest
 
-from core.geometry import build, meshing
-from core.model.seed import seed_project
+from core.geometry import solid_model, meshing
+from core.model.templates import seed_project
 from core.model.schemas import BoxRefinement, CylinderRefinement
 
 
 @pytest.fixture(scope="module")
 def quadratic_mesh():
-    with build.session():
+    with solid_model.session():
         yield meshing.mesh_project(seed_project(), element_size=4.0, order=2)
 
 
@@ -71,7 +71,7 @@ def test_result_serialises_to_the_frontend_contract(quadratic_mesh):
 def test_box_and_cylinder_refinements_create_a_background_size_field():
     import gmsh
 
-    with build.session():
+    with solid_model.session():
         gmsh.clear()
         gmsh.model.add("fields")
         background = meshing._apply_refinements(3.0, [
@@ -87,7 +87,7 @@ def test_box_and_cylinder_refinements_create_a_background_size_field():
 def test_gmsh_controls_are_applied_before_generation():
     import gmsh
 
-    with build.session():
+    with solid_model.session():
         gmsh.clear()
         gmsh.model.add("options")
         meshing._configure(2.0, [], [], algorithm_3d="hxt", smoothing=7,
@@ -103,7 +103,7 @@ def test_gmsh_controls_are_applied_before_generation():
 def test_only_the_requested_body_gets_volume_elements():
     import gmsh
 
-    with build.session():
+    with solid_model.session():
         result = meshing.mesh_project(
             seed_project(), element_size=5.0, order=1,
             volume_keys=["soil_L1"], optimization="none",
@@ -127,7 +127,7 @@ def test_only_the_requested_body_gets_volume_elements():
 def test_different_layer_sizes_keep_the_shared_surface_conformal():
     import gmsh
 
-    with build.session():
+    with solid_model.session():
         result = meshing.mesh_project(
             seed_project(), element_size=5.0, order=1,
             volume_keys=["soil_L1", "soil_L2"],

@@ -20,10 +20,10 @@ import re
 
 import pytest
 
-from core.geometry import build
-from core.kratos import export as kratos
+from core.geometry import solid_model
+from core.kratos import writer
 from core.model.schemas import MeshRequest, Project
-from core.model.seed import seed_project
+from core.model.templates import seed_project
 from tests import mdpa
 
 # A wall retaining ground on its +x side: the anchor rakes back into that soil and the
@@ -59,13 +59,13 @@ def golden_project(**overrides) -> Project:
 
 @pytest.fixture(scope="module")
 def session():
-    with build.session():
+    with solid_model.session():
         yield
 
 
 @pytest.fixture(scope="module")
 def golden(session):
-    return kratos.export_project(golden_project(), MeshRequest(element_size=4.0, order=2))
+    return writer.export_project(golden_project(), MeshRequest(element_size=4.0, order=2))
 
 
 @pytest.fixture(scope="module")
@@ -119,8 +119,8 @@ def test_the_load_sits_on_the_ground_surface_between_its_own_ends(deck):
 def test_both_files_come_from_one_mesh_operation(session):
     """Same project in, byte-identical pair out: nothing in the deck is order- or
     run-dependent, which is what lets the two files be trusted against each other."""
-    first = kratos.export_project(golden_project(), MeshRequest(element_size=4.0, order=2))
-    second = kratos.export_project(golden_project(), MeshRequest(element_size=4.0, order=2))
+    first = writer.export_project(golden_project(), MeshRequest(element_size=4.0, order=2))
+    second = writer.export_project(golden_project(), MeshRequest(element_size=4.0, order=2))
 
     assert first["mdpa"] == second["mdpa"]
     assert first["materials"] == second["materials"]
@@ -180,8 +180,8 @@ def test_every_part_lists_exactly_the_nodes_its_own_entities_use(deck):
 
 def test_an_unsupported_element_type_fails_loudly_before_anything_is_written():
     """The deck must refuse a shape it cannot express rather than write a broken one."""
-    with pytest.raises(kratos.ExportError, match="no Kratos element is mapped"):
-        kratos._lookup(kratos.ELEMENTS, 2, 3)      # gmsh type 3 is a 4-node quad
+    with pytest.raises(writer.ExportError, match="no Kratos element is mapped"):
+        writer._lookup(writer.ELEMENTS, 2, 3)      # gmsh type 3 is a 4-node quad
 
 
 def test_a_property_set_missing_what_its_law_needs_is_refused_by_name(session):
@@ -189,14 +189,14 @@ def test_a_property_set_missing_what_its_law_needs_is_refused_by_name(session):
     which one, and of what, before anything is written."""
     section = {**PILE_SECTION, "variables": {k: v for k, v in PILE_SECTION["variables"].items()
                                              if k != "I33"}}
-    with pytest.raises(kratos.ExportError, match="I33"):
-        kratos.export_project(golden_project(beam_sections=[section]),
+    with pytest.raises(writer.ExportError, match="I33"):
+        writer.export_project(golden_project(beam_sections=[section]),
                               MeshRequest(element_size=4.0, order=2))
 
 
 def test_a_soil_only_export_is_unchanged_by_any_of_this(session):
     """Backward compatibility: a project with no structures exports as it always did."""
-    plain = kratos.export_project(
+    plain = writer.export_project(
         golden_project(loads=[], beams=[], beam_sections=[],
                        anchors=[], anchor_sections=[]),
         MeshRequest(element_size=4.0, order=2),
@@ -268,7 +268,7 @@ def staged(session):
     project = Project.model_validate(
         project.model_dump()
         | {"phases": [phase.model_dump() for phase in phases.staged_excavation_phases(project)]})
-    return kratos.export_project(project, MeshRequest(element_size=4.0, order=2))
+    return writer.export_project(project, MeshRequest(element_size=4.0, order=2))
 
 
 @pytest.fixture(scope="module")
@@ -369,7 +369,7 @@ def test_a_staged_export_is_deterministic(session):
     project = Project.model_validate(
         project.model_dump()
         | {"phases": [phase.model_dump() for phase in phases.staged_excavation_phases(project)]})
-    first = kratos.export_project(project, MeshRequest(element_size=4.0, order=2))
-    second = kratos.export_project(project, MeshRequest(element_size=4.0, order=2))
+    first = writer.export_project(project, MeshRequest(element_size=4.0, order=2))
+    second = writer.export_project(project, MeshRequest(element_size=4.0, order=2))
     assert first["project_parameters"] == second["project_parameters"]
     assert first["mdpa"] == second["mdpa"]

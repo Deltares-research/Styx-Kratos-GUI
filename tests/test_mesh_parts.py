@@ -12,13 +12,13 @@ three of them (the interface and the normal loads) own no geometry of their own.
 
 import pytest
 
-from core.geometry import build, meshing
+from core.geometry import solid_model, meshing
 from tests.models.excavation import excavation_project
 @pytest.fixture(scope="module")
 def model():
     project = excavation_project()
-    with build.session():
-        built = build.build_geometry(project)
+    with solid_model.session():
+        built = solid_model.build_geometry(project)
         areas = dict(built.mass)
         mesh = meshing.mesh_project(project)
     return project, mesh, areas
@@ -128,7 +128,7 @@ def test_a_one_sided_interface_has_only_that_side():
     project = excavation_project()
     project = project.model_copy(update={"interfaces": [
         interface.model_copy(update={"side": "right"}) for interface in project.interfaces]})
-    with build.session():
+    with solid_model.session():
         mesh = meshing.mesh_project(project)
     keys = set(by_key(mesh))
     assert "wall_contact:R" in keys
@@ -151,7 +151,7 @@ def test_a_surface_load_is_the_ground_edges_under_its_footprint(model):
 
 
 def test_the_anchor_is_one_truss_from_head_to_tail(model):
-    """`core.kratos.export._anchor_ties` exports it as one two-node element, so that is what is
+    """`core.kratos.writer._anchor_ties` exports it as one two-node element, so that is what is
     drawn, whatever gmsh did along its curve."""
     project, mesh, _ = model
     (anchor,) = project.anchors
@@ -172,10 +172,10 @@ def test_parts_travel_in_the_payload(model):
 def test_a_solid_model_draws_each_body_by_its_own_skin():
     """In 3D the grey mesh is the outer skin of everything meshed together. A body's
     section is the skin of that body alone, so a body inside the model still has one."""
-    from core.model.seed import seed_project
+    from core.model.templates import seed_project
 
     project = seed_project(simple=True)
-    with build.session():
+    with solid_model.session():
         mesh = meshing.mesh_project(project, element_size=6.0, order=1)
     parts = by_key(mesh)
     soils = [key for key, *_ in project.soil_bodies()]

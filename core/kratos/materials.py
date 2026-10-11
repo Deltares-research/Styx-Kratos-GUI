@@ -24,7 +24,7 @@ stands. It does three things on top, and no others:
     same text.
 
 Until 2026-10-10 the project was in kN, kN/m2 and m/day and this module converted it.
-`core/model/legacy.py` turns such a project into the current shape with the numbers this module
+`core/model/migration.py` turns such a project into the current shape with the numbers this module
 used to write, so an old project's deck does not change.
 """
 
@@ -114,7 +114,7 @@ SMEARED_ANCHOR = ("CROSS_AREA",)
 """An anchor's steel per metre run of wall. Not its density (as above), and not its
 prestress: `TRUSS_PRESTRESS_PK2` is a stress, and the force it puts into a metre of wall
 is that stress times the smeared area already. (It was divided by the spacing as well
-until 2026-10-10; `core/model/legacy.py` folds that into an old project's value, so its deck
+until 2026-10-10; `core/model/migration.py` folds that into an old project's value, so its deck
 does not change.)"""
 
 
@@ -312,7 +312,7 @@ def _interface_variables(section: InterfaceSection, project: Project,
     reduced by `r_inter` -- the definition of the factor.
 
     **Which soil.** `adjacent` is the material of the body this stretch of contact runs
-    against (`core/kratos/export.py:_interface_by_body`): the reference groups its interfaces
+    against (`core/kratos/writer.py:_interface_by_body`): the reference groups its interfaces
     into property sets on exactly that basis. A section that *names* a material
     overrides it for the whole contact.
 

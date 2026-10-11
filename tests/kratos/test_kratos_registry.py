@@ -1,6 +1,6 @@
 """Every Kratos name the exporter can write exists in the Kratos it runs on (plan sec 8.3).
 
-The exporter's element, condition and law names live in tables in `core.kratos.export` and
+The exporter's element, condition and law names live in tables in `core.kratos.writer` and
 `core.kratos.materials`, several of them marked "check against the first real run". A name
 Kratos does not know fails only when Kratos reads the deck -- a first-order section with
 a sheet pile stopped at `LinearTimoshenkoCurvedBeamElement2D2N is not registered` while
@@ -22,8 +22,8 @@ from pathlib import Path
 
 import pytest
 
-from core.kratos import export as kratos, materials as kratos_materials
-from core.run import calculate
+from core.kratos import writer, materials
+from core.analysis import calculation
 
 pytestmark = pytest.mark.kratos
 
@@ -38,10 +38,10 @@ KNOWN_MISSING = {
 
 def checkout() -> Path:
     try:
-        calculate.interpreter()
-    except calculate.CalculationError as failure:
+        calculation.interpreter()
+    except calculation.CalculationError as failure:
         pytest.skip(f"no Kratos configured: {failure}")
-    build = calculate._settings().get("kratos") or ""
+    build = calculation._settings().get("kratos") or ""
     root = Path(build).parents[1] if build else None
     if root is None or not (root / "applications").is_dir():
         pytest.skip(f"no Kratos source beside the build {build!r}")
@@ -66,15 +66,15 @@ def exporter_names() -> dict[str, str]:
     """name -> where in the exporter it comes from."""
     out = {}
     for table in ("ELEMENTS", "BEAMS", "SHELLS", "CONDITIONS"):
-        for key, (name, _) in getattr(kratos, table).items():
-            out[name] = f"kratos.{table}[{key}]"
+        for key, (name, _) in getattr(writer, table).items():
+            out[name] = f"writer.{table}[{key}]"
     for table in ("INTERFACES", "NORMAL_LOAD_CONDITIONS", "TRUSSES"):
-        for key, name in getattr(kratos, table).items():
-            out[name] = f"kratos.{table}[{key}]"
-    for law in (*kratos_materials.LINEAR_ELASTIC, kratos_materials.ANCHOR_LAW,
-                kratos_materials.PANEL_LAW, kratos_materials.INTERFACE_LAW,
-                kratos_materials.BEAM_LAW):
-        out[law] = "kratos_materials law"
+        for key, name in getattr(writer, table).items():
+            out[name] = f"writer.{table}[{key}]"
+    for law in (*materials.LINEAR_ELASTIC, materials.ANCHOR_LAW,
+                materials.PANEL_LAW, materials.INTERFACE_LAW,
+                materials.BEAM_LAW):
+        out[law] = "materials law"
     # Laws are typed into property sets now; the ones the test model's Mohr-Coulomb
     # variant types are held to the registry the same way.
     from tests.models import excavation

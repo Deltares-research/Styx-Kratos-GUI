@@ -27,7 +27,7 @@ is where they replace `SOLVER`.
 `stage_settings.processes.constraints_process_list` and `.loads_process_list` are
 filled in, because both are fully determined by the project already exported to the
 .mdpa: the domain boundaries and their sub-model parts, and each load's own components
-(see `core.kratos.export._load_variable`).
+(see `core.kratos.writer._load_variable`).
 
 Confidence note: constraints and loads both use GeoMechanicsApplication's
 apply_vector_constraint_table_process / ApplyVectorConstraintTableProcess -- the same
@@ -68,7 +68,7 @@ import json
 import re
 from dataclasses import dataclass
 
-from core.kratos.files import MATERIALS_NAME
+from core.kratos.deck_files import MATERIALS_NAME
 from core.model import units
 
 ORCHESTRATOR = "Orchestrators.KratosMultiphysics.SequentialOrchestrator"
@@ -129,7 +129,7 @@ Everything a project genuinely decides -- dimension, sub-model parts, rotations 
 is filled in around this by `_solver_settings` rather than being listed here."""
 
 # Metres, and a *step*, not a tolerance. The master and slave nodes of a tie are copies
-# of the same source node -- `core.kratos.export` gives each duplicate its original's exact
+# of the same source node -- `core.kratos.writer` gives each duplicate its original's exact
 # coordinates -- so this was 1e-6: enough to clear floating-point noise from the .mdpa's
 # 10-decimal node table and nothing more, on the reasoning that a wider radius could only
 # net a neighbour belonging to someone else.
@@ -145,7 +145,7 @@ MASTER_SLAVE_SEARCH_RADIUS = 0.01
 MASTER_SLAVE_NEIGHBOURS = 2
 """How many master nodes the tie interpolates a slave from.
 
-One is what the pairing needs: `core.kratos.export._split_ties` knows exactly which copy belongs
+One is what the pairing needs: `core.kratos.writer._split_ties` knows exactly which copy belongs
 to which original, so every slave has one true master at zero distance and a second can
 only be an unrelated node. This asked for 1 on that reasoning, and the reasoning was
 wrong -- not about the geometry, which still holds, but about what Kratos does with it.
@@ -173,7 +173,7 @@ class Stage:
     This module renders; it does not derive. Which parts are active in a stage, which
     processes a stage wants and what it solves with are all questions about the
     *project* -- they need the phase tree and the mapping from model keys to deck part
-    names, and both live in `core.kratos.export`. So a `Stage` arrives with the answers.
+    names, and both live in `core.kratos.writer`. So a `Stage` arrives with the answers.
 
     `active` is the deck part names live during this stage, and it drives the process
     filter: a process is emitted only where every part it names is active (plan sec
@@ -230,7 +230,7 @@ def project_parameters(
 ) -> str:
     """`constraints` is (sub-model part name, DISPLACEMENT is_fixed per axis).
     `loads` is (sub-model part name, Kratos variable, active per axis, value).
-    `stages` is the deck's stages in execution order -- see `Stage`, and `core.kratos.export`
+    `stages` is the deck's stages in execution order -- see `Stage`, and `core.kratos.writer`
     for where they come from. There is always at least one.
     `normal_loads` is (sub-model part name, fluid_pressure_type, pressure, water level,
     water specific weight) -- one per active `NormalLoad`; the last three are read only
@@ -334,7 +334,7 @@ def _preprocess(stage: Stage, deck_name: str) -> dict | None:
 def _auxiliary(stage: Stage) -> list[dict]:
     """`auxiliary_process_list`: the stage's own bookkeeping, in the reference's order.
 
-    Every one of these is switched on by `core.kratos.export` for the stages it belongs in and
+    Every one of these is switched on by `core.kratos.writer` for the stages it belongs in and
     absent otherwise -- see `Stage`. The order matches
     `staged_construction_for_generated_mesh.json`: K0 or the stress carry-over first,
     then the interface neighbour search, then the extrapolations that read what they
@@ -414,7 +414,7 @@ def _process_parts(processes: list[dict],
 
 # -- the staged auxiliary processes ------------------------------------------
 # All four are read field for field off `staged_construction_for_generated_mesh.json`,
-# Kratos' own staged-excavation reference deck. Which stages each belongs in is `core.kratos.export`'s decision and
+# Kratos' own staged-excavation reference deck. Which stages each belongs in is `core.kratos.writer`'s decision and
 # is documented there; what the parameters mean is here.
 
 def _k0_procedure(parts: tuple[str, ...]) -> dict:

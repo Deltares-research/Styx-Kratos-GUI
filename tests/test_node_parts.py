@@ -1,7 +1,7 @@
 """Which SubModelParts each node is in -- read off the deck itself.
 
 The answer is taken from the `.mdpa` the export writes, parsed back with
-`core.kratos.mdpa_import`, so a part's name and a node's number are exactly what Kratos is given.
+`core.kratos.mdpa_reader`, so a part's name and a node's number are exactly what Kratos is given.
 That matters most at an interface: the split leaves two or three nodes at one point, and
 which of them the wall holds and which each soil side holds is the whole question.
 """
@@ -12,8 +12,8 @@ from collections import defaultdict
 
 import pytest
 
-from core.geometry import build
-from core.kratos import export as kratos, node_parts
+from core.geometry import solid_model
+from core.kratos import writer, node_parts
 from tests.models.excavation import excavation_project
 from core.model.schemas import MeshRequest
 
@@ -83,8 +83,8 @@ def test_a_node_is_in_every_part_that_names_it():
 
 @pytest.fixture(scope="module")
 def wall_deck():
-    with build.session():
-        exported = kratos.export_project(excavation_project(), MeshRequest(),
+    with solid_model.session():
+        exported = writer.export_project(excavation_project(), MeshRequest(),
                                          include_materials=False)
     return node_parts.node_parts(exported["mdpa"])
 

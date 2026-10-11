@@ -9,7 +9,7 @@ import textwrap
 
 import pytest
 
-from core import script
+from core import scripting
 from core.model.schemas import Project
 
 
@@ -20,7 +20,7 @@ def write(tmp_path, body: str, name: str = "model.py"):
 
 
 SEED = """
-    from core.model.seed import seed_project
+    from core.model.templates import seed_project
 """
 
 
@@ -29,7 +29,7 @@ def test_a_script_can_hand_back_a_project_variable(tmp_path):
     PROJECT = seed_project()
     PROJECT.name = "from a variable"
     """)
-    assert script.load_project(path).name == "from a variable"
+    assert scripting.load_project(path).name == "from a variable"
 
 
 def test_a_script_can_hand_back_a_builder_called_project(tmp_path):
@@ -39,7 +39,7 @@ def test_a_script_can_hand_back_a_builder_called_project(tmp_path):
         p.name = "from project()"
         return p
     """)
-    assert script.load_project(path).name == "from project()"
+    assert scripting.load_project(path).name == "from project()"
 
 
 def test_a_builder_may_be_named_after_what_it_builds(tmp_path):
@@ -51,7 +51,7 @@ def test_a_builder_may_be_named_after_what_it_builds(tmp_path):
         p.name = "from pit_project()"
         return p
     """)
-    assert script.load_project(path).name == "from pit_project()"
+    assert scripting.load_project(path).name == "from pit_project()"
 
 
 def test_the_test_model_runs_as_a_script(tmp_path):
@@ -60,7 +60,7 @@ def test_the_test_model_runs_as_a_script(tmp_path):
 
         run tests/models/excavation.py
     """
-    loaded = script.load_project(pathlib.Path(__file__).parent / "models" / "excavation.py")
+    loaded = scripting.load_project(pathlib.Path(__file__).parent / "models" / "excavation.py")
     assert isinstance(loaded, Project)
     assert len(loaded.excavation.levels) == 3
     assert loaded.beams and loaded.anchors
@@ -79,21 +79,21 @@ def test_main_is_not_called(tmp_path):
     if __name__ == "__main__":
         main()
     """)
-    script.load_project(path)
+    scripting.load_project(path)
     assert not (tmp_path / "side-effect.txt").exists()
 
 
 def test_a_missing_file_says_where_it_looked(tmp_path):
-    with pytest.raises(script.ScriptError, match="no such file"):
-        script.load_project(tmp_path / "nope.py")
+    with pytest.raises(scripting.ScriptError, match="no such file"):
+        scripting.load_project(tmp_path / "nope.py")
 
 
 def test_a_script_that_raises_reports_what_it_raised(tmp_path):
     path = write(tmp_path, """
     raise ValueError("the layers do not stack")
     """)
-    with pytest.raises(script.ScriptError, match="the layers do not stack"):
-        script.load_project(path)
+    with pytest.raises(scripting.ScriptError, match="the layers do not stack"):
+        scripting.load_project(path)
 
 
 def test_a_missing_package_is_named_rather_than_left_as_an_import_error(tmp_path):
@@ -104,16 +104,16 @@ def test_a_missing_package_is_named_rather_than_left_as_an_import_error(tmp_path
     path = write(tmp_path, """
     from MiscellaneousTools.GeometryGenerator.build_mdpa import generate_mdpa
     """)
-    with pytest.raises(script.ScriptError, match="MiscellaneousTools"):
-        script.load_project(path)
+    with pytest.raises(scripting.ScriptError, match="MiscellaneousTools"):
+        scripting.load_project(path)
 
 
 def test_a_script_with_no_model_says_what_it_should_have_left_behind(tmp_path):
     path = write(tmp_path, """
     ANSWER = 42
     """)
-    with pytest.raises(script.ScriptError, match="describes no model"):
-        script.load_project(path)
+    with pytest.raises(scripting.ScriptError, match="describes no model"):
+        scripting.load_project(path)
 
 
 def test_a_broken_builder_reports_its_own_failure(tmp_path):
@@ -123,8 +123,8 @@ def test_a_broken_builder_reports_its_own_failure(tmp_path):
     def project():
         raise KeyError("bh1")
     """)
-    with pytest.raises(script.ScriptError, match="project\\(\\) failed"):
-        script.load_project(path)
+    with pytest.raises(scripting.ScriptError, match="project\\(\\) failed"):
+        scripting.load_project(path)
 
 
 def test_a_helper_that_takes_arguments_is_not_mistaken_for_the_entry_point(tmp_path):
@@ -134,11 +134,11 @@ def test_a_helper_that_takes_arguments_is_not_mistaken_for_the_entry_point(tmp_p
 
     PROJECT = seed_project()
     """)
-    assert isinstance(script.load_project(path), Project)
+    assert isinstance(scripting.load_project(path), Project)
 
 
 _SCRIPT = textwrap.dedent("""
-    from core.model.seed import seed_project
+    from core.model.templates import seed_project
     PROJECT = seed_project()
     PROJECT.name = "From a script"
 """)
@@ -155,7 +155,7 @@ def test_a_relative_path_is_read_from_the_repository_root(tmp_path, monkeypatch)
     (root / "models" / "pit.py").write_text(_SCRIPT, encoding="utf-8")
     monkeypatch.chdir(root)
 
-    project = script.load_project("models/pit.py")
+    project = scripting.load_project("models/pit.py")
     assert project.name == "From a script"
 
 
@@ -166,20 +166,20 @@ def test_a_relative_path_is_not_looked_for_above_the_root(tmp_path, monkeypatch)
     (tmp_path / "model.py").write_text(_SCRIPT, encoding="utf-8")
     monkeypatch.chdir(tmp_path / "root")
 
-    with pytest.raises(script.ScriptError, match="no such file"):
-        script.load_project("model.py")
+    with pytest.raises(scripting.ScriptError, match="no such file"):
+        scripting.load_project("model.py")
 
 
 # ── Errors a script author can act on (plan Task 1.3) ───────────────────────
 
 def test_a_syntax_error_names_the_file_and_the_line(tmp_path):
     path = write(tmp_path, """
-    from core.model.seed import seed_project
+    from core.model.templates import seed_project
     PROJECT = seed_project(
     PROJECT.name = "never parsed"
     """)
-    with pytest.raises(script.ScriptError) as error:
-        script.load_project(path)
+    with pytest.raises(scripting.ScriptError) as error:
+        scripting.load_project(path)
     assert "model.py" in str(error.value)
     assert "line 3" in str(error.value), str(error.value)
 
@@ -189,8 +189,8 @@ def test_a_runtime_error_names_the_line_of_the_script_it_came_from(tmp_path):
     PROJECT = seed_project()
     depth = PROJECT.layers[99]
     """)
-    with pytest.raises(script.ScriptError) as error:
-        script.load_project(path)
+    with pytest.raises(scripting.ScriptError) as error:
+        scripting.load_project(path)
     message = str(error.value)
     assert "IndexError" in message
     line = textwrap.dedent(path.read_text(encoding="utf-8")).splitlines().index(
@@ -206,8 +206,8 @@ def test_a_script_that_exits_is_an_error_not_the_end_of_the_server(tmp_path):
     import sys
     sys.exit("usage: model.py --out DIR")
     """)
-    with pytest.raises(script.ScriptError, match="exited.*usage: model.py"):
-        script.load_project(path)
+    with pytest.raises(scripting.ScriptError, match="exited.*usage: model.py"):
+        scripting.load_project(path)
 
 
 def test_argparse_outside_a_main_guard_is_reported_not_raised(tmp_path, monkeypatch):
@@ -216,8 +216,8 @@ def test_argparse_outside_a_main_guard_is_reported_not_raised(tmp_path, monkeypa
     import argparse
     argparse.ArgumentParser().parse_args()
     """)
-    with pytest.raises(script.ScriptError, match="exited"):
-        script.load_project(path)
+    with pytest.raises(scripting.ScriptError, match="exited"):
+        scripting.load_project(path)
 
 
 def test_a_builder_that_returns_something_else_says_what_it_returned(tmp_path):
@@ -225,16 +225,16 @@ def test_a_builder_that_returns_something_else_says_what_it_returned(tmp_path):
     def project():
         return {"name": "a dict, not a Project"}
     """)
-    with pytest.raises(script.ScriptError, match=r"project\(\) returned a dict, not a Project"):
-        script.load_project(path)
+    with pytest.raises(scripting.ScriptError, match=r"project\(\) returned a dict, not a Project"):
+        scripting.load_project(path)
 
 
 def test_a_project_variable_of_the_wrong_type_says_so(tmp_path):
     path = write(tmp_path, """
     PROJECT = "a pit"
     """)
-    with pytest.raises(script.ScriptError, match="PROJECT is a str, not a Project"):
-        script.load_project(path)
+    with pytest.raises(scripting.ScriptError, match="PROJECT is a str, not a Project"):
+        scripting.load_project(path)
 
 
 def test_project_variable_wins_over_project_function_wins_over_named_builder(tmp_path):
@@ -251,7 +251,7 @@ def test_project_variable_wins_over_project_function_wins_over_named_builder(tmp
     def site_project():
         raise AssertionError("not called when PROJECT is there")
     """, name="every.py")
-    assert script.load_project(every).name == "variable"
+    assert scripting.load_project(every).name == "variable"
 
     two = write(tmp_path, common + """
     def site_project():
@@ -259,7 +259,7 @@ def test_project_variable_wins_over_project_function_wins_over_named_builder(tmp
     def project():
         return named("project()")
     """, name="two.py")
-    assert script.load_project(two).name == "project()"
+    assert scripting.load_project(two).name == "project()"
 
 
 def test_the_script_does_not_run_as_main(tmp_path):
@@ -267,7 +267,7 @@ def test_the_script_does_not_run_as_main(tmp_path):
     PROJECT = seed_project()
     PROJECT.name = __name__
     """)
-    assert script.load_project(path).name != "__main__"
+    assert scripting.load_project(path).name != "__main__"
 
 
 # ── Scripts that come with helpers ──────────────────────────────────────────
@@ -281,7 +281,7 @@ def test_a_helper_module_beside_the_script_can_be_imported(tmp_path):
     PROJECT = seed_project()
     PROJECT.name = f"floor at {site_layers.DEPTH}"
     """)
-    assert script.load_project(path).name == "floor at -12.5"
+    assert scripting.load_project(path).name == "floor at -12.5"
 
 
 def test_an_edited_helper_is_read_again_on_the_next_run(tmp_path):
@@ -294,9 +294,9 @@ def test_an_edited_helper_is_read_again_on_the_next_run(tmp_path):
     PROJECT = seed_project()
     PROJECT.name = f"floor at {site_layers.DEPTH}"
     """)
-    script.load_project(path)
+    scripting.load_project(path)
     helper.write_text("DEPTH = -20.0\n", encoding="utf-8")
-    assert script.load_project(path).name == "floor at -20.0"
+    assert scripting.load_project(path).name == "floor at -20.0"
 
 
 def test_running_a_script_writes_nothing_beside_it(tmp_path):
@@ -305,7 +305,7 @@ def test_running_a_script_writes_nothing_beside_it(tmp_path):
     import site_layers
     PROJECT = seed_project()
     """)
-    script.load_project(path)
+    scripting.load_project(path)
     assert sorted(p.name for p in tmp_path.iterdir()) == ["model.py", "site_layers.py"]
 
 
@@ -324,7 +324,7 @@ def test_installed_packages_stay_imported_when_the_venv_is_beside_the_script(
     """)
     import sys
     try:
-        script.load_project(path)
+        scripting.load_project(path)
         assert "installed_thing" in sys.modules
     finally:
         sys.modules.pop("installed_thing", None)
@@ -348,7 +348,7 @@ def test_the_server_s_own_packages_stay_imported_when_a_script_sits_above_them(
     PROJECT = seed_project()
     """)
     try:
-        script.load_project(path)
+        scripting.load_project(path)
         assert own in sys.modules
         assert helper not in sys.modules
     finally:
@@ -362,9 +362,9 @@ def test_running_a_script_leaves_the_import_path_as_it_found_it(tmp_path):
     path = write(tmp_path, SEED + """
     PROJECT = seed_project()
     """)
-    script.load_project(path)
-    with pytest.raises(script.ScriptError):
-        script.load_project(write(tmp_path, "raise RuntimeError('x')\n", name="bad.py"))
+    scripting.load_project(path)
+    with pytest.raises(scripting.ScriptError):
+        scripting.load_project(write(tmp_path, "raise RuntimeError('x')\n", name="bad.py"))
     assert sys.path == before
 
 

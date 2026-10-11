@@ -1,6 +1,6 @@
 """Reading GiD's ASCII post files.
 
-`core.results.gid` is a format reader and nothing else: it turns `.post.msh` and
+`core.results.gid_reader` is a format reader and nothing else: it turns `.post.msh` and
 `.post.res` text into tables, and has no opinion about what the numbers mean. What they
 mean -- which of them a user can ask for, in what unit, with which sign -- is
 `core.results.fields`, and is tested next door.
@@ -18,7 +18,7 @@ import pytest
 
 from pathlib import Path
 
-from core.results import gid as gid_results
+from core.results import gid_reader
 
 REFERENCE = Path(__file__).resolve().parents[1] / "test"
 """The GeoMechanicsApplication's own 1D consolidation deck and its eleven stages of
@@ -60,7 +60,7 @@ MESH = dedent("""
 
 
 def test_nodes_are_read_once_however_many_blocks_follow():
-    mesh = gid_results.read_mesh(MESH)
+    mesh = gid_reader.read_mesh(MESH)
 
     assert mesh.nodes[1] == (0.1, 0.0, 0.0)
     assert mesh.nodes[3] == (0.0, -1.0, 0.0)
@@ -68,7 +68,7 @@ def test_nodes_are_read_once_however_many_blocks_follow():
 
 
 def test_a_block_carries_its_element_type_and_node_count():
-    mesh = gid_results.read_mesh(MESH)
+    mesh = gid_reader.read_mesh(MESH)
 
     assert [block.element_type for block in mesh.blocks] == ["Triangle", "Triangle"]
     assert [block.nnode for block in mesh.blocks] == [6, 6]
@@ -79,7 +79,7 @@ def test_connectivity_stops_before_the_property_id():
     """The last number on an element row is its Properties id, not a node. Read as a
     node it would be a silent corruption -- a plausible id pointing at real
     coordinates somewhere else in the mesh."""
-    mesh = gid_results.read_mesh(MESH)
+    mesh = gid_reader.read_mesh(MESH)
 
     assert mesh.blocks[0].elements[11] == [1, 2, 3, 4, 5, 6]
     assert mesh.blocks[0].properties[11] == 3
@@ -89,7 +89,7 @@ def test_connectivity_stops_before_the_property_id():
 def test_a_block_with_no_coordinates_of_its_own_still_reads():
     """Only the first block in a Kratos file carries `Coordinates`; the rest reference
     the same global node table."""
-    mesh = gid_results.read_mesh(MESH)
+    mesh = gid_reader.read_mesh(MESH)
 
     assert list(mesh.blocks[1].elements) == [13]
 
@@ -103,21 +103,21 @@ def test_an_empty_element_block_is_a_block_with_no_elements():
         End Elements
         """)
 
-    mesh = gid_results.read_mesh(text)
+    mesh = gid_reader.read_mesh(text)
 
     assert len(mesh.blocks) == 1
     assert mesh.blocks[0].elements == {}
 
 
 def test_every_element_can_be_found_without_knowing_its_block():
-    mesh = gid_results.read_mesh(MESH)
+    mesh = gid_reader.read_mesh(MESH)
 
     assert mesh.connectivity(13) == [1, 2, 3, 4, 5, 6]
     assert mesh.connectivity(999) is None
 
 
 def test_the_dimension_is_read_from_the_block_header():
-    mesh = gid_results.read_mesh(MESH)
+    mesh = gid_reader.read_mesh(MESH)
 
     assert mesh.dimension == 2
 
@@ -166,7 +166,7 @@ RES = dedent("""
 def test_gauss_point_sets_are_read_with_their_counts():
     """The count is what makes the Gauss blocks readable at all -- see the
     continuation-line case below."""
-    out = gid_results.read_results(RES)
+    out = gid_reader.read_results(RES)
 
     assert out.gauss_sets["tri3_element_gp"].count == 3
     assert out.gauss_sets["tri3_element_gp"].element_type == "Triangle"
@@ -174,7 +174,7 @@ def test_gauss_point_sets_are_read_with_their_counts():
 
 
 def test_a_nodal_vector_comes_back_per_node():
-    out = gid_results.read_results(RES)
+    out = gid_reader.read_results(RES)
     field = out.field("DISPLACEMENT")
 
     assert field.kind == "vector"
@@ -185,13 +185,13 @@ def test_a_nodal_vector_comes_back_per_node():
 
 def test_a_nodal_scalar_is_still_a_list_of_one():
     """One shape for every field, so nothing downstream has to branch on arity."""
-    out = gid_results.read_results(RES)
+    out = gid_reader.read_results(RES)
 
     assert out.field("WATER_PRESSURE").values[1] == [-105000.0]
 
 
 def test_the_time_is_read_and_is_the_stage_it_belongs_to():
-    out = gid_results.read_results(RES)
+    out = gid_reader.read_results(RES)
 
     assert out.field("DISPLACEMENT").time == 2.0
 
@@ -201,7 +201,7 @@ def test_gauss_values_are_grouped_by_element_across_continuation_lines():
     `elem_id v...` and is followed by one bare `v...` line per remaining Gauss point,
     with no id on it -- so a reader that takes the first token as an id gets three
     elements numbered -44110, -40413 and 12."""
-    out = gid_results.read_results(RES)
+    out = gid_reader.read_results(RES)
     field = out.field("CAUCHY_STRESS_TENSOR")
 
     assert field.location == "gauss"
@@ -217,7 +217,7 @@ def test_an_empty_gauss_block_is_read_as_a_field_with_nothing_in_it():
     implement CAUCHY_STRESS_TENSOR on its integration points, so Kratos writes the
     block and puts nothing in it -- which is how `core.results.fields` learns that
     stresses are not available on the wall."""
-    out = gid_results.read_results(RES)
+    out = gid_reader.read_results(RES)
 
     beam = out.field("CAUCHY_STRESS_TENSOR", gauss_set="lin2_element_gp")
     assert beam is not None
@@ -225,13 +225,13 @@ def test_an_empty_gauss_block_is_read_as_a_field_with_nothing_in_it():
 
 
 def test_one_variable_can_appear_on_two_gauss_sets():
-    out = gid_results.read_results(RES)
+    out = gid_reader.read_results(RES)
 
     assert len(out.fields_named("CAUCHY_STRESS_TENSOR")) == 2
 
 
 def test_the_variables_present_are_reported():
-    out = gid_results.read_results(RES)
+    out = gid_reader.read_results(RES)
 
     assert out.variables() == {"CAUCHY_STRESS_TENSOR", "DISPLACEMENT", "WATER_PRESSURE"}
 
@@ -239,13 +239,13 @@ def test_the_variables_present_are_reported():
 def test_a_variable_that_is_not_there_is_none_rather_than_a_raise():
     """The field catalogue asks for everything it might offer and keeps what came
     back, so absence is the normal answer and must be cheap."""
-    out = gid_results.read_results(RES)
+    out = gid_reader.read_results(RES)
 
     assert out.field("TOTAL_STRESS_TENSOR") is None
 
 
 def test_an_empty_file_is_no_fields_rather_than_an_error():
-    out = gid_results.read_results("GiD Post Results File 1.2\n")
+    out = gid_reader.read_results("GiD Post Results File 1.2\n")
 
     assert out.variables() == set()
 
@@ -255,7 +255,7 @@ def test_an_empty_file_is_no_fields_rather_than_an_error():
 def test_the_reference_mesh_reads():
     mesh_path, _ = reference_stage(1)
 
-    mesh = gid_results.read_mesh(mesh_path.read_text(encoding="utf-8"))
+    mesh = gid_reader.read_mesh(mesh_path.read_text(encoding="utf-8"))
 
     assert len(mesh.nodes) > 100
     assert mesh.blocks and mesh.blocks[0].element_type == "Triangle"
@@ -272,7 +272,7 @@ def test_the_reference_mesh_reads():
 def test_the_reference_results_read():
     _, res_path = reference_stage(1)
 
-    out = gid_results.read_results(res_path.read_text(encoding="utf-8"))
+    out = gid_reader.read_results(res_path.read_text(encoding="utf-8"))
 
     assert {"TOTAL_DISPLACEMENT", "WATER_PRESSURE",
             "CAUCHY_STRESS_TENSOR"} <= out.variables()
@@ -286,8 +286,8 @@ def test_every_reference_stage_reads_and_its_results_match_its_mesh():
     the mesh actually contains or nothing downstream can draw them."""
     for n in range(1, 12):
         mesh_path, res_path = reference_stage(n)
-        mesh = gid_results.read_mesh(mesh_path.read_text(encoding="utf-8"))
-        out = gid_results.read_results(res_path.read_text(encoding="utf-8"))
+        mesh = gid_reader.read_mesh(mesh_path.read_text(encoding="utf-8"))
+        out = gid_reader.read_results(res_path.read_text(encoding="utf-8"))
 
         elements = {id for block in mesh.blocks for id in block.elements}
         for field in out.all_fields():
@@ -300,7 +300,7 @@ def test_every_reference_stage_reads_and_its_results_match_its_mesh():
 def test_every_gauss_element_has_the_number_of_points_its_set_declares():
     for n in (1, 6, 11):
         _, res_path = reference_stage(n)
-        out = gid_results.read_results(res_path.read_text(encoding="utf-8"))
+        out = gid_reader.read_results(res_path.read_text(encoding="utf-8"))
 
         for field in out.all_fields():
             if field.location != "gauss":
@@ -370,7 +370,7 @@ STEPPED = dedent("""
 def test_a_stage_written_in_several_steps_reads_as_its_last_step():
     """A step cut on non-convergence makes Kratos write a block per step. The stage's
     result is where it ended, not the first sub-step."""
-    results = gid_results.read_results(STEPPED)
+    results = gid_reader.read_results(STEPPED)
 
     field = results.field("DISPLACEMENT")
 
@@ -382,7 +382,7 @@ def test_a_gauss_variable_of_two_element_types_keeps_both():
     """Soil and interface (or two continuum types) both write CAUCHY_STRESS_TENSOR, one
     block per Gauss set. Asking for the variable must give every element, each with its
     own points -- not whichever block came first."""
-    results = gid_results.read_results(STEPPED)
+    results = gid_reader.read_results(STEPPED)
 
     field = results.field("CAUCHY_STRESS_TENSOR")
 
@@ -392,7 +392,7 @@ def test_a_gauss_variable_of_two_element_types_keeps_both():
 
 
 def test_one_gauss_set_can_still_be_asked_for_alone():
-    results = gid_results.read_results(STEPPED)
+    results = gid_reader.read_results(STEPPED)
 
     field = results.field("CAUCHY_STRESS_TENSOR", gauss_set="quad_gp")
 
@@ -412,7 +412,7 @@ def test_an_empty_last_step_of_one_set_does_not_hide_the_other():
         Values
         End Values
         """)
-    field = gid_results.read_results(text).field("CAUCHY_STRESS_TENSOR")
+    field = gid_reader.read_results(text).field("CAUCHY_STRESS_TENSOR")
 
     assert set(field.values) == {11, 21}
 
@@ -423,7 +423,7 @@ def test_a_results_file_cut_off_mid_write_reads_what_is_there():
     whole = STEPPED.split('Result "CAUCHY_STRESS_TENSOR" "Kratos" 1 Matrix')[0]
     cut = whole + 'Result "DISPLACEMENT" "Kratos" 2 Vector OnNodes\nValues\n1 0.5 0'
 
-    results = gid_results.read_results(cut)
+    results = gid_reader.read_results(cut)
 
     # The step cut off before its first full row is empty; the last *complete* step is
     # what there is to see, not nothing.

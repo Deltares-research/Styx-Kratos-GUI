@@ -11,8 +11,8 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-from core.kratos import export as kratos, materials as kratos_materials
-from core.results import runs as results
+from core.kratos import writer, materials
+from core.results import catalog
 from benchmarks import models
 from benchmarks.runner import Case, Context, Outcome
 
@@ -20,14 +20,14 @@ from benchmarks.runner import Case, Context, Outcome
 
 
 def last_stage(ctx: Context) -> int:
-    return len(results.describe(ctx.run_id)["stages"])
+    return len(catalog.describe(ctx.run_id)["stages"])
 
 
 def element_material(ctx: Context) -> dict[int, dict]:
     """element id -> the project material of the soil body it belongs to."""
     from tests import mdpa  # the independent reader the tests use
     deck = mdpa.parse(next(ctx.directory.glob("*.mdpa")).read_text(encoding="utf-8"))
-    names = kratos._part_names(ctx.project)
+    names = writer._part_names(ctx.project)
     material_of_key = {key: ctx.project.material(mat) for key, _, mat in
                        _soil_bodies(ctx.project)}
     out = {}
@@ -45,11 +45,11 @@ def _soil_bodies(project):
 
 
 def gauss(ctx: Context, stage: int, variable: str = "CAUCHY_STRESS_TENSOR"):
-    return results.stage_results(ctx.run_id, stage).field(variable).values
+    return catalog.stage_results(ctx.run_id, stage).field(variable).values
 
 
 def centroid_y(ctx: Context, stage: int, element: int) -> float:
-    mesh = results.stage_mesh(ctx.run_id, stage)
+    mesh = catalog.stage_mesh(ctx.run_id, stage)
     corners = mesh.connectivity(element)[:3]
     return sum(mesh.nodes[c][1] for c in corners) / 3
 
@@ -59,7 +59,7 @@ def centroid_y(ctx: Context, stage: int, element: int) -> float:
 
 def k0_ratio(tolerance: float = 1e-4):
     def check(ctx: Context) -> Outcome:
-        k0_of = {e: m.number("K0_NC") or kratos_materials.jaky(m)
+        k0_of = {e: m.number("K0_NC") or materials.jaky(m)
                  for e, m in element_material(ctx).items()}
         worst = 0.0
         for element, points in gauss(ctx, 1).items():
@@ -120,8 +120,8 @@ def _wet_and_dry(top, bottom, material, water_y):
 def hydrostatic(height: float, gamma_w: float = 10.0):
     def check(ctx: Context) -> Outcome:
         stage = last_stage(ctx)
-        values = results.stage_results(ctx.run_id, stage).field("WATER_PRESSURE").values
-        mesh = results.stage_mesh(ctx.run_id, stage)
+        values = catalog.stage_results(ctx.run_id, stage).field("WATER_PRESSURE").values
+        mesh = catalog.stage_mesh(ctx.run_id, stage)
         water = ctx.project.water.y
         worst = max(abs(v[0] + 1000 * gamma_w * max(0.0, water - mesh.nodes[n][1]))
                     / max(1.0, 1e-5 * 1000 * gamma_w * height) for n, v in values.items())
@@ -143,9 +143,9 @@ def movement(ctx: Context) -> dict[int, tuple]:
     only the remaining nodes, because an excavated node keeps the value it had when it was
     taken away and would otherwise count as ground that did not move."""
     stage = last_stage(ctx)
-    after = results.stage_results(ctx.run_id, stage).field("TOTAL_DISPLACEMENT").values
-    before = results.stage_results(ctx.run_id, 1).field("TOTAL_DISPLACEMENT").values
-    mesh = results.stage_mesh(ctx.run_id, stage)
+    after = catalog.stage_results(ctx.run_id, stage).field("TOTAL_DISPLACEMENT").values
+    before = catalog.stage_results(ctx.run_id, 1).field("TOTAL_DISPLACEMENT").values
+    mesh = catalog.stage_mesh(ctx.run_id, stage)
     remaining = {n for nodes in mesh.elements().values() for n in nodes}
     return {n: tuple(a - b for a, b in zip(after[n], before[n]))
             for n in remaining if n in after and n in before}
@@ -156,7 +156,7 @@ def symmetric_about(axis_x: float, tolerance: float = 0.03):
     largest horizontal movement the same on both sides."""
     def check(ctx: Context) -> Outcome:
         u = movement(ctx)
-        mesh = results.stage_mesh(ctx.run_id, last_stage(ctx))
+        mesh = catalog.stage_mesh(ctx.run_id, last_stage(ctx))
         left = max((abs(v[0]) for n, v in u.items() if mesh.nodes[n][0] < axis_x), default=0)
         right = max((abs(v[0]) for n, v in u.items() if mesh.nodes[n][0] > axis_x), default=0)
         heave_node = max(u, key=lambda n: u[n][1])
@@ -184,7 +184,7 @@ def surface_profile(ctx: Context) -> dict[float, float]:
     """Δu_y along the ground surface left standing (beside the pit), averaged per metre
     of x -- over the middle slice of a 3D model, whose ends are its boundaries."""
     u = movement(ctx)
-    mesh = results.stage_mesh(ctx.run_id, last_stage(ctx))
+    mesh = catalog.stage_mesh(ctx.run_id, last_stage(ctx))
     top = max(mesh.nodes[n][1] for n in u)
     mid_z = (ctx.project.domain.z0 + ctx.project.domain.z1) / 2
     rows = defaultdict(list)
@@ -214,7 +214,7 @@ _heave: dict[str, float] = {}
 
 def floor_heave(ctx: Context, axis_x: float = 40.0) -> float:
     """Δu_y at the middle of the final pit floor: smooth there, unlike the corners."""
-    return _floor_heave(movement(ctx), results.stage_mesh(ctx.run_id, last_stage(ctx)), axis_x)
+    return _floor_heave(movement(ctx), catalog.stage_mesh(ctx.run_id, last_stage(ctx)), axis_x)
 
 
 def _floor_heave(u, mesh, axis_x):

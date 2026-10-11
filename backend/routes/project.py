@@ -12,12 +12,12 @@ from fastapi.exceptions import RequestValidationError
 
 from backend import store
 from backend.routes.common import validated
-from core.model import phases as phase_model, units
-from core.kratos import materials as kratos_materials
-from core.model.loads import translate as translate_loads
+from core.model import phases, units
+from core.kratos import materials
+from core.model.load_translation import translate as translate_loads
 from core.model.schemas import (DimensionUpdate, LayersUpdate, MaterialsUpdate, PhasesUpdate, Project,
                           StructuresUpdate, UnitsUpdate, WaterUpdate)
-from core.model.walls import translate as translate_walls
+from core.model.wall_translation import translate as translate_walls
 
 router = APIRouter()
 
@@ -44,22 +44,22 @@ def run_script(request: dict) -> dict:
     """Build the model by running a Python file: the command line's `run <file.py>`.
 
     The file is executed here, in the server's own interpreter, and whatever `Project`
-    it describes becomes the open model. See `core.script` for the three ways a script
+    it describes becomes the open model. See `core.scripting` for the three ways a script
     can hand one back, and for why this route is local-only by construction.
     """
-    from core import script as script_module
+    from core import scripting
 
-    from core.kratos import deck as decks
+    from core.kratos import external_deck
 
     path = (request or {}).get("path")
     if not path:
         raise HTTPException(status_code=422, detail="run needs a path to a .py file")
     try:
-        project = script_module.load_project(path)
+        project = scripting.load_project(path)
         # A deck case comes with its mesh -- there is nothing to generate -- so it goes
         # back in the same answer, and the client shows it instead of meshing.
-        mesh = decks.preview(project.deck) if project.deck else None
-    except (script_module.ScriptError, decks.DeckError) as failure:
+        mesh = external_deck.preview(project.deck) if project.deck else None
+    except (scripting.ScriptError, external_deck.DeckError) as failure:
         # 400, not 500: the file is the caller's, and every one of these messages is
         # written to be read by whoever typed the command.
         raise HTTPException(status_code=400, detail=str(failure)) from failure
@@ -79,7 +79,7 @@ async def new_project() -> dict:
 
     An empty project, not the demo model: what the server itself opens on. It lives
     here, not in the browser, so a client-side copy is not a second definition to keep
-    in step with `core.model.seed.blank_project`.
+    in step with `core.model.templates.blank_project`.
     """
     project = store.new()
     return {"project": project, "invalidates": ["project", "tree", "geometry", "mesh"]}
@@ -136,7 +136,7 @@ async def patch_materials(update: MaterialsUpdate) -> dict:
     project = validated(payload)
     store.put(project)
     # Soil colour comes from the assigned material (`_colors_by_volume` in
-    # core/geometry/tessellate.py), so the geometry has to be re-tessellated even though
+    # core/geometry/tessellation.py), so the geometry has to be re-tessellated even though
     # no shape changed.
     return {"project": project, "invalidates": ["project", "tree", "geometry"]}
 
@@ -198,8 +198,8 @@ async def patch_phases(update: PhasesUpdate) -> dict:
     payload["phases"] = [phase.model_dump() for phase in update.phases]
     project = validated(payload)
     try:
-        phase_model.linearise(project)
-    except phase_model.PhaseError as failure:
+        phases.linearise(project)
+    except phases.PhaseError as failure:
         raise RequestValidationError([{
             "type": "value_error", "loc": ("body", "phases"), "msg": str(failure),
             "input": payload["phases"],
@@ -209,7 +209,7 @@ async def patch_phases(update: PhasesUpdate) -> dict:
 
 
 def _phases_of_a_deck_are_read_only(project: Project) -> None:
-    """A deck's phases are its stages, read from it (`core.kratos.deck`); the deck is what
+    """A deck's phases are its stages, read from it (`core.kratos.external_deck`); the deck is what
     Calculate runs, so an edit made here would show in the panel and change nothing
     that is calculated."""
     if project.deck is not None:
@@ -234,7 +234,7 @@ async def seed_default_phases() -> dict:
     _phases_of_a_deck_are_read_only(current)
     payload = current.model_dump()
     payload["phases"] = [phase.model_dump()
-                         for phase in phase_model.default_phases(current)]
+                         for phase in phases.default_phases(current)]
     project = validated(payload)
     store.put(project)
     return {"project": project, "invalidates": ["project"]}
@@ -257,20 +257,20 @@ async def patch_dimension(update: DimensionUpdate) -> dict:
     # A load is the one thing that changes shape with the dimension: a pressure over a
     # footprint in the solid model is a pressure per metre run in the cut. Translated
     # here, at the single point the mode changes, so the tree, the geometry and the
-    # deck all see the same pair. See core/model/loads.py for what is and is not translatable.
+    # deck all see the same pair. See core/model/load_translation.py for what is and is not translatable.
     notes: list[str] = []
     payload["loads"] = [load.model_dump()
                         for load in translate_loads(current, update.dimension, notes,
                                                     update.section_offset)]
     # A wall changes shape with the dimension the same way: a sheet pile in the section
     # is a panel swept between two levels in the solid model, which is what gives it a
-    # plan footprint to edit. See core/model/walls.py for what is and is not translatable.
+    # plan footprint to edit. See core/model/wall_translation.py for what is and is not translatable.
     beams, panel_sections = translate_walls(current, update.dimension, notes)
     payload["beams"] = [beam.model_dump() for beam in beams]
     payload["panel_sections"] = [section.model_dump() for section in panel_sections]
     # A soil law is written for one dimension; the pairs this application knows go
     # across with the model, and any other is left as the user typed it, said out loud.
-    payload["materials"] = kratos_materials.translate_laws(
+    payload["materials"] = materials.translate_laws(
         payload["materials"], update.dimension, notes)
     project = validated(payload)
     store.put(project)

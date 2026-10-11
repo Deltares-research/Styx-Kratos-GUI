@@ -1,8 +1,8 @@
 """The processes a staged deck carries, and which stages carry them.
 
 Two questions, and they are separate. *What* a process looks like is settled by copying
-the reference deck field for field (`core/kratos/processes.py`). *Which stages it belongs
-in* is derived from the phase tree (`core/kratos/export.py:_phased_stages`), and that is what
+the reference deck field for field (`core/kratos/parameters.py`). *Which stages it belongs
+in* is derived from the phase tree (`core/kratos/writer.py:_phased_stages`), and that is what
 most of this file is about, because it is the part that can be wrong in a way no schema
 catches.
 
@@ -13,9 +13,9 @@ import json
 
 import pytest
 
-from core.kratos import export as kratos, materials as kratos_materials
+from core.kratos import writer, materials
 from tests.models import excavation
-from core.geometry.build import session
+from core.geometry.solid_model import session
 from core.model.schemas import MeshRequest
 
 
@@ -23,7 +23,7 @@ from core.model.schemas import MeshRequest
 def result() -> dict:
     project = excavation.excavation_project(staged=True)
     with session():
-        return kratos.export_project(project,
+        return writer.export_project(project,
                                      MeshRequest(**project.mesh.model_dump()))
 
 
@@ -211,18 +211,18 @@ def test_each_stage_writes_its_own_json_output_files(doc):
 
 def test_the_interface_output_reads_the_node_part_built_for_it(doc):
     written = processes(doc, "7_Third_excavation", "json_output")
-    assert named(written[1]) == [kratos.RIGHT_SIDE_PART]
+    assert named(written[1]) == [writer.RIGHT_SIDE_PART]
 
 
 # -- C7: Right_Side_Of_Right_Interfaces --------------------------------------
 
 def test_the_retained_side_node_part_is_in_the_mdpa(result):
-    assert f"Begin SubModelPart {kratos.RIGHT_SIDE_PART}" in result["mdpa"]
+    assert f"Begin SubModelPart {writer.RIGHT_SIDE_PART}" in result["mdpa"]
 
 
 def test_the_retained_side_node_part_holds_nodes_and_no_elements(result):
     block = result["mdpa"].partition(
-        f"Begin SubModelPart {kratos.RIGHT_SIDE_PART}")[2].partition("End SubModelPart")[0]
+        f"Begin SubModelPart {writer.RIGHT_SIDE_PART}")[2].partition("End SubModelPart")[0]
     assert "Begin SubModelPartNodes" in block
     assert "Begin SubModelPartElements\n" not in block
 
@@ -231,9 +231,9 @@ def test_an_unstaged_project_grows_no_part_it_never_reads():
     """It exists only because the `JsonOutputProcess` of a staged deck reads it."""
     project = excavation.excavation_project(staged=False)
     with session():
-        plain = kratos.export_project(project,
+        plain = writer.export_project(project,
                                       MeshRequest(**project.mesh.model_dump()))
-    assert kratos.RIGHT_SIDE_PART not in plain["mdpa"]
+    assert writer.RIGHT_SIDE_PART not in plain["mdpa"]
 
 
 # -- C6: master/slave across the pre-installation stages ---------------------
@@ -305,7 +305,7 @@ def test_k0_nc_is_jaky_unless_the_material_says_otherwise():
 def test_an_unstaged_project_gets_no_second_materials_file():
     project = excavation.excavation_project(staged=False)
     with session():
-        plain = kratos.export_project(project,
+        plain = writer.export_project(project,
                                       MeshRequest(**project.mesh.model_dump()))
     assert plain["materials"] and plain["initial_materials"] is None
 
@@ -315,8 +315,8 @@ def test_material_parameters_writes_the_k0_variables_on_request():
     places for a material to be described, and they would drift."""
     project = excavation.excavation_project(staged=False)
     parts = [("Soil_Top", "m_upper")]
-    plain, _ = kratos_materials.material_parameters(project, parts, 2)
-    with_k0, _ = kratos_materials.material_parameters(project, parts, 2, k0=True)
+    plain, _ = materials.material_parameters(project, parts, 2)
+    with_k0, _ = materials.material_parameters(project, parts, 2, k0=True)
     variables = json.loads(with_k0)["properties"][0]["Material"]["Variables"]
     assert "K0_NC" not in json.loads(plain)["properties"][0]["Material"]["Variables"]
     assert variables["K0_MAIN_DIRECTION"] == 1

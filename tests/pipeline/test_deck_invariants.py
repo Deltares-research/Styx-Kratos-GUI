@@ -9,8 +9,8 @@ import re
 
 import pytest
 
-from core.geometry import build
-from core.kratos import export as kratos
+from core.geometry import solid_model
+from core.kratos import writer
 from tests.models import excavation
 from core.model.schemas import MeshRequest
 from tests.pipeline.deck_invariants import check_deck
@@ -18,8 +18,8 @@ from tests.pipeline.deck_invariants import check_deck
 
 @pytest.fixture(scope="module")
 def export():
-    with build.session():
-        return kratos.export_project(excavation.excavation_project(staged=True),
+    with solid_model.session():
+        return writer.export_project(excavation.excavation_project(staged=True),
                                      MeshRequest(element_size=8.0, order=2))
 
 

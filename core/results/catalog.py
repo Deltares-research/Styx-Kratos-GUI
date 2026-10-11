@@ -1,8 +1,8 @@
 """What a calculation left behind, found again.
 
-`core.run.calculate` writes a run into a directory of its own and then forgets it: the route
+`core.analysis.calculation` writes a run into a directory of its own and then forgets it: the route
 returns the path, the command log prints it, and that is the last the application knows
-about it. This module is the other half -- it walks `calculate.runs_root()` and describes
+about it. This module is the other half -- it walks `calculation.runs_root()` and describes
 what is there, so a run can be opened again a week later, from a different session, of a
 server that has been restarted since.
 
@@ -17,7 +17,7 @@ Three things shape it:
 *   **The deck names its own output.** Each stage's `problem_name` in
     `ProjectParameters.json` is exactly the base name the GiD writer was given, so the
     output files are found by asking the deck rather than by rebuilding a filename from
-    `core.kratos.processes.stage_name` and hoping the two agree. The rebuild survives only as
+    `core.kratos.parameters.stage_name` and hoping the two agree. The rebuild survives only as
     the fallback for a deck that cannot be read.
 *   **This module serves files the caller names.** It is the first place in the project
     that does, so `file_path` is deliberately narrow: one flat directory, one plain
@@ -38,20 +38,20 @@ import zipfile
 from collections import OrderedDict
 from pathlib import Path, PureWindowsPath
 
-from core.kratos import files
-from core.run import calculate
+from core.kratos import deck_files
+from core.analysis import calculation
 
 RUN_NAME = re.compile(
     r"^(?P<deck>.+)_(?P<date>\d{4}-\d{2}-\d{2})_(?P<hour>\d{2})-(?P<minute>\d{2})"
     r"(?:_(?P<repeat>\d+))?$")
-"""A run directory's name, as `calculate.new_run_directory` builds it: the deck, the
+"""A run directory's name, as `calculation.new_run_directory` builds it: the deck, the
 minute it started, and -- for the second run inside one minute -- a counter.
 
 `deck` is greedy on purpose. A deck may itself end in something that looks like a date,
 and the stamp is always last, so the *rightmost* match is the right split."""
 
 STAGE_NUMBER = re.compile(r"^(\d+)_")
-"""The index `core.kratos.processes.stage_name` puts in front of every stage name. Stages are
+"""The index `core.kratos.parameters.stage_name` puts in front of every stage name. Stages are
 ordered by it in the fallback path, because the filenames themselves sort lexically and
 that puts a ten-stage deck's stage 10 between 1 and 2."""
 
@@ -85,7 +85,7 @@ def runs() -> list[dict]:
     files keep being touched -- copied, opened, synced -- long after it finished, and
     the name is what the user reads in the listing anyway.
     """
-    root = calculate.runs_root()
+    root = calculation.runs_root()
     if not root.is_dir():
         # A machine that has never calculated has no runs directory. That is the
         # normal state of a fresh checkout, not a fault to report.
@@ -136,7 +136,7 @@ def run_directory(run_id: str) -> Path:
             or "/" in run_id or "\\" in run_id
             or PureWindowsPath(run_id).drive):
         raise UnknownRun(f"{run_id!r} is not a run.")
-    root = calculate.runs_root()
+    root = calculation.runs_root()
     directory = root / run_id
     if directory.resolve().parent != root.resolve():
         raise UnknownRun(f"{run_id!r} is not a run.")
@@ -149,11 +149,11 @@ def run_directory(run_id: str) -> Path:
 
 def run_unit_system(run_id: str) -> str:
     """The unit system a run's numbers are in: what its deck recorded beside it
-    (`files.UNITS_NAME`), or SI for a run without the record -- a deck case, or a
+    (`deck_files.UNITS_NAME`), or SI for a run without the record -- a deck case, or a
     run older than the unit system, both of which are SI decks."""
     from core.model import units
 
-    path = run_directory(run_id) / files.UNITS_NAME
+    path = run_directory(run_id) / deck_files.UNITS_NAME
     try:
         system = json.loads(path.read_text(encoding="utf-8")).get("unit_system")
     except (OSError, ValueError, AttributeError):
@@ -177,23 +177,23 @@ def describe(run_id: str) -> dict:
         "complete": bool(stages) and all(stage["results"] for stage in stages),
         "unit_system": run_unit_system(run_id),
         "failed_at": failed,
-        "log": calculate.LOG_NAME if (directory / calculate.LOG_NAME).is_file() else None,
+        "log": calculation.LOG_NAME if (directory / calculation.LOG_NAME).is_file() else None,
     }
 
 
 def failed_at(directory: Path) -> dict | None:
     """The stage this run died in, read off the log it left.
 
-    `calculate.failed_stage` is imported rather than reimplemented: it already knows
-    how to read the markers `core.run.runner` prints, including that they arrive
+    `calculation.failed_stage` is imported rather than reimplemented: it already knows
+    how to read the markers `core.analysis.kratos_main` prints, including that they arrive
     interleaved with Kratos' own C++ output. The only difference here is where the text
     comes from -- a file on disk instead of a subprocess' pipe -- which is what lets a
     run from last week still say where it stopped.
     """
-    log = directory / calculate.LOG_NAME
+    log = directory / calculation.LOG_NAME
     if not log.is_file():
         return None
-    stage = calculate.failed_stage(log.read_text(encoding="utf-8", errors="replace"))
+    stage = calculation.failed_stage(log.read_text(encoding="utf-8", errors="replace"))
     if stage is None:
         return None
     index, total, name = stage
@@ -220,7 +220,7 @@ def _stages_from_deck(directory: Path) -> list[tuple[str, str]]:
     edited by hand after the fact, and none of those should take the listing down.
     """
     try:
-        deck = json.loads((directory / files.PARAMETERS_NAME)
+        deck = json.loads((directory / deck_files.PARAMETERS_NAME)
                           .read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return []
@@ -250,9 +250,9 @@ def _gid_output_name(stage: object) -> str | None:
     """The base name the GiD writer was handed, which is what its files are called.
 
     Our own decks give it the stage's `problem_name`, so the two never differed until a
-    deck written elsewhere was run (`core.kratos.deck`): there they can, and the file on disk is
+    deck written elsewhere was run (`core.kratos.external_deck`): there they can, and the file on disk is
     named by this one. Only the last path component, because a run directory is flat --
-    `deck.stage` cuts any directory off before the run.
+    `external_deck.stage` cuts any directory off before the run.
     """
     try:
         processes = stage["stage_settings"]["output_processes"]["gid_output"]
@@ -268,7 +268,7 @@ def _stages_from_files(directory: Path) -> list[tuple[str, str]]:
     A stage's output is named `<deck>_<index>_<phase>`, and the deck name is the one
     thing here that is not recoverable from the file alone -- so the stage name is
     taken to start at the first `<digits>_` group, which is what `stage_name` writes
-    and no deck name produced by `calculate.new_run_directory` can contain.
+    and no deck name produced by `calculation.new_run_directory` can contain.
     """
     found = []
     for path in directory.glob(f"*{RESULTS_SUFFIX}"):
@@ -321,7 +321,7 @@ def _files(directory: Path) -> list[dict]:
 def file_path(run_id: str, name: str) -> Path:
     """One file of one run, by name.
 
-    A run directory is flat -- `calculate` writes into it and Kratos writes beside that
+    A run directory is flat -- `calculation` writes into it and Kratos writes beside that
     -- so a legal name here is a plain filename and nothing else. That is checked
     directly rather than by resolving and comparing, because the two platforms disagree
     about what a separator is: `..\\x` is one path component on Linux and two on
@@ -350,7 +350,7 @@ used first.
 
 A stage is half a megabyte to several of ASCII and the viewer asks for one field at a
 time, so without this every change of field would re-parse the same files. The key
-carries size and mtime, so a run that is overwritten -- which `calculate` never does,
+carries size and mtime, so a run that is overwritten -- which `calculation` never does,
 but a user copying files in might -- is re-read rather than served stale.
 
 The working set is a whole run, not one stage: `stage_parts` reads every stage's mesh
@@ -404,16 +404,16 @@ def stage_record(run_id: str, index: int) -> dict:
 
 
 def stage_mesh(run_id: str, index: int):
-    from core.results import gid as gid_results
+    from core.results import gid_reader
 
     stage = stage_record(run_id, index)
     if not stage["mesh_file"]:
         raise UnknownRun(f"Stage {index} of {run_id!r} wrote no mesh file.")
-    return _parsed(run_directory(run_id) / stage["mesh_file"], gid_results.read_mesh)
+    return _parsed(run_directory(run_id) / stage["mesh_file"], gid_reader.read_mesh)
 
 
 def stage_results(run_id: str, index: int):
-    from core.results import gid as gid_results
+    from core.results import gid_reader
 
     stage = stage_record(run_id, index)
     if not stage["results_file"]:
@@ -421,7 +421,7 @@ def stage_results(run_id: str, index: int):
             f"Stage {index} of {run_id!r} wrote no results. "
             "The run stopped before reaching it, or is still going.")
     return _parsed(run_directory(run_id) / stage["results_file"],
-                   gid_results.read_results)
+                   gid_reader.read_results)
 
 
 def stage_geometry(run_id: str, index: int) -> dict:
@@ -432,48 +432,48 @@ def stage_geometry(run_id: str, index: int) -> dict:
     `Kratos_Triangle2D6_Mesh_2`. Both files are cached, so switching stage costs one
     parse and switching field costs none.
     """
-    from core.kratos import mdpa_import
-    from core.results import mesh as result_mesh
+    from core.kratos import mdpa_reader
+    from core.results import mesh
 
     directory = run_directory(run_id)
     deck = next((path for path in directory.glob("*.mdpa")), None)
     if deck is None:
         raise UnknownRun(f"{run_id!r} has no .mdpa, so its mesh cannot be named.")
-    return result_mesh.stage_sections(_parsed(deck, mdpa_import.import_mdpa),
+    return mesh.stage_sections(_parsed(deck, mdpa_reader.import_mdpa),
                                       stage_mesh(run_id, index))
 
 
 def stage_fields(run_id: str, index: int) -> dict:
     """The field menu for one stage, derived from what that stage actually wrote."""
-    from core.results import fields as result_fields
+    from core.results import fields
 
     stage = stage_record(run_id, index)
     return {"stage": stage,
-            "groups": result_fields.catalogue(stage_results(run_id, index),
+            "groups": fields.catalogue(stage_results(run_id, index),
                                               run_unit_system(run_id))}
 
 
 def stage_field(run_id: str, index: int, name: str, location: str = "nodes") -> dict:
     """One field of one stage: the ids it is defined on, the numbers, and the range."""
-    from core.results import fields as result_fields
+    from core.results import fields
 
-    return result_fields.values(stage_results(run_id, index),
+    return fields.values(stage_results(run_id, index),
                                 stage_mesh(run_id, index), name, location,
                                 run_unit_system(run_id))
 
 
 def stage_displacement(run_id: str, index: int) -> dict:
     """The displacement vectors of one stage -- what a deformed mesh is drawn with."""
-    from core.results import fields as result_fields
+    from core.results import fields
 
-    return result_fields.displacement(stage_results(run_id, index))
+    return fields.displacement(stage_results(run_id, index))
 
 
 def stage_at_node(run_id: str, index: int, node: int) -> dict:
     """Every field of one stage, at one node -- what `results at <id>` prints."""
-    from core.results import fields as result_fields
+    from core.results import fields
 
-    return result_fields.at_node(stage_results(run_id, index),
+    return fields.at_node(stage_results(run_id, index),
                                  stage_mesh(run_id, index), node, run_unit_system(run_id))
 
 
@@ -485,47 +485,47 @@ def stage_parts(run_id: str, index: int) -> dict:
     `core.results.parts`). They are cached, and the alternative is the postprocessor
     reporting the interfaces as having been demolished seven times.
     """
-    from core.kratos import mdpa_import
-    from core.results import gid as gid_results, parts as result_parts
+    from core.kratos import mdpa_reader
+    from core.results import gid_reader, parts
 
     directory = run_directory(run_id)
     deck = next((path for path in directory.glob("*.mdpa")), None)
     if deck is None:
         raise UnknownRun(f"{run_id!r} has no .mdpa, so its parts cannot be named.")
-    model = _parsed(deck, mdpa_import.import_mdpa)
+    model = _parsed(deck, mdpa_reader.import_mdpa)
 
-    meshes = [_parsed(directory / stage["mesh_file"], gid_results.read_mesh)
+    meshes = [_parsed(directory / stage["mesh_file"], gid_reader.read_mesh)
               for stage in stage_list(directory) if stage["mesh_file"]]
-    written = result_parts.written_parts(model, meshes)
+    written = parts.written_parts(model, meshes)
 
-    parts = result_parts.stage_parts(model, stage_mesh(run_id, index), written=written)
+    staged = parts.stage_parts(model, stage_mesh(run_id, index), written=written)
     return {"parts": [
         {"name": part.name, "kind": part.kind, "declared": part.declared,
          "nodes": part.nodes, "elements": len(part.elements),
          "alive": part.alive, "written": part.written}
-        for part in parts]}
+        for part in staged]}
 
 
 # ── Structural members ──────────────────────────────────────────────────────
 
 def _member_files(run_id: str) -> dict[str, list[tuple[dict, Path]]]:
     """{member: [(stage row, its json_output file), ...]}, in stage order."""
-    from core.results import members as result_members
+    from core.results import members
 
     directory = run_directory(run_id)
     found: dict[str, list[tuple[dict, Path]]] = {}
     for stage in stage_list(directory):
         for filename in stage["json"]:
-            member = result_members.member_name(filename, stage["name"])
+            member = members.member_name(filename, stage["name"])
             if member:
                 found.setdefault(member, []).append((stage, directory / filename))
     return found
 
 
 def _member_output(path: Path) -> dict:
-    from core.results import members as result_members
+    from core.results import members
 
-    return _parsed(path, result_members.read_output)
+    return _parsed(path, members.read_output)
 
 
 def stage_members(run_id: str) -> dict:
@@ -534,18 +534,18 @@ def stage_members(run_id: str) -> dict:
     Read off the files rather than the deck: a member is plottable because its output is
     there, and a quantity is offered because the file carries it.
     """
-    from core.results import members as result_members
+    from core.results import members
 
-    members = []
+    listed = []
     for name, found in sorted(_member_files(run_id).items()):
         outputs = [_member_output(path) for _, path in found]
-        members.append({
+        listed.append({
             "name": name,
             "stages": [stage["index"] for stage, _ in found],
             "quantities": [entry.summary(run_unit_system(run_id))
-                           for entry in result_members.available(outputs)],
+                           for entry in members.available(outputs)],
         })
-    return {"members": members}
+    return {"members": listed}
 
 
 def member_profiles(run_id: str, member: str, quantity: str) -> dict:
@@ -554,24 +554,24 @@ def member_profiles(run_id: str, member: str, quantity: str) -> dict:
     The y of each node comes from the run's own `.mdpa`, undeformed -- the level on the
     wall, which is what the vertical axis of this plot means.
     """
-    from core.kratos import mdpa_import
-    from core.results import members as result_members
+    from core.kratos import mdpa_reader
+    from core.results import members
 
     files = _member_files(run_id)
     if member not in files:
         raise UnknownRun(f"{run_id!r} wrote no output for a member called {member!r}; "
                          f"it has {', '.join(sorted(files)) or 'none'}.")
-    entry = result_members.quantity(quantity)
+    entry = members.quantity(quantity)
     outputs = [(stage, _member_output(path)) for stage, path in files[member]]
-    if entry not in result_members.available(output for _, output in outputs):
-        raise result_members.UnknownQuantity(
+    if entry not in members.available(output for _, output in outputs):
+        raise members.UnknownQuantity(
             f"The {member} output carries no {entry.label.lower()} ({quantity}).")
 
     directory = run_directory(run_id)
     deck = next((path for path in directory.glob("*.mdpa")), None)
     if deck is None:
         raise UnknownRun(f"{run_id!r} has no .mdpa, so its members cannot be placed.")
-    coordinates = _parsed(deck, mdpa_import.import_mdpa).nodes
+    coordinates = _parsed(deck, mdpa_reader.import_mdpa).nodes
 
     return {
         "member": member,
@@ -580,7 +580,7 @@ def member_profiles(run_id: str, member: str, quantity: str) -> dict:
         "unit": entry.unit(run_unit_system(run_id)),
         "stages": [{"index": stage["index"], "name": stage["name"],
                     "phase": stage["phase"]}
-                   | result_members.profile(output, coordinates, entry)
+                   | members.profile(output, coordinates, entry)
                    for stage, output in outputs],
     }
 

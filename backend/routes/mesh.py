@@ -11,8 +11,8 @@ from fastapi import APIRouter
 from backend import store
 from backend.routes.common import check_mesh_keys, not_for_a_deck, run_mesh_job
 from core import gmsh_worker
-from core.geometry.build import GeometryError
-from core.kratos.export import ExportError
+from core.geometry.solid_model import GeometryError
+from core.kratos.writer import ExportError
 from core.geometry.meshing import MeshingError
 from core.model.schemas import MeshRequest
 

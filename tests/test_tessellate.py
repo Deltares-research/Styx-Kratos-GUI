@@ -15,9 +15,9 @@ import math
 
 import pytest
 
-from core.geometry import build, tessellate
+from core.geometry import solid_model, tessellation
 from core.model.schemas import PointLoad, Project
-from core.model.seed import seed_project
+from core.model.templates import seed_project
 
 
 @pytest.fixture(scope="module")
@@ -27,8 +27,8 @@ def project() -> Project:
 
 @pytest.fixture(scope="module")
 def display(project):
-    with build.session():
-        yield tessellate.tessellate(project)
+    with solid_model.session():
+        yield tessellation.tessellate(project)
 
 
 def sections_of(display, key):
@@ -91,8 +91,8 @@ def test_closed_surfaces_wind_outward_and_enclose_their_true_volume(display, pro
     is two-sided. Every real failure here is far larger: an inverted part reads negative,
     a dropped face loses whole cubic metres, a doubled face roughly doubles the total.
     """
-    with build.session():
-        result = build.build_geometry(project)
+    with solid_model.session():
+        result = solid_model.build_geometry(project)
 
         for key in project.part_keys():
             enclosed = sum(signed_volume(s) for s in sections_of(display, key))
@@ -123,8 +123,8 @@ def test_coordinate_defined_point_load_has_a_display_indicator(project):
         id="load_crane", name="Crane", x=5.0, y=-3.0,
         thickness=0.25, components=(0.0, -100.0),
     )]
-    with build.session():
-        rendered = tessellate.tessellate(candidate)
+    with solid_model.session():
+        rendered = tessellation.tessellate(candidate)
 
     sections = sections_of(rendered, "load_crane")
     assert sections and sections[0].positions
@@ -148,8 +148,8 @@ def test_interior_faces_between_volumes_of_one_part_are_dropped(display, project
     """
     import gmsh
 
-    with build.session():
-        result = build.build_geometry(project)
+    with solid_model.session():
+        result = solid_model.build_geometry(project)
         gmsh.model.mesh.importStl()
 
         naive = 0
@@ -204,7 +204,7 @@ def test_coordinates_are_rounded_for_the_wire(display):
     describe sub-nanometre positions of a 50 m excavation."""
     for s in display.sections:
         for v in s.positions[:600]:
-            assert round(v, tessellate.DECIMALS) == v, f"{s.key}: {v!r} is not rounded"
+            assert round(v, tessellation.DECIMALS) == v, f"{s.key}: {v!r} is not rounded"
 
 
 def test_payload_serialises_to_plain_json(display):
@@ -233,7 +233,7 @@ def project_with_line_and_surface(tmp_path):
 
     p = seed_project(simple=False)
 
-    with build.session():
+    with solid_model.session():
         gmsh.clear()
         a = gmsh.model.occ.addPoint(2, 2, 0)
         b = gmsh.model.occ.addPoint(8, 2, 0)
@@ -269,8 +269,8 @@ def project_with_line_and_surface(tmp_path):
 
 
 def test_a_drawn_line_renders_as_an_edges_only_section(project_with_line_and_surface):
-    with build.session():
-        result = tessellate.tessellate(project_with_line_and_surface)
+    with solid_model.session():
+        result = tessellation.tessellate(project_with_line_and_surface)
 
     sections = sections_of(result, "drawn_line")
     assert len(sections) == 1
@@ -282,8 +282,8 @@ def test_a_drawn_line_renders_as_an_edges_only_section(project_with_line_and_sur
 
 
 def test_a_drawn_surface_renders_as_a_visible_flat_section(project_with_line_and_surface):
-    with build.session():
-        result = tessellate.tessellate(project_with_line_and_surface)
+    with solid_model.session():
+        result = tessellation.tessellate(project_with_line_and_surface)
 
     sections = sections_of(result, "drawn_surface")
     assert len(sections) == 1
@@ -300,7 +300,7 @@ def test_a_drawn_surface_renders_as_a_visible_flat_section(project_with_line_and
 
 
 def test_every_part_key_is_drawable_including_overlays(project_with_line_and_surface):
-    with build.session():
-        result = tessellate.tessellate(project_with_line_and_surface)
+    with solid_model.session():
+        result = tessellation.tessellate(project_with_line_and_surface)
 
     assert {s.key for s in result.sections} == set(project_with_line_and_surface.part_keys())

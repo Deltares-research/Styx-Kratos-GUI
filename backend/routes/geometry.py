@@ -11,8 +11,8 @@ from fastapi import APIRouter, File, HTTPException, UploadFile
 from backend import store
 from backend.routes.common import read_upload, validated
 from core import gmsh_worker
-from core.geometry.build import GeometryError
-from core.geometry.importer import ImportRefused
+from core.geometry.solid_model import GeometryError
+from core.geometry.cad_import import ImportRefused
 from core.model.schemas import Project
 
 router = APIRouter()
@@ -152,7 +152,7 @@ async def create_geometry(recipe: dict) -> dict:
     try:
         res = await gmsh_worker.run(gmsh_worker.create_job, json.dumps(recipe))
     except ValueError as refused:
-        # `core.geometry.creator` raises ValueError for a recipe it cannot build -- an unknown kind,
+        # `core.geometry.primitives` raises ValueError for a recipe it cannot build -- an unknown kind,
         # too few vertices: the caller's to fix, so 422 with its reason, not a 500.
         raise HTTPException(status_code=422, detail=str(refused)) from refused
     except gmsh_worker.WorkerCrashed:

@@ -1,6 +1,6 @@
 """A stage's mesh, as buffers the viewport can draw and colour.
 
-The payload is the shape `core.kratos.mdpa_import.to_sections` already produces for an imported
+The payload is the shape `core.kratos.mdpa_reader.to_sections` already produces for an imported
 deck, and it is built with that module's own `_section_dict` rather than a copy of it:
 positions, triangle indices, line-segment coordinates, a bbox, and -- the part that
 matters here -- `node_ids`, the deck's own node number for every vertex, in the same
@@ -24,7 +24,7 @@ end-to-end segment renders a bending sheet pile as a straight stick.
 
 ── What is deferred ─────────────────────────────────────────────────────────
 
-3D gets its boundary faces from the corner nodes only, as `mdpa_import` already does.
+3D gets its boundary faces from the corner nodes only, as `mdpa_reader` already does.
 Subdividing a quadratic tetrahedron's faces needs the mapping from each face to its own
 mid-side nodes, and 3D is surface shading in this milestone (`plan/active/postprocessing-plan.md`,
 task 23). A 2D section -- which is what this project mostly produces, and what the whole
@@ -33,8 +33,8 @@ staged-construction feature is built around -- is fully subdivided.
 
 from __future__ import annotations
 
-from core.results.gid import GidMesh
-from core.kratos.mdpa_import import MdpaModel, _section_dict, _tet_boundary_triangles, bbox_of
+from core.results.gid_reader import GidMesh
+from core.kratos.mdpa_reader import MdpaModel, _section_dict, _tet_boundary_triangles, bbox_of
 
 T6_SUBTRIANGLES = ((0, 3, 5), (3, 1, 4), (5, 4, 2), (3, 4, 5))
 """How a six-node triangle splits. Corners 0,1,2; mid-sides 3 = (0,1), 4 = (1,2),
@@ -121,8 +121,8 @@ def edges_of(connectivity: list[int], nnode: int, element_type: str) -> list[tup
     """One line element's drawable segments.
 
     A three-node element is (end, end, middle) in Kratos' ordering -- see
-    `core.kratos.export.BEAMS` -- so it is drawn end-to-middle and middle-to-end. Drawing
-    `(conn[0], conn[1])` alone is what `mdpa_import` does, and is right for a straight
+    `core.kratos.writer.BEAMS` -- so it is drawn end-to-middle and middle-to-end. Drawing
+    `(conn[0], conn[1])` alone is what `mdpa_reader` does, and is right for a straight
     undeformed member and wrong for a deformed one.
     """
     if not element_type.lower().startswith(("lin", "point")):
@@ -170,7 +170,7 @@ def stage_sections(model: MdpaModel, mesh: GidMesh) -> dict:
 
     if mesh.dimension == 3:
         # The outer skin, per part, so two neighbouring bodies each keep their own
-        # surface where they meet -- the same rule `mdpa_import` uses.
+        # surface where they meet -- the same rule `mdpa_reader` uses.
         grouped = _skins(grouped, mesh, owner, kinds)
 
     sections = []
@@ -203,7 +203,7 @@ def stage_sections(model: MdpaModel, mesh: GidMesh) -> dict:
 def _index_edges(section: dict, pairs: list[tuple[int, int]]) -> None:
     """Add `edge_indices`: the line work as vertex indices, beside the raw coordinates.
 
-    `mdpa_import._section_dict` writes edges as flat coordinates, which is all its own
+    `mdpa_reader._section_dict` writes edges as flat coordinates, which is all its own
     viewer needs -- an imported mesh is drawn once and never moves. A *result* moves:
     the same line has to take a vertex colour and shift with the deformation factor,
     and neither is possible from coordinates that have lost which node they came from.
@@ -265,7 +265,7 @@ def _owners(model: MdpaModel) -> dict[int, str]:
 def _element_kinds(model: MdpaModel) -> dict[int, str]:
     """Element id -> "continuum" | "beam" | "truss" | "interface" | ...
 
-    Read off the deck's element *classes*, which `mdpa_import` has already classified.
+    Read off the deck's element *classes*, which `mdpa_reader` has already classified.
     It is what decides whether a part is drawn as a surface or as line work, and it is
     not recoverable from the GiD mesh alone: a beam and an interface are both `Linear`
     there.
