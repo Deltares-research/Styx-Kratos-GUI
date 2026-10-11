@@ -66,7 +66,8 @@ jobs:
       - name: Tests (syntax, headless JS, pytest, browser suite, GUI end-to-end)
         run: >
           python tools/test.py e2e
-          --cov=core --cov=backend --cov-report=term --cov-report=html --cov-fail-under=95
+          --cov=core --cov=backend --cov=cli --cov-report=term --cov-report=html
+          --cov-fail-under=95
           --js-coverage --tracing retain-on-failure --output test-results
 
       - name: Coverage on the run's summary page

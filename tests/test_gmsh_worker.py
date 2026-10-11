@@ -106,3 +106,35 @@ def test_a_crash_is_a_readable_500_and_the_api_keeps_working(monkeypatch):
         monkeypatch.undo()
         assert client.get("/api/health").status_code == 200
         assert client.get("/api/geometry").status_code == 200, "the next request is served"
+
+
+# ── In this process: the command line ──────────────────────────────────────
+
+def test_a_job_can_run_in_this_process_with_gmsh_owned_for_it():
+    """The command line runs one job and exits: a pool would cost a second interpreter
+    for nothing. `run_here` initializes gmsh for the job and finalizes it after."""
+    import gmsh
+
+    assert not gmsh.isInitialized()
+
+    assert gmsh_worker.run_here(gmsh_worker.version_job) == gmsh_worker.version_job()
+    assert not gmsh.isInitialized()
+
+
+def test_a_job_run_here_leaves_a_gmsh_it_did_not_start_alone():
+    import gmsh
+
+    gmsh.initialize()
+    try:
+        gmsh_worker.run_here(gmsh_worker.version_job)
+        assert gmsh.isInitialized()
+    finally:
+        gmsh.finalize()
+
+
+def test_a_job_that_fails_here_raises_and_still_finalizes():
+    import gmsh
+
+    with pytest.raises(ValueError, match="no such thing"):
+        gmsh_worker.run_here(worker_jobs.fail, "no such thing")
+    assert not gmsh.isInitialized()

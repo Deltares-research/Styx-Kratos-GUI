@@ -70,6 +70,7 @@ strings and hand them to the same handlers.
 | A finished deck | A Kratos deck written elsewhere, shown as its own mesh and run as its own files, from a script that names it (`external_deck.deck_project`) | `core/kratos/external_deck.py`, `frontend/js/deck.js` |
 | Import mesh | Read an `.mdpa` back into mesh data | `core/kratos/mdpa_reader.py`, `POST /api/import/mdpa` |
 | Export | Write the deck without running it | `POST /api/export/mdpa`, `frontend/js/export.js` |
+| `kratos-cli` | The terminal, without the browser or the server: new, edit any field by path, mesh, phases, export, run a deck, results ([CLI.md](CLI.md)). It edits the project file through `core/session.py`, as the routes do, and runs gmsh in its own process (`gmsh_worker.run_here`) | `cli/`, `kratos-cli.bat`, `kratos-cli.sh` |
 
 ## Server modules
 
@@ -87,7 +88,7 @@ is one stage of the pipeline the data goes through:
 | `core/kratos/` | `writer.py` (the deck), `materials.py` (MaterialParameters.json), `parameters.py` (ProjectParameters.json: stages, solver, output), `interfaces.py` (split nodes along walls), `deck_files.py` (the deck's file names), `external_deck.py` (finished decks), `mdpa_reader.py`, `node_parts.py` |
 | `core/analysis/` | `calculation.py` (run directory, subprocess, failure reading), `kratos_main.py` (runs inside Kratos' Python) |
 | `core/results/` | `catalog.py` (runs registry, file access, cache), `gid_reader.py` (GiD ASCII), `fields.py` (catalogue, units, invariants), `mesh.py` (drawable buffers), `parts.py`, `members.py` (wall and interface curves) |
-| `core/` | `scripting.py` (`run <file.py>`) and `gmsh_worker.py` (the gmsh process pool). Both send work into several packages, so they stay at the top |
+| `core/` | `scripting.py` (`run <file.py>`), `gmsh_worker.py` (the gmsh process pool) and `session.py` (every edit of a project, and the project file: the HTTP routes and the command line make their edits through it). They send work into several packages, so they stay at the top |
 
 Imports go one way: **model ← geometry ← kratos ← analysis ← results**. A package may import
 from its own package or one to its left, never to its right. `tests/test_layout.py`
@@ -101,8 +102,9 @@ Every `__init__.py` in `core/` is empty. Kratos is started with
 
 ## HTTP API
 
-Each group is one module in `backend/routes/`; what they share (upload limit, project
-validation, mesh jobs) is in `backend/routes/common.py`.
+Each group is one module in `backend/routes/`; what they share (upload limit, the
+answer to a refused edit, mesh jobs) is in `backend/routes/common.py`. A route that edits
+the project makes the edit through `core/session.py` and only adds the HTTP around it.
 
 | Group | Module | Routes |
 |---|---|---|

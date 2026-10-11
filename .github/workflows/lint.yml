@@ -2,7 +2,7 @@
 #   ruff    Pyflakes-level mistakes in the Python code (settings in pyproject.toml)
 #   eslint  likely bugs in the frontend's JavaScript (settings in eslint.config.mjs)
 #   actionlint  mistakes in these workflows themselves (settings in .github/actionlint.yaml)
-#   mypy    type errors in core/ and backend/ (settings in pyproject.toml); reports only, for now
+#   mypy    type errors in core/, backend/ and cli/ (settings in pyproject.toml); reports only, for now
 # The JavaScript syntax check runs with the tests (tools/test.py).
 name: lint
 

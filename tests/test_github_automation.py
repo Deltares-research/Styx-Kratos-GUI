@@ -100,14 +100,18 @@ def test_a_pull_request_runs_each_workflow_once_not_twice():
             assert on["push"] == {"branches": ["main"]}, name
 
 
-def test_run_sh_is_executable_in_git():
-    """`./run.sh --check` (the launcher workflow, the release check) needs the bit set in
-    the repository; a checkout made on Windows does not set it by itself."""
+@pytest.mark.parametrize("script", ["run.sh", "kratos-cli.sh"])
+def test_the_shell_scripts_are_executable_in_git(script):
+    """`./run.sh --check` (the launcher workflow, the release check) and `./kratos-cli.sh`
+    need the bit set in the repository; a checkout made on Windows does not set it by
+    itself. A script git does not know yet is added with `git add --chmod=+x`."""
     try:
-        listed = subprocess.run(["git", "ls-files", "-s", "run.sh"], cwd=ROOT,
+        listed = subprocess.run(["git", "ls-files", "-s", script], cwd=ROOT,
                                 capture_output=True, check=True, text=True).stdout
     except (OSError, subprocess.CalledProcessError) as failure:
         pytest.skip(f"not a git checkout: {failure}")
+    if not listed:
+        pytest.skip(f"{script} is not in git yet: git add --chmod=+x {script}")
     assert listed.startswith("100755 "), listed
 
 
@@ -141,7 +145,7 @@ def test_mypy_reports_without_failing_the_build_until_its_findings_are_worked_do
     pinned = (ROOT / "requirements-dev.txt").read_text(encoding="utf-8")
     assert re.search(rf"^mypy=={SEMVER}$", pinned, re.MULTILINE)
     config = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
-    assert config["tool"]["mypy"]["files"] == ["core", "backend"]
+    assert config["tool"]["mypy"]["files"] == ["core", "backend", "cli"]
 
 
 def test_dependabot_bumps_mypy_with_the_other_test_tools():
@@ -288,8 +292,9 @@ def test_the_archive_leaves_out_only_what_a_user_does_not_run():
                (ROOT / ".gitattributes").read_text(encoding="utf-8").splitlines()
                if "export-ignore" in line]
     assert ignored
-    needed = ("core", "backend", "frontend/js", "frontend/index.html", "requirements.txt",
-              "run.bat", "run.sh", "README.md", "LICENSE")
+    needed = ("core", "backend", "cli", "frontend/js", "frontend/index.html",
+              "requirements.txt", "run.bat", "run.sh", "kratos-cli.bat", "kratos-cli.sh",
+              "README.md", "LICENSE")
     for pattern in ignored:
         path = pattern.strip("/")
         assert (ROOT / path).exists(), f"{pattern} names nothing"

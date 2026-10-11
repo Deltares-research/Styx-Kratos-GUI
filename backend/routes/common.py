@@ -1,4 +1,4 @@
-"""What more than one router needs: reading an upload, validating an edited project, and
+"""What more than one router needs: reading an upload, answering a refused edit, and
 handing a mesh job to the gmsh worker.
 
 Written once so the routes cannot drift apart in how they refuse a request.
@@ -6,11 +6,13 @@ Written once so the routes cannot drift apart in how they refuse a request.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+
 from fastapi import HTTPException, UploadFile
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, ValidationError
 
-from core import gmsh_worker
+from core import gmsh_worker, session
 from core.model.schemas import MeshRequest, Project
 
 MAX_UPLOAD_BYTES = 256 * 2**20
@@ -27,32 +29,35 @@ async def read_upload(file: UploadFile) -> bytes:
     return data
 
 
-def validated(payload: dict) -> Project:
-    """`payload` as a `Project`, refused the way a bad request body is: a 422 that names
-    each field, not the 500 a `ValidationError` escaping a route would be."""
+@contextmanager
+def refusals():
+    """Answer an edit `core.session` refuses the way a bad request is answered.
+
+    A field that does not validate is a 422 naming each field, the same as a bad request
+    body, not the 500 a `ValidationError` escaping a route would be. A part that is not
+    there is a 404; any other refused edit is a 422 with its reason, which the command
+    log shows as it stands.
+    """
     try:
-        return Project.model_validate(payload)
+        yield
     except ValidationError as failure:
         raise RequestValidationError(failure.errors()) from failure
+    except session.UnknownPart as failure:
+        raise HTTPException(status_code=404, detail=str(failure)) from failure
+    except session.EditRefused as failure:
+        raise HTTPException(status_code=422, detail=str(failure)) from failure
 
 
 def not_for_a_deck(project: Project, what: str) -> None:
-    """Refuse to mesh or export a project that is a deck already (`core.kratos.external_deck`).
-
-    Everything but its deck is the empty site the schema requires, so going ahead would
-    mesh nothing and answer as though that were the model.
-    """
-    if project.deck is not None:
-        raise HTTPException(status_code=422, detail=(
-            f"{project.name} is a Kratos deck ({project.deck.parameters} in "
-            f"{project.deck.directory}), so it is not {what} here: its mesh is the "
-            f"deck's own. Calculate runs it as it is."))
+    """Refuse, as a 422, to mesh or export a project that is a deck already
+    (`session.require_parametric`)."""
+    with refusals():
+        session.require_parametric(project, what)
 
 
 def check_mesh_keys(project: Project, settings: MeshRequest) -> None:
     """Refuse a mesh request that names a body this project does not have."""
-    unknown = sorted((set(settings.volume_keys or []) | set(settings.body_sizes))
-                     - set(project.part_keys()))
+    unknown = session.unknown_mesh_keys(project, settings)
     if unknown:
         raise HTTPException(status_code=422, detail="unknown mesh body key(s): " + ", ".join(unknown))
 

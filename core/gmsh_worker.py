@@ -84,6 +84,20 @@ def shutdown() -> None:
         _executor = None
 
 
+def run_here(job: Callable[..., Any], *args: Any) -> Any:
+    """Run `job` in this process instead of the worker, with gmsh owned for it.
+
+    What the command line does (`cli/`): it runs one job and exits, so a pool would cost
+    a second interpreter for nothing, and a crash ends only that command. gmsh is
+    initialized for the job and finalized after, unless it was running already -- the
+    same re-entrant rule `solid_model.session` keeps.
+    """
+    from core.geometry import solid_model
+
+    with solid_model.session():
+        return job(*args)
+
+
 # ── Jobs ────────────────────────────────────────────────────────────────────
 #
 # Top-level functions, because the pool pickles them by qualified name. They take and

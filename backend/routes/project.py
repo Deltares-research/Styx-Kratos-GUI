@@ -1,8 +1,9 @@
 """The Project routes: the open model, and every edit made to it.
 
-An edit is validated as a whole project before it is stored (`common.validated`), so a
-change that would leave the model inconsistent is refused field by field rather than
-stored. Each answer names what the frontend has to refresh (`invalidates`).
+The edits themselves are `core.session`'s, the same functions the command line makes
+them with; a route reads the store, makes the edit, and stores what comes back. A change
+that would leave the model inconsistent is refused field by field rather than stored
+(`common.refusals`). Each answer names what the frontend has to refresh (`invalidates`).
 """
 
 from __future__ import annotations
@@ -11,13 +12,11 @@ from fastapi import APIRouter, HTTPException
 from fastapi.exceptions import RequestValidationError
 
 from backend import store
-from backend.routes.common import validated
-from core.model import phases, units
-from core.kratos import materials
-from core.model.load_translation import translate as translate_loads
+from backend.routes.common import refusals
+from core import session
+from core.model import phases
 from core.model.schemas import (DimensionUpdate, LayersUpdate, MaterialsUpdate, PhasesUpdate, Project,
                           StructuresUpdate, UnitsUpdate, WaterUpdate)
-from core.model.wall_translation import translate as translate_walls
 
 router = APIRouter()
 
@@ -87,22 +86,8 @@ async def new_project() -> dict:
 
 @router.patch("/api/project/layers")
 async def patch_layers(update: LayersUpdate) -> dict:
-    current = store.get()
-    payload = current.model_dump()
-    payload["layers"] = [layer.model_dump() for layer in update.layers]
-    if update.materials is not None:
-        payload["materials"] = [material.model_dump() for material in update.materials]
-    if update.boreholes is not None:
-        payload["boreholes"] = [borehole.model_dump() for borehole in update.boreholes]
-    if update.domain is not None:
-        payload["domain"] = update.domain.model_dump()
-    if update.water is not None:
-        payload["water"] = update.water.model_dump()
-    if update.custom_parts is not None:
-        payload["custom_parts"] = [part.model_dump() for part in update.custom_parts]
-    # The layer objects validate individually in the request model; project-level
-    # checks add material references, borehole coverage and stack continuity.
-    project = validated(payload)
+    with refusals():
+        project = session.replace_layers(store.get(), update)
     store.put(project)
     return {"project": project, "invalidates": ["project", "tree", "geometry", "mesh"]}
 
@@ -115,25 +100,17 @@ async def put_water(update: WaterUpdate) -> dict:
     express: there, an omitted `water` means "leave it alone". What the `water` command
     calls (frontend/js/patches.js).
     """
-    payload = store.get().model_dump()
-    payload["water"] = update.water.model_dump() if update.water is not None else None
-    project = validated(payload)
+    with refusals():
+        project = session.set_water(store.get(), update)
     store.put(project)
     return {"project": project, "invalidates": ["project", "tree", "geometry", "mesh"]}
 
 
 @router.patch("/api/project/materials")
 async def patch_materials(update: MaterialsUpdate) -> dict:
-    """Replace the material library.
-
-    Validating the whole project is the point: it is what refuses a material a
-    layer still points at, so a delete in the editor cannot leave the model
-    referencing something that no longer exists.
-    """
-    current = store.get()
-    payload = current.model_dump()
-    payload["materials"] = [material.model_dump() for material in update.materials]
-    project = validated(payload)
+    """Replace the material library; a material a layer still points at is refused."""
+    with refusals():
+        project = session.replace_materials(store.get(), update)
     store.put(project)
     # Soil colour comes from the assigned material (`_colors_by_volume` in
     # core/geometry/tessellation.py), so the geometry has to be re-tessellated even though
@@ -143,99 +120,47 @@ async def patch_materials(update: MaterialsUpdate) -> dict:
 
 @router.patch("/api/project/structures")
 async def patch_structures(update: StructuresUpdate) -> dict:
-    """Replace Structure-mode objects as one validated project transaction.
-
-    One endpoint for every structure kind, so a sheet pile and the section it points at
-    land in the same validated write: sending them separately would put the project
-    through a state where the beam references a section that does not exist yet.
-    """
-    current = store.get()
-    payload = current.model_dump()
-    payload["loads"] = [load.model_dump() for load in update.loads]
-    if update.beam_sections is not None:
-        payload["beam_sections"] = [s.model_dump() for s in update.beam_sections]
-    if update.panel_sections is not None:
-        payload["panel_sections"] = [s.model_dump() for s in update.panel_sections]
-    if update.beams is not None:
-        payload["beams"] = [beam.model_dump() for beam in update.beams]
-    if update.anchor_sections is not None:
-        payload["anchor_sections"] = [s.model_dump() for s in update.anchor_sections]
-    if update.anchors is not None:
-        payload["anchors"] = [anchor.model_dump() for anchor in update.anchors]
-    if update.interface_sections is not None:
-        payload["interface_sections"] = [s.model_dump() for s in update.interface_sections]
-    if update.interfaces is not None:
-        payload["interfaces"] = [i.model_dump() for i in update.interfaces]
-    if update.normal_loads is not None:
-        payload["normal_loads"] = [n.model_dump() for n in update.normal_loads]
-    project = validated(payload)
+    """Replace Structure-mode objects as one validated project transaction
+    (`session.replace_structures`)."""
+    with refusals():
+        project = session.replace_structures(store.get(), update)
     store.put(project)
     return {"project": project, "invalidates": ["project", "tree", "geometry", "mesh"]}
 
 
 @router.patch("/api/project/phases")
 async def patch_phases(update: PhasesUpdate) -> dict:
-    """Replace the construction sequence.
+    """Replace the construction sequence (`session.replace_phases`).
 
-    Two validations, and they are different things. The schema's own checks run first
-    -- one root, no cycles, no part both activated and deactivated in one phase, every
-    key a key the model has -- and reject the payload field by field. Then the tree has
-    to *linearise*: Kratos runs one flat `execution_list`, so two phases starting from
-    the same parent have no order to run in.
-
-    `linearise` is deliberately not a schema validator (see `core.model.phases.PhaseError`):
-    a branch is a legitimate thing to have half-built in an editor, and refusing it in
-    `Project` would make it impossible to type. It is refused *here* instead of at
-    export because this is where the user can still see what they did -- the message
-    names the phases that branch.
+    A tree that does not linearise is answered like a field that does not validate --
+    a 422 on `phases`, naming the phases that branch -- because to the editor it is
+    one: the sequence it sent cannot be stored.
 
     Only `project` is invalidated. A phase list changes the deck and the panel, not the
     geometry or the mesh: every part it names already exists, which is what makes a
     key valid in the first place.
     """
-    _phases_of_a_deck_are_read_only(store.get())
-    payload = store.get().model_dump()
-    payload["phases"] = [phase.model_dump() for phase in update.phases]
-    project = validated(payload)
     try:
-        phases.linearise(project)
+        with refusals():
+            project = session.replace_phases(store.get(), update)
     except phases.PhaseError as failure:
         raise RequestValidationError([{
             "type": "value_error", "loc": ("body", "phases"), "msg": str(failure),
-            "input": payload["phases"],
+            "input": [phase.model_dump() for phase in update.phases],
         }]) from failure
     store.put(project)
     return {"project": project, "invalidates": ["project"]}
-
-
-def _phases_of_a_deck_are_read_only(project: Project) -> None:
-    """A deck's phases are its stages, read from it (`core.kratos.external_deck`); the deck is what
-    Calculate runs, so an edit made here would show in the panel and change nothing
-    that is calculated."""
-    if project.deck is not None:
-        raise HTTPException(status_code=422, detail=(
-            f"The phases of {project.name} are the stages of its Kratos deck "
-            f"({project.deck.parameters} in {project.deck.directory}), shown as they "
-            f"are. Edit the deck to change them, then run its script again."))
 
 
 @router.post("/api/project/phases/defaults")
 async def seed_default_phases() -> dict:
     """What "Create default phases" gives: the initial stage, then the null step.
 
-    `phases.default_phases` is the authority on it; every further phase is the user's to
-    add. This endpoint is only the way the GUI reaches it.
-
-    It replaces whatever is there rather than refusing when phases already exist. That
-    is the point: it is the way back out of a sequence the user has broken, and a
-    "reset to defaults" that declines to reset is not one.
+    `session.default_phases` makes it; this endpoint is only the way the GUI reaches it.
+    It replaces whatever is there: it is the way back out of a broken sequence.
     """
-    current = store.get()
-    _phases_of_a_deck_are_read_only(current)
-    payload = current.model_dump()
-    payload["phases"] = [phase.model_dump()
-                         for phase in phases.default_phases(current)]
-    project = validated(payload)
+    with refusals():
+        project = session.default_phases(store.get())
     store.put(project)
     return {"project": project, "invalidates": ["project"]}
 
@@ -248,31 +173,8 @@ async def patch_dimension(update: DimensionUpdate) -> dict:
     cross the section plane is not in a 2D model at all, so the explorer has to be
     rebuilt rather than left showing rows that select nothing.
     """
-    current = store.get()
-    payload = current.model_dump()
-    payload["dimension"] = update.dimension
-    # An explicit offset replaces the stored one; omitted, going to 2D lets the Project
-    # validator resolve the midpoint.
-    payload["section_offset"] = update.section_offset
-    # A load is the one thing that changes shape with the dimension: a pressure over a
-    # footprint in the solid model is a pressure per metre run in the cut. Translated
-    # here, at the single point the mode changes, so the tree, the geometry and the
-    # deck all see the same pair. See core/model/load_translation.py for what is and is not translatable.
-    notes: list[str] = []
-    payload["loads"] = [load.model_dump()
-                        for load in translate_loads(current, update.dimension, notes,
-                                                    update.section_offset)]
-    # A wall changes shape with the dimension the same way: a sheet pile in the section
-    # is a panel swept between two levels in the solid model, which is what gives it a
-    # plan footprint to edit. See core/model/wall_translation.py for what is and is not translatable.
-    beams, panel_sections = translate_walls(current, update.dimension, notes)
-    payload["beams"] = [beam.model_dump() for beam in beams]
-    payload["panel_sections"] = [section.model_dump() for section in panel_sections]
-    # A soil law is written for one dimension; the pairs this application knows go
-    # across with the model, and any other is left as the user typed it, said out loud.
-    payload["materials"] = materials.translate_laws(
-        payload["materials"], update.dimension, notes)
-    project = validated(payload)
+    with refusals():
+        project, notes = session.set_dimension(store.get(), update)
     store.put(project)
     # `notes` is what the command log says about the loads that changed shape; the
     # frontend prints them under the mode-switch line (frontend/js/patches.js).
@@ -282,15 +184,12 @@ async def patch_dimension(update: DimensionUpdate) -> dict:
 
 @router.patch("/api/project/units")
 def patch_units(update: UnitsUpdate) -> dict:
-    """Re-express the whole project in another unit system (`core/model/units.py`).
+    """Re-express the whole project in another unit system (`session.set_units`).
 
-    The one place values are converted: from here on the project, its deck and its
-    results are all in the new system. A variable whose dimension is not known here is
-    kept as typed and named in `notes`, for the user to convert.
+    A variable whose dimension is not known is kept as typed and named in `notes`, for
+    the user to convert.
     """
-    current = store.get()
-    payload, notes = units.convert_project(current.model_dump(mode="json"),
-                                           update.unit_system)
-    project = validated(payload)
+    with refusals():
+        project, notes = session.set_units(store.get(), update)
     store.put(project)
     return {"project": project, "notes": notes, "invalidates": ["project", "tree"]}
