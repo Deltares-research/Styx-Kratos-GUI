@@ -1,0 +1,5 @@
+name: Styx CodeQL config
+
+# three.js is vendored, minified and not ours to fix.
+paths-ignore:
+  - frontend/vendor

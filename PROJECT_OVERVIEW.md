@@ -25,24 +25,24 @@ results back in its Results mode. How the pieces fit is in
 
 | Area | Change | Code lines |
 |---|---|--:|
-| `server/app/result_members.py` (new) | A structural member's results as curves along it — the data behind the wall-plot window | +83 |
-| `server/app/results.py`, `main.py` | `stage_members`, `member_profiles`, and the two `/members` routes | +66 |
-| `live/js/results-plot.js` (new) | `results plot …` command and the SVG figure, DOM-free and tested headless | +356 |
-| `live/js/patches.js`, `results.js`, `live/css/live.css` | The plot window and its buttons; legend Min/Max limits; legend moved clear of the ruler | +204 |
-| `server/tests/test_result_members.py` (new) | The plot data against Kratos' own run (the orange benchmark line) | +184 |
-| `live/tests/test-results-plot.js` (new), `test-results.js` | The figure, the command and the legend limits | +404 |
+| `core/result_members.py` (new) | A structural member's results as curves along it — the data behind the wall-plot window | +83 |
+| `core/results.py`, `main.py` | `stage_members`, `member_profiles`, and the two `/members` routes | +66 |
+| `frontend/js/results-plot.js` (new) | `results plot …` command and the SVG figure, DOM-free and tested headless | +356 |
+| `frontend/js/patches.js`, `results.js`, `frontend/css/live.css` | The plot window and its buttons; legend Min/Max limits; legend moved clear of the ruler | +204 |
+| `tests/test_result_members.py` (new) | The plot data against Kratos' own run (the orange benchmark line) | +184 |
+| `frontend/tests/test-results-plot.js` (new), `test-results.js` | The figure, the command and the legend limits | +404 |
 
 ## Overview
 
 | Area | Language | Files | Lines | Code | Classes | Functions | Methods | Functions + methods |
 |---|---|--:|--:|--:|--:|--:|--:|--:|
-| Backend — Application (`server/app`) | Python | 34 | 13,313 | 7,143 | 78 | 389 | 87 | 476 |
-| Backend — Tests (`server/tests`) | Python | 52 | 18,969 | 11,201 | 9 | 1468 | 16 | 1484 |
-| Frontend — Live app JS (`live/js`) | JavaScript | 34 | 16,256 | 11,698 | 0 | 1839 | 0 | 1839 |
-| Frontend — Shell JS (`js/`) | JavaScript | 10 | 4,171 | 3,412 | 0 | 494 | 0 | 494 |
-| Frontend — Tests (`live/tests`, JS) | JavaScript | 39 | 11,419 | 9,090 | 0 | 2087 | 0 | 2087 |
-| Frontend — Test runners (`live/tests`, Python) | Python | 2 | 365 | 232 | 0 | 7 | 0 | 7 |
-| Frontend — Stylesheets (`css/`, `live/css`) | CSS | 4 | 1,167 | 971 | 0 | 0 | 0 | 0 |
+| Backend — Application (`core/`, `backend/`) | Python | 34 | 13,313 | 7,143 | 78 | 389 | 87 | 476 |
+| Backend — Tests (`tests/`) | Python | 52 | 18,969 | 11,201 | 9 | 1468 | 16 | 1484 |
+| Frontend — Live app JS (`frontend/js`) | JavaScript | 34 | 16,256 | 11,698 | 0 | 1839 | 0 | 1839 |
+| Frontend — Shell JS (`frontend/base/js`) | JavaScript | 10 | 4,171 | 3,412 | 0 | 494 | 0 | 494 |
+| Frontend — Tests (`frontend/tests`, JS) | JavaScript | 39 | 11,419 | 9,090 | 0 | 2087 | 0 | 2087 |
+| Frontend — Test runners (`frontend/tests`, Python) | Python | 2 | 365 | 232 | 0 | 7 | 0 | 7 |
+| Frontend — Stylesheets (`frontend/base/css`, `frontend/css`) | CSS | 4 | 1,167 | 971 | 0 | 0 | 0 | 0 |
 | Frontend — HTML pages | HTML | 3 | 498 | 392 | 0 | 0 | 0 | 0 |
 | **Backend total** | | **86** | **32,282** | **18,344** | **87** | **1857** | **103** | **1960** |
 | **Frontend total** | | **92** | **33,876** | **25,795** | **0** | **4427** | **0** | **4427** |
@@ -60,9 +60,9 @@ results back in its Results mode. How the pieces fit is in
 | **Test total** | 93 | 30,753 | 20,523 | 9 | 3578 |
 | **Everything** | 178 | 66,158 | 44,139 | 87 | 6387 |
 
-## Backend (Python, `server/`)
+## Backend (Python: `core/`, `backend/`)
 
-### Application modules — `server/app`
+### Application modules — `core/`, `backend/`
 
 | Module | Lines | Code | Comments/docs | Blank | Classes | Functions | Methods |
 |---|--:|--:|--:|--:|--:|--:|--:|
@@ -100,7 +100,7 @@ results back in its Results mode. How the pieces fit is in
 | `routes/__init__.py` | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | **Total (34 files)** | **13,313** | **7,143** | **4,044** | **2,126** | **78** | **389** | **87** |
 
-### Tests — `server/tests`
+### Tests — `tests`
 
 | Module | Lines | Code | Comments/docs | Blank | Classes | Functions | Methods |
 |---|--:|--:|--:|--:|--:|--:|--:|
@@ -154,7 +154,7 @@ results back in its Results mode. How the pieces fit is in
 
 ## Frontend (browser)
 
-### Live application modules — `live/js`
+### Live application modules — `frontend/js`
 
 | Module | Lines | Code | Comments | Blank | Functions |
 |---|--:|--:|--:|--:|--:|
@@ -194,9 +194,9 @@ results back in its Results mode. How the pieces fit is in
 | `water-command.js` | 70 | 37 | 20 | 13 | 3 |
 | **Total (34 files)** | **16,256** | **11,698** | **2,819** | **1,739** | **1839** |
 
-### Shell modules — `js/`
+### Shell modules — `frontend/base/js`
 
-The frozen UI shell served alongside `live/`; `live/js` swaps in its own viewport and patches the rest.
+The frozen UI shell, served at `/js`; `frontend/js` swaps in its own viewport and patches the rest.
 
 | Module | Lines | Code | Comments | Blank | Functions |
 |---|--:|--:|--:|--:|--:|
@@ -212,7 +212,7 @@ The frozen UI shell served alongside `live/`; `live/js` swaps in its own viewpor
 | `menubar.js` | 112 | 87 | 11 | 14 | 14 |
 | **Total (10 files)** | **4,171** | **3,412** | **342** | **417** | **494** |
 
-### Tests — `live/tests`
+### Tests — `frontend/tests`
 
 | Module | Lines | Code | Comments | Blank | Functions |
 |---|--:|--:|--:|--:|--:|
@@ -269,7 +269,7 @@ Test runners:
 | File | Lines | Code | Comments | Blank |
 |---|--:|--:|--:|--:|
 | `css/components.css` | 442 | 398 | 25 | 19 |
-| `live/css/live.css` | 405 | 308 | 65 | 32 |
+| `frontend/css/live.css` | 405 | 308 | 65 | 32 |
 | `css/layout.css` | 238 | 206 | 16 | 16 |
 | `css/tokens.css` | 82 | 59 | 12 | 11 |
 | **Total (4 files)** | **1,167** | **971** | **118** | **78** |
@@ -278,7 +278,7 @@ Test runners:
 
 | File | Lines | Code | Comments | Blank |
 |---|--:|--:|--:|--:|
-| `live/index.html` | 212 | 151 | 33 | 28 |
-| `live/tests/index.html` | 140 | 126 | 6 | 8 |
+| `frontend/index.html` | 212 | 151 | 33 | 28 |
+| `frontend/tests/index.html` | 140 | 126 | 6 | 8 |
 | `index.html` | 146 | 115 | 8 | 23 |
 | **Total (3 files)** | **498** | **392** | **47** | **59** |

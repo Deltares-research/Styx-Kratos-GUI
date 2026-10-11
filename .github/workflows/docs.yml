@@ -1,0 +1,36 @@
+# Broken links in the Markdown documents: outside links, and links to files in the
+# repository (settings in lychee.toml). The weekly run catches pages that moved since.
+# Not a required check: an outside site being down is no fault of a pull request.
+name: docs
+
+# Pushes count only on main: a pull request's own branch is covered by pull_request.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: "23 5 * * 1"   # Mondays
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  links:
+    name: links
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: lycheeverse/lychee-action@v2
+        with:
+          args: --config lychee.toml --no-progress './**/*.md'
+          fail: true
+        env:
+          # Links to github.com count against a much higher limit with a token.
+          GITHUB_TOKEN: ${{ github.token }}

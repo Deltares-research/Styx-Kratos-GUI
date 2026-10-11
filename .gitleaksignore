@@ -1,0 +1,5 @@
+# Findings gitleaks (.github/workflows/security.yml) reports that are not secrets, one
+# fingerprint per line, as gitleaks prints it. Say why above each.
+
+# A file-hash index from a code-graph tool, committed once by mistake; the "key" is a hash.
+2922fe2c079ce275bd13e7edab6c1ba6118db8d4:graphify-out/cache/stat-index.json:generic-api-key:1

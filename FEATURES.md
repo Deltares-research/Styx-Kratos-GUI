@@ -24,14 +24,14 @@ Two limits run through everything below:
 
 | Feature | What is written | Status | Source |
 |---|---|---|---|
-| Kratos application | GeoMechanicsApplication, `U_Pw` solver, model part `PorousDomain` | ✅ | [kratos_processes.py](server/app/kratos_processes.py) `SOLVER` |
-| Orchestrator | `SequentialOrchestrator` over named stages, `GeoMechanicsAnalysis` stage | ✅ | [kratos_processes.py](server/app/kratos_processes.py) `ORCHESTRATOR` |
-| Analysis type | Static, Newmark scheme, Newton-Raphson, residual criterion | ✅ fixed, not selectable | [kratos_processes.py](server/app/kratos_processes.py) `SOLVER` |
+| Kratos application | GeoMechanicsApplication, `U_Pw` solver, model part `PorousDomain` | ✅ | [kratos_processes.py](core/kratos_processes.py) `SOLVER` |
+| Orchestrator | `SequentialOrchestrator` over named stages, `GeoMechanicsAnalysis` stage | ✅ | [kratos_processes.py](core/kratos_processes.py) `ORCHESTRATOR` |
+| Analysis type | Static, Newmark scheme, Newton-Raphson, residual criterion | ✅ fixed, not selectable | [kratos_processes.py](core/kratos_processes.py) `SOLVER` |
 | Linear solver | `skyline_lu_factorization` (direct), block builder, 1 OpenMP thread | ✅ fixed | same |
 | Tolerances | Relative 1e-4, absolute 1e-9, 6–15 iterations, reduction 0.5, increase 2.0 | ✅ max iterations and relative tolerance editable per phase | same |
-| Time stepping | One step per stage (dt = 1); settling stages sit at negative time, as in the reference deck | ✅ | [kratos.py](server/app/kratos.py) |
-| Units | A project unit system, SI (N, m, kg, s) or kN (kN, m, t, s), chosen with `units <system>` or the status bar; every input is in it, the deck carries it verbatim and the results come back in it. Property sets are Kratos' own law + `Variables` | ✅ tested, the test model run in both systems | [units.py](server/app/units.py), [kratos_materials.py](server/app/kratos_materials.py) |
-| Dynamics, consolidation, arc-length control, updated mesh | Not supported. A phase's `time_interval` is stored but not used | ❌ | [schemas.py](server/app/schemas.py) `Phase` |
+| Time stepping | One step per stage (dt = 1); settling stages sit at negative time, as in the reference deck | ✅ | [kratos.py](core/kratos.py) |
+| Units | A project unit system, SI (N, m, kg, s) or kN (kN, m, t, s), chosen with `units <system>` or the status bar; every input is in it, the deck carries it verbatim and the results come back in it. Property sets are Kratos' own law + `Variables` | ✅ tested, the test model run in both systems | [units.py](core/units.py), [kratos_materials.py](core/kratos_materials.py) |
+| Dynamics, consolidation, arc-length control, updated mesh | Not supported. A phase's `time_interval` is stored but not used | ❌ | [schemas.py](core/schemas.py) `Phase` |
 
 ### A2. Continuum (soil) elements
 
@@ -41,7 +41,7 @@ Two limits run through everything below:
 | 3D | `UPwSmallStrainElement3D4N` (tetrahedron) | `SmallStrainUPwDiffOrderElement3D10N` | 🟡 no 3D reference run |
 
 Triangles and tetrahedra only; quadrilaterals and hexahedra are not supported. See
-`ELEMENTS` in [kratos.py](server/app/kratos.py).
+`ELEMENTS` in [kratos.py](core/kratos.py).
 
 ### A3. Structural elements
 
@@ -69,7 +69,7 @@ structural elements.
 | Element | `Geo_UPwLineInterfacePlaneStrainElement2Plus2N` / `Geo_UPwLineInterfacePlaneStrainDiffOrderElement3Plus3N` | ✅ quadratic, from a Kratos reference deck · 🟡 linear name is inferred |
 | Law | Follows the soil: `GeoInterfaceCoulombLawPlaneStrain` against Mohr-Coulomb, `GeoIncrementalLinearElasticInterfaceLaw` against Linear Elastic and in the K0 phase | ✅ matches Kratos' Mohr-Coulomb reference deck · 🟡 unrun |
 | Placement | Along a sheet pile (side: both, left or right), or along a free polyline through the soil (soil against soil, a slip surface, a lining) | ✅ |
-| Node splitting | Nodes are duplicated after meshing, giving a zero-thickness contact | ✅ [interfaces.py](server/app/interfaces.py) |
+| Node splitting | Nodes are duplicated after meshing, giving a zero-thickness contact | ✅ [interfaces.py](core/interfaces.py) |
 | Stiffness | Entered as kn and ks, or derived: ks = G_soil / virtual thickness, kn from ks | ✅ |
 | Strength | Against Mohr-Coulomb soil: c·R and atan(R·tan φ), where R is the contact's `R_inter` or, left blank, the soil's own. Against elastic soil: none (it cannot slip) | ✅ matches Kratos' Mohr-Coulomb reference deck · 🟡 unrun |
 | Permeability | Neutral, Drain or Impermeable (stored) | 🟡 |
@@ -78,7 +78,7 @@ structural elements.
 ### A5. Soil constitutive models
 
 Two models, both GeoMechanicsApplication's own, each written as itself
-([material_models.py](server/app/material_models.py)). User-defined models (UDSM/UMAT)
+([kratos_materials.py](core/kratos_materials.py)). User-defined models (UDSM/UMAT)
 are next.
 
 | Model chosen in the GUI | Written to Kratos as | Status |
@@ -103,7 +103,7 @@ Mohr-Coulomb staged-excavation reference does the same. The real law takes over 
 | Water unit weight | `DENSITY_WATER`, the same value the hydrostatic processes use | ✅ |
 
 **Soil presets:** Fill, Sand loose, Sand dense, Clay soft, Clay stiff, Bedrock
-([material-library.js](live/js/material-library.js)).
+([material-library.js](frontend/js/material-library.js)).
 
 ### A6. Loads, water and boundary conditions
 
@@ -205,7 +205,7 @@ Mohr-Coulomb staged-excavation reference does the same. The real law takes over 
 |---|---|---|
 | Export | File ▸ Export writes `.mdpa`, `MaterialParameters.json` and `ProjectParameters.json`, and lists every assumption and warning | ✅ |
 | Calculate (F9) | Meshes the model, writes the files and runs Kratos in a new folder for each run | ✅ |
-| Pointing to Kratos | `server/kratos.local.json` or environment variables: Python interpreter, Kratos build folder, runs folder, time limit (default 3600 s) | ✅ |
+| Pointing to Kratos | `kratos.local.json` or environment variables: Python interpreter, Kratos build folder, runs folder, time limit (default 3600 s) | ✅ |
 | Failed runs | Says which stage failed | ✅ |
 
 ### B6. Results mode
@@ -237,9 +237,9 @@ Mohr-Coulomb staged-excavation reference does the same. The real law takes over 
 
 | Item | Detail |
 |---|---|
-| Benchmarks | Analytical checks in `server/benchmarks` (K0 columns, hydrostatic, weight above and below water, reaction balance, symmetric pit, 2D/3D, mesh convergence), and a live Kratos run of the staged test model, skipped where Kratos is not installed |
+| Benchmarks | Analytical checks in `benchmarks` (K0 columns, hydrostatic, weight above and below water, reaction balance, symmetric pit, 2D/3D, mesh convergence), and a live Kratos run of the staged test model, skipped where Kratos is not installed |
 | Server tests | pytest, 45 test files (run with Python 3.11, which has gmsh) |
-| JavaScript tests | 33 browser test files; the ones that don't use the DOM also run headless under quickjs (`live/tests/run_headless.py`) |
+| JavaScript tests | 33 browser test files; the ones that don't use the DOM also run headless under quickjs (`frontend/tests/run_headless.py`) |
 
 ---
 
@@ -247,7 +247,7 @@ Mohr-Coulomb staged-excavation reference does the same. The real law takes over 
 
 1. **Mohr-Coulomb has not been run yet.** The deck matches Kratos' Mohr-Coulomb
    reference materials file set by set; the wall curves still need a real run
-   (`mohr_coulomb_project` in `server/tests/models/excavation.py`). No user-defined (UDSM/UMAT) models yet.
+   (`mohr_coulomb_project` in `tests/models/excavation.py`). No user-defined (UDSM/UMAT) models yet.
 2. **No factor of safety.** There is no φ–c reduction phase.
 3. **Only one flat water table.** No sloping phreatic line, no level per phase, no
    groundwater flow calculation.

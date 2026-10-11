@@ -1,0 +1,55 @@
+# What a new user does first, on each platform the README promises: start the launcher,
+# let it build its venv from requirements.txt, and check that the app imports.
+name: launcher
+
+# Pushes count only on main: a pull request's own branch is covered by pull_request.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: launcher-${{ github.ref }}
+  # A newer push supersedes a pull request's run; every run on main is kept.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  check:
+    name: launcher ${{ matrix.os }} / Python ${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, ubuntu-latest, macos-latest]
+        # The oldest Python the README allows, and a current one.
+        python: ["3.10", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+
+      - name: System libraries the gmsh wheel loads (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libglu1-mesa libxcursor1 libxinerama1 libxft2 libxrender1
+
+      # run.bat asks the py launcher for "-3", which picks the newest installed Python 3;
+      # pointing it at the one set up above keeps the matrix honest.
+      - name: Launcher (Windows)
+        if: runner.os == 'Windows'
+        shell: cmd
+        env:
+          PY_PYTHON3: ${{ matrix.python }}
+        run: run.bat --check
+
+      - name: Launcher (Linux, macOS)
+        if: runner.os != 'Windows'
+        run: ./run.sh --check

@@ -1,0 +1,5 @@
+# Settings for actionlint (the actionlint job in workflows/lint.yml).
+self-hosted-runner:
+  # The machine with Kratos (workflows/kratos.yml).
+  labels:
+    - kratos

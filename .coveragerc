@@ -1,0 +1,17 @@
+# Coverage for `pytest --cov` (plan/alpha-test-plan.md Task 0.5).
+[run]
+source = core, backend
+# Run by the launcher's own bootstrap; covered by the smoke tier.
+omit =
+    backend/launcher.py
+# gmsh runs in a worker process (core/gmsh_worker.py); without this its modules look untested.
+concurrency = multiprocessing, thread
+parallel = true
+sigterm = true
+
+[report]
+show_missing = true
+skip_empty = true
+
+[html]
+directory = htmlcov
