@@ -37,7 +37,9 @@ import json
 import os
 import re
 import subprocess
+import threading
 import time
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 import sys
@@ -67,6 +69,9 @@ path so it is read the same way wherever the server is installed."""
 PARAMETERS_NAME = "ProjectParameters.json"
 MATERIALS_NAME = "MaterialParameters.json"
 INITIAL_MATERIALS_NAME = "initial_materials.json"
+UNITS_NAME = "kratos_gui_units.json"
+"""Beside the deck: the unit system its numbers are in, so its results are labelled in it
+(`results.run_unit_system`). Kratos never reads it."""
 """The K0 stage's own materials file. Written only when the deck has a stage that
 reads it; the name matches `kratos_processes.INITIAL_MATERIALS_FILENAME`."""
 LOG_NAME = "kratos.log"
@@ -116,6 +121,9 @@ _running = False
 """One calculation at a time. A solver takes the machine's cores and an unknown amount
 of time, so a second press is refused with a message rather than queued invisibly
 behind the first."""
+
+# The route runs `run` on a worker thread, so the check and the set must be one step.
+_claim = threading.Lock()
 
 
 class CalculationError(RuntimeError):
@@ -170,6 +178,9 @@ def write_deck(export: dict, directory: Path) -> list[str]:
         written.append(INITIAL_MATERIALS_NAME)
     _write(directory / PARAMETERS_NAME, export["project_parameters"])
     written.append(PARAMETERS_NAME)
+    if export.get("unit_system"):
+        _write(directory / UNITS_NAME, json.dumps({"unit_system": export["unit_system"]}))
+        written.append(UNITS_NAME)
     return written
 
 
@@ -209,6 +220,12 @@ def interpreter() -> tuple[str, dict[str, str]]:
         raise CalculationError(
             f"The python to run Kratos with was given as {python}, which does not "
             f"exist. Correct it in {SETTINGS_FILE} or in {PYTHON_ENV}.")
+    if Path(python).is_dir():
+        raise CalculationError(
+            f"The python to run Kratos with was given as {python}, which is a "
+            f"directory -- it has to be the interpreter itself (python.exe, or "
+            f"bin/python in a virtual environment). Correct it in {SETTINGS_FILE} or "
+            f"in {PYTHON_ENV}.")
 
     environment = dict(os.environ)
     paths = [str(SERVER)]
@@ -254,11 +271,16 @@ def run(export: dict) -> dict:
     A failed *analysis* is a result, not an exception: only a calculation that could not
     be started at all raises.
     """
-    if _running:
-        raise Busy("A calculation is already running.")
-    python, environment = interpreter()
-    directory = new_run_directory(export["deck_name"])
-    return _execute(python, environment, directory, write_deck(export, directory))
+    with _one_at_a_time():
+        python, environment = interpreter()
+        directory = _run_directory(export["deck_name"])
+        try:
+            inputs = write_deck(export, directory)
+        except OSError as failure:
+            raise CalculationError(
+                f"The deck could not be written under {runs_root()}: {failure}. Set "
+                f"{RUNS_ENV} to a directory that can be written to.") from failure
+        return _execute(python, environment, directory, inputs)
 
 
 def run_deck(deck) -> dict:
@@ -270,20 +292,49 @@ def run_deck(deck) -> dict:
     """
     from app import deck as decks
 
-    if _running:
-        raise Busy("A calculation is already running.")
-    python, environment = interpreter()
-    directory = new_run_directory(decks.deck_name(deck))
-    return _execute(python, environment, directory, decks.stage(deck, directory))
+    with _one_at_a_time():
+        python, environment = interpreter()
+        directory = _run_directory(decks.deck_name(deck))
+        try:
+            inputs = decks.stage(deck, directory)
+        except OSError as failure:
+            raise CalculationError(
+                f"The deck could not be copied into {directory}: {failure}.") from failure
+        return _execute(python, environment, directory, inputs)
+
+
+@contextmanager
+def _one_at_a_time():
+    """Claim `_running` for the length of the block, or raise `Busy`.
+
+    The routes run on worker threads, so the check and the set are one step under
+    `_claim` -- before any file is touched, or two presses at once both get through.
+    """
+    global _running
+    with _claim:
+        if _running:
+            raise Busy("A calculation is already running.")
+        _running = True
+    try:
+        yield
+    finally:
+        _running = False
+
+
+def _run_directory(deck_name: str) -> Path:
+    try:
+        return new_run_directory(deck_name)
+    except OSError as failure:
+        raise CalculationError(
+            f"The deck could not be written under {runs_root()}: {failure}. Set "
+            f"{RUNS_ENV} to a directory that can be written to.") from failure
 
 
 def _execute(python: str, environment: dict[str, str], directory: Path,
              inputs: list[str]) -> dict:
     """Run the deck already written into `directory`, and say what happened."""
-    global _running
     before = _contents(directory)
 
-    _running = True
     started = time.monotonic()
     try:
         completed = subprocess.run(
@@ -293,12 +344,15 @@ def _execute(python: str, environment: dict[str, str], directory: Path,
         )
         output, returncode = completed.stdout, completed.returncode
     except subprocess.TimeoutExpired as expired:
-        output = (expired.output or "") + (
+        output = _text(expired.output) + (
             f"\n\nGiven up on after {timeout():.0f} s. Raise {TIMEOUT_ENV} if the "
             "model is meant to take this long.")
         returncode = None
-    finally:
-        _running = False
+    except OSError as failure:
+        raise CalculationError(
+            f"The python to run Kratos with, {python}, could not be started: "
+            f"{failure}. It has to be a python interpreter; correct it in "
+            f"{SETTINGS_FILE} or in {PYTHON_ENV}.") from failure
 
     (directory / LOG_NAME).write_text(output, encoding="utf-8")
     stage = failed_stage(output)
@@ -342,6 +396,13 @@ def failed_stage(output: str) -> tuple[int, int, str] | None:
 
 def _contents(directory: Path) -> set[str]:
     return {path.name for path in directory.iterdir()}
+
+
+def _text(output: str | bytes | None) -> str:
+    # TimeoutExpired.output is bytes on POSIX even with text=True.
+    if isinstance(output, bytes):
+        return output.decode("utf-8", errors="replace")
+    return output or ""
 
 
 def _explain(output: str, lines: int = 30,

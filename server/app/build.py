@@ -701,8 +701,8 @@ def _embed_beams(project: Project, owners: dict[int, set[str]], dim: int,
     The same imprint `_imprint_load_footprints` performs, with the opposite half of the
     result kept: a load only needs the boundary split, while a beam *is* the tool
     pieces. Because the fragment makes the soil and the curve share their edges, the
-    mesher puts one node where both meet -- which is what the reference deck shows
-    (examples/dike_with_sheet_pile.mdpa: every sheet-pile node is also a soil node).
+    mesher puts one node where both meet -- which is what a Kratos sheet-pile deck
+    shows: every sheet-pile node is also a soil node.
 
     A pile that stops inside the soil does not separate the surface into two regions,
     so nothing is cut away; the curve simply becomes an internal edge of the face. The
@@ -1041,9 +1041,8 @@ def _attach_anchors(project: Project, dim: int, log: list[str] | None = None
                     ) -> tuple[dict[str, list[int]], dict[str, int]]:
     """Draw each anchor and give its tail a node, without touching the model topology.
 
-    Deliberately *not* fragmented into anything. The reference deck
-    (examples/crow_case.mdpa) has a tail node that belongs to no element at all, held by
-    its own node group: the grouted body is idealised as a fixed point, so embedding the
+    Deliberately *not* fragmented into anything. The tail is a node that belongs to no
+    element at all, held by its own node group: the grouted body is idealised as a fixed point, so embedding the
     tie in the soil would model a fully bonded bar instead. The head needs no fragment
     either -- `_split_at` has already made it a vertex of the beam, which is where the
     shared node comes from.

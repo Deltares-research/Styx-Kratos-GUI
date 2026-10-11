@@ -93,9 +93,10 @@ def test_the_wall_gets_a_section_whose_thickness_is_the_profiles_area():
     solid = applied(project_with([PILE]), 3)
     section = solid.panel_section(panel_of(solid).section)
 
-    assert section.thickness == pytest.approx(SECTION["area"])
-    assert (section.E, section.nu, section.density) == (
-        SECTION["E"], SECTION["nu"], SECTION["density"])
+    pile = solid.beam_section(SECTION["id"]).variables
+    assert section.variables["THICKNESS"] == pytest.approx(pile["CROSS_AREA"])
+    assert [section.variables[k] for k in ("YOUNG_MODULUS", "POISSON_RATIO", "DENSITY")] \
+        == [pile[k] for k in ("YOUNG_MODULUS", "POISSON_RATIO", "DENSITY")]
 
 
 def test_the_pile_record_survives_the_switch():
@@ -204,3 +205,20 @@ def test_a_plane_anchors_head_is_a_node_of_the_translated_wall():
         export = kratos.export_project(solid, MeshRequest(element_size=4.0, order=1))
 
     assert "Anchor_1" in export["mdpa"]
+
+
+@pytest.mark.xfail(strict=True, reason=(
+    "Known gap (alpha 1.6, plan sec 4.1): a panel narrowed off the section plane still "
+    "refreshes its pile, which the section then builds. Loads already leave such a pair "
+    "out (`Project.loads_for(2)`); walls need their own design because piles feed "
+    "anchors and interfaces. Strict, so this fails loudly the day it is fixed."))
+def test_a_panel_narrowed_clear_of_the_section_plane_is_not_built_in_the_section():
+    solid = applied(project_with([PILE]), 3)
+    narrowed = solid.model_dump()
+    for beam in narrowed["beams"]:
+        if beam["kind"] == "panel":
+            beam["footprint"] = [[PILE_X, 1.0], [PILE_X, 3.0]]
+    section = applied(Project.model_validate(narrowed), 2)
+
+    assert section.cut_at() > 3.0, "the default cut is mid-domain, clear of z 1..3"
+    assert [b.id for b in section.structures_for(2)] == []

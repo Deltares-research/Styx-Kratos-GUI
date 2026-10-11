@@ -149,24 +149,35 @@ def test_fields_are_grouped_the_way_an_engineer_looks_for_them(stage):
 
 # ── Units (task 9) ──────────────────────────────────────────────────────────
 
-def test_a_stress_comes_back_in_kilopascals(stage):
-    """-100000 Pa in the file is -100 kPa on screen. The factor is imported from
-    `kratos_materials`, not written again here."""
+def test_a_stress_comes_back_as_the_run_wrote_it(stage):
+    """-100000 in the file is -100000 on screen: Kratos has no units, the run is in its
+    project's system, and only the label says which (`app/units.py`)."""
     mesh, results = stage
 
     out = result_fields.values(results, mesh, "syy", "elements")
 
+    assert out["unit"] == "Pa"
+    assert out["values"][out["ids"].index(1)] == pytest.approx(-100000.0)
+
+
+def test_a_run_in_kilonewtons_is_labelled_so_and_not_scaled(stage):
+    mesh, results = stage
+
+    out = result_fields.values(results, mesh, "syy", "elements", system="kN")
+
     assert out["unit"] == "kPa"
-    assert out["values"][out["ids"].index(1)] == pytest.approx(-100.0)
+    assert out["values"][out["ids"].index(1)] == pytest.approx(-100000.0)
+    assert {e["unit"] for g in result_fields.catalogue(results, "kN") for e in g["fields"]
+            if g["name"] == "Effective stresses"} == {"kPa"}
 
 
-def test_a_pore_pressure_comes_back_in_kilopascals(stage):
+def test_a_pore_pressure_comes_back_as_the_run_wrote_it(stage):
     mesh, results = stage
 
     out = result_fields.values(results, mesh, "pw", "nodes")
 
-    assert out["unit"] == "kPa"
-    assert out["values"][out["ids"].index(1)] == pytest.approx(-105.0)
+    assert out["unit"] == "Pa"
+    assert out["values"][out["ids"].index(1)] == pytest.approx(-105000.0)
 
 
 def test_a_displacement_stays_in_metres(stage):
@@ -178,10 +189,15 @@ def test_a_displacement_stays_in_metres(stage):
     assert out["values"][out["ids"].index(3)] == pytest.approx(-0.01)
 
 
-def test_the_conversion_is_the_one_the_exporter_used():
-    """One number, in one place. If these two ever disagreed, a stress written by this
-    project and read back by it would not be the same stress."""
-    assert result_fields.STRESS_SCALE == 1.0 / kratos_materials.KILO
+def test_nothing_is_scaled_on_the_way_out(stage):
+    """A number read back is the number Kratos wrote: the deck carried the project's own
+    numbers in, so the results come out in the same system."""
+    mesh, results = stage
+    raw = results.field("CAUCHY_STRESS_TENSOR").values
+    out = result_fields.values(results, mesh, "sxx", "elements")
+    for element, value in zip(out["ids"], out["values"]):
+        points = raw[element]
+        assert value == pytest.approx(sum(p[0] for p in points) / len(points))
 
 
 def test_every_field_declares_a_unit(stage):
@@ -216,7 +232,7 @@ def test_mean_stress_is_the_average_of_the_normal_components(stage):
 
     out = result_fields.values(results, mesh, "p", "elements")
 
-    assert out["values"][out["ids"].index(1)] == pytest.approx(-200.0 / 3)
+    assert out["values"][out["ids"].index(1)] == pytest.approx((-200.0 / 3) * 1e3)
 
 
 def test_deviatoric_stress_is_never_negative(stage):
@@ -226,7 +242,7 @@ def test_deviatoric_stress_is_never_negative(stage):
 
     out = result_fields.values(results, mesh, "q", "elements")
 
-    assert out["values"][out["ids"].index(1)] == pytest.approx(50.0)
+    assert out["values"][out["ids"].index(1)] == pytest.approx((50.0) * 1e3)
     assert all(value >= 0 for value in out["values"])
 
 
@@ -250,9 +266,9 @@ def test_principal_stresses_are_ordered_with_the_most_compressive_first(stage):
     at = lambda name: result_fields.values(  # noqa: E731
         results, mesh, name, "elements")["values"][0]
 
-    assert at("s1") == pytest.approx(-100.0)
-    assert at("s2") == pytest.approx(-50.0)
-    assert at("s3") == pytest.approx(-50.0)
+    assert at("s1") == pytest.approx((-100.0) * 1e3)
+    assert at("s2") == pytest.approx((-50.0) * 1e3)
+    assert at("s3") == pytest.approx((-50.0) * 1e3)
 
 
 def test_shear_rotates_the_principal_axes():
@@ -265,9 +281,9 @@ def test_shear_rotates_the_principal_axes():
     at = lambda name: result_fields.values(  # noqa: E731
         results, mesh, name, "elements")["values"][0]
 
-    assert at("s1") == pytest.approx(-130.0)
-    assert at("s3") == pytest.approx(-60.0)
-    assert at("tau_max") == pytest.approx(35.0)
+    assert at("s1") == pytest.approx((-130.0) * 1e3)
+    assert at("s3") == pytest.approx((-60.0) * 1e3)
+    assert at("tau_max") == pytest.approx((35.0) * 1e3)
 
 
 def test_maximum_shear_is_half_the_principal_range(stage):
@@ -312,7 +328,7 @@ def test_an_element_value_is_the_mean_over_its_integration_points():
 
     out = result_fields.values(results, mesh, "syy", "elements")
 
-    assert out["values"][out["ids"].index(1)] == pytest.approx(-100.0)
+    assert out["values"][out["ids"].index(1)] == pytest.approx((-100.0) * 1e3)
 
 
 def test_a_node_value_is_the_mean_of_the_elements_that_touch_it(stage):
@@ -323,10 +339,10 @@ def test_a_node_value_is_the_mean_of_the_elements_that_touch_it(stage):
     out = result_fields.values(results, mesh, "syy", "nodes")
     value = dict(zip(out["ids"], out["values"]))
 
-    assert value[1] == pytest.approx(-100.0)
-    assert value[4] == pytest.approx(-140.0)
-    assert value[2] == pytest.approx(-120.0)
-    assert value[3] == pytest.approx(-120.0)
+    assert value[1] == pytest.approx((-100.0) * 1e3)
+    assert value[4] == pytest.approx((-140.0) * 1e3)
+    assert value[2] == pytest.approx((-120.0) * 1e3)
+    assert value[3] == pytest.approx((-120.0) * 1e3)
 
 
 def test_a_node_no_live_element_touches_is_left_out(stage):
@@ -361,7 +377,7 @@ def test_an_invariant_is_derived_per_integration_point_then_averaged():
     # Derived then averaged: 30. Averaged then derived: (-100,-70,-100) -> q = 30 too.
     # So this pair is checked on p' instead, where the two orders also agree, and the
     # real assertion is the one below: q is never negative and never NaN.
-    assert out["values"][out["ids"].index(1)] == pytest.approx(30.0)
+    assert out["values"][out["ids"].index(1)] == pytest.approx((30.0) * 1e3)
 
 
 def test_deriving_before_averaging_is_what_actually_happens():
@@ -380,7 +396,7 @@ def test_deriving_before_averaging_is_what_actually_happens():
 
     out = result_fields.values(results, mesh, "q", "elements")
 
-    assert out["values"][out["ids"].index(1)] == pytest.approx(math.sqrt(3) * 40)
+    assert out["values"][out["ids"].index(1)] == pytest.approx((math.sqrt(3) * 40) * 1e3)
 
 
 def test_an_unknown_field_is_refused_by_name(stage):
@@ -451,3 +467,59 @@ def test_the_reference_pore_pressure_is_hydrostatic_and_compressive():
 
     assert out["min"] < 0
     assert out["max"] <= 1e-9
+
+
+# ── The closed-form invariants against a numerical eigensolver ──────────────
+
+import numpy as np
+from hypothesis import given, settings, strategies as st
+
+from app.result_fields import _deviatoric_stress, _mean_stress, _principal, _tau_max
+
+COMPONENT = st.floats(min_value=-5e6, max_value=5e6, allow_nan=False, allow_infinity=False)
+
+
+def _matrix(s):
+    xx, yy, zz, xy, yz, xz = s
+    return np.array([[xx, xy, xz], [xy, yy, yz], [xz, yz, zz]])
+
+
+@settings(max_examples=300, deadline=None)
+@given(st.lists(COMPONENT, min_size=6, max_size=6))
+def test_principal_stresses_match_a_numerical_eigensolver(s):
+    """The trigonometric solution, on any symmetric tensor -- not just the plane-strain
+    ones the runs produce, where one principal direction is out of plane."""
+    expected = np.linalg.eigvalsh(_matrix(s))
+    scale = max(1.0, float(np.max(np.abs(s))))
+
+    assert np.allclose(_principal(s), expected, atol=1e-6 * scale, rtol=0)
+
+
+@settings(max_examples=300, deadline=None)
+@given(st.lists(COMPONENT, min_size=6, max_size=6))
+def test_the_invariants_agree_with_each_other(s):
+    low, middle, high = _principal(s)
+    scale = max(1.0, max(abs(v) for v in s))
+
+    assert low <= middle + 1e-9 * scale and middle <= high + 1e-9 * scale
+    assert abs((low + middle + high) / 3.0 - _mean_stress(s)) <= 1e-6 * scale
+    assert _deviatoric_stress(s) >= 0.0
+    assert abs(_tau_max(s) - (high - low) / 2.0) <= 1e-9 * scale
+
+
+def test_pure_shear_has_principal_stresses_plus_and_minus_tau():
+    tau = 25_000.0
+    low, middle, high = _principal([0, 0, 0, tau, 0, 0])
+
+    assert (low, middle, high) == pytest.approx((-tau, 0.0, tau), abs=1e-6)
+    assert _tau_max([0, 0, 0, tau, 0, 0]) == pytest.approx(tau)
+    assert _deviatoric_stress([0, 0, 0, tau, 0, 0]) == pytest.approx(math.sqrt(3) * tau)
+
+
+def test_an_isotropic_state_has_p_equal_to_the_stress_and_no_q():
+    sigma = -120_000.0
+    s = [sigma, sigma, sigma, 0, 0, 0]
+
+    assert _mean_stress(s) == sigma
+    assert _deviatoric_stress(s) == 0.0
+    assert _principal(s) == (sigma, sigma, sigma)

@@ -65,10 +65,17 @@ QUADRILATERALS: dict[str, tuple[str, int, int]] = {
     "SmallStrainUPwDiffOrderElement2D9N": ("continuum", 2, 9),
 }
 """Soil classes this codebase's exporter never writes -- it only meshes triangles -- but
-that a deck from elsewhere often is mostly made of (e.g. the Eemdijk deck's 8-node
-quads). Corners first, counter-clockwise, then midsides, as Kratos orders them."""
+that a deck from elsewhere often is mostly made of (e.g. 8-node quads). Corners first, counter-clockwise, then midsides, as Kratos orders them."""
+
+LEGACY: dict[str, tuple[str, int, int]] = {
+    "LinearTimoshenkoCurvedBeamElement2D2N": ("beam", 2, 2),
+    "LinearTimoshenkoBeamElement3D3N": ("beam", 3, 3),
+}
+"""Beam names this exporter once wrote, which Kratos does not register -- still read, so
+a deck written by an older version opens."""
 
 CLASS_KIND: dict[str, tuple[str, int, int]] = {
+    **LEGACY,
     **_reverse(ELEMENTS, "continuum"),
     **QUADRILATERALS,
     **_reverse(BEAMS, "beam"),
@@ -82,6 +89,8 @@ CONDITION_KIND: dict[str, tuple[str, int, int]] = {
     **_reverse(CONDITIONS, "condition"),
     # Keyed by (dimension, node count), like `INTERFACES`.
     **{name: ("condition", dim, n) for (dim, n), name in NORMAL_LOAD_CONDITIONS.items()},
+    # The linear normal load's former name, for decks written before it was corrected.
+    "LineNormalLoadCondition2D2N": ("condition", 2, 2),
 }
 """Kratos condition class name -> ("condition", dimension, node count)."""
 
@@ -178,7 +187,10 @@ def bbox_of(nodes: dict[int, tuple[float, float, float]]
 def import_mdpa(text: str) -> MdpaModel:
     """Parse a `.mdpa` deck's text into nodes, typed entities, and named parts."""
     model = MdpaModel()
-    lines = [line.strip() for line in text.replace("\r\n", "\n").split("\n")]
+    # `//` starts a comment anywhere on a line in Kratos' own reader; cut here, a comment
+    # is a blank line to every block below, and those already skip blanks.
+    lines = [line.split("//", 1)[0].strip()
+             for line in text.replace("\r\n", "\n").split("\n")]
     index = 0
     try:
         while index < len(lines):
@@ -231,13 +243,27 @@ def _entities(lines: list[str], index: int, into: list[Entity], name: str,
     return index + 1
 
 
-def _part(lines: list[str], index: int, model: MdpaModel, name: str) -> int:
-    part = Part(name=name)
+def _part(lines: list[str], index: int, model: MdpaModel, name: str,
+          parent: str | None = None) -> int:
+    """One `SubModelPart` block, and every part nested in it.
+
+    A child is stored under Kratos' own full name, `Parent.Child` -- two parents may each
+    have a `Clay` -- and, as Kratos does when it reads one, its nodes, elements and
+    conditions are members of every part above it too.
+    """
+    full = name if parent is None else f"{parent}.{name}"
+    part = Part(name=full)
     field_of = {"SubModelPartNodes": part.nodes, "SubModelPartElements": part.elements,
                 "SubModelPartConditions": part.conditions}
+    children: list[Part] = []
     while lines[index] != "End SubModelPart":
         line = lines[index]
         index += 1
+        head = line.split()
+        if head[:2] == ["Begin", "SubModelPart"] and len(head) == 3:
+            index = _part(lines, index, model, head[2], parent=full)
+            children.append(model.parts[f"{full}.{head[2]}"])
+            continue
         match = re.fullmatch(r"Begin (SubModelPart\w+)", line)
         if not match:
             continue
@@ -250,12 +276,17 @@ def _part(lines: list[str], index: int, model: MdpaModel, name: str) -> int:
                 target.append(int(lines[index]))
             index += 1
         index += 1
+    for child in children:
+        for mine, theirs in ((part.nodes, child.nodes), (part.elements, child.elements),
+                             (part.conditions, child.conditions)):
+            have = set(mine)
+            mine.extend(entry for entry in theirs if entry not in have)
     part.kind = ("body" if part.elements else
                  "load" if part.conditions else
                  "boundary" if name in BOUNDARY_NAMES else
                  "support" if name.endswith("_Support") else
                  "group")
-    model.parts[name] = part
+    model.parts[full] = part
     return index + 1
 
 
@@ -473,6 +504,8 @@ def _part_data(lines: list[str], index: int, part: Part) -> int:
     while not lines[index].startswith("End "):
         line = lines[index]
         index += 1
+        if not line:  # a blank line inside the block; see `_nodes`
+            continue
         vector = VECTOR_DATA.fullmatch(line)
         if vector:
             name, values = vector.groups()

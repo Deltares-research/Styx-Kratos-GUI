@@ -1,21 +1,15 @@
 """`app.mdpa_import`: reading a .mdpa deck back into typed mesh data.
 
-Checked two ways: round-tripped through `kratos.export_project` (so the classification
-tables are proven against the same fixture the forward-export tests use), and against
-the real GiD-authored decks in examples/, which this codebase did not write and may use
-element classes the export side never emits.
+Round-tripped through `kratos.export_project`, so the classification tables are proven
+against the same fixture the forward-export tests use, and fed hand-written decks for the
+element classes a deck written elsewhere uses and the export side never emits.
 """
-
-from pathlib import Path
 
 import pytest
 
 from app import build, kratos, mdpa_import
 from app.schemas import MeshRequest, Project
 from app.seed import seed_project
-
-EXAMPLES = Path(__file__).resolve().parents[2] / "examples"
-
 
 @pytest.fixture(scope="module")
 def session():
@@ -97,23 +91,6 @@ def test_to_dict_is_json_safe(reimported):
     import json
 
     json.dumps(reimported.to_dict())
-
-
-# ── Real, externally-authored decks ──────────────────────────────────────────
-
-@pytest.mark.parametrize("filename", [
-    "simple_embankment.mdpa", "crow_case.mdpa", "dike_with_sheet_pile.mdpa",
-    "Deep_excavation_Rotterdam_Zuid.mdpa",
-])
-def test_reference_decks_parse_without_error(filename):
-    text = (EXAMPLES / filename).read_text()
-
-    model = mdpa_import.import_mdpa(text)
-
-    assert model.nodes
-    assert model.elements
-    for entity in model.elements + model.conditions:
-        assert len(entity.entries) > 0
 
 
 def test_an_unmapped_class_name_is_kept_as_unknown_rather_than_failing():
@@ -207,8 +184,8 @@ def test_a_2d_deck_draws_its_triangles_directly_with_no_boundary_extraction():
                                   "SmallStrainUPwDiffOrderElement2D8N",
                                   "SmallStrainUPwDiffOrderElement2D9N"])
 def test_a_2d_quadrilateral_class_is_soil_rather_than_unknown(name):
-    """This app's exporter only ever writes triangles, but a deck from elsewhere (the
-    Eemdijk one is almost all 8-node quads) is mostly quadrilaterals -- unknown, they
+    """This app's exporter only ever writes triangles, but a deck from elsewhere is often
+    mostly 8-node quadrilaterals -- unknown, they
     were counted and never drawn, leaving a scatter of the deck's few triangles."""
     nodes = {"4N": 4, "8N": 8, "9N": 9}[name[-2:]]
     model = mdpa_import.import_mdpa(
@@ -282,14 +259,15 @@ def test_a_quadratic_beam_spans_end_to_end_not_end_to_midside():
     assert beam["indices"] == [], "a beam has no triangles, only its own line segment"
 
 
-def test_a_beams_segments_join_up_into_one_unbroken_run():
+def test_a_beams_segments_join_up_into_one_unbroken_run(session):
     """The end of each element is the start of the next -- what makes a sheet pile draw
     as a continuous line rather than a row of dashes."""
-    model = mdpa_import.import_mdpa((EXAMPLES / "crow_case.mdpa").read_text())
+    from tests.models import excavation
 
-    # crow_case.mdpa's sheet pile is its own body sub-model part ("Sheet_Pile_Wall"),
-    # not a leftover -- see test_a_body_sub_model_part_becomes_its_own_section below.
-    beam = next(s for s in mdpa_import.to_sections(model) if s["part"] == "Sheet_Pile_Wall")
+    exported = kratos.export_project(excavation.excavation_project(staged=False),
+                                     MeshRequest(element_size=8.0, order=2))
+    model = mdpa_import.import_mdpa(exported["mdpa"])
+    beam = next(s for s in mdpa_import.to_sections(model) if s["part"] == "SheetPileWall")
 
     points = [tuple(beam["edges"][i:i + 3]) for i in range(0, len(beam["edges"]), 3)]
     starts = {points[i] for i in range(0, len(points), 2)}
@@ -400,23 +378,8 @@ def test_with_no_sub_model_parts_declared_everything_falls_back_to_one_section_p
     assert sections[0]["part"] is None
 
 
-def test_an_interface_only_body_part_draws_the_line_it_lies_along():
-    """crow_case.mdpa's "Interface_..." parts own only zero-thickness interface
-    elements. They are drawn -- as line work, since there is no thickness to fill -- so
-    each gets its own checklist row and its own eye in the Model explorer."""
-    model = mdpa_import.import_mdpa((EXAMPLES / "crow_case.mdpa").read_text())
-
-    sections = {s["key"]: s for s in mdpa_import.to_sections(model)}
-
-    contact = sections["imported:Interface_Top_Right"]
-    assert contact["kind"] == "interface"
-    assert contact["edges"], "a contact is line work, not a surface"
-    assert contact["indices"] == []
-    assert any(k.startswith("imported:") for k in sections), "the real bodies still draw"
-
-
 def test_an_invisible_body_part_does_not_burn_a_palette_slot():
-    """A body part that draws nothing (like crow_case.mdpa's "Interface_..." parts)
+    """A body part that draws nothing (an "Interface_..." part a GiD-authored deck writes)
     must not shift every later part's colour along by one -- otherwise two real bodies
     a palette's length apart end up sharing a colour by accident, for a reason nobody
     looking at the checklist could see (an invisible part in between)."""
@@ -453,20 +416,6 @@ def test_an_invisible_body_part_does_not_burn_a_palette_slot():
         "Soil_B is the second *visible* body -- the invisible one in between must not "
         "have consumed a palette slot"
     )
-
-
-@pytest.mark.parametrize("filename", [
-    "simple_embankment.mdpa", "crow_case.mdpa", "dike_with_sheet_pile.mdpa",
-    "Deep_excavation_Rotterdam_Zuid.mdpa",
-])
-def test_reference_decks_produce_at_least_one_drawable_section(filename):
-    model = mdpa_import.import_mdpa((EXAMPLES / filename).read_text())
-
-    sections = mdpa_import.to_sections(model)
-
-    assert sections
-    for section in sections:
-        assert section["indices"] or section["edges"]
 
 
 # ── A deck's node table is already the world frame ───────────────────────────────
@@ -678,3 +627,87 @@ def test_blank_lines_inside_a_block_are_skipped():
     assert model.parts["Soil_Top"].nodes == [1, 2]
     assert model.parts["Soil_Top"].elements == [1]
     assert model.parts["Soil_Top"].kind == "body"
+
+
+# ── Nested sub-model parts, data blanks, comments (finding F8, alpha 1.10) ──
+
+NESTED = "\n".join([
+    "Begin Properties 1", "End Properties",
+    "Begin Nodes",
+    "1 0.0 0.0 0.0", "2 1.0 0.0 0.0", "3 0.0 1.0 0.0", "4 1.0 1.0 0.0",
+    "End Nodes",
+    "Begin Elements UPwSmallStrainElement2D3N",
+    "1 1 1 2 3", "2 1 2 4 3",
+    "End Elements",
+    "Begin SubModelPart Soil",
+    "  Begin SubModelPartData",
+    "  End SubModelPartData",
+    "  Begin SubModelPartNodes", "  1", "  2", "  3", "  End SubModelPartNodes",
+    "  Begin SubModelPartElements", "  1", "  End SubModelPartElements",
+    "  Begin SubModelPart Clay",
+    "    Begin SubModelPartNodes", "    2", "    3", "    4", "    End SubModelPartNodes",
+    "    Begin SubModelPartElements", "    2", "    End SubModelPartElements",
+    "  End SubModelPart",
+    "  Begin SubModelPartConditions",
+    "  End SubModelPartConditions",
+    "End SubModelPart",
+    "Begin SubModelPart Bottom",
+    "  Begin SubModelPartNodes", "  1", "  2", "  End SubModelPartNodes",
+    "End SubModelPart",
+])
+
+
+def test_a_nested_sub_model_part_is_its_own_part_under_its_full_name():
+    """Kratos names a child `Parent.Child`, and two parents may each have a `Clay`."""
+    model = mdpa_import.import_mdpa(NESTED)
+
+    clay = model.parts["Soil.Clay"]
+    assert clay.nodes == [2, 3, 4]
+    assert clay.elements == [2]
+    assert clay.kind == "body"
+
+
+def test_a_parent_holds_its_children_as_kratos_does():
+    """Kratos adds a child's entities to every model part above it, so the parent is
+    its own blocks plus its children's -- and its blocks after the child still count."""
+    model = mdpa_import.import_mdpa(NESTED)
+
+    soil = model.parts["Soil"]
+    assert sorted(soil.nodes) == [1, 2, 3, 4]
+    assert sorted(soil.elements) == [1, 2]
+
+
+def test_the_child_does_not_end_its_parent():
+    """The child's `End SubModelPart` used to close the parent, so the next top-level
+    part was read as part of a block that had already ended."""
+    model = mdpa_import.import_mdpa(NESTED)
+
+    assert set(model.parts) == {"Soil", "Soil.Clay", "Bottom"}
+    assert model.parts["Bottom"].nodes == [1, 2]
+
+
+def test_a_blank_line_inside_sub_model_part_data_is_skipped():
+    text = NESTED.replace("  Begin SubModelPartData\n",
+                          "  Begin SubModelPartData\n\n  THICKNESS 0.5\n\n")
+
+    model = mdpa_import.import_mdpa(text)
+
+    assert model.parts["Soil"].data == {"THICKNESS": [0.5]}
+
+
+def test_comments_are_ignored_wherever_they_are():
+    text = "// written by hand\n" + NESTED.replace(
+        "1 1 1 2 3", "1 1 1 2 3 // first").replace("  2\n", "  2  // second\n", 1)
+
+    model = mdpa_import.import_mdpa(text)
+
+    assert model.elements[0].entries[1] == [1, 2, 3]
+    assert model.parts["Soil"].nodes[:3] == [1, 2, 3]
+
+
+def test_tabs_and_scientific_notation_are_read():
+    text = NESTED.replace("2 1.0 0.0 0.0", "2\t1.0E+00\t0.0\t0.0")
+
+    model = mdpa_import.import_mdpa(text)
+
+    assert model.nodes[2] == (1.0, 0.0, 0.0)

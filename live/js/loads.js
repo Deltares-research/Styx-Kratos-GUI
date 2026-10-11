@@ -58,7 +58,8 @@ App.Loads = (function () {
         // inside the fill and would not translate to a surface load (server/app/
         // loads.py compares against `Project.ground_y`).
         x0: x0, x1: x1, y: span.y_top, thickness: 0.15,
-        components: [0, -20], distribution: 'Uniform', active: true
+        components: [0, -App.Units.fromSI(20000, 'line force', App.Units.system(project))],
+        distribution: 'Uniform', active: true
       };
     } else {
       x0 = Math.min(a[0], b[0]); x1 = Math.max(a[0], b[0]);
@@ -78,7 +79,8 @@ App.Loads = (function () {
       // by 1e-7 and lands just above the face it should imprint.
       x0: x0, x1: x1, z0: z0, z1: z1, y: extent(project).y_top,
       thickness: 0.15,
-      components: [0, -20, 0],
+      // 20 kN/m2 down, in the project's units.
+      components: [0, -App.Units.fromSI(20000, 'stress', App.Units.system(project)), 0],
       distribution: 'Uniform', active: true
     };
   }
@@ -98,7 +100,8 @@ App.Loads = (function () {
     return {
       id: 'load_' + number, name: 'PointLoad_' + number, kind: 'point',
       x: coordinate[0], y: coordinate[1], thickness: 0.25,
-      components: [0, -20], distribution: 'Uniform', active: true
+      components: [0, -App.Units.fromSI(20000, 'force', App.Units.system(project))],
+      distribution: 'Uniform', active: true
     };
   }
 
@@ -327,7 +330,7 @@ App.Loads = (function () {
         controls.q0 = input(load.components[0]);
         controls.q1 = input(load.components[1]);
         if (load.kind === 'surface') controls.q2 = input(load.components[2]);
-        var unit = load.kind === 'point' ? 'kN' : (load.kind === 'line' ? 'kN/m' : 'kN/m²');
+        var unit = App.Units.label({ point: 'force', line: 'line force' }[load.kind] || 'stress');
         row('qx', controls.q0, 'World x component [' + unit + '].');
         row('qy', controls.q1, 'World y component [' + unit + ']; downward is negative.');
         if (load.kind === 'surface') {

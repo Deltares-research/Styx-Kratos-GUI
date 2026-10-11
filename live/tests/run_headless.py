@@ -45,9 +45,9 @@ SUITES = {
     # headless runner can execute it, which is the only automated check JavaScript
     # gets on this machine.
     "results-render": (
-        # The CROW fixture first: a real section and its fields, so the arithmetic is
+        # The field fixture first: a whole section and its fields, so the arithmetic is
         # exercised on a mesh rather than only on four-vertex squares.
-        [TESTS / "fixtures" / "crow-field.js", JS / "results-render.js"],
+        [TESTS / "fixtures" / "results-field.js", JS / "results-render.js"],
         TESTS / "test-results-render.js",
     ),
     # The Model explorer's colour toggle and the `colour` command. The toggle and the
@@ -59,7 +59,7 @@ SUITES = {
     # `water <level>` / `water off`: what was asked and what to send. The request and
     # the redraw are patches.js's.
     "water": (
-        [JS / "water-command.js"],
+        [JS / "unit-table.js", JS / "units.js", JS / "water-command.js"],
         TESTS / "test-water-command.js",
     ),
     # `node <id>`, the right-click "which parts is this node in" and the hover: the
@@ -86,12 +86,42 @@ SUITES = {
         [JS / "results-render.js", JS / "results.js", JS / "results-plot.js"],
         TESTS / "test-results-plot.js",
     ),
+    # The rulers' arithmetic: steps, ticks, labels, the ranges a view shows. Painting
+    # the canvases and the toolbar wiring are test-ruler-dom.js, in the browser.
+    "ruler": (
+        [JS / "ruler.js"],
+        TESTS / "test-ruler.js",
+    ),
+    # Where node and element numbers go: grouping, fans, culling, the cap. The menu row
+    # is test-mesh-labels-dom.js, in the browser.
+    "mesh-labels": (
+        [JS / "mesh-labels.js"],
+        TESTS / "test-mesh-labels.js",
+    ),
+    # Drafting, validating and saving interfaces, with the API stood in.
+    "interfaces": (
+        [JS / "unit-table.js", JS / "units.js", JS / "property-sets.js",
+         JS / "interfaces.js"],
+        TESTS / "test-interfaces.js",
+    ),
     "results": (
         # calculate.js comes along because the handoff between the two is the whole of
         # task P0.4: what Calculate just wrote has to become the run `results` opens.
         # It touches no DOM either, so it loads here as cleanly as results.js does.
         [JS / "results-render.js", JS / "results.js", JS / "calculate.js"],
         TESTS / "test-results.js",
+    ),
+    # The project's unit system: labels, conversions of library presets, and the
+    # `units` command. The request and the redraw are patches.js's.
+    "units": (
+        [JS / "unit-table.js", JS / "units.js"],
+        TESTS / "test-units.js",
+    ),
+    # Property sets: the law a new soil, profile, tendon or contact starts with, what
+    # its law needs, what the server derives, and how a typed value becomes Kratos'.
+    "property-sets": (
+        [JS / "unit-table.js", JS / "units.js", JS / "property-sets.js"],
+        TESTS / "test-property-sets.js",
     ),
 }
 

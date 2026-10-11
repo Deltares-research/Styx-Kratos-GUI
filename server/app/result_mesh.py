@@ -26,7 +26,7 @@ end-to-end segment renders a bending sheet pile as a straight stick.
 
 3D gets its boundary faces from the corner nodes only, as `mdpa_import` already does.
 Subdividing a quadratic tetrahedron's faces needs the mapping from each face to its own
-mid-side nodes, and 3D is surface shading in this milestone (`plan/postprocessing-plan.md`,
+mid-side nodes, and 3D is surface shading in this milestone (`plan/active/postprocessing-plan.md`,
 task 23). A 2D section -- which is what this project mostly produces, and what the whole
 staged-construction feature is built around -- is fully subdivided.
 """
@@ -171,9 +171,6 @@ def stage_sections(model: MdpaModel, mesh: GidMesh) -> dict:
     if mesh.dimension == 3:
         # The outer skin, per part, so two neighbouring bodies each keep their own
         # surface where they meet -- the same rule `mdpa_import` uses.
-        for bucket in grouped.values():
-            if bucket["triangles"]:
-                continue
         grouped = _skins(grouped, mesh, owner, kinds)
 
     sections = []

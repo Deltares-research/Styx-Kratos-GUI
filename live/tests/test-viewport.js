@@ -558,7 +558,7 @@
 
 (function () {
   /* Which refinements a mesh is built with. A model can carry a graded mesh of its own
-     (server/app/crow.py refines its excavation and grades out to the far field), and
+     (a model script can refine its excavation and grade out to the far field), and
      `meshSettings` used to overwrite that with `App.MESH_REFINEMENTS || []` -- so the
      Generate-mesh button flattened a grading the project had asked for. */
 
@@ -654,7 +654,7 @@
 })();
 
 /* ── Loads in Staged construction ─────────────────────────────────────────
-   A layered-soil project (the blank project, CROW) drew its loads in Structures mode
+   A layered-soil project (the blank project, the test model) drew its loads in Structures mode
    and dropped them in Staged construction, the one mode where a load's phase matters:
    the surcharge vanished as soon as the user moved on from Structures. A phase that
    switches a load off still hides it -- that is `phaseHidden`'s job, not this one's. */

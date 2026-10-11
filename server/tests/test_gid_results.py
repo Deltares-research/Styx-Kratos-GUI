@@ -22,8 +22,8 @@ from app import gid_results
 
 REFERENCE = Path(__file__).resolve().parents[2] / "test"
 """The GeoMechanicsApplication's own 1D consolidation deck and its eleven stages of
-output, copied into the repository root's `test/`. Gitignored, like `examples/` -- so
-every case that reads it skips when it is not there."""
+output, copied into the repository root's `test/`. Not tracked -- so every case that
+reads it skips when it is not there."""
 
 
 def reference_stage(n: int) -> tuple[Path, Path]:
@@ -308,3 +308,125 @@ def test_every_gauss_element_has_the_number_of_points_its_set_declares():
             expected = out.gauss_sets[field.gauss_set].count
             for element, points in field.values.items():
                 assert len(points) == expected, f"stage {n}, element {element}"
+
+
+# ── Several steps per stage, several element types per variable (finding F6) ──
+
+STEPPED = dedent("""
+    GiD Post Results File 1.0
+    GaussPoints "tri_gp" ElemType Triangle
+    Number Of Gauss Points: 1
+    Natural Coordinates: Internal
+    End GaussPoints
+    GaussPoints "quad_gp" ElemType Quadrilateral
+    Number Of Gauss Points: 2
+    Natural Coordinates: Internal
+    End GaussPoints
+    Result "DISPLACEMENT" "Kratos" 0.25 Vector OnNodes
+    Values
+    1 0.001 0 0
+    2 0.002 0 0
+    End Values
+    Result "CAUCHY_STRESS_TENSOR" "Kratos" 0.25 Matrix OnGaussPoints "tri_gp"
+    Values
+    11 -1 -1 -1 0 0 0
+    End Values
+    Result "CAUCHY_STRESS_TENSOR" "Kratos" 0.25 Matrix OnGaussPoints "quad_gp"
+    Values
+    21 -5 -5 -5 0 0 0
+     -5 -5 -5 0 0 0
+    End Values
+    Result "DISPLACEMENT" "Kratos" 0.5 Vector OnNodes
+    Values
+    1 0.01 0 0
+    2 0.02 0 0
+    End Values
+    Result "CAUCHY_STRESS_TENSOR" "Kratos" 0.5 Matrix OnGaussPoints "tri_gp"
+    Values
+    11 -2 -2 -2 0 0 0
+    End Values
+    Result "CAUCHY_STRESS_TENSOR" "Kratos" 0.5 Matrix OnGaussPoints "quad_gp"
+    Values
+    21 -6 -6 -6 0 0 0
+     -6 -6 -6 0 0 0
+    End Values
+    Result "DISPLACEMENT" "Kratos" 1 Vector OnNodes
+    Values
+    1 0.1 0 0
+    2 0.2 0 0
+    End Values
+    Result "CAUCHY_STRESS_TENSOR" "Kratos" 1 Matrix OnGaussPoints "tri_gp"
+    Values
+    11 -3 -3 -3 0 0 0
+    End Values
+    Result "CAUCHY_STRESS_TENSOR" "Kratos" 1 Matrix OnGaussPoints "quad_gp"
+    Values
+    21 -7 -7 -7 0 0 0
+     -7 -7 -7 0 0 0
+    End Values
+    """)
+
+
+def test_a_stage_written_in_several_steps_reads_as_its_last_step():
+    """A step cut on non-convergence makes Kratos write a block per step. The stage's
+    result is where it ended, not the first sub-step."""
+    results = gid_results.read_results(STEPPED)
+
+    field = results.field("DISPLACEMENT")
+
+    assert field.time == 1.0
+    assert field.values == {1: [0.1, 0.0, 0.0], 2: [0.2, 0.0, 0.0]}
+
+
+def test_a_gauss_variable_of_two_element_types_keeps_both():
+    """Soil and interface (or two continuum types) both write CAUCHY_STRESS_TENSOR, one
+    block per Gauss set. Asking for the variable must give every element, each with its
+    own points -- not whichever block came first."""
+    results = gid_results.read_results(STEPPED)
+
+    field = results.field("CAUCHY_STRESS_TENSOR")
+
+    assert set(field.values) == {11, 21}
+    assert field.values[11] == [[-3.0] * 3 + [0.0] * 3]
+    assert field.values[21] == [[-7.0] * 3 + [0.0] * 3] * 2
+
+
+def test_one_gauss_set_can_still_be_asked_for_alone():
+    results = gid_results.read_results(STEPPED)
+
+    field = results.field("CAUCHY_STRESS_TENSOR", gauss_set="quad_gp")
+
+    assert set(field.values) == {21}
+    assert field.values[21][0][0] == -7.0
+
+
+def test_an_empty_last_step_of_one_set_does_not_hide_the_other():
+    """The beam's empty `lin2_element_gp` block is written at every step; it must still
+    lose to the soil's block of the same step."""
+    text = STEPPED + dedent("""
+        GaussPoints "lin2_element_gp" ElemType Linear
+        Number Of Gauss Points: 2
+        Natural Coordinates: Internal
+        End GaussPoints
+        Result "CAUCHY_STRESS_TENSOR" "Kratos" 1 Matrix OnGaussPoints "lin2_element_gp"
+        Values
+        End Values
+        """)
+    field = gid_results.read_results(text).field("CAUCHY_STRESS_TENSOR")
+
+    assert set(field.values) == {11, 21}
+
+
+def test_a_results_file_cut_off_mid_write_reads_what_is_there():
+    """A run killed while writing leaves a file that stops mid-block. The stage is still
+    worth looking at, so the reader keeps what it read rather than refusing all of it."""
+    whole = STEPPED.split('Result "CAUCHY_STRESS_TENSOR" "Kratos" 1 Matrix')[0]
+    cut = whole + 'Result "DISPLACEMENT" "Kratos" 2 Vector OnNodes\nValues\n1 0.5 0'
+
+    results = gid_results.read_results(cut)
+
+    # The step cut off before its first full row is empty; the last *complete* step is
+    # what there is to see, not nothing.
+    assert results.field("DISPLACEMENT").time == 1.0
+    assert results.field("DISPLACEMENT").values[1] == [0.1, 0.0, 0.0]
+    assert results.field("CAUCHY_STRESS_TENSOR").time == 0.5

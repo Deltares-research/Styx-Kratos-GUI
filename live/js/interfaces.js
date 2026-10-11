@@ -10,7 +10,7 @@
    Two ways to place one, and a record carries exactly one of them:
 
      • along a sheet pile, which is the usual case and the one
-       examples/crow_case.mdpa contains. `side` says which of the two soils is
+       Kratos' reference decks contain. `side` says which of the two soils is
        unglued from the wall; "both" is the normal answer for a retaining wall.
      • along its own polyline through the soil -- an excavation face, a lining,
        a slip surface. There is no structure between the two soils then, so one
@@ -19,7 +19,7 @@
    Left and right are relative to walking the line in the order its points are
    stored, the same convention the exported element's node order carries.
 
-   Plane strain only. Every reference deck in examples/ is a section, and a 3D
+   Plane strain only. Every reference deck is a section, and a 3D
    interface is a different element with a different node layout and no fixture
    to pin it -- see the INTERFACES table in server/app/kratos.py.
    ══════════════════════════════════════════════════════════════════ */
@@ -32,10 +32,10 @@ App.Interfaces = (function () {
      and a virtual thickness the stiffness is derived over. The material is filled
      in from the project when the interface is drafted, because the factor reduces
      a particular soil's strength rather than a number in the abstract. */
-  var DEFAULT_SECTION = {
-    name: 'Interface', r_inter: 0.7, virtual_thickness: 0.01,
-    normal_stiffness: null, shear_stiffness: null, permeability: 'Neutral'
-  };
+  function defaultSection() {
+    return Object.assign({ name: 'Interface', r_inter: 0.7, virtual_thickness: 0.01,
+                           permeability: 'Neutral' }, App.PropertySets.defaults('interface'));
+  }
 
   var SIDES = ['both', 'left', 'right'];
 
@@ -133,7 +133,7 @@ App.Interfaces = (function () {
     var known = library.some(function (s) { return s.id === record.section; });
     if (!known) {
       var soil = ((project && project.materials) || [])[0];
-      library.push(Object.assign({ id: record.section }, DEFAULT_SECTION,
+      library.push(Object.assign({ id: record.section }, defaultSection(),
                                  { material: soil ? soil.id : null }));
     }
     return library;
@@ -172,25 +172,28 @@ App.Interfaces = (function () {
 
   function validateSection(section) {
     if (!section.name || !section.name.trim()) return 'Section name cannot be empty.';
-    if (!(section.r_inter > 0 && section.r_inter <= 1)) {
+    // Null is a choice: each stretch of contact then takes its own soil's Rinter.
+    if (section.r_inter !== null && section.r_inter !== undefined
+        && !(section.r_inter > 0 && section.r_inter <= 1)) {
       return 'The strength reduction R_inter must be above 0 and at most 1.';
     }
     if (!(section.virtual_thickness > 0)) {
       return 'The virtual thickness must be greater than zero.';
     }
-    var stiffnesses = ['normal_stiffness', 'shear_stiffness'];
+    var stiffnesses = ['INTERFACE_NORMAL_STIFFNESS', 'INTERFACE_SHEAR_STIFFNESS'];
     for (var i = 0; i < stiffnesses.length; i += 1) {
-      var value = section[stiffnesses[i]];
-      if (value !== null && value !== undefined && !(value > 0)) {
-        return 'An interface stiffness must be greater than zero.';
+      var value = (section.variables || {})[stiffnesses[i]];
+      if (value !== undefined && !(value > 0)) {
+        return stiffnesses[i] + ' must be greater than zero.';
       }
     }
-    // Without a soil to reduce there is nothing to derive the contact stiffness
-    // from, which is the server's rule too rather than a second opinion on it.
-    if (!section.material
-        && !(section.normal_stiffness > 0 && section.shear_stiffness > 0)) {
-      return 'An interface needs a soil material, or both stiffnesses given directly.';
-    }
+    var problem = App.PropertySets.validate('interface', section);
+    if (problem) return problem;
+    // No material and no stiffnesses is the ordinary case, not an error: the contact
+    // then derives from whatever soil each stretch runs against. The server dropped
+    // the old refusal for that reason (server/app/schemas.py, InterfaceSection), and
+    // the one case with nothing to derive from -- no soil either side -- is caught at
+    // export, where the adjacent bodies are known.
     return null;
   }
 
@@ -260,7 +263,7 @@ App.Interfaces = (function () {
 
   function sectionOf(record) {
     return storedSections().filter(function (s) { return s.id === record.section; })[0]
-      || Object.assign({ id: record.section }, DEFAULT_SECTION);
+      || Object.assign({ id: record.section }, defaultSection());
   }
 
   /* What the interface runs along, for the explorer and the viewport: the pile's
@@ -311,7 +314,7 @@ App.Interfaces = (function () {
   }
 
   return {
-    SIDES: SIDES, DEFAULT_SECTION: DEFAULT_SECTION,
+    SIDES: SIDES, defaultSection: defaultSection,
     available: available, unavailableMessage: unavailableMessage,
     livePiles: livePiles, draft: draft, sectionsFor: sectionsFor, sectionOf: sectionOf,
     pathOf: pathOf, length: length,

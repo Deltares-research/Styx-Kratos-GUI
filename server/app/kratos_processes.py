@@ -43,7 +43,7 @@ staged interface to `1_Initial_stage` only. Deactivating a sheet pile's interfac
 `staged_parts`) removes its own contact stiffness but does nothing to reconnect the two
 soil copies `app.interfaces` split apart for it, so without this the initial stage --
 meant to be undisturbed ground -- models two mechanically disconnected halves. Not
-inferred from a reference GeoMechanics deck (none in examples/ carries a sheet pile that
+inferred from a reference GeoMechanics deck (none at hand carries a sheet pile that
 is *not yet* installed); read instead off Deltares/FEA-Tools'
 `MiscellaneousTools/InterfaceInserter/master_slave_inserter.py`, a working tool built
 for the same Kratos process, and off the process's own Kratos source
@@ -52,8 +52,8 @@ See `_master_slave_constraint` for the one deliberate difference from that refer
 
 `normal_loads` adds one `ApplyNormalLoadTableProcess` per `NormalLoad` (app/schemas.py)
 to `loads_process_list`, in every stage the same way an ordinary load is -- nothing
-about a normal load ties it to wall installation. The `"Hydrostatic"` shape (the CROW
-reference case's `WaterLoad_StageN` arrangement) is copied verbatim from a real working
+about a normal load ties it to wall installation. The `"Hydrostatic"` shape (a staged
+excavation's `WaterLoad_StageN` arrangement) is copied verbatim from a real working
 example, Deltares/FEA-Tools' `MiscellaneousTools/InterfaceInserter/
 test_project_parameters.json`, whose `River_load` process this reproduces field for
 field. The `"Uniform"` shape is not backed by a working example the way that one is; it
@@ -68,7 +68,7 @@ import json
 import re
 from dataclasses import dataclass
 
-from app import kratos_materials
+from app import kratos_materials, units
 
 ORCHESTRATOR = "Orchestrators.KratosMultiphysics.SequentialOrchestrator"
 ANALYSIS_STAGE = "Stages.KratosMultiphysics.GeoMechanicsApplication.GeoMechanicsAnalysis"
@@ -162,14 +162,10 @@ loop never runs, that distance stays `DBL_MAX`, the shape parameter comes out as
 utility needs two points to interpolate between whether or not the second one adds
 anything, so it gets two."""
 
-KILO = kratos_materials.KILO
-"""kN -> N. The project is in kN and the deck is SI; see `kratos_materials.KILO`."""
-
-GRAVITY = kratos_materials.GRAVITY
-"""m/s2. Imported rather than written again: `kratos_materials` divides a unit weight by
-this same g to get the density it writes into the materials file, so if the two ever
-disagreed a soil's weight in the deck would not be its unit weight and nothing in the
-run would say so."""
+GRAVITY = units.GRAVITY_SI
+"""m/s2 -- and the same number in every unit system the project can be in, since all of
+them measure length in metres and time in seconds (`app/units.py`). The loads, pressures
+and specific weights below are the project's own numbers, written as they stand."""
 
 JSON_OUTPUT_FREQUENCY = 0.9999999999
 """See `_json_output`: a shade under one stage, so it writes once."""
@@ -263,12 +259,8 @@ def project_parameters(
         # continuum elements their self weight, and it is not filtered because the part
         # it names is the one the solver assembles out of whatever is active.
         loads_processes = [_gravity()]
-        # The project's loads are in kN and kN/m; the deck is in N. Converted here
-        # rather than inside `_load`, which is a plain vector writer and is also what
-        # puts gravity above into the list -- an acceleration in m/s2, already SI, and
-        # the one entry that must not be scaled.
-        loads_processes += [_load(name, variable, active,
-                                  [component * KILO for component in value])
+        # In the project's units, which are the deck's: written as they stand.
+        loads_processes += [_load(name, variable, active, list(value))
                             for name, variable, active, value in loads if keep(name)]
         loads_processes += [
             _normal_load(name, fluid_pressure_type, pressure, water_y, specific_weight)
@@ -288,7 +280,7 @@ def project_parameters(
         process_parts = _process_parts(constraint_processes + loads_processes,
                                        stage.ties)
         solver = _solver_settings(deck_name, domain_size, bodies, process_parts,
-                                  rotation_dofs, imported=len(stages) > 1,
+                                  rotation_dofs, imported=stage.modeler or index > 0,
                                   stage=stage)
         rendered[stage.name] = _stage(stage, index, constraint_processes,
                                       loads_processes, auxiliary, solver, deck_name)
@@ -322,8 +314,7 @@ def _preprocess(stage: Stage, deck_name: str) -> dict | None:
         the stages before it did to it: the wall would arrive activated on top of
         undisturbed ground rather than on the ground the initial stage settled.
 
-    Both are read off `crow_validation/common/staged_construction.json`, Kratos' own
-    staged excavation benchmark, and hold in
+    Both are read off Kratos' own staged excavation benchmark, and hold in
     `staged_construction_for_generated_mesh.json` too.
 
     A stage that switches nothing and imports nothing has no preprocess block at all
@@ -428,7 +419,7 @@ def _process_parts(processes: list[dict],
 
 # -- the staged auxiliary processes ------------------------------------------
 # All four are read field for field off `staged_construction_for_generated_mesh.json`,
-# the CROW reference deck. Which stages each belongs in is `app.kratos`'s decision and
+# Kratos' own staged-excavation reference deck. Which stages each belongs in is `app.kratos`'s decision and
 # is documented there; what the parameters mean is here.
 
 def _k0_procedure(parts: tuple[str, ...]) -> dict:
@@ -683,7 +674,7 @@ def _pore_pressure(water_y: float, specific_weight: float) -> dict:
             "fluid_pressure_type": "Hydrostatic",
             "gravity_direction": 1,
             "reference_coordinate": water_y,
-            "specific_weight": specific_weight * KILO,
+            "specific_weight": specific_weight,
         },
     }
 
@@ -697,7 +688,7 @@ def _master_slave_constraint(master_part_name: str, slave_part_name: str) -> dic
     reasoning that reading the parameters could not have corrected -- see
     `MASTER_SLAVE_SEARCH_RADIUS` and `MASTER_SLAVE_NEIGHBOURS` for what each one turned
     out to mean and how the deck failed. The general lesson is written down in
-    plan/staged-construction-plan.md sec 7: a parameter whose meaning was inferred is a
+    plan/outdated/staged-construction-plan.md sec 7: a parameter whose meaning was inferred is a
     guess until a run says otherwise, however good the inference looked."""
     return {
         "python_module": "assign_master_slave_constraints_to_neighbours_process",
@@ -740,14 +731,14 @@ def _normal_load(part_name: str, fluid_pressure_type: str, pressure: float,
         # dropped on the way out. Both branches share one parameter set, so the key is
         # one the process already declares -- it is not an invention that would trip
         # Kratos' validation against its own defaults.
-        "value": [pressure * KILO, 0.0],
+        "value": [pressure, 0.0],
         "table": [0, 0],
     }
     if fluid_pressure_type == "Hydrostatic":
         parameters.update({
             "gravity_direction": 1,
             "reference_coordinate": water_y,
-            "specific_weight": specific_weight * KILO,
+            "specific_weight": specific_weight,
         })
     return {
         "python_module": "apply_normal_load_table_process",

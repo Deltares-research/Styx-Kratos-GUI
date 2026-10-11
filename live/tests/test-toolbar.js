@@ -112,27 +112,38 @@
 
   test('the interface tool reaches App.Interfaces rather than the frozen action', function () {
     var saved = App.Interfaces;
+    App.state = App.state || {};
+    var wasMode = App.state.modelMode;
     var started = 0;
     App.Interfaces = { start: function () { started += 1; } };
+    // The tool is 2D-only; pinned so a mode left behind by an earlier test cannot refuse it.
+    App.state.modelMode = '2d';
     try {
       withInstall(function (notes) {
         App.runAction({ action: 'interface' });
         T.eq(started, 1);
         T.eq(notes.filter(function (n) { return n === 'frozen:interface'; }), []);
       });
-    } finally { App.Interfaces = saved; }
+    } finally { App.Interfaces = saved; App.state.modelMode = wasMode; }
   });
 
   test('switching to 2D disables the 3D-only toolbar buttons and re-enables them in 3D', function () {
-    var bar = document.createElement('div');
-    bar.id = 'maintoolbar';
+    // The page's own toolbar host, as the app has exactly one; a second #maintoolbar would never be found.
+    var bar = document.getElementById('maintoolbar');
+    var created = !bar;
+    if (created) {
+      bar = document.createElement('div');
+      bar.id = 'maintoolbar';
+      document.body.appendChild(bar);
+    }
+    var previous = Array.prototype.slice.call(bar.childNodes);
+    bar.textContent = '';
     ['viewIso', 'navRotate', 'toggleProjection', 'zoomFit'].forEach(function (action) {
       var b = document.createElement('button');
       b.className = 'tbtn';
       b.dataset.action = action;
       bar.appendChild(b);
     });
-    document.body.appendChild(bar);
     function btn(action) { return bar.querySelector('[data-action="' + action + '"]'); }
 
     try {
@@ -147,7 +158,8 @@
       T.ok(!btn('viewIso').classList.contains('disabled'), 'back in 3D the presets return');
       T.ok(!btn('viewIso').disabled);
     } finally {
-      bar.remove();
+      if (created) bar.remove();
+      else { bar.textContent = ''; previous.forEach(function (n) { bar.appendChild(n); }); }
     }
   });
 

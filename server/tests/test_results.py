@@ -127,12 +127,11 @@ def test_runs_are_listed_newest_first(runs_root):
 
 
 def test_a_run_is_named_by_its_deck_and_when_it_started(runs_root):
-    make_run(runs_root, "CROW_excavation_wall_2026-09-22_00-49",
-             deck="CROW_excavation_wall")
+    make_run(runs_root, "Staged_excavation_2026-09-22_00-49", deck="Staged_excavation")
 
     run = results.runs()[0]
 
-    assert run["deck"] == "CROW_excavation_wall"
+    assert run["deck"] == "Staged_excavation"
     assert run["started"] == "2026-09-22T00:49"
 
 
@@ -427,7 +426,7 @@ def test_a_gauss_field_can_be_asked_for_per_element_or_per_node(client, readable
         f"/api/results/runs/{readable_run}/stages/1/field/syy?location=nodes").json()
 
     assert per_element["ids"] == [1]
-    assert per_element["values"][0] == pytest.approx(-100.0)
+    assert per_element["values"][0] == pytest.approx(-100_000.0)
     assert per_node["ids"] == [1, 2, 3]
 
 
@@ -478,3 +477,104 @@ def test_the_archive_endpoint_returns_a_zip(client, runs_root):
     assert response.status_code == 200
     assert response.content[:2] == b"PK"
     assert "Test_model_2026-09-22_00-49.zip" in response.headers["content-disposition"]
+
+
+# ── A run id that climbs out of the runs root (finding F9) ──────────────────
+#
+# `RUN_NAME`'s `deck` group is `.+`, so `..\secret_2026-01-01_00-00` matches it. On
+# Windows the backslash is a separator, and the "run" resolved outside the runs root.
+
+OUTSIDE = "secret_2026-01-01_00-00"
+
+
+@pytest.fixture
+def outside_run(runs_root):
+    """A real run directory beside the runs root, holding something private."""
+    directory = make_run(runs_root.parent, OUTSIDE)
+    (directory / "private.txt").write_text("do not serve", encoding="utf-8")
+    return directory
+
+
+@pytest.mark.parametrize("run_id", [
+    "..\\" + OUTSIDE,
+    "../" + OUTSIDE,
+    "x\\..\\..\\" + OUTSIDE,
+    "C:\\" + OUTSIDE,
+    "\\\\server\\share\\" + OUTSIDE,
+    ".." + OUTSIDE,
+])
+def test_a_run_id_with_a_separator_or_dots_is_refused(runs_root, outside_run, run_id):
+    with pytest.raises(results.UnknownRun):
+        results.run_directory(run_id)
+
+
+@pytest.mark.parametrize("encoded", [
+    f"..%5C{OUTSIDE}",
+    f"..%2F{OUTSIDE}",
+    f"x%5C..%5C..%5C{OUTSIDE}",
+])
+@pytest.mark.parametrize("tail", [
+    "", "/archive", "/files/private.txt", "/members", "/members/wall/moment",
+    "/stages/1/fields", "/stages/1/mesh", "/stages/1/displacement", "/stages/1/at/1",
+    "/stages/1/parts", "/stages/1/field/p",
+])
+def test_a_traversing_run_id_is_refused_over_http(client, outside_run, encoded, tail):
+    response = client.get(f"/api/results/runs/{encoded}{tail}")
+
+    assert response.status_code in (400, 404)
+    assert "do not serve" not in response.text
+    assert b"private.txt" not in response.content
+
+
+def test_the_runs_root_itself_is_not_a_run(runs_root):
+    with pytest.raises(results.UnknownRun):
+        results.run_directory(".")
+
+
+def test_a_deck_name_with_two_dots_keeps_its_runs(runs_root):
+    """`app.deck.deck_name` is a file's stem, and `model..v2.mdpa` is a legal file."""
+    make_run(runs_root, "model..v2_2026-01-01_00-00", deck="model..v2")
+
+    assert results.run_directory("model..v2_2026-01-01_00-00").is_dir()
+
+
+def test_the_listing_ignores_what_is_not_a_run(runs_root):
+    """A runs root is a folder people put things in: notes, a zip, a copied deck."""
+    make_run(runs_root, "Test_model_2026-09-22_00-49")
+    (runs_root / "notes").mkdir()
+    (runs_root / "old results.zip").write_bytes(b"PK")
+    (runs_root / "Test_model_2026-09-22").mkdir()
+
+    assert [run["id"] for run in results.runs()] == ["Test_model_2026-09-22_00-49"]
+
+
+# ── The run's unit system ───────────────────────────────────────────────────
+# Kratos has no units: a run is in its project's system, recorded beside the deck
+# (`calculate.UNITS_NAME`), and every label the results carry follows it.
+
+def test_a_run_without_a_record_is_si(readable_run):
+    assert results.run_unit_system(readable_run) == "SI"
+    assert results.describe(readable_run)["unit_system"] == "SI"
+
+
+def test_a_run_says_which_system_its_numbers_are_in(client, runs_root, readable_run):
+    (runs_root / readable_run / calculate.UNITS_NAME).write_text(
+        json.dumps({"unit_system": "kN"}), encoding="utf-8")
+    assert results.run_unit_system(readable_run) == "kN"
+    answer = client.get(f"/api/results/runs/{readable_run}/stages/1/field/syy"
+                        "?location=elements").json()
+    assert answer["unit"] == "kPa"
+    assert answer["values"][0] == pytest.approx(-100_000.0), "labelled, never scaled"
+
+
+@pytest.mark.parametrize("text", ["not json", '{"unit_system": "imperial"}', "[]"])
+def test_a_record_that_cannot_be_read_is_si(runs_root, readable_run, text):
+    (runs_root / readable_run / calculate.UNITS_NAME).write_text(text, encoding="utf-8")
+    assert results.run_unit_system(readable_run) == "SI"
+
+
+def test_the_deck_writes_its_system_beside_itself(tmp_path):
+    written = calculate.write_deck({"deck_name": "d", "mdpa": "", "project_parameters": "{}",
+                                    "unit_system": "kN"}, tmp_path)
+    assert calculate.UNITS_NAME in written
+    assert json.loads((tmp_path / calculate.UNITS_NAME).read_text()) == {"unit_system": "kN"}

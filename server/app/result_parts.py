@@ -18,7 +18,7 @@ A part with no elements in a stage's mesh is one of:
 
 *   **deactivated by that phase.** Kratos writes the block and leaves it empty. This is
     how a staged result recovers the construction sequence -- no phase record is
-    consulted and none is needed. Verified against the real seven-stage CROW run, where
+    consulted and none is needed. Verified against a real seven-stage excavation run, where
     the three excavation lifts drop out at stages 4, 6 and 7 exactly as the phase names
     say they should.
 *   **never written by this output at all.** The GiD writer emits only the element types
@@ -81,7 +81,7 @@ def element_owner(model: MdpaModel) -> dict[int, str]:
     Only parts that own elements are considered, so a node set does not lay claim to
     the elements its nodes happen to belong to.
 
-    Checked against the real CROW deck, where no element is claimed by two parts: the
+    Checked against a real staged deck, where no element is claimed by two parts: the
     staged split gives every lift its own body. Should a deck ever overlap them, the
     first part in file order wins, which is the deck's own outermost grouping.
     """

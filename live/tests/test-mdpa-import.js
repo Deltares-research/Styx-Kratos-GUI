@@ -113,10 +113,10 @@ test('the File menu offers Import mesh (.mdpa)…', function () {
 
   test('the checklist lists one row per section, named by part or by kind', function () {
     withDom(function () {
-      App.MdpaImportDialog.openChecklist(MODEL, 'crow_case.mdpa');
+      App.MdpaImportDialog.openChecklist(MODEL, 'sheet_pile.mdpa');
       var panel = document.getElementById('mdpa-checklist');
       T.ok(panel, 'the checklist panel is inserted');
-      T.eq(panel.querySelector('.dlg-title').textContent, 'crow_case.mdpa');
+      T.eq(panel.querySelector('.dlg-title').textContent, 'sheet_pile.mdpa');
 
       var labels = Array.prototype.map.call(
         panel.querySelectorAll('input[type="checkbox"]'),

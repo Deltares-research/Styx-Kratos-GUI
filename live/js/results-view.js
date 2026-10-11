@@ -206,12 +206,14 @@ App.ResultsView = (function () {
   function ensureLegend() {
     var parent = host();
     if (!parent) return null;
-    if (!legendHost || !legendHost.parentNode) {
+    // Re-homed whenever it is not in *this* viewport: a cached legend whose old parent
+    // was replaced would otherwise keep being filled in where nobody can see it.
+    if (!legendHost) {
       legendHost = document.createElement('div');
       legendHost.id = 'vp-legend';
       legendHost.className = 'vp-hud vp-legend';
-      parent.appendChild(legendHost);
     }
+    if (legendHost.parentNode !== parent) parent.appendChild(legendHost);
     return legendHost;
   }
 

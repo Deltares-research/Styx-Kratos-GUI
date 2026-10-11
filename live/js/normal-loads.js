@@ -12,7 +12,7 @@
 
      • "Hydrostatic" derives the pressure from the project's own water level,
        zero at the phreatic surface and increasing with depth -- the usual
-       case for an exposed excavation face (the CROW reference case's
+       case for an exposed excavation face (a staged excavation's
        WaterLoad_StageN arrangement).
      • "Uniform" applies a fixed `pressure` everywhere along the line instead,
        for a load that is not water.
@@ -197,7 +197,7 @@ App.NormalLoads = (function () {
       // blank box as a load of zero.
       var pressure = controls.pressure.value.trim();
       if (pressure === '') {
-        message.textContent = 'Give the load a pressure in kN/m².';
+        message.textContent = 'Give the load a pressure in ' + App.Units.label('stress') + '.';
         return null;
       }
       record.pressure = Number(pressure);
@@ -257,7 +257,8 @@ App.NormalLoads = (function () {
         // something the user states rather than something they can walk past.
         controls.pressure = input(known ? record.pressure : (record.pressure || ''));
         row('Pressure', controls.pressure,
-            'Required. Magnitude [kN/m²], normal to the line, compression positive.');
+            'Required. Magnitude [' + App.Units.label('stress')
+            + '], normal to the line, compression positive.');
 
         controls.active = el('input.mesh-setting-control', { type: 'checkbox' });
         controls.active.checked = record.active !== false;

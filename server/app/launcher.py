@@ -91,6 +91,28 @@ def check_environment(python: Path) -> None:
     subprocess.check_call([str(python), "-c", probe], cwd=SERVER_ROOT)
 
 
+ALLOWED_HOSTS_ENV = "KRATOS_GUI_ALLOWED_HOSTS"
+"""Host names the server answers to besides the loopback ones, comma-separated. Read by
+`app.main`'s Host check; defined here because the launcher runs before the server's
+dependencies are installed, so it cannot import `app.main`."""
+
+LOOPBACK = ("127.0.0.1", "localhost", "::1", "[::1]")
+ALL_INTERFACES = ("0.0.0.0", "::", "[::]")
+
+
+def server_environment(args: argparse.Namespace, base: dict[str, str]) -> dict[str, str]:
+    """What the server process needs in its environment beyond `base`.
+
+    `--host modelling-pc` has to be reachable *as* modelling-pc, or the Host check would
+    refuse the very address the user chose. An all-interfaces bind names no host, so it
+    adds none: which name the LAN uses is for `KRATOS_GUI_ALLOWED_HOSTS` to say.
+    """
+    if args.host in LOOPBACK or args.host in ALL_INTERFACES:
+        return {}
+    extra = [h for h in (base.get(ALLOWED_HOSTS_ENV, ""), args.host) if h]
+    return {ALLOWED_HOSTS_ENV: ",".join(extra)}
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Set up and run the kratos-GUI backend")
     parser.add_argument("--check", action="store_true", help="install and validate dependencies, then exit")
@@ -113,6 +135,7 @@ def main(argv: list[str] | None = None) -> int:
             "--host", args.host, "--port", str(args.port),
         ]
         os.chdir(SERVER_ROOT)
+        os.environ.update(server_environment(args, dict(os.environ)))
         if args.open_browser:
             url = f"http://{args.host}:{args.port}/"
             threading.Timer(1.0, webbrowser.open, args=(url,)).start()

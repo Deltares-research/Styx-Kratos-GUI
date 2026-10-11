@@ -229,20 +229,25 @@ def test_an_element_no_part_claims_is_still_drawn(stage):
 
 # ── Against the real run ────────────────────────────────────────────────────
 
-def test_the_real_stage_builds_and_every_index_is_in_range():
+@pytest.fixture
+def real_run(monkeypatch):
+    """A Kratos run of the test model (`tests/results_run.py`), or a skip without Kratos:
+    its directory and its own deck."""
+    from tests import results_run
+
+    run = results_run.real_run()
+    results_run.use(monkeypatch, run)
+    root, run_id = run
+    return root / run_id, mdpa_import.import_mdpa(results_run.deck_text(run))
+
+
+def test_the_real_stage_builds_and_every_index_is_in_range(real_run):
     """An index past the end of the positions buffer is the failure mode that matters:
     three.js does not check, it reads whatever is next in memory and draws a spike
     across the model."""
-    from pathlib import Path
     from app import results
 
-    directory = Path.home() / "KratosGUI" / "runs" / "CROW_excavation_wall_2026-09-22_00-49"
-    if not directory.is_dir():
-        pytest.skip("this machine has no CROW run to read")
-
-    model = mdpa_import.import_mdpa(
-        (directory / "CROW_excavation_wall.mdpa").read_text(encoding="utf-8"))
-
+    directory, model = real_run
     for stage in results.describe(directory.name)["stages"]:
         mesh = gid_results.read_mesh(
             (directory / stage["mesh_file"]).read_text(encoding="utf-8"))
@@ -256,16 +261,10 @@ def test_the_real_stage_builds_and_every_index_is_in_range():
             assert len(section["positions"]) == 3 * vertices
 
 
-def test_the_real_stages_show_the_excavation_disappearing():
-    from pathlib import Path
+def test_the_real_stages_show_the_excavation_disappearing(real_run):
     from app import results
 
-    directory = Path.home() / "KratosGUI" / "runs" / "CROW_excavation_wall_2026-09-22_00-49"
-    if not directory.is_dir():
-        pytest.skip("this machine has no CROW run to read")
-
-    model = mdpa_import.import_mdpa(
-        (directory / "CROW_excavation_wall.mdpa").read_text(encoding="utf-8"))
+    directory, model = real_run
 
     def parts_drawn(n):
         stage = results.describe(directory.name)["stages"][n - 1]
@@ -372,7 +371,8 @@ def test_an_edge_two_elements_share_is_drawn_once():
 
 
 # ── Quadratic quadrilaterals ────────────────────────────────────────────────
-# Eemdijk is mostly eight-node quadrilaterals. Shaded through the corners alone, their
+# A deck from elsewhere is often mostly eight-node quadrilaterals. Shaded through the
+# corners alone, their
 # four mid-side values never reach the screen -- and the mesh outline, which runs
 # through those mid-side nodes, has no vertex to be drawn from.
 
@@ -440,3 +440,71 @@ def test_an_eight_node_quadrilateral_section_is_outlined_through_its_midsides():
     assert segments_of(soil) == {frozenset(pair) for pair in
                                  ((1, 5), (5, 2), (2, 6), (6, 3),
                                   (3, 7), (7, 4), (4, 8), (8, 1))}
+
+
+# ── A 3D stage: each part drawn as its outer skin ───────────────────────────
+
+MDPA_3D = dedent("""
+    Begin Properties 1
+    End Properties
+    Begin Nodes
+    1 0 0 0
+    2 1 0 0
+    3 0 1 0
+    4 0 0 1
+    5 1 1 1
+    End Nodes
+    Begin Elements UPwSmallStrainElement3D4N
+    1 1 1 2 3 4
+    2 1 2 3 4 5
+    End Elements
+    Begin SubModelPart Soil
+     Begin SubModelPartNodes
+     1
+     2
+     3
+     4
+     5
+     End SubModelPartNodes
+     Begin SubModelPartElements
+     1
+     2
+     End SubModelPartElements
+    End SubModelPart
+    """)
+
+MESH_3D = dedent("""
+    MESH "Kratos_Tetrahedra3D4_Mesh_1" dimension 3 ElemType Tetrahedra Nnode 4
+    Coordinates
+    1 0 0 0
+    2 1 0 0
+    3 0 1 0
+    4 0 0 1
+    5 1 1 1
+    End Coordinates
+    Elements
+    1 1 2 3 4 1
+    2 2 3 4 5 1
+    End Elements
+    """)
+
+
+def test_a_3d_part_is_drawn_as_its_skin_without_the_shared_face():
+    """Two tetrahedra glued on face 2-3-4: eight faces, the shared one inside, six drawn."""
+    sections = result_mesh.stage_sections(mdpa_import.import_mdpa(MDPA_3D),
+                                          gid_results.read_mesh(MESH_3D))["sections"]
+
+    (soil,) = [s for s in sections if s["part"] == "Soil"]
+    triangles = [tuple(sorted(soil["node_ids"][i] for i in soil["indices"][k:k + 3]))
+                 for k in range(0, len(soil["indices"]), 3)]
+    assert len(triangles) == 6
+    assert (2, 3, 4) not in triangles
+
+
+def test_a_3d_skin_offers_no_per_element_colouring():
+    """A skin face belongs to no single element, so the viewer falls back to nodes."""
+    sections = result_mesh.stage_sections(mdpa_import.import_mdpa(MDPA_3D),
+                                          gid_results.read_mesh(MESH_3D))["sections"]
+
+    (soil,) = [s for s in sections if s["part"] == "Soil"]
+    assert not soil.get("triangle_elements")

@@ -167,12 +167,10 @@ def parsed(source: str) -> list[str]:
 
 
 def main(paths: list[str]) -> int:
-    # `js/` is the frozen mockup, and it is in the default scan for the same reason
-    # `live/js` is: the live layer patches the mockup's own dialogs and explorer in
-    # place, so a syntax error there takes out exactly as much of the running app --
-    # and the phase editor edits both trees at once.
+    # `live/base/js` is in the default scan because the live layer patches its dialogs
+    # and explorer in place, so a syntax error there takes out as much of the app.
     files = [pathlib.Path(p) for p in paths] or sorted(
-        pathlib.Path("js").glob("*.js")) + sorted(
+        pathlib.Path("live/base/js").glob("*.js")) + sorted(
         pathlib.Path("live/js").glob("*.js")) + sorted(
         pathlib.Path("live/tests").glob("*.js"))
     if esprima is None:

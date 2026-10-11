@@ -8,10 +8,10 @@
       var second = App.MaterialLibrary.addSoil(preset.id);
       T.ok(first.id !== second.id);
       T.ok(first.name !== second.name);
-      first.E = 123;
-      preset.E = 456;
-      T.ok(App.MaterialLibrary.soils()[0].E !== 123);
-      T.ok(App.MaterialLibrary.soils()[0].E !== 456);
+      first.variables.YOUNG_MODULUS = 123;
+      preset.variables.YOUNG_MODULUS = 456;
+      T.ok(App.MaterialLibrary.soils()[0].variables.YOUNG_MODULUS !== 123);
+      T.ok(App.MaterialLibrary.soils()[0].variables.YOUNG_MODULUS !== 456);
       App.MATERIALS = [{ id: second.id, name: second.name }];
       var third = App.MaterialLibrary.addSoil(App.MaterialLibrary.soils()[0].id);
       T.ok(third.id !== second.id);
@@ -41,16 +41,17 @@
   });
 
   test('material dialog adds library soil, applies interface preset and cancels both', function () {
-    var saved = App.MATERIALS;
+    var saved = App.MATERIALS, savedLayers = App.LAYERS;
     var host = document.createElement('div'); host.id = 'modal-layer'; document.body.appendChild(host);
-    App.MATERIALS = [];
+    // Closing the dialog remounts the Model explorer, which needs its host.
+    var tree = document.createElement('div'); tree.id = 'tree-model'; document.body.appendChild(tree);
+    // No materials means no layers: a layer pointing at a missing material is not a state the app can be in.
+    App.MATERIALS = []; App.LAYERS = [];
     try {
       App.Dialogs.materials();
       var apply = host.querySelector('[data-action="apply-interface-preset"]');
-      T.ok(apply.disabled);
       host.querySelector('[data-action="add-soil-preset"]').click();
       T.eq(App.MATERIALS.length, 1);
-      T.ok(!apply.disabled);
       apply.click();
       T.eq(App.MATERIALS[0].rInter, App.MaterialLibrary.interfaces()[0].rInter);
       Array.from(host.querySelectorAll('.dlg-foot button')).find(function (b) {
@@ -59,30 +60,25 @@
       T.eq(App.MATERIALS.length, 0);
     } finally {
       if (host.querySelector('.dlg-x')) host.querySelector('.dlg-x').click();
-      host.remove(); App.MATERIALS = saved;
+      host.remove(); tree.remove(); App.MATERIALS = saved; App.LAYERS = savedLayers;
     }
   });
 })();
 
-/* ── Porosity and k0_nc survive the round trip ──────────────────────────────
-   `Material.porosity` and `Material.k0_nc` were added server-side for the CROW
-   reference (plan sec 7.4) under one rule: the user owns the value, and a derived
-   default is only for when there is not one. The browser's own material record never
-   learned either field, so fromProject dropped them on the way in and
-   materialsToServer omitted them on the way out -- and PATCH /api/project/materials
-   replaces the whole library. Opening the material dialog on a project that had them
-   and pressing OK therefore reset both to null, silently: the deck then fell back to
-   DEFAULT_POROSITY and to Jaky, and the user's numbers were gone with nothing said.
-
-   Round-tripping them is the fix, and is what these assert. The editor rows on top of
-   them are in js/dialogs.js' materialEditor. */
+/* ── A material's Kratos block survives the round trip ──────────────────────
+   PATCH /api/project/materials replaces the whole library, so a material the dialog
+   never opened has to go back exactly as it came: every variable, a string, a list, a
+   law nobody here knows. A variable dropped on the way is a variable the next save
+   deletes -- which is how porosity and K0 were once lost without a word. */
 
 (function () {
   function serverMaterial(extra) {
     return Object.assign({
-      id: 'm9', name: 'Sand, dense', model: 'Mohr-Coulomb', type: 'Drained',
-      color: '#c4a86a', g_unsat: 18, g_sat: 20.5, E: 25000, nu: 0.28,
-      c: 0.5, phi: 32, k: 1.5, r_inter: 0.7, interface_permeability: 'Neutral'
+      id: 'm9', name: 'Sand, dense', color: '#c4a86a',
+      constitutive_law: 'SmallStrainUDSM2DPlaneStrainLaw',
+      variables: { YOUNG_MODULUS: 4.5e7, POROSITY: 0.33, K0_NC: 0.46,
+                   GEO_DRAINAGE_TYPE: 'CONSTANT_PW_FIELD', UDSM_PARAMETERS: [1, 2.5] },
+      tables: {}, r_inter: 0.7, interface_permeability: 'Neutral'
     }, extra || {});
   }
 
@@ -92,36 +88,40 @@
     return App.Model.materialsToServer(App.Model.fromProject(project).MATERIALS)[0];
   }
 
-  test('a typed porosity survives the material round trip', function () {
-    T.eq(roundTrip({ porosity: 0.42 }).porosity, 0.42);
-  });
-
-  test('a typed k0_nc survives the material round trip', function () {
-    T.eq(roundTrip({ k0_nc: 0.62 }).k0_nc, 0.62);
-  });
-
-  /* Null is the value that means "derive it" -- DEFAULT_POROSITY for the one, Jaky's
-     1 - sin(phi) for the other -- so it has to travel as null rather than be dropped
-     or turned into a number here. Sending it absent would be read the same way by the
-     server, but only by accident; saying it explicitly is what keeps the two ends
-     agreeing about who decides. */
-  test('an unset porosity and k0_nc travel as null, not as an invented default',
-       function () {
-    var sent = roundTrip();
-    T.eq(sent.porosity, null, 'porosity was not sent as null');
-    T.eq(sent.k0_nc, null, 'k0_nc was not sent as null');
-  });
-
-  /* The whole library goes in one PATCH, so a material the dialog never opened has to
-     come back out byte for byte -- that is the case the original bug actually hit. */
   test('every field the server sent comes back, for a material nothing touched',
        function () {
-    var original = serverMaterial({ porosity: 0.33, k0_nc: 0.46 });
-    var sent = roundTrip({ porosity: 0.33, k0_nc: 0.46 });
+    var original = serverMaterial();
+    var sent = roundTrip();
     Object.keys(original).forEach(function (key) {
       T.eq(sent[key], original[key], 'field ' + key + ' did not survive');
     });
     T.eq(Object.keys(sent).sort(), Object.keys(original).sort(),
          'the round trip changed the set of fields');
+  });
+
+  test('the browser\'s copy is its own: an edit does not reach the project it came from',
+       function () {
+    var project = { domain: {}, boreholes: [], layers: [], custom_parts: [],
+                    materials: [serverMaterial()] };
+    var mapped = App.Model.fromProject(project).MATERIALS[0];
+    mapped.variables.YOUNG_MODULUS = 1;
+    T.eq(project.materials[0].variables.YOUNG_MODULUS, 4.5e7);
+  });
+
+  test('a library preset arrives in the project\'s units and dimension', function () {
+    var saved = App.PROJECT, savedMaterials = App.MATERIALS;
+    try {
+      App.MATERIALS = [];
+      App.PROJECT = { unit_system: 'kN', dimension: 3 };
+      var m = App.MaterialLibrary.addSoil('m2');
+      T.eq(m.constitutive_law, 'GeoIncrementalLinearElastic3DLaw');
+      T.near(m.variables.YOUNG_MODULUS, 2.5e4, 1e-6);
+      T.near(m.variables.DENSITY_SOLID, 18 / 9.81, 1e-9);
+      T.eq(m.variables.GEO_FRICTION_ANGLE, 32.0);
+      App.PROJECT = { unit_system: 'SI', dimension: 2 };
+      var si = App.MaterialLibrary.addSoil('m2');
+      T.eq(si.constitutive_law, 'GeoLinearElasticPlaneStrain2DLaw');
+      T.eq(si.variables.YOUNG_MODULUS, 2.5e7);
+    } finally { App.PROJECT = saved; App.MATERIALS = savedMaterials; }
   });
 })();

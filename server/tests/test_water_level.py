@@ -1,10 +1,9 @@
 """The water level is the project's own, not a default every model is born with.
 
 It used to be required, and the blank project -- what the server opens on and what New
-project gives -- carried `WaterLevel(y=-1.5)`: a phreatic level nobody asked for, at
-the CROW case's depth, in every model. Now `Project.water` is optional. A model that
-has one (CROW, a file saved with one) keeps it; a new one has none until the user sets
-it (`PUT /api/project/water`, or `water <level>` on the command line).
+project gives -- carried `WaterLevel(y=-1.5)`: a phreatic level nobody asked for, in
+every model. Now `Project.water` is optional. A model that has one (the test model, a
+file saved with one) keeps it; a new one has none until the user sets it (`PUT /api/project/water`, or `water <level>` on the command line).
 
 A dry model still has to say something about pore pressure: the `U_Pw` elements' pressure
 degrees of freedom are unconstrained without it, which is one of the defects only a run
@@ -14,7 +13,7 @@ and still fixed, because Kratos' `ApplyConstantHydrostaticPressureProcess` write
 `min(-gamma * (ref - y), pressure_tension_cut_off)` and the cut-off defaults to 0 --
 read from applications/GeoMechanicsApplication/custom_processes/
 apply_constant_hydrostatic_pressure_process.cpp, and borne out by a real run in
-`test_crow_results.py::test_pore_pressure_is_hydrostatic_below_the_water_table_and_zero_above_it`.
+`test_results_regression.py::test_pore_pressure_is_hydrostatic_below_the_water_table_and_zero_above_it`.
 """
 
 from __future__ import annotations
@@ -25,9 +24,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import build, kratos, meshing, store
-from app.crow import crow_project
 from app.main import app
 from app.schemas import MeshRequest, Project
+from tests.models import excavation
+from tests.models.excavation import excavation_project
 from app.seed import blank_project, seed_project
 
 
@@ -57,8 +57,8 @@ def test_a_new_project_has_no_water_level():
     assert blank_project().water is None
 
 
-def test_the_crow_case_keeps_its_own():
-    assert crow_project().water.y == -1.5
+def test_the_test_model_keeps_its_own():
+    assert excavation_project().water.y == excavation.WATER_Y
 
 
 def test_a_project_saved_with_a_water_level_still_opens_with_it():
@@ -69,7 +69,7 @@ def test_a_project_saved_with_a_water_level_still_opens_with_it():
 def test_a_hydrostatic_water_load_needs_a_water_level():
     """Its pressure is derived from `Project.water`; with none there is nothing to derive
     it from, and a silent zero would be a wall with no water on it."""
-    payload = crow_project().model_dump()
+    payload = excavation_project().model_dump()
     payload["water"] = None
     with pytest.raises(ValueError, match="water level"):
         Project.model_validate(payload)
@@ -107,20 +107,20 @@ def test_a_dry_model_builds_no_water_slab(session):
 def test_the_water_level_is_a_line_part_of_the_mesh(session):
     """So the Model explorer's colour toggle can draw it on the mesh, in Mesh mode, like
     any other part: across the domain and the slab's overhang, at the level."""
-    project = crow_project()
+    project = excavation_project()
     mesh = meshing.mesh_project(project)
     (water,) = [part for part in mesh.parts if part.key == "water"]
     assert not water.indices
     xs = water.edges[0::3]
     ys = water.edges[1::3]
-    assert set(ys) == {-1.5}
+    assert set(ys) == {excavation.WATER_Y}
     margin = project.water.margin
     assert min(xs) == pytest.approx(project.domain.x0 - margin)
     assert max(xs) == pytest.approx(project.domain.x1 + margin)
 
 
 def test_a_dry_model_has_no_water_part(session):
-    payload = crow_project().model_dump()
+    payload = excavation_project().model_dump()
     payload["water"] = None
     payload["normal_loads"] = []
     payload["phases"] = []
@@ -153,7 +153,7 @@ def test_the_water_level_can_be_set_and_removed(client):
 
 
 def test_a_water_level_cannot_be_removed_from_under_a_hydrostatic_load(client):
-    store.put(crow_project())
+    store.put(excavation_project())
     response = client.put("/api/project/water", json={"water": None})
     assert response.status_code == 422
     assert "water level" in response.text

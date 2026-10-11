@@ -9,21 +9,25 @@ server/kratos.local.json
 
 plan/
 graphify-out/
+# Local snapshot of the frozen mockup (index.html + css/js/vendor/assets).
+mockup/
+# Old mockup locations; the app uses live/base/.
+/css/
+/js/
 
-# Reference decks and example models. `examples/crow/` holds the CROW staged-excavation
-# case: the model script the GUI runs (`run examples/crow/crow.py`), the deck Kratos is
-# validated against (`crow_validation_*`, copied from the GeoMechanicsApplication test
-# suite), and what STEM generates for the same model (`*_for_generated_mesh`,
-# `crow_excavation_wall.mdpa`, `demo_crow_excavation_wall.py`).
-#
-# Out of the repository because they belong to another project and are large -- the two
-# .mdpa files alone are 700 KB of node tables. `server/tests/crow_example.py` skips the
-# tests that need them when they are not there, so a clone without them still runs green.
-examples/
 AGENTS.md
-test/
 
 # Python and test caches
 __pycache__/
 .pytest_cache/
 *.py[cod]
+
+# Coverage output (pytest --cov, and the JS summary from --js-coverage)
+server/.coverage
+server/.coverage.*
+server/htmlcov/
+server/htmlcov-js/
+# Benchmark runs and reports (python -m benchmarks run, from server/)
+server/benchmarks/reports/
+# Playwright traces kept for failed tests (--tracing retain-on-failure)
+server/test-results/

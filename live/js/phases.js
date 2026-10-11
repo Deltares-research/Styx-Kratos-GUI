@@ -78,8 +78,8 @@ App.Phases = (function () {
   /* Which parts are in the model during `id`, as a sorted array.
 
      Everything starts active: the mesh carries every part, and the first phase's job
-     is to switch off what has not been built yet -- which is what the CROW
-     reference's stage 1 does. Mirrors server/app/phases.py:active_parts exactly,
+     is to switch off what has not been built yet -- which is what Kratos'
+     staged-excavation reference's stage 1 does. Mirrors server/app/phases.py:active_parts exactly,
      including that a part in both of one phase's lists is impossible (the schema
      refuses it), so the order within a phase does not matter.
 

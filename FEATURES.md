@@ -30,14 +30,14 @@ Two limits run through everything below:
 | Linear solver | `skyline_lu_factorization` (direct), block builder, 1 OpenMP thread | ✅ fixed | same |
 | Tolerances | Relative 1e-4, absolute 1e-9, 6–15 iterations, reduction 0.5, increase 2.0 | ✅ max iterations and relative tolerance editable per phase | same |
 | Time stepping | One step per stage (dt = 1); settling stages sit at negative time, as in the reference deck | ✅ | [kratos.py](server/app/kratos.py) |
-| Units | Project in m / kN / day, converted to SI (N, Pa, m/s) on export | ✅ tested | [kratos_materials.py](server/app/kratos_materials.py) |
+| Units | A project unit system, SI (N, m, kg, s) or kN (kN, m, t, s), chosen with `units <system>` or the status bar; every input is in it, the deck carries it verbatim and the results come back in it. Property sets are Kratos' own law + `Variables` | ✅ tested, the test model run in both systems | [units.py](server/app/units.py), [kratos_materials.py](server/app/kratos_materials.py) |
 | Dynamics, consolidation, arc-length control, updated mesh | Not supported. A phase's `time_interval` is stored but not used | ❌ | [schemas.py](server/app/schemas.py) `Phase` |
 
 ### A2. Continuum (soil) elements
 
 | Dimension | Linear | Quadratic | Status |
 |---|---|---|---|
-| 2D plane strain | `UPwSmallStrainElement2D3N` (triangle) | `SmallStrainUPwDiffOrderElement2D6N` | ✅ checked against CROW |
+| 2D plane strain | `UPwSmallStrainElement2D3N` (triangle) | `SmallStrainUPwDiffOrderElement2D6N` | ✅ checked against Kratos' reference results |
 | 3D | `UPwSmallStrainElement3D4N` (tetrahedron) | `SmallStrainUPwDiffOrderElement3D10N` | 🟡 no 3D reference run |
 
 Triangles and tetrahedra only; quadrilaterals and hexahedra are not supported. See
@@ -50,7 +50,7 @@ Triangles and tetrahedra only; quadrilaterals and hexahedra are not supported. S
 | `Beam` | Sheet pile | `LinearTimoshenkoCurvedBeamElement2D2N` / `2D3N` | `TimoshenkoBeamElasticConstitutiveLaw` | 2D | ✅ element from the reference deck; law from Kratos docs |
 | `Member` | Bored pile, king post, strut | `LinearTimoshenkoBeamElement3D2N` / `3D3N` | same | 3D | 🟡 |
 | `Panel` | Wall panel (a footprint swept between two levels) | `ShellThinElement3D3N` (a 6-node triangle is written from its corners) | `LinearElasticPlaneStress2DLaw` | 3D | 🟡 |
-| `Anchor` | Anchor: a 2-node tie, head snapped onto a sheet pile, tail fixed | `LinearTrussElement2D2N` | `TrussConstitutiveLaw` + `TRUSS_PRESTRESS_PK2` | 2D | ✅ element from CROW |
+| `Anchor` | Anchor: a 2-node tie, head snapped onto a sheet pile, tail fixed | `LinearTrussElement2D2N` | `TrussConstitutiveLaw` + `TRUSS_PRESTRESS_PK2` | 2D | ✅ element from a Kratos reference deck |
 | `SpaceAnchor` | 3D anchor, head on a panel or member | `LinearTrussElement3D2N` | same | 3D | 🟡 |
 | Anchor tension / compression limits | Fields on the anchor section | Not exported; a warning says so | — | — | ❌ |
 
@@ -66,12 +66,12 @@ structural elements.
 
 | Feature | Detail | Status |
 |---|---|---|
-| Element | `Geo_UPwLineInterfacePlaneStrainElement2Plus2N` / `Geo_UPwLineInterfacePlaneStrainDiffOrderElement3Plus3N` | ✅ quadratic, from CROW · 🟡 linear name is inferred |
-| Law | Follows the soil: `GeoInterfaceCoulombLawPlaneStrain` against Mohr-Coulomb, `GeoIncrementalLinearElasticInterfaceLaw` against Linear Elastic and in the K0 phase | ✅ matches Kratos' CROW MC deck · 🟡 unrun |
+| Element | `Geo_UPwLineInterfacePlaneStrainElement2Plus2N` / `Geo_UPwLineInterfacePlaneStrainDiffOrderElement3Plus3N` | ✅ quadratic, from a Kratos reference deck · 🟡 linear name is inferred |
+| Law | Follows the soil: `GeoInterfaceCoulombLawPlaneStrain` against Mohr-Coulomb, `GeoIncrementalLinearElasticInterfaceLaw` against Linear Elastic and in the K0 phase | ✅ matches Kratos' Mohr-Coulomb reference deck · 🟡 unrun |
 | Placement | Along a sheet pile (side: both, left or right), or along a free polyline through the soil (soil against soil, a slip surface, a lining) | ✅ |
 | Node splitting | Nodes are duplicated after meshing, giving a zero-thickness contact | ✅ [interfaces.py](server/app/interfaces.py) |
 | Stiffness | Entered as kn and ks, or derived: ks = G_soil / virtual thickness, kn from ks | ✅ |
-| Strength | Against Mohr-Coulomb soil: c·R and atan(R·tan φ), where R is the contact's `R_inter` or, left blank, the soil's own. Against elastic soil: none (it cannot slip) | ✅ matches Kratos' CROW MC deck · 🟡 unrun |
+| Strength | Against Mohr-Coulomb soil: c·R and atan(R·tan φ), where R is the contact's `R_inter` or, left blank, the soil's own. Against elastic soil: none (it cannot slip) | ✅ matches Kratos' Mohr-Coulomb reference deck · 🟡 unrun |
 | Permeability | Neutral, Drain or Impermeable (stored) | 🟡 |
 | 3D interfaces | Not exported; a warning says so | ❌ |
 
@@ -84,10 +84,10 @@ are next.
 | Model chosen in the GUI | Written to Kratos as | Status |
 |---|---|---|
 | Linear Elastic | `GeoLinearElasticPlaneStrain2DLaw` / `GeoIncrementalLinearElastic3DLaw` | ✅ 2D · 🟡 3D name corrected, no tests yet |
-| Mohr-Coulomb | `GeoMohrCoulombLawPlaneStrain` / `GeoMohrCoulombLaw3D` | ✅ matches Kratos' CROW MC deck set by set · 🟡 no tests yet |
+| Mohr-Coulomb | `GeoMohrCoulombLawPlaneStrain` / `GeoMohrCoulombLaw3D` | ✅ matches Kratos' Mohr-Coulomb reference deck set by set · 🟡 no tests yet |
 
-The K0 phase writes every soil as linear elastic, whatever its model: Kratos' own CROW
-Mohr-Coulomb case does the same. The real law takes over from the next phase.
+The K0 phase writes every soil as linear elastic, whatever its model: Kratos' own
+Mohr-Coulomb staged-excavation reference does the same. The real law takes over from the next phase.
 
 | Material input | Kratos variable | Status |
 |---|---|---|
@@ -127,7 +127,7 @@ Mohr-Coulomb case does the same. The real law takes over from the next phase.
 |---|---|---|
 | Phase types | K0 procedure, Plastic, Null step | ✅ |
 | Phase tree | Each phase has a parent and stores only what it switches on and off. Kratos needs one sequence, so the tree is flattened; a tree that branches is rejected | ✅ |
-| Default sequence | Initial stage (K0), null step, wall installation, then one excavation stage per lift (the water load moves down with it), with each anchor installed after the lift that exposes it | ✅ reproduces the 7 CROW stages |
+| Default sequence | Initial stage (K0), null step, wall installation, then one excavation stage per lift (the water load moves down with it), with each anchor installed after the lift that exposes it | ✅ reproduces the 7 stages of Kratos' staged-excavation reference |
 | Switching parts on and off | `ActivateModelPartOperation` / `DeactivateModelPartOperation` for soil bodies, lifts, beams, anchors, interfaces and loads | ✅ |
 | Settings per phase | Reset displacements (`reset_totals`), max iterations, tolerance | ✅ |
 | Stress carry-over | `ApplyFinalStressesOfPreviousStageToInitialState` | ✅ |
@@ -141,7 +141,7 @@ Mohr-Coulomb case does the same. The real law takes over from the next phase.
 | Output | Variables | Status |
 |---|---|---|
 | GiD ASCII files (`.post.res`, `.post.msh`), one per stage | Nodal `DISPLACEMENT`, `TOTAL_DISPLACEMENT`, `WATER_PRESSURE`; Gauss-point `CAUCHY_STRESS_TENSOR` | ✅ |
-| Wall forces at the nodes | `AXIAL_FORCE`, `BENDING_MOMENT`, `SHEAR_FORCE` | ✅ tests compare them with Kratos' own CROW curves |
+| Wall forces at the nodes | `AXIAL_FORCE`, `BENDING_MOMENT`, `SHEAR_FORCE` | ✅ a live Kratos run is regression-tested; validated against Kratos' own curves |
 | Interface tractions | `GEO_EFFECTIVE_TRACTION_VECTOR`, written to JSON on the retained side | ✅ |
 
 ---
@@ -214,7 +214,7 @@ Mohr-Coulomb case does the same. The real law takes over from the next phase.
 |---|---|---|
 | Runs | List every run, open one, step through its phases | ✅ |
 | Quantities | \|u\|, u_x, u_y, u_z, both total and per phase; σ'xx, σ'yy, σ'zz, σ'xy, σ'yz, σ'xz; p', q, σ1, σ2, σ3, τ_max; pore pressure; total stresses, hydraulic head and saturation when Kratos wrote them | ✅ |
-| Signs and units | Compression is negative, as Kratos writes it; stresses in kPa, lengths in m | ✅ tested |
+| Signs and units | Compression is negative, as Kratos writes it; every quantity in the run's own unit system (Pa for SI, kPa for kN), lengths in m | ✅ tested |
 | Display | Colour bands or smooth shading, colour map, reversed scale, automatic or fixed range, deformed shape with a chosen or automatic scale | ✅ |
 | Node readout | Every quantity at one node (`results at <node>`) | ✅ |
 | Export | The field on screen as CSV; any file from a run, or the whole run as a zip | ✅ |
@@ -225,7 +225,7 @@ Mohr-Coulomb case does the same. The real law takes over from the next phase.
 
 | Command | What it does |
 |---|---|
-| `run <file.py>` or `load` | Runs a Python file that returns a `Project` and shows the model, e.g. `examples/crow/crow.py` |
+| `run <file.py>` or `load` | Runs a Python file that returns a `Project` and shows the model, e.g. `tests/models/excavation.py` |
 | `export` | Writes the Kratos files |
 | `cleargeometry` | Removes drawn and imported geometry |
 | `results …` | `runs`, `open`, `phase`, `fields`, `field`, `at`, `bands`, `smooth`, `map`, `deform`, `range`, `reverse`, `csv`, `files`, `get`, `zip` |
@@ -237,7 +237,7 @@ Mohr-Coulomb case does the same. The real law takes over from the next phase.
 
 | Item | Detail |
 |---|---|
-| Benchmark | The CROW sheet-pile excavation, 7 stages. The generated deck is compared with the reference `.mdpa`, and the wall forces with Kratos' own curves |
+| Benchmarks | Analytical checks in `server/benchmarks` (K0 columns, hydrostatic, weight above and below water, reaction balance, symmetric pit, 2D/3D, mesh convergence), and a live Kratos run of the staged test model, skipped where Kratos is not installed |
 | Server tests | pytest, 45 test files (run with Python 3.11, which has gmsh) |
 | JavaScript tests | 33 browser test files; the ones that don't use the DOM also run headless under quickjs (`live/tests/run_headless.py`) |
 
@@ -245,9 +245,9 @@ Mohr-Coulomb case does the same. The real law takes over from the next phase.
 
 ## Main gaps
 
-1. **Mohr-Coulomb has not been run yet.** The deck matches Kratos' CROW Mohr-Coulomb
-   materials file set by set; the wall curves still need a real run
-   (`run examples/crow/crow_mohr_coulomb.py`). No user-defined (UDSM/UMAT) models yet.
+1. **Mohr-Coulomb has not been run yet.** The deck matches Kratos' Mohr-Coulomb
+   reference materials file set by set; the wall curves still need a real run
+   (`mohr_coulomb_project` in `server/tests/models/excavation.py`). No user-defined (UDSM/UMAT) models yet.
 2. **No factor of safety.** There is no φ–c reduction phase.
 3. **Only one flat water table.** No sloping phreatic line, no level per phase, no
    groundwater flow calculation.

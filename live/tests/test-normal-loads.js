@@ -403,3 +403,90 @@
       }, function (e) { Object.assign(App, saved); throw e; });
   });
 })();
+
+/* Pick, edit and start, with the dialog and the drawing tool stood in. */
+(function () {
+  function project(dimension) {
+    return {
+      dimension: dimension, section_offset: 20,
+      domain: { x0: 0, x1: 50, z0: 0, z1: 40, y_top: 0, y_bottom: -25 },
+      materials: [], loads: [], beams: [], beam_sections: [],
+      water: { y: -3.5, specific_weight: 10.0 },
+      normal_loads: [{ id: 'normalload_1', name: 'Face', kind: 'normal',
+                       points: [[10, 0], [10, -6]], fluid_pressure_type: 'Hydrostatic',
+                       pressure: 0, active: true }]
+    };
+  }
+
+  function rig(dimension) {
+    var saved = { PROJECT: App.PROJECT, NORMAL_LOADS: App.NORMAL_LOADS, Dialogs: App.Dialogs,
+                  DrawInput: App.DrawInput, Command: App.Command };
+    var ctx = { opened: [], drawing: null, notes: [] };
+    App.PROJECT = project(dimension);
+    App.NORMAL_LOADS = App.PROJECT.normal_loads.slice();
+    App.Dialogs = { open: function (config) {
+      var body = document.createElement('div');
+      config.build(body);
+      ctx.opened.push({ config: config, body: body });
+      return { close: function () {} };
+    } };
+    App.DrawInput = { start: function (mode, options) { ctx.drawing = { mode: mode, options: options }; } };
+    App.Command = { note: function (t) { ctx.notes.push(t); }, ok: function () {}, err: function () {} };
+    ctx.restore = function () { Object.assign(App, saved); };
+    return ctx;
+  }
+
+  test('pick: two points picked on the model open the form at those points', function () {
+    var ctx = rig(2);
+    try {
+      App.NormalLoads.pick();
+      T.eq(ctx.drawing.mode, 'load');
+      T.eq(ctx.drawing.options.count, 2);
+      ctx.drawing.options.onComplete([[4, 0, 0], [9, -3, 0]]);
+      var inputs = ctx.opened[0].body.querySelectorAll('input');
+      var values = Array.prototype.map.call(inputs, function (i) { return i.value; });
+      T.ok(/Create normal load/.test(ctx.opened[0].config.title));
+      T.ok(values.indexOf('4') >= 0 && values.indexOf('9') >= 0 && values.indexOf('-3') >= 0,
+           'the picked x and y are in the form: ' + values.join(','));
+    } finally { ctx.restore(); }
+  });
+
+  test("pick: the form's own Pick button starts picking", function () {
+    var ctx = rig(2);
+    try {
+      App.NormalLoads.start();
+      var pickButton = ctx.opened[0].config.buttons.filter(function (b) {
+        return /Pick on model/.test(b.label); })[0];
+      pickButton.onClick();
+      T.eq(ctx.drawing && ctx.drawing.mode, 'load');
+    } finally { ctx.restore(); }
+  });
+
+  test('edit: an existing load opens as Edit with its own pressure, an unknown id does nothing', function () {
+    var ctx = rig(2);
+    try {
+      T.eq(App.NormalLoads.edit('normalload_9'), undefined);
+      T.eq(ctx.opened.length, 0);
+      App.NormalLoads.edit('normalload_1');
+      T.ok(/Edit normal load/.test(ctx.opened[0].config.title));
+      T.eq(ctx.opened[0].body.querySelector('select').value, 'Hydrostatic');
+    } finally { ctx.restore(); }
+  });
+
+  test('start: in the solid model it says why and opens nothing', function () {
+    var ctx = rig(3);
+    try {
+      T.eq(App.NormalLoads.start(), undefined);
+      T.eq(ctx.opened.length, 0);
+      T.ok(ctx.notes.length === 1);
+    } finally { ctx.restore(); }
+  });
+
+  test('a normal load key is recognised, anything else is not', function () {
+    var ctx = rig(2);
+    try {
+      T.ok(App.NormalLoads.isNormalLoadKey('normalload_1'));
+      T.ok(!App.NormalLoads.isNormalLoadKey('load_1'));
+    } finally { ctx.restore(); }
+  });
+})();

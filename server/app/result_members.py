@@ -4,13 +4,14 @@ The deck asks Kratos' `json_output` process for one file per member per stage --
 `<stage>__output_wall.json` (bending moment, shear force, normal force, displacement at
 every wall node) and `<stage>__output_interface.json` (effective traction on one side of
 the wall). These are the numbers a retaining-wall designer opens the program for, and
-they are not in the GiD output at all for the interface (`plan/postprocessing-plan.md`
+they are not in the GiD output at all for the interface (`plan/active/postprocessing-plan.md`
 sec 0.3), so this reads them where they are.
 
-What comes out is the plot Kratos' own CROW validation draws: per stage,
-the quantity against the level y, node by node, toe to top. Kratos' comparison figure
-(`test_CROW_case_testGUI_mesh.py`) is the model -- same quantities, same units, and the
-same sign, which is Kratos' own and is not flipped to anybody else's convention.
+What comes out is the plot Kratos' own staged-excavation validation
+draws: per stage, the quantity against the level y, node by node, toe to top. Kratos'
+comparison figure is the model -- same quantities and the same sign, which
+is Kratos' own and is not flipped to anybody else's convention. The numbers are the run's
+own, in its unit system (`app/units.py`), and labelled for it rather than scaled.
 
 Nothing here opens a file. `app.results` finds them and caches them; this turns text into
 numbers and numbers into curves, so the tests can feed it three nodes.
@@ -22,7 +23,7 @@ import json
 from dataclasses import dataclass
 from typing import Iterable
 
-KILO = 1e-3
+from app import units
 
 
 class UnknownQuantity(ValueError):
@@ -34,28 +35,29 @@ class Quantity:
     name: str
     """What the command takes: `results plot wall M`."""
     label: str
-    unit: str
+    quantity: units.Quantity
     variable: str
     """The Kratos variable in the json_output file."""
     component: int | None
     """For a vector variable, which component; None for a scalar."""
-    scale: float
-    """Deck units (SI) to the unit above."""
 
-    def summary(self) -> dict:
-        return {"name": self.name, "label": self.label, "unit": self.unit}
+    def unit(self, system: str = units.DEFAULT) -> str:
+        return units.label(self.quantity, system)
+
+    def summary(self, system: str = units.DEFAULT) -> dict:
+        return {"name": self.name, "label": self.label, "unit": self.unit(system)}
 
 
 QUANTITIES = (
-    Quantity("M", "Bending moment", "kNm/m", "BENDING_MOMENT", None, KILO),
-    Quantity("Q", "Shear force", "kN/m", "SHEAR_FORCE", None, KILO),
-    Quantity("N", "Normal force", "kN/m", "AXIAL_FORCE", None, KILO),
-    Quantity("ux", "Horizontal total displacement", "m", "TOTAL_DISPLACEMENT_X", None, 1.0),
-    Quantity("uy", "Vertical total displacement", "m", "TOTAL_DISPLACEMENT_Y", None, 1.0),
+    Quantity("M", "Bending moment", units.MOMENT_PER_LENGTH, "BENDING_MOMENT", None),
+    Quantity("Q", "Shear force", units.LINE_FORCE, "SHEAR_FORCE", None),
+    Quantity("N", "Normal force", units.LINE_FORCE, "AXIAL_FORCE", None),
+    Quantity("ux", "Horizontal total displacement", units.LENGTH, "TOTAL_DISPLACEMENT_X", None),
+    Quantity("uy", "Vertical total displacement", units.LENGTH, "TOTAL_DISPLACEMENT_Y", None),
     # The traction is in the interface's own axes: normal first, then shear. Kratos'
-    # CROW plots take exactly these two components.
-    Quantity("tn", "Normal traction", "kN/m²", "GEO_EFFECTIVE_TRACTION_VECTOR", 0, KILO),
-    Quantity("ts", "Shear traction", "kN/m²", "GEO_EFFECTIVE_TRACTION_VECTOR", 1, KILO),
+    # validation plots take exactly these two components.
+    Quantity("tn", "Normal traction", units.STRESS, "GEO_EFFECTIVE_TRACTION_VECTOR", 0),
+    Quantity("ts", "Shear traction", units.STRESS, "GEO_EFFECTIVE_TRACTION_VECTOR", 1),
 )
 """Every quantity a member can be plotted for, in the order a menu offers them."""
 
@@ -116,7 +118,7 @@ def _value(raw: object, entry: Quantity) -> float | None:
         raw = raw[entry.component]
     if isinstance(raw, bool) or not isinstance(raw, (int, float)):
         return None
-    return float(raw) * entry.scale
+    return float(raw)
 
 
 def profile(output: dict[int, dict[str, object]],

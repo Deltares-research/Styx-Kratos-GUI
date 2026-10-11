@@ -21,7 +21,6 @@ import re
 import pytest
 
 from app import build, kratos
-from app.kratos_materials import KILO
 from app.schemas import MeshRequest, Project
 from app.seed import seed_project
 from tests import mdpa
@@ -31,16 +30,19 @@ from tests import mdpa
 # that happen to share a domain.
 LINE_LOAD = {"id": "load_1", "name": "Surcharge", "kind": "line",
              "x0": 14.0, "x1": 22.0, "y": 0.0, "thickness": 0.15,
-             "components": [0.0, -20.0], "distribution": "Uniform", "active": True}
-PILE_SECTION = {"id": "az26", "name": "AZ 26-700", "E": 2.1e8, "nu": 0.3,
-                "area": 0.0198, "inertia": 5.52e-4, "density": 7850.0, "spacing": 1.0}
+             "components": [0.0, -20_000.0], "distribution": "Uniform", "active": True}
+# Kratos property sets, in the project's SI units (app/schemas.py:KratosPropertySet).
+PILE_SECTION = {"id": "az26", "name": "AZ 26-700", "spacing": 1.0, "variables": {
+    "YOUNG_MODULUS": 2.1e11, "POISSON_RATIO": 0.3, "CROSS_AREA": 0.0198, "I33": 5.52e-4,
+    "DENSITY": 7850.0}}
 PILE = {"id": "pile_1", "name": "Sheet pile 1", "section": "az26",
         "points": [[12.0, 0.0], [12.0, -14.0]], "active": True}
-TENDON = {"id": "strand", "name": "4-strand tendon", "E": 1.95e8, "area": 0.0006,
-          "density": 7850.0, "spacing": 2.5, "tension_limit": 900.0,
-          "compression_limit": None}
+TENDON = {"id": "strand", "name": "4-strand tendon", "spacing": 2.5,
+          "tension_limit": 900_000.0, "compression_limit": None, "variables": {
+              "YOUNG_MODULUS": 1.95e11, "CROSS_AREA": 0.0006, "DENSITY": 7850.0}}
 ANCHOR = {"id": "anchor_1", "name": "Anchor 1", "kind": "anchor", "section": "strand",
-          "head": [12.0, -2.0], "tail": [20.0, -8.0], "prestress": 250.0, "active": True}
+          "head": [12.0, -2.0], "tail": [20.0, -8.0], "prestress": 100_000.0,
+          "active": True}
 
 KRATOS_IDENTIFIER = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
@@ -181,10 +183,14 @@ def test_an_unsupported_element_type_fails_loudly_before_anything_is_written():
         kratos._lookup(kratos.ELEMENTS, 2, 3)      # gmsh type 3 is a 4-node quad
 
 
-def test_an_unmapped_constitutive_law_is_named_in_the_warnings(golden):
-    """Not a hard failure, deliberately: the seeded materials use models with no
-    drop-in GeoMechanics law, so the export still runs and says what it substituted."""
-    assert any("constitutive law" in warning for warning in golden["warnings"])
+def test_a_property_set_missing_what_its_law_needs_is_refused_by_name(session):
+    """Kratos stops on a missing variable deep inside its own Check(); the export says
+    which one, and of what, before anything is written."""
+    section = {**PILE_SECTION, "variables": {k: v for k, v in PILE_SECTION["variables"].items()
+                                             if k != "I33"}}
+    with pytest.raises(kratos.ExportError, match="I33"):
+        kratos.export_project(golden_project(beam_sections=[section]),
+                              MeshRequest(element_size=4.0, order=2))
 
 
 def test_a_soil_only_export_is_unchanged_by_any_of_this(session):
@@ -209,15 +215,16 @@ def test_the_pile_and_tendon_values_survive_into_the_material_file(materials):
     pile = next(e for e in materials if e["model_part_name"] == "PorousDomain.Sheet_pile_1")
     anchor = next(e for e in materials if e["model_part_name"] == "PorousDomain.Anchor_1")
 
-    assert pile["Material"]["Variables"]["YOUNG_MODULUS"] == pytest.approx(
-        PILE_SECTION["E"] * KILO)
-    assert pile["Material"]["Variables"]["I33"] == pytest.approx(PILE_SECTION["inertia"])
+    assert pile["Material"]["Variables"]["YOUNG_MODULUS"] ==         PILE_SECTION["variables"]["YOUNG_MODULUS"]
+    assert pile["Material"]["Variables"]["I33"] == PILE_SECTION["variables"]["I33"]
     # Both smeared over their out-of-plane spacing: the pile is continuous, the anchor
     # stands every 2.5 m, so only the anchor's numbers are divided down.
     assert anchor["Material"]["Variables"]["CROSS_AREA"] == pytest.approx(
-        TENDON["area"] / TENDON["spacing"])
-    assert anchor["Material"]["Variables"]["TRUSS_PRESTRESS_PK2"] == pytest.approx(
-        ANCHOR["prestress"] * KILO / TENDON["spacing"])
+        TENDON["variables"]["CROSS_AREA"] / TENDON["spacing"])
+    # A stress, and not smeared: the smeared area already makes the force per metre.
+    assert anchor["Material"]["Variables"]["TRUSS_PRESTRESS_PK2"] == ANCHOR["prestress"]
+    # Nor is the steel's density: it does not thin out when the anchors spread.
+    assert anchor["Material"]["Variables"]["DENSITY"] == TENDON["variables"]["DENSITY"]
 
 
 def test_the_load_value_and_the_anchor_support_reach_the_process_file(golden, deck):
@@ -244,7 +251,7 @@ def test_the_load_value_and_the_anchor_support_reach_the_process_file(golden, de
 # ── The same deck, staged ───────────────────────────────────────────────────
 # The second fixture, and the reason for it: until now the two-stage path was covered
 # only where it was implicit -- a sheet pile deactivating itself -- and the seven-stage
-# path only through the CROW model, which is one specific project. What can go wrong in
+# path only through the staged test model, which is one specific project. What can go wrong in
 # a staged deck goes wrong at the same seams the single-stage one has, plus one more:
 # a part can be named by a stage and be missing from the .mdpa, and nothing but a
 # cross-check between the two files catches it.
