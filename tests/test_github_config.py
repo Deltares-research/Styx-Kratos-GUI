@@ -70,11 +70,11 @@ def test_each_platform_runs_its_own_launcher_with_check(launcher):
         assert (ROOT / name).is_file(), name
 
 
-def test_linux_gets_the_libraries_the_readme_tells_users_to_install(launcher):
+def test_linux_gets_the_libraries_the_install_guide_tells_users_to_install(launcher):
     _, job = launcher
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    guide = (ROOT / "docs" / "INSTALLATION.md").read_text(encoding="utf-8")
     for library in ("libglu1-mesa", "libxcursor1", "libxinerama1", "libxft2", "libxrender1"):
-        assert library in commands(job) and library in readme, library
+        assert library in commands(job) and library in guide, library
 
 
 # ── Lint ────────────────────────────────────────────────────────────────────

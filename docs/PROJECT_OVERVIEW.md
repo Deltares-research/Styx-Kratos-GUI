@@ -11,7 +11,8 @@ Styx is a Deltares/Kratos geotechnical modeller: build a soil and excavation mod
 with Gmsh, export and run a Kratos GeoMechanics deck in construction phases, and read the
 results back in its Results mode. How the pieces fit is in
 [ARCHITECTURE.md](ARCHITECTURE.md); what works and what does not is in
-[FEATURES.md](FEATURES.md); how to install and run it is in [README.md](../README.md).
+[FEATURES.md](FEATURES.md); how to install and run it is in
+[INSTALLATION.md](INSTALLATION.md).
 
 ## How it is counted
 
