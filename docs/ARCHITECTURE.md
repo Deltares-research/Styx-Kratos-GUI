@@ -7,7 +7,7 @@ holding one project, plus a build-free browser front end.
 
 See also: [FEATURES.md](FEATURES.md) (what works, per Kratos feature),
 [PROJECT_OVERVIEW.md](PROJECT_OVERVIEW.md) (code size per module),
-[README.md](README.md) (install, run, configure Kratos).
+[README.md](../README.md) (install, run, configure Kratos).
 
 ## At a glance
 

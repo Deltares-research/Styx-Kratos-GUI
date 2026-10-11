@@ -6,11 +6,7 @@ tests/              export-ignore
 frontend/tests/     export-ignore
 benchmarks/         export-ignore
 tools/              export-ignore
-.coveragerc         export-ignore
 .gitleaksignore     export-ignore
 eslint.config.mjs   export-ignore
-lychee.toml         export-ignore
-mypy.ini            export-ignore
-pytest.ini          export-ignore
+pyproject.toml      export-ignore
 requirements-dev.txt export-ignore
-ruff.toml           export-ignore

@@ -187,7 +187,7 @@ def test_the_output_asks_for_displacement_and_water_pressure(section):
     assert "WATER_PRESSURE" in results
 
 
-# ── What FEATURES.md A1 promises about the solver, pinned ──────────────────
+# ── What docs/FEATURES.md A1 promises about the solver, pinned─────────────────
 
 def test_the_linear_solver_is_the_direct_skyline_one_on_one_thread(section):
     """A direct solver, a block builder and one OpenMP thread in every stage: the

@@ -34,3 +34,6 @@ __pycache__/
 /benchmarks/reports/
 # Playwright traces kept for failed tests (--tracing retain-on-failure)
 /test-results/
+
+# Crash dumps Git for Windows tools write into the working folder (grep.exe.stackdump).
+*.stackdump

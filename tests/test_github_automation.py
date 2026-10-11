@@ -5,12 +5,12 @@ scans, the coverage floor, the Kratos tier on a self-hosted runner, releases, th
 check, the branch ruleset, and the files a contributor reads first. None of it runs
 locally, so what each piece must do is pinned here."""
 
-import configparser
 import itertools
 import json
 import pathlib
 import re
 import subprocess
+import tomllib
 
 import pytest
 
@@ -140,9 +140,8 @@ def test_mypy_reports_without_failing_the_build_until_its_findings_are_worked_do
     assert "mypy" in commands(job) and "requirements-dev.txt" in commands(job)
     pinned = (ROOT / "requirements-dev.txt").read_text(encoding="utf-8")
     assert re.search(rf"^mypy=={SEMVER}$", pinned, re.MULTILINE)
-    config = configparser.ConfigParser()
-    config.read(ROOT / "mypy.ini", encoding="utf-8")
-    assert config["mypy"]["files"].replace(",", " ").split() == ["core", "backend"]
+    config = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    assert config["tool"]["mypy"]["files"] == ["core", "backend"]
 
 
 def test_dependabot_bumps_mypy_with_the_other_test_tools():
@@ -305,8 +304,9 @@ def test_the_links_in_the_documentation_are_checked():
     (job,) = found["jobs"].values()
     (lychee,) = [step for step in job["steps"]
                  if str(step.get("uses", "")).startswith("lycheeverse/lychee-action@")]
-    assert "lychee.toml" in lychee["with"]["args"] and "*.md" in lychee["with"]["args"]
-    assert (ROOT / "lychee.toml").is_file()
+    assert "--config .github/lychee.toml" in lychee["with"]["args"]
+    assert "*.md" in lychee["with"]["args"]
+    assert (GITHUB / "lychee.toml").is_file()
 
 
 # ── Branch ruleset ──────────────────────────────────────────────────────────

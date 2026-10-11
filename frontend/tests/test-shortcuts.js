@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════════════════
-   test-shortcuts.js — the keyboard shortcuts FEATURES.md B1 lists.
+   test-shortcuts.js — the keyboard shortcuts docs/FEATURES.md B1 lists.
 
    js/data.js prints Ctrl+Z / Y / S / O / N beside menu items it never wired up;
    patches.js binds them to the actions the menus run, and turns F9 into Generate mesh

@@ -2,10 +2,10 @@
 what it must do is pinned here: the platforms, the tier it runs through `tools/test.py`, and
 the prerequisites that tier needs on a machine with nothing installed."""
 
-import configparser
 import importlib.util
 import pathlib
 import sys
+import tomllib
 
 import pytest
 
@@ -76,10 +76,10 @@ def test_it_measures_the_core_and_the_backend(commands):
 
 
 def test_coverage_is_taken_over_the_core_and_the_backend():
-    config = configparser.ConfigParser()
-    config.read(ROOT / ".coveragerc", encoding="utf-8")
-    assert config["run"]["source"].replace(",", " ").split() == ["core", "backend"]
-    assert config["run"]["omit"].split() == ["backend/launcher.py"]
+    config = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    run = config["tool"]["coverage"]["run"]
+    assert run["source"] == ["core", "backend"]
+    assert run["omit"] == ["backend/launcher.py"]
     assert (ROOT / "backend" / "launcher.py").is_file()
 
 

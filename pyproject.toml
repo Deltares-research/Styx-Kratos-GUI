@@ -1,0 +1,67 @@
+# Settings for the Python tools: pytest, coverage, mypy and ruff. The app itself is not
+# installed from here: the launcher installs requirements.txt (backend/launcher.py).
+
+# ── pytest ──────────────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+markers = [
+    "browser: needs Playwright and a Chromium; skipped when Playwright is missing",
+    "e2e: drives the real GUI against a live server (--run-e2e)",
+    "kratos: needs a working Kratos install (--run-kratos)",
+    "benchmark: a Kratos benchmark case, minutes each (--run-benchmarks)",
+    "perf: timing against tests/perf/baseline.json (--run-perf)",
+    "slow: more than ten seconds without Kratos (--run-slow)",
+    "covers(*ids): GUI inventory entries this test exercises",
+]
+filterwarnings = [
+    "error::DeprecationWarning",
+    # starlette's own module-level type alias touches a deprecated anyio name at import
+    # time. Ours to neither fix nor be failed by; the blanket rule above still applies to
+    # everything in core/ and backend/.
+    "ignore:The anyio.abc.BlockingPortal alias is deprecated:DeprecationWarning",
+]
+
+# ── coverage, for `pytest --cov` (plan/alpha-test-plan.md Task 0.5) ─────────
+[tool.coverage.run]
+source = ["core", "backend"]
+# Run by the launcher's own bootstrap; covered by the smoke tier.
+omit = ["backend/launcher.py"]
+# gmsh runs in a worker process (core/gmsh_worker.py); without this its modules look untested.
+concurrency = ["multiprocessing", "thread"]
+parallel = true
+sigterm = true
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true
+
+[tool.coverage.html]
+directory = "htmlcov"
+
+# ── mypy (the lint workflow, .github/workflows/lint.yml) ─────────────────────
+# It reports without failing the build until the existing findings are worked down; then
+# drop `continue-on-error` from the mypy job there.
+[tool.mypy]
+files = ["core", "backend"]
+python_version = "3.10"
+# gmsh and a few others ship no type information.
+ignore_missing_imports = true
+warn_unused_ignores = true
+
+# ── ruff check (the lint workflow, .github/workflows/lint.yml) ───────────────
+# Pyflakes plus the pycodestyle errors: real mistakes, not style. The code is not run
+# through a formatter, so formatting rules stay off.
+[tool.ruff]
+target-version = "py310"
+extend-exclude = [
+    "frontend/vendor",
+]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
+ignore = [
+    "E402",  # imports placed after a sys.path set-up or a constant they need, on purpose
+    "E731",  # a short lambda bound to a name reads better in tests than a nested def
+    "E741",  # `l` for a layer is this codebase's convention
+]

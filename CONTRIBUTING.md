@@ -56,7 +56,7 @@ each one needs.
 | Launcher | `run.bat --check` or `./run.sh --check` | [launcher](.github/workflows/launcher.yml): Windows, Linux and macOS, on Python 3.10 and 3.13 |
 | Vulnerable packages | `pip install pip-audit`, then `pip-audit -r requirements.txt -r requirements-dev.txt` | [security](.github/workflows/security.yml), `pip-audit` job, also weekly |
 | Secrets in the history | [gitleaks](https://github.com/gitleaks/gitleaks): `gitleaks git .` | [security](.github/workflows/security.yml), `gitleaks` job |
-| Documentation links | [lychee](https://github.com/lycheeverse/lychee): `lychee --config lychee.toml './**/*.md'` | [docs](.github/workflows/docs.yml), also weekly |
+| Documentation links | [lychee](https://github.com/lycheeverse/lychee): `lychee --config .github/lychee.toml './**/*.md'` | [docs](.github/workflows/docs.yml), also weekly |
 | Code scanning | Not run locally | [codeql](.github/workflows/codeql.yml) and [dependency review](.github/workflows/dependency-review.yml), where GitHub offers them |
 
 If gitleaks reports something that is not a secret, add its fingerprint to
