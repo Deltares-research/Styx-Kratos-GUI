@@ -29,8 +29,7 @@ Follow [Getting started](README.md#getting-started) in the README. `run.bat` (Wi
 .venv-linux/bin/python -m pip install -r requirements-dev.txt
 ```
 
-[Running the tests](README.md#running-the-tests) in the README lists the test tiers and what
-each one needs.
+[TESTING.md](docs/TESTING.md) lists the test tiers and what each one needs.
 
 ## Making a change
 
