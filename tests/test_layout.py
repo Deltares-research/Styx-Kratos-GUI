@@ -116,6 +116,7 @@ ROOT_FILES = {
     ".gitattributes", ".gitignore", ".gitleaksignore",     # git and gitleaks look only here
     "README.md", "LICENSE", "CONTRIBUTING.md", "SECURITY.md",
     "run.bat", "run.sh",                                    # what a user double-clicks
+    "kratos-cli.bat", "kratos-cli.sh",                      # ... and types, beside them
     "requirements.txt", "requirements-dev.txt",             # the launcher and Dependabot
     "pyproject.toml",                                       # pytest, coverage, mypy, ruff
     "eslint.config.mjs",                                    # its globs are root-relative
@@ -139,7 +140,7 @@ def test_the_python_tools_read_their_settings_from_pyproject(name):
 
 @pytest.mark.parametrize("name", ["ARCHITECTURE.md", "FEATURES.md", "PROJECT_OVERVIEW.md",
                                   "INSTALLATION.md", "KRATOS_SETUP.md", "USAGE.md",
-                                  "TESTING.md"])
+                                  "TESTING.md", "CLI.md"])
 def test_the_documents_are_in_docs_and_linked_from_the_readme(name):
     assert (ROOT / "docs" / name).is_file(), name
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
@@ -162,6 +163,17 @@ def test_core_does_not_import_the_web_framework_or_the_backend():
     assert not crossings, "core reaches into the web layer:\n" + "\n".join(crossings)
 
 
+def test_the_command_line_is_a_front_end_of_core_not_of_the_server():
+    """`cli/` sits beside `backend/` (plan/active/cli-plan.md D3): it makes its edits
+    through `core.session`, as the routes do, and needs no server to run."""
+    files = sorted((ROOT / "cli").rglob("*.py"))
+    assert files, "no Python files under cli/"
+    crossings = [f"{path.relative_to(ROOT).as_posix()}:{line} imports {name}"
+                 for path in files for line, name in imports(parsed(path))
+                 if name.split(".")[0] in WEB]
+    assert not crossings, "cli reaches into the web layer:\n" + "\n".join(crossings)
+
+
 # ── The packages inside core ────────────────────────────────────────────────
 
 LAYERS = {"model": 0, "geometry": 1, "kratos": 2, "analysis": 3, "results": 4}
@@ -170,9 +182,10 @@ its geometry and mesh, the Kratos deck written from both, the analysis that runs
 deck, and what the run left behind. A package may import from its own rank or below,
 never above."""
 
-TOP_LEVEL = {"__init__.py", "scripting.py", "gmsh_worker.py"}
-"""What stays at core's top level: the two modules that send work into several packages
-(`run <file.py>`, and the gmsh process pool). They are outside the ranking."""
+TOP_LEVEL = {"__init__.py", "scripting.py", "gmsh_worker.py", "session.py"}
+"""What stays at core's top level: the modules that send work into several packages
+(`run <file.py>`, the gmsh process pool, and the edits both front ends make). They are
+outside the ranking."""
 
 ALLOWED: dict[tuple[str, str], str] = {}
 """The imports that go up anyway, `(file, module): reason`. None now: the last, the mesh

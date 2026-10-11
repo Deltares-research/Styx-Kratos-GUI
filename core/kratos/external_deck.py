@@ -141,7 +141,7 @@ def stats(deck: Deck) -> dict:
 # computes on (`problem_domain_sub_model_part_list`) and which it loads
 # (`loads_process_list`); the difference between one stage and the next is exactly the
 # diff a `Phase` stores. Read-only: the deck is what runs, so these are never exported
-# (`main._phases_of_a_deck_are_read_only`).
+# (`core.session.DeckReadOnly`).
 
 MODEL_PART_PREFIX = "PorousDomain."
 COMPUTATIONAL = "porous_computational_model_part"

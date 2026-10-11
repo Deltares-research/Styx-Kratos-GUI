@@ -54,6 +54,8 @@ browser.
   export.
 - **Scripting**: a command line in the app, plus `run <file.py>` to build a model from a
   Python script.
+- **Command line**: `kratos-cli` builds, meshes, stages, exports, runs and reads a model in
+  the terminal, without the browser, on the same project file the GUI saves.
 
 See [FEATURES.md](docs/FEATURES.md) for the full list with the status of each feature, and its
 **Main gaps** section for what is planned next.
@@ -104,6 +106,21 @@ repository root:
 [KRATOS_SETUP.md](docs/KRATOS_SETUP.md) walks through installing Kratos (PyPI or a source
 build), the configuration options, and troubleshooting.
 
+### The command line
+
+Everything from a new model to its results also works in a terminal, with no browser:
+
+```bash
+./kratos-cli.sh new site.json --demo --dim 2     # Windows: kratos-cli.bat
+./kratos-cli.sh mesh site.json
+./kratos-cli.sh phases site.json defaults
+./kratos-cli.sh export site.json --out deck/      # the .mdpa and the two JSON files
+./kratos-cli.sh run deck/
+./kratos-cli.sh results show 1
+```
+
+[CLI.md](docs/CLI.md) lists every command.
+
 ## Documentation
 
 | Document | Contents |
@@ -111,6 +128,7 @@ build), the configuration options, and troubleshooting.
 | [INSTALLATION.md](docs/INSTALLATION.md) | Prerequisites per platform, the launcher and its options |
 | [KRATOS_SETUP.md](docs/KRATOS_SETUP.md) | Installing Kratos and connecting it to Styx, with troubleshooting |
 | [USAGE.md](docs/USAGE.md) | A walk through the modes: building, meshing, calculating, results and scripting |
+| [CLI.md](docs/CLI.md) | `kratos-cli`: every step of a model in the terminal, command by command |
 | [TESTING.md](docs/TESTING.md) | The test tiers and how to run them |
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | How a model flows from the browser to Kratos and back |
 | [FEATURES.md](docs/FEATURES.md) | What works, feature by feature, and where the code is |
@@ -119,8 +137,9 @@ build), the configuration options, and troubleshooting.
 ## Project layout
 
 ```text
-core/          the engine, one package per stage: model/, geometry/ (Gmsh), kratos/ (the deck), run/, results/
+core/          the engine, one package per stage: model/, geometry/ (Gmsh), kratos/ (the deck), analysis/, results/
 backend/       the FastAPI app, the in-memory project store, and the launcher
+cli/           kratos-cli, the command line beside the GUI
 frontend/      the browser app (index.html, js/, css/, three.js), with its own tests in frontend/tests/
 tests/         pytest suites: unit, API, browser, end-to-end, Kratos and performance
 benchmarks/    Kratos benchmark cases and runner
@@ -128,6 +147,8 @@ tools/test.py  the tier runner
 docs/          user guides and design documents
 run.bat        launcher for Windows
 run.sh         launcher for Linux and macOS
+kratos-cli.bat the command line, for Windows
+kratos-cli.sh  the command line, for Linux and macOS
 ```
 
 ## Contributing

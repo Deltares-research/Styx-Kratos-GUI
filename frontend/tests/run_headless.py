@@ -123,6 +123,13 @@ SUITES = {
         [JS / "unit-table.js", JS / "units.js", JS / "property-sets.js"],
         TESTS / "test-property-sets.js",
     ),
+    # What a new soil starts as, held to the command line's (core/model/drafts.py)
+    # through the fixture tests/test_draft_parity.py writes.
+    "drafts": (
+        [TESTS / "fixtures" / "drafts.js", JS / "unit-table.js", JS / "units.js",
+         JS / "property-sets.js", JS / "material-library.js"],
+        TESTS / "test-drafts.js",
+    ),
 }
 
 

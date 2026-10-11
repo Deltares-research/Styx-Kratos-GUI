@@ -24,7 +24,7 @@ filterwarnings = [
 
 # ── coverage, for `pytest --cov` (plan/alpha-test-plan.md Task 0.5) ─────────
 [tool.coverage.run]
-source = ["core", "backend"]
+source = ["core", "backend", "cli"]
 # Run by the launcher's own bootstrap; covered by the smoke tier.
 omit = ["backend/launcher.py"]
 # gmsh runs in a worker process (core/gmsh_worker.py); without this its modules look untested.
@@ -43,7 +43,7 @@ directory = "htmlcov"
 # It reports without failing the build until the existing findings are worked down; then
 # drop `continue-on-error` from the mypy job there.
 [tool.mypy]
-files = ["core", "backend"]
+files = ["core", "backend", "cli"]
 python_version = "3.10"
 # gmsh and a few others ship no type information.
 ignore_missing_imports = true

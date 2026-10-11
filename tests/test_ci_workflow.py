@@ -70,15 +70,16 @@ def test_it_installs_the_requirements_kept_at_the_repository_root(job, commands)
         assert f"-r {name}" in commands
 
 
-def test_it_measures_the_core_and_the_backend(commands):
+def test_it_measures_the_core_the_backend_and_the_command_line(commands):
     assert "--cov=core" in commands and "--cov=backend" in commands
+    assert "--cov=cli" in commands
     assert "--cov=app" not in commands
 
 
-def test_coverage_is_taken_over_the_core_and_the_backend():
+def test_coverage_is_taken_over_the_core_the_backend_and_the_command_line():
     config = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     run = config["tool"]["coverage"]["run"]
-    assert run["source"] == ["core", "backend"]
+    assert run["source"] == ["core", "backend", "cli"]
     assert run["omit"] == ["backend/launcher.py"]
     assert (ROOT / "backend" / "launcher.py").is_file()
 
