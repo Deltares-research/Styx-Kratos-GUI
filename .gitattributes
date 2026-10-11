@@ -1,0 +1,16 @@
+# What `git archive` leaves out of a release download (.github/workflows/release.yml):
+# the development tooling. A user runs the app; the tests, the CI and the linters'
+# settings stay in the repository.
+.github/            export-ignore
+tests/              export-ignore
+frontend/tests/     export-ignore
+benchmarks/         export-ignore
+tools/              export-ignore
+.coveragerc         export-ignore
+.gitleaksignore     export-ignore
+eslint.config.mjs   export-ignore
+lychee.toml         export-ignore
+mypy.ini            export-ignore
+pytest.ini          export-ignore
+requirements-dev.txt export-ignore
+ruff.toml           export-ignore

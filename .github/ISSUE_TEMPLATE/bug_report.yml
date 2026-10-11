@@ -1,0 +1,68 @@
+name: Bug report
+description: Something in Styx does not work as it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for reporting this. For a security problem, do not open an issue: see the
+        repository's security policy (SECURITY.md) instead.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you saw, and what you expected to see instead.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: From starting the app. A project file or a script you can share helps most.
+      placeholder: |
+        1. Start the app with run.bat
+        2. Add a soil layer ...
+        3. Press Calculate
+    validations:
+      required: true
+
+  - type: textarea
+    id: errors
+    attributes:
+      label: Error messages
+      description: Text from the terminal, from the browser's developer console, or from the Kratos log.
+      render: text
+
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The release, or the commit (`git rev-parse --short HEAD`).
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - Linux
+        - macOS
+    validations:
+      required: true
+
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      placeholder: "3.11.8"
+
+  - type: input
+    id: kratos
+    attributes:
+      label: Kratos version
+      description: Only if the problem is in Calculate or Results.
+      placeholder: "10.4.4"

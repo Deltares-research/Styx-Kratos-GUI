@@ -2,16 +2,20 @@
 # Kratos is not installable here, so the kratos/bench tiers run on a machine that has it.
 name: tests
 
+# Pushes count only on main: a pull request's own branch is covered by pull_request.
 on:
   push:
+    branches: [main]
   pull_request:
+  workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
   group: tests-${{ github.ref }}
-  cancel-in-progress: true
+  # A newer push supersedes a pull request's run; every run on main is kept.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   tests:
@@ -39,8 +43,8 @@ jobs:
           python-version: ${{ matrix.python }}
           cache: pip
           cache-dependency-path: |
-            server/requirements.txt
-            server/requirements-dev.txt
+            requirements.txt
+            requirements-dev.txt
 
       - name: System libraries the gmsh wheel loads (Linux)
         if: runner.os == 'Linux'
@@ -51,17 +55,28 @@ jobs:
       - name: Python packages
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -r server/requirements.txt -r server/requirements-dev.txt
+          python -m pip install -r requirements.txt -r requirements-dev.txt
           python -m pip install quickjs || echo "quickjs did not install; headless JS will be reported as skipped"
 
       - name: Playwright's Chromium
         run: python -m playwright install --with-deps chromium
 
+      # The floor sits a little under the measured line coverage (97 % on 2026-10-11), so
+      # a change that lands untested code fails here instead of eroding it quietly.
       - name: Tests (syntax, headless JS, pytest, browser suite, GUI end-to-end)
         run: >
           python tools/test.py e2e
-          --cov=app --cov-report=term --cov-report=html --js-coverage
-          --tracing retain-on-failure --output test-results
+          --cov=core --cov=backend --cov-report=term --cov-report=html --cov-fail-under=95
+          --js-coverage --tracing retain-on-failure --output test-results
+
+      - name: Coverage on the run's summary page
+        if: always()
+        shell: bash
+        run: |
+          if [ -f .coverage ]; then
+            echo "### Python coverage, ${{ matrix.os }} / Python ${{ matrix.python }}" >> "$GITHUB_STEP_SUMMARY"
+            python -m coverage report --format=markdown --skip-covered >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Keep traces and coverage
         if: always()
@@ -69,8 +84,8 @@ jobs:
         with:
           name: reports-${{ matrix.os }}-py${{ matrix.python }}
           path: |
-            server/test-results/
-            server/htmlcov/
-            server/htmlcov-js/
+            test-results/
+            htmlcov/
+            htmlcov-js/
           if-no-files-found: ignore
           retention-days: 14

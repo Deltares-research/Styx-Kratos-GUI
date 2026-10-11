@@ -25,14 +25,13 @@ import sys
 from dataclasses import dataclass, field
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-SERVER = ROOT / "server"
-sys.path.insert(0, str(SERVER))
+sys.path.insert(0, str(ROOT))
 
-from app.launcher import platform_venv_name, venv_python  # noqa: E402
+from backend.launcher import platform_venv_name, venv_python  # noqa: E402
 
 QUICKJS_ENV = "KRATOS_GUI_QUICKJS_PYTHON"
 HEADLESS_NO_QUICKJS = 3
-"""`live/tests/run_headless.py`'s exit code when quickjs cannot be imported."""
+"""`frontend/tests/run_headless.py`'s exit code when quickjs cannot be imported."""
 
 PYTEST_FLAGS = {
     "quick": ["-m", "not browser"],
@@ -55,8 +54,8 @@ class Step:
     skip_codes: tuple[int, ...] = field(default_factory=tuple)
 
 
-def server_python(server: pathlib.Path = SERVER) -> pathlib.Path:
-    candidate = venv_python(server / platform_venv_name())
+def server_python(root: pathlib.Path = ROOT) -> pathlib.Path:
+    candidate = venv_python(root / platform_venv_name())
     return candidate if candidate.exists() else pathlib.Path(sys.executable)
 
 
@@ -83,7 +82,7 @@ def headless_python(has_quickjs=_imports_quickjs) -> str | None:
 
 def plan(tier: str, extra: list[str] | tuple[str, ...] = (), root: pathlib.Path = ROOT,
          has_quickjs=_imports_quickjs) -> list[Step]:
-    server, tests = root / "server", root / "live" / "tests"
+    tests = root / "frontend" / "tests"
     python = str(server_python())
     steps: list[Step] = []
 
@@ -99,16 +98,16 @@ def plan(tier: str, extra: list[str] | tuple[str, ...] = (), root: pathlib.Path 
                 f"{QUICKJS_ENV} to it")))
 
     if tier == "bench":
-        if (server / "benchmarks" / "__init__.py").exists():
+        if (root / "benchmarks" / "__init__.py").exists():
             steps.append(Step("bench", [python, "-m", "benchmarks", "run", "--all", *extra],
-                              server))
+                              root))
         else:
-            steps.append(Step("bench", None, server, unavailable=(
-                "server/benchmarks does not exist yet (plan Task 4.1)")))
+            steps.append(Step("bench", None, root, unavailable=(
+                "benchmarks/ does not exist yet (plan Task 4.1)")))
         return steps
 
     steps.append(Step("pytest", [python, "-m", "pytest", "-q", *PYTEST_FLAGS[tier], *extra],
-                      server))
+                      root))
     return steps
 
 

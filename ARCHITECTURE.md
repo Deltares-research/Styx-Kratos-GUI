@@ -16,13 +16,13 @@ See also: [FEATURES.md](FEATURES.md) (what works, per Kratos feature),
 | Layer | What |
 |---|---|
 | Framework | FastAPI 0.115.6 + Uvicorn 0.34.0 |
-| Validation | Pydantic 2.10.4. `Project` (`server/app/schemas.py`) is the single source of truth |
+| Validation | Pydantic 2.10.4. `Project` (`core/schemas.py`) is the single source of truth |
 | Geometry/mesh | Gmsh 4.13.1 (OpenCASCADE kernel) |
 | Numerics | NumPy 2.2.1 |
-| State | One project in memory (`server/app/store.py`). No database, no auth. Run results live on disk |
+| State | One project in memory (`backend/store.py`). No database, no auth. Run results live on disk |
 | Concurrency | Gmsh in a `ProcessPoolExecutor(max_workers=1)` (`gmsh_worker.py`). Kratos in a subprocess per run (`calculate.py`) |
-| Solver | Kratos MultiPhysics GeoMechanicsApplication. Not installed by the launcher; found through `KRATOS_GUI_PYTHON` / `KRATOS_GUI_KRATOS` or `server/kratos.local.json` |
-| Tests | pytest 8.3.4 + httpx `TestClient`, 1273 cases. `python -m pytest -q` from `server/`, with an interpreter that has gmsh |
+| Solver | Kratos MultiPhysics GeoMechanicsApplication. Not installed by the launcher; found through `KRATOS_GUI_PYTHON` / `KRATOS_GUI_KRATOS` or `kratos.local.json` |
+| Tests | pytest 8.3.4 + httpx `TestClient`, 1273 cases. `python -m pytest -q` from the repository root, with an interpreter that has gmsh |
 
 ### Frontend
 
@@ -30,10 +30,10 @@ See also: [FEATURES.md](FEATURES.md) (what works, per Kratos feature),
 |---|---|
 | 3D | three.js (vendored), the only dependency |
 | Build | **None.** No npm, no bundler, no transpiler |
-| Style | ES5 IIFE modules on a global `App` namespace, 44 `<script>` tags in `live/index.html` |
-| Fallback renderer | Hand-written CPU painter (`live/js/canvas-renderer.js`) when there is no WebGL |
-| HTTP | `fetch` wrapper (`live/js/api.js`) |
-| Tests | ~90-line browser harness (`live/tests/index.html`, 36 test files). The DOM-free suites also run headless under quickjs: `python live/tests/run_headless.py`, 302 cases in 9 suites. `python live/tests/syntax_check.py` parses every JS file |
+| Style | ES5 IIFE modules on a global `App` namespace, 44 `<script>` tags in `frontend/index.html` |
+| Fallback renderer | Hand-written CPU painter (`frontend/js/canvas-renderer.js`) when there is no WebGL |
+| HTTP | `fetch` wrapper (`frontend/js/api.js`) |
+| Tests | ~90-line browser harness (`frontend/tests/index.html`, 36 test files). The DOM-free suites also run headless under quickjs: `python frontend/tests/run_headless.py`, 302 cases in 9 suites. `python frontend/tests/syntax_check.py` parses every JS file |
 
 ## How a model flows
 
@@ -61,12 +61,12 @@ strings and hand them to the same handlers.
 
 | Entry | What it does | Code |
 |---|---|---|
-| The GUI | Draw soil, structures, loads, water, phases; mesh; Calculate (F9) | `live/js/*`, `patches.js` |
+| The GUI | Draw soil, structures, loads, water, phases; mesh; Calculate (F9) | `frontend/js/*`, `patches.js` |
 | Command box | `mesh`, `water`, `phases`, `node <id>`, `colour <part>`, `results …`, `results plot …` | each module's `handleCommand` |
 | `run <file.py>` | Builds the open model by running a Python file that defines a `Project` (e.g. `run tests/models/excavation.py`) | `script.py`, `POST /api/project/script` |
-| A finished deck | A Kratos deck written elsewhere, shown as its own mesh and run as its own files, from a script that names it (`deck.deck_project`) | `deck.py`, `live/js/deck.js` |
+| A finished deck | A Kratos deck written elsewhere, shown as its own mesh and run as its own files, from a script that names it (`deck.deck_project`) | `deck.py`, `frontend/js/deck.js` |
 | Import mesh | Read an `.mdpa` back into mesh data | `mdpa_import.py`, `POST /api/import/mdpa` |
-| Export | Write the deck without running it | `POST /api/export/mdpa`, `live/js/export.js` |
+| Export | Write the deck without running it | `POST /api/export/mdpa`, `frontend/js/export.js` |
 
 ## Server modules
 
@@ -97,7 +97,7 @@ strings and hand them to the same handlers.
 
 | Role | Modules |
 |---|---|
-| Shell (frozen) | `live/base/js` and `live/base/css`, the original mockup's UI, served unchanged at `/js` and `/css`: menus, toolbars, explorer, dialogs, command box |
+| Shell (frozen) | `frontend/base/js` and `frontend/base/css`, the original mockup's UI, served unchanged at `/js` and `/css`: menus, toolbars, explorer, dialogs, command box |
 | Glue | `patches.js` wires the live behaviour into the frozen shell: menu actions, rails, panels, windows |
 | Data | `api.js`, `model.js` (server project → shape the shell expects), `buffers.js`, `history.js` (undo/redo) |
 | View | `viewport.js` (three.js), `orbit.js` (Y-up camera, replaces the base one), `canvas-renderer.js`, `ruler.js`, `mesh-labels.js`, `part-colors.js`, `node-parts.js` |
@@ -140,14 +140,14 @@ run directory (~/KratosGUI/runs/<deck>_<stamp>/)
 
 | Suite | How to run | What it covers |
 |---|---|---|
-| Server | `python -m pytest -q` from `server/` (1273 cases, ~70 s) | Schema, geometry, meshing, export (golden decks), phases, API, results parsing |
-| Live Kratos regression | Part of the server suite; skipped where Kratos is not installed | The staged test model (`server/tests/models/excavation.py`) run through Kratos once per session and checked for invariants any correct run holds: every stage has output, parts and stages agree with the deck, hydrostatic pore pressure, signs, wall curves (`server/tests/test_results_regression.py`) |
-| Headless JS | `python live/tests/run_headless.py` (302 cases) | Every DOM-free module: phases, results, results-render, results-plot, part colours, water, node parts, mesh settings, deck |
-| JS syntax | `python live/tests/syntax_check.py` | Every `live/base/js`, `live/js` and test file parses. One syntax error silently disables the whole live layer |
-| Browser | open `live/tests/index.html` | Everything, including DOM, three.js and real events |
+| Server | `python -m pytest -q` from the repository root (1273 cases, ~70 s) | Schema, geometry, meshing, export (golden decks), phases, API, results parsing |
+| Live Kratos regression | Part of the server suite; skipped where Kratos is not installed | The staged test model (`tests/models/excavation.py`) run through Kratos once per session and checked for invariants any correct run holds: every stage has output, parts and stages agree with the deck, hydrostatic pore pressure, signs, wall curves (`tests/test_results_regression.py`) |
+| Headless JS | `python frontend/tests/run_headless.py` (302 cases) | Every DOM-free module: phases, results, results-render, results-plot, part colours, water, node parts, mesh settings, deck |
+| JS syntax | `python frontend/tests/syntax_check.py` | Every `frontend/base/js`, `frontend/js` and test file parses. One syntax error silently disables the whole live layer |
+| Browser | open `frontend/tests/index.html` | Everything, including DOM, three.js and real events |
 
 No recorded Kratos run is kept in the repository. Without Kratos, the results pipeline
-is exercised on synthetic GiD output from `server/tests/fakes/` (a fake runner and
+is exercised on synthetic GiD output from `tests/fakes/` (a fake runner and
 `gid_writer.py`), built from the same test model.
 
 ## Ideas that carry the design
@@ -156,7 +156,7 @@ is exercised on synthetic GiD output from `server/tests/fakes/` (a fake runner a
 |---|---|
 | Gmsh in a 1-worker subprocess | It is a process-global singleton, and the subprocess also contains OCC hard crashes |
 | Kratos in a subprocess, configured by path | Its compiled extensions are bound to the Python they were built for, which is usually not the server's |
-| Frozen `live/base/` + live `live/js/` | The server mounts the base files in place. Only the camera in `orbit.js` is replaced; the rest is wrapped by `patches.js` |
+| Frozen `frontend/base/` + live `frontend/js/` | The server mounts the base files in place. Only the camera in `orbit.js` is replaced; the rest is wrapped by `patches.js` |
 | Part keys | One string is the gmsh physical group, `userData.key`, tree `obj:` and `OBJECT_PROPS` key |
 | The command line is the feature | Every button builds a command string. One implementation per action, and every model can be scripted (`run <file.py>`) |
 | DOM-free logic, thin DOM | Anything decidable without a page goes in a module with no `document`, so the headless runner can test it. `patches.js` and `results-view.js` only host it |

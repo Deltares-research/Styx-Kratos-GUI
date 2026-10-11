@@ -1,0 +1,3 @@
+# Who reviews what. GitHub asks the owners of the changed paths to review a pull request.
+# The last matching line wins, so add narrower paths below this one as the team grows.
+*   @indigocoral

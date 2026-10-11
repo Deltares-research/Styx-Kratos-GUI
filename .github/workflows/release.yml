@@ -1,0 +1,78 @@
+# Pushing a version tag makes a GitHub release:
+#
+#   git tag -a v1.2.0 -m "Styx 1.2.0"
+#   git push origin v1.2.0
+#
+# The release carries the source as .zip and .tar.gz, built from the tag with
+# `git archive` (what it leaves out is listed in .gitattributes), and notes made from
+# the merged pull requests, sorted by label (.github/release.yml). A tag with a hyphen,
+# such as v1.2.0-rc.1, makes a pre-release.
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: build and check the archive
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Source archives
+        run: |
+          name="styx-${GITHUB_REF_NAME}"
+          mkdir dist
+          git archive --format=zip --prefix="$name/" -o "dist/$name.zip" "$GITHUB_REF_NAME"
+          git archive --format=tar.gz --prefix="$name/" -o "dist/$name.tar.gz" "$GITHUB_REF_NAME"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: System libraries the gmsh wheel loads
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libglu1-mesa libxcursor1 libxinerama1 libxft2 libxrender1
+
+      # What a user does with the download: unpack it and start it.
+      - name: The unpacked archive starts
+        run: |
+          cd "$RUNNER_TEMP"
+          unzip -q "$GITHUB_WORKSPACE/dist/styx-${GITHUB_REF_NAME}.zip"
+          "./styx-${GITHUB_REF_NAME}/run.sh" --check
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    name: publish the release
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+
+      - name: GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          prerelease=false
+          case "$GITHUB_REF_NAME" in *-*) prerelease=true ;; esac
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Styx ${GITHUB_REF_NAME#v}" \
+            --generate-notes --verify-tag --prerelease="$prerelease"

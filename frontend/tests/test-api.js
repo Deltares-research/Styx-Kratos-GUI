@@ -1,0 +1,120 @@
+/* Tests for frontend/js/api.js — the HTTP client.
+
+   Everything here runs against an injected fetch, so no server is needed and the
+   error paths (which are the interesting ones) are reachable. */
+
+(function () {
+
+  function stub(responses) {
+    var calls = [];
+    function fetchStub(url, opts) {
+      calls.push({ url: url, opts: opts || {} });
+      var next = responses.shift();
+      if (typeof next === 'function') return next();
+      return Promise.resolve(next);
+    }
+    fetchStub.calls = calls;
+    return fetchStub;
+  }
+
+  function json(status, body) {
+    return {
+      ok: status >= 200 && status < 300,
+      status: status,
+      json: function () { return Promise.resolve(body); }
+    };
+  }
+
+  function notJson(status) {
+    return {
+      ok: false, status: status,
+      json: function () { return Promise.reject(new SyntaxError('not json')); }
+    };
+  }
+
+  function api(responses) {
+    return App.Api.create({ base: '', fetch: stub(responses) });
+  }
+
+  /* ── Base URL ────────────────────────────────────────────────── */
+
+  test('a page served over http talks to its own origin', function () {
+    T.eq(App.Api.baseFor({ protocol: 'http:' }), '');
+    T.eq(App.Api.baseFor({ protocol: 'https:' }), '');
+  });
+
+  test('a page opened from disk falls back to the local server', function () {
+    // The frozen demo is meant to run off file://. If someone opens frontend/ that
+    // way, a relative fetch would resolve to a file: URL and fail opaquely.
+    T.eq(App.Api.baseFor({ protocol: 'file:' }), 'http://127.0.0.1:8000');
+  });
+
+  /* ── Requests ────────────────────────────────────────────────── */
+
+  test('get parses the body and sends no payload', function () {
+    var client = api([json(200, { name: 'Site' })]);
+    return client.get('/api/project').then(function (body) {
+      T.eq(body, { name: 'Site' });
+      var call = client.fetch.calls[0];
+      T.eq(call.url, '/api/project');
+      T.eq(call.opts.method, 'GET');
+      T.eq(call.opts.body, undefined);
+    });
+  });
+
+  test('put sends JSON with the right content type', function () {
+    var client = api([json(200, { ok: true })]);
+    return client.put('/api/project', { name: 'Site' }).then(function () {
+      var call = client.fetch.calls[0];
+      T.eq(call.opts.method, 'PUT');
+      T.eq(call.opts.headers['Content-Type'], 'application/json');
+      T.eq(JSON.parse(call.opts.body), { name: 'Site' });
+    });
+  });
+
+  test('the base url is prefixed to every path', function () {
+    var client = App.Api.create({ base: 'http://127.0.0.1:8000', fetch: stub([json(200, {})]) });
+    return client.get('/api/health').then(function () {
+      T.eq(client.fetch.calls[0].url, 'http://127.0.0.1:8000/api/health');
+    });
+  });
+
+  /* ── Failures ────────────────────────────────────────────────── */
+
+  test("a FastAPI error surfaces its detail, not just a status code", function () {
+    var client = api([json(500, { detail: 'Boolean produced no volume for wall' })]);
+    return T.rejects(function () { return client.get('/api/geometry'); }).then(function (err) {
+      T.ok(/Boolean produced no volume for wall/.test(err.message), err.message);
+      T.eq(err.status, 500);
+    });
+  });
+
+  test('a 422 reports which field the schema rejected', function () {
+    // pydantic's detail is a list of objects; flattening it is the difference
+    // between a usable command-log line and "[object Object]".
+    var client = api([json(422, { detail: [
+      { loc: ['body', 'layers', 0, 'bots'], msg: 'layer stack must be contiguous' }
+    ] })]);
+    return T.rejects(function () { return client.put('/api/project', {}); }).then(function (err) {
+      T.ok(/contiguous/.test(err.message), err.message);
+      T.ok(/layers/.test(err.message), err.message);
+      T.ok(!/\[object Object\]/.test(err.message), err.message);
+    });
+  });
+
+  test('a non-JSON error body still produces a readable message', function () {
+    var client = api([notJson(502)]);
+    return T.rejects(function () { return client.get('/api/geometry'); }).then(function (err) {
+      T.ok(/502/.test(err.message), err.message);
+    });
+  });
+
+  test('an unreachable server says so rather than leaking TypeError', function () {
+    var client = api([function () { return Promise.reject(new TypeError('Failed to fetch')); }]);
+    return T.rejects(function () { return client.get('/api/health'); }).then(function (err) {
+      T.ok(/server/i.test(err.message), err.message);
+      T.eq(err.offline, true);
+    });
+  });
+
+})();

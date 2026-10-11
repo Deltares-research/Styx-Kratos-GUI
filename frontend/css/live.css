@@ -1,0 +1,405 @@
+/* Live-only controls; the file:// mockup styles remain frozen. */
+.mesh-settings-body { padding: 14px 18px; overflow: auto; }
+.mesh-settings-form {
+  display: grid;
+  grid-template-columns: 165px minmax(170px, 220px) 1fr;
+  gap: 10px 12px;
+  align-items: center;
+  width: 100%;
+}
+.mesh-setting-label { font-weight: 600; color: var(--c-ink); }
+.mesh-setting-control {
+  min-width: 0;
+  height: 27px;
+  border: 1px solid var(--c-border);
+  border-radius: 2px;
+  background: #fff;
+  padding: 2px 6px;
+  color: var(--c-ink);
+  font: inherit;
+}
+input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify-self: start; }
+.mesh-setting-help { color: var(--c-ink-soft); font-size: var(--fs-sm); line-height: 1.3; }
+.mesh-setting-targets { font-family: var(--font-mono); color: var(--brand-primary); }
+/* Sized to the form's control column, so its right edge lines up with the
+   single-line fields below it. A min-width wider than the track's max would
+   overflow the cell and run under the help text. */
+.mesh-body-table {
+  border: 1px solid var(--c-border);
+  border-radius: 2px;
+  background: #fff;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+.mesh-body-head,
+.mesh-body-row {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) 74px;
+  gap: 8px;
+  align-items: center;
+  min-height: 30px;
+  padding: 3px 8px;
+}
+.mesh-body-head > span,
+.mesh-body-row > span {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.mesh-body-head {
+  color: var(--c-ink-soft);
+  font-size: var(--fs-sm);
+  background: var(--c-panel);
+  border-bottom: 1px solid var(--c-border);
+}
+.mesh-body-row + .mesh-body-row { border-top: 1px solid var(--c-border); }
+.mesh-body-enabled { width: 16px; height: 16px; margin: 0; }
+/* Fills its column and keeps the border/height of the fields below. */
+.mesh-body-size { width: 100%; height: 24px; }
+/* An unchecked layer is not meshed, so its target size does not apply. */
+.mesh-body-size:disabled { background: var(--c-panel); color: var(--c-ink-faint); }
+.mesh-body-row.off > span { color: var(--c-ink-faint); }
+.mesh-settings-message { color: #a12622; max-width: 280px; }
+
+/* ── Create soil volume ────────────────────────────────────────── */
+.soil-volume-body { padding: 14px 18px; overflow: auto; }
+.soil-volume-table {
+  border: 1px solid var(--c-border);
+  border-radius: 2px;
+  background: #fff;
+  width: 100%;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+.soil-volume-head,
+.soil-volume-row {
+  display: grid;
+  grid-template-columns: 20px repeat(3, minmax(0, 1fr)) 26px;
+  gap: 5px;
+  align-items: center;
+  padding: 3px 6px;
+}
+/* In 2D the corner table drops the out-of-plane column. */
+.soil-volume-table.planar .soil-volume-head,
+.soil-volume-table.planar .soil-volume-row {
+  grid-template-columns: 20px repeat(2, minmax(0, 1fr)) 26px;
+}
+.soil-volume-head {
+  color: var(--c-ink-soft); font-size: var(--fs-sm);
+  background: var(--c-panel); border-bottom: 1px solid var(--c-border);
+}
+.soil-volume-row + .soil-volume-row { border-top: 1px solid var(--c-border-soft); }
+.soil-volume-index { color: var(--c-ink-faint); font-size: var(--fs-sm); }
+.soil-volume-coord { height: 23px; width: 100%; }
+.soil-volume-rows { max-height: 132px; overflow-y: auto; }
+.soil-volume-actions { margin-top: 6px; }
+.soil-volume-extrusion {
+  display: grid; grid-template-columns: repeat(3, auto minmax(0, 1fr));
+  gap: 5px; align-items: center;
+}
+.soil-volume-axis { color: var(--c-ink-soft); font-size: var(--fs-sm); }
+.soil-volume-summary { font-size: var(--fs-sm); color: var(--c-ink-soft); }
+.soil-volume-summary.invalid { color: #a3341f; }
+
+/* Custom soil volumes, listed inside the frozen Modify soil layers window. */
+.soil-body-section { border-top: 1px solid var(--c-border); background: var(--c-panel); }
+.soil-body-section-head {
+  padding: 5px 10px; font-weight: 600; font-size: var(--fs-sm); color: var(--c-ink-soft);
+}
+.soil-body-section table.lay-table { background: #fff; }
+
+/* The view presets are meaningless once the camera is locked to the section
+   plane, so 2D greys them out rather than leaving four buttons that do nothing. */
+#vp-viewcube.off { opacity: .4; }
+#vp-viewcube.off button { cursor: default; }
+
+/* ── No WebGL ────────────────────────────────────────────────────────────────
+   Shown in place of the 3D scene when the browser gives no WebGL context. It has
+   to be readable and actionable: the user is looking at an empty viewport and
+   needs to know it is their graphics settings, not their model. */
+.vp-no-webgl {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  max-width: 460px;
+  z-index: 4;
+  background: var(--c-vp-hud);
+  border: 1px solid var(--c-border);
+  border-left: 3px solid #c0392b;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-menu);
+  padding: 14px 18px;
+  color: var(--c-ink);
+  line-height: 1.55;
+}
+
+/* A rail tool the current model cannot have: js/data.js never needed a disabled
+   state for these, because none of them did anything. Matches .tbtn.disabled. */
+.rail-btn.disabled { color: var(--c-disabled); pointer-events: none; }
+
+/* ── 2D rulers ──────────────────────────────────────────────────────
+   One canvas per viewport edge, painted by frontend/js/ruler.js from the same
+   visible rectangle the camera is drawn with. They sit *over* the scene rather
+   than shrinking it: the renderer's canvas is the full viewport, and inseting
+   it would change every screen-to-world mapping in the app for a 22 px frame.
+   Below .vp-hud (z-index 3) and inert, so nothing in the viewport becomes
+   unclickable behind them; the HUD corners step inward instead. */
+.vp-ruler {
+  position: absolute;
+  z-index: 2;
+  display: block;
+  pointer-events: none;
+}
+.vp-ruler[hidden] { display: none; }
+.vp-ruler-top    { top: 0; left: 0; width: 100%; height: 22px; }
+.vp-ruler-bottom { bottom: 0; left: 0; width: 100%; height: 22px; }
+.vp-ruler-left   { top: 0; left: 0; width: 22px; height: 100%; }
+.vp-ruler-right  { top: 0; right: 0; width: 22px; height: 100%; }
+
+#viewport.rulers-on #vp-hud-topleft { top: 28px; left: 30px; }
+#viewport.rulers-on #vp-viewcube    { top: 28px; right: 30px; }
+#viewport.rulers-on #vp-triad       { left: 26px; bottom: 26px; }
+
+/* ── ID labels ─────────────────────────────────────────────────
+   One canvas over the whole viewport, painted by frontend/js/mesh-labels.js from the
+   render tick. Under the rulers (z-index 2) so an edge number is never covered by
+   a node number, and inert like them: the labels are a reading aid over the scene,
+   and nothing behind them may become unclickable. */
+.vp-mesh-labels {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.vp-mesh-labels[hidden] { display: none; }
+
+/* ── Results mode ────────────────────────────────────────────────────────
+   The colour legend over the viewport, and the Results explorer in the dock.
+   Both are filled in by frontend/js/results-view.js and frontend/js/patches.js.       */
+
+/* 40px in from the right, not 12: the right-hand ruler is 22px wide (ruler.js SIZE)
+   and the legend sat on top of it, covering its numbers. */
+.vp-legend {
+  position: absolute;
+  right: 40px;
+  bottom: 56px;
+  width: 104px;
+  padding: 8px 10px 6px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid var(--c-border);
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--c-ink);
+  pointer-events: none;
+}
+.vp-legend[hidden] { display: none; }
+
+.vp-legend-title {
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.vp-legend-unit,
+.vp-legend-foot { color: var(--c-ink-soft); font-size: 10px; }
+.vp-legend-foot { margin-top: 4px; }
+
+/* The ramp and its ticks share one box, so a tick can be positioned as a
+   percentage of the ramp's own height and stay beside the colour it names. */
+.vp-legend-body {
+  position: relative;
+  height: 150px;
+  margin: 6px 0 2px;
+}
+.vp-legend-body > i {
+  position: absolute;
+  top: 0; left: 0; bottom: 0;
+  width: 16px;
+  border: 1px solid var(--c-border-soft);
+}
+.vp-legend-body > ul {
+  position: absolute;
+  top: 0; left: 22px; right: 0; bottom: 0;
+  margin: 0; padding: 0;
+  list-style: none;
+}
+.vp-legend-body > ul > li {
+  position: absolute;
+  left: 0;
+  transform: translateY(-50%);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* ── The Results explorer ─────────────────────────────────────────────── */
+
+/* A mode's own dock panel (Phases, Results) is put away with `hidden` when its tab is
+   left. `.dock-panel { display: flex }` in the frozen css/layout.css outranks the
+   browser's `[hidden]` rule, so without this both stayed on screen in every tab. */
+.dock-panel[hidden] { display: none; }
+
+.res-grid { display: flex; flex-direction: column; gap: 4px; padding: 6px 8px; }
+
+.res-row {
+  display: grid;
+  grid-template-columns: 62px 1fr;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+}
+.res-row > span:first-child { color: var(--c-ink-soft); }
+.res-row select { width: 100%; font-size: 11px; }
+/* A grid item stretches to its column by default, which on a checkbox leaves a wide
+   dead strip that still toggles when clicked. */
+.res-row input[type="checkbox"] { justify-self: start; width: auto; margin: 0; }
+
+.res-run {
+  font-size: 10px;
+  color: var(--c-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* The legend's Min ... Max boxes: two equal boxes that shrink with the dock column,
+   then Auto and the unit. An empty box shows the phase's own value as its placeholder. */
+.res-limits { display: flex; align-items: center; gap: 4px; min-width: 0; }
+.res-limits input {
+  flex: 1 1 0; min-width: 0; width: 0;
+  font-size: 11px; padding: 1px 3px;
+  font-variant-numeric: tabular-nums;
+}
+.res-limits-to { color: var(--c-ink-faint); }
+.res-limits button { flex: 0 0 auto; font-size: 10px; padding: 1px 5px; }
+.res-limits-unit { flex: 0 0 auto; color: var(--c-ink-soft); font-size: 10px; }
+
+.res-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px 8px 8px;
+}
+.res-actions button { font-size: 11px; padding: 2px 8px; }
+
+.dock-empty {
+  margin: 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--c-ink-soft);
+}
+.dock-empty code {
+  background: var(--c-panel);
+  border: 1px solid var(--c-border-soft);
+  border-radius: 3px;
+  padding: 0 3px;
+}
+
+/* The Results chooser in a window of its own: the same controls as the dock panel,
+   given the room a dock column does not have.
+
+   `.dlg-body` is a flex *row* (css/components.css:313) because a dialog's body is
+   normally one pane, or a list beside a detail view. Here it is a single block of
+   controls that must fill the width, so the row is given one item that grows. The
+   window's buttons live in the footer beside Close, not in here.                   */
+
+.dlg-results .dlg-body { overflow: auto; padding: 4px 6px; }
+
+.dlg-results .res-grid {
+  flex: 1 1 auto;
+  min-width: 0;
+  gap: 10px;
+  padding: 12px 14px;
+}
+
+.dlg-results .res-row {
+  grid-template-columns: 104px 1fr;
+  gap: 12px;
+  font-size: 12px;
+}
+.dlg-results .res-row select { padding: 2px 4px; }
+.dlg-results .res-run { font-size: 11px; }
+
+.dlg-results .dock-empty { margin: 16px; font-size: 12px; }
+
+/* Three actions and a Close is more than the footer's 82px minimum was sized for. */
+.dlg-results .dlg-foot { gap: 6px; }
+.dlg-results .dlg-foot .btn { min-width: 0; padding: 0 12px; white-space: nowrap; }
+.dlg-results .res-limits input { font-size: 12px; padding: 2px 4px; }
+.dlg-results .res-limits button { font-size: 11px; padding: 2px 8px; }
+
+/* The plot window (patches.js `openPlotWindow`): a member's results along it, a panel
+   per phase. The figure is one SVG drawn by frontend/js/results-plot.js; it is scaled to the
+   window's width and scrolls vertically when its rows do not fit. `.dlg-body` is a flex
+   row, so the window's content is one column that fills it. */
+.dlg-plot .dlg-body { overflow: hidden; padding: 0; }
+.dlg-plot .dock-empty { margin: 16px; font-size: 12px; }
+.dlg-plot .dlg-foot { gap: 6px; }
+.dlg-plot .dlg-foot .btn { min-width: 0; padding: 0 12px; white-space: nowrap; }
+
+.rp-window {
+  flex: 1 1 auto; min-width: 0;
+  display: flex; flex-direction: column;
+}
+.rp-controls {
+  display: flex; align-items: center; gap: 16px; flex: 0 0 auto;
+  padding: 8px 12px; font-size: 12px;
+  border-bottom: 1px solid var(--c-border-soft);
+}
+.rp-controls label { display: flex; align-items: center; gap: 6px; color: var(--c-ink-soft); }
+.rp-controls select { font-size: 12px; padding: 2px 4px; }
+.rp-run {
+  margin-left: auto; min-width: 0; font-size: 11px; color: var(--c-ink-faint);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.rp-host { flex: 1 1 auto; min-height: 0; overflow: auto; background: #fff; }
+.rp-host svg { display: block; width: 100%; height: auto; }
+
+/* The Model explorer's colour toggle (Mesh mode): beside the eye, a square in the part's
+   own colour -- outlined while off, filled while on, half filled for a group that is
+   partly on. See addPartColorToggles in frontend/js/patches.js. */
+.tree-paint {
+  width: 11px; height: 11px; flex: 0 0 auto; margin-left: 3px; box-sizing: border-box;
+  border: 2px solid var(--paint, #e6194b); border-radius: 2px; background: #fff;
+  cursor: pointer;
+}
+.tree-paint.on { background: var(--paint, #e6194b); }
+.tree-paint.mixed { background: linear-gradient(135deg, var(--paint, #e6194b) 50%, #fff 50%); }
+.tree-paint.empty-slot { visibility: hidden; cursor: default; }
+
+/* The Model explorer's checkbox in Staged construction mode means "in the model in the
+   selected phase" (addPhaseChecks in frontend/js/patches.js). A group whose parts differ
+   shows a dash; a state this phase inherited rather than set itself is ticked in grey. */
+.tree-eye.phase-check.mixed::after {
+  opacity: 1; width: 7px; height: 0; transform: none;
+  border: 0; border-bottom: 1.6px solid var(--brand-primary);
+}
+.tree-eye.phase-check.inherited::after { border-color: var(--c-ink-faint); }
+
+/* Overlapping nodes of an imported deck, fanned apart (paintNodeFans in
+   frontend/js/viewport.js). Inert like the labels' overlay: clicks go through to the canvas,
+   where the same fanned positions are what a click picks. */
+.vp-node-fans {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  display: block;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.vp-node-fans[hidden] { display: none; }
+
+/* The Phases overview (patches.js `phasesDialog`): the Plaxis list, a line per phase. */
+.phases-overview-list .phase-row { gap: 6px; }
+.phases-overview-list .phase-name { flex: 1 1 auto; min-width: 0; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.phases-overview-list .phase-kind { flex: 0 0 auto; }
+.phase-dot.failed { background: #d64545; }
+.phases-overview-box { margin: 6px 0 10px; padding: 8px; min-height: 48px;
+  border: 1px solid var(--c-line); background: var(--c-panel-2); }
+.phases-overview-box.done, .phases-overview-box.initial { color: var(--brand-green); }
+.phases-overview-box.failed { color: #d64545; }
+.phases-overview-error { white-space: pre-wrap; font-size: var(--fs-sm); max-height: 200px;
+  overflow: auto; margin: 0 0 10px; }

@@ -1,0 +1,26 @@
+# How GitHub sorts the generated release notes (`--generate-notes` in
+# workflows/release.yml): one section per label, in this order. A pull request
+# without any of these labels lands under "Other changes".
+changelog:
+  exclude:
+    labels:
+      - skip-changelog
+  categories:
+    - title: Breaking changes
+      labels:
+        - breaking-change
+    - title: New features
+      labels:
+        - enhancement
+    - title: Bug fixes
+      labels:
+        - bug
+    - title: Documentation
+      labels:
+        - documentation
+    - title: Dependencies
+      labels:
+        - dependencies
+    - title: Other changes
+      labels:
+        - "*"

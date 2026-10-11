@@ -1,0 +1,3 @@
+# Every issue starts from a form (bug_report.yml, feature_request.yml), so it arrives
+# with what is needed to act on it. GitHub adds the security policy's link itself.
+blank_issues_enabled: false
