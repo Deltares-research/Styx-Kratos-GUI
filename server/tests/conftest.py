@@ -38,8 +38,8 @@ def pytest_addoption(parser):
                          help=f"run tests marked {marker} ({what})")
     # Here rather than in tests/browser/conftest.py: options are only read from conftests loaded at startup.
     parser.addoption("--update-snapshots", action="store_true", default=False,
-                     help="rewrite committed snapshots (the OpenAPI schema) from the code, "
-                          "for a deliberate API change")
+                     help="rewrite committed snapshots (deck structure, perf baseline) from "
+                          "the code, for a deliberate change")
     parser.addoption("--js-coverage", action="store_true", default=False,
                      help="collect function coverage of live/js in the browser unit suite "
                           "(written to htmlcov-js/summary.json)")

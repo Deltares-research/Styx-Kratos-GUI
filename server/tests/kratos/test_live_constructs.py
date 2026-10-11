@@ -72,14 +72,19 @@ def without(project: Project, **emptied) -> Project:
 
 # ── The "Uniform" normal load, at both orders ────────────────────────────────
 
-def soil_block(load_points=None) -> Project:
+def soil_block(load_points=None, pressure: float = 50_000.0) -> Project:
     p = excavation.excavation_project(staged=False).model_dump(mode="json")
     p.update(beams=[], anchors=[], interfaces=[], loads=[], normal_loads=[], phases=[],
              water=None)
     if load_points:
         p["normal_loads"] = [{"id": "surcharge", "name": "Surcharge", "points": load_points,
-                              "fluid_pressure_type": "Uniform", "pressure": 50_000.0}]  # Pa
+                              "fluid_pressure_type": "Uniform", "pressure": pressure}]  # Pa
     return Project.model_validate(p)
+
+
+def nodes_block(export: dict) -> str:
+    mdpa = export["mdpa"]
+    return mdpa[mdpa.index("Begin Nodes"):mdpa.index("End Nodes")]
 
 
 def deep_vertical_stress(directory: Path, stage: int = 1) -> float:
@@ -91,7 +96,7 @@ def deep_vertical_stress(directory: Path, stage: int = 1) -> float:
         corners = mesh.connectivity(element)[:3]
         cx = sum(mesh.nodes[c][0] for c in corners) / 3
         cy = sum(mesh.nodes[c][1] for c in corners) / 3
-        if -20 < cy < -10 and 20 < cx < 60:       # deep, clear of the side boundaries
+        if -20 < cy < -10 and 20 < cx < 40:       # deep, clear of the side boundaries
             values.append(sum(p[1] for p in points) / len(points))
     assert len(values) > 10
     return sum(values) / len(values)
@@ -100,12 +105,17 @@ def deep_vertical_stress(directory: Path, stage: int = 1) -> float:
 @pytest.mark.parametrize("order", [1, 2])
 @pytest.mark.parametrize("direction", ["left to right", "right to left"])
 def test_a_uniform_normal_load_adds_its_pressure_at_depth(order, direction):
+    """The unloaded run carries the same line at zero pressure. The line is part of the
+    geometry, so without it gmsh meshes the block differently, and the two window
+    averages then sit at different mean depths: in the test model's sand, 0.47 m
+    apart in one column, which gravity turns into 9 kPa of the 'surcharge'."""
     d = soil_block().domain
     line = [(d.x0, d.y_top), (d.x1, d.y_top)]
     if direction == "right to left":
         line.reverse()
-    _, unloaded = run(soil_block(), order=order)
-    _, loaded = run(soil_block(line), order=order)
+    unloaded_export, unloaded = run(soil_block(line, pressure=0.0), order=order)
+    loaded_export, loaded = run(soil_block(line), order=order)
+    assert nodes_block(loaded_export) == nodes_block(unloaded_export), "not the same mesh"
     change = (deep_vertical_stress(Path(loaded["directory"]))
               - deep_vertical_stress(Path(unloaded["directory"])))
     assert change == pytest.approx(-50_000.0, rel=0.01), (
