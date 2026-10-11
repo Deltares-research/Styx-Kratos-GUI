@@ -1,26 +1,40 @@
-/* Built-in starting values in m / kN / day. Project edits never alter this catalog.
-   Soil presets retain the demo's existing values; interfaces belong to a soil set. */
+/* Built-in starting values: Kratos property sets, stated in SI and added to a project in
+   its own unit system (App.Units). Project edits never alter this catalogue.
+
+   The soils are the frozen demo's six (js/data.js), converted the way every project in
+   the old kN/m3-kN/m2-m/day shape is (server/app/legacy.py): DENSITY_SOLID is the unit
+   weight over g, PERMEABILITY_XX the m/day value per second. POROSITY is 0, as in
+   Kratos' staged-excavation reference, so each soil weighs exactly DENSITY_SOLID g -- its unit weight -- above
+   and below the water alike (add a porosity and a RETENTION_LAW to tell the two apart).
+   What a preset leaves out -- the water's density, the fluid constants -- the export
+   derives, and says so.
+   The interface presets belong to a soil set: they are its Rinter and permeability. */
 App.MaterialLibrary = (function () {
   var soils = [
-  { id:'m1', name:'Fill',          model:'Mohr-Coulomb',  type:'Drained',   color:'#d8c48a',
-    gUnsat:17.0, gSat:20.0, E:15000,  nu:0.30, c:1.0,  phi:30.0, k:1.0,
-    rInter:0.70, interfacePerm:'Neutral' },
-  { id:'m2', name:'Sand, loose',   model:'Hardening Soil',type:'Drained',   color:'#c4a86a',
-    gUnsat:18.0, gSat:20.5, E:25000,  nu:0.28, c:0.5,  phi:32.0, k:1.5,
-    rInter:0.70, interfacePerm:'Neutral' },
-  { id:'m3', name:'Clay, soft',    model:'Soft Soil',     type:'Undrained (A)', color:'#8fa86b',
-    gUnsat:15.0, gSat:16.0, E:4000,   nu:0.35, c:5.0,  phi:22.0, k:0.0001,
-    rInter:0.50, interfacePerm:'Impermeable' },
-  { id:'m4', name:'Clay, stiff',   model:'Mohr-Coulomb',  type:'Undrained (A)', color:'#6f8fa8',
-    gUnsat:17.5, gSat:18.5, E:12000,  nu:0.33, c:15.0, phi:25.0, k:0.0005,
-    rInter:0.55, interfacePerm:'Impermeable' },
-  { id:'m5', name:'Sand, dense',   model:'Hardening Soil',type:'Drained',   color:'#b08a6a',
-    gUnsat:19.0, gSat:21.0, E:45000,  nu:0.25, c:0.0,  phi:36.0, k:5.0,
-    rInter:0.75, interfacePerm:'Neutral' },
-  { id:'m6', name:'Bedrock',       model:'Linear Elastic',type:'Non-porous',color:'#8d8d99',
-    gUnsat:24.0, gSat:24.0, E:2.0e6,  nu:0.20, c:null, phi:null, k:0.0,
-    rInter:1.00, interfacePerm:'Impermeable' }
-];
+    { id: 'm1', name: 'Fill', color: '#d8c48a', rInter: 0.70, interfacePerm: 'Neutral',
+      variables: { GEO_DRAINAGE_TYPE: 'CONSTANT_PW_FIELD', YOUNG_MODULUS: 1.5e7,
+                   POISSON_RATIO: 0.30, DENSITY_SOLID: 17000 / 9.81,
+                   PERMEABILITY_XX: 1.0 / 86400, POROSITY: 0.0, GEO_COHESION: 1000, GEO_FRICTION_ANGLE: 30.0 } },
+    { id: 'm2', name: 'Sand, loose', color: '#c4a86a', rInter: 0.70, interfacePerm: 'Neutral',
+      variables: { GEO_DRAINAGE_TYPE: 'CONSTANT_PW_FIELD', YOUNG_MODULUS: 2.5e7,
+                   POISSON_RATIO: 0.28, DENSITY_SOLID: 18000 / 9.81,
+                   PERMEABILITY_XX: 1.5 / 86400, POROSITY: 0.0, GEO_COHESION: 500, GEO_FRICTION_ANGLE: 32.0 } },
+    { id: 'm3', name: 'Clay, soft', color: '#8fa86b', rInter: 0.50, interfacePerm: 'Impermeable',
+      variables: { GEO_DRAINAGE_TYPE: 'FULLY_COUPLED', YOUNG_MODULUS: 4.0e6,
+                   POISSON_RATIO: 0.35, DENSITY_SOLID: 15000 / 9.81,
+                   PERMEABILITY_XX: 0.0001 / 86400, POROSITY: 0.0, GEO_COHESION: 5000, GEO_FRICTION_ANGLE: 22.0 } },
+    { id: 'm4', name: 'Clay, stiff', color: '#6f8fa8', rInter: 0.55, interfacePerm: 'Impermeable',
+      variables: { GEO_DRAINAGE_TYPE: 'FULLY_COUPLED', YOUNG_MODULUS: 1.2e7,
+                   POISSON_RATIO: 0.33, DENSITY_SOLID: 17500 / 9.81,
+                   PERMEABILITY_XX: 0.0005 / 86400, POROSITY: 0.0, GEO_COHESION: 15000, GEO_FRICTION_ANGLE: 25.0 } },
+    { id: 'm5', name: 'Sand, dense', color: '#b08a6a', rInter: 0.75, interfacePerm: 'Neutral',
+      variables: { GEO_DRAINAGE_TYPE: 'CONSTANT_PW_FIELD', YOUNG_MODULUS: 4.5e7,
+                   POISSON_RATIO: 0.25, DENSITY_SOLID: 19000 / 9.81,
+                   PERMEABILITY_XX: 5.0 / 86400, POROSITY: 0.0, GEO_COHESION: 0, GEO_FRICTION_ANGLE: 36.0 } },
+    { id: 'm6', name: 'Bedrock', color: '#8d8d99', rInter: 1.00, interfacePerm: 'Impermeable',
+      variables: { GEO_DRAINAGE_TYPE: 'CONSTANT_PW_FIELD', YOUNG_MODULUS: 2.0e9,
+                   POISSON_RATIO: 0.20, DENSITY_SOLID: 24000 / 9.81, PERMEABILITY_XX: 0.0 , POROSITY: 0.0} }
+  ];
   var interfaces = [
     { id: 'rough', name: 'Rough contact', rInter: 1.0, interfacePerm: 'Neutral' },
     { id: 'reduced', name: 'Reduced-strength contact', rInter: 0.7, interfacePerm: 'Neutral' },
@@ -33,8 +47,19 @@ App.MaterialLibrary = (function () {
     if (!preset) throw new Error('Unknown material library preset: ' + id);
     return preset;
   }
+  function dimension() { return App.PROJECT && App.PROJECT.dimension === 3 ? 3 : 2; }
+
+  /* A preset as a project material: the law of the project's dimension, and the
+     variables in the project's unit system. */
+  function asMaterial(preset) {
+    return { id: preset.id, name: preset.name, color: preset.color,
+             constitutive_law: App.PropertySets.lawFor('soil', dimension()),
+             variables: App.Units.convertVariables(preset.variables, 'SI', App.Units.current()),
+             tables: {}, rInter: preset.rInter, interfacePerm: preset.interfacePerm };
+  }
+
   function addSoil(id) {
-    var material = copy(find(soils, id));
+    var material = asMaterial(copy(find(soils, id)));
     var n = 1;
     while (App.MATERIALS.some(function (m) { return m.id === 'ml' + n; })) n++;
     material.id = 'ml' + n;
@@ -54,5 +79,5 @@ App.MaterialLibrary = (function () {
   }
   return { soils: function () { return copy(soils); },
     interfaces: function () { return copy(interfaces); },
-    addSoil: addSoil, applyInterface: applyInterface };
+    asMaterial: asMaterial, addSoil: addSoil, applyInterface: applyInterface };
 })();

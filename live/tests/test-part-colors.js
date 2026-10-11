@@ -11,7 +11,7 @@
 
   var P = App.PartColors;
 
-  /* The CROW tree, cut down to its shapes: a soil body row, a group row whose children
+  /* A staged model's tree, cut down to its shapes: a soil body row, a group row whose children
      are parts, and a row bound to nothing that has a meshable part under it. */
   function tree() {
     return [

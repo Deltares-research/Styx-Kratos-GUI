@@ -1,8 +1,13 @@
 """The project schema — the single source of truth for the model.
 
 Coordinates are X across, Y up and Z out of plane, metres, y = 0 at the ground
-datum. A 2D model is the x-y plane at z = 0; a 3D model extrudes it along Z. Units throughout are m / kN / day, matching the
-status bar (index.html:117).
+datum. A 2D model is the x-y plane at z = 0; a 3D model extrudes it along Z.
+
+Units are the project's own (`Project.unit_system`, `app/units.py`): length in metres,
+time in seconds, and force and mass in the system's units -- N and kg, or kN and t. Every
+value a property set, load or pressure holds is in that system and goes into the deck as
+it stands. Property sets hold what Kratos reads: a constitutive law name and a
+`Variables` block under Kratos' own names (`KratosPropertySet`).
 
 Part keys (`Project.part_keys`) are the contract with the frozen frontend: each one is a
 `userData.key` on a picked mesh, an `obj:` on a model-tree node, and a key in
@@ -12,9 +17,11 @@ Part keys (`Project.part_keys`) are the contract with the frozen frontend: each 
 from __future__ import annotations
 
 import math
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field, computed_field, model_validator
+from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
+
+from app import legacy, units
 
 Hex = Annotated[str, Field(pattern=r"^#[0-9a-fA-F]{6}$")]
 Ident = Annotated[str, Field(min_length=1, max_length=64)]
@@ -106,56 +113,74 @@ class Borehole(Base):
     water: float     # phreatic level, m
 
 
-class Material(Base):
+VariableName = Annotated[str, Field(pattern=r"^[A-Z][A-Z0-9_]*$", max_length=96)]
+VariableValue = float | int | bool | str | list[float] | list[list[float]]
+
+
+def _finite(value: object) -> bool:
+    if isinstance(value, (bool, str)):
+        return True
+    if isinstance(value, (int, float)):
+        return math.isfinite(value)
+    if isinstance(value, list):
+        return all(_finite(v) for v in value)
+    return True
+
+
+SOIL_LAW_PAIRS = {"GeoLinearElasticPlaneStrain2DLaw": (2, "GeoIncrementalLinearElastic3DLaw"),
+                  "GeoIncrementalLinearElastic3DLaw": (3, "GeoLinearElasticPlaneStrain2DLaw")}
+"""Soil laws that exist in one dimension only: law -> (its dimension, its counterpart).
+GeoMechanics registers no 3D `GeoLinearElastic` law; its one 3D linear elastic soil law
+is the incremental one. A project keeps such a law in step with its own dimension
+(`Project._soil_laws_follow_the_dimension`), so what it shows is what it writes."""
+
+
+class KratosPropertySet(Base):
+    """What Kratos reads for one property set: a constitutive law and its `Variables`,
+    exactly as `MaterialParameters.json` carries them, in the project's unit system.
+
+    Written into the deck as they stand. The exporter adds only what is missing and can
+    be derived (`app/kratos_materials.py`), and says so; it never rewrites a value the
+    user gave. `tables` is Kratos' own `Tables` block, carried verbatim."""
+    constitutive_law: str = Field(min_length=1)
+    variables: dict[VariableName, VariableValue] = Field(default_factory=dict)
+    tables: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("variables")
+    @classmethod
+    def _finite_values(cls, value: dict) -> dict:
+        for name, entry in value.items():
+            if not _finite(entry):
+                raise ValueError(f"variable {name} must be finite")
+        return value
+
+    def number(self, name: str) -> float | None:
+        """A numeric variable, or None when it is absent or not a number."""
+        value = self.variables.get(name)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return None
+        return float(value)
+
+
+class Material(KratosPropertySet):
+    """A soil property set. Its law and variables are Kratos'; `r_inter` and
+    `interface_permeability` are this application's, the defaults an interface along
+    this soil starts from (the Interfaces tab of the material editor)."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _old_shape(cls, value: object) -> object:
+        """Built from the fields this had before 2026-10-10 (a script written against
+        them, say): converted the way a saved project in that shape is (`app/legacy.py`)."""
+        if legacy.is_old_record("materials", value):
+            return legacy.material(value, 2)
+        return value
+
     id: Ident
     name: str
-    model: Literal["Mohr-Coulomb", "Hardening Soil", "Soft Soil", "Linear Elastic"]
-    type: Literal["Drained", "Undrained (A)", "Undrained (B)", "Non-porous"]
     color: Hex
-    g_unsat: float = Field(gt=0)       # kN/m3
-    g_sat: float = Field(gt=0)         # kN/m3
-    E: float = Field(gt=0)             # kN/m2
-    nu: float = Field(ge=0, lt=0.5)
-    c: float | None = Field(default=None, ge=0)     # kN/m2; null for non-porous rock
-    phi: float | None = Field(default=None, ge=0, lt=90)   # degrees
-    k: float = Field(ge=0)             # m/day
-
-    # Interface properties. A soil material set carries the strength reduction applied
-    # where a structure meets this soil, so "Soil and interfaces" is one set type
-    # rather than two (the Interfaces tab of the material editor).
     r_inter: float = Field(default=0.70, gt=0, le=1)
     interface_permeability: Literal["Neutral", "Drain", "Impermeable"] = "Neutral"
-
-    porosity: float | None = Field(default=None, ge=0, lt=1)
-    """Voids as a fraction of total volume. None falls back to
-    `app/kratos_materials.py:DEFAULT_POROSITY`, which is what every project written
-    before this field existed carries. A number here is the user's, and is written."""
-
-    k0_nc: float | None = Field(default=None, gt=0, le=2)
-    """Coefficient of earth pressure at rest, normally consolidated (Kratos' `K0_NC`).
-
-    `None` means "use Jaky's formula" -- see `k0_normally_consolidated`. It is optional
-    rather than defaulted because only a material with a friction angle has an answer,
-    and non-porous rock has neither.
-    """
-
-    def k0_normally_consolidated(self) -> float | None:
-        """K0 for the initial stage, or `None` if this material cannot say.
-
-        Jaky's `1 - sin(phi)` when nothing overrides it: the standard correlation, and
-        the one the CROW reference deck's own numbers follow (0.62 and 0.46 are Jaky at
-        22.3 deg and 32.7 deg). Deriving it rather than defaulting to a constant keeps a
-        stiff soil and a loose one from being handed the same initial stress ratio.
-
-        `None` for a material with no friction angle -- non-porous rock -- because there
-        is nothing to derive it from. The caller omits `K0_NC` in that case and leaves
-        the k0 procedure on its own default rather than inventing one here.
-        """
-        if self.k0_nc is not None:
-            return self.k0_nc
-        if self.phi is None:
-            return None
-        return 1.0 - math.sin(math.radians(self.phi))
 
 
 class SoilLayer(Base):
@@ -208,8 +233,8 @@ class Excavation(Base):
     """The lifts the pit is dug in, shallowest first, each strictly below the last.
 
     A staged excavation is not one hole that appears at once: each lift is its own body
-    in the mesh, deactivated in its own phase (`Excavated_Soil_1/2/3` in the CROW
-    reference deck). One level means an unstaged pit, which is what every project
+    in the mesh, deactivated in its own phase (`Excavated_Soil_1/2/3` in Kratos'
+    staged-excavation reference deck). One level means an unstaged pit, which is what every project
     written before this field had, and is why it defaults to `[floor_y]` rather than to
     empty.
     """
@@ -318,7 +343,7 @@ class PointLoad(Base):
     x: float
     y: float
     thickness: float = Field(default=0.25, gt=0)
-    components: tuple[float, float]  # in-plane x/y, kN
+    components: tuple[float, float]  # in-plane x/y, a force
     distribution: Literal["Uniform"] = "Uniform"
     active: bool = True
     derived_from: Ident | None = None
@@ -345,7 +370,7 @@ class LineLoad(Base):
     x1: float
     y: float
     thickness: float = Field(default=0.15, gt=0)
-    components: tuple[float, float]  # in-plane x/y, kN/m
+    components: tuple[float, float]  # in-plane x/y, a force per length
     distribution: Literal["Uniform"] = "Uniform"
     active: bool = True
     derived_from: Ident | None = None
@@ -385,7 +410,7 @@ class SurfaceLoad(Base):
     None is what every project saved before this field reads as, and it still means
     what it always did."""
     thickness: float = Field(gt=0)
-    components: tuple[float, float, float]  # world x/y/z, kN/m2; y is vertical
+    components: tuple[float, float, float]  # world x/y/z, a stress; y is vertical
     distribution: Literal["Uniform"] = "Uniform"
     active: bool = True
     derived_from: Ident | None = None
@@ -404,51 +429,32 @@ class SurfaceLoad(Base):
         return self
 
 
-class BeamSection(Base):
-    """A reusable structural profile, shared by every sheet pile that uses it.
+class BeamSection(KratosPropertySet):
+    """A reusable structural profile, shared by every sheet pile and member that uses it.
 
-    Section values live here rather than on each beam because that is the shape Kratos
-    wants: one `MaterialParameters.json` entry per distinct property set, referenced by
-    name. Several sheet piles in one model normally share a profile, and duplicating
-    the numbers per beam would let two copies of "AZ 26" drift apart. The pairing is
-    the one `materials` / `layers[].mat` already uses, so the frontend's editor and
-    tree patterns carry over unchanged.
-
-    Units follow the project: kN, m. `E` is kN/m2, `area` m2/m and `inertia` m4/m --
-    both per metre run, the plane-strain convention -- and `density` kg/m3, matching
-    the `DENSITY_SOLID` the soil materials already export.
+    One `MaterialParameters.json` entry per part that uses it, with these variables
+    (`YOUNG_MODULUS`, `POISSON_RATIO`, `DENSITY`, `CROSS_AREA`, `I33`, and in 3D `I22`,
+    `TORSIONAL_INERTIA`; `AREA_EFFECTIVE_Y/Z` for shear). Values are per member: in 2D
+    the exporter divides the extensive ones by `spacing` to give the metre run plane
+    strain models -- geometry, not a unit conversion.
     """
+
+    @model_validator(mode="before")
+    @classmethod
+    def _old_shape(cls, value: object) -> object:
+        """Built from the fields this had before 2026-10-10 (a script written against
+        them, say): converted the way a saved project in that shape is (`app/legacy.py`)."""
+        if legacy.is_old_record("beam_sections", value):
+            return legacy.CONVERTERS['beam_sections'](value)
+        return value
+
     id: Ident
     name: str
-    E: float = Field(gt=0)                 # kN/m2
-    nu: float = Field(ge=0, lt=0.5)
-    area: float = Field(gt=0)              # m2 per metre run
-    inertia: float = Field(gt=0)           # m4 per metre run, about the out-of-plane axis
-    shear_area: float | None = Field(default=None, gt=0)   # m2 per metre run
-    """The area that carries shear, which is less than the whole section -- a rolled
-    profile shears in its web. None takes the full section, which is what this exported
-    before the field existed and is the shear-stiff end of the range.
-
-    It is also how a model says shear deformation is not part of it: a value far larger
-    than the section makes `GA_s` large enough that the beam bends as a Bernoulli one.
-    The CROW reference does exactly that (`THICKNESS_EFFECTIVE_Y` twenty times its own
-    thickness), which is why this is a field and not a derivation."""
-    density: float = Field(gt=0)           # kg/m3
+    constitutive_law: str = Field(default="TimoshenkoBeamElasticConstitutiveLaw", min_length=1)
     spacing: float = Field(default=1.0, gt=0)
     """Out-of-plane spacing in metres. 1.0 is a continuous wall -- the usual sheet
     pile -- and a larger value smears a discrete row of piles over the plane. A
     plane-strain device: a 3D member is discrete already, and ignores it."""
-
-    # A beam in space bends about two axes and twists about the third, none of which a
-    # plane-strain section has room for. Optional so every saved profile still loads,
-    # and so the 2D pile stays the two numbers an engineer reads off a profile table.
-    inertia_minor: float | None = Field(default=None, gt=0)
-    """m4, about the weak axis. Defaults to `inertia`, i.e. a section as stiff both
-    ways, which is what a solid round pile is."""
-
-    torsional_inertia: float | None = Field(default=None, gt=0)
-    """m4. Defaults to `inertia + inertia_minor`, the usual estimate for a thin-walled
-    open section. Only used by a 3D member."""
 
 
 class Beam(Base):
@@ -487,19 +493,30 @@ class Beam(Base):
         return self
 
 
-class AnchorSection(Base):
-    """A reusable tendon or bar, shared by every anchor installed with it.
+class AnchorSection(KratosPropertySet):
+    """A reusable tendon or bar, shared by every anchor installed with it
+    (`YOUNG_MODULUS`, `CROSS_AREA`, `DENSITY`, per anchor).
 
     `spacing` matters more here than for a sheet pile: anchors are discrete members at
     centres along the wall, and plane strain smears them over a metre run.
     """
+
+    @model_validator(mode="before")
+    @classmethod
+    def _old_shape(cls, value: object) -> object:
+        """Built from the fields this had before 2026-10-10 (a script written against
+        them, say): converted the way a saved project in that shape is (`app/legacy.py`)."""
+        if legacy.is_old_record("anchor_sections", value):
+            return legacy.CONVERTERS['anchor_sections'](value)
+        return value
+
     id: Ident
     name: str
-    E: float = Field(gt=0)                 # kN/m2
-    area: float = Field(gt=0)              # m2 of steel per anchor
-    density: float = Field(ge=0)           # kg/m3; 0 for a tendon modelled massless
+    constitutive_law: str = Field(default="TrussConstitutiveLaw", min_length=1)
     spacing: float = Field(default=2.5, gt=0)
-    tension_limit: float | None = Field(default=None, gt=0)      # kN per anchor
+    tension_limit: float | None = Field(default=None, gt=0)
+    """Force per anchor, in the project's units. A design value Kratos has no property
+    for; kept in the project and named in the export's warnings."""
     compression_limit: float | None = Field(default=None, gt=0)
     """Left None for a tendon, which takes no compression at all."""
 
@@ -507,7 +524,7 @@ class AnchorSection(Base):
 class Anchor(Base):
     """One anchor: a two-node tie from a sheet pile to a restrained point.
 
-    The formulation is the one examples/crow_case.mdpa writes -- a single
+    The formulation is the one Kratos' reference decks write -- a single
     `LinearTrussElement2D2N` whose head node is shared with the beam and whose tail node
     belongs to no other element, held by its own node group. The tail is therefore *not*
     coupled to the soil continuum: the grouted body is idealised as a fixed point, which
@@ -522,8 +539,10 @@ class Anchor(Base):
     head: tuple[float, float]
     tail: tuple[float, float]
     prestress: float = 0.0
-    """Lock-off force in kN per anchor, positive in tension. Per anchor rather than per
-    section: two anchors of the same tendon are routinely stressed differently."""
+    """Kratos' `TRUSS_PRESTRESS_PK2` for this anchor, a stress in the project's units,
+    positive in tension (smeared by the tendon's spacing in 2D, like its area). Per
+    anchor rather than per section: two anchors of the same tendon are routinely
+    stressed differently, and each anchor is its own property set in the deck."""
     active: bool = True
 
     @model_validator(mode="after")
@@ -545,50 +564,50 @@ class Anchor(Base):
 # nodes are separate, so the wall and the soil can move relative to one another instead
 # of being welded together the way `_embed_beams` leaves them.
 #
-# The formulation is read off examples/crow_case.mdpa, which is exactly this: the sheet
+# The formulation is read off Kratos' reference decks, which are exactly this: the sheet
 # pile owns its own nodes, each side of the soil owns a duplicate set, and one
 # `Geo_UPwLineInterfacePlaneStrainDiffOrderElement3Plus3N` per side per beam segment
 # ties them together. See the element table in app/kratos.py and the node split in
 # app/interfaces.py.
 
 
-class InterfaceSection(Base):
+class InterfaceSection(KratosPropertySet):
     """A reusable interface property set, shared by every interface using it.
 
-    Zero thickness means there is no modulus here: the element's stiffness is a stiffness
-    *per unit area*, kN/m3, and its strength is the adjacent soil's reduced by `r_inter`.
-    Left unset, the two are derived from the soil the contact runs against -- shear is
-    its shear modulus over `virtual_thickness`, normal is ten times that -- which is what
-    `app/kratos_materials.py` does and where the reasoning for it lives.
+    Its variables are Kratos' (`INTERFACE_NORMAL_STIFFNESS`, `INTERFACE_SHEAR_STIFFNESS`,
+    `GEO_COHESION`, `GEO_FRICTION_ANGLE`, ...). Any left out are derived at export from
+    the soil the contact runs against -- shear stiffness its shear modulus over
+    `virtual_thickness`, normal ten times that, strength the soil's reduced by `r_inter`
+    -- which is what `app/kratos_materials.py` does and where the reasoning lives.
 
     *Which* soil is the adjacent body's by default, one property set per body, as the
     reference deck does it. `material` overrides that for the whole contact.
-
-    `r_inter` and `permeability` mirror the fields the soil `Material` already has, so
-    the material library's interface presets (js/material-library.js) drop straight in.
     """
+
+    @model_validator(mode="before")
+    @classmethod
+    def _old_shape(cls, value: object) -> object:
+        """Built from the fields this had before 2026-10-10 (a script written against
+        them, say): converted the way a saved project in that shape is (`app/legacy.py`)."""
+        if legacy.is_old_record("interface_sections", value):
+            return legacy.CONVERTERS['interface_sections'](value)
+        return value
+
     id: Ident
     name: str
+    constitutive_law: str = Field(default="GeoIncrementalLinearElasticInterfaceLaw",
+                                  min_length=1)
     material: Ident | None = None
-    """One soil for the whole contact, overriding the per-body default. Its E, cohesion
-    and friction angle are what `r_inter` reduces. None -- the usual case -- derives each
-    stretch of contact from the body it actually runs against."""
-    r_inter: float = Field(default=0.7, gt=0, le=1)
+    """One soil for the whole contact, overriding the per-body default."""
+    r_inter: float | None = Field(default=None, gt=0, le=1)
+    """The strength reduction for the whole contact. None -- each stretch of contact takes
+    the Rinter of the soil it runs against (`Material.r_inter`), which is Plaxis' rule and
+    the one Kratos' Mohr-Coulomb staged-excavation reference follows: a clay and a
+    sand along the same wall are reduced by different factors."""
     virtual_thickness: float = Field(default=1.0, gt=0)       # m
     """The element size normal to the interface, which the derived stiffnesses are the
-    soil's shear modulus over. 1.0 is the reference deck's own
-    (`MaterialParameters_for_generated_mesh.json`); it was 0.01 until the stiffnesses
-    were checked against it."""
-    normal_stiffness: float | None = Field(default=None, gt=0)   # kN/m3
-    shear_stiffness: float | None = Field(default=None, gt=0)    # kN/m3
+    soil's shear modulus over. 1.0 is the reference deck's own."""
     permeability: Literal["Neutral", "Drain", "Impermeable"] = "Neutral"
-
-    # There used to be a validator here refusing a section with neither a material nor
-    # explicit stiffnesses. That is the ordinary case now: such a section derives from
-    # whatever soil each stretch of the contact runs against, which is a fact about the
-    # mesh and cannot be known here. The one case that really has nothing to derive from
-    # -- a contact with no soil on either side -- is still refused, at export, where the
-    # adjacent bodies are known (`app/kratos_materials.py:_interface_variables`).
 
 
 class Interface(Base):
@@ -597,8 +616,8 @@ class Interface(Base):
     Two ways to place one, and exactly one of them per record:
 
     *   `structure` names a sheet pile. The interface runs the whole pile, and `side`
-        says which of the two soils is unglued from it. This is the crow-case
-        arrangement and the usual one -- a wall slides against the ground on both faces.
+        says which of the two soils is unglued from it. This is the usual
+        arrangement -- a wall slides against the ground on both faces.
     *   `points` is a free polyline in the section, which splits soil from soil: an
         excavation face, a slip surface, a lining. There is no structure in the middle,
         so one soil keeps the original nodes and the other is detached; `side` says
@@ -666,7 +685,7 @@ class NormalLoad(Base):
     *   `"Hydrostatic"` derives the pressure from `Project.water` at export time --
         zero at the phreatic level, increasing with depth below it -- so the load
         tracks the water table rather than a value copied onto each stage's record.
-        This is the CROW reference case's `WaterLoad_StageN` arrangement.
+        This is a staged excavation's `WaterLoad_StageN` arrangement.
     *   `"Uniform"` applies `pressure` everywhere along the line instead, for a load
         that is not water: a surcharge normal to a sloped face, say.
     """
@@ -679,7 +698,7 @@ class NormalLoad(Base):
     the water case and derives the pressure from `Project.water` instead, ignoring
     `pressure` -- the wrong thing to fall into without asking for it."""
     pressure: float = 0.0
-    """kN/m2, compression positive. Read only when `fluid_pressure_type` is
+    """A stress in the project's units, compression positive. Read only when `fluid_pressure_type` is
     `"Uniform"`; a hydrostatic load is derived from `Project.water` instead."""
     active: bool = True
 
@@ -723,26 +742,42 @@ class NormalLoad(Base):
 # `loads[]` already holds three kinds. Records stay dimension-native: a 2D pile keeps
 # its `(x, y)` polyline and is untouched by any of this.
 #
-# No 3D element class is pinned by a reference deck here -- every deck in examples/ is
+# No 3D element class is pinned by a reference deck here -- every reference deck is
 # plane strain. See plan/structure-mode-implementation-plan.md and the element tables
 # in app/kratos.py, which name every unconfirmed choice in one place.
 
 
-class PanelSection(Base):
-    """A reusable wall property set, shared by every panel built with it.
+class PanelSection(KratosPropertySet):
+    """A reusable wall property set, shared by every panel built with it
+    (`YOUNG_MODULUS`, `POISSON_RATIO`, `DENSITY`, `THICKNESS`). The 3D counterpart of
+    `BeamSection`: a shell is defined by a thickness, not an area and inertia."""
 
-    The 3D counterpart of `BeamSection`. A panel is a shell, so it is defined by a
-    thickness: `area` and `inertia` per metre run are the plane-strain reduction of
-    exactly this, and carrying both would let the two drift apart.
+    @model_validator(mode="before")
+    @classmethod
+    def _old_shape(cls, value: object) -> object:
+        """Built from the fields this had before 2026-10-10 (a script written against
+        them, say): converted the way a saved project in that shape is (`app/legacy.py`)."""
+        if legacy.is_old_record("panel_sections", value):
+            return legacy.CONVERTERS['panel_sections'](value)
+        return value
 
-    Units follow the project: `E` in kN/m2, `thickness` in m, `density` in kg/m3.
-    """
     id: Ident
     name: str
-    E: float = Field(gt=0)                 # kN/m2
-    nu: float = Field(ge=0, lt=0.5)
-    thickness: PositiveSize                # m
-    density: float = Field(gt=0)           # kg/m3
+    constitutive_law: str = Field(default="LinearElasticPlaneStress2DLaw", min_length=1)
+
+    @classmethod
+    def from_beam_section(cls, section: BeamSection, id: str, name: str) -> PanelSection:
+        """The shell a pile's profile becomes when its wall is swept into the solid
+        model. `CROSS_AREA` per metre run is exactly a thickness in metres -- the
+        plane-strain reduction of a plate, read backwards -- and the rest carry over."""
+        mapping = {"YOUNG_MODULUS": "YOUNG_MODULUS", "POISSON_RATIO": "POISSON_RATIO",
+                   "DENSITY": "DENSITY", "CROSS_AREA": "THICKNESS"}
+        variables = {mapping[k]: v for k, v in section.variables.items() if k in mapping}
+        return cls(id=id, name=name, variables=_ordered_like(variables, mapping.values()))
+
+
+def _ordered_like(variables: dict, order) -> dict:
+    return {k: variables[k] for k in order if k in variables}
 
 
 class Panel(Base):
@@ -892,6 +927,10 @@ class Wells(Base):
     length: float = Field(gt=0)
 
 
+WATER_SPECIFIC_WEIGHT_SI = 10_000.0
+"""N/m3, the water a project that says nothing about it has."""
+
+
 class WaterLevel(Base):
     y: float
     # The phreatic level is a reference plane, not a solid: it is drawn as a thin slab
@@ -899,8 +938,9 @@ class WaterLevel(Base):
     # (js/viewport.js:201). It takes no part in the geometry booleans.
     margin: float = Field(default=3.0, ge=0)
     thickness: float = Field(default=0.06, gt=0)
-    specific_weight: float = Field(default=10.0, gt=0)
-    """kN/m3. Read by a `NormalLoad` in `"Hydrostatic"` mode
+    specific_weight: float | None = Field(default=None, gt=0)
+    """In the project's units. None is water's 10 kN/m3 in whatever system the project
+    uses (`Project.water_specific_weight`). Read by a `NormalLoad` in `"Hydrostatic"` mode
     (`app/kratos_processes.py:_normal_load`); otherwise unused. One value for the whole
     project, the same way `y` is one phreatic level -- not a per-load setting."""
 
@@ -930,7 +970,7 @@ class Phase(Base):
     pressure calculation type" in the phase panel) but the reference deck never varies
     it -- it changes which water *load* is active, not the water table -- so there is
     no worked example to follow and inventing one would be guessing. See
-    plan/staged-construction-plan.md sec 7.
+    plan/outdated/staged-construction-plan.md sec 7.
     """
     id: Ident
     name: str
@@ -1068,6 +1108,10 @@ class PhasesUpdate(Base):
     phases: list[Phase]
 
 
+class UnitsUpdate(Base):
+    unit_system: Literal["SI", "kN"]
+
+
 class DimensionUpdate(Base):
     dimension: Literal[2, 3]
     # Omitted going to 2D, the Project validator resolves it to the middle of the
@@ -1137,7 +1181,7 @@ class Deck(Base):
     """A Kratos deck that already exists on disk, standing in for the parametric model.
 
     Set by `app.deck.deck_project` for a case that is written as a deck rather than
-    built from layers -- the Eemdijk case, with its twenty stages, three material sets
+    built from layers -- a dike analysis, say, with twenty stages, three material sets
     and phreatic multi-lines, none of which this schema can say. The deck is shown as
     its own mesh and calculated as the files it is; nothing is exported. Every other
     field of a project carrying one is the empty site `seed.blank_project` is, there
@@ -1167,12 +1211,17 @@ class Project(Base):
 
     Named `simple_example` until the phase editor made it user-visible, which was the
     wrong name twice over: it is not about examples, and the models that set it are not
-    simple -- `examples/crow/crow.py` sets it. The old spelling is still accepted on the
+    simple -- a staged model script sets it. The old spelling is still accepted on the
     way in (see `_reconcile_layered_soil`); nothing writes it any more.
     """
 
     dimension: Literal[2, 3] = 3
     """3 builds the solid model. 2 builds a planar section through it."""
+
+    unit_system: Literal["SI", "kN"] = units.DEFAULT
+    """The consistent set every value is in, and the deck and its results with it:
+    "SI" (N, m, kg, s) or "kN" (kN, m, t, s). See `app/units.py`. Changed only through
+    `PATCH /api/project/units`, which converts the values with it."""
 
     section_offset: float | None = None
     """Where the section is taken, as a world z. A 2D model is always the x-y plane,
@@ -1223,6 +1272,15 @@ class Project(Base):
     always did. That is the compatibility contract; see `test_export_golden.py`."""
     deck: Deck | None = None
     """A deck this project *is*, rather than one it exports. See `Deck`."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_legacy_units(cls, value: object) -> object:
+        """A project saved before the unit system existed, converted once into the
+        current shape in SI, with the numbers the old exporter wrote (`app/legacy.py`)."""
+        if legacy.is_legacy(value):
+            return legacy.migrate(value)
+        return legacy.migrate_records(value) if isinstance(value, dict) else value
 
     @model_validator(mode="before")
     @classmethod
@@ -1337,13 +1395,25 @@ class Project(Base):
                     )
         return self
 
+    @model_validator(mode="after")
+    def _soil_laws_follow_the_dimension(self) -> Project:
+        """A soil law that exists in one dimension only, swapped for its counterpart
+        when the project is the other dimension -- however the dimension came to change.
+        Any other law is the user's, and is left exactly as typed."""
+        for material in self.materials:
+            pair = SOIL_LAW_PAIRS.get(material.constitutive_law)
+            if pair is not None and pair[0] != self.dimension:
+                material.constitutive_law = pair[1]
+        return self
+
     @property
     def water_specific_weight(self) -> float:
-        """kN/m3: the project's own, or `WaterLevel`'s default for a dry model -- the
-        materials still need a unit weight of water for their permeability."""
-        if self.water is not None:
+        """The water's specific weight in the project's units: the project's own, or
+        10 kN/m3 in its system -- a dry model's materials still describe water."""
+        if self.water is not None and self.water.specific_weight is not None:
             return self.water.specific_weight
-        return WaterLevel.model_fields["specific_weight"].default
+        return units.from_si(WATER_SPECIFIC_WEIGHT_SI, units.SPECIFIC_WEIGHT,
+                             self.unit_system)
 
     @model_validator(mode="after")
     def _cross_references(self) -> Project:
@@ -1620,7 +1690,16 @@ class Project(Base):
         and are carried at the section plane instead (`build._load_footprint_tools`).
         """
         if dimension == 2:
-            return [load for load in self.loads if load.kind != "surface"]
+            # A pad whose footprint misses the section plane does not load the section;
+            # its 2D half is kept, so moving the plane onto it brings it back.
+            cut = self.cut_at()
+            clear = {load.id: load.derived_from for load in self.loads
+                     if load.kind == "surface"
+                     and not load.z0 - 1e-9 <= cut <= load.z1 + 1e-9}
+            off = set(clear.values()) | {load.id for load in self.loads
+                                         if load.derived_from in clear}
+            return [load for load in self.loads
+                    if load.kind != "surface" and load.id not in off]
         # Both ends of every pair, so a 2D half is recognised whether it was the record
         # the user authored or the one translated from a surface load.
         paired = {id for load in self.loads if load.derived_from is not None

@@ -62,16 +62,15 @@ def _is_vertical(beam: Beam) -> bool:
 def wall_section_for(section, existing: dict[str, PanelSection]) -> PanelSection:
     """The shell property set a pile's profile becomes, made once per profile.
 
-    `area` is m2 per metre run, which is exactly a thickness in metres -- the
-    plane-strain reduction `PanelSection` documents, read backwards, and the same one
-    `kratos._shell_section_of` already writes into the deck. Shared by every wall built
+    `CROSS_AREA` per metre run is exactly a thickness in metres
+    (`PanelSection.from_beam_section`), the same reduction `kratos._shell_section_of`
+    writes into the deck. Shared by every wall built
     from that profile, so editing the profile moves all of them together.
     """
     key = f"{section.id}_wall"
     if key in existing:
         return existing[key]
-    return PanelSection(id=key, name=f"{section.name} wall", E=section.E, nu=section.nu,
-                        thickness=section.area, density=section.density)
+    return PanelSection.from_beam_section(section, key, f"{section.name} wall")
 
 
 def _panel_from(beam: Beam, project: Project, existing: Panel | None,

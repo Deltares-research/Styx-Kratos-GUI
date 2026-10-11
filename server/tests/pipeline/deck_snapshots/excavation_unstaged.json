@@ -1,0 +1,417 @@
+{
+ "conditions": {
+  "LineLoadCondition2D2N": 7,
+  "UPwNormalFaceLoadCondition2D2N": 4
+ },
+ "elements": {
+  "Geo_UPwLineInterfacePlaneStrainElement2Plus2N": 1,
+  "LinearTimoshenkoBeamElement2D2N": 6,
+  "LinearTrussElement2D2N": 1,
+  "UPwSmallStrainElement2D3N": 15
+ },
+ "materials": {
+  "materials:PorousDomain.Interface_Soil_Bottom": {
+   "law": "GeoIncrementalLinearElasticInterfaceLaw",
+   "variables": {
+    "GEO_COHESION": 0.0,
+    "GEO_DILATANCY_ANGLE": 0.0,
+    "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+    "GEO_FRICTION_ANGLE": 22.717230921203008,
+    "INTERFACE_NORMAL_STIFFNESS": 230769230.76923075,
+    "INTERFACE_SHEAR_STIFFNESS": 23076923.076923076
+   }
+  },
+  "materials:PorousDomain.Interface_Soil_Bottom_pit": {
+   "law": "GeoIncrementalLinearElasticInterfaceLaw",
+   "variables": {
+    "GEO_COHESION": 0.0,
+    "GEO_DILATANCY_ANGLE": 0.0,
+    "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+    "GEO_FRICTION_ANGLE": 22.717230921203008,
+    "INTERFACE_NORMAL_STIFFNESS": 230769230.76923075,
+    "INTERFACE_SHEAR_STIFFNESS": 23076923.076923076
+   }
+  },
+  "materials:PorousDomain.Interface_Soil_Middle": {
+   "law": "GeoIncrementalLinearElasticInterfaceLaw",
+   "variables": {
+    "GEO_COHESION": 1340.0,
+    "GEO_DILATANCY_ANGLE": 0.0,
+    "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+    "GEO_FRICTION_ANGLE": 17.3501687177877,
+    "INTERFACE_NORMAL_STIFFNESS": 15384615.384615384,
+    "INTERFACE_SHEAR_STIFFNESS": 1538461.5384615385
+   }
+  },
+  "materials:PorousDomain.Interface_Soil_Middle_pit": {
+   "law": "GeoIncrementalLinearElasticInterfaceLaw",
+   "variables": {
+    "GEO_COHESION": 1340.0,
+    "GEO_DILATANCY_ANGLE": 0.0,
+    "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+    "GEO_FRICTION_ANGLE": 17.3501687177877,
+    "INTERFACE_NORMAL_STIFFNESS": 15384615.384615384,
+    "INTERFACE_SHEAR_STIFFNESS": 1538461.5384615385
+   }
+  },
+  "materials:PorousDomain.Interface_Soil_Top": {
+   "law": "GeoIncrementalLinearElasticInterfaceLaw",
+   "variables": {
+    "GEO_COHESION": 1340.0,
+    "GEO_DILATANCY_ANGLE": 0.0,
+    "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+    "GEO_FRICTION_ANGLE": 17.3501687177877,
+    "INTERFACE_NORMAL_STIFFNESS": 15384615.384615384,
+    "INTERFACE_SHEAR_STIFFNESS": 1538461.5384615385
+   }
+  },
+  "materials:PorousDomain.Interface_Soil_Top_lift1": {
+   "law": "GeoIncrementalLinearElasticInterfaceLaw",
+   "variables": {
+    "GEO_COHESION": 1340.0,
+    "GEO_DILATANCY_ANGLE": 0.0,
+    "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+    "GEO_FRICTION_ANGLE": 17.3501687177877,
+    "INTERFACE_NORMAL_STIFFNESS": 15384615.384615384,
+    "INTERFACE_SHEAR_STIFFNESS": 1538461.5384615385
+   }
+  },
+  "materials:PorousDomain.Interface_Soil_Top_lift2": {
+   "law": "GeoIncrementalLinearElasticInterfaceLaw",
+   "variables": {
+    "GEO_COHESION": 1340.0,
+    "GEO_DILATANCY_ANGLE": 0.0,
+    "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+    "GEO_FRICTION_ANGLE": 17.3501687177877,
+    "INTERFACE_NORMAL_STIFFNESS": 15384615.384615384,
+    "INTERFACE_SHEAR_STIFFNESS": 1538461.5384615385
+   }
+  },
+  "materials:PorousDomain.Interface_Soil_Top_lift3": {
+   "law": "GeoIncrementalLinearElasticInterfaceLaw",
+   "variables": {
+    "GEO_COHESION": 1340.0,
+    "GEO_DILATANCY_ANGLE": 0.0,
+    "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+    "GEO_FRICTION_ANGLE": 17.3501687177877,
+    "INTERFACE_NORMAL_STIFFNESS": 15384615.384615384,
+    "INTERFACE_SHEAR_STIFFNESS": 1538461.5384615385
+   }
+  },
+  "materials:PorousDomain.SheetPileWall": {
+   "law": "TimoshenkoBeamElasticConstitutiveLaw",
+   "variables": {
+    "AREA_EFFECTIVE_Y": 0.0075,
+    "CROSS_AREA": 0.015,
+    "DENSITY": 7850.0,
+    "I33": 0.0003,
+    "POISSON_RATIO": 0.0,
+    "YOUNG_MODULUS": 210000000000.0
+   }
+  },
+  "materials:PorousDomain.Soil_Bottom": {
+   "law": "GeoLinearElasticPlaneStrain2DLaw",
+   "variables": {
+    "BULK_MODULUS_FLUID": 2200000000.0,
+    "BULK_MODULUS_SOLID": 10000000000.0,
+    "DENSITY_SOLID": 1936.7991845056065,
+    "DENSITY_WATER": 1019.367991845056,
+    "DYNAMIC_VISCOSITY": 0.001,
+    "GEO_COHESION": 0.0,
+    "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+    "GEO_FRICTION_ANGLE": 32.0,
+    "PERMEABILITY_XX": 1e-05,
+    "PERMEABILITY_XY": 0.0,
+    "PERMEABILITY_YY": 1e-05,
+    "POISSON_RATIO": 0.3,
+    "POROSITY": 0.0,
+    "YOUNG_MODULUS": 30000000.0
+   }
+  },
+  "materials:PorousDomain.Soil_Bottom_pit": {
+   "law": "GeoLinearElasticPlaneStrain2DLaw",
+   "variables": {
+    "BULK_MODULUS_FLUID": 2200000000.0,
+    "BULK_MODULUS_SOLID": 10000000000.0,
+    "DENSITY_SOLID": 1936.7991845056065,
+    "DENSITY_WATER": 1019.367991845056,
+    "DYNAMIC_VISCOSITY": 0.001,
+    "GEO_COHESION": 0.0,
+    "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+    "GEO_FRICTION_ANGLE": 32.0,
+    "PERMEABILITY_XX": 1e-05,
+    "PERMEABILITY_XY": 0.0,
+    "PERMEABILITY_YY": 1e-05,
+    "POISSON_RATIO": 0.3,
+    "POROSITY": 0.0,
+    "YOUNG_MODULUS": 30000000.0
+   }
+  },
+  "materials:PorousDomain.Soil_Middle": {
+   "law": "GeoLinearElasticPlaneStrain2DLaw",
+   "variables": {
+    "BULK_MODULUS_FLUID": 2200000000.0,
+    "BULK_MODULUS_SOLID": 10000000000.0,
+    "DENSITY_SOLID": 1732.9255861365953,
+    "DENSITY_WATER": 1019.367991845056,
+    "DYNAMIC_VISCOSITY": 0.001,
+    "GEO_COHESION": 2000.0,
+    "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+    "GEO_FRICTION_ANGLE": 25.0,
+    "PERMEABILITY_XX": 1e-08,
+    "PERMEABILITY_XY": 0.0,
+    "PERMEABILITY_YY": 1e-08,
+    "POISSON_RATIO": 0.3,
+    "POROSITY": 0.0,
+    "YOUNG_MODULUS": 2000000.0
+   }
+  },
+  "materials:PorousDomain.Soil_Middle_pit": {
+   "law": "GeoLinearElasticPlaneStrain2DLaw",
+   "variables": {
+    "BULK_MODULUS_FLUID": 2200000000.0,
+    "BULK_MODULUS_SOLID": 10000000000.0,
+    "DENSITY_SOLID": 1732.9255861365953,
+    "DENSITY_WATER": 1019.367991845056,
+    "DYNAMIC_VISCOSITY": 0.001,
+    "GEO_COHESION": 2000.0,
+    "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+    "GEO_FRICTION_ANGLE": 25.0,
+    "PERMEABILITY_XX": 1e-08,
+    "PERMEABILITY_XY": 0.0,
+    "PERMEABILITY_YY": 1e-08,
+    "POISSON_RATIO": 0.3,
+    "POROSITY": 0.0,
+    "YOUNG_MODULUS": 2000000.0
+   }
+  },
+  "materials:PorousDomain.Soil_Top": {
+   "law": "GeoLinearElasticPlaneStrain2DLaw",
+   "variables": {
+    "BULK_MODULUS_FLUID": 2200000000.0,
+    "BULK_MODULUS_SOLID": 10000000000.0,
+    "DENSITY_SOLID": 1732.9255861365953,
+    "DENSITY_WATER": 1019.367991845056,
+    "DYNAMIC_VISCOSITY": 0.001,
+    "GEO_COHESION": 2000.0,
+    "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+    "GEO_FRICTION_ANGLE": 25.0,
+    "PERMEABILITY_XX": 1e-08,
+    "PERMEABILITY_XY": 0.0,
+    "PERMEABILITY_YY": 1e-08,
+    "POISSON_RATIO": 0.3,
+    "POROSITY": 0.0,
+    "YOUNG_MODULUS": 2000000.0
+   }
+  },
+  "materials:PorousDomain.Soil_Top_lift1": {
+   "law": "GeoLinearElasticPlaneStrain2DLaw",
+   "variables": {
+    "BULK_MODULUS_FLUID": 2200000000.0,
+    "BULK_MODULUS_SOLID": 10000000000.0,
+    "DENSITY_SOLID": 1732.9255861365953,
+    "DENSITY_WATER": 1019.367991845056,
+    "DYNAMIC_VISCOSITY": 0.001,
+    "GEO_COHESION": 2000.0,
+    "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+    "GEO_FRICTION_ANGLE": 25.0,
+    "PERMEABILITY_XX": 1e-08,
+    "PERMEABILITY_XY": 0.0,
+    "PERMEABILITY_YY": 1e-08,
+    "POISSON_RATIO": 0.3,
+    "POROSITY": 0.0,
+    "YOUNG_MODULUS": 2000000.0
+   }
+  },
+  "materials:PorousDomain.Soil_Top_lift2": {
+   "law": "GeoLinearElasticPlaneStrain2DLaw",
+   "variables": {
+    "BULK_MODULUS_FLUID": 2200000000.0,
+    "BULK_MODULUS_SOLID": 10000000000.0,
+    "DENSITY_SOLID": 1732.9255861365953,
+    "DENSITY_WATER": 1019.367991845056,
+    "DYNAMIC_VISCOSITY": 0.001,
+    "GEO_COHESION": 2000.0,
+    "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+    "GEO_FRICTION_ANGLE": 25.0,
+    "PERMEABILITY_XX": 1e-08,
+    "PERMEABILITY_XY": 0.0,
+    "PERMEABILITY_YY": 1e-08,
+    "POISSON_RATIO": 0.3,
+    "POROSITY": 0.0,
+    "YOUNG_MODULUS": 2000000.0
+   }
+  },
+  "materials:PorousDomain.Soil_Top_lift3": {
+   "law": "GeoLinearElasticPlaneStrain2DLaw",
+   "variables": {
+    "BULK_MODULUS_FLUID": 2200000000.0,
+    "BULK_MODULUS_SOLID": 10000000000.0,
+    "DENSITY_SOLID": 1732.9255861365953,
+    "DENSITY_WATER": 1019.367991845056,
+    "DYNAMIC_VISCOSITY": 0.001,
+    "GEO_COHESION": 2000.0,
+    "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+    "GEO_FRICTION_ANGLE": 25.0,
+    "PERMEABILITY_XX": 1e-08,
+    "PERMEABILITY_XY": 0.0,
+    "PERMEABILITY_YY": 1e-08,
+    "POISSON_RATIO": 0.3,
+    "POROSITY": 0.0,
+    "YOUNG_MODULUS": 2000000.0
+   }
+  },
+  "materials:PorousDomain.Strut": {
+   "law": "TrussConstitutiveLaw",
+   "variables": {
+    "CROSS_AREA": 0.001,
+    "DENSITY": 0.0,
+    "TRUSS_PRESTRESS_PK2": 0.0,
+    "YOUNG_MODULUS": 210000000000.0
+   }
+  }
+ },
+ "nodes": 101,
+ "parts": [
+  "Bottom_Fixed",
+  "Interface_Master",
+  "Interface_Slave",
+  "Interface_Soil_Bottom",
+  "Interface_Soil_Bottom_pit",
+  "Interface_Soil_Middle",
+  "Interface_Soil_Middle_pit",
+  "Interface_Soil_Top",
+  "Interface_Soil_Top_lift1",
+  "Interface_Soil_Top_lift2",
+  "Interface_Soil_Top_lift3",
+  "Left_Edge",
+  "Load",
+  "Right_Edge",
+  "SheetPileWall",
+  "Soil_Bottom",
+  "Soil_Bottom_pit",
+  "Soil_Middle",
+  "Soil_Middle_pit",
+  "Soil_Top",
+  "Soil_Top_lift1",
+  "Soil_Top_lift1_Left_Edge",
+  "Soil_Top_lift2",
+  "Soil_Top_lift2_Left_Edge",
+  "Soil_Top_lift3",
+  "Soil_Top_lift3_Left_Edge",
+  "Strut",
+  "Strut_Support",
+  "Top_Surface",
+  "WaterLoad_Stage1",
+  "WaterLoad_Stage2",
+  "WaterLoad_Stage3"
+ ],
+ "stages": {
+  "1_Initial_stage": {
+   "materials": "MaterialParameters.json",
+   "operations": {
+    "DeactivateModelPartOperation": [
+     "PorousDomain.Interface_Soil_Bottom",
+     "PorousDomain.Interface_Soil_Bottom_pit",
+     "PorousDomain.Interface_Soil_Middle",
+     "PorousDomain.Interface_Soil_Middle_pit",
+     "PorousDomain.Interface_Soil_Top",
+     "PorousDomain.Interface_Soil_Top_lift1",
+     "PorousDomain.Interface_Soil_Top_lift2",
+     "PorousDomain.Interface_Soil_Top_lift3",
+     "PorousDomain.SheetPileWall"
+    ]
+   },
+   "problem_domain": [
+    "Interface_Soil_Bottom",
+    "Interface_Soil_Bottom_pit",
+    "Interface_Soil_Middle",
+    "Interface_Soil_Middle_pit",
+    "Interface_Soil_Top",
+    "Interface_Soil_Top_lift1",
+    "Interface_Soil_Top_lift2",
+    "Interface_Soil_Top_lift3",
+    "SheetPileWall",
+    "Soil_Bottom",
+    "Soil_Bottom_pit",
+    "Soil_Middle",
+    "Soil_Middle_pit",
+    "Soil_Top",
+    "Soil_Top_lift1",
+    "Soil_Top_lift2",
+    "Soil_Top_lift3",
+    "Strut"
+   ],
+   "processes": [
+    [
+     "apply_normal_load_table_process",
+     3
+    ],
+    [
+     "apply_scalar_constraint_table_process",
+     1
+    ],
+    [
+     "apply_vector_constraint_table_process",
+     9
+    ],
+    [
+     "assign_master_slave_constraints_to_neighbours_process",
+     1
+    ]
+   ],
+   "reset_totals": false
+  },
+  "2_Wall_installation": {
+   "materials": "MaterialParameters.json",
+   "operations": {
+    "ActivateModelPartOperation": [
+     "PorousDomain.Interface_Soil_Bottom",
+     "PorousDomain.Interface_Soil_Bottom_pit",
+     "PorousDomain.Interface_Soil_Middle",
+     "PorousDomain.Interface_Soil_Middle_pit",
+     "PorousDomain.Interface_Soil_Top",
+     "PorousDomain.Interface_Soil_Top_lift1",
+     "PorousDomain.Interface_Soil_Top_lift2",
+     "PorousDomain.Interface_Soil_Top_lift3",
+     "PorousDomain.SheetPileWall"
+    ]
+   },
+   "problem_domain": [
+    "Interface_Soil_Bottom",
+    "Interface_Soil_Bottom_pit",
+    "Interface_Soil_Middle",
+    "Interface_Soil_Middle_pit",
+    "Interface_Soil_Top",
+    "Interface_Soil_Top_lift1",
+    "Interface_Soil_Top_lift2",
+    "Interface_Soil_Top_lift3",
+    "SheetPileWall",
+    "Soil_Bottom",
+    "Soil_Bottom_pit",
+    "Soil_Middle",
+    "Soil_Middle_pit",
+    "Soil_Top",
+    "Soil_Top_lift1",
+    "Soil_Top_lift2",
+    "Soil_Top_lift3",
+    "Strut"
+   ],
+   "processes": [
+    [
+     "apply_normal_load_table_process",
+     3
+    ],
+    [
+     "apply_scalar_constraint_table_process",
+     1
+    ],
+    [
+     "apply_vector_constraint_table_process",
+     9
+    ]
+   ],
+   "reset_totals": false
+  }
+ }
+}

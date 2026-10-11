@@ -8,8 +8,10 @@
 (function () {
   var PILE = { id: 'beam_1', name: 'Sheet pile 1', section: 'az26',
                points: [[12, 0], [12, -14]], active: true };
-  var PROFILE = { id: 'az26', name: 'AZ 26-700', E: 2.1e8, nu: 0.3, area: 0.0198,
-                  inertia: 5.52e-4, density: 7850, spacing: 1 };
+  var PROFILE = { id: 'az26', name: 'AZ 26-700', spacing: 1,
+                  constitutive_law: 'TimoshenkoBeamElasticConstitutiveLaw', tables: {},
+                         variables: { YOUNG_MODULUS: 2.1e11, POISSON_RATIO: 0.3,
+                                      CROSS_AREA: 0.0198, I33: 5.52e-4, DENSITY: 7850 } };
 
   function section(extra) {
     return Object.assign({
@@ -132,9 +134,10 @@
     var project = section({
       anchors: [{ id: 'anchor_1', name: 'Anchor 1', kind: 'anchor', section: 'strand',
                   head: [12, -2], tail: [20, -8], prestress: 250, active: true }],
-      anchor_sections: [{ id: 'strand', name: 'tendon', E: 1.95e8, area: 0.0006,
-                          density: 7850, spacing: 2.5, tension_limit: 900,
-                          compression_limit: null }]
+      anchor_sections: [{ id: 'strand', name: 'tendon', spacing: 2.5, tension_limit: 900000,
+                          compression_limit: null, constitutive_law: 'TrussConstitutiveLaw', tables: {},
+                           variables: { YOUNG_MODULUS: 1.95e11, CROSS_AREA: 0.0006,
+                                        DENSITY: 7850 } }]
     });
     T.eq(App.Anchors.draft(project).id, 'anchor_2');
     T.eq(App.Anchors.draft(project).section, 'strand', 'the tendon is reused');
@@ -153,15 +156,28 @@
   });
 
   test('tendon validation refuses unusable structural properties', function () {
-    var ok = { id: 'strand', name: 'tendon', E: 1.95e8, area: 0.0006, density: 7850,
-               spacing: 2.5, tension_limit: 900, compression_limit: null };
+    var steel = { YOUNG_MODULUS: 1.95e11, CROSS_AREA: 0.0006, DENSITY: 7850 };
+    var ok = { id: 'strand', name: 'tendon', spacing: 2.5, tension_limit: 900000,
+               compression_limit: null, constitutive_law: 'TrussConstitutiveLaw', variables: steel };
+    function with_(variables) { return Object.assign({}, steel, variables); }
     T.eq(App.Anchors.validateSection(ok), null);
-    T.eq(App.Anchors.validateSection(Object.assign({}, ok, { compression_limit: 500 })), null);
-    T.ok(App.Anchors.validateSection(Object.assign({}, ok, { E: 0 })));
-    T.ok(App.Anchors.validateSection(Object.assign({}, ok, { area: -1 })));
+    T.eq(App.Anchors.validateSection(Object.assign({}, ok, { compression_limit: 500000 })), null);
+    T.ok(App.Anchors.validateSection(Object.assign({}, ok, { variables: with_({ YOUNG_MODULUS: 0 }) })));
+    T.ok(App.Anchors.validateSection(Object.assign({}, ok, { variables: with_({ CROSS_AREA: -1 }) })));
     T.ok(App.Anchors.validateSection(Object.assign({}, ok, { spacing: 0 })));
     T.ok(App.Anchors.validateSection(Object.assign({}, ok, { tension_limit: 0 })));
     T.ok(App.Anchors.validateSection(Object.assign({}, ok, { name: '' })));
+  });
+
+  test('a massless tendon is allowed, as on the server; a negative density is not', function () {
+    var steel = { YOUNG_MODULUS: 1.95e11, CROSS_AREA: 0.0006, DENSITY: 0 };
+    var ok = { id: 'strand', name: 'tendon', spacing: 1, tension_limit: null,
+               compression_limit: null, constitutive_law: 'TrussConstitutiveLaw', variables: steel };
+    T.eq(App.Anchors.validateSection(ok), null);
+    T.ok(App.Anchors.validateSection(Object.assign({}, ok, {
+      variables: Object.assign({}, steel, { DENSITY: -1 }) })));
+    T.ok(App.Anchors.validateSection(Object.assign({}, ok, {
+      variables: Object.assign({}, steel, { DENSITY: NaN }) })));
   });
 
   function withStubs(project, body) {
@@ -210,9 +226,10 @@
     var project = section({
       anchors: [{ id: 'anchor_1', name: 'Anchor 1', kind: 'anchor', section: 'strand',
                   head: [12, -2], tail: [20, -8], prestress: 250, active: true }],
-      anchor_sections: [{ id: 'strand', name: 'tendon', E: 1.95e8, area: 0.0006,
-                          density: 7850, spacing: 2.5, tension_limit: 900,
-                          compression_limit: null }]
+      anchor_sections: [{ id: 'strand', name: 'tendon', spacing: 2.5, tension_limit: 900000,
+                          compression_limit: null, constitutive_law: 'TrussConstitutiveLaw', tables: {},
+                           variables: { YOUNG_MODULUS: 1.95e11, CROSS_AREA: 0.0006,
+                                        DENSITY: 7850 } }]
     });
     return withStubs(project, function (sent) {
       return App.Anchors.remove('anchor_1').then(function (done) {

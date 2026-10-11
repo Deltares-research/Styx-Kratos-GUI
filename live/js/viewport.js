@@ -407,7 +407,7 @@ App.Viewport = (function () {
      A `layered_soil` project has no water geometry at all -- `Project.part_keys`
      omits "water" on that path, so the thin slab the full build raises is never
      meshed and the level cannot be seen. That is the path the blank project and
-     `examples/crow/crow.py` both take, so the level being invisible is the normal
+     a staged model script both take, so the level being invisible is the normal
      case rather than an edge one, and a deck whose every pore pressure is stated
      about a number nobody can see is the thing worth fixing (plan sec 7.2).
 
@@ -1452,8 +1452,8 @@ App.Viewport = (function () {
      nobody is looking at. */
   /* The refinements a mesh is built with: the ones set from the toolbar this session
      if there are any, and otherwise the model's own (`MeshSettings.refinements`). A
-     model can carry a graded mesh -- server/app/crow.py refines its excavation and
-     grades out to the far field -- and it has to mesh that way from the Generate-mesh
+     model can carry a graded mesh -- a model script can refine its excavation and
+     grade out to the far field -- and it has to mesh that way from the Generate-mesh
      button and from Export alike, not only from a script.
 
      Length, not truthiness: "Reset local mesh refinement" leaves an empty array behind,

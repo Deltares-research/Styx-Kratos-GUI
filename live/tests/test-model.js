@@ -16,10 +16,14 @@
         { id: 'bh2', name: 'BH-2', x: 28, y: 4, head: -0.4, water: -1.8 }
       ],
       materials: [
-        { id: 'm2', name: 'Sand, loose', model: 'Hardening Soil', type: 'Drained',
-          color: '#c4a86a', g_unsat: 18, g_sat: 20.5, E: 25000, nu: 0.28, c: 0.5, phi: 32, k: 1.5 },
-        { id: 'm4', name: 'Clay, stiff', model: 'Mohr-Coulomb', type: 'Undrained (A)',
-          color: '#6f8fa8', g_unsat: 17.5, g_sat: 18.5, E: 12000, nu: 0.33, c: 15, phi: 25, k: 0.0005 }
+        { id: 'm2', name: 'Sand, loose', color: '#c4a86a',
+          constitutive_law: 'GeoLinearElasticPlaneStrain2DLaw',
+          variables: { YOUNG_MODULUS: 2.5e7, POISSON_RATIO: 0.28, DENSITY_SOLID: 1834.86,
+                       GEO_COHESION: 500, GEO_FRICTION_ANGLE: 32 } },
+        { id: 'm4', name: 'Clay, stiff', color: '#6f8fa8',
+          constitutive_law: 'GeoLinearElasticPlaneStrain2DLaw',
+          variables: { GEO_DRAINAGE_TYPE: 'FULLY_COUPLED', YOUNG_MODULUS: 1.2e7,
+                       POISSON_RATIO: 0.33, DENSITY_SOLID: 1783.89 } }
       ],
       layers: layers,
       custom_parts: customParts || []
@@ -96,12 +100,10 @@
 
   /* ── Mapping ─────────────────────────────────────────────────── */
 
-  test('materials are renamed to the field names the frozen UI reads', function () {
-    // js/data.js:315 uses gUnsat/gSat; the schema uses g_unsat/g_sat. Without this
-    // the material dialog silently shows undefined.
+  test('a material arrives as the Kratos property set the server holds', function () {
     var m = App.Model.fromProject(project(TWO)).MATERIALS[0];
-    T.eq(m.gUnsat, 18);
-    T.eq(m.gSat, 20.5);
+    T.eq(m.constitutive_law, 'GeoLinearElasticPlaneStrain2DLaw');
+    T.eq(m.variables.YOUNG_MODULUS, 2.5e7);
     T.eq(m.color, '#c4a86a');
     T.eq(m.id, 'm2');
   });
@@ -124,8 +126,10 @@
   function piledProject() {
     var p = project(TWO);
     p.dimension = 2; p.section_offset = 20;
-    p.beam_sections = [{ id: 'az26', name: 'AZ 26-700', E: 2.1e8, nu: 0.3,
-                         area: 0.0198, inertia: 5.52e-4, density: 7850, spacing: 1 }];
+    p.beam_sections = [{ id: 'az26', name: 'AZ 26-700', spacing: 1,
+                         constitutive_law: 'TimoshenkoBeamElasticConstitutiveLaw', tables: {},
+                         variables: { YOUNG_MODULUS: 2.1e11, POISSON_RATIO: 0.3,
+                                      CROSS_AREA: 0.0198, I33: 5.52e-4, DENSITY: 7850 } }];
     p.beams = [{ id: 'beam_1', name: 'Sheet pile 1', section: 'az26',
                  points: [[12, 0], [12, -14]], active: true }];
     return p;
@@ -161,11 +165,12 @@
   test('the section rows edit the shared profile and reject a bad value', function () {
     withProject(piledProject(), function () {
       var rows = App.OBJECT_PROPS.beam_1.groups.Section;
-      var area = rows.filter(function (row) { return row[0] === 'Area'; })[0];
+      var area = rows.filter(function (row) { return row[0] === 'CROSS_AREA'; })[0];
+      T.eq(area[2], 'm²', 'labelled in the project units');
       T.eq(area[4].set(0.03), null);
-      T.eq(App.BEAM_SECTIONS[0].area, 0.03, 'the profile itself moved');
+      T.eq(App.BEAM_SECTIONS[0].variables.CROSS_AREA, 0.03, 'the profile itself moved');
       T.ok(area[4].set(-1), 'a negative area is refused');
-      T.eq(App.BEAM_SECTIONS[0].area, 0.03, 'and the profile is left as it was');
+      T.eq(App.BEAM_SECTIONS[0].variables.CROSS_AREA, 0.03, 'and the profile is left as it was');
     });
   });
 
@@ -195,9 +200,11 @@
 
   function anchoredProject() {
     var p = piledProject();
-    p.anchor_sections = [{ id: 'strand', name: '4-strand tendon', E: 1.95e8,
-                           area: 0.0006, density: 7850, spacing: 2.5,
-                           tension_limit: 900, compression_limit: null }];
+    p.anchor_sections = [{ id: 'strand', name: '4-strand tendon', spacing: 2.5,
+                           tension_limit: 900000, compression_limit: null,
+                           constitutive_law: 'TrussConstitutiveLaw', tables: {},
+                           variables: { YOUNG_MODULUS: 1.95e11, CROSS_AREA: 0.0006,
+                                        DENSITY: 7850 } }];
     p.anchors = [{ id: 'anchor_1', name: 'Anchor 1', kind: 'anchor', section: 'strand',
                    head: [12, -2], tail: [20, -8], prestress: 250, active: true }];
     return p;
@@ -235,11 +242,11 @@
   test('the tendon rows edit the shared library and reject a bad value', function () {
     withProject(anchoredProject(), function () {
       var rows = App.OBJECT_PROPS.anchor_1.groups.Tendon;
-      var area = rows.filter(function (row) { return row[0] === 'Area'; })[0];
+      var area = rows.filter(function (row) { return row[0] === 'CROSS_AREA'; })[0];
       T.eq(area[4].set(0.0009), null);
-      T.eq(App.ANCHOR_SECTIONS[0].area, 0.0009);
+      T.eq(App.ANCHOR_SECTIONS[0].variables.CROSS_AREA, 0.0009);
       T.ok(area[4].set(0), 'a tendon with no steel is refused');
-      T.eq(App.ANCHOR_SECTIONS[0].area, 0.0009);
+      T.eq(App.ANCHOR_SECTIONS[0].variables.CROSS_AREA, 0.0009);
     });
   });
 
@@ -257,8 +264,8 @@
     var p = piledProject();
     p.interface_sections = [{ id: 'contact_1', name: 'Steel against sand',
                               material: 'm2', r_inter: 0.67, virtual_thickness: 0.01,
-                              normal_stiffness: null, shear_stiffness: null,
-                              permeability: 'Neutral' }];
+                              permeability: 'Neutral', variables: {}, tables: {},
+                              constitutive_law: 'GeoIncrementalLinearElasticInterfaceLaw' }];
     p.interfaces = [{ id: 'interface_1', name: 'Wall contact', kind: 'interface',
                       section: 'contact_1', structure: 'beam_1', points: null,
                       side: 'both', active: true }];
@@ -309,6 +316,16 @@
     });
   });
 
+  test('a contact with no Rinter of its own says it takes each soil’s', function () {
+    var p = contactedProject();
+    p.interface_sections[0].r_inter = null;
+    withProject(p, function () {
+      var row = App.OBJECT_PROPS.interface_1.groups.Contact.filter(function (r) {
+        return r[0] === 'R_inter'; })[0];
+      T.eq(row.slice(0, 4), ['R_inter', 'each soil’s own', '', true]);
+    });
+  });
+
   test('a free interface shows its own coordinates instead of a pile', function () {
     var p = contactedProject();
     p.interfaces[0].structure = null;
@@ -344,7 +361,7 @@
   function pairedLoads() {
     return [
       { id: 'surfaceload_1', name: 'SurfaceLoad_1', kind: 'surface', x0: 4, x1: 16,
-        z0: 5, z1: 10, thickness: 0.3, components: [0, 0, -25],
+        z0: 15, z1: 25, thickness: 0.3, components: [0, 0, -25],
         distribution: 'Uniform', active: true, derived_from: null },
       { id: 'surfaceload_1_2d', name: 'SurfaceLoad_1', kind: 'line', x0: 4, x1: 16,
         y: 0, thickness: 0.3, components: [0, -25], distribution: 'Uniform',
@@ -424,6 +441,38 @@
     withProject(p, function () {
       T.eq(App.LOADS.map(function (l) { return l.id; }), ['surfaceload_1_2d']);
       T.eq(nodeLabelled(App.TREES.structures, 'Loads').count, 1);
+    });
+  });
+
+  test('a pair whose pad is clear of the section plane is not in the section', function () {
+    /* Mirrors Project.loads_for(2): the pad at z 15..25 does not load a cut at z 5. */
+    var p = project(TWO);
+    p.dimension = 2; p.section_offset = 5;
+    p.loads = pairedLoads();
+    withProject(p, function () {
+      T.eq(App.LOADS.map(function (l) { return l.id; }), []);
+    });
+  });
+
+  test('a pair clear of the plane is still a load when the 2D half was authored', function () {
+    /* The derived half is the surface one here; the rule follows the pad either way. */
+    var p = project(TWO);
+    p.dimension = 2; p.section_offset = 5;
+    p.loads = [
+      { id: 'lineload_1', name: 'LineLoad_1', kind: 'line', x0: 4, x1: 16, y: 0,
+        thickness: 0.15, components: [0, -25], distribution: 'Uniform',
+        active: true, derived_from: null },
+      { id: 'lineload_1_3d', name: 'SurfaceLoad_1', kind: 'surface', x0: 4, x1: 16,
+        z0: 15, z1: 25, thickness: 0.15, components: [0, -25, 0],
+        distribution: 'Uniform', active: true, derived_from: 'lineload_1' }
+    ];
+    withProject(p, function () {
+      T.eq(App.LOADS.map(function (l) { return l.id; }), []);
+      p.section_offset = 20;
+    });
+    withProject(p, function () {
+      T.eq(App.LOADS.map(function (l) { return l.id; }), ['lineload_1'],
+           'moving the plane onto the pad brings it back');
     });
   });
 
@@ -707,20 +756,25 @@
   function walledProject() {
     var p = project(TWO);
     p.dimension = 3;
-    p.beam_sections = [{ id: 'az26', name: 'AZ 26-700', E: 2.1e8, nu: 0.3,
-                         area: 0.0198, inertia: 5.52e-4, density: 7850, spacing: 1,
-                         inertia_minor: null, torsional_inertia: null }];
-    p.panel_sections = [{ id: 'az26_wall', name: 'AZ 26-700 wall', E: 2.1e8, nu: 0.3,
-                          thickness: 0.4, density: 7850 }];
+    p.beam_sections = [{ id: 'az26', name: 'AZ 26-700', spacing: 1,
+                         constitutive_law: 'TimoshenkoBeamElasticConstitutiveLaw', tables: {},
+                         variables: { YOUNG_MODULUS: 2.1e11, POISSON_RATIO: 0.3,
+                                      CROSS_AREA: 0.0198, I33: 5.52e-4, DENSITY: 7850 } }];
+    p.panel_sections = [{ id: 'az26_wall', name: 'AZ 26-700 wall',
+                          constitutive_law: 'LinearElasticPlaneStress2DLaw', tables: {},
+                          variables: { YOUNG_MODULUS: 2.1e11, POISSON_RATIO: 0.3,
+                                       THICKNESS: 0.4, DENSITY: 7850 } }];
     p.beams = [
       { id: 'panel_1', name: 'Wall 1', kind: 'panel', section: 'az26_wall',
         footprint: [[12, 4], [12, 20]], y_top: 0, y_toe: -14, active: true },
       { id: 'member_1', name: 'King post 1', kind: 'member', section: 'az26',
         points: [[18, 10, 0], [18, 10, -12]], active: true }
     ];
-    p.anchor_sections = [{ id: 'strand', name: '4-strand tendon', E: 1.95e8,
-                           area: 0.0006, density: 7850, spacing: 2.5,
-                           tension_limit: 900, compression_limit: null }];
+    p.anchor_sections = [{ id: 'strand', name: '4-strand tendon', spacing: 2.5,
+                           tension_limit: 900000, compression_limit: null,
+                           constitutive_law: 'TrussConstitutiveLaw', tables: {},
+                           variables: { YOUNG_MODULUS: 1.95e11, CROSS_AREA: 0.0006,
+                                        DENSITY: 7850 } }];
     p.anchors = [{ id: 'anchor_1', name: 'Anchor 1', kind: 'anchor3d', section: 'strand',
                    head: [12, 10, -2], tail: [17, 10, -8], prestress: 250, active: true }];
     return p;
@@ -801,8 +855,8 @@
       T.eq(geometry.slice(0, 4), ['x1', 'z1', 'x2', 'z2']);
       T.ok(geometry.indexOf('Top level') >= 0 && geometry.indexOf('Toe level') >= 0);
       var section = props.groups.Section.map(function (row) { return row[0]; });
-      T.ok(section.indexOf('Thickness') >= 0, section.join(', '));
-      T.eq(section.indexOf('Area'), -1, 'a wall has a thickness, not an area per metre');
+      T.ok(section.indexOf('THICKNESS') >= 0, section.join(', '));
+      T.eq(section.indexOf('CROSS_AREA'), -1, 'a wall has a thickness, not an area per metre');
     });
   });
 
@@ -812,7 +866,8 @@
       T.eq(props.title, 'King post 1');
       T.eq(props.groups.Geometry.map(function (row) { return row[0]; }).slice(0, 6),
            ['x1', 'y1', 'z1', 'x2', 'y2', 'z2']);
-      T.eq(props.groups.Section.map(function (row) { return row[0]; })[2], 'Area');
+      var names = props.groups.Section.map(function (row) { return row[0]; });
+      T.ok(names.indexOf('CROSS_AREA') >= 0 && names.indexOf('I22') >= 0, names.join(', '));
     });
   });
 
@@ -977,9 +1032,11 @@
     withProject(p, function () {
       var node = soilNode(App.TREES.soil);
       var objs = (node.children || []).map(function (c) { return c.obj; });
-      T.eq(objs, STAGED.soil_body_keys, 'one row per body, in the order published');
+      // Grouped by layer (model.js layerBodies), not in the server's outside-first order.
+      T.eq(objs, ['soil_L1', 'soil_L1__lift1', 'soil_L1__lift2', 'soil_L2'],
+           'one row per body, each lift right after the layer it was dug out of');
       T.eq(node.count, 4, 'the count is rows, not layers');
-      T.ok(/lift 1/.test(node.children[2].label), 'and says which part of the layer');
+      T.ok(/lift 1/.test(node.children[1].label), 'and says which part of the layer');
     });
   });
 

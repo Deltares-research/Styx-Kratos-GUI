@@ -1,7 +1,6 @@
 # Gmsh-backed geotechnical modeller mockup
 
-The original static demonstration remains available by opening `index.html` directly. The live
-version uses FastAPI and Gmsh to build and mesh real OpenCASCADE solids.
+The app uses FastAPI and Gmsh to build and mesh real OpenCASCADE solids.
 
 ## Requirements
 
@@ -99,12 +98,35 @@ are read on every run, so a machine can be set up and Calculate pressed again wi
 the server. If Kratos cannot be found, the command log says exactly what to write where; the deck
 is written either way, so it can also just be run by hand.
 
-## Tests
+## Running the tests
 
-Run backend tests with `server/.venv-linux/bin/python -m pytest -q` on Linux, or
-`server\.venv-windows\Scripts\python.exe -m pytest -q` on Windows. JavaScript tests are in
-`live/tests/index.html` and require no build step. The DOM-free JavaScript suites also run without
-a browser (`pip install quickjs` first), and every JavaScript file can be parse-checked:
+One command per tier, from the repository root, with any Python 3.10+; pytest always runs in
+the server's own venv. Test-only tools: `pip install -r server/requirements-dev.txt` into that
+venv (Playwright uses the installed Chrome).
+
+| Command | Runs |
+|---|---|
+| `python tools/test.py quick` | JS syntax check, headless JS suites, pytest without the browser |
+| `python tools/test.py browser` | `quick` plus the browser unit suite (`live/tests/index.html`) through Playwright |
+| `python tools/test.py e2e` | `browser` plus the GUI end-to-end tests |
+| `python tools/test.py kratos` | tests that run Kratos (needs `server/kratos.local.json`) |
+| `python tools/test.py bench` | the Kratos benchmark runner |
+| `python tools/test.py perf` | performance tests |
+| `python tools/test.py all` | everything this machine can run; lists what was skipped and why |
+
+Arguments after the tier go to pytest, e.g. `python tools/test.py quick -k phases -x`. A step
+whose prerequisite is missing (quickjs, Kratos, a browser) is reported as skipped, not failed.
+The headless JS suites need `quickjs`; if the venv cannot install it, point
+`KRATOS_GUI_QUICKJS_PYTHON` at a Python that has it.
+
+Coverage: add `--cov=app --cov-report=html --js-coverage` to a tier that runs the browser
+suite (e.g. `python tools/test.py browser --cov=app --cov-report=html --js-coverage`). The
+server report lands in `server/htmlcov/`, the per-module JS function coverage in
+`server/htmlcov-js/summary.json`.
+
+Without the tier runner: `python -m pytest -q` from `server/` in its venv
+(`server/.venv-linux/bin/python` or `server\.venv-windows\Scripts\python.exe`), and for
+JavaScript:
 
 ```bash
 python live/tests/run_headless.py

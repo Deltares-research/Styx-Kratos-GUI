@@ -1,7 +1,8 @@
 """Interfaces in the exported deck: the node split, the contact elements, the materials.
 
-Everything asserted here about the *shape* of the output is read off
-examples/crow_case.mdpa, which contains the arrangement this feature reproduces:
+Everything asserted here about the *shape* of the output is read off a real Kratos
+deck with a contact on both faces of a sheet pile, the arrangement this feature
+reproduces:
 
     Begin Elements Geo_UPwLineInterfacePlaneStrainDiffOrderElement3Plus3N
       22434 0  4639 4624 4633  4771 4765 4769
@@ -20,7 +21,7 @@ import json
 import pytest
 
 from app import build, kratos, schemas
-from app.kratos_materials import KILO
+KILO = 1000.0  # kN -> N: these tests write old-style projects, converted on load (app/legacy.py)
 from app.schemas import MeshRequest, Project
 from app.seed import seed_project
 from tests import mdpa
@@ -146,7 +147,7 @@ def test_the_first_half_is_the_pile_and_the_second_half_is_the_soil(contacted):
 
 
 def test_the_pile_is_no_longer_welded_to_the_soil(contacted):
-    """The whole point of the interface, and crow_case.mdpa's own arrangement: with a
+    """The whole point of the interface, and a real deck's own arrangement: with a
     contact on both faces the wall shares no node with the ground."""
     deck = deck_of(contacted)
     assert not beam_nodes(deck) & soil_nodes(deck)
@@ -305,8 +306,8 @@ def test_each_face_of_the_wall_gets_its_own_copy_of_the_soil(contacted):
     for faces in by_segment.values():
         assert len(faces) == 2, "one element per face of the wall"
         # Disjoint, save at the toe: the ground closes under the pile, so the two faces
-        # meet there in one node -- crow_case.mdpa writes 52 copies a side for 53 pile
-        # nodes for exactly this reason.
+        # meet there in one node -- a real deck writes one copy a side fewer than the
+        # pile has nodes for exactly this reason.
         assert len(set(faces[0]) & set(faces[1])) <= 1
         assert set(faces[0]) != set(faces[1])
 
@@ -361,7 +362,7 @@ def test_the_contact_is_split_per_soil_body_it_runs_against(contacted):
     A lift is dug away in its own phase and the contact along that lift has to go with
     it -- an interface still holding a face whose soil has been removed would carry
     shear against nothing. The reference deck splits the same way
-    (plan/staged-construction-plan.md sec 0.1).
+    (plan/outdated/staged-construction-plan.md sec 0.1).
     """
     deck = deck_of(contacted)
     parts = interface_parts(deck)
@@ -519,7 +520,8 @@ def test_the_shear_stiffness_is_the_soils_shear_modulus_over_the_element_size(co
     variables = interface_material(contacted)
 
     assert variables["INTERFACE_SHEAR_STIFFNESS"] == pytest.approx(
-        soil.E * KILO / (2 * (1 + soil.nu) * thickness))
+        soil.variables["YOUNG_MODULUS"]
+        / (2 * (1 + soil.variables["POISSON_RATIO"]) * thickness))
 
 
 def test_the_normal_stiffness_is_ten_times_the_shear(contacted):
@@ -548,7 +550,8 @@ def test_a_contact_takes_the_stiffness_of_each_soil_it_runs_against(session):
 
     def shear_of(layer):
         soil = project.material(layer.mat)
-        return round(soil.E * KILO / (2 * (1 + soil.nu)), 6)
+        return round(soil.variables["YOUNG_MODULUS"]
+                     / (2 * (1 + soil.variables["POISSON_RATIO"])), 6)
 
     assert shears == {shear_of(layer) for layer in project.layers}
     assert len(shears) == 2, "two layers, two different soils, two stiffnesses"
@@ -581,9 +584,9 @@ def test_the_strength_is_the_soil_s_reduced_by_r_inter(contacted):
     soil = seed_project().materials[0]
     variables = interface_material(contacted)
 
-    assert variables["GEO_COHESION"] == pytest.approx(soil.c * 0.67 * KILO)
-    assert variables["GEO_FRICTION_ANGLE"] == pytest.approx(
-        math.degrees(math.atan(math.tan(math.radians(soil.phi)) * 0.67)))
+    assert variables["GEO_COHESION"] == pytest.approx(soil.variables["GEO_COHESION"] * 0.67)
+    assert variables["GEO_FRICTION_ANGLE"] == pytest.approx(math.degrees(math.atan(
+        math.tan(math.radians(soil.variables["GEO_FRICTION_ANGLE"])) * 0.67)))
 
 
 def test_the_interface_property_id_is_unique_and_non_zero(contacted):
@@ -610,7 +613,7 @@ def test_an_interface_says_how_it_drains(contacted):
 
 def test_every_interface_property_set_says_it(contacted):
     """One drawn interface becomes one deck part per soil body it runs against, and the
-    warning fires once per property set -- eight of them in the CROW deck."""
+    warning fires once per property set."""
     entries = [e for e in entries_of(contacted)
                if e["model_part_name"].startswith("PorousDomain.Wall_contact")]
     assert entries
@@ -630,7 +633,7 @@ def test_an_interface_drains_as_a_constant_field_whatever_the_soil_does(session)
     project = interfaced_project()
     undrained = project.model_dump()
     for material in undrained["materials"]:
-        material["type"] = "Undrained (A)"
+        material["variables"]["GEO_DRAINAGE_TYPE"] = "FULLY_COUPLED"
     export = kratos.export_project(Project.model_validate(undrained),
                                    MeshRequest(element_size=3.0, order=2))
     soils = [e["Material"]["Variables"]["GEO_DRAINAGE_TYPE"] for e in entries_of(export)

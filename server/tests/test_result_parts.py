@@ -195,23 +195,23 @@ def test_parts_keep_the_order_the_deck_declares_them_in(model):
 
 # ── Against the real run ────────────────────────────────────────────────────
 
-def test_the_real_run_reads_its_construction_sequence_out_of_the_files():
-    """The end-to-end claim of this task, against the seven-stage CROW run: the phases
-    a staged model went through are recoverable from its output alone.
+def test_the_real_run_reads_its_construction_sequence_out_of_the_files(monkeypatch):
+    """The end-to-end claim of this task, against a seven-stage Kratos run of the test
+    model (skipped without Kratos): the phases a staged model went through are
+    recoverable from its output alone.
 
     The excavation lifts leave one at a time, the wall arrives when it is installed and
     the strut after it, and the interfaces are absent throughout -- which the run-wide
     check reports as "not written" rather than as seven deactivations.
     """
-    from pathlib import Path
     from app import results
+    from tests import results_run
 
-    directory = Path.home() / "KratosGUI" / "runs" / "CROW_excavation_wall_2026-09-22_00-49"
-    if not directory.is_dir():
-        pytest.skip("this machine has no CROW run to read")
-
-    model = mdpa_import.import_mdpa(
-        (directory / "CROW_excavation_wall.mdpa").read_text(encoding="utf-8"))
+    run = results_run.real_run()
+    results_run.use(monkeypatch, run)
+    root, run_id = run
+    directory = root / run_id
+    model = mdpa_import.import_mdpa(results_run.deck_text(run))
     meshes = [gid_results.read_mesh(
                   (directory / stage["mesh_file"]).read_text(encoding="utf-8"))
               for stage in results.describe(directory.name)["stages"]]

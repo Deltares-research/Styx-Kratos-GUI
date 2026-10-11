@@ -1,16 +1,10 @@
 """The FastAPI app.
 
-Two things it deliberately does not do:
-
-*   It does not copy the frozen mockup. `kratos-GUI/css`, `js`, `assets` and `vendor` are
-    mounted where they already live, so the served app and the one that opens straight
-    off `file://` are the same bytes and cannot drift apart.
-*   It does not modify them. The backend-connected frontend lives in `live/`, loads the
-    frozen scripts verbatim, and replaces exactly two: `js/viewport.js`, the one module
-    that invents geometry, and `js/orbit.js`, which is hard-wired to a Z-up world the
-    model no longer uses. The orbit controller is *overridden* rather than dropped --
-    `App.Orbit` is a plain global assignment, so the frozen file is still loaded and
-    `live/js/orbit.js` after it wins.
+The frontend lives in `live/`. Its base UI -- menus, toolbars, explorer, dialogs and
+command box -- is in `live/base/css` and `live/base/js`, served at `/css` and `/js`;
+`assets` and `vendor` are served from the repository root. `live/js` builds on the base
+scripts without editing them, and replaces the orbit controller: `App.Orbit` is a plain
+global assignment, so `live/js/orbit.js`, loaded after the base one, wins.
 """
 
 from __future__ import annotations
@@ -22,24 +16,29 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import ValidationError
 import os
 import tempfile
+from urllib.parse import urlsplit
 
-from app import calculate, gmsh_worker, phases as phase_model, results, store
+from app import (calculate, gmsh_worker, kratos_materials, phases as phase_model, results,
+                 store, units)
 from app.loads import translate as translate_loads
 from app.walls import translate as translate_walls
 from app.build import GeometryError
+from app.importer import ImportRefused
 from app.kratos import ExportError
+from app.launcher import ALLOWED_HOSTS_ENV
 from app.meshing import MeshingError
-from app.schemas import (DimensionUpdate, ExportRequest, LayersUpdate, MaterialsUpdate,
+from app.schemas import (DimensionUpdate, ExportRequest, LayersUpdate, MaterialsUpdate, UnitsUpdate,
                          MeshRequest, PhasesUpdate, Project, StructuresUpdate,
                          WaterUpdate)
 
-FROZEN = Path(__file__).resolve().parents[2]
-LIVE = FROZEN / "live"
+ROOT = Path(__file__).resolve().parents[2]
+LIVE = ROOT / "live"
+BASE = LIVE / "base"
 
 
 @asynccontextmanager
@@ -53,6 +52,13 @@ async def lifespan(_: FastAPI):
 
 
 app = FastAPI(title="kratos-GUI backend", lifespan=lifespan)
+
+
+@app.exception_handler(gmsh_worker.WorkerCrashed)
+async def worker_crashed(_request, failure: gmsh_worker.WorkerCrashed):
+    """Any route that reaches gmsh: the request that crashed the worker fails with a reason
+    the command log can show, and the worker is already being replaced for the next one."""
+    return JSONResponse(status_code=500, content={"detail": str(failure)})
 
 # The geometry payload is flat arrays of decimal digits: highly repetitive, and roughly
 # an order of magnitude smaller gzipped. This is what makes JSON the right format here.
@@ -77,6 +83,69 @@ async def do_not_cache_sources(request, call_next):
     if (path == "/" or path.endswith(SOURCE_SUFFIXES)) and not path.startswith("/vendor/"):
         response.headers["Cache-Control"] = "no-store, must-revalidate"
     return response
+
+
+LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "::1")
+
+
+def allowed_hosts() -> set[str]:
+    """The names this server answers to: loopback, plus `ALLOWED_HOSTS_ENV` -- read per
+    request, so it can be set without a code change and tested without a restart."""
+    extra = os.environ.get(ALLOWED_HOSTS_ENV, "")
+    return set(LOOPBACK_HOSTS) | {h.strip().lower() for h in extra.split(",") if h.strip()}
+
+
+def _host_name(netloc: str) -> str:
+    """`host[:port]` or `[v6]:port`, without the port, lower-cased."""
+    netloc = netloc.strip().lower()
+    if netloc.startswith("["):
+        return netloc[1:netloc.find("]")] if "]" in netloc else netloc
+    return netloc.rsplit(":", 1)[0] if netloc.count(":") == 1 else netloc
+
+
+@app.middleware("http")
+async def only_this_browser_tab(request, call_next):
+    """Refuse requests that did not come from a page this server served.
+
+    The server listens on loopback, but any site the user has open can still try to
+    reach it, and `/api/project/script` runs Python. Two ways in, two checks, both
+    before any route runs:
+
+    * **DNS rebinding** -- an attacker's name made to resolve to 127.0.0.1 -- arrives
+      with the attacker's name in `Host`. Refused unless it is a loopback name or one
+      listed in `KRATOS_GUI_ALLOWED_HOSTS` (which `--host <name>` sets).
+    * **A cross-site request** -- a form or fetch from another page -- carries that
+      page's `Origin`. Refused unless it is this server's own. A request with no
+      `Origin` (a same-origin GET, curl, a test client) is not a browser crossing sites.
+    """
+    allowed = allowed_hosts()
+    if _host_name(request.headers.get("host", "")) not in allowed:
+        return JSONResponse(status_code=400, content={"detail": (
+            f"Refused: this server answers to {', '.join(sorted(allowed))} as its host, "
+            f"not {request.headers.get('host', '')!r}. To serve it under another name, "
+            f"list that name in {ALLOWED_HOSTS_ENV}.")})
+    origin = request.headers.get("origin")
+    if origin is not None:
+        parsed = urlsplit(origin)
+        if not parsed.scheme or _host_name(parsed.netloc) not in allowed:
+            return JSONResponse(status_code=403, content={"detail": (
+                f"Refused: a request from another site (origin {origin!r}) may not use "
+                "this server.")})
+    return await call_next(request)
+
+
+MAX_UPLOAD_BYTES = 256 * 2**20
+"""The largest file an upload route reads. A real deck is a few megabytes (a dike section's mesh
+is about 3 MB); this exists so a runaway file is a refusal, not an out-of-memory server."""
+
+
+async def _read_upload(file: UploadFile) -> bytes:
+    data = await file.read(MAX_UPLOAD_BYTES + 1)
+    if len(data) > MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail=(
+            f"{file.filename} is larger than the {MAX_UPLOAD_BYTES / 2**20:g} MB this "
+            "server reads in one upload."))
+    return data
 
 
 # ── API ─────────────────────────────────────────────────────────────────────
@@ -105,7 +174,7 @@ async def reset_project() -> dict:
 
 
 @app.post("/api/project/script")
-async def run_script(request: dict) -> dict:
+def run_script(request: dict) -> dict:
     """Build the model by running a Python file: the command line's `run <file.py>`.
 
     The file is executed here, in the server's own interpreter, and whatever `Project`
@@ -146,10 +215,8 @@ def _not_for_a_deck(project: Project, what: str) -> None:
             f"deck's own. Calculate runs it as it is."))
 
 
-# There is no `/api/project/crow`. It opened the CROW staged-excavation case, back when
-# a File menu item asked for it; both are gone. An example model is opened the way any
-# model is -- `run examples/crow/crow.py` in the command box, through
-# `/api/project/script` -- which works for every model rather than for the one somebody
+# There is no endpoint that opens one particular model. A model is opened the way any
+# model is -- `run <file.py>` in the command box, through `/api/project/script` -- which works for every model rather than for the one somebody
 # wired an endpoint to.
 
 
@@ -358,13 +425,18 @@ async def patch_dimension(update: DimensionUpdate) -> dict:
     # deck all see the same pair. See app/loads.py for what is and is not translatable.
     notes: list[str] = []
     payload["loads"] = [load.model_dump()
-                        for load in translate_loads(current, update.dimension, notes)]
+                        for load in translate_loads(current, update.dimension, notes,
+                                                    update.section_offset)]
     # A wall changes shape with the dimension the same way: a sheet pile in the section
     # is a panel swept between two levels in the solid model, which is what gives it a
     # plan footprint to edit. See app/walls.py for what is and is not translatable.
     beams, panel_sections = translate_walls(current, update.dimension, notes)
     payload["beams"] = [beam.model_dump() for beam in beams]
     payload["panel_sections"] = [section.model_dump() for section in panel_sections]
+    # A soil law is written for one dimension; the pairs this application knows go
+    # across with the model, and any other is left as the user typed it, said out loud.
+    payload["materials"] = kratos_materials.translate_laws(
+        payload["materials"], update.dimension, notes)
     try:
         project = Project.model_validate(payload)
     except ValidationError as failure:
@@ -376,23 +448,67 @@ async def patch_dimension(update: DimensionUpdate) -> dict:
             "invalidates": ["project", "tree", "geometry", "mesh"]}
 
 
+@app.patch("/api/project/units")
+def patch_units(update: UnitsUpdate) -> dict:
+    """Re-express the whole project in another unit system (`app/units.py`).
+
+    The one place values are converted: from here on the project, its deck and its
+    results are all in the new system. A variable whose dimension is not known here is
+    kept as typed and named in `notes`, for the user to convert.
+    """
+    current = store.get()
+    payload, notes = units.convert_project(current.model_dump(mode="json"),
+                                           update.unit_system)
+    try:
+        project = Project.model_validate(payload)
+    except ValidationError as failure:
+        raise RequestValidationError(failure.errors()) from failure
+    store.put(project)
+    return {"project": project, "notes": notes, "invalidates": ["project", "tree"]}
+
+
 @app.delete("/api/project/custom_parts")
 async def clear_custom_parts() -> dict:
     project = store.get()
-    project.custom_parts = []
-    store.put(project)
+    store.put(_without_custom_parts(project, [p.key for p in project.custom_parts]))
     return {"ok": True, "invalidates": ["project", "tree", "geometry", "mesh"]}
 
 
 @app.delete("/api/geometry/parts/{key}")
 async def delete_geometry_part(key: str) -> dict:
     project = store.get()
-    remaining = [p for p in project.custom_parts if p.key != key]
-    if len(remaining) == len(project.custom_parts):
+    if not any(p.key == key for p in project.custom_parts):
         raise HTTPException(status_code=404, detail=f"no custom part with key {key!r}")
-    project.custom_parts = remaining
-    store.put(project)
+    store.put(_without_custom_parts(project, [key]))
     return {"ok": True, "invalidates": ["project", "tree", "geometry", "mesh"]}
+
+
+def _without_custom_parts(project: Project, keys: list[str]) -> Project:
+    """`project` minus the custom parts `keys`, validated like any other edit.
+
+    A part a phase still names is refused, not quietly unstaged: which phases should
+    lose it is a modelling decision. Left to validation instead, the store would hold a
+    project every later PATCH fails on with "names no such part", with only a reset as a
+    way out. A mesh size for the part goes with it -- it describes nothing else.
+    """
+    gone = set(keys)
+    users = [(phase.id, sorted(gone & set(phase.activate + phase.deactivate)))
+             for phase in project.phases]
+    users = [(phase, named) for phase, named in users if named]
+    if users:
+        listed = "; ".join(f"phase {phase!r} names {', '.join(named)}"
+                           for phase, named in users)
+        raise HTTPException(status_code=422, detail=(
+            f"cannot delete a part that a phase still uses ({listed}); take it out of "
+            "those phases first"))
+    payload = project.model_dump()
+    payload["custom_parts"] = [p for p in payload["custom_parts"] if p["key"] not in gone]
+    payload["mesh"]["body_sizes"] = {k: v for k, v in payload["mesh"]["body_sizes"].items()
+                                     if k not in gone}
+    try:
+        return Project.model_validate(payload)
+    except ValidationError as failure:
+        raise RequestValidationError(failure.errors()) from failure
 
 @app.get("/api/geometry")
 async def get_geometry() -> dict:
@@ -413,12 +529,16 @@ async def import_geometry(file: UploadFile = File(...)) -> dict:
     if ext not in (".step", ".stp", ".iges", ".igs", ".brep", ".stl", ".obj"):
         raise HTTPException(status_code=422, detail="Unsupported file extension. Use .step, .iges, .brep, .stl, or .obj.")
         
+    data = await _read_upload(file)
     fd, path = tempfile.mkstemp(suffix=ext)
     try:
         with os.fdopen(fd, "wb") as f:
-            f.write(await file.read())
+            f.write(data)
             
         res = await gmsh_worker.run(gmsh_worker.import_job, path, ext)
+    except ImportRefused as refused:
+        # The file's problem, not the server's: the message says what to change in it.
+        raise HTTPException(status_code=422, detail=str(refused)) from refused
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
     finally:
@@ -427,7 +547,11 @@ async def import_geometry(file: UploadFile = File(...)) -> dict:
             
     project = store.get()
     
-    idx = len([p for p in project.custom_parts if p.key.startswith("imported_")])
+    # After the highest key in use, not the count: a deleted imported_0 must not let the next
+    # import take a key that imported_1 still holds.
+    taken = [int(p.key.split("_", 1)[1]) for p in project.custom_parts
+             if p.key.startswith("imported_") and p.key.split("_", 1)[1].isdigit()]
+    idx = max(taken, default=-1) + 1
     key = f"imported_{idx}"
     
     part = CustomPart(
@@ -477,6 +601,12 @@ async def create_geometry(recipe: dict) -> dict:
 
     try:
         res = await gmsh_worker.run(gmsh_worker.create_job, json.dumps(recipe))
+    except ValueError as refused:
+        # `app.creator` raises ValueError for a recipe it cannot build -- an unknown kind,
+        # too few vertices: the caller's to fix, so 422 with its reason, not a 500.
+        raise HTTPException(status_code=422, detail=str(refused)) from refused
+    except gmsh_worker.WorkerCrashed:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
         
@@ -687,7 +817,7 @@ async def _calculate_deck(project: Project) -> dict:
 #
 # Reading back what a calculation left behind. The registry only *finds* things in
 # this milestone -- which runs exist, which stages each got through, which files are
-# in it; parsing a result is the next one (`plan/postprocessing-plan.md`, P1).
+# in it; parsing a result is the next one (`plan/active/postprocessing-plan.md`, P1).
 
 
 def _results_error(failure: results.ResultsError) -> HTTPException:
@@ -702,13 +832,13 @@ def _results_error(failure: results.ResultsError) -> HTTPException:
 
 
 @app.get("/api/results/runs")
-async def results_runs() -> dict:
+def results_runs() -> dict:
     """Every run on this machine, newest first. Cheap: names and sizes, no parsing."""
     return {"runs": results.runs(), "root": str(calculate.runs_root())}
 
 
 @app.get("/api/results/runs/{run_id}")
-async def results_run(run_id: str) -> dict:
+def results_run(run_id: str) -> dict:
     try:
         return results.describe(run_id)
     except results.ResultsError as failure:
@@ -716,7 +846,7 @@ async def results_run(run_id: str) -> dict:
 
 
 @app.get("/api/results/runs/{run_id}/stages/{index}/fields")
-async def results_stage_fields(run_id: str, index: int) -> dict:
+def results_stage_fields(run_id: str, index: int) -> dict:
     """What this stage can be asked to show.
 
     Derived from the file, never from a list in the source: a variable Kratos declined
@@ -730,7 +860,7 @@ async def results_stage_fields(run_id: str, index: int) -> dict:
 
 
 @app.get("/api/results/runs/{run_id}/stages/{index}/mesh")
-async def results_stage_mesh(run_id: str, index: int) -> dict:
+def results_stage_mesh(run_id: str, index: int) -> dict:
     """The stage's mesh as drawable buffers, one section per named part.
 
     Vertex *i* of a section is the deck's node `node_ids[i]`, at
@@ -744,7 +874,7 @@ async def results_stage_mesh(run_id: str, index: int) -> dict:
 
 
 @app.get("/api/results/runs/{run_id}/stages/{index}/displacement")
-async def results_stage_displacement(run_id: str, index: int) -> dict:
+def results_stage_displacement(run_id: str, index: int) -> dict:
     """The displacement vectors this stage's mesh is deformed by.
 
     Its own route because it is the one quantity the viewer needs all three components
@@ -757,7 +887,7 @@ async def results_stage_displacement(run_id: str, index: int) -> dict:
 
 
 @app.get("/api/results/runs/{run_id}/stages/{index}/at/{node}")
-async def results_stage_at(run_id: str, index: int, node: int) -> dict:
+def results_stage_at(run_id: str, index: int, node: int) -> dict:
     """Every field of this stage at one node, in one request.
 
     `results at <id>` is how a number gets checked against a hand calculation without
@@ -774,7 +904,7 @@ async def results_stage_at(run_id: str, index: int, node: int) -> dict:
 
 
 @app.get("/api/results/runs/{run_id}/stages/{index}/parts")
-async def results_stage_parts(run_id: str, index: int) -> dict:
+def results_stage_parts(run_id: str, index: int) -> dict:
     """The deck's named parts as this stage saw them, and which were live in it."""
     try:
         return results.stage_parts(run_id, index)
@@ -783,7 +913,7 @@ async def results_stage_parts(run_id: str, index: int) -> dict:
 
 
 @app.get("/api/results/runs/{run_id}/stages/{index}/field/{name}")
-async def results_stage_field(run_id: str, index: int, name: str,
+def results_stage_field(run_id: str, index: int, name: str,
                               location: str = "nodes") -> dict:
     """One field: the ids it is defined on, the numbers on them, and their range.
 
@@ -804,7 +934,7 @@ async def results_stage_field(run_id: str, index: int, name: str,
 
 
 @app.get("/api/results/runs/{run_id}/members")
-async def results_members(run_id: str) -> dict:
+def results_members(run_id: str) -> dict:
     """The structural members this run wrote curves for -- the wall, its interface --
     with the stages each has and the quantities each can be plotted for."""
     try:
@@ -814,7 +944,7 @@ async def results_members(run_id: str) -> dict:
 
 
 @app.get("/api/results/runs/{run_id}/members/{member}/{quantity}")
-async def results_member_plot(run_id: str, member: str, quantity: str) -> dict:
+def results_member_plot(run_id: str, member: str, quantity: str) -> dict:
     """One quantity along one member, a curve per stage: what the plot window draws.
 
     422 for a quantity this member does not carry, like an unknown field: the run and
@@ -831,7 +961,7 @@ async def results_member_plot(run_id: str, member: str, quantity: str) -> dict:
 
 
 @app.get("/api/results/runs/{run_id}/files/{name}")
-async def results_file(run_id: str, name: str) -> FileResponse:
+def results_file(run_id: str, name: str) -> FileResponse:
     """One file of one run, as a download.
 
     The first route in this project that opens a file the caller named. Every check
@@ -850,7 +980,7 @@ async def results_file(run_id: str, name: str) -> FileResponse:
 
 
 @app.get("/api/results/runs/{run_id}/archive")
-async def results_archive(run_id: str) -> Response:
+def results_archive(run_id: str) -> Response:
     """The whole run directory as one zip -- the deck, the results and the log.
 
     Server-side rather than zipped in the browser from `live/js/zip.js`: the client
@@ -887,11 +1017,7 @@ async def import_mdpa(file: UploadFile = File(...)) -> dict:
     if ext != ".mdpa":
         raise HTTPException(status_code=422, detail="Unsupported file extension. Use .mdpa.")
 
-    text = (await file.read()).decode("utf-8", errors="replace")
-    try:
-        model = parse(text)
-    except ImportError_ as failure:
-        raise HTTPException(status_code=422, detail=str(failure)) from failure
+    text = (await _read_upload(file)).decode("utf-8", errors="replace")
 
     # A deck's node table is already the world frame in either dimension -- a 2D deck
     # is the x-y plane at z = 0, which is where a 2D model lives -- so nothing about
@@ -900,19 +1026,28 @@ async def import_mdpa(file: UploadFile = File(...)) -> dict:
     # `node_parts` is what lets the preview answer "which SubModelParts is this node
     # in" when a node is clicked (live/js/node-parts.js).
     from app import node_parts
-    return {**model.to_dict(), "node_parts": node_parts.of_model(model)}
+
+    def preview() -> dict:
+        model = parse(text)
+        return {**model.to_dict(), "node_parts": node_parts.of_model(model)}
+
+    try:
+        # Off the event loop: a real deck is megabytes, seconds of parsing.
+        return await asyncio.to_thread(preview)
+    except ImportError_ as failure:
+        raise HTTPException(status_code=422, detail=str(failure)) from failure
 
 
 # ── Static ──────────────────────────────────────────────────────────────────
 
 @app.get("/")
 async def index() -> FileResponse:
-    live_index = LIVE / "index.html"
-    return FileResponse(live_index if live_index.exists() else FROZEN / "index.html")
+    return FileResponse(LIVE / "index.html")
 
 
-for folder in ("css", "js", "assets", "vendor"):
-    app.mount(f"/{folder}", StaticFiles(directory=FROZEN / folder), name=folder)
+for folder in ("css", "js"):
+    app.mount(f"/{folder}", StaticFiles(directory=BASE / folder), name=folder)
+for folder in ("assets", "vendor"):
+    app.mount(f"/{folder}", StaticFiles(directory=ROOT / folder), name=folder)
 
-if LIVE.exists():
-    app.mount("/live", StaticFiles(directory=LIVE), name="live")
+app.mount("/live", StaticFiles(directory=LIVE), name="live")

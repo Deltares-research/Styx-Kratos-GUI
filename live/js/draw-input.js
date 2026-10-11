@@ -192,28 +192,13 @@ App.DrawInput = (function () {
     else updatePreview(pt);
   }
   
+  /* Right-click finishes an open shape -- a line or a polygon has no fixed vertex count.
+     Everything else completes itself on its last click, so there is nothing to finish. */
   function onContextMenu(ev) {
     if (state !== 'PLACING') return;
     ev.preventDefault();
     ev.stopPropagation();
-    if (activeMode === 'load' && pts.length === 2) {
-      var a = pts[0], b = pts[1];
-      var loadPoints;
-      if (App.PROJECT && App.PROJECT.dimension === 2) {
-        loadPoints = [new THREE.Vector3(a[0], a[1], a[2]),
-                      new THREE.Vector3(b[0], b[1], b[2])];
-      } else {
-        loadPoints = [
-          new THREE.Vector3(a[0], a[1], a[2]), new THREE.Vector3(b[0], a[1], a[2]),
-          new THREE.Vector3(b[0], b[1], a[2]), new THREE.Vector3(a[0], b[1], a[2]),
-          new THREE.Vector3(a[0], a[1], a[2])
-        ];
-      }
-      previewGroup.add(new THREE.Line(
-        new THREE.BufferGeometry().setFromPoints(loadPoints), material));
-    } else if (activeMode === 'line' || activeMode === 'polygon') {
-      commit();
-    }
+    if (activeMode === 'line' || activeMode === 'polygon') commit();
   }
   
   function handleCommand(text) {
@@ -309,6 +294,23 @@ App.DrawInput = (function () {
       var boxMesh = new THREE.Mesh(boxGeo, pMaterial);
       boxMesh.position.set(v0[0] + w/2, v0[1] + h/2, v0[2] + d/2);
       previewGroup.add(boxMesh);
+    } else if (activeMode === 'load' && pts.length === 2) {
+      // The load from the first click to the pointer: a line along the section's
+      // ground, or the footprint rectangle in plan for a surface load in 3D.
+      var a = pts[0], b = pts[1];
+      var loadPoints;
+      if (App.PROJECT && App.PROJECT.dimension === 2) {
+        loadPoints = [new THREE.Vector3(a[0], a[1], a[2]),
+                      new THREE.Vector3(b[0], b[1], b[2])];
+      } else {
+        loadPoints = [
+          new THREE.Vector3(a[0], a[1], a[2]), new THREE.Vector3(b[0], a[1], a[2]),
+          new THREE.Vector3(b[0], a[1], b[2]), new THREE.Vector3(a[0], a[1], b[2]),
+          new THREE.Vector3(a[0], a[1], a[2])
+        ];
+      }
+      previewGroup.add(new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints(loadPoints), material));
     } else if (activeMode === 'cylinder' && pts.length === 2) {
       var v0 = pts[0], v1 = pts[1];
       var r = Math.sqrt(Math.pow(v1[0]-v0[0],2) + Math.pow(v1[1]-v0[1],2));

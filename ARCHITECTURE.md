@@ -63,8 +63,8 @@ strings and hand them to the same handlers.
 |---|---|---|
 | The GUI | Draw soil, structures, loads, water, phases; mesh; Calculate (F9) | `live/js/*`, `patches.js` |
 | Command box | `mesh`, `water`, `phases`, `node <id>`, `colour <part>`, `results …`, `results plot …` | each module's `handleCommand` |
-| `run <file.py>` | Builds the open model by running a Python file that defines a `Project` (e.g. `run app/crow.py`) | `script.py`, `POST /api/project/script` |
-| A finished deck | A Kratos deck written elsewhere, shown as its own mesh and run as its own files (e.g. `run app/eemdijk.py`) | `deck.py`, `live/js/deck.js` |
+| `run <file.py>` | Builds the open model by running a Python file that defines a `Project` (e.g. `run tests/models/excavation.py`) | `script.py`, `POST /api/project/script` |
+| A finished deck | A Kratos deck written elsewhere, shown as its own mesh and run as its own files, from a script that names it (`deck.deck_project`) | `deck.py`, `live/js/deck.js` |
 | Import mesh | Read an `.mdpa` back into mesh data | `mdpa_import.py`, `POST /api/import/mdpa` |
 | Export | Write the deck without running it | `POST /api/export/mdpa`, `live/js/export.js` |
 
@@ -79,7 +79,6 @@ strings and hand them to the same handlers.
 | Running | `calculate.py` (run directory, subprocess, failure reading), `kratos_runner.py` (runs inside Kratos' Python) |
 | Other inputs | `script.py` (`run <file.py>`), `deck.py` (finished decks), `mdpa_import.py`, `node_parts.py` |
 | Results | `results.py` (runs registry, file access, cache), `gid_results.py`, `result_fields.py` (catalogue, units, invariants), `result_mesh.py` (drawable buffers), `result_parts.py`, `result_members.py` (wall and interface curves) |
-| Example models | `crow.py` (CROW sheet-pile excavation), `eemdijk.py` (Eemdijk dike deck) |
 
 ## HTTP API
 
@@ -98,10 +97,10 @@ strings and hand them to the same handlers.
 
 | Role | Modules |
 |---|---|
-| Shell (frozen) | `js/` is the original static mockup, served unchanged: menus, toolbars, explorer, dialogs, command box |
+| Shell (frozen) | `live/base/js` and `live/base/css`, the original mockup's UI, served unchanged at `/js` and `/css`: menus, toolbars, explorer, dialogs, command box |
 | Glue | `patches.js` wires the live behaviour into the frozen shell: menu actions, rails, panels, windows |
 | Data | `api.js`, `model.js` (server project → shape the shell expects), `buffers.js`, `history.js` (undo/redo) |
-| View | `viewport.js` (three.js, replaces the frozen one), `orbit.js` (Y-up camera), `canvas-renderer.js`, `ruler.js`, `mesh-labels.js`, `part-colors.js`, `node-parts.js` |
+| View | `viewport.js` (three.js), `orbit.js` (Y-up camera, replaces the base one), `canvas-renderer.js`, `ruler.js`, `mesh-labels.js`, `part-colors.js`, `node-parts.js` |
 | Modelling tools | `draw-input.js`, `beams.js`, `anchors.js`, `interfaces.js`, `loads.js`, `normal-loads.js`, `water-command.js`, `soil-volume-dialog.js`, `material-library.js` |
 | Mesh and phases | `mesh-settings.js`, `phases.js` |
 | Files | `export.js`, `import-dialog.js`, `mdpa-import-dialog.js`, `download.js`, `zip.js`, `deck.js` |
@@ -134,7 +133,7 @@ run directory (~/KratosGUI/runs/<deck>_<stamp>/)
   probe and CSV export.
 - **Plot along the wall.** Bending moment, shear force, normal force, displacements and
   interface tractions against the level y, one panel per phase. It follows Kratos' own
-  CROW validation figure, with Kratos' sign convention. The window is modeless and can
+  staged-excavation validation figure, with Kratos' sign convention. The window is modeless and can
   save SVG or CSV.
 
 ## Testing
@@ -142,14 +141,14 @@ run directory (~/KratosGUI/runs/<deck>_<stamp>/)
 | Suite | How to run | What it covers |
 |---|---|---|
 | Server | `python -m pytest -q` from `server/` (1273 cases, ~70 s) | Schema, geometry, meshing, export (golden decks), phases, API, results parsing |
-| CROW benchmark | Part of the server suite | A real CROW run (`server/tests/fixtures/crow_run/`) held to Kratos' own validated CROW results: wall forces and displacements, and the plotted curves per stage |
+| Live Kratos regression | Part of the server suite; skipped where Kratos is not installed | The staged test model (`server/tests/models/excavation.py`) run through Kratos once per session and checked for invariants any correct run holds: every stage has output, parts and stages agree with the deck, hydrostatic pore pressure, signs, wall curves (`server/tests/test_results_regression.py`) |
 | Headless JS | `python live/tests/run_headless.py` (302 cases) | Every DOM-free module: phases, results, results-render, results-plot, part colours, water, node parts, mesh settings, deck |
-| JS syntax | `python live/tests/syntax_check.py` | Every `live/js` and test file parses. One syntax error silently disables the whole live layer |
+| JS syntax | `python live/tests/syntax_check.py` | Every `live/base/js`, `live/js` and test file parses. One syntax error silently disables the whole live layer |
 | Browser | open `live/tests/index.html` | Everything, including DOM, three.js and real events |
 
-The CROW fixture is generated, never edited: `python tests/make_crow_fixture.py --write`
-distils a run directory plus Kratos' validation case. `--members` adds only the member
-output and its reference curves.
+No recorded Kratos run is kept in the repository. Without Kratos, the results pipeline
+is exercised on synthetic GiD output from `server/tests/fakes/` (a fake runner and
+`gid_writer.py`), built from the same test model.
 
 ## Ideas that carry the design
 
@@ -157,7 +156,7 @@ output and its reference curves.
 |---|---|
 | Gmsh in a 1-worker subprocess | It is a process-global singleton, and the subprocess also contains OCC hard crashes |
 | Kratos in a subprocess, configured by path | Its compiled extensions are bound to the Python they were built for, which is usually not the server's |
-| Frozen `js/` + live `live/js/` | The server mounts the frozen files in place. Only `viewport.js` (and the camera in `orbit.js`) is replaced; the rest is wrapped by `patches.js` |
+| Frozen `live/base/` + live `live/js/` | The server mounts the base files in place. Only the camera in `orbit.js` is replaced; the rest is wrapped by `patches.js` |
 | Part keys | One string is the gmsh physical group, `userData.key`, tree `obj:` and `OBJECT_PROPS` key |
 | The command line is the feature | Every button builds a command string. One implementation per action, and every model can be scripted (`run <file.py>`) |
 | DOM-free logic, thin DOM | Anything decidable without a page goes in a module with no `document`, so the headless runner can test it. `patches.js` and `results-view.js` only host it |

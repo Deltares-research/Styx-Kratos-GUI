@@ -34,7 +34,7 @@ from dataclasses import dataclass
 import gmsh
 
 from app import build, interfaces, meshing, phases
-from app import kratos_processes
+from app import kratos_materials, kratos_processes
 from app.kratos_materials import material_parameters
 from app.schemas import (Beam, LineLoad, MeshRequest, PanelSection, PointLoad,
                          Project, SurfaceLoad)
@@ -48,20 +48,25 @@ ELEMENTS: dict[tuple[int, int], tuple[str, tuple[int, ...]]] = {
 }
 
 # Sheet piles: 1D structural elements living inside the 2D section, sharing its nodes.
-# Both 2D classes and their (end, end, midside) connectivity are read off the reference
-# decks -- examples/dike_with_sheet_pile.mdpa writes the linear one,
-# examples/crow_case.mdpa the quadratic one -- so the gmsh order maps straight through.
+# Both 2D classes and their (end, end, midside) connectivity are read off reference
+# GeoMechanics decks, one of each order, so the gmsh order maps straight through.
 #
 # The 3D entries are the members: bored piles, king posts and struts. NOT CONFIRMED by
-# any deck in examples/ -- every one of them is plane strain -- so these follow Kratos
+# any reference deck -- every one of them is plane strain -- so these follow Kratos
 # StructuralMechanicsApplication's naming rather than a fixture here, exactly as the
 # constitutive laws in app/kratos_materials.py already do. Check them against the first
 # real 3D run; they are named here, in one place, so that is a one-line change.
+#
+# Every name here is checked against the registrations of the Kratos build that runs the
+# deck (tests/kratos/test_kratos_registry.py). That is how two of them were found not to
+# exist: Kratos has no 2-node *curved* beam (an older reference deck writes one anyway,
+# so a first-order section with a pile never loaded) and no 3-node *straight* one
+# in 3D. The 2-node beams are straight, the 3-node ones curved, in both dimensions.
 BEAMS: dict[tuple[int, int], tuple[str, tuple[int, ...]]] = {
-    (2, 1): ("LinearTimoshenkoCurvedBeamElement2D2N", (0, 1)),
+    (2, 1): ("LinearTimoshenkoBeamElement2D2N", (0, 1)),
     (2, 8): ("LinearTimoshenkoCurvedBeamElement2D3N", (0, 1, 2)),
     (3, 1): ("LinearTimoshenkoBeamElement3D2N", (0, 1)),
-    (3, 8): ("LinearTimoshenkoBeamElement3D3N", (0, 1, 2)),
+    (3, 8): ("LinearTimoshenkoCurvedBeamElement3D3N", (0, 1, 2)),
 }
 
 # Wall panels: 2D structural elements living inside the 3D solid, sharing its nodes.
@@ -74,13 +79,13 @@ SHELLS: dict[tuple[int, int], tuple[str, tuple[int, ...]]] = {
 }
 
 # Zero-thickness contact between a structure and the soil, or between two soils. Only
-# the quadratic class is pinned by a fixture: examples/crow_case.mdpa writes
+# the quadratic class is pinned by a reference deck, which writes
 # `Geo_UPwLineInterfacePlaneStrainDiffOrderElement3Plus3N` with six nodes -- three from
 # the sheet pile, then their three coincident copies on one face of the soil -- and one
 # element per pile segment per face, the two faces carrying opposite node orders.
 #
 # The linear name below follows the same convention with the DiffOrder infix dropped, as
-# the beam and soil classes do between orders, but no deck in examples/ contains it.
+# the beam and soil classes do between orders, but no reference deck contains it.
 # Check it against the first real first-order run; it is named here alone.
 #
 # 2D only. Every reference deck is plane strain, and a 3D interface is a surface element
@@ -95,7 +100,7 @@ TRUSSES: dict[int, str] = {
     2: "LinearTrussElement2D2N",
     3: "LinearTrussElement3D2N",
 }
-"""The anchor tie, per model dimension. The 2D name is read off examples/crow_case.mdpa;
+"""The anchor tie, per model dimension. The 2D name is read off a reference deck;
 the 3D one is its documented counterpart and carries the same caveat as `SHELLS`."""
 
 # The boundary of a 2D body is a line, of a 3D body a surface.
@@ -111,10 +116,15 @@ CONDITIONS: dict[tuple[int, int], tuple[str, tuple[int, ...]]] = {
 # type and hands back gmsh's own line order (already Kratos'), the same way `INTERFACES`
 # is keyed. 2D only, like a free interface. Both names are confirmed against a working
 # reference (Deltares/FEA-Tools' MiscellaneousTools/InterfaceInserter,
-# test_create_interfaces.py for the linear class, examples/crow_config.json for the
-# quadratic one).
+# test_create_interfaces.py for the linear class, a reference deck's ProjectParameters
+# for the quadratic one).
+#
+# The linear name was `LineNormalLoadCondition2D2N` until the registry check above found
+# no such condition in the Kratos that runs these decks; GeoMechanics' linear normal load
+# is `UPwNormalFaceLoadCondition2D2N`, reading the same NORMAL_CONTACT_STRESS the
+# normal-load process sets (tests/kratos/test_live_constructs.py runs it).
 NORMAL_LOAD_CONDITIONS: dict[tuple[int, int], str] = {
-    (2, 2): "LineNormalLoadCondition2D2N",
+    (2, 2): "UPwNormalFaceLoadCondition2D2N",
     (2, 3): "LineNormalLoadDiffOrderCondition2D3N",
 }
 
@@ -127,6 +137,17 @@ NORMAL_LOAD_CONDITIONS: dict[tuple[int, int], str] = {
 EDGES: dict[int, tuple[tuple[int, ...], ...]] = {
     3: ((0, 1), (1, 2), (2, 0)),
     6: ((0, 1, 3), (1, 2, 4), (2, 0, 5)),
+}
+
+# The faces of a 3D continuum element, as Kratos' own Tetrahedra3D4 / Tetrahedra3D10
+# GenerateFaces lists them -- each pointing out of the element, corners then the
+# matching mid-side nodes. Kratos matches a face condition to its element by node
+# sequence up to *rotation* but never reversal, so a load face written the other way
+# round is "found without any corresponding element" and the run stops. Keyed by node
+# count, indices into connectivity already in Kratos order.
+FACES: dict[int, tuple[tuple[int, ...], ...]] = {
+    4: ((2, 3, 1), (0, 3, 2), (0, 1, 3), (0, 2, 1)),
+    10: ((0, 2, 1, 6, 5, 4), (0, 3, 2, 7, 9, 6), (0, 1, 3, 4, 8, 7), (2, 3, 1, 9, 8, 5)),
 }
 
 # Reversing the first two corners flips an element; the midside nodes move with the
@@ -166,7 +187,7 @@ class ExportError(RuntimeError):
     """The mesh cannot be expressed as a Kratos deck. Surfaced to the command log."""
 
 
-def export_project(project: Project, settings: MeshRequest,
+def export_project(project: Project, settings: MeshRequest | None = None,
                    include_materials: bool = True) -> dict:
     """Mesh the project and render it as a Kratos deck.
 
@@ -175,7 +196,19 @@ def export_project(project: Project, settings: MeshRequest,
     worker's process boundary unchanged. `materials` is None when the companion
     MaterialParameters.json is not wanted, and `initial_materials` is None unless some
     stage reads one -- only a deck with a K0 stage does (plan sec C4).
+
+    Without `settings` the project meshes with the settings it carries (`Project.mesh`),
+    the ones the GUI's Generate mesh uses. The call runs in a gmsh session of its own when
+    there is none (`build.session` is re-entrant, so the worker's long-lived one is used
+    as it is), which lets a script or a test export a model in one line.
     """
+    if settings is None:
+        settings = MeshRequest(**project.mesh.model_dump())
+    with build.session():
+        return _export(project, settings, include_materials)
+
+
+def _export(project: Project, settings: MeshRequest, include_materials: bool) -> dict:
     mesh = meshing.mesh_project(
         project, element_size=settings.element_size, order=settings.order,
         refinements=settings.refinements, algorithm_3d=settings.algorithm_3d,
@@ -333,11 +366,16 @@ def export_project(project: Project, settings: MeshRequest,
         (names[key], project.interface_section(_interface_of(project, key).section),
          _adjacent_material(project, key, names, material_by_part))
         for key, _, _ in interface_blocks]
-    materials, material_warnings = (
-        material_parameters(project, part_materials, dim, beam_properties,
-                            anchor_properties, panel_properties, interface_properties)
-        if include_materials else (None, [])
-    )
+    try:
+        materials, material_warnings = (
+            material_parameters(project, part_materials, dim, beam_properties,
+                                anchor_properties, panel_properties, interface_properties)
+            if include_materials else (None, [])
+        )
+    except kratos_materials.MaterialError as failure:
+        # A property set that cannot be written is the user's to fix, and says what;
+        # surfaced like every other refusal of the export rather than as a crash.
+        raise ExportError(str(failure)) from None
     warnings.extend(material_warnings)
     # Kratos has no quadratic shell, so a wall in a quadratic mesh is written from the
     # corner nodes of each 6-node face: compatible along the soil's linear edges, one
@@ -443,6 +481,9 @@ def export_project(project: Project, settings: MeshRequest,
         # how Kratos finds the .mdpa again. Returned rather than re-derived by whoever
         # writes the files, so the name in the deck and the name on disk cannot drift.
         "deck_name": deck_name(project),
+        # The system every number in the deck is in, recorded with the run so its results
+        # are read in it (`calculate.write_deck`, `app.result_fields`).
+        "unit_system": project.unit_system,
         # The node table on its own, in the deck's own numbering. The viewport's node-ID
         # labels can only be drawn from here: a gmsh tag is not a Kratos ID -- `node_id`
         # above renumbers 1..N over the tags the blocks actually use, and the interface
@@ -959,8 +1000,7 @@ def _shell_section_of(project: Project, key: str) -> PanelSection:
     if panel is not None:
         return project.panel_section(panel.section)
     beam = project.beam_section(_beam_of(project, key).section)
-    return PanelSection(id=beam.id, name=beam.name, E=beam.E, nu=beam.nu,
-                        thickness=beam.area, density=beam.density)
+    return PanelSection.from_beam_section(beam, beam.id, beam.name)
 
 
 def _load_variable(load: PointLoad | LineLoad | SurfaceLoad,
@@ -991,7 +1031,7 @@ def _phreatic(project: Project) -> tuple[float, float]:
     """
     if project.water is None:
         return (project.domain.y_bottom, project.water_specific_weight)
-    return (project.water.y, project.water.specific_weight)
+    return (project.water.y, project.water_specific_weight)
 
 
 def _world_coordinates() -> dict[int, tuple[float, float, float]]:
@@ -1313,25 +1353,45 @@ def _align_conditions(conditions: list[tuple[str, str, list[list[int]]]],
     direction the line was drawn in (`_drawn_order`), which is the only statement of
     which side of an internal face the load acts on.
 
-    3D faces are left alone: Kratos rotates those itself, and only the continuum blocks
-    are offered here in any case.
+    A 3D face is aligned the same way, to the face as its element generates it
+    (`FACES`). Kratos *rotates* a face to match, which once read as reason enough to
+    leave faces alone -- but it never *reverses* one, and gmsh's boundary triangles came
+    out reversed against the tetrahedra often enough that no 3D load had ever loaded.
     """
     edges: dict[frozenset[int], list[tuple[int, ...]]] = {}
+    faces: dict[frozenset[int], list[tuple[int, ...]]] = {}
     for _, _, rows in soil_blocks:
         for row in rows:
-            for order in EDGES.get(len(row), ()):
-                edge = tuple(row[index] for index in order)
-                found = edges.setdefault(frozenset(edge), [])
-                if edge not in found:
-                    found.append(edge)
+            for table, into in ((EDGES, edges), (FACES, faces)):
+                for order in table.get(len(row), ()):
+                    entity = tuple(row[index] for index in order)
+                    found = into.setdefault(frozenset(entity), [])
+                    if entity not in found:
+                        found.append(entity)
     for _, _, rows in conditions:
         for index, row in enumerate(rows):
-            found = [edge for edge in edges.get(frozenset(row), ())
-                     if len(edge) == len(row)]
-            if not found:
+            key = frozenset(row)
+            found = [face for face in faces.get(key, ()) if len(face) == len(row)]
+            if found:
+                rows[index] = list(next((face for face in found if _rotated(face, row)),
+                                        found[0]))
                 continue
-            rows[index] = list(next((edge for edge in found if list(edge) == row),
-                                    found[0]))
+            found = [edge for edge in edges.get(key, ()) if len(edge) == len(row)]
+            if found:
+                rows[index] = list(next((edge for edge in found if list(edge) == row),
+                                        found[0]))
+
+
+def _rotated(face: tuple[int, ...], row: list[int]) -> bool:
+    """Whether `row` is the triangular `face` rotated: corners and mid-sides turn
+    together, the way Kratos compares them."""
+    for k in range(3):
+        turned = list(face[k:3] + face[:k])
+        if len(face) == 6:
+            turned += list(face[3 + k:] + face[3:3 + k])
+        if turned == row:
+            return True
+    return False
 
 
 def _under_load(corners: list[int], world: dict[int, tuple[float, float, float]],
@@ -1438,7 +1498,7 @@ def _number_conditions(
     """Assign condition ids in emission order, in their own id space starting at 1.
 
     Property 0, always: a load's magnitude is not read off a Properties block (see
-    `_load_variable`), and every reference GeoMechanics deck in examples/ writes 0 here
+    `_load_variable`), and every reference GeoMechanics deck writes 0 here
     for exactly this condition class.
     """
     numbered = []

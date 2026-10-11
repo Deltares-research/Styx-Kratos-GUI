@@ -31,6 +31,8 @@
   test('empty borehole stack supports add, insert, delete and collision-free re-add', function () {
     var saved = { layers: App.LAYERS, boreholes: App.BOREHOLES, materials: App.MATERIALS };
     var host = document.createElement('div'); host.id = 'modal-layer'; document.body.appendChild(host);
+    // Closing the dialog remounts the Model explorer, which needs its host.
+    var tree = document.createElement('div'); tree.id = 'tree-model'; document.body.appendChild(tree);
     App.LAYERS = []; App.MATERIALS = [];
     App.BOREHOLES = [{ id: 'bh1', name: 'BH-1', x: 0, y: 0, head: 0, water: -1 }];
     try {
@@ -51,7 +53,7 @@
       T.eq(App.LAYERS.length, 0);
       click('Add'); T.eq(App.LAYERS.length, 1);
     } finally {
-      host.querySelector('.dlg-x').click(); host.remove();
+      host.querySelector('.dlg-x').click(); host.remove(); tree.remove();
       App.LAYERS = saved.layers; App.BOREHOLES = saved.boreholes; App.MATERIALS = saved.materials;
     }
   });

@@ -157,8 +157,8 @@ def test_a_first_order_run_meshes_the_pile_as_two_node_lines():
 
 def test_every_sheet_pile_node_is_also_a_soil_node():
     """Conformity is the whole point of embedding the curve, and it is what the
-    reference deck shows: in examples/dike_with_sheet_pile.mdpa every one of the
-    sheet pile's nodes belongs to the soil mesh too."""
+    Kratos decks show: in a sheet-pile deck every one of the sheet pile's nodes
+    belongs to the soil mesh too."""
     with build.session():
         _, beam_nodes, soil_nodes = beam_mesh(piled_section())
 
@@ -247,18 +247,18 @@ def test_the_anchor_tail_gets_exactly_one_node_belonging_to_nothing_else():
 # thing to want: the wall is where the bending moments are read.
 
 
-def crow_like():
-    from tests.crow_example import crow
-    return crow.crow_project(staged=False)
+def excavation_like():
+    from tests.models import excavation
+    return excavation.excavation_project(staged=False)
 
 
-def crow_deck(**sizes):
-    """The CROW model exported with the given per-part sizes, parsed back."""
+def excavation_deck(**sizes):
+    """The test model exported with the given per-part sizes, parsed back."""
     from app import kratos
-    from tests.crow_example import crow
+    from tests.models import excavation
     from app.schemas import MeshRequest
     from tests import mdpa
-    project = crow.crow_project(staged=False)
+    project = excavation.excavation_project(staged=False)
     base = {f"soil_{layer.id}": 2.0 for layer in project.layers}
     with build.session():
         exported = kratos.export_project(
@@ -274,15 +274,15 @@ def wall_elements(deck) -> int:
 
 def test_a_size_asked_for_a_structure_reaches_the_mesh():
     """Coarse wall, fine wall, same soil: the wall's own size is what changes it."""
-    coarse = wall_elements(crow_deck())
-    fine = wall_elements(crow_deck(sheetpile=0.5))
+    coarse = wall_elements(excavation_deck())
+    fine = wall_elements(excavation_deck(sheetpile=0.5))
     assert fine > coarse * 2, (coarse, fine)
 
 
 def test_the_contact_follows_the_wall_it_holds():
     """The interface is split off the same curve, so refining the wall refines it too --
     one element a side, which is what keeps the two conformal."""
-    deck = crow_deck(sheetpile=0.5)
+    deck = excavation_deck(sheetpile=0.5)
     contacts = sum(len(b.entries) for b in deck.elements
                    if b.name.startswith("Geo_UPwLineInterface"))
     assert contacts == 2 * wall_elements(deck)
@@ -292,15 +292,15 @@ def test_a_finer_wall_does_not_refine_the_far_field():
     """A `Restrict` field applies to the entities it names. Asking for a fine wall must
     not drag the whole model finer -- the bottom boundary is 60 m down and has no reason
     to notice."""
-    plain = len(crow_deck().parts["Bottom_Fixed"].nodes)
-    refined = len(crow_deck(sheetpile=0.5).parts["Bottom_Fixed"].nodes)
+    plain = len(excavation_deck().parts["Bottom_Fixed"].nodes)
+    refined = len(excavation_deck(sheetpile=0.5).parts["Bottom_Fixed"].nodes)
     assert refined == plain
 
 
 def test_the_structure_size_is_the_same_field_the_soil_uses():
     """One mechanism, not two: `body_sizes` is keyed by part key and a structure has
     one, so nothing new is asked of the user or of the Mesh properties dialog."""
-    assert "sheetpile" in crow_like().part_keys()
+    assert "sheetpile" in excavation_like().part_keys()
 
 
 # ── A graded mesh ───────────────────────────────────────────────────────────
@@ -339,7 +339,7 @@ def a_box(**kw):
 
 def test_a_box_without_a_band_steps_straight_back_to_the_model_size():
     """The behaviour every refinement had before `thickness`, and still the default."""
-    bands = edge_lengths_by_band(crow_like(), element_size=8.0, refinements=[a_box()])
+    bands = edge_lengths_by_band(excavation_like(), element_size=8.0, refinements=[a_box()])
     assert bands[0] < 1.5
     assert bands[20] > 4.0, "without a band the size jumps at the edge of the box"
 
@@ -353,7 +353,7 @@ def test_a_band_grades_the_size_back_out_instead_of_stepping():
     *smaller* than the one inside it by more than that noise, and that no strip is more
     than twice the one inside it -- a step of four or more is the jump a bare box makes.
     """
-    bands = edge_lengths_by_band(crow_like(), element_size=8.0,
+    bands = edge_lengths_by_band(excavation_like(), element_size=8.0,
                                  refinements=[a_box(thickness=45.0)])
     sizes = [bands[b] for b in sorted(bands)]
     assert sizes[0] < 1.5 and sizes[-1] > 6.0
@@ -361,10 +361,10 @@ def test_a_band_grades_the_size_back_out_instead_of_stepping():
     assert all(b < 2.5 * a for a, b in zip(sizes, sizes[1:])), sizes
 
 
-def test_the_crow_model_carries_its_own_graded_mesh():
-    """`examples/crow/crow.py` is the model a user opens, so the grading has to travel with the
+def test_the_test_model_carries_its_own_graded_mesh():
+    """A model script is what a user opens, so the grading has to travel with the
     project rather than being typed into a mesh dialog afterwards."""
-    project = crow_like()
+    project = excavation_like()
     assert project.mesh.refinements, "the project carries its refinement"
     bands = edge_lengths_by_band(
         project, element_size=project.mesh.element_size,

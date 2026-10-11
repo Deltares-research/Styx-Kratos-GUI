@@ -30,6 +30,30 @@
     return ka.every(function (k) { return same(a[k], b[k]); });
   }
 
+  /* App's code -- functions, and objects carrying functions -- by name. Data such as
+     App.PROJECT is left out: tests legitimately leave a different project behind. */
+  function codeOf(app) {
+    var snapshot = {};
+    Object.keys(app || {}).forEach(function (key) {
+      var value = app[key];
+      if (typeof value === 'function') { snapshot[key] = value; return; }
+      if (value && typeof value === 'object' && Object.keys(value).some(function (k) {
+        return typeof value[k] === 'function';
+      })) snapshot[key] = value;
+    });
+    return snapshot;
+  }
+
+  /* Puts back every module a test swapped. Each test starts from the same App, so a
+     stub installed by one (test-results.js's setup() is the pattern) cannot reach the
+     next. */
+  function restoreLeaks(app, before) {
+    var after = codeOf(app);
+    Object.keys(before).forEach(function (key) {
+      if (after[key] !== before[key]) app[key] = before[key];
+    });
+  }
+
   var T = {
     test: function (name, fn) { cases.push({ name: name, fn: fn }); },
 
@@ -56,10 +80,25 @@
     },
 
     run: function () {
-      var results = { passed: 0, failed: 0, failures: [], names: [] };
+      var results = { passed: 0, failed: 0, failures: [], names: [], uncaught: [] };
+      var current = '(before the first test)';
+      // A callback a test left behind throws outside every test; name the one that was running.
+      function stray(message) { results.uncaught.push(current + '\n    ' + message); }
+      if (global.addEventListener) {
+        global.addEventListener('error', function (e) { stray(e.message); });
+        global.addEventListener('unhandledrejection', function (e) {
+          stray(e.reason && e.reason.message || String(e.reason));
+        });
+      }
       return cases.reduce(function (chain, c) {
         return chain.then(function () {
-          return Promise.resolve().then(c.fn).then(function () {
+          current = c.name;
+          var before = codeOf(global.App);
+          function isolate() { restoreLeaks(global.App, before); }
+          return Promise.resolve().then(c.fn).then(isolate, function (err) {
+            isolate();
+            throw err;
+          }).then(function () {
             results.passed++;
             results.names.push('PASS ' + c.name);
           }, function (err) {
@@ -70,7 +109,7 @@
         });
       }, Promise.resolve()).then(function () {
         results.total = cases.length;
-        results.ok = results.failed === 0;
+        results.ok = results.failed === 0 && results.uncaught.length === 0;
         return results;
       });
     }

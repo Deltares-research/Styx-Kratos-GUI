@@ -37,7 +37,9 @@
     if (!arg) {
       return { ok: true, body: null, message: water
         ? 'Water level: ' + fixed(water.y) + ' m (specific weight '
-          + water.specific_weight + ' kN/m³).'
+          + (water.specific_weight === null || water.specific_weight === undefined
+             ? App.Units.fromSI(10000, 'specific weight') : water.specific_weight)
+          + ' ' + App.Units.label('specific weight') + ').'
         : 'This model has no water level. ' + USAGE };
     }
 

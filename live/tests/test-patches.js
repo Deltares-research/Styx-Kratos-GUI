@@ -12,12 +12,14 @@
     var saved = {
       action: App.runAction, viewport: App.Viewport, command: App.Command,
       state: App.state, setMode: App.setMode, select: App.selectObject,
-      explorerMountTree: App.Explorer && App.Explorer.mountTree
+      explorerMountTree: App.Explorer && App.Explorer.mountTree, menu: App.Menu
     };
     var lines = [], selected = null;
     App.state = { mode: 'soil' };
     App.setMode = function (mode) { App.state.mode = mode; };
     App.selectObject = function (key) { selected = key; };
+    // install() remounts the menubar; the test page has no #menubar to mount into.
+    App.Menu = { mountBar: function () {}, openAt: function () {} };
     App.Command = {
       write: function (kind, text) { lines.push(kind + ':' + text); },
       ok: function (text) { lines.push('ok:' + text); },
@@ -37,6 +39,7 @@
     } finally {
       App.runAction = saved.action; App.Viewport = saved.viewport; App.Command = saved.command;
       App.state = saved.state; App.setMode = saved.setMode; App.selectObject = saved.select;
+      App.Menu = saved.menu;
       if (App.Explorer && saved.explorerMountTree) App.Explorer.mountTree = saved.explorerMountTree;
       App.LivePatches.resetForTests();
     }
@@ -436,6 +439,10 @@
                  note: function () {}, err: function () {} },
       Toolbars: { setToolbarState: function () {} },
       Viewport: { setViewMode: function () {}, refresh: function () { return Promise.resolve(); } },
+      // The switch adopts the server's answer through App.Model.apply (so Undo can take
+      // it back); these answers are two-field stand-ins, not projects a model can build.
+      Model: { apply: function (project) { App.PROJECT = project; },
+               load: function () { return Promise.resolve(); } },
       runAction: function () { throw new Error('frozen action should not run'); },
       PROJECT: null
     }, extra);
@@ -695,9 +702,9 @@
 })();
 
 (function () {
-  /* There is no menu item for the CROW example, and that is the point. Models are
-     opened by running the Python that builds them -- `run app/crow.py` in the command
-     box, covered below -- which works for any model rather than only the one somebody
+  /* There is no menu item for an example model, and that is the point. Models are
+     opened by running the Python that builds them -- `run models/pit.py` in the
+     command box, covered below -- which works for any model rather than only the one somebody
      thought to add a button for. A menu item for it existed and was removed; this is
      what stops it coming back. */
 
@@ -705,8 +712,8 @@
     App.LivePatches.install();
     var file = (App.MENUS || []).filter(function (m) { return m.label === 'File'; })[0];
     var items = file.items || [];
-    T.ok(!items.some(function (i) { return i && /crow/i.test(i.label || ''); }),
-      'the File menu offers no CROW example');
+    T.ok(!items.some(function (i) { return i && /example/i.test(i.label || ''); }),
+      'the File menu offers no example model');
     T.ok(!items.some(function (i) { return i && /Example$/.test(i.action || ''); }),
       'nor any other one-click example model');
   });
@@ -719,29 +726,38 @@
     var saved = {
       api: App.Api, viewport: App.Viewport, command: App.Command, state: App.state,
       setMode: App.setMode, select: App.selectObject, model: App.Model,
-      history: App.History, project: App.PROJECT
+      history: App.History, project: App.PROJECT, action: App.runAction,
+      explorer: App.Explorer, resultsView: App.ResultsView, menu: App.Menu
     };
-    var ctx = { posted: [], lines: [], meshed: 0, applied: null, saved: saved };
+    var ctx = { posted: [], lines: [], meshed: 0, applied: null, frozen: [], saved: saved };
     App.state = { mode: 'soil' };
     App.setMode = function (m) { App.state.mode = m; };
     App.selectObject = function () {};
-    App.Command = App.Command || {};
-    App.Command = Object.assign({}, App.Command, {
+    App.runAction = function () {};
+    // The frozen interpreter the live one wraps; a `run` it does not own falls through here.
+    App.Command = {
       write: function () {}, ok: function (t) { ctx.lines.push('ok:' + t); },
       note: function () {}, err: function (t) { ctx.lines.push('err:' + t); },
-      run: App.Command.run
-    });
+      run: function (t) { ctx.frozen.push(t); }
+    };
     App.Api = { post: function (path, body) {
       ctx.posted.push({ path: path, body: body });
       return (overrides && overrides.post) ? overrides.post(path, body)
         : Promise.resolve({ project: { name: 'scripted', mesh: {} } });
     } };
     App.Model = { apply: function (p) { ctx.applied = p; }, setImportedParts: function () {} };
-    App.History = { reset: function () {} };
+    App.History = { install: function () {}, reset: function () {},
+                    canUndo: function () { return false; }, canRedo: function () { return false; } };
+    // Adopting a project remounts the tree and clears results; neither has a host here.
+    App.Explorer = { mountTree: function () {} };
+    App.ResultsView = { clear: function () {} };
+    App.Menu = { mountBar: function () {}, openAt: function () {} };
     App.Viewport = {
       refresh: function () { return Promise.resolve(); },
       generateMesh: function (done) { ctx.meshed += 1; done({ elements: 1, nodes: 1, seconds: 0 }); }
     };
+    App.LivePatches.resetForTests();
+    App.LivePatches.install();
     return ctx;
   }
 
@@ -750,29 +766,29 @@
     App.Api = s.api; App.Viewport = s.viewport; App.Command = s.command;
     App.state = s.state; App.setMode = s.setMode; App.selectObject = s.select;
     App.Model = s.model; App.History = s.history; App.PROJECT = s.project;
+    App.runAction = s.action;
+    App.Explorer = s.explorer; App.ResultsView = s.resultsView; App.Menu = s.menu;
+    App.LivePatches.resetForTests();
   }
 
   test('run <file.py> builds the model from a script and meshes it', function () {
-    App.LivePatches.install();
     var ctx = harness();
-    return Promise.resolve(App.Command.run('run app/crow.py')).then(function () {
+    return Promise.resolve(App.Command.run('run models/pit.py')).then(function () {
       T.eq(ctx.posted[0].path, '/api/project/script');
-      T.eq(ctx.posted[0].body.path, 'app/crow.py');
+      T.eq(ctx.posted[0].body.path, 'models/pit.py');
       T.ok(ctx.applied && ctx.applied.name === 'scripted', 'the project is adopted');
       T.eq(ctx.meshed, 1, 'and meshed without a second command');
     }).then(function () { restore(ctx); }, function (e) { restore(ctx); throw e; });
   });
 
   test('run keeps a path with spaces in it intact', function () {
-    App.LivePatches.install();
     var ctx = harness();
-    return Promise.resolve(App.Command.run('run C:/my models/crow.py')).then(function () {
-      T.eq(ctx.posted[0].body.path, 'C:/my models/crow.py');
+    return Promise.resolve(App.Command.run('run C:/my models/pit.py')).then(function () {
+      T.eq(ctx.posted[0].body.path, 'C:/my models/pit.py');
     }).then(function () { restore(ctx); }, function (e) { restore(ctx); throw e; });
   });
 
   test('run with no path explains itself instead of posting', function () {
-    App.LivePatches.install();
     var ctx = harness();
     return Promise.resolve(App.Command.run('run')).then(function () {
       T.eq(ctx.posted.length, 0);
@@ -781,7 +797,6 @@
   });
 
   test("a script error is shown as the server's own message", function () {
-    App.LivePatches.install();
     var ctx = harness({ post: function () {
       return Promise.reject(new Error("model.py needs the Python package 'STEM'"));
     } });
@@ -790,5 +805,29 @@
            'the reason reaches the log');
       T.eq(ctx.meshed, 0, 'and nothing is meshed');
     }).then(function () { restore(ctx); }, function (e) { restore(ctx); throw e; });
+  });
+
+  /* `cleargeometry` is refused while a phase still uses one of the parts (finding F3).
+     It used to report "cleared" whatever the server said. */
+  function refusingFetch(detail) {
+    var saved = window.fetch;
+    window.fetch = function () {
+      return Promise.resolve({ ok: false, status: 422,
+        json: function () { return Promise.resolve({ detail: detail }); } });
+    };
+    return function () { window.fetch = saved; };
+  }
+
+  test("cleargeometry refused by the server says why, and not that it cleared", function () {
+    var ctx = harness();
+    var loaded = 0;
+    App.Model.load = function () { loaded += 1; return Promise.resolve(); };
+    var unfetch = refusingFetch("cannot delete a part that a phase still uses (phase 'dig_1' names drawn_0)");
+    return Promise.resolve(App.Command.run('cleargeometry')).then(function () {
+      T.ok(ctx.lines.some(function (l) { return /^err:.*dig_1/.test(l); }), ctx.lines.join(' | '));
+      T.ok(!ctx.lines.some(function (l) { return /^ok:/.test(l); }), 'no success line');
+      T.eq(loaded, 0, 'the model is not reloaded for a refusal');
+    }).then(function () { unfetch(); restore(ctx); },
+            function (e) { unfetch(); restore(ctx); throw e; });
   });
 })();

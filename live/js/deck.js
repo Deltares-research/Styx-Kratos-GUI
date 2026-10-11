@@ -1,7 +1,7 @@
 /* ══════════════════════════════════════════════════════════════════
    deck.js — a model that is a Kratos deck already, opened with `run <case.py>`.
 
-   A case like examples/eemdijk/eemdijk.py builds nothing: it names a finished deck
+   A deck case script builds nothing: it names a finished deck
    (server/app/deck.py), and `POST /api/project/script` sends that deck's mesh back
    with the project, in the shape `POST /api/import/mdpa` answers. There is nothing to
    generate, so instead of meshing, the command line goes straight to the Mesh tab
@@ -19,7 +19,7 @@
     return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
   }
 
-  /* Whether the answer to `run` carries a mesh to show. A parametric model (CROW)
+  /* Whether the answer to `run` carries a mesh to show. A parametric model
      carries none, and is meshed by the client as it always was. */
   function hasMesh(result) {
     return !!(result && result.mesh && (result.mesh.sections || []).length);
@@ -39,7 +39,7 @@
     });
   }
 
-  /* "Eemdijk (blue): 2D mesh, 16 885 nodes, 5 155 continuum, 374 beam elements;
+  /* "Dike section: 2D mesh, 16 885 nodes, 5 155 continuum, 374 beam elements;
      78 parts in the Model explorer." Elements only: a load condition is part of the
      deck, but not of what is drawn. */
   function summary(mesh, name) {

@@ -179,6 +179,7 @@ App.Results = (function () {
      module's state, and without it they would go on offering the phases of a run that
      is no longer open. */
   function forget() {
+    ticket += 1;
     listed = [];
     openRun = null;
     pending = Promise.resolve();
@@ -224,6 +225,8 @@ App.Results = (function () {
      stage, so by the time anything gets here everything is in hand. */
   function present() {
     if (!view.mesh || !view.field) return;
+    var displacement = view.displacement && view.displacement.stage === view.stage
+      ? view.displacement : null;
     var range = {
       min: options.min === null ? view.field.min : options.min,
       max: options.max === null ? view.field.max : options.max
@@ -233,7 +236,7 @@ App.Results = (function () {
       stage: view.stage,
       mesh: view.mesh,
       field: view.field,
-      displacement: view.displacement,
+      displacement: displacement,
       options: {
         map: options.map, bands: options.bands, deform: options.deform,
         reversed: options.reversed, mesh: options.mesh,
@@ -251,15 +254,21 @@ App.Results = (function () {
     if (view.displacement && view.displacement.stage === view.stage) {
       return Promise.resolve();
     }
-    var path = ROOT + '/' + encodeURIComponent(openRun.id)
-             + '/stages/' + view.stage + '/displacement';
+    // Tagged with the stage it was asked *for*, and kept only if that stage is still
+    // the one shown: by the time it arrives the user may have stepped on.
+    var run = openRun, stage = view.stage;
+    function keep(answer) {
+      if (openRun === run && view.stage === stage) view.displacement = answer;
+    }
+    var path = ROOT + '/' + encodeURIComponent(run.id)
+             + '/stages/' + stage + '/displacement';
     return App.Api.get(path).then(function (answer) {
-      answer.stage = view.stage;
-      view.displacement = answer;
+      answer.stage = stage;
+      keep(answer);
     }).catch(function () {
       // A stage with no displacement in it is not an error; it just cannot be
       // deformed, and `results-view` treats an empty one as a factor of zero.
-      view.displacement = { stage: view.stage, ids: [], values: [] };
+      keep({ stage: stage, ids: [], values: [] });
     });
   }
 
@@ -296,6 +305,12 @@ App.Results = (function () {
 
   var listeners = [];
   var pending = Promise.resolve();
+
+  /* Which request is the latest. Opening a run, choosing a stage and choosing a field
+     each take a new ticket; a reply that comes back holding an older one is for
+     something the user has already moved on from, and is dropped. Without it, two
+     quick `results phase +` left the slower reply on screen labelled as the newer. */
+  var ticket = 0;
 
   /* Subscribe to "something on screen changed". The Results panel is DOM and lives in
      `patches.js`, so it cannot be updated from here directly -- and it must not keep
@@ -363,7 +378,7 @@ App.Results = (function () {
   }
 
   /* An id, or a position in the last listing. The number is the convenience -- nobody
-     is going to retype `CROW_excavation_wall_2026-09-22_00-49` -- and it is resolved
+     is going to retype `Staged_excavation_2026-09-22_00-49` -- and it is resolved
      here rather than sent, so the server has one kind of id and not two. */
   function resolve(token) {
     if (!/^\d+$/.test(token)) return token;
@@ -389,7 +404,9 @@ App.Results = (function () {
     var id = resolve(token);
     if (!id) return Promise.resolve();
 
+    var mine = ++ticket;
     return App.Api.get(ROOT + '/' + encodeURIComponent(id)).then(function (run) {
+      if (mine !== ticket) return run;
       // Only now: a failed open must leave whatever was open still open, because the
       // alternative is losing a run you had in front of you to a typo.
       openRun = run;
@@ -518,8 +535,10 @@ App.Results = (function () {
   function useStage(index, quiet) {
     var base = ROOT + '/' + encodeURIComponent(openRun.id) + '/stages/' + index;
     var wanted = view.field && view.field.field;
+    var mine = ++ticket;
     return Promise.all([App.Api.get(base + '/mesh'),
                         App.Api.get(base + '/fields')]).then(function (both) {
+      if (mine !== ticket) return;
       view.stage = index;
       view.displacement = null;
       view.mesh = both[0];
@@ -662,7 +681,9 @@ App.Results = (function () {
     }
     var path = ROOT + '/' + encodeURIComponent(openRun.id) + '/stages/' + view.stage
              + '/field/' + encodeURIComponent(name) + '?location=' + at;
+    var mine = ++ticket;
     return App.Api.get(path).then(function (field) {
+      if (mine !== ticket) return field;
       view.field = field;
       view.location = at;
       changed();
