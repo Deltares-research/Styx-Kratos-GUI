@@ -1,7 +1,6 @@
 """Kratos .mdpa export: node tables, element blocks, sub-model parts and materials."""
 
 import json
-from pathlib import Path
 
 import pytest
 
@@ -10,8 +9,6 @@ KILO = 1000.0  # kN -> N: these tests write old-style projects, converted on loa
 from app.schemas import LineLoad, MeshRequest, PointLoad
 from app.seed import seed_project
 from tests import mdpa
-
-REFERENCE = Path(__file__).resolve().parents[2] / "examples" / "simple_embankment.mdpa"
 
 # Kratos' own node ordering for the quadratic simplices, as (midside index -> corners).
 # Asserting the midside node really is the midpoint of that edge is what catches a
@@ -293,8 +290,8 @@ def test_the_2d_line_load_becomes_conditions_inside_its_interval(section):
 
 
 def test_load_conditions_keep_property_zero_like_a_gid_deck(section):
-    """Every real Kratos GeoMechanics deck in examples/ (crow_case.mdpa,
-    dike_with_sheet_pile.mdpa) writes 0 here: the load's magnitude is applied by a
+    """Every GiD-authored Kratos GeoMechanics deck writes 0 here: the load's magnitude
+    is applied by a
     ProjectParameters.json process against the sub-model part, not read off a
     Properties block, so a condition never gets a property of its own."""
     deck = deck_of(section)
@@ -443,23 +440,6 @@ def test_a_law_this_application_does_not_know_is_written_as_given(session):
     assert all(e["Material"]["Variables"]["UDSM_NAME"] == "MohrCoulomb64.dll" for e in entries)
 
 
-# ── Parity with the GiD reference deck ──────────────────────────────────────
-
-@pytest.mark.skipif(not REFERENCE.exists(), reason="reference deck is not checked in")
-def test_the_reference_deck_parses_to_the_same_grammar_we_write(section):
-    reference = mdpa.parse(REFERENCE.read_text())
-    ours = deck_of(section)
-    assert reference.properties == [0]
-    assert ours.properties[0] == 0
-    assert {block.name for block in reference.elements} == {
-        block.name for block in ours.elements
-    }
-    for deck in (reference, ours):
-        for name, part in deck.parts.items():
-            if part.elements:
-                assert part.nodes == sorted({n for e in part.elements for n in deck.element(e)})
-
-
 # ── Load footprint conformance ──────────────────────────────────────────────
 
 def test_2d_line_load_conditions_span_its_interval_exactly(section):
@@ -602,10 +582,9 @@ def test_an_inactive_load_gets_no_process(session):
 
 # ── Sheet piles as beam elements ────────────────────────────────────────────
 #
-# The classes, their connectivity order and the property id are all taken from the
-# reference decks in examples/: dike_with_sheet_pile.mdpa writes the linear beam,
-# crow_case.mdpa the quadratic one, and both write property 0 and share every beam
-# node with the soil mesh.
+# The classes, their connectivity order and the property id are the ones GiD-authored
+# Kratos decks write: the linear beam and the quadratic one, both with property 0 and
+# sharing every beam node with the soil mesh.
 
 BEAM_SECTION = {"id": "az26", "name": "AZ 26-700", "E": 2.1e8, "nu": 0.3,
                 "area": 0.0198, "inertia": 5.52e-4, "density": 7850.0, "spacing": 1.0}
@@ -771,8 +750,8 @@ def test_a_sheet_pile_saved_in_a_3d_project_is_not_exported(session):
 
 # ── Anchors as two-node ties ────────────────────────────────────────────────
 #
-# examples/crow_case.mdpa is the whole specification: one LinearTrussElement2D2N with
-# property 0, its head node shared with the beam (it sits in two beam elements there),
+# Kratos' staged-excavation decks are the whole specification: one LinearTrussElement2D2N
+# with property 0, its head node shared with the beam (it sits in two beam elements there),
 # its tail node in no element at all and alone in a one-node support group.
 
 TENDON = {"id": "strand", "name": "4-strand tendon", "E": 1.95e8, "area": 0.0006,
@@ -931,14 +910,14 @@ def test_an_anchor_saved_in_a_3d_project_is_not_exported(session):
 # ── Staged excavation: bodies, their edges and their materials ──────────────
 #
 # A staged deck keeps the excavated soil so each lift can be deactivated in its own
-# phase (plan/staged-construction-plan.md sec A1). Three things follow from that, and
+# phase (plan/outdated/staged-construction-plan.md sec A1). Three things follow from that, and
 # none of them is true of an unstaged deck: every lift is its own sub-model part, every
 # lift carries its layer's material, and the domain edge a lift touches is segmented so
 # the lift's own edge constraint can leave the deck with it.
 
 
 def staged_project(dimension: int = 2):
-    """The CROW arrangement: three layers, three lifts, pit against the left edge."""
+    """A staged excavation: three layers, three lifts, pit against the left edge."""
     from app.schemas import Project
     p = seed_project(simple=False).model_dump() | {"dimension": dimension}
     if dimension == 2:

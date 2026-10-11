@@ -139,6 +139,24 @@ def with_needs(chosen: list[Case], by_id: dict[str, Case]) -> list[Case]:
     return out
 
 
+def kratos_commit() -> str | None:
+    """The commit and date of the Kratos build a calculation uses, for the report: the
+    checkout two levels above the configured build (`<checkout>/bin/Release`)."""
+    import subprocess
+
+    from app import calculate
+
+    build = os.environ.get(calculate.KRATOS_ENV) or calculate._settings().get("kratos")
+    if not build:
+        return None
+    checkout = Path(build).parents[1]
+    try:
+        return subprocess.run(["git", "-C", str(checkout), "log", "-1", "--format=%H %cI"],
+                              capture_output=True, text=True, timeout=30).stdout.strip() or None
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+
+
 def report(results: list[Result], kratos_commit: str | None) -> tuple[str, dict]:
     lines = ["# Benchmark report", "",
              f"Kratos: `{kratos_commit or 'unknown'}`", "",

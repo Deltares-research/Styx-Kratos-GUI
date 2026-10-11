@@ -7,7 +7,7 @@ question about geotechnics, and only the second has opinions.
 ── The catalogue comes from the file, never from a list here ────────────────
 
 `catalogue` asks the parsed results what variables they carry and offers only the
-quantities those support. That is decision 1.3 of `plan/postprocessing-plan.md`, and it
+quantities those support. That is decision 1.3 of `plan/active/postprocessing-plan.md`, and it
 is what makes widening the deck's output (P4) safe: a variable Kratos declines to write,
 or writes an empty block for because the element does not implement it, costs one
 missing menu entry and breaks nothing. The beam's empty `CAUCHY_STRESS_TENSOR` block is

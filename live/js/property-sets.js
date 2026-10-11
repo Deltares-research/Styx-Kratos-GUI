@@ -32,7 +32,7 @@ App.PropertySets = (function () {
                 'BULK_MODULUS_FLUID', 'DYNAMIC_VISCOSITY', 'PERMEABILITY_YY',
                 'PERMEABILITY_XY', 'PERMEABILITY_ZZ', 'PERMEABILITY_YZ',
                 'PERMEABILITY_ZX', 'K0_NC'],
-      // A new soil: a loose drained sand, in SI. Porosity 0, as in the CROW reference:
+      // A new soil: a loose drained sand, in SI. Porosity 0, as in Kratos' reference:
       // Kratos weighs a point at (1 - n) DENSITY_SOLID g + n S gamma_w, so at n = 0 the
       // soil weighs DENSITY_SOLID g -- 17 kN/m3 here -- whatever its saturation. A soil
       // that should weigh more below the water than above it needs a porosity and a

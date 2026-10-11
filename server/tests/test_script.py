@@ -4,6 +4,7 @@ Every failure here is read by whoever typed the command, with no stack trace on 
 so the messages are asserted as carefully as the successes.
 """
 
+import pathlib
 import textwrap
 
 import pytest
@@ -42,26 +43,24 @@ def test_a_script_can_hand_back_a_builder_called_project(tmp_path):
 
 
 def test_a_builder_may_be_named_after_what_it_builds(tmp_path):
-    """What lets `examples/crow/crow.py` be run as it stands, off its own `crow_project()`."""
+    """What lets a model script be run as it stands, off a builder named for what it
+    builds -- `tests/models/excavation.py` has `excavation_project()`."""
     path = write(tmp_path, SEED + """
-    def crow_project():
+    def pit_project():
         p = seed_project()
-        p.name = "from crow_project()"
+        p.name = "from pit_project()"
         return p
     """)
-    assert script.load_project(path).name == "from crow_project()"
+    assert script.load_project(path).name == "from pit_project()"
 
 
-def test_the_crow_example_runs(tmp_path):
-    """The worked example has to be loadable by the thing that documents it -- and by
-    the same path a user types, which is how the GUI opens it:
+def test_the_test_model_runs_as_a_script(tmp_path):
+    """The model the tests build is a script the GUI can open, by the same path a user
+    types:
 
-        run examples/crow/crow.py
+        run tests/models/excavation.py
     """
-    from tests.crow_example import PATH
-    if not PATH.exists():
-        pytest.skip(f"launcher {PATH} is not in this checkout")
-    loaded = script.load_project(PATH)
+    loaded = script.load_project(pathlib.Path(__file__).parent / "models" / "excavation.py")
     assert isinstance(loaded, Project)
     assert len(loaded.excavation.levels) == 3
     assert loaded.beams and loaded.anchors
@@ -99,9 +98,9 @@ def test_a_script_that_raises_reports_what_it_raised(tmp_path):
 
 def test_a_missing_package_is_named_rather_than_left_as_an_import_error(tmp_path):
     """The common way a script from elsewhere fails: written against a package this
-    environment does not have. `demo_crow_excavation_wall.py` is exactly this -- it
-    imports STEM's MiscellaneousTools, which this repo deliberately does not depend on
-    (plan/stem-geometry-generator-feasibility.md)."""
+    environment does not have -- a script written for STEM, say, imports its
+    MiscellaneousTools, which this repo deliberately does not depend on
+    (plan/outdated/stem-geometry-generator-feasibility.md)."""
     path = write(tmp_path, """
     from MiscellaneousTools.GeometryGenerator.build_mdpa import generate_mdpa
     """)
@@ -146,20 +145,20 @@ _SCRIPT = textwrap.dedent("""
 
 
 def test_a_script_is_found_from_the_repository_root_too(tmp_path, monkeypatch):
-    """`run examples/crow/crow.py`, typed the way the path reads in the project.
+    """`run models/pit.py`, typed the way the path reads in the project.
 
     The server runs from `server/`, so a path relative to that was once the only one
     that resolved -- which made the natural way to name a model script the wrong one,
-    and `../examples/...` the right one. A model lives in the project, not in the
+    and `../models/...` the right one. A model lives in the project, not in the
     server's own directory, so the root is searched as well.
     """
     root = tmp_path
     (root / "server").mkdir()
-    (root / "examples").mkdir()
-    (root / "examples" / "model.py").write_text(_SCRIPT, encoding="utf-8")
+    (root / "models").mkdir()
+    (root / "models" / "pit.py").write_text(_SCRIPT, encoding="utf-8")
     monkeypatch.chdir(root / "server")
 
-    project = script.load_project("examples/model.py")
+    project = script.load_project("models/pit.py")
     assert project.name == "From a script"
 
 
@@ -237,7 +236,7 @@ def test_a_builder_that_returns_something_else_says_what_it_returned(tmp_path):
 
 def test_a_project_variable_of_the_wrong_type_says_so(tmp_path):
     path = write(tmp_path, """
-    PROJECT = "crow"
+    PROJECT = "a pit"
     """)
     with pytest.raises(script.ScriptError, match="PROJECT is a str, not a Project"):
         script.load_project(path)

@@ -9,7 +9,8 @@ import re
 
 import pytest
 
-from app import build, crow, kratos
+from app import build, kratos
+from tests.models import excavation
 from app.schemas import MeshRequest
 from tests.pipeline.deck_invariants import check_deck
 
@@ -17,7 +18,7 @@ from tests.pipeline.deck_invariants import check_deck
 @pytest.fixture(scope="module")
 def export():
     with build.session():
-        return kratos.export_project(crow.crow_project(staged=True),
+        return kratos.export_project(excavation.excavation_project(staged=True),
                                      MeshRequest(element_size=8.0, order=2))
 
 

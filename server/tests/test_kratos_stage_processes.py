@@ -14,14 +14,14 @@ import json
 import pytest
 
 from app import kratos, kratos_materials
-from tests.crow_example import crow
+from tests.models import excavation
 from app.build import session
 from app.schemas import MeshRequest
 
 
 @pytest.fixture(scope="module")
 def result() -> dict:
-    project = crow.crow_project(staged=True)
+    project = excavation.excavation_project(staged=True)
     with session():
         return kratos.export_project(project,
                                      MeshRequest(**project.mesh.model_dump()))
@@ -229,7 +229,7 @@ def test_the_retained_side_node_part_holds_nodes_and_no_elements(result):
 
 def test_an_unstaged_project_grows_no_part_it_never_reads():
     """It exists only because the `JsonOutputProcess` of a staged deck reads it."""
-    project = crow.crow_project(staged=False)
+    project = excavation.excavation_project(staged=False)
     with session():
         plain = kratos.export_project(project,
                                       MeshRequest(**project.mesh.model_dump()))
@@ -292,18 +292,18 @@ def test_only_the_soil_carries_the_k0_variables(result):
 
 
 def test_k0_nc_is_jaky_unless_the_material_says_otherwise():
-    """0.62 and 0.46 in the reference, which are Jaky at its two friction angles -- so
-    CROW's typed K0_NC and the fallback agree."""
+    """The test model types 0.58 and 0.47, which are Jaky at its two friction angles --
+    so its typed K0_NC and the fallback agree."""
     from app.kratos_materials import jaky
-    project = crow.crow_project(staged=False)
-    for key, k0 in (("m_upper", 0.62), ("m_lower", 0.46)):
+    project = excavation.excavation_project(staged=False)
+    for key, k0 in (("m_upper", 0.58), ("m_lower", 0.47)):
         material = project.material(key)
         assert material.variables["K0_NC"] == k0
         assert round(jaky(material), 2) == k0
 
 
 def test_an_unstaged_project_gets_no_second_materials_file():
-    project = crow.crow_project(staged=False)
+    project = excavation.excavation_project(staged=False)
     with session():
         plain = kratos.export_project(project,
                                       MeshRequest(**project.mesh.model_dump()))
@@ -313,11 +313,11 @@ def test_an_unstaged_project_gets_no_second_materials_file():
 def test_material_parameters_writes_the_k0_variables_on_request():
     """The same generator with a keyword, not a second one: two generators would be two
     places for a material to be described, and they would drift."""
-    project = crow.crow_project(staged=False)
+    project = excavation.excavation_project(staged=False)
     parts = [("Soil_Top", "m_upper")]
     plain, _ = kratos_materials.material_parameters(project, parts, 2)
     with_k0, _ = kratos_materials.material_parameters(project, parts, 2, k0=True)
     variables = json.loads(with_k0)["properties"][0]["Material"]["Variables"]
     assert "K0_NC" not in json.loads(plain)["properties"][0]["Material"]["Variables"]
     assert variables["K0_MAIN_DIRECTION"] == 1
-    assert round(variables["K0_NC"], 2) == 0.62
+    assert round(variables["K0_NC"], 2) == 0.58

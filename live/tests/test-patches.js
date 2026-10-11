@@ -702,9 +702,9 @@
 })();
 
 (function () {
-  /* There is no menu item for the CROW example, and that is the point. Models are
-     opened by running the Python that builds them -- `run app/crow.py` in the command
-     box, covered below -- which works for any model rather than only the one somebody
+  /* There is no menu item for an example model, and that is the point. Models are
+     opened by running the Python that builds them -- `run models/pit.py` in the
+     command box, covered below -- which works for any model rather than only the one somebody
      thought to add a button for. A menu item for it existed and was removed; this is
      what stops it coming back. */
 
@@ -712,8 +712,8 @@
     App.LivePatches.install();
     var file = (App.MENUS || []).filter(function (m) { return m.label === 'File'; })[0];
     var items = file.items || [];
-    T.ok(!items.some(function (i) { return i && /crow/i.test(i.label || ''); }),
-      'the File menu offers no CROW example');
+    T.ok(!items.some(function (i) { return i && /example/i.test(i.label || ''); }),
+      'the File menu offers no example model');
     T.ok(!items.some(function (i) { return i && /Example$/.test(i.action || ''); }),
       'nor any other one-click example model');
   });
@@ -773,9 +773,9 @@
 
   test('run <file.py> builds the model from a script and meshes it', function () {
     var ctx = harness();
-    return Promise.resolve(App.Command.run('run app/crow.py')).then(function () {
+    return Promise.resolve(App.Command.run('run models/pit.py')).then(function () {
       T.eq(ctx.posted[0].path, '/api/project/script');
-      T.eq(ctx.posted[0].body.path, 'app/crow.py');
+      T.eq(ctx.posted[0].body.path, 'models/pit.py');
       T.ok(ctx.applied && ctx.applied.name === 'scripted', 'the project is adopted');
       T.eq(ctx.meshed, 1, 'and meshed without a second command');
     }).then(function () { restore(ctx); }, function (e) { restore(ctx); throw e; });
@@ -783,8 +783,8 @@
 
   test('run keeps a path with spaces in it intact', function () {
     var ctx = harness();
-    return Promise.resolve(App.Command.run('run C:/my models/crow.py')).then(function () {
-      T.eq(ctx.posted[0].body.path, 'C:/my models/crow.py');
+    return Promise.resolve(App.Command.run('run C:/my models/pit.py')).then(function () {
+      T.eq(ctx.posted[0].body.path, 'C:/my models/pit.py');
     }).then(function () { restore(ctx); }, function (e) { restore(ctx); throw e; });
   });
 

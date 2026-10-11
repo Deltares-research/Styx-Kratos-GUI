@@ -1,4 +1,4 @@
-"""The Tier-1 benchmark catalogue (plan/alpha-test-plan.md sec 7.3), as runnable cases.
+"""The Tier-1 benchmark catalogue (plan/active/alpha-test-plan.md sec 7.3), as runnable cases.
 
 Each check compares the run with an answer that does not come from this tool: an
 analytical solution, Kratos' own test values, or a self-consistency the physics demands
@@ -12,7 +12,7 @@ from __future__ import annotations
 import math
 from collections import defaultdict
 
-from app import crow, kratos, kratos_materials, results
+from app import kratos, kratos_materials, results
 from benchmarks import models
 from benchmarks.runner import Case, Context, Outcome
 
@@ -248,22 +248,6 @@ def richardson(coarse: str, medium: str, fine: str, low: float = 1.5, high: floa
     return check
 
 
-def wall_matches_reference(stage: str, field: str):
-    """The wall's curve in one stage against Kratos' own Mohr-Coulomb CROW case, node by
-    node, with Kratos' 2 % rule (`tests/kratos/test_live_crow_mc.py` makes the same
-    comparison for every field)."""
-    def check(ctx: Context) -> Outcome:
-        from tests.kratos.test_live_crow_mc import disagreements
-        from tests import mdpa
-        deck = mdpa.parse(next(ctx.directory.glob("*.mdpa")).read_text(encoding="utf-8"))
-        compared, failures = disagreements({"directory": ctx.directory, "deck": deck},
-                                           stage, field)
-        return Outcome(f"{field} along the wall, {stage}", compared >= 10 and not failures,
-                       f"{compared - len(failures)} of {compared} nodes within 2 %",
-                       "every node")
-    return check
-
-
 # ── The catalogue ───────────────────────────────────────────────────────────
 
 SAND = models.material("sand", "Sand", 18.0, k0=0.6)
@@ -339,13 +323,6 @@ CASES = [
          blocked="needs REACTION output (MF-01)"),
     Case("BM-EQ-01", "Reactions balance weight and loads", "self-consistency",
          blocked="needs REACTION output (MF-01)"),
-    Case("BM-CROW-MC", "CROW, Mohr-Coulomb soils and Coulomb contacts",
-         "crow_validation/mohr_coulomb_clay-sand (Kratos' expected wall results)",
-         build=lambda: crow.crow_mohr_coulomb_project(staged=True),
-         checks=[wall_matches_reference(stage, field)
-                 for stage in ("3_SheetPileWall_installation", "4_First_excavation",
-                               "6_Second_excavation", "7_Third_excavation")
-                 for field in ("bending_moment", "horizontal_total_displacement")]),
 ]
 
 BY_ID = {case.id: case for case in CASES}

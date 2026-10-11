@@ -2,7 +2,7 @@
 page and wait for it. The page publishes its outcome as `window.__TEST_RESULTS__`.
 
 With `--js-coverage`, Chrome's precise coverage is taken over the same run and summarised
-per live module into `htmlcov-js/summary.json` (plan/alpha-test-plan.md Task 0.5)."""
+per live module into `htmlcov-js/summary.json` (plan/active/alpha-test-plan.md Task 0.5)."""
 
 import json
 import pathlib
@@ -15,7 +15,7 @@ ROOT = pathlib.Path(__file__).resolve().parents[3]
 SUITE = ROOT / "live" / "tests" / "index.html"
 REPORT = ROOT / "server" / "htmlcov-js" / "summary.json"
 TARGET = 80.0
-"""Per live module, in percent of functions run (plan/full-test-and-validation-plan.md M4).
+"""Per live module, in percent of functions run (plan/active/full-test-and-validation-plan.md M4).
 Enforced whenever the suite runs with --js-coverage."""
 
 pytestmark = pytest.mark.browser

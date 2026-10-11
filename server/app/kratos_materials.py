@@ -141,8 +141,8 @@ def material_parameters(
     `k0` writes the initial stage's companion file instead: the same file with the soil's
     `K0_*` variables in it, which only `apply_k0_procedure_process` reads, and only the
     initial stage runs. That stage is elastic whatever the model: a soil or contact with
-    another law gets the elastic one in this file, exactly as Kratos' CROW Mohr-Coulomb
-    case runs its stage 1 on the elastic `common/initial_materials.json`.
+    another law gets the elastic one in this file, exactly as Kratos' own Mohr-Coulomb
+    staged-excavation reference runs its stage 1 on an elastic materials file.
     """
     warnings: list[str] = []
     derived: list[str] = []
@@ -190,7 +190,7 @@ def material_parameters(
             section.tables)
     if elastic:
         warnings.append(
-            "The K0 stage runs elastic, as Kratos' own Mohr-Coulomb CROW case does: "
+            "The K0 stage runs elastic: "
             + ", ".join(dict.fromkeys(elastic)) + " use the elastic law in "
             "initial_materials.json and their own from the next stage on.")
     if derived:
@@ -290,8 +290,7 @@ def _variables(material: Material, dim: int, k0: bool, project: Project,
 
 def jaky(material: Material) -> float | None:
     """Jaky's 1 - sin(phi), the standard correlation for K0 of a normally consolidated
-    soil, and the one the CROW reference deck's own numbers follow (0.62 and 0.46 are
-    Jaky at 22.3 deg and 32.7 deg). None for a material with no friction angle: there is
+    soil, and the one Kratos' staged-excavation reference deck's own numbers follow. None for a material with no friction angle: there is
     nothing to derive it from, and the K0 procedure is left to its own default."""
     phi = material.number("GEO_FRICTION_ANGLE")
     return None if phi is None else 1.0 - math.sin(math.radians(phi))

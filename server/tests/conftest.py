@@ -1,4 +1,4 @@
-"""Opt-in test tiers (plan/alpha-test-plan.md sec 2.2).
+"""Opt-in test tiers (plan/active/alpha-test-plan.md sec 2.2).
 
 The default `pytest -q` stays fast and needs neither Kratos nor a browser. Everything
 slower or with an outside dependency is marked and skipped, with the flag that runs it

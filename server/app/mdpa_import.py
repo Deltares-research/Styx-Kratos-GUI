@@ -65,15 +65,14 @@ QUADRILATERALS: dict[str, tuple[str, int, int]] = {
     "SmallStrainUPwDiffOrderElement2D9N": ("continuum", 2, 9),
 }
 """Soil classes this codebase's exporter never writes -- it only meshes triangles -- but
-that a deck from elsewhere often is mostly made of (e.g. the Eemdijk deck's 8-node
-quads). Corners first, counter-clockwise, then midsides, as Kratos orders them."""
+that a deck from elsewhere often is mostly made of (e.g. 8-node quads). Corners first, counter-clockwise, then midsides, as Kratos orders them."""
 
 LEGACY: dict[str, tuple[str, int, int]] = {
     "LinearTimoshenkoCurvedBeamElement2D2N": ("beam", 2, 2),
     "LinearTimoshenkoBeamElement3D3N": ("beam", 3, 3),
 }
 """Beam names this exporter once wrote, which Kratos does not register -- still read, so
-a deck written by an older version (or examples/dike_with_sheet_pile.mdpa) opens."""
+a deck written by an older version opens."""
 
 CLASS_KIND: dict[str, tuple[str, int, int]] = {
     **LEGACY,

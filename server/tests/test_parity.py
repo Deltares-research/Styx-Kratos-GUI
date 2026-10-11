@@ -26,7 +26,7 @@ def test_materials_match_frozen_data_js():
     `js/data.js` is frozen in the strong sense -- one commit, never edited since -- so a
     solver input it never carried is backend-only by construction rather than drift for
     this guard to catch. `k0_nc` is the first of those: it exists for the initial stage's
-    k0 procedure (plan/staged-construction-plan.md sec C4), which postdates the mockup
+    k0 procedure (plan/outdated/staged-construction-plan.md sec C4), which postdates the mockup
     entirely. Every field the mockup *does* define is still pinned.
     """
     from app import legacy, seed

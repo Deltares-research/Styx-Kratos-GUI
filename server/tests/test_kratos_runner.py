@@ -52,7 +52,7 @@ def run_runner(directory: Path, *args: str, stub: bool = True,
         else:
             monkeypatch.delenv(calculate.KRATOS_ENV, raising=False)
     python, environment = calculate.interpreter()
-    command = [python, *(calculate.COMMAND if not args else ["-m", "app.kratos_runner",
+    command = [python, *(calculate.COMMAND if not args else [*calculate.COMMAND[:-1],
                                                              *args])]
     return subprocess.run(command, cwd=directory, env=environment,
                           stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
@@ -210,14 +210,13 @@ def test_the_runner_does_not_import_the_server(tmp_path, monkeypatch):
 
 
 def test_a_real_export_runs_through_the_stand_in(tmp_path, monkeypatch):
-    """Not a hand-written deck: what the server exports for the staged CROW model, so
+    """Not a hand-written deck: what the server exports for the staged test model, so
     the orchestrator name and execution list are the ones Kratos will really be given."""
     from app import kratos
     from app.build import session
     from app.schemas import MeshRequest
-    from tests.crow_example import crow
-
-    project = crow.crow_project(staged=True)
+    from tests.models import excavation
+    project = excavation.excavation_project(staged=True)
     with session():
         export = kratos.export_project(project, MeshRequest(**project.mesh.model_dump()))
     (tmp_path / "ProjectParameters.json").write_text(export["project_parameters"],

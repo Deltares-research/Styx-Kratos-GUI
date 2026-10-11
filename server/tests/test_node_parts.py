@@ -13,7 +13,7 @@ from collections import defaultdict
 import pytest
 
 from app import build, kratos, node_parts
-from app.crow import crow_project
+from tests.models.excavation import excavation_project
 from app.schemas import MeshRequest
 
 DECK = """Begin Properties 0
@@ -78,24 +78,24 @@ def test_a_node_is_in_every_part_that_names_it():
     assert by_node[3] == {"Soil", "Load"}
 
 
-# ── The CROW wall ────────────────────────────────────────────────────────────
+# ── The test model's wall ────────────────────────────────────────────────────
 
 @pytest.fixture(scope="module")
-def crow():
+def wall_deck():
     with build.session():
-        exported = kratos.export_project(crow_project(), MeshRequest(),
+        exported = kratos.export_project(excavation_project(), MeshRequest(),
                                          include_materials=False)
     return node_parts.node_parts(exported["mdpa"])
 
 
-def test_the_wall_and_each_soil_side_hold_their_own_node(crow):
+def test_the_wall_and_each_soil_side_hold_their_own_node(wall_deck):
     """Every wall position the interface split is three nodes: the pile's own, and one
     for the soil on each side. Each side's copy is in that side's soil only -- one body,
     or two where the node sits on the seam between layers -- and never in the other
     side's."""
-    by_node = membership(crow)
+    by_node = membership(wall_deck)
     at = defaultdict(list)
-    for node, x, y, _ in crow["nodes"]:
+    for node, x, y, _ in wall_deck["nodes"]:
         at[(round(x, 6), round(y, 6))].append(node)
     triples = [ids for ids in at.values()
                if len(ids) == 3 and any("SheetPileWall" in by_node[n] for n in ids)]
@@ -109,8 +109,8 @@ def test_the_wall_and_each_soil_side_hold_their_own_node(crow):
         assert not bodies[0] & bodies[1], ("both sides in one body", bodies)
 
 
-def test_the_numbering_is_the_deck_s(crow):
-    ids = [row[0] for row in crow["nodes"]]
+def test_the_numbering_is_the_deck_s(wall_deck):
+    ids = [row[0] for row in wall_deck["nodes"]]
     assert ids == list(range(1, len(ids) + 1))
 
 
@@ -125,7 +125,7 @@ def test_the_route_answers_in_the_labels_numbering():
     from app.main import app
 
     with TestClient(app) as client:
-        store.put(crow_project())
+        store.put(excavation_project())
         settings = {"element_size": 1.0, "order": 2}
         response = client.post("/api/mesh/node-parts", json=settings)
         assert response.status_code == 200, response.text

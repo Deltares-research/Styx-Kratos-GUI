@@ -95,7 +95,7 @@ def test_a_material_built_from_the_old_fields_is_converted():
 # ── K0, for the initial stage ───────────────────────────────────────────────
 #
 # `apply_k0_procedure_process` settles the initial stress field, and reads K0_NC off
-# each soil property (plan/staged-construction-plan.md sec C4). A material gives one as
+# each soil property (plan/outdated/staged-construction-plan.md sec C4). A material gives one as
 # a `K0_NC` variable; one that does not gets Jaky's at export.
 
 def _sand(**variables) -> schemas.Material:
@@ -103,8 +103,8 @@ def _sand(**variables) -> schemas.Material:
 
 
 def test_k0_defaults_to_jaky_from_the_friction_angle():
-    """1 - sin(phi). Both values in the CROW reference sit on this formula (0.62 at
-    22.3 deg, 0.46 at 32.7 deg), which is what says it is the right default."""
+    """1 - sin(phi): the normally consolidated K0 a soil's own friction angle gives
+    (0.62 at 22.3 deg, 0.46 at 32.7 deg)."""
     from app.kratos_materials import jaky
     assert jaky(_sand(GEO_FRICTION_ANGLE=30.0)) == pytest.approx(0.5)
     assert jaky(_sand(GEO_FRICTION_ANGLE=22.3)) == pytest.approx(0.62, abs=5e-3)
@@ -180,7 +180,7 @@ def test_excavation_must_sit_inside_the_domain():
 # ── Staged excavation levels ────────────────────────────────────────────────
 #
 # A staged excavation is dug in lifts, and each lift is a separately deactivatable body
-# in the deck (plan/staged-construction-plan.md sec 0.1: Excavated_Soil_1/2/3). `levels`
+# in the deck (plan/outdated/staged-construction-plan.md sec 0.1: Excavated_Soil_1/2/3). `levels`
 # is that sequence; `floor_y` is the last of them, kept as the name everything already
 # reads.
 
@@ -227,12 +227,12 @@ def test_a_floor_disagreeing_with_its_levels_is_refused_not_guessed(levels):
         schemas.Excavation(x0=0, x1=10, z0=0, z1=10, floor_y=-9.0, levels=levels)
 
 
-def _crow_like() -> schemas.Project:
-    """The CROW reference's soil arrangement: three layers, three excavation lifts.
+def _layered_pit() -> schemas.Project:
+    """A staged excavation's soil arrangement: three layers, three excavation lifts.
 
     Layer 1 spans 0..-8 and is dug away in three lifts; layer 2 (-8..-12) and layer 3
-    (-12..-60) are never dug. That produces the reference deck's eight bodies -- see
-    plan/staged-construction-plan.md sec 0.1.
+    (-12..-60) are never dug. That produces eight bodies -- see
+    plan/outdated/staged-construction-plan.md sec 0.1.
     """
     p = seed_project(simple=False).model_dump()
     p["domain"] |= {"y_top": 0.0, "y_bottom": -60.0}
@@ -260,7 +260,7 @@ def test_an_unstaged_project_has_one_soil_body_per_layer():
 
 
 def test_a_staged_excavation_splits_the_soil_inside_the_pit_into_lifts():
-    bodies = {key: (y0, y1) for key, y0, y1, _ in _crow_like().soil_bodies()}
+    bodies = {key: (y0, y1) for key, y0, y1, _ in _layered_pit().soil_bodies()}
     assert bodies == {
         # Outside the pit outline the layers are untouched and keep their own keys.
         "soil_L1": (-8.0, 0.0),
@@ -280,7 +280,7 @@ def test_a_staged_excavation_splits_the_soil_inside_the_pit_into_lifts():
 def test_a_lift_crossing_a_layer_boundary_yields_one_body_per_layer():
     """Bodies are the intersection of a layer with a lift, so a lift deeper than the
     layer it starts in cannot produce one body spanning two materials."""
-    p = _crow_like().model_dump()
+    p = _layered_pit().model_dump()
     # The first lift is dug straight through L1 and on into L2. `floor_y` follows
     # `levels` rather than the other way round, so it goes out with the levels it
     # belonged to.
@@ -296,7 +296,7 @@ def test_a_lift_crossing_a_layer_boundary_yields_one_body_per_layer():
 def test_staged_soil_bodies_are_part_keys():
     """Anything with geometry needs a key, or the viewport and the exporter cannot
     name it (`Project.part_keys` is that namespace)."""
-    p = _crow_like()
+    p = _layered_pit()
     keys = p.part_keys()
     assert len(keys) == len(set(keys)), "part keys must stay unique"
     for key, *_ in p.soil_bodies():
@@ -726,7 +726,7 @@ def test_a_project_without_sheet_piles_stays_valid_and_empty():
 
 # ── Anchors: two-node ties from a sheet pile to a restrained point ──────────
 #
-# The formulation is read off examples/crow_case.mdpa: one LinearTrussElement2D2N whose
+# The formulation is Kratos' own staged-excavation one: one LinearTrussElement2D2N whose
 # head node is shared with the sheet-pile beam and whose tail node belongs to no other
 # element at all, held instead by its own single-node group. The tail is therefore not
 # coupled to the soil -- the grouted body is idealised as a fixed point.
@@ -1092,7 +1092,7 @@ def test_a_project_without_3d_structures_stays_valid_and_empty():
 # ── Interfaces ──────────────────────────────────────────────────────────────
 #
 # An interface is the zero-thickness contact between a structure and the soil around
-# it, the arrangement examples/crow_case.mdpa contains. Its properties live in a
+# it, the arrangement Kratos' staged-excavation decks use. Its properties live in a
 # reusable `interface_sections` set for the same reason a beam's do: several contacts
 # normally share one, and Kratos wants one property entry per distinct set.
 
@@ -1305,7 +1305,7 @@ def test_asking_for_a_layer_asks_for_the_lifts_dug_out_of_it():
     otherwise checking `Soil_Top` in that dialog meshes the retained side and silently
     leaves the whole excavation out of the model.
     """
-    p = _crow_like()
+    p = _layered_pit()
     assert set(p.expand_body_keys(["soil_L1"])) == {
         "soil_L1", "soil_L1__lift1", "soil_L1__lift2", "soil_L1__lift3"}
     assert p.expand_body_keys(["soil_L3"]) == ["soil_L3", "soil_L3__pit"]
@@ -1328,7 +1328,7 @@ def test_the_project_publishes_its_soil_body_keys():
     in the browser instead would be a second implementation of `soil_bodies` to keep in
     step, so the project says it.
     """
-    p = _crow_like()
+    p = _layered_pit()
     assert p.soil_body_keys == [key for key, *_ in p.soil_bodies()]
     assert len(p.soil_body_keys) == 8
 
@@ -1336,7 +1336,7 @@ def test_the_project_publishes_its_soil_body_keys():
 def test_soil_body_keys_survive_a_round_trip():
     """It is published, not accepted: a client that sends the project back must not be
     rejected for echoing a field it was given."""
-    p = _crow_like()
+    p = _layered_pit()
     dumped = p.model_dump()
     assert "soil_body_keys" in dumped
     assert schemas.Project.model_validate(dumped).soil_body_keys == p.soil_body_keys
@@ -1355,7 +1355,7 @@ def test_a_project_with_no_ground_in_it_has_no_soil_bodies():
 
 def test_a_load_cannot_take_a_staged_body_s_name():
     """One part-key namespace: a load named after a lift would collide in the deck."""
-    p = _crow_like().model_dump()
+    p = _layered_pit().model_dump()
     p["loads"] = [{"id": "soil_L1__lift1", "name": "Surcharge", "kind": "line",
                    "x0": 0.0, "x1": 5.0, "y": 0.0, "components": [0.0, -10.0]}]
     with pytest.raises(ValidationError, match="collides"):
@@ -1365,7 +1365,7 @@ def test_a_load_cannot_take_a_staged_body_s_name():
 def test_each_soil_body_has_a_label_saying_which_part_of_its_layer_it_is():
     """The Model explorer lists bodies, and three keys that differ only by a `__lift2`
     suffix are not something to put in front of a user."""
-    p = _crow_like()
+    p = _layered_pit()
     labels = p.soil_body_labels
     assert set(labels) == set(p.soil_body_keys)
     assert labels["soil_L1"] == "Soil_1"
@@ -1383,11 +1383,11 @@ def test_an_unstaged_layer_is_labelled_with_nothing_but_its_name():
 #
 # A construction phase, in the sense the GUI already draws (js/data.js:559) and
 # the sense the reference deck's seven stages have. See
-# plan/staged-construction-plan.md sec B1 for why a phase stores a *diff* against its
+# plan/outdated/staged-construction-plan.md sec B1 for why a phase stores a *diff* against its
 # parent rather than an absolute state.
 
 def _phased(*phases) -> schemas.Project:
-    return schemas.Project.model_validate(_crow_like().model_dump() | {"phases": list(phases)})
+    return schemas.Project.model_validate(_layered_pit().model_dump() | {"phases": list(phases)})
 
 
 def _phase(id_, parent=None, **kw) -> dict:
@@ -1475,7 +1475,7 @@ def test_phases_survive_a_round_trip():
 # wall and stays), so they have to be nameable in a phase. Hence a second, wider list.
 
 def _simple_with_a_load() -> schemas.Project:
-    p = _crow_like().model_dump()
+    p = _layered_pit().model_dump()
     p["layered_soil"] = True
     p["loads"] = [{"id": "surcharge", "name": "Load", "kind": "line",
                    "x0": 5.0, "x1": p["domain"]["x1"], "y": 0.0,
@@ -1519,10 +1519,10 @@ def test_a_phase_may_switch_a_load_off_and_on_again():
 
 
 # ── layered_soil (was simple_example) ───────────────────────────────────────
-# The rename is `plan/staged-construction-plan.md` sec 7.14: the flag never meant "this
+# The rename is `plan/outdated/staged-construction-plan.md` sec 7.14: the flag never meant "this
 # model is simple", it meant "build the soil out of the layer stack and whatever the
 # user drew, rather than raising the seeded demo wall ring, strut frame and pile group".
-# `examples/crow/crow.py` sets it on a model nobody would call simple, which is what
+# A real staged excavation sets it on a model nobody would call simple, which is what
 # made the old name worth the churn.
 
 def test_layered_soil_accepts_the_old_simple_example_name():

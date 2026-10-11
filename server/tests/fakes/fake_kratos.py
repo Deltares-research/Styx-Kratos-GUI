@@ -54,17 +54,21 @@ def _member_outputs(export: dict, directory: Path, params: dict) -> list[str]:
             name = process["Parameters"]["output_file_name"]
             part = process["Parameters"]["model_part_name"].split(".", 1)[1]
             nodes = deck.parts[part].nodes if part in deck.parts else []
+            # What each member's process asks for, as a real run writes it: forces and
+            # displacements on a beam, tractions on an interface.
+            traction = "interface" in name.rsplit("__output_", 1)[-1]
             payload = {"TIME": [1.0]}
             for n in nodes:
                 x, y, _ = deck.nodes[n]
-                payload[f"NODE_{n}"] = {
-                    "BENDING_MOMENT": [index * 1000.0 * y * (y + 13.0)],
-                    "SHEAR_FORCE": [index * 1000.0 * (2 * y + 13.0)],
-                    "AXIAL_FORCE": [-index * 100.0 * y],
-                    "TOTAL_DISPLACEMENT_X": [-index * 1e-3 * (y + 13.0)],
-                    "TOTAL_DISPLACEMENT_Y": [0.0],
-                    "GEO_EFFECTIVE_TRACTION_VECTOR": [[index * 1000.0 * y, 100.0 * y]],
-                }
+                payload[f"NODE_{n}"] = (
+                    {"GEO_EFFECTIVE_TRACTION_VECTOR": [[index * 1000.0 * y, 100.0 * y]]}
+                    if traction else {
+                        "BENDING_MOMENT": [index * 1000.0 * y * (y + 13.0)],
+                        "SHEAR_FORCE": [index * 1000.0 * (2 * y + 13.0)],
+                        "AXIAL_FORCE": [-index * 100.0 * y],
+                        "TOTAL_DISPLACEMENT_X": [-index * 1e-3 * (y + 13.0)],
+                        "TOTAL_DISPLACEMENT_Y": [0.0],
+                    })
             target = Path(name).name
             (directory / target).write_text(json.dumps(payload), encoding="utf-8")
             written.append(target)

@@ -8,14 +8,14 @@ import time
 
 import pytest
 
-from tests.e2e.test_flows import LONG, calculate, run_crow
+from tests.e2e.test_flows import LONG, calculate, run_model
 from tests.perf.test_perf import check
 
 pytestmark = pytest.mark.perf
 
 
 def test_first_results_on_screen_and_a_phase_switch(app_page, request):
-    run_crow(app_page)
+    run_model(app_page)
     started = time.perf_counter()
     calculate(app_page)
     app_page.wait_for_function("document.querySelector('#vp-legend')"

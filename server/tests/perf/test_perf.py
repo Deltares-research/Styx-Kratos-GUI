@@ -5,9 +5,10 @@ failed above `SLOWDOWN` times it. Timings are the owner's machine's: on another 
 regenerate the baseline (`--update-snapshots`) before reading anything into a failure.
 What is measured is what a user waits for:
 
-* meshing and exporting CROW (Calculate's first half, and Export);
-* reading one stage of a run back -- the CROW fixture's final stage, and a synthetic
-  20-stage Eemdijk-sized run, cold (finding F10's cache is what keeps the warm case cheap);
+* meshing and exporting the test model (Calculate's first half, and Export);
+* reading one stage of a run back -- the final stage of a real run of the test model
+  (skipped without Kratos), and a synthetic 20-stage run, cold (finding F10's cache is
+  what keeps the warm case cheap);
 * in the page, the time from `results phase <n>` to that phase drawn (tests/e2e).
 """
 
@@ -20,9 +21,10 @@ from pathlib import Path
 
 import pytest
 
-from app import build, calculate, crow, kratos, results
+from app import build, calculate, kratos, results
 from app.schemas import MeshRequest
-from tests import crow_run
+from tests import results_run
+from tests.models import excavation
 
 pytestmark = pytest.mark.perf
 
@@ -52,33 +54,33 @@ def check(name: str, seconds: float, request) -> None:
         f"{name}: {seconds:.3f} s against a baseline of {baseline[name]:.3f} s")
 
 
-def test_meshing_and_exporting_crow(request):
-    project = crow.crow_project(staged=True)
+def test_meshing_and_exporting_the_test_model(request):
+    project = excavation.excavation_project(staged=True)
     settings = MeshRequest(**project.mesh.model_dump())
 
     def export():
         with build.session():
             kratos.export_project(project, settings)
-    check("export_crow_s", median_seconds(export), request)
+    check("export_model_s", median_seconds(export), request)
 
 
 def test_reading_the_final_stage_of_a_run_cold(request, monkeypatch):
-    crow_run.use_fixture_runs(monkeypatch)
+    run = results_run.use(monkeypatch, results_run.real_run())
 
     def read():
         results.forget_cache()
-        results.stage_fields(crow_run.RUN_ID, 7)
-        results.stage_geometry(crow_run.RUN_ID, 7)
-        results.stage_field(crow_run.RUN_ID, 7, "p")
-    check("read_crow_stage_cold_s", median_seconds(read), request)
+        results.stage_fields(run, 7)
+        results.stage_geometry(run, 7)
+        results.stage_field(run, 7, "p")
+    check("read_model_stage_cold_s", median_seconds(read), request)
 
 
 def test_opening_a_twenty_stage_run_and_stepping_through_it(request, tmp_path, monkeypatch):
-    """Eemdijk's size: 20 stages. The parts listing reads every stage's mesh once; after
+    """A long staged deck: 20 stages. The parts listing reads every stage's mesh once; after
     that, stepping through the phases must cost a field, not a re-parse (F10)."""
     from tests.fakes import gid_writer
 
-    project = crow.crow_project(staged=True)
+    project = excavation.excavation_project(staged=True)
     with build.session():
         export = kratos.export_project(project, MeshRequest(element_size=2.0, order=2))
     params = json.loads(export["project_parameters"])

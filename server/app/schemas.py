@@ -233,8 +233,8 @@ class Excavation(Base):
     """The lifts the pit is dug in, shallowest first, each strictly below the last.
 
     A staged excavation is not one hole that appears at once: each lift is its own body
-    in the mesh, deactivated in its own phase (`Excavated_Soil_1/2/3` in the CROW
-    reference deck). One level means an unstaged pit, which is what every project
+    in the mesh, deactivated in its own phase (`Excavated_Soil_1/2/3` in Kratos'
+    staged-excavation reference deck). One level means an unstaged pit, which is what every project
     written before this field had, and is why it defaults to `[floor_y]` rather than to
     empty.
     """
@@ -524,7 +524,7 @@ class AnchorSection(KratosPropertySet):
 class Anchor(Base):
     """One anchor: a two-node tie from a sheet pile to a restrained point.
 
-    The formulation is the one examples/crow_case.mdpa writes -- a single
+    The formulation is the one Kratos' reference decks write -- a single
     `LinearTrussElement2D2N` whose head node is shared with the beam and whose tail node
     belongs to no other element, held by its own node group. The tail is therefore *not*
     coupled to the soil continuum: the grouted body is idealised as a fixed point, which
@@ -564,7 +564,7 @@ class Anchor(Base):
 # nodes are separate, so the wall and the soil can move relative to one another instead
 # of being welded together the way `_embed_beams` leaves them.
 #
-# The formulation is read off examples/crow_case.mdpa, which is exactly this: the sheet
+# The formulation is read off Kratos' reference decks, which are exactly this: the sheet
 # pile owns its own nodes, each side of the soil owns a duplicate set, and one
 # `Geo_UPwLineInterfacePlaneStrainDiffOrderElement3Plus3N` per side per beam segment
 # ties them together. See the element table in app/kratos.py and the node split in
@@ -602,8 +602,8 @@ class InterfaceSection(KratosPropertySet):
     r_inter: float | None = Field(default=None, gt=0, le=1)
     """The strength reduction for the whole contact. None -- each stretch of contact takes
     the Rinter of the soil it runs against (`Material.r_inter`). That is the rule here and
-    the one Kratos' CROW Mohr-Coulomb case follows: its clay is reduced by 0.48 and its
-    sand by 0.57 along the same wall."""
+    the one Kratos' Mohr-Coulomb staged-excavation reference follows: a clay and a
+    sand along the same wall are reduced by different factors."""
     virtual_thickness: float = Field(default=1.0, gt=0)       # m
     """The element size normal to the interface, which the derived stiffnesses are the
     soil's shear modulus over. 1.0 is the reference deck's own."""
@@ -616,8 +616,8 @@ class Interface(Base):
     Two ways to place one, and exactly one of them per record:
 
     *   `structure` names a sheet pile. The interface runs the whole pile, and `side`
-        says which of the two soils is unglued from it. This is the crow-case
-        arrangement and the usual one -- a wall slides against the ground on both faces.
+        says which of the two soils is unglued from it. This is the usual
+        arrangement -- a wall slides against the ground on both faces.
     *   `points` is a free polyline in the section, which splits soil from soil: an
         excavation face, a slip surface, a lining. There is no structure in the middle,
         so one soil keeps the original nodes and the other is detached; `side` says
@@ -685,7 +685,7 @@ class NormalLoad(Base):
     *   `"Hydrostatic"` derives the pressure from `Project.water` at export time --
         zero at the phreatic level, increasing with depth below it -- so the load
         tracks the water table rather than a value copied onto each stage's record.
-        This is the CROW reference case's `WaterLoad_StageN` arrangement.
+        This is a staged excavation's `WaterLoad_StageN` arrangement.
     *   `"Uniform"` applies `pressure` everywhere along the line instead, for a load
         that is not water: a surcharge normal to a sloped face, say.
     """
@@ -742,7 +742,7 @@ class NormalLoad(Base):
 # `loads[]` already holds three kinds. Records stay dimension-native: a 2D pile keeps
 # its `(x, y)` polyline and is untouched by any of this.
 #
-# No 3D element class is pinned by a reference deck here -- every deck in examples/ is
+# No 3D element class is pinned by a reference deck here -- every reference deck is
 # plane strain. See plan/structure-mode-implementation-plan.md and the element tables
 # in app/kratos.py, which name every unconfirmed choice in one place.
 
@@ -970,7 +970,7 @@ class Phase(Base):
     pressure calculation type" in the phase panel). The reference deck never varies
     it -- it changes which water *load* is active, not the water table -- so there is
     no worked example to follow and inventing one would be guessing. See
-    plan/staged-construction-plan.md sec 7.
+    plan/outdated/staged-construction-plan.md sec 7.
     """
     id: Ident
     name: str
@@ -1181,7 +1181,7 @@ class Deck(Base):
     """A Kratos deck that already exists on disk, standing in for the parametric model.
 
     Set by `app.deck.deck_project` for a case that is written as a deck rather than
-    built from layers -- the Eemdijk case, with its twenty stages, three material sets
+    built from layers -- a dike analysis, say, with twenty stages, three material sets
     and phreatic multi-lines, none of which this schema can say. The deck is shown as
     its own mesh and calculated as the files it is; nothing is exported. Every other
     field of a project carrying one is the empty site `seed.blank_project` is, there
@@ -1211,7 +1211,7 @@ class Project(Base):
 
     Named `simple_example` until the phase editor made it user-visible, which was the
     wrong name twice over: it is not about examples, and the models that set it are not
-    simple -- `examples/crow/crow.py` sets it. The old spelling is still accepted on the
+    simple -- a staged model script sets it. The old spelling is still accepted on the
     way in (see `_reconcile_layered_soil`); nothing writes it any more.
     """
 

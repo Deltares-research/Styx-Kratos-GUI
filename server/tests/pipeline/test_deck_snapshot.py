@@ -20,17 +20,20 @@ from pathlib import Path
 
 import pytest
 
-from app import build, crow, kratos
+from app import build, kratos
 from app.schemas import MeshRequest
 from app.seed import seed_project
 from tests import mdpa
+from tests.models import excavation
 
 SNAPSHOTS = Path(__file__).with_name("deck_snapshots")
 COUNT_TOLERANCE = 0.02
 
 MODELS = {
-    "crow_staged": (lambda: crow.crow_project(staged=True), MeshRequest(element_size=8.0, order=2)),
-    "crow_unstaged": (lambda: crow.crow_project(staged=False), MeshRequest(element_size=8.0, order=1)),
+    "excavation_staged": (lambda: excavation.excavation_project(staged=True),
+                          MeshRequest(element_size=8.0, order=2)),
+    "excavation_unstaged": (lambda: excavation.excavation_project(staged=False),
+                            MeshRequest(element_size=8.0, order=1)),
     "seed_3d": (lambda: seed_project(), MeshRequest(element_size=12.0, order=1)),
 }
 

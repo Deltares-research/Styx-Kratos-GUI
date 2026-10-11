@@ -21,30 +21,30 @@
   var log, opened, api, saved;
 
   var RUNS = [
-    { id: 'CROW_excavation_wall_2026-09-22_00-49', deck: 'CROW_excavation_wall',
+    { id: 'Staged_excavation_2026-09-22_00-49', deck: 'Staged_excavation',
       started: '2026-09-22T00:49', repeat: 1, results: 7, files: 30, bytes: 6234567 },
     { id: 'column_new_2026-09-20_22-37', deck: 'column_new',
       started: '2026-09-20T22:37', repeat: 1, results: 1, files: 7, bytes: 41234 }
   ];
 
   var DETAIL = {
-    id: 'CROW_excavation_wall_2026-09-22_00-49', deck: 'CROW_excavation_wall',
+    id: 'Staged_excavation_2026-09-22_00-49', deck: 'Staged_excavation',
     started: '2026-09-22T00:49', repeat: 1, results: 7, files: 30, bytes: 6234567,
     complete: true, failed_at: null, log: 'kratos.log',
     stages: [
       { index: 1, name: '1_Initial_stage', phase: 'Initial stage',
-        base: 'CROW_excavation_wall_1_Initial_stage',
-        results_file: 'CROW_excavation_wall_1_Initial_stage.post.res',
-        mesh_file: 'CROW_excavation_wall_1_Initial_stage.post.msh',
+        base: 'Staged_excavation_1_Initial_stage',
+        results_file: 'Staged_excavation_1_Initial_stage.post.res',
+        mesh_file: 'Staged_excavation_1_Initial_stage.post.msh',
         results: true, json: [] },
       { index: 2, name: '2_First_excavation', phase: 'First excavation',
-        base: 'CROW_excavation_wall_2_First_excavation',
-        results_file: 'CROW_excavation_wall_2_First_excavation.post.res',
-        mesh_file: 'CROW_excavation_wall_2_First_excavation.post.msh',
+        base: 'Staged_excavation_2_First_excavation',
+        results_file: 'Staged_excavation_2_First_excavation.post.res',
+        mesh_file: 'Staged_excavation_2_First_excavation.post.msh',
         results: true, json: ['2_First_excavation__output_wall.json'] }
     ],
     files: [
-      { name: 'CROW_excavation_wall.mdpa', bytes: 494424 },
+      { name: 'Staged_excavation.mdpa', bytes: 494424 },
       { name: 'kratos.log', bytes: 182962 }
     ]
   };
@@ -123,7 +123,7 @@
   test('a command that is not ours is declined so the chain can continue', function () {
     setup();
     T.eq(App.Results.handleCommand('mesh'), false);
-    T.eq(App.Results.handleCommand('run examples/crow/crow.py'), false);
+    T.eq(App.Results.handleCommand('run models/pit.py'), false);
     T.eq(App.Results.handleCommand(''), false);
     T.eq(App.Results.handleCommand('resultsomething'), false);
     T.eq(log.length, 0, 'a declined command must not write to the log');
@@ -141,9 +141,9 @@
     return App.Results.handleCommand('results runs').then(function () {
       T.eq(api.calls, ['/api/results/runs']);
       var body = lines().join('\n');
-      T.ok(body.indexOf('CROW_excavation_wall') !== -1);
+      T.ok(body.indexOf('Staged_excavation') !== -1);
       T.ok(body.indexOf('column_new') !== -1);
-      T.ok(body.indexOf('CROW_excavation_wall') < body.indexOf('column_new'),
+      T.ok(body.indexOf('Staged_excavation') < body.indexOf('column_new'),
            'the newest run must be listed first');
     });
   });
@@ -152,7 +152,7 @@
     setup();
     return App.Results.handleCommand('results runs').then(function () {
       var first = lines().filter(function (line) {
-        return line.indexOf('CROW_excavation_wall_2026') !== -1;
+        return line.indexOf('Staged_excavation_2026') !== -1;
       })[0];
       T.ok(first, 'the run was not listed at all');
       T.ok(/^\s*1\b/.test(first), 'the listing index is what `results open 1` takes');
@@ -272,7 +272,7 @@
       return App.Results.handleCommand('results files');
     }).then(function () {
       T.eq(api.calls, [], 'the file list came back with the run; do not re-fetch it');
-      T.ok(said('CROW_excavation_wall.mdpa'));
+      T.ok(said('Staged_excavation.mdpa'));
       T.ok(said('kratos.log'));
     });
   });

@@ -41,7 +41,7 @@ def test_the_loopback_names_are_served(client, host):
 def test_a_foreign_host_is_refused_before_any_route_runs(client, host):
     """DNS rebinding: the page's own name now points at 127.0.0.1."""
     response = client.post("/api/project/script", headers={"Host": host},
-                           json={"path": "app/crow.py"})
+                           json={"path": "tests/models/excavation.py"})
 
     assert response.status_code == 400
     assert "host" in response.json()["detail"].lower()
@@ -52,7 +52,7 @@ def test_a_foreign_host_is_refused_before_any_route_runs(client, host):
 def test_a_cross_site_request_is_refused(client, origin):
     """A form or a fetch from another site carries that site's Origin."""
     response = client.post("/api/project/script", headers={"Origin": origin},
-                           content=b'{"path": "app/crow.py"}')
+                           content=b'{"path": "tests/models/excavation.py"}')
 
     assert response.status_code == 403
     assert "origin" in response.json()["detail"].lower()
@@ -94,7 +94,8 @@ def test_an_upload_over_the_limit_is_refused_and_leaves_nothing_behind(
 
 
 def test_the_upload_limit_is_generous_by_default():
-    """A real deck is megabytes (Eemdijk's mesh: ~3 MB); the limit is for runaway files."""
+    """A real deck is megabytes (a dike section's mesh: ~3 MB); the limit is for
+    runaway files."""
     assert main.MAX_UPLOAD_BYTES >= 100 * 2**20
 
 

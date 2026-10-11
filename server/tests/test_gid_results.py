@@ -22,8 +22,8 @@ from app import gid_results
 
 REFERENCE = Path(__file__).resolve().parents[2] / "test"
 """The GeoMechanicsApplication's own 1D consolidation deck and its eleven stages of
-output, copied into the repository root's `test/`. Gitignored, like `examples/` -- so
-every case that reads it skips when it is not there."""
+output, copied into the repository root's `test/`. Not tracked -- so every case that
+reads it skips when it is not there."""
 
 
 def reference_stage(n: int) -> tuple[Path, Path]:

@@ -8,7 +8,8 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from app import crow, units
+from app import units
+from tests.models import excavation
 from app.main import app
 from app.schemas import Project
 
@@ -115,7 +116,7 @@ def test_the_kn_deck_is_the_si_deck_in_kilonewtons(client):
     from app import build, kratos
     from app.schemas import MeshRequest
 
-    si = crow.crow_project(staged=True)
+    si = excavation.excavation_project(staged=True)
     kn_payload, _ = units.convert_project(si.model_dump(mode="json"), "kN")
     kn = Project.model_validate(kn_payload)
     with build.session():
@@ -140,7 +141,7 @@ def test_the_kn_deck_is_the_si_deck_in_kilonewtons(client):
 
 
 def test_going_to_3d_carries_the_soil_law_with_it(client):
-    put(client, crow.crow_project(staged=True))
+    put(client, excavation.excavation_project(staged=True))
     answer = client.patch("/api/project/dimension", json={"dimension": 3})
     assert answer.status_code == 200, answer.text
     assert {m.constitutive_law for m in current(client).materials} == {
@@ -151,7 +152,7 @@ def test_going_to_3d_carries_the_soil_law_with_it(client):
 
 
 def test_a_law_this_application_cannot_pair_is_kept_and_named(client):
-    data = crow.crow_project(staged=False).model_dump(mode="json")
+    data = excavation.excavation_project(staged=False).model_dump(mode="json")
     data["materials"][0]["constitutive_law"] = "SmallStrainUDSM2DPlaneStrainLaw"
     put(client, Project.model_validate(data))
     answer = client.patch("/api/project/dimension", json={"dimension": 3}).json()

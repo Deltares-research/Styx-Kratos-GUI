@@ -56,8 +56,8 @@
   });
 
   T.test('the summary names the model, its size and where the parts are', function () {
-    var text = D.summary(MESH, 'Eemdijk (blue)');
-    T.ok(/^Eemdijk \(blue\)/.test(text), text);
+    var text = D.summary(MESH, 'Dike section');
+    T.ok(/^Dike section/.test(text), text);
     T.ok(/2D/.test(text), text);
     T.ok(/16 885 nodes/.test(text), text);
     T.ok(/5 155 continuum/.test(text), 'both soil classes are counted together: ' + text);

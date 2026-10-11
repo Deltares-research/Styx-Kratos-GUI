@@ -2,14 +2,15 @@
 
 from __future__ import annotations
 
-from app import calculate, crow, results
+from app import calculate, kratos, results
+from tests.models import excavation
 from tests.fakes import fake_kratos
 
 
 def test_a_fake_run_reads_as_a_complete_run_with_member_curves(tmp_path, monkeypatch):
     monkeypatch.setenv(calculate.RUNS_ENV, str(tmp_path))
     results.forget_cache()
-    outcome = fake_kratos.fake_run(crow.export(crow.crow_project(staged=True)))
+    outcome = fake_kratos.fake_run(kratos.export_project(excavation.excavation_project(staged=True)))
 
     run_id = outcome["directory"].replace("\\", "/").rsplit("/", 1)[1]
     described = results.describe(run_id)

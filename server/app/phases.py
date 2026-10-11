@@ -159,13 +159,13 @@ def default_phases(project: Project) -> list[Phase]:
 
 
 def staged_excavation_phases(project: Project) -> list[Phase]:
-    """A whole staged-excavation sequence, built from the model: the CROW case's.
+    """A whole staged-excavation sequence, built from the model.
 
-    What `app.crow` gives its model, and what `default_phases` used to give every
-    model. Shaped like the reference deck, because the reference deck is a normal excavation
+    What a staged model script gives its model, and what `default_phases` used to
+    give every model. Shaped like the reference deck, because the reference deck is a normal excavation
     and the shape generalises: settle the ground, build the wall, then alternate digging
-    with propping. For CROW it reproduces all seven stages exactly
-    (`tests/test_phases.py`).
+    with propping. For the reference deck it reproduces all seven
+    stages exactly (`tests/test_phases.py`).
 
         1  initial            K0 procedure; everything not yet built is switched off
         2  null_step          the same model, solved again, to settle the K0 stresses

@@ -1,4 +1,4 @@
-"""Every route's contract, in one table (plan/full-test-and-validation-plan.md sec 5).
+"""Every route's contract, in one table (plan/active/full-test-and-validation-plan.md sec 5).
 
 For each route in `app.main`:
 
@@ -28,10 +28,11 @@ from fastapi.testclient import TestClient
 from app import deck as decks
 from app.main import app
 from app.seed import seed_project
-from tests import crow_run
+from tests import results_run
 from tests.test_importer import stl_text
 
-RUN = crow_run.RUN_ID
+RUN = None
+"""The fake run of the test model the results routes read, set by the `client` fixture."""
 COARSE = {"element_size": 6.0, "order": 1}
 
 
@@ -84,7 +85,7 @@ CONTRACTS = [
     Contract("POST", "/api/project/new", lambda c: c.post("/api/project/new"),
              PROJECT_KEYS, EVERYTHING),
     Contract("POST", "/api/project/script",
-             lambda c: c.post("/api/project/script", json={"path": "app/crow.py"}),
+             lambda c: c.post("/api/project/script", json={"path": "tests/models/excavation.py"}),
              {"project", "path", "mesh", "invalidates"}, EVERYTHING,
              bad=lambda c: c.post("/api/project/script", json={"path": "no/such/file.py"}),
              bad_status=400),
@@ -237,7 +238,8 @@ def _id(contract: Contract) -> str:
 
 @pytest.fixture
 def client(monkeypatch, tmp_path):
-    crow_run.use_fixture_runs(monkeypatch)
+    global RUN
+    RUN = results_run.use(monkeypatch, results_run.fake_run())
     # Calculate runs this interpreter in Kratos' place: the route's own shape is the
     # point here, not the analysis (`test_calculate.py` covers the runner).
     from app import calculate

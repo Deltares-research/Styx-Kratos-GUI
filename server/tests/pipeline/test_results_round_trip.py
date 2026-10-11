@@ -1,7 +1,7 @@
 """Project -> deck -> (synthetic) run -> results API, end to end without Kratos (alpha 2.4).
 
-CROW is exported as Calculate would export it, and `tests/fakes/gid_writer.py` writes
-every stage's GiD output with fields that are analytic functions of the coordinates --
+The test model is exported as Calculate would export it, and `tests/fakes/gid_writer.py`
+writes every stage's GiD output with fields that are analytic functions of the coordinates --
 in three sub-steps per stage, so the reader has to take the last one (finding F6). Then
 everything is read back through the HTTP routes the Results mode uses, and each number is
 compared with the function that wrote it:
@@ -19,13 +19,14 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from app import build, calculate, crow, kratos, phases, results
+from app import build, calculate, kratos, phases, results
+from tests.models import excavation
 from app.main import app
 from app.schemas import MeshRequest
 from tests import mdpa
 from tests.fakes import gid_writer
 
-RUN = "CROW_excavation_wall_2026-01-01_00-00"
+RUN = "Staged_excavation_2026-01-01_00-00"
 WATER = None
 
 
@@ -45,7 +46,7 @@ def stress(x, y, z, stage):
 @pytest.fixture(scope="module")
 def run(tmp_path_factory):
     global WATER
-    project = crow.crow_project(staged=True)
+    project = excavation.excavation_project(staged=True)
     WATER = project.water.y
     with build.session():
         export = kratos.export_project(project, MeshRequest(element_size=8.0, order=2))

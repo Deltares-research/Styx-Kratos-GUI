@@ -1,8 +1,8 @@
 """A model that is a Kratos deck already: shown as its own mesh, run as its own files.
 
-`app.crow` builds its case out of the parametric `Project` and exports it. That is the
-right way round for a model the schema can say, and the wrong one for a case like
-Eemdijk: twenty stages, three material sets swapped between them, phreatic multi-lines,
+A model script usually builds its case out of the parametric `Project`, which is then
+exported. That is the right way round for a model the schema can say, and the wrong
+one for a case like a long-running dike analysis: twenty stages, three material sets swapped between them, phreatic multi-lines,
 a crane load that comes and goes, and a constitutive-law switch -- written, run and
 validated as a deck, and nothing the layers-and-boreholes schema can express. Rebuilding
 it would be a second model of the same dike, checked against nothing.
@@ -11,8 +11,8 @@ So a deck case script hands back a project that *points at* the deck::
 
     from app.deck import deck_project
 
-    def eemdijk_project():
-        return deck_project(HERE, "eemdijk.json", name="Eemdijk (blue)")
+    def dike_project():
+        return deck_project(HERE, "dike.json", name="Dike section")
 
 and `run <file.py>` opens it like any other model. What differs is downstream:
 

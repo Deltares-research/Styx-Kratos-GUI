@@ -25,7 +25,7 @@ Three things shape it:
     `UnsafeName`.
 
 Nothing here parses a result. Finding the files is this milestone; reading them is the
-next one (`plan/postprocessing-plan.md`, P1).
+next one (`plan/active/postprocessing-plan.md`, P1).
 """
 
 from __future__ import annotations
@@ -360,7 +360,7 @@ overflowed on every phase switch. Now it is bounded by the size of what it parse
 """
 
 CACHE_BYTES = 96 * 2**20
-"""Budget in bytes of *source file*. A 20-stage Eemdijk run is ~13 MB of meshes and ~4 MB
+"""Budget in bytes of *source file*. A 20-stage dike run is ~13 MB of meshes and ~4 MB
 per stage of results, so this holds a run's meshes and a dozen stages of results; the
 parsed objects are a few times larger than their text."""
 

@@ -212,8 +212,8 @@ def test_each_stage_is_one_step_and_the_settling_stages_sit_before_zero():
     """dt = 1 per stage; the K0 stage and the null step run at negative time, as in the
     reference deck, so the construction starts at t = 0."""
     import json as _json
-    from app import crow
-    params = _json.loads(crow.export(crow.crow_project(staged=True))["project_parameters"])
+    from tests.models import excavation
+    params = _json.loads(kratos.export_project(excavation.excavation_project(staged=True))["project_parameters"])
     order = params["orchestrator"]["settings"]["execution_list"]
     times = [(params["stages"][n]["stage_settings"]["problem_data"]["start_time"],
               params["stages"][n]["stage_settings"]["problem_data"]["end_time"]) for n in order]

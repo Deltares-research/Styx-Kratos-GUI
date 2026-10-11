@@ -1,4 +1,4 @@
-# What every push and pull request must pass (plan/alpha-test-plan.md Task 0.6, decision D8).
+# What every push and pull request must pass (plan/active/alpha-test-plan.md Task 0.6, decision D8).
 # Kratos is not installable here, so the kratos/bench tiers run on a machine that has it.
 name: tests
 

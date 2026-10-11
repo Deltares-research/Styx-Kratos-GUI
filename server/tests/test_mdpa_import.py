@@ -1,29 +1,15 @@
 """`app.mdpa_import`: reading a .mdpa deck back into typed mesh data.
 
-Checked two ways: round-tripped through `kratos.export_project` (so the classification
-tables are proven against the same fixture the forward-export tests use), and against
-the real GiD-authored decks in examples/, which this codebase did not write and may use
-element classes the export side never emits.
+Round-tripped through `kratos.export_project`, so the classification tables are proven
+against the same fixture the forward-export tests use, and fed hand-written decks for the
+element classes a deck written elsewhere uses and the export side never emits.
 """
-
-from pathlib import Path
 
 import pytest
 
 from app import build, kratos, mdpa_import
 from app.schemas import MeshRequest, Project
 from app.seed import seed_project
-
-EXAMPLES = Path(__file__).resolve().parents[2] / "examples"
-
-
-def reference_deck(filename: str) -> str:
-    """A GiD-authored deck from the gitignored examples/, or a skip naming the missing path."""
-    path = EXAMPLES / filename
-    if not path.exists():
-        pytest.skip(f"reference deck {path} is not in this checkout")
-    return path.read_text()
-
 
 @pytest.fixture(scope="module")
 def session():
@@ -105,23 +91,6 @@ def test_to_dict_is_json_safe(reimported):
     import json
 
     json.dumps(reimported.to_dict())
-
-
-# ── Real, externally-authored decks ──────────────────────────────────────────
-
-@pytest.mark.parametrize("filename", [
-    "simple_embankment.mdpa", "crow_case.mdpa", "dike_with_sheet_pile.mdpa",
-    "Deep_excavation_Rotterdam_Zuid.mdpa",
-])
-def test_reference_decks_parse_without_error(filename):
-    text = reference_deck(filename)
-
-    model = mdpa_import.import_mdpa(text)
-
-    assert model.nodes
-    assert model.elements
-    for entity in model.elements + model.conditions:
-        assert len(entity.entries) > 0
 
 
 def test_an_unmapped_class_name_is_kept_as_unknown_rather_than_failing():
@@ -215,8 +184,8 @@ def test_a_2d_deck_draws_its_triangles_directly_with_no_boundary_extraction():
                                   "SmallStrainUPwDiffOrderElement2D8N",
                                   "SmallStrainUPwDiffOrderElement2D9N"])
 def test_a_2d_quadrilateral_class_is_soil_rather_than_unknown(name):
-    """This app's exporter only ever writes triangles, but a deck from elsewhere (the
-    Eemdijk one is almost all 8-node quads) is mostly quadrilaterals -- unknown, they
+    """This app's exporter only ever writes triangles, but a deck from elsewhere is often
+    mostly 8-node quadrilaterals -- unknown, they
     were counted and never drawn, leaving a scatter of the deck's few triangles."""
     nodes = {"4N": 4, "8N": 8, "9N": 9}[name[-2:]]
     model = mdpa_import.import_mdpa(
@@ -290,14 +259,15 @@ def test_a_quadratic_beam_spans_end_to_end_not_end_to_midside():
     assert beam["indices"] == [], "a beam has no triangles, only its own line segment"
 
 
-def test_a_beams_segments_join_up_into_one_unbroken_run():
+def test_a_beams_segments_join_up_into_one_unbroken_run(session):
     """The end of each element is the start of the next -- what makes a sheet pile draw
     as a continuous line rather than a row of dashes."""
-    model = mdpa_import.import_mdpa(reference_deck("crow_case.mdpa"))
+    from tests.models import excavation
 
-    # crow_case.mdpa's sheet pile is its own body sub-model part ("Sheet_Pile_Wall"),
-    # not a leftover -- see test_a_body_sub_model_part_becomes_its_own_section below.
-    beam = next(s for s in mdpa_import.to_sections(model) if s["part"] == "Sheet_Pile_Wall")
+    exported = kratos.export_project(excavation.excavation_project(staged=False),
+                                     MeshRequest(element_size=8.0, order=2))
+    model = mdpa_import.import_mdpa(exported["mdpa"])
+    beam = next(s for s in mdpa_import.to_sections(model) if s["part"] == "SheetPileWall")
 
     points = [tuple(beam["edges"][i:i + 3]) for i in range(0, len(beam["edges"]), 3)]
     starts = {points[i] for i in range(0, len(points), 2)}
@@ -408,23 +378,8 @@ def test_with_no_sub_model_parts_declared_everything_falls_back_to_one_section_p
     assert sections[0]["part"] is None
 
 
-def test_an_interface_only_body_part_draws_the_line_it_lies_along():
-    """crow_case.mdpa's "Interface_..." parts own only zero-thickness interface
-    elements. They are drawn -- as line work, since there is no thickness to fill -- so
-    each gets its own checklist row and its own eye in the Model explorer."""
-    model = mdpa_import.import_mdpa(reference_deck("crow_case.mdpa"))
-
-    sections = {s["key"]: s for s in mdpa_import.to_sections(model)}
-
-    contact = sections["imported:Interface_Top_Right"]
-    assert contact["kind"] == "interface"
-    assert contact["edges"], "a contact is line work, not a surface"
-    assert contact["indices"] == []
-    assert any(k.startswith("imported:") for k in sections), "the real bodies still draw"
-
-
 def test_an_invisible_body_part_does_not_burn_a_palette_slot():
-    """A body part that draws nothing (like crow_case.mdpa's "Interface_..." parts)
+    """A body part that draws nothing (an "Interface_..." part a GiD-authored deck writes)
     must not shift every later part's colour along by one -- otherwise two real bodies
     a palette's length apart end up sharing a colour by accident, for a reason nobody
     looking at the checklist could see (an invisible part in between)."""
@@ -461,20 +416,6 @@ def test_an_invisible_body_part_does_not_burn_a_palette_slot():
         "Soil_B is the second *visible* body -- the invisible one in between must not "
         "have consumed a palette slot"
     )
-
-
-@pytest.mark.parametrize("filename", [
-    "simple_embankment.mdpa", "crow_case.mdpa", "dike_with_sheet_pile.mdpa",
-    "Deep_excavation_Rotterdam_Zuid.mdpa",
-])
-def test_reference_decks_produce_at_least_one_drawable_section(filename):
-    model = mdpa_import.import_mdpa(reference_deck(filename))
-
-    sections = mdpa_import.to_sections(model)
-
-    assert sections
-    for section in sections:
-        assert section["indices"] or section["edges"]
 
 
 # ── A deck's node table is already the world frame ───────────────────────────────

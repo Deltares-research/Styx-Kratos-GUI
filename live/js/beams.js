@@ -12,7 +12,7 @@
    profile a sheet pile uses, standing in space. Which kinds a project can hold is
    its dimension's business; `available()` and `draft()` ask, rather than assume.
 
-   Confidence note: every reference deck in examples/ is plane strain, so the 2D
+   Confidence note: every reference deck is plane strain, so the 2D
    pile's element classes are the only ones pinned by a fixture. The 3D classes
    follow Kratos' documented naming and are named in one place, app/kratos.py.
    ══════════════════════════════════════════════════════════════════ */

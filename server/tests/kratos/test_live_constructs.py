@@ -14,7 +14,8 @@ What running them found, 2026-10-10 (all fixed unless marked xfail below):
   interface still cannot run -- a modelling decision for the owner.
 * xfail: in 3D, a stage with both a surface load (face conditions) and a strut or beam
   (line elements) stops in Kratos' own neighbour search, which asks every element for its
-  faces and a line has none. 3D CROW runs all seven stages without its surcharge.
+  faces and a line has none. The 3D test model runs all seven stages without its
+  surcharge.
 """
 
 from __future__ import annotations
@@ -24,19 +25,18 @@ from pathlib import Path
 
 import pytest
 
-from app import build, calculate, crow, kratos, result_members, results, seed
+from app import build, calculate, kratos, result_members, results, seed
+from tests.models import excavation
 from app.schemas import MeshRequest, Project
 from tests import mdpa
+from tests.results_run import require_kratos
 
 pytestmark = pytest.mark.kratos
 
 
 @pytest.fixture(scope="module", autouse=True)
 def runs_root(tmp_path_factory):
-    try:
-        calculate.interpreter()
-    except calculate.CalculationError as failure:
-        pytest.skip(f"no Kratos configured: {failure}")
+    require_kratos()
     previous = os.environ.get(calculate.RUNS_ENV)
     os.environ[calculate.RUNS_ENV] = str(tmp_path_factory.mktemp("construct-runs"))
     results.forget_cache()
@@ -73,7 +73,7 @@ def without(project: Project, **emptied) -> Project:
 # ── The "Uniform" normal load, at both orders ────────────────────────────────
 
 def soil_block(load_points=None) -> Project:
-    p = crow.crow_project(staged=False).model_dump(mode="json")
+    p = excavation.excavation_project(staged=False).model_dump(mode="json")
     p.update(beams=[], anchors=[], interfaces=[], loads=[], normal_loads=[], phases=[],
              water=None)
     if load_points:
@@ -127,7 +127,7 @@ def peak_moment(export: dict, outcome: dict, stage: str) -> tuple[float, float]:
 def test_a_first_order_section_with_a_pile_bends_it_like_second_order():
     """The straight 2-node beam (the curved one does not exist), without interfaces:
     both orders of the same model must tell the same story about the wall."""
-    project = without(crow.crow_project(staged=True), interfaces=[])
+    project = without(excavation.excavation_project(staged=True), interfaces=[])
     settings = project.mesh.model_dump()
     linear = run(project, order=1, size=settings["element_size"])
     quadratic = run(project, order=2, size=settings["element_size"])
@@ -142,18 +142,18 @@ def test_a_first_order_section_with_a_pile_bends_it_like_second_order():
     "Kratos has no linear U-Pw line interface (test_kratos_registry KNOWN_MISSING); "
     "which element replaces it is the owner's modelling decision"))
 def test_a_first_order_section_with_interfaces_runs():
-    project = crow.crow_project(staged=True)
+    project = excavation.excavation_project(staged=True)
     run(project, order=1, size=project.mesh.element_size)
 
 
 # ── 3D ──────────────────────────────────────────────────────────────────────
 
-def solid_crow() -> Project:
+def solid_excavation() -> Project:
     from fastapi.testclient import TestClient
     from app.main import app
     with TestClient(app) as client:
         try:
-            client.put("/api/project", json=crow.crow_project(staged=True).model_dump(mode="json"))
+            client.put("/api/project", json=excavation.excavation_project(staged=True).model_dump(mode="json"))
             assert client.patch("/api/project/dimension", json={"dimension": 3}).status_code == 200
             return Project.model_validate(client.get("/api/project").json())
         finally:
@@ -169,8 +169,8 @@ def test_the_3d_seed_with_its_surface_load_runs_and_settles():
 
 
 @pytest.mark.parametrize("order", [1, 2])
-def test_3d_crow_runs_every_stage_without_its_surcharge(order):
-    solid = solid_crow()
+def test_3d_excavation_runs_every_stage_without_its_surcharge(order):
+    solid = solid_excavation()
     run(without(solid, loads=[]), order=order, size=10.0 if order == 1 else 12.0)
 
 
@@ -178,5 +178,5 @@ def test_3d_crow_runs_every_stage_without_its_surcharge(order):
     "Kratos' FindNeighbourElementsOfConditions asks every element for its faces when a "
     "stage has face conditions, and the strut (a line) has none: Geometry::GenerateFaces "
     "throws in stage 5. A Kratos limitation or a condition-class choice -- owner's call"))
-def test_3d_crow_with_its_surcharge_runs_every_stage():
-    run(solid_crow(), order=1, size=10.0)
+def test_3d_excavation_with_its_surcharge_runs_every_stage():
+    run(solid_excavation(), order=1, size=10.0)

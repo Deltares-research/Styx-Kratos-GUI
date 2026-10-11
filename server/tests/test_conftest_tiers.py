@@ -1,4 +1,4 @@
-"""The opt-in test tiers (plan/alpha-test-plan.md Task 0.2): what runs by default, and what
+"""The opt-in test tiers (plan/active/alpha-test-plan.md Task 0.2): what runs by default, and what
 waits for a flag. Each case runs a small pytest session in a scratch directory with a copy
 of the real `conftest.py`, so the rules are exercised exactly as a test file meets them."""
 

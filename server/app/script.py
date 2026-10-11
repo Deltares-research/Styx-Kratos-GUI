@@ -2,9 +2,8 @@
 
 The modeller's command line takes `run <file.py>`, and this is what that runs. The file
 is ordinary Python that hands back a `Project`; the server executes it, adopts what it
-returns and the model appears in the viewport. `examples/crow/crow.py` is one, and is the worked
-example to copy. `examples/eemdijk/eemdijk.py` is the other kind: it builds nothing, and
-names a finished Kratos deck instead (`app.deck.deck_project`), which opens with its own
+returns and the model appears in the viewport. `tests/models/excavation.py` is one. A
+script of the other kind builds nothing, and names a finished Kratos deck instead (`app.deck.deck_project`), which opens with its own
 mesh and is calculated as the files it already is.
 
 A script says what it built in one of three ways, looked for in this order:
@@ -12,7 +11,8 @@ A script says what it built in one of three ways, looked for in this order:
 1.  a module-level `PROJECT`;
 2.  a zero-argument `project()`;
 3.  any other zero-argument function whose name ends in `_project` -- which is what lets
-    `examples/crow/crow.py` be run as it stands, off its own `crow_project()`.
+    `tests/models/excavation.py` be run as it stands, off its own
+    `excavation_project()`.
 
 Nothing else is called. In particular `main()` is left alone: a script written to be run
 from a shell usually writes files there, and running a file to *look* at the model it
@@ -43,9 +43,9 @@ the server's own, which `app.launcher` sets to `server/` -- and then the reposit
 above it.
 
 The root is searched because a model script belongs to the project rather than to the
-server's own directory. `examples/crow/crow.py` is how that path reads everywhere else,
-and typing `run ../examples/crow/crow.py` to reach it would only be explicable to
-somebody who already knew where the server was started from. Nearest first, so a file
+server's own directory. A path from the repository root is how it reads everywhere
+else, and typing `run ../<path>` to reach it would only be explicable to somebody who
+already knew where the server was started from. Nearest first, so a file
 beside the server still wins.
 
 The caller may also give an absolute path, which is what the command line does after
@@ -82,7 +82,7 @@ def _run(resolved: Path) -> Project:
             f"{resolved.name} needs the Python package {failure.name!r}, which is not "
             f"installed in the server's environment. A script run here may import only "
             f"what this server can (`app.schemas` and the standard library are always "
-            f"available); see examples/crow/crow.py for one that does."
+            f"available)."
         ) from failure
     except Exception as failure:                       # noqa: BLE001 - reported, not swallowed
         raise ScriptError(
@@ -96,8 +96,7 @@ def _run(resolved: Path) -> Project:
             f"{resolved.name} ran, but describes no model"
             + (f" -- {complaint}" if complaint else "") + ". It has to leave a Project "
             f"behind: either a module-level PROJECT, or a function project() -- or any "
-            f"name ending in _project -- that takes no arguments and returns one. "
-            f"examples/crow/crow.py is a worked example."
+            f"name ending in _project -- that takes no arguments and returns one."
         )
     return project
 

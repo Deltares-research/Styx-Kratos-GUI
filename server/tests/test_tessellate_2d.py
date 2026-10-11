@@ -228,16 +228,15 @@ def test_an_anchor_is_drawn_as_edges_like_the_pile_it_hangs_from():
 # ── Staged excavation ───────────────────────────────────────────────────────
 
 def test_a_staged_excavation_is_drawable():
-    """The whole CROW model, through the path the viewport uses.
+    """The whole staged test model, through the path the viewport uses.
 
     Every soil body has to be drawable, and colour is what this catches: a lift takes
     the colour of the layer it was dug out of, and one that is not given one used to
     take the whole geometry endpoint down with a KeyError rather than simply arriving
     grey.
     """
-    from tests.crow_example import crow
-    crow_project = crow.crow_project
-    project = crow_project()
+    from tests.models import excavation
+    project = excavation.excavation_project()
     with build.session():
         display = tessellate.tessellate(project)
 
@@ -249,9 +248,8 @@ def test_a_staged_excavation_is_drawable():
 
 
 def test_a_lift_is_drawn_in_the_colour_of_the_layer_it_came_from():
-    from tests.crow_example import crow
-    crow_project = crow.crow_project
-    project = crow_project()
+    from tests.models import excavation
+    project = excavation.excavation_project()
     with build.session():
         display = tessellate.tessellate(project)
 

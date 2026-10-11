@@ -7,7 +7,8 @@ slide and to open, so the one node where the two meet must become several -- one
 body -- and a zero-thickness element must be written across the gap to carry the
 friction.
 
-The arrangement is read off examples/crow_case.mdpa and reproduced here exactly:
+The arrangement is the one Kratos' GeoMechanicsApplication decks use, reproduced
+here exactly:
 
 *   The structure keeps the original node ids. Its beam elements are never rewritten.
 *   Each soil body that touches the line gets its own copy of every node on it, and its
@@ -23,7 +24,7 @@ answered per node rather than per body. Around a node, two soil elements belong 
 same copy when a chain of shared edges joins them *without crossing the interface*. At a
 node in the middle of the line that gives two copies, one per face. At the toe, where
 the line stops and the ground closes underneath, it gives one -- the soil there really is
-continuous, and crow_case.mdpa writes exactly one node for it. No geometric side test
+continuous, and a real deck writes exactly one node for it. No geometric side test
 could tell those two cases apart.
 
 Nothing here imports gmsh: it takes connectivity and returns connectivity, so the split
@@ -310,7 +311,7 @@ def _is_detached(group: dict, wanted: dict[str, tuple[str, ...]],
 
     A group labelled "both" wraps around the end of the line -- the ground under a
     pile's toe. It is detached when a structure owns the line, because there is a pile
-    there to pull it away from, and that is what crow_case.mdpa writes: one copy at the
+    there to pull it away from, and that is what a real deck writes: one copy at the
     toe, held by both faces. Along a free interface there is nothing in the middle, so
     the same wrap is simply continuous soil and stays where it is.
     """

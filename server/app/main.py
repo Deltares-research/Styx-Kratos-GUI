@@ -135,8 +135,8 @@ async def only_this_browser_tab(request, call_next):
 
 
 MAX_UPLOAD_BYTES = 256 * 2**20
-"""The largest file an upload route reads. A real deck is a few megabytes (Eemdijk's mesh is
-about 3 MB); this exists so a runaway file is a refusal, not an out-of-memory server."""
+"""The largest file an upload route reads. A real deck is a few megabytes (a dike section's mesh
+is about 3 MB); this exists so a runaway file is a refusal, not an out-of-memory server."""
 
 
 async def _read_upload(file: UploadFile) -> bytes:
@@ -215,10 +215,8 @@ def _not_for_a_deck(project: Project, what: str) -> None:
             f"deck's own. Calculate runs it as it is."))
 
 
-# There is no `/api/project/crow`. It opened the CROW staged-excavation case, back when
-# a File menu item asked for it; both are gone. An example model is opened the way any
-# model is -- `run examples/crow/crow.py` in the command box, through
-# `/api/project/script` -- which works for every model rather than for the one somebody
+# There is no endpoint that opens one particular model. A model is opened the way any
+# model is -- `run <file.py>` in the command box, through `/api/project/script` -- which works for every model rather than for the one somebody
 # wired an endpoint to.
 
 
@@ -819,7 +817,7 @@ async def _calculate_deck(project: Project) -> dict:
 #
 # Reading back what a calculation left behind. The registry only *finds* things in
 # this milestone -- which runs exist, which stages each got through, which files are
-# in it; parsing a result is the next one (`plan/postprocessing-plan.md`, P1).
+# in it; parsing a result is the next one (`plan/active/postprocessing-plan.md`, P1).
 
 
 def _results_error(failure: results.ResultsError) -> HTTPException:
