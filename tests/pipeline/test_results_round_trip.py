@@ -20,10 +20,10 @@ import pytest
 from fastapi.testclient import TestClient
 
 from core.model import phases
-from core.geometry import build
-from core.kratos import export as kratos
-from core.run import calculate
-from core.results import runs as results
+from core.geometry import solid_model
+from core.kratos import writer
+from core.analysis import calculation
+from core.results import catalog
 from tests.models import excavation
 from backend.main import app
 from core.model.schemas import MeshRequest
@@ -52,8 +52,8 @@ def run(tmp_path_factory):
     global WATER
     project = excavation.excavation_project(staged=True)
     WATER = project.water.y
-    with build.session():
-        export = kratos.export_project(project, MeshRequest(element_size=8.0, order=2))
+    with solid_model.session():
+        export = writer.export_project(project, MeshRequest(element_size=8.0, order=2))
     root = tmp_path_factory.mktemp("runs")
     active = gid_writer.write_run(export, root / RUN,
                                   nodal={"TOTAL_DISPLACEMENT": u, "WATER_PRESSURE": pw},
@@ -64,11 +64,11 @@ def run(tmp_path_factory):
 
 @pytest.fixture
 def client(run, monkeypatch):
-    monkeypatch.setenv(calculate.RUNS_ENV, str(run["root"]))
-    results.forget_cache()
+    monkeypatch.setenv(calculation.RUNS_ENV, str(run["root"]))
+    catalog.forget_cache()
     with TestClient(app) as c:
         yield c
-    results.forget_cache()
+    catalog.forget_cache()
 
 
 def nodes_in(run, stage_name) -> dict[int, tuple[float, float, float]]:
@@ -141,7 +141,7 @@ def test_every_field_at_one_node_is_the_function_there(client, run):
 def test_the_parts_alive_in_each_stage_are_the_phase_model_s(client, run, index):
     """The deck's activations (which the writer applied) and the phase model agree."""
     project = run["project"]
-    names = kratos._part_names(project)
+    names = writer._part_names(project)
     parts = {p["name"]: p for p in
              client.get(f"/api/results/runs/{RUN}/stages/{index}/parts").json()["parts"]}
     with_elements = {name for name, p in parts.items() if p["declared"]}
@@ -153,11 +153,11 @@ def test_the_parts_alive_in_each_stage_are_the_phase_model_s(client, run, index)
 
 
 def test_a_run_that_stopped_part_way_reads_as_far_as_it_got(run, tmp_path, monkeypatch):
-    with build.session():
-        export = kratos.export_project(run["project"], MeshRequest(element_size=8.0, order=2))
+    with solid_model.session():
+        export = writer.export_project(run["project"], MeshRequest(element_size=8.0, order=2))
     gid_writer.write_run(export, tmp_path / RUN, nodal={"TOTAL_DISPLACEMENT": u}, through=4)
-    monkeypatch.setenv(calculate.RUNS_ENV, str(tmp_path))
-    results.forget_cache()
-    described = results.describe(RUN)
+    monkeypatch.setenv(calculation.RUNS_ENV, str(tmp_path))
+    catalog.forget_cache()
+    described = catalog.describe(RUN)
     assert [s["results"] for s in described["stages"]] == [True] * 4 + [False] * 3
     assert described["complete"] is False

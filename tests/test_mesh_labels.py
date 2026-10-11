@@ -4,7 +4,7 @@ A label is only worth drawing if the number on it is the number the solver will 
 both sources of a displayed mesh have to hand the viewer real Kratos IDs:
 
 *   a mesh the GUI generated -- gmsh tags are *not* those IDs, because
-    `kratos.export_project` renumbers 1..N over the tags its blocks actually use, numbers
+    `writer.export_project` renumbers 1..N over the tags its blocks actually use, numbers
     elements in emission order, and the interface split adds nodes along the way, so the
     numbering can only come from the exporter itself;
 *   a `.mdpa` read back in -- the file's own tables, carried per drawn section.
@@ -16,16 +16,16 @@ midpoints, and their mean is the same point as the corners'.
 
 import pytest
 
-from core.geometry import build
-from core.kratos import export as kratos, mdpa_import
+from core.geometry import solid_model
+from core.kratos import writer, mdpa_reader
 from core.model.schemas import MeshRequest, Project
-from core.model.seed import seed_project
+from core.model.templates import seed_project
 from tests import mdpa
 
 
 @pytest.fixture(scope="module")
 def session():
-    with build.session():
+    with solid_model.session():
         yield
 
 
@@ -34,7 +34,7 @@ def exported(session):
     project = seed_project()
     project.dimension = 2
     project.section_offset = 20.0
-    return kratos.export_project(project, MeshRequest(element_size=6.0, order=2))
+    return writer.export_project(project, MeshRequest(element_size=6.0, order=2))
 
 
 # ── A generated mesh: the exporter's own numbering ───────────────────────────
@@ -81,8 +81,8 @@ def test_every_labelled_element_lies_inside_the_model(exported):
 # ── An imported deck: the file's own numbering ───────────────────────────────
 
 def test_imported_sections_name_the_node_behind_every_position(exported):
-    model = mdpa_import.import_mdpa(exported["mdpa"])
-    sections = mdpa_import.to_sections(model)
+    model = mdpa_reader.import_mdpa(exported["mdpa"])
+    sections = mdpa_reader.to_sections(model)
     assert sections, "the seed section draws at least one body"
 
     nodes = model.world_nodes()
@@ -96,8 +96,8 @@ def test_imported_sections_name_the_node_behind_every_position(exported):
 
 
 def test_imported_sections_carry_their_elements_and_where_to_label_them(exported):
-    model = mdpa_import.import_mdpa(exported["mdpa"])
-    sections = mdpa_import.to_sections(model)
+    model = mdpa_reader.import_mdpa(exported["mdpa"])
+    sections = mdpa_reader.to_sections(model)
     nodes = model.world_nodes()
     by_id = {element_id: conn
              for entity in model.elements for element_id, conn in entity.entries.items()}
@@ -115,7 +115,7 @@ def test_imported_sections_carry_their_elements_and_where_to_label_them(exported
 
 
 def test_imported_payload_reaches_the_client_with_both_tables(exported):
-    model = mdpa_import.import_mdpa(exported["mdpa"])
+    model = mdpa_reader.import_mdpa(exported["mdpa"])
     payload = model.to_dict()
     assert all(section["node_ids"] for section in payload["sections"])
     assert any(section["elements"] for section in payload["sections"])

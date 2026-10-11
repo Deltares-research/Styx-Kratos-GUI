@@ -756,7 +756,7 @@ def _embed_beams(project: Project, owners: dict[int, set[str]], dim: int,
 
     # A normal load's polyline is embedded the same way and for the same reason: it
     # needs its own mesh edges to harvest a condition off, which is what lets
-    # `core.kratos.export._normal_load_conditions` find it without scanning the boundary
+    # `core.kratos.writer._normal_load_conditions` find it without scanning the boundary
     # at a fixed elevation the way `meshing.loaded_elements` does for a flat `LineLoad`.
     for load in normal_loads:
         vertices = [point(x, y) for x, y in load.points]
@@ -827,7 +827,7 @@ def _section_sweeps(project: Project, log: list[str] | None = None
     starting there and running off to one side.
 
     Free interfaces are swept the same way and for a narrower purpose: the imprint.
-    Their zero-thickness elements are plane strain only (`core/kratos/export.py`'s `INTERFACES`
+    Their zero-thickness elements are plane strain only (`core/kratos/writer.py`'s `INTERFACES`
     table), so the surface splits the mesh and nothing more -- which is still worth
     having, because it is what makes the interface visible in the solid model.
 

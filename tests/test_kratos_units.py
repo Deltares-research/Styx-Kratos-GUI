@@ -7,7 +7,7 @@ under Kratos' names -- so the deck is the project's numbers, written as they sta
 Until 2026-10-10 the project was in kN, kN/m2 and m/day and the exporter converted
 everything on the way out, which went wrong once in the most expensive way: `DENSITY_SOLID`
 converted and nothing else, so one materials file carried two unit systems. There is now
-nothing to convert, and an old project is converted once, on load (`core/model/legacy.py`).
+nothing to convert, and an old project is converted once, on load (`core/model/migration.py`).
 
 The test model (`tests/models/excavation.py`) types its numbers in SI, so the values
 below are the ones it types -- and the test is that the deck carries them unchanged.
@@ -18,10 +18,10 @@ import json
 import pytest
 
 from core.model import schemas
-from core.kratos import export as kratos, materials as kratos_materials
-from core.geometry.build import session
+from core.kratos import writer, materials
+from core.geometry.solid_model import session
 from core.model.schemas import MeshRequest, Project
-from core.model.seed import seed_project
+from core.model.templates import seed_project
 from tests.models import excavation
 
 
@@ -29,7 +29,7 @@ from tests.models import excavation
 def exported() -> dict:
     project = excavation.excavation_project()
     with session():
-        return kratos.export_project(project,
+        return writer.export_project(project,
                                      MeshRequest(**project.mesh.model_dump()))
 
 
@@ -177,7 +177,7 @@ def test_the_deck_carries_the_numbers_as_typed(unit_system):
     convert -- a 1000 typed is a 1000 written."""
     project = Project.model_validate(_round_numbers(unit_system))
     with session():
-        exported = kratos.export_project(project, MeshRequest(element_size=6.0, order=1))
+        exported = writer.export_project(project, MeshRequest(element_size=6.0, order=1))
     soil = next(iter(json.loads(exported["materials"])["properties"]))["Material"][
         "Variables"]
     assert soil["YOUNG_MODULUS"] == 1000.0
@@ -193,8 +193,8 @@ def test_nothing_between_the_project_and_the_deck_converts_a_unit():
     constants of nature the exporter supplies for a soil that says nothing (water's
     bulk modulus, its viscosity), expressed in the project's system."""
     import inspect
-    from core.kratos import processes as kratos_processes
-    for module in (kratos_materials, kratos_processes, kratos):
+    from core.kratos import parameters
+    for module in (materials, parameters, writer):
         assert "KILO" not in inspect.getsource(module), module.__name__
 
 
@@ -235,7 +235,7 @@ def test_a_typed_k0_is_written_instead_of_jaky():
     K0 stage's file, and only there."""
     project = excavation.excavation_project(staged=True)
     with session():
-        exported = kratos.export_project(project, MeshRequest(element_size=8.0, order=2))
+        exported = writer.export_project(project, MeshRequest(element_size=8.0, order=2))
     initial = {e["model_part_name"]: e["Material"]["Variables"]
                for e in json.loads(exported["initial_materials"])["properties"]}
     assert initial["PorousDomain.Soil_Top"]["K0_NC"] == 0.58
@@ -263,17 +263,17 @@ def test_a_material_that_says_nothing_about_porosity_still_gets_a_number():
     """Derived when empty, and said: the export lists every name it filled in."""
     project = seed_project()
     derived: list[str] = []
-    written = kratos_materials._variables(_bare(), 2, False, project, derived)
-    assert written["POROSITY"] == kratos_materials.DEFAULT_POROSITY
+    written = materials._variables(_bare(), 2, False, project, derived)
+    assert written["POROSITY"] == materials.DEFAULT_POROSITY
     assert "material 'M': POROSITY" in derived
-    typed = kratos_materials._variables(_bare(POROSITY=0.0), 2, False, project, [])
+    typed = materials._variables(_bare(POROSITY=0.0), 2, False, project, [])
     assert typed["POROSITY"] == 0.0
 
 
 @pytest.mark.parametrize("unit_system, bulk", [("SI", 1.0e10), ("kN", 1.0e7)])
 def test_the_constants_a_soil_leaves_out_are_in_the_projects_system(unit_system, bulk):
     project = seed_project().model_copy(update={"unit_system": unit_system})
-    written = kratos_materials._variables(_bare(), 2, False, project, [])
+    written = materials._variables(_bare(), 2, False, project, [])
     assert written["BULK_MODULUS_SOLID"] == pytest.approx(bulk)
     # Water's density from the project's own water: 10 kN/m3 over g, in its system.
     expected = 10_000.0 / 9.81 if unit_system == "SI" else 10.0 / 9.81
@@ -288,7 +288,7 @@ def test_the_constants_a_soil_leaves_out_are_in_the_projects_system(unit_system,
 def test_the_drainage_type_is_the_materials_own(typed, expected):
     """As typed; a soil that says nothing is drained -- the pore pressure prescribed,
     not solved for -- which is what the test model's soils are."""
-    written = kratos_materials._variables(_bare(**typed), 2, False, seed_project(), [])
+    written = materials._variables(_bare(**typed), 2, False, seed_project(), [])
     assert written["GEO_DRAINAGE_TYPE"] == expected
 
 
@@ -310,7 +310,7 @@ def test_the_notice_names_what_was_derived_and_nothing_else():
     is named with it, so the user can see what the deck decided."""
     project = excavation.excavation_project(staged=False)
     with session():
-        exported = kratos.export_project(project, MeshRequest(element_size=8.0, order=2))
+        exported = writer.export_project(project, MeshRequest(element_size=8.0, order=2))
     notices = [w for w in exported["warnings"] if w.startswith("Derived where")]
     assert len(notices) == 1
     assert "material" not in notices[0], "the test model's soils give every variable"

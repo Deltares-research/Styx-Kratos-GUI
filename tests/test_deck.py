@@ -15,10 +15,10 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from core import script
-from core.kratos import deck
-from core.run import calculate
-from core.results import runs as results
+from core import scripting
+from core.kratos import external_deck
+from core.analysis import calculation
+from core.results import catalog
 from backend.main import app
 from core.model.schemas import Project
 
@@ -115,7 +115,7 @@ def deck_dir(tmp_path):
 
 @pytest.fixture
 def project(deck_dir):
-    return deck.deck_project(deck_dir, "dike.json", name="Dike")
+    return external_deck.deck_project(deck_dir, "dike.json", name="Dike")
 
 
 # ── The project ─────────────────────────────────────────────────────────────
@@ -136,7 +136,7 @@ def test_a_deck_project_takes_its_dimension_and_extent_from_the_mesh(project):
 
 
 def test_the_name_defaults_to_the_mesh_file(deck_dir):
-    assert deck.deck_project(deck_dir, "dike.json").name == "dike"
+    assert external_deck.deck_project(deck_dir, "dike.json").name == "dike"
 
 
 def test_a_deck_project_survives_the_round_trip_through_json(project):
@@ -146,20 +146,20 @@ def test_a_deck_project_survives_the_round_trip_through_json(project):
 
 
 def test_a_missing_parameters_file_is_named(deck_dir):
-    with pytest.raises(deck.DeckError, match="nope.json"):
-        deck.deck_project(deck_dir, "nope.json")
+    with pytest.raises(external_deck.DeckError, match="nope.json"):
+        external_deck.deck_project(deck_dir, "nope.json")
 
 
 def test_a_missing_materials_file_is_named(deck_dir):
     (deck_dir / "materials_b.json").unlink()
-    with pytest.raises(deck.DeckError, match="materials_b.json"):
-        deck.deck_project(deck_dir, "dike.json")
+    with pytest.raises(external_deck.DeckError, match="materials_b.json"):
+        external_deck.deck_project(deck_dir, "dike.json")
 
 
 def test_a_missing_mesh_is_named(deck_dir):
     (deck_dir / "dike.mdpa").unlink()
-    with pytest.raises(deck.DeckError, match="dike.mdpa"):
-        deck.deck_project(deck_dir, "dike.json")
+    with pytest.raises(external_deck.DeckError, match="dike.mdpa"):
+        external_deck.deck_project(deck_dir, "dike.json")
 
 
 # ── What the deck is made of ────────────────────────────────────────────────
@@ -167,16 +167,16 @@ def test_a_missing_mesh_is_named(deck_dir):
 def test_the_deck_is_the_files_its_parameters_name(project):
     """Read off the parameters, not globbed: a case directory also holds READMEs, old
     results and pictures, and none of those belong in a run."""
-    assert deck.input_files(project.deck) == [
+    assert external_deck.input_files(project.deck) == [
         "dike.json", "dike.mdpa", "materials_a.json", "materials_b.json"]
 
 
 def test_the_deck_name_is_the_mesh_file(project):
-    assert deck.deck_name(project.deck) == "dike"
+    assert external_deck.deck_name(project.deck) == "dike"
 
 
 def test_the_preview_is_the_mesh_with_its_parts(project):
-    preview = deck.preview(project.deck)
+    preview = external_deck.preview(project.deck)
     assert preview["dimension"] == 2
     assert [section["part"] for section in preview["sections"]] == ["soil"]
     assert {part["name"] for part in preview["parts"]} == {"soil", "bottom"}
@@ -188,22 +188,22 @@ def test_the_preview_is_the_mesh_with_its_parts(project):
 def test_staging_copies_the_deck_and_nothing_else(project, tmp_path):
     run = tmp_path / "run"
     run.mkdir()
-    written = deck.stage(project.deck, run)
+    written = external_deck.stage(project.deck, run)
 
-    assert sorted(written) == sorted([calculate.PARAMETERS_NAME, "dike.mdpa",
+    assert sorted(written) == sorted([calculation.PARAMETERS_NAME, "dike.mdpa",
                                       "materials_a.json", "materials_b.json"])
     assert sorted(path.name for path in run.iterdir()) == sorted(written)
     assert (run / "materials_b.json").read_text(encoding="utf-8") == '{"properties": [1]}'
 
 
 def test_staging_writes_the_output_beside_the_deck(project, tmp_path):
-    """A run directory is flat -- `results.file_path` serves nothing else -- so an
+    """A run directory is flat -- `catalog.file_path` serves nothing else -- so an
     output name with a directory in it is cut down to its last component."""
     run = tmp_path / "run"
     run.mkdir()
-    deck.stage(project.deck, run)
+    external_deck.stage(project.deck, run)
 
-    staged = json.loads((run / calculate.PARAMETERS_NAME).read_text(encoding="utf-8"))
+    staged = json.loads((run / calculation.PARAMETERS_NAME).read_text(encoding="utf-8"))
     names = [process["Parameters"]["output_name"]
              for stage_ in staged["stages"].values()
              for process in stage_["stage_settings"]["output_processes"]["gid_output"]]
@@ -214,20 +214,20 @@ def test_staging_leaves_the_original_deck_alone(project, deck_dir, tmp_path):
     before = (deck_dir / "dike.json").read_text(encoding="utf-8")
     run = tmp_path / "run"
     run.mkdir()
-    deck.stage(project.deck, run)
+    external_deck.stage(project.deck, run)
     assert (deck_dir / "dike.json").read_text(encoding="utf-8") == before
 
 
 # ── Results find a deck's output by the name it was written under ───────────
 
 def test_results_find_a_stage_by_its_output_name(project, tmp_path, monkeypatch):
-    monkeypatch.setenv(calculate.RUNS_ENV, str(tmp_path / "runs"))
-    run = calculate.new_run_directory("dike")
-    deck.stage(project.deck, run)
+    monkeypatch.setenv(calculation.RUNS_ENV, str(tmp_path / "runs"))
+    run = calculation.new_run_directory("dike")
+    external_deck.stage(project.deck, run)
     (run / "second.post.res").write_text("", encoding="utf-8")
     (run / "second.post.msh").write_text("", encoding="utf-8")
 
-    stages = results.stage_list(run)
+    stages = catalog.stage_list(run)
     assert [s["name"] for s in stages] == ["1_Initial", "2_Load"]
     assert stages[1]["results_file"] == "second.post.res"
     assert stages[1]["mesh_file"] == "second.post.msh"
@@ -238,28 +238,28 @@ def test_results_find_a_stage_by_its_output_name(project, tmp_path, monkeypatch)
 @pytest.fixture
 def stand_in(tmp_path, monkeypatch):
     """This interpreter in Kratos' place, as in `test_calculate`."""
-    monkeypatch.setattr(calculate, "SETTINGS_FILE", tmp_path / "no-settings.json")
-    monkeypatch.delenv(calculate.KRATOS_ENV, raising=False)
-    monkeypatch.setenv(calculate.PYTHON_ENV, sys.executable)
-    monkeypatch.setenv(calculate.RUNS_ENV, str(tmp_path / "runs"))
-    monkeypatch.setattr(calculate, "COMMAND",
+    monkeypatch.setattr(calculation, "SETTINGS_FILE", tmp_path / "no-settings.json")
+    monkeypatch.delenv(calculation.KRATOS_ENV, raising=False)
+    monkeypatch.setenv(calculation.PYTHON_ENV, sys.executable)
+    monkeypatch.setenv(calculation.RUNS_ENV, str(tmp_path / "runs"))
+    monkeypatch.setattr(calculation, "COMMAND",
                         ["-c", "open('1_Initial.post.res', 'w').close()"])
 
 
 def test_a_deck_runs_as_it_is(project, stand_in):
-    result = calculate.run_deck(project.deck)
+    result = calculation.run_deck(project.deck)
 
     assert result["ok"] is True
     directory = Path(result["directory"])
     assert directory.name.startswith("dike_")
-    assert calculate.PARAMETERS_NAME in result["inputs"]
+    assert calculation.PARAMETERS_NAME in result["inputs"]
     assert result["outputs"] == ["1_Initial.post.res"]
 
 
 def test_a_deck_run_is_refused_while_another_runs(project, stand_in, monkeypatch):
-    monkeypatch.setattr(calculate, "_running", True)
-    with pytest.raises(calculate.Busy):
-        calculate.run_deck(project.deck)
+    monkeypatch.setattr(calculation, "_running", True)
+    with pytest.raises(calculation.Busy):
+        calculation.run_deck(project.deck)
 
 
 def test_two_deck_presses_at_the_same_moment_start_one_run(
@@ -268,7 +268,7 @@ def test_two_deck_presses_at_the_same_moment_start_one_run(
     both presses get past the check while the first is still staging its files."""
     import threading
     both_inside = threading.Barrier(2, timeout=2)
-    stage_files = deck.stage
+    stage_files = external_deck.stage
 
     def slow_stage(source, directory):
         try:
@@ -277,13 +277,13 @@ def test_two_deck_presses_at_the_same_moment_start_one_run(
             pass
         return stage_files(source, directory)
 
-    monkeypatch.setattr(deck, "stage", slow_stage)
+    monkeypatch.setattr(external_deck, "stage", slow_stage)
     outcomes = []
 
     def press():
         try:
-            outcomes.append(calculate.run_deck(project.deck)["ok"])
-        except calculate.Busy:
+            outcomes.append(calculation.run_deck(project.deck)["ok"])
+        except calculation.Busy:
             outcomes.append("busy")
 
     threads = [threading.Thread(target=press) for _ in range(2)]
@@ -302,9 +302,9 @@ def test_a_deck_file_gone_since_opening_is_reported_not_crashed_on(
     deleted in between is a message naming it, and the button is free again."""
     (deck_dir / "materials_b.json").unlink()
 
-    with pytest.raises(calculate.CalculationError, match="materials_b.json"):
-        calculate.run_deck(project.deck)
-    assert calculate._running is False
+    with pytest.raises(calculation.CalculationError, match="materials_b.json"):
+        calculation.run_deck(project.deck)
+    assert calculation._running is False
 
 
 # ── `run <file.py>` ─────────────────────────────────────────────────────────
@@ -312,7 +312,7 @@ def test_a_deck_file_gone_since_opening_is_reported_not_crashed_on(
 def deck_script(tmp_path, deck_dir) -> Path:
     path = tmp_path / "dike_case.py"
     path.write_text(textwrap.dedent(f"""
-        from core.kratos.deck import deck_project
+        from core.kratos.external_deck import deck_project
 
         def dike_project():
             return deck_project({str(deck_dir)!r}, "dike.json", name="Dike")
@@ -321,7 +321,7 @@ def deck_script(tmp_path, deck_dir) -> Path:
 
 
 def test_a_script_can_hand_back_a_deck(tmp_path, deck_dir):
-    loaded = script.load_project(deck_script(tmp_path, deck_dir))
+    loaded = scripting.load_project(deck_script(tmp_path, deck_dir))
     assert loaded.deck is not None and loaded.name == "Dike"
 
 
@@ -363,9 +363,9 @@ def test_calculate_runs_the_deck_rather_than_exporting(client, project, monkeypa
         ran["deck"] = source
         return {"ok": True, "returncode": 0, "stage": None, "seconds": 0.1,
                 "directory": str(Path("runs") / "dike_2026-10-09_12-00"),
-                "inputs": [], "outputs": [], "log": calculate.LOG_NAME, "error": None}
+                "inputs": [], "outputs": [], "log": calculation.LOG_NAME, "error": None}
 
-    monkeypatch.setattr(calculate, "run_deck", fake_run_deck)
+    monkeypatch.setattr(calculation, "run_deck", fake_run_deck)
     client.put("/api/project", json=project.model_dump(mode="json"))
     body = client.post("/api/calculate", json={"element_size": 2.0}).json()
 
@@ -476,7 +476,7 @@ def staged(tmp_path):
     (directory / "dike.mdpa").write_text(STAGED_MDPA, encoding="utf-8")
     (directory / "dike.json").write_text(json.dumps(STAGED, indent=2), encoding="utf-8")
     (directory / "materials_a.json").write_text('{"properties": []}', encoding="utf-8")
-    return deck.deck_project(directory, "dike.json", name="Staged dike")
+    return external_deck.deck_project(directory, "dike.json", name="Staged dike")
 
 
 def test_every_stage_becomes_a_phase_in_run_order(staged):
@@ -552,9 +552,9 @@ def test_a_decks_phases_are_not_edited_here(client, staged):
 def test_staging_brings_the_units_record_when_the_deck_has_one(project, deck_dir, tmp_path):
     """A deck this application exported records its unit system beside itself; opened
     again as a deck case, the record goes into the run so its results are labelled in
-    that system (`results.run_unit_system`). A deck from elsewhere has none, and is SI."""
-    from core.run import calculate
-    (deck_dir / calculate.UNITS_NAME).write_text('{"unit_system": "kN"}', encoding="utf-8")
-    written = deck.stage(project.deck, tmp_path)
-    assert calculate.UNITS_NAME in written
-    assert (tmp_path / calculate.UNITS_NAME).read_text(encoding="utf-8") == '{"unit_system": "kN"}'
+    that system (`catalog.run_unit_system`). A deck from elsewhere has none, and is SI."""
+    from core.analysis import calculation
+    (deck_dir / calculation.UNITS_NAME).write_text('{"unit_system": "kN"}', encoding="utf-8")
+    written = external_deck.stage(project.deck, tmp_path)
+    assert calculation.UNITS_NAME in written
+    assert (tmp_path / calculation.UNITS_NAME).read_text(encoding="utf-8") == '{"unit_system": "kN"}'

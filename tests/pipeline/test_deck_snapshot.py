@@ -20,10 +20,10 @@ from pathlib import Path
 
 import pytest
 
-from core.geometry import build
-from core.kratos import export as kratos
+from core.geometry import solid_model
+from core.kratos import writer
 from core.model.schemas import MeshRequest
-from core.model.seed import seed_project
+from core.model.templates import seed_project
 from tests import mdpa
 from tests.models import excavation
 
@@ -103,8 +103,8 @@ def differences(current: dict, committed: dict) -> list[str]:
 @pytest.mark.parametrize("name", sorted(MODELS))
 def test_the_deck_structure_matches_its_snapshot(name, request):
     build_project, settings = MODELS[name]
-    with build.session():
-        current = summary(kratos.export_project(build_project(), settings))
+    with solid_model.session():
+        current = summary(writer.export_project(build_project(), settings))
     path = SNAPSHOTS / f"{name}.json"
     if request.config.getoption("--update-snapshots") or not path.exists():
         SNAPSHOTS.mkdir(exist_ok=True)

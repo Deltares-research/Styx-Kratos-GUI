@@ -1,5 +1,5 @@
 /* Import a Kratos .mdpa deck's mesh: nodes, typed elements/conditions, and named
-   sub-model-part groupings, read back by `POST /api/import/mdpa` (core/kratos/mdpa_import.py).
+   sub-model-part groupings, read back by `POST /api/import/mdpa` (core/kratos/mdpa_reader.py).
 
    This recovers the mesh a deck contains, not the parametric project that produced it
    -- that information is discarded on export, so nothing here ever becomes a real,

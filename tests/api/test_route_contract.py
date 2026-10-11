@@ -25,9 +25,9 @@ import pytest
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
-from core.kratos import deck as decks
+from core.kratos import external_deck
 from backend.main import app
-from core.model.seed import seed_project
+from core.model.templates import seed_project
 from tests import results_run
 from tests.test_importer import stl_text
 
@@ -242,11 +242,11 @@ def client(monkeypatch, tmp_path):
     RUN = results_run.use(monkeypatch, results_run.fake_run())
     # Calculate runs this interpreter in Kratos' place: the route's own shape is the
     # point here, not the analysis (`test_calculate.py` covers the runner).
-    from core.run import calculate
-    monkeypatch.setattr(calculate, "SETTINGS_FILE", tmp_path / "none.json")
-    monkeypatch.delenv(calculate.KRATOS_ENV, raising=False)
-    monkeypatch.setenv(calculate.PYTHON_ENV, __import__("sys").executable)
-    monkeypatch.setattr(calculate, "COMMAND", ["-c", "print('stand-in')"])
+    from core.analysis import calculation
+    monkeypatch.setattr(calculation, "SETTINGS_FILE", tmp_path / "none.json")
+    monkeypatch.delenv(calculation.KRATOS_ENV, raising=False)
+    monkeypatch.setenv(calculation.PYTHON_ENV, __import__("sys").executable)
+    monkeypatch.setattr(calculation, "COMMAND", ["-c", "print('stand-in')"])
     with TestClient(app) as c:
         c.post("/api/project/reset")
         yield c
@@ -265,8 +265,8 @@ def test_every_route_has_a_contract():
 @pytest.mark.parametrize("contract", CONTRACTS, ids=_id)
 def test_the_happy_path_has_its_shape(client, contract, monkeypatch, tmp_path):
     if contract.path == "/api/calculate":
-        from core.run import calculate
-        monkeypatch.setenv(calculate.RUNS_ENV, str(tmp_path / "calc_runs"))
+        from core.analysis import calculation
+        monkeypatch.setenv(calculation.RUNS_ENV, str(tmp_path / "calc_runs"))
     response = contract.happy(client)
 
     assert response.status_code == 200, response.text[:500]
@@ -326,7 +326,7 @@ def deck_client(client, tmp_path):
         "orchestrator": {"name": "Orchestrators.KratosMultiphysics.SequentialOrchestrator",
                          "settings": {"execution_list": ["1_Initial"]}},
         "stages": {"1_Initial": stage}}), encoding="utf-8")
-    project = decks.deck_project(directory, "site.json", name="Site")
+    project = external_deck.deck_project(directory, "site.json", name="Site")
     assert client.put("/api/project", json=project.model_dump()).status_code == 200
     return client
 

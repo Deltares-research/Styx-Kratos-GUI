@@ -39,7 +39,7 @@
     T.eq(groups.mesh, ['soil_L1', 'soil_L2', 'mesh']);
   });
 
-  /* Sheet piles and anchors are drawn as their own sections (core/geometry/tessellate.py
+  /* Sheet piles and anchors are drawn as their own sections (core/geometry/tessellation.py
      :112-126), so each gets a THREE.Group keyed by its id -- but no mode listed those
      keys, which left every pile and anchor invisible in every mode. */
   test('sheet piles and anchors are visible where the other structures are', function () {

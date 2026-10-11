@@ -1,9 +1,9 @@
 import pytest
 import os
-from core.geometry import creator
+from core.geometry import primitives
 
 def test_creator_creates_box(tmp_path, monkeypatch):
-    monkeypatch.setattr(creator, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(primitives, "DATA_DIR", tmp_path)
     
     recipe = {
         "kind": "box",
@@ -14,7 +14,7 @@ def test_creator_creates_box(tmp_path, monkeypatch):
     import gmsh
     gmsh.initialize()
     try:
-        res = creator.process_creation(recipe)
+        res = primitives.process_creation(recipe)
         assert res["volumes"] == 1
         assert os.path.exists(res["brep_path"])
         
@@ -31,7 +31,7 @@ def test_creator_creates_box(tmp_path, monkeypatch):
 
 
 def test_creator_creates_cylinder(tmp_path, monkeypatch):
-    monkeypatch.setattr(creator, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(primitives, "DATA_DIR", tmp_path)
     
     recipe = {
         "kind": "cylinder",
@@ -43,7 +43,7 @@ def test_creator_creates_cylinder(tmp_path, monkeypatch):
     import gmsh
     gmsh.initialize()
     try:
-        res = creator.process_creation(recipe)
+        res = primitives.process_creation(recipe)
         assert res["volumes"] == 1
         assert os.path.exists(res["brep_path"])
     finally:
@@ -51,7 +51,7 @@ def test_creator_creates_cylinder(tmp_path, monkeypatch):
 
 
 def test_creator_creates_polygon_extrude(tmp_path, monkeypatch):
-    monkeypatch.setattr(creator, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(primitives, "DATA_DIR", tmp_path)
 
     recipe = {
         "kind": "polygon_extrude",
@@ -62,7 +62,7 @@ def test_creator_creates_polygon_extrude(tmp_path, monkeypatch):
     import gmsh
     gmsh.initialize()
     try:
-        res = creator.process_creation(recipe)
+        res = primitives.process_creation(recipe)
         assert res["volumes"] == 1
         assert os.path.exists(res["brep_path"])
 
@@ -78,7 +78,7 @@ def test_creator_creates_polygon_extrude(tmp_path, monkeypatch):
 
 
 def test_creator_creates_line(tmp_path, monkeypatch):
-    monkeypatch.setattr(creator, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(primitives, "DATA_DIR", tmp_path)
 
     recipe = {
         "kind": "line",
@@ -88,7 +88,7 @@ def test_creator_creates_line(tmp_path, monkeypatch):
     import gmsh
     gmsh.initialize()
     try:
-        res = creator.process_creation(recipe)
+        res = primitives.process_creation(recipe)
         assert res["dim"] == 1
         assert res["volumes"] == 0
         assert os.path.exists(res["brep_path"])
@@ -103,7 +103,7 @@ def test_creator_creates_line(tmp_path, monkeypatch):
 
 
 def test_creator_creates_polyline_with_more_than_two_vertices(tmp_path, monkeypatch):
-    monkeypatch.setattr(creator, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(primitives, "DATA_DIR", tmp_path)
 
     recipe = {
         "kind": "line",
@@ -113,7 +113,7 @@ def test_creator_creates_polyline_with_more_than_two_vertices(tmp_path, monkeypa
     import gmsh
     gmsh.initialize()
     try:
-        res = creator.process_creation(recipe)
+        res = primitives.process_creation(recipe)
         assert res["dim"] == 1
         xmin, ymin, zmin, xmax, ymax, zmax = res["bbox"]
         assert xmax == pytest.approx(10, abs=1e-5)
@@ -123,13 +123,13 @@ def test_creator_creates_polyline_with_more_than_two_vertices(tmp_path, monkeypa
 
 
 def test_creator_line_requires_at_least_two_vertices(tmp_path, monkeypatch):
-    monkeypatch.setattr(creator, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(primitives, "DATA_DIR", tmp_path)
 
     import gmsh
     gmsh.initialize()
     try:
         with pytest.raises(ValueError):
-            creator.process_creation({"kind": "line", "vertices": [[0, 0, 0]]})
+            primitives.process_creation({"kind": "line", "vertices": [[0, 0, 0]]})
     finally:
         gmsh.finalize()
 
@@ -137,7 +137,7 @@ def test_creator_line_requires_at_least_two_vertices(tmp_path, monkeypatch):
 def test_creator_creates_polygon_surface(tmp_path, monkeypatch):
     """A plain 'polygon' recipe is a flat surface -- no extrusion, no volume. This is
     what the GUI's 'Create surface' tool sends; 'polygon_extrude' is a distinct recipe."""
-    monkeypatch.setattr(creator, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(primitives, "DATA_DIR", tmp_path)
 
     recipe = {
         "kind": "polygon",
@@ -147,7 +147,7 @@ def test_creator_creates_polygon_surface(tmp_path, monkeypatch):
     import gmsh
     gmsh.initialize()
     try:
-        res = creator.process_creation(recipe)
+        res = primitives.process_creation(recipe)
         assert res["dim"] == 2
         assert res["volumes"] == 0
         assert os.path.exists(res["brep_path"])
@@ -164,24 +164,24 @@ def test_creator_creates_polygon_surface(tmp_path, monkeypatch):
 
 
 def test_creator_polygon_requires_at_least_three_vertices(tmp_path, monkeypatch):
-    monkeypatch.setattr(creator, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(primitives, "DATA_DIR", tmp_path)
 
     import gmsh
     gmsh.initialize()
     try:
         with pytest.raises(ValueError):
-            creator.process_creation({"kind": "polygon", "vertices": [[0, 0, 0], [1, 0, 0]]})
+            primitives.process_creation({"kind": "polygon", "vertices": [[0, 0, 0], [1, 0, 0]]})
     finally:
         gmsh.finalize()
 
 
 def test_creator_rejects_unknown_kind(tmp_path, monkeypatch):
-    monkeypatch.setattr(creator, "DATA_DIR", tmp_path)
+    monkeypatch.setattr(primitives, "DATA_DIR", tmp_path)
 
     import gmsh
     gmsh.initialize()
     try:
         with pytest.raises(ValueError):
-            creator.process_creation({"kind": "sphere"})
+            primitives.process_creation({"kind": "sphere"})
     finally:
         gmsh.finalize()

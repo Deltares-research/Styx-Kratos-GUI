@@ -20,11 +20,11 @@ import json
 
 import pytest
 
-from core.geometry import build
-from core.kratos import export as kratos
-KILO = 1000.0  # kN -> N: these tests write old-style projects, converted on load (core/model/legacy.py)
+from core.geometry import solid_model
+from core.kratos import writer
+KILO = 1000.0  # kN -> N: these tests write old-style projects, converted on load (core/model/migration.py)
 from core.model.schemas import MeshRequest, Project
-from core.model.seed import seed_project
+from core.model.templates import seed_project
 from tests import mdpa
 from tests.test_kratos import BEAM_SECTION, deck_of
 
@@ -34,7 +34,7 @@ SECTION = {"id": "steel_soil", "name": "Steel against sand", "material": "mat_sa
 
 @pytest.fixture(scope="module")
 def session():
-    with build.session():
+    with solid_model.session():
         yield
 
 
@@ -59,14 +59,14 @@ def interfaced_project(side: str = "both", active: bool = True, dimension: int =
 @pytest.fixture(scope="module")
 def contacted(session):
     """A quadratic section: one sheet pile with soil unglued from both its faces."""
-    return kratos.export_project(interfaced_project(), MeshRequest(element_size=3.0, order=2))
+    return writer.export_project(interfaced_project(), MeshRequest(element_size=3.0, order=2))
 
 
 def interface_block(deck: mdpa.Deck) -> mdpa.Block:
     """Every contact element in the deck, as one block.
 
     The deck writes one block per soil body the contact runs against, so a lift can be
-    deactivated together with the interface along it (`kratos._interface_by_body`).
+    deactivated together with the interface along it (`writer._interface_by_body`).
     Tests about the contact as a whole want all of them; the split itself is what
     `test_the_contact_is_split_per_soil_body_it_runs_against` checks.
     """
@@ -117,7 +117,7 @@ def test_a_quadratic_section_writes_the_reference_deck_s_interface_class(contact
 
 
 def test_a_first_order_deck_writes_the_four_node_interface(session):
-    export = kratos.export_project(interfaced_project(),
+    export = writer.export_project(interfaced_project(),
                                    MeshRequest(element_size=3.0, order=1))
     block = interface_block(deck_of(export))
     assert block.name == "Geo_UPwLineInterfacePlaneStrainElement2Plus2N"
@@ -174,7 +174,7 @@ def test_a_soil_to_soil_interface_is_not_staged(session):
     installation moment for it to wait for, so it is not deactivated up front."""
     project = interfaced_project(side="left", structure=None,
                                  points=[[8.0, 0.0], [8.0, -10.0]])
-    export = kratos.export_project(project, MeshRequest(element_size=3.0, order=2))
+    export = writer.export_project(project, MeshRequest(element_size=3.0, order=2))
     doc = json.loads(export["project_parameters"])
 
     assert doc["orchestrator"]["settings"]["execution_list"] == \
@@ -270,7 +270,7 @@ def test_the_tie_searches_over_a_radius_it_can_reach_a_neighbour_in(contacted):
 
 def test_a_single_sided_interface_needs_no_tie(session):
     """Soil only exists on one face, so there is nothing on the other to reconnect."""
-    export = kratos.export_project(interfaced_project(side="left"),
+    export = writer.export_project(interfaced_project(side="left"),
                                    MeshRequest(element_size=3.0, order=2))
     deck = deck_of(export)
     assert "Wall_contact_Master" not in deck.parts
@@ -289,7 +289,7 @@ def test_a_soil_to_soil_interface_needs_no_tie(session):
     tie-back necessary."""
     project = interfaced_project(side="left", structure=None,
                                  points=[[8.0, 0.0], [8.0, -10.0]])
-    export = kratos.export_project(project, MeshRequest(element_size=3.0, order=2))
+    export = writer.export_project(project, MeshRequest(element_size=3.0, order=2))
     deck = deck_of(export)
     assert not any(name.endswith(("_Master", "_Slave")) for name in deck.parts)
 
@@ -424,7 +424,7 @@ def test_a_boundary_group_picks_up_the_copies_that_land_on_it(contacted):
 # ── Which sides, and which interfaces ───────────────────────────────────────
 
 def test_detaching_one_side_leaves_the_other_bonded(session):
-    export = kratos.export_project(interfaced_project(side="left"),
+    export = writer.export_project(interfaced_project(side="left"),
                                    MeshRequest(element_size=3.0, order=2))
     deck = deck_of(export)
 
@@ -437,7 +437,7 @@ def test_detaching_one_side_leaves_the_other_bonded(session):
 
 
 def test_an_inactive_interface_is_kept_in_the_project_but_not_exported(session):
-    export = kratos.export_project(interfaced_project(active=False),
+    export = writer.export_project(interfaced_project(active=False),
                                    MeshRequest(element_size=3.0, order=2))
     deck = deck_of(export)
 
@@ -449,7 +449,7 @@ def test_an_inactive_interface_is_kept_in_the_project_but_not_exported(session):
 def test_an_interface_on_a_switched_off_pile_is_not_exported(session):
     project = interfaced_project()
     project.beams[0].active = False
-    export = kratos.export_project(project, MeshRequest(element_size=3.0, order=2))
+    export = writer.export_project(project, MeshRequest(element_size=3.0, order=2))
 
     assert not any("Interface" in block.name for block in deck_of(export).elements)
 
@@ -459,7 +459,7 @@ def test_a_free_interface_splits_soil_from_soil(session):
     detached, and the contact holds the two soils together."""
     project = interfaced_project(side="left", structure=None,
                                  points=[[8.0, 0.0], [8.0, -10.0]])
-    export = kratos.export_project(project, MeshRequest(element_size=3.0, order=2))
+    export = writer.export_project(project, MeshRequest(element_size=3.0, order=2))
     deck = deck_of(export)
     block = interface_block(deck)
 
@@ -478,7 +478,7 @@ def test_a_free_interface_ties_its_own_tip_together(session):
     Exactly one element does, and it is the last one."""
     project = interfaced_project(side="left", structure=None,
                                  points=[[8.0, 0.0], [8.0, -10.0]])
-    export = kratos.export_project(project, MeshRequest(element_size=3.0, order=2))
+    export = writer.export_project(project, MeshRequest(element_size=3.0, order=2))
     block = interface_block(deck_of(export))
 
     tips = [nodes for nodes in block.entries.values() if len(set(nodes)) < len(nodes)]
@@ -486,7 +486,7 @@ def test_a_free_interface_ties_its_own_tip_together(session):
 
 
 def test_a_3d_project_writes_no_interface_and_says_so(session):
-    export = kratos.export_project(interfaced_project(dimension=3),
+    export = writer.export_project(interfaced_project(dimension=3),
                                    MeshRequest(element_size=6.0, order=2))
 
     assert not any("Interface" in block.name for block in deck_of(export).elements)
@@ -542,9 +542,9 @@ def test_a_contact_takes_the_stiffness_of_each_soil_it_runs_against(session):
 
     So a section naming no material derives per adjacent body. Which body each contact
     element runs against is already known: the deck writes one part per body
-    (`core/kratos/export.py:_interface_by_body`)."""
+    (`core/kratos/writer.py:_interface_by_body`)."""
     project = interfaced_project(section={"material": None, "virtual_thickness": 1.0})
-    export = kratos.export_project(project, MeshRequest(element_size=3.0, order=2))
+    export = writer.export_project(project, MeshRequest(element_size=3.0, order=2))
     variables = [e["Material"]["Variables"] for e in entries_of(export)
                  if e["model_part_name"].startswith("PorousDomain.Wall_contact")]
     shears = {round(v["INTERFACE_SHEAR_STIFFNESS"], 6) for v in variables}
@@ -567,7 +567,7 @@ def test_a_section_that_names_a_material_uses_it_for_the_whole_contact(contacted
 
 
 def test_an_explicit_stiffness_is_used_as_it_stands(session):
-    export = kratos.export_project(
+    export = writer.export_project(
         interfaced_project(section={"normal_stiffness": 1.5e6, "shear_stiffness": 5.0e5}),
         MeshRequest(element_size=3.0, order=2))
     variables = interface_material(export)
@@ -635,7 +635,7 @@ def test_an_interface_drains_as_a_constant_field_whatever_the_soil_does(session)
     undrained = project.model_dump()
     for material in undrained["materials"]:
         material["variables"]["GEO_DRAINAGE_TYPE"] = "FULLY_COUPLED"
-    export = kratos.export_project(Project.model_validate(undrained),
+    export = writer.export_project(Project.model_validate(undrained),
                                    MeshRequest(element_size=3.0, order=2))
     soils = [e["Material"]["Variables"]["GEO_DRAINAGE_TYPE"] for e in entries_of(export)
              if e["model_part_name"].startswith("PorousDomain.Soil")]

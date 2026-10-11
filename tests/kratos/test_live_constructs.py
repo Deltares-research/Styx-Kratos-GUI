@@ -25,11 +25,11 @@ from pathlib import Path
 
 import pytest
 
-from core.model import seed
-from core.geometry import build
-from core.kratos import export as kratos
-from core.run import calculate
-from core.results import members as result_members, runs as results
+from core.model import templates
+from core.geometry import solid_model
+from core.kratos import writer
+from core.analysis import calculation
+from core.results import members, catalog
 from tests.models import excavation
 from core.model.schemas import MeshRequest, Project
 from tests import mdpa
@@ -41,21 +41,21 @@ pytestmark = pytest.mark.kratos
 @pytest.fixture(scope="module", autouse=True)
 def runs_root(tmp_path_factory):
     require_kratos()
-    previous = os.environ.get(calculate.RUNS_ENV)
-    os.environ[calculate.RUNS_ENV] = str(tmp_path_factory.mktemp("construct-runs"))
-    results.forget_cache()
+    previous = os.environ.get(calculation.RUNS_ENV)
+    os.environ[calculation.RUNS_ENV] = str(tmp_path_factory.mktemp("construct-runs"))
+    catalog.forget_cache()
     yield
     if previous is None:
-        os.environ.pop(calculate.RUNS_ENV, None)
+        os.environ.pop(calculation.RUNS_ENV, None)
     else:
-        os.environ[calculate.RUNS_ENV] = previous
-    results.forget_cache()
+        os.environ[calculation.RUNS_ENV] = previous
+    catalog.forget_cache()
 
 
 def run(project: Project, order: int = 2, size: float = 4.0, ok: bool = True):
-    with build.session():
-        export = kratos.export_project(project, MeshRequest(element_size=size, order=order))
-    outcome = calculate.run(export)
+    with solid_model.session():
+        export = writer.export_project(project, MeshRequest(element_size=size, order=order))
+    outcome = calculation.run(export)
     if ok:
         assert outcome["ok"], (outcome["stage"], (outcome["error"] or "")[-600:])
     return export, outcome
@@ -93,8 +93,8 @@ def nodes_block(export: dict) -> str:
 
 def deep_vertical_stress(directory: Path, stage: int = 1) -> float:
     run_id = directory.name
-    stress = results.stage_results(run_id, stage).field("CAUCHY_STRESS_TENSOR")
-    mesh = results.stage_mesh(run_id, stage)
+    stress = catalog.stage_results(run_id, stage).field("CAUCHY_STRESS_TENSOR")
+    mesh = catalog.stage_mesh(run_id, stage)
     values = []
     for element, points in stress.values.items():
         corners = mesh.connectivity(element)[:3]
@@ -130,7 +130,7 @@ def test_a_uniform_normal_load_adds_its_pressure_at_depth(order, direction):
 
 def peak_moment(export: dict, outcome: dict, stage: str) -> tuple[float, float]:
     directory = Path(outcome["directory"])
-    output = result_members.read_output(
+    output = members.read_output(
         (directory / f"{stage}__output_wall.json").read_text(encoding="utf-8"))
     deck = mdpa.parse(export["mdpa"])
     moments = {deck.nodes[n][1]: v["BENDING_MOMENT"] for n, v in output.items()
@@ -175,10 +175,10 @@ def solid_excavation() -> Project:
 
 
 def test_the_3d_seed_with_its_surface_load_runs_and_settles():
-    export, outcome = run(seed.seed_project(), order=1, size=10.0)
+    export, outcome = run(templates.seed_project(), order=1, size=10.0)
     run_id = Path(outcome["directory"]).name
-    stages = results.describe(run_id)["stages"]
-    u = results.stage_results(run_id, len(stages)).field("TOTAL_DISPLACEMENT")
+    stages = catalog.describe(run_id)["stages"]
+    u = catalog.stage_results(run_id, len(stages)).field("TOTAL_DISPLACEMENT")
     assert min(v[1] for v in u.values.values()) < 0.0, "the ground settles under its weight"
 
 

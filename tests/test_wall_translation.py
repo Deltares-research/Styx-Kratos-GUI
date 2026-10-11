@@ -5,7 +5,7 @@ solid model could only sweep it a nominal strip wide and there was nothing to ed
 Selection explorer showed x and z and no y. A wall in 3D is a `Panel` -- a plan
 footprint swept between two levels -- and that is what the pile becomes on the switch.
 
-The pairing is the one `core/model/loads.py` already uses for a surface load and a line load:
+The pairing is the one `core/model/load_translation.py` already uses for a surface load and a line load:
 both records are kept, linked by `derived_from`, and the dimension being left is the
 one that wins. Keeping both is what lets the footprint the user drew in plan survive a
 trip through the section, which has no y to remember it by.
@@ -16,9 +16,9 @@ stepped pile keeps the swept strip and says so.
 
 import pytest
 
-from core.model import walls
+from core.model import wall_translation
 from core.model.schemas import Project
-from core.model.seed import seed_project
+from core.model.templates import seed_project
 
 
 PILE_X, PILE_TOP, PILE_TOE = 10.0, 0.0, -7.5
@@ -42,7 +42,7 @@ def project_with(beams: list[dict], dimension: int = 2,
 
 def applied(project: Project, dimension: int) -> Project:
     """`project` after the switch, as the API stores it."""
-    beams, sections = walls.translate(project, dimension)
+    beams, sections = wall_translation.translate(project, dimension)
     payload = project.model_dump() | {"dimension": dimension}
     payload["beams"] = [b.model_dump() for b in beams]
     payload["panel_sections"] = [s.model_dump() for s in sections]
@@ -88,7 +88,7 @@ def test_the_wall_points_back_at_the_pile_and_is_named_for_its_own_kind():
 
 def test_the_wall_gets_a_section_whose_thickness_is_the_profiles_area():
     """`area` is m2 per metre run, which is a thickness in metres -- the same reduction
-    `kratos._shell_section_of` already writes into the deck."""
+    `writer._shell_section_of` already writes into the deck."""
     solid = applied(project_with([PILE]), 3)
     section = solid.panel_section(panel_of(solid).section)
 
@@ -158,7 +158,7 @@ def test_a_raking_pile_gets_no_panel_and_says_so():
     """A panel is a vertical sweep; a raking pile is not one, and inventing a footprint
     for it would straighten the wall the user drew."""
     log: list[str] = []
-    beams, _ = walls.translate(project_with([RAKING]), 3, log)
+    beams, _ = wall_translation.translate(project_with([RAKING]), 3, log)
 
     assert [b.kind for b in beams] == ["beam"]
     assert any("Sheet pile 2" in note for note in log), log
@@ -186,11 +186,11 @@ def test_a_plane_anchors_head_is_a_node_of_the_translated_wall():
     """The head has to be a node of the wall's *own* mesh or the tie hangs off nothing.
 
     Checked through the exporter rather than the B-rep, because that is what actually
-    demands it: `kratos._anchor_bodies` resolves the head among structural nodes only,
+    demands it: `writer._anchor_ties` resolves the head among structural nodes only,
     and raises if there is none -- a vertex of the anchor's own display line will not do.
     """
-    from core.geometry import build
-    from core.kratos import export as kratos
+    from core.geometry import solid_model
+    from core.kratos import writer
     from core.model.schemas import MeshRequest
 
     payload = project_with([PILE]).model_dump()
@@ -201,8 +201,8 @@ def test_a_plane_anchors_head_is_a_node_of_the_translated_wall():
                            "tail": [PILE_X - 6.0, -6.0], "active": True}]
     solid = applied(Project.model_validate(payload), 3)
 
-    with build.session():
-        export = kratos.export_project(solid, MeshRequest(element_size=4.0, order=1))
+    with solid_model.session():
+        export = writer.export_project(solid, MeshRequest(element_size=4.0, order=1))
 
     assert "Anchor_1" in export["mdpa"]
 

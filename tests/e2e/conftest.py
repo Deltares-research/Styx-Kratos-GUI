@@ -1,7 +1,7 @@
 """The GUI end-to-end tier (plan alpha 3.1): the real server, the real page, a real browser.
 
 The FastAPI app runs in this process under uvicorn, on a free port, with its runs written
-to a temporary root. `calculate.run` is swapped for `tests/fakes/fake_kratos.py` so
+to a temporary root. `calculation.run` is swapped for `tests/fakes/fake_kratos.py` so
 Results mode can be driven on any machine -- unless `--run-kratos` is given, in which case
 the real solver runs. Everything under tests/e2e is marked `e2e` by the root conftest and
 needs `--run-e2e`.
@@ -36,18 +36,18 @@ def _free_port() -> int:
 def live_server(request, tmp_path_factory):
     """Package-scoped, not session: its patches (the fake runner, the runs root) must be
     undone before the rest of the suite runs, or every later test that calls
-    `calculate.run` gets the fake -- as 22 of them did when `--run-e2e` ran everything."""
+    `calculation.run` gets the fake -- as 22 of them did when `--run-e2e` ran everything."""
     import uvicorn
 
-    from core.run import calculate
+    from core.analysis import calculation
     from backend.main import app
     from tests.fakes import fake_kratos
 
     root = tmp_path_factory.mktemp("e2e-runs")
     patch = pytest.MonkeyPatch()
-    patch.setenv(calculate.RUNS_ENV, str(root))
+    patch.setenv(calculation.RUNS_ENV, str(root))
     if not request.config.getoption("--run-kratos"):
-        patch.setattr(calculate, "run", fake_kratos.fake_run)
+        patch.setattr(calculation, "run", fake_kratos.fake_run)
 
     port = _free_port()
     # ws="none": the app has no websockets, and importing uvicorn's websocket protocol

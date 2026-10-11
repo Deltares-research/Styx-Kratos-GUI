@@ -133,7 +133,7 @@
     });
   });
 
-  /* The run log names the stage it reached (core/run/calculate.py's `failed_stage`),
+  /* The run log names the stage it reached (core/analysis/calculation.py's `failed_stage`),
      so the dots can say how far it got rather than all staying grey. */
   test('a finished run marks the stages that completed', function () {
     var rows = App.Phases.rows(project(), { completed: 3 });

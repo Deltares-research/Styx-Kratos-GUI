@@ -24,18 +24,18 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend import store
-from core.geometry import build, meshing
-from core.kratos import export as kratos
+from core.geometry import solid_model, meshing
+from core.kratos import writer
 from backend.main import app
 from core.model.schemas import MeshRequest, Project
 from tests.models import excavation
 from tests.models.excavation import excavation_project
-from core.model.seed import blank_project, seed_project
+from core.model.templates import blank_project, seed_project
 
 
 @pytest.fixture(scope="module")
 def session():
-    with build.session():
+    with solid_model.session():
         yield
 
 
@@ -81,7 +81,7 @@ def test_a_hydrostatic_water_load_needs_a_water_level():
 
 def test_a_dry_model_still_fixes_its_pore_pressure_at_zero(session):
     project = dry(seed_project())
-    exported = kratos.export_project(project, MeshRequest(element_size=6.0, order=1))
+    exported = writer.export_project(project, MeshRequest(element_size=6.0, order=1))
     parameters = pressure_process(exported)
     assert parameters["fluid_pressure_type"] == "Hydrostatic"
     assert parameters["is_fixed"] is True
@@ -94,13 +94,13 @@ def test_a_dry_model_still_fixes_its_pore_pressure_at_zero(session):
 def test_a_wet_model_is_unchanged(session):
     project = seed_project()
     project.water.y = -4.25
-    exported = kratos.export_project(project, MeshRequest(element_size=6.0, order=1))
+    exported = writer.export_project(project, MeshRequest(element_size=6.0, order=1))
     assert pressure_process(exported)["reference_coordinate"] == -4.25
 
 
 def test_a_dry_model_builds_no_water_slab(session):
     project = dry(seed_project(simple=False))
-    built = build.build_geometry(project)
+    built = solid_model.build_geometry(project)
     assert not built.volumes.get("water")
 
 

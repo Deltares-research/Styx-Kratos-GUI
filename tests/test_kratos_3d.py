@@ -11,7 +11,7 @@ the arrangement those decks pin down, one dimension up:
     shared with the structure it hangs from and its tail node in no other element,
     alone in a one-node support group that a constraint process pins.
 
-The element class names themselves are named in one place (core/kratos/export.py) and flagged
+The element class names themselves are named in one place (core/kratos/writer.py) and flagged
 as unconfirmed; these tests hold the arrangement, not the spelling, wherever they can.
 """
 
@@ -19,11 +19,11 @@ import json
 
 import pytest
 
-from core.geometry import build
-from core.kratos import export as kratos
-KILO = 1000.0  # kN -> N: these tests write old-style projects, converted on load (core/model/legacy.py)
+from core.geometry import solid_model
+from core.kratos import writer
+KILO = 1000.0  # kN -> N: these tests write old-style projects, converted on load (core/model/migration.py)
 from core.model.schemas import MeshRequest, Project
-from core.model.seed import seed_project
+from core.model.templates import seed_project
 from tests import mdpa
 
 
@@ -63,14 +63,14 @@ def structured(beams: list[dict], anchors: list[dict] | None = None) -> Project:
 
 @pytest.fixture(scope="module")
 def session():
-    with build.session():
+    with solid_model.session():
         yield
 
 
 @pytest.fixture(scope="module")
 def walled(session):
     """A wall, a member and an anchor in one quadratic 3D deck."""
-    return kratos.export_project(structured([PANEL, MEMBER], [ANCHOR]),
+    return writer.export_project(structured([PANEL, MEMBER], [ANCHOR]),
                                  MeshRequest(element_size=6.0, order=2))
 
 
@@ -111,7 +111,7 @@ def test_a_quadratic_mesh_says_the_wall_is_written_linear(walled):
 
 
 def test_a_linear_mesh_writes_the_wall_with_no_such_warning(session):
-    export = kratos.export_project(structured([PANEL]),
+    export = writer.export_project(structured([PANEL]),
                                    MeshRequest(element_size=6.0, order=1))
 
     assert shells_of(deck_of(export)).entries
@@ -154,7 +154,7 @@ def test_the_panel_section_becomes_a_material_entry_mapped_to_its_part(walled):
 
 
 def test_an_inactive_wall_is_not_exported(session):
-    export = kratos.export_project(structured([PANEL | {"active": False}]),
+    export = writer.export_project(structured([PANEL | {"active": False}]),
                                    MeshRequest(element_size=6.0, order=1))
     deck = deck_of(export)
 
@@ -164,7 +164,7 @@ def test_an_inactive_wall_is_not_exported(session):
 
 def test_a_wall_saved_in_a_2d_project_is_not_exported(session):
     payload = structured([PANEL]).model_dump() | {"dimension": 2, "section_offset": 12.5}
-    export = kratos.export_project(Project.model_validate(payload),
+    export = writer.export_project(Project.model_validate(payload),
                                    MeshRequest(element_size=6.0, order=2))
 
     assert not any("Shell" in block.name for block in deck_of(export).elements)
@@ -274,7 +274,7 @@ def test_the_tendon_becomes_a_material_entry_with_its_prestress(walled):
 
 def test_an_anchor_may_hang_from_a_member_instead_of_a_wall(session):
     on_member = ANCHOR | {"head": [18.0, -4.0, 10.0], "tail": [22.0, -9.0, 10.0]}
-    export = kratos.export_project(structured([MEMBER], [on_member]),
+    export = writer.export_project(structured([MEMBER], [on_member]),
                                    MeshRequest(element_size=6.0, order=1))
     deck = deck_of(export)
     head = next(iter(truss_of(deck).entries.values()))[0]
@@ -284,7 +284,7 @@ def test_an_anchor_may_hang_from_a_member_instead_of_a_wall(session):
 
 
 def test_an_inactive_space_anchor_is_not_exported(session):
-    export = kratos.export_project(structured([PANEL], [ANCHOR | {"active": False}]),
+    export = writer.export_project(structured([PANEL], [ANCHOR | {"active": False}]),
                                    MeshRequest(element_size=6.0, order=1))
     deck = deck_of(export)
 
@@ -295,7 +295,7 @@ def test_an_inactive_space_anchor_is_not_exported(session):
 def test_a_space_anchor_saved_in_a_2d_project_is_not_exported(session):
     payload = structured([PANEL], [ANCHOR]).model_dump() | {"dimension": 2,
                                                             "section_offset": 12.5}
-    export = kratos.export_project(Project.model_validate(payload),
+    export = writer.export_project(Project.model_validate(payload),
                                    MeshRequest(element_size=6.0, order=2))
 
     assert not any("Truss" in block.name for block in deck_of(export).elements)
@@ -323,7 +323,7 @@ def test_every_node_written_is_used_and_ids_are_contiguous(walled):
 # ── 2D structures carried into the 3D deck ──────────────────────────────────
 #
 # A sheet pile and a plane anchor are drawn in the section and built on it in the solid
-# model too (build._section_sweeps). Having built them, the deck has to carry them: a
+# model too (solid_model._section_sweeps). Having built them, the deck has to carry them: a
 # structure the viewport shows but Calculate silently drops is worse than one that was
 # never there.
 
@@ -337,7 +337,7 @@ PLANE_ANCHOR = {"id": "anchor_2d", "name": "Anchor 2D", "kind": "anchor",
 @pytest.fixture(scope="module")
 def sectioned(session):
     """A 2D sheet pile and a 2D anchor, exported from a *3D* project."""
-    return kratos.export_project(structured([PILE], [PLANE_ANCHOR]),
+    return writer.export_project(structured([PILE], [PLANE_ANCHOR]),
                                  MeshRequest(element_size=6.0, order=1))
 
 
@@ -390,7 +390,7 @@ def test_the_plane_anchors_tail_is_pinned_in_all_three_directions(sectioned):
 # ── 2D loads that reach a 3D deck ───────────────────────────────────────────
 #
 # A point load and a line load below the ground surface have no surface form (a
-# SurfaceLoad has no z of its own), so `core/model/loads.py` translates neither and the solid
+# SurfaceLoad has no z of its own), so `core/model/load_translation.py` translates neither and the solid
 # model carries them at the section plane instead. What the deck can do with them
 # differs, and the difference is said out loud rather than left to be discovered.
 
@@ -409,7 +409,7 @@ def loaded(loads: list[dict]) -> Project:
 
 def test_a_2d_point_load_is_written_as_a_3d_point_condition(session):
     """It has a node to sit on wherever it is, so the dimension costs it nothing."""
-    export = kratos.export_project(loaded([POINT_LOAD]),
+    export = writer.export_project(loaded([POINT_LOAD]),
                                    MeshRequest(element_size=6.0, order=1))
     deck = deck_of(export)
 
@@ -421,14 +421,14 @@ def test_a_2d_point_load_is_written_as_a_3d_point_condition(session):
 def test_a_buried_line_load_in_3d_warns_rather_than_vanishing(session):
     """Kratos has no 3D line-load condition in this deck's table, so it cannot be
     written -- and a load that is drawn but not applied has to be said out loud."""
-    export = kratos.export_project(loaded([BURIED_LINE]),
+    export = writer.export_project(loaded([BURIED_LINE]),
                                    MeshRequest(element_size=6.0, order=1))
 
     assert any("LineLoad_2" in w for w in export["warnings"]), export["warnings"]
 
 
 # ── Staged construction in 3D ───────────────────────────────────────────────
-# `kratos/export.py`'s two `if dim == 2 else []` guards keep a 3D deck from staging its
+# `kratos/writer.py`'s two `if dim == 2 else []` guards keep a 3D deck from staging its
 # structures: no automatic wall-installation stage, and no master/slave tie. That is
 # the restriction plan sec 7.13 says to keep -- but it used to be silent, and the
 # phases panel is visible in 3D projects, so a user could build a sequence here and
@@ -455,7 +455,7 @@ def test_a_3d_phase_list_still_activates_and_deactivates_its_parts(session):
     out as a Deactivate and an Activate operation, exactly as they would in plane
     strain. Only the *implicit* sheet-pile staging and the interface ties are dropped.
     """
-    export = kratos.export_project(
+    export = writer.export_project(
         _phased(structured([PANEL, MEMBER], [ANCHOR]), ["panel_1", "anchor_1"]),
         MeshRequest(element_size=6.0, order=1))
     doc = json.loads(export["project_parameters"])
@@ -474,7 +474,7 @@ def test_a_3d_project_with_structures_says_they_are_not_staged(session):
     """The silent skip, made audible. A 2D deck installs its wall in a stage of its
     own even with no phases at all; the same model in 3D gets one stage and said
     nothing about the difference."""
-    export = kratos.export_project(structured([PANEL, MEMBER], [ANCHOR]),
+    export = writer.export_project(structured([PANEL, MEMBER], [ANCHOR]),
                                    MeshRequest(element_size=6.0, order=1))
 
     note = [w for w in export["warnings"] if "not staged" in w]
@@ -485,7 +485,7 @@ def test_a_3d_project_with_structures_says_they_are_not_staged(session):
 def test_the_note_is_absent_from_a_3d_project_with_nothing_to_stage(session):
     """No structures, nothing withheld, nothing to say. A warning that fires on every
     3D export is one people learn to skip past."""
-    export = kratos.export_project(seed_project(simple=True),
+    export = writer.export_project(seed_project(simple=True),
                                    MeshRequest(element_size=6.0, order=1))
 
     assert not any("not staged" in w for w in export["warnings"]), export["warnings"]
@@ -495,7 +495,7 @@ def test_the_note_is_absent_in_plane_strain(session):
     """2D is the case where the structures *are* staged."""
     payload = structured([PANEL, MEMBER], [ANCHOR]).model_dump()
     payload["dimension"] = 2
-    export = kratos.export_project(Project.model_validate(payload),
+    export = writer.export_project(Project.model_validate(payload),
                                    MeshRequest(element_size=6.0, order=1))
 
     assert not any("not staged" in w for w in export["warnings"]), export["warnings"]

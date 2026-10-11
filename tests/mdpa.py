@@ -1,6 +1,6 @@
 """A minimal .mdpa reader, used to assert on what the exporter writes.
 
-Deliberately independent of `core.kratos.export`: it re-derives the file's meaning from the
+Deliberately independent of `core.kratos.writer`: it re-derives the file's meaning from the
 text, so a test that passes says the *file* is right rather than that two copies of the
 same helper agree. It also parses GiD's reference decks in the repo root, which is how
 the format's invariants were established in the first place.

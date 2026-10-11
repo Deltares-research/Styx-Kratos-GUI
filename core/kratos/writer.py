@@ -34,9 +34,9 @@ from dataclasses import dataclass
 import gmsh
 
 from core.model import phases
-from core.geometry import build, meshing
-from core.kratos import files, interfaces
-from core.kratos import materials as kratos_materials, processes as kratos_processes
+from core.geometry import solid_model, meshing
+from core.kratos import deck_files, interfaces
+from core.kratos import materials, parameters
 from core.kratos.materials import material_parameters
 from core.model.schemas import (Beam, LineLoad, MeshRequest, PanelSection, PointLoad,
                          Project, SurfaceLoad)
@@ -182,7 +182,7 @@ TOLERANCE = 1e-6
 
 # Indicators, not finite-element material: the load pad and the phreatic slab are never
 # meshed, and `excavation` is an alias for soil that has been dug away.
-NOT_MATERIAL = set(build.DISPLAY_ONLY) | {"excavation"}
+NOT_MATERIAL = set(solid_model.DISPLAY_ONLY) | {"excavation"}
 
 
 class ExportError(RuntimeError):
@@ -201,12 +201,12 @@ def export_project(project: Project, settings: MeshRequest | None = None,
 
     Without `settings` the project meshes with the settings it carries (`Project.mesh`),
     the ones the GUI's Generate mesh uses. The call runs in a gmsh session of its own when
-    there is none (`build.session` is re-entrant, so the worker's long-lived one is used
+    there is none (`solid_model.session` is re-entrant, so the worker's long-lived one is used
     as it is), which lets a script or a test export a model in one line.
     """
     if settings is None:
         settings = MeshRequest(**project.mesh.model_dump())
-    with build.session():
+    with solid_model.session():
         return _export(project, settings, include_materials)
 
 
@@ -226,7 +226,7 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
     # itself has things to say -- an interface a 3D model cannot carry, a wall written
     # one order below the soil around it.
     #
-    # Seeded from `mesh.log`'s own curated notes -- every `core.geometry.build` line meant for a
+    # Seeded from `mesh.log`'s own curated notes -- every `core.geometry.solid_model` line meant for a
     # person rather than gmsh's own chatter carries this exact "Info    : " padding
     # (gmsh's raw logger writes "Info: ..." instead, one space, so the two never
     # collide). A pile that never touches the soil, a wall drawn in the wrong mode --
@@ -294,7 +294,7 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
     # Soil only, which is what `_boundary_nodes` documents it measures the domain faces
     # from. `soil_blocks` is every continuum body, structures included: in 3D the wall
     # ring, the struts and the piles are solids too, and the ring is built *outboard* of
-    # the pit face (`build._build_solids`), so a pit against the domain edge puts wall
+    # the pit face (`solid_model._build_solids`), so a pit against the domain edge puts wall
     # outside the soil. Measured with it, the left face follows the wall and the soil's
     # own edge -- the one the excavation is dug against -- is not a boundary at all.
     body_tags = {tag for key, _, rows in soil_blocks if key.startswith("soil_")
@@ -369,12 +369,12 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
          _adjacent_material(project, key, names, material_by_part))
         for key, _, _ in interface_blocks]
     try:
-        materials, material_warnings = (
+        material_file, material_warnings = (
             material_parameters(project, part_materials, dim, beam_properties,
                                 anchor_properties, panel_properties, interface_properties)
             if include_materials else (None, [])
         )
-    except kratos_materials.MaterialError as failure:
+    except materials.MaterialError as failure:
         # A property set that cannot be written is the user's to fix, and says what;
         # surfaced like every other refusal of the export rather than as a crash.
         raise ExportError(str(failure)) from None
@@ -458,12 +458,12 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
     # actually names it, so an unphased deck is not shipped a file nothing opens.
     initial_materials = None
     if include_materials and any(
-            stage.materials_filename == files.INITIAL_MATERIALS_NAME
+            stage.materials_filename == deck_files.INITIAL_MATERIALS_NAME
             for stage in stages):
         initial_materials, _ = material_parameters(
             project, part_materials, dim, beam_properties, anchor_properties,
             panel_properties, interface_properties, k0=True)
-    processes = kratos_processes.project_parameters(
+    processes = parameters.project_parameters(
         _boundary_constraints(project, dim, boundaries) + anchor_fixities,
         [(name, variable, load_mask, value) for name, variable, value in active_loads],
         stages,
@@ -484,7 +484,7 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
         # writes the files, so the name in the deck and the name on disk cannot drift.
         "deck_name": deck_name(project),
         # The system every number in the deck is in, recorded with the run so its results
-        # are read in it (`calculate.write_deck`, `core.results.fields`).
+        # are read in it (`calculation.write_deck`, `core.results.fields`).
         "unit_system": project.unit_system,
         # The node table on its own, in the deck's own numbering. The viewport's node-ID
         # labels can only be drawn from here: a gmsh tag is not a Kratos ID -- `node_id`
@@ -497,7 +497,7 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
         # Same pass, same reason as the node table -- an element id is assigned here, in
         # emission order, and exists nowhere before this function runs.
         "elements": _element_labels(coordinates, node_id, numbered),
-        "materials": materials,
+        "materials": material_file,
         "initial_materials": initial_materials,
         "project_parameters": processes,
         "stats": mesh.stats.to_dict(),
@@ -573,7 +573,7 @@ def _deck_active(deck: _Deck, keys: set[str]) -> frozenset[str]:
 
 
 def _stages(project: Project, deck: _Deck, staged_parts: list[str],
-            staged_ties: list[tuple[str, str]]) -> list[kratos_processes.Stage]:
+            staged_ties: list[tuple[str, str]]) -> list[parameters.Stage]:
     """The deck's stages, in execution order.
 
     A project with no phases exports exactly the deck it exported before staged
@@ -584,19 +584,19 @@ def _stages(project: Project, deck: _Deck, staged_parts: list[str],
     """
     if not project.phases:
         if not staged_parts:
-            return [kratos_processes.Stage(name=kratos_processes.STAGE_NAME)]
+            return [parameters.Stage(name=parameters.STAGE_NAME)]
         return [
-            kratos_processes.Stage(
-                name=kratos_processes.INITIAL_STAGE_NAME, modeler=True,
+            parameters.Stage(
+                name=parameters.INITIAL_STAGE_NAME, modeler=True,
                 deactivate=tuple(staged_parts), ties=tuple(staged_ties)),
-            kratos_processes.Stage(
-                name=kratos_processes.WALL_INSTALLATION_STAGE_NAME,
+            parameters.Stage(
+                name=parameters.WALL_INSTALLATION_STAGE_NAME,
                 activate=tuple(staged_parts), start_time=1.0),
         ]
     return _phased_stages(project, deck)
 
 
-def _phased_stages(project: Project, deck: _Deck) -> list[kratos_processes.Stage]:
+def _phased_stages(project: Project, deck: _Deck) -> list[parameters.Stage]:
     """One stage per phase. Raises `phases.PhaseError` if the tree does not linearise."""
     steps = phases.transitions(project)
 
@@ -611,7 +611,7 @@ def _phased_stages(project: Project, deck: _Deck) -> list[kratos_processes.Stage
             break
         settling += 1
 
-    out: list[kratos_processes.Stage] = []
+    out: list[parameters.Stage] = []
     keys = set(project.stageable_keys())
     live = _deck_active(deck, keys)
     for index, (phase, switched_on, switched_off) in enumerate(steps):
@@ -650,8 +650,8 @@ def _phased_stages(project: Project, deck: _Deck) -> list[kratos_processes.Stage
         if retained and deck.right_side:
             output += ((deck.right_side, "output_interface", INTERFACE_VARIABLES),)
 
-        out.append(kratos_processes.Stage(
-            name=kratos_processes.stage_name(index, phase.name),
+        out.append(parameters.Stage(
+            name=parameters.stage_name(index, phase.name),
             activate=activate,
             deactivate=deactivate,
             active=live,
@@ -673,8 +673,8 @@ def _phased_stages(project: Project, deck: _Deck) -> list[kratos_processes.Stage
             reset_displacements=phase.reset_displacements,
             max_iterations=phase.max_iterations,
             tolerated_error=phase.tolerated_error,
-            materials_filename=(files.INITIAL_MATERIALS_NAME if k0
-                                else files.MATERIALS_NAME),
+            materials_filename=(deck_files.INITIAL_MATERIALS_NAME if k0
+                                else deck_files.MATERIALS_NAME),
         ))
     return out
 
@@ -830,7 +830,7 @@ def _split_ties(rows: list[list[int]], per_side: int, duplicates: dict[int, int]
 
     A node in the middle of the line gets exactly two copies, one per face (see
     `core.kratos.interfaces`'s module docstring) -- while the structure that owns the line is
-    staged (deactivated, then activated on installation -- see `kratos_processes`),
+    staged (deactivated, then activated on installation -- see `parameters`),
     nothing else holds those two copies together, so they need a master/slave tie for
     the stage(s) before installation. A node with only one copy is the toe, where the
     ground closes under the structure and is already continuous; it needs no tie.
@@ -838,7 +838,7 @@ def _split_ties(rows: list[list[int]], per_side: int, duplicates: dict[int, int]
     The pairing is exact, not discovered by search: each node in one list has exactly one
     true partner, at zero distance, in the other. That made
     `minimum_number_of_neighbouring_nodes` 1 here for a while, and running the deck
-    showed why it cannot be -- see `kratos_processes.MASTER_SLAVE_NEIGHBOURS`. The
+    showed why it cannot be -- see `parameters.MASTER_SLAVE_NEIGHBOURS`. The
     geometry below is unchanged by that; only what Kratos is asked to do with it.
     """
     by_original: dict[int, set[int]] = {}
@@ -923,17 +923,17 @@ def _anchor_ties(project: Project, dim: int,
     exactly: one linear element whatever the mesh order, with the head node the beam
     already owns and a tail node bonded to nothing.
 
-    The head is resolved to a *beam* node specifically. `build._attach_anchors` draws
+    The head is resolved to a *beam* node specifically. `solid_model._attach_anchors` draws
     the anchor as display geometry whose own head vertex sits at the same place, so a
     plain nearest-node search could pick that stray instead of the pile's node.
     """
     # In 3D both kinds are live: a space anchor is drawn in the model, and a plane
-    # anchor hangs off the sheet pile that `build._section_sweeps` put on the cut.
+    # anchor hangs off the sheet pile that `solid_model._section_sweeps` put on the cut.
     anchors = (project.plane_anchors if dim == 2
                else project.plane_anchors + project.space_anchors)
     # The structures an anchor may hang from: a 2D head is on a sheet pile, a 3D head on
     # a wall or a member. Resolved to *structural* nodes specifically, because
-    # `build._attach_anchors` draws the tie's own head vertex at the same place and a
+    # `solid_model._attach_anchors` draws the tie's own head vertex at the same place and a
     # plain nearest-node search could pick that stray instead.
     structural = {tag for _, _, rows in _harvest(_beam_bodies(project, dim), 1, BEAMS,
                                                  model_dim=dim)
@@ -1047,7 +1047,7 @@ def _kratos_coordinates(world: dict[int, tuple[float, float, float]], dim: int
     """World coordinates are Kratos coordinates, in both dimensions.
 
     There is nothing to remap since the re-basis: a 2D model is the x-y plane, which is
-    the plane Kratos writes a plane-strain deck in, and `build._section` has already
+    the plane Kratos writes a plane-strain deck in, and `solid_model._section` has already
     moved it onto z = 0. Asserted rather than assumed -- a 2D node off the plane would
     otherwise reach the deck as a silently wrong third coordinate.
     """
@@ -1062,7 +1062,7 @@ def _kratos_coordinates(world: dict[int, tuple[float, float, float]], dim: int
 
 
 def _bodies(project: Project, dim: int) -> dict[str, list[int]]:
-    """Part key -> entity tags, from the physical groups `build` tagged, in tree order.
+    """Part key -> entity tags, from the physical groups `solid_model` tagged, in tree order.
 
     Physical groups are the identity contract the rest of the app already uses, so the
     deck's bodies are the same bodies the model tree and the viewport name.
@@ -1105,7 +1105,7 @@ def _panel_bodies(project: Project, dim: int) -> dict[str, list[int]]:
     """Panel key -> 2D entity tags, for the walls embedded in the 3D solid.
 
     Empty in 2D: a wall is drawn in plan and has no place in a plane-strain cut, which
-    `build._embed_beams` has already logged.
+    `solid_model._embed_beams` has already logged.
     """
     if dim != 3:
         return {}
@@ -1156,7 +1156,7 @@ def _lookup(table: dict, dim: int, element_type: int) -> tuple[str, tuple[int, .
         shape = gmsh.model.mesh.getElementProperties(element_type)[0]
         raise ExportError(
             f"no Kratos element is mapped for a {shape} in {dim}D. Mesh with linear or "
-            "quadratic simplices, or add the type to core/kratos/export.py."
+            "quadratic simplices, or add the type to core/kratos/writer.py."
         ) from None
 
 
@@ -1221,7 +1221,7 @@ def _load_conditions(project: Project, dim: int,
 def _normal_load_conditions(project: Project, dim: int, warnings: list[str],
                             world: dict[int, tuple[float, float, float]] | None = None
                             ) -> list[tuple[str, str, list[list[int]]]]:
-    """One condition per active `NormalLoad`, off the line `build._embed_beams` already
+    """One condition per active `NormalLoad`, off the line `solid_model._embed_beams` already
     gave its own physical group -- the same way a free interface's line is found.
 
     Unlike `meshing.loaded_elements`, this does not scan the boundary at a fixed
@@ -1403,7 +1403,7 @@ def deck_name(project: Project) -> str:
     The project's own name, reduced to what every filesystem accepts -- the same rule
     `frontend/js/export.js` applies when it names the archive, so the file a download writes
     and the file a calculation runs are named alike. Public because two callers need the
-    same answer: the export that puts it in the parameters, and `core.run.calculate`, which
+    same answer: the export that puts it in the parameters, and `core.analysis.calculation`, which
     has to write the .mdpa under exactly the name those parameters ask Kratos for.
     """
     return re.sub(r"[^A-Za-z0-9]+", "_", project.name).strip("_") or "model"

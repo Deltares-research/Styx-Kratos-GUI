@@ -228,7 +228,7 @@ test('the File menu offers Import mesh (.mdpa)…', function () {
 
   /* A wall and the zero-thickness contacts that hold the soil to it: the arrangement a
      .mdpa with a sheet pile actually contains. The contact draws as line work (there is
-     no thickness for a face to span -- core/kratos/mdpa_import.py `_triangles_and_edges`),
+     no thickness for a face to span -- core/kratos/mdpa_reader.py `_triangles_and_edges`),
      and nothing here treats it differently from any other part: it earns a checklist
      row, an eye in the Model explorer and a colour of its own by being a section. */
   var WALLED = {

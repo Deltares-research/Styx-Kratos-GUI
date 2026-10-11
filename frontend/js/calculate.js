@@ -64,7 +64,7 @@ App.Calculate = (function () {
     /* Which stage it died in, first and on its own line.
 
        `result.stage` is what `calculate.failed_stage` worked out from the markers
-       `core.run.runner` prints around each stage; null on a deck that finished, and on
+       `core.analysis.kratos_main` prints around each stage; null on a deck that finished, and on
        one that never reached a stage at all. On a seven-stage deck the difference
        between "it failed" and "phase 5 failed" is most of the message, so it is said
        before the reason rather than buried in it. */

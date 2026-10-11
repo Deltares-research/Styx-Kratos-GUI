@@ -1,7 +1,7 @@
 /* ══════════════════════════════════════════════════════════════════
    test-deck.js — `run <case.py>` for a case that is a Kratos deck already.
 
-   The server sends such a case's mesh back with the project (core/kratos/deck.py);
+   The server sends such a case's mesh back with the project (core/kratos/external_deck.py);
    `App.Deck` decides what to do with it -- whether there is one, which parts go into
    the Model explorer, and what the command log says. Showing it, and switching to
    the Mesh tab, are patches.js's.

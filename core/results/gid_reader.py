@@ -1,6 +1,6 @@
 """GiD's ASCII post files, read back.
 
-A Kratos deck written by `core.kratos.processes` carries one `GiDOutputProcess` per
+A Kratos deck written by `core.kratos.parameters` carries one `GiDOutputProcess` per
 stage, which leaves two files beside the deck: `<problem>.post.msh`, the mesh as that
 stage saw it, and `<problem>.post.res`, the results on it. This module turns both into
 tables and stops there. It has no opinion about what a number means -- which quantities

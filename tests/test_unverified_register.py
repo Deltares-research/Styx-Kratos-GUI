@@ -25,7 +25,7 @@ def test_every_deferral_in_the_exporter_is_in_a_file_the_register_covers():
                  if DEFERRAL.search(path.read_text(encoding="utf-8"))}
     assert deferring <= COVERED_FILES, sorted(deferring - COVERED_FILES)
     registered = {row["where"].split()[0].split(".")[0] + ".py" for row in REGISTER}
-    assert deferring <= registered | {"kratos/materials.py", "kratos/processes.py"}
+    assert deferring <= registered | {"kratos/materials.py", "kratos/parameters.py"}
 
 
 def test_the_open_and_blocked_rows_are_the_known_gaps():

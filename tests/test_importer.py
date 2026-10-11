@@ -1,4 +1,4 @@
-"""`core.geometry.importer` and `POST /api/geometry/import`: a CAD file in, one solid part out
+"""`core.geometry.cad_import` and `POST /api/geometry/import`: a CAD file in, one solid part out
 (plan/active/alpha-test-plan.md Task 1.2).
 
 The fixtures are made here rather than committed: STEP, IGES and BREP are written by gmsh
@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from core.geometry import build, importer
+from core.geometry import solid_model, cad_import
 
 CORNERS = [(0, 0, 0), (2, 0, 0), (2, 1, 0), (0, 1, 0),
            (0, 0, 3), (2, 0, 3), (2, 1, 3), (0, 1, 3)]
@@ -52,7 +52,7 @@ def binary_stl(faces=FACES) -> bytes:
 
 @pytest.fixture(scope="module")
 def gmsh_session():
-    with build.session():
+    with solid_model.session():
         yield
 
 
@@ -60,7 +60,7 @@ def gmsh_session():
 def data_dir(tmp_path, monkeypatch):
     # The importer writes its .brep into .data; a test writes into its own folder.
     target = tmp_path / "data"
-    monkeypatch.setattr(importer, "DATA_DIR", target)
+    monkeypatch.setattr(cad_import, "DATA_DIR", target)
     return target
 
 
@@ -88,7 +88,7 @@ def assert_one_box(result, data_dir):
 def test_a_cad_solid_comes_through_as_one_volume_with_its_extent(gmsh_session, data_dir,
                                                                   tmp_path, extension):
     source = written_by_gmsh(tmp_path / f"box{extension}")
-    assert_one_box(importer.process_import(str(source), extension), data_dir)
+    assert_one_box(cad_import.process_import(str(source), extension), data_dir)
 
 
 @pytest.mark.parametrize("extension, text", [(".stl", stl_text), (".obj", obj_text)])
@@ -96,18 +96,18 @@ def test_a_closed_triangulated_surface_is_rebuilt_into_a_solid(gmsh_session, dat
                                                                tmp_path, extension, text):
     source = tmp_path / f"cube{extension}"
     source.write_text(text(), encoding="ascii")
-    assert_one_box(importer.process_import(str(source), extension), data_dir)
+    assert_one_box(cad_import.process_import(str(source), extension), data_dir)
 
 
 def test_the_extension_is_matched_whatever_its_case(gmsh_session, data_dir, tmp_path):
     source = written_by_gmsh(tmp_path / "box.step").rename(tmp_path / "BOX.STEP")
-    assert_one_box(importer.process_import(str(source), ".STEP"), data_dir)
+    assert_one_box(cad_import.process_import(str(source), ".STEP"), data_dir)
 
 
 def test_a_binary_stl_imports_like_an_ascii_one(gmsh_session, data_dir, tmp_path):
     source = tmp_path / "cube.stl"
     source.write_bytes(binary_stl())
-    assert_one_box(importer.process_import(str(source), ".stl"), data_dir)
+    assert_one_box(cad_import.process_import(str(source), ".stl"), data_dir)
 
 
 def test_an_obj_with_quads_texture_indices_and_comments_imports(gmsh_session, data_dir,
@@ -118,7 +118,7 @@ def test_an_obj_with_quads_texture_indices_and_comments_imports(gmsh_session, da
             + "".join("f " + " ".join(f"{i + 1}/1/1" for i in quad) + "\n" for quad in quads))
     source = tmp_path / "cube.obj"
     source.write_text(text, encoding="ascii")
-    assert_one_box(importer.process_import(str(source), ".obj"), data_dir)
+    assert_one_box(cad_import.process_import(str(source), ".obj"), data_dir)
 
 
 def test_two_separate_closed_bodies_are_two_volumes(gmsh_session, data_dir, tmp_path):
@@ -128,18 +128,18 @@ def test_two_separate_closed_bodies_are_two_volumes(gmsh_session, data_dir, tmp_
             + "".join("f %d %d %d\n" % tuple(i + 9 for i in face) for face in FACES))
     source = tmp_path / "two.obj"
     source.write_text(text, encoding="ascii")
-    result = importer.process_import(str(source), ".obj")
+    result = cad_import.process_import(str(source), ".obj")
     assert result["volumes"] == 2
     assert result["bbox"] == pytest.approx((0, 0, 0, 12, 1, 3), abs=1e-4)
 
 
 def test_a_mesh_too_large_to_rebuild_is_refused_with_its_size(gmsh_session, data_dir,
                                                                tmp_path, monkeypatch):
-    monkeypatch.setattr(importer, "MAX_TRIANGLES", 10)
+    monkeypatch.setattr(cad_import, "MAX_TRIANGLES", 10)
     source = tmp_path / "cube.stl"
     source.write_text(stl_text(), encoding="ascii")
-    with pytest.raises(importer.ImportRefused, match="12 triangles"):
-        importer.process_import(str(source), ".stl")
+    with pytest.raises(cad_import.ImportRefused, match="12 triangles"):
+        cad_import.process_import(str(source), ".stl")
 
 
 # ── What the user is told when the file is not a solid ──────────────────────
@@ -148,8 +148,8 @@ def test_an_open_surface_is_refused_with_a_reason_about_solids(gmsh_session, dat
                                                                 tmp_path):
     source = tmp_path / "lid_missing.stl"
     source.write_text(stl_text(FACES[:-2]), encoding="ascii")
-    with pytest.raises(importer.ImportRefused, match="not closed"):
-        importer.process_import(str(source), ".stl")
+    with pytest.raises(cad_import.ImportRefused, match="not closed"):
+        cad_import.process_import(str(source), ".stl")
 
 
 def test_a_cad_file_of_loose_faces_that_do_not_close_is_refused(gmsh_session, data_dir,
@@ -160,31 +160,31 @@ def test_a_cad_file_of_loose_faces_that_do_not_close_is_refused(gmsh_session, da
     gmsh.model.occ.synchronize()
     gmsh.write(str(tmp_path / "sheet.step"))
     gmsh.clear()
-    with pytest.raises(importer.ImportRefused, match="no 3D volumes"):
-        importer.process_import(str(tmp_path / "sheet.step"), ".step")
+    with pytest.raises(cad_import.ImportRefused, match="no 3D volumes"):
+        cad_import.process_import(str(tmp_path / "sheet.step"), ".step")
 
 
 @pytest.mark.parametrize("extension", [".step", ".stl", ".obj"])
 def test_an_empty_file_is_refused_not_crashed_on(gmsh_session, data_dir, tmp_path, extension):
     source = tmp_path / f"empty{extension}"
     source.write_bytes(b"")
-    with pytest.raises(importer.ImportRefused):
-        importer.process_import(str(source), extension)
+    with pytest.raises(cad_import.ImportRefused):
+        cad_import.process_import(str(source), extension)
 
 
 def test_a_file_that_is_not_what_its_extension_says_is_refused(gmsh_session, data_dir,
                                                                tmp_path):
     source = tmp_path / "notes.step"
     source.write_text("this is not a STEP file\n", encoding="ascii")
-    with pytest.raises(importer.ImportRefused):
-        importer.process_import(str(source), ".step")
+    with pytest.raises(cad_import.ImportRefused):
+        cad_import.process_import(str(source), ".step")
 
 
 def test_a_path_with_spaces_and_non_ascii_letters_imports(gmsh_session, data_dir, tmp_path):
     folder = tmp_path / "Rotterdam Zuid — bouwput ü"
     folder.mkdir()
     source = written_by_gmsh(folder / "wand é.step")
-    assert_one_box(importer.process_import(str(source), ".step"), data_dir)
+    assert_one_box(cad_import.process_import(str(source), ".step"), data_dir)
 
 
 # ── Through the API ─────────────────────────────────────────────────────────
@@ -193,16 +193,16 @@ def test_a_part_rebuilt_from_triangles_takes_part_in_the_build_as_its_volume(gms
                                                                              data_dir,
                                                                              tmp_path):
     from core.model.schemas import CustomPart
-    from core.model.seed import seed_project
+    from core.model.templates import seed_project
 
     source = tmp_path / "cube.stl"
     source.write_text(stl_text(), encoding="ascii")
-    result = importer.process_import(str(source), ".stl")
+    result = cad_import.process_import(str(source), ".stl")
     project = seed_project()
     project.custom_parts.append(CustomPart(key="imported_0", label="cube.stl", source="import",
                                            source_file=result["brep_path"],
                                            bbox=tuple(result["bbox"])))
-    built = build.build_geometry(project)
+    built = solid_model.build_geometry(project)
     assert built.mass["imported_0"] == pytest.approx(6.0, rel=1e-6), "2 x 1 x 3"
 
 

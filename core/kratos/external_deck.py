@@ -9,7 +9,7 @@ it would be a second model of the same dike, checked against nothing.
 
 So a deck case script hands back a project that *points at* the deck::
 
-    from core.kratos.deck import deck_project
+    from core.kratos.external_deck import deck_project
 
     def dike_project():
         return deck_project(HERE, "dike.json", name="Dike section")
@@ -35,9 +35,9 @@ import re
 import shutil
 from pathlib import Path, PurePath
 
-from core.kratos import files, mdpa_import, node_parts
+from core.kratos import deck_files, mdpa_reader, node_parts
 from core.model.schemas import Deck, Domain, Phase, Project
-from core.model.seed import blank_project
+from core.model.templates import blank_project
 
 
 class DeckError(ValueError):
@@ -52,11 +52,11 @@ way across Kratos versions."""
 
 # ── Opening one ─────────────────────────────────────────────────────────────
 
-def deck_project(directory: str | Path, parameters: str = files.PARAMETERS_NAME,
+def deck_project(directory: str | Path, parameters: str = deck_files.PARAMETERS_NAME,
                  name: str | None = None) -> Project:
     """The project a deck case opens as.
 
-    The empty site `seed.blank_project` is, carrying the deck -- with the dimension
+    The empty site `templates.blank_project` is, carrying the deck -- with the dimension
     and the extent taken from the mesh, so that a plane-strain deck opens in 2D and
     the view frames the dike rather than a default 20 m site. Every file the deck
     names is checked here, so a broken case fails when it is opened, by name, rather
@@ -246,29 +246,29 @@ def stage(deck: Deck, directory: Path) -> list[str]:
     Two changes, both to the parameters and both about where things land rather than
     what is computed:
 
-    *   it is written as `files.PARAMETERS_NAME`, which is the name the runner is
-        started with and the one `core.results.runs` reads a run's stages from;
+    *   it is written as `deck_files.PARAMETERS_NAME`, which is the name the runner is
+        started with and the one `core.results.catalog` reads a run's stages from;
     *   each output process' `output_name` loses any directory in front of it. Kratos
         would write `gid_output/1_Initial_stage.post.res` into a subdirectory, and a
-        run directory is flat -- `core.results.runs.file_path` serves nothing else, on
+        run directory is flat -- `core.results.catalog.file_path` serves nothing else, on
         purpose.
 
     The original is never touched.
     """
     parameters = _flattened(_parameters(deck))
     written = []
-    files.write_text(directory / files.PARAMETERS_NAME,
+    deck_files.write_text(directory / deck_files.PARAMETERS_NAME,
                      json.dumps(parameters, indent=4))
-    written.append(files.PARAMETERS_NAME)
+    written.append(deck_files.PARAMETERS_NAME)
     for name in input_files(deck)[1:]:
         shutil.copyfile(_path(deck, name), directory / name)
         written.append(name)
     # A deck this application exported says which unit system its numbers are in;
     # the run keeps the record, so its results are labelled in it. Kratos never reads it.
-    units = _path(deck, files.UNITS_NAME)
+    units = _path(deck, deck_files.UNITS_NAME)
     if units.is_file():
-        shutil.copyfile(units, directory / files.UNITS_NAME)
-        written.append(files.UNITS_NAME)
+        shutil.copyfile(units, directory / deck_files.UNITS_NAME)
+        written.append(deck_files.UNITS_NAME)
     return written
 
 
@@ -322,21 +322,21 @@ def _mdpa_file(deck: Deck) -> str:
     return meshes[0]
 
 
-_meshes: dict[tuple, mdpa_import.MdpaModel] = {}
+_meshes: dict[tuple, mdpa_reader.MdpaModel] = {}
 """Parsed meshes, by path and what the filesystem says about it -- a case's .mdpa is
 megabytes, and opening, previewing and calculating it would otherwise parse it three
 times over."""
 
 
-def _mesh(deck: Deck) -> mdpa_import.MdpaModel:
+def _mesh(deck: Deck) -> mdpa_reader.MdpaModel:
     path = _path(deck, _mdpa_file(deck))
     stat = path.stat()
     key = (str(path), stat.st_mtime_ns, stat.st_size)
     if key not in _meshes:
         _meshes.clear()
         try:
-            _meshes[key] = mdpa_import.import_mdpa(path.read_text(encoding="utf-8",
+            _meshes[key] = mdpa_reader.import_mdpa(path.read_text(encoding="utf-8",
                                                                   errors="replace"))
-        except mdpa_import.ImportError_ as failure:
+        except mdpa_reader.ImportError_ as failure:
             raise DeckError(f"{path.name}: {failure}") from failure
     return _meshes[key]

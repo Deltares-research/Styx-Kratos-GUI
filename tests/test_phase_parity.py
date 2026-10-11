@@ -31,8 +31,8 @@ import sys
 # it there already.
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
-from core.model import phases as phase_model, schemas   # noqa: E402
-from core.model.seed import seed_project                # noqa: E402
+from core.model import phases, schemas   # noqa: E402
+from core.model.templates import seed_project                # noqa: E402
 
 FIXTURE = (pathlib.Path(__file__).resolve().parents[1]
            / "frontend" / "tests" / "fixtures" / "phase-cases.js")
@@ -112,9 +112,9 @@ def build() -> dict:
     return {
         "project": json.loads(project.model_dump_json()),
         "stageable_keys": project.stageable_keys(),
-        "active_parts": {phase.id: sorted(phase_model.active_parts(project, phase.id))
+        "active_parts": {phase.id: sorted(phases.active_parts(project, phase.id))
                          for phase in project.phases},
-        "order": [phase.id for phase in phase_model.linearise(project)],
+        "order": [phase.id for phase in phases.linearise(project)],
     }
 
 

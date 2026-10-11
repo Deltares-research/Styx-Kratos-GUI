@@ -17,8 +17,8 @@ import textwrap
 
 import pytest
 
-from core.kratos import mdpa_import
-from core.results import gid as gid_results, parts as result_parts
+from core.kratos import mdpa_reader
+from core.results import gid_reader, parts
 
 
 def dedent(text: str) -> str:
@@ -72,7 +72,7 @@ MDPA = dedent("""
     """)
 
 
-def stage_mesh(*elements: int) -> gid_results.GidMesh:
+def stage_mesh(*elements: int) -> gid_reader.GidMesh:
     """A stage's `.post.msh` carrying just the elements named.
 
     The lift is written as its own block so that leaving it out produces the shape a
@@ -86,18 +86,18 @@ def stage_mesh(*elements: int) -> gid_results.GidMesh:
     ]
     lines += [rows[e] for e in elements if e in rows]
     lines.append("End Elements")
-    return gid_results.read_mesh("\n".join(lines) + "\n")
+    return gid_reader.read_mesh("\n".join(lines) + "\n")
 
 
 @pytest.fixture
 def model():
-    return mdpa_import.import_mdpa(MDPA)
+    return mdpa_reader.import_mdpa(MDPA)
 
 
 # ── The join ────────────────────────────────────────────────────────────────
 
 def test_an_element_knows_which_part_it_belongs_to(model):
-    owner = result_parts.element_owner(model)
+    owner = parts.element_owner(model)
 
     assert owner[1] == "Soil_Top"
     assert owner[2] == "Soil_Top_lift1"
@@ -107,13 +107,13 @@ def test_an_element_knows_which_part_it_belongs_to(model):
 def test_a_part_that_owns_no_elements_owns_no_elements(model):
     """`Bottom_Support` is a node set. It must not claim the elements those nodes
     happen to belong to."""
-    owner = result_parts.element_owner(model)
+    owner = parts.element_owner(model)
 
     assert "Bottom_Support" not in owner.values()
 
 
 def test_an_element_no_part_claims_is_simply_absent(model):
-    owner = result_parts.element_owner(model)
+    owner = parts.element_owner(model)
 
     assert 404 not in owner
 
@@ -121,56 +121,56 @@ def test_an_element_no_part_claims_is_simply_absent(model):
 # ── What the phase did ──────────────────────────────────────────────────────
 
 def test_a_part_whose_elements_are_in_this_stage_is_alive(model):
-    parts = {p.name: p for p in result_parts.stage_parts(model, stage_mesh(1, 2))}
+    by_name = {p.name: p for p in parts.stage_parts(model, stage_mesh(1, 2))}
 
-    assert parts["Soil_Top"].alive is True
-    assert parts["Soil_Top_lift1"].alive is True
-    assert parts["Soil_Top"].elements == [1]
+    assert by_name["Soil_Top"].alive is True
+    assert by_name["Soil_Top_lift1"].alive is True
+    assert by_name["Soil_Top"].elements == [1]
 
 
 def test_a_part_the_phase_deactivated_is_not_alive(model):
     """The excavated lift. Its block is in the stage mesh with nothing in it, and that
     is exactly how a staged result learns what is still standing -- no phase record is
     consulted and none is needed."""
-    parts = {p.name: p for p in result_parts.stage_parts(model, stage_mesh(1))}
+    by_name = {p.name: p for p in parts.stage_parts(model, stage_mesh(1))}
 
-    assert parts["Soil_Top"].alive is True
-    assert parts["Soil_Top_lift1"].alive is False
-    assert parts["Soil_Top_lift1"].elements == []
-    assert parts["Soil_Top_lift1"].declared == 1
+    assert by_name["Soil_Top"].alive is True
+    assert by_name["Soil_Top_lift1"].alive is False
+    assert by_name["Soil_Top_lift1"].elements == []
+    assert by_name["Soil_Top_lift1"].declared == 1
 
 
 def test_a_part_gid_never_writes_is_told_apart_from_one_that_was_removed(model):
     """The interfaces are solved and are in the deck, and the GiD writer has no
     geometry for them, so they are in none of the run's stages. Calling that
     "deactivated" would be a statement about the model, and a false one."""
-    written = result_parts.written_parts(model, [stage_mesh(1, 2), stage_mesh(1)])
+    written = parts.written_parts(model, [stage_mesh(1, 2), stage_mesh(1)])
 
-    parts = {p.name: p for p in result_parts.stage_parts(model, stage_mesh(1),
+    by_name = {p.name: p for p in parts.stage_parts(model, stage_mesh(1),
                                                          written=written)}
 
-    assert parts["Soil_Top_lift1"].written is True
-    assert parts["Soil_Top_lift1"].alive is False, "removed by this phase"
-    assert parts["Wall_contact"].written is False, "never written by the GiD output"
-    assert parts["Wall_contact"].alive is False
+    assert by_name["Soil_Top_lift1"].written is True
+    assert by_name["Soil_Top_lift1"].alive is False, "removed by this phase"
+    assert by_name["Wall_contact"].written is False, "never written by the GiD output"
+    assert by_name["Wall_contact"].alive is False
 
 
 def test_without_the_run_wide_check_nothing_claims_to_know(model):
     """`written` is a fact about the whole run, so a single stage may not assert it.
     None, not False: the difference between "no" and "not asked"."""
-    parts = {p.name: p for p in result_parts.stage_parts(model, stage_mesh(1))}
+    by_name = {p.name: p for p in parts.stage_parts(model, stage_mesh(1))}
 
-    assert parts["Wall_contact"].written is None
+    assert by_name["Wall_contact"].written is None
 
 
 def test_a_node_only_part_is_carried_but_never_called_dead(model):
     """A support or a boundary owns no elements, so "alive" is not a question about
     it. It is reported so the explorer can list it, and its aliveness is None."""
-    parts = {p.name: p for p in result_parts.stage_parts(model, stage_mesh(1, 2))}
+    by_name = {p.name: p for p in parts.stage_parts(model, stage_mesh(1, 2))}
 
-    assert parts["Bottom_Support"].kind == "support"
-    assert parts["Bottom_Support"].alive is None
-    assert parts["Bottom_Support"].nodes == 2
+    assert by_name["Bottom_Support"].kind == "support"
+    assert by_name["Bottom_Support"].alive is None
+    assert by_name["Bottom_Support"].nodes == 2
 
 
 def test_a_part_with_no_elements_is_not_reported_as_unwritten(model):
@@ -179,17 +179,17 @@ def test_a_part_with_no_elements_is_not_reported_as_unwritten(model):
     not apply -- and answering False would put every support and boundary in the deck
     in the same bucket as the interfaces, which is the one distinction this field
     exists to make."""
-    written = result_parts.written_parts(model, [stage_mesh(1, 2)])
+    written = parts.written_parts(model, [stage_mesh(1, 2)])
 
-    parts = {p.name: p for p in result_parts.stage_parts(model, stage_mesh(1, 2),
+    by_name = {p.name: p for p in parts.stage_parts(model, stage_mesh(1, 2),
                                                          written=written)}
 
-    assert parts["Bottom_Support"].written is None
-    assert parts["Wall_contact"].written is False, "this one really is unwritten"
+    assert by_name["Bottom_Support"].written is None
+    assert by_name["Wall_contact"].written is False, "this one really is unwritten"
 
 
 def test_parts_keep_the_order_the_deck_declares_them_in(model):
-    names = [p.name for p in result_parts.stage_parts(model, stage_mesh(1, 2))]
+    names = [p.name for p in parts.stage_parts(model, stage_mesh(1, 2))]
 
     assert names == ["Soil_Top", "Soil_Top_lift1", "Wall_contact", "Bottom_Support"]
 
@@ -205,21 +205,21 @@ def test_the_real_run_reads_its_construction_sequence_out_of_the_files(monkeypat
     the strut after it, and the interfaces are absent throughout -- which the run-wide
     check reports as "not written" rather than as seven deactivations.
     """
-    from core.results import runs as results
+    from core.results import catalog
     from tests import results_run
 
     run = results_run.real_run()
     results_run.use(monkeypatch, run)
     root, run_id = run
     directory = root / run_id
-    model = mdpa_import.import_mdpa(results_run.deck_text(run))
-    meshes = [gid_results.read_mesh(
+    model = mdpa_reader.import_mdpa(results_run.deck_text(run))
+    meshes = [gid_reader.read_mesh(
                   (directory / stage["mesh_file"]).read_text(encoding="utf-8"))
-              for stage in results.describe(directory.name)["stages"]]
-    written = result_parts.written_parts(model, meshes)
+              for stage in catalog.describe(directory.name)["stages"]]
+    written = parts.written_parts(model, meshes)
 
     def alive(name):
-        return [{p.name: p.alive for p in result_parts.stage_parts(model, mesh)}[name]
+        return [{p.name: p.alive for p in parts.stage_parts(model, mesh)}[name]
                 for mesh in meshes]
 
     assert alive("Soil_Top_lift1") == [True, True, True, False, False, False, False]

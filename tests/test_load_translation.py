@@ -13,9 +13,9 @@ from whichever dimension the user was last working in, which is the one they edi
 import gmsh
 import pytest
 
-from core.model import loads as translate
+from core.model import load_translation
 from core.model.schemas import Project
-from core.model.seed import seed_project
+from core.model.templates import seed_project
 
 
 # Narrower than the model (z 0..25) and across its section plane (z 12.5).
@@ -51,7 +51,7 @@ def kinds(loads) -> list[str]:
 def test_a_surface_load_gains_a_line_counterpart_in_2d():
     project = project_with([SURFACE])
 
-    translated = translate.translate(project, dimension=2)
+    translated = load_translation.translate(project, dimension=2)
 
     assert kinds(translated) == ["line", "surface"]
 
@@ -60,7 +60,7 @@ def test_the_line_counterpart_keeps_the_footprints_x_extent_and_pressure():
     """kN/m2 over a footprint is kN/m per metre run: the number carries unchanged."""
     project = project_with([SURFACE])
 
-    line = next(l for l in translate.translate(project, dimension=2) if l.kind == "line")
+    line = next(l for l in load_translation.translate(project, dimension=2) if l.kind == "line")
 
     assert (line.x0, line.x1) == (SURFACE["x0"], SURFACE["x1"])
     assert line.components == (0.0, -25.0)
@@ -70,7 +70,7 @@ def test_the_line_counterpart_keeps_the_footprints_x_extent_and_pressure():
 def test_the_line_counterpart_points_back_at_the_surface_load():
     project = project_with([SURFACE])
 
-    line = next(l for l in translate.translate(project, dimension=2) if l.kind == "line")
+    line = next(l for l in load_translation.translate(project, dimension=2) if l.kind == "line")
 
     assert line.derived_from == "surfaceload_1"
 
@@ -78,7 +78,7 @@ def test_the_line_counterpart_points_back_at_the_surface_load():
 def test_the_surface_record_survives_the_switch():
     project = project_with([SURFACE])
 
-    translated = translate.translate(project, dimension=2)
+    translated = load_translation.translate(project, dimension=2)
 
     assert any(l.id == "surfaceload_1" for l in translated)
 
@@ -88,7 +88,7 @@ def test_the_surface_record_survives_the_switch():
 def test_a_line_load_gains_a_surface_counterpart_in_3d():
     project = project_with([LINE], dimension=2)
 
-    translated = translate.translate(project, dimension=3)
+    translated = load_translation.translate(project, dimension=3)
 
     assert kinds(translated) == ["line", "surface"]
 
@@ -98,7 +98,7 @@ def test_a_new_surface_counterpart_spans_the_full_out_of_plane_width():
     model. Nothing better is knowable: the line record carries no y."""
     project = project_with([LINE], dimension=2)
 
-    surface = next(l for l in translate.translate(project, dimension=3)
+    surface = next(l for l in load_translation.translate(project, dimension=3)
                    if l.kind == "surface")
 
     assert (surface.z0, surface.z1) == (project.domain.z0, project.domain.z1)
@@ -112,9 +112,9 @@ def test_a_round_trip_keeps_the_original_footprint():
     """The reason both records are kept: z = 10..15 must not become the whole model."""
     project = project_with([SURFACE])
 
-    down = project_with([l.model_dump() for l in translate.translate(project, 2)],
+    down = project_with([l.model_dump() for l in load_translation.translate(project, 2)],
                         dimension=2)
-    up = translate.translate(down, dimension=3)
+    up = load_translation.translate(down, dimension=3)
 
     surface = next(l for l in up if l.id == "surfaceload_1")
     assert (surface.z0, surface.z1) == (SURFACE["z0"], SURFACE["z1"])
@@ -123,13 +123,13 @@ def test_a_round_trip_keeps_the_original_footprint():
 def test_an_edit_made_in_the_section_reaches_the_solid_model():
     """The counterpart is refreshed, not merely kept: what the user last edited wins."""
     project = project_with([SURFACE])
-    down = [l.model_dump() for l in translate.translate(project, 2)]
+    down = [l.model_dump() for l in load_translation.translate(project, 2)]
     for load in down:
         if load["kind"] == "line":
             load["x1"] = 12.0
             load["components"] = [0.0, -40.0]
 
-    up = translate.translate(project_with(down, dimension=2), dimension=3)
+    up = load_translation.translate(project_with(down, dimension=2), dimension=3)
 
     surface = next(l for l in up if l.id == "surfaceload_1")
     assert surface.x1 == 12.0
@@ -144,7 +144,7 @@ def test_a_point_load_gets_no_counterpart():
     built at the section plane instead."""
     project = project_with([POINT], dimension=2)
 
-    translated = translate.translate(project, dimension=3)
+    translated = load_translation.translate(project, dimension=3)
 
     assert kinds(translated) == ["point"]
 
@@ -154,7 +154,7 @@ def test_a_line_load_below_the_ground_surface_gets_no_counterpart():
     buried load up to it would relocate the model, so it is carried instead."""
     project = project_with([BURIED], dimension=2)
 
-    translated = translate.translate(project, dimension=3)
+    translated = load_translation.translate(project, dimension=3)
 
     assert kinds(translated) == ["line"]
 
@@ -164,7 +164,7 @@ def test_a_line_load_below_the_ground_surface_gets_no_counterpart():
 def test_a_translated_pair_is_built_once_in_each_dimension():
     """Both records exist; only one of them is the model's, or the load is doubled."""
     project = project_with([l.model_dump() for l in
-                            translate.translate(project_with([SURFACE]), 2)])
+                            load_translation.translate(project_with([SURFACE]), 2)])
 
     assert [l.id for l in project.loads_for(3)] == ["surfaceload_1"]
     assert [l.kind for l in project.loads_for(2)] == ["line"]
@@ -181,7 +181,7 @@ def test_a_load_with_no_counterpart_is_built_in_both_dimensions():
 
 def switched(project: Project, dimension: int, **extra) -> Project:
     """`project` after a mode switch, the way the route does it."""
-    loads = [l.model_dump() for l in translate.translate(project, dimension)]
+    loads = [l.model_dump() for l in load_translation.translate(project, dimension)]
     payload = project.model_dump() | {"dimension": dimension, "loads": loads}
     payload.setdefault("section_offset", None)
     payload.update(extra)
@@ -234,7 +234,7 @@ def test_a_surface_load_clear_of_the_cut_is_not_in_the_section():
 
 def test_the_switch_says_the_load_is_clear_of_the_cut():
     notes: list[str] = []
-    translate.translate(project_with([OFF_CUT]), 2, notes)
+    load_translation.translate(project_with([OFF_CUT]), 2, notes)
 
     assert any("SurfaceLoad_2" in note and "section plane" in note
                and "12.5" in note for note in notes), notes
@@ -329,16 +329,16 @@ def test_the_switch_says_what_became_of_each_load():
 def test_a_translated_pair_is_drawn_once_in_the_solid_model():
     """The failure this guards against is a load applied twice: both halves of a pair
     imprinting the same boundary, and both symbols drawn on top of each other."""
-    from core.geometry import build, tessellate
+    from core.geometry import solid_model, tessellation
 
     paired = [l.model_dump() for l in
-              translate.translate(project_with([SURFACE], dimension=3), 2)]
+              load_translation.translate(project_with([SURFACE], dimension=3), 2)]
     payload = seed_project(simple=False).model_dump() | {"dimension": 3}
     payload["loads"] = paired
     project = Project.model_validate(payload)
 
-    with build.session():
-        display = tessellate.tessellate(project)
+    with solid_model.session():
+        display = tessellation.tessellate(project)
 
     drawn = {s.key for s in display.sections} & {"surfaceload_1", "surfaceload_1_2d"}
     assert drawn == {"surfaceload_1"}, drawn
@@ -354,7 +354,7 @@ def test_a_translated_pair_is_drawn_once_in_the_solid_model():
 def test_the_surface_counterpart_is_named_for_its_own_kind():
     project = project_with([LINE], dimension=2)
 
-    surface = next(l for l in translate.translate(project, 3) if l.kind == "surface")
+    surface = next(l for l in load_translation.translate(project, 3) if l.kind == "surface")
 
     assert surface.name == "SurfaceLoad_1"
 
@@ -362,7 +362,7 @@ def test_the_surface_counterpart_is_named_for_its_own_kind():
 def test_the_line_counterpart_is_named_for_its_own_kind():
     project = project_with([SURFACE])
 
-    line = next(l for l in translate.translate(project, 2) if l.kind == "line")
+    line = next(l for l in load_translation.translate(project, 2) if l.kind == "line")
 
     assert line.name == "LineLoad_1"
 
@@ -372,19 +372,19 @@ def test_a_name_the_user_chose_is_carried_across_untouched():
     load itself, and renaming it on a mode switch would lose what they wrote."""
     project = project_with([LINE | {"name": "Crane pad"}], dimension=2)
 
-    surface = next(l for l in translate.translate(project, 3) if l.kind == "surface")
+    surface = next(l for l in load_translation.translate(project, 3) if l.kind == "surface")
 
     assert surface.name == "Crane pad"
 
 
 def test_a_renamed_counterpart_keeps_its_own_name_on_a_later_switch():
     project = project_with([LINE], dimension=2)
-    both = [l.model_dump() for l in translate.translate(project, 3)]
+    both = [l.model_dump() for l in load_translation.translate(project, 3)]
     for load in both:
         if load["kind"] == "surface":
             load["name"] = "Pad by the crane"
 
-    again = translate.translate(project_with(both, dimension=2), 3)
+    again = load_translation.translate(project_with(both, dimension=2), 3)
 
     surface = next(l for l in again if l.kind == "surface")
     assert surface.name == "Pad by the crane"
@@ -394,7 +394,7 @@ def test_the_default_name_is_renumbered_to_match_its_source():
     project = project_with([LINE | {"id": "lineload_7", "name": "LineLoad_7"}],
                            dimension=2)
 
-    surface = next(l for l in translate.translate(project, 3) if l.kind == "surface")
+    surface = next(l for l in load_translation.translate(project, 3) if l.kind == "surface")
 
     assert surface.name == "SurfaceLoad_7"
 
@@ -429,20 +429,20 @@ def test_a_line_load_on_a_drawn_embankment_translates():
     """The regression: this is exactly the load `Project.extent` newly allows."""
     project = raised([LINE | {"y": 4.0}])
 
-    assert kinds(translate.translate(project, 3)) == ["line", "surface"]
+    assert kinds(load_translation.translate(project, 3)) == ["line", "surface"]
 
 
 def test_a_line_load_at_the_borehole_top_still_translates_when_nothing_is_drawn():
     project = project_with([LINE], dimension=2)
 
-    assert kinds(translate.translate(project, 3)) == ["line", "surface"]
+    assert kinds(load_translation.translate(project, 3)) == ["line", "surface"]
 
 
 def test_a_line_load_buried_in_the_embankment_still_gets_no_counterpart():
     """The earlier rule is intact: a load part-way up is not on a ground surface."""
     project = raised([LINE | {"y": 2.0}])
 
-    assert kinds(translate.translate(project, 3)) == ["line"]
+    assert kinds(load_translation.translate(project, 3)) == ["line"]
 
 
 def test_the_line_counterpart_comes_back_at_the_top_of_the_model():
@@ -450,22 +450,22 @@ def test_the_line_counterpart_comes_back_at_the_top_of_the_model():
                        "x0": 4.0, "x1": 16.0, "z0": 5.0, "z1": 10.0, "thickness": 0.3,
                        "components": [0.0, -25.0, 0.0]}], dimension=3)
 
-    line = next(l for l in translate.translate(project, 2) if l.kind == "line")
+    line = next(l for l in load_translation.translate(project, 2) if l.kind == "line")
 
     assert line.y == 4.0
 
 
 def test_the_surface_load_is_drawn_on_top_of_the_drawn_layer():
     """Not buried at z = 0 inside the embankment, where nothing would be visible."""
-    from core.geometry import build
+    from core.geometry import solid_model
 
     project = raised([{"id": "surfaceload_1", "name": "SurfaceLoad_1", "kind": "surface",
                        "x0": 4.0, "x1": 16.0, "z0": 5.0, "z1": 10.0, "thickness": 0.3,
                        "components": [0.0, -25.0, 0.0]}], dimension=3)
 
-    with build.session():
-        build.build_geometry(project)
-        tools = build._load_footprint_tools(project, 3)
+    with solid_model.session():
+        solid_model.build_geometry(project)
+        tools = solid_model._load_footprint_tools(project, 3)
         boxes = [gmsh.model.occ.getBoundingBox(dim, tag) for dim, tag in tools]
 
     assert boxes and all(box[1] == pytest.approx(4.0) for box in boxes), boxes
@@ -498,27 +498,27 @@ def test_a_load_on_the_visible_top_of_a_drawn_layer_translates():
     """The bug as reported: the user clicks the surface and gets 4.0, not 4.0000001."""
     project = padded([LINE | {"y": 4.0}])
 
-    assert kinds(translate.translate(project, 3)) == ["line", "surface"]
+    assert kinds(load_translation.translate(project, 3)) == ["line", "surface"]
 
 
 def test_the_surface_load_carries_the_elevation_it_was_translated_from():
     """Not the padded ground: the imprint has to land on the face, not above it."""
     project = padded([LINE | {"y": 4.0}])
 
-    surface = next(l for l in translate.translate(project, 3) if l.kind == "surface")
+    surface = next(l for l in load_translation.translate(project, 3) if l.kind == "surface")
 
     assert surface.y == 4.0
 
 
 def test_the_pad_is_placed_on_the_face_not_on_the_padded_ground():
-    """What `build` and `kratos` feed to gmsh when they place the pad.
+    """What `solid_model` and `writer` feed to gmsh when they place the pad.
 
     Asserted on the elevation itself rather than on the built entity: gmsh reports
     every bounding box padded by 1e-7, so the geometry cannot tell 4.0 from 4.0000001
     -- which is the whole difference between imprinting the face and floating above it.
     """
     project = padded([LINE | {"y": 4.0}], dimension=2)
-    both = [l.model_dump() for l in translate.translate(project, 3)]
+    both = [l.model_dump() for l in load_translation.translate(project, 3)]
     solid = padded(both, dimension=3)
 
     surface = next(l for l in solid.loads if l.kind == "surface")
@@ -528,9 +528,9 @@ def test_the_pad_is_placed_on_the_face_not_on_the_padded_ground():
 
 def test_the_elevation_survives_the_round_trip():
     project = padded([LINE | {"y": 4.0}])
-    both = [l.model_dump() for l in translate.translate(project, 3)]
+    both = [l.model_dump() for l in load_translation.translate(project, 3)]
 
-    back = translate.translate(padded(both, dimension=3), 2)
+    back = load_translation.translate(padded(both, dimension=3), 2)
 
     line = next(l for l in back if l.kind == "line")
     assert line.y == 4.0
@@ -549,4 +549,4 @@ def test_a_surface_load_with_no_elevation_still_means_the_top_of_the_model():
 def test_a_load_buried_in_the_embankment_still_gets_no_counterpart():
     project = padded([LINE | {"y": 2.0}])
 
-    assert kinds(translate.translate(project, 3)) == ["line"]
+    assert kinds(load_translation.translate(project, 3)) == ["line"]

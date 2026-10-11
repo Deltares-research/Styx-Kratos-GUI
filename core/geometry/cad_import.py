@@ -68,7 +68,7 @@ def process_import(filepath: str, extension: str) -> dict:
         max(b[3] for b in boxes), max(b[4] for b in boxes), max(b[5] for b in boxes),
     )
     brep_path = DATA_DIR / f"{uuid.uuid4().hex}.brep"
-    # The OCC shapes as a .brep, so build.py can re-import them cheaply on every rebuild.
+    # The OCC shapes as a .brep, so solid_model.py can re-import them cheaply on every rebuild.
     gmsh.write(str(brep_path))
     return {"brep_path": str(brep_path), "volumes": len(volumes), "bbox": bbox}
 

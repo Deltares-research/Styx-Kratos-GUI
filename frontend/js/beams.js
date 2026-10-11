@@ -14,7 +14,7 @@
 
    Confidence note: every reference deck is plane strain, so the 2D
    pile's element classes are the only ones pinned by a fixture. The 3D classes
-   follow Kratos' documented naming and are named in one place, core/kratos/export.py.
+   follow Kratos' documented naming and are named in one place, core/kratos/writer.py.
    ══════════════════════════════════════════════════════════════════ */
 
 var App = window.App || {};

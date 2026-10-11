@@ -1,4 +1,4 @@
-"""Projects saved before the unit system (core/model/legacy.py): converted once, on load, into
+"""Projects saved before the unit system (core/model/migration.py): converted once, on load, into
 the Kratos property sets and the SI values the old exporter wrote -- so an old project
 writes the deck it always wrote."""
 
@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from core.model import legacy
+from core.model import migration
 from core.model.schemas import Project
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "projects"
@@ -30,10 +30,10 @@ def new(old):
 
 
 def test_an_old_file_is_recognised_by_its_materials(old):
-    assert legacy.is_legacy(old)
-    assert not legacy.is_legacy(Project.model_validate(old).model_dump(mode="json"))
-    assert not legacy.is_legacy({"materials": []})
-    assert not legacy.is_legacy("not a project")
+    assert migration.is_legacy(old)
+    assert not migration.is_legacy(Project.model_validate(old).model_dump(mode="json"))
+    assert not migration.is_legacy({"materials": []})
+    assert not migration.is_legacy("not a project")
 
 
 def test_the_converted_project_is_si(new):
@@ -62,14 +62,14 @@ def test_what_the_old_soil_left_empty(old, new):
     left to Jaky, as before."""
     o, v = old["materials"][1], new.materials[1].variables
     assert o["c"] is None and "GEO_COHESION" not in v
-    assert legacy.material({**o, "porosity": None, "k0_nc": None}, 2)["variables"]["POROSITY"] == 0.3
-    assert "K0_NC" not in legacy.material({**o, "k0_nc": None}, 2)["variables"]
+    assert migration.material({**o, "porosity": None, "k0_nc": None}, 2)["variables"]["POROSITY"] == 0.3
+    assert "K0_NC" not in migration.material({**o, "k0_nc": None}, 2)["variables"]
 
 
 def test_an_undrained_soil_is_fully_coupled():
     o = fixture("seed_3d_v1")["materials"][2]
     assert o["type"] == "Undrained (A)"
-    m = legacy.material(o, 3)
+    m = migration.material(o, 3)
     assert m["variables"]["GEO_DRAINAGE_TYPE"] == "FULLY_COUPLED"
     assert m["constitutive_law"] == "GeoIncrementalLinearElastic3DLaw"
     assert {"PERMEABILITY_ZZ", "PERMEABILITY_YZ", "PERMEABILITY_ZX"} <= set(m["variables"])
@@ -173,7 +173,7 @@ def test_an_old_shaped_material_takes_the_projects_water():
 
 
 def test_things_that_are_not_records_pass_through_untouched():
-    assert legacy._scaled("x", "pressure") == "x"
-    assert legacy._load({"id": "l"}) == {"id": "l"}
-    assert legacy.migrate_records({"materials": [{"id": "m", "variables": {}}]}) == \
+    assert migration._scaled("x", "pressure") == "x"
+    assert migration._load({"id": "l"}) == {"id": "l"}
+    assert migration.migrate_records({"materials": [{"id": "m", "variables": {}}]}) == \
         {"materials": [{"id": "m", "variables": {}}]}

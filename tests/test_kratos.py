@@ -5,11 +5,11 @@ import json
 import pytest
 
 from core.model import schemas
-from core.geometry import build
-from core.kratos import export as kratos
-KILO = 1000.0  # kN -> N: these tests write old-style projects, converted on load (core/model/legacy.py)
+from core.geometry import solid_model
+from core.kratos import writer
+KILO = 1000.0  # kN -> N: these tests write old-style projects, converted on load (core/model/migration.py)
 from core.model.schemas import LineLoad, MeshRequest, PointLoad
-from core.model.seed import seed_project
+from core.model.templates import seed_project
 from tests import mdpa
 
 # Kratos' own node ordering for the quadratic simplices, as (midside index -> corners).
@@ -23,7 +23,7 @@ MIDSIDES = {
 
 @pytest.fixture(scope="module")
 def session():
-    with build.session():
+    with solid_model.session():
         yield
 
 
@@ -31,7 +31,7 @@ def session():
 def solid(session):
     """The 3D model: quadratic tetrahedra."""
     project = seed_project()
-    return kratos.export_project(project, MeshRequest(element_size=6.0, order=2))
+    return writer.export_project(project, MeshRequest(element_size=6.0, order=2))
 
 
 @pytest.fixture(scope="module")
@@ -44,7 +44,7 @@ def section(session):
         id="load_line", name="LineLoad_1", x0=1.0, x1=10.0,
         y=project.domain.y_top, thickness=0.25, components=(0.0, -20_000.0),
     )]
-    return kratos.export_project(project, MeshRequest(element_size=6.0, order=2))
+    return writer.export_project(project, MeshRequest(element_size=6.0, order=2))
 
 
 def deck_of(export: dict) -> mdpa.Deck:
@@ -82,14 +82,14 @@ def test_the_section_is_written_as_quadratic_triangles(section):
 
 
 def test_first_order_writes_linear_elements(session):
-    export = kratos.export_project(seed_project(), MeshRequest(element_size=8.0, order=1))
+    export = writer.export_project(seed_project(), MeshRequest(element_size=8.0, order=1))
     deck = deck_of(export)
     assert {block.name for block in deck.elements} == {"UPwSmallStrainElement3D4N"}
 
 
 def test_one_element_block_and_one_sub_model_part_per_soil_layer(solid):
     deck = deck_of(solid)
-    # The seeded example is two stacked layers, named in seed.py.
+    # The seeded example is two stacked layers, named in templates.py.
     assert [part for part in deck.parts if part in ("Soil_1", "Soil_2")] == ["Soil_1", "Soil_2"]
     assert len(deck.elements) == 2
 
@@ -252,7 +252,7 @@ def test_boundary_groups_follow_a_drawn_body_that_does_not_fill_the_domain():
              3: (5.0, -3.0, 0.0), 4: (0.0, -3.0, 0.0)}
     node_id = {tag: tag for tag in world}
     boundaries = dict((name, nodes) for name, _, nodes in
-                      kratos._boundary_nodes(project, 2, world, node_id, set(world)))
+                      writer._boundary_nodes(project, 2, world, node_id, set(world)))
     assert boundaries["Left_Edge"] == [1, 4]
     assert boundaries["Right_Edge"] == [2, 3]
     assert boundaries["Top_Surface"] == [1, 2]
@@ -267,7 +267,7 @@ def test_a_structure_standing_proud_of_the_soil_does_not_become_the_top_surface(
              4: (0.0, -3.0, 0.0), 5: (2.0, 2.0, 0.0), 6: (2.0, 0.0, 0.0)}
     node_id = {tag: tag for tag in world}
     boundaries = dict((name, nodes) for name, _, nodes in
-                      kratos._boundary_nodes(project, 2, world, node_id, {1, 2, 3, 4}))
+                      writer._boundary_nodes(project, 2, world, node_id, {1, 2, 3, 4}))
     assert boundaries["Top_Surface"] == [1, 2, 6]
 
 
@@ -341,7 +341,7 @@ def test_surface_load_has_no_material_parameters_entry(solid):
 
 
 def test_a_2d_point_load_is_exported_as_a_3d_point_condition(session):
-    """A point load has no surface form to be translated into (`core/model/loads.py`), so the
+    """A point load has no surface form to be translated into (`core/model/load_translation.py`), so the
     solid model carries it at the section plane -- and a node is a node in either
     dimension, so the deck can apply it there. It still has no material entry: a load
     is a condition, not a property set."""
@@ -353,7 +353,7 @@ def test_a_2d_point_load_is_exported_as_a_3d_point_condition(session):
             components=(15_000.0, -120_000.0), active=True,
         )
     ]
-    exported = kratos.export_project(project, MeshRequest(element_size=6.0, order=1))
+    exported = writer.export_project(project, MeshRequest(element_size=6.0, order=1))
     deck = deck_of(exported)
     assert "Crane_reaction" in deck.parts
     assert _load_process(exported, "Crane_reaction")["value"] == [15000.0, -120000.0]
@@ -369,7 +369,7 @@ def test_point_load_coordinates_export_in_a_2d_section(session):
         id="load_jack", name="Jack", x=5.0, y=-4.0,
         components=(15_000.0, -120_000.0),
     )]
-    exported = kratos.export_project(project, MeshRequest(element_size=6.0, order=1))
+    exported = writer.export_project(project, MeshRequest(element_size=6.0, order=1))
     deck = deck_of(exported)
 
     assert any(block.name == "PointLoadCondition2D1N" for block in deck.conditions)
@@ -381,7 +381,7 @@ def test_point_load_coordinates_export_in_a_2d_section(session):
 def test_inactive_load_is_kept_in_the_project_but_not_exported(session):
     project = seed_project()
     project.loads[0].active = False
-    exported = kratos.export_project(project, MeshRequest(element_size=6.0, order=1))
+    exported = writer.export_project(project, MeshRequest(element_size=6.0, order=1))
     deck = deck_of(exported)
 
     assert deck.conditions == []
@@ -394,7 +394,7 @@ def test_a_saved_3d_surface_load_is_not_exported_in_2d(session):
     project = seed_project()
     project.dimension = 2
     project.section_offset = 20.0
-    deck = deck_of(kratos.export_project(project, MeshRequest(element_size=8.0, order=2)))
+    deck = deck_of(writer.export_project(project, MeshRequest(element_size=8.0, order=2)))
     assert deck.conditions == []
     assert "SurfaceLoad_1" not in deck.parts
 
@@ -436,7 +436,7 @@ def test_a_law_this_application_does_not_know_is_written_as_given(session):
     for material in project.materials:
         material.constitutive_law = "SmallStrainUDSM3DLaw"
         material.variables["UDSM_NAME"] = "MohrCoulomb64.dll"
-    exported = kratos.export_project(project, MeshRequest(element_size=8.0, order=1))
+    exported = writer.export_project(project, MeshRequest(element_size=8.0, order=1))
     entries = json.loads(exported["materials"])["properties"]
     assert {e["Material"]["constitutive_law"]["name"] for e in entries} == {"SmallStrainUDSM3DLaw"}
     assert all(e["Material"]["Variables"]["UDSM_NAME"] == "MohrCoulomb64.dll" for e in entries)
@@ -466,7 +466,7 @@ def test_2d_load_conditions_are_written_in_their_element_edge_order(section):
     edges = {tuple(nodes[index] for index in order)
              for block in deck.elements if block.name.startswith("SmallStrain")
              for nodes in block.entries.values()
-             for order in kratos.EDGES[len(nodes)]}
+             for order in writer.EDGES[len(nodes)]}
 
     rows = [tuple(nodes) for block in deck.conditions
             for nodes in block.entries.values()]
@@ -575,7 +575,7 @@ def test_the_3d_surface_load_process_is_fully_active(solid):
 def test_an_inactive_load_gets_no_process(session):
     project = seed_project()
     project.loads[0].active = False
-    exported = kratos.export_project(project, MeshRequest(element_size=6.0, order=1))
+    exported = writer.export_project(project, MeshRequest(element_size=6.0, order=1))
     # Gravity stays: it is a body load on the whole model, not one of the loads the
     # project draws, and switching a surcharge off does not make the ground weightless.
     assert [p["Parameters"]["variable_name"]
@@ -605,7 +605,7 @@ def piled_project(order: int = 2, active: bool = True, dimension: int = 2):
 @pytest.fixture(scope="module")
 def piled(session):
     """A plane-strain section with one quadratic sheet pile."""
-    return kratos.export_project(piled_project(), MeshRequest(element_size=3.0, order=2))
+    return writer.export_project(piled_project(), MeshRequest(element_size=3.0, order=2))
 
 
 def test_the_sheet_pile_is_written_as_the_quadratic_timoshenko_beam(piled):
@@ -617,7 +617,7 @@ def test_the_sheet_pile_is_written_as_the_quadratic_timoshenko_beam(piled):
 
 
 def test_a_first_order_deck_writes_the_two_node_beam(session):
-    export = kratos.export_project(piled_project(order=1),
+    export = writer.export_project(piled_project(order=1),
                                    MeshRequest(element_size=3.0, order=1))
     names = {block.name for block in deck_of(export).elements}
 
@@ -733,7 +733,7 @@ def test_the_beam_property_id_is_unique_and_non_zero_in_the_material_file(piled)
 
 
 def test_an_inactive_sheet_pile_is_not_exported(session):
-    export = kratos.export_project(piled_project(active=False),
+    export = writer.export_project(piled_project(active=False),
                                    MeshRequest(element_size=3.0, order=2))
     deck = deck_of(export)
 
@@ -744,7 +744,7 @@ def test_an_inactive_sheet_pile_is_not_exported(session):
 
 
 def test_a_sheet_pile_saved_in_a_3d_project_is_not_exported(session):
-    export = kratos.export_project(piled_project(dimension=3),
+    export = writer.export_project(piled_project(dimension=3),
                                    MeshRequest(element_size=6.0, order=2))
 
     assert not any("Beam" in block.name for block in deck_of(export).elements)
@@ -773,7 +773,7 @@ def anchored_project(order: int = 2, active: bool = True, dimension: int = 2):
 
 @pytest.fixture(scope="module")
 def anchored(session):
-    return kratos.export_project(anchored_project(), MeshRequest(element_size=3.0, order=2))
+    return writer.export_project(anchored_project(), MeshRequest(element_size=3.0, order=2))
 
 
 def truss_of(deck):
@@ -858,7 +858,7 @@ def test_the_soil_says_how_it_drains_in_the_name_kratos_still_reads(section):
 
     The value follows the material's own drainage type -- the seed's two layers are a
     Drained sand over an Undrained (A) clay, so the deck carries both answers. Which
-    type maps to which is `kratos_materials._drainage`, covered in
+    type maps to which is `materials._drainage`, covered in
     `tests/test_kratos_units.py`.
     """
     entries = json.loads(section["materials"])["properties"]
@@ -894,7 +894,7 @@ def test_every_material_property_id_stays_unique_with_soil_pile_and_anchor(ancho
 
 
 def test_an_inactive_anchor_is_not_exported(session):
-    export = kratos.export_project(anchored_project(active=False),
+    export = writer.export_project(anchored_project(active=False),
                                    MeshRequest(element_size=3.0, order=2))
     deck = deck_of(export)
 
@@ -903,7 +903,7 @@ def test_an_inactive_anchor_is_not_exported(session):
 
 
 def test_an_anchor_saved_in_a_3d_project_is_not_exported(session):
-    export = kratos.export_project(anchored_project(dimension=3),
+    export = writer.export_project(anchored_project(dimension=3),
                                    MeshRequest(element_size=6.0, order=2))
 
     assert not any(b.name == "LinearTrussElement2D2N" for b in deck_of(export).elements)
@@ -943,13 +943,13 @@ def staged_project(dimension: int = 2):
 
 @pytest.fixture(scope="module")
 def staged(session):
-    return kratos.export_project(staged_project(), MeshRequest(element_size=4.0, order=2))
+    return writer.export_project(staged_project(), MeshRequest(element_size=4.0, order=2))
 
 
 def test_every_staged_body_is_its_own_sub_model_part(staged):
     """One lift, one part: what a phase's Deactivate operation names."""
     deck = deck_of(staged)
-    names = {kratos._part_names(staged_project())[key]
+    names = {writer._part_names(staged_project())[key]
              for key, *_ in staged_project().soil_bodies()}
     for name in names:
         assert name in deck.parts, f"{name} is missing from the deck"
@@ -957,7 +957,7 @@ def test_every_staged_body_is_its_own_sub_model_part(staged):
 
 
 def test_a_lift_is_named_after_the_layer_it_is_dug_out_of(staged):
-    names = kratos._part_names(staged_project())
+    names = writer._part_names(staged_project())
     assert names["soil_L1__lift1"] == "Upper_Sand_lift1"
     assert names["soil_L2__pit"] == "Middle_Clay_pit"
     assert names["soil_L1"] == "Upper_Sand"
@@ -968,7 +968,7 @@ def test_every_staged_body_carries_its_layer_material(staged):
     the way through the split."""
     entries = json.loads(staged["materials"])["properties"]
     named = {e["model_part_name"].split(".")[-1] for e in entries}
-    names = kratos._part_names(staged_project())
+    names = writer._part_names(staged_project())
     for key, *_ in staged_project().soil_bodies():
         assert names[key] in named, f"{names[key]} has no material"
 
@@ -1103,8 +1103,8 @@ def test_gravity_is_the_same_number_in_every_unit_system():
     """The deck's gravity is written once, whatever the project's units: every system on
     offer measures length in metres and time in seconds."""
     from core.model import units
-    from core.kratos import processes as kratos_processes
-    assert all(kratos_processes.GRAVITY == units.gravity(name) for name in units.SYSTEMS)
+    from core.kratos import parameters
+    assert all(parameters.GRAVITY == units.gravity(name) for name in units.SYSTEMS)
 
 
 def test_gravity_is_applied_before_the_loads_that_sit_on_the_model(piled):
@@ -1152,7 +1152,7 @@ def test_the_pore_pressure_is_read_off_the_projects_own_water_level(session):
     project = seed_project()
     project.water.y = -4.25
     project.water.specific_weight = 9_900.0
-    exported = kratos.export_project(project, MeshRequest(element_size=6.0, order=1))
+    exported = writer.export_project(project, MeshRequest(element_size=6.0, order=1))
     (process,) = _pressure_processes(exported)[0]
     parameters = process["Parameters"]
     assert parameters["reference_coordinate"] == -4.25
@@ -1170,7 +1170,7 @@ def test_the_two_water_processes_agree_with_each_other(session):
     referenced to one level inside ground pressurised about another."""
     project = seed_project()
     project.water.y = -2.75
-    exported = kratos.export_project(project, MeshRequest(element_size=6.0, order=1))
+    exported = writer.export_project(project, MeshRequest(element_size=6.0, order=1))
     doc = json.loads(exported["project_parameters"])
     stage = next(iter(doc["stages"].values()))["stage_settings"]["processes"]
     water = [p["Parameters"] for p in stage["constraints_process_list"]
@@ -1187,20 +1187,20 @@ STEEL = {"YOUNG_MODULUS": 2.1e11, "POISSON_RATIO": 0.3, "DENSITY": 7850.0,
 
 def test_a_section_without_a_shear_area_takes_the_whole_one(session):
     """What every project written before the field carried, and still the default."""
-    from core.kratos import materials as kratos_materials
+    from core.kratos import materials
     section = schemas.BeamSection(id="s", name="S", variables=dict(STEEL))
     assert "AREA_EFFECTIVE_Y" not in section.variables
-    variables = kratos_materials._beam_variables(section, 2)
+    variables = materials._beam_variables(section, 2)
     assert variables["AREA_EFFECTIVE_Y"] == variables["CROSS_AREA"]
 
 
 def test_a_section_may_say_how_much_of_it_carries_shear(session):
     """Less than the whole section for a rolled profile, which shears in its web; far
     more than it for a model that means shear deformation to be negligible."""
-    from core.kratos import materials as kratos_materials
+    from core.kratos import materials
     section = schemas.BeamSection(id="s", name="S",
                                   variables=STEEL | {"AREA_EFFECTIVE_Y": 0.008})
-    variables = kratos_materials._beam_variables(section, 2)
+    variables = materials._beam_variables(section, 2)
     assert variables["AREA_EFFECTIVE_Y"] == pytest.approx(0.008)
     assert variables["CROSS_AREA"] == pytest.approx(0.02)
 
@@ -1208,8 +1208,8 @@ def test_a_section_may_say_how_much_of_it_carries_shear(session):
 def test_a_shear_area_is_smeared_over_spacing_like_the_rest(session):
     """A row of piles at 2.5 m centres contributes two-fifths of its shear area to the
     metre run, the same way it does its area and its inertia."""
-    from core.kratos import materials as kratos_materials
+    from core.kratos import materials
     section = schemas.BeamSection(id="s", name="S", spacing=2.5,
                                   variables=STEEL | {"AREA_EFFECTIVE_Y": 0.008})
-    variables = kratos_materials._beam_variables(section, 2)
+    variables = materials._beam_variables(section, 2)
     assert variables["AREA_EFFECTIVE_Y"] == pytest.approx(0.008 / 2.5)

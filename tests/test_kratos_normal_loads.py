@@ -2,8 +2,8 @@
 
 A `NormalLoad` (core/model/schemas.py) is a pressure normal to a free polyline -- an exposed
 excavation face, a sloped boundary -- embedded into the section the same way a free
-interface is (core/geometry/build.py:_embed_beams) and harvested the same way
-(core/kratos/export.py:_normal_load_conditions), rather than by `_load_conditions`'s flat-
+interface is (core/geometry/solid_model.py:_embed_beams) and harvested the same way
+(core/kratos/writer.py:_normal_load_conditions), rather than by `_load_conditions`'s flat-
 elevation scan. Its process, `ApplyNormalLoadTableProcess`, is read off a real working
 example in Deltares/FEA-Tools (MiscellaneousTools/InterfaceInserter/
 test_project_parameters.json), which this reproduces for the "Hydrostatic" case.
@@ -15,16 +15,16 @@ import json
 
 import pytest
 
-from core.geometry import build
-from core.kratos import export as kratos
+from core.geometry import solid_model
+from core.kratos import writer
 from core.model.schemas import MeshRequest, Project
-from core.model.seed import seed_project
+from core.model.templates import seed_project
 from tests import mdpa
 
 
 @pytest.fixture(scope="module")
 def session():
-    with build.session():
+    with solid_model.session():
         yield
 
 
@@ -46,7 +46,7 @@ def normal_load_project(fluid_pressure_type: str = "Hydrostatic", pressure: floa
 @pytest.fixture(scope="module")
 def hydrostatic(session):
     """A quadratic mesh, the sloped-then-flat exposed boundary of the docstring."""
-    return kratos.export_project(normal_load_project(),
+    return writer.export_project(normal_load_project(),
                                  MeshRequest(element_size=3.0, order=2))
 
 
@@ -70,7 +70,7 @@ def test_a_quadratic_normal_load_writes_the_reference_deck_s_condition(hydrostat
 
 
 def test_a_first_order_deck_writes_the_two_node_condition(session):
-    export = kratos.export_project(normal_load_project(),
+    export = writer.export_project(normal_load_project(),
                                    MeshRequest(element_size=3.0, order=1))
     block = condition_block(mdpa.parse(export["mdpa"]))
     assert block.name == "UPwNormalFaceLoadCondition2D2N"
@@ -98,7 +98,7 @@ def test_the_normal_load_gets_its_own_sub_model_part(hydrostatic):
 
 
 def test_an_inactive_normal_load_is_kept_in_the_project_but_not_exported(session):
-    export = kratos.export_project(normal_load_project(active=False),
+    export = writer.export_project(normal_load_project(active=False),
                                    MeshRequest(element_size=3.0, order=2))
     deck = mdpa.parse(export["mdpa"])
 
@@ -107,7 +107,7 @@ def test_an_inactive_normal_load_is_kept_in_the_project_but_not_exported(session
 
 
 def test_a_3d_project_writes_no_normal_load_and_says_so(session):
-    export = kratos.export_project(normal_load_project(dimension=3),
+    export = writer.export_project(normal_load_project(dimension=3),
                                    MeshRequest(element_size=6.0, order=2))
     deck = mdpa.parse(export["mdpa"])
 
@@ -136,7 +136,7 @@ def test_the_magnitude_is_written_whichever_mode_the_load_is_in(session):
     user gave still belongs in the deck rather than being dropped on the way out.
     Both branches share one parameter set, so `value` is a key the process declares."""
     for mode in ("Uniform", "Hydrostatic"):
-        export = kratos.export_project(
+        export = writer.export_project(
             normal_load_project(fluid_pressure_type=mode, pressure=17_500.0),
             MeshRequest(element_size=3.0, order=2))
         parameters = process_of(export)["Parameters"]
@@ -144,7 +144,7 @@ def test_the_magnitude_is_written_whichever_mode_the_load_is_in(session):
 
 
 def test_a_uniform_normal_load_writes_its_own_value_instead(session):
-    export = kratos.export_project(
+    export = writer.export_project(
         normal_load_project(fluid_pressure_type="Uniform", pressure=25_000.0),
         MeshRequest(element_size=3.0, order=2))
     parameters = process_of(export)["Parameters"]
@@ -165,7 +165,7 @@ def test_a_normal_load_applies_the_magnitude_it_was_given(session):
     payload = normal_load_project().model_dump()
     payload["normal_loads"][0].pop("fluid_pressure_type")
     payload["normal_loads"][0]["pressure"] = 42_000.0
-    export = kratos.export_project(Project.model_validate(payload),
+    export = writer.export_project(Project.model_validate(payload),
                                    MeshRequest(element_size=3.0, order=2))
 
     parameters = process_of(export)["Parameters"]
@@ -174,7 +174,7 @@ def test_a_normal_load_applies_the_magnitude_it_was_given(session):
 
 
 def test_an_inactive_normal_load_writes_no_process(session):
-    export = kratos.export_project(normal_load_project(active=False),
+    export = writer.export_project(normal_load_project(active=False),
                                    MeshRequest(element_size=3.0, order=2))
     doc = json.loads(export["project_parameters"])
     processes = doc["stages"]["1_Stage"]["stage_settings"]["processes"]["loads_process_list"]
@@ -191,7 +191,7 @@ def test_the_line_the_gui_drafts_by_default_exports_a_condition(session):
     x = domain.x0 + (domain.x1 - domain.x0) * 0.5
     drafted = [[x, domain.y_top],
                [x, domain.y_top - (domain.y_top - domain.y_bottom) * 0.5]]
-    export = kratos.export_project(
+    export = writer.export_project(
         normal_load_project(points=drafted, fluid_pressure_type="Uniform",
                             pressure=15_000.0),
         MeshRequest(element_size=3.0, order=2))
@@ -207,14 +207,14 @@ def test_a_staged_project_applies_the_normal_load_in_every_stage(session):
     """A sheet pile splits the deck into an initial and a wall-installation stage. The
     water against an excavation face is there throughout -- nothing about a normal load
     waits for the wall -- so its process is repeated in both, the way an ordinary load's
-    is (see core.kratos.processes' module docstring)."""
+    is (see core.kratos.parameters' module docstring)."""
     payload = normal_load_project().model_dump()
     payload["beam_sections"] = [{"id": "az26", "name": "AZ 26-700", "E": 2.1e8,
                                  "nu": 0.3, "area": 0.0198, "inertia": 5.52e-4,
                                  "density": 7850.0, "spacing": 1.0}]
     payload["beams"] = [{"id": "sheetpile_1", "name": "Sheet pile 1", "section": "az26",
                          "points": [[12.0, 0.0], [12.0, -10.0]], "active": True}]
-    export = kratos.export_project(Project.model_validate(payload),
+    export = writer.export_project(Project.model_validate(payload),
                                    MeshRequest(element_size=3.0, order=2))
 
     doc = json.loads(export["project_parameters"])

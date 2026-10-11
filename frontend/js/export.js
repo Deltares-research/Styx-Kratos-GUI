@@ -76,7 +76,7 @@ App.Export = (function () {
       written.push({ name: 'ProjectParameters.json', text: result.project_parameters });
     }
     // Which unit system every number above is in. Kratos never reads it; opened again
-    // as a deck case, it is what labels the results (core/results/runs.py).
+    // as a deck case, it is what labels the results (core/results/catalog.py).
     if (result.unit_system) {
       written.push({ name: 'kratos_gui_units.json',
                      text: JSON.stringify({ unit_system: result.unit_system }) });

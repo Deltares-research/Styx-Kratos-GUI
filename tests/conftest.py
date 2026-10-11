@@ -56,10 +56,10 @@ def every_exported_deck_is_sound():
     Session-scoped, so it is in place before any module- or session-scoped fixture
     exports its deck: pytest builds the widest fixtures first, and a function-scoped
     patch would let every shared fixture's deck through unchecked."""
-    from core.kratos import export as kratos
+    from core.kratos import writer
     from tests.pipeline.deck_invariants import check_deck
 
-    real = kratos.export_project
+    real = writer.export_project
 
     def checked(*args, **kwargs):
         export = real(*args, **kwargs)
@@ -69,7 +69,7 @@ def every_exported_deck_is_sound():
         return export
 
     with pytest.MonkeyPatch.context() as patch:
-        patch.setattr(kratos, "export_project", checked)
+        patch.setattr(writer, "export_project", checked)
         yield
 
 

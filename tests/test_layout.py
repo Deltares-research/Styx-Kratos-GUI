@@ -8,13 +8,16 @@ the folders said so; these tests keep it visible and keep it from eroding:
 * the three folders exist, and the two they replace, `server/` and `live/`, are gone;
 * nothing in core imports the web framework or the backend;
 * core is five packages, one per stage of the pipeline -- `model`, `geometry`, `kratos`,
-  `run`, `results` -- and imports between them go one way, down that list;
-* every `__init__.py` in core is empty and `core/run/runner.py` needs only the standard
-  library, because Kratos' own interpreter imports the `core` package to run a deck and
-  has neither pydantic nor gmsh;
+  `analysis`, `results` -- and imports between them go one way, down that list;
+* every `__init__.py` in core is empty and `core/analysis/kratos_main.py` needs only the
+  standard library, because Kratos' own interpreter imports the `core` package to run a
+  deck and has neither pydantic nor gmsh;
+* a core module is imported under its own name, never as another (`export as kratos`);
 * no file in the repository still points into the old folders, names the old `app`
-  package, or names a core module by the flat name it had before the packages, dotted
-  (`core.kratos_runner`) or alone in prose (`kratos_runner`);
+  package, or names a core module by a name it had before: the flat one before the
+  packages, dotted (`core.kratos_runner`) or alone in prose (`kratos_runner`), or the one
+  it had in its package before the modules were renamed (`core.run.runner`, `runner.X`).
+  Every dotted `core.x.y` and every path `core/x/y.py` a file names has to exist;
 * everything the browser loads comes from `frontend/`, so a checkout runs the same
   without the old, untracked copies of the shell some machines keep at the root
   (`css/`, `js/`).
@@ -161,12 +164,13 @@ def test_core_does_not_import_the_web_framework_or_the_backend():
 
 # ── The packages inside core ────────────────────────────────────────────────
 
-LAYERS = {"model": 0, "geometry": 1, "kratos": 2, "run": 3, "results": 4}
+LAYERS = {"model": 0, "geometry": 1, "kratos": 2, "analysis": 3, "results": 4}
 """core's packages, in the order the data goes through them: the project the user edits,
-its geometry and mesh, the Kratos deck written from both, the run of that deck, and what
-the run left behind. A package may import from its own rank or below, never above."""
+its geometry and mesh, the Kratos deck written from both, the analysis that runs that
+deck, and what the run left behind. A package may import from its own rank or below,
+never above."""
 
-TOP_LEVEL = {"__init__.py", "script.py", "gmsh_worker.py"}
+TOP_LEVEL = {"__init__.py", "scripting.py", "gmsh_worker.py"}
 """What stays at core's top level: the two modules that send work into several packages
 (`run <file.py>`, and the gmsh process pool). They are outside the ranking."""
 
@@ -235,7 +239,8 @@ def upward_imports() -> dict[tuple[str, str], list[int]]:
 
 def test_layer_reads_the_package_of_a_dotted_name():
     assert layer("core.model.schemas") == 0
-    assert layer("core.results.runs") == 4
+    assert layer("core.results.catalog") == 4
+    assert layer("core.analysis.calculation") == 3
     assert layer("core.results") == 4
     assert layer("core.gmsh_worker") is None
     assert layer("core") is None
@@ -246,19 +251,19 @@ def test_an_upward_import_is_found_in_every_form():
     tree = ast.parse(
         "import core.kratos\n"
         "from core import results\n"
-        "from core.run import calculate\n"
-        "from core.results.runs import run_directory\n"
+        "from core.analysis import calculation\n"
+        "from core.results.catalog import run_directory\n"
         "def later():\n"
-        "    from core.kratos import export as kratos\n"
+        "    from core.kratos import writer\n"
         "from core.model import schemas\n"
         "from core import geometry, gmsh_worker\n"
-        "import core.geometry.build\n")
+        "import core.geometry.solid_model\n")
     found = upward(tree, LAYERS["geometry"])
     assert sorted({line for line, _ in found}) == [1, 2, 3, 4, 6], found
 
 
 def test_imports_inside_core_go_one_way():
-    """model <- geometry <- kratos <- run <- results, lazy imports included."""
+    """model <- geometry <- kratos <- analysis <- results, lazy imports included."""
     found = upward_imports()
     upward = [f"{file}:{lines[0]} imports {name} (rank {layer(name)})"
               for (file, name), lines in sorted(found.items()) if (file, name) not in ALLOWED]
@@ -272,19 +277,19 @@ def test_the_paths_found_from_file_point_at_the_repository():
     """These are found from `__file__`, so each goes one level deeper when its module
     moves into a package; left as it was, it would point inside `core/` and still work
     -- on the wrong folder."""
-    from core.geometry import creator, importer
-    from core.run import calculate
+    from core.analysis import calculation
+    from core.geometry import cad_import, primitives
 
-    assert calculate.ROOT == ROOT
-    assert creator.DATA_DIR == ROOT / ".data"
-    assert importer.DATA_DIR == ROOT / ".data"
+    assert calculation.ROOT == ROOT
+    assert primitives.DATA_DIR == ROOT / ".data"
+    assert cad_import.DATA_DIR == ROOT / ".data"
 
 
 # ── What Kratos' interpreter imports ────────────────────────────────────────
 
 def test_every_package_in_core_is_empty():
-    """Kratos is started with `-m core.run.runner`, which runs `core/__init__.py` and
-    `core/run/__init__.py` first, in an interpreter that has none of this project's
+    """Kratos is started with `-m core.analysis.kratos_main`, which runs `core/__init__.py`
+    and `core/analysis/__init__.py` first, in an interpreter that has none of this project's
     dependencies. The other packages' are held to the same rule: one rule, not two."""
     inits = sorted(CORE.rglob("__init__.py"))
     assert CORE / "__init__.py" in inits, f"{CORE / '__init__.py'} is missing"
@@ -296,9 +301,9 @@ def test_every_package_in_core_is_empty():
 KRATOS = "KratosMultiphysics"
 
 
-def test_the_kratos_runner_needs_only_the_standard_library():
+def test_the_script_kratos_runs_needs_only_the_standard_library():
     """Kratos' interpreter has the standard library and Kratos, and nothing else."""
-    runner = CORE / "run" / "runner.py"
+    runner = CORE / "analysis" / "kratos_main.py"
     assert runner.is_file(), f"{runner} is missing"
     allowed = set(sys.stdlib_module_names) | {"__future__", KRATOS}
     foreign = [f"line {line}: {name}" for line, name in imports(parsed(runner))
@@ -320,7 +325,7 @@ BINARY = {".png", ".jpg", ".jpeg", ".gif", ".ico", ".gz", ".zip", ".woff", ".wof
 def module_names() -> list[str]:
     """The modules the old `app` package held, each once `app.<name>`: core's under the
     flat names they had then, and backend's top level."""
-    return sorted({*MOVED, *(path.stem for folder in (CORE, BACKEND) if folder.is_dir()
+    return sorted({*MOVED, "script", *(path.stem for folder in (CORE, BACKEND) if folder.is_dir()
                              for path in folder.glob("*.py") if path.stem != "__init__")})
 
 
@@ -391,7 +396,7 @@ def test_the_pattern_finds_old_references_and_leaves_the_rest_alone():
         "from backend.main import app",
         "    from backend.main import app",
         "\"from backend.main import app; \"",
-        "-m core.run.runner",
+        "-m core.analysis.kratos_main",
     ]:
         assert not stale.search(line), line
 
@@ -414,7 +419,26 @@ MOVED = {
 }
 """Each module core held side by side, and where it went when core became packages."""
 
-ADDED = {"kratos": {"files"}}
+RENAMED_IN_PACKAGE = {
+    "model.legacy": "model.migration", "model.seed": "model.templates",
+    "model.loads": "model.load_translation", "model.walls": "model.wall_translation",
+    "geometry.build": "geometry.solid_model", "geometry.creator": "geometry.primitives",
+    "geometry.importer": "geometry.cad_import", "geometry.tessellate": "geometry.tessellation",
+    "kratos.export": "kratos.writer", "kratos.mdpa_import": "kratos.mdpa_reader",
+    "kratos.processes": "kratos.parameters", "kratos.deck": "kratos.external_deck",
+    "kratos.files": "kratos.deck_files",
+    "run.calculate": "analysis.calculation", "run.runner": "analysis.kratos_main",
+    "results.runs": "results.catalog", "results.gid": "results.gid_reader",
+    "script": "scripting",
+}
+"""The modules renamed inside their packages (plan/active/module-naming-plan.md), and the
+`run` package that became `analysis`: each name a module had from the packages until
+then, and the one it has now."""
+
+NOW = {old: RENAMED_IN_PACKAGE.get(new, new) for old, new in MOVED.items()}
+"""Each flat module, and where it is now."""
+
+ADDED = {"kratos": {"deck_files"}}
 """Modules a package has that no flat module became."""
 
 
@@ -423,7 +447,7 @@ def old_core_pattern() -> re.Pattern:
 
     * A dotted name: `core.schemas`, `-m core.kratos_runner`, `core.result_fields.x`.
       `kratos` and `results` are packages now, so `core.kratos` and `core.results` alone
-      are fine, and so is a module in them (`core.kratos.export`); only an attribute of
+      are fine, and so is a module in them (`core.kratos.writer`); only an attribute of
       the old module is stale (`core.kratos.export_project`, `core.results.run_directory`).
     * A path to the file: `core/result_fields.py`, `core\\kratos.py`.
     * `from core import x` naming one of the flat modules.
@@ -431,7 +455,7 @@ def old_core_pattern() -> re.Pattern:
     flat = sorted((old for old in MOVED if old not in LAYERS), key=len, reverse=True)
     rules = [r"(?<![\w.])core\.(?:" + "|".join(flat) + r")(?!\w)"]
     for package in sorted(set(MOVED) & set(LAYERS)):
-        inside = sorted({new.split(".")[1] for new in MOVED.values()
+        inside = sorted({new.split(".")[1] for new in NOW.values()
                          if new.startswith(package + ".")} | ADDED.get(package, set()))
         rules.append(rf"(?<![\w.])core\.{package}\.(?!(?:" + "|".join(inside) + r")(?!\w))\w")
     rules.append(r"(?<!\w)core[\\/](?:" + "|".join(sorted(MOVED, key=len, reverse=True))
@@ -462,17 +486,17 @@ def test_the_old_core_pattern_finds_flat_names_and_leaves_the_packages_alone():
         assert stale.search(line), line
     for line in [
         "from core.model.schemas import Project",
-        "from core.kratos import export as kratos",
-        "from core.results import fields as result_fields",
+        "from core.kratos import writer",
+        "from core.results import fields",
         "from core import gmsh_worker",
-        "from core import script",
-        "-m core.run.runner",
+        "from core import scripting",
+        "-m core.analysis.kratos_main",
         "the core.kratos package",
         "is in core.kratos.",
-        "core.kratos.export.export_project",
-        "core.kratos.files.PARAMETERS_NAME",
-        "core.results.runs.run_directory",
-        "see core/kratos/export.py and core/results/",
+        "core.kratos.writer.export_project",
+        "core.kratos.deck_files.PARAMETERS_NAME",
+        "core.results.catalog.run_directory",
+        "see core/kratos/writer.py and core/results/",
         "core/gmsh_worker.py",
         "core.model.units",
         "frontend/js/kratos.js",
@@ -527,13 +551,16 @@ def test_no_core_module_is_named_by_its_flat_name():
     assert not found, f"{len(found)} references to core's flat modules:\n{shown(found)}"
 
 
-RENAMED = sorted(old for old, new in MOVED.items() if new.split(".")[1] != old)
-"""The flat modules whose own name did not survive the move: `kratos` is `export` now,
-`results` is `runs`, `kratos_runner` is `runner`. A file that imports one under its old
-name (`from core.kratos import export as kratos`) may go on calling it that; anywhere
-else the old name is a module that is gone."""
+RENAMED = sorted({old for old, now in NOW.items() if now.split(".")[-1] != old}
+                 | {old.split(".")[-1] for old, new in RENAMED_IN_PACKAGE.items()
+                    if old.split(".")[-1] != new.split(".")[-1]})
+"""The names a core module had and has no more: the flat ones whose own name did not
+survive the packages (`kratos` is `writer` now, `results` is `catalog`, `kratos_runner`
+is `kratos_main`), and the ones renamed inside their package (`export`, `runs`,
+`calculate`). A module is imported under its own name only, so no file binds one of
+these to a module any more."""
 
-NOT_ATTRIBUTES = ("py", "js", "json", "log", "yml", "local", "post", "res", "md")
+NOT_ATTRIBUTES = ("py", "js", "json", "log", "yml", "local", "post", "res", "md", "mdpa", "zip")
 """What follows `kratos.` or `results.` in a file name rather than a module's attribute:
 `kratos.log`, `kratos.local.json`, `results.js`, `results.post.res`."""
 
@@ -560,6 +587,9 @@ def test_the_renamed_pattern_finds_old_names_and_leaves_words_and_files_alone():
         "the CRLF endings -- `kratos.LINE_END` --",
         "(`results.run_unit_system`)",
         "gid_results takes the last step",
+        "the names `files.PARAMETERS_NAME` gives",
+        "see `calculate.run_deck`",
+        "mdpa_import reads it back",
     ]:
         assert pattern.search(line), line
     for line in [
@@ -567,8 +597,8 @@ def test_the_renamed_pattern_finds_old_names_and_leaves_words_and_files_alone():
         "the log, kratos.log",
         ".github/workflows/kratos.yml",
         "frontend/js/results.js",
-        "core.kratos.export.LINE_END",
-        "core.results.runs.run_directory",
+        "core.kratos.writer.LINE_END",
+        "core.results.catalog.run_directory",
         "tests/test_kratos_runner.py",
         "and read the results. Then",
         "Kratos.Parameters(handle.read())",
@@ -612,6 +642,158 @@ def test_no_file_names_a_renamed_module_it_does_not_import():
     the way a docstring cites a neighbour, once the neighbour is called something else."""
     found = renamed_names_in_prose()
     assert not found, f"{len(found)} old module names in prose:\n{shown(found)}"
+
+
+DOTTED = re.compile(r"(?<![\w.\\/-])core\.([A-Za-z_]\w*)(?:\.([A-Za-z_]\w*))?")
+PATH = re.compile(r"(?<![\w.-])core[\\/]+([A-Za-z_]\w*)(?:[\\/]+([A-Za-z_]\w*)\.py(?!\w))?")
+IN_CORE = re.compile(r"(?<![\w./\\-])(model|geometry|kratos|analysis|results|run)[\\/]([A-Za-z_]\w*)\.py(?!\w)")
+FROM = re.compile(r"(?<![\w.])from\s+core(?:\.(\w+))?\s+import\s+\(?\s*"
+                  r"((?:\w+(?:\s+as\s+\w+)?\s*,\s*)*\w+)")
+"""A core module named by its dotted name (`core.kratos.writer`, `-m core.analysis.x`), by
+its path (`core/kratos/writer.py`, `core\\analysis\\`), or by an import (`from
+core.kratos import writer, materials`)."""
+
+
+def resolves(first: str, second: str | None, *, attribute: bool) -> bool:
+    """Whether `core.<first>[.<second>]` is there. Below a package, `second` must be one of
+    its modules (or a package in it): every `__init__.py` in core is empty, so a package
+    has nothing else. Below a module, `second` is an attribute when `attribute` says so."""
+    if first in NOT_ATTRIBUTES:
+        return True
+    if (CORE / first / "__init__.py").is_file():
+        return second is None or (CORE / first / f"{second}.py").is_file() \
+            or (CORE / first / second / "__init__.py").is_file()
+    return (CORE / f"{first}.py").is_file() and (attribute or second is None)
+
+
+def unresolved(line: str) -> list[str]:
+    """What `line` names in core that is not there."""
+    gone = [m.group(0) for m in DOTTED.finditer(line)
+            if not resolves(m.group(1), m.group(2), attribute=True)]
+    gone += [m.group(0) for m in IN_CORE.finditer(line)
+             if not resolves(m.group(1), m.group(2), attribute=False)
+             or not (CORE / m.group(1) / "__init__.py").is_file()]
+    gone += [m.group(0) for m in PATH.finditer(line)
+             if not resolves(m.group(1), m.group(2), attribute=False)]
+    for m in FROM.finditer(line):
+        names = re.findall(r"(\w+)(?:\s+as\s+\w+)?", m.group(2))
+        if m.group(1) is None:
+            gone += [f"from core import {name}" for name in names
+                     if not resolves(name, None, attribute=False)]
+        elif (CORE / m.group(1) / "__init__.py").is_file():
+            gone += [f"from core.{m.group(1)} import {name}" for name in names
+                     if not resolves(m.group(1), name, attribute=False)]
+    return gone
+
+
+def test_unresolved_finds_what_is_gone_and_leaves_what_is_there_alone():
+    for line in [
+        "-m core.run.runner",
+        "see core/kratos/export.py:_interface_by_body",
+        "core\\run\\calculate.py",
+        "`core.results.runs.run_directory`",
+        "from core.kratos import export as kratos",
+        "from core.kratos import materials, processes",
+        "from core import script",
+        "from core.run import calculate",
+        "core.kratos.export_project",
+        "core/run/",
+        "| `kratos/export.py` | 1,670 |",
+        "`run/calculate.py` -> `run/runner.py`",
+    ]:
+        assert unresolved(line), line
+    for line in [
+        "-m core.analysis.kratos_main",
+        "see core/kratos/writer.py:_interface_by_body",
+        "core\\analysis\\calculation.py",
+        "`core.results.catalog.run_directory`",
+        "from core.kratos import writer",
+        "from core.kratos import (materials, parameters)",
+        "from core import scripting, gmsh_worker",
+        "from core.model.schemas import Project",
+        "core.scripting.load_project",
+        "core/analysis/ and core/model/",
+        "core/gmsh_worker.py",
+        "| `kratos/writer.py` | 1,670 |",
+        "tests/kratos/test_kratos_registry.py, frontend/js/results.js",
+        "the core package, core.py, pydantic_core.x, frontend/js/core.js",
+    ]:
+        assert not unresolved(line), line
+
+
+def test_every_core_module_a_file_names_is_there():
+    """Whatever a module was called before -- flat, or in its package before the renaming
+    -- a dotted name, a path or an import naming it fails here once it is gone."""
+    found = []
+    for name in repository_files():
+        if name == THIS or name.startswith(SKIPPED) or Path(name).suffix.lower() in BINARY:
+            continue
+        try:
+            text = (ROOT / name).read_bytes().decode("utf-8")
+        except UnicodeDecodeError:
+            continue
+        found += [f"{name}:{number}: {', '.join(gone)}"
+                  for number, line in enumerate(text.splitlines(), start=1)
+                  if (gone := unresolved(line))]
+    assert not found, f"{len(found)} names of core modules that are gone:\n{shown(found)}"
+
+
+# ── A module goes by its own name ───────────────────────────────────────────
+
+ALIASES: dict[tuple[str, str], str] = {}
+"""The imports that give a core module another name, `(file, "module as name"): reason`.
+A module is called by its own name, so that `writer.export_project` reads the same in
+every file; an entry here needs a reason the module's own name cannot be used there."""
+
+PYTHON_FOLDERS = ("core", "backend", "tests", "benchmarks", "tools")
+
+
+def module_aliases(tree: ast.AST) -> list[tuple[int, str]]:
+    """`(line, "module as name")` for each core module `tree` imports under another name:
+    `from core.kratos import writer as w`, `from core import scripting as s`, `import
+    core.kratos.writer as w`. An attribute imported under another name is not one: `from
+    core.model.wall_translation import translate as translate_walls` names a function."""
+    found = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            found += [(node.lineno, f"{alias.name} as {alias.asname}") for alias in node.names
+                      if alias.asname and alias.name.split(".")[0] == "core"]
+        elif isinstance(node, ast.ImportFrom) and node.level == 0 and node.module \
+                and node.module.split(".")[0] == "core":
+            folder = ROOT.joinpath(*node.module.split("."))
+            found += [(node.lineno, f"{alias.name} as {alias.asname}") for alias in node.names
+                      if alias.asname and alias.asname != alias.name
+                      and ((folder / f"{alias.name}.py").is_file()
+                           or (folder / alias.name / "__init__.py").is_file())]
+    return sorted(found)
+
+
+def test_module_aliases_finds_a_module_and_leaves_an_attribute_alone():
+    tree = ast.parse(
+        "from core.kratos import writer as kratos, materials\n"
+        "from core import scripting as script\n"
+        "import core.results.catalog as results\n"
+        "from core.model.schemas import Project as P\n"
+        "from core.model import phases\n"
+        "def later():\n"
+        "    from core.results import fields as result_fields\n")
+    assert module_aliases(tree) == [(1, "writer as kratos"), (2, "scripting as script"),
+                                    (3, "core.results.catalog as results"),
+                                    (7, "fields as result_fields")]
+
+
+def test_a_core_module_is_imported_under_its_own_name():
+    found = {}
+    for folder in PYTHON_FOLDERS:
+        for path in sorted((ROOT / folder).rglob("*.py")):
+            relative = path.relative_to(ROOT).as_posix()
+            for line, alias in module_aliases(parsed(path)):
+                found.setdefault((relative, alias), line)
+    wrong = [f"{file}:{line}: {alias}" for (file, alias), line in sorted(found.items())
+             if (file, alias) not in ALIASES]
+    stale = [f"{file}: {alias}" for file, alias in sorted(ALIASES) if (file, alias) not in found]
+    assert not wrong, "a core module imported under another name:\n" + "\n".join(wrong)
+    assert not stale, "ALIASES names an import that is gone; remove it:\n" + "\n".join(stale)
 
 
 # ── Served from frontend/ only ──────────────────────────────────────────────

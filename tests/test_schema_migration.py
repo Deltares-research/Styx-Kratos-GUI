@@ -22,8 +22,8 @@ from pathlib import Path
 
 import pytest
 
-from core.geometry import build
-from core.kratos import export as kratos
+from core.geometry import solid_model
+from core.kratos import writer
 from core.model.schemas import MeshRequest, Project
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "projects"
@@ -67,7 +67,7 @@ def test_the_single_load_keeps_its_magnitude_and_footprint():
     project = Project.model_validate(raw("single_load_2d.json"))
 
     magnitudes = [abs(c) for load in project.loads for c in load.components if c]
-    # kN/m2 then, Pa now: the project is converted into SI on load (core/model/legacy.py).
+    # kN/m2 then, Pa now: the project is converted into SI on load (core/model/migration.py).
     assert old["magnitude"] * 1000 in magnitudes
     assert any(getattr(load, "x0", None) == old["x0"] and getattr(load, "x1", None) == old["x1"]
                for load in project.loads)
@@ -92,8 +92,8 @@ def test_an_old_project_goes_through_the_api_unchanged(path):
 @pytest.mark.parametrize("path", SAVED, ids=lambda p: p.stem)
 def test_an_old_project_still_meshes_and_exports(path):
     project = Project.model_validate(json.loads(path.read_text(encoding="utf-8")))
-    with build.session():
-        export = kratos.export_project(project, MeshRequest(element_size=8.0, order=1))
+    with solid_model.session():
+        export = writer.export_project(project, MeshRequest(element_size=8.0, order=1))
 
     assert len(export["nodes"]) > 0 and len(export["elements"]) > 0
     assert "Begin Nodes" in export["mdpa"] and "Begin Elements" in export["mdpa"]

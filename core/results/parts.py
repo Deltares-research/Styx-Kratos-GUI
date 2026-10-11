@@ -6,7 +6,7 @@ excavation lift or the sheet pile. The names live in the `.mdpa` in the same run
 directory, and the join between the two is exact rather than approximate: both files
 carry Kratos' own element ids, so this module is a lookup and never a guess.
 
-Parsing the `.mdpa` is `core.kratos.mdpa_import`'s job, not repeated here. (That parser could
+Parsing the `.mdpa` is `core.kratos.mdpa_reader`'s job, not repeated here. (That parser could
 not read a deck this project had written until P1 -- see
 `tests/test_mdpa_import.test_blank_lines_inside_a_block_are_skipped` and
 `tests/test_calculate.test_the_deck_lands_on_disk_as_the_bytes_it_was_rendered_as` for
@@ -35,8 +35,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field as dataclass_field
 
-from core.results.gid import GidMesh
-from core.kratos.mdpa_import import MdpaModel
+from core.results.gid_reader import GidMesh
+from core.kratos.mdpa_reader import MdpaModel
 
 
 @dataclass
@@ -45,7 +45,7 @@ class StagePart:
 
     name: str
     kind: str
-    """From `mdpa_import.Part`: "body", "load", "boundary", "support" or "group"."""
+    """From `mdpa_reader.Part`: "body", "load", "boundary", "support" or "group"."""
     declared: int
     """How many elements the deck gives this part, in every stage."""
     nodes: int

@@ -5,7 +5,7 @@
    bare sheet pile is. It follows either a pile -- the arrangement
    Kratos' reference decks contain -- or its own line through the soil, and `side` says
    which of the two soils is unglued from it. Plane strain only; see the INTERFACES
-   table in core/kratos/export.py. */
+   table in core/kratos/writer.py. */
 
 (function () {
   function pile(extra) {

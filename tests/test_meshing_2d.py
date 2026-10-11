@@ -9,9 +9,9 @@ per-layer size would be silently ignored and every element would come out the sa
 
 import pytest
 
-from core.geometry import build, meshing
+from core.geometry import solid_model, meshing
 from core.model.schemas import BoxRefinement, Project
-from core.model.seed import seed_project
+from core.model.templates import seed_project
 
 
 def section_project(simple: bool = True, **extra) -> Project:
@@ -23,7 +23,7 @@ def section_project(simple: bool = True, **extra) -> Project:
 @pytest.fixture(scope="module")
 def quadratic():
     project = section_project()
-    with build.session():
+    with solid_model.session():
         yield project, meshing.mesh_project(project, element_size=2.0, order=2)
 
 
@@ -82,7 +82,7 @@ def test_a_finer_body_size_actually_refines_that_body():
     matches nothing, gmsh reports no error, and the size is silently ignored."""
     project = section_project()
     coarse_key = f"soil_{project.layers[0].id}"
-    with build.session():
+    with solid_model.session():
         coarse = meshing.mesh_project(project, element_size=4.0, order=1)
         fine = meshing.mesh_project(project, element_size=4.0, order=1,
                                     body_sizes={coarse_key: 1.0})
@@ -96,7 +96,7 @@ def test_a_local_refinement_box_still_applies():
                         x_min=d.x0, x_max=d.x1 / 2,
                         z_min=d.z0 - 1, z_max=d.z1 + 1,
                         y_min=d.y_bottom, y_max=d.y_top)
-    with build.session():
+    with solid_model.session():
         plain = meshing.mesh_project(project, element_size=4.0, order=1)
         refined = meshing.mesh_project(project, element_size=4.0, order=1, refinements=[box])
     assert refined.stats.elements > plain.stats.elements
@@ -104,7 +104,7 @@ def test_a_local_refinement_box_still_applies():
 
 def test_meshing_reports_which_keys_it_meshed():
     project = section_project()
-    with build.session():
+    with solid_model.session():
         mesh = meshing.mesh_project(project, element_size=4.0, order=1)
     assert set(mesh.meshed_keys) <= set(project.part_keys())
     assert mesh.meshed_keys
@@ -141,7 +141,7 @@ def beam_mesh(project: Project, order: int = 2) -> tuple[list[int], set[int], se
 
 
 def test_a_sheet_pile_is_meshed_as_line_elements_beside_the_soil_triangles():
-    with build.session():
+    with solid_model.session():
         types, beam_nodes, _ = beam_mesh(piled_section())
 
     assert beam_nodes, "the pile has to reach the mesh, not just the geometry"
@@ -149,7 +149,7 @@ def test_a_sheet_pile_is_meshed_as_line_elements_beside_the_soil_triangles():
 
 
 def test_a_first_order_run_meshes_the_pile_as_two_node_lines():
-    with build.session():
+    with solid_model.session():
         types, _, _ = beam_mesh(piled_section(), order=1)
 
     assert set(types) == {1}, "gmsh type 1 is the 2-node line"
@@ -159,14 +159,14 @@ def test_every_sheet_pile_node_is_also_a_soil_node():
     """Conformity is the whole point of embedding the curve, and it is what the
     Kratos decks show: in a sheet-pile deck every one of the sheet pile's nodes
     belongs to the soil mesh too."""
-    with build.session():
+    with solid_model.session():
         _, beam_nodes, soil_nodes = beam_mesh(piled_section())
 
     assert beam_nodes - soil_nodes == set()
 
 
 def test_a_pile_crossing_a_layer_boundary_still_shares_its_nodes():
-    with build.session():
+    with solid_model.session():
         _, beam_nodes, soil_nodes = beam_mesh(
             piled_section(points=((12.0, 0.0), (12.0, -7.0), (15.0, -12.0)))
         )
@@ -200,7 +200,7 @@ def mesh_nodes_at(x: float, y: float, tol: float = 1e-6) -> list[int]:
 
 def test_the_anchor_head_is_a_node_the_sheet_pile_owns():
     """Splitting the pile at the head is what makes the tie land on a real beam node."""
-    with build.session():
+    with solid_model.session():
         _, beam_nodes, soil_nodes = beam_mesh(anchored_section())
         at_head = mesh_nodes_at(12.0, -2.0)
 
@@ -210,7 +210,7 @@ def test_the_anchor_head_is_a_node_the_sheet_pile_owns():
 
 def test_an_anchor_does_not_cost_the_pile_its_conformity():
     """The pile must keep every node it had before an anchor was hung off it."""
-    with build.session():
+    with solid_model.session():
         _, plain_nodes, _ = beam_mesh(piled_section())
         _, anchored_nodes, _ = beam_mesh(anchored_section())
 
@@ -221,7 +221,7 @@ def test_the_anchor_tail_gets_exactly_one_node_belonging_to_nothing_else():
     """The reference deck's tail node is in no element at all: the grouted body is
     idealised as a fixed point, not bonded to the soil."""
     import gmsh
-    with build.session():
+    with solid_model.session():
         meshing.mesh_project(anchored_section(), element_size=3.0, order=2)
         at_tail = mesh_nodes_at(20.0, -8.0)
         used = set()
@@ -254,14 +254,14 @@ def excavation_like():
 
 def excavation_deck(**sizes):
     """The test model exported with the given per-part sizes, parsed back."""
-    from core.kratos import export as kratos
+    from core.kratos import writer
     from tests.models import excavation
     from core.model.schemas import MeshRequest
     from tests import mdpa
     project = excavation.excavation_project(staged=False)
     base = {f"soil_{layer.id}": 2.0 for layer in project.layers}
-    with build.session():
-        exported = kratos.export_project(
+    with solid_model.session():
+        exported = writer.export_project(
             project, MeshRequest(element_size=8.0, order=2,
                                  body_sizes=base | sizes))
     return mdpa.parse(exported["mdpa"])
@@ -314,7 +314,7 @@ def edge_lengths_by_band(project, **kw):
     """Mean longest triangle edge, in 10 m bands of x."""
     import math
     import gmsh
-    with build.session():
+    with solid_model.session():
         meshing.mesh_project(project, order=2, **kw)
         types, _, connectivity = gmsh.model.mesh.getElements(2)
         tags, coords, _ = gmsh.model.mesh.getNodes()

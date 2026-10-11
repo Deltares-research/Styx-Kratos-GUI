@@ -8,9 +8,9 @@ import time
 
 import gmsh
 
-from core.geometry import build
+from core.geometry import solid_model
 from core.model.schemas import BoxRefinement, CylinderRefinement, Project
-from core.geometry.tessellate import DECIMALS, Section
+from core.geometry.tessellation import DECIMALS, Section
 
 
 MESH_COLOR = "#d9dee6"
@@ -92,7 +92,7 @@ def mesh_project(project: Project, element_size: float | None = None,
         raise ValueError("order must be 1 or 2")
 
     started = time.perf_counter()
-    built = build.build_geometry(project)
+    built = solid_model.build_geometry(project)
     # Expanded, because what picks these picks *layers*: the Mesh properties dialog
     # lists `project.layers`, and a staged layer is several bodies. Naming the layer has
     # to bring the lifts dug out of it, or a project whose pit is staged meshes only the
@@ -163,13 +163,13 @@ def mesh_project(project: Project, element_size: float | None = None,
                      meshed_keys=list(meshed_keys), parts=parts)
 
 
-def _structural_entities(result: build.BuildResult) -> list[tuple[int, int]]:
+def _structural_entities(result: solid_model.BuildResult) -> list[tuple[int, int]]:
     """The wall faces and member curves the mesher has to be told to mesh."""
     return ([(2, tag) for tags in result.faces.values() for tag in tags]
             + [(1, tag) for tags in result.curves.values() for tag in tags])
 
 
-def _finite_element_volumes(project: Project, result: build.BuildResult,
+def _finite_element_volumes(project: Project, result: solid_model.BuildResult,
                             volume_keys: list[str] | None = None) -> list[int]:
     """Physical solids only: omit display indicators and the excavation soil alias."""
     keys = volume_keys or ([f"soil_{layer.id}" for layer in project.layers]
@@ -354,7 +354,7 @@ def _node_coordinates() -> dict[int, tuple[float, float, float]]:
     }
 
 
-def _part_sections(project: Project, built: build.BuildResult, meshed_keys: list[str],
+def _part_sections(project: Project, built: solid_model.BuildResult, meshed_keys: list[str],
                    dim: int) -> list[Section]:
     """One section per part key that owns elements, in `Project.part_keys` order, then
     the loads that order leaves out.
@@ -437,7 +437,7 @@ hide the other; this much is enough to see two and little enough to still read a
 line."""
 
 
-def _interface_sections(interface, project: Project, built: build.BuildResult,
+def _interface_sections(interface, project: Project, built: solid_model.BuildResult,
                         coordinates: dict[int, tuple[float, float, float]]
                         ) -> list[Section]:
     """`<key>:L` and/or `<key>:R`: one section per face the interface unglues.
@@ -510,13 +510,13 @@ def loaded_elements(project: Project, dim: int,
     elements on the ground surface that lie under it, or for a point load the one node
     nearest it, typed `POINT`. Rows are in gmsh's node order.
 
-    Two things ask, and both ask here, so they cannot disagree: `core.kratos.export`
+    Two things ask, and both ask here, so they cannot disagree: `core.kratos.writer`
     writes a condition on each row, and the mesh preview colours the same edges
     (`_load_sections`), so the line a user sees is exactly the one Kratos is told to load.
 
     Selected element by element rather than entity by entity: the pad is a display
     indicator that never cuts the soil, so the loaded region is not a separate part.
-    `build._imprint_load_footprints` has split the boundary exactly at the footprint
+    `solid_model._imprint_load_footprints` has split the boundary exactly at the footprint
     edges, so every element is wholly inside or wholly outside it and the test below is
     an exact containment test. Without that imprint the only available rule would be
     whether an element's centre lies under the pad, which moves a loaded edge by as
@@ -545,8 +545,8 @@ def loaded_elements(project: Project, dim: int,
         rows_by_type: dict[int, list[list[int]]] = {}
         for _, entity in gmsh.model.getEntities(dim - 1):
             box = gmsh.model.getBoundingBox(dim - 1, entity)
-            if (abs(box[1] - elevation) > build.TOLERANCE
-                    or abs(box[4] - elevation) > build.TOLERANCE):
+            if (abs(box[1] - elevation) > solid_model.TOLERANCE
+                    or abs(box[4] - elevation) > solid_model.TOLERANCE):
                 continue
             types, _, connectivity = gmsh.model.mesh.getElements(dim - 1, entity)
             for element_type, flat in zip(types, connectivity):
@@ -564,7 +564,7 @@ def _under_load(corners: list[int], world: dict[int, tuple[float, float, float]]
                 load) -> bool:
     """Every corner inside the footprint, within the tolerance the imprint holds to."""
     def inside(value: float, low: float, high: float) -> bool:
-        return low - build.TOLERANCE <= value <= high + build.TOLERANCE
+        return low - solid_model.TOLERANCE <= value <= high + solid_model.TOLERANCE
 
     if load.kind == "line":
         return all(inside(world[tag][0], load.x0, load.x1) for tag in corners)
@@ -613,7 +613,7 @@ def _line_segments(curves: list[int], coordinates: dict[int, tuple[float, float,
 
 def _add_tie_segments(section: Section, curves: list[int]) -> None:
     """An anchor is one two-node truss from head to tail whatever the mesh does along
-    its curve (`core.kratos.export._anchor_ties`), so it is drawn as that one segment:
+    its curve (`core.kratos.writer._anchor_ties`), so it is drawn as that one segment:
     the curve's two end points."""
     for curve in curves:
         ends = gmsh.model.getBoundary([(1, curve)], oriented=False)

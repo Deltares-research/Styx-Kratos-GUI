@@ -5,12 +5,12 @@ a temporary runs root of its own:
 
 *   `real_run()` -- the test model (`tests/models/excavation.py`) calculated by Kratos,
     when Kratos is installed on this machine, and a skip when it is not. The regression
-    check on real solver output: what Kratos writes, read back through `core.results.runs`.
+    check on real solver output: what Kratos writes, read back through `core.results.catalog`.
 *   `fake_run()` -- the same model through `tests/fakes/fake_kratos.py`: synthetic,
     analytic output in the files a real run leaves, made on any machine. For tests about
     the shape of what the results routes answer rather than about the numbers.
 
-`use(monkeypatch, run_id)` points `calculate.runs_root()` at the run's root, through the
+`use(monkeypatch, run_id)` points `calculation.runs_root()` at the run's root, through the
 environment variable a user has, and returns the id.
 """
 
@@ -37,15 +37,15 @@ PROBE_TIMEOUT = 120.0
 def kratos_missing() -> str | None:
     """Why this machine cannot run Kratos, or None when it can. Asked once per session.
 
-    `calculate.interpreter()` succeeding is not enough: with nothing configured it falls
+    `calculation.interpreter()` succeeding is not enough: with nothing configured it falls
     back to the server's own Python, which exists and has no Kratos, and a test trusting
     it would run a calculation and fail rather than skip.
     """
-    from core.run import calculate
+    from core.analysis import calculation
 
     try:
-        python, environment = calculate.interpreter()
-    except calculate.CalculationError as failure:
+        python, environment = calculation.interpreter()
+    except calculation.CalculationError as failure:
         return f"no Kratos configured: {failure}"
     try:
         probe = subprocess.run([python, "-c", PROBE], env=environment, capture_output=True,
@@ -72,20 +72,20 @@ def _new_root(prefix: str) -> pathlib.Path:
 
 def _in_root(root: pathlib.Path, make):
     """Run `make()` with the runs root pointed at `root`, and put it back after."""
-    from core.run import calculate
-    from core.results import runs as results
+    from core.analysis import calculation
+    from core.results import catalog
 
-    previous = os.environ.get(calculate.RUNS_ENV)
-    os.environ[calculate.RUNS_ENV] = str(root)
-    results.forget_cache()
+    previous = os.environ.get(calculation.RUNS_ENV)
+    os.environ[calculation.RUNS_ENV] = str(root)
+    catalog.forget_cache()
     try:
         return make()
     finally:
         if previous is None:
-            os.environ.pop(calculate.RUNS_ENV, None)
+            os.environ.pop(calculation.RUNS_ENV, None)
         else:
-            os.environ[calculate.RUNS_ENV] = previous
-        results.forget_cache()
+            os.environ[calculation.RUNS_ENV] = previous
+        catalog.forget_cache()
 
 
 def model():
@@ -97,11 +97,11 @@ def model():
 
 @functools.cache
 def _real() -> tuple[pathlib.Path, str]:
-    from core.kratos import export as kratos
-    from core.run import calculate
+    from core.kratos import writer
+    from core.analysis import calculation
 
     root = _new_root("kratos-run-")
-    outcome = _in_root(root, lambda: calculate.run(kratos.export_project(model())))
+    outcome = _in_root(root, lambda: calculation.run(writer.export_project(model())))
     # A model Kratos rejects is a failure of this suite, not a reason to skip it.
     assert outcome["ok"], f"Kratos did not finish the test model: {outcome.get('error')}"
     return root, pathlib.Path(outcome["directory"]).name
@@ -116,22 +116,22 @@ def real_run() -> tuple[pathlib.Path, str]:
 @functools.cache
 def fake_run() -> tuple[pathlib.Path, str]:
     """(runs root, run id) of the test model through the fake Kratos."""
-    from core.kratos import export as kratos
+    from core.kratos import writer
     from tests.fakes import fake_kratos
 
     root = _new_root("fake-run-")
-    outcome = _in_root(root, lambda: fake_kratos.fake_run(kratos.export_project(model())))
+    outcome = _in_root(root, lambda: fake_kratos.fake_run(writer.export_project(model())))
     return root, pathlib.Path(outcome["directory"]).name
 
 
 def use(monkeypatch, run: tuple[pathlib.Path, str]) -> str:
-    """Point `calculate.runs_root()` at the run's root, and return the run id."""
-    from core.run import calculate
-    from core.results import runs as results
+    """Point `calculation.runs_root()` at the run's root, and return the run id."""
+    from core.analysis import calculation
+    from core.results import catalog
 
     root, run_id = run
-    monkeypatch.setenv(calculate.RUNS_ENV, str(root))
-    results.forget_cache()
+    monkeypatch.setenv(calculation.RUNS_ENV, str(root))
+    catalog.forget_cache()
     return run_id
 
 

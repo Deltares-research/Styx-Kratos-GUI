@@ -14,9 +14,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.main import app
-from core.geometry import build
+from core.geometry import solid_model
 from core.model.schemas import Project
-from core.model.seed import seed_project
+from core.model.templates import seed_project
 
 
 @pytest.fixture(scope="module")
@@ -31,7 +31,7 @@ def client():
 # ── Health ──────────────────────────────────────────────────────────────────
 
 def test_empty_project_can_save_first_layer_and_delete_last_layer(client):
-    from core.model.seed import blank_project
+    from core.model.templates import blank_project
     original = client.get('/api/project').json()
     try:
         client.put('/api/project', json=blank_project().model_dump())
@@ -108,7 +108,7 @@ def test_post_project_new_starts_an_empty_project(client):
     """"New project" on the toolbar. The client has no copy of what "empty" means --
     it is the server that decides -- so this has to happen here, not by the client
     inventing a blank document of its own."""
-    from core.model.seed import blank_project
+    from core.model.templates import blank_project
 
     body = client.post("/api/project/new").json()
 
@@ -123,7 +123,7 @@ def test_the_project_the_server_opens_on_is_plane_strain(client):
     """The app is a 2D modeller first: the document it comes up on is the section, so
     the client never has to switch into it -- and never shows a 3D view it is about to
     replace. The offset is resolved here too, so the viewport reads one number."""
-    from core.model.seed import blank_project
+    from core.model.templates import blank_project
 
     blank = blank_project()
 
@@ -232,7 +232,7 @@ def test_post_geometry_import_adds_custom_part_and_invalidates(client):
     # or just use a valid step. Let's create a real step file via gmsh here.
     
     import gmsh
-    with build.session():
+    with solid_model.session():
         gmsh.clear()
         gmsh.model.occ.addBox(0,0,0,1,1,1)
         gmsh.model.occ.synchronize()
@@ -508,7 +508,7 @@ def test_patch_structures_accepts_a_coordinate_defined_point_load(client):
 
     assert response.status_code == 200
     # `derived_from` comes back on every load: it is how a translated pair is linked
-    # (core/model/loads.py), and a load the client authored is nobody's translation.
+    # (core/model/load_translation.py), and a load the client authored is nobody's translation.
     assert response.json()["project"]["loads"] == [point | {"derived_from": None}]
 
     client.put("/api/project", json=seed_project().model_dump())
@@ -524,7 +524,7 @@ BEAM = {"id": "sheetpile_1", "name": "Sheet pile 1", "section": "az26",
 # section gains the two inertias only a member in space has any use for, and the shear
 # area that `None` means "take the whole section" for.
 # `derived_from` comes back on every structure: it is how a translated pair is linked
-# (core/model/walls.py), and a pile the client authored is nobody's translation.
+# (core/model/wall_translation.py), and a pile the client authored is nobody's translation.
 STORED_BEAM = BEAM | {"kind": "beam", "derived_from": None}
 STORED_SECTION = SECTION | {"constitutive_law": "TimoshenkoBeamElasticConstitutiveLaw",
                             "tables": {}}
@@ -1268,11 +1268,11 @@ def test_calculate_meshes_exports_and_runs_the_deck(client, monkeypatch, tmp_pat
     """The whole button, with a stand-in for Kratos: the project is meshed and exported
     as usual, the three files land in a directory of their own, and what comes back is
     where they went and what the run produced."""
-    from core.run import calculate
+    from core.analysis import calculation
 
-    monkeypatch.setenv(calculate.RUNS_ENV, str(tmp_path / "runs"))
-    monkeypatch.setenv(calculate.PYTHON_ENV, sys.executable)
-    monkeypatch.setattr(calculate, "COMMAND",
+    monkeypatch.setenv(calculation.RUNS_ENV, str(tmp_path / "runs"))
+    monkeypatch.setenv(calculation.PYTHON_ENV, sys.executable)
+    monkeypatch.setattr(calculation, "COMMAND",
                         ["-c", "open('results.post.res', 'w').close()"])
 
     body = client.post("/api/calculate", json={"element_size": 8.0}).json()
@@ -1283,7 +1283,7 @@ def test_calculate_meshes_exports_and_runs_the_deck(client, monkeypatch, tmp_pat
     assert sorted(body["inputs"]) == sorted(
         p.name for p in directory.iterdir()
         if p.suffix in (".mdpa",) or p.name.endswith("Parameters.json")
-        or p.name == calculate.UNITS_NAME)
+        or p.name == calculation.UNITS_NAME)
     assert body["outputs"] == ["results.post.res"]
     assert body["stats"]["elements"] > 0
 
@@ -1292,11 +1292,11 @@ def test_calculate_reports_a_failed_run_rather_than_raising(client, monkeypatch,
                                                             tmp_path):
     """A model Kratos refuses is an answer about the model, not a broken server: it
     comes back 200 with `ok` false and what Kratos said."""
-    from core.run import calculate
+    from core.analysis import calculation
 
-    monkeypatch.setenv(calculate.RUNS_ENV, str(tmp_path / "runs"))
-    monkeypatch.setenv(calculate.PYTHON_ENV, sys.executable)
-    monkeypatch.setattr(calculate, "COMMAND",
+    monkeypatch.setenv(calculation.RUNS_ENV, str(tmp_path / "runs"))
+    monkeypatch.setenv(calculation.PYTHON_ENV, sys.executable)
+    monkeypatch.setattr(calculation, "COMMAND",
                         ["-c", "import sys; print('Error: nope'); sys.exit(1)"])
 
     response = client.post("/api/calculate", json={"element_size": 8.0})
@@ -1307,9 +1307,9 @@ def test_calculate_reports_a_failed_run_rather_than_raising(client, monkeypatch,
 
 
 def test_calculate_refuses_a_second_run_while_one_is_going(client, monkeypatch):
-    from core.run import calculate
+    from core.analysis import calculation
 
-    monkeypatch.setattr(calculate, "_running", True)
+    monkeypatch.setattr(calculation, "_running", True)
 
     assert client.post("/api/calculate", json={"element_size": 8.0}).status_code == 409
 

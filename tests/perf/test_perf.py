@@ -21,10 +21,10 @@ from pathlib import Path
 
 import pytest
 
-from core.geometry import build
-from core.kratos import export as kratos
-from core.run import calculate
-from core.results import runs as results
+from core.geometry import solid_model
+from core.kratos import writer
+from core.analysis import calculation
+from core.results import catalog
 from core.model.schemas import MeshRequest
 from tests import results_run
 from tests.models import excavation
@@ -62,8 +62,8 @@ def test_meshing_and_exporting_the_test_model(request):
     settings = MeshRequest(**project.mesh.model_dump())
 
     def export():
-        with build.session():
-            kratos.export_project(project, settings)
+        with solid_model.session():
+            writer.export_project(project, settings)
     check("export_model_s", median_seconds(export), request)
 
 
@@ -71,10 +71,10 @@ def test_reading_the_final_stage_of_a_run_cold(request, monkeypatch):
     run = results_run.use(monkeypatch, results_run.real_run())
 
     def read():
-        results.forget_cache()
-        results.stage_fields(run, 7)
-        results.stage_geometry(run, 7)
-        results.stage_field(run, 7, "p")
+        catalog.forget_cache()
+        catalog.stage_fields(run, 7)
+        catalog.stage_geometry(run, 7)
+        catalog.stage_field(run, 7, "p")
     check("read_model_stage_cold_s", median_seconds(read), request)
 
 
@@ -84,8 +84,8 @@ def test_opening_a_twenty_stage_run_and_stepping_through_it(request, tmp_path, m
     from tests.fakes import gid_writer
 
     project = excavation.excavation_project(staged=True)
-    with build.session():
-        export = kratos.export_project(project, MeshRequest(element_size=2.0, order=2))
+    with solid_model.session():
+        export = writer.export_project(project, MeshRequest(element_size=2.0, order=2))
     params = json.loads(export["project_parameters"])
     order = params["orchestrator"]["settings"]["execution_list"]
     params["orchestrator"]["settings"]["execution_list"] = [
@@ -95,12 +95,12 @@ def test_opening_a_twenty_stage_run_and_stepping_through_it(request, tmp_path, m
     gid_writer.write_run(export, tmp_path / run,
                          nodal={"TOTAL_DISPLACEMENT": lambda x, y, z, s: (x, y, 0.0)},
                          gauss={"CAUCHY_STRESS_TENSOR": lambda x, y, z, s: (y,) * 3 + (0.0,) * 3})
-    monkeypatch.setenv(calculate.RUNS_ENV, str(tmp_path))
+    monkeypatch.setenv(calculation.RUNS_ENV, str(tmp_path))
 
     def open_and_step():
-        results.forget_cache()
-        results.stage_parts(run, 1)
+        catalog.forget_cache()
+        catalog.stage_parts(run, 1)
         for index in range(1, 8):
-            results.stage_field(run, index, "uy")
+            catalog.stage_field(run, index, "uy")
     check("open_and_step_20_stages_s", median_seconds(open_and_step, repeat=2), request)
-    results.forget_cache()
+    catalog.forget_cache()

@@ -97,10 +97,10 @@ def version_job() -> str:
 
 
 def geometry_job(project_json: str) -> dict:
-    from core.geometry import tessellate
+    from core.geometry import tessellation
     from core.model.schemas import Project
 
-    return tessellate.tessellate(Project.model_validate_json(project_json)).to_dict()
+    return tessellation.tessellate(Project.model_validate_json(project_json)).to_dict()
 
 
 def mesh_job(project_json: str, settings_json: str) -> dict:
@@ -131,12 +131,12 @@ def mesh_labels_job(project_json: str, settings_json: str) -> dict:
     Both tables travel together: they come out of one pass, and fetching them separately
     would mean meshing the project twice to say what it already said.
     """
-    from core.kratos import export as kratos
+    from core.kratos import writer
     from core.model.schemas import MeshRequest, Project
 
     project = Project.model_validate_json(project_json)
     settings = MeshRequest.model_validate_json(settings_json)
-    result = kratos.export_project(project, settings, include_materials=False)
+    result = writer.export_project(project, settings, include_materials=False)
     return {"nodes": result["nodes"], "elements": result["elements"],
             "stats": result["stats"]}
 
@@ -148,31 +148,31 @@ def node_parts_job(project_json: str, settings_json: str) -> dict:
     that knows both a node's Kratos number and the parts that name it; the answer is
     read back off the `.mdpa` text so it is the deck's own (`core.kratos.node_parts`).
     """
-    from core.kratos import export as kratos, node_parts
+    from core.kratos import writer, node_parts
     from core.model.schemas import MeshRequest, Project
 
     project = Project.model_validate_json(project_json)
     settings = MeshRequest.model_validate_json(settings_json)
-    result = kratos.export_project(project, settings, include_materials=False)
+    result = writer.export_project(project, settings, include_materials=False)
     return node_parts.node_parts(result["mdpa"])
 
 
 def import_job(filepath: str, extension: str) -> dict:
-    from core.geometry import importer
-    return importer.process_import(filepath, extension)
+    from core.geometry import cad_import
+    return cad_import.process_import(filepath, extension)
 
 
 def create_job(recipe_json: str) -> dict:
     import json
-    from core.geometry import creator
-    return creator.process_creation(json.loads(recipe_json))
+    from core.geometry import primitives
+    return primitives.process_creation(json.loads(recipe_json))
 
 
 def export_job(project_json: str, settings_json: str) -> dict:
-    from core.kratos import export as kratos
+    from core.kratos import writer
     from core.model.schemas import ExportRequest, Project
 
     project = Project.model_validate_json(project_json)
     settings = ExportRequest.model_validate_json(settings_json)
-    return kratos.export_project(project, settings,
+    return writer.export_project(project, settings,
                                  include_materials=settings.include_materials)

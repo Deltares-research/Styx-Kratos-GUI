@@ -13,9 +13,9 @@ only about what OCC ends up holding.
 import gmsh
 import pytest
 
-from core.geometry import build
+from core.geometry import solid_model
 from core.model.schemas import Project
-from core.model.seed import seed_project
+from core.model.templates import seed_project
 
 SECTION_AZ26 = {"id": "az26", "name": "AZ 26-700", "E": 2.1e8, "nu": 0.3,
                 "area": 0.0198, "inertia": 5.52e-4, "density": 7850.0, "spacing": 1.0}
@@ -88,8 +88,8 @@ def conformity(result, entities: list[tuple[int, int]]) -> tuple[int, int, int]:
 def test_a_panel_becomes_named_two_dimensional_faces():
     """Not a thin solid: a wall is a surface inside the volume, as the 2D pile is a
     curve inside the face."""
-    with build.session():
-        result = build.build_geometry(structured([PANEL]))
+    with solid_model.session():
+        result = solid_model.build_geometry(structured([PANEL]))
         named = groups()
 
     assert result.faces["panel_1"], "the wall must survive the build"
@@ -99,8 +99,8 @@ def test_a_panel_becomes_named_two_dimensional_faces():
 
 
 def test_the_panel_faces_span_exactly_the_footprint_and_levels_drawn():
-    with build.session():
-        result = build.build_geometry(structured([PANEL]))
+    with solid_model.session():
+        result = solid_model.build_geometry(structured([PANEL]))
         boxes = [gmsh.model.getBoundingBox(2, tag) for tag in result.faces["panel_1"]]
 
     assert min(b[0] for b in boxes) == pytest.approx(12.0, abs=1e-5)
@@ -114,8 +114,8 @@ def test_the_panel_faces_span_exactly_the_footprint_and_levels_drawn():
 def test_the_panel_is_fragmented_into_the_soil_so_the_two_share_nodes():
     """The conformity target, and the whole reason the wall is a fragment tool: the
     soil elements have to be built on the wall's own nodes."""
-    with build.session():
-        result = build.build_geometry(structured([PANEL]))
+    with solid_model.session():
+        result = solid_model.build_geometry(structured([PANEL]))
         total, shared, duplicates = conformity(
             result, [(2, tag) for tag in result.faces["panel_1"]]
         )
@@ -128,8 +128,8 @@ def test_the_panel_is_fragmented_into_the_soil_so_the_two_share_nodes():
 def test_a_wall_that_stops_inside_the_soil_does_not_cut_the_body_in_two():
     """A panel shorter than the block leaves the soil one volume, imprinted."""
     shallow = PANEL | {"y_toe": -6.0, "footprint": [[12.0, 8.0], [12.0, 16.0]]}
-    with build.session():
-        result = build.build_geometry(structured([shallow]))
+    with solid_model.session():
+        result = solid_model.build_geometry(structured([shallow]))
         soil = [tag for key, tags in result.volumes.items()
                 if key.startswith("soil_") for tag in tags]
 
@@ -139,8 +139,8 @@ def test_a_wall_that_stops_inside_the_soil_does_not_cut_the_body_in_two():
 
 
 def test_an_inactive_panel_is_not_built():
-    with build.session():
-        result = build.build_geometry(structured([PANEL | {"active": False}]))
+    with solid_model.session():
+        result = solid_model.build_geometry(structured([PANEL | {"active": False}]))
 
     assert result.faces.get("panel_1", []) == []
 
@@ -149,8 +149,8 @@ def test_a_panel_is_not_built_into_a_2d_section_and_says_so():
     """The mirror of the 2D pile in 3D: a wall in plan has no place in an x-y cut."""
     payload = structured([PANEL]).model_dump() | {"dimension": 2}
     project = Project.model_validate(payload)
-    with build.session():
-        result = build.build_geometry(project)
+    with solid_model.session():
+        result = solid_model.build_geometry(project)
 
     assert result.faces.get("panel_1", []) == []
     assert any("panel_1" in line for line in result.log)
@@ -159,8 +159,8 @@ def test_a_panel_is_not_built_into_a_2d_section_and_says_so():
 # ── Members ─────────────────────────────────────────────────────────────────
 
 def test_a_member_becomes_named_one_dimensional_curves():
-    with build.session():
-        result = build.build_geometry(structured([MEMBER]))
+    with solid_model.session():
+        result = solid_model.build_geometry(structured([MEMBER]))
         named = groups()
 
     assert result.curves["member_1"]
@@ -169,8 +169,8 @@ def test_a_member_becomes_named_one_dimensional_curves():
 
 
 def test_the_member_curves_span_exactly_the_polyline_drawn():
-    with build.session():
-        result = build.build_geometry(structured([MEMBER]))
+    with solid_model.session():
+        result = solid_model.build_geometry(structured([MEMBER]))
         boxes = [gmsh.model.getBoundingBox(1, tag) for tag in result.curves["member_1"]]
 
     assert min(b[1] for b in boxes) == pytest.approx(-12.0, abs=1e-5)
@@ -182,8 +182,8 @@ def test_the_member_curves_span_exactly_the_polyline_drawn():
 def test_the_member_is_fragmented_into_the_soil_it_stands_in():
     """Same contract as the wall, one dimension lower: a pile the soil does not share
     nodes with is a pile the soil slides past."""
-    with build.session():
-        result = build.build_geometry(structured([MEMBER]))
+    with solid_model.session():
+        result = solid_model.build_geometry(structured([MEMBER]))
         total, shared, duplicates = conformity(
             result, [(1, tag) for tag in result.curves["member_1"]]
         )
@@ -194,8 +194,8 @@ def test_the_member_is_fragmented_into_the_soil_it_stands_in():
 
 
 def test_a_wall_and_a_member_can_stand_in_one_model():
-    with build.session():
-        result = build.build_geometry(structured([PANEL, MEMBER]))
+    with solid_model.session():
+        result = solid_model.build_geometry(structured([PANEL, MEMBER]))
         named = groups()
 
     assert result.faces["panel_1"] and result.curves["member_1"]
@@ -205,8 +205,8 @@ def test_a_wall_and_a_member_can_stand_in_one_model():
 # ── Space anchors ───────────────────────────────────────────────────────────
 
 def test_a_space_anchor_is_drawn_as_a_bare_line_with_a_free_tail():
-    with build.session():
-        result = build.build_geometry(structured([PANEL], [ANCHOR]))
+    with solid_model.session():
+        result = solid_model.build_geometry(structured([PANEL], [ANCHOR]))
         named = groups()
 
     assert result.ties["anchor_1"], "the tie must be drawn"
@@ -216,8 +216,8 @@ def test_a_space_anchor_is_drawn_as_a_bare_line_with_a_free_tail():
 
 
 def test_the_tie_runs_from_the_head_on_the_wall_to_the_tail():
-    with build.session():
-        result = build.build_geometry(structured([PANEL], [ANCHOR]))
+    with solid_model.session():
+        result = solid_model.build_geometry(structured([PANEL], [ANCHOR]))
         boxes = [gmsh.model.getBoundingBox(1, tag) for tag in result.ties["anchor_1"]]
 
     assert min(b[0] for b in boxes) == pytest.approx(12.0, abs=1e-5)
@@ -229,8 +229,8 @@ def test_the_tie_runs_from_the_head_on_the_wall_to_the_tail():
 def test_the_tie_is_not_fragmented_into_the_soil():
     """The grouted body is idealised as a fixed point, exactly as in 2D: bonding the
     tie into the mesh would model a fully grouted bar instead."""
-    with build.session():
-        result = build.build_geometry(structured([PANEL], [ANCHOR]))
+    with solid_model.session():
+        result = solid_model.build_geometry(structured([PANEL], [ANCHOR]))
         soil = {tag for key, tags in result.volumes.items()
                 if key.startswith("soil_") for tag in tags}
         touching = {v for tag in result.ties["anchor_1"]
@@ -243,8 +243,8 @@ def test_the_tie_is_not_fragmented_into_the_soil():
 def test_an_anchor_head_splits_the_member_it_hangs_from():
     """The same trick the 2D pile uses: split at the head and the shared node is free."""
     on_member = ANCHOR | {"head": [18.0, -4.0, 10.0], "tail": [22.0, -9.0, 10.0]}
-    with build.session():
-        result = build.build_geometry(structured([MEMBER], [on_member]))
+    with solid_model.session():
+        result = solid_model.build_geometry(structured([MEMBER], [on_member]))
         ends = set()
         for tag in result.curves["member_1"]:
             for point in gmsh.model.getAdjacencies(1, tag)[1]:
@@ -254,8 +254,8 @@ def test_an_anchor_head_splits_the_member_it_hangs_from():
 
 
 def test_an_inactive_space_anchor_is_not_built():
-    with build.session():
-        result = build.build_geometry(
+    with solid_model.session():
+        result = solid_model.build_geometry(
             structured([PANEL], [ANCHOR | {"active": False}])
         )
 
@@ -265,8 +265,8 @@ def test_an_inactive_space_anchor_is_not_built():
 def test_a_space_anchor_is_not_built_into_a_2d_section_and_says_so():
     payload = structured([PANEL], [ANCHOR]).model_dump() | {"dimension": 2}
     project = Project.model_validate(payload)
-    with build.session():
-        result = build.build_geometry(project)
+    with solid_model.session():
+        result = solid_model.build_geometry(project)
 
     assert result.ties.get("anchor_1", []) == []
     assert any("anchor_1" in line for line in result.log)
@@ -275,8 +275,8 @@ def test_a_space_anchor_is_not_built_into_a_2d_section_and_says_so():
 # ── The full (non-simple) model takes them too ──────────────────────────────
 
 def test_the_full_example_builds_the_3d_structures_as_well():
-    with build.session():
-        result = build.build_geometry(structured([PANEL, MEMBER], [ANCHOR], simple=False))
+    with solid_model.session():
+        result = solid_model.build_geometry(structured([PANEL, MEMBER], [ANCHOR], simple=False))
 
     assert result.faces["panel_1"] and result.curves["member_1"]
     assert result.ties["anchor_1"]
@@ -288,10 +288,10 @@ def test_the_full_example_builds_the_3d_structures_as_well():
 # structural part built so far, so it is the one that needed a new branch.
 
 def test_a_wall_is_drawn_as_a_surface_and_a_member_as_edges():
-    from core.geometry import tessellate
+    from core.geometry import tessellation
 
-    with build.session():
-        model = tessellate.tessellate(structured([PANEL, MEMBER], [ANCHOR]))
+    with solid_model.session():
+        model = tessellation.tessellate(structured([PANEL, MEMBER], [ANCHOR]))
 
     wall = next(s for s in model.sections if s.key == "panel_1")
     assert wall.indices, "a wall is a surface: there is something to triangulate"
@@ -307,10 +307,10 @@ def test_a_wall_is_drawn_as_a_surface_and_a_member_as_edges():
 
 
 def test_every_part_key_still_gets_a_section_with_3d_structures_present():
-    from core.geometry import tessellate
+    from core.geometry import tessellation
 
     project = structured([PANEL, MEMBER], [ANCHOR])
-    with build.session():
-        model = tessellate.tessellate(project)
+    with solid_model.session():
+        model = tessellation.tessellate(project)
 
     assert set(project.part_keys()) <= {s.key for s in model.sections}

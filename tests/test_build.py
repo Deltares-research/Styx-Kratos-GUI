@@ -4,7 +4,7 @@ These tests are the reason the backend exists: they assert the model is a real B
 solid with measurable volume, rather than the invented boxes of js/viewport.js.
 
 The expected soil volume is recomputed analytically here, from the project fields, by a
-formula written independently of build.py. That redundancy is the point — if a boolean
+formula written independently of solid_model.py. That redundancy is the point — if a boolean
 silently drops a solid (the plan's headline risk, and gmsh's failure mode is to succeed
 with empty results) the number moves and this test fails.
 """
@@ -13,15 +13,15 @@ import math
 
 import pytest
 
-from core.geometry import build
+from core.geometry import solid_model
 from core.model.schemas import Project
-from core.model.seed import seed_project
+from core.model.templates import seed_project
 
 
 @pytest.fixture(scope="module")
 def result():
-    with build.session():
-        yield build.build_geometry(seed_project(simple=False))
+    with solid_model.session():
+        yield solid_model.build_geometry(seed_project(simple=False))
 
 
 @pytest.fixture(scope="module")
@@ -33,7 +33,7 @@ def assert_bounds(got, exact, slack=0.2):
     """Assert a bounding box encloses `exact` without exceeding it by more than `slack`.
 
     Not equality: OCC's Bnd_Box bounds a curved face by its control hull rather than the
-    surface (see build.bounding_box), so a solid with a bored hole or an oblique
+    surface (see solid_model.bounding_box), so a solid with a bored hole or an oblique
     cylinder overstates its extent by centimetres. Containment plus a ceiling is the
     strongest claim that is actually true.
     """
@@ -72,7 +72,7 @@ def test_physical_groups_are_registered_in_gmsh_under_the_same_names(result, pro
 def _expected_soil_volume(p: Project) -> float:
     """Domain box, less every void and every solid that displaces soil.
 
-    Written from the project fields alone, deliberately not sharing code with build.py.
+    Written from the project fields alone, deliberately not sharing code with solid_model.py.
     """
     d, e, w = p.domain, p.excavation, p.wall
 
@@ -159,7 +159,7 @@ def test_wall_is_a_ring_not_a_slab(result, project):
 
     e, w, t = project.excavation, project.wall, project.wall.thickness
     assert_bounds(
-        build.bounding_box(result.volumes["wall"]),
+        solid_model.bounding_box(result.volumes["wall"]),
         (e.x0 - t, w.toe_y, e.z0 - t, e.x1 + t, w.top_y, e.z1 + t),
     )
 
@@ -178,7 +178,7 @@ def test_struts_span_the_pit_horizontally(result, project):
 
     s, e = project.struts, project.excavation
     tags = result.volumes["struts"]
-    xmin, ymin, zmin, xmax, ymax, zmax = build.bounding_box(tags)
+    xmin, ymin, zmin, xmax, ymax, zmax = solid_model.bounding_box(tags)
 
     assert zmin == pytest.approx(e.z0 - s.overhang, abs=1e-6)
     assert zmax == pytest.approx(e.z1 + s.overhang, abs=1e-6)
@@ -188,7 +188,7 @@ def test_struts_span_the_pit_horizontally(result, project):
 
 def test_piles_hang_below_the_pit_floor(result, project):
     p = project
-    xmin, ymin, zmin, xmax, ymax, zmax = build.bounding_box(result.volumes["piles"])
+    xmin, ymin, zmin, xmax, ymax, zmax = solid_model.bounding_box(result.volumes["piles"])
     assert ymax == pytest.approx(p.piles.top_y, abs=1e-6)
     assert ymin == pytest.approx(p.piles.top_y - p.piles.length, abs=1e-6)
     assert result.mass["piles"] == pytest.approx(
@@ -205,7 +205,7 @@ def test_anchors_rake_outward_and_downward_from_both_walls(result, project):
     head_z0, head_z1 = e.z0 - t + a.head_offset, e.z1 + t - a.head_offset
 
     assert_bounds(
-        build.bounding_box(result.volumes["anchors"]),
+        solid_model.bounding_box(result.volumes["anchors"]),
         (
             min(a.xs) - a.radius, a.head_y - drop, head_z0 - reach,
             max(a.xs) + a.radius, a.head_y + a.radius * math.cos(inc), head_z1 + reach,
@@ -223,7 +223,7 @@ def test_anchors_rake_outward_and_downward_from_both_walls(result, project):
 
 def test_wells_are_vertical_pipes_through_the_full_drawdown_depth(result, project):
     w = project.wells
-    xmin, ymin, zmin, xmax, ymax, zmax = build.bounding_box(result.volumes["wells"])
+    xmin, ymin, zmin, xmax, ymax, zmax = solid_model.bounding_box(result.volumes["wells"])
     assert ymin == pytest.approx(w.top_y - w.length, abs=1e-6)
     assert (xmax - xmin) == pytest.approx(
         max(x for x, _ in w.positions) - min(x for x, _ in w.positions) + 2 * w.radius, abs=1e-6
@@ -242,7 +242,7 @@ def test_load_and_water_do_not_carve_the_soil(result, project):
 
 
 def test_water_plane_sits_at_the_phreatic_level(result, project):
-    xmin, ymin, zmin, xmax, ymax, zmax = build.bounding_box(result.volumes["water"])
+    xmin, ymin, zmin, xmax, ymax, zmax = solid_model.bounding_box(result.volumes["water"])
     assert (ymin + ymax) / 2 == pytest.approx(project.water.y, abs=1e-6)
 
 
@@ -259,13 +259,13 @@ def test_bounding_box_covers_the_domain(result, project):
 
 def test_custom_parts_are_integrated_and_prioritized(project, tmp_path):
     from core.model.schemas import CustomPart
-    from core.geometry import build
+    from core.geometry import solid_model
 
     # We create a dummy .brep file representing a box cutting through the soil
     p = project.model_copy(deep=True)
 
     import gmsh
-    with build.session():
+    with solid_model.session():
         # A box spanning from x=5, y=5, z=-2 to x=10, y=10, z=-5
         gmsh.clear()
         gmsh.model.occ.addBox(5, 5, -2, 5, 5, -3)
@@ -285,8 +285,8 @@ def test_custom_parts_are_integrated_and_prioritized(project, tmp_path):
         source_file=brep_path
     ))
     
-    with build.session():
-        res = build.build_geometry(p)
+    with solid_model.session():
+        res = solid_model.build_geometry(p)
         
     assert "custom_1" in res.volumes
     # Volume is 5 * 5 * 3 = 75
@@ -303,7 +303,7 @@ def test_custom_line_and_surface_parts_are_display_only_overlays(project, tmp_pa
     p = project.model_copy(deep=True)
 
     import gmsh
-    with build.session():
+    with solid_model.session():
         gmsh.clear()
         p1 = gmsh.model.occ.addPoint(0, 0, 0)
         p2 = gmsh.model.occ.addPoint(10, 0, 0)
@@ -335,8 +335,8 @@ def test_custom_line_and_surface_parts_are_display_only_overlays(project, tmp_pa
         key="drawn_surface", label="A surface", source="gui", source_file=surface_path,
     ))
 
-    with build.session():
-        res = build.build_geometry(p)  # must not raise GeometryError
+    with solid_model.session():
+        res = solid_model.build_geometry(p)  # must not raise GeometryError
 
     assert "drawn_line" not in res.volumes
     assert "drawn_surface" not in res.volumes
@@ -347,10 +347,10 @@ def test_custom_line_and_surface_parts_are_display_only_overlays(project, tmp_pa
 def test_build_is_repeatable(project):
     """Every request rebuilds in the same long-lived worker process, so a stale model
     leaking between builds would show up as drifting volumes."""
-    with build.session():
-        first = build.build_geometry(project)
+    with solid_model.session():
+        first = solid_model.build_geometry(project)
         first_mass = dict(first.mass)
-        second = build.build_geometry(project)
+        second = solid_model.build_geometry(project)
 
         assert sorted(second.volumes) == sorted(first_mass)
         for key, mass in first_mass.items():
@@ -380,8 +380,8 @@ def test_a_load_footprint_splits_the_top_face_at_its_own_edges():
     """
     project = seed_project()
     load = project.loads[0]
-    with build.session():
-        build.build_geometry(project)
+    with solid_model.session():
+        solid_model.build_geometry(project)
         footprints = [box for box in _top_faces()
                       if box[0] == pytest.approx(load.x0) and box[3] == pytest.approx(load.x1)]
 
@@ -397,24 +397,24 @@ def test_the_imprint_splits_no_material_and_leaves_nothing_behind():
     without_load = seed_project(simple=False)
     without_load.loads = []
 
-    with build.session():
-        loaded = build.build_geometry(with_load)
-        plain = build.build_geometry(without_load)
+    with solid_model.session():
+        loaded = solid_model.build_geometry(with_load)
+        plain = solid_model.build_geometry(without_load)
 
     material = lambda volumes: {key: len(tags) for key, tags in volumes.items()
-                                if key not in build.DISPLAY_ONLY}
+                                if key not in solid_model.DISPLAY_ONLY}
 
     assert material(loaded.volumes) == material(plain.volumes)
     for key, mass in plain.mass.items():
-        if key not in build.DISPLAY_ONLY:
+        if key not in solid_model.DISPLAY_ONLY:
             assert loaded.mass[key] == pytest.approx(mass), key
 
 
 def test_a_footprint_overhanging_the_domain_leaves_no_free_floating_surface():
     """The seeded pad hangs 1 m past the simple example's 25 m domain."""
     project = seed_project()
-    with build.session():
-        build.build_geometry(project)
+    with solid_model.session():
+        solid_model.build_geometry(project)
         overhang = [box for box in _top_faces() if box[5] > project.domain.z1 + 1e-5]
 
     assert overhang == []

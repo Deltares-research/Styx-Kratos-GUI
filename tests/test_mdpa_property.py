@@ -1,4 +1,4 @@
-"""`core.kratos.mdpa_import`, against decks generated at random (plan sec 4.4, sec 9).
+"""`core.kratos.mdpa_reader`, against decks generated at random (plan sec 4.4, sec 9).
 
 Hand-written fixtures pin the cases somebody thought of. This writes random small decks
 -- any node count, triangles over those nodes, sub-model parts (some nested) over both,
@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from hypothesis import given, settings, strategies as st
 
-from core.kratos import mdpa_import
+from core.kratos import mdpa_reader
 
 ELEMENT = "UPwSmallStrainElement2D3N"
 COORD = st.floats(min_value=-1e4, max_value=1e4, allow_nan=False, allow_infinity=False)
@@ -66,7 +66,7 @@ def write(nodes, elements, parts, noise) -> str:
 def test_a_random_deck_reads_back_as_written(deck):
     nodes, elements, parts, noise = deck
 
-    model = mdpa_import.import_mdpa(write(nodes, elements, parts, noise))
+    model = mdpa_reader.import_mdpa(write(nodes, elements, parts, noise))
 
     assert model.nodes == nodes
     (entity,) = model.elements
@@ -86,5 +86,5 @@ def test_a_random_deck_reads_back_as_written(deck):
 def test_crlf_and_lf_decks_read_the_same(deck):
     text = write(*deck)
 
-    assert (mdpa_import.import_mdpa(text.replace("\n", "\r\n")).to_dict()
-            == mdpa_import.import_mdpa(text).to_dict())
+    assert (mdpa_reader.import_mdpa(text.replace("\n", "\r\n")).to_dict()
+            == mdpa_reader.import_mdpa(text).to_dict())

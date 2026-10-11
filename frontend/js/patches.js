@@ -118,7 +118,7 @@ App.LivePatches = (function () {
   ];
 
   /* The mode the app opens in, matching the document the server opens on
-     (core/model/seed.py blank_project). This is a 2D modeller first. */
+     (core/model/templates.py blank_project). This is a 2D modeller first. */
   var DEFAULT_MODEL_MODE = '2d';
 
   var modeInFlight = false;
@@ -163,7 +163,7 @@ App.LivePatches = (function () {
           : 'Switched to 3D — the full solid model.');
         // A load changes shape with the dimension: a pressure over a footprint in the
         // solid model is a pressure per metre run in the cut, and the server translates
-        // between them (core/model/loads.py). It says what it did to each one, and a
+        // between them (core/model/load_translation.py). It says what it did to each one, and a
         // record the user did not author must not appear in the tree unannounced.
         (result.notes || []).forEach(function (note) { App.Command.note(note); });
         return App.Viewport.refresh();
@@ -1653,7 +1653,7 @@ App.LivePatches = (function () {
                 [key, el('div.pgrid-val.readonly', { text: String(spec[2]) })]);
     }
     /* A deck case's phases are its stages, read from the deck that Calculate runs
-       (core/kratos/deck.py); the server refuses an edit, so none is offered. */
+       (core/kratos/external_deck.py); the server refuses an edit, so none is offered. */
     if (App.PROJECT && App.PROJECT.deck) {
       var shown = phase[spec[2]];
       if (kind === 'check') shown = shown ? 'Yes' : 'No';
@@ -3265,7 +3265,7 @@ App.LivePatches = (function () {
          The scripting interface every modeller of this kind has, and the reason the
          command line is here rather than being a log: the file says what the model is,
          the server runs it, and what comes back is adopted and meshed. Errors are the
-         server's own message verbatim -- core/script.py writes them to be read here,
+         server's own message verbatim -- core/scripting.py writes them to be read here,
          with no stack trace on screen to fall back on. */
       if (cmd === 'run' || cmd === 'load') {
         var scriptPath = (text || '').trim().slice(cmd.length).trim();

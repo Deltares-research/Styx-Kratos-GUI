@@ -2,7 +2,7 @@
 
 The project goes to the server with PUT /api/project and is calculated with POST
 /api/calculate -- the same routes, the same export, the same runner the Calculate button
-uses -- and the run is then read back through `core.results.runs`. Nothing about a benchmark
+uses -- and the run is then read back through `core.results.catalog`. Nothing about a benchmark
 takes a shortcut the user's model would not take.
 """
 
@@ -75,13 +75,13 @@ def run_case(case: Case, runs_root: Path) -> Result:
     os.environ.setdefault("KRATOS_GUI_ALLOWED_HOSTS", "testserver")
     from fastapi.testclient import TestClient
 
-    from core.run import calculate
-    from core.results import runs as results
+    from core.analysis import calculation
+    from core.results import catalog
     from backend.main import app
 
-    previous = os.environ.get(calculate.RUNS_ENV)
-    os.environ[calculate.RUNS_ENV] = str(runs_root)
-    results.forget_cache()
+    previous = os.environ.get(calculation.RUNS_ENV)
+    os.environ[calculation.RUNS_ENV] = str(runs_root)
+    catalog.forget_cache()
     started = time.monotonic()
     try:
         project = case.build()
@@ -119,10 +119,10 @@ def run_case(case: Case, runs_root: Path) -> Result:
                       seconds=time.monotonic() - started)
     finally:
         if previous is None:
-            os.environ.pop(calculate.RUNS_ENV, None)
+            os.environ.pop(calculation.RUNS_ENV, None)
         else:
-            os.environ[calculate.RUNS_ENV] = previous
-        results.forget_cache()
+            os.environ[calculation.RUNS_ENV] = previous
+        catalog.forget_cache()
 
 
 def with_needs(chosen: list[Case], by_id: dict[str, Case]) -> list[Case]:
@@ -145,9 +145,9 @@ def kratos_commit() -> str | None:
     checkout two levels above the configured build (`<checkout>/bin/Release`)."""
     import subprocess
 
-    from core.run import calculate
+    from core.analysis import calculation
 
-    build = os.environ.get(calculate.KRATOS_ENV) or calculate._settings().get("kratos")
+    build = os.environ.get(calculation.KRATOS_ENV) or calculation._settings().get("kratos")
     if not build:
         return None
     checkout = Path(build).parents[1]

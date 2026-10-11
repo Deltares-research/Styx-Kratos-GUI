@@ -21,7 +21,7 @@ from fastapi.testclient import TestClient
 from backend import launcher
 from backend.main import app
 from backend.routes import common
-from core.run import calculate
+from core.analysis import calculation
 
 
 @pytest.fixture
@@ -110,7 +110,7 @@ def test_archive_entries_are_plain_names_only(client, tmp_path, monkeypatch):
     (run / "sub").mkdir(parents=True)
     (run / "Deck.mdpa").write_text("Begin Properties 0\nEnd Properties\n", encoding="utf-8")
     (run / "sub" / "hidden.txt").write_text("nested", encoding="utf-8")
-    monkeypatch.setenv(calculate.RUNS_ENV, str(root))
+    monkeypatch.setenv(calculation.RUNS_ENV, str(root))
 
     response = client.get("/api/results/runs/Deck_2026-01-01_00-00/archive")
 
