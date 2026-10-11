@@ -17,7 +17,7 @@ import pytest
 from backend.launcher import ALLOWED_HOSTS_ENV
 
 # Starlette's TestClient sends `Host: testserver`. The server refuses any host that is not
-# loopback (backend/main.py `only_this_browser_tab`), and `testserver` is allowed for the test
+# loopback (backend/middleware.py `only_this_browser_tab`), and `testserver` is allowed for the test
 # session only, through the same variable a deliberate LAN setup would use.
 os.environ.setdefault(ALLOWED_HOSTS_ENV, "testserver")
 

@@ -16,7 +16,9 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-MAIN = Path(__file__).resolve().parents[1] / "backend" / "main.py"
+BACKEND = Path(__file__).resolve().parents[1] / "backend"
+SOURCES = [BACKEND / "main.py", *sorted((BACKEND / "routes").glob("*.py"))]
+"""Where routes are declared: the app's own two in `main.py`, the rest in a router each."""
 
 CHEAP = {
     "health", "get_project", "put_project", "reset_project", "new_project",
@@ -27,20 +29,22 @@ CHEAP = {
 """Validation and a store write. `patch_dimension` translates loads and walls, which is
 proportional to how many there are -- tens, not the mesh."""
 
-OFFLOADS = ("to_thread", "run")
-"""`asyncio.to_thread(...)` and `gmsh_worker.run(...)`."""
+OFFLOADS = ("to_thread", "run", "run_mesh_job")
+"""`asyncio.to_thread(...)`, `gmsh_worker.run(...)`, and `run_mesh_job(...)`
+(`backend/routes/common.py`), which is `gmsh_worker.run` for a mesh job."""
 
 
 def _routes() -> list[ast.AsyncFunctionDef | ast.FunctionDef]:
-    tree = ast.parse(MAIN.read_text(encoding="utf-8"))
+    nodes = [node for source in SOURCES
+             for node in ast.parse(source.read_text(encoding="utf-8")).body]
     out = []
-    for node in tree.body:
+    for node in nodes:
         if not isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef)):
             continue
         for decorator in node.decorator_list:
             if (isinstance(decorator, ast.Call) and isinstance(decorator.func, ast.Attribute)
                     and isinstance(decorator.func.value, ast.Name)
-                    and decorator.func.value.id == "app"
+                    and decorator.func.value.id in {"app", "router"}
                     and decorator.func.attr in {"get", "post", "put", "patch", "delete"}):
                 out.append(node)
     return out
@@ -50,7 +54,9 @@ def _offloads(function: ast.AsyncFunctionDef) -> bool:
     for node in ast.walk(function):
         if isinstance(node, ast.Await) and isinstance(node.value, ast.Call):
             called = node.value.func
-            if isinstance(called, ast.Attribute) and called.attr in OFFLOADS:
+            name = (called.attr if isinstance(called, ast.Attribute)
+                    else called.id if isinstance(called, ast.Name) else None)
+            if name in OFFLOADS:
                 return True
     return False
 

@@ -11,6 +11,7 @@ import argparse
 import hashlib
 import os
 from pathlib import Path
+import socket
 import subprocess
 import sys
 import threading
@@ -93,8 +94,8 @@ def check_environment(python: Path) -> None:
 
 ALLOWED_HOSTS_ENV = "KRATOS_GUI_ALLOWED_HOSTS"
 """Host names the server answers to besides the loopback ones, comma-separated. Read by
-`backend.main`'s Host check; defined here because the launcher runs before the server's
-dependencies are installed, so it cannot import `backend.main`."""
+`backend.middleware`'s Host check; defined here because the launcher runs before the
+server's dependencies are installed, so it cannot import the backend."""
 
 LOOPBACK = ("127.0.0.1", "localhost", "::1", "[::1]")
 ALL_INTERFACES = ("0.0.0.0", "::", "[::]")
@@ -113,6 +114,21 @@ def server_environment(args: argparse.Namespace, base: dict[str, str]) -> dict[s
     return {ALLOWED_HOSTS_ENV: ",".join(extra)}
 
 
+def port_in_use(host: str, port: int) -> bool:
+    """Whether something already answers on `port` -- most likely a server left running.
+
+    Probed by connecting, not by binding: on Windows a test bind can succeed on a port
+    another process is listening on. An all-interfaces address is reached on loopback.
+    """
+    if host in ALL_INTERFACES:
+        host = "::1" if ":" in host else "127.0.0.1"
+    try:
+        with socket.create_connection((host.strip("[]"), port), timeout=0.5):
+            return True
+    except OSError:
+        return False
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Set up and run the kratos-GUI backend")
     parser.add_argument("--check", action="store_true", help="install and validate dependencies, then exit")
@@ -129,6 +145,15 @@ def main(argv: list[str] | None = None) -> int:
         if args.check:
             check_environment(python)
             return 0
+
+        # A new server could not bind the port and would exit, while the browser opened
+        # on the old one -- with the project, and the code, it had when it was started.
+        if port_in_use(args.host, args.port):
+            print(f"Port {args.port} is already in use, most likely by a server that is "
+                  "still running from before. Close that window (or end its python.exe), "
+                  f"or start this one on another port (--port {args.port + 1}).",
+                  file=sys.stderr)
+            return 1
 
         command = [
             str(python), "-m", "uvicorn", "backend.main:app",

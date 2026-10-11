@@ -18,9 +18,10 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from backend import main
-from core import calculate
+from backend import launcher
 from backend.main import app
+from backend.routes import common
+from core import calculate
 
 
 @pytest.fixture
@@ -67,7 +68,7 @@ def test_the_app_own_origin_is_served(client, origin):
 def test_more_hosts_can_be_allowed_deliberately(client, monkeypatch):
     """Serving on a LAN is a choice someone makes on purpose (`--host`), so it is an
     environment variable away -- never the default."""
-    monkeypatch.setenv(main.ALLOWED_HOSTS_ENV, "modelling-pc, 10.0.0.5")
+    monkeypatch.setenv(launcher.ALLOWED_HOSTS_ENV, "modelling-pc, 10.0.0.5")
 
     assert client.get("/api/health", headers={"Host": "modelling-pc:8000"}).status_code == 200
     assert client.get("/api/health", headers={"Host": "10.0.0.5"}).status_code == 200
@@ -84,7 +85,8 @@ def _temp_files(suffix: str) -> set[str]:
                                         ("/api/import/mdpa", "big.mdpa")])
 def test_an_upload_over_the_limit_is_refused_and_leaves_nothing_behind(
         client, monkeypatch, route, name):
-    monkeypatch.setattr(main, "MAX_UPLOAD_BYTES", 16)
+    # `read_upload` reads the limit from the module it lives in.
+    monkeypatch.setattr(common, "MAX_UPLOAD_BYTES", 16)
     before = _temp_files(Path(name).suffix)
 
     response = client.post(route, files={"file": (name, io.BytesIO(b"x" * 17))})
@@ -97,7 +99,7 @@ def test_an_upload_over_the_limit_is_refused_and_leaves_nothing_behind(
 def test_the_upload_limit_is_generous_by_default():
     """A real deck is megabytes (a dike section's mesh: ~3 MB); the limit is for
     runaway files."""
-    assert main.MAX_UPLOAD_BYTES >= 100 * 2**20
+    assert common.MAX_UPLOAD_BYTES >= 100 * 2**20
 
 
 # ── S5: the archive ──────────────────────────────────────────────────────────
@@ -121,19 +123,15 @@ def test_archive_entries_are_plain_names_only(client, tmp_path, monkeypatch):
 # ── S6: where it listens ─────────────────────────────────────────────────────
 
 def test_the_launcher_listens_on_loopback_by_default():
-    from backend import launcher
-
     assert launcher.parse_args([]).host == "127.0.0.1"
 
 
 def test_the_launcher_allows_the_host_it_was_told_to_listen_on(monkeypatch):
     """`--host modelling-pc` has to be reachable as modelling-pc, or the Host check
     would refuse the very address the user chose."""
-    from backend import launcher
-
     environment = launcher.server_environment(launcher.parse_args(["--host", "0.0.0.0"]),
                                               {})
     assert environment == {}
     environment = launcher.server_environment(
         launcher.parse_args(["--host", "modelling-pc"]), {})
-    assert environment[main.ALLOWED_HOSTS_ENV] == "modelling-pc"
+    assert environment[launcher.ALLOWED_HOSTS_ENV] == "modelling-pc"
