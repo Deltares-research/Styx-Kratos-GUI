@@ -20,9 +20,10 @@ from pathlib import Path
 
 import pytest
 
-from core import build, kratos
-from core.schemas import MeshRequest
-from core.seed import seed_project
+from core.geometry import build
+from core.kratos import export as kratos
+from core.model.schemas import MeshRequest
+from core.model.seed import seed_project
 from tests import mdpa
 from tests.models import excavation
 

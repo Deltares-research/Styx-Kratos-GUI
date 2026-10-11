@@ -27,7 +27,7 @@ is where they replace `SOLVER`.
 `stage_settings.processes.constraints_process_list` and `.loads_process_list` are
 filled in, because both are fully determined by the project already exported to the
 .mdpa: the domain boundaries and their sub-model parts, and each load's own components
-(see `core.kratos._load_variable`).
+(see `core.kratos.export._load_variable`).
 
 Confidence note: constraints and loads both use GeoMechanicsApplication's
 apply_vector_constraint_table_process / ApplyVectorConstraintTableProcess -- the same
@@ -41,7 +41,7 @@ that same deck.
 `master_slave` adds one `AssignMasterSlaveConstraintsToNeighboursUtility` process per
 staged interface to `1_Initial_stage` only. Deactivating a sheet pile's interface (via
 `staged_parts`) removes its own contact stiffness but does nothing to reconnect the two
-soil copies `core.interfaces` split apart for it, so without this the initial stage --
+soil copies `core.kratos.interfaces` split apart for it, so without this the initial stage --
 meant to be undisturbed ground -- models two mechanically disconnected halves. Not
 inferred from a reference GeoMechanics deck (none at hand carries a sheet pile that
 is *not yet* installed); read instead off Deltares/FEA-Tools'
@@ -50,7 +50,7 @@ for the same Kratos process, and off the process's own Kratos source
 (`assign_master_slave_constraints_to_neighbours_process.py`) for what its parameters do.
 See `_master_slave_constraint` for the one deliberate difference from that reference.
 
-`normal_loads` adds one `ApplyNormalLoadTableProcess` per `NormalLoad` (core/schemas.py)
+`normal_loads` adds one `ApplyNormalLoadTableProcess` per `NormalLoad` (core/model/schemas.py)
 to `loads_process_list`, in every stage the same way an ordinary load is -- nothing
 about a normal load ties it to wall installation. The `"Hydrostatic"` shape (a staged
 excavation's `WaterLoad_StageN` arrangement) is copied verbatim from a real working
@@ -68,7 +68,8 @@ import json
 import re
 from dataclasses import dataclass
 
-from core import units
+from core.kratos.files import MATERIALS_NAME
+from core.model import units
 
 ORCHESTRATOR = "Orchestrators.KratosMultiphysics.SequentialOrchestrator"
 ANALYSIS_STAGE = "Stages.KratosMultiphysics.GeoMechanicsApplication.GeoMechanicsAnalysis"
@@ -79,12 +80,6 @@ WALL_INSTALLATION_STAGE_NAME = "2_Wall_installation"
 # The part GeoMechanics' solver assembles for itself out of the lists below; named here
 # because two things address it rather than a body: the tie process and the GiD output.
 COMPUTATIONAL_MODEL_PART = "porous_computational_model_part"
-MATERIALS_FILENAME = "MaterialParameters.json"
-INITIAL_MATERIALS_FILENAME = "initial_materials.json"
-"""What `1_Initial_stage` reads instead: the same file plus the two K0
-variables `apply_k0_procedure_process` needs, which only that stage runs.
-The reference deck pairs its own two files exactly this way (plan sec C4)."""
-
 TIME_STEP = 1.0
 """Seconds, and the length of a stage: one step per stage. A static analysis has no
 real clock -- time here only orders the stages -- so one step is one stage, and stage
@@ -134,7 +129,7 @@ Everything a project genuinely decides -- dimension, sub-model parts, rotations 
 is filled in around this by `_solver_settings` rather than being listed here."""
 
 # Metres, and a *step*, not a tolerance. The master and slave nodes of a tie are copies
-# of the same source node -- `core.kratos` gives each duplicate its original's exact
+# of the same source node -- `core.kratos.export` gives each duplicate its original's exact
 # coordinates -- so this was 1e-6: enough to clear floating-point noise from the .mdpa's
 # 10-decimal node table and nothing more, on the reasoning that a wider radius could only
 # net a neighbour belonging to someone else.
@@ -150,7 +145,7 @@ MASTER_SLAVE_SEARCH_RADIUS = 0.01
 MASTER_SLAVE_NEIGHBOURS = 2
 """How many master nodes the tie interpolates a slave from.
 
-One is what the pairing needs: `core.kratos._split_ties` knows exactly which copy belongs
+One is what the pairing needs: `core.kratos.export._split_ties` knows exactly which copy belongs
 to which original, so every slave has one true master at zero distance and a second can
 only be an unrelated node. This asked for 1 on that reasoning, and the reasoning was
 wrong -- not about the geometry, which still holds, but about what Kratos does with it.
@@ -164,7 +159,7 @@ anything, so it gets two."""
 
 GRAVITY = units.GRAVITY_SI
 """m/s2 -- and the same number in every unit system the project can be in, since all of
-them measure length in metres and time in seconds (`core/units.py`). The loads, pressures
+them measure length in metres and time in seconds (`core/model/units.py`). The loads, pressures
 and specific weights below are the project's own numbers, written as they stand."""
 
 JSON_OUTPUT_FREQUENCY = 0.9999999999
@@ -178,7 +173,7 @@ class Stage:
     This module renders; it does not derive. Which parts are active in a stage, which
     processes a stage wants and what it solves with are all questions about the
     *project* -- they need the phase tree and the mapping from model keys to deck part
-    names, and both live in `core.kratos`. So a `Stage` arrives with the answers.
+    names, and both live in `core.kratos.export`. So a `Stage` arrives with the answers.
 
     `active` is the deck part names live during this stage, and it drives the process
     filter: a process is emitted only where every part it names is active (plan sec
@@ -206,7 +201,7 @@ class Stage:
     reset_displacements: bool = False
     max_iterations: int | None = None
     tolerated_error: float | None = None
-    materials_filename: str = MATERIALS_FILENAME
+    materials_filename: str = MATERIALS_NAME
 
 
 def stage_name(index: int, phase_name: str) -> str:
@@ -235,7 +230,7 @@ def project_parameters(
 ) -> str:
     """`constraints` is (sub-model part name, DISPLACEMENT is_fixed per axis).
     `loads` is (sub-model part name, Kratos variable, active per axis, value).
-    `stages` is the deck's stages in execution order -- see `Stage`, and `core.kratos`
+    `stages` is the deck's stages in execution order -- see `Stage`, and `core.kratos.export`
     for where they come from. There is always at least one.
     `normal_loads` is (sub-model part name, fluid_pressure_type, pressure, water level,
     water specific weight) -- one per active `NormalLoad`; the last three are read only
@@ -339,7 +334,7 @@ def _preprocess(stage: Stage, deck_name: str) -> dict | None:
 def _auxiliary(stage: Stage) -> list[dict]:
     """`auxiliary_process_list`: the stage's own bookkeeping, in the reference's order.
 
-    Every one of these is switched on by `core.kratos` for the stages it belongs in and
+    Every one of these is switched on by `core.kratos.export` for the stages it belongs in and
     absent otherwise -- see `Stage`. The order matches
     `staged_construction_for_generated_mesh.json`: K0 or the stress carry-over first,
     then the interface neighbour search, then the extrapolations that read what they
@@ -419,7 +414,7 @@ def _process_parts(processes: list[dict],
 
 # -- the staged auxiliary processes ------------------------------------------
 # All four are read field for field off `staged_construction_for_generated_mesh.json`,
-# Kratos' own staged-excavation reference deck. Which stages each belongs in is `core.kratos`'s decision and
+# Kratos' own staged-excavation reference deck. Which stages each belongs in is `core.kratos.export`'s decision and
 # is documented there; what the parameters mean is here.
 
 def _k0_procedure(parts: tuple[str, ...]) -> dict:
@@ -427,7 +422,7 @@ def _k0_procedure(parts: tuple[str, ...]) -> dict:
 
     Runs in the K0 phase only, over the soil bodies active in it -- it reads `K0_NC`
     and `K0_MAIN_DIRECTION` off each body's material, which is why the initial stage
-    reads a materials file of its own (`core.kratos_materials`, plan sec C4).
+    reads a materials file of its own (`core.kratos.materials`, plan sec C4).
     """
     return {
         "python_module": "apply_k0_procedure_process",
@@ -553,7 +548,7 @@ def _solver_settings(deck_name: str, domain_size: int, body_parts: list[str],
         "rotation_dofs": rotation_dofs,
         "model_import_settings": ({"input_type": "use_input_model_part"} if imported else
                                   {"input_type": "mdpa", "input_filename": deck_name}),
-        "material_import_settings": {"materials_filename": MATERIALS_FILENAME},
+        "material_import_settings": {"materials_filename": MATERIALS_NAME},
         "problem_domain_sub_model_part_list": list(body_parts),
         "processes_sub_model_part_list": list(process_parts),
         "body_domain_sub_model_part_list": list(body_parts),
@@ -708,7 +703,7 @@ def _master_slave_constraint(master_part_name: str, slave_part_name: str) -> dic
 
 def _normal_load(part_name: str, fluid_pressure_type: str, pressure: float,
                  water_y: float, specific_weight: float) -> dict:
-    """Apply a pressure normal to a `NormalLoad`'s line (core/schemas.py).
+    """Apply a pressure normal to a `NormalLoad`'s line (core/model/schemas.py).
 
     `"Hydrostatic"` is copied field for field from a real working example (see the
     module docstring): the pressure grows with depth below `water_y`, along axis 1 (Y,

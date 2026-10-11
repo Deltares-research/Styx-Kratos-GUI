@@ -2,7 +2,7 @@
 in frontend/base/js/data.js.
 """
 
-from core.seed import seed_project
+from core.model.seed import seed_project
 from tests import frozen
 
 
@@ -29,7 +29,7 @@ def test_materials_match_frozen_data_js():
     k0 procedure (plan/outdated/staged-construction-plan.md sec C4), which postdates the mockup
     entirely. Every field the mockup *does* define is still pinned.
     """
-    from core import legacy, seed
+    from core.model import legacy, seed
     expected = frozen.materials()
     assert expected, "frozen MATERIALS parsed as empty -- the guard would pass vacuously"
     demo = [{k: v for k, v in m.items() if k in expected[0]} for m in seed._DEMO_MATERIALS]

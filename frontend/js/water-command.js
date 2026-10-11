@@ -5,7 +5,7 @@
        water <level>      set it (metres, inside the model), e.g. `water -1.5`
        water off          remove it (also `none`, `remove`)
 
-   A model is not born with a water level (core/seed.py `blank_project`): it has
+   A model is not born with a water level (core/model/seed.py `blank_project`): it has
    one when its author sets one, and this is where that is done. Once set, the level and
    its specific weight are also editable in the Selection explorer, as before.
 

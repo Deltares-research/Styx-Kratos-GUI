@@ -16,9 +16,10 @@ midpoints, and their mean is the same point as the corners'.
 
 import pytest
 
-from core import build, kratos, mdpa_import
-from core.schemas import MeshRequest, Project
-from core.seed import seed_project
+from core.geometry import build
+from core.kratos import export as kratos, mdpa_import
+from core.model.schemas import MeshRequest, Project
+from core.model.seed import seed_project
 from tests import mdpa
 
 

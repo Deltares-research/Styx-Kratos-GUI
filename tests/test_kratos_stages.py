@@ -12,11 +12,11 @@ import json
 
 import pytest
 
-from core import phases, schemas
+from core.model import phases, schemas
 from tests.models import excavation
-from core.build import session
-from core.schemas import MeshRequest
-from core import kratos
+from core.geometry.build import session
+from core.model.schemas import MeshRequest
+from core.kratos import export as kratos
 
 
 @pytest.fixture(scope="module")
@@ -76,7 +76,7 @@ def test_a_phased_project_exports_one_stage_per_phase(staged_doc):
 def test_a_stage_is_numbered_and_its_phase_name_sanitised():
     """`1_Initial_stage`, the reference's own shape: the position in the sequence, then
     the phase's name with anything that cannot sit in a filename replaced."""
-    from core.kratos_processes import stage_name
+    from core.kratos.processes import stage_name
     assert stage_name(0, "Initial stage") == "1_Initial_stage"
     assert stage_name(6, "Third excavation") == "7_Third_excavation"
     assert stage_name(2, "Dig / prop  (2)") == "3_Dig_prop_2"
@@ -114,7 +114,7 @@ def test_a_stage_that_changes_nothing_writes_no_operations(staged_doc):
 
 def test_deactivating_a_soil_body_takes_its_interface_with_it(staged_doc):
     """One drawn `Interface` is eight deck parts, one per soil body it runs against
-    (`core/kratos.py:_interface_by_body`). The phase model knows only the one key, so
+    (`core/kratos/export.py:_interface_by_body`). The phase model knows only the one key, so
     export is what pairs the interface with the body: digging out a lift must remove the
     contact against it, or the deck holds a contact element against nothing."""
     off = operation(staged_doc, "4_First_excavation", "Deactivate")
@@ -243,8 +243,9 @@ def test_a_project_with_one_phase_imports_its_mesh_once():
     project (a K0 column) imported every element twice and Kratos stopped at element 1."""
     import json as _json
 
-    from core import build, kratos as _kratos
-    from core.schemas import MeshRequest
+    from core.geometry import build
+    from core.kratos import export as _kratos
+    from core.model.schemas import MeshRequest
     from benchmarks import models
 
     project = models.project()

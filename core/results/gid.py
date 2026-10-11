@@ -1,11 +1,11 @@
 """GiD's ASCII post files, read back.
 
-A Kratos deck written by `core.kratos_processes` carries one `GiDOutputProcess` per
+A Kratos deck written by `core.kratos.processes` carries one `GiDOutputProcess` per
 stage, which leaves two files beside the deck: `<problem>.post.msh`, the mesh as that
 stage saw it, and `<problem>.post.res`, the results on it. This module turns both into
 tables and stops there. It has no opinion about what a number means -- which quantities
 a user may ask for, in what unit, with which sign -- because that is a question about
-geotechnics rather than about a file format, and it lives in `core.result_fields`.
+geotechnics rather than about a file format, and it lives in `core.results.fields`.
 
 Reading these rather than adding a VTK writer is a decision, not an accident: the
 deck's output block is part of what is compared against a validated reference stage
@@ -74,7 +74,7 @@ class Block:
 
     `name` is GiD's own (`Kratos_Triangle2D6_Mesh_2`) and says nothing about which part
     of the project it is. That join is made through the `.mdpa` in the same directory --
-    see `core.result_fields.parts_of`.
+    see `core.results.fields.parts_of`.
     """
     name: str
     element_type: str
@@ -195,7 +195,7 @@ class Field:
     Gauss entry is a list of those, one per integration point. Nothing collapses the
     second into the first here, because averaging a tensor and then deriving q from it
     is not the same number as deriving q at each point and averaging that -- and the
-    second is the right one. `core.result_fields` does it in that order.
+    second is the right one. `core.results.fields` does it in that order.
     """
     variable: str
     kind: str          # "scalar" | "vector" | "matrix"

@@ -3,7 +3,7 @@
 
    `/api/mesh/node-parts` sends the deck's node table and, per SubModelPart, the nodes
    it names -- read back off the `.mdpa` the export writes, so the names and numbers are
-   exactly Kratos' (core/node_parts.py). This module turns that into answers:
+   exactly Kratos' (core/kratos/node_parts.py). This module turns that into answers:
 
        partsOf       the parts one node is in
        samePosition  the nodes at its position -- an interface split leaves two or

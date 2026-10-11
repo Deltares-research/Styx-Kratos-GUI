@@ -1,6 +1,6 @@
 import pytest
 import os
-from core import creator
+from core.geometry import creator
 
 def test_creator_creates_box(tmp_path, monkeypatch):
     monkeypatch.setattr(creator, "DATA_DIR", tmp_path)

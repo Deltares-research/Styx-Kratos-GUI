@@ -9,9 +9,9 @@ per-layer size would be silently ignored and every element would come out the sa
 
 import pytest
 
-from core import build, meshing
-from core.schemas import BoxRefinement, Project
-from core.seed import seed_project
+from core.geometry import build, meshing
+from core.model.schemas import BoxRefinement, Project
+from core.model.seed import seed_project
 
 
 def section_project(simple: bool = True, **extra) -> Project:
@@ -254,9 +254,9 @@ def excavation_like():
 
 def excavation_deck(**sizes):
     """The test model exported with the given per-part sizes, parsed back."""
-    from core import kratos
+    from core.kratos import export as kratos
     from tests.models import excavation
-    from core.schemas import MeshRequest
+    from core.model.schemas import MeshRequest
     from tests import mdpa
     project = excavation.excavation_project(staged=False)
     base = {f"soil_{layer.id}": 2.0 for layer in project.layers}
@@ -332,7 +332,7 @@ def edge_lengths_by_band(project, **kw):
 
 
 def a_box(**kw):
-    from core.schemas import BoxRefinement
+    from core.model.schemas import BoxRefinement
     return BoxRefinement(kind="box", size=0.75, x_min=-1.0, x_max=8.0,
                          y_min=-16.0, y_max=1.0, z_min=-1e6, z_max=1e6, **kw)
 

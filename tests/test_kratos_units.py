@@ -1,13 +1,13 @@
 """Units: the deck carries the project's own numbers, in the project's own system.
 
 Kratos has no units; it needs one consistent set, gravity in it. The project names the
-set (`Project.unit_system`, `core/units.py`) and holds what Kratos reads -- property sets
+set (`Project.unit_system`, `core/model/units.py`) and holds what Kratos reads -- property sets
 under Kratos' names -- so the deck is the project's numbers, written as they stand.
 
 Until 2026-10-10 the project was in kN, kN/m2 and m/day and the exporter converted
 everything on the way out, which went wrong once in the most expensive way: `DENSITY_SOLID`
 converted and nothing else, so one materials file carried two unit systems. There is now
-nothing to convert, and an old project is converted once, on load (`core/legacy.py`).
+nothing to convert, and an old project is converted once, on load (`core/model/legacy.py`).
 
 The test model (`tests/models/excavation.py`) types its numbers in SI, so the values
 below are the ones it types -- and the test is that the deck carries them unchanged.
@@ -17,10 +17,11 @@ import json
 
 import pytest
 
-from core import kratos, kratos_materials, schemas
-from core.build import session
-from core.schemas import MeshRequest, Project
-from core.seed import seed_project
+from core.model import schemas
+from core.kratos import export as kratos, materials as kratos_materials
+from core.geometry.build import session
+from core.model.schemas import MeshRequest, Project
+from core.model.seed import seed_project
 from tests.models import excavation
 
 
@@ -192,7 +193,7 @@ def test_nothing_between_the_project_and_the_deck_converts_a_unit():
     constants of nature the exporter supplies for a soil that says nothing (water's
     bulk modulus, its viscosity), expressed in the project's system."""
     import inspect
-    from core import kratos_processes
+    from core.kratos import processes as kratos_processes
     for module in (kratos_materials, kratos_processes, kratos):
         assert "KILO" not in inspect.getsource(module), module.__name__
 

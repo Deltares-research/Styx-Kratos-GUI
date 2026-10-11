@@ -1,7 +1,7 @@
 /* ══════════════════════════════════════════════════════════════════
    test-units.js — the project's unit system, in the browser.
 
-   Kratos has no units: the project names a consistent set (core/units.py) and
+   Kratos has no units: the project names a consistent set (core/model/units.py) and
    every value it holds -- property-set variables, loads, pressures -- is in that set.
    The browser needs to label each number for what it is, convert the library's presets
    into the project's system, and turn `units <system>` into the request that converts

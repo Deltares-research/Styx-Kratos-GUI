@@ -6,7 +6,7 @@ excavation lift or the sheet pile. The names live in the `.mdpa` in the same run
 directory, and the join between the two is exact rather than approximate: both files
 carry Kratos' own element ids, so this module is a lookup and never a guess.
 
-Parsing the `.mdpa` is `core.mdpa_import`'s job, not repeated here. (That parser could
+Parsing the `.mdpa` is `core.kratos.mdpa_import`'s job, not repeated here. (That parser could
 not read a deck this project had written until P1 -- see
 `tests/test_mdpa_import.test_blank_lines_inside_a_block_are_skipped` and
 `tests/test_calculate.test_the_deck_lands_on_disk_as_the_bytes_it_was_rendered_as` for
@@ -35,8 +35,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field as dataclass_field
 
-from core.gid_results import GidMesh
-from core.mdpa_import import MdpaModel
+from core.results.gid import GidMesh
+from core.kratos.mdpa_import import MdpaModel
 
 
 @dataclass

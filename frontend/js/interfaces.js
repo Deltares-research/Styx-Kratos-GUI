@@ -5,7 +5,7 @@
    thin band where the two slide past one another and can pull apart, instead of
    being welded together the way a bare sheet pile is. Kratos writes it as a
    zero-thickness element -- two coincident faces with separate nodes -- and the
-   server does the node splitting after meshing (core/interfaces.py).
+   server does the node splitting after meshing (core/kratos/interfaces.py).
 
    Two ways to place one, and a record carries exactly one of them:
 
@@ -21,7 +21,7 @@
 
    Plane strain only. Every reference deck is a section, and a 3D
    interface is a different element with a different node layout and no fixture
-   to pin it -- see the INTERFACES table in core/kratos.py.
+   to pin it -- see the INTERFACES table in core/kratos/export.py.
    ══════════════════════════════════════════════════════════════════ */
 
 var App = window.App || {};
@@ -191,7 +191,7 @@ App.Interfaces = (function () {
     if (problem) return problem;
     // No material and no stiffnesses is the ordinary case, not an error: the contact
     // then derives from whatever soil each stretch runs against. The server dropped
-    // the old refusal for that reason (core/schemas.py, InterfaceSection), and
+    // the old refusal for that reason (core/model/schemas.py, InterfaceSection), and
     // the one case with nothing to derive from -- no soil either side -- is caught at
     // export, where the adjacent bodies are known.
     return null;

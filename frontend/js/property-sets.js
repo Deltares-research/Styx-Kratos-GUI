@@ -3,7 +3,7 @@
 
    Every soil, sheet-pile profile, wall, tendon and contact in a project is a Kratos
    property set: a constitutive law and a `Variables` block under Kratos' own names, in
-   the project's unit system (core/schemas.py `KratosPropertySet`). The deck
+   the project's unit system (core/model/schemas.py `KratosPropertySet`). The deck
    carries it verbatim; the server fills in only what is missing and derivable, and says
    which. So the editors show Kratos' names and Kratos' numbers, labelled with the
    project's units -- nothing is converted between what is typed and what Kratos reads.

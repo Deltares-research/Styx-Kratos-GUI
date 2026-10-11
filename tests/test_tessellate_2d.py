@@ -14,9 +14,9 @@ tag -> index remap (garbage) in a single number.
 
 import pytest
 
-from core import build, tessellate
-from core.schemas import Project
-from core.seed import seed_project
+from core.geometry import build, tessellate
+from core.model.schemas import Project
+from core.model.seed import seed_project
 
 
 def section_project(simple: bool) -> Project:
@@ -162,7 +162,7 @@ def test_a_normal_load_draws_no_geometry_of_its_own():
 def test_a_normal_load_still_draws_nothing_in_the_project_the_server_opens_on():
     """The blank project takes a different build path (`_build_layered_soil`), which
     once drew the strip separately; it must not grow one back."""
-    from core.seed import blank_project
+    from core.model.seed import blank_project
 
     payload = blank_project().model_dump()
     payload.update(dimension=2, section_offset=0.5)

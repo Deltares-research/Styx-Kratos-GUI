@@ -14,9 +14,9 @@ is to succeed with empty results.
 import gmsh
 import pytest
 
-from core import build
-from core.schemas import Project
-from core.seed import seed_project
+from core.geometry import build
+from core.model.schemas import Project
+from core.model.seed import seed_project
 
 
 def section_project(simple: bool, z: float | None = None) -> Project:

@@ -21,8 +21,11 @@ from pathlib import Path
 
 import pytest
 
-from core import build, calculate, kratos, results
-from core.schemas import MeshRequest
+from core.geometry import build
+from core.kratos import export as kratos
+from core.run import calculate
+from core.results import runs as results
+from core.model.schemas import MeshRequest
 from tests import results_run
 from tests.models import excavation
 

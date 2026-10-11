@@ -8,8 +8,8 @@ two disagree (see test_parity.py).
 import pytest
 from pydantic import ValidationError
 
-from core import schemas
-from core.seed import seed_project
+from core.model import schemas
+from core.model.seed import seed_project
 
 
 # ── Domain ──────────────────────────────────────────────────────────────────
@@ -84,7 +84,7 @@ def test_a_material_without_strength_simply_leaves_it_out():
 
 def test_a_material_built_from_the_old_fields_is_converted():
     """A script written against the old fields still works: the record is read as an
-    old file's would be (`core/legacy.py`), in SI."""
+    old file's would be (`core/model/legacy.py`), in SI."""
     m = schemas.Material(id="m2", name="Sand, loose", model="Hardening Soil",
                          type="Drained", color="#c4a86a", g_unsat=18.0, g_sat=20.5,
                          E=25000, nu=0.28, c=0.5, phi=32.0, k=1.5)
@@ -105,14 +105,14 @@ def _sand(**variables) -> schemas.Material:
 def test_k0_defaults_to_jaky_from_the_friction_angle():
     """1 - sin(phi): the normally consolidated K0 a soil's own friction angle gives
     (0.62 at 22.3 deg, 0.46 at 32.7 deg)."""
-    from core.kratos_materials import jaky
+    from core.kratos.materials import jaky
     assert jaky(_sand(GEO_FRICTION_ANGLE=30.0)) == pytest.approx(0.5)
     assert jaky(_sand(GEO_FRICTION_ANGLE=22.3)) == pytest.approx(0.62, abs=5e-3)
 
 
 def test_a_material_with_no_friction_angle_has_no_k0():
     """Non-porous rock carries neither, and nothing should be invented for it."""
-    from core.kratos_materials import jaky
+    from core.kratos.materials import jaky
     rock = schemas.Material(**{**SAND, "variables": {"YOUNG_MODULUS": 2e9}})
     assert jaky(rock) is None
 
@@ -1345,7 +1345,7 @@ def test_soil_body_keys_survive_a_round_trip():
 def test_a_project_with_no_ground_in_it_has_no_soil_bodies():
     """`part_keys` reads these, and runs during validation on the empty site the server
     opens on. Asking a project with no layers what bodies it has is not an error."""
-    from core.seed import blank_project
+    from core.model.seed import blank_project
     blank = blank_project()
     assert blank.soil_bodies() == []
     assert blank.soil_body_keys == []

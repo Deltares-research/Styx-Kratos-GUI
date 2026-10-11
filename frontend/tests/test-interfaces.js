@@ -5,7 +5,7 @@
    bare sheet pile is. It follows either a pile -- the arrangement
    Kratos' reference decks contain -- or its own line through the soil, and `side` says
    which of the two soils is unglued from it. Plane strain only; see the INTERFACES
-   table in core/kratos.py. */
+   table in core/kratos/export.py. */
 
 (function () {
   function pile(extra) {
@@ -28,7 +28,7 @@
     return Object.assign(section(), { dimension: 3 }, extra || {});
   }
 
-  // A Kratos property set like every other (core/schemas.py InterfaceSection):
+  // A Kratos property set like every other (core/model/schemas.py InterfaceSection):
   // no stiffness of its own, so the soil each stretch runs against supplies it.
   var CONTACT = { id: 'interfacesection_1', name: 'Interface', material: 'mat_sand',
                   r_inter: 0.7, virtual_thickness: 0.01, permeability: 'Neutral',
@@ -137,7 +137,7 @@
   });
 
   test('a contact with no Rinter of its own takes each soil’s', function () {
-    /* core/schemas.py InterfaceSection.r_inter: None is the default rule -- each
+    /* core/model/schemas.py InterfaceSection.r_inter: None is the default rule -- each
        stretch of contact takes the Rinter of the soil it runs against. */
     T.eq(App.Interfaces.validateSection(Object.assign({}, CONTACT, { r_inter: null })), null);
   });

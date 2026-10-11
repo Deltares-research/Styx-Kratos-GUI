@@ -1,6 +1,6 @@
 """The construction sequence: resolving a phase tree into what Kratos runs.
 
-`core.phases` is pure model logic -- no gmsh, no Kratos -- so this file builds projects
+`core.model.phases` is pure model logic -- no gmsh, no Kratos -- so this file builds projects
 and reads sets of part keys back, and never meshes anything. What it is checked against
 is Kratos' own staged-construction reference deck: its seven stages, their
 `stage_preprocess` operations, and their `problem_domain_sub_model_part_list`s. See
@@ -10,8 +10,8 @@ plan/outdated/staged-construction-plan.md sec 4.
 import pytest
 from pydantic import ValidationError
 
-from core import phases, schemas
-from core.seed import seed_project
+from core.model import phases, schemas
+from core.model.seed import seed_project
 
 
 def _project(*phase_records) -> schemas.Project:
@@ -163,7 +163,7 @@ def test_a_transition_reports_only_what_actually_changes():
 #   7 Third excavation         deactivate lift 3
 #
 # The eight interface parts are one key below: one drawn `Interface` becomes eight deck
-# parts at export (`core/kratos.py:_interface_by_body`), which is export's business.
+# parts at export (`core/kratos/export.py:_interface_by_body`), which is export's business.
 
 def _model():
     from tests.models import excavation
@@ -246,7 +246,7 @@ def test_the_default_is_the_initial_stage_then_the_null_step():
 
 
 def test_a_new_model_gets_no_excavation_phase():
-    from core.seed import blank_project
+    from core.model.seed import blank_project
 
     assert [ph.id for ph in phases.default_phases(blank_project())] ==         ["initial", "null_step"]
 

@@ -1,8 +1,8 @@
 """The processes a staged deck carries, and which stages carry them.
 
 Two questions, and they are separate. *What* a process looks like is settled by copying
-the reference deck field for field (`core/kratos_processes.py`). *Which stages it belongs
-in* is derived from the phase tree (`core/kratos.py:_phased_stages`), and that is what
+the reference deck field for field (`core/kratos/processes.py`). *Which stages it belongs
+in* is derived from the phase tree (`core/kratos/export.py:_phased_stages`), and that is what
 most of this file is about, because it is the part that can be wrong in a way no schema
 catches.
 
@@ -13,10 +13,10 @@ import json
 
 import pytest
 
-from core import kratos, kratos_materials
+from core.kratos import export as kratos, materials as kratos_materials
 from tests.models import excavation
-from core.build import session
-from core.schemas import MeshRequest
+from core.geometry.build import session
+from core.model.schemas import MeshRequest
 
 
 @pytest.fixture(scope="module")
@@ -294,7 +294,7 @@ def test_only_the_soil_carries_the_k0_variables(result):
 def test_k0_nc_is_jaky_unless_the_material_says_otherwise():
     """The test model types 0.58 and 0.47, which are Jaky at its two friction angles --
     so its typed K0_NC and the fallback agree."""
-    from core.kratos_materials import jaky
+    from core.kratos.materials import jaky
     project = excavation.excavation_project(staged=False)
     for key, k0 in (("m_upper", 0.58), ("m_lower", 0.47)):
         material = project.material(key)

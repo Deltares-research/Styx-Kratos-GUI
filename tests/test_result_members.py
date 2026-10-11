@@ -3,7 +3,7 @@
 Kratos' `json_output` process writes, per stage, one file per member --
 `<stage>__output_wall.json` with the bending moment, shear force, normal force and
 displacement at every wall node, and `<stage>__output_interface.json` with the effective
-traction on one side of the wall. `core.result_members` turns one of those into a curve
+traction on one side of the wall. `core.results.members` turns one of those into a curve
 along the member: (value, y) per node, sorted by y, in the units a retaining-wall plot is
 read in.
 
@@ -20,7 +20,7 @@ import json
 
 import pytest
 
-from core import result_members, results
+from core.results import members as result_members, runs as results
 from tests import results_run
 
 

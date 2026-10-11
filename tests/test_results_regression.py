@@ -1,7 +1,7 @@
 """Reading a real Kratos run back, end to end -- when Kratos is installed.
 
 The test model (`tests/models/excavation.py`) is calculated once per session
-(`tests/results_run.py`) and read through `core.results` the way the GUI reads it. Without
+(`tests/results_run.py`) and read through `core.results.runs` the way the GUI reads it. Without
 Kratos on the machine every case here skips and says why; nothing about a run is
 committed.
 
@@ -29,7 +29,9 @@ import json
 
 import pytest
 
-from core import kratos, phases, results
+from core.model import phases
+from core.kratos import export as kratos
+from core.results import runs as results
 from tests import mdpa, results_run
 from tests.models import excavation
 
@@ -283,7 +285,7 @@ def test_the_ground_under_the_pit_heaves_and_the_far_field_settles(run):
 
 def test_the_gid_parser_agrees_with_the_decks_own_json_output(run, real, deck):
     """`TOTAL_DISPLACEMENT_X` along the wall is written twice by the same run: into the
-    GiD `.post.res` that `core.gid_results` parses, and by Kratos' own json_output
+    GiD `.post.res` that `core.results.gid` parses, and by Kratos' own json_output
     process. The two sides share no code."""
     wall = deck.parts[WALL_PART].nodes
     written = member_output(real, "7_Third_excavation", "wall")

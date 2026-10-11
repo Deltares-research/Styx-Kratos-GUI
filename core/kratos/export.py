@@ -6,7 +6,7 @@ optional `Conditions` for the surface load, and one `SubModelPart` per body whos
 list is exactly the union of its elements' nodes.
 
 One thing the deck does that the mesh does not: an interface. Where the project asks for
-one, `core.interfaces` splits the meshed soil off the structure it was built conformal to
+one, `core.kratos.interfaces` splits the meshed soil off the structure it was built conformal to
 and this writes the zero-thickness elements that hold the two together again -- see the
 `INTERFACES` table below.
 
@@ -33,10 +33,12 @@ from dataclasses import dataclass
 
 import gmsh
 
-from core import build, interfaces, meshing, phases
-from core import kratos_materials, kratos_processes
-from core.kratos_materials import material_parameters
-from core.schemas import (Beam, LineLoad, MeshRequest, PanelSection, PointLoad,
+from core.model import phases
+from core.geometry import build, meshing
+from core.kratos import files, interfaces
+from core.kratos import materials as kratos_materials, processes as kratos_processes
+from core.kratos.materials import material_parameters
+from core.model.schemas import (Beam, LineLoad, MeshRequest, PanelSection, PointLoad,
                          Project, SurfaceLoad)
 
 # (dim, gmsh element type) -> (Kratos class, gmsh index order in Kratos' order)
@@ -54,7 +56,7 @@ ELEMENTS: dict[tuple[int, int], tuple[str, tuple[int, ...]]] = {
 # The 3D entries are the members: bored piles, king posts and struts. NOT CONFIRMED by
 # any reference deck -- every one of them is plane strain -- so these follow Kratos
 # StructuralMechanicsApplication's naming rather than a fixture here, exactly as the
-# constitutive laws in core/kratos_materials.py already do. Check them against the first
+# constitutive laws in core/kratos/materials.py already do. Check them against the first
 # real 3D run; they are named here, in one place, so that is a one-line change.
 #
 # Every name here is checked against the registrations of the Kratos build that runs the
@@ -224,7 +226,7 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
     # itself has things to say -- an interface a 3D model cannot carry, a wall written
     # one order below the soil around it.
     #
-    # Seeded from `mesh.log`'s own curated notes -- every `core.build` line meant for a
+    # Seeded from `mesh.log`'s own curated notes -- every `core.geometry.build` line meant for a
     # person rather than gmsh's own chatter carries this exact "Info    : " padding
     # (gmsh's raw logger writes "Info: ..." instead, one space, so the two never
     # collide). A pile that never touches the soil, a wall drawn in the wrong mode --
@@ -247,7 +249,7 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
     # A beam's node order is its local axis, and the sign of every force it reports
     # follows it, so it runs the way the user drew it rather than the way gmsh built
     # the curve. Done here, before the interface split reads these rows: which face of
-    # the wall is which is settled by the drawn path too (`core/interfaces.py`), so both
+    # the wall is which is settled by the drawn path too (`core/kratos/interfaces.py`), so both
     # answer to the same statement of intent.
     beam_blocks = [(key, name, _drawn_order(rows, _beam_of(project, key).points, world))
                    for key, name, rows in beam_blocks]
@@ -456,7 +458,7 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
     # actually names it, so an unphased deck is not shipped a file nothing opens.
     initial_materials = None
     if include_materials and any(
-            stage.materials_filename == kratos_processes.INITIAL_MATERIALS_FILENAME
+            stage.materials_filename == files.INITIAL_MATERIALS_NAME
             for stage in stages):
         initial_materials, _ = material_parameters(
             project, part_materials, dim, beam_properties, anchor_properties,
@@ -482,7 +484,7 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
         # writes the files, so the name in the deck and the name on disk cannot drift.
         "deck_name": deck_name(project),
         # The system every number in the deck is in, recorded with the run so its results
-        # are read in it (`calculate.write_deck`, `core.result_fields`).
+        # are read in it (`calculate.write_deck`, `core.results.fields`).
         "unit_system": project.unit_system,
         # The node table on its own, in the deck's own numbering. The viewport's node-ID
         # labels can only be drawn from here: a gmsh tag is not a Kratos ID -- `node_id`
@@ -524,7 +526,7 @@ def _adjacent_material(project: Project, key: str, names: dict[str, str],
 # vocabulary -- one drawn `Interface`, one soil body per lift -- and the deck speaks its
 # own, in which that interface is eight parts and each of them is tied to the body it
 # runs against. Translating between the two is this section's whole job, and it is why
-# `core.phases` knows nothing about Kratos: the model has no business knowing that
+# `core.model.phases` knows nothing about Kratos: the model has no business knowing that
 # digging out a lift also removes a contact.
 
 WALL_OUTPUT_VARIABLES = ("BENDING_MOMENT", "SHEAR_FORCE", "AXIAL_FORCE",
@@ -671,8 +673,8 @@ def _phased_stages(project: Project, deck: _Deck) -> list[kratos_processes.Stage
             reset_displacements=phase.reset_displacements,
             max_iterations=phase.max_iterations,
             tolerated_error=phase.tolerated_error,
-            materials_filename=(kratos_processes.INITIAL_MATERIALS_FILENAME if k0
-                                else kratos_processes.MATERIALS_FILENAME),
+            materials_filename=(files.INITIAL_MATERIALS_NAME if k0
+                                else files.MATERIALS_NAME),
         ))
     return out
 
@@ -690,7 +692,7 @@ def _interface_elements(project: Project, dim: int,
                                    list[tuple[str, list[int], list[int]]]]:
     """Unglue the soil along every active interface and write the contact elements.
 
-    The topology is `core.interfaces`' job and is done on connectivity alone; what
+    The topology is `core.kratos.interfaces`' job and is done on connectivity alone; what
     happens here is the bookkeeping around it. The soil rows are rewritten onto the
     copies, the copies inherit their originals' coordinates -- which is what makes the
     element zero-thickness -- and any load condition standing on a split node follows
@@ -827,7 +829,7 @@ def _split_ties(rows: list[list[int]], per_side: int, duplicates: dict[int, int]
     """Pair up the soil-side copies of every node the interface split into two.
 
     A node in the middle of the line gets exactly two copies, one per face (see
-    `core.interfaces`'s module docstring) -- while the structure that owns the line is
+    `core.kratos.interfaces`'s module docstring) -- while the structure that owns the line is
     staged (deactivated, then activated on installation -- see `kratos_processes`),
     nothing else holds those two copies together, so they need a master/slave tie for
     the stage(s) before installation. A node with only one copy is the toe, where the
@@ -1154,7 +1156,7 @@ def _lookup(table: dict, dim: int, element_type: int) -> tuple[str, tuple[int, .
         shape = gmsh.model.mesh.getElementProperties(element_type)[0]
         raise ExportError(
             f"no Kratos element is mapped for a {shape} in {dim}D. Mesh with linear or "
-            "quadratic simplices, or add the type to core/kratos.py."
+            "quadratic simplices, or add the type to core/kratos/export.py."
         ) from None
 
 
@@ -1190,62 +1192,29 @@ def _load_conditions(project: Project, dim: int,
                      world: dict[int, tuple[float, float, float]],
                      warnings: list[str] | None = None
                      ) -> list[tuple[str, str, list[list[int]]]]:
-    """Boundary elements on the ground surface that lie under the load pad.
-
-    Selected element by element rather than entity by entity: the pad is a display
-    indicator that never cuts the soil, so the loaded region is not a separate part.
-
-    `build._imprint_load_footprints` has split the boundary exactly at the footprint
-    edges, so every element is wholly inside or wholly outside it and the test below is
-    an exact containment test. Without that imprint the only available rule would be
-    whether an element's centre lies under the pad, which moves a loaded edge by as
-    much as one element.
-    """
-    out: list[tuple[str, str, list[list[int]]]] = []
-    # `loads_for` rather than a kind test: a translated pair holds a surface record and
-    # a line record for one load, and writing both would apply it twice. What it hands
-    # back for a 3D model is the surface loads plus the 2D ones nothing was translated
-    # from -- see the CONDITIONS table for which of those can actually be written.
+    """Each load's conditions: the elements `meshing.loaded_elements` finds under it,
+    under the class `CONDITIONS` names for their gmsh type, or for a point load its one
+    node as a `PointLoadCondition`."""
     for load in project.loads_for(dim):
-        if not load.active:
-            continue
-        if dim == 3 and load.kind == "line":
+        if dim == 3 and load.active and load.kind == "line" and warnings is not None:
             # A line load imprints a *curve* on the solid's boundary, and the boundary
-            # elements harvested below are faces. CONDITIONS has no 3D line class to
-            # write it with, and inventing one with no reference deck behind it would
-            # be a guess in the deck rather than in a comment. Said out loud instead:
-            # the load is drawn and meshed, but it is not applied.
-            if warnings is not None:
-                warnings.append(
-                    f"{load.name!r} is a line load, which has no Kratos condition in a "
-                    "3D deck; it is drawn at the section plane but applies no force. "
-                    "Move it to the ground surface so it translates to a surface load, "
-                    "or apply it in the 2D section."
-                )
-            continue
-        if load.kind == "point":
-            target = ((load.x, load.y, 0.0) if dim == 2
-                      else (load.x, load.y, project.cut_at()))
-            nearest = min(
-                world,
-                key=lambda tag: sum((world[tag][axis] - target[axis]) ** 2 for axis in range(3)),
+            # elements `loaded_elements` harvests are faces. CONDITIONS has no 3D line
+            # class to write it with, and inventing one with no reference deck behind it
+            # would be a guess in the deck rather than in a comment. Said out loud
+            # instead: the load is drawn and meshed, but it is not applied.
+            warnings.append(
+                f"{load.name!r} is a line load, which has no Kratos condition in a "
+                "3D deck; it is drawn at the section plane but applies no force. "
+                "Move it to the ground surface so it translates to a surface load, "
+                "or apply it in the 2D section."
             )
-            out.append((load.id, f"PointLoadCondition{dim}D1N", [[nearest]]))
+    out: list[tuple[str, str, list[list[int]]]] = []
+    for key, element_type, rows in meshing.loaded_elements(project, dim, world):
+        if element_type == meshing.POINT:
+            out.append((key, f"PointLoadCondition{dim}D1N", rows))
             continue
-        elevation = project.elevation_of(load)
-        rows_by_class: dict[str, list[list[int]]] = {}
-        for _, entity in gmsh.model.getEntities(dim - 1):
-            box = gmsh.model.getBoundingBox(dim - 1, entity)
-            if abs(box[1] - elevation) > TOLERANCE or abs(box[4] - elevation) > TOLERANCE:
-                continue
-            types, _, connectivity = gmsh.model.mesh.getElements(dim - 1, entity)
-            for element_type, flat in zip(types, connectivity):
-                name, order = _lookup(CONDITIONS, dim, int(element_type))
-                for offset in range(0, len(flat), len(order)):
-                    row = [int(flat[offset + i]) for i in order]
-                    if _under_load(row[:dim], world, load):
-                        rows_by_class.setdefault(name, []).append(row)
-        out.extend((load.id, name, rows) for name, rows in rows_by_class.items() if rows)
+        name, order = _lookup(CONDITIONS, dim, element_type)
+        out.append((key, name, [[row[i] for i in order] for row in rows]))
     return out
 
 
@@ -1255,9 +1224,9 @@ def _normal_load_conditions(project: Project, dim: int, warnings: list[str],
     """One condition per active `NormalLoad`, off the line `build._embed_beams` already
     gave its own physical group -- the same way a free interface's line is found.
 
-    Unlike `_load_conditions`, this does not scan the boundary at a fixed elevation: a
-    normal load can run down a vertical face, which has no single elevation to scan
-    for, so it is read straight off the mesh instead.
+    Unlike `meshing.loaded_elements`, this does not scan the boundary at a fixed
+    elevation: a normal load can run down a vertical face, which has no single elevation
+    to scan for, so it is read straight off the mesh instead.
     """
     if project.dimension != 2 and any(n.active for n in project.normal_loads):
         warnings.append(
@@ -1394,18 +1363,6 @@ def _rotated(face: tuple[int, ...], row: list[int]) -> bool:
     return False
 
 
-def _under_load(corners: list[int], world: dict[int, tuple[float, float, float]],
-                load) -> bool:
-    """Every corner inside the footprint, within the tolerance the imprint holds to."""
-    def inside(value: float, low: float, high: float) -> bool:
-        return low - TOLERANCE <= value <= high + TOLERANCE
-
-    if load.kind == "line":
-        return all(inside(world[tag][0], load.x0, load.x1) for tag in corners)
-    return all(inside(world[tag][0], load.x0, load.x1)
-               and inside(world[tag][2], load.z0, load.z1) for tag in corners)
-
-
 # ── Naming and numbering ────────────────────────────────────────────────────
 
 def _part_names(project: Project) -> dict[str, str]:
@@ -1446,7 +1403,7 @@ def deck_name(project: Project) -> str:
     The project's own name, reduced to what every filesystem accepts -- the same rule
     `frontend/js/export.js` applies when it names the archive, so the file a download writes
     and the file a calculation runs are named alike. Public because two callers need the
-    same answer: the export that puts it in the parameters, and `core.calculate`, which
+    same answer: the export that puts it in the parameters, and `core.run.calculate`, which
     has to write the .mdpa under exactly the name those parameters ask Kratos for.
     """
     return re.sub(r"[^A-Za-z0-9]+", "_", project.name).strip("_") or "model"

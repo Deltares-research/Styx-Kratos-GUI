@@ -15,8 +15,11 @@ from pathlib import Path
 
 import pytest
 
-from core import calculate, kratos, results, units
-from core.schemas import Project
+from core.model import units
+from core.kratos import export as kratos
+from core.run import calculate
+from core.results import runs as results
+from core.model.schemas import Project
 from tests.models import excavation
 from tests.results_run import require_kratos
 
@@ -53,7 +56,7 @@ def runs(tmp_path_factory):
 
 
 def wall(directory: Path, stage: str) -> dict:
-    from core import result_members
+    from core.results import members as result_members
     return result_members.read_output(
         (directory / f"{stage}__output_wall.json").read_text(encoding="utf-8"))
 

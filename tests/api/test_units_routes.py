@@ -8,10 +8,10 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from core import units
+from core.model import units
 from tests.models import excavation
 from backend.main import app
-from core.schemas import Project
+from core.model.schemas import Project
 
 
 @pytest.fixture
@@ -113,8 +113,9 @@ def test_an_unknown_system_is_refused(client):
 def test_the_kn_deck_is_the_si_deck_in_kilonewtons(client):
     """Kratos has no units: the same model in the kN system writes every force-bearing
     number a thousand times smaller and everything else the same."""
-    from core import build, kratos
-    from core.schemas import MeshRequest
+    from core.geometry import build
+    from core.kratos import export as kratos
+    from core.model.schemas import MeshRequest
 
     si = excavation.excavation_project(staged=True)
     kn_payload, _ = units.convert_project(si.model_dump(mode="json"), "kN")

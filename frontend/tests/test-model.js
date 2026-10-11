@@ -353,7 +353,7 @@
   });
 
   /* ── A translated load pair ──────────────────────────────────────
-     core/loads.py turns a surface load into a line load on the switch to 2D and
+     core/model/loads.py turns a surface load into a line load on the switch to 2D and
      back, keeping both records so the footprint survives the round trip. Exactly one
      half of a pair belongs to the model: `App.Model`'s `loadsFor` mirrors the server's
      `Project.loads_for`, and these hold the two in step. */
@@ -792,7 +792,7 @@
   });
 
   /* ── A translated wall pair ──────────────────────────────────────
-     core/walls.py turns a sheet pile into a wall panel on the switch to 3D and
+     core/model/walls.py turns a sheet pile into a wall panel on the switch to 3D and
      back, keeping both records so the plan footprint survives the round trip. The
      panel is what gives the wall y values to edit at all -- a pile has none. */
 

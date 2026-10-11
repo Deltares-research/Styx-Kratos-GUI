@@ -12,49 +12,49 @@ proven), "open" (nothing has run it yet), "blocked" (a run shows it cannot work 
 """
 
 REGISTER = [
-    {"id": "R1", "where": "kratos.py BEAMS (2, 8)", "what": "quadratic 2D beam class",
+    {"id": "R1", "where": "kratos/export.py BEAMS (2, 8)", "what": "quadratic 2D beam class",
      "status": "closed", "evidence": "test_results_regression (a Kratos run of the staged "
      "test model); wall M/Q/N/ux validated outside this repository against Kratos' own "
      "reference results"},
-    {"id": "R2", "where": "kratos.py BEAMS (2, 1)", "what": "linear 2D beam class",
+    {"id": "R2", "where": "kratos/export.py BEAMS (2, 1)", "what": "linear 2D beam class",
      "status": "fixed", "evidence": "registry check; test_live_constructs first-order pile "
      "within 15 % of second order (was LinearTimoshenkoCurvedBeamElement2D2N: not in Kratos)"},
-    {"id": "R3", "where": "kratos.py BEAMS (3, *)", "what": "3D member classes",
+    {"id": "R3", "where": "kratos/export.py BEAMS (3, *)", "what": "3D member classes",
      "status": "open", "evidence": "registry check only (3D 3-node fixed to the curved class); "
      "no 3D model with a member has run"},
-    {"id": "R4", "where": "kratos.py SHELLS / kratos_materials.PANEL_LAW",
+    {"id": "R4", "where": "kratos/export.py SHELLS / kratos/materials.PANEL_LAW",
      "what": "3D wall shells and their law",
      "status": "closed", "evidence": "test_3d_excavation_runs_every_stage_without_its_"
      "surcharge (the panel is active from stage 3); values not yet compared (M8 BM-2D3D-01)"},
-    {"id": "R5", "where": "kratos.py INTERFACES (2, 3) / kratos_materials.INTERFACE_LAW",
+    {"id": "R5", "where": "kratos/export.py INTERFACES (2, 3) / kratos/materials.INTERFACE_LAW",
      "what": "quadratic interface class, law and stiffness variables",
      "status": "closed", "evidence": "test_results_regression (contacts on both faces); "
      "wall curves validated outside this repository against Kratos' own reference results"},
-    {"id": "R6", "where": "kratos.py INTERFACES (2, 2)", "what": "linear interface class",
+    {"id": "R6", "where": "kratos/export.py INTERFACES (2, 2)", "what": "linear interface class",
      "status": "blocked", "evidence": "not registered in Kratos; no linear U-Pw line "
      "interface exists (test_kratos_registry KNOWN_MISSING)"},
-    {"id": "R7", "where": "kratos_materials.BEAM_LAW", "what": "beam law and variables",
+    {"id": "R7", "where": "kratos/materials.BEAM_LAW", "what": "beam law and variables",
      "status": "closed", "evidence": "test_results_regression; wall curves "
      "validated outside this repository against Kratos' own reference results"},
-    {"id": "R8", "where": "kratos_materials.ANCHOR_LAW", "what": "truss law; prestress",
+    {"id": "R8", "where": "kratos/materials.ANCHOR_LAW", "what": "truss law; prestress",
      "status": "closed", "evidence": "test_results_regression stages 5-7 with the strut; "
      "TRUSS_PRESTRESS_PK2 still open -- no strut run so far is prestressed"},
-    {"id": "R9", "where": "kratos_processes._master_slave_constraint",
+    {"id": "R9", "where": "kratos/processes._master_slave_constraint",
      "what": "master/slave tie before installation",
      "status": "closed", "evidence": "test_results_regression stages 1-2 and on; wall "
      "agreement validated outside this repository against Kratos' own reference results"},
-    {"id": "R10", "where": "kratos_processes._normal_load Uniform",
+    {"id": "R10", "where": "kratos/processes._normal_load Uniform",
      "what": "uniform normal-load process shape",
      "status": "closed", "evidence": "test_live_constructs: +50 kPa at depth, both orders, "
      "both drawing directions"},
-    {"id": "R11", "where": "kratos.py NORMAL_LOAD_CONDITIONS (2, 2)",
+    {"id": "R11", "where": "kratos/export.py NORMAL_LOAD_CONDITIONS (2, 2)",
      "what": "linear normal-load condition",
      "status": "fixed", "evidence": "was LineNormalLoadCondition2D2N (not in Kratos); "
      "UPwNormalFaceLoadCondition2D2N proven by the order-1 uniform load run"},
-    {"id": "R12", "where": "kratos_materials.LINEAR_ELASTIC 3D", "what": "3D soil law",
+    {"id": "R12", "where": "kratos/materials.LINEAR_ELASTIC 3D", "what": "3D soil law",
      "status": "fixed", "evidence": "was GeoLinearElastic3DLaw (not in Kratos); "
      "test_the_3d_seed_with_its_surface_load_runs_and_settles"},
-    {"id": "R13", "where": "kratos.py CONDITIONS (3, *)", "what": "3D surface-load faces",
+    {"id": "R13", "where": "kratos/export.py CONDITIONS (3, *)", "what": "3D surface-load faces",
      "status": "fixed", "evidence": "were reversed against their tetrahedra; deck rule 13 "
      "and the 3D seed run. With a strut or beam active in the same stage: blocked "
      "(Kratos neighbour search; test_3d_excavation_with_its_surcharge_runs_every_stage xfail)"},
@@ -63,11 +63,11 @@ REGISTER = [
      "status": "closed", "evidence": "test_kratos_registry (the laws are registered); wall "
      "M, Q, N, u_x within Kratos' 2 % at every node, validated outside this repository "
      "against Kratos' own reference results"},
-    {"id": "R15", "where": "kratos_materials.material_parameters(k0=True)",
+    {"id": "R15", "where": "kratos/materials.material_parameters(k0=True)",
      "what": "the K0 stage runs elastic whatever the law",
      "status": "closed", "evidence": "validated outside this repository against Kratos' own "
      "reference results, whose stage 1 reads the elastic common/initial_materials.json"},
-    {"id": "R16", "where": "core.units / the whole deck",
+    {"id": "R16", "where": "core.model.units / the whole deck",
      "what": "Kratos is unit-agnostic: a deck in kN, m, t, s",
      "status": "closed", "evidence": "test_live_units: the test model in SI and in kN "
      "agree x1000 at every node and Gauss point"},
@@ -75,9 +75,10 @@ REGISTER = [
      "status": "closed", "evidence": "wall curves validated outside this repository "
      "against Kratos' own reference results, without them"},
     {"id": "K2", "where": "gid_output output_interval", "what": "GiD writes every sub-step",
-     "status": "closed", "evidence": "gid_results takes the last step (finding F6, "
+     "status": "closed", "evidence": "core.results.gid takes the last step (finding F6, "
      "test_results_round_trip)"},
 ]
 
-COVERED_FILES = {"kratos.py", "kratos_materials.py", "kratos_processes.py"}
-"""Files whose deferred-to-a-run comments the register is held against."""
+COVERED_FILES = {"kratos/export.py", "kratos/materials.py", "kratos/processes.py"}
+"""Files whose deferred-to-a-run comments the register is held against, relative to
+`core/`."""

@@ -7,8 +7,8 @@ project and `put`s it; these pin the store's own half of that contract.
 """
 
 from backend import store
-from core.schemas import Project
-from core.seed import blank_project, seed_project
+from core.model.schemas import Project
+from core.model.seed import blank_project, seed_project
 
 
 def test_get_returns_the_live_project_not_a_copy():

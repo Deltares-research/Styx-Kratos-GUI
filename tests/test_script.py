@@ -10,7 +10,7 @@ import textwrap
 import pytest
 
 from core import script
-from core.schemas import Project
+from core.model.schemas import Project
 
 
 def write(tmp_path, body: str, name: str = "model.py"):
@@ -20,7 +20,7 @@ def write(tmp_path, body: str, name: str = "model.py"):
 
 
 SEED = """
-    from core.seed import seed_project
+    from core.model.seed import seed_project
 """
 
 
@@ -138,7 +138,7 @@ def test_a_helper_that_takes_arguments_is_not_mistaken_for_the_entry_point(tmp_p
 
 
 _SCRIPT = textwrap.dedent("""
-    from core.seed import seed_project
+    from core.model.seed import seed_project
     PROJECT = seed_project()
     PROJECT.name = "From a script"
 """)
@@ -174,7 +174,7 @@ def test_a_relative_path_is_not_looked_for_above_the_root(tmp_path, monkeypatch)
 
 def test_a_syntax_error_names_the_file_and_the_line(tmp_path):
     path = write(tmp_path, """
-    from core.seed import seed_project
+    from core.model.seed import seed_project
     PROJECT = seed_project(
     PROJECT.name = "never parsed"
     """)

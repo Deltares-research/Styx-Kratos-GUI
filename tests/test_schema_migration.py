@@ -22,8 +22,9 @@ from pathlib import Path
 
 import pytest
 
-from core import build, kratos
-from core.schemas import MeshRequest, Project
+from core.geometry import build
+from core.kratos import export as kratos
+from core.model.schemas import MeshRequest, Project
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "projects"
 SAVED = sorted(FIXTURES.glob("*.json"))
@@ -66,7 +67,7 @@ def test_the_single_load_keeps_its_magnitude_and_footprint():
     project = Project.model_validate(raw("single_load_2d.json"))
 
     magnitudes = [abs(c) for load in project.loads for c in load.components if c]
-    # kN/m2 then, Pa now: the project is converted into SI on load (core/legacy.py).
+    # kN/m2 then, Pa now: the project is converted into SI on load (core/model/legacy.py).
     assert old["magnitude"] * 1000 in magnitudes
     assert any(getattr(load, "x0", None) == old["x0"] and getattr(load, "x1", None) == old["x1"]
                for load in project.loads)

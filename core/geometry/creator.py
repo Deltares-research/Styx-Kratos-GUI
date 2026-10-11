@@ -2,7 +2,7 @@ import math
 import uuid
 from pathlib import Path
 
-DATA_DIR = Path(__file__).resolve().parent.parent / ".data"
+DATA_DIR = Path(__file__).resolve().parents[2] / ".data"
 
 DIM_NAME = {0: "point", 1: "curve", 2: "surface", 3: "volume"}
 

@@ -9,9 +9,10 @@ import re
 
 import pytest
 
-from core import build, kratos
+from core.geometry import build
+from core.kratos import export as kratos
 from tests.models import excavation
-from core.schemas import MeshRequest
+from core.model.schemas import MeshRequest
 from tests.pipeline.deck_invariants import check_deck
 
 

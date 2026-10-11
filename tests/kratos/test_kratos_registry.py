@@ -1,7 +1,7 @@
 """Every Kratos name the exporter can write exists in the Kratos it runs on (plan sec 8.3).
 
-The exporter's element, condition and law names live in tables in `core.kratos` and
-`core.kratos_materials`, several of them marked "check against the first real run". A name
+The exporter's element, condition and law names live in tables in `core.kratos.export` and
+`core.kratos.materials`, several of them marked "check against the first real run". A name
 Kratos does not know fails only when Kratos reads the deck -- a first-order section with
 a sheet pile stopped at `LinearTimoshenkoCurvedBeamElement2D2N is not registered` while
 every structural test passed. So every name in those tables is looked up in the
@@ -22,7 +22,8 @@ from pathlib import Path
 
 import pytest
 
-from core import calculate, kratos, kratos_materials
+from core.kratos import export as kratos, materials as kratos_materials
+from core.run import calculate
 
 pytestmark = pytest.mark.kratos
 

@@ -11,7 +11,7 @@ from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, ValidationError
 
 from core import gmsh_worker
-from core.schemas import MeshRequest, Project
+from core.model.schemas import MeshRequest, Project
 
 MAX_UPLOAD_BYTES = 256 * 2**20
 """The largest file an upload route reads. A real deck is a few megabytes (a dike section's mesh
@@ -37,7 +37,7 @@ def validated(payload: dict) -> Project:
 
 
 def not_for_a_deck(project: Project, what: str) -> None:
-    """Refuse to mesh or export a project that is a deck already (`core.deck`).
+    """Refuse to mesh or export a project that is a deck already (`core.kratos.deck`).
 
     Everything but its deck is the empty site the schema requires, so going ahead would
     mesh nothing and answer as though that were the model.

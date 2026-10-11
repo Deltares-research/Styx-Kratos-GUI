@@ -26,8 +26,8 @@ results back in its Results mode. How the pieces fit is in
 
 | Area | Change | Code lines |
 |---|---|--:|
-| `core/result_members.py` (new) | A structural member's results as curves along it — the data behind the wall-plot window | +83 |
-| `core/results.py`, `main.py` | `stage_members`, `member_profiles`, and the two `/members` routes | +66 |
+| `core/results/members.py` (new) | A structural member's results as curves along it — the data behind the wall-plot window | +83 |
+| `core/results/runs.py`, `main.py` | `stage_members`, `member_profiles`, and the two `/members` routes | +66 |
 | `frontend/js/results-plot.js` (new) | `results plot …` command and the SVG figure, DOM-free and tested headless | +356 |
 | `frontend/js/patches.js`, `results.js`, `frontend/css/live.css` | The plot window and its buttons; legend Min/Max limits; legend moved clear of the ruler | +204 |
 | `tests/test_result_members.py` (new) | The plot data against Kratos' own run (the orange benchmark line) | +184 |
@@ -67,36 +67,36 @@ results back in its Results mode. How the pieces fit is in
 
 | Module | Lines | Code | Comments/docs | Blank | Classes | Functions | Methods |
 |---|--:|--:|--:|--:|--:|--:|--:|
-| `schemas.py` | 1,949 | 1,036 | 636 | 277 | 41 | 4 | 63 |
-| `kratos.py` | 1,670 | 946 | 517 | 207 | 2 | 49 | 0 |
-| `build.py` | 1,253 | 683 | 378 | 192 | 2 | 37 | 0 |
+| `model/schemas.py` | 1,949 | 1,036 | 636 | 277 | 41 | 4 | 63 |
+| `kratos/export.py` | 1,670 | 946 | 517 | 207 | 2 | 49 | 0 |
+| `geometry/build.py` | 1,253 | 683 | 378 | 192 | 2 | 37 | 0 |
 | `main.py` | 918 | 529 | 231 | 158 | 0 | 43 | 0 |
-| `meshing.py` | 594 | 412 | 110 | 72 | 3 | 18 | 2 |
-| `kratos_processes.py` | 795 | 395 | 297 | 103 | 1 | 22 | 0 |
-| `mdpa_import.py` | 483 | 282 | 133 | 68 | 4 | 15 | 5 |
-| `results.py` | 551 | 281 | 153 | 117 | 3 | 29 | 0 |
-| `kratos_materials.py` | 479 | 224 | 192 | 63 | 1 | 8 | 0 |
-| `tessellate.py` | 387 | 214 | 107 | 66 | 2 | 12 | 2 |
-| `interfaces.py` | 364 | 204 | 92 | 68 | 3 | 16 | 0 |
-| `deck.py` | 335 | 193 | 78 | 64 | 1 | 17 | 0 |
-| `gid_results.py` | 326 | 184 | 83 | 59 | 5 | 3 | 9 |
-| `result_fields.py` | 388 | 184 | 122 | 82 | 2 | 15 | 0 |
-| `calculate.py` | 373 | 170 | 135 | 68 | 2 | 13 | 0 |
-| `result_mesh.py` | 283 | 144 | 94 | 45 | 0 | 10 | 0 |
-| `phases.py` | 248 | 105 | 94 | 49 | 1 | 8 | 0 |
-| `seed.py` | 136 | 94 | 30 | 12 | 0 | 2 | 0 |
-| `walls.py` | 173 | 93 | 45 | 35 | 0 | 9 | 0 |
+| `geometry/meshing.py` | 594 | 412 | 110 | 72 | 3 | 18 | 2 |
+| `kratos/processes.py` | 795 | 395 | 297 | 103 | 1 | 22 | 0 |
+| `kratos/mdpa_import.py` | 483 | 282 | 133 | 68 | 4 | 15 | 5 |
+| `results/runs.py` | 551 | 281 | 153 | 117 | 3 | 29 | 0 |
+| `kratos/materials.py` | 479 | 224 | 192 | 63 | 1 | 8 | 0 |
+| `geometry/tessellate.py` | 387 | 214 | 107 | 66 | 2 | 12 | 2 |
+| `kratos/interfaces.py` | 364 | 204 | 92 | 68 | 3 | 16 | 0 |
+| `kratos/deck.py` | 335 | 193 | 78 | 64 | 1 | 17 | 0 |
+| `results/gid.py` | 326 | 184 | 83 | 59 | 5 | 3 | 9 |
+| `results/fields.py` | 388 | 184 | 122 | 82 | 2 | 15 | 0 |
+| `run/calculate.py` | 373 | 170 | 135 | 68 | 2 | 13 | 0 |
+| `results/mesh.py` | 283 | 144 | 94 | 45 | 0 | 10 | 0 |
+| `model/phases.py` | 248 | 105 | 94 | 49 | 1 | 8 | 0 |
+| `model/seed.py` | 136 | 94 | 30 | 12 | 0 | 2 | 0 |
+| `model/walls.py` | 173 | 93 | 45 | 35 | 0 | 9 | 0 |
 | `launcher.py` | 128 | 91 | 8 | 29 | 0 | 9 | 0 |
-| `loads.py` | 203 | 88 | 74 | 41 | 0 | 9 | 0 |
-| `result_members.py` | 152 | 83 | 40 | 29 | 2 | 6 | 1 |
+| `model/loads.py` | 203 | 88 | 74 | 41 | 0 | 9 | 0 |
+| `results/members.py` | 152 | 83 | 40 | 29 | 2 | 6 | 1 |
 | `gmsh_worker.py` | 150 | 76 | 33 | 41 | 0 | 12 | 0 |
 | `script.py` | 158 | 74 | 59 | 25 | 1 | 4 | 0 |
-| `creator.py` | 104 | 68 | 11 | 25 | 0 | 2 | 0 |
-| `result_parts.py` | 134 | 45 | 63 | 26 | 1 | 3 | 1 |
-| `kratos_runner.py` | 112 | 40 | 44 | 28 | 1 | 3 | 4 |
-| `importer.py` | 60 | 37 | 10 | 13 | 0 | 1 | 0 |
+| `geometry/creator.py` | 104 | 68 | 11 | 25 | 0 | 2 | 0 |
+| `results/parts.py` | 134 | 45 | 63 | 26 | 1 | 3 | 1 |
+| `run/runner.py` | 112 | 40 | 44 | 28 | 1 | 3 | 4 |
+| `geometry/importer.py` | 60 | 37 | 10 | 13 | 0 | 1 | 0 |
 | `store.py` | 37 | 14 | 11 | 12 | 0 | 4 | 0 |
-| `node_parts.py` | 31 | 10 | 13 | 8 | 0 | 2 | 0 |
+| `kratos/node_parts.py` | 31 | 10 | 13 | 8 | 0 | 2 | 0 |
 | `__init__.py` | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | `routes/__init__.py` | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | **Total (34 files)** | **13,313** | **7,143** | **4,044** | **2,126** | **78** | **389** | **87** |

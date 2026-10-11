@@ -2,7 +2,7 @@
 
 The project goes to the server with PUT /api/project and is calculated with POST
 /api/calculate -- the same routes, the same export, the same runner the Calculate button
-uses -- and the run is then read back through `core.results`. Nothing about a benchmark
+uses -- and the run is then read back through `core.results.runs`. Nothing about a benchmark
 takes a shortcut the user's model would not take.
 """
 
@@ -15,7 +15,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 
-from core.schemas import Project
+from core.model.schemas import Project
 
 STATUSES = ("PASS", "PASS-DEV", "FAIL", "ERROR", "BLOCKED", "KNOWN")
 """PASS-DEV: passes, on a deliberately documented deviation from the reference model.
@@ -75,7 +75,8 @@ def run_case(case: Case, runs_root: Path) -> Result:
     os.environ.setdefault("KRATOS_GUI_ALLOWED_HOSTS", "testserver")
     from fastapi.testclient import TestClient
 
-    from core import calculate, results
+    from core.run import calculate
+    from core.results import runs as results
     from backend.main import app
 
     previous = os.environ.get(calculate.RUNS_ENV)
@@ -144,7 +145,7 @@ def kratos_commit() -> str | None:
     checkout two levels above the configured build (`<checkout>/bin/Release`)."""
     import subprocess
 
-    from core import calculate
+    from core.run import calculate
 
     build = os.environ.get(calculate.KRATOS_ENV) or calculate._settings().get("kratos")
     if not build:

@@ -25,7 +25,7 @@ see `Project.loads_for`, which is what keeps a translated pair from being applie
 
 from __future__ import annotations
 
-from core.schemas import LineLoad, PointLoad, Project, SurfaceLoad
+from core.model.schemas import LineLoad, PointLoad, Project, SurfaceLoad
 
 Load = PointLoad | LineLoad | SurfaceLoad
 

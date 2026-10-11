@@ -20,9 +20,10 @@ import re
 
 import pytest
 
-from core import build, kratos
-from core.schemas import MeshRequest, Project
-from core.seed import seed_project
+from core.geometry import build
+from core.kratos import export as kratos
+from core.model.schemas import MeshRequest, Project
+from core.model.seed import seed_project
 from tests import mdpa
 
 # A wall retaining ground on its +x side: the anchor rakes back into that soil and the
@@ -31,7 +32,7 @@ from tests import mdpa
 LINE_LOAD = {"id": "load_1", "name": "Surcharge", "kind": "line",
              "x0": 14.0, "x1": 22.0, "y": 0.0, "thickness": 0.15,
              "components": [0.0, -20_000.0], "distribution": "Uniform", "active": True}
-# Kratos property sets, in the project's SI units (core/schemas.py:KratosPropertySet).
+# Kratos property sets, in the project's SI units (core/model/schemas.py:KratosPropertySet).
 PILE_SECTION = {"id": "az26", "name": "AZ 26-700", "spacing": 1.0, "variables": {
     "YOUNG_MODULUS": 2.1e11, "POISSON_RATIO": 0.3, "CROSS_AREA": 0.0198, "I33": 5.52e-4,
     "DENSITY": 7850.0}}
@@ -262,7 +263,7 @@ def test_the_load_value_and_the_anchor_support_reach_the_process_file(golden, de
 
 @pytest.fixture(scope="module")
 def staged(session):
-    from core import phases
+    from core.model import phases
     project = golden_project()
     project = Project.model_validate(
         project.model_dump()
@@ -363,7 +364,7 @@ def test_the_deck_reads_only_materials_files_the_export_produced(staged, staged_
 
 
 def test_a_staged_export_is_deterministic(session):
-    from core import phases
+    from core.model import phases
     project = golden_project()
     project = Project.model_validate(
         project.model_dump()

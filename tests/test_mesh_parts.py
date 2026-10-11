@@ -12,7 +12,7 @@ three of them (the interface and the normal loads) own no geometry of their own.
 
 import pytest
 
-from core import build, meshing
+from core.geometry import build, meshing
 from tests.models.excavation import excavation_project
 @pytest.fixture(scope="module")
 def model():
@@ -92,7 +92,7 @@ def segments(section):
 
 
 def test_an_interface_on_a_structure_has_one_section_per_side(model):
-    """`wall_contact` has no curve of its own: `core.interfaces` builds its elements from
+    """`wall_contact` has no curve of its own: `core.kratos.interfaces` builds its elements from
     the pile's edges after meshing, and with `side="both"` it does so on each face. The
     two faces are what a user has to tell apart, so each is a section of its own,
     `<key>:L` and `<key>:R`, with one segment per pile segment."""
@@ -137,7 +137,7 @@ def test_a_one_sided_interface_has_only_that_side():
 
 def test_a_surface_load_is_the_ground_edges_under_its_footprint(model):
     """The same edges the deck writes the load's conditions on
-    (`kratos._load_conditions`): the ground surface between x0 and x1, all of it and
+    (`meshing.loaded_elements`): the ground surface between x0 and x1, all of it and
     nothing else."""
     project, mesh, _ = model
     (load,) = project.loads
@@ -151,7 +151,7 @@ def test_a_surface_load_is_the_ground_edges_under_its_footprint(model):
 
 
 def test_the_anchor_is_one_truss_from_head_to_tail(model):
-    """`kratos._anchor_ties` exports it as one two-node element, so that is what is
+    """`core.kratos.export._anchor_ties` exports it as one two-node element, so that is what is
     drawn, whatever gmsh did along its curve."""
     project, mesh, _ = model
     (anchor,) = project.anchors
@@ -172,7 +172,7 @@ def test_parts_travel_in_the_payload(model):
 def test_a_solid_model_draws_each_body_by_its_own_skin():
     """In 3D the grey mesh is the outer skin of everything meshed together. A body's
     section is the skin of that body alone, so a body inside the model still has one."""
-    from core.seed import seed_project
+    from core.model.seed import seed_project
 
     project = seed_project(simple=True)
     with build.session():

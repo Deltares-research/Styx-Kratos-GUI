@@ -2,7 +2,7 @@
    its own unit system (App.Units). Project edits never alter this catalogue.
 
    The soils are the frozen demo's six (js/data.js), converted the way every project in
-   the old kN/m3-kN/m2-m/day shape is (core/legacy.py): DENSITY_SOLID is the unit
+   the old kN/m3-kN/m2-m/day shape is (core/model/legacy.py): DENSITY_SOLID is the unit
    weight over g, PERMEABILITY_XX the m/day value per second. POROSITY is 0, as in
    Kratos' staged-excavation reference, so each soil weighs exactly DENSITY_SOLID g -- its unit weight -- above
    and below the water alike (add a porosity and a RETENTION_LAW to tell the two apart).

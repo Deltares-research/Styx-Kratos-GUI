@@ -21,7 +21,7 @@ from fastapi.testclient import TestClient
 from backend import launcher
 from backend.main import app
 from backend.routes import common
-from core import calculate
+from core.run import calculate
 
 
 @pytest.fixture

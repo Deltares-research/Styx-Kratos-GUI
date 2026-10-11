@@ -7,7 +7,7 @@
 the right way to pin an edge case and the wrong way to notice that a whole mesh comes out
 grey. This records a whole soil body of the test model (`tests/models/excavation.py`) in
 its last stage, with p' at the nodes, p' per element and the vertical displacement, read
-through `core.results` exactly as the server answers the page.
+through `core.results.runs` exactly as the server answers the page.
 
 The run is synthetic -- `tests/fakes/gid_writer.py` with analytic fields -- so this needs
 no Kratos and writes the same file on every machine. The fields are the ones the fake
@@ -81,7 +81,9 @@ def compact_json(payload: dict, depth: int = 2, indent: int = 1) -> str:
 def record() -> dict:
     import os
 
-    from core import calculate, kratos, results
+    from core.kratos import export as kratos
+    from core.run import calculate
+    from core.results import runs as results
     from tests.fakes import gid_writer
     from tests.models import excavation
 

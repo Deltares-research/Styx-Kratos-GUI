@@ -1,4 +1,4 @@
-"""Projects saved before the unit system (core/legacy.py): converted once, on load, into
+"""Projects saved before the unit system (core/model/legacy.py): converted once, on load, into
 the Kratos property sets and the SI values the old exporter wrote -- so an old project
 writes the deck it always wrote."""
 
@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from core import legacy
-from core.schemas import Project
+from core.model import legacy
+from core.model.schemas import Project
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "projects"
 
@@ -142,7 +142,7 @@ def test_an_old_shaped_section_in_a_kn_project_arrives_in_kilonewtons():
     the record is read as the old exporter would have (kN -> SI) and then expressed in
     the project's own system."""
     data = Project.model_validate(fixture("staged_v1")).model_dump(mode="json")
-    data, _ = __import__("core.units", fromlist=["units"]).convert_project(data, "kN")
+    data, _ = __import__("core.model.units", fromlist=["units"]).convert_project(data, "kN")
     data["beam_sections"] = [{"id": "az26", "name": "AZ 26", "E": 2.1e8, "nu": 0.3,
                               "area": 0.0198, "inertia": 5.52e-4, "density": 7850.0,
                               "spacing": 1.0, "shear_area": 0.01, "inertia_minor": 1e-4,

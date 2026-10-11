@@ -1,7 +1,7 @@
 /* Create a custom soil volume from typed coordinates.
 
    The shape is a planar polygon plus an extrusion vector, which is the
-   `polygon_extrude` recipe core/creator.py already runs. One form covers both
+   `polygon_extrude` recipe core/geometry/creator.py already runs. One form covers both
    ways of describing a body:
 
      * an embankment or cutting — the cross-section drawn in a vertical plane
@@ -109,7 +109,7 @@ App.SoilVolumeDialog = (function () {
      asks for corners in two axes and nothing else.
 
      What is *sent* is still a polygon_extrude prism: that is what the backend
-     sections (core/build.py `_section` intersects a plane with a solid, and a
+     sections (core/geometry/build.py `_section` intersects a plane with a solid, and a
      surface has nothing to intersect). Sweeping it across the whole domain is the
      honest encoding of "infinite out of plane" -- every section plane cuts it, and
      switching back to 3D shows a body spanning the model rather than a slab of

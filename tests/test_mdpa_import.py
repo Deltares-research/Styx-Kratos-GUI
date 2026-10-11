@@ -1,4 +1,4 @@
-"""`core.mdpa_import`: reading a .mdpa deck back into typed mesh data.
+"""`core.kratos.mdpa_import`: reading a .mdpa deck back into typed mesh data.
 
 Round-tripped through `kratos.export_project`, so the classification tables are proven
 against the same fixture the forward-export tests use, and fed hand-written decks for the
@@ -7,9 +7,10 @@ element classes a deck written elsewhere uses and the export side never emits.
 
 import pytest
 
-from core import build, kratos, mdpa_import
-from core.schemas import MeshRequest, Project
-from core.seed import seed_project
+from core.geometry import build
+from core.kratos import export as kratos, mdpa_import
+from core.model.schemas import MeshRequest, Project
+from core.model.seed import seed_project
 
 @pytest.fixture(scope="module")
 def session():
@@ -601,7 +602,7 @@ def test_blank_lines_inside_a_block_are_skipped():
     `test_calculate.test_the_deck_lands_on_disk_as_the_bytes_it_was_rendered_as`), so
     read back it was blank-line-separated throughout -- and this parser took the whole
     import down with "list index out of range" on the first one. The two defects
-    together meant `core.mdpa_import` could not read a single deck this project had
+    together meant `core.kratos.mdpa_import` could not read a single deck this project had
     ever exported.
 
     The line-ending bug is fixed; this is the other half, and it is worth having on its

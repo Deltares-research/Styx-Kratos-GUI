@@ -2,7 +2,7 @@
    test-material-sets.js — the Material sets dialog, for Kratos property sets.
 
    A soil is what Kratos reads: a constitutive law and its Variables, under Kratos'
-   names, in the project's units (core/schemas.py). The dialog shows exactly that,
+   names, in the project's units (core/model/schemas.py). The dialog shows exactly that,
    labels each number in the project's system, edits it in place on App.MATERIALS (the
    contract patches.js saves through), and refuses what the server would refuse.
    ══════════════════════════════════════════════════════════════════ */

@@ -1,7 +1,7 @@
-"""`core.kratos_runner` end to end, against a stand-in Kratos.
+"""`core.run.runner` end to end, against a stand-in Kratos.
 
 `test_calculate.py` covers the orchestrator wrapper in isolation. This runs the real
-entry point -- `python -m core.kratos_runner ProjectParameters.json`, in the deck's own
+entry point -- `python -m core.run.runner ProjectParameters.json`, in the deck's own
 directory, with `calculate.interpreter()`'s environment -- against
 `tests/fakes/kratos_stub`, a `KratosMultiphysics` whose `SequentialOrchestrator` keeps
 the real one's loop order. What that proves and the wrapper tests cannot: the registry
@@ -16,8 +16,9 @@ from pathlib import Path
 
 import pytest
 
-from core import calculate, kratos_processes
-from core.kratos_runner import STAGE_MARKER
+from core.kratos import processes as kratos_processes
+from core.run import calculate
+from core.run.runner import STAGE_MARKER
 
 STUB = Path(__file__).resolve().parent / "fakes" / "kratos_stub"
 
@@ -191,7 +192,7 @@ def test_without_kratos_the_runner_fails_the_way_calculate_explains(
 
 
 def test_the_runner_does_not_import_the_server(tmp_path, monkeypatch):
-    """Kratos' interpreter has none of FastAPI, pydantic or gmsh. `-m core.kratos_runner`
+    """Kratos' interpreter has none of FastAPI, pydantic or gmsh. `-m core.run.runner`
     imports `core` first, so neither it nor the runner may pull any of them in."""
     deck(tmp_path, STAGES[:1])
     (tmp_path / "sitecustomize.py").write_text(
@@ -212,9 +213,9 @@ def test_the_runner_does_not_import_the_server(tmp_path, monkeypatch):
 def test_a_real_export_runs_through_the_stand_in(tmp_path, monkeypatch):
     """Not a hand-written deck: what the server exports for the staged test model, so
     the orchestrator name and execution list are the ones Kratos will really be given."""
-    from core import kratos
-    from core.build import session
-    from core.schemas import MeshRequest
+    from core.kratos import export as kratos
+    from core.geometry.build import session
+    from core.model.schemas import MeshRequest
     from tests.models import excavation
     project = excavation.excavation_project(staged=True)
     with session():
@@ -247,7 +248,7 @@ def stub_on_path(monkeypatch):
 
 def test_main_returns_zero_after_a_run_that_worked(tmp_path, monkeypatch, capsys,
                                                     stub_on_path):
-    from core import kratos_runner
+    from core.run import runner as kratos_runner
     deck(tmp_path, STAGES[:2])
     monkeypatch.chdir(tmp_path)
 
@@ -259,7 +260,7 @@ def test_main_returns_zero_after_a_run_that_worked(tmp_path, monkeypatch, capsys
 
 
 def test_main_lets_a_stage_failure_through(tmp_path, monkeypatch, stub_on_path):
-    from core import kratos_runner
+    from core.run import runner as kratos_runner
     deck(tmp_path, STAGES[:1], fail={"1_Initial_stage": "solve"})
     monkeypatch.chdir(tmp_path)
 
@@ -268,7 +269,7 @@ def test_main_lets_a_stage_failure_through(tmp_path, monkeypatch, stub_on_path):
 
 
 def test_main_with_no_deck_named_is_a_usage_error(capsys):
-    from core import kratos_runner
+    from core.run import runner as kratos_runner
 
     assert kratos_runner.main(["kratos_runner.py"]) == 2
     assert "usage" in capsys.readouterr().err

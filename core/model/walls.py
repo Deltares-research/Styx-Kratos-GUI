@@ -7,7 +7,7 @@ into the other, which is what gives the wall a `y` to edit in 3D at all -- a pil
 none, so before this it could only be swept a nominal strip wide with nothing in the
 Selection explorer to change.
 
-The pairing is the one `core/loads.py` uses for a surface load and a line load, and for
+The pairing is the one `core/model/loads.py` uses for a surface load and a line load, and for
 the same reason: both records are kept, linked by `derived_from`, so the footprint the
 user draws in plan survives a trip through a section that has no y to remember it by.
 The translation runs in the direction of travel, so whichever dimension was just left
@@ -25,7 +25,7 @@ in the section; only the half of a *pair* is refreshed.
 from __future__ import annotations
 
 
-from core.schemas import Beam, Member, Panel, PanelSection, Project
+from core.model.schemas import Beam, Member, Panel, PanelSection, Project
 
 Structure = Beam | Panel | Member
 
@@ -62,7 +62,7 @@ def wall_section_for(section, existing: dict[str, PanelSection]) -> PanelSection
     """The shell property set a pile's profile becomes, made once per profile.
 
     `CROSS_AREA` per metre run is exactly a thickness in metres
-    (`PanelSection.from_beam_section`), the same reduction `kratos._shell_section_of`
+    (`PanelSection.from_beam_section`), the same reduction `core.kratos.export._shell_section_of`
     writes into the deck. Shared by every wall built
     from that profile, so editing the profile moves all of them together.
     """

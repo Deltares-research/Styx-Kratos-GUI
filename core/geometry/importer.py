@@ -18,7 +18,7 @@ import struct
 import uuid
 from pathlib import Path
 
-DATA_DIR = Path(__file__).resolve().parent.parent / ".data"
+DATA_DIR = Path(__file__).resolve().parents[2] / ".data"
 
 CAD_EXTENSIONS = {".step", ".stp", ".iges", ".igs", ".brep"}
 MESH_EXTENSIONS = {".stl", ".obj"}

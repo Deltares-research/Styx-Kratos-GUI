@@ -1,4 +1,4 @@
-"""`core.importer` and `POST /api/geometry/import`: a CAD file in, one solid part out
+"""`core.geometry.importer` and `POST /api/geometry/import`: a CAD file in, one solid part out
 (plan/active/alpha-test-plan.md Task 1.2).
 
 The fixtures are made here rather than committed: STEP, IGES and BREP are written by gmsh
@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from core import build, importer
+from core.geometry import build, importer
 
 CORNERS = [(0, 0, 0), (2, 0, 0), (2, 1, 0), (0, 1, 0),
            (0, 0, 3), (2, 0, 3), (2, 1, 3), (0, 1, 3)]
@@ -192,8 +192,8 @@ def test_a_path_with_spaces_and_non_ascii_letters_imports(gmsh_session, data_dir
 def test_a_part_rebuilt_from_triangles_takes_part_in_the_build_as_its_volume(gmsh_session,
                                                                              data_dir,
                                                                              tmp_path):
-    from core.schemas import CustomPart
-    from core.seed import seed_project
+    from core.model.schemas import CustomPart
+    from core.model.seed import seed_project
 
     source = tmp_path / "cube.stl"
     source.write_text(stl_text(), encoding="ascii")

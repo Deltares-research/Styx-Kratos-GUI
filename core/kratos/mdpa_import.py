@@ -1,14 +1,14 @@
 """Parse a Kratos `.mdpa` deck back into mesh data: nodes, typed elements and
 conditions, and named sub-model-part groupings.
 
-The mirror image of `core.kratos`: that module picks a Kratos class for each
+The mirror image of `core.kratos.export`: that module picks a Kratos class for each
 (dimension, gmsh element type) pair via its ELEMENTS/BEAMS/SHELLS/TRUSSES/CONDITIONS
 tables; this inverts those same tables so a class name found in a file resolves back to
 what kind of entity it is (soil continuum, beam, shell, truss, or load condition) and
 its dimension and node count. Those tables are imported rather than re-derived, so the
 two directions cannot silently drift apart.
 
-Node order is not un-permuted -- `kratos.FLIP` only ever encodes orientation (which way
+Node order is not un-permuted -- `export.FLIP` only ever encodes orientation (which way
 an element's normal or a beam's local axis points), and that does not matter for
 re-displaying a mesh that already exists.
 
@@ -26,7 +26,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 import re
 
-from core.kratos import (BEAMS, BOUNDARIES, CONDITIONS, ELEMENTS, INTERFACES,
+from core.kratos.export import (BEAMS, BOUNDARIES, CONDITIONS, ELEMENTS, INTERFACES,
                         NORMAL_LOAD_CONDITIONS, SHELLS, TRUSSES)
 
 TOLERANCE = 1e-6
@@ -34,7 +34,7 @@ TOLERANCE = 1e-6
 within this."""
 
 BOUNDARY_NAMES = {name for name, _, _ in BOUNDARIES}
-"""Domain-face node groups (`kratos.BOUNDARIES`). Their fixities live in
+"""Domain-face node groups (`export.BOUNDARIES`). Their fixities live in
 project_parameters.json, not in any SubModelPartData the .mdpa itself carries, so a
 group is only recognisable as a boundary by this reserved name."""
 
@@ -53,7 +53,7 @@ def _reverse_trusses() -> dict[str, tuple[str, int, int]]:
 
 
 def _reverse_interfaces() -> dict[str, tuple[str, int, int]]:
-    """`kratos.INTERFACES` is keyed by nodes *per side*, and a contact element carries
+    """`export.INTERFACES` is keyed by nodes *per side*, and a contact element carries
     both sides: the line's own nodes, then their coincident copies."""
     return {name: ("interface", dim, per_side * 2)
             for (dim, per_side), name in INTERFACES.items()}
@@ -123,7 +123,7 @@ class Part:
     data: dict[str, list[float]] = field(default_factory=dict)
     kind: str = "group"
     """"body" (owns elements), "load" (owns conditions), "boundary" (a reserved domain-
-    face name), "support" (nodes only, named `*_Support` by `kratos.export_project`'s
+    face name), "support" (nodes only, named `*_Support` by `export.export_project`'s
     anchor-tail convention), or "group" (any other nodes-only part)."""
 
     def to_dict(self) -> dict:
@@ -292,8 +292,8 @@ def _part(lines: list[str], index: int, model: MdpaModel, name: str,
 
 # ── Drawable preview ──────────────────────────────────────────────────────
 #
-# A payload shaped exactly like the `Section`s `core.tessellate` renders for a
-# generated mesh (core/tessellate.py:62), so the viewer can draw an imported
+# A payload shaped exactly like the `Section`s `core.geometry.tessellate` renders for a
+# generated mesh, so the viewer can draw an imported
 # deck through the buffer path it already has (js/buffers.js's `geometry`/`edges`)
 # rather than needing a second renderer.
 #
@@ -325,7 +325,7 @@ PART_PALETTE = (
     "#4fada0", "#c98750", "#5c76b0", "#a3b04f", "#b0507e",
 )
 """Cycled by a body part's position in the deck. There is no per-body material to key a
-colour off here, the way `kratos._part_materials` has for an export -- only an
+colour off here, the way `export._part_materials` has for an export -- only an
 arbitrary, but stable (same file, same order, same colours), position in the file."""
 
 
@@ -352,7 +352,7 @@ def _element_labels(nodes: dict[int, tuple[float, float, float]],
                     conns_by_id: list[tuple[int, list[int]]]) -> list[list[float]]:
     """`[element id, x, y, z]` per element, the point being the mean of its own nodes.
 
-    The same rule the exporter labels a generated mesh by (`kratos._element_labels`), and
+    The same rule the exporter labels a generated mesh by (`export._element_labels`), and
     exact for the simplices either side writes: a quadratic element's extra nodes are
     edge midpoints, whose mean is the corners' mean again. An element naming a node the
     file does not define is skipped rather than guessed at.
@@ -388,7 +388,7 @@ def _triangles_and_edges(conns_by_kind: dict[str, list[list[int]]],
                       for tri in _plane_triangles(conn)])
     triangles += [conn[:3] for conn in conns_by_kind.get("shell", [])]
     # The far end is the *second* node, never the last: a quadratic beam is written
-    # (end, end, midside) -- see `kratos.BEAMS` -- so drawing to the last node covers
+    # (end, end, midside) -- see `export.BEAMS` -- so drawing to the last node covers
     # half of each element and renders a sheet pile as a dashed line.
     edges = [(conn[0], conn[1]) for conn in conns_by_kind.get("beam", [])]
     edges += [(conn[0], conn[1]) for conn in conns_by_kind.get("truss", [])]

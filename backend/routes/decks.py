@@ -9,11 +9,12 @@ from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from backend import store
 from backend.routes.common import check_mesh_keys, not_for_a_deck, read_upload, run_mesh_job
-from core import calculate, gmsh_worker
-from core.build import GeometryError
-from core.kratos import ExportError
-from core.meshing import MeshingError
-from core.schemas import ExportRequest, Project
+from core import gmsh_worker
+from core.run import calculate
+from core.geometry.build import GeometryError
+from core.kratos.export import ExportError
+from core.geometry.meshing import MeshingError
+from core.model.schemas import ExportRequest, Project
 
 router = APIRouter()
 
@@ -47,7 +48,7 @@ async def calculate_project(settings: ExportRequest) -> dict:
     app keeps answering while a solver works. A model Kratos rejects comes back 200 with
     `ok` false and its reason: that is an answer about the model, not a broken server.
 
-    A project that is a deck already (`core.deck`) skips the export: its own files are
+    A project that is a deck already (`core.kratos.deck`) skips the export: its own files are
     copied into the run directory and run as they are.
     """
     project = store.get()
@@ -75,7 +76,7 @@ async def calculate_project(settings: ExportRequest) -> dict:
 
 
 async def _calculate_deck(project: Project) -> dict:
-    from core import deck as decks
+    from core.kratos import deck as decks
 
     try:
         stats = decks.stats(project.deck)
@@ -104,7 +105,7 @@ async def import_mdpa(file: UploadFile = File(...)) -> dict:
     app's 2D view looks, and it is the plane an export of this project would have
     flattened.
     """
-    from core.mdpa_import import ImportError_, import_mdpa as parse
+    from core.kratos.mdpa_import import ImportError_, import_mdpa as parse
 
     ext = Path(file.filename or "").suffix.lower()
     if ext != ".mdpa":
@@ -118,7 +119,7 @@ async def import_mdpa(file: UploadFile = File(...)) -> dict:
     #
     # `node_parts` is what lets the preview answer "which SubModelParts is this node
     # in" when a node is clicked (frontend/js/node-parts.js).
-    from core import node_parts
+    from core.kratos import node_parts
 
     def preview() -> dict:
         model = parse(text)

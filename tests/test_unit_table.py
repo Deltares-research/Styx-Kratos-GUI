@@ -1,10 +1,10 @@
-"""The browser's copy of the unit systems, held to the server's (core/units.py).
+"""The browser's copy of the unit systems, held to the server's (core/model/units.py).
 
 The material editor labels each Kratos variable with its unit in the project's system,
 and the library converts its presets into that system, so the browser needs what
-`core.units` knows: the systems, each quantity's dimension and labels, and which quantity
+`core.model.units` knows: the systems, each quantity's dimension and labels, and which quantity
 each Kratos variable is. Two copies of that drift, so there is one -- generated from
-`core.units` into `frontend/js/unit-table.js` -- and this test fails the moment it is stale.
+`core.model.units` into `frontend/js/unit-table.js` -- and this test fails the moment it is stale.
 
     python tests/test_unit_table.py --write
 
@@ -19,11 +19,11 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
-from core import units   # noqa: E402
+from core.model import units   # noqa: E402
 
 TABLE = pathlib.Path(__file__).resolve().parents[1] / "frontend" / "js" / "unit-table.js"
 
-HEADER = '''/* Generated from core/units.py -- the unit systems a project can be in, each
+HEADER = '''/* Generated from core/model/units.py -- the unit systems a project can be in, each
    quantity's dimension (mass, length, time) and label, and the quantity of every Kratos
    variable the application knows. Read by frontend/js/units.js.
 

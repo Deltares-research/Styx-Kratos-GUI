@@ -5,7 +5,7 @@ solid model could only sweep it a nominal strip wide and there was nothing to ed
 Selection explorer showed x and z and no y. A wall in 3D is a `Panel` -- a plan
 footprint swept between two levels -- and that is what the pile becomes on the switch.
 
-The pairing is the one `core/loads.py` already uses for a surface load and a line load:
+The pairing is the one `core/model/loads.py` already uses for a surface load and a line load:
 both records are kept, linked by `derived_from`, and the dimension being left is the
 one that wins. Keeping both is what lets the footprint the user drew in plan survive a
 trip through the section, which has no y to remember it by.
@@ -16,9 +16,9 @@ stepped pile keeps the swept strip and says so.
 
 import pytest
 
-from core import walls
-from core.schemas import Project
-from core.seed import seed_project
+from core.model import walls
+from core.model.schemas import Project
+from core.model.seed import seed_project
 
 
 PILE_X, PILE_TOP, PILE_TOE = 10.0, 0.0, -7.5
@@ -189,8 +189,9 @@ def test_a_plane_anchors_head_is_a_node_of_the_translated_wall():
     demands it: `kratos._anchor_bodies` resolves the head among structural nodes only,
     and raises if there is none -- a vertex of the anchor's own display line will not do.
     """
-    from core import build, kratos
-    from core.schemas import MeshRequest
+    from core.geometry import build
+    from core.kratos import export as kratos
+    from core.model.schemas import MeshRequest
 
     payload = project_with([PILE]).model_dump()
     payload["anchor_sections"] = [{"id": "strand", "name": "Strand", "E": 1.95e8,

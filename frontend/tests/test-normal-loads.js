@@ -4,7 +4,7 @@
    excavation face, a sloped boundary -- rather than the fixed x/y vector a LineLoad
    carries on a flat horizontal run. Sized either "Hydrostatic" (tracks the project's
    water level, the usual case for an exposed excavation face) or "Uniform" (a fixed
-   pressure). Plane strain only; see NORMAL_LOAD_CONDITIONS in core/kratos.py. */
+   pressure). Plane strain only; see NORMAL_LOAD_CONDITIONS in core/kratos/export.py. */
 
 (function () {
   function section(extra) {

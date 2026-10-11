@@ -19,10 +19,10 @@ from pydantic import ValidationError
 
 from backend.main import app
 from core import gmsh_worker
-from core.kratos import ExportError
-from core.meshing import MeshingError
-from core.schemas import MeshRequest
-from core.seed import seed_project
+from core.kratos.export import ExportError
+from core.geometry.meshing import MeshingError
+from core.model.schemas import MeshRequest
+from core.model.seed import seed_project
 
 ROUTES = Path(__file__).resolve().parents[2] / "backend" / "routes"
 

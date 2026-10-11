@@ -1,9 +1,9 @@
 """Normal loads in the exported deck: the condition and the process that sizes it.
 
-A `NormalLoad` (core/schemas.py) is a pressure normal to a free polyline -- an exposed
+A `NormalLoad` (core/model/schemas.py) is a pressure normal to a free polyline -- an exposed
 excavation face, a sloped boundary -- embedded into the section the same way a free
-interface is (core/build.py:_embed_beams) and harvested the same way
-(core/kratos.py:_normal_load_conditions), rather than by `_load_conditions`'s flat-
+interface is (core/geometry/build.py:_embed_beams) and harvested the same way
+(core/kratos/export.py:_normal_load_conditions), rather than by `_load_conditions`'s flat-
 elevation scan. Its process, `ApplyNormalLoadTableProcess`, is read off a real working
 example in Deltares/FEA-Tools (MiscellaneousTools/InterfaceInserter/
 test_project_parameters.json), which this reproduces for the "Hydrostatic" case.
@@ -15,9 +15,10 @@ import json
 
 import pytest
 
-from core import build, kratos
-from core.schemas import MeshRequest, Project
-from core.seed import seed_project
+from core.geometry import build
+from core.kratos import export as kratos
+from core.model.schemas import MeshRequest, Project
+from core.model.seed import seed_project
 from tests import mdpa
 
 
@@ -206,7 +207,7 @@ def test_a_staged_project_applies_the_normal_load_in_every_stage(session):
     """A sheet pile splits the deck into an initial and a wall-installation stage. The
     water against an excavation face is there throughout -- nothing about a normal load
     waits for the wall -- so its process is repeated in both, the way an ordinary load's
-    is (see kratos_processes' module docstring)."""
+    is (see core.kratos.processes' module docstring)."""
     payload = normal_load_project().model_dump()
     payload["beam_sections"] = [{"id": "az26", "name": "AZ 26-700", "E": 2.1e8,
                                  "nu": 0.3, "area": 0.0198, "inertia": 5.52e-4,

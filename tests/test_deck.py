@@ -15,9 +15,12 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from core import calculate, deck, results, script
+from core import script
+from core.kratos import deck
+from core.run import calculate
+from core.results import runs as results
 from backend.main import app
-from core.schemas import Project
+from core.model.schemas import Project
 
 MODEL_SCRIPT = Path(__file__).resolve().parent / "models" / "excavation.py"
 
@@ -309,7 +312,7 @@ def test_a_deck_file_gone_since_opening_is_reported_not_crashed_on(
 def deck_script(tmp_path, deck_dir) -> Path:
     path = tmp_path / "dike_case.py"
     path.write_text(textwrap.dedent(f"""
-        from core.deck import deck_project
+        from core.kratos.deck import deck_project
 
         def dike_project():
             return deck_project({str(deck_dir)!r}, "dike.json", name="Dike")
@@ -510,7 +513,7 @@ def test_each_phase_stores_what_its_stage_changes(staged):
 
 
 def test_the_resolved_phases_are_the_stages_own_part_lists(staged):
-    from core import phases
+    from core.model import phases
     assert phases.active_parts(staged, "4_Crane") == {"soil", "fill", "crane"}
     assert phases.active_parts(staged, "6_Dig") == {"soil"}
 
@@ -550,7 +553,7 @@ def test_staging_brings_the_units_record_when_the_deck_has_one(project, deck_dir
     """A deck this application exported records its unit system beside itself; opened
     again as a deck case, the record goes into the run so its results are labelled in
     that system (`results.run_unit_system`). A deck from elsewhere has none, and is SI."""
-    from core import calculate
+    from core.run import calculate
     (deck_dir / calculate.UNITS_NAME).write_text('{"unit_system": "kN"}', encoding="utf-8")
     written = deck.stage(project.deck, tmp_path)
     assert calculate.UNITS_NAME in written

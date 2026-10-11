@@ -10,7 +10,7 @@ An old file is turned into the new shape here, in the SI system, carrying *exact
 numbers the old exporter wrote*. So a project opened today exports the deck it exported
 yesterday, and every derivation the old exporter made silently is now a value the user
 can see and change. The constants and expressions below are therefore frozen history,
-not configuration: they are what `kratos_materials` did on the day it stopped, and they
+not configuration: they are what `core.kratos.materials` did on the day it stopped, and they
 must not follow later changes there.
 
 A file is old when its materials carry the old fields (`g_unsat`). Materials are
@@ -103,7 +103,7 @@ def migrate_records(value: dict) -> dict:
     shape -- a script written against the old fields, say. Each such record is
     converted as an old file's would be, then expressed in the project's own system.
     Loads and pressures carry no shape to tell old from new by, and are left alone."""
-    from core import units
+    from core.model import units
 
     out = dict(value)
     dim = out.get("dimension", 3)

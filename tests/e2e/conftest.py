@@ -39,7 +39,7 @@ def live_server(request, tmp_path_factory):
     `calculate.run` gets the fake -- as 22 of them did when `--run-e2e` ran everything."""
     import uvicorn
 
-    from core import calculate
+    from core.run import calculate
     from backend.main import app
     from tests.fakes import fake_kratos
 

@@ -25,8 +25,8 @@ from dataclasses import dataclass, field
 
 import gmsh
 
-from core import build
-from core.schemas import Project
+from core.geometry import build
+from core.model.schemas import Project
 
 DECIMALS = 4
 """0.1 mm at metre scale. Python's float repr is 17 significant digits by default."""
@@ -102,7 +102,7 @@ def tessellate(project: Project) -> DisplayModel:
     custom_colors = {p.key: p.color for p in project.custom_parts}
 
     sections = []
-    # A normal load owns a curve -- the line its condition is written on (core/kratos.py)
+    # A normal load owns a curve -- the line its condition is written on (core/kratos/export.py)
     # -- but nothing to draw from it. Its symbol is the arrows the viewport puts on that
     # line, and drawing the curve as well would lay a stray line over the loaded face,
     # which is what a sheet pile's hairline would look like there.
@@ -151,7 +151,8 @@ def tessellate(project: Project) -> DisplayModel:
                 )
             continue
         # A part can end up owning no volume -- fragmenting two solids that occupy
-        # the same space assigns the shared tags to one of them (core/build.py:320-326).
+        # the same space assigns the shared tags to one of them
+        # (`build._assign_by_priority`).
         # It then contributes no sections; it must not fail the whole model.
         for color, tags in _group_by_color(result.volumes.get(key, []), colors).items():
             sections.append(_section(key, color, tags, coords))
