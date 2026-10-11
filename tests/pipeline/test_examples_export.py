@@ -20,9 +20,10 @@ from pathlib import Path
 
 import pytest
 
-from core import build, kratos
-from core.schemas import MeshRequest, Project
-from core.seed import seed_project
+from core.geometry import build
+from core.kratos import export as kratos
+from core.model.schemas import MeshRequest, Project
+from core.model.seed import seed_project
 from tests.models import excavation
 from tests.pipeline.deck_invariants import check_deck
 
@@ -36,7 +37,7 @@ ALLOWED_WARNINGS = [
 ]
 
 ALLOWED_3D_WARNINGS = [
-    # What the solid model cannot carry yet, each named in the export (core/kratos.py).
+    # What the solid model cannot carry yet, each named in the export (core/kratos/export.py).
     r"^interfaces are plane-strain only and none was written into this 3D deck",
     r"^a normal load is plane-strain only and none was written into this 3D deck",
     r"^the wall panels are written as linear shells inside a quadratic soil mesh",

@@ -16,8 +16,8 @@ project validates exactly as it used to.
 
 import pytest
 
-from core.schemas import Project
-from core.seed import seed_project
+from core.model.schemas import Project
+from core.model.seed import seed_project
 
 
 EMBANKMENT = {"key": "drawn_1", "label": "Embankment", "source": "gui",

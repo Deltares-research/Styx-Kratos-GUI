@@ -4,7 +4,7 @@
    Two halves, and the first matters more than it looks.
 
    `App.Phases.activeParts` is a second implementation of
-   `core/phases.py:active_parts`. It exists because the viewport has to grey out
+   `core/model/phases.py:active_parts`. It exists because the viewport has to grey out
    what a phase switched off on every click, and cannot ask the server each time. Two
    implementations of one rule drift, so both are held to one generated document --
    `fixtures/phase-cases.js`, owned by `tests/test_phase_parity.py`, which
@@ -39,7 +39,7 @@
     Object.keys(FIXTURE.active_parts).forEach(function (id) {
       T.eq(App.Phases.activeParts(p, id).slice().sort(),
            FIXTURE.active_parts[id].slice().sort(),
-           'phase ' + id + ' disagrees with core/phases.py');
+           'phase ' + id + ' disagrees with core/model/phases.py');
     });
   });
 
@@ -133,7 +133,7 @@
     });
   });
 
-  /* The run log names the stage it reached (core/calculate.py's `failed_stage`),
+  /* The run log names the stage it reached (core/run/calculate.py's `failed_stage`),
      so the dots can say how far it got rather than all staying grey. */
   test('a finished run marks the stages that completed', function () {
     var rows = App.Phases.rows(project(), { completed: 3 });

@@ -8,9 +8,9 @@ import time
 
 import gmsh
 
-from core import build
-from core.schemas import BoxRefinement, CylinderRefinement, Project
-from core.tessellate import DECIMALS, Section
+from core.geometry import build
+from core.model.schemas import BoxRefinement, CylinderRefinement, Project
+from core.geometry.tessellate import DECIMALS, Section
 
 
 MESH_COLOR = "#d9dee6"
@@ -442,7 +442,7 @@ def _interface_sections(interface, project: Project, built: build.BuildResult,
                         ) -> list[Section]:
     """`<key>:L` and/or `<key>:R`: one section per face the interface unglues.
 
-    The deck has a contact element per face (`core.interfaces`), and which face a user is
+    The deck has a contact element per face (`core.kratos.interfaces`), and which face a user is
     looking at matters -- one holds the retained soil, the other the excavated side. An
     interface on a structure owns no curve of its own, so its segments are the
     structure's. Left is a +90 degree turn from walking the line in its stored order
@@ -498,20 +498,89 @@ def _left_of(path: list[tuple[float, float]], start: tuple[float, float, float],
     return (-ly / length, lx / length)
 
 
+POINT = 15
+"""gmsh's element type for a single node: what `loaded_elements` calls a point load's
+row, which is one node rather than boundary elements."""
+
+
+def loaded_elements(project: Project, dim: int,
+                    world: dict[int, tuple[float, float, float]]
+                    ) -> list[tuple[str, int, list[list[int]]]]:
+    """`(load id, gmsh element type, node rows)` for each active load: the boundary
+    elements on the ground surface that lie under it, or for a point load the one node
+    nearest it, typed `POINT`. Rows are in gmsh's node order.
+
+    Two things ask, and both ask here, so they cannot disagree: `core.kratos.export`
+    writes a condition on each row, and the mesh preview colours the same edges
+    (`_load_sections`), so the line a user sees is exactly the one Kratos is told to load.
+
+    Selected element by element rather than entity by entity: the pad is a display
+    indicator that never cuts the soil, so the loaded region is not a separate part.
+    `build._imprint_load_footprints` has split the boundary exactly at the footprint
+    edges, so every element is wholly inside or wholly outside it and the test below is
+    an exact containment test. Without that imprint the only available rule would be
+    whether an element's centre lies under the pad, which moves a loaded edge by as
+    much as one element.
+    """
+    out: list[tuple[str, int, list[list[int]]]] = []
+    # `loads_for` rather than a kind test: a translated pair holds a surface record and
+    # a line record for one load, and taking both would apply it twice. What it hands
+    # back for a 3D model is the surface loads plus the 2D ones nothing was translated
+    # from.
+    for load in project.loads_for(dim):
+        # A 3D line load imprints a *curve* on the solid's boundary, and the boundary
+        # elements read below are faces; the exporter says so in its warnings.
+        if not load.active or (dim == 3 and load.kind == "line"):
+            continue
+        if load.kind == "point":
+            target = ((load.x, load.y, 0.0) if dim == 2
+                      else (load.x, load.y, project.cut_at()))
+            nearest = min(
+                world,
+                key=lambda tag: sum((world[tag][axis] - target[axis]) ** 2 for axis in range(3)),
+            )
+            out.append((load.id, POINT, [[nearest]]))
+            continue
+        elevation = project.elevation_of(load)
+        rows_by_type: dict[int, list[list[int]]] = {}
+        for _, entity in gmsh.model.getEntities(dim - 1):
+            box = gmsh.model.getBoundingBox(dim - 1, entity)
+            if (abs(box[1] - elevation) > build.TOLERANCE
+                    or abs(box[4] - elevation) > build.TOLERANCE):
+                continue
+            types, _, connectivity = gmsh.model.mesh.getElements(dim - 1, entity)
+            for element_type, flat in zip(types, connectivity):
+                size = gmsh.model.mesh.getElementProperties(int(element_type))[3]
+                for offset in range(0, len(flat), size):
+                    row = [int(flat[offset + i]) for i in range(size)]
+                    if _under_load(row[:dim], world, load):
+                        rows_by_type.setdefault(int(element_type), []).append(row)
+        out.extend((load.id, element_type, rows)
+                   for element_type, rows in rows_by_type.items() if rows)
+    return out
+
+
+def _under_load(corners: list[int], world: dict[int, tuple[float, float, float]],
+                load) -> bool:
+    """Every corner inside the footprint, within the tolerance the imprint holds to."""
+    def inside(value: float, low: float, high: float) -> bool:
+        return low - build.TOLERANCE <= value <= high + build.TOLERANCE
+
+    if load.kind == "line":
+        return all(inside(world[tag][0], load.x0, load.x1) for tag in corners)
+    return all(inside(world[tag][0], load.x0, load.x1)
+               and inside(world[tag][2], load.z0, load.z1) for tag in corners)
+
+
 def _load_sections(project: Project, dim: int,
                    coordinates: dict[int, tuple[float, float, float]]
                    ) -> dict[str, Section]:
-    """Each load, as the edges the deck applies it on.
-
-    Asked of `kratos._load_conditions` itself rather than worked out again here, so the
-    line a user sees coloured is exactly the one Kratos is told to load. A point load is
-    one node, drawn as a segment of no length so it still gets its dot. A 3D surface
+    """Each load, as the edges the deck applies it on (`loaded_elements`). A point load
+    is one node, drawn as a segment of no length so it still gets its dot. A 3D surface
     load is drawn by the edges of its faces.
     """
-    from core import kratos
-
     out: dict[str, Section] = {}
-    for key, _, rows in kratos._load_conditions(project, dim, coordinates):
+    for key, _, rows in loaded_elements(project, dim, coordinates):
         section = out.setdefault(key, Section(key=key, color=MESH_COLOR))
         for row in rows:
             corners = row[:dim]
@@ -544,8 +613,8 @@ def _line_segments(curves: list[int], coordinates: dict[int, tuple[float, float,
 
 def _add_tie_segments(section: Section, curves: list[int]) -> None:
     """An anchor is one two-node truss from head to tail whatever the mesh does along
-    its curve (`kratos._anchor_ties`), so it is drawn as that one segment: the curve's
-    two end points."""
+    its curve (`core.kratos.export._anchor_ties`), so it is drawn as that one segment:
+    the curve's two end points."""
     for curve in curves:
         ends = gmsh.model.getBoundary([(1, curve)], oriented=False)
         for _, point in ends[:2]:

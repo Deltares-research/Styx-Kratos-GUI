@@ -16,9 +16,9 @@ profile's own out-of-plane `spacing`.
 import gmsh
 import pytest
 
-from core import build
-from core.schemas import Project
-from core.seed import seed_project
+from core.geometry import build
+from core.model.schemas import Project
+from core.model.seed import seed_project
 
 
 PILE_X = 10.0
@@ -160,7 +160,7 @@ def test_the_section_still_builds_its_structures(section):
 
 @pytest.fixture(scope="module")
 def drawn():
-    from core import tessellate
+    from core.geometry import tessellate
     project = project_with_2d_structures(dimension=3, simple=False)
     with build.session():
         yield tessellate.tessellate(project)

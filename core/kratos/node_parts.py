@@ -1,7 +1,7 @@
 """Which SubModelParts each node of a deck is in.
 
-Read off the `.mdpa` text itself -- the one `core.kratos` writes for the open project, or
-any other -- with `core.mdpa_import`, so a part's name and a node's number are exactly
+Read off the `.mdpa` text itself -- the one `core.kratos.export` writes for the open project, or
+any other -- with `core.kratos.mdpa_import`, so a part's name and a node's number are exactly
 what Kratos is given. Nothing is derived from the project: an interface split, a staged
 lift, a load's own sub-model part are all whatever the deck says they are.
 
@@ -12,7 +12,7 @@ every part name once per node.
 
 from __future__ import annotations
 
-from core import mdpa_import
+from core.kratos import mdpa_import
 
 
 def node_parts(mdpa_text: str) -> dict:

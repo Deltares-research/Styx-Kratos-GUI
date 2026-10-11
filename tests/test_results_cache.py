@@ -16,7 +16,8 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 
-from core import gid_results, mdpa_import, results
+from core.kratos import mdpa_import
+from core.results import gid as gid_results, runs as results
 from backend.main import app
 from tests.test_results import make_run
 
@@ -34,7 +35,7 @@ def seven_stages(runs_root):
 
 @pytest.fixture
 def runs_root(tmp_path, monkeypatch):
-    from core import calculate
+    from core.run import calculate
 
     root = tmp_path / "runs"
     root.mkdir()

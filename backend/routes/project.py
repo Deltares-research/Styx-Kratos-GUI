@@ -12,11 +12,12 @@ from fastapi.exceptions import RequestValidationError
 
 from backend import store
 from backend.routes.common import validated
-from core import kratos_materials, phases as phase_model, units
-from core.loads import translate as translate_loads
-from core.schemas import (DimensionUpdate, LayersUpdate, MaterialsUpdate, PhasesUpdate, Project,
+from core.model import phases as phase_model, units
+from core.kratos import materials as kratos_materials
+from core.model.loads import translate as translate_loads
+from core.model.schemas import (DimensionUpdate, LayersUpdate, MaterialsUpdate, PhasesUpdate, Project,
                           StructuresUpdate, UnitsUpdate, WaterUpdate)
-from core.walls import translate as translate_walls
+from core.model.walls import translate as translate_walls
 
 router = APIRouter()
 
@@ -48,7 +49,7 @@ def run_script(request: dict) -> dict:
     """
     from core import script as script_module
 
-    from core import deck as decks
+    from core.kratos import deck as decks
 
     path = (request or {}).get("path")
     if not path:
@@ -78,7 +79,7 @@ async def new_project() -> dict:
 
     An empty project, not the demo model: what the server itself opens on. It lives
     here, not in the browser, so a client-side copy is not a second definition to keep
-    in step with `core.seed.blank_project`.
+    in step with `core.model.seed.blank_project`.
     """
     project = store.new()
     return {"project": project, "invalidates": ["project", "tree", "geometry", "mesh"]}
@@ -134,8 +135,9 @@ async def patch_materials(update: MaterialsUpdate) -> dict:
     payload["materials"] = [material.model_dump() for material in update.materials]
     project = validated(payload)
     store.put(project)
-    # Soil colour comes from the assigned material (core/tessellate.py:129), so the
-    # geometry has to be re-tessellated even though no shape changed.
+    # Soil colour comes from the assigned material (`_colors_by_volume` in
+    # core/geometry/tessellate.py), so the geometry has to be re-tessellated even though
+    # no shape changed.
     return {"project": project, "invalidates": ["project", "tree", "geometry"]}
 
 
@@ -181,7 +183,7 @@ async def patch_phases(update: PhasesUpdate) -> dict:
     to *linearise*: Kratos runs one flat `execution_list`, so two phases starting from
     the same parent have no order to run in.
 
-    `linearise` is deliberately not a schema validator (see `core.phases.PhaseError`):
+    `linearise` is deliberately not a schema validator (see `core.model.phases.PhaseError`):
     a branch is a legitimate thing to have half-built in an editor, and refusing it in
     `Project` would make it impossible to type. It is refused *here* instead of at
     export because this is where the user can still see what they did -- the message
@@ -207,7 +209,7 @@ async def patch_phases(update: PhasesUpdate) -> dict:
 
 
 def _phases_of_a_deck_are_read_only(project: Project) -> None:
-    """A deck's phases are its stages, read from it (`core.deck`); the deck is what
+    """A deck's phases are its stages, read from it (`core.kratos.deck`); the deck is what
     Calculate runs, so an edit made here would show in the panel and change nothing
     that is calculated."""
     if project.deck is not None:
@@ -255,14 +257,14 @@ async def patch_dimension(update: DimensionUpdate) -> dict:
     # A load is the one thing that changes shape with the dimension: a pressure over a
     # footprint in the solid model is a pressure per metre run in the cut. Translated
     # here, at the single point the mode changes, so the tree, the geometry and the
-    # deck all see the same pair. See core/loads.py for what is and is not translatable.
+    # deck all see the same pair. See core/model/loads.py for what is and is not translatable.
     notes: list[str] = []
     payload["loads"] = [load.model_dump()
                         for load in translate_loads(current, update.dimension, notes,
                                                     update.section_offset)]
     # A wall changes shape with the dimension the same way: a sheet pile in the section
     # is a panel swept between two levels in the solid model, which is what gives it a
-    # plan footprint to edit. See core/walls.py for what is and is not translatable.
+    # plan footprint to edit. See core/model/walls.py for what is and is not translatable.
     beams, panel_sections = translate_walls(current, update.dimension, notes)
     payload["beams"] = [beam.model_dump() for beam in beams]
     payload["panel_sections"] = [section.model_dump() for section in panel_sections]
@@ -280,7 +282,7 @@ async def patch_dimension(update: DimensionUpdate) -> dict:
 
 @router.patch("/api/project/units")
 def patch_units(update: UnitsUpdate) -> dict:
-    """Re-express the whole project in another unit system (`core/units.py`).
+    """Re-express the whole project in another unit system (`core/model/units.py`).
 
     The one place values are converted: from here on the project, its deck and its
     results are all in the new system. A variable whose dimension is not known here is

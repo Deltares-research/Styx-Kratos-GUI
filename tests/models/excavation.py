@@ -18,8 +18,8 @@ It is also a script the GUI can open, through the same path a user's own model t
 
 from __future__ import annotations
 
-from core import phases
-from core.schemas import (Anchor, AnchorRows, AnchorSection, Beam, BeamSection, Borehole,
+from core.model import phases
+from core.model.schemas import (Anchor, AnchorRows, AnchorSection, Beam, BeamSection, Borehole,
                          BoxRefinement, Domain, Excavation, Interface, InterfaceSection,
                          LineLoad, Material, MeshSettings, NormalLoad, Piles, Project,
                          SoilLayer, Struts, Wall, WaterLevel, Wells)

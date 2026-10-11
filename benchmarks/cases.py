@@ -11,7 +11,8 @@ from __future__ import annotations
 
 from collections import defaultdict
 
-from core import kratos, kratos_materials, results
+from core.kratos import export as kratos, materials as kratos_materials
+from core.results import runs as results
 from benchmarks import models
 from benchmarks.runner import Case, Context, Outcome
 

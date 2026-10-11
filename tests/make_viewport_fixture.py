@@ -34,7 +34,7 @@ def record() -> dict:
     os.environ.setdefault("KRATOS_GUI_ALLOWED_HOSTS", "testserver")
     from fastapi.testclient import TestClient
 
-    from core import mdpa_import, node_parts
+    from core.kratos import mdpa_import, node_parts
     from backend.main import app
     from tests.models import excavation
 

@@ -1,6 +1,6 @@
 """Turning a stage's mesh into something that can be drawn and coloured.
 
-The buffers here are the same shape `core.mdpa_import.to_sections` already produces for
+The buffers here are the same shape `core.kratos.mdpa_import.to_sections` already produces for
 an imported deck -- positions, indices, edges, and `node_ids` giving the deck's own node
 number per vertex -- because the viewport has a path for those and a second one would be
 a second thing to keep working.
@@ -17,7 +17,8 @@ import textwrap
 
 import pytest
 
-from core import gid_results, mdpa_import, result_mesh
+from core.kratos import mdpa_import
+from core.results import gid as gid_results, mesh as result_mesh
 
 
 def dedent(text: str) -> str:
@@ -245,7 +246,7 @@ def test_the_real_stage_builds_and_every_index_is_in_range(real_run):
     """An index past the end of the positions buffer is the failure mode that matters:
     three.js does not check, it reads whatever is next in memory and draws a spike
     across the model."""
-    from core import results
+    from core.results import runs as results
 
     directory, model = real_run
     for stage in results.describe(directory.name)["stages"]:
@@ -262,7 +263,7 @@ def test_the_real_stage_builds_and_every_index_is_in_range(real_run):
 
 
 def test_the_real_stages_show_the_excavation_disappearing(real_run):
-    from core import results
+    from core.results import runs as results
 
     directory, model = real_run
 

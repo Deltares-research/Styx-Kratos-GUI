@@ -119,7 +119,7 @@ build), the configuration options, and troubleshooting.
 ## Project layout
 
 ```text
-core/          the engine: schemas, geometry, Gmsh meshing, the Kratos deck writer, results reader
+core/          the engine, one package per stage: model/, geometry/ (Gmsh), kratos/ (the deck), run/, results/
 backend/       the FastAPI app, the in-memory project store, and the launcher
 frontend/      the browser app (index.html, js/, css/, three.js), with its own tests in frontend/tests/
 tests/         pytest suites: unit, API, browser, end-to-end, Kratos and performance

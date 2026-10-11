@@ -15,7 +15,8 @@ from pathlib import Path
 
 import pytest
 
-from core import calculate, kratos, mdpa_import
+from core.kratos import export as kratos, mdpa_import
+from core.run import calculate
 
 DECK = {
     "deck_name": "Test_model",
@@ -92,7 +93,7 @@ def test_the_deck_lands_on_disk_as_the_bytes_it_was_rendered_as(tmp_path):
     a second time, and every line lands as "\r\r\n".
 
     Kratos tolerates it, which is why seven real runs went green over a malformed deck;
-    nothing else does. `core.mdpa_import` reads every second line as blank, and a file
+    nothing else does. `core.kratos.mdpa_import` reads every second line as blank, and a file
     that cannot be read back by the program that wrote it is a bug whether or not the
     solver minded.
     """
@@ -155,11 +156,11 @@ def repository_root() -> Path:
 def test_the_runner_is_named_as_a_module_of_core():
     """A module name rather than a file path, so it reads the same wherever the
     repository is checked out. `core` is the package Kratos' interpreter imports."""
-    assert calculate.COMMAND == ["-m", "core.kratos_runner", "ProjectParameters.json"]
+    assert calculate.COMMAND == ["-m", "core.run.runner", "ProjectParameters.json"]
 
 
 def test_the_repository_root_is_on_the_path_so_the_runner_can_be_imported(monkeypatch):
-    """The runner is `core.kratos_runner`, run by an interpreter that has never heard of
+    """The runner is `core.run.runner`, run by an interpreter that has never heard of
     this project. `core` is a folder at the repository's root, so the root is what
     has to be on its path."""
     monkeypatch.delenv(calculate.KRATOS_ENV, raising=False)
@@ -574,7 +575,7 @@ def test_the_stage_markers_are_kept_out_of_the_tail_shown_to_the_user():
 
 
 # ── The markers at the other end: kratos_runner's orchestrator wrapper ──────
-# `core.kratos_runner` is a script for Kratos' interpreter, but it imports Kratos only
+# `core.run.runner` is a script for Kratos' interpreter, but it imports Kratos only
 # inside `run()`, so the wrapper itself is ordinary Python and testable here against a
 # stand-in base class. What the stand-in reproduces is the contract read off Kratos'
 # own `Orchestrator`: `RunCurrentStagePreprocess(stage_name, data=None)` before each
@@ -604,7 +605,7 @@ class FakeOrchestrator:
 
 
 def test_the_wrapper_announces_every_stage_in_order(capsys):
-    from core import kratos_runner
+    from core.run import runner as kratos_runner
 
     kratos_runner.announcing(FakeOrchestrator)(["a", "b", "c"]).Run()
 
@@ -623,7 +624,7 @@ def test_the_wrapper_still_does_the_base_class_work(capsys):
     """It announces around Kratos' own hooks, it does not replace them. Dropping the
     super() call would silently stop every Activate and Deactivate operation, which is
     the whole of staged construction."""
-    from core import kratos_runner
+    from core.run import runner as kratos_runner
 
     orchestrator = kratos_runner.announcing(FakeOrchestrator)(["a", "b"])
     orchestrator.Run()
@@ -637,7 +638,7 @@ def test_begin_is_printed_before_the_preprocess_runs(capsys):
     Deactivate operations execute, so a phase naming a part the mdpa does not carry
     throws there. Announced after it, that failure would be blamed on the stage
     before."""
-    from core import kratos_runner
+    from core.run import runner as kratos_runner
 
     class Exploding(FakeOrchestrator):
         def RunCurrentStagePreprocess(self, stage_name, data=None):
@@ -652,7 +653,7 @@ def test_begin_is_printed_before_the_preprocess_runs(capsys):
 def test_the_two_ends_agree_on_the_marker(capsys):
     """The round trip: what the runner prints is what `calculate` reads. They share
     the constant, but not the format string, and a change to one is only caught here."""
-    from core import kratos_runner
+    from core.run import runner as kratos_runner
 
     class Failing(FakeOrchestrator):
         def Run(self):

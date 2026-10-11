@@ -1,4 +1,4 @@
-"""`core.mdpa_import`, against decks generated at random (plan sec 4.4, sec 9).
+"""`core.kratos.mdpa_import`, against decks generated at random (plan sec 4.4, sec 9).
 
 Hand-written fixtures pin the cases somebody thought of. This writes random small decks
 -- any node count, triangles over those nodes, sub-model parts (some nested) over both,
@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from hypothesis import given, settings, strategies as st
 
-from core import mdpa_import
+from core.kratos import mdpa_import
 
 ELEMENT = "UPwSmallStrainElement2D3N"
 COORD = st.floats(min_value=-1e4, max_value=1e4, allow_nan=False, allow_infinity=False)

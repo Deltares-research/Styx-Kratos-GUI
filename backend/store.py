@@ -9,8 +9,8 @@ rather than half-done.
 
 from __future__ import annotations
 
-from core.schemas import Project
-from core.seed import blank_project, seed_project
+from core.model.schemas import Project
+from core.model.seed import blank_project, seed_project
 
 # The server opens on an empty site. `reset()` restores the demo model -- it is what
 # test setup uses to get back to a known, fully-populated project -- while `new()` is

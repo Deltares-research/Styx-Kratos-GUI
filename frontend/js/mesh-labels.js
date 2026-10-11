@@ -10,7 +10,7 @@
 
    Element IDs have no counterpart in Node_ViZ -- it reads a node table and nothing else
    -- so they are this app's own: an element's number goes at its centroid, which the
-   server computes in the same pass that numbers it (core/kratos.py
+   server computes in the same pass that numbers it (core/kratos/export.py
    `_element_labels`). Everything downstream of "a number at a point" is then shared,
    which is why this module is about labels rather than about nodes: a kind is a list of
    points, a colour, and nothing more. Element edges, faces and whatever else comes next
@@ -91,7 +91,7 @@
   }
 
   /* An imported deck's sections: each carries its own slice of the file's node table
-     (core/mdpa_import.py `_section_dict`), one id per position triple. */
+     (core/kratos/mdpa_import.py `_section_dict`), one id per position triple. */
   function nodesFromSections(sections) {
     var out = [];
     (sections || []).forEach(function (section) {

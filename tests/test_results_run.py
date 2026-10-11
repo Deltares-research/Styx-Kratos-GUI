@@ -6,7 +6,7 @@ import sys
 
 import pytest
 
-from core import calculate
+from core.run import calculate
 from tests import results_run
 
 

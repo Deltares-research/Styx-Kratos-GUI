@@ -2,7 +2,7 @@
 
 Milestone D resolves the phase tree in the browser as well as on the server: the
 viewport has to grey out what a phase switched off, and it cannot ask the server on
-every click. That makes two implementations of one rule -- `core.phases.active_parts`
+every click. That makes two implementations of one rule -- `core.model.phases.active_parts`
 and `App.Phases.activeParts` -- and two implementations of one rule drift.
 
 `frontend/tests/fixtures/phase-cases.js` is the document both are held to. This module owns
@@ -31,8 +31,8 @@ import sys
 # it there already.
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
-from core import phases as phase_model, schemas   # noqa: E402
-from core.seed import seed_project                # noqa: E402
+from core.model import phases as phase_model, schemas   # noqa: E402
+from core.model.seed import seed_project                # noqa: E402
 
 FIXTURE = (pathlib.Path(__file__).resolve().parents[1]
            / "frontend" / "tests" / "fixtures" / "phase-cases.js")

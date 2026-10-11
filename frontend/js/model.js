@@ -36,9 +36,9 @@ App.Model = (function () {
 
   /* ── Mapping ─────────────────────────────────────────────────── */
 
-  /* Mirrors `Project.loads_for` in core/schemas.py, and has to stay in step
+  /* Mirrors `Project.loads_for` in core/model/schemas.py, and has to stay in step
      with it: a surface load and a line load can be one load seen from two dimensions
-     (core/loads.py translates between them on the mode switch), and both records
+     (core/model/loads.py translates between them on the mode switch), and both records
      are kept so the round trip does not widen the footprint. Exactly one of a pair
      belongs to the model, or the tree lists the load twice and the viewport draws it
      twice. A 2D load nothing was translated from -- a point load, or a line load below
@@ -69,14 +69,14 @@ App.Model = (function () {
     });
   }
 
-  /* Mirrors `Project.structures_for` in core/schemas.py, the way `loadsFor`
+  /* Mirrors `Project.structures_for` in core/model/schemas.py, the way `loadsFor`
      mirrors `loads_for` and for the same reason: a sheet pile and a wall panel can be
-     one wall seen from two dimensions (core/walls.py translates between them on
+     one wall seen from two dimensions (core/model/walls.py translates between them on
      the mode switch), and exactly one half of a pair belongs to the model or the tree
      lists the wall twice and the viewport draws it twice. A pile nothing was
      translated from -- a raking or stepped one, which has no panel form -- shows in
      both. */
-  /* Mirrors `Project.extent` in core/schemas.py: how far the model actually
+  /* Mirrors `Project.extent` in core/model/schemas.py: how far the model actually
      reaches, which is the domain grown to cover every drawn or imported part. A
      structure is placed against this, not against `project.domain` -- an embankment
      drawn above `y_top` is model geometry, and a load standing on it was being refused
@@ -121,7 +121,7 @@ App.Model = (function () {
       BOREHOLES: project.boreholes.map(function (b) {
         return { id: b.id, name: b.name, x: b.x, y: b.y, head: b.head, water: b.water };
       }),
-      // A soil is a Kratos property set (core/schemas.py Material): its law and
+      // A soil is a Kratos property set (core/model/schemas.py Material): its law and
       // its Variables, under Kratos' names, in the project's units -- carried as they
       // are, because the library goes back in one PATCH that replaces it wholesale and
       // a variable this record dropped is a variable the next save deletes. Only the
@@ -138,7 +138,7 @@ App.Model = (function () {
                  tops: Object.assign({}, l.tops), bots: Object.assign({}, l.bots) };
       }),
       // Every 2D-native record is built into the solid model too, on the section
-      // plane it was drawn on (core/build.py's `_section_sweeps`), so 3D shows
+      // plane it was drawn on (core/geometry/build.py's `_section_sweeps`), so 3D shows
       // it rather than hiding it: a sheet pile the viewport drops is the bug this
       // filter used to cause. The traffic is one way -- a wall panel is drawn in plan
       // and genuinely has no place in a plane-strain cut -- so 2D still shows only
@@ -282,7 +282,7 @@ App.Model = (function () {
   /* One tree row per soil *body*, not per layer.
 
      A staged excavation splits the soil inside the pit into the lifts it is dug in, so
-     one layer can be four bodies (core/schemas.py, `Project.soil_bodies`). Each
+     one layer can be four bodies (core/model/schemas.py, `Project.soil_bodies`). Each
      is separately meshed, separately deactivated in a phase, and separately shown or
      hidden -- so each needs its own row with its own eye, or the excavated side has no
      representation in the tree at all.
@@ -626,7 +626,8 @@ App.Model = (function () {
 
   /* The domain is one object for the whole project, so these rows edit the model
      rather than the selected layer. Mirrors the server's ordering validator
-     (core/schemas.py:45-49) so an impossible extent is refused here. */
+     (`Domain._ordered` in core/model/schemas.py) so an impossible extent is refused
+     here. */
   var LIMITS = { x0: ['x1', 'below'], x1: ['x0', 'above'],
                  z0: ['z1', 'below'], z1: ['z0', 'above'] };
 
@@ -653,7 +654,7 @@ App.Model = (function () {
 
   /* ── The water line ──────────────────────────────────────────────────────
      Two numbers, and both of them are the deck's: `y` is the level
-     `kratos_processes._pore_pressure` states the whole ground's water pressure about,
+     `core.kratos.processes._pore_pressure` states the whole ground's water pressure about,
      and `specific_weight` scales that pressure, every hydrostatic normal load, and
      DENSITY_WATER in the materials file. Nothing in the GUI could change either until
      now -- the frozen `water` entry in js/data.js:631 lists three borehole levels from
@@ -695,7 +696,7 @@ App.Model = (function () {
       set: function (value) {
         if (!Number.isFinite(value)) return 'The specific weight must be a number.';
         // Mirrors WaterLevel's gt=0. Zero is not merely wrong, it divides by zero
-        // where kratos_materials derives DENSITY_WATER from it.
+        // where core.kratos.materials derives DENSITY_WATER from it.
         if (value <= 0) return 'The specific weight must be greater than zero.';
         water.specific_weight = value;
         return null;
@@ -1160,7 +1161,7 @@ App.Model = (function () {
   }
 
   /* `null` is a choice, not a gap: a contact with no material of its own takes the
-     stiffness of whichever soil each stretch runs against (core/schemas.py,
+     stiffness of whichever soil each stretch runs against (core/model/schemas.py,
      InterfaceSection). A <select> carries strings, so it is offered as ''. */
   var ADJACENT_SOIL = { value: '', text: 'From the soil it runs against' };
 
@@ -1259,7 +1260,7 @@ App.Model = (function () {
      A pressure normal to a free polyline, sized one of two ways: tracking the
      project's own water level ("Hydrostatic", the usual case for an exposed
      excavation face) or a fixed value along the whole line ("Uniform"). See
-     core/schemas.py's NormalLoad and core/kratos_processes.py's
+     core/model/schemas.py's NormalLoad and core/kratos/processes.py's
      ApplyNormalLoadTableProcess. */
 
   function normalLoadPointEditor(record, index, axis) {
@@ -1319,7 +1320,7 @@ App.Model = (function () {
     /* The magnitude is always here and always editable, whichever mode the load is
        in: it is the field people come to this panel to change, and one that appears
        and vanishes with the type reads as a missing feature. It is written into the
-       deck either way (see kratos_processes' `_normal_load`). */
+       deck either way (see core.kratos.processes' `_normal_load`). */
     var sizing = [
       ['Type', hydrostatic ? 'Hydrostatic' : 'Uniform', '', false,
        normalLoadFluidPressureTypeEditor(record)],

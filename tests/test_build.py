@@ -13,9 +13,9 @@ import math
 
 import pytest
 
-from core import build
-from core.schemas import Project
-from core.seed import seed_project
+from core.geometry import build
+from core.model.schemas import Project
+from core.model.seed import seed_project
 
 
 @pytest.fixture(scope="module")
@@ -258,8 +258,8 @@ def test_bounding_box_covers_the_domain(result, project):
 
 
 def test_custom_parts_are_integrated_and_prioritized(project, tmp_path):
-    from core.schemas import CustomPart
-    from core import build
+    from core.model.schemas import CustomPart
+    from core.geometry import build
 
     # We create a dummy .brep file representing a box cutting through the soil
     p = project.model_copy(deep=True)
@@ -298,7 +298,7 @@ def test_custom_line_and_surface_parts_are_display_only_overlays(project, tmp_pa
     display-only overlay, the same status load/water already have. Before this, any
     custom part without a volume made `_verify` raise GeometryError, because it only
     ever checked `volumes`."""
-    from core.schemas import CustomPart
+    from core.model.schemas import CustomPart
 
     p = project.model_copy(deep=True)
 

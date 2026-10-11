@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from core import calculate, kratos, results
+from core.kratos import export as kratos
+from core.run import calculate
+from core.results import runs as results
 from tests.models import excavation
 from tests.fakes import fake_kratos
 

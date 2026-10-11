@@ -3,7 +3,7 @@
 
    Kratos has no units. A project names one consistent set -- SI (N, m, kg, s) or
    kN (kN, m, t, s) -- and every value it holds is in it: what the editors show, what
-   the deck carries, what the results come back in (core/units.py). So nothing
+   the deck carries, what the results come back in (core/model/units.py). So nothing
    here converts a value on its way to the server. It labels numbers for what they
    are, converts the library's presets into the project's system, and turns
    `units <system>` into the request that converts the whole project once.

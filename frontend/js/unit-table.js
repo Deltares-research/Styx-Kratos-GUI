@@ -1,4 +1,4 @@
-/* Generated from core/units.py -- the unit systems a project can be in, each
+/* Generated from core/model/units.py -- the unit systems a project can be in, each
    quantity's dimension (mass, length, time) and label, and the quantity of every Kratos
    variable the application knows. Read by frontend/js/units.js.
 

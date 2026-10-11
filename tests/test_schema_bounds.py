@@ -1,7 +1,7 @@
 """Every declared bound in the schema, tested on both sides (plan sec 4.1).
 
 Generated rather than written: each `Field(gt=..., ge=..., lt=..., le=...)`,
-`min_length`/`max_length` and `Literal[...]` on every model in `core.schemas` becomes a
+`min_length`/`max_length` and `Literal[...]` on every model in `core.model.schemas` becomes a
 pair of cases -- the value at (or just inside) the bound is accepted, the value just
 outside it is refused. A bound added tomorrow is tested tomorrow, and a bound someone
 loosens by accident fails here.
@@ -23,7 +23,7 @@ import annotated_types
 import pytest
 from pydantic import BaseModel, TypeAdapter, ValidationError
 
-from core import schemas
+from core.model import schemas
 
 EPSILON = 1e-9
 

@@ -1,6 +1,6 @@
 """A stage's mesh, as buffers the viewport can draw and colour.
 
-The payload is the shape `core.mdpa_import.to_sections` already produces for an imported
+The payload is the shape `core.kratos.mdpa_import.to_sections` already produces for an imported
 deck, and it is built with that module's own `_section_dict` rather than a copy of it:
 positions, triangle indices, line-segment coordinates, a bbox, and -- the part that
 matters here -- `node_ids`, the deck's own node number for every vertex, in the same
@@ -33,8 +33,8 @@ staged-construction feature is built around -- is fully subdivided.
 
 from __future__ import annotations
 
-from core.gid_results import GidMesh
-from core.mdpa_import import MdpaModel, _section_dict, _tet_boundary_triangles, bbox_of
+from core.results.gid import GidMesh
+from core.kratos.mdpa_import import MdpaModel, _section_dict, _tet_boundary_triangles, bbox_of
 
 T6_SUBTRIANGLES = ((0, 3, 5), (3, 1, 4), (5, 4, 2), (3, 4, 5))
 """How a six-node triangle splits. Corners 0,1,2; mid-sides 3 = (0,1), 4 = (1,2),
@@ -121,7 +121,7 @@ def edges_of(connectivity: list[int], nnode: int, element_type: str) -> list[tup
     """One line element's drawable segments.
 
     A three-node element is (end, end, middle) in Kratos' ordering -- see
-    `kratos.BEAMS` -- so it is drawn end-to-middle and middle-to-end. Drawing
+    `core.kratos.export.BEAMS` -- so it is drawn end-to-middle and middle-to-end. Drawing
     `(conn[0], conn[1])` alone is what `mdpa_import` does, and is right for a straight
     undeformed member and wrong for a deformed one.
     """

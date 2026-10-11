@@ -1,6 +1,6 @@
 """The half of ProjectParameters.json that makes the deck runnable.
 
-`core.kratos_processes` used to leave `problem_data` and `solver_settings` empty, which
+`core.kratos.processes` used to leave `problem_data` and `solver_settings` empty, which
 made the export a deck Kratos could read and not one it could run. It now fills both
 from a documented default analysis (see `kratos_processes.DEFAULTS`), so that pressing
 Calculate has something to hand the orchestrator.
@@ -15,9 +15,10 @@ import json
 
 import pytest
 
-from core import build, kratos, kratos_processes
-from core.schemas import LineLoad, MeshRequest, Project
-from core.seed import seed_project
+from core.geometry import build
+from core.kratos import export as kratos, processes as kratos_processes
+from core.model.schemas import LineLoad, MeshRequest, Project
+from core.model.seed import seed_project
 
 PILE_SECTION = {"id": "az26", "name": "AZ 26-700", "E": 2.1e8, "nu": 0.3,
                 "area": 0.0198, "inertia": 5.52e-4, "density": 7850.0, "spacing": 1.0}

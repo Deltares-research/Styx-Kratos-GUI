@@ -1,6 +1,6 @@
 """The runs registry: finding what a calculation left behind, and handing it back.
 
-No Kratos and no parsing here. `core.results` in this milestone only *finds* things --
+No Kratos and no parsing here. `core.results.runs` in this milestone only *finds* things --
 which runs exist, which stages each one got through, and which files are in it -- and
 serves a named file out of a run directory. Reading the results themselves is P1.
 
@@ -16,7 +16,8 @@ import zipfile
 import pytest
 from fastapi.testclient import TestClient
 
-from core import calculate, results
+from core.run import calculate
+from core.results import runs as results
 from backend.main import app
 
 
@@ -44,7 +45,7 @@ def parameters(deck: str, stages: list[str]) -> str:
 def make_run(root, name: str, deck: str = "Test_model",
              stages: list[str] | None = None, through: int | None = None,
              log: str | None = None):
-    """A run directory as `core.calculate` would have left it.
+    """A run directory as `core.run.calculate` would have left it.
 
     `through` is how many stages wrote their pair of output files -- `None` for all of
     them, which is what a run that finished looks like.
@@ -532,7 +533,7 @@ def test_the_runs_root_itself_is_not_a_run(runs_root):
 
 
 def test_a_deck_name_with_two_dots_keeps_its_runs(runs_root):
-    """`core.deck.deck_name` is a file's stem, and `model..v2.mdpa` is a legal file."""
+    """`core.kratos.deck.deck_name` is a file's stem, and `model..v2.mdpa` is a legal file."""
     make_run(runs_root, "model..v2_2026-01-01_00-00", deck="model..v2")
 
     assert results.run_directory("model..v2_2026-01-01_00-00").is_dir()

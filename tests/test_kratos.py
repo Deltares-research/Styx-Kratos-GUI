@@ -4,10 +4,12 @@ import json
 
 import pytest
 
-from core import build, kratos, schemas
-KILO = 1000.0  # kN -> N: these tests write old-style projects, converted on load (core/legacy.py)
-from core.schemas import LineLoad, MeshRequest, PointLoad
-from core.seed import seed_project
+from core.model import schemas
+from core.geometry import build
+from core.kratos import export as kratos
+KILO = 1000.0  # kN -> N: these tests write old-style projects, converted on load (core/model/legacy.py)
+from core.model.schemas import LineLoad, MeshRequest, PointLoad
+from core.model.seed import seed_project
 from tests import mdpa
 
 # Kratos' own node ordering for the quadratic simplices, as (midside index -> corners).
@@ -339,7 +341,7 @@ def test_surface_load_has_no_material_parameters_entry(solid):
 
 
 def test_a_2d_point_load_is_exported_as_a_3d_point_condition(session):
-    """A point load has no surface form to be translated into (`core/loads.py`), so the
+    """A point load has no surface form to be translated into (`core/model/loads.py`), so the
     solid model carries it at the section plane -- and a node is a node in either
     dimension, so the deck can apply it there. It still has no material entry: a load
     is a condition, not a property set."""
@@ -596,7 +598,7 @@ def piled_project(order: int = 2, active: bool = True, dimension: int = 2):
     payload["beam_sections"] = [BEAM_SECTION]
     payload["beams"] = [{"id": "sheetpile_1", "name": "Sheet pile 1", "section": "az26",
                          "points": [[12.0, 0.0], [12.0, -14.0]], "active": active}]
-    from core.schemas import Project
+    from core.model.schemas import Project
     return Project.model_validate(payload)
 
 
@@ -760,7 +762,7 @@ TENDON = {"id": "strand", "name": "4-strand tendon", "E": 1.95e8, "area": 0.0006
 
 
 def anchored_project(order: int = 2, active: bool = True, dimension: int = 2):
-    from core.schemas import Project
+    from core.model.schemas import Project
     payload = piled_project(dimension=dimension).model_dump()
     payload["anchor_sections"] = [TENDON]
     payload["anchors"] = [{"id": "anchor_1", "name": "Anchor 1", "kind": "anchor",
@@ -918,7 +920,7 @@ def test_an_anchor_saved_in_a_3d_project_is_not_exported(session):
 
 def staged_project(dimension: int = 2):
     """A staged excavation: three layers, three lifts, pit against the left edge."""
-    from core.schemas import Project
+    from core.model.schemas import Project
     p = seed_project(simple=False).model_dump() | {"dimension": dimension}
     if dimension == 2:
         p["section_offset"] = 20.0
@@ -1100,7 +1102,8 @@ def test_gravity_in_a_3d_deck_still_points_down_y(solid):
 def test_gravity_is_the_same_number_in_every_unit_system():
     """The deck's gravity is written once, whatever the project's units: every system on
     offer measures length in metres and time in seconds."""
-    from core import kratos_processes, units
+    from core.model import units
+    from core.kratos import processes as kratos_processes
     assert all(kratos_processes.GRAVITY == units.gravity(name) for name in units.SYSTEMS)
 
 
@@ -1184,7 +1187,7 @@ STEEL = {"YOUNG_MODULUS": 2.1e11, "POISSON_RATIO": 0.3, "DENSITY": 7850.0,
 
 def test_a_section_without_a_shear_area_takes_the_whole_one(session):
     """What every project written before the field carried, and still the default."""
-    from core import kratos_materials
+    from core.kratos import materials as kratos_materials
     section = schemas.BeamSection(id="s", name="S", variables=dict(STEEL))
     assert "AREA_EFFECTIVE_Y" not in section.variables
     variables = kratos_materials._beam_variables(section, 2)
@@ -1194,7 +1197,7 @@ def test_a_section_without_a_shear_area_takes_the_whole_one(session):
 def test_a_section_may_say_how_much_of_it_carries_shear(session):
     """Less than the whole section for a rolled profile, which shears in its web; far
     more than it for a model that means shear deformation to be negligible."""
-    from core import kratos_materials
+    from core.kratos import materials as kratos_materials
     section = schemas.BeamSection(id="s", name="S",
                                   variables=STEEL | {"AREA_EFFECTIVE_Y": 0.008})
     variables = kratos_materials._beam_variables(section, 2)
@@ -1205,7 +1208,7 @@ def test_a_section_may_say_how_much_of_it_carries_shear(session):
 def test_a_shear_area_is_smeared_over_spacing_like_the_rest(session):
     """A row of piles at 2.5 m centres contributes two-fifths of its shear area to the
     metre run, the same way it does its area and its inertia."""
-    from core import kratos_materials
+    from core.kratos import materials as kratos_materials
     section = schemas.BeamSection(id="s", name="S", spacing=2.5,
                                   variables=STEEL | {"AREA_EFFECTIVE_Y": 0.008})
     variables = kratos_materials._beam_variables(section, 2)

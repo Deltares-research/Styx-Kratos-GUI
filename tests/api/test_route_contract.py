@@ -25,9 +25,9 @@ import pytest
 from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
-from core import deck as decks
+from core.kratos import deck as decks
 from backend.main import app
-from core.seed import seed_project
+from core.model.seed import seed_project
 from tests import results_run
 from tests.test_importer import stl_text
 
@@ -242,7 +242,7 @@ def client(monkeypatch, tmp_path):
     RUN = results_run.use(monkeypatch, results_run.fake_run())
     # Calculate runs this interpreter in Kratos' place: the route's own shape is the
     # point here, not the analysis (`test_calculate.py` covers the runner).
-    from core import calculate
+    from core.run import calculate
     monkeypatch.setattr(calculate, "SETTINGS_FILE", tmp_path / "none.json")
     monkeypatch.delenv(calculate.KRATOS_ENV, raising=False)
     monkeypatch.setenv(calculate.PYTHON_ENV, __import__("sys").executable)
@@ -265,7 +265,7 @@ def test_every_route_has_a_contract():
 @pytest.mark.parametrize("contract", CONTRACTS, ids=_id)
 def test_the_happy_path_has_its_shape(client, contract, monkeypatch, tmp_path):
     if contract.path == "/api/calculate":
-        from core import calculate
+        from core.run import calculate
         monkeypatch.setenv(calculate.RUNS_ENV, str(tmp_path / "calc_runs"))
     response = contract.happy(client)
 

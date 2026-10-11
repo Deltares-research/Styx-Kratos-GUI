@@ -21,11 +21,11 @@ def test_every_row_says_what_proves_it():
 
 
 def test_every_deferral_in_the_exporter_is_in_a_file_the_register_covers():
-    deferring = {path.name for path in CORE.glob("*.py")
+    deferring = {path.relative_to(CORE).as_posix() for path in CORE.rglob("*.py")
                  if DEFERRAL.search(path.read_text(encoding="utf-8"))}
     assert deferring <= COVERED_FILES, sorted(deferring - COVERED_FILES)
     registered = {row["where"].split()[0].split(".")[0] + ".py" for row in REGISTER}
-    assert deferring <= registered | {"kratos_materials.py", "kratos_processes.py"}
+    assert deferring <= registered | {"kratos/materials.py", "kratos/processes.py"}
 
 
 def test_the_open_and_blocked_rows_are_the_known_gaps():

@@ -17,11 +17,11 @@ See also: [FEATURES.md](FEATURES.md) (what works, per Kratos feature),
 | Layer | What |
 |---|---|
 | Framework | FastAPI 0.115.6 + Uvicorn 0.34.0 |
-| Validation | Pydantic 2.10.4. `Project` (`core/schemas.py`) is the single source of truth |
+| Validation | Pydantic 2.10.4. `Project` (`core/model/schemas.py`) is the single source of truth |
 | Geometry/mesh | Gmsh 4.13.1 (OpenCASCADE kernel) |
 | Numerics | NumPy 2.2.1 |
 | State | One project in memory (`backend/store.py`). No database, no auth. Run results live on disk |
-| Concurrency | Gmsh in a `ProcessPoolExecutor(max_workers=1)` (`gmsh_worker.py`). Kratos in a subprocess per run (`calculate.py`) |
+| Concurrency | Gmsh in a `ProcessPoolExecutor(max_workers=1)` (`core/gmsh_worker.py`). Kratos in a subprocess per run (`core/run/calculate.py`) |
 | Solver | Kratos MultiPhysics GeoMechanicsApplication. Not installed by the launcher; found through `KRATOS_GUI_PYTHON` / `KRATOS_GUI_KRATOS` or `kratos.local.json` |
 | Tests | pytest 8.3.4 + httpx `TestClient`, 1273 cases. `python -m pytest -q` from the repository root, with an interpreter that has gmsh |
 
@@ -38,18 +38,20 @@ See also: [FEATURES.md](FEATURES.md) (what works, per Kratos feature),
 
 ## How a model flows
 
+Module paths are relative to `core/`.
+
 | Step | Module | Note |
 |---|---|---|
-| 1. Edit | `schemas.py` | Every PATCH re-validates the *whole* project |
-| 2. Build | `build.py` | Boxes → boolean fragment → cut pit → embed structures; 2D sections and 3D solids |
-| 3. Draw | `tessellate.py` | OCC `importStl()`, ~0.1 s, for display only (not an FE mesh) |
-| 4. Mesh | `meshing.py` | Real tet/tri mesh, re-derived from the geometry each time |
-| 5. Split | `interfaces.py` | Duplicate nodes along a wall, zero-thickness contact elements |
-| 6. Phase | `phases.py` | The phase tree resolved into the sequence of stages Kratos runs: what is active, water, loads |
-| 7. Export | `kratos.py`, `kratos_materials.py`, `kratos_processes.py` | `.mdpa` + `MaterialParameters.json` + `ProjectParameters.json` (one stage per phase, with GiD and JSON output processes) |
-| 8. Solve | `calculate.py` → `kratos_runner.py` | Kratos' orchestrator in a subprocess, writing into a run directory of its own (`~/KratosGUI/runs/<deck>_<stamp>/`) |
-| 9. Read back | `results.py` → `gid_results.py`, `result_fields.py`, `result_mesh.py`, `result_parts.py` | The run's GiD ASCII (`.post.msh` / `.post.res`) parsed into fields per stage, joined to the deck's parts |
-| 10. Members | `result_members.py` | The deck's `<stage>__output_<member>.json` turned into curves along the wall and its interface |
+| 1. Edit | `model/schemas.py` | Every PATCH re-validates the *whole* project |
+| 2. Build | `geometry/build.py` | Boxes → boolean fragment → cut pit → embed structures; 2D sections and 3D solids |
+| 3. Draw | `geometry/tessellate.py` | OCC `importStl()`, ~0.1 s, for display only (not an FE mesh) |
+| 4. Mesh | `geometry/meshing.py` | Real tet/tri mesh, re-derived from the geometry each time |
+| 5. Split | `kratos/interfaces.py` | Duplicate nodes along a wall, zero-thickness contact elements |
+| 6. Phase | `model/phases.py` | The phase tree resolved into the sequence of stages Kratos runs: what is active, water, loads |
+| 7. Export | `kratos/export.py`, `kratos/materials.py`, `kratos/processes.py` | `.mdpa` + `MaterialParameters.json` + `ProjectParameters.json` (one stage per phase, with GiD and JSON output processes) |
+| 8. Solve | `run/calculate.py` → `run/runner.py` | Kratos' orchestrator in a subprocess, writing into a run directory of its own (`~/KratosGUI/runs/<deck>_<stamp>/`) |
+| 9. Read back | `results/runs.py` → `results/gid.py`, `results/fields.py`, `results/mesh.py`, `results/parts.py` | The run's GiD ASCII (`.post.msh` / `.post.res`) parsed into fields per stage, joined to the deck's parts |
+| 10. Members | `results/members.py` | The deck's `<stage>__output_<member>.json` turned into curves along the wall and its interface |
 
 Steps 2–5 run in the gmsh worker process. Step 8 is the only step that needs Kratos. Steps 9–10
 read files only, so a run from last week, or a run on another machine, can be opened
@@ -64,22 +66,38 @@ strings and hand them to the same handlers.
 |---|---|---|
 | The GUI | Draw soil, structures, loads, water, phases; mesh; Calculate (F9) | `frontend/js/*`, `patches.js` |
 | Command box | `mesh`, `water`, `phases`, `node <id>`, `colour <part>`, `results …`, `results plot …` | each module's `handleCommand` |
-| `run <file.py>` | Builds the open model by running a Python file that defines a `Project` (e.g. `run tests/models/excavation.py`) | `script.py`, `POST /api/project/script` |
-| A finished deck | A Kratos deck written elsewhere, shown as its own mesh and run as its own files, from a script that names it (`deck.deck_project`) | `deck.py`, `frontend/js/deck.js` |
-| Import mesh | Read an `.mdpa` back into mesh data | `mdpa_import.py`, `POST /api/import/mdpa` |
+| `run <file.py>` | Builds the open model by running a Python file that defines a `Project` (e.g. `run tests/models/excavation.py`) | `core/script.py`, `POST /api/project/script` |
+| A finished deck | A Kratos deck written elsewhere, shown as its own mesh and run as its own files, from a script that names it (`deck.deck_project`) | `core/kratos/deck.py`, `frontend/js/deck.js` |
+| Import mesh | Read an `.mdpa` back into mesh data | `core/kratos/mdpa_import.py`, `POST /api/import/mdpa` |
 | Export | Write the deck without running it | `POST /api/export/mdpa`, `frontend/js/export.js` |
 
 ## Server modules
 
-| Role | Modules |
+`backend/` is the FastAPI server: `main.py` (assembles the app), `middleware.py`
+(Host/Origin check, no-cache), `routes/` (one module per API group, below), `store.py`
+(the one project), `launcher.py` (portable setup).
+
+`core/` is the engine, in plain Python with no web framework. Each of its five packages
+is one stage of the pipeline the data goes through:
+
+| Package | Modules |
 |---|---|
-| App and state | `main.py` (assembles the app), `middleware.py` (Host/Origin check, no-cache), `routes/` (one module per API group, below), `store.py` (the one project), `seed.py` (starting project), `launcher.py` (portable setup) |
-| Model | `schemas.py` (the `Project`), `walls.py`, `loads.py` (section ↔ solid translation), `phases.py` |
-| Geometry and mesh | `build.py`, `tessellate.py`, `meshing.py`, `interfaces.py`, `gmsh_worker.py`, `importer.py`, `creator.py` |
-| Kratos export | `kratos.py` (deck), `kratos_materials.py`, `kratos_processes.py` (stages, solver, output) |
-| Running | `calculate.py` (run directory, subprocess, failure reading), `kratos_runner.py` (runs inside Kratos' Python) |
-| Other inputs | `script.py` (`run <file.py>`), `deck.py` (finished decks), `mdpa_import.py`, `node_parts.py` |
-| Results | `results.py` (runs registry, file access, cache), `gid_results.py`, `result_fields.py` (catalogue, units, invariants), `result_mesh.py` (drawable buffers), `result_parts.py`, `result_members.py` (wall and interface curves) |
+| `core/model/` | `schemas.py` (the `Project`), `units.py` (unit systems), `legacy.py` (old project files), `seed.py` (starting project), `phases.py` (phase tree → stages), `walls.py`, `loads.py` (section ↔ solid translation) |
+| `core/geometry/` | `build.py` (OCC solids), `tessellate.py` (display), `meshing.py` (FE mesh), `importer.py` (CAD import), `creator.py` (geometry recipes) |
+| `core/kratos/` | `export.py` (the deck), `materials.py`, `processes.py` (stages, solver, output), `interfaces.py` (split nodes along walls), `files.py` (the deck's file names), `deck.py` (finished decks), `mdpa_import.py`, `node_parts.py` |
+| `core/run/` | `calculate.py` (run directory, subprocess, failure reading), `runner.py` (runs inside Kratos' Python) |
+| `core/results/` | `runs.py` (runs registry, file access, cache), `gid.py` (GiD ASCII), `fields.py` (catalogue, units, invariants), `mesh.py` (drawable buffers), `parts.py`, `members.py` (wall and interface curves) |
+| `core/` | `script.py` (`run <file.py>`) and `gmsh_worker.py` (the gmsh process pool). Both send work into several packages, so they stay at the top |
+
+Imports go one way: **model ← geometry ← kratos ← run ← results**. A package may import
+from its own package or one to its left, never to its right. `tests/test_layout.py`
+holds the code to it, with no exceptions. Where a lower package and a higher one need
+the same answer, the lower one gives it: the edges a load is applied on are chosen in
+`geometry/meshing.py` (`loaded_elements`), and both the mesh preview and the exporter's
+load conditions read them from there.
+
+Every `__init__.py` in `core/` is empty. Kratos is started with
+`-m core.run.runner`, and its interpreter has neither pydantic nor gmsh.
 
 ## HTTP API
 
@@ -115,10 +133,10 @@ validation, mesh jobs) is in `backend/routes/common.py`.
 ```
 run directory (~/KratosGUI/runs/<deck>_<stamp>/)
   <deck>.mdpa, ProjectParameters.json           → part names, stage order, output names
-  <deck>_<stage>.post.msh / .post.res           → gid_results → result_fields / result_mesh / result_parts
-  <stage>__output_wall.json, __output_interface → result_members
+  <deck>_<stage>.post.msh / .post.res           → results/gid → results/fields, mesh, parts
+  <stage>__output_wall.json, __output_interface → results/members
         │
-        ▼  results.py (finds files, parses once, caches by size + mtime)
+        ▼  results/runs.py (finds files, parses once, caches by size + mtime)
   /api/results/... routes
         │
         ▼

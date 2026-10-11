@@ -1,4 +1,4 @@
-"""The project unit system (core/units.py): Kratos has no units, only a consistent set, so
+"""The project unit system (core/model/units.py): Kratos has no units, only a consistent set, so
 the project picks one and every number -- input, deck and result -- is in it."""
 
 from __future__ import annotations
@@ -7,7 +7,7 @@ import math
 
 import pytest
 
-from core import units
+from core.model import units
 
 
 def test_the_systems_on_offer_and_the_default():

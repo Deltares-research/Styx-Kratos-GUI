@@ -1,7 +1,7 @@
 """The Results routes: reading back what a calculation left behind.
 
 Which runs exist, which stages each got through, which files are in it, and what a stage
-can show -- its mesh, its fields, the curves along a wall. All of it is `core.results`;
+can show -- its mesh, its fields, the curves along a wall. All of it is `core.results.runs`;
 these routes only turn its refusals into status codes.
 """
 
@@ -10,7 +10,8 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse, Response
 
-from core import calculate, results
+from core.run import calculate
+from core.results import runs as results
 
 router = APIRouter()
 
@@ -46,7 +47,7 @@ def results_stage_fields(run_id: str, index: int) -> dict:
 
     Derived from the file, never from a list in the source: a variable Kratos declined
     to write -- or wrote an empty block for, because the element does not implement it
-    -- costs one missing menu entry and breaks nothing. See `core.result_fields`.
+    -- costs one missing menu entry and breaks nothing. See `core.results.fields`.
     """
     try:
         return results.stage_fields(run_id, index)
@@ -88,7 +89,7 @@ def results_stage_at(run_id: str, index: int, node: int) -> dict:
     `results at <id>` is how a number gets checked against a hand calculation without
     leaving the app, and doing it a field at a time would be twenty-odd round trips.
     """
-    from core import result_fields
+    from core.results import fields as result_fields
 
     try:
         return results.stage_at_node(run_id, index, node)
@@ -115,7 +116,7 @@ def results_stage_field(run_id: str, index: int, name: str,
     The range travels with the values so that a colour legend and the colours it
     explains can never be computed from two different things.
     """
-    from core import result_fields
+    from core.results import fields as result_fields
 
     try:
         return results.stage_field(run_id, index, name, location)
@@ -145,7 +146,7 @@ def results_member_plot(run_id: str, member: str, quantity: str) -> dict:
     422 for a quantity this member does not carry, like an unknown field: the run and
     the member are there, and what is wrong is the question.
     """
-    from core import result_members
+    from core.results import members as result_members
 
     try:
         return results.member_profiles(run_id, member, quantity)

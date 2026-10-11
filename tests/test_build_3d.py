@@ -13,9 +13,9 @@ only about what OCC ends up holding.
 import gmsh
 import pytest
 
-from core import build
-from core.schemas import Project
-from core.seed import seed_project
+from core.geometry import build
+from core.model.schemas import Project
+from core.model.seed import seed_project
 
 SECTION_AZ26 = {"id": "az26", "name": "AZ 26-700", "E": 2.1e8, "nu": 0.3,
                 "area": 0.0198, "inertia": 5.52e-4, "density": 7850.0, "spacing": 1.0}
@@ -288,7 +288,7 @@ def test_the_full_example_builds_the_3d_structures_as_well():
 # structural part built so far, so it is the one that needed a new branch.
 
 def test_a_wall_is_drawn_as_a_surface_and_a_member_as_edges():
-    from core import tessellate
+    from core.geometry import tessellate
 
     with build.session():
         model = tessellate.tessellate(structured([PANEL, MEMBER], [ANCHOR]))
@@ -307,7 +307,7 @@ def test_a_wall_is_drawn_as_a_surface_and_a_member_as_edges():
 
 
 def test_every_part_key_still_gets_a_section_with_3d_structures_present():
-    from core import tessellate
+    from core.geometry import tessellate
 
     project = structured([PANEL, MEMBER], [ANCHOR])
     with build.session():

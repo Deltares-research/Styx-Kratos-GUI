@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from core import calculate
+from core.run import calculate
 from benchmarks.cases import BY_ID, CASES
 from benchmarks.runner import run_case
 

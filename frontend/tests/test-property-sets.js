@@ -3,7 +3,7 @@
 
    A soil, profile, wall, tendon or contact is a Kratos property set: a law and a
    Variables block under Kratos' names, in the project's units, carried into the deck
-   verbatim (core/schemas.py). `App.PropertySets` is what the editors share about
+   verbatim (core/model/schemas.py). `App.PropertySets` is what the editors share about
    them: the law a new set starts with, what its law cannot do without, what the server
    derives when it is left out, and how a typed value becomes a Kratos value.
    ══════════════════════════════════════════════════════════════════ */

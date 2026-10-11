@@ -1,8 +1,8 @@
 """Every structural rule a Kratos deck written by this tool must satisfy (plan alpha 2.1).
 
-`check_deck(export)` takes what `core.kratos.export_project` returns and gives back a list
+`check_deck(export)` takes what `core.kratos.export.export_project` returns and gives back a list
 of violations, each a sentence naming the rule and the offending thing; empty means
-sound. It re-reads the deck through `tests.mdpa` -- independent of `core.kratos` -- so a
+sound. It re-reads the deck through `tests.mdpa` -- independent of `core.kratos.export` -- so a
 rule that holds says the *files* are right, not that two copies of one helper agree.
 
 `tests/conftest.py` runs it on every deck any test exports, so a new feature that breaks
@@ -183,11 +183,11 @@ def _order(deck) -> list[str]:
 
 # 11. one unit system: nothing that carries a force or a mass reads like another system's
 #
-# The deck is in the project's system (`core/units.py`). A Young's modulus a thousand times
+# The deck is in the project's system (`core/model/units.py`). A Young's modulus a thousand times
 # too small for it, or a density a thousand times off either way, is a value typed in the
 # wrong system -- the 1000x slip this deck once had in every number.
 def _units(files, system: str = "SI") -> list[str]:
-    from core import units
+    from core.model import units
     least_modulus = units.from_si(1e3, units.STRESS, system)
     least_density = units.from_si(100.0, units.DENSITY, system)
     most_density = units.from_si(1e5, units.DENSITY, system)
@@ -247,7 +247,7 @@ def _k0(deck, params, files) -> list[str]:
 # be *rotated*, a line not even that, and neither may be *reversed* -- a reversed one is
 # "found without any corresponding element" and the run stops before its first step.
 # The orders below are Kratos' own GenerateEdges / GenerateFaces (kratos/geometries/),
-# written here independently of core.kratos.
+# written here independently of core.kratos.export.
 SOIL_EDGES = {3: ((0, 1), (1, 2), (2, 0)), 6: ((0, 1, 3), (1, 2, 4), (2, 0, 5))}
 SOIL_FACES = {4: ((2, 3, 1), (0, 3, 2), (0, 1, 3), (0, 2, 1)),
               10: ((0, 2, 1, 6, 5, 4), (0, 3, 2, 7, 9, 6), (0, 1, 3, 4, 8, 7),

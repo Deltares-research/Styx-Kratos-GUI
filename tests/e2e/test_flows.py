@@ -43,7 +43,7 @@ def deck_case(directory: Path) -> Path:
     (deck / "materials_a.json").write_text('{"properties": []}', encoding="utf-8")
     (deck / "materials_b.json").write_text('{"properties": [1]}', encoding="utf-8")
     script = directory / "deck_case.py"
-    script.write_text("from core.deck import deck_project\n\n\n"
+    script.write_text("from core.kratos.deck import deck_project\n\n\n"
                       "def dike_project():\n"
                       f"    return deck_project({deck.as_posix()!r}, 'dike.json', name='Dike')\n",
                       encoding="utf-8")

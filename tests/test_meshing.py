@@ -4,9 +4,9 @@ import math
 
 import pytest
 
-from core import build, meshing
-from core.seed import seed_project
-from core.schemas import BoxRefinement, CylinderRefinement
+from core.geometry import build, meshing
+from core.model.seed import seed_project
+from core.model.schemas import BoxRefinement, CylinderRefinement
 
 
 @pytest.fixture(scope="module")

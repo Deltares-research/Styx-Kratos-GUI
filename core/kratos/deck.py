@@ -9,7 +9,7 @@ it would be a second model of the same dike, checked against nothing.
 
 So a deck case script hands back a project that *points at* the deck::
 
-    from core.deck import deck_project
+    from core.kratos.deck import deck_project
 
     def dike_project():
         return deck_project(HERE, "dike.json", name="Dike section")
@@ -35,9 +35,9 @@ import re
 import shutil
 from pathlib import Path, PurePath
 
-from core import calculate, mdpa_import, node_parts
-from core.schemas import Deck, Domain, Phase, Project
-from core.seed import blank_project
+from core.kratos import files, mdpa_import, node_parts
+from core.model.schemas import Deck, Domain, Phase, Project
+from core.model.seed import blank_project
 
 
 class DeckError(ValueError):
@@ -52,7 +52,7 @@ way across Kratos versions."""
 
 # ── Opening one ─────────────────────────────────────────────────────────────
 
-def deck_project(directory: str | Path, parameters: str = calculate.PARAMETERS_NAME,
+def deck_project(directory: str | Path, parameters: str = files.PARAMETERS_NAME,
                  name: str | None = None) -> Project:
     """The project a deck case opens as.
 
@@ -93,7 +93,7 @@ def input_files(deck: Deck) -> list[str]:
     """Every file the deck reads, by name: the parameters, the mesh, then each
     materials file in the order the stages first ask for it."""
     parameters = _parameters(deck)
-    files = [deck.parameters]
+    names = [deck.parameters]
     meshes: list[str] = []
     materials: list[str] = []
     for stage in _stages(parameters):
@@ -107,12 +107,12 @@ def input_files(deck: Deck) -> list[str]:
         materials.append((solver.get("material_import_settings") or {})
                          .get("materials_filename", ""))
     for mesh in meshes:
-        if mesh and f"{mesh}.mdpa" not in files:
-            files.append(f"{mesh}.mdpa")
+        if mesh and f"{mesh}.mdpa" not in names:
+            names.append(f"{mesh}.mdpa")
     for material in materials:
-        if material and material not in files:
-            files.append(material)
-    return files
+        if material and material not in names:
+            names.append(material)
+    return names
 
 
 def deck_name(deck: Deck) -> str:
@@ -181,7 +181,7 @@ def stageable_parts(parameters: dict) -> list[str]:
 def phases(parameters: dict) -> list[Phase]:
     """One phase per stage, in run order, each starting from the one before.
 
-    Phases resolve from "everything is there" (`core.phases.active_parts`), so the first
+    Phases resolve from "everything is there" (`core.model.phases.active_parts`), so the first
     one deactivates what its stage does not have; every later one stores only what
     changed. The calculation type is read where the deck says it: a K0 stage runs the
     K0 procedure process, and a null step is named as one -- the deck has no other
@@ -246,28 +246,29 @@ def stage(deck: Deck, directory: Path) -> list[str]:
     Two changes, both to the parameters and both about where things land rather than
     what is computed:
 
-    *   it is written as `calculate.PARAMETERS_NAME`, which is the name the runner is
-        started with and the one `core.results` reads a run's stages from;
+    *   it is written as `files.PARAMETERS_NAME`, which is the name the runner is
+        started with and the one `core.results.runs` reads a run's stages from;
     *   each output process' `output_name` loses any directory in front of it. Kratos
         would write `gid_output/1_Initial_stage.post.res` into a subdirectory, and a
-        run directory is flat -- `results.file_path` serves nothing else, on purpose.
+        run directory is flat -- `core.results.runs.file_path` serves nothing else, on
+        purpose.
 
     The original is never touched.
     """
     parameters = _flattened(_parameters(deck))
     written = []
-    calculate._write(directory / calculate.PARAMETERS_NAME,
+    files.write_text(directory / files.PARAMETERS_NAME,
                      json.dumps(parameters, indent=4))
-    written.append(calculate.PARAMETERS_NAME)
+    written.append(files.PARAMETERS_NAME)
     for name in input_files(deck)[1:]:
         shutil.copyfile(_path(deck, name), directory / name)
         written.append(name)
     # A deck this application exported says which unit system its numbers are in;
     # the run keeps the record, so its results are labelled in it. Kratos never reads it.
-    units = _path(deck, calculate.UNITS_NAME)
+    units = _path(deck, files.UNITS_NAME)
     if units.is_file():
-        shutil.copyfile(units, directory / calculate.UNITS_NAME)
-        written.append(calculate.UNITS_NAME)
+        shutil.copyfile(units, directory / files.UNITS_NAME)
+        written.append(files.UNITS_NAME)
     return written
 
 

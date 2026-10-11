@@ -1,9 +1,9 @@
 """Reading GiD's ASCII post files.
 
-`core.gid_results` is a format reader and nothing else: it turns `.post.msh` and
+`core.results.gid` is a format reader and nothing else: it turns `.post.msh` and
 `.post.res` text into tables, and has no opinion about what the numbers mean. What they
 mean -- which of them a user can ask for, in what unit, with which sign -- is
-`core.result_fields`, and is tested next door.
+`core.results.fields`, and is tested next door.
 
 The cases below are written against small literal files, because that is the only way to
 pin the parts of the format that the runs on this machine happen not to exercise. The
@@ -18,7 +18,7 @@ import pytest
 
 from pathlib import Path
 
-from core import gid_results
+from core.results import gid as gid_results
 
 REFERENCE = Path(__file__).resolve().parents[1] / "test"
 """The GeoMechanicsApplication's own 1D consolidation deck and its eleven stages of
@@ -215,7 +215,7 @@ def test_gauss_values_are_grouped_by_element_across_continuation_lines():
 def test_an_empty_gauss_block_is_read_as_a_field_with_nothing_in_it():
     """Not a parse failure and not an absent field. The beam element does not
     implement CAUCHY_STRESS_TENSOR on its integration points, so Kratos writes the
-    block and puts nothing in it -- which is how `core.result_fields` learns that
+    block and puts nothing in it -- which is how `core.results.fields` learns that
     stresses are not available on the wall."""
     out = gid_results.read_results(RES)
 

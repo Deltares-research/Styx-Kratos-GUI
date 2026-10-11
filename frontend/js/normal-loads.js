@@ -4,9 +4,9 @@
    A normal load is a pressure applied perpendicular to a free polyline -- an
    exposed excavation face, a sloped boundary -- rather than the fixed x/y
    vector a LineLoad carries on a flat horizontal run. The server embeds the
-   polyline the same way it embeds a free interface's (core/build.py's
+   polyline the same way it embeds a free interface's (core/geometry/build.py's
    `_embed_beams`) and writes Kratos' ApplyNormalLoadTableProcess for it
-   (core/kratos_processes.py).
+   (core/kratos/processes.py).
 
    Two ways to size one, picked by `fluid_pressure_type`:
 
@@ -18,7 +18,7 @@
        for a load that is not water.
 
    Plane strain only, like a free interface -- see NORMAL_LOAD_CONDITIONS in
-   core/kratos.py.
+   core/kratos/export.py.
    ══════════════════════════════════════════════════════════════════ */
 
 var App = window.App || {};

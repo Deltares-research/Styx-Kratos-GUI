@@ -1,4 +1,4 @@
-"""A stand-in for `core.calculate.run` in the GUI end-to-end tests (plan alpha 3.4).
+"""A stand-in for `core.run.calculate.run` in the GUI end-to-end tests (plan alpha 3.4).
 
 It does what a Kratos run leaves behind, for exactly the deck it is given: a run
 directory named the way `calculate.new_run_directory` names one, the deck written by
@@ -19,7 +19,7 @@ import json
 import time
 from pathlib import Path
 
-from core import calculate
+from core.run import calculate
 from tests import mdpa
 from tests.fakes import gid_writer
 

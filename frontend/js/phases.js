@@ -8,7 +8,7 @@
 
    ── Why the phase model exists twice ──────────────────────────────────────
 
-   `activeParts` below is a second implementation of `core/phases.py`'s function
+   `activeParts` below is a second implementation of `core/model/phases.py`'s function
    of the same name. That is a deliberate duplication and worth being uneasy about.
    The reason is the viewport: staged mode has to grey out the parts a phase switched
    off, on every click, while the user is dragging a selection around -- and a round
@@ -79,7 +79,7 @@ App.Phases = (function () {
 
      Everything starts active: the mesh carries every part, and the first phase's job
      is to switch off what has not been built yet -- which is what Kratos'
-     staged-excavation reference's stage 1 does. Mirrors core/phases.py:active_parts exactly,
+     staged-excavation reference's stage 1 does. Mirrors core/model/phases.py:active_parts exactly,
      including that a part in both of one phase's lists is impossible (the schema
      refuses it), so the order within a phase does not matter.
 
@@ -187,7 +187,7 @@ App.Phases = (function () {
      `name` and `kind` off each, and nothing else.
 
      `run` is what the last calculation reported, `{completed: n}`: the run log names
-     the stage it reached (core/calculate.py's `failed_stage`), so the dots can
+     the stage it reached (core/run/calculate.py's `failed_stage`), so the dots can
      say how far it got instead of all staying grey. Omitted, nothing has been run and
      every phase after the first is pending. */
   function rows(project, run) {

@@ -11,7 +11,7 @@ ProjectParameters.json process against the load's sub-model part instead.
 
 **The project already holds what Kratos reads.** Every property set is a constitutive law
 and a `Variables` block under Kratos' names, in the project's unit system
-(`core/schemas.py:KratosPropertySet`, `core/units.py`), and this module writes it as it
+(`core/model/schemas.py:KratosPropertySet`, `core/model/units.py`), and this module writes it as it
 stands. It does three things on top, and no others:
 
 *   **Fills what is missing and can be derived** -- the fluid constants, the water's
@@ -24,7 +24,7 @@ stands. It does three things on top, and no others:
     same text.
 
 Until 2026-10-10 the project was in kN, kN/m2 and m/day and this module converted it.
-`core/legacy.py` turns such a project into the current shape with the numbers this module
+`core/model/legacy.py` turns such a project into the current shape with the numbers this module
 used to write, so an old project's deck does not change.
 """
 
@@ -33,8 +33,8 @@ from __future__ import annotations
 import json
 import math
 
-from core import units
-from core.schemas import (SOIL_LAW_PAIRS, AnchorSection, BeamSection, InterfaceSection,
+from core.model import units
+from core.model.schemas import (SOIL_LAW_PAIRS, AnchorSection, BeamSection, InterfaceSection,
                          KratosPropertySet, Material, PanelSection, Project)
 
 
@@ -114,7 +114,7 @@ SMEARED_ANCHOR = ("CROSS_AREA",)
 """An anchor's steel per metre run of wall. Not its density (as above), and not its
 prestress: `TRUSS_PRESTRESS_PK2` is a stress, and the force it puts into a metre of wall
 is that stress times the smeared area already. (It was divided by the spacing as well
-until 2026-10-10; `core/legacy.py` folds that into an old project's value, so its deck
+until 2026-10-10; `core/model/legacy.py` folds that into an old project's value, so its deck
 does not change.)"""
 
 
@@ -312,7 +312,7 @@ def _interface_variables(section: InterfaceSection, project: Project,
     reduced by `r_inter` -- the definition of the factor.
 
     **Which soil.** `adjacent` is the material of the body this stretch of contact runs
-    against (`core/kratos.py:_interface_by_body`): the reference groups its interfaces
+    against (`core/kratos/export.py:_interface_by_body`): the reference groups its interfaces
     into property sets on exactly that basis. A section that *names* a material
     overrides it for the whole contact.
 

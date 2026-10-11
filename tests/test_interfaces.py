@@ -1,6 +1,6 @@
 """The zero-thickness interface split, on meshes small enough to reason about by hand.
 
-`core.interfaces` is deliberately free of gmsh: it takes connectivity and coordinates and
+`core.kratos.interfaces` is deliberately free of gmsh: it takes connectivity and coordinates and
 returns connectivity, so the topology it performs -- which node is duplicated, which
 element follows which copy, and which way round the resulting element is written -- can
 be asserted exactly rather than inferred from a mesh nobody chose.
@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import pytest
 
-from core import interfaces
+from core.kratos import interfaces
 
 
 # A unit square either side of the line x = 0, meshed as four linear triangles.

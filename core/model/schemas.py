@@ -3,7 +3,7 @@
 Coordinates are X across, Y up and Z out of plane, metres, y = 0 at the ground
 datum. A 2D model is the x-y plane at z = 0; a 3D model extrudes it along Z.
 
-Units are the project's own (`Project.unit_system`, `core/units.py`): length in metres,
+Units are the project's own (`Project.unit_system`, `core/model/units.py`): length in metres,
 time in seconds, and force and mass in the system's units -- N and kg, or kN and t. Every
 value a property set, load or pressure holds is in that system and goes into the deck as
 it stands. Property sets hold what Kratos reads: a constitutive law name and a
@@ -21,7 +21,7 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
 
-from core import legacy, units
+from core.model import legacy, units
 
 Hex = Annotated[str, Field(pattern=r"^#[0-9a-fA-F]{6}$")]
 Ident = Annotated[str, Field(min_length=1, max_length=64)]
@@ -140,7 +140,7 @@ class KratosPropertySet(Base):
     exactly as `MaterialParameters.json` carries them, in the project's unit system.
 
     Written into the deck as they stand. The exporter adds only what is missing and can
-    be derived (`core/kratos_materials.py`), and says so; it never rewrites a value the
+    be derived (`core/kratos/materials.py`), and says so; it never rewrites a value the
     user gave. `tables` is Kratos' own `Tables` block, carried verbatim."""
     constitutive_law: str = Field(min_length=1)
     variables: dict[VariableName, VariableValue] = Field(default_factory=dict)
@@ -171,7 +171,7 @@ class Material(KratosPropertySet):
     @classmethod
     def _old_shape(cls, value: object) -> object:
         """Built from the fields this had before 2026-10-10 (a script written against
-        them, say): converted the way a saved project in that shape is (`core/legacy.py`)."""
+        them, say): converted the way a saved project in that shape is (`core/model/legacy.py`)."""
         if legacy.is_old_record("materials", value):
             return legacy.material(value, 2)
         return value
@@ -350,7 +350,7 @@ class PointLoad(Base):
     """The load in the other dimension this one is the translation of, if any.
 
     A surface load and a line load are one load seen from two dimensions, and both
-    records are kept so a round trip does not widen the footprint (`core/loads.py`).
+    records are kept so a round trip does not widen the footprint (`core/model/loads.py`).
     Set on the *derived* record only; the one the user authored carries None."""
 
     @model_validator(mode="after")
@@ -377,7 +377,7 @@ class LineLoad(Base):
     """The load in the other dimension this one is the translation of, if any.
 
     A surface load and a line load are one load seen from two dimensions, and both
-    records are kept so a round trip does not widen the footprint (`core/loads.py`).
+    records are kept so a round trip does not widen the footprint (`core/model/loads.py`).
     Set on the *derived* record only; the one the user authored carries None."""
 
     @model_validator(mode="after")
@@ -417,7 +417,7 @@ class SurfaceLoad(Base):
     """The load in the other dimension this one is the translation of, if any.
 
     A surface load and a line load are one load seen from two dimensions, and both
-    records are kept so a round trip does not widen the footprint (`core/loads.py`).
+    records are kept so a round trip does not widen the footprint (`core/model/loads.py`).
     Set on the *derived* record only; the one the user authored carries None."""
 
     @model_validator(mode="after")
@@ -443,7 +443,7 @@ class BeamSection(KratosPropertySet):
     @classmethod
     def _old_shape(cls, value: object) -> object:
         """Built from the fields this had before 2026-10-10 (a script written against
-        them, say): converted the way a saved project in that shape is (`core/legacy.py`)."""
+        them, say): converted the way a saved project in that shape is (`core/model/legacy.py`)."""
         if legacy.is_old_record("beam_sections", value):
             return legacy.CONVERTERS['beam_sections'](value)
         return value
@@ -477,7 +477,7 @@ class Beam(Base):
 
     A sheet pile and a wall panel are one wall seen from two dimensions, and both
     records are kept so a plan footprint survives a trip through the section, which has
-    no z to remember it by (`core/walls.py`). Set on the *derived* record only."""
+    no z to remember it by (`core/model/walls.py`). Set on the *derived* record only."""
 
     @model_validator(mode="after")
     def _usable_polyline(self) -> Beam:
@@ -505,7 +505,7 @@ class AnchorSection(KratosPropertySet):
     @classmethod
     def _old_shape(cls, value: object) -> object:
         """Built from the fields this had before 2026-10-10 (a script written against
-        them, say): converted the way a saved project in that shape is (`core/legacy.py`)."""
+        them, say): converted the way a saved project in that shape is (`core/model/legacy.py`)."""
         if legacy.is_old_record("anchor_sections", value):
             return legacy.CONVERTERS['anchor_sections'](value)
         return value
@@ -567,8 +567,8 @@ class Anchor(Base):
 # The formulation is read off Kratos' reference decks, which are exactly this: the sheet
 # pile owns its own nodes, each side of the soil owns a duplicate set, and one
 # `Geo_UPwLineInterfacePlaneStrainDiffOrderElement3Plus3N` per side per beam segment
-# ties them together. See the element table in core/kratos.py and the node split in
-# core/interfaces.py.
+# ties them together. See the element table in core/kratos/export.py and the node split in
+# core/kratos/interfaces.py.
 
 
 class InterfaceSection(KratosPropertySet):
@@ -578,7 +578,7 @@ class InterfaceSection(KratosPropertySet):
     `GEO_COHESION`, `GEO_FRICTION_ANGLE`, ...). Any left out are derived at export from
     the soil the contact runs against -- shear stiffness its shear modulus over
     `virtual_thickness`, normal ten times that, strength the soil's reduced by `r_inter`
-    -- which is what `core/kratos_materials.py` does and where the reasoning lives.
+    -- which is what `core/kratos/materials.py` does and where the reasoning lives.
 
     *Which* soil is the adjacent body's by default, one property set per body, as the
     reference deck does it. `material` overrides that for the whole contact.
@@ -588,7 +588,7 @@ class InterfaceSection(KratosPropertySet):
     @classmethod
     def _old_shape(cls, value: object) -> object:
         """Built from the fields this had before 2026-10-10 (a script written against
-        them, say): converted the way a saved project in that shape is (`core/legacy.py`)."""
+        them, say): converted the way a saved project in that shape is (`core/model/legacy.py`)."""
         if legacy.is_old_record("interface_sections", value):
             return legacy.CONVERTERS['interface_sections'](value)
         return value
@@ -628,7 +628,7 @@ class Interface(Base):
     convention the exported element's node order carries.
 
     Dimension-native `(x, y)`, like every other 2D record. Interfaces are plane strain
-    only -- see core/kratos.py's `INTERFACES` table for why.
+    only -- see core/kratos/export.py's `INTERFACES` table for why.
     """
     id: Ident
     name: str
@@ -674,8 +674,8 @@ class NormalLoad(Base):
     Dimension-native `(x, y)`, like a free `Interface`'s points: 2D (plane strain)
     only, with no 3D translation -- `Project.active_normal_loads` is gated the same
     way `active_interfaces` is. The line is embedded into the section the same way a
-    free interface's is (`core/build.py:_embed_beams`), and its condition is harvested
-    directly off that embedding (`core/kratos.py:_normal_load_conditions`) rather than
+    free interface's is (`core/geometry/build.py:_embed_beams`), and its condition is harvested
+    directly off that embedding (`core/kratos/export.py:_normal_load_conditions`) rather than
     by scanning the boundary at a fixed elevation the way `LineLoad` is, which is what
     lets it run down a vertical face.
 
@@ -744,7 +744,7 @@ class NormalLoad(Base):
 #
 # No 3D element class is pinned by a reference deck here -- every reference deck is
 # plane strain. See plan/structure-mode-implementation-plan.md and the element tables
-# in core/kratos.py, which name every unconfirmed choice in one place.
+# in core/kratos/export.py, which name every unconfirmed choice in one place.
 
 
 class PanelSection(KratosPropertySet):
@@ -756,7 +756,7 @@ class PanelSection(KratosPropertySet):
     @classmethod
     def _old_shape(cls, value: object) -> object:
         """Built from the fields this had before 2026-10-10 (a script written against
-        them, say): converted the way a saved project in that shape is (`core/legacy.py`)."""
+        them, say): converted the way a saved project in that shape is (`core/model/legacy.py`)."""
         if legacy.is_old_record("panel_sections", value):
             return legacy.CONVERTERS['panel_sections'](value)
         return value
@@ -800,7 +800,7 @@ class Panel(Base):
 
     A sheet pile and a wall panel are one wall seen from two dimensions, and both
     records are kept so a plan footprint survives a trip through the section, which has
-    no z to remember it by (`core/walls.py`). Set on the *derived* record only."""
+    no z to remember it by (`core/model/walls.py`). Set on the *derived* record only."""
 
     @model_validator(mode="after")
     def _usable_sweep(self) -> Panel:
@@ -941,7 +941,7 @@ class WaterLevel(Base):
     specific_weight: float | None = Field(default=None, gt=0)
     """In the project's units. None is water's 10 kN/m3 in whatever system the project
     uses (`Project.water_specific_weight`). Read by a `NormalLoad` in `"Hydrostatic"` mode
-    (`core/kratos_processes.py:_normal_load`); otherwise unused. One value for the whole
+    (`core/kratos/processes.py:_normal_load`); otherwise unused. One value for the whole
     project, the same way `y` is one phreatic level -- not a per-load setting."""
 
 
@@ -957,12 +957,12 @@ class Phase(Base):
     whole model. Two reasons, and both matter: the reference deck's `stage_preprocess`
     *is* that diff, so nothing has to be reconstructed on export; and storing absolute
     state would mean rewriting every later phase whenever a part is added to the model.
-    Resolving diff to state is one function, in `core.phases`, which is the only place
+    Resolving diff to state is one function, in `core.model.phases`, which is the only place
     that walks the parent chain.
 
     `parent` makes a tree, and Plaxis allows a branch. Kratos does not: its orchestrator
     runs a flat `execution_list`. Linearising the tree, and refusing one that cannot be
-    linearised, is the export's job (`core.phases`) rather than this class's -- a branch
+    linearised, is the export's job (`core.model.phases`) rather than this class's -- a branch
     is a legitimate thing to have half-built in the editor, and refusing it here would
     make it impossible to type.
 
@@ -1055,9 +1055,9 @@ class LayersUpdate(Base):
     # here rather than on an endpoint of its own for the same reason: the water level
     # is validated against the model it belongs to, not on its own.
     #
-    # It is not merely cosmetic. `kratos_processes._pore_pressure` states the whole
+    # It is not merely cosmetic. `core.kratos.processes._pore_pressure` states the whole
     # ground's water pressure from these two numbers, `_normal_load` sizes every
-    # hydrostatic load from them, and `kratos_materials` derives DENSITY_WATER from
+    # hydrostatic load from them, and `core.kratos.materials` derives DENSITY_WATER from
     # the specific weight -- so this row is the deck's water table.
     water: WaterLevel | None = None
     # Custom soil bodies, so reassigning one's material is validated against the
@@ -1180,7 +1180,7 @@ class ExportRequest(MeshRequest):
 class Deck(Base):
     """A Kratos deck that already exists on disk, standing in for the parametric model.
 
-    Set by `core.deck.deck_project` for a case that is written as a deck rather than
+    Set by `core.kratos.deck.deck_project` for a case that is written as a deck rather than
     built from layers -- a dike analysis, say, with twenty stages, three material sets
     and phreatic multi-lines, none of which this schema can say. The deck is shown as
     its own mesh and calculated as the files it is; nothing is exported. Every other
@@ -1220,7 +1220,7 @@ class Project(Base):
 
     unit_system: Literal["SI", "kN"] = units.DEFAULT
     """The consistent set every value is in, and the deck and its results with it:
-    "SI" (N, m, kg, s) or "kN" (kN, m, t, s). See `core/units.py`. Changed only through
+    "SI" (N, m, kg, s) or "kN" (kN, m, t, s). See `core/model/units.py`. Changed only through
     `PATCH /api/project/units`, which converts the values with it."""
 
     section_offset: float | None = None
@@ -1263,7 +1263,7 @@ class Project(Base):
     """The phreatic level, or `None` for a model without one -- which is what a new
     project starts as. A model is not born with a water table at somebody else's depth;
     it has one when its author sets one. Without it the deck is dry: zero pore pressure,
-    still fixed (`kratos_processes._pore_pressure`)."""
+    still fixed (`core.kratos.processes._pore_pressure`)."""
     mesh: MeshSettings = Field(default_factory=MeshSettings)
     custom_parts: list[CustomPart] = Field(default_factory=list)
     phases: list[Phase] = Field(default_factory=list)
@@ -1277,7 +1277,7 @@ class Project(Base):
     @classmethod
     def _migrate_legacy_units(cls, value: object) -> object:
         """A project saved before the unit system existed, converted once into the
-        current shape in SI, with the numbers the old exporter wrote (`core/legacy.py`)."""
+        current shape in SI, with the numbers the old exporter wrote (`core/model/legacy.py`)."""
         if legacy.is_legacy(value):
             return legacy.migrate(value)
         return legacy.migrate_records(value) if isinstance(value, dict) else value
@@ -1649,7 +1649,7 @@ class Project(Base):
         boreholes describe, so once a drawn embankment stands above it, `domain.y_top`
         is buried inside the fill rather than on top of it. `extent` knows where the
         model actually ends; everything that places or reads a surface load asks here,
-        so the build, the exporter and `core/loads.py` agree on one answer.
+        so the build, the exporter and `core/model/loads.py` agree on one answer.
         """
         return self.extent().y_top
 
@@ -1819,7 +1819,7 @@ class Project(Base):
                 raise ValueError(f"phase {phase.id!r} starts from itself")
 
         # Every phase has to reach the root by following parents. Anything that does not
-        # is in a cycle, which would make `core.phases` walk for ever.
+        # is in a cycle, which would make `core.model.phases` walk for ever.
         parents = {phase.id: phase.parent for phase in self.phases}
         for start in ids:
             seen, at = set(), start

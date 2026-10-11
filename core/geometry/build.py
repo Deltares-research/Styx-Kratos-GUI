@@ -27,7 +27,7 @@ from dataclasses import dataclass, field
 
 import gmsh
 
-from core.schemas import Project
+from core.model.schemas import Project
 
 # When a fragment output volume comes from several inputs, the structure wins over the
 # soil it displaces, and the more specific structure wins over the more general. The
@@ -560,7 +560,7 @@ def _load_footprint_tools(project: Project, dim: int) -> list[tuple[int, int]]:
     """One boundary-coincident entity per active load, in this dimension's coordinates.
 
     A 2D load record is dimension-native `(x, y)`, so the tool is placed at the section
-    offset along z -- the same world position `kratos._load_conditions` reads a point
+    offset along z -- the same world position `meshing.loaded_elements` reads a point
     load back at.
     """
     tools: list[tuple[int, int]] = []
@@ -575,7 +575,7 @@ def _load_footprint_tools(project: Project, dim: int) -> list[tuple[int, int]]:
         # A point or line load is dimension-native, and imprints on the section plane
         # in either model: in 2D that plane *is* the model, and in 3D it is a line
         # across the solid's boundary at the cut. Same tool, same world position, so
-        # `kratos._load_conditions` reads it back the same way in both.
+        # `meshing.loaded_elements` reads it back the same way in both.
         if load.kind == "point":
             tools.append((0, point(load.x, load.y)))
         elif load.kind == "line":
@@ -611,7 +611,7 @@ def _clip_to_model(tools: list[tuple[int, int]],
 
     A footprint may hang over the edge of the domain or over the excavated void. The
     overhang has no boundary to imprint, and left in place it becomes a free-floating
-    surface at the load elevation -- which `kratos._load_conditions` would then read
+    surface at the load elevation -- which `meshing.loaded_elements` would then read
     back as loaded boundary. Intersecting first is what keeps the model clean.
 
     One boolean per tool, for the same reason `_section` runs one per volume: the
@@ -747,7 +747,7 @@ def _embed_beams(project: Project, owners: dict[int, set[str]], dim: int,
     # A free interface -- one drawn through the soil rather than along a pile -- needs
     # the same imprint for the same reason: the mesh can only be split along a line it
     # actually has edges on. It carries no elements of its own, so unlike a beam it is
-    # only ever an internal edge; `core.interfaces` does the rest, after meshing.
+    # only ever an internal edge; `core.kratos.interfaces` does the rest, after meshing.
     for interface in free:
         vertices = [point(x, y) for x, y in interface.points]
         for start, end in zip(vertices, vertices[1:]):
@@ -756,8 +756,8 @@ def _embed_beams(project: Project, owners: dict[int, set[str]], dim: int,
 
     # A normal load's polyline is embedded the same way and for the same reason: it
     # needs its own mesh edges to harvest a condition off, which is what lets
-    # `kratos._normal_load_conditions` find it without scanning the boundary at a
-    # fixed elevation the way `_load_conditions` does for a flat `LineLoad`.
+    # `core.kratos.export._normal_load_conditions` find it without scanning the boundary
+    # at a fixed elevation the way `meshing.loaded_elements` does for a flat `LineLoad`.
     for load in normal_loads:
         vertices = [point(x, y) for x, y in load.points]
         for start, end in zip(vertices, vertices[1:]):
@@ -827,7 +827,7 @@ def _section_sweeps(project: Project, log: list[str] | None = None
     starting there and running off to one side.
 
     Free interfaces are swept the same way and for a narrower purpose: the imprint.
-    Their zero-thickness elements are plane strain only (`core/kratos.py`'s `INTERFACES`
+    Their zero-thickness elements are plane strain only (`core/kratos/export.py`'s `INTERFACES`
     table), so the surface splits the mesh and nothing more -- which is still worth
     having, because it is what makes the interface visible in the solid model.
 

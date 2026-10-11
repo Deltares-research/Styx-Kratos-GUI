@@ -118,7 +118,7 @@ def test_the_stored_project_is_valid_after_every_delete(client):
     """The store must only ever hold a project that validates; whatever a delete leaves
     behind is checked the same way a PUT would be."""
     from backend import store
-    from core.schemas import Project
+    from core.model.schemas import Project
 
     first = _box(client)
     _box(client, origin=(5, 5, 0), label="Other")

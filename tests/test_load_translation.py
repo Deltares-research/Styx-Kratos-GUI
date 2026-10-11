@@ -13,9 +13,9 @@ from whichever dimension the user was last working in, which is the one they edi
 import gmsh
 import pytest
 
-from core import loads as translate
-from core.schemas import Project
-from core.seed import seed_project
+from core.model import loads as translate
+from core.model.schemas import Project
+from core.model.seed import seed_project
 
 
 # Narrower than the model (z 0..25) and across its section plane (z 12.5).
@@ -329,7 +329,7 @@ def test_the_switch_says_what_became_of_each_load():
 def test_a_translated_pair_is_drawn_once_in_the_solid_model():
     """The failure this guards against is a load applied twice: both halves of a pair
     imprinting the same boundary, and both symbols drawn on top of each other."""
-    from core import build, tessellate
+    from core.geometry import build, tessellate
 
     paired = [l.model_dump() for l in
               translate.translate(project_with([SURFACE], dimension=3), 2)]
@@ -457,7 +457,7 @@ def test_the_line_counterpart_comes_back_at_the_top_of_the_model():
 
 def test_the_surface_load_is_drawn_on_top_of_the_drawn_layer():
     """Not buried at z = 0 inside the embankment, where nothing would be visible."""
-    from core import build
+    from core.geometry import build
 
     project = raised([{"id": "surfaceload_1", "name": "SurfaceLoad_1", "kind": "surface",
                        "x0": 4.0, "x1": 16.0, "z0": 5.0, "z1": 10.0, "thickness": 0.3,

@@ -97,15 +97,15 @@ def version_job() -> str:
 
 
 def geometry_job(project_json: str) -> dict:
-    from core import tessellate
-    from core.schemas import Project
+    from core.geometry import tessellate
+    from core.model.schemas import Project
 
     return tessellate.tessellate(Project.model_validate_json(project_json)).to_dict()
 
 
 def mesh_job(project_json: str, settings_json: str) -> dict:
-    from core import meshing
-    from core.schemas import MeshRequest, Project
+    from core.geometry import meshing
+    from core.model.schemas import MeshRequest, Project
 
     project = Project.model_validate_json(project_json)
     settings = MeshRequest.model_validate_json(settings_json)
@@ -131,8 +131,8 @@ def mesh_labels_job(project_json: str, settings_json: str) -> dict:
     Both tables travel together: they come out of one pass, and fetching them separately
     would mean meshing the project twice to say what it already said.
     """
-    from core import kratos
-    from core.schemas import MeshRequest, Project
+    from core.kratos import export as kratos
+    from core.model.schemas import MeshRequest, Project
 
     project = Project.model_validate_json(project_json)
     settings = MeshRequest.model_validate_json(settings_json)
@@ -146,10 +146,10 @@ def node_parts_job(project_json: str, settings_json: str) -> dict:
 
     The whole export runs, like `mesh_labels_job`, because the deck is the only thing
     that knows both a node's Kratos number and the parts that name it; the answer is
-    read back off the `.mdpa` text so it is the deck's own (`core.node_parts`).
+    read back off the `.mdpa` text so it is the deck's own (`core.kratos.node_parts`).
     """
-    from core import kratos, node_parts
-    from core.schemas import MeshRequest, Project
+    from core.kratos import export as kratos, node_parts
+    from core.model.schemas import MeshRequest, Project
 
     project = Project.model_validate_json(project_json)
     settings = MeshRequest.model_validate_json(settings_json)
@@ -158,19 +158,19 @@ def node_parts_job(project_json: str, settings_json: str) -> dict:
 
 
 def import_job(filepath: str, extension: str) -> dict:
-    from core import importer
+    from core.geometry import importer
     return importer.process_import(filepath, extension)
 
 
 def create_job(recipe_json: str) -> dict:
     import json
-    from core import creator
+    from core.geometry import creator
     return creator.process_creation(json.loads(recipe_json))
 
 
 def export_job(project_json: str, settings_json: str) -> dict:
-    from core import kratos
-    from core.schemas import ExportRequest, Project
+    from core.kratos import export as kratos
+    from core.model.schemas import ExportRequest, Project
 
     project = Project.model_validate_json(project_json)
     settings = ExportRequest.model_validate_json(settings_json)

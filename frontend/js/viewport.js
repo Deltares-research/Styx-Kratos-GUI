@@ -50,7 +50,7 @@ App.Viewport = (function () {
   var showGrid = true, gridGroup, boundsGroup, referenceGrid;
   var activeView = 'iso';
   /* The section, not the solid model: the server opens on a plane-strain project
-     (core/seed.py blank_project), so starting in 3D would only mean drawing a
+     (core/model/seed.py blank_project), so starting in 3D would only mean drawing a
      view the first /api/geometry answer immediately takes away. */
   var DEFAULT_VIEW_MODE = 'elevation';
   var DEFAULT_DIMENSION = 2;
@@ -265,7 +265,7 @@ App.Viewport = (function () {
      the right of the walking direction -- so a line drawn left to right along the top
      of the ground pushes down into it, which is the reading anyone expects. A negative
      pressure flips the arrows. This is the symbol's convention; the sign Kratos itself
-     applies comes from the condition's own node order (core/kratos.py). */
+     applies comes from the condition's own node order (core/kratos/export.py). */
   function normalLoadGlyphSpec(load, project) {
     var points = load.points || [];
     var span = modelSpan(project, frame && frame.size);
@@ -525,7 +525,7 @@ App.Viewport = (function () {
                              normalLoadKeys) {
     customKeys = customKeys || [];
     loadKeys = loadKeys || [];
-    // Sheet piles and anchors are sections of their own (core/tessellate.py
+    // Sheet piles and anchors are sections of their own (core/geometry/tessellate.py
     // :112-126). Leaving them out of every mode is what kept them invisible.
     memberKeys = memberKeys || [];
     // And a normal load is a section of its own too -- the strip the build draws
@@ -559,7 +559,7 @@ App.Viewport = (function () {
   /* Which soil bodies there are to show.
 
      Not one per layer: a staged excavation splits the soil inside the pit into the
-     lifts it is dug in, so three layers can be eight bodies (core/schemas.py,
+     lifts it is dug in, so three layers can be eight bodies (core/model/schemas.py,
      `Project.soil_bodies`). Deriving that split here would be a second implementation
      of it to keep in step, so the project publishes the answer and this reads it.
 
@@ -1604,7 +1604,7 @@ App.Viewport = (function () {
 
   /* ── Parts in a colour of their own ────────────────────────────────────
      The grey mesh is one sheet. `result.parts` is the same mesh cut along part keys
-     (core/meshing.py `_part_sections`), and each part is built here once, hidden,
+     (core/geometry/meshing.py `_part_sections`), and each part is built here once, hidden,
      inside the mesh group -- so it lives and dies with the mesh, and is only ever on
      screen where the mesh is (Mesh mode, mesh eye on). `App.PartColors` decides which
      are switched on; `syncPartColors` shows exactly those that are also shown by their

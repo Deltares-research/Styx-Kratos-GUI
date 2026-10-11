@@ -37,7 +37,7 @@
   }
 
   /* An interface reaches the mesh as one key per face it unglues -- `wall_contact:L`
-     and `wall_contact:R` (core/meshing.py `_interface_sections`) -- because the
+     and `wall_contact:R` (core/geometry/meshing.py `_interface_sections`) -- because the
      two faces are what a user has to tell apart. Left is a +90 degree turn from walking
      the line in its stored order, the project's own convention. */
   var SIDE = /:(L|R)$/;

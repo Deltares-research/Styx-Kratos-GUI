@@ -1,7 +1,7 @@
 """Synthetic GiD output for an exported deck (plan alpha 2.4).
 
 `write_run(export, directory, fields)` lays out a run directory the way a Kratos run
-leaves one: the deck as `core.calculate.write_deck` writes it, then one `.post.msh` and
+leaves one: the deck as `core.run.calculate.write_deck` writes it, then one `.post.msh` and
 one `.post.res` per stage, named by the stage's own `output_name`. The numbers are
 analytic functions of the coordinates, chosen by the caller, so a test can say exactly
 what every node and element should read back as.
@@ -18,7 +18,7 @@ What a real run does that this copies, because the reader depends on it:
   stage cut on non-convergence writes it -- the last step is the stage's result.
 
 It is a test double, not a GiD writer: the format is exactly as much of GiD's as
-`core.gid_results` reads.
+`core.results.gid` reads.
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ import json
 from pathlib import Path
 from typing import Callable
 
-from core import calculate
+from core.run import calculate
 from tests import mdpa
 
 Nodal = Callable[[float, float, float, int], tuple[float, ...]]

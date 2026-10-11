@@ -1,12 +1,12 @@
 """What the numbers in a result file mean.
 
-`core.gid_results` reads the format; this is the layer that decides what a user may ask
+`core.results.gid` reads the format; this is the layer that decides what a user may ask
 for. Three things are pinned here and all three are the kind of mistake that produces a
 plausible wrong answer rather than a crash:
 
 *   **the unit.** The deck is SI and the project is m/kN/day. A stress read straight out
     of the file and printed is out by a factor of a thousand and looks entirely
-    reasonable -- `kratos_materials.KILO` exists because that exact mistake was once
+    reasonable -- `core.kratos.materials.KILO` exists because that exact mistake was once
     made in the other direction.
 *   **the sign.** Kratos writes compression negative, and so does Plaxis. Nothing is
     flipped, and there is a test saying so, because "fixing" it later would silently
@@ -22,7 +22,7 @@ from pathlib import Path
 
 import pytest
 
-from core import gid_results, result_fields
+from core.results import fields as result_fields, gid as gid_results
 
 REFERENCE = Path(__file__).resolve().parents[1] / "test"
 
@@ -151,7 +151,7 @@ def test_fields_are_grouped_the_way_an_engineer_looks_for_them(stage):
 
 def test_a_stress_comes_back_as_the_run_wrote_it(stage):
     """-100000 in the file is -100000 on screen: Kratos has no units, the run is in its
-    project's system, and only the label says which (`core/units.py`)."""
+    project's system, and only the label says which (`core/model/units.py`)."""
     mesh, results = stage
 
     out = result_fields.values(results, mesh, "syy", "elements")
@@ -474,7 +474,7 @@ def test_the_reference_pore_pressure_is_hydrostatic_and_compressive():
 import numpy as np
 from hypothesis import given, settings, strategies as st
 
-from core.result_fields import _deviatoric_stress, _mean_stress, _principal, _tau_max
+from core.results.fields import _deviatoric_stress, _mean_stress, _principal, _tau_max
 
 COMPONENT = st.floats(min_value=-5e6, max_value=5e6, allow_nan=False, allow_infinity=False)
 

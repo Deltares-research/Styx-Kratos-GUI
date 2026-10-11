@@ -11,7 +11,7 @@ the arrangement those decks pin down, one dimension up:
     shared with the structure it hangs from and its tail node in no other element,
     alone in a one-node support group that a constraint process pins.
 
-The element class names themselves are named in one place (core/kratos.py) and flagged
+The element class names themselves are named in one place (core/kratos/export.py) and flagged
 as unconfirmed; these tests hold the arrangement, not the spelling, wherever they can.
 """
 
@@ -19,10 +19,11 @@ import json
 
 import pytest
 
-from core import build, kratos
-KILO = 1000.0  # kN -> N: these tests write old-style projects, converted on load (core/legacy.py)
-from core.schemas import MeshRequest, Project
-from core.seed import seed_project
+from core.geometry import build
+from core.kratos import export as kratos
+KILO = 1000.0  # kN -> N: these tests write old-style projects, converted on load (core/model/legacy.py)
+from core.model.schemas import MeshRequest, Project
+from core.model.seed import seed_project
 from tests import mdpa
 
 
@@ -389,7 +390,7 @@ def test_the_plane_anchors_tail_is_pinned_in_all_three_directions(sectioned):
 # ── 2D loads that reach a 3D deck ───────────────────────────────────────────
 #
 # A point load and a line load below the ground surface have no surface form (a
-# SurfaceLoad has no z of its own), so `core/loads.py` translates neither and the solid
+# SurfaceLoad has no z of its own), so `core/model/loads.py` translates neither and the solid
 # model carries them at the section plane instead. What the deck can do with them
 # differs, and the difference is said out loud rather than left to be discovered.
 
@@ -427,7 +428,7 @@ def test_a_buried_line_load_in_3d_warns_rather_than_vanishing(session):
 
 
 # ── Staged construction in 3D ───────────────────────────────────────────────
-# `kratos.py`'s two `if dim == 2 else []` guards keep a 3D deck from staging its
+# `kratos/export.py`'s two `if dim == 2 else []` guards keep a 3D deck from staging its
 # structures: no automatic wall-installation stage, and no master/slave tie. That is
 # the restriction plan sec 7.13 says to keep -- but it used to be silent, and the
 # phases panel is visible in 3D projects, so a user could build a sequence here and

@@ -3,7 +3,7 @@
 
    The frozen dialog (js/dialogs.js) edits a Plaxis-style sheet: unit weights in kN/m3,
    E in kN/m2, permeability in m/day, a material model and a drainage type -- numbers
-   the exporter used to convert. A soil is now what Kratos reads (core/schemas.py
+   the exporter used to convert. A soil is now what Kratos reads (core/model/schemas.py
    `Material`): a constitutive law and its Variables under Kratos' own names, in the
    project's unit system, written into the deck as they stand. So this replaces that
    dialog with one that shows and edits exactly that, each number labelled in the

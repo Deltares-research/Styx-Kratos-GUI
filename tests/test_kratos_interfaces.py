@@ -20,10 +20,11 @@ import json
 
 import pytest
 
-from core import build, kratos
-KILO = 1000.0  # kN -> N: these tests write old-style projects, converted on load (core/legacy.py)
-from core.schemas import MeshRequest, Project
-from core.seed import seed_project
+from core.geometry import build
+from core.kratos import export as kratos
+KILO = 1000.0  # kN -> N: these tests write old-style projects, converted on load (core/model/legacy.py)
+from core.model.schemas import MeshRequest, Project
+from core.model.seed import seed_project
 from tests import mdpa
 from tests.test_kratos import BEAM_SECTION, deck_of
 
@@ -541,7 +542,7 @@ def test_a_contact_takes_the_stiffness_of_each_soil_it_runs_against(session):
 
     So a section naming no material derives per adjacent body. Which body each contact
     element runs against is already known: the deck writes one part per body
-    (`core/kratos.py:_interface_by_body`)."""
+    (`core/kratos/export.py:_interface_by_body`)."""
     project = interfaced_project(section={"material": None, "virtual_thickness": 1.0})
     export = kratos.export_project(project, MeshRequest(element_size=3.0, order=2))
     variables = [e["Material"]["Variables"] for e in entries_of(export)

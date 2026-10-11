@@ -15,9 +15,9 @@ import math
 
 import pytest
 
-from core import build, tessellate
-from core.schemas import PointLoad, Project
-from core.seed import seed_project
+from core.geometry import build, tessellate
+from core.model.schemas import PointLoad, Project
+from core.model.seed import seed_project
 
 
 @pytest.fixture(scope="module")
@@ -229,7 +229,7 @@ def test_payload_stays_small_enough_to_send_as_json(display):
 def project_with_line_and_surface(tmp_path):
     import gmsh
 
-    from core.schemas import CustomPart
+    from core.model.schemas import CustomPart
 
     p = seed_project(simple=False)
 

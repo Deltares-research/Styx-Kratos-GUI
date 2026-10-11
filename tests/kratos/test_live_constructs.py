@@ -25,9 +25,13 @@ from pathlib import Path
 
 import pytest
 
-from core import build, calculate, kratos, result_members, results, seed
+from core.model import seed
+from core.geometry import build
+from core.kratos import export as kratos
+from core.run import calculate
+from core.results import members as result_members, runs as results
 from tests.models import excavation
-from core.schemas import MeshRequest, Project
+from core.model.schemas import MeshRequest, Project
 from tests import mdpa
 from tests.results_run import require_kratos
 

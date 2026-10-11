@@ -24,12 +24,13 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend import store
-from core import build, kratos, meshing
+from core.geometry import build, meshing
+from core.kratos import export as kratos
 from backend.main import app
-from core.schemas import MeshRequest, Project
+from core.model.schemas import MeshRequest, Project
 from tests.models import excavation
 from tests.models.excavation import excavation_project
-from core.seed import blank_project, seed_project
+from core.model.seed import blank_project, seed_project
 
 
 @pytest.fixture(scope="module")

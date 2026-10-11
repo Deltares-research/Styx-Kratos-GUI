@@ -8,8 +8,8 @@ from __future__ import annotations
 
 import gmsh
 
-from core import kratos
-from core.schemas import MeshRequest
+from core.kratos import export as kratos
+from core.model.schemas import MeshRequest
 from tests.models import excavation
 
 

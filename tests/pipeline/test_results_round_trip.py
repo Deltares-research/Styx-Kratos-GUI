@@ -19,10 +19,14 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from core import build, calculate, kratos, phases, results
+from core.model import phases
+from core.geometry import build
+from core.kratos import export as kratos
+from core.run import calculate
+from core.results import runs as results
 from tests.models import excavation
 from backend.main import app
-from core.schemas import MeshRequest
+from core.model.schemas import MeshRequest
 from tests import mdpa
 from tests.fakes import gid_writer
 

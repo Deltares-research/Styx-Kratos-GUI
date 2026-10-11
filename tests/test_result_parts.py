@@ -17,7 +17,8 @@ import textwrap
 
 import pytest
 
-from core import gid_results, mdpa_import, result_parts
+from core.kratos import mdpa_import
+from core.results import gid as gid_results, parts as result_parts
 
 
 def dedent(text: str) -> str:
@@ -204,7 +205,7 @@ def test_the_real_run_reads_its_construction_sequence_out_of_the_files(monkeypat
     the strut after it, and the interfaces are absent throughout -- which the run-wide
     check reports as "not written" rather than as seven deactivations.
     """
-    from core import results
+    from core.results import runs as results
     from tests import results_run
 
     run = results_run.real_run()
