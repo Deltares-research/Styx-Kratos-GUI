@@ -1,6 +1,6 @@
 """Every route's contract, in one table (plan/active/full-test-and-validation-plan.md sec 5).
 
-For each route in `backend.main`:
+For each route the app serves:
 
 (a) a happy path, asserting the response *shape* -- its keys and, where it has one, the
     `invalidates` list the front end refreshes from;

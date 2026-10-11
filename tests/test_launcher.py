@@ -79,6 +79,8 @@ def stood_in(monkeypatch, tmp_path):
     monkeypatch.setattr(_launcher.os, "execv", lambda exe, argv: calls.__setitem__("exec", argv))
     monkeypatch.setattr(_launcher.os, "chdir", lambda path: None)
     monkeypatch.delenv(_launcher.ALLOWED_HOSTS_ENV, raising=False)
+    # Whatever this machine happens to be serving on 8000 is not these tests' business.
+    monkeypatch.setattr(_launcher, "port_in_use", lambda host, port: False)
     return calls
 
 
@@ -111,3 +113,55 @@ def test_a_failed_setup_is_one_line_and_exit_code_one(monkeypatch, capsys):
 
     assert _launcher.main([]) == 1
     assert "Launcher failed: Python 3.10" in capsys.readouterr().err
+
+
+# ── A port that is already taken ────────────────────────────────────────────
+
+import socket as _socket
+
+
+@_pytest.fixture
+def listening():
+    """A socket listening on a free loopback port, like a server left running."""
+    server = _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM)
+    server.bind(("127.0.0.1", 0))
+    server.listen()
+    yield server.getsockname()[1]
+    server.close()
+
+
+def test_a_port_with_a_server_on_it_is_in_use(listening):
+    assert _launcher.port_in_use("127.0.0.1", listening)
+    assert _launcher.port_in_use("localhost", listening)
+
+
+def test_an_all_interfaces_bind_is_probed_on_loopback(listening):
+    assert _launcher.port_in_use("0.0.0.0", listening)
+
+
+def test_a_free_port_is_not_in_use(listening):
+    port = listening
+    with _socket.socket(_socket.AF_INET, _socket.SOCK_STREAM) as probe:
+        probe.bind(("127.0.0.1", 0))
+        free = probe.getsockname()[1]
+
+    assert not _launcher.port_in_use("127.0.0.1", free)
+    assert port != free
+
+
+def test_a_server_already_on_the_port_is_refused_not_opened(stood_in, monkeypatch, capsys):
+    """A server left running from before still holds its own project in memory, and
+    its own code. The browser must not be pointed at it as if it were this one: a new
+    server cannot bind the port, so it would exit, and the page would show the old
+    model."""
+    monkeypatch.setattr(_launcher, "port_in_use", lambda host, port: True)
+    opened = []
+    monkeypatch.setattr(_launcher.webbrowser, "open", opened.append)
+    monkeypatch.setattr(_launcher.subprocess, "call",
+                        lambda argv: stood_in.__setitem__("call", argv))
+
+    assert _launcher.main(["--open-browser"]) == 1
+
+    assert stood_in["exec"] is None and stood_in["call"] is None and opened == []
+    err = capsys.readouterr().err
+    assert "8000" in err and "already" in err

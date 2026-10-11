@@ -73,7 +73,7 @@ strings and hand them to the same handlers.
 
 | Role | Modules |
 |---|---|
-| App and state | `main.py` (routes), `store.py` (the one project), `seed.py` (starting project), `launcher.py` (portable setup) |
+| App and state | `main.py` (assembles the app), `middleware.py` (Host/Origin check, no-cache), `routes/` (one module per API group, below), `store.py` (the one project), `seed.py` (starting project), `launcher.py` (portable setup) |
 | Model | `schemas.py` (the `Project`), `walls.py`, `loads.py` (section ↔ solid translation), `phases.py` |
 | Geometry and mesh | `build.py`, `tessellate.py`, `meshing.py`, `interfaces.py`, `gmsh_worker.py`, `importer.py`, `creator.py` |
 | Kratos export | `kratos.py` (deck), `kratos_materials.py`, `kratos_processes.py` (stages, solver, output) |
@@ -83,16 +83,19 @@ strings and hand them to the same handlers.
 
 ## HTTP API
 
-| Group | Routes |
-|---|---|
-| Project | `GET/PUT /api/project`, `POST /api/project/new`, `/reset`, `/script`; `PATCH /api/project/layers`, `/materials`, `/structures`, `/phases`, `/dimension`; `PUT /api/project/water`; `POST /api/project/phases/defaults` |
-| Geometry | `GET /api/geometry`, `POST /api/geometry/create`, `/import`, `DELETE /api/geometry/parts/{key}`, `DELETE /api/project/custom_parts` |
-| Mesh | `POST /api/mesh`, `/api/mesh/labels`, `/api/mesh/node-parts` |
-| Decks | `POST /api/export/mdpa`, `/api/import/mdpa`, `/api/calculate` |
-| Results | `GET /api/results/runs`, `/runs/{run}`, `/runs/{run}/files/{name}`, `/runs/{run}/archive` |
-| Results per stage | `GET /api/results/runs/{run}/stages/{n}/fields`, `/mesh`, `/field/{name}`, `/displacement`, `/at/{node}`, `/parts` |
-| Results per member | `GET /api/results/runs/{run}/members`, `/members/{member}/{quantity}` |
-| Health | `GET /api/health` |
+Each group is one module in `backend/routes/`; what they share (upload limit, project
+validation, mesh jobs) is in `backend/routes/common.py`.
+
+| Group | Module | Routes |
+|---|---|---|
+| Project | `routes/project.py` | `GET/PUT /api/project`, `POST /api/project/new`, `/reset`, `/script`; `PATCH /api/project/layers`, `/materials`, `/structures`, `/phases`, `/dimension`, `/units`; `PUT /api/project/water`; `POST /api/project/phases/defaults` |
+| Geometry | `routes/geometry.py` | `GET /api/geometry`, `POST /api/geometry/create`, `/import`, `DELETE /api/geometry/parts/{key}`, `DELETE /api/project/custom_parts` |
+| Mesh | `routes/mesh.py` | `POST /api/mesh`, `/api/mesh/labels`, `/api/mesh/node-parts` |
+| Decks | `routes/decks.py` | `POST /api/export/mdpa`, `/api/import/mdpa`, `/api/calculate` |
+| Results | `routes/results.py` | `GET /api/results/runs`, `/runs/{run}`, `/runs/{run}/files/{name}`, `/runs/{run}/archive` |
+| Results per stage | `routes/results.py` | `GET /api/results/runs/{run}/stages/{n}/fields`, `/mesh`, `/field/{name}`, `/displacement`, `/at/{node}`, `/parts` |
+| Results per member | `routes/results.py` | `GET /api/results/runs/{run}/members`, `/members/{member}/{quantity}` |
+| Health | `main.py` | `GET /api/health` |
 
 ## Browser modules
 
