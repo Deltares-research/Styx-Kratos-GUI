@@ -9,10 +9,10 @@
 those requests from this recording instead of a server, so the module can be booted and
 driven in the test page.
 
-The model is CROW (`app.crow.crow_project(staged=True)`) at a coarse mesh: staged phases,
-a sheet pile with interfaces both sides, a strut, line loads and a water level -- most of
-what the viewport draws -- in a file small enough to commit. Plus one imported `.mdpa`
-preview (the coarse CROW deck itself), for the imported-mesh half.
+The model is the test model (`tests/models/excavation.py`, staged) at a coarse mesh:
+staged phases, a sheet pile with interfaces both sides, a strut, line loads and a water
+level -- most of what the viewport draws -- in a file small enough to commit. Plus one
+imported `.mdpa` preview (the coarse deck of the same model), for the imported-mesh half.
 
 Generated, never edited: rerun with --write after a change to any of those payloads.
 """
@@ -34,11 +34,12 @@ def record() -> dict:
     os.environ.setdefault("KRATOS_GUI_ALLOWED_HOSTS", "testserver")
     from fastapi.testclient import TestClient
 
-    from app import crow, mdpa_import, node_parts
+    from app import mdpa_import, node_parts
     from app.main import app
+    from tests.models import excavation
 
     with TestClient(app) as client:
-        project = crow.crow_project(staged=True).model_dump(mode="json")
+        project = excavation.excavation_project(staged=True).model_dump(mode="json")
         assert client.put("/api/project", json=project).status_code == 200
         out = {
             "settings": SETTINGS,

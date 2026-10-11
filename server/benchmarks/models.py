@@ -7,7 +7,8 @@ benchmark runner sends exactly that project through the REST API, the path the G
 
 from __future__ import annotations
 
-from app import crow, legacy, phases
+from app import legacy, phases
+from tests.models import excavation
 from app.schemas import Project
 from app.seed import blank_project
 
@@ -16,8 +17,8 @@ def material(id_: str, name: str, gamma: float, k0: float | None = None,
              E: float = 3.0e4, nu: float = 0.3, porosity: float | None = 0.0,
              gamma_sat: float | None = None) -> dict:
     """A drained linear-elastic soil, described as an engineer would (kN/m3, kN/m2,
-    m/day): the form the analytical checks in `cases.py` read. Porosity 0 by default, as
-    in the CROW reference deck; `porosity=None` takes the default porosity, 0.3."""
+    m/day): the form the analytical checks in `cases.py` read. Porosity 0 by default, so
+    the unsaturated weight is the weight; `porosity=None` takes the default porosity, 0.3."""
     return {"id": id_, "name": name, "model": "Linear Elastic", "type": "Drained",
             "color": "#b6ac97", "g_unsat": gamma, "g_sat": gamma_sat or gamma, "E": E,
             "nu": nu, "c": 1.0, "phi": 30.0, "k": 1.0, "porosity": porosity, "k0_nc": k0}
@@ -44,7 +45,7 @@ def weighing(spec: dict) -> dict:
             "YOUNG_MODULUS": spec["E"] * 1000.0, "POISSON_RATIO": spec["nu"],
             "DENSITY_SOLID": spec["g_unsat"] * 1000.0 / ((1.0 - n) * 9.81),
             "POROSITY": n, "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
-            # The retention block exactly as the CROW reference deck writes it.
+            # Kratos' saturated-below-the-phreatic-level retention block.
             "SATURATED_SATURATION": 1.0, "RESIDUAL_SATURATION": 1.0e-10,
             "MINIMUM_RELATIVE_PERMEABILITY": 1.0e-4,
             "PERMEABILITY_XX": spec["k"] / 86_400,
@@ -93,9 +94,10 @@ def column(layers: list[tuple[float, float, dict]], width: float = 1.0,
 
 def symmetric_pit(width: float = 80.0, pit: tuple[float, float] = (35.0, 45.0),
                   levels: tuple[float, ...] = (-2.0, -5.0), dimension: int = 2) -> Project:
-    """CROW's ground with no structures, dug symmetrically in the middle of a full model:
-    two lifts, the default staged sequence. Plane strain, or its 3D extrusion."""
-    p = crow.crow_project(staged=False).model_dump(mode="json")
+    """The test model's ground with no structures, dug symmetrically in the middle of a
+    full model: two lifts, the default staged sequence. Plane strain, or its 3D
+    extrusion."""
+    p = excavation.excavation_project(staged=False).model_dump(mode="json")
     p.update(beams=[], anchors=[], interfaces=[], loads=[], normal_loads=[], phases=[],
              water=None, name="Symmetric pit")
     p["domain"] = dict(p["domain"], x0=0.0, x1=width)

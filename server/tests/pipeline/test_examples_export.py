@@ -1,9 +1,9 @@
 """Every model a user can open, meshed and exported, in both element orders (alpha 2.2).
 
-The models: CROW staged and unstaged, both seed projects, CROW translated into the solid
-model, the saved project files committed under `tests/fixtures/projects/`,
-and -- when the gitignored `examples/` is on the machine -- its JSON projects. Each goes
-through the same export the Calculate button runs, coarse, and must
+The models: the test model staged and unstaged, both seed projects, the test model
+translated into the solid model, and the saved project files committed under
+`tests/fixtures/projects/`. Each goes through the same export the Calculate button runs,
+coarse, and must
 
 * pass every structural rule (`check_deck`), and
 * warn about nothing but what is expected of that model.
@@ -20,12 +20,12 @@ from pathlib import Path
 
 import pytest
 
-from app import build, crow, kratos
+from app import build, kratos
 from app.schemas import MeshRequest, Project
 from app.seed import seed_project
+from tests.models import excavation
 from tests.pipeline.deck_invariants import check_deck
 
-ROOT = Path(__file__).resolve().parents[3]
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures" / "projects"
 
 ALLOWED_WARNINGS = [
@@ -43,13 +43,14 @@ ALLOWED_3D_WARNINGS = [
 ]
 
 
-def _solid_crow() -> Project:
+def _solid_excavation() -> Project:
     from fastapi.testclient import TestClient
     from app.main import app
 
     with TestClient(app) as client:
         try:
-            client.put("/api/project", json=crow.crow_project(staged=True).model_dump(mode="json"))
+            client.put("/api/project",
+                       json=excavation.excavation_project(staged=True).model_dump(mode="json"))
             assert client.patch("/api/project/dimension", json={"dimension": 3}).status_code == 200
             return Project.model_validate(client.get("/api/project").json())
         finally:
@@ -61,14 +62,12 @@ def _saved(path: Path):
 
 
 MODELS = {
-    "crow-staged": lambda: crow.crow_project(staged=True),
-    "crow-unstaged": lambda: crow.crow_project(staged=False),
+    "excavation-staged": lambda: excavation.excavation_project(staged=True),
+    "excavation-unstaged": lambda: excavation.excavation_project(staged=False),
     "seed": lambda: seed_project(),
     "seed-simple": lambda: seed_project(simple=True),
-    "crow-solid": _solid_crow,
+    "excavation-solid": _solid_excavation,
     **{f"saved:{p.stem}": _saved(p) for p in sorted(FIXTURES.glob("*.json"))},
-    **{f"examples:{p.stem}": _saved(p) for p in sorted((ROOT / "examples").glob("*.json"))
-       if p.name != "MaterialParameters.json"},
 }
 SIZES = {2: 8.0, 3: 12.0}
 

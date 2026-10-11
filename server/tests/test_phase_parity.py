@@ -82,9 +82,9 @@ PHASES = [
 
 
 def _project() -> schemas.Project:
-    """The CROW soil arrangement -- three layers, three lifts -- with PHASES on it.
+    """A staged soil arrangement -- three layers, three lifts -- with PHASES on it.
 
-    The same shape `test_schemas._crow_like` builds, restated rather than imported so
+    The same shape `test_schemas._layered_pit` builds, restated rather than imported so
     that the fixture does not move when that helper is edited for a different reason.
     """
     payload = seed_project(simple=False).model_dump()

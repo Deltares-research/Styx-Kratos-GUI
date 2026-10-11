@@ -7,7 +7,7 @@
    bar show. No DOM, so it runs headless; the right-click item, the hover and the
    marker on the mesh are patches.js and viewport.js.
 
-   The fixture is the CROW wall at (5, -5.75), as the exported deck has it: the pile's
+   The fixture is a sheet-pile wall at (5, -5.75), as the exported deck has it: the pile's
    node 89 and the two soil copies the interface split left beside it.
    ══════════════════════════════════════════════════════════════════ */
 

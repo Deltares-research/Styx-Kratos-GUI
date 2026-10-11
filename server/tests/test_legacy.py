@@ -96,7 +96,7 @@ def test_sections_become_property_sets(old, new):
 
 
 def test_an_interface_section_that_derived_its_stiffness_still_does():
-    contact = Project.model_validate(fixture("crow_staged_v1")).interface_sections[0]
+    contact = Project.model_validate(fixture("staged_v1")).interface_sections[0]
     assert contact.variables == {}
 
 
@@ -124,7 +124,7 @@ def test_the_single_load_of_the_oldest_files_is_in_newtons_too():
         assert project.loads[0].components[1] == raw["loads"][0]["components"][1] * 1000
 
 
-@pytest.mark.parametrize("name", ["crow_staged_v1", "every_field_2d_v1", "seed_3d_v1",
+@pytest.mark.parametrize("name", ["staged_v1", "every_field_2d_v1", "seed_3d_v1",
                                   "single_load_2d", "simple_example_3d"])
 def test_every_old_fixture_opens(name):
     assert Project.model_validate(fixture(name)).unit_system == "SI"
@@ -141,7 +141,7 @@ def test_an_old_shaped_section_in_a_kn_project_arrives_in_kilonewtons():
     """A script written against the old fields, run against a project in the kN system:
     the record is read as the old exporter would have (kN -> SI) and then expressed in
     the project's own system."""
-    data = Project.model_validate(fixture("crow_staged_v1")).model_dump(mode="json")
+    data = Project.model_validate(fixture("staged_v1")).model_dump(mode="json")
     data, _ = __import__("app.units", fromlist=["units"]).convert_project(data, "kN")
     data["beam_sections"] = [{"id": "az26", "name": "AZ 26", "E": 2.1e8, "nu": 0.3,
                               "area": 0.0198, "inertia": 5.52e-4, "density": 7850.0,
@@ -160,9 +160,9 @@ def test_an_old_shaped_section_in_a_kn_project_arrives_in_kilonewtons():
 
 
 def test_an_old_shaped_material_takes_the_projects_water():
-    data = Project.model_validate(fixture("crow_staged_v1")).model_dump(mode="json")
+    data = Project.model_validate(fixture("staged_v1")).model_dump(mode="json")
     data["water"]["specific_weight"] = 9_810.0                   # N/m3, the SI project's
-    old = fixture("crow_staged_v1")["materials"][0]
+    old = fixture("staged_v1")["materials"][0]
     data["materials"][0] = old
     project = Project.model_validate(data)
     assert project.materials[0].variables["DENSITY_WATER"] == pytest.approx(1000.0)

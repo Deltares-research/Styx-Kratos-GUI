@@ -1,4 +1,4 @@
-"""The CI workflow (plan/alpha-test-plan.md Task 0.6, decision D8). It only runs on GitHub, so
+"""The CI workflow (plan/active/alpha-test-plan.md Task 0.6, decision D8). It only runs on GitHub, so
 what it must do is pinned here: the platforms, the tier it runs through `tools/test.py`, and
 the prerequisites that tier needs on a machine with nothing installed."""
 

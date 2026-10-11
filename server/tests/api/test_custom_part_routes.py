@@ -3,7 +3,7 @@
 Both delete routes used to mutate the stored project in place and skip validation. A
 phase that still named the deleted part then made every later validated edit -- layers,
 materials, structures, phases -- fail with 422 "phase ... names no such part", and the
-only way out was a reset (plan/full-test-and-validation-plan.md, finding F3).
+only way out was a reset (plan/active/full-test-and-validation-plan.md, finding F3).
 
 The policy pinned here:
 

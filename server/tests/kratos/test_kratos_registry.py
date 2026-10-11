@@ -74,11 +74,11 @@ def exporter_names() -> dict[str, str]:
                 kratos_materials.PANEL_LAW, kratos_materials.INTERFACE_LAW,
                 kratos_materials.BEAM_LAW):
         out[law] = "kratos_materials law"
-    # Laws are typed into property sets now, so the ones this application ships typed --
-    # the CROW Mohr-Coulomb builder's -- are held to the registry the same way.
-    from app import crow
-    for law in (crow.MOHR_COULOMB, crow.COULOMB_CONTACT):
-        out[law] = "app.crow Mohr-Coulomb builder"
+    # Laws are typed into property sets now; the ones the test model's Mohr-Coulomb
+    # variant types are held to the registry the same way.
+    from tests.models import excavation
+    for law in (excavation.MOHR_COULOMB, excavation.COULOMB_CONTACT):
+        out[law] = "tests.models.excavation Mohr-Coulomb variant"
     return out
 
 

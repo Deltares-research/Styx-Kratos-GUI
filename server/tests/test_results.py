@@ -127,12 +127,11 @@ def test_runs_are_listed_newest_first(runs_root):
 
 
 def test_a_run_is_named_by_its_deck_and_when_it_started(runs_root):
-    make_run(runs_root, "CROW_excavation_wall_2026-09-22_00-49",
-             deck="CROW_excavation_wall")
+    make_run(runs_root, "Staged_excavation_2026-09-22_00-49", deck="Staged_excavation")
 
     run = results.runs()[0]
 
-    assert run["deck"] == "CROW_excavation_wall"
+    assert run["deck"] == "Staged_excavation"
     assert run["started"] == "2026-09-22T00:49"
 
 

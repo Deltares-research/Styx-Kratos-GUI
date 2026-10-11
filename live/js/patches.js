@@ -1473,8 +1473,8 @@ App.LivePatches = (function () {
      A panel with nothing in it and no way out of it would be the commonest thing
      anybody sees, so it carries the button that fills it. `default_phases` on the
      server builds the sequence -- settle, build, then alternate digging and propping
-     -- from the model as it stands, which for the CROW model is its seven stages
-     exactly. */
+     -- from the model as it stands, which for a staged excavation is its seven
+     stages exactly. */
   function emptyPhaseState() {
     var el = App.UI.el;
     var wrap = el('div.lay-hint', { style: 'padding:10px' });
@@ -2254,9 +2254,9 @@ App.LivePatches = (function () {
           item.action = 'exportModel';
         }
       });
-      /* There is deliberately no menu item for the CROW example. Models are opened by
-         running the Python that builds them -- `run app/crow.py` in the command box --
-         which works for any model, not only the one example somebody thought to add a
+      /* There is deliberately no menu item for any one model. Models are opened by
+         running the Python that builds them -- `run <file.py>` in the command box --
+         which works for any model, not only the one somebody thought to add a
          button for. See `runScript`. */
       if (!fileMenu.items.some(function (item) { return item && item.action === 'importMdpa'; })) {
         // Belongs beside Export model -- the same File > Print/Export group -- not
@@ -3276,7 +3276,7 @@ App.LivePatches = (function () {
         }
         return App.Api.post('/api/project/script', { path: scriptPath })
           .then(function (result) {
-            // A deck case (examples/eemdijk/eemdijk.py) brings its own mesh: show
+            // A deck case (a script naming a finished deck) brings its own mesh: show
             // that, rather than meshing the empty site its project carries.
             if (App.Deck && App.Deck.hasMesh(result)) {
               return adoptProject(result.project, 'Ran ' + scriptPath

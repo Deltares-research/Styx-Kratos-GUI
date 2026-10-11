@@ -1,8 +1,8 @@
 /* ══════════════════════════════════════════════════════════════════
    test-results-plot.js — `results plot`, and the figure it draws.
 
-   The plot window imitates Kratos' own CROW comparison figure
-   (`test_CROW_case_testGUI_mesh.py`): one panel per stage, the quantity along the
+   The plot window imitates Kratos' own staged-excavation comparison
+   figure: one panel per stage, the quantity along the
    horizontal axis, the level y up the vertical one, a line with a dot at every node.
    Whether the *numbers* are Kratos' is the server's test
    (`server/tests/test_result_members.py`, against Kratos' own run on the reference
@@ -17,7 +17,7 @@
 (function () {
 
   var P = App.ResultsPlot;
-  var RUN = 'CROW_excavation_wall_2026-09-22_16-28';
+  var RUN = 'Staged_excavation_2026-09-22_16-28';
 
   /* What `setup` replaces, kept so the last case can put it back: in the browser suite
      every file shares one `App`, and the suites after this one must get the real
@@ -57,7 +57,7 @@
              min: low, max: high };
   }
 
-  /* Stage 3 and 7 of CROW's bending moment, a handful of points each: the shape of the
+  /* Stage 3 and 7 of a sheet pile's bending moment, a handful of points each: the shape of the
      real curve -- zero at both ends, a belly at -6 m -- at the real magnitudes. */
   function plotOf(quantity, member) {
     var q = QUANTITIES[quantity];
@@ -222,7 +222,7 @@
   });
 
   test('a densely meshed member is drawn as a line without a dot per node', function () {
-    /* Eemdijk's wall is 749 nodes over 18.7 m: a dot on each is a solid bar that hides
+    /* A long dike wall is 749 nodes over 18.7 m: a dot on each is a solid bar that hides
        the line it is meant to mark. */
     var plot = plotOf('M');
     var dense = [];

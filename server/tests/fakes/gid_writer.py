@@ -116,7 +116,12 @@ def _results_text(deck: mdpa.Deck, active: set[int], stage_index: int,
         if kind is None or kind[0] == "Linear":
             continue
         name = f"{block.name}_gp"
-        sets[name] = (block, kind)
+        # One Gauss set per element class, over every block of that class: a deck has a
+        # block per part, and the class's set covers all of them, as Kratos writes it.
+        if name in sets:
+            sets[name][0].append(block)
+            continue
+        sets[name] = ([block], kind)
         lines += [f'GaussPoints "{name}" ElemType {kind[0]}',
                   f"Number Of Gauss Points: {kind[2]}", "Natural Coordinates: Internal",
                   "End GaussPoints"]
@@ -134,13 +139,14 @@ def _results_text(deck: mdpa.Deck, active: set[int], stage_index: int,
                 lines.append(" ".join([str(n)] + [repr(v) for v in values]))
             lines.append("End Values")
         for variable, function in gauss.items():
-            for name, (block, kind) in sets.items():
-                ids = [e for e in block.entries if e in active]
+            for name, (blocks, kind) in sets.items():
+                entries = {e: nodes for block in blocks
+                           for e, nodes in block.entries.items() if e in active}
                 lines.append(f'Result "{variable}" "Kratos" {time!r} Matrix '
                              f'OnGaussPoints "{name}"')
                 lines.append("Values")
-                for e in ids:
-                    corners = block.entries[e][:kind[2]]
+                for e, nodes in entries.items():
+                    corners = nodes[:kind[2]]
                     cx = sum(deck.nodes[n][0] for n in corners) / len(corners)
                     cy = sum(deck.nodes[n][1] for n in corners) / len(corners)
                     cz = sum(deck.nodes[n][2] for n in corners) / len(corners)

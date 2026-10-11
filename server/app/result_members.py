@@ -4,12 +4,12 @@ The deck asks Kratos' `json_output` process for one file per member per stage --
 `<stage>__output_wall.json` (bending moment, shear force, normal force, displacement at
 every wall node) and `<stage>__output_interface.json` (effective traction on one side of
 the wall). These are the numbers a retaining-wall designer opens the program for, and
-they are not in the GiD output at all for the interface (`plan/postprocessing-plan.md`
+they are not in the GiD output at all for the interface (`plan/active/postprocessing-plan.md`
 sec 0.3), so this reads them where they are.
 
-What comes out is the plot Plaxis and Kratos' own CROW validation both draw: per stage,
-the quantity against the level y, node by node, toe to top. Kratos' comparison figure
-(`test_CROW_case_testGUI_mesh.py`) is the model -- same quantities and the same sign, which
+What comes out is the plot Plaxis and Kratos' own staged-excavation validation both
+draw: per stage, the quantity against the level y, node by node, toe to top. Kratos'
+comparison figure is the model -- same quantities and the same sign, which
 is Kratos' own and is not flipped to anybody else's convention. The numbers are the run's
 own, in its unit system (`app/units.py`), and labelled for it rather than scaled.
 
@@ -55,7 +55,7 @@ QUANTITIES = (
     Quantity("ux", "Horizontal total displacement", units.LENGTH, "TOTAL_DISPLACEMENT_X", None),
     Quantity("uy", "Vertical total displacement", units.LENGTH, "TOTAL_DISPLACEMENT_Y", None),
     # The traction is in the interface's own axes: normal first, then shear. Kratos'
-    # CROW plots take exactly these two components.
+    # validation plots take exactly these two components.
     Quantity("tn", "Normal traction", units.STRESS, "GEO_EFFECTIVE_TRACTION_VECTOR", 0),
     Quantity("ts", "Shear traction", units.STRESS, "GEO_EFFECTIVE_TRACTION_VECTOR", 1),
 )

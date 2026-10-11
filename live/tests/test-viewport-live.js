@@ -2,7 +2,7 @@
 
    test-viewport.js covers the pure helpers the module exports. This boots the module
    itself -- renderer, scene, camera, orbit, pointer -- once, against recorded server
-   answers for the CROW model (fixtures/viewport-payloads.js, written by
+   answers for the test model (fixtures/viewport-payloads.js, written by
    server/tests/make_viewport_fixture.py), and then drives its public API, checking the
    scene graph it leaves behind. WebGL where the browser offers it, App.CanvasRenderer
    where it does not; both are a real renderer as far as this module is concerned.
@@ -339,7 +339,7 @@
   test('viewport: a phase hides what it has not built yet', function () {
     return boot().then(function () {
       var phases = App.PROJECT.phases || [];
-      T.ok(phases.length > 1, 'the CROW model is staged');
+      T.ok(phases.length > 1, 'the test model is staged');
       App.state.mode = 'staged';
       App.state.phase = phases[0].id;
       App.Viewport.applyPhaseVisibility();

@@ -1,11 +1,10 @@
 """A model that *is* a Kratos deck: opened with `run <file.py>`, shown as its own mesh,
 and calculated as the files it already is.
 
-The Eemdijk case is the reason (`examples/eemdijk/eemdijk.py`): twenty stages, three
-material sets, phreatic multi-lines and a constitutive-law switch, none of which the
-parametric `Project` can express -- and none of which it needs to, because the deck is
-already written and validated. These tests use a two-stage stand-in for it, so they run
-on any clone; the one test that opens Eemdijk itself skips when `examples/` is absent.
+A real case is the reason: a deck of twenty stages, three material sets, phreatic
+multi-lines and a constitutive-law switch, none of which the parametric `Project` can
+express -- and none of which it needs to, because the deck is already written and
+validated. These tests use a two-stage stand-in for one, so they run on any clone.
 """
 
 import json
@@ -20,8 +19,7 @@ from app import calculate, deck, results, script
 from app.main import app
 from app.schemas import Project
 
-ROOT = Path(__file__).resolve().parents[2]
-EEMDIJK = ROOT / "examples" / "eemdijk" / "eemdijk.py"
+MODEL_SCRIPT = Path(__file__).resolve().parent / "models" / "excavation.py"
 
 MDPA = """\
 Begin Properties 1
@@ -341,11 +339,8 @@ def test_running_a_deck_script_sends_its_mesh_along(client, tmp_path, deck_dir):
 
 
 def test_a_parametric_script_sends_no_mesh(client):
-    """CROW and its kind are meshed by the client after they load, as before."""
-    from tests.crow_example import PATH
-    if not PATH.exists():
-        pytest.skip("examples/crow/crow.py is not in this clone")
-    body = client.post("/api/project/script", json={"path": str(PATH)}).json()
+    """A model built from layers is meshed by the client after it loads, as before."""
+    body = client.post("/api/project/script", json={"path": str(MODEL_SCRIPT)}).json()
     assert body["mesh"] is None
 
 
@@ -375,42 +370,6 @@ def test_calculate_runs_the_deck_rather_than_exporting(client, project, monkeypa
     assert body["run"] == "dike_2026-10-09_12-00"
     assert body["stats"] == {"nodes": 4, "elements": 1}
     assert body["warnings"] == []
-
-
-# ── The Eemdijk case itself ─────────────────────────────────────────────────
-
-@pytest.mark.skipif(not EEMDIJK.exists(), reason="examples/ is not in this clone")
-def test_the_eemdijk_case_opens():
-    loaded = script.load_project(EEMDIJK)
-    assert loaded.deck is not None and loaded.dimension == 2
-    files = deck.input_files(loaded.deck)
-    assert files[:2] == ["eemdijk.json", "eemdijk.mdpa"]
-    assert len(files) == 5, "the parameters, the mesh and three material sets"
-    preview = deck.preview(loaded.deck)
-    assert len(preview["sections"]) == 78
-
-
-# ── `run app/eemdijk.py`, the way `run app/crow.py` opens CROW ──────────────
-
-SERVER = ROOT / "server"
-
-
-def test_the_eemdijk_model_reads_its_deck_from_examples():
-    """The model is tracked; the deck it names is not (examples/ is gitignored)."""
-    from app import eemdijk
-    assert eemdijk.DIRECTORY == ROOT / "examples" / "eemdijk"
-    assert eemdijk.PARAMETERS == "eemdijk.json"
-
-
-@pytest.mark.skipif(not (ROOT / "examples" / "eemdijk" / "eemdijk.json").exists(),
-                    reason="examples/ is not in this clone")
-def test_run_app_eemdijk_opens_the_case():
-    """Exactly what the command line resolves `run app/eemdijk.py` to: a path tried
-    against the server's own directory first."""
-    loaded = script.load_project("app/eemdijk.py", roots=(str(SERVER), str(ROOT)))
-    assert loaded.deck is not None
-    assert loaded.name == "Eemdijk (blue)"
-    assert Path(loaded.deck.directory) == ROOT / "examples" / "eemdijk"
 
 
 # ── The stages, as phases ───────────────────────────────────────────────────
@@ -585,20 +544,6 @@ def test_a_decks_phases_are_not_edited_here(client, staged):
     assert response.status_code == 422
     assert "deck" in response.json()["detail"]
     assert client.post("/api/project/phases/defaults").status_code == 422
-
-
-@pytest.mark.skipif(not (ROOT / "examples" / "eemdijk" / "eemdijk.json").exists(),
-                    reason="examples/ is not in this clone")
-def test_eemdijk_opens_with_its_twenty_stages():
-    from app import eemdijk, phases
-    loaded = eemdijk.eemdijk_project()
-    assert len(loaded.phases) == 20
-    assert loaded.phases[0].calculation == "K0 procedure"
-    assert loaded.phases[11].name == "Damwand installatie"
-    assert "sheetpile_upper" in loaded.phases[11].activate
-    assert "kraan_load_p1" in phases.active_parts(loaded, loaded.phases[10].id)
-    assert "kraan_load_p1" not in phases.active_parts(loaded, loaded.phases[12].id)
-    assert "ontgraven_upper_layer" in loaded.phases[15].deactivate
 
 
 def test_staging_brings_the_units_record_when_the_deck_has_one(project, deck_dir, tmp_path):

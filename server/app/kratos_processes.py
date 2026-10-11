@@ -43,7 +43,7 @@ staged interface to `1_Initial_stage` only. Deactivating a sheet pile's interfac
 `staged_parts`) removes its own contact stiffness but does nothing to reconnect the two
 soil copies `app.interfaces` split apart for it, so without this the initial stage --
 meant to be undisturbed ground -- models two mechanically disconnected halves. Not
-inferred from a reference GeoMechanics deck (none in examples/ carries a sheet pile that
+inferred from a reference GeoMechanics deck (none at hand carries a sheet pile that
 is *not yet* installed); read instead off Deltares/FEA-Tools'
 `MiscellaneousTools/InterfaceInserter/master_slave_inserter.py`, a working tool built
 for the same Kratos process, and off the process's own Kratos source
@@ -52,8 +52,8 @@ See `_master_slave_constraint` for the one deliberate difference from that refer
 
 `normal_loads` adds one `ApplyNormalLoadTableProcess` per `NormalLoad` (app/schemas.py)
 to `loads_process_list`, in every stage the same way an ordinary load is -- nothing
-about a normal load ties it to wall installation. The `"Hydrostatic"` shape (the CROW
-reference case's `WaterLoad_StageN` arrangement) is copied verbatim from a real working
+about a normal load ties it to wall installation. The `"Hydrostatic"` shape (a staged
+excavation's `WaterLoad_StageN` arrangement) is copied verbatim from a real working
 example, Deltares/FEA-Tools' `MiscellaneousTools/InterfaceInserter/
 test_project_parameters.json`, whose `River_load` process this reproduces field for
 field. The `"Uniform"` shape is not backed by a working example the way that one is; it
@@ -314,8 +314,7 @@ def _preprocess(stage: Stage, deck_name: str) -> dict | None:
         the stages before it did to it: the wall would arrive activated on top of
         undisturbed ground rather than on the ground the initial stage settled.
 
-    Both are read off `crow_validation/common/staged_construction.json`, Kratos' own
-    staged excavation benchmark, and hold in
+    Both are read off Kratos' own staged excavation benchmark, and hold in
     `staged_construction_for_generated_mesh.json` too.
 
     A stage that switches nothing and imports nothing has no preprocess block at all
@@ -420,7 +419,7 @@ def _process_parts(processes: list[dict],
 
 # -- the staged auxiliary processes ------------------------------------------
 # All four are read field for field off `staged_construction_for_generated_mesh.json`,
-# the CROW reference deck. Which stages each belongs in is `app.kratos`'s decision and
+# Kratos' own staged-excavation reference deck. Which stages each belongs in is `app.kratos`'s decision and
 # is documented there; what the parameters mean is here.
 
 def _k0_procedure(parts: tuple[str, ...]) -> dict:
@@ -689,7 +688,7 @@ def _master_slave_constraint(master_part_name: str, slave_part_name: str) -> dic
     reasoning that reading the parameters could not have corrected -- see
     `MASTER_SLAVE_SEARCH_RADIUS` and `MASTER_SLAVE_NEIGHBOURS` for what each one turned
     out to mean and how the deck failed. The general lesson is written down in
-    plan/staged-construction-plan.md sec 7: a parameter whose meaning was inferred is a
+    plan/outdated/staged-construction-plan.md sec 7: a parameter whose meaning was inferred is a
     guess until a run says otherwise, however good the inference looked."""
     return {
         "python_module": "assign_master_slave_constraints_to_neighbours_process",

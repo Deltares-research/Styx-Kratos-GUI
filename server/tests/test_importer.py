@@ -1,5 +1,5 @@
 """`app.importer` and `POST /api/geometry/import`: a CAD file in, one solid part out
-(plan/alpha-test-plan.md Task 1.2).
+(plan/active/alpha-test-plan.md Task 1.2).
 
 The fixtures are made here rather than committed: STEP, IGES and BREP are written by gmsh
 from a box, and the triangulated formats (STL, OBJ) are written as text from the eight

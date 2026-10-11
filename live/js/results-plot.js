@@ -3,8 +3,8 @@
 
    The plot every retaining-wall calculation is read from: bending moment, shear
    force, normal force and displacement down the wall, and the earth pressure on it,
-   one panel per construction phase. Modelled on Kratos' own CROW comparison figure
-   (`test_CROW_case_testGUI_mesh.py`) -- the quantity along the horizontal axis, the
+   one panel per construction phase. Modelled on Kratos' own staged-excavation
+   comparison figure -- the quantity along the horizontal axis, the
    level y up the vertical one, a line with a dot at every node -- with the one
    addition Plaxis makes, the largest value written beside the point it occurs at.
 
@@ -36,7 +36,7 @@ App.ResultsPlot = (function () {
      reference figure: taller than wide, because the wall is. */
   var PANEL = { width: 230, height: 330, left: 54, right: 14, top: 28, bottom: 46 };
   var COLUMNS = 5;          // per row before wrapping, as `make_sub_plots` does
-  var DOTS_UP_TO = 150;     // nodes per panel; a CROW wall is 39-53, Eemdijk's 749
+  var DOTS_UP_TO = 150;     // nodes per panel; a sheet-pile wall is ~40-50, a long dike's ~750
   var LINE = '#1f77b4';     // matplotlib's first colour, the reference figure's Kratos line
   var PEAK = '#d62728';
   var GRID = '#dcdcdc';

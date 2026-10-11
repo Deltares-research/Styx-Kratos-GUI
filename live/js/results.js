@@ -378,7 +378,7 @@ App.Results = (function () {
   }
 
   /* An id, or a position in the last listing. The number is the convenience -- nobody
-     is going to retype `CROW_excavation_wall_2026-09-22_00-49` -- and it is resolved
+     is going to retype `Staged_excavation_2026-09-22_00-49` -- and it is resolved
      here rather than sent, so the server has one kind of id and not two. */
   function resolve(token) {
     if (!/^\d+$/.test(token)) return token;

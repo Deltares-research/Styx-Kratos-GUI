@@ -2,7 +2,7 @@
 
    Both are DOM built through the real App.UI / App.Dialogs, opened the way the app opens
    them (`App.runAction({action: 'phases'})`, and `mountLivePhases` behind the dock), on
-   the recorded CROW model -- seven phases, parts switched off and on along the way.
+   the recorded test model -- seven phases, parts switched off and on along the way.
    What reaches the server is recorded as the PATCH it would be. */
 
 (function () {
@@ -76,7 +76,7 @@
     return ctx;
   }
 
-  function crow() { return window.VIEWPORT_PAYLOADS.project; }
+  function model() { return window.VIEWPORT_PAYLOADS.project; }
 
   function windowRows(ctx) {
     return Array.prototype.slice.call(ctx.layer.querySelectorAll('.phases-overview .phase-row'));
@@ -88,11 +88,11 @@
   }
 
   test('phases window: one row per phase, with the properties and the log of the selected one', function () {
-    var ctx = rig(crow());
+    var ctx = rig(model());
     try {
       App.runAction({ action: 'phases' });
       var rows = windowRows(ctx);
-      T.eq(rows.length, crow().phases.length);
+      T.eq(rows.length, model().phases.length);
       var right = ctx.layer.querySelector('.phases-overview > div:nth-child(2)');
       T.ok(/Staged construction/.test(right.textContent), 'what the phase changes is listed');
       T.ok(/Log info for last calculation/.test(
@@ -101,21 +101,21 @@
   });
 
   test('phases window: clicking a phase selects it, and the viewport follows', function () {
-    var ctx = rig(crow());
+    var ctx = rig(model());
     try {
       App.runAction({ action: 'phases' });
-      var last = windowRows(ctx)[crow().phases.length - 1];
+      var last = windowRows(ctx)[model().phases.length - 1];
       last.click();
-      T.eq(App.state.phase, crow().phases[crow().phases.length - 1].id);
+      T.eq(App.state.phase, model().phases[model().phases.length - 1].id);
       T.ok(ctx.visibility > 0, 'the viewport was asked to redraw the phase');
-      T.ok(windowRows(ctx)[crow().phases.length - 1].classList.contains('selected'));
+      T.ok(windowRows(ctx)[model().phases.length - 1].classList.contains('selected'));
     } finally { ctx.restore(); }
   });
 
   test('phases window: a part switched off can be switched back on from the list', function () {
-    var ctx = rig(crow());
+    var ctx = rig(model());
     App.runAction({ action: 'phases' });
-    windowRows(ctx)[crow().phases.length - 1].click();
+    windowRows(ctx)[model().phases.length - 1].click();
     var button = Array.prototype.filter.call(ctx.layer.querySelectorAll('button'), function (b) {
       return b.textContent === 'Switch on';
     })[0];
@@ -129,7 +129,7 @@
   });
 
   test("phases window: renaming a phase writes the sequence with the new name", function () {
-    var ctx = rig(crow());
+    var ctx = rig(model());
     App.runAction({ action: 'phases' });
     var input = ctx.layer.querySelector('.phases-overview .pgrid input.cell-input');
     T.ok(input, 'the name is editable');
@@ -142,7 +142,7 @@
   });
 
   test('phases window: a project with no phases says how to make them', function () {
-    var bare = JSON.parse(JSON.stringify(crow()));
+    var bare = JSON.parse(JSON.stringify(model()));
     bare.phases = [];
     var ctx = rig(bare);
     try {
@@ -155,51 +155,51 @@
      its own -- the frozen one lists js/data.js's mockup phases. */
 
   test('phase list: the dock lists every phase, and a click selects one', function () {
-    var ctx = rig(crow());
+    var ctx = rig(model());
     try {
       App.Explorer.mountPhases();
       var rows = ctx.dock.querySelectorAll('.phase-row');
-      T.eq(rows.length, crow().phases.length);
+      T.eq(rows.length, model().phases.length);
       rows[2].click();
-      T.eq(App.state.phase, crow().phases[2].id);
+      T.eq(App.state.phase, model().phases[2].id);
       T.ok(ctx.dock.querySelectorAll('.phase-row')[2].classList.contains('selected'),
            'redrawn with the new selection');
     } finally { ctx.restore(); }
   });
 
   test('phase list: the toolbar adds and deletes phases through one PATCH each', function () {
-    var ctx = rig(crow());
-    App.state.phase = crow().phases[1].id;
+    var ctx = rig(model());
+    App.state.phase = model().phases[1].id;
     App.Explorer.mountPhases();
     var buttons = ctx.dock.querySelectorAll('.phase-toolbar button.tbtn');
     T.eq(buttons.length, 4, 'add, insert, duplicate, delete');
     buttons[0].click();
     return done(ctx, new Promise(function (r) { setTimeout(r, 20); }).then(function () {
-      T.eq(ctx.patches[0].body.phases.length, crow().phases.length + 1, 'one added');
-      App.state.phase = crow().phases[1].id;
+      T.eq(ctx.patches[0].body.phases.length, model().phases.length + 1, 'one added');
+      App.state.phase = model().phases[1].id;
       App.Explorer.mountPhases();
       ctx.dock.querySelectorAll('.phase-toolbar button.tbtn')[3].click();
       return new Promise(function (r) { setTimeout(r, 20); });
     }).then(function () {
       T.eq(ctx.patches.length, 2);
-      T.ok(ctx.patches[1].body.phases.every(function (p) { return p.id !== crow().phases[1].id; }),
+      T.ok(ctx.patches[1].body.phases.every(function (p) { return p.id !== model().phases[1].id; }),
            'the selected phase is gone');
     }));
   });
 
   test("phase list: the dock's Phases… button opens the window", function () {
-    var ctx = rig(crow());
+    var ctx = rig(model());
     try {
       App.Explorer.mountPhases();
       var open = Array.prototype.filter.call(ctx.dock.querySelectorAll('button'), function (b) {
         return b.textContent === 'Phases…'; })[0];
       open.click();
-      T.eq(windowRows(ctx).length, crow().phases.length);
+      T.eq(windowRows(ctx).length, model().phases.length);
     } finally { ctx.restore(); }
   });
 
   test('phase list: with no phases the dock offers to create the defaults', function () {
-    var bare = JSON.parse(JSON.stringify(crow()));
+    var bare = JSON.parse(JSON.stringify(model()));
     bare.phases = [];
     var ctx = rig(bare);
     App.Explorer.mountPhases();
@@ -214,8 +214,8 @@
   });
 
   test('staged mode: clicking a part switches it for the selected phase', function () {
-    var ctx = rig(crow());
-    var phase = crow().phases[crow().phases.length - 1];
+    var ctx = rig(model());
+    var phase = model().phases[model().phases.length - 1];
     App.state.phase = phase.id;
     var key = App.Phases.stageableKeys(App.PROJECT)[0];
     App.selectObject(key, 'viewport');

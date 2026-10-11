@@ -8,7 +8,7 @@
    either of them -- the Selection explorer's `water` entry was still the mockup's
    three borehole rows from js/data.js:631, which describe a different project.
 
-   See plan/staged-construction-plan.md sec 7.2, "the GUI follow-on Marjan asked for".
+   See plan/outdated/staged-construction-plan.md sec 7.2, "the GUI follow-on Marjan asked for".
    A *per-phase* phreatic level is a further step and deliberately not here.
    ══════════════════════════════════════════════════════════════════ */
 
@@ -221,7 +221,7 @@
    A `layered_soil` project has no water geometry at all: `Project.part_keys` omits
    "water" on that path, so the thin slab the full build raises is never tessellated
    and the level is invisible. That is the case the blank project opens in and the one
-   `examples/crow/crow.py` uses, so "invisible" is the normal state rather than the
+   a staged model script uses, so "invisible" is the normal state rather than the
    exception -- hence a line drawn by the client from the project's own number.
 
    `waterLineSpec` is pure, and tested here rather than through the scene for the same

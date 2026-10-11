@@ -10,7 +10,7 @@
    Two ways to place one, and a record carries exactly one of them:
 
      • along a sheet pile, which is the usual case and the one
-       examples/crow_case.mdpa contains. `side` says which of the two soils is
+       Kratos' reference decks contain. `side` says which of the two soils is
        unglued from the wall; "both" is the normal answer for a retaining wall.
      • along its own polyline through the soil -- an excavation face, a lining,
        a slip surface. There is no structure between the two soils then, so one
@@ -19,7 +19,7 @@
    Left and right are relative to walking the line in the order its points are
    stored, the same convention the exported element's node order carries.
 
-   Plane strain only. Every reference deck in examples/ is a section, and a 3D
+   Plane strain only. Every reference deck is a section, and a 3D
    interface is a different element with a different node layout and no fixture
    to pin it -- see the INTERFACES table in server/app/kratos.py.
    ══════════════════════════════════════════════════════════════════ */

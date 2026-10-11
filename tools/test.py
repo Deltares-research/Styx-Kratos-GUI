@@ -1,4 +1,4 @@
-"""One command per test tier (plan/alpha-test-plan.md sec 2.3).
+"""One command per test tier (plan/active/alpha-test-plan.md sec 2.3).
 
     python tools/test.py quick      JS syntax + headless JS + pytest without the browser
     python tools/test.py browser    quick, with the browser unit suite (Playwright)

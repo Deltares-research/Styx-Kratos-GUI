@@ -1,7 +1,8 @@
 """Interfaces in the exported deck: the node split, the contact elements, the materials.
 
-Everything asserted here about the *shape* of the output is read off
-examples/crow_case.mdpa, which contains the arrangement this feature reproduces:
+Everything asserted here about the *shape* of the output is read off a real Kratos
+deck with a contact on both faces of a sheet pile, the arrangement this feature
+reproduces:
 
     Begin Elements Geo_UPwLineInterfacePlaneStrainDiffOrderElement3Plus3N
       22434 0  4639 4624 4633  4771 4765 4769
@@ -146,7 +147,7 @@ def test_the_first_half_is_the_pile_and_the_second_half_is_the_soil(contacted):
 
 
 def test_the_pile_is_no_longer_welded_to_the_soil(contacted):
-    """The whole point of the interface, and crow_case.mdpa's own arrangement: with a
+    """The whole point of the interface, and a real deck's own arrangement: with a
     contact on both faces the wall shares no node with the ground."""
     deck = deck_of(contacted)
     assert not beam_nodes(deck) & soil_nodes(deck)
@@ -305,8 +306,8 @@ def test_each_face_of_the_wall_gets_its_own_copy_of_the_soil(contacted):
     for faces in by_segment.values():
         assert len(faces) == 2, "one element per face of the wall"
         # Disjoint, save at the toe: the ground closes under the pile, so the two faces
-        # meet there in one node -- crow_case.mdpa writes 52 copies a side for 53 pile
-        # nodes for exactly this reason.
+        # meet there in one node -- a real deck writes one copy a side fewer than the
+        # pile has nodes for exactly this reason.
         assert len(set(faces[0]) & set(faces[1])) <= 1
         assert set(faces[0]) != set(faces[1])
 
@@ -361,7 +362,7 @@ def test_the_contact_is_split_per_soil_body_it_runs_against(contacted):
     A lift is dug away in its own phase and the contact along that lift has to go with
     it -- an interface still holding a face whose soil has been removed would carry
     shear against nothing. The reference deck splits the same way
-    (plan/staged-construction-plan.md sec 0.1).
+    (plan/outdated/staged-construction-plan.md sec 0.1).
     """
     deck = deck_of(contacted)
     parts = interface_parts(deck)
@@ -612,7 +613,7 @@ def test_an_interface_says_how_it_drains(contacted):
 
 def test_every_interface_property_set_says_it(contacted):
     """One drawn interface becomes one deck part per soil body it runs against, and the
-    warning fires once per property set -- eight of them in the CROW deck."""
+    warning fires once per property set."""
     entries = [e for e in entries_of(contacted)
                if e["model_part_name"].startswith("PorousDomain.Wall_contact")]
     assert entries

@@ -1,8 +1,8 @@
 """Features one at a time, and the pairs that interact (plan alpha 2.3).
 
-The base is CROW stripped to its soil. Each case adds features back -- a pile, its
-interfaces, the strut, the loads, the water, the phases -- in the form CROW itself
-carries them, so every combination is one a valid project can hold. Each deck must pass
+The base is the test model stripped to its soil. Each case adds features back -- a
+pile, its interfaces, the strut, the loads, the water, the phases -- in the form the
+test model carries them, so every combination is one a valid project can hold. Each deck must pass
 `check_deck` (conftest runs it on every export) and show the feature in the file: the
 element or condition it should have written, on the parts it should be on.
 """
@@ -13,7 +13,8 @@ import json
 
 import pytest
 
-from app import build, crow, kratos
+from app import build, kratos
+from tests.models import excavation
 from app.schemas import MeshRequest, Project
 from tests import mdpa
 from tests.pipeline.deck_invariants import check_deck
@@ -22,7 +23,7 @@ FEATURES = ("pile", "interfaces", "strut", "loads", "normal_loads", "water", "ph
 
 
 def project_with(*features) -> Project:
-    full = crow.crow_project(staged=True).model_dump(mode="json")
+    full = excavation.excavation_project(staged=True).model_dump(mode="json")
     base = dict(full)
     base.update(beams=[], anchors=[], interfaces=[], loads=[], normal_loads=[],
                 phases=[], water=None)
@@ -39,7 +40,7 @@ def project_with(*features) -> Project:
     if "normal_loads" in features:
         base["normal_loads"] = full["normal_loads"]
     if "phases" in features:
-        # The phases name CROW's parts; a part left out is taken out of them too, the
+        # The phases name the test model's parts; a part left out is taken out of them too, the
         # edit a user makes before deleting it (finding F3 refuses the delete otherwise).
         present = set(Project.model_validate(base).stageable_keys())
         base["phases"] = [dict(phase,
@@ -116,7 +117,7 @@ def test_phases_become_one_stage_each():
                           "phases")
     params = json.loads(export["project_parameters"])
     assert len(params["orchestrator"]["settings"]["execution_list"]) == \
-        len(crow.crow_project(staged=True).phases)
+        len(excavation.excavation_project(staged=True).phases)
 
 
 @pytest.mark.parametrize("features", [(), ("pile",), ("pile", "interfaces"),

@@ -9,6 +9,7 @@ one, running a one-line script) in Kratos' place.
 """
 
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -143,14 +144,30 @@ def test_the_kratos_build_is_put_on_both_paths(monkeypatch, tmp_path):
     assert str(build / "libs") in environment["PATH"].split(";")
 
 
-def test_the_server_is_on_the_path_so_the_runner_can_be_imported(monkeypatch):
-    """The runner is `app.kratos_runner`, run by an interpreter that has never heard of
-    this project."""
+def repository_root() -> Path:
+    """The checkout's root, the folder `tools/test.py` is in: found by walking up, so it
+    is the same answer wherever this file sits."""
+    here = Path(__file__).resolve()
+    return next(folder for folder in here.parents
+                if (folder / "tools" / "test.py").is_file())
+
+
+def test_the_runner_is_named_as_a_module_of_core():
+    """A module name rather than a file path, so it reads the same wherever the
+    repository is checked out. `core` is the package Kratos' interpreter imports."""
+    assert calculate.COMMAND == ["-m", "core.kratos_runner", "ProjectParameters.json"]
+
+
+def test_the_repository_root_is_on_the_path_so_the_runner_can_be_imported(monkeypatch):
+    """The runner is `core.kratos_runner`, run by an interpreter that has never heard of
+    this project. `core` is a folder at the repository's root, so the root is what
+    has to be on its path."""
     monkeypatch.delenv(calculate.KRATOS_ENV, raising=False)
+    monkeypatch.delenv("PYTHONPATH", raising=False)
 
     _, environment = calculate.interpreter()
 
-    assert str(calculate.SERVER) in environment["PYTHONPATH"].split(";")
+    assert str(repository_root()) in environment["PYTHONPATH"].split(os.pathsep)
 
 
 def test_the_machine_can_be_configured_in_a_file_instead_of_the_environment(

@@ -18,7 +18,7 @@ def main(argv: list[str]) -> int:
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     sys.path.insert(0, str(HERE.parent))
     from benchmarks.cases import BY_ID, CASES
-    from benchmarks.runner import run_case, with_needs, write_report
+    from benchmarks.runner import kratos_commit, run_case, with_needs, write_report
 
     parser = argparse.ArgumentParser(prog="python -m benchmarks")
     sub = parser.add_subparsers(dest="verb", required=True)
@@ -43,7 +43,6 @@ def main(argv: list[str]) -> int:
         for outcome in result.outcomes:
             print(f"{'':14s}{'ok ' if outcome.passed else 'BAD'} {outcome.name}: "
                   f"{outcome.measured} (expected {outcome.expected})")
-    from tests.make_eemdijk_fixture import kratos_commit
     path = write_report(results, reports, kratos_commit())
     print(f"report: {path}")
     return 1 if any(r.status in ("FAIL", "ERROR") for r in results) else 0

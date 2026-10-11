@@ -1,15 +1,15 @@
 {
- "name": "CROW excavation wall",
+ "name": "Staged excavation",
  "layered_soil": true,
  "dimension": 2,
  "section_offset": 5.0,
  "domain": {
   "x0": 0.0,
-  "x1": 80.0,
+  "x1": 60.0,
   "z0": 0.0,
   "z1": 10.0,
   "y_top": 0.0,
-  "y_bottom": -60.0
+  "y_bottom": -40.0
  },
  "boreholes": [
   {
@@ -18,45 +18,45 @@
    "x": 0.0,
    "y": 0.0,
    "head": 0.0,
-   "water": -1.5
+   "water": -1.0
   }
  ],
  "materials": [
   {
    "id": "m_upper",
-   "name": "Upper ground",
+   "name": "Soft clay",
    "model": "Mohr-Coulomb",
    "type": "Drained",
    "color": "#c4a86a",
-   "g_unsat": 18.0,
-   "g_sat": 20.0,
-   "E": 900.0,
-   "nu": 0.2,
-   "c": 1.0,
-   "phi": 22.3,
-   "k": 1.0,
-   "r_inter": 0.7,
+   "g_unsat": 17.0,
+   "g_sat": 19.0,
+   "E": 2000.0,
+   "nu": 0.3,
+   "c": 2.0,
+   "phi": 25.0,
+   "k": 0.001,
+   "r_inter": 0.67,
    "interface_permeability": "Neutral",
    "porosity": 0.0,
-   "k0_nc": 0.62
+   "k0_nc": 0.58
   },
   {
    "id": "m_lower",
-   "name": "Deep sand",
+   "name": "Dense sand",
    "model": "Mohr-Coulomb",
    "type": "Drained",
    "color": "#b08a6a",
-   "g_unsat": 20.0,
-   "g_sat": 22.0,
-   "E": 7428.6,
+   "g_unsat": 19.0,
+   "g_sat": 21.0,
+   "E": 30000.0,
    "nu": 0.3,
    "c": 0.0,
-   "phi": 32.7,
-   "k": 5.0,
-   "r_inter": 0.7,
+   "phi": 32.0,
+   "k": 1.0,
+   "r_inter": 0.67,
    "interface_permeability": "Neutral",
    "porosity": 0.0,
-   "k0_nc": 0.46
+   "k0_nc": 0.47
   }
  ],
  "layers": [
@@ -68,7 +68,7 @@
     "bh1": 0.0
    },
    "bots": {
-    "bh1": -8.0
+    "bh1": -7.0
    }
   },
   {
@@ -76,10 +76,10 @@
    "name": "Soil_Middle",
    "mat": "m_upper",
    "tops": {
-    "bh1": -8.0
+    "bh1": -7.0
    },
    "bots": {
-    "bh1": -12.0
+    "bh1": -10.0
    }
   },
   {
@@ -87,33 +87,33 @@
    "name": "Soil_Bottom",
    "mat": "m_lower",
    "tops": {
-    "bh1": -12.0
+    "bh1": -10.0
    },
    "bots": {
-    "bh1": -60.0
+    "bh1": -40.0
    }
   }
  ],
  "excavation": {
   "x0": 0.0,
-  "x1": 5.0,
+  "x1": 6.0,
   "z0": 0.0,
   "z1": 10.0,
-  "floor_y": -8.0,
+  "floor_y": -7.0,
   "levels": [
    -2.0,
-   -5.0,
-   -8.0
+   -4.5,
+   -7.0
   ]
  },
  "wall": {
   "thickness": 0.5,
   "top_y": 0.0,
-  "toe_y": -13.0
+  "toe_y": -12.0
  },
  "struts": {
   "xs": [],
-  "y": -1.5,
+  "y": -1.0,
   "radius": 0.1,
   "overhang": 0.8,
   "waler_width": 0.5,
@@ -122,7 +122,7 @@
  },
  "anchor_rows": {
   "xs": [],
-  "head_y": -1.5,
+  "head_y": -1.0,
   "length": 1.0,
   "inclination_deg": 45.0,
   "radius": 0.1,
@@ -140,13 +140,13 @@
    "id": "surcharge",
    "name": "Load",
    "kind": "line",
-   "x0": 5.0,
-   "x1": 80.0,
+   "x0": 6.0,
+   "x1": 60.0,
    "y": 0.0,
    "thickness": 0.15,
    "components": [
     0.0,
-    -20.0
+    -10.0
    ],
    "distribution": "Uniform",
    "active": true,
@@ -157,12 +157,12 @@
   {
    "id": "sheetpile",
    "name": "Sheet pile",
-   "E": 8444900.0,
+   "E": 210000000.0,
    "nu": 0.0,
-   "area": 0.4924,
-   "inertia": 0.009948850085333335,
-   "shear_area": 10.0,
-   "density": 298.36,
+   "area": 0.015,
+   "inertia": 0.0003,
+   "shear_area": 0.0075,
+   "density": 7850.0,
    "spacing": 1.0,
    "inertia_minor": null,
    "torsional_inertia": null
@@ -177,12 +177,12 @@
    "section": "sheetpile",
    "points": [
     [
-     5.0,
+     6.0,
      0.0
     ],
     [
-     5.0,
-     -13.0
+     6.0,
+     -12.0
     ]
    ],
    "active": true,
@@ -194,9 +194,9 @@
    "id": "strand",
    "name": "Strut",
    "E": 210000000.0,
-   "area": 4.7619e-05,
+   "area": 0.002,
    "density": 0.0,
-   "spacing": 1.0,
+   "spacing": 2.0,
    "tension_limit": null,
    "compression_limit": null
   }
@@ -208,12 +208,12 @@
    "kind": "anchor",
    "section": "strand",
    "head": [
-    5.0,
-    -1.5
+    6.0,
+    -1.0
    ],
    "tail": [
-    4.0,
-    -1.5
+    5.0,
+    -1.0
    ],
    "prestress": 0.0,
    "active": true
@@ -224,8 +224,8 @@
    "id": "contact",
    "name": "Wall contact",
    "material": null,
-   "r_inter": 0.7,
-   "virtual_thickness": 1.0,
+   "r_inter": 0.67,
+   "virtual_thickness": 0.5,
    "normal_stiffness": null,
    "shear_stiffness": null,
    "permeability": "Neutral"
@@ -250,11 +250,11 @@
    "kind": "normal",
    "points": [
     [
-     5.0,
-     -1.5
+     6.0,
+     -1.0
     ],
     [
-     5.0,
+     6.0,
      -2.0
     ],
     [
@@ -272,16 +272,16 @@
    "kind": "normal",
    "points": [
     [
-     5.0,
-     -1.5
+     6.0,
+     -1.0
     ],
     [
-     5.0,
-     -5.0
+     6.0,
+     -4.5
     ],
     [
      0.0,
-     -5.0
+     -4.5
     ]
    ],
    "fluid_pressure_type": "Hydrostatic",
@@ -294,16 +294,16 @@
    "kind": "normal",
    "points": [
     [
-     5.0,
-     -1.5
+     6.0,
+     -1.0
     ],
     [
-     5.0,
-     -8.0
+     6.0,
+     -7.0
     ],
     [
      0.0,
-     -8.0
+     -7.0
     ]
    ],
    "fluid_pressure_type": "Hydrostatic",
@@ -318,7 +318,7 @@
   "length": 1.0
  },
  "water": {
-  "y": -1.5,
+  "y": -1.0,
   "margin": 3.0,
   "thickness": 0.06,
   "specific_weight": 10.0
@@ -339,13 +339,13 @@
   "refinements": [
    {
     "kind": "box",
-    "size": 0.75,
-    "thickness": 45.0,
+    "size": 0.8,
+    "thickness": 30.0,
     "x_min": -1.0,
-    "x_max": 8.0,
+    "x_max": 9.0,
     "z_min": -1.0,
     "z_max": 11.0,
-    "y_min": -16.0,
+    "y_min": -15.0,
     "y_max": 1.0
    }
   ]

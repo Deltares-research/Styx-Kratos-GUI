@@ -3,8 +3,8 @@
 
    The soils are the frozen demo's six (js/data.js), converted the way every project in
    the old kN/m3-kN/m2-m/day shape is (server/app/legacy.py): DENSITY_SOLID is the unit
-   weight over g, PERMEABILITY_XX the m/day value per second. POROSITY is 0, as in the
-   CROW reference, so each soil weighs exactly DENSITY_SOLID g -- its unit weight -- above
+   weight over g, PERMEABILITY_XX the m/day value per second. POROSITY is 0, as in
+   Kratos' staged-excavation reference, so each soil weighs exactly DENSITY_SOLID g -- its unit weight -- above
    and below the water alike (add a porosity and a RETENTION_LAW to tell the two apart).
    What a preset leaves out -- the water's density, the fluid constants -- the export
    derives, and says so.

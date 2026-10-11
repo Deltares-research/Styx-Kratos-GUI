@@ -1,6 +1,6 @@
 """Kratos export of the 3D structures: wall panels, members and space anchors.
 
-The 2D contracts are read off real decks in examples/; every one of them is plane
+The 2D contracts are read off real Kratos decks; every one of them is plane
 strain, so nothing here has a fixture behind it. What *is* carried over unchanged is
 the arrangement those decks pin down, one dimension up:
 

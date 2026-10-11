@@ -12,7 +12,7 @@
 
      • "Hydrostatic" derives the pressure from the project's own water level,
        zero at the phreatic surface and increasing with depth -- the usual
-       case for an exposed excavation face (the CROW reference case's
+       case for an exposed excavation face (a staged excavation's
        WaterLoad_StageN arrangement).
      • "Uniform" applies a fixed `pressure` everywhere along the line instead,
        for a load that is not water.

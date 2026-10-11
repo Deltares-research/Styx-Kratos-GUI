@@ -116,12 +116,12 @@ def test_the_excavated_pit_is_missing_from_the_soil_section(full):
 #
 # With more than one excavation level the soil inside the pit outline stays in the
 # model, split into the lifts it is dug in, because each lift is deactivated in its own
-# phase (plan/staged-construction-plan.md sec A1). `Project.soil_bodies` names them;
+# phase (plan/outdated/staged-construction-plan.md sec A1). `Project.soil_bodies` names them;
 # these tests are what says the geometry agrees with those names.
 
 
 def staged_project() -> Project:
-    """The CROW arrangement in plane strain: three layers, three lifts, pit on the left.
+    """A staged excavation in plane strain: three layers, three lifts, pit on the left.
 
     Areas below are recomputed from these numbers rather than read off the build, for
     the reason this module's docstring gives: gmsh's failure mode is to succeed with
@@ -186,8 +186,8 @@ def test_the_excavated_ground_is_still_in_the_model(staged):
 
     Stated as an inequality rather than an area identity. Soil plus structures does not
     add up to the domain here -- the wall ring is built outboard of the pit face
-    (`_build_solids`), and this fixture puts that face on the domain edge the way the
-    CROW case's symmetry plane does, so part of the wall stands outside the soil
+    (`_build_solids`), and this fixture puts that face on the domain edge, a symmetry
+    plane, so part of the wall stands outside the soil
     entirely.
     """
     project, result = staged
@@ -474,7 +474,7 @@ def test_an_anchor_becomes_its_own_named_curve():
 
 def test_the_anchor_splits_the_pile_at_its_head():
     """The head has to become a vertex the beam shares, which is what makes it one
-    node in the mesh (examples/crow_case.mdpa: the head sits in two beam elements)."""
+    node in the mesh, where the head sits in two beam elements."""
     with build.session():
         plain = build.build_geometry(_piled_section([[12.0, 0.0], [12.0, -14.0]]))
         plain_pieces = len(plain.curves["sheetpile_1"])

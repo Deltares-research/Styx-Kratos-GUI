@@ -8,9 +8,9 @@ a user may ask for, in what unit, with which sign -- because that is a question 
 geotechnics rather than about a file format, and it lives in `app.result_fields`.
 
 Reading these rather than adding a VTK writer is a decision, not an accident: the
-deck's output block is part of what `tests/test_crow_reference.py` compares against the
-validated reference stage for stage, and a second writer would change a deck that is
-currently known-good (`plan/postprocessing-plan.md`, decision 1.1).
+deck's output block is part of what is compared against a validated reference stage
+for stage, and a second writer would change a deck that is
+currently known-good (`plan/active/postprocessing-plan.md`, decision 1.1).
 
 ── The two things about this format that are easy to get wrong ──────────────
 

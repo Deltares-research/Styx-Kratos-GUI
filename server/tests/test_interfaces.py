@@ -5,8 +5,8 @@ returns connectivity, so the topology it performs -- which node is duplicated, w
 element follows which copy, and which way round the resulting element is written -- can
 be asserted exactly rather than inferred from a mesh nobody chose.
 
-The arrangement every test here builds is the one examples/crow_case.mdpa contains: the
-structure keeps the original nodes, each side of the soil gets its own copies, and one
+The arrangement every test here builds is the one Kratos' GeoMechanicsApplication
+expects: the structure keeps the original nodes, each side of the soil gets its own copies, and one
 interface element per side per segment ties them back together.
 """
 
@@ -114,7 +114,7 @@ BELOW = [[7, 8, 2], [7, 2, 1], [8, 9, 3], [8, 3, 2]]
 
 
 def test_the_toe_node_is_shared_because_the_soil_is_continuous_around_it():
-    """crow_case.mdpa's own arrangement: 52 duplicates per side for 53 pile nodes. The
+    """The usual arrangement: one duplicate fewer per side than the pile has nodes. The
     node at the toe is one soil node, not two, because the ground closes under the pile
     -- and it is still detached from the pile, which is what the interface is for."""
     rows, result = split("both", rows=rows_of(LEFT, RIGHT, BELOW), nodes=TOE_NODES)
@@ -171,7 +171,7 @@ def test_the_element_is_the_structure_side_then_the_soil_side():
 
 def test_the_element_normal_points_at_the_soil_it_holds():
     """A +90 degree turn from the first pair's direction has to point at the second
-    pair's side -- the convention crow_case.mdpa writes, where the two faces of one wall
+    pair's side -- the convention Kratos' interface elements use, where the two faces of one wall
     carry opposite node orders."""
     rows, result = split("both")
     left_nodes = {node for row in rows[:2] for node in row}

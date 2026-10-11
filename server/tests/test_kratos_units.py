@@ -9,14 +9,8 @@ everything on the way out, which went wrong once in the most expensive way: `DEN
 converted and nothing else, so one materials file carried two unit systems. There is now
 nothing to convert, and an old project is converted once, on load (`app/legacy.py`).
 
-The reference files are the authority, and they have been run:
-
-    initial_materials_for_generated_mesh.json
-    MaterialParameters_for_generated_mesh.json
-    staged_construction_for_generated_mesh.json
-
-`app/crow.py` is built to be the same model, in the reference's own SI numbers, so the
-values below are the reference's -- and the test is that we reproduce them.
+The test model (`tests/models/excavation.py`) types its numbers in SI, so the values
+below are the ones it types -- and the test is that the deck carries them unchanged.
 """
 
 import json
@@ -24,16 +18,15 @@ import json
 import pytest
 
 from app import kratos, kratos_materials, schemas
-from tests.crow_example import crow, reference as example_file
 from app.build import session
 from app.schemas import MeshRequest, Project
 from app.seed import seed_project
-
+from tests.models import excavation
 
 
 @pytest.fixture(scope="module")
 def exported() -> dict:
-    project = crow.crow_project()
+    project = excavation.excavation_project()
     with session():
         return kratos.export_project(project,
                                      MeshRequest(**project.mesh.model_dump()))
@@ -46,12 +39,11 @@ def variables(exported: dict, part: str) -> dict:
 
 
 # -- The soil ----------------------------------------------------------------
-# Reference property sets 1 and 2. `examples/crow/crow.py` types the same two materials in kN/m2,
-# so these are the reference's numbers reached from the project's own input.
+# The two soils, as the test model types them.
 
 def test_the_soil_stiffness_is_written_in_pascals(exported):
-    assert variables(exported, "Soil_Top")["YOUNG_MODULUS"] == pytest.approx(9.0e5)
-    assert variables(exported, "Soil_Bottom")["YOUNG_MODULUS"] == pytest.approx(7.4286e6)
+    assert variables(exported, "Soil_Top")["YOUNG_MODULUS"] == pytest.approx(2.0e6)
+    assert variables(exported, "Soil_Bottom")["YOUNG_MODULUS"] == pytest.approx(3.0e7)
 
 
 def test_a_lift_keeps_the_stiffness_of_the_layer_it_was_dug_from(exported):
@@ -60,24 +52,23 @@ def test_a_lift_keeps_the_stiffness_of_the_layer_it_was_dug_from(exported):
 
 
 def test_the_solid_density_is_the_unit_weight_at_g(exported):
-    """This one was always right, and it is what pins the deck as SI: it only agrees
-    with the reference because both are kg/m3."""
-    assert variables(exported, "Soil_Top")["DENSITY_SOLID"] == pytest.approx(1834.86,
+    """It is what pins the deck as SI: 17 and 19 kN/m3 over g, in kg/m3."""
+    assert variables(exported, "Soil_Top")["DENSITY_SOLID"] == pytest.approx(1732.93,
                                                                             rel=1e-5)
-    assert variables(exported, "Soil_Bottom")["DENSITY_SOLID"] == pytest.approx(2038.74,
+    assert variables(exported, "Soil_Bottom")["DENSITY_SOLID"] == pytest.approx(1936.80,
                                                                                rel=1e-5)
 
 
 def test_the_water_density_follows_the_projects_own_specific_weight(exported):
-    """1019.37 kg/m3 is 10 kN/m3 at g, which is the reference's number and the same
-    `Project.water.specific_weight` the two water processes read. It was a flat 1000.0
+    """1019.37 kg/m3 is 10 kN/m3 at g: the same `Project.water.specific_weight` the two
+    water processes read. It was a flat 1000.0
     before, so a project whose water was not exactly 9.81 kN/m3 described it one way in
     the materials file and another in the processes."""
     assert variables(exported, "Soil_Top")["DENSITY_WATER"] == pytest.approx(1019.37,
                                                                             rel=1e-5)
 
 
-def test_the_bulk_moduli_are_the_references_own(exported):
+def test_the_bulk_moduli_are_the_materials_own(exported):
     soil = variables(exported, "Soil_Top")
     assert soil["BULK_MODULUS_SOLID"] == pytest.approx(1.0e10)
     assert soil["BULK_MODULUS_FLUID"] == pytest.approx(2.2e9)
@@ -85,14 +76,14 @@ def test_the_bulk_moduli_are_the_references_own(exported):
 
 def test_cohesion_is_written_in_pascals(exported):
     """`Material.c` is kN/m2 like `E`, and was written raw for the same reason."""
-    assert variables(exported, "Soil_Top")["GEO_COHESION"] == pytest.approx(1.0e3)
+    assert variables(exported, "Soil_Top")["GEO_COHESION"] == pytest.approx(2.0e3)
 
 
 # -- The structures ----------------------------------------------------------
 
 def test_the_sheet_pile_stiffness_is_written_in_pascals(exported):
     assert variables(exported, "SheetPileWall")["YOUNG_MODULUS"] == \
-        pytest.approx(8.4449e9)
+        pytest.approx(2.1e11)
 
 
 def test_the_tendon_stiffness_is_written_in_pascals(exported):
@@ -102,18 +93,16 @@ def test_the_tendon_stiffness_is_written_in_pascals(exported):
 def test_areas_and_thicknesses_are_metres_and_are_not_scaled(exported):
     """Only the force carries a kilo. A length, an area and an angle do not, and
     multiplying them too would be the easiest way to get this half right."""
-    assert variables(exported, "Strut")["CROSS_AREA"] == pytest.approx(4.7619e-5)
-    # The section area of the wall. The reference calls it `THICKNESS`, because its beam
-    # law is `TimoshenkoBeamPlaneStrainElasticConstitutiveLaw` where ours is
-    # `TimoshenkoBeamElasticConstitutiveLaw`; the number is the same 0.4924 m2/m either
-    # way, and which law to write is a separate question from what units it is in.
-    assert variables(exported, "SheetPileWall")["CROSS_AREA"] == pytest.approx(0.4924)
-    assert variables(exported, "Soil_Top")["GEO_FRICTION_ANGLE"] == pytest.approx(22.3)
+    # Per metre of wall: 2.0e-3 m2 every 2 m.
+    assert variables(exported, "Strut")["CROSS_AREA"] == pytest.approx(1.0e-3)
+    # The section area of the wall, m2 per metre of wall.
+    assert variables(exported, "SheetPileWall")["CROSS_AREA"] == pytest.approx(0.015)
+    assert variables(exported, "Soil_Top")["GEO_FRICTION_ANGLE"] == pytest.approx(25.0)
 
 
 def test_the_beam_density_is_already_si_and_is_left_alone(exported):
     """`BeamSection.density` is documented kg/m3, not kN/m3, so it crosses unchanged."""
-    assert variables(exported, "SheetPileWall")["DENSITY"] == pytest.approx(298.36)
+    assert variables(exported, "SheetPileWall")["DENSITY"] == pytest.approx(7850.0)
 
 
 # -- The processes -----------------------------------------------------------
@@ -130,17 +119,16 @@ def _parameters(exported: dict, module: str, ends_with: str) -> dict:
 
 
 def test_a_line_load_is_written_in_newtons_per_metre(exported):
-    """The reference's `Load` is `[0.0, -20000.0, 0.0]` for the 20 kN/m surcharge
-    `examples/crow/crow.py` types."""
+    """`[0.0, -10000.0, 0.0]` for the 10 kN/m surcharge the test model types."""
     doc = json.loads(exported["project_parameters"])
     stage = doc["stages"]["3_SheetPileWall_installation"]["stage_settings"]["processes"]
     (load,) = [p for p in stage["loads_process_list"]
                if p["Parameters"]["model_part_name"].endswith(".Load")]
-    assert load["Parameters"]["value"] == [0.0, -20000.0, 0.0]
+    assert load["Parameters"]["value"] == [0.0, -10000.0, 0.0]
 
 
 def test_both_water_processes_use_newtons_per_cubic_metre(exported):
-    """10000.0, the reference's own, from `Project.water.specific_weight` of 10 kN/m3."""
+    """10000.0, from `Project.water.specific_weight` of 10 kN/m3."""
     doc = json.loads(exported["project_parameters"])
     for stage in doc["stages"].values():
         processes = stage["stage_settings"]["processes"]
@@ -150,7 +138,7 @@ def test_both_water_processes_use_newtons_per_cubic_metre(exported):
         assert hydrostatic
         for parameters in hydrostatic:
             assert parameters["specific_weight"] == pytest.approx(1.0e4)
-            assert parameters["reference_coordinate"] == pytest.approx(-1.5)
+            assert parameters["reference_coordinate"] == pytest.approx(excavation.WATER_Y)
 
 
 def test_gravity_is_not_scaled(exported):
@@ -210,55 +198,54 @@ def test_nothing_between_the_project_and_the_deck_converts_a_unit():
 
 
 # -- The interfaces ----------------------------------------------------------
-# Reference property sets 3 and 4. Their stiffnesses are what pinned the derivation:
-# `G / t` at `t = 1`, and a normal ten times the shear at two different Poisson ratios.
+# The stiffnesses are derived: `G / t`, the shear modulus of the soil behind the contact
+# over its virtual thickness (0.5 m), and a normal ten times the shear.
 
 def test_each_interface_takes_the_stiffness_of_the_soil_behind_it(exported):
-    """The reference splits its contacts in two -- those against the upper ground and
-    those against the deeper sand -- and gives each the shear modulus of that soil."""
+    """The contacts against the clay and those against the sand each take the shear
+    modulus of that soil: E / 2(1 + nu) over 0.5 m."""
     upper = variables(exported, "Interface_Soil_Top")
     lower = variables(exported, "Interface_Soil_Bottom")
-    assert upper["INTERFACE_SHEAR_STIFFNESS"] == pytest.approx(3.75e5, rel=1e-4)
-    assert upper["INTERFACE_NORMAL_STIFFNESS"] == pytest.approx(3.75e6, rel=1e-4)
-    assert lower["INTERFACE_SHEAR_STIFFNESS"] == pytest.approx(2.8571e6, rel=1e-4)
-    assert lower["INTERFACE_NORMAL_STIFFNESS"] == pytest.approx(2.8571e7, rel=1e-4)
+    assert upper["INTERFACE_SHEAR_STIFFNESS"] == pytest.approx(1.53846e6, rel=1e-4)
+    assert upper["INTERFACE_NORMAL_STIFFNESS"] == pytest.approx(1.53846e7, rel=1e-4)
+    assert lower["INTERFACE_SHEAR_STIFFNESS"] == pytest.approx(2.30769e7, rel=1e-4)
+    assert lower["INTERFACE_NORMAL_STIFFNESS"] == pytest.approx(2.30769e8, rel=1e-4)
 
 
 def test_a_lifts_contact_takes_the_layer_it_was_dug_from(exported):
-    """`Interface_Soil_Top_lift1` is the reference's `Interface_Excavated_Soil_1`, and
-    sits in its upper-ground group."""
+    """A lift was dug out of the clay, so its contact is the clay's."""
     for part in ("Interface_Soil_Top_lift1", "Interface_Soil_Top_lift2",
                  "Interface_Soil_Top_lift3", "Interface_Soil_Middle_pit"):
         assert variables(exported, part)["INTERFACE_SHEAR_STIFFNESS"] == \
-            pytest.approx(3.75e5, rel=1e-4)
+            pytest.approx(1.53846e6, rel=1e-4)
     assert variables(exported, "Interface_Soil_Bottom_pit")[
-        "INTERFACE_SHEAR_STIFFNESS"] == pytest.approx(2.8571e6, rel=1e-4)
+        "INTERFACE_SHEAR_STIFFNESS"] == pytest.approx(2.30769e7, rel=1e-4)
 
 
 # -- What the user typed, not what the exporter assumed ----------------------
-# Four values the reference deck carries that this exporter used to decide for itself.
+# Four values a material carries that this exporter used to decide for itself.
 # The rule Marjan gave: the user is responsible for the values, so where a material
 # carries one it is written, and the derived default is only for when it does not.
 
 
 def test_a_typed_k0_is_written_instead_of_jaky():
-    """`K0_NC` overrides `1 - sin(phi)`. The reference's 0.62 and 0.46 happen to be Jaky
-    at its friction angles, but a user who types 0.62 gets 0.62, not 0.6205 -- in the
+    """`K0_NC` overrides `1 - sin(phi)`. The test model's 0.58 and 0.47 are close to Jaky
+    at its friction angles, but a user who types 0.58 gets 0.58, not 0.5774 -- in the
     K0 stage's file, and only there."""
-    project = crow.crow_project(staged=True)
+    project = excavation.excavation_project(staged=True)
     with session():
         exported = kratos.export_project(project, MeshRequest(element_size=8.0, order=2))
     initial = {e["model_part_name"]: e["Material"]["Variables"]
                for e in json.loads(exported["initial_materials"])["properties"]}
-    assert initial["PorousDomain.Soil_Top"]["K0_NC"] == 0.62
-    assert initial["PorousDomain.Soil_Bottom"]["K0_NC"] == 0.46
+    assert initial["PorousDomain.Soil_Top"]["K0_NC"] == 0.58
+    assert initial["PorousDomain.Soil_Bottom"]["K0_NC"] == 0.47
     later = {e["model_part_name"]: e["Material"]["Variables"]
              for e in json.loads(exported["materials"])["properties"]}
     assert "K0_NC" not in later["PorousDomain.Soil_Top"]
 
 
 def test_porosity_is_the_materials_own(exported):
-    """It was a fixed 0.3 for every soil in every project. The reference uses 0.0 for
+    """It was a fixed 0.3 for every soil in every project. The test model types 0.0 for
     both of its soils, which is a property of the ground, not of the exporter."""
     assert variables(exported, "Soil_Top")["POROSITY"] == 0.0
     assert variables(exported, "Soil_Bottom")["POROSITY"] == 0.0
@@ -299,18 +286,18 @@ def test_the_constants_a_soil_leaves_out_are_in_the_projects_system(unit_system,
 ])
 def test_the_drainage_type_is_the_materials_own(typed, expected):
     """As typed; a soil that says nothing is drained -- the pore pressure prescribed,
-    not solved for -- which is what the reference's soils are."""
+    not solved for -- which is what the test model's soils are."""
     written = kratos_materials._variables(_bare(**typed), 2, False, seed_project(), [])
     assert written["GEO_DRAINAGE_TYPE"] == expected
 
 
-def test_the_crow_soils_are_written_as_a_constant_pressure_field(exported):
+def test_the_test_models_soils_are_written_as_a_constant_pressure_field(exported):
     assert variables(exported, "Soil_Top")["GEO_DRAINAGE_TYPE"] == "CONSTANT_PW_FIELD"
 
 
 def test_a_tendon_may_be_massless(exported):
-    """`AnchorSection.density` was `gt=0`, so the reference's 0.0 could not be typed at
-    all -- a prestressed tendon whose own weight is beside the point is an ordinary
+    """`AnchorSection.density` was `gt=0`, so a 0.0 could not be typed at all -- a
+    prestressed tendon whose own weight is beside the point is an ordinary
     thing to model."""
     assert variables(exported, "Strut")["DENSITY"] == 0.0
 
@@ -320,10 +307,10 @@ def test_a_tendon_may_be_massless(exported):
 def test_the_notice_names_what_was_derived_and_nothing_else():
     """A property set that gives everything gets no notice; one that leaves a value out
     is named with it, so the user can see what the deck decided."""
-    project = crow.crow_project(staged=False)
+    project = excavation.excavation_project(staged=False)
     with session():
         exported = kratos.export_project(project, MeshRequest(element_size=8.0, order=2))
     notices = [w for w in exported["warnings"] if w.startswith("Derived where")]
     assert len(notices) == 1
-    assert "material" not in notices[0], "CROW's soils give every variable"
+    assert "material" not in notices[0], "the test model's soils give every variable"
     assert "interface section 'Wall contact': INTERFACE_SHEAR_STIFFNESS" in notices[0]

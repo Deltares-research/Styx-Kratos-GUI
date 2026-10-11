@@ -1,11 +1,11 @@
-"""The same model in two unit systems, through real Kratos (plan/kratos-native-inputs-plan.md
+"""The same model in two unit systems, through real Kratos (plan/outdated/kratos-native-inputs-plan.md
 phase C). Opt-in: `pytest --run-kratos`.
 
 Kratos has no units: give it a consistent set and every number comes back in it. That is
 the premise the project's unit system rests on -- the deck is written in whatever system
 the project is in, with nothing converted -- and it is a premise about Kratos, so it is
-checked by running Kratos: CROW in SI and CROW in kN, the second's forces, stresses and
-pressures a thousand times smaller and its displacements identical.
+checked by running Kratos: the test model in SI and in kN, the second's forces, stresses
+and pressures a thousand times smaller and its displacements identical.
 """
 
 from __future__ import annotations
@@ -15,9 +15,10 @@ from pathlib import Path
 
 import pytest
 
-from app import calculate, crow, results, units
+from app import calculate, kratos, results, units
 from app.schemas import Project
-from tests.kratos.test_live_crow import _require_kratos
+from tests.models import excavation
+from tests.results_run import require_kratos
 
 pytestmark = pytest.mark.kratos
 
@@ -27,19 +28,19 @@ STAGES = ["3_SheetPileWall_installation", "4_First_excavation", "6_Second_excava
 
 @pytest.fixture(scope="module")
 def runs(tmp_path_factory):
-    _require_kratos()
+    require_kratos()
     root = tmp_path_factory.mktemp("unit-runs")
     previous = os.environ.get(calculate.RUNS_ENV)
     os.environ[calculate.RUNS_ENV] = str(root)
     results.forget_cache()
     try:
-        si = crow.crow_project(staged=True)
+        si = excavation.excavation_project(staged=True)
         payload, notes = units.convert_project(si.model_dump(mode="json"), "kN")
         assert notes == []
         kn = Project.model_validate(payload)
         out = {}
         for name, project in (("SI", si), ("kN", kn)):
-            outcome = calculate.run(crow.export(project))
+            outcome = calculate.run(kratos.export_project(project))
             assert outcome["ok"], outcome["error"]
             out[name] = Path(outcome["directory"])
         yield out

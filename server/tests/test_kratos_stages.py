@@ -1,7 +1,7 @@
 """The stage list: one deck stage per phase, and what each one carries.
 
-Checked against `staged_construction_for_generated_mesh.json`, the CROW reference deck's
-seven-stage ProjectParameters. See plan/staged-construction-plan.md sec C1, C2, C5.
+Checked against the seven-stage ProjectParameters of Kratos' own staged-construction
+reference deck. See plan/outdated/staged-construction-plan.md sec C1, C2, C5.
 
 The compatibility contract runs through this file: a project with no phases must export
 exactly the deck it exported before staged construction existed. `test_export_golden.py`
@@ -13,7 +13,7 @@ import json
 import pytest
 
 from app import phases, schemas
-from tests.crow_example import crow
+from tests.models import excavation
 from app.build import session
 from app.schemas import MeshRequest
 from app import kratos
@@ -22,16 +22,16 @@ from app.seed import seed_project
 
 @pytest.fixture(scope="module")
 def staged_doc() -> dict:
-    """The CROW model with its default seven phases, exported."""
+    """The test model with its default seven phases, exported."""
     with session():
-        result = kratos.export_project(crow.crow_project(staged=True),
-                                       MeshRequest(**crow.crow_project().mesh.model_dump()))
+        result = kratos.export_project(excavation.excavation_project(staged=True),
+                                       MeshRequest(**excavation.excavation_project().mesh.model_dump()))
     return json.loads(result["project_parameters"])
 
 
 @pytest.fixture(scope="module")
 def unphased_doc() -> dict:
-    project = crow.crow_project(staged=False)
+    project = excavation.excavation_project(staged=False)
     with session():
         result = kratos.export_project(project,
                                        MeshRequest(**project.mesh.model_dump()))
@@ -212,7 +212,7 @@ def test_displacements_reset_in_the_stage_that_installs_the_wall(staged_doc):
 
 def test_a_phases_solver_settings_reach_the_deck():
     """Not through the defaults: a number typed into the phase editor has to arrive."""
-    project = crow.crow_project(staged=True)
+    project = excavation.excavation_project(staged=True)
     edited = [ph.model_dump() for ph in project.phases]
     edited[3] |= {"max_iterations": 321, "tolerated_error": 2e-3}
     project = schemas.Project.model_validate(project.model_dump() | {"phases": edited})
@@ -228,7 +228,7 @@ def test_a_phases_solver_settings_reach_the_deck():
 def test_a_branching_phase_tree_is_refused_at_export():
     """Kratos runs one sequence. The schema accepts the branch so it can be half-built
     in the editor; this is where it stops."""
-    project = crow.crow_project(staged=True)
+    project = excavation.excavation_project(staged=True)
     records = [ph.model_dump() for ph in project.phases]
     records.append(dict(records[-1], id="alternative", parent=records[2]["id"]))
     project = schemas.Project.model_validate(project.model_dump() | {"phases": records})

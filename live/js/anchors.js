@@ -2,8 +2,8 @@
    anchors.js — Structure-mode anchors.
 
    An anchor is a two-node tie: a head on a sheet pile and a tail at a point
-   the analysis holds still. That is the formulation the reference deck uses
-   (examples/crow_case.mdpa) -- the head node is shared with the beam, and the
+   the analysis holds still. That is the formulation Kratos' reference decks
+   use -- the head node is shared with the beam, and the
    tail belongs to no element at all, restrained by its own node group. The
    grouted body is idealised as a fixed point rather than bonded to the soil.
 
@@ -291,8 +291,7 @@ App.Anchors = (function () {
   function validateSection(section) {
     if (!section.name || !section.name.trim()) return 'Tendon name cannot be empty.';
     if (!(section.spacing > 0)) return 'Tendon spacing must be greater than zero.';
-    // DENSITY may be zero, as on the server: a tendon is often modelled massless --
-    // CROW's strut is.
+    // DENSITY may be zero, as on the server: a tendon is often modelled massless.
     var problem = App.PropertySets.validate('anchor', section);
     if (problem) return problem;
     // Null is the honest value for a tendon, which takes no compression at all.

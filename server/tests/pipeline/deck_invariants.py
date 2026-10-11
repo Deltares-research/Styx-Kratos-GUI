@@ -277,7 +277,8 @@ def _condition_order(deck) -> list[str]:
                 own = tuple(row[i] for i in local)
                 allowed |= {own} if dimension == 2 else _rotations(own)
     # A line element is its own only edge: a load on a wall face, whose nodes the
-    # interface split left to the beam alone, finds the beam (CROW's water loads do).
+    # interface split left to the beam alone, finds the beam (the test model's water
+    # loads do).
     for block in deck.elements:
         if "Beam" in block.name:
             allowed |= {tuple(row) for row in block.entries.values()}

@@ -4,6 +4,9 @@ Snapshot of the source tree on 2026-10-09 (after the wall-plot window, commit `9
 lines of code, classes and functions per module, split into backend (Python server) and
 frontend (browser app).
 
+The rows of the example-case files, which left the repository on 2026-10-11, are
+removed; the totals are still the snapshot's.
+
 Styx is a Deltares/Kratos geotechnical modeller: build a soil and excavation model, mesh it
 with Gmsh, export and run a Kratos GeoMechanics deck in construction phases, and read the
 results back in a Plaxis-style Results mode. How the pieces fit is in
@@ -15,7 +18,7 @@ results back in a Plaxis-style Results mode. How the pieces fit is in
 - **Lines** = every physical line. **Code** = lines minus blank lines minus comment-only lines (Python docstrings count as comments).
 - **Python**: parsed with `ast`. *Classes* include nested classes; *Functions* are module-level and nested functions; *Methods* are functions defined directly in a class body.
 - **JavaScript**: counted from source text with comments, strings and regular-expression literals stripped. The frontend is plain ES5 (IIFE modules hung off a global `App` namespace) with no `class`, arrow functions or method shorthand, so it has 0 classes and every function is a `function` keyword. *Functions* counts every `function` keyword left after stripping: named declarations, anonymous `function (...)` expressions (callbacks, object-literal members) and `function(...)` written without the space. JS figures are close estimates, not parser-exact.
-- Excluded: `vendor/` (three.js), `htmlcov*/`, virtual environments, `__pycache__`, and the ignored `examples/`, `test/`, `plan/`, `tools/`, `graphify-out/` folders.
+- Excluded: `vendor/` (three.js), `htmlcov*/`, virtual environments, `__pycache__`, and the local-only `plan/`, `tools/`, `graphify-out/` folders.
 - **Comparing with the previous snapshot (2026-10-08):** lines, code and comments are counted the same way and compare directly. JS function counts are a few percent higher than that snapshot showed for the same files, because `function(` without a space is now included. Recounted this way, the previous snapshot had 1,750 live, 494 shell and 1,976 test functions, against the 1,743, 471 and 1,898 it printed.
 
 ## What changed since the previous snapshot
@@ -26,7 +29,7 @@ results back in a Plaxis-style Results mode. How the pieces fit is in
 | `server/app/results.py`, `main.py` | `stage_members`, `member_profiles`, and the two `/members` routes | +66 |
 | `live/js/results-plot.js` (new) | `results plot …` command and the SVG figure, DOM-free and tested headless | +356 |
 | `live/js/patches.js`, `results.js`, `live/css/live.css` | The plot window and its buttons; legend Min/Max limits; legend moved clear of the ruler | +204 |
-| `server/tests/test_result_members.py` (new) | The plot data against Kratos' own CROW run (the orange benchmark line) | +184 |
+| `server/tests/test_result_members.py` (new) | The plot data against Kratos' own run (the orange benchmark line) | +184 |
 | `live/tests/test-results-plot.js` (new), `test-results.js` | The figure, the command and the legend limits | +404 |
 
 ## Overview
@@ -79,7 +82,6 @@ results back in a Plaxis-style Results mode. How the pieces fit is in
 | `result_fields.py` | 388 | 184 | 122 | 82 | 2 | 15 | 0 |
 | `calculate.py` | 373 | 170 | 135 | 68 | 2 | 13 | 0 |
 | `result_mesh.py` | 283 | 144 | 94 | 45 | 0 | 10 | 0 |
-| `crow.py` | 307 | 135 | 138 | 34 | 0 | 3 | 0 |
 | `phases.py` | 248 | 105 | 94 | 49 | 1 | 8 | 0 |
 | `seed.py` | 136 | 94 | 30 | 12 | 0 | 2 | 0 |
 | `walls.py` | 173 | 93 | 45 | 35 | 0 | 9 | 0 |
@@ -94,7 +96,6 @@ results back in a Plaxis-style Results mode. How the pieces fit is in
 | `importer.py` | 60 | 37 | 10 | 13 | 0 | 1 | 0 |
 | `store.py` | 37 | 14 | 11 | 12 | 0 | 4 | 0 |
 | `node_parts.py` | 31 | 10 | 13 | 8 | 0 | 2 | 0 |
-| `eemdijk.py` | 32 | 9 | 13 | 10 | 0 | 1 | 0 |
 | `__init__.py` | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | `routes/__init__.py` | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | **Total (34 files)** | **13,313** | **7,143** | **4,044** | **2,126** | **78** | **389** | **87** |
@@ -106,11 +107,9 @@ results back in a Plaxis-style Results mode. How the pieces fit is in
 | `test_api.py` | 1,644 | 1,029 | 208 | 407 | 0 | 108 | 0 |
 | `test_schemas.py` | 1,530 | 943 | 190 | 397 | 0 | 161 | 0 |
 | `test_kratos.py` | 1,216 | 754 | 178 | 284 | 0 | 110 | 0 |
-| `test_crow_reference.py` | 886 | 482 | 224 | 180 | 0 | 68 | 0 |
 | `test_mdpa_import.py` | 680 | 430 | 80 | 170 | 0 | 44 | 0 |
 | `test_deck.py` | 556 | 383 | 49 | 124 | 0 | 43 | 0 |
 | `test_kratos_interfaces.py` | 639 | 367 | 123 | 149 | 0 | 52 | 0 |
-| `make_crow_fixture.py` | 519 | 337 | 97 | 85 | 0 | 16 | 0 |
 | `test_build_2d.py` | 528 | 306 | 95 | 127 | 0 | 42 | 0 |
 | `test_kratos_3d.py` | 500 | 285 | 72 | 143 | 0 | 45 | 0 |
 | `test_result_mesh.py` | 442 | 281 | 55 | 106 | 0 | 30 | 0 |
@@ -121,7 +120,6 @@ results back in a Plaxis-style Results mode. How the pieces fit is in
 | `test_meshing_2d.py` | 377 | 232 | 56 | 89 | 0 | 33 | 0 |
 | `test_load_translation.py` | 443 | 226 | 65 | 152 | 0 | 37 | 0 |
 | `test_export_golden.py` | 367 | 223 | 61 | 83 | 0 | 30 | 0 |
-| `test_crow_results.py` | 445 | 199 | 146 | 100 | 0 | 24 | 0 |
 | `test_build_3d.py` | 316 | 198 | 38 | 80 | 0 | 22 | 0 |
 | `test_kratos_stage_processes.py` | 320 | 190 | 50 | 80 | 0 | 37 | 0 |
 | `test_tessellate.py` | 306 | 187 | 46 | 73 | 0 | 23 | 0 |
@@ -133,7 +131,6 @@ results back in a Plaxis-style Results mode. How the pieces fit is in
 | `test_kratos_units.py` | 296 | 146 | 79 | 71 | 0 | 27 | 0 |
 | `test_kratos_normal_loads.py` | 227 | 145 | 31 | 51 | 0 | 18 | 0 |
 | `test_kratos_stages.py` | 237 | 128 | 49 | 60 | 0 | 24 | 0 |
-| `test_crow_wall_forces.py` | 289 | 127 | 99 | 63 | 0 | 15 | 0 |
 | `test_result_parts.py` | 233 | 127 | 42 | 64 | 0 | 15 | 0 |
 | `test_interfaces.py` | 234 | 123 | 49 | 62 | 0 | 18 | 0 |
 | `test_mesh_parts.py` | 186 | 121 | 26 | 39 | 0 | 17 | 0 |
@@ -148,12 +145,10 @@ results back in a Plaxis-style Results mode. How the pieces fit is in
 | `frozen.py` | 131 | 96 | 14 | 21 | 0 | 8 | 0 |
 | `test_water_level.py` | 159 | 91 | 26 | 42 | 0 | 15 | 0 |
 | `test_mesh_labels.py` | 146 | 88 | 19 | 39 | 0 | 11 | 0 |
-| `crow_run.py` | 168 | 77 | 47 | 44 | 0 | 10 | 0 |
 | `test_model_extent.py` | 102 | 53 | 17 | 32 | 0 | 10 | 0 |
 | `test_parity.py` | 98 | 49 | 22 | 27 | 0 | 11 | 0 |
 | `test_launcher.py` | 63 | 41 | 4 | 18 | 3 | 0 | 6 |
 | `test_importer.py` | 31 | 24 | 4 | 3 | 0 | 1 | 0 |
-| `crow_example.py` | 46 | 8 | 25 | 13 | 0 | 1 | 0 |
 | `__init__.py` | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | **Total (52 files)** | **18,969** | **11,201** | **3,092** | **4,676** | **9** | **1468** | **16** |
 
@@ -259,7 +254,6 @@ The frozen UI shell served alongside `live/`; `live/js` swaps in its own viewpor
 | `test-water-command.js` | 80 | 58 | 8 | 14 | 12 |
 | `test-zip.js` | 70 | 55 | 6 | 9 | 10 |
 | `test-import.js` | 41 | 33 | 2 | 6 | 4 |
-| `fixtures/crow-field.js` | 36 | 25 | 9 | 2 | 0 |
 | **Total (39 files)** | **11,419** | **9,090** | **998** | **1,331** | **2087** |
 
 Test runners:

@@ -1147,7 +1147,7 @@ def test_the_live_shell_replaces_only_the_viewport_and_the_orbit_controller(clie
                              "results-plot.js",
                              # The unit system and the Kratos property sets the editors
                              # show, and the Material sets dialog that replaces the frozen
-                             # one's Plaxis sheet (plan/kratos-native-inputs-plan.md).
+                             # one's Plaxis sheet (plan/outdated/kratos-native-inputs-plan.md).
                              "unit-table.js", "units.js", "property-sets.js",
                              "material-sets.js"}
     assert body.index('/js/orbit.js') < body.index('/live/js/orbit.js'), (
@@ -1498,18 +1498,16 @@ def test_a_2d_model_survives_a_round_trip_through_the_solid_model(client, restor
     client.put("/api/project", json=seed_project().model_dump())
 
 
-def test_the_crow_case_can_be_opened_and_drawn(client):
-    """The staged-excavation model, through the routes the browser actually calls --
-    which is `run examples/crow/crow.py` in the command box, and nothing of its own.
+def test_a_staged_excavation_can_be_opened_and_drawn(client):
+    """The test model, through the routes the browser actually calls -- which is
+    `run tests/models/excavation.py` in the command box, and nothing of its own.
 
-    `test_crow_reference.py` says the deck is right; this says the model can be looked
-    at, which is a different failure -- a body with no colour, or a key the viewport
-    cannot name, takes the geometry endpoint down without touching the export.
+    The deck tests say the export is right; this says the model can be looked at, which
+    is a different failure -- a body with no colour, or a key the viewport cannot name,
+    takes the geometry endpoint down without touching the export.
     """
-    from tests.crow_example import PATH
-    if not PATH.exists():
-        pytest.skip(f"launcher {PATH} is not in this checkout")
-    loaded = client.post("/api/project/script", json={"path": str(PATH)})
+    path = Path(__file__).resolve().parent / "models" / "excavation.py"
+    loaded = client.post("/api/project/script", json={"path": str(path)})
     assert loaded.status_code == 200, loaded.text
     project = loaded.json()["project"]
     assert project["dimension"] == 2

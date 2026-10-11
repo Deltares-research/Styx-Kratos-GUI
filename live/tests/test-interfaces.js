@@ -3,7 +3,7 @@
    An interface is the zero-thickness contact between a structure and the ground: the
    band where the two slide and can open, instead of being welded together the way a
    bare sheet pile is. It follows either a pile -- the arrangement
-   examples/crow_case.mdpa contains -- or its own line through the soil, and `side` says
+   Kratos' reference decks contain -- or its own line through the soil, and `side` says
    which of the two soils is unglued from it. Plane strain only; see the INTERFACES
    table in server/app/kratos.py. */
 
@@ -144,7 +144,7 @@
 
   test('a contact with no soil of its own derives from the soil it runs against', function () {
     /* The server's rule (InterfaceSection): no material and no stiffnesses is the
-       ordinary case -- CROW's own contact is one -- not an error. It used to be refused
+       ordinary case -- the test model's own contact is one -- not an error. It used to be refused
        here after the server had stopped refusing it, so any edit of such a contact
        in the property grid failed. */
     var loose = Object.assign({}, CONTACT, { material: null });

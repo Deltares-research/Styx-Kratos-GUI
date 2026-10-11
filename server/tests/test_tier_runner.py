@@ -1,4 +1,4 @@
-"""`tools/test.py`, the one command per test tier (plan/alpha-test-plan.md Task 0.4).
+"""`tools/test.py`, the one command per test tier (plan/active/alpha-test-plan.md Task 0.4).
 
 The steps are checked as data, and a run is checked with a stand-in for `subprocess.call`,
 so nothing here starts a browser, Kratos or a second pytest."""

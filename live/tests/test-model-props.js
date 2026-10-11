@@ -3,7 +3,7 @@
    `App.Model.apply` builds `App.OBJECT_PROPS`: per object, groups of rows, and on an
    editable row an editor -- `{kind, get, set[, options]}` -- or a button `{kind:
    'button', run}`. The explorer calls them; nothing else does. So rather than one test
-   per row, three rules are swept over all of them, on the recorded CROW model in 2D and
+   per row, three rules are swept over all of them, on the recorded test model in 2D and
    in 3D (fixtures/viewport-payloads.js):
 
    1. writing back what an editor reads is accepted -- a no-op edit is never refused;

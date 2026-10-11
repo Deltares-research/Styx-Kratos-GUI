@@ -251,7 +251,7 @@ def test_the_load_value_and_the_anchor_support_reach_the_process_file(golden, de
 # ── The same deck, staged ───────────────────────────────────────────────────
 # The second fixture, and the reason for it: until now the two-stage path was covered
 # only where it was implicit -- a sheet pile deactivating itself -- and the seven-stage
-# path only through the CROW model, which is one specific project. What can go wrong in
+# path only through the staged test model, which is one specific project. What can go wrong in
 # a staged deck goes wrong at the same seams the single-stage one has, plus one more:
 # a part can be named by a stage and be missing from the .mdpa, and nothing but a
 # cross-check between the two files catches it.

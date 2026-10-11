@@ -229,20 +229,25 @@ def test_an_element_no_part_claims_is_still_drawn(stage):
 
 # ── Against the real run ────────────────────────────────────────────────────
 
-def test_the_real_stage_builds_and_every_index_is_in_range():
+@pytest.fixture
+def real_run(monkeypatch):
+    """A Kratos run of the test model (`tests/results_run.py`), or a skip without Kratos:
+    its directory and its own deck."""
+    from tests import results_run
+
+    run = results_run.real_run()
+    results_run.use(monkeypatch, run)
+    root, run_id = run
+    return root / run_id, mdpa_import.import_mdpa(results_run.deck_text(run))
+
+
+def test_the_real_stage_builds_and_every_index_is_in_range(real_run):
     """An index past the end of the positions buffer is the failure mode that matters:
     three.js does not check, it reads whatever is next in memory and draws a spike
     across the model."""
-    from pathlib import Path
     from app import results
 
-    directory = Path.home() / "KratosGUI" / "runs" / "CROW_excavation_wall_2026-09-22_00-49"
-    if not directory.is_dir():
-        pytest.skip("this machine has no CROW run to read")
-
-    model = mdpa_import.import_mdpa(
-        (directory / "CROW_excavation_wall.mdpa").read_text(encoding="utf-8"))
-
+    directory, model = real_run
     for stage in results.describe(directory.name)["stages"]:
         mesh = gid_results.read_mesh(
             (directory / stage["mesh_file"]).read_text(encoding="utf-8"))
@@ -256,16 +261,10 @@ def test_the_real_stage_builds_and_every_index_is_in_range():
             assert len(section["positions"]) == 3 * vertices
 
 
-def test_the_real_stages_show_the_excavation_disappearing():
-    from pathlib import Path
+def test_the_real_stages_show_the_excavation_disappearing(real_run):
     from app import results
 
-    directory = Path.home() / "KratosGUI" / "runs" / "CROW_excavation_wall_2026-09-22_00-49"
-    if not directory.is_dir():
-        pytest.skip("this machine has no CROW run to read")
-
-    model = mdpa_import.import_mdpa(
-        (directory / "CROW_excavation_wall.mdpa").read_text(encoding="utf-8"))
+    directory, model = real_run
 
     def parts_drawn(n):
         stage = results.describe(directory.name)["stages"][n - 1]
@@ -372,7 +371,8 @@ def test_an_edge_two_elements_share_is_drawn_once():
 
 
 # ── Quadratic quadrilaterals ────────────────────────────────────────────────
-# Eemdijk is mostly eight-node quadrilaterals. Shaded through the corners alone, their
+# A deck from elsewhere is often mostly eight-node quadrilaterals. Shaded through the
+# corners alone, their
 # four mid-side values never reach the screen -- and the mesh outline, which runs
 # through those mid-side nodes, has no vertex to be drawn from.
 
