@@ -104,6 +104,38 @@ def test_the_folders_they_replace_are_gone(folder):
         "data) belongs at the root now, or nowhere.")
 
 
+ROOT_FILES = {
+    ".gitattributes", ".gitignore", ".gitleaksignore",     # git and gitleaks look only here
+    "README.md", "LICENSE", "CONTRIBUTING.md", "SECURITY.md",
+    "run.bat", "run.sh",                                    # what a user double-clicks
+    "requirements.txt", "requirements-dev.txt",             # the launcher and Dependabot
+    "pyproject.toml",                                       # pytest, coverage, mypy, ruff
+    "eslint.config.mjs",                                    # its globs are root-relative
+}
+"""The files the repository keeps at its root. Anything else has a folder: documents in
+`docs/`, CI settings in `.github/`, a Python tool's settings in `pyproject.toml`."""
+
+
+def test_the_root_holds_only_what_has_to_be_there():
+    extra = sorted(name for name in repository_files()
+                   if "/" not in name and name not in ROOT_FILES)
+    assert not extra, (
+        f"new files at the root: {extra}. Put them in a folder (docs/, .github/, tools/), "
+        "or add them to ROOT_FILES with the reason they cannot move.")
+
+
+@pytest.mark.parametrize("name", [".coveragerc", "mypy.ini", "pytest.ini", "ruff.toml"])
+def test_the_python_tools_read_their_settings_from_pyproject(name):
+    assert not (ROOT / name).exists(), f"{name} overrides pyproject.toml; merge it there"
+
+
+@pytest.mark.parametrize("name", ["ARCHITECTURE.md", "FEATURES.md", "PROJECT_OVERVIEW.md"])
+def test_the_design_documents_are_in_docs(name):
+    assert (ROOT / "docs" / name).is_file(), name
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert f"(docs/{name})" in readme, f"the README's table of documents misses {name}"
+
+
 # ── The boundary: core knows nothing of the web ─────────────────────────────
 
 WEB = {"fastapi", "starlette", "uvicorn", "backend"}

@@ -51,7 +51,7 @@ def live_server(request, tmp_path_factory):
 
     port = _free_port()
     # ws="none": the app has no websockets, and importing uvicorn's websocket protocol
-    # pulls in a deprecated websockets module that pytest.ini turns into an error.
+    # pulls in a deprecated websockets module that pyproject.toml's pytest settings turn into an error.
     server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port,
                                            log_level="warning", ws="none"))
     failure: list[BaseException] = []

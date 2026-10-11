@@ -83,7 +83,7 @@ browser.
 - **Scripting**: a command line in the app, plus `run <file.py>` to build a model from a
   Python script.
 
-See [FEATURES.md](FEATURES.md) for the full list with the status of each feature, and its
+See [FEATURES.md](docs/FEATURES.md) for the full list with the status of each feature, and its
 **Main gaps** section for what is planned next.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
@@ -97,7 +97,7 @@ See [FEATURES.md](FEATURES.md) for the full list with the status of each feature
 | Frontend | Plain JavaScript and [three.js](https://threejs.org/), with no build step and no npm |
 | Solver | [Kratos Multiphysics](https://github.com/KratosMultiphysics/Kratos) GeoMechanicsApplication (installed separately, see [below](#setting-up-kratos-for-calculate)) |
 
-[ARCHITECTURE.md](ARCHITECTURE.md) explains how the pieces fit together.
+[ARCHITECTURE.md](docs/ARCHITECTURE.md) explains how the pieces fit together.
 
 <p align="right">(<a href="#readme-top">back to top</a>)</p>
 
@@ -490,15 +490,16 @@ frontend/      the browser app (index.html, js/, css/, three.js), with its own t
 tests/         pytest suites: unit, API, browser, end-to-end, Kratos and performance
 benchmarks/    Kratos benchmark cases and runner
 tools/test.py  the tier runner
+docs/          architecture, feature status, code size per module
 run.bat        launcher for Windows
 run.sh         launcher for Linux and macOS
 ```
 
 | Document | Contents |
 |---|---|
-| [ARCHITECTURE.md](ARCHITECTURE.md) | How a model flows from the browser to Kratos and back |
-| [FEATURES.md](FEATURES.md) | What works, feature by feature, and where the code is |
-| [PROJECT_OVERVIEW.md](PROJECT_OVERVIEW.md) | Code size per module |
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | How a model flows from the browser to Kratos and back |
+| [FEATURES.md](docs/FEATURES.md) | What works, feature by feature, and where the code is |
+| [PROJECT_OVERVIEW.md](docs/PROJECT_OVERVIEW.md) | Code size per module |
 
 ## Contributing
 

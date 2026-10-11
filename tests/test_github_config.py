@@ -5,6 +5,7 @@ security scan, and the dependency updates and review."""
 
 import pathlib
 import re
+import tomllib
 
 import pytest
 
@@ -98,7 +99,8 @@ def test_lint_runs_on_every_push_and_pull_request(lint):
 def test_lint_runs_ruff_against_the_repository_config(lint):
     _, job = lint
     assert "ruff check" in commands(job)
-    assert (ROOT / "ruff.toml").is_file()
+    config = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    assert config["tool"]["ruff"]["lint"]["select"]
 
 
 def test_ruff_is_pinned_once_and_ci_installs_that_pin(lint):
