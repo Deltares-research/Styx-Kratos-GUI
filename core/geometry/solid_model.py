@@ -22,12 +22,13 @@ from __future__ import annotations
 
 import math
 import os
+from collections.abc import Callable, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 
 import gmsh
 
-from core.model.schemas import Project
+from core.model.schemas import Anchor, Project, SpaceAnchor
 
 # When a fragment output volume comes from several inputs, the structure wins over the
 # soil it displaces, and the more specific structure wins over the more general. The
@@ -152,12 +153,13 @@ def build_geometry(project: Project) -> BuildResult:
         owners = (_stage_bodies(project, owners) if len(project.excavation.levels) > 1
                   else _cut_the_pit(project, owners))
 
-        dim, notes = 3, []
+        dim = 3
+        notes: list[str] = []
         if project.dimension == 2:
             # Section before fragmenting: the faces are what has to be made conformal,
             # and fragmenting the solids first would only be work thrown away.
             dim = 2
-            owners = _section(owners, project.section_offset, notes)
+            owners = _section(owners, project.cut_at(), notes)
             overlays = _drop_overlays(overlays, notes)
 
         owners = _fragment(owners, dim)
@@ -245,10 +247,11 @@ def _build_layered_soil(project: Project) -> BuildResult:
         for tag, key in custom_volumes.items():
             owners[tag] = {key}
 
-        dim, notes = 3, []
+        dim = 3
+        notes: list[str] = []
         if project.dimension == 2:
             dim = 2
-            owners = _section(owners, project.section_offset, notes)
+            owners = _section(owners, project.cut_at(), notes)
             overlays = _drop_overlays(overlays, notes)
 
         owners, curves, faces = _embed_beams(
@@ -433,7 +436,7 @@ def _build_display_only(project: Project, dim: int = 3,
     # this section" needs no special case. Never fragmented, in either dimension:
     # these are indicators, and letting them cut the model would change the mesh.
     owners = {tag: {key} for key, tags in built.items() for tag in tags}
-    sectioned = _assign_by_priority(_section(owners, project.section_offset, log))
+    sectioned = _assign_by_priority(_section(owners, project.cut_at(), log))
     return {key: sectioned.get(key, []) for key in built}
 
 
@@ -617,7 +620,7 @@ def _clip_to_model(tools: list[tuple[int, int]],
     One boolean per tool, for the same reason `_section` runs one per volume: the
     result stays positional, with no `outDimTagsMap` to unpick across two lists.
     """
-    clipped = []
+    clipped: list[tuple[int, int]] = []
     for dim, tag in tools:
         pieces, _ = gmsh.model.occ.intersect(
             [(dim, tag)], inputs, removeObject=True, removeTool=False,
@@ -659,8 +662,8 @@ def _imprint_load_footprints(project: Project, owners: dict[int, set[str]],
     return rebuilt
 
 
-def _split_at(points: list[tuple[float, ...]],
-              heads: list[tuple[float, ...]]) -> list[tuple[float, ...]]:
+def _split_at(points: Sequence[tuple[float, ...]],
+              heads: Sequence[tuple[float, ...]]) -> list[tuple[float, ...]]:
     """The polyline with every anchor head that lies on it inserted as a vertex.
 
     The head has to be a vertex of the beam for the mesh to put one node there and for
@@ -749,7 +752,7 @@ def _embed_beams(project: Project, owners: dict[int, set[str]], dim: int,
     # actually has edges on. It carries no elements of its own, so unlike a beam it is
     # only ever an internal edge; `core.kratos.interfaces` does the rest, after meshing.
     for interface in free:
-        vertices = [point(x, y) for x, y in interface.points]
+        vertices = [point(x, y) for x, y in interface.points or []]
         for start, end in zip(vertices, vertices[1:]):
             tools.append((1, gmsh.model.occ.addLine(start, end)))
             owner_of_tool.append(interface.id)
@@ -837,7 +840,7 @@ def _section_sweeps(project: Project, log: list[str] | None = None
     # X and Y; the sweep is along Z, the axis the section has none of.
     spacings = {section.id: section.spacing for section in project.beam_sections}
 
-    def sweep(key: str, points: list[tuple[float, float]], width: float
+    def sweep(key: str, points: Sequence[tuple[float, ...]], width: float
               ) -> tuple[str, list[int]] | None:
         start = project.cut_at() - width / 2.0
         vertices = [gmsh.model.occ.addPoint(x, y, start) for x, y in points]
@@ -856,18 +859,18 @@ def _section_sweeps(project: Project, log: list[str] | None = None
         if not beam.active or beam.id not in swept:
             continue
         width = spacings.get(beam.section, 1.0)
-        swept = sweep(beam.id, _split_at(beam.points, heads), width)
-        if swept:
-            out.append(swept)
+        piece = sweep(beam.id, _split_at(beam.points, heads), width)
+        if piece:
+            out.append(piece)
         elif log is not None:
             log.append(f"Info    : {beam.id} could not be swept onto the section plane")
 
     for interface in project.active_interfaces:
         if interface.structure is not None or not interface.points:
             continue
-        swept = sweep(interface.id, interface.points, INTERFACE_SWEEP)
-        if swept:
-            out.append(swept)
+        piece = sweep(interface.id, interface.points, INTERFACE_SWEEP)
+        if piece:
+            out.append(piece)
     if log is not None and any(i.structure is None for i in project.active_interfaces):
         log.append("Info    : interfaces are plane-strain elements; the ones drawn in "
                    "the section split this 3D mesh but export no interface elements")
@@ -945,7 +948,8 @@ def _embed_3d_structures(project: Project, owners: dict[int, set[str]],
             owner_of_tool.append(member.id)
 
     inputs = [(3, tag) for tag in owners]
-    kept, kept_owners = [], []
+    kept: list[tuple[int, int]] = []
+    kept_owners: list[str | None] = []
     for tool, key in zip(tools, owner_of_tool):
         pieces, _ = gmsh.model.occ.intersect(
             [tool], inputs, removeObject=True, removeTool=False,
@@ -981,14 +985,14 @@ def _embed_3d_structures(project: Project, owners: dict[int, set[str]],
     # faces, a member is curves, and the fragment may have cut either into several.
     faces: dict[str, list[int]] = {}
     curves: dict[str, list[int]] = {}
-    for key, pieces in zip(kept_owners, mapping[len(inputs):]):
-        if key is None:      # an imprinted anchor head belongs to no structure
+    for owner, pieces in zip(kept_owners, mapping[len(inputs):]):
+        if owner is None:      # an imprinted anchor head belongs to no structure
             continue
         for piece_dim, tag in pieces:
             if piece_dim == 2:
-                faces.setdefault(key, []).append(tag)
+                faces.setdefault(owner, []).append(tag)
             elif piece_dim == 1:
-                curves.setdefault(key, []).append(tag)
+                curves.setdefault(owner, []).append(tag)
     curves = {key: sorted(set(tags)) for key, tags in curves.items()}
     faces = {key: sorted(set(tags)) for key, tags in faces.items()}
     _embed_curves_in_volumes(curves, list(rebuilt), log)
@@ -1068,8 +1072,10 @@ def _attach_anchors(project: Project, dim: int, log: list[str] | None = None
     # sheet pile, and `_section_sweeps` has just put that pile on the section plane.
     # One anchor, on the plane: a plane-strain record says where the tie is in the
     # section, not how many of them run out of plane.
-    plane = [(a, in_plane) for a in project.plane_anchors if a.active]
-    space = [(a, in_space) for a in project.space_anchors if a.active]
+    plane: list[tuple[Anchor | SpaceAnchor, Callable[..., int]]] = [
+        (a, in_plane) for a in project.plane_anchors if a.active]
+    space: list[tuple[Anchor | SpaceAnchor, Callable[..., int]]] = [
+        (a, in_space) for a in project.space_anchors if a.active]
     if dim == 3:
         active, skipped = plane + space, []
     else:

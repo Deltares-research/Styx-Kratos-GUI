@@ -31,7 +31,7 @@ def js_number(value: float) -> str:
     digits = "".join(map(str, exact.as_tuple().digits))
     k = len(digits)
     # The value is 0.<digits> x 10**n, as ECMA-262's Number::toString counts.
-    n = k + exact.as_tuple().exponent
+    n = k + int(exact.as_tuple().exponent)    # an int: the value is finite here
     if k <= n <= 21:
         return sign + digits + "0" * (n - k)
     if 0 < n <= 21:

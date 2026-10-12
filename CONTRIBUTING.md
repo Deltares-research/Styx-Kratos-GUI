@@ -51,7 +51,7 @@ Follow [Getting started](README.md#getting-started) in the README. `run.bat` (Wi
 | Python lint | `ruff check .` | [lint](.github/workflows/lint.yml), `ruff` job |
 | JavaScript lint | Needs Node: `npx eslint@10.12.0 frontend` | [lint](.github/workflows/lint.yml), `eslint` job |
 | Workflows | [actionlint](https://github.com/rhysd/actionlint), if you changed `.github/workflows/` | [lint](.github/workflows/lint.yml), `actionlint` job |
-| Types | `python -m mypy` | [lint](.github/workflows/lint.yml), `mypy` job. It reports only and does not fail the build yet. |
+| Types | `python -m mypy` | [lint](.github/workflows/lint.yml), `mypy` job. A new finding fails it. |
 | Launcher | `run.bat --check` or `./run.sh --check` | [launcher](.github/workflows/launcher.yml): Windows, Linux and macOS, on Python 3.10 and 3.13 |
 | Vulnerable packages | `pip install pip-audit`, then `pip-audit -r requirements.txt -r requirements-dev.txt` | [security](.github/workflows/security.yml), `pip-audit` job, also weekly |
 | Secrets in the history | [gitleaks](https://github.com/gitleaks/gitleaks): `gitleaks git .` | [security](.github/workflows/security.yml), `gitleaks` job |
@@ -75,8 +75,8 @@ pull request.
   The release notes are grouped by these labels.
 - All required checks must pass before the pull request can be merged into `main`.
 
-By submitting a contribution, you agree that it is licensed under the
-[Apache License 2.0](LICENSE), the same license as the project (section 5 of the license).
+The project's license is still to be decided (see [LICENSE](LICENSE)). Contributions are
+released under the license the project chooses.
 
 ## For maintainers
 

@@ -20,6 +20,8 @@ the file may or may not carry.
 
 from __future__ import annotations
 
+from typing import TypeGuard
+
 KILO = 1000.0                   # kN -> N
 GRAVITY = 9.81                  # m/s2: unit weight -> density
 SECONDS_PER_DAY = 86_400.0      # m/day -> m/s
@@ -38,7 +40,7 @@ INTERFACE_LAW = "GeoIncrementalLinearElasticInterfaceLaw"
 UNDRAINED_TYPES = ("Undrained (A)", "Undrained (B)")
 
 
-def is_legacy(value: object) -> bool:
+def is_legacy(value: object) -> TypeGuard[dict]:
     """A whole old file: no unit system named, and every material in the old shape.
 
     A current document that merely carries one old-shaped record -- a script's -- is not

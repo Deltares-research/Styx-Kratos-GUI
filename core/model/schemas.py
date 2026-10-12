@@ -17,6 +17,7 @@ Part keys (`Project.part_keys`) are the contract with the frozen frontend: each 
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
@@ -176,7 +177,7 @@ class Material(KratosPropertySet):
     def _old_shape(cls, value: object) -> object:
         """Built from the fields this had before 2026-10-10 (a script written against
         them, say): converted the way a saved project in that shape is (`core/model/migration.py`)."""
-        if migration.is_old_record("materials", value):
+        if isinstance(value, dict) and migration.is_old_record("materials", value):
             return migration.material(value, 2)
         return value
 
@@ -888,7 +889,7 @@ class SpaceAnchor(Base):
 
 
 def point_on_polyline(point: tuple[float, ...],
-                      points: list[tuple[float, ...]], tol: float = 1e-6) -> bool:
+                      points: Sequence[tuple[float, ...]], tol: float = 1e-6) -> bool:
     """Does `point` lie on any segment of `points`, within `tol` metres?
 
     Used to hold the anchor head onto a sheet pile. The head becomes a shared node in
@@ -1826,7 +1827,8 @@ class Project(Base):
         # is in a cycle, which would make `core.model.phases` walk for ever.
         parents = {phase.id: phase.parent for phase in self.phases}
         for start in ids:
-            seen, at = set(), start
+            seen: set[str] = set()
+            at: str | None = start
             while at is not None:
                 if at in seen:
                     raise ValueError(
@@ -1848,7 +1850,7 @@ class Project(Base):
                     f"phase {phase.id!r} names no such part: {', '.join(unknown)}"
                 )
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def soil_body_keys(self) -> list[str]:
         """The part keys of `soil_bodies`, published with the project.
@@ -1862,7 +1864,7 @@ class Project(Base):
         """
         return [key for key, *_ in self.soil_bodies()]
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def soil_body_labels(self) -> dict[str, str]:
         """What to call each soil body in front of a user, keyed by part key.
@@ -1982,7 +1984,7 @@ class Project(Base):
         ] + [load.id for load in self.loads] + [n.id for n in self.normal_loads] \
           + beams + (["water"] if self.water is not None else []) + ["wells"] + customs
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def stageable_parts(self) -> list[str]:
         """`stageable_keys`, published with the project.

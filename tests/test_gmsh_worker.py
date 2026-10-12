@@ -35,6 +35,16 @@ def test_a_job_runs_in_a_worker_process_with_gmsh_initialised():
     assert run(worker_jobs.pid) != __import__("os").getpid()
 
 
+def test_the_worker_is_spawned_never_forked():
+    """Linux forks by default, and a fork copies only the thread that forked: a lock held
+    by any other thread (the browser tests' server, Playwright's loop) stays held in the
+    child forever. The worker deadlocked that way on the Ubuntu runner until the job's
+    timeout. A spawned worker starts clean, as it always has on Windows."""
+    import multiprocessing
+
+    assert gmsh_worker.executor()._mp_context is multiprocessing.get_context("spawn")
+
+
 def test_a_job_exception_crosses_the_process_boundary_with_its_message():
     with pytest.raises(ValueError, match="thin solid"):
         run(worker_jobs.fail, "boolean failed on a thin solid")

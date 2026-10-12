@@ -30,7 +30,7 @@ from pathlib import Path
 
 from pydantic import BaseModel
 
-from core.model.schemas import Project
+from core.model.schemas import Deck, Project
 
 ROOT = Path(__file__).resolve().parents[2]
 """The checkout: where `core` is, for a script run as `python model.py`."""
@@ -69,7 +69,7 @@ def script(project: Project, source: str | Path | None = None,
     `written`."""
     head = _docstring(project, source, written, name)
     if project.deck is not None:
-        return _deck_script(project, head)
+        return _deck_script(project, project.deck, head)
     written_fields = dict(_fields(project))
     inline = {name: value for name, value in written_fields.items() if not _record(value)}
     groups = _grouped([name for name in written_fields if name not in inline])
@@ -155,8 +155,7 @@ def _docstring(project: Project, source, written, name: str) -> str:
             '...).\n"""\n')
 
 
-def _deck_script(project: Project, head: str) -> str:
-    deck = project.deck
+def _deck_script(project: Project, deck: Deck, head: str) -> str:
     arguments = [_flat(deck.directory), _flat(deck.parameters), f"name={_flat(project.name)}"]
     return "\n".join([
         head, PREAMBLE,
@@ -252,6 +251,8 @@ def _code(value: object, indent: int, start: int | None = None) -> str:
         lines = [f"{inner}{_flat(key)}: {_code(item, deeper, deeper + len(_flat(key)) + 2)}"
                  for key, item in value.items()]
         return "{\n" + ",\n".join(lines) + f",\n{' ' * indent}}}"
+    if not isinstance(value, (list, tuple)):    # every other kind was flat above
+        return flat
     opening, closing = ("[", "]") if isinstance(value, list) else ("(", ")")
     lines = [f"{inner}{_code(item, deeper)}" for item in value]
     return opening + "\n" + ",\n".join(lines) + f",\n{' ' * indent}{closing}"

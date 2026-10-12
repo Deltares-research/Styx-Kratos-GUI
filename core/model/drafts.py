@@ -17,6 +17,8 @@ Nothing here edits a project; `core.session` does that with what these return.
 from __future__ import annotations
 
 import math
+from collections.abc import Sequence
+from typing import Any
 
 from core.model import units
 from core.model.schemas import (Anchor, AnchorSection, BeamSection, Beam, Borehole, Interface,
@@ -45,7 +47,7 @@ LAYER_THICKNESS = 5.0
 BOREHOLE_SPACING = 10.0
 """How far past the last borehole `App.addBorehole` puts a new one, in metres."""
 
-LIBRARY = [
+LIBRARY: list[dict[str, Any]] = [
     {"id": "m1", "name": "Fill", "color": "#d8c48a", "r_inter": 0.70,
      "interface_permeability": "Neutral",
      "variables": {"GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD", "YOUNG_MODULUS": 1.5e7,
@@ -158,7 +160,7 @@ def layer(project: Project, id: str, material: str, *, name: str | None = None,
                      tops=tops, bots=bots)
 
 
-def section_prism(project: Project, points: list[tuple[float, float]]) -> dict:
+def section_prism(project: Project, points: Sequence[tuple[float, ...]]) -> dict:
     """The recipe for a 2D soil volume: the outline `points`, in the section's x-y plane,
     swept along z across the whole domain (`soil-volume-dialog.js` `prismFor`).
 
@@ -188,7 +190,7 @@ def free_id(taken: list[str], prefix: str) -> str:
 # the JavaScript writes it, operation for operation, so the two give the same numbers
 # and not merely close ones; `tests/test_draft_parity.py` runs both on the same projects.
 
-SECTION_DEFAULTS_SI = {
+SECTION_DEFAULTS_SI: dict[str, dict[str, Any]] = {
     "beam": {"name": "Sheet pile section", "spacing": 1.0,
              "constitutive_law": "TimoshenkoBeamElasticConstitutiveLaw",
              # An AZ 26-700 sheet pile, per metre run.
@@ -522,7 +524,9 @@ def anchor(project: Project, head=None, tail=None, *, id: str | None = None,
     if all(value == tail[axis] for axis, value in enumerate(snapped)):
         raise DraftError("An anchor must have a non-zero length.")
     id, default_name = _named(id, [a.id for a in project.anchors], "anchor_", "Anchor")
-    record = SpaceAnchor if width == 3 else Anchor
+    # Any: the one call below builds either, so its kind and coordinates are the
+    # width's own -- which mypy cannot follow through the conditional.
+    record: Any = SpaceAnchor if width == 3 else Anchor
     return record(id=id, name=name or default_name,
                   kind="anchor3d" if width == 3 else "anchor",
                   section=section or _first_section(project, "anchor"),
@@ -549,12 +553,17 @@ def interface(project: Project, structure: str | None = None, points=None, *,
             raise DraftError("An interface can only follow a live sheet pile.")
     id, default_name = _named(id, [i.id for i in project.interfaces], "interface_",
                               "Interface")
-    fields = dict(id=id, name=name or default_name, kind="interface",
-                  section=section or _first_section(project, "interface"), active=True)
+    # `side` rides in the fields as a plain string: the record checks it is one of
+    # its three.
+    fields: dict[str, Any] = dict(id=id, name=name or default_name, kind="interface",
+                                  section=section or _first_section(project, "interface"),
+                                  active=True)
     if pile is not None:
-        return Interface(**fields, structure=pile.id, points=None, side=side or "both")
+        fields["side"] = side or "both"
+        return Interface(**fields, structure=pile.id, points=None)
+    fields["side"] = side or "left"
     line = _middle(project) if points is None else [(p[0], p[1]) for p in points]
-    return Interface(**fields, structure=None, points=line, side=side or "left")
+    return Interface(**fields, structure=None, points=line)
 
 
 def normal_load(project: Project, points=None, *, id: str | None = None,
