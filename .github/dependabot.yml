@@ -1,0 +1,21 @@
+# Weekly pull requests that bump the pinned packages and the actions the workflows use.
+# Each one runs the full CI, so a bump that breaks something says so before merging.
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /                # requirements.txt and requirements-dev.txt
+    schedule:
+      interval: weekly
+    groups:
+      # Test-only tools change often and safely; one pull request for all of them.
+      test-tools:
+        patterns: ["playwright", "pytest*", "hypothesis", "ruff", "mypy", "httpx"]
+    open-pull-requests-limit: 5
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]

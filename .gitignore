@@ -1,17 +1,20 @@
 # Virtual environments contain platform-specific executables and native libraries.
-server/.venv/
-server/.venv-*/
-server/.data/
+/.venv/
+/.venv-*/
+# The venv from before the move, until it is deleted (restructure Step 7).
+.venv/
+.venv-*/
+/.data/
 
 # Which python runs Kratos, and where its build is: one machine's answer, not the
-# project's. See server/app/calculate.py.
-server/kratos.local.json
+# project's. See core/analysis/calculation.py.
+/kratos.local.json
 
 plan/
 graphify-out/
 # Local snapshot of the frozen mockup (index.html + css/js/vendor/assets).
 mockup/
-# Old mockup locations; the app uses live/base/.
+# Old mockup locations; the app uses frontend/base/.
 /css/
 /js/
 
@@ -23,11 +26,14 @@ __pycache__/
 *.py[cod]
 
 # Coverage output (pytest --cov, and the JS summary from --js-coverage)
-server/.coverage
-server/.coverage.*
-server/htmlcov/
-server/htmlcov-js/
-# Benchmark runs and reports (python -m benchmarks run, from server/)
-server/benchmarks/reports/
+/.coverage
+/.coverage.*
+/htmlcov/
+/htmlcov-js/
+# Benchmark runs and reports (python -m benchmarks run, from the repository root)
+/benchmarks/reports/
 # Playwright traces kept for failed tests (--tracing retain-on-failure)
-server/test-results/
+/test-results/
+
+# Crash dumps Git for Windows tools write into the working folder (grep.exe.stackdump).
+*.stackdump

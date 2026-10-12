@@ -1,0 +1,67 @@
+# The tiers GitHub's own runners cannot run, because Kratos is not installable there
+# (tests.yml says the same). They run on a self-hosted runner, on a machine that has Kratos.
+#
+# Setting it up, once (see CONTRIBUTING.md, "For maintainers"):
+#   1. Register a runner on that machine: Settings > Actions > Runners > New self-hosted
+#      runner, and give it the extra label `kratos`.
+#   2. In the runner's .env file, set KRATOS_GUI_PYTHON and KRATOS_GUI_KRATOS (see
+#      core/analysis/calculation.py): a checkout starts clean, so kratos.local.json is not there.
+#   3. Set the repository variable KRATOS_RUNNER to true. Until then every job is skipped
+#      instead of waiting a day for a runner that does not exist.
+#
+# Only the schedule and a manual start reach the runner, never a pull request: a
+# self-hosted runner runs whatever code it is handed.
+name: kratos
+
+on:
+  schedule:
+    - cron: "0 2 * * *"    # nightly: the Kratos tier
+    - cron: "0 3 * * 6"    # Saturdays: the benchmark cases as well, minutes each
+  workflow_dispatch:
+    inputs:
+      benchmarks:
+        description: Run the benchmark cases as well
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kratos
+  cancel-in-progress: false
+
+jobs:
+  kratos:
+    name: kratos tier
+    if: vars.KRATOS_RUNNER == 'true'
+    runs-on: [self-hosted, kratos]
+    timeout-minutes: 240
+    env:
+      PYTHONUTF8: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # The checkout has no venv, so tools/test.py runs pytest with this Python.
+      - name: Python packages
+        run: python -m pip install -r requirements.txt -r requirements-dev.txt
+
+      - name: Tests that run Kratos
+        run: python tools/test.py kratos
+
+      - name: Benchmark cases
+        if: github.event.schedule == '0 3 * * 6' || inputs.benchmarks
+        run: python tools/test.py bench
+
+      - name: Keep the benchmark reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kratos-reports
+          path: benchmarks/reports/
+          if-no-files-found: ignore
+          retention-days: 30

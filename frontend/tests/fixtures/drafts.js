@@ -1,0 +1,2512 @@
+/* Generated fixture -- what a new soil or structure starts as, in the one document
+   the GUI (property-sets.js, material-library.js, beams.js, anchors.js, interfaces.js,
+   loads.js, normal-loads.js) and the command line (core/model/drafts.py) are both held
+   to. See tests/test_draft_parity.py, which writes and compares it, and
+   frontend/tests/test-drafts.js, which reads it.
+
+   Not hand-edited. `python tests/test_draft_parity.py --write` rebuilds it.
+*/
+window.DRAFTS_FIXTURE =
+{
+  "soil_laws": {
+    "2": "GeoLinearElasticPlaneStrain2DLaw",
+    "3": "GeoIncrementalLinearElastic3DLaw"
+  },
+  "soil_defaults": {
+    "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+    "YOUNG_MODULUS": 10000000.0,
+    "POISSON_RATIO": 0.3,
+    "DENSITY_SOLID": 1732.9255861365953,
+    "POROSITY": 0.0,
+    "PERMEABILITY_XX": 1.1574074074074073e-05,
+    "GEO_COHESION": 0.0,
+    "GEO_FRICTION_ANGLE": 30.0
+  },
+  "library": [
+    {
+      "id": "m1",
+      "name": "Fill",
+      "color": "#d8c48a",
+      "r_inter": 0.7,
+      "interface_permeability": "Neutral",
+      "variables": {
+        "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+        "YOUNG_MODULUS": 15000000.0,
+        "POISSON_RATIO": 0.3,
+        "DENSITY_SOLID": 1732.9255861365953,
+        "PERMEABILITY_XX": 1.1574074074074073e-05,
+        "POROSITY": 0.0,
+        "GEO_COHESION": 1000,
+        "GEO_FRICTION_ANGLE": 30.0
+      }
+    },
+    {
+      "id": "m2",
+      "name": "Sand, loose",
+      "color": "#c4a86a",
+      "r_inter": 0.7,
+      "interface_permeability": "Neutral",
+      "variables": {
+        "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+        "YOUNG_MODULUS": 25000000.0,
+        "POISSON_RATIO": 0.28,
+        "DENSITY_SOLID": 1834.8623853211009,
+        "PERMEABILITY_XX": 1.736111111111111e-05,
+        "POROSITY": 0.0,
+        "GEO_COHESION": 500,
+        "GEO_FRICTION_ANGLE": 32.0
+      }
+    },
+    {
+      "id": "m3",
+      "name": "Clay, soft",
+      "color": "#8fa86b",
+      "r_inter": 0.5,
+      "interface_permeability": "Impermeable",
+      "variables": {
+        "GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
+        "YOUNG_MODULUS": 4000000.0,
+        "POISSON_RATIO": 0.35,
+        "DENSITY_SOLID": 1529.051987767584,
+        "PERMEABILITY_XX": 1.1574074074074074e-09,
+        "POROSITY": 0.0,
+        "GEO_COHESION": 5000,
+        "GEO_FRICTION_ANGLE": 22.0
+      }
+    },
+    {
+      "id": "m4",
+      "name": "Clay, stiff",
+      "color": "#6f8fa8",
+      "r_inter": 0.55,
+      "interface_permeability": "Impermeable",
+      "variables": {
+        "GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
+        "YOUNG_MODULUS": 12000000.0,
+        "POISSON_RATIO": 0.33,
+        "DENSITY_SOLID": 1783.893985728848,
+        "PERMEABILITY_XX": 5.787037037037037e-09,
+        "POROSITY": 0.0,
+        "GEO_COHESION": 15000,
+        "GEO_FRICTION_ANGLE": 25.0
+      }
+    },
+    {
+      "id": "m5",
+      "name": "Sand, dense",
+      "color": "#b08a6a",
+      "r_inter": 0.75,
+      "interface_permeability": "Neutral",
+      "variables": {
+        "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+        "YOUNG_MODULUS": 45000000.0,
+        "POISSON_RATIO": 0.25,
+        "DENSITY_SOLID": 1936.7991845056065,
+        "PERMEABILITY_XX": 5.787037037037037e-05,
+        "POROSITY": 0.0,
+        "GEO_COHESION": 0,
+        "GEO_FRICTION_ANGLE": 36.0
+      }
+    },
+    {
+      "id": "m6",
+      "name": "Bedrock",
+      "color": "#8d8d99",
+      "r_inter": 1.0,
+      "interface_permeability": "Impermeable",
+      "variables": {
+        "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+        "YOUNG_MODULUS": 2000000000.0,
+        "POISSON_RATIO": 0.2,
+        "DENSITY_SOLID": 2446.4831804281343,
+        "PERMEABILITY_XX": 0.0,
+        "POROSITY": 0.0
+      }
+    }
+  ],
+  "projects": {
+    "section": {
+      "name": "Deep excavation — Rotterdam Zuid",
+      "dimension": 2,
+      "unit_system": "SI",
+      "section_offset": 12.5,
+      "domain": {
+        "x0": 0.0,
+        "x1": 25.0,
+        "z0": 0.0,
+        "z1": 25.0,
+        "y_top": 0.0,
+        "y_bottom": -25.0
+      },
+      "materials": [
+        {
+          "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+            "YOUNG_MODULUS": 15000000.0,
+            "POISSON_RATIO": 0.3,
+            "DENSITY_SOLID": 1732.9255861365953,
+            "DENSITY_WATER": 1019.367991845056,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000000.0,
+            "BULK_MODULUS_FLUID": 2200000000.0,
+            "DYNAMIC_VISCOSITY": 0.001,
+            "PERMEABILITY_XX": 1.1574074074074073e-05,
+            "PERMEABILITY_YY": 1.1574074074074073e-05,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 1.1574074074074073e-05,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0,
+            "GEO_COHESION": 1000.0,
+            "GEO_FRICTION_ANGLE": 30.0
+          },
+          "tables": {},
+          "id": "m1",
+          "name": "Fill",
+          "color": "#d8c48a",
+          "r_inter": 0.7,
+          "interface_permeability": "Neutral"
+        },
+        {
+          "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+            "YOUNG_MODULUS": 25000000.0,
+            "POISSON_RATIO": 0.28,
+            "DENSITY_SOLID": 1834.8623853211009,
+            "DENSITY_WATER": 1019.367991845056,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000000.0,
+            "BULK_MODULUS_FLUID": 2200000000.0,
+            "DYNAMIC_VISCOSITY": 0.001,
+            "PERMEABILITY_XX": 1.736111111111111e-05,
+            "PERMEABILITY_YY": 1.736111111111111e-05,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 1.736111111111111e-05,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0,
+            "GEO_COHESION": 500.0,
+            "GEO_FRICTION_ANGLE": 32.0
+          },
+          "tables": {},
+          "id": "m2",
+          "name": "Sand, loose",
+          "color": "#c4a86a",
+          "r_inter": 0.7,
+          "interface_permeability": "Neutral"
+        },
+        {
+          "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
+            "YOUNG_MODULUS": 4000000.0,
+            "POISSON_RATIO": 0.35,
+            "DENSITY_SOLID": 1529.051987767584,
+            "DENSITY_WATER": 1019.367991845056,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000000.0,
+            "BULK_MODULUS_FLUID": 2200000000.0,
+            "DYNAMIC_VISCOSITY": 0.001,
+            "PERMEABILITY_XX": 1.1574074074074074e-09,
+            "PERMEABILITY_YY": 1.1574074074074074e-09,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 1.1574074074074074e-09,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0,
+            "GEO_COHESION": 5000.0,
+            "GEO_FRICTION_ANGLE": 22.0
+          },
+          "tables": {},
+          "id": "m3",
+          "name": "Clay, soft",
+          "color": "#8fa86b",
+          "r_inter": 0.5,
+          "interface_permeability": "Impermeable"
+        },
+        {
+          "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
+            "YOUNG_MODULUS": 12000000.0,
+            "POISSON_RATIO": 0.33,
+            "DENSITY_SOLID": 1783.893985728848,
+            "DENSITY_WATER": 1019.367991845056,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000000.0,
+            "BULK_MODULUS_FLUID": 2200000000.0,
+            "DYNAMIC_VISCOSITY": 0.001,
+            "PERMEABILITY_XX": 5.787037037037037e-09,
+            "PERMEABILITY_YY": 5.787037037037037e-09,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 5.787037037037037e-09,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0,
+            "GEO_COHESION": 15000.0,
+            "GEO_FRICTION_ANGLE": 25.0
+          },
+          "tables": {},
+          "id": "m4",
+          "name": "Clay, stiff",
+          "color": "#6f8fa8",
+          "r_inter": 0.55,
+          "interface_permeability": "Impermeable"
+        },
+        {
+          "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+            "YOUNG_MODULUS": 45000000.0,
+            "POISSON_RATIO": 0.25,
+            "DENSITY_SOLID": 1936.7991845056065,
+            "DENSITY_WATER": 1019.367991845056,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000000.0,
+            "BULK_MODULUS_FLUID": 2200000000.0,
+            "DYNAMIC_VISCOSITY": 0.001,
+            "PERMEABILITY_XX": 5.787037037037037e-05,
+            "PERMEABILITY_YY": 5.787037037037037e-05,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 5.787037037037037e-05,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0,
+            "GEO_COHESION": 0.0,
+            "GEO_FRICTION_ANGLE": 36.0
+          },
+          "tables": {},
+          "id": "m5",
+          "name": "Sand, dense",
+          "color": "#b08a6a",
+          "r_inter": 0.75,
+          "interface_permeability": "Neutral"
+        },
+        {
+          "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+            "YOUNG_MODULUS": 2000000000.0,
+            "POISSON_RATIO": 0.2,
+            "DENSITY_SOLID": 2446.4831804281343,
+            "DENSITY_WATER": 1019.367991845056,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000000.0,
+            "BULK_MODULUS_FLUID": 2200000000.0,
+            "DYNAMIC_VISCOSITY": 0.001,
+            "PERMEABILITY_XX": 0.0,
+            "PERMEABILITY_YY": 0.0,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 0.0,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0
+          },
+          "tables": {},
+          "id": "m6",
+          "name": "Bedrock",
+          "color": "#8d8d99",
+          "r_inter": 1.0,
+          "interface_permeability": "Impermeable"
+        }
+      ],
+      "loads": [
+        {
+          "id": "load",
+          "name": "SurfaceLoad_1",
+          "kind": "surface",
+          "x0": 1.0,
+          "x1": 10.0,
+          "z0": 14.0,
+          "z1": 26.0,
+          "y": null,
+          "thickness": 0.25,
+          "components": [
+            0.0,
+            -20000.0,
+            0.0
+          ],
+          "distribution": "Uniform",
+          "active": true,
+          "derived_from": null
+        },
+        {
+          "id": "load_2d",
+          "name": "LineLoad_1",
+          "kind": "line",
+          "x0": 1.0,
+          "x1": 10.0,
+          "y": 0.0,
+          "thickness": 0.25,
+          "components": [
+            0.0,
+            -20000.0
+          ],
+          "distribution": "Uniform",
+          "active": true,
+          "derived_from": "load"
+        }
+      ],
+      "beam_sections": [],
+      "panel_sections": [],
+      "beams": [],
+      "anchor_sections": [],
+      "anchors": [],
+      "interface_sections": [],
+      "interfaces": [],
+      "normal_loads": [],
+      "custom_parts": []
+    },
+    "section_kn": {
+      "name": "Deep excavation — Rotterdam Zuid",
+      "dimension": 2,
+      "unit_system": "kN",
+      "section_offset": 12.5,
+      "domain": {
+        "x0": 0.0,
+        "x1": 25.0,
+        "z0": 0.0,
+        "z1": 25.0,
+        "y_top": 0.0,
+        "y_bottom": -25.0
+      },
+      "materials": [
+        {
+          "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+            "YOUNG_MODULUS": 15000.0,
+            "POISSON_RATIO": 0.3,
+            "DENSITY_SOLID": 1.7329255861365953,
+            "DENSITY_WATER": 1.019367991845056,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000.0,
+            "BULK_MODULUS_FLUID": 2200000.0,
+            "DYNAMIC_VISCOSITY": 1e-06,
+            "PERMEABILITY_XX": 1.1574074074074073e-05,
+            "PERMEABILITY_YY": 1.1574074074074073e-05,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 1.1574074074074073e-05,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0,
+            "GEO_COHESION": 1.0,
+            "GEO_FRICTION_ANGLE": 30.0
+          },
+          "tables": {},
+          "id": "m1",
+          "name": "Fill",
+          "color": "#d8c48a",
+          "r_inter": 0.7,
+          "interface_permeability": "Neutral"
+        },
+        {
+          "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+            "YOUNG_MODULUS": 25000.0,
+            "POISSON_RATIO": 0.28,
+            "DENSITY_SOLID": 1.8348623853211008,
+            "DENSITY_WATER": 1.019367991845056,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000.0,
+            "BULK_MODULUS_FLUID": 2200000.0,
+            "DYNAMIC_VISCOSITY": 1e-06,
+            "PERMEABILITY_XX": 1.736111111111111e-05,
+            "PERMEABILITY_YY": 1.736111111111111e-05,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 1.736111111111111e-05,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0,
+            "GEO_COHESION": 0.5,
+            "GEO_FRICTION_ANGLE": 32.0
+          },
+          "tables": {},
+          "id": "m2",
+          "name": "Sand, loose",
+          "color": "#c4a86a",
+          "r_inter": 0.7,
+          "interface_permeability": "Neutral"
+        },
+        {
+          "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
+            "YOUNG_MODULUS": 4000.0,
+            "POISSON_RATIO": 0.35,
+            "DENSITY_SOLID": 1.529051987767584,
+            "DENSITY_WATER": 1.019367991845056,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000.0,
+            "BULK_MODULUS_FLUID": 2200000.0,
+            "DYNAMIC_VISCOSITY": 1e-06,
+            "PERMEABILITY_XX": 1.1574074074074074e-09,
+            "PERMEABILITY_YY": 1.1574074074074074e-09,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 1.1574074074074074e-09,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0,
+            "GEO_COHESION": 5.0,
+            "GEO_FRICTION_ANGLE": 22.0
+          },
+          "tables": {},
+          "id": "m3",
+          "name": "Clay, soft",
+          "color": "#8fa86b",
+          "r_inter": 0.5,
+          "interface_permeability": "Impermeable"
+        },
+        {
+          "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
+            "YOUNG_MODULUS": 12000.0,
+            "POISSON_RATIO": 0.33,
+            "DENSITY_SOLID": 1.783893985728848,
+            "DENSITY_WATER": 1.019367991845056,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000.0,
+            "BULK_MODULUS_FLUID": 2200000.0,
+            "DYNAMIC_VISCOSITY": 1e-06,
+            "PERMEABILITY_XX": 5.787037037037037e-09,
+            "PERMEABILITY_YY": 5.787037037037037e-09,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 5.787037037037037e-09,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0,
+            "GEO_COHESION": 15.0,
+            "GEO_FRICTION_ANGLE": 25.0
+          },
+          "tables": {},
+          "id": "m4",
+          "name": "Clay, stiff",
+          "color": "#6f8fa8",
+          "r_inter": 0.55,
+          "interface_permeability": "Impermeable"
+        },
+        {
+          "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+            "YOUNG_MODULUS": 45000.0,
+            "POISSON_RATIO": 0.25,
+            "DENSITY_SOLID": 1.9367991845056065,
+            "DENSITY_WATER": 1.019367991845056,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000.0,
+            "BULK_MODULUS_FLUID": 2200000.0,
+            "DYNAMIC_VISCOSITY": 1e-06,
+            "PERMEABILITY_XX": 5.787037037037037e-05,
+            "PERMEABILITY_YY": 5.787037037037037e-05,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 5.787037037037037e-05,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0,
+            "GEO_COHESION": 0.0,
+            "GEO_FRICTION_ANGLE": 36.0
+          },
+          "tables": {},
+          "id": "m5",
+          "name": "Sand, dense",
+          "color": "#b08a6a",
+          "r_inter": 0.75,
+          "interface_permeability": "Neutral"
+        },
+        {
+          "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+            "YOUNG_MODULUS": 2000000.0,
+            "POISSON_RATIO": 0.2,
+            "DENSITY_SOLID": 2.4464831804281344,
+            "DENSITY_WATER": 1.019367991845056,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000.0,
+            "BULK_MODULUS_FLUID": 2200000.0,
+            "DYNAMIC_VISCOSITY": 1e-06,
+            "PERMEABILITY_XX": 0.0,
+            "PERMEABILITY_YY": 0.0,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 0.0,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0
+          },
+          "tables": {},
+          "id": "m6",
+          "name": "Bedrock",
+          "color": "#8d8d99",
+          "r_inter": 1.0,
+          "interface_permeability": "Impermeable"
+        }
+      ],
+      "loads": [
+        {
+          "id": "load",
+          "name": "SurfaceLoad_1",
+          "kind": "surface",
+          "x0": 1.0,
+          "x1": 10.0,
+          "z0": 14.0,
+          "z1": 26.0,
+          "y": null,
+          "thickness": 0.25,
+          "components": [
+            0.0,
+            -20.0,
+            0.0
+          ],
+          "distribution": "Uniform",
+          "active": true,
+          "derived_from": null
+        },
+        {
+          "id": "load_2d",
+          "name": "LineLoad_1",
+          "kind": "line",
+          "x0": 1.0,
+          "x1": 10.0,
+          "y": 0.0,
+          "thickness": 0.25,
+          "components": [
+            0.0,
+            -20.0
+          ],
+          "distribution": "Uniform",
+          "active": true,
+          "derived_from": "load"
+        }
+      ],
+      "beam_sections": [],
+      "panel_sections": [],
+      "beams": [],
+      "anchor_sections": [],
+      "anchors": [],
+      "interface_sections": [],
+      "interfaces": [],
+      "normal_loads": [],
+      "custom_parts": []
+    },
+    "section_pile_kn": {
+      "name": "Deep excavation — Rotterdam Zuid",
+      "dimension": 2,
+      "unit_system": "kN",
+      "section_offset": 12.5,
+      "domain": {
+        "x0": 0.0,
+        "x1": 25.0,
+        "z0": 0.0,
+        "z1": 25.0,
+        "y_top": 0.0,
+        "y_bottom": -25.0
+      },
+      "materials": [
+        {
+          "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+            "YOUNG_MODULUS": 15000.0,
+            "POISSON_RATIO": 0.3,
+            "DENSITY_SOLID": 1.7329255861365953,
+            "DENSITY_WATER": 1.019367991845056,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000.0,
+            "BULK_MODULUS_FLUID": 2200000.0,
+            "DYNAMIC_VISCOSITY": 1e-06,
+            "PERMEABILITY_XX": 1.1574074074074073e-05,
+            "PERMEABILITY_YY": 1.1574074074074073e-05,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 1.1574074074074073e-05,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0,
+            "GEO_COHESION": 1.0,
+            "GEO_FRICTION_ANGLE": 30.0
+          },
+          "tables": {},
+          "id": "m1",
+          "name": "Fill",
+          "color": "#d8c48a",
+          "r_inter": 0.7,
+          "interface_permeability": "Neutral"
+        },
+        {
+          "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+            "YOUNG_MODULUS": 25000.0,
+            "POISSON_RATIO": 0.28,
+            "DENSITY_SOLID": 1.8348623853211008,
+            "DENSITY_WATER": 1.019367991845056,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000.0,
+            "BULK_MODULUS_FLUID": 2200000.0,
+            "DYNAMIC_VISCOSITY": 1e-06,
+            "PERMEABILITY_XX": 1.736111111111111e-05,
+            "PERMEABILITY_YY": 1.736111111111111e-05,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 1.736111111111111e-05,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0,
+            "GEO_COHESION": 0.5,
+            "GEO_FRICTION_ANGLE": 32.0
+          },
+          "tables": {},
+          "id": "m2",
+          "name": "Sand, loose",
+          "color": "#c4a86a",
+          "r_inter": 0.7,
+          "interface_permeability": "Neutral"
+        },
+        {
+          "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
+            "YOUNG_MODULUS": 4000.0,
+            "POISSON_RATIO": 0.35,
+            "DENSITY_SOLID": 1.529051987767584,
+            "DENSITY_WATER": 1.019367991845056,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000.0,
+            "BULK_MODULUS_FLUID": 2200000.0,
+            "DYNAMIC_VISCOSITY": 1e-06,
+            "PERMEABILITY_XX": 1.1574074074074074e-09,
+            "PERMEABILITY_YY": 1.1574074074074074e-09,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 1.1574074074074074e-09,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0,
+            "GEO_COHESION": 5.0,
+            "GEO_FRICTION_ANGLE": 22.0
+          },
+          "tables": {},
+          "id": "m3",
+          "name": "Clay, soft",
+          "color": "#8fa86b",
+          "r_inter": 0.5,
+          "interface_permeability": "Impermeable"
+        },
+        {
+          "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
+            "YOUNG_MODULUS": 12000.0,
+            "POISSON_RATIO": 0.33,
+            "DENSITY_SOLID": 1.783893985728848,
+            "DENSITY_WATER": 1.019367991845056,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000.0,
+            "BULK_MODULUS_FLUID": 2200000.0,
+            "DYNAMIC_VISCOSITY": 1e-06,
+            "PERMEABILITY_XX": 5.787037037037037e-09,
+            "PERMEABILITY_YY": 5.787037037037037e-09,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 5.787037037037037e-09,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0,
+            "GEO_COHESION": 15.0,
+            "GEO_FRICTION_ANGLE": 25.0
+          },
+          "tables": {},
+          "id": "m4",
+          "name": "Clay, stiff",
+          "color": "#6f8fa8",
+          "r_inter": 0.55,
+          "interface_permeability": "Impermeable"
+        },
+        {
+          "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+            "YOUNG_MODULUS": 45000.0,
+            "POISSON_RATIO": 0.25,
+            "DENSITY_SOLID": 1.9367991845056065,
+            "DENSITY_WATER": 1.019367991845056,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000.0,
+            "BULK_MODULUS_FLUID": 2200000.0,
+            "DYNAMIC_VISCOSITY": 1e-06,
+            "PERMEABILITY_XX": 5.787037037037037e-05,
+            "PERMEABILITY_YY": 5.787037037037037e-05,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 5.787037037037037e-05,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0,
+            "GEO_COHESION": 0.0,
+            "GEO_FRICTION_ANGLE": 36.0
+          },
+          "tables": {},
+          "id": "m5",
+          "name": "Sand, dense",
+          "color": "#b08a6a",
+          "r_inter": 0.75,
+          "interface_permeability": "Neutral"
+        },
+        {
+          "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+            "YOUNG_MODULUS": 2000000.0,
+            "POISSON_RATIO": 0.2,
+            "DENSITY_SOLID": 2.4464831804281344,
+            "DENSITY_WATER": 1.019367991845056,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000.0,
+            "BULK_MODULUS_FLUID": 2200000.0,
+            "DYNAMIC_VISCOSITY": 1e-06,
+            "PERMEABILITY_XX": 0.0,
+            "PERMEABILITY_YY": 0.0,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 0.0,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0
+          },
+          "tables": {},
+          "id": "m6",
+          "name": "Bedrock",
+          "color": "#8d8d99",
+          "r_inter": 1.0,
+          "interface_permeability": "Impermeable"
+        }
+      ],
+      "loads": [
+        {
+          "id": "load",
+          "name": "SurfaceLoad_1",
+          "kind": "surface",
+          "x0": 1.0,
+          "x1": 10.0,
+          "z0": 14.0,
+          "z1": 26.0,
+          "y": null,
+          "thickness": 0.25,
+          "components": [
+            0.0,
+            -20.0,
+            0.0
+          ],
+          "distribution": "Uniform",
+          "active": true,
+          "derived_from": null
+        },
+        {
+          "id": "load_2d",
+          "name": "LineLoad_1",
+          "kind": "line",
+          "x0": 1.0,
+          "x1": 10.0,
+          "y": 0.0,
+          "thickness": 0.25,
+          "components": [
+            0.0,
+            -20.0
+          ],
+          "distribution": "Uniform",
+          "active": true,
+          "derived_from": "load"
+        }
+      ],
+      "beam_sections": [
+        {
+          "constitutive_law": "TimoshenkoBeamElasticConstitutiveLaw",
+          "variables": {
+            "YOUNG_MODULUS": 210000000.0,
+            "POISSON_RATIO": 0.3,
+            "DENSITY": 7.85,
+            "CROSS_AREA": 0.0198,
+            "I33": 0.000552
+          },
+          "tables": {},
+          "id": "beamsection_1",
+          "name": "Sheet pile section",
+          "spacing": 1.0
+        }
+      ],
+      "panel_sections": [],
+      "beams": [
+        {
+          "id": "beam_1",
+          "name": "Sheet pile 1",
+          "kind": "beam",
+          "section": "beamsection_1",
+          "points": [
+            [
+              12.5,
+              0.0
+            ],
+            [
+              12.5,
+              -12.5
+            ]
+          ],
+          "active": true,
+          "derived_from": null
+        }
+      ],
+      "anchor_sections": [],
+      "anchors": [],
+      "interface_sections": [],
+      "interfaces": [],
+      "normal_loads": [],
+      "custom_parts": []
+    },
+    "pile": {
+      "name": "Staged excavation",
+      "dimension": 2,
+      "unit_system": "SI",
+      "section_offset": 5.0,
+      "domain": {
+        "x0": 0.0,
+        "x1": 60.0,
+        "z0": 0.0,
+        "z1": 10.0,
+        "y_top": 0.0,
+        "y_bottom": -40.0
+      },
+      "materials": [
+        {
+          "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+            "YOUNG_MODULUS": 2000000.0,
+            "POISSON_RATIO": 0.3,
+            "DENSITY_SOLID": 1732.9255861365953,
+            "DENSITY_WATER": 1019.367991845056,
+            "POROSITY": 0.0,
+            "BULK_MODULUS_SOLID": 10000000000.0,
+            "BULK_MODULUS_FLUID": 2200000000.0,
+            "DYNAMIC_VISCOSITY": 0.001,
+            "PERMEABILITY_XX": 1e-08,
+            "PERMEABILITY_YY": 1e-08,
+            "PERMEABILITY_XY": 0.0,
+            "GEO_COHESION": 2000.0,
+            "GEO_FRICTION_ANGLE": 25.0,
+            "K0_NC": 0.58
+          },
+          "tables": {},
+          "id": "m_upper",
+          "name": "Soft clay",
+          "color": "#c4a86a",
+          "r_inter": 0.7,
+          "interface_permeability": "Neutral"
+        },
+        {
+          "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+            "YOUNG_MODULUS": 30000000.0,
+            "POISSON_RATIO": 0.3,
+            "DENSITY_SOLID": 1936.7991845056065,
+            "DENSITY_WATER": 1019.367991845056,
+            "POROSITY": 0.0,
+            "BULK_MODULUS_SOLID": 10000000000.0,
+            "BULK_MODULUS_FLUID": 2200000000.0,
+            "DYNAMIC_VISCOSITY": 0.001,
+            "PERMEABILITY_XX": 1e-05,
+            "PERMEABILITY_YY": 1e-05,
+            "PERMEABILITY_XY": 0.0,
+            "GEO_COHESION": 0.0,
+            "GEO_FRICTION_ANGLE": 32.0,
+            "K0_NC": 0.47
+          },
+          "tables": {},
+          "id": "m_lower",
+          "name": "Dense sand",
+          "color": "#b08a6a",
+          "r_inter": 0.7,
+          "interface_permeability": "Neutral"
+        }
+      ],
+      "loads": [
+        {
+          "id": "surcharge",
+          "name": "Load",
+          "kind": "line",
+          "x0": 6.0,
+          "x1": 60.0,
+          "y": 0.0,
+          "thickness": 0.15,
+          "components": [
+            0.0,
+            -10000.0
+          ],
+          "distribution": "Uniform",
+          "active": true,
+          "derived_from": null
+        }
+      ],
+      "beam_sections": [
+        {
+          "constitutive_law": "TimoshenkoBeamElasticConstitutiveLaw",
+          "variables": {
+            "YOUNG_MODULUS": 210000000000.0,
+            "POISSON_RATIO": 0.0,
+            "DENSITY": 7850.0,
+            "CROSS_AREA": 0.015,
+            "I33": 0.0003,
+            "AREA_EFFECTIVE_Y": 0.0075
+          },
+          "tables": {},
+          "id": "sheetpile",
+          "name": "Sheet pile",
+          "spacing": 1.0
+        }
+      ],
+      "panel_sections": [],
+      "beams": [
+        {
+          "id": "sheetpile",
+          "name": "SheetPileWall",
+          "kind": "beam",
+          "section": "sheetpile",
+          "points": [
+            [
+              6.0,
+              0.0
+            ],
+            [
+              6.0,
+              -12.0
+            ]
+          ],
+          "active": true,
+          "derived_from": null
+        }
+      ],
+      "anchor_sections": [
+        {
+          "constitutive_law": "TrussConstitutiveLaw",
+          "variables": {
+            "YOUNG_MODULUS": 210000000000.0,
+            "CROSS_AREA": 0.002,
+            "DENSITY": 0.0
+          },
+          "tables": {},
+          "id": "strand",
+          "name": "Strut",
+          "spacing": 2.0,
+          "tension_limit": null,
+          "compression_limit": null
+        }
+      ],
+      "anchors": [
+        {
+          "id": "strut",
+          "name": "Strut",
+          "kind": "anchor",
+          "section": "strand",
+          "head": [
+            6.0,
+            -1.0
+          ],
+          "tail": [
+            5.0,
+            -1.0
+          ],
+          "prestress": 0.0,
+          "active": true
+        }
+      ],
+      "interface_sections": [
+        {
+          "constitutive_law": "GeoIncrementalLinearElasticInterfaceLaw",
+          "variables": {},
+          "tables": {},
+          "id": "contact",
+          "name": "Wall contact",
+          "material": null,
+          "r_inter": 0.67,
+          "virtual_thickness": 0.5,
+          "permeability": "Neutral"
+        }
+      ],
+      "interfaces": [
+        {
+          "id": "wall_contact",
+          "name": "Interface",
+          "kind": "interface",
+          "section": "contact",
+          "structure": "sheetpile",
+          "points": null,
+          "side": "both",
+          "active": true
+        }
+      ],
+      "normal_loads": [
+        {
+          "id": "water_1",
+          "name": "WaterLoad_Stage1",
+          "kind": "normal",
+          "points": [
+            [
+              6.0,
+              -1.0
+            ],
+            [
+              6.0,
+              -2.0
+            ],
+            [
+              0.0,
+              -2.0
+            ]
+          ],
+          "fluid_pressure_type": "Hydrostatic",
+          "pressure": 0.0,
+          "active": true
+        },
+        {
+          "id": "water_2",
+          "name": "WaterLoad_Stage2",
+          "kind": "normal",
+          "points": [
+            [
+              6.0,
+              -1.0
+            ],
+            [
+              6.0,
+              -4.5
+            ],
+            [
+              0.0,
+              -4.5
+            ]
+          ],
+          "fluid_pressure_type": "Hydrostatic",
+          "pressure": 0.0,
+          "active": true
+        },
+        {
+          "id": "water_3",
+          "name": "WaterLoad_Stage3",
+          "kind": "normal",
+          "points": [
+            [
+              6.0,
+              -1.0
+            ],
+            [
+              6.0,
+              -7.0
+            ],
+            [
+              0.0,
+              -7.0
+            ]
+          ],
+          "fluid_pressure_type": "Hydrostatic",
+          "pressure": 0.0,
+          "active": true
+        }
+      ],
+      "custom_parts": []
+    },
+    "solid": {
+      "name": "Deep excavation — Rotterdam Zuid",
+      "dimension": 3,
+      "unit_system": "SI",
+      "section_offset": null,
+      "domain": {
+        "x0": 0.0,
+        "x1": 25.0,
+        "z0": 0.0,
+        "z1": 25.0,
+        "y_top": 0.0,
+        "y_bottom": -25.0
+      },
+      "materials": [
+        {
+          "constitutive_law": "GeoIncrementalLinearElastic3DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+            "YOUNG_MODULUS": 15000000.0,
+            "POISSON_RATIO": 0.3,
+            "DENSITY_SOLID": 1732.9255861365953,
+            "DENSITY_WATER": 1019.367991845056,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000000.0,
+            "BULK_MODULUS_FLUID": 2200000000.0,
+            "DYNAMIC_VISCOSITY": 0.001,
+            "PERMEABILITY_XX": 1.1574074074074073e-05,
+            "PERMEABILITY_YY": 1.1574074074074073e-05,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 1.1574074074074073e-05,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0,
+            "GEO_COHESION": 1000.0,
+            "GEO_FRICTION_ANGLE": 30.0
+          },
+          "tables": {},
+          "id": "m1",
+          "name": "Fill",
+          "color": "#d8c48a",
+          "r_inter": 0.7,
+          "interface_permeability": "Neutral"
+        },
+        {
+          "constitutive_law": "GeoIncrementalLinearElastic3DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+            "YOUNG_MODULUS": 25000000.0,
+            "POISSON_RATIO": 0.28,
+            "DENSITY_SOLID": 1834.8623853211009,
+            "DENSITY_WATER": 1019.367991845056,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000000.0,
+            "BULK_MODULUS_FLUID": 2200000000.0,
+            "DYNAMIC_VISCOSITY": 0.001,
+            "PERMEABILITY_XX": 1.736111111111111e-05,
+            "PERMEABILITY_YY": 1.736111111111111e-05,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 1.736111111111111e-05,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0,
+            "GEO_COHESION": 500.0,
+            "GEO_FRICTION_ANGLE": 32.0
+          },
+          "tables": {},
+          "id": "m2",
+          "name": "Sand, loose",
+          "color": "#c4a86a",
+          "r_inter": 0.7,
+          "interface_permeability": "Neutral"
+        },
+        {
+          "constitutive_law": "GeoIncrementalLinearElastic3DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
+            "YOUNG_MODULUS": 4000000.0,
+            "POISSON_RATIO": 0.35,
+            "DENSITY_SOLID": 1529.051987767584,
+            "DENSITY_WATER": 1019.367991845056,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000000.0,
+            "BULK_MODULUS_FLUID": 2200000000.0,
+            "DYNAMIC_VISCOSITY": 0.001,
+            "PERMEABILITY_XX": 1.1574074074074074e-09,
+            "PERMEABILITY_YY": 1.1574074074074074e-09,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 1.1574074074074074e-09,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0,
+            "GEO_COHESION": 5000.0,
+            "GEO_FRICTION_ANGLE": 22.0
+          },
+          "tables": {},
+          "id": "m3",
+          "name": "Clay, soft",
+          "color": "#8fa86b",
+          "r_inter": 0.5,
+          "interface_permeability": "Impermeable"
+        },
+        {
+          "constitutive_law": "GeoIncrementalLinearElastic3DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
+            "YOUNG_MODULUS": 12000000.0,
+            "POISSON_RATIO": 0.33,
+            "DENSITY_SOLID": 1783.893985728848,
+            "DENSITY_WATER": 1019.367991845056,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000000.0,
+            "BULK_MODULUS_FLUID": 2200000000.0,
+            "DYNAMIC_VISCOSITY": 0.001,
+            "PERMEABILITY_XX": 5.787037037037037e-09,
+            "PERMEABILITY_YY": 5.787037037037037e-09,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 5.787037037037037e-09,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0,
+            "GEO_COHESION": 15000.0,
+            "GEO_FRICTION_ANGLE": 25.0
+          },
+          "tables": {},
+          "id": "m4",
+          "name": "Clay, stiff",
+          "color": "#6f8fa8",
+          "r_inter": 0.55,
+          "interface_permeability": "Impermeable"
+        },
+        {
+          "constitutive_law": "GeoIncrementalLinearElastic3DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+            "YOUNG_MODULUS": 45000000.0,
+            "POISSON_RATIO": 0.25,
+            "DENSITY_SOLID": 1936.7991845056065,
+            "DENSITY_WATER": 1019.367991845056,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000000.0,
+            "BULK_MODULUS_FLUID": 2200000000.0,
+            "DYNAMIC_VISCOSITY": 0.001,
+            "PERMEABILITY_XX": 5.787037037037037e-05,
+            "PERMEABILITY_YY": 5.787037037037037e-05,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 5.787037037037037e-05,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0,
+            "GEO_COHESION": 0.0,
+            "GEO_FRICTION_ANGLE": 36.0
+          },
+          "tables": {},
+          "id": "m5",
+          "name": "Sand, dense",
+          "color": "#b08a6a",
+          "r_inter": 0.75,
+          "interface_permeability": "Neutral"
+        },
+        {
+          "constitutive_law": "GeoIncrementalLinearElastic3DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+            "YOUNG_MODULUS": 2000000000.0,
+            "POISSON_RATIO": 0.2,
+            "DENSITY_SOLID": 2446.4831804281343,
+            "DENSITY_WATER": 1019.367991845056,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000000.0,
+            "BULK_MODULUS_FLUID": 2200000000.0,
+            "DYNAMIC_VISCOSITY": 0.001,
+            "PERMEABILITY_XX": 0.0,
+            "PERMEABILITY_YY": 0.0,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 0.0,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0
+          },
+          "tables": {},
+          "id": "m6",
+          "name": "Bedrock",
+          "color": "#8d8d99",
+          "r_inter": 1.0,
+          "interface_permeability": "Impermeable"
+        }
+      ],
+      "loads": [
+        {
+          "id": "load",
+          "name": "SurfaceLoad_1",
+          "kind": "surface",
+          "x0": 1.0,
+          "x1": 10.0,
+          "z0": 14.0,
+          "z1": 26.0,
+          "y": null,
+          "thickness": 0.25,
+          "components": [
+            0.0,
+            -20000.0,
+            0.0
+          ],
+          "distribution": "Uniform",
+          "active": true,
+          "derived_from": null
+        }
+      ],
+      "beam_sections": [],
+      "panel_sections": [],
+      "beams": [],
+      "anchor_sections": [],
+      "anchors": [],
+      "interface_sections": [],
+      "interfaces": [],
+      "normal_loads": [],
+      "custom_parts": []
+    },
+    "solid_wall": {
+      "name": "Deep excavation — Rotterdam Zuid",
+      "dimension": 3,
+      "unit_system": "SI",
+      "section_offset": null,
+      "domain": {
+        "x0": 0.0,
+        "x1": 25.0,
+        "z0": 0.0,
+        "z1": 25.0,
+        "y_top": 0.0,
+        "y_bottom": -25.0
+      },
+      "materials": [
+        {
+          "constitutive_law": "GeoIncrementalLinearElastic3DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+            "YOUNG_MODULUS": 15000000.0,
+            "POISSON_RATIO": 0.3,
+            "DENSITY_SOLID": 1732.9255861365953,
+            "DENSITY_WATER": 1019.367991845056,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000000.0,
+            "BULK_MODULUS_FLUID": 2200000000.0,
+            "DYNAMIC_VISCOSITY": 0.001,
+            "PERMEABILITY_XX": 1.1574074074074073e-05,
+            "PERMEABILITY_YY": 1.1574074074074073e-05,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 1.1574074074074073e-05,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0,
+            "GEO_COHESION": 1000.0,
+            "GEO_FRICTION_ANGLE": 30.0
+          },
+          "tables": {},
+          "id": "m1",
+          "name": "Fill",
+          "color": "#d8c48a",
+          "r_inter": 0.7,
+          "interface_permeability": "Neutral"
+        },
+        {
+          "constitutive_law": "GeoIncrementalLinearElastic3DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+            "YOUNG_MODULUS": 25000000.0,
+            "POISSON_RATIO": 0.28,
+            "DENSITY_SOLID": 1834.8623853211009,
+            "DENSITY_WATER": 1019.367991845056,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000000.0,
+            "BULK_MODULUS_FLUID": 2200000000.0,
+            "DYNAMIC_VISCOSITY": 0.001,
+            "PERMEABILITY_XX": 1.736111111111111e-05,
+            "PERMEABILITY_YY": 1.736111111111111e-05,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 1.736111111111111e-05,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0,
+            "GEO_COHESION": 500.0,
+            "GEO_FRICTION_ANGLE": 32.0
+          },
+          "tables": {},
+          "id": "m2",
+          "name": "Sand, loose",
+          "color": "#c4a86a",
+          "r_inter": 0.7,
+          "interface_permeability": "Neutral"
+        },
+        {
+          "constitutive_law": "GeoIncrementalLinearElastic3DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
+            "YOUNG_MODULUS": 4000000.0,
+            "POISSON_RATIO": 0.35,
+            "DENSITY_SOLID": 1529.051987767584,
+            "DENSITY_WATER": 1019.367991845056,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000000.0,
+            "BULK_MODULUS_FLUID": 2200000000.0,
+            "DYNAMIC_VISCOSITY": 0.001,
+            "PERMEABILITY_XX": 1.1574074074074074e-09,
+            "PERMEABILITY_YY": 1.1574074074074074e-09,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 1.1574074074074074e-09,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0,
+            "GEO_COHESION": 5000.0,
+            "GEO_FRICTION_ANGLE": 22.0
+          },
+          "tables": {},
+          "id": "m3",
+          "name": "Clay, soft",
+          "color": "#8fa86b",
+          "r_inter": 0.5,
+          "interface_permeability": "Impermeable"
+        },
+        {
+          "constitutive_law": "GeoIncrementalLinearElastic3DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
+            "YOUNG_MODULUS": 12000000.0,
+            "POISSON_RATIO": 0.33,
+            "DENSITY_SOLID": 1783.893985728848,
+            "DENSITY_WATER": 1019.367991845056,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000000.0,
+            "BULK_MODULUS_FLUID": 2200000000.0,
+            "DYNAMIC_VISCOSITY": 0.001,
+            "PERMEABILITY_XX": 5.787037037037037e-09,
+            "PERMEABILITY_YY": 5.787037037037037e-09,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 5.787037037037037e-09,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0,
+            "GEO_COHESION": 15000.0,
+            "GEO_FRICTION_ANGLE": 25.0
+          },
+          "tables": {},
+          "id": "m4",
+          "name": "Clay, stiff",
+          "color": "#6f8fa8",
+          "r_inter": 0.55,
+          "interface_permeability": "Impermeable"
+        },
+        {
+          "constitutive_law": "GeoIncrementalLinearElastic3DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+            "YOUNG_MODULUS": 45000000.0,
+            "POISSON_RATIO": 0.25,
+            "DENSITY_SOLID": 1936.7991845056065,
+            "DENSITY_WATER": 1019.367991845056,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000000.0,
+            "BULK_MODULUS_FLUID": 2200000000.0,
+            "DYNAMIC_VISCOSITY": 0.001,
+            "PERMEABILITY_XX": 5.787037037037037e-05,
+            "PERMEABILITY_YY": 5.787037037037037e-05,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 5.787037037037037e-05,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0,
+            "GEO_COHESION": 0.0,
+            "GEO_FRICTION_ANGLE": 36.0
+          },
+          "tables": {},
+          "id": "m5",
+          "name": "Sand, dense",
+          "color": "#b08a6a",
+          "r_inter": 0.75,
+          "interface_permeability": "Neutral"
+        },
+        {
+          "constitutive_law": "GeoIncrementalLinearElastic3DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+            "YOUNG_MODULUS": 2000000000.0,
+            "POISSON_RATIO": 0.2,
+            "DENSITY_SOLID": 2446.4831804281343,
+            "DENSITY_WATER": 1019.367991845056,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000000.0,
+            "BULK_MODULUS_FLUID": 2200000000.0,
+            "DYNAMIC_VISCOSITY": 0.001,
+            "PERMEABILITY_XX": 0.0,
+            "PERMEABILITY_YY": 0.0,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 0.0,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0
+          },
+          "tables": {},
+          "id": "m6",
+          "name": "Bedrock",
+          "color": "#8d8d99",
+          "r_inter": 1.0,
+          "interface_permeability": "Impermeable"
+        }
+      ],
+      "loads": [
+        {
+          "id": "load",
+          "name": "SurfaceLoad_1",
+          "kind": "surface",
+          "x0": 1.0,
+          "x1": 10.0,
+          "z0": 14.0,
+          "z1": 26.0,
+          "y": null,
+          "thickness": 0.25,
+          "components": [
+            0.0,
+            -20000.0,
+            0.0
+          ],
+          "distribution": "Uniform",
+          "active": true,
+          "derived_from": null
+        }
+      ],
+      "beam_sections": [],
+      "panel_sections": [
+        {
+          "constitutive_law": "LinearElasticPlaneStress2DLaw",
+          "variables": {
+            "YOUNG_MODULUS": 210000000000.0,
+            "POISSON_RATIO": 0.3,
+            "DENSITY": 7850.0,
+            "THICKNESS": 0.4
+          },
+          "tables": {},
+          "id": "panelsection_1",
+          "name": "Wall section"
+        }
+      ],
+      "beams": [
+        {
+          "id": "panel_1",
+          "name": "Wall 1",
+          "kind": "panel",
+          "section": "panelsection_1",
+          "footprint": [
+            [
+              12.5,
+              6.25
+            ],
+            [
+              12.5,
+              18.75
+            ]
+          ],
+          "y_top": 0.0,
+          "y_toe": -12.5,
+          "active": true,
+          "derived_from": null
+        }
+      ],
+      "anchor_sections": [],
+      "anchors": [],
+      "interface_sections": [],
+      "interfaces": [],
+      "normal_loads": [],
+      "custom_parts": []
+    },
+    "solid_member": {
+      "name": "Deep excavation — Rotterdam Zuid",
+      "dimension": 3,
+      "unit_system": "SI",
+      "section_offset": null,
+      "domain": {
+        "x0": 0.0,
+        "x1": 25.0,
+        "z0": 0.0,
+        "z1": 25.0,
+        "y_top": 0.0,
+        "y_bottom": -25.0
+      },
+      "materials": [
+        {
+          "constitutive_law": "GeoIncrementalLinearElastic3DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+            "YOUNG_MODULUS": 15000000.0,
+            "POISSON_RATIO": 0.3,
+            "DENSITY_SOLID": 1732.9255861365953,
+            "DENSITY_WATER": 1019.367991845056,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000000.0,
+            "BULK_MODULUS_FLUID": 2200000000.0,
+            "DYNAMIC_VISCOSITY": 0.001,
+            "PERMEABILITY_XX": 1.1574074074074073e-05,
+            "PERMEABILITY_YY": 1.1574074074074073e-05,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 1.1574074074074073e-05,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0,
+            "GEO_COHESION": 1000.0,
+            "GEO_FRICTION_ANGLE": 30.0
+          },
+          "tables": {},
+          "id": "m1",
+          "name": "Fill",
+          "color": "#d8c48a",
+          "r_inter": 0.7,
+          "interface_permeability": "Neutral"
+        },
+        {
+          "constitutive_law": "GeoIncrementalLinearElastic3DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+            "YOUNG_MODULUS": 25000000.0,
+            "POISSON_RATIO": 0.28,
+            "DENSITY_SOLID": 1834.8623853211009,
+            "DENSITY_WATER": 1019.367991845056,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000000.0,
+            "BULK_MODULUS_FLUID": 2200000000.0,
+            "DYNAMIC_VISCOSITY": 0.001,
+            "PERMEABILITY_XX": 1.736111111111111e-05,
+            "PERMEABILITY_YY": 1.736111111111111e-05,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 1.736111111111111e-05,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0,
+            "GEO_COHESION": 500.0,
+            "GEO_FRICTION_ANGLE": 32.0
+          },
+          "tables": {},
+          "id": "m2",
+          "name": "Sand, loose",
+          "color": "#c4a86a",
+          "r_inter": 0.7,
+          "interface_permeability": "Neutral"
+        },
+        {
+          "constitutive_law": "GeoIncrementalLinearElastic3DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
+            "YOUNG_MODULUS": 4000000.0,
+            "POISSON_RATIO": 0.35,
+            "DENSITY_SOLID": 1529.051987767584,
+            "DENSITY_WATER": 1019.367991845056,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000000.0,
+            "BULK_MODULUS_FLUID": 2200000000.0,
+            "DYNAMIC_VISCOSITY": 0.001,
+            "PERMEABILITY_XX": 1.1574074074074074e-09,
+            "PERMEABILITY_YY": 1.1574074074074074e-09,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 1.1574074074074074e-09,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0,
+            "GEO_COHESION": 5000.0,
+            "GEO_FRICTION_ANGLE": 22.0
+          },
+          "tables": {},
+          "id": "m3",
+          "name": "Clay, soft",
+          "color": "#8fa86b",
+          "r_inter": 0.5,
+          "interface_permeability": "Impermeable"
+        },
+        {
+          "constitutive_law": "GeoIncrementalLinearElastic3DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
+            "YOUNG_MODULUS": 12000000.0,
+            "POISSON_RATIO": 0.33,
+            "DENSITY_SOLID": 1783.893985728848,
+            "DENSITY_WATER": 1019.367991845056,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000000.0,
+            "BULK_MODULUS_FLUID": 2200000000.0,
+            "DYNAMIC_VISCOSITY": 0.001,
+            "PERMEABILITY_XX": 5.787037037037037e-09,
+            "PERMEABILITY_YY": 5.787037037037037e-09,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 5.787037037037037e-09,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0,
+            "GEO_COHESION": 15000.0,
+            "GEO_FRICTION_ANGLE": 25.0
+          },
+          "tables": {},
+          "id": "m4",
+          "name": "Clay, stiff",
+          "color": "#6f8fa8",
+          "r_inter": 0.55,
+          "interface_permeability": "Impermeable"
+        },
+        {
+          "constitutive_law": "GeoIncrementalLinearElastic3DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+            "YOUNG_MODULUS": 45000000.0,
+            "POISSON_RATIO": 0.25,
+            "DENSITY_SOLID": 1936.7991845056065,
+            "DENSITY_WATER": 1019.367991845056,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000000.0,
+            "BULK_MODULUS_FLUID": 2200000000.0,
+            "DYNAMIC_VISCOSITY": 0.001,
+            "PERMEABILITY_XX": 5.787037037037037e-05,
+            "PERMEABILITY_YY": 5.787037037037037e-05,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 5.787037037037037e-05,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0,
+            "GEO_COHESION": 0.0,
+            "GEO_FRICTION_ANGLE": 36.0
+          },
+          "tables": {},
+          "id": "m5",
+          "name": "Sand, dense",
+          "color": "#b08a6a",
+          "r_inter": 0.75,
+          "interface_permeability": "Neutral"
+        },
+        {
+          "constitutive_law": "GeoIncrementalLinearElastic3DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+            "YOUNG_MODULUS": 2000000000.0,
+            "POISSON_RATIO": 0.2,
+            "DENSITY_SOLID": 2446.4831804281343,
+            "DENSITY_WATER": 1019.367991845056,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000000.0,
+            "BULK_MODULUS_FLUID": 2200000000.0,
+            "DYNAMIC_VISCOSITY": 0.001,
+            "PERMEABILITY_XX": 0.0,
+            "PERMEABILITY_YY": 0.0,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 0.0,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0
+          },
+          "tables": {},
+          "id": "m6",
+          "name": "Bedrock",
+          "color": "#8d8d99",
+          "r_inter": 1.0,
+          "interface_permeability": "Impermeable"
+        }
+      ],
+      "loads": [
+        {
+          "id": "load",
+          "name": "SurfaceLoad_1",
+          "kind": "surface",
+          "x0": 1.0,
+          "x1": 10.0,
+          "z0": 14.0,
+          "z1": 26.0,
+          "y": null,
+          "thickness": 0.25,
+          "components": [
+            0.0,
+            -20000.0,
+            0.0
+          ],
+          "distribution": "Uniform",
+          "active": true,
+          "derived_from": null
+        }
+      ],
+      "beam_sections": [
+        {
+          "constitutive_law": "TimoshenkoBeamElasticConstitutiveLaw",
+          "variables": {
+            "YOUNG_MODULUS": 210000000000.0,
+            "POISSON_RATIO": 0.3,
+            "DENSITY": 7850.0,
+            "CROSS_AREA": 0.0198,
+            "I33": 0.000552
+          },
+          "tables": {},
+          "id": "beamsection_1",
+          "name": "Sheet pile section",
+          "spacing": 1.0
+        }
+      ],
+      "panel_sections": [],
+      "beams": [
+        {
+          "id": "member_1",
+          "name": "Member 1",
+          "kind": "member",
+          "section": "beamsection_1",
+          "points": [
+            [
+              12.5,
+              0.0,
+              12.5
+            ],
+            [
+              12.5,
+              -12.5,
+              12.5
+            ]
+          ],
+          "active": true,
+          "derived_from": null
+        }
+      ],
+      "anchor_sections": [],
+      "anchors": [],
+      "interface_sections": [],
+      "interfaces": [],
+      "normal_loads": [],
+      "custom_parts": []
+    }
+  },
+  "calls": [
+    {
+      "title": "a sheet pile down the middle",
+      "call": "Beams.draft",
+      "project": "section",
+      "args": [
+        "beam"
+      ],
+      "result": {
+        "id": "beam_1",
+        "name": "Sheet pile 1",
+        "kind": "beam",
+        "section": "beamsection_1",
+        "points": [
+          [
+            12.5,
+            0.0
+          ],
+          [
+            12.5,
+            -12.5
+          ]
+        ],
+        "active": true
+      }
+    },
+    {
+      "title": "a sheet pile along given points, on the first profile",
+      "call": "Beams.draftFromPoints",
+      "project": "pile",
+      "args": [
+        [
+          [
+            20,
+            0
+          ],
+          [
+            20,
+            -6
+          ]
+        ]
+      ],
+      "result": {
+        "id": "beam_1",
+        "name": "Sheet pile 1",
+        "kind": "beam",
+        "section": "sheetpile",
+        "points": [
+          [
+            20.0,
+            0.0
+          ],
+          [
+            20.0,
+            -6.0
+          ]
+        ],
+        "active": true
+      }
+    },
+    {
+      "title": "a sheet pile below the model is refused",
+      "call": "Beams.draftFromPoints",
+      "project": "section",
+      "args": [
+        [
+          [
+            12,
+            0
+          ],
+          [
+            12,
+            -40
+          ]
+        ]
+      ],
+      "error": "The sheet pile must stay inside the model domain."
+    },
+    {
+      "title": "a sheet pile in the solid model is refused",
+      "call": "Beams.draft",
+      "project": "solid",
+      "args": [
+        "beam"
+      ],
+      "error": "A sheet pile is a 2D section object; switch to 2D, or create a wall instead."
+    },
+    {
+      "title": "the profile a first sheet pile brings",
+      "call": "Beams.sectionsFor",
+      "project": "section",
+      "args": [
+        {
+          "id": "beam_1",
+          "name": "Sheet pile 1",
+          "kind": "beam",
+          "section": "beamsection_1",
+          "points": [
+            [
+              12.5,
+              0.0
+            ],
+            [
+              12.5,
+              -12.5
+            ]
+          ],
+          "active": true
+        }
+      ],
+      "result": [
+        {
+          "constitutive_law": "TimoshenkoBeamElasticConstitutiveLaw",
+          "variables": {
+            "YOUNG_MODULUS": 210000000000.0,
+            "POISSON_RATIO": 0.3,
+            "DENSITY": 7850.0,
+            "CROSS_AREA": 0.0198,
+            "I33": 0.000552
+          },
+          "tables": {},
+          "id": "beamsection_1",
+          "name": "Sheet pile section",
+          "spacing": 1.0
+        }
+      ]
+    },
+    {
+      "title": "a wall across the middle of the site",
+      "call": "Beams.draft",
+      "project": "solid",
+      "args": [
+        "panel"
+      ],
+      "result": {
+        "id": "panel_1",
+        "name": "Wall 1",
+        "kind": "panel",
+        "section": "panelsection_1",
+        "footprint": [
+          [
+            12.5,
+            6.25
+          ],
+          [
+            12.5,
+            18.75
+          ]
+        ],
+        "y_top": 0.0,
+        "y_toe": -12.5,
+        "active": true
+      }
+    },
+    {
+      "title": "a wall along a given footprint",
+      "call": "Beams.draftPanel",
+      "project": "solid",
+      "args": [
+        [
+          [
+            5,
+            5
+          ],
+          [
+            5,
+            20
+          ]
+        ]
+      ],
+      "result": {
+        "id": "panel_1",
+        "name": "Wall 1",
+        "kind": "panel",
+        "section": "panelsection_1",
+        "footprint": [
+          [
+            5.0,
+            5.0
+          ],
+          [
+            5.0,
+            20.0
+          ]
+        ],
+        "y_top": 0.0,
+        "y_toe": -12.5,
+        "active": true
+      }
+    },
+    {
+      "title": "the shell a first wall brings",
+      "call": "Beams.sectionsFor",
+      "project": "solid",
+      "args": [
+        {
+          "id": "panel_1",
+          "name": "Wall 1",
+          "kind": "panel",
+          "section": "panelsection_1",
+          "footprint": [
+            [
+              12.5,
+              6.25
+            ],
+            [
+              12.5,
+              18.75
+            ]
+          ],
+          "y_top": 0.0,
+          "y_toe": -12.5,
+          "active": true
+        }
+      ],
+      "result": [
+        {
+          "constitutive_law": "LinearElasticPlaneStress2DLaw",
+          "variables": {
+            "YOUNG_MODULUS": 210000000000.0,
+            "POISSON_RATIO": 0.3,
+            "DENSITY": 7850.0,
+            "THICKNESS": 0.4
+          },
+          "tables": {},
+          "id": "panelsection_1",
+          "name": "Wall section"
+        }
+      ]
+    },
+    {
+      "title": "a member standing in the middle",
+      "call": "Beams.draft",
+      "project": "solid",
+      "args": [
+        "member"
+      ],
+      "result": {
+        "id": "member_1",
+        "name": "Member 1",
+        "kind": "member",
+        "section": "beamsection_1",
+        "points": [
+          [
+            12.5,
+            0.0,
+            12.5
+          ],
+          [
+            12.5,
+            -12.5,
+            12.5
+          ]
+        ],
+        "active": true
+      }
+    },
+    {
+      "title": "a member along given points",
+      "call": "Beams.draftMember",
+      "project": "solid",
+      "args": [
+        [
+          [
+            3,
+            0,
+            3
+          ],
+          [
+            3,
+            -10,
+            3
+          ]
+        ]
+      ],
+      "result": {
+        "id": "member_1",
+        "name": "Member 1",
+        "kind": "member",
+        "section": "beamsection_1",
+        "points": [
+          [
+            3.0,
+            0.0,
+            3.0
+          ],
+          [
+            3.0,
+            -10.0,
+            3.0
+          ]
+        ],
+        "active": true
+      }
+    },
+    {
+      "title": "an anchor raking back from the pile",
+      "call": "Anchors.draft",
+      "project": "pile",
+      "args": [],
+      "result": {
+        "id": "anchor_1",
+        "name": "Anchor 1",
+        "kind": "anchor",
+        "section": "strand",
+        "head": [
+          6.0,
+          -3.0
+        ],
+        "tail": [
+          14.19152,
+          -8.735764
+        ],
+        "prestress": 0.0,
+        "active": true
+      }
+    },
+    {
+      "title": "an anchor head snapped onto the pile",
+      "call": "Anchors.draftFromPoints",
+      "project": "pile",
+      "args": [
+        [
+          [
+            6.4,
+            -2
+          ],
+          [
+            20,
+            -8
+          ]
+        ]
+      ],
+      "result": {
+        "id": "anchor_1",
+        "name": "Anchor 1",
+        "kind": "anchor",
+        "section": "strand",
+        "head": [
+          6.0,
+          -2.0
+        ],
+        "tail": [
+          20.0,
+          -8.0
+        ],
+        "prestress": 0.0,
+        "active": true
+      }
+    },
+    {
+      "title": "an anchor head far from the pile is refused",
+      "call": "Anchors.draftFromPoints",
+      "project": "pile",
+      "args": [
+        [
+          [
+            10,
+            -2
+          ],
+          [
+            20,
+            -8
+          ]
+        ]
+      ],
+      "error": "The anchor head must be placed on a sheet pile."
+    },
+    {
+      "title": "an anchor with nothing to hang from is refused",
+      "call": "Anchors.draft",
+      "project": "section",
+      "args": [],
+      "error": "An anchor hangs from a sheet pile; create one first."
+    },
+    {
+      "title": "an anchor on a wall",
+      "call": "Anchors.draft",
+      "project": "solid_wall",
+      "args": [],
+      "result": {
+        "id": "anchor_1",
+        "name": "Anchor 1",
+        "kind": "anchor3d",
+        "section": "tendon_1",
+        "head": [
+          12.5,
+          -3.125,
+          12.5
+        ],
+        "tail": [
+          20.69152,
+          -8.860764,
+          12.5
+        ],
+        "prestress": 0.0,
+        "active": true
+      }
+    },
+    {
+      "title": "an anchor on a member",
+      "call": "Anchors.draft",
+      "project": "solid_member",
+      "args": [],
+      "result": {
+        "id": "anchor_1",
+        "name": "Anchor 1",
+        "kind": "anchor3d",
+        "section": "tendon_1",
+        "head": [
+          12.5,
+          -3.125,
+          12.5
+        ],
+        "tail": [
+          20.69152,
+          -8.860764,
+          12.5
+        ],
+        "prestress": 0.0,
+        "active": true
+      }
+    },
+    {
+      "title": "a first anchor in a kN model",
+      "call": "Anchors.draft",
+      "project": "section_pile_kn",
+      "args": [],
+      "result": {
+        "id": "anchor_1",
+        "name": "Anchor 1",
+        "kind": "anchor",
+        "section": "tendon_1",
+        "head": [
+          12.5,
+          -3.125
+        ],
+        "tail": [
+          20.69152,
+          -8.860764
+        ],
+        "prestress": 0.0,
+        "active": true
+      }
+    },
+    {
+      "title": "the tendon a first anchor brings, in kN",
+      "call": "Anchors.sectionsFor",
+      "project": "section_pile_kn",
+      "args": [
+        {
+          "id": "anchor_1",
+          "name": "Anchor 1",
+          "kind": "anchor",
+          "section": "tendon_1",
+          "head": [
+            12.5,
+            -3.125
+          ],
+          "tail": [
+            20.69152,
+            -8.860764
+          ],
+          "prestress": 0.0,
+          "active": true
+        }
+      ],
+      "result": [
+        {
+          "constitutive_law": "TrussConstitutiveLaw",
+          "variables": {
+            "YOUNG_MODULUS": 195000000.0,
+            "CROSS_AREA": 0.0006,
+            "DENSITY": 7.85
+          },
+          "tables": {},
+          "id": "tendon_1",
+          "name": "Anchor tendon",
+          "spacing": 2.5,
+          "tension_limit": 900.0,
+          "compression_limit": null
+        }
+      ]
+    },
+    {
+      "title": "an interface on the first pile",
+      "call": "Interfaces.draft",
+      "project": "pile",
+      "args": [],
+      "result": {
+        "id": "interface_1",
+        "name": "Interface 1",
+        "kind": "interface",
+        "section": "contact",
+        "structure": "sheetpile",
+        "points": null,
+        "side": "both",
+        "active": true
+      }
+    },
+    {
+      "title": "an interface with no pile is a free line",
+      "call": "Interfaces.draft",
+      "project": "section",
+      "args": [],
+      "result": {
+        "id": "interface_1",
+        "name": "Interface 1",
+        "kind": "interface",
+        "section": "interfacesection_1",
+        "structure": null,
+        "points": [
+          [
+            12.5,
+            0.0
+          ],
+          [
+            12.5,
+            -12.5
+          ]
+        ],
+        "side": "left",
+        "active": true
+      }
+    },
+    {
+      "title": "the contact a first interface brings",
+      "call": "Interfaces.sectionsFor",
+      "project": "section",
+      "args": [
+        {
+          "id": "interface_1",
+          "name": "Interface 1",
+          "kind": "interface",
+          "section": "interfacesection_1",
+          "structure": null,
+          "points": [
+            [
+              12.5,
+              0.0
+            ],
+            [
+              12.5,
+              -12.5
+            ]
+          ],
+          "side": "left",
+          "active": true
+        }
+      ],
+      "result": [
+        {
+          "constitutive_law": "GeoIncrementalLinearElasticInterfaceLaw",
+          "variables": {},
+          "tables": {},
+          "id": "interfacesection_1",
+          "name": "Interface",
+          "material": "m1",
+          "r_inter": 0.7,
+          "virtual_thickness": 0.01,
+          "permeability": "Neutral"
+        }
+      ]
+    },
+    {
+      "title": "a normal load down the middle",
+      "call": "NormalLoads.draft",
+      "project": "section",
+      "args": [],
+      "result": {
+        "id": "normalload_1",
+        "name": "Normal load 1",
+        "kind": "normal",
+        "points": [
+          [
+            12.5,
+            0.0
+          ],
+          [
+            12.5,
+            -12.5
+          ]
+        ],
+        "fluid_pressure_type": "Uniform",
+        "pressure": 0.0,
+        "active": true
+      }
+    },
+    {
+      "title": "a point load",
+      "call": "Loads.draftPoint",
+      "project": "section",
+      "args": [
+        [
+          5,
+          0
+        ]
+      ],
+      "result": {
+        "id": "load_1",
+        "name": "PointLoad_1",
+        "kind": "point",
+        "x": 5.0,
+        "y": 0.0,
+        "thickness": 0.25,
+        "components": [
+          0.0,
+          -20000.0
+        ],
+        "distribution": "Uniform",
+        "active": true
+      }
+    },
+    {
+      "title": "a point load in kN",
+      "call": "Loads.draftPoint",
+      "project": "section_kn",
+      "args": [
+        [
+          5,
+          0
+        ]
+      ],
+      "result": {
+        "id": "load_1",
+        "name": "PointLoad_1",
+        "kind": "point",
+        "x": 5.0,
+        "y": 0.0,
+        "thickness": 0.25,
+        "components": [
+          0.0,
+          -20.0
+        ],
+        "distribution": "Uniform",
+        "active": true
+      }
+    },
+    {
+      "title": "a point load in the solid model is refused",
+      "call": "Loads.draftPoint",
+      "project": "solid",
+      "args": [
+        [
+          5,
+          0
+        ]
+      ],
+      "error": "A 2D point load needs one finite x-y coordinate."
+    },
+    {
+      "title": "a line load picked right to left",
+      "call": "Loads.draftFromPoints",
+      "project": "section",
+      "args": [
+        [
+          [
+            8,
+            0
+          ],
+          [
+            2,
+            0
+          ]
+        ]
+      ],
+      "result": {
+        "id": "load_1",
+        "name": "LineLoad_1",
+        "kind": "line",
+        "x0": 2.0,
+        "x1": 8.0,
+        "y": 0.0,
+        "thickness": 0.15,
+        "components": [
+          0.0,
+          -20000.0
+        ],
+        "distribution": "Uniform",
+        "active": true
+      }
+    },
+    {
+      "title": "a surface load in the middle of the site",
+      "call": "Loads.draftSurface",
+      "project": "solid",
+      "args": [],
+      "result": {
+        "id": "load_1",
+        "name": "SurfaceLoad_1",
+        "kind": "surface",
+        "x0": 10.0,
+        "x1": 15.0,
+        "z0": 10.0,
+        "z1": 15.0,
+        "y": 0.0,
+        "thickness": 0.15,
+        "components": [
+          0.0,
+          -20000.0,
+          0.0
+        ],
+        "distribution": "Uniform",
+        "active": true
+      }
+    }
+  ]
+};
