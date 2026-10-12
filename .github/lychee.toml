@@ -4,6 +4,9 @@
 exclude = [
     # The app's own address, only there while it runs.
     '^https?://(localhost|127\.0\.0\.1)',
+    # Where the README says the project lives. It answers 404 until the public copy is
+    # made: remove this line then.
+    '^https://github\.com/Deltares-research/Styx-Kratos-GUI',
 ]
 
 exclude_path = ["frontend/vendor"]
