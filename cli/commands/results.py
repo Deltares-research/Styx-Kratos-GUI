@@ -86,8 +86,10 @@ def register(commands, common: argparse.ArgumentParser) -> None:
 
 
 def _out(parser: argparse.ArgumentParser, default: str) -> None:
-    parser.add_argument("--out", type=Path, metavar="PATH",
-                        help=f"a file, or a folder to put it in (default: {default})")
+    # Taken as typed, not as a Path, which would drop the separator that says "a folder".
+    parser.add_argument("--out", metavar="PATH",
+                        help=f"a file, or a folder to put it in, made when it ends in / "
+                             f"(default: {default})")
     parser.add_argument("--force", action="store_true", help="overwrite a file already there")
 
 
@@ -137,7 +139,8 @@ def list_files(args: argparse.Namespace) -> Answer:
     with environment(args):
         run = catalog.describe(_run(args.run))
     lines = [f"{len(run['files'])} files in {run['id']}:"]
-    lines += [f"  {entry['name']:<52}{_size(entry['bytes'])}" for entry in run["files"]]
+    width = max((len(entry["name"]) for entry in run["files"]), default=0) + 2
+    lines += [f"  {entry['name']:<{width}}{_size(entry['bytes'])}" for entry in run["files"]]
     lines.append("`kratos-cli results get <run> <file>` copies one, `results archive "
                  "<run>` all of them.")
     return Answer(data=run["files"], lines=lines)
@@ -299,7 +302,15 @@ def get_archive(args: argparse.Namespace) -> Answer:
 
 
 def _target(args: argparse.Namespace, name: str) -> Path:
-    target = args.out if args.out is not None else Path(name)
+    """Where `--out` says: a file, or a folder to put `name` in -- one that is there, or
+    one written with a separator at its end (`logs/`), which is made."""
+    if args.out is None:
+        target = Path(name)
+    elif args.out.endswith(("/", "\\")):
+        Path(args.out).mkdir(parents=True, exist_ok=True)
+        target = Path(args.out) / name
+    else:
+        target = Path(args.out)
     if target.is_dir():
         target = target / name
     if target.exists() and not args.force:

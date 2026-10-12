@@ -182,6 +182,17 @@ def test_files_lists_the_run_s_files_with_their_sizes(cli, run):
     assert "ProjectParameters.json" in ran.out and "KB" in ran.out
 
 
+def test_files_keeps_a_long_name_apart_from_its_size(cli, run):
+    """The sizes line up after the longest name, however long a deck's stage names are."""
+    import re
+
+    rows = cli("results", "files", run).out.splitlines()[1:-1]
+
+    found = [re.fullmatch(r"  \S+ {2,}(\S+ \S+)", row) for row in rows]
+    assert rows and all(found), [row for row, match in zip(rows, found) if not match]
+    assert len({match.start(1) for match in found}) == 1
+
+
 # ── CSV ─────────────────────────────────────────────────────────────────────
 
 def test_a_field_as_csv_is_the_gui_s_csv(cli, run):
@@ -228,6 +239,16 @@ def test_get_copies_one_file_of_the_run(cli, run, tmp_path):
     root, _ = results_run.fake_run()
     assert ((tmp_path / "ProjectParameters.json").read_bytes()
             == (root / run / "ProjectParameters.json").read_bytes())
+
+
+def test_get_into_a_folder_that_is_not_there_yet_makes_it(cli, run, tmp_path):
+    """`--out logs/`: a path that ends in a separator is a folder, made if need be --
+    not a file called `logs`."""
+    for name, separator in (("logs", "/"), ("more", "\\")):
+        ran = cli("results", "get", run, "kratos.log", "--out", f"{tmp_path / name}{separator}")
+
+        assert ran.code == 0, ran.err
+        assert (tmp_path / name / "kratos.log").is_file()
 
 
 def test_get_does_not_overwrite_a_file_unless_told_to(cli, run, tmp_path):
