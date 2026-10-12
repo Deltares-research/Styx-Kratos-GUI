@@ -2,7 +2,7 @@ fastapi==0.143.0
 uvicorn[standard]==0.34.0
 pydantic==2.10.4
 gmsh==4.13.1
-numpy==2.2.1
+numpy==2.5.3
 
 # tests
 pytest==9.1.1
