@@ -417,18 +417,29 @@ def test_the_readme_points_to_the_contributing_guide_and_the_security_policy():
 
 AUTHOR = "Marjan Fathian"
 HOME = "https://github.com/Deltares-research/Styx-Kratos-GUI"
-STARTED = "https://github.com/indigocoral/Kratos-GUI"
+STARTED = "indigocoral/Kratos-GUI"
 
 
-@pytest.mark.parametrize("name", ["README.md", "docs/INSTALLATION.md", "CITATION.cff",
-                                  ".github/lychee.toml"])
+@pytest.mark.parametrize("name", ["README.md", "docs/INSTALLATION.md", "CITATION.cff"])
 def test_the_documents_name_the_repository_by_its_new_name(name):
-    """The repository is Styx-Kratos-GUI under Deltares-research. GitHub redirects the old
-    name, but a clone made from an old link lands in a folder the guides do not name."""
+    """The repository is the public Styx-Kratos-GUI under Deltares-research. A clone made
+    from an old link would land in a folder the guides do not name."""
     text = (ROOT / name).read_text(encoding="utf-8")
     assert "Deltares-research/Kratos-GUI" not in text
-    assert "Deltares-research/Styx-Kratos-GUI" in text.replace("\\", "")
+    assert "Deltares-research/Styx-Kratos-GUI" in text
     assert "cd Kratos-GUI" not in text
+
+
+def test_the_link_check_reaches_the_public_repository():
+    """The repository is public, so its own links answer and are checked like any other."""
+    excluded = tomllib.loads((GITHUB / "lychee.toml").read_text(encoding="utf-8"))["exclude"]
+    assert not [pattern for pattern in excluded if "Styx-Kratos-GUI" in pattern]
+
+
+def test_the_readme_does_not_link_to_the_private_repository():
+    """Where the project started is named, not linked: that repository stays private, and
+    its link would answer 404 to every reader of the public one."""
+    assert f"https://github.com/{STARTED}" not in (ROOT / "README.md").read_text(encoding="utf-8")
 
 
 def test_the_citation_names_the_author():
