@@ -43,6 +43,7 @@ import threading
 import zipfile
 from collections import OrderedDict
 from pathlib import Path, PureWindowsPath
+from typing import Any
 
 from core.kratos import deck_files
 from core.analysis import calculation
@@ -246,7 +247,7 @@ def stage_list(directory: Path) -> list[dict]:
             for index, (name, base) in enumerate(stages, start=1)]
 
 
-def _stages_from_deck(directory: Path) -> list[tuple[str, str]]:
+def _stages_from_deck(directory: Path) -> list[tuple[str, str | None]]:
     """`(stage name, output base name)` per stage, from `ProjectParameters.json`.
 
     Every lookup is defensive. This file is written by us, but the directory it sits in
@@ -280,7 +281,7 @@ def _stages_from_deck(directory: Path) -> list[tuple[str, str]]:
     return out
 
 
-def _gid_output_name(stage: object) -> str | None:
+def _gid_output_name(stage: Any) -> str | None:
     """The base name the GiD writer was handed, which is what its files are called.
 
     Our own decks give it the stage's `problem_name`, so the two never differed until a
@@ -296,7 +297,7 @@ def _gid_output_name(stage: object) -> str | None:
     return PureWindowsPath(name).name if isinstance(name, str) and name else None
 
 
-def _stages_from_files(directory: Path) -> list[tuple[str, str]]:
+def _stages_from_files(directory: Path) -> list[tuple[str, str | None]]:
     """The fallback: every `*.post.res` in the directory, ordered by stage number.
 
     A stage's output is named `<deck>_<index>_<phase>`, and the deck name is the one
@@ -307,9 +308,9 @@ def _stages_from_files(directory: Path) -> list[tuple[str, str]]:
     found = []
     for path in directory.glob(f"*{RESULTS_SUFFIX}"):
         base = path.name[:-len(RESULTS_SUFFIX)]
-        match = re.search(r"_(\d+_.*)$", base)
+        match = re.search(r"_((\d+)_.*)$", base)
         if match:
-            found.append((int(STAGE_NUMBER.match(match[1])[1]), match[1], base))
+            found.append((int(match[2]), match[1], base))
     return [(name, base) for _, name, base in sorted(found)]
 
 

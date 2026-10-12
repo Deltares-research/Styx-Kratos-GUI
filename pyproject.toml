@@ -40,11 +40,13 @@ skip_empty = true
 directory = "htmlcov"
 
 # ── mypy (the lint workflow, .github/workflows/lint.yml) ─────────────────────
-# It reports without failing the build until the existing findings are worked down; then
-# drop `continue-on-error` from the mypy job there.
+# No findings since 2026-10-12, and the job fails on a new one.
 [tool.mypy]
 files = ["core", "backend", "cli"]
 python_version = "3.10"
+# The lint workflow runs on Linux; checked as Linux on Windows too, so `readline` has
+# its functions there and both agree.
+platform = "linux"
 # gmsh and a few others ship no type information.
 ignore_missing_imports = true
 warn_unused_ignores = true

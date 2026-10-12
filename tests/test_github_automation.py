@@ -138,9 +138,11 @@ def test_eslint_leaves_the_vendored_and_the_frozen_code_alone():
     assert "import " not in config, "a plain npx eslint has no plugins to import"
 
 
-def test_mypy_reports_without_failing_the_build_until_its_findings_are_worked_down(lint):
+def test_mypy_fails_the_build_now_its_findings_are_worked_down(lint):
+    """It reported without failing while 142 findings stood (2026-10-12); with none
+    left, a new one fails the lint workflow."""
     job = lint["jobs"]["mypy"]
-    assert job["continue-on-error"] is True
+    assert not job.get("continue-on-error", False)
     assert "mypy" in commands(job) and "requirements-dev.txt" in commands(job)
     pinned = (ROOT / "requirements-dev.txt").read_text(encoding="utf-8")
     assert re.search(rf"^mypy=={SEMVER}$", pinned, re.MULTILINE)
@@ -324,6 +326,13 @@ def test_the_links_in_the_documentation_are_checked():
     assert (GITHUB / "lychee.toml").is_file()
 
 
+def test_the_link_check_settings_are_ones_lychee_accepts():
+    """`lychee-action@v2` runs the newest lychee, and lychee 0.24 refused the old boolean
+    `include_fragments = false` ("wanted string or table"): the whole check failed to start."""
+    settings = tomllib.loads((GITHUB / "lychee.toml").read_text(encoding="utf-8"))
+    assert settings["include_fragments"] in ("none", "anchor-only", "text-only", "full")
+
+
 # ── Branch ruleset ──────────────────────────────────────────────────────────
 
 @pytest.fixture(scope="module")
@@ -384,7 +393,8 @@ def test_the_workflows_themselves_are_linted():
 
 
 def test_advisory_and_flaky_checks_are_not_required(ruleset):
-    """mypy reports only; outside links can be down for reasons no pull request causes."""
+    """mypy is not a required check yet; outside links can be down for reasons no pull
+    request causes."""
     required = required_checks(ruleset)
     assert "mypy" not in required
     for job_id, job in workflow("docs.yml")["jobs"].items():

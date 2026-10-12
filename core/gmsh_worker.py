@@ -21,6 +21,7 @@ repeated `initialize()`/`finalize()` cycles are a documented source of trouble.
 from __future__ import annotations
 
 import asyncio
+import multiprocessing
 from concurrent.futures import ProcessPoolExecutor
 from concurrent.futures.process import BrokenProcessPool
 from typing import Any, Callable
@@ -50,7 +51,11 @@ def _init_worker() -> None:
 def executor() -> ProcessPoolExecutor:
     global _executor
     if _executor is None:
-        _executor = ProcessPoolExecutor(max_workers=1, initializer=_init_worker)
+        # Spawned on every platform, as Windows always does: Linux would fork, and a
+        # fork of a process with other threads (a server, a browser driver) can
+        # inherit a lock one of them held, and wait on it forever.
+        _executor = ProcessPoolExecutor(max_workers=1, initializer=_init_worker,
+                                        mp_context=multiprocessing.get_context("spawn"))
     return _executor
 
 

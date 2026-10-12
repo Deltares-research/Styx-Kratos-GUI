@@ -72,8 +72,8 @@ def deck_project(directory: str | Path, parameters: str = deck_files.PARAMETERS_
 
     model = _mesh(source)
     x0, y0, _z0, x1, y1, _z1 = model.bbox
-    parameters = _parameters(source)
-    source = source.model_copy(update={"parts": stageable_parts(parameters)})
+    settings = _parameters(source)
+    source = source.model_copy(update={"parts": stageable_parts(settings)})
     blank = blank_project()
     return Project.model_validate(blank.model_dump() | {
         "name": name or deck_name(source),
@@ -83,7 +83,7 @@ def deck_project(directory: str | Path, parameters: str = deck_files.PARAMETERS_
                          z1=blank.domain.z1, y_top=max(y1, y0 + 1e-3),
                          y_bottom=y0).model_dump(),
         "deck": source.model_dump(),
-        "phases": [phase.model_dump() for phase in phases(parameters)],
+        "phases": [phase.model_dump() for phase in phases(settings)],
     })
 
 

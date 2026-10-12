@@ -153,7 +153,7 @@ def show_deck(args: argparse.Namespace) -> Answer:
     if stages:
         lines.append(f"  {len(stages)} stages:")
         for number, stage in enumerate(stages, start=1):
-            change = [stage.calculation]
+            change: list[str] = [stage.calculation]
             if stage.activate:
                 change.append("activates " + ", ".join(stage.activate))
             if stage.deactivate:
@@ -187,6 +187,8 @@ def _deck_location(source: Path) -> tuple[Path, str]:
 
 def _deck_mdpa(directory: Path, parameters: str) -> Path:
     deck = external_deck.deck_project(directory, parameters).deck
+    if deck is None:        # a deck's own project always carries it
+        raise CommandError(f"no deck in {directory}")
     return Path(deck.directory) / f"{external_deck.deck_name(deck)}.mdpa"
 
 

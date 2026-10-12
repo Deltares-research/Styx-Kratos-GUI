@@ -154,7 +154,7 @@
     var colors = R.colors({ values: [5, 5, 5], missing: 0 }, { min: 5, max: 5 });
 
     T.eq(colors.length, 9);
-    colors.forEach(function (c) { T.ok(c === c, 'NaN reached the colour buffer'); });
+    colors.forEach(function (c) { T.ok(!Number.isNaN(c), 'NaN reached the colour buffer'); });
   });
 
   test('a value outside the range is clamped rather than wrapped', function () {
@@ -204,7 +204,7 @@
         var rgb = R.sample(name, i / 10);
         T.eq(rgb.length, 3, name);
         rgb.forEach(function (c) {
-          T.ok(c >= 0 && c <= 1 && c === c, name + ' is out of range at '
+          T.ok(c >= 0 && c <= 1, name + ' is out of range at '
                                             + (i / 10) + ': ' + c);
         });
       }

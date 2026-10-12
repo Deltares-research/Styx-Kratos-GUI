@@ -224,7 +224,8 @@ def _nodes(lines: list[str], index: int, model: MdpaModel) -> int:
         # rather than pre-filtering the whole file keeps the line indices this parser
         # returns meaningful, which is what every caller of these helpers relies on.
         if parts:
-            model.nodes[int(parts[0])] = tuple(float(v) for v in parts[1:4])
+            x, y, z = (float(v) for v in parts[1:4])
+            model.nodes[int(parts[0])] = (x, y, z)
         index += 1
     return index + 1
 
@@ -460,8 +461,9 @@ def to_sections(model: MdpaModel) -> list[dict]:
         drawn: list[tuple[int, list[int]]] = []
         for element_id in part.elements:
             claimed.add(element_id)
-            kind, conn = by_id.get(element_id, (None, None))
-            if kind in DRAWABLE:
+            entry = by_id.get(element_id)
+            if entry is not None and entry[0] in DRAWABLE:
+                kind, conn = entry
                 conns_by_kind.setdefault(kind, []).append(conn)
                 drawn.append((element_id, conn))
         triangles, edges = _triangles_and_edges(conns_by_kind, model.dimension)

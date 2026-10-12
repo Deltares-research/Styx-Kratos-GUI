@@ -60,6 +60,15 @@ def test_it_installs_the_app_the_test_tools_and_quickjs(commands):
     assert "quickjs" in commands
 
 
+def test_a_quickjs_that_does_not_build_does_not_fail_the_install(job):
+    """`cmd || echo ...` is the fallback, and it only holds in bash: on Windows the default
+    shell is PowerShell, which leaves the failed pip's exit code behind and fails the step
+    (Python 3.13, where quickjs has no wheel and its build fails)."""
+    (install,) = [step for step in job["steps"] if "pip install quickjs" in step.get("run", "")]
+    assert "||" in install["run"]
+    assert install.get("shell") == "bash"
+
+
 def test_it_installs_the_requirements_kept_at_the_repository_root(job, commands):
     setup = next(step for step in job["steps"]
                  if str(step.get("uses", "")).startswith("actions/setup-python"))
