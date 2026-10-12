@@ -296,7 +296,7 @@ def test_the_archive_leaves_out_only_what_a_user_does_not_run():
     assert ignored
     needed = ("core", "backend", "cli", "frontend/js", "frontend/index.html",
               "requirements.txt", "run.bat", "run.sh", "kratos-cli.bat", "kratos-cli.sh",
-              "README.md", "LICENSE")
+              "README.md", "LICENSE", "CITATION.cff")
     for pattern in ignored:
         path = pattern.strip("/")
         assert (ROOT / path).exists(), f"{pattern} names nothing"
@@ -403,7 +403,7 @@ def test_advisory_and_flaky_checks_are_not_required(ruleset):
 
 # ── What a contributor reads first ──────────────────────────────────────────
 
-@pytest.mark.parametrize("name", ["LICENSE", "CONTRIBUTING.md", "SECURITY.md"])
+@pytest.mark.parametrize("name", ["LICENSE", "CITATION.cff", "CONTRIBUTING.md", "SECURITY.md"])
 def test_the_community_files_are_there(name):
     assert (ROOT / name).is_file(), name
 
@@ -411,6 +411,54 @@ def test_the_community_files_are_there(name):
 def test_the_readme_points_to_the_contributing_guide_and_the_security_policy():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     assert "(CONTRIBUTING.md)" in readme and "(SECURITY.md)" in readme
+
+
+# ── Who made it ─────────────────────────────────────────────────────────────
+
+AUTHOR = "Marjan Fathian"
+HOME = "https://github.com/Deltares-research/Kratos-GUI"
+STARTED = "https://github.com/indigocoral/Kratos-GUI"
+
+
+def test_the_citation_names_the_author():
+    """GitHub reads CITATION.cff at the root and shows "Cite this repository" beside the
+    code, with these authors, in the order given."""
+    citation = load(ROOT / "CITATION.cff")
+    assert citation["cff-version"] == "1.2.0"
+    assert citation["type"] == "software"
+    assert "license" not in citation, "the license is still to be decided"
+    assert citation["repository-code"] == HOME
+    first = citation["authors"][0]
+    assert (first["given-names"], first["family-names"]) == ("Marjan", "Fathian")
+    assert first["affiliation"] == "Deltares"
+    assert {"title", "message", "abstract"} <= set(citation)
+
+
+TO_BE_DECIDED = "still under consideration and has not been decided"
+
+
+def test_the_license_is_still_to_be_decided():
+    """No license is chosen yet. LICENSE says so, and nothing grants one in the meantime:
+    no Apache text in LICENSE, no badge, no license line for contributions."""
+    license_file = (ROOT / "LICENSE").read_text(encoding="utf-8")
+    assert TO_BE_DECIDED in license_file and "Apache" not in license_file
+    assert not (ROOT / "NOTICE").exists(), "a NOTICE file belongs to an Apache license"
+    for name in ("README.md", "CONTRIBUTING.md"):
+        text = (ROOT / name).read_text(encoding="utf-8")
+        assert "Apache" not in text and "to be decided" in text, name
+
+
+def test_the_readme_license_section_says_it_is_to_be_decided():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    section = readme.split("## License", 1)[1].split("\n## ", 1)[0]
+    assert TO_BE_DECIDED in section and "(LICENSE)" in section
+
+
+def test_the_readme_names_the_author_and_where_the_project_started():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    authors = readme.split("## Authors", 1)[1].split("\n## ", 1)[0]
+    assert AUTHOR in authors and "(CITATION.cff)" in authors
+    assert STARTED in authors, "the history before the move is part of the credit"
 
 
 def test_every_path_has_an_owner():

@@ -1,0 +1,23 @@
+# How to cite Styx. GitHub reads this file and shows "Cite this repository" beside the code.
+cff-version: 1.2.0
+message: "If you use Styx in your work, please cite it as below."
+type: software
+title: "Styx: a browser-based geotechnical modeller for Kratos GeoMechanics"
+abstract: >-
+  Styx is a single-user modeller for staged geotechnical analyses such as excavations and
+  sheet pile walls. It builds the model from OpenCASCADE solids, meshes it with Gmsh, writes
+  a Kratos Multiphysics GeoMechanicsApplication input deck, runs it in construction stages
+  and shows the results. It can be driven from the browser or from the command line
+  (kratos-cli).
+authors:
+  - given-names: Marjan
+    family-names: Fathian
+    affiliation: Deltares
+repository-code: "https://github.com/Deltares-research/Kratos-GUI"
+keywords:
+  - geotechnical engineering
+  - finite element method
+  - Kratos Multiphysics
+  - GeoMechanicsApplication
+  - Gmsh
+  - staged construction
