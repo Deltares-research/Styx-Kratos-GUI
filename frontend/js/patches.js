@@ -664,6 +664,23 @@ App.LivePatches = (function () {
      whole project to another one. What to send is `App.Units`'s (tested headless); this
      sends it, redraws from the project the server stored, and prints what the server
      could not convert. `false` when it is not this command. */
+  /* `script <file.py>`: the open model written as a model script
+     (core/model/script_writer.py). What to send is App.ScriptCommand's; this sends it. */
+  function runScriptCommand(text) {
+    if (!App.ScriptCommand) return false;
+    var answer = App.ScriptCommand.command(text);
+    if (answer === false) return false;
+    if (App.Command.write) App.Command.write('echo', '> ' + String(text).trim());
+    if (!answer.ok) { App.Command.err(answer.message); return true; }
+    App.Command.note(answer.message);
+    App.Api.post('/api/project/script/save', answer.body)
+      .then(function (result) {
+        App.Command.ok(App.ScriptCommand.written(result.path || answer.body.path));
+      })
+      .catch(function (error) { App.Command.err(error.message); });
+    return true;
+  }
+
   function runUnitsCommand(text) {
     if (!App.Units) return false;
     var answer = App.Units.command(text, App.PROJECT);
@@ -2484,6 +2501,7 @@ App.LivePatches = (function () {
         !App.CMD_RESPONSES.help.some(function (line) { return /run </.test(line[1]); })) {
       App.CMD_RESPONSES.help.splice(1, 0,
         ['note', '  run <file.py>         build the model from a Python file'],
+        ['note', '  script <file.py>      write the model as a Python file that builds it'],
         ['note', '  export                write the Kratos deck'],
         ['note', '  cleargeometry         remove drawn/imported custom geometry'],
         ['note', '  results               open what a calculation wrote (try "results runs")'],
@@ -3241,6 +3259,8 @@ App.LivePatches = (function () {
       if (runUnitsCommand(text)) return;
       // `node <id>`: which SubModelParts a node is in.
       if (runNodeCommand(text)) return;
+      // `script <file.py>`: the model written as a Python file that builds it again.
+      if (runScriptCommand(text)) return;
 
       var cmd = (text || '').trim().split(/\s+/)[0].toLowerCase();
       if (cmd === 'phases') {

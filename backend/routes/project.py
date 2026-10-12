@@ -67,6 +67,23 @@ def run_script(request: dict) -> dict:
             "invalidates": ["project", "tree", "geometry", "mesh"]}
 
 
+@router.post("/api/project/script/save")
+def save_script(request: dict) -> dict:
+    """Write the open model as a model script: the command line's `script <file.py>`.
+
+    The file builds the model again (`core.model.script_writer`): `run <file.py>` opens
+    it, and `python <file.py> --out deck/` writes its deck. A file that is there is
+    replaced only with `force`. Local-only for the same reason `run` is: it writes where
+    it is told to, with the user's own privileges.
+    """
+    path = (request or {}).get("path")
+    if not path:
+        raise HTTPException(status_code=422, detail="script needs a path to a .py file")
+    with refusals():
+        written = session.write_script(store.get(), path, force=bool(request.get("force")))
+    return {"path": str(written)}
+
+
 # There is no endpoint that opens one particular model. A model is opened the way any
 # model is -- `run <file.py>` in the command box, through `/api/project/script` -- which works for every model rather than for the one somebody
 # wired an endpoint to.

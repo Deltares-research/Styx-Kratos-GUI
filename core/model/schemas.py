@@ -46,6 +46,10 @@ class CustomPart(Base):
     source: Literal["import", "gui"]
     source_file: str | None = None
     recipe: dict | None = None
+    imported_from: str | None = None
+    """The CAD file an imported part was read from, absolute, when the importer knew it
+    (`kratos-cli volume import`; a browser upload names only the file). A model script
+    reads it again when the part's .brep is gone (`core.scripting.with_solids`)."""
     # A drawn or imported solid becomes *soil* once it is given a material: it then
     # carries the same strength/stiffness/permeability set as a stack layer and is
     # meshed as a soil body. Left unset, the part stays plain display geometry.

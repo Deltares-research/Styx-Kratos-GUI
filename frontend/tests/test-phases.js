@@ -43,6 +43,16 @@
     });
   });
 
+  /* The editing, held to core/model/phases.py's twins: the command line adds, inserts,
+     deletes, copies and switches parts the way the toolbar and the explorer do. */
+  (FIXTURE.edits || []).forEach(function (edit) {
+    test('App.Phases.' + edit.call + '(' + JSON.stringify(edit.args).slice(1, -1)
+         + ') agrees with the command line', function () {
+      var args = [project()].concat(JSON.parse(JSON.stringify(edit.args)));
+      T.eq(App.Phases[edit.call].apply(null, args), edit.result);
+    });
+  });
+
   test('a part switched off and later back on is on', function () {
     /* The case that separates walking the chain from reading the last instruction:
        `soil_L1` is deactivated at dig_1 and activated again at dig_2. */

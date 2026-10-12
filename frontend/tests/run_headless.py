@@ -62,6 +62,12 @@ SUITES = {
         [JS / "unit-table.js", JS / "units.js", JS / "water-command.js"],
         TESTS / "test-water-command.js",
     ),
+    # `script <file.py>`: what was asked and what to send. The request and what is said
+    # once it is written are patches.js's.
+    "script": (
+        [JS / "script-command.js"],
+        TESTS / "test-script-command.js",
+    ),
     # `node <id>`, the right-click "which parts is this node in" and the hover: the
     # node -> parts index and the text. The fetch, the marker and the menu are DOM.
     "node-parts": (
@@ -123,11 +129,12 @@ SUITES = {
         [JS / "unit-table.js", JS / "units.js", JS / "property-sets.js"],
         TESTS / "test-property-sets.js",
     ),
-    # What a new soil starts as, held to the command line's (core/model/drafts.py)
-    # through the fixture tests/test_draft_parity.py writes.
+    # What a new soil or structure starts as, held to the command line's
+    # (core/model/drafts.py) through the fixture tests/test_draft_parity.py writes.
     "drafts": (
         [TESTS / "fixtures" / "drafts.js", JS / "unit-table.js", JS / "units.js",
-         JS / "property-sets.js", JS / "material-library.js"],
+         JS / "property-sets.js", JS / "material-library.js", JS / "beams.js",
+         JS / "anchors.js", JS / "interfaces.js", JS / "loads.js", JS / "normal-loads.js"],
         TESTS / "test-drafts.js",
     ),
 }

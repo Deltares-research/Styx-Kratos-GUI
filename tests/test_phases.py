@@ -12,6 +12,7 @@ from pydantic import ValidationError
 
 from core.model import phases, schemas
 from core.model.templates import seed_project
+from tests.models.excavation import excavation_project
 
 
 def _project(*phase_records) -> schemas.Project:
@@ -329,3 +330,71 @@ def test_reactivating_a_part_brings_it_back_from_that_phase_on():
 def test_more_than_ten_lifts_are_still_named():
     assert phases._ordinal(10) == "Tenth"
     assert phases._ordinal(11) == "#11"
+
+
+# ── Editing: the Phases toolbar's list transforms (`App.Phases`) ─────────────
+
+def _test_model() -> schemas.Project:
+    """tests/models/excavation.py, staged: seven phases to edit."""
+    return excavation_project()
+
+
+def _ids(listed):
+    return [(phase.id, phase.parent) for phase in listed]
+
+
+def test_add_puts_a_blank_phase_at_the_end_of_the_sequence():
+    project = _test_model()
+
+    listed = phases.added(project)
+
+    new = listed[-1]
+    assert (new.id, new.name, new.parent) == ("phase_1", "Phase 8", "dig_3")
+    assert new == schemas.Phase(id="phase_1", name="Phase 8", parent="dig_3")
+
+
+def test_insert_puts_a_phase_between_a_phase_and_its_parent():
+    listed = phases.inserted(_test_model(), "dig_1")
+
+    assert _ids(listed)[3:5] == [("phase_1", "install_sheetpile"), ("dig_1", "phase_1")]
+    assert listed[3].name == "New phase"
+
+
+def test_remove_heals_the_chain():
+    listed = phases.removed(_test_model(), "install_strut")
+
+    assert ("dig_2", "dig_1") in _ids(listed)
+    assert "install_strut" not in [phase.id for phase in listed]
+
+
+def test_copy_repeats_the_solver_settings_but_not_the_parts():
+    listed = phases.copied(_test_model(), "install_sheetpile")
+
+    made = listed[3]
+    assert (made.id, made.name, made.parent) == ("phase_1",
+                                                 "SheetPileWall installation (copy)",
+                                                 "install_sheetpile")
+    assert (made.reset_displacements, made.max_iterations, made.tolerated_error) == (
+        True, 150, 1e-3)
+    assert made.activate == [] and made.deactivate == []
+    assert ("dig_1", "phase_1") in _ids(listed)
+
+
+def test_set_active_gives_the_smallest_instruction():
+    """Switching a part to what its parent already gives drops the instruction rather
+    than stacking a second one."""
+    project = _test_model()
+
+    off = phases.set_active(project, "dig_1", ["strut"], True)
+    assert next(p for p in off if p.id == "dig_1").activate == ["water_1", "strut"]
+
+    back = phases.set_active(project, "install_sheetpile", ["sheetpile"], False)
+    assert next(p for p in back if p.id == "install_sheetpile").activate == [
+        "wall_contact", "surcharge"]
+
+
+def test_an_edit_of_a_phase_that_is_not_there_changes_nothing():
+    project = _test_model()
+
+    for edit in (phases.inserted, phases.removed, phases.copied):
+        assert edit(project, "nope") == project.phases

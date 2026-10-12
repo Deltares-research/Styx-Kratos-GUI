@@ -301,6 +301,16 @@ def test_the_archive_leaves_out_only_what_a_user_does_not_run():
         assert not any(keep == path or keep.startswith(path + "/") for keep in needed), pattern
 
 
+def test_shell_scripts_keep_lf_on_every_checkout():
+    """With `core.autocrlf` on, as Git for Windows sets it, a checkout writes CRLF, and
+    bash reads the CR as part of each command (`set: pipefail\r: invalid option`): a
+    clone on Windows could not run `kratos-cli.sh` in Git Bash."""
+    lines = (ROOT / ".gitattributes").read_text(encoding="utf-8").splitlines()
+    assert any(line.split()[:3] == ["*.sh", "text", "eol=lf"] for line in lines)
+    for script in ("run.sh", "kratos-cli.sh"):
+        assert b"\r" not in (ROOT / script).read_bytes(), script
+
+
 # ── Documentation links ─────────────────────────────────────────────────────
 
 def test_the_links_in_the_documentation_are_checked():

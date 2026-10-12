@@ -28,6 +28,7 @@ import json
 import os
 import re
 import tempfile
+import time
 from pathlib import Path
 
 from core import scripting
@@ -35,8 +36,9 @@ from core.kratos import materials
 from core.model import drafts, phases, units
 from core.model.load_translation import translate as translate_loads
 from core.model.schemas import (CustomPart, DimensionUpdate, LayersUpdate, MaterialsUpdate,
-                                MeshRequest, PhasesUpdate, Project, StructuresUpdate,
-                                UnitsUpdate, WaterLevel, WaterUpdate)
+                                MeshRequest, Panel, PhasesUpdate, Project, StructuresUpdate,
+                                UnitsUpdate, WaterLevel, WaterUpdate, point_on_panel,
+                                point_on_polyline)
 from core.model.wall_translation import translate as translate_walls
 
 
@@ -108,16 +110,66 @@ def save(project: Project, path: str | Path) -> Path:
         raise ProjectFileError(f"a project is saved as a .json file, not as {path.name}. "
                                "Give a path ending in .json.")
     text = json.dumps(project.model_dump(mode="json"), indent=2, ensure_ascii=False) + "\n"
+    return _write(path, text)
+
+
+def write_script(project: Project, path: str | Path, *, force: bool = False,
+                 source: str | Path | None = None) -> Path:
+    """Write `project` as a model script (`core.model.script_writer`): the Python file
+    that builds it again, which `run`, `kratos-cli` and `python <file> --out deck/` take.
+
+    `source` is the project file it came from, which the file names. A file that is
+    there already is replaced only with `force`: a script may have been edited by hand.
+    """
+    from core.model import script_writer
+
+    path = Path(path)
+    if path.suffix.lower() != ".py":
+        raise EditRefused(f"a model script is a .py file, not {path.name}. "
+                          "Give a path ending in .py.")
+    if path.exists() and not force:
+        raise EditRefused(f"{path} is there already, and may have been edited by hand: "
+                          "give --force to replace it.")
+    return _write(path, script_writer.script(project, source=source, name=path.name))
+
+
+def _write(path: Path, text: str) -> Path:
+    """`text` into `path`, UTF-8: written beside it and moved over it in one step."""
     folder = path.parent if str(path.parent) else Path(".")
     handle, temporary = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=folder)
     try:
         with os.fdopen(handle, "w", encoding="utf-8", newline="") as file:
             file.write(text)
-        os.replace(temporary, path)
+        _replace(temporary, path)
     except BaseException:
         Path(temporary).unlink(missing_ok=True)
         raise
     return path
+
+
+REPLACE_TRIES = 20
+REPLACE_WAIT = 0.05
+"""How long a save waits for a file another program holds open: a second in all."""
+
+
+def _replace(temporary: str, path: Path) -> None:
+    """Move the written file over `path`, waiting out a program that has it open.
+
+    Windows will not replace a file another program holds -- a virus scanner reading
+    the file a command has just written, an indexer -- and says "Access is denied".
+    The hold lasts milliseconds, and the next command's save is the one that meets it,
+    so a save tries again for a moment before it gives up.
+    """
+    for attempt in range(REPLACE_TRIES):
+        try:
+            os.replace(temporary, path)
+            return
+        except PermissionError:
+            if attempt == REPLACE_TRIES - 1:
+                raise ProjectFileError(
+                    f"{path} could not be written: another program holds it open. "
+                    "Close it there, and try again.") from None
+            time.sleep(REPLACE_WAIT)
 
 
 # ── Soil, water, materials, structures ──────────────────────────────────────
@@ -368,13 +420,14 @@ def with_created_part(project: Project, recipe: dict,
     return edited, part
 
 
-def with_imported_part(project: Project, filename: str | None,
-                       built: dict) -> tuple[Project, CustomPart]:
+def with_imported_part(project: Project, filename: str | None, built: dict,
+                       source: str | Path | None = None) -> tuple[Project, CustomPart]:
     """`project` with the solid read from a CAD file, and the part it became.
 
-    `built` is what `core.gmsh_worker.import_job` answered. The key follows the highest
-    import key in use, not the count: a deleted imported_0 must not let the next import
-    take a key that imported_1 still holds.
+    `built` is what `core.gmsh_worker.import_job` answered. `source` is the file it was
+    read from, when the caller knows it, kept so a model script can read it again. The
+    key follows the highest import key in use, not the count: a deleted imported_0 must
+    not let the next import take a key that imported_1 still holds.
     """
     edited = project.model_copy(deep=True)
     taken = [int(p.key.split("_", 1)[1]) for p in edited.custom_parts
@@ -385,6 +438,7 @@ def with_imported_part(project: Project, filename: str | None,
         label=filename or key,
         source="import",
         source_file=built["brep_path"],
+        imported_from=str(Path(source).resolve()) if source is not None else None,
         # gmsh measured it while the part was open; kept so `Project.extent` can say
         # how far the model reaches without reopening every .brep.
         bbox=tuple(built["bbox"]),
@@ -851,3 +905,238 @@ def _index(records: list, id: str, what: str) -> int:
 def _refuse_taken(id: str, taken: list[str], what: str) -> None:
     if id in taken:
         raise EditRefused(f"there is already a {what} {id!r}; give another id.")
+
+
+# ── Structures, one at a time ───────────────────────────────────────────────
+#
+# What the Structure mode's tools save one record at a time through
+# `PATCH /api/project/structures` (`replace_structures` above): a sheet pile, wall or
+# member, an anchor, an interface, a normal load or a load, each with the section it is
+# built with when the project has none by that id yet (`drafts.section_for`). The
+# collections share one namespace with the soil bodies -- the keys a phase switches --
+# so an id is refused that any part already has.
+
+STRUCTURES = ("beams", "anchors", "interfaces", "normal_loads", "loads")
+"""The project lists a structure is kept in."""
+
+RESERVED = {"excavation", "wall", "struts", "anchors", "piles", "water", "wells"}
+"""The keys of the demo's own pit furniture, which no structure may take
+(`Project._cross_references`)."""
+
+
+def _collection(record) -> str:
+    kind = getattr(record, "kind", None)
+    for field, kinds in (("beams", ("beam", "panel", "member")),
+                         ("anchors", ("anchor", "anchor3d")), ("interfaces", ("interface",)),
+                         ("normal_loads", ("normal",)),
+                         ("loads", ("point", "line", "surface"))):
+        if kind in kinds:
+            return field
+    raise EditRefused(f"{type(record).__name__} is not a structure")
+
+
+def find_structure(project: Project, id: str):
+    """The structure `id` -- sheet pile, wall, member, anchor, interface or load."""
+    for field in STRUCTURES:
+        for record in getattr(project, field):
+            if record.id == id:
+                return record
+    names = [r.id for field in STRUCTURES for r in getattr(project, field)]
+    raise UnknownRecord(f"there is no structure {id!r}; there are: "
+                        + (", ".join(names) or "none"))
+
+
+def add_structure(project: Project, record, section=None) -> Project:
+    """`project` with the structure `record`, and with `section` -- the default one it
+    brings, `drafts.section_for` -- added to its library."""
+    taken = set(project.part_keys()) | set(project.stageable_keys())
+    taken |= {r.id for field in STRUCTURES for r in getattr(project, field)} | RESERVED
+    if record.id in taken:
+        raise EditRefused(f"there is already a part {record.id!r}; give another id. A "
+                          "phase names a part by its id, so no two parts share one.")
+    payload = project.model_dump()
+    if section is not None:
+        field = drafts.SECTION_FIELDS[drafts.section_kind(record)]
+        _refuse_taken(section.id, [s["id"] for s in payload[field]], "section")
+        payload[field].append(section.model_dump())
+    payload[_collection(record)].append(record.model_dump())
+    return Project.model_validate(payload)
+
+
+def update_structure(project: Project, id: str, **fields) -> Project:
+    """The structure `id` with the fields given, by their schema names."""
+    field = _collection(find_structure(project, id))
+    payload = project.model_dump()
+    record = next(r for r in payload[field] if r["id"] == id)
+    record.update(fields)
+    return Project.model_validate(payload)
+
+
+def remove_structure(project: Project, id: str) -> Project:
+    """The project without the structure `id`, and without its mesh size.
+
+    Refused while a phase names it -- which phases should lose it is a modelling decision,
+    as for a custom part (`without_custom_parts`) -- and, for a pile, while an anchor
+    hangs from it or an interface follows it: those would be left on nothing.
+    """
+    record = find_structure(project, id)
+    users = [phase.id for phase in project.phases
+             if id in phase.activate or id in phase.deactivate]
+    if users:
+        raise EditRefused("cannot remove a structure a phase still uses ("
+                          + "; ".join(f"phase {phase!r} names {id}" for phase in users)
+                          + "); take it out of those phases first")
+    if _collection(record) == "beams":
+        hanging = [a.id for a in project.anchors if _hangs_from(a, record)]
+        hanging += [i.id for i in project.interfaces if i.structure == id]
+        if hanging:
+            raise EditRefused(f"{id} carries {', '.join(hanging)}; remove or move them "
+                              "first")
+    payload = project.model_dump()
+    field = _collection(record)
+    payload[field] = [r for r in payload[field] if r["id"] != id]
+    payload["mesh"]["body_sizes"].pop(id, None)
+    return Project.model_validate(payload)
+
+
+def _hangs_from(anchor, structure) -> bool:
+    """Whether the head of `anchor` is on `structure`, the test `Project` holds it to."""
+    if len(anchor.head) == 3 and isinstance(structure, Panel):
+        return point_on_panel(anchor.head, structure)
+    points = getattr(structure, "points", None)
+    if points is None or len(points[0]) != len(anchor.head):
+        return False
+    return point_on_polyline(anchor.head, points)
+
+
+def find_section(project: Project, id: str, kind: str | None = None) -> tuple[str, object]:
+    """The section `id` and its kind, which `kind` names when two libraries share the id."""
+    kinds = [k for k, field in drafts.SECTION_FIELDS.items()
+             if (kind is None or k == kind) and any(s.id == id for s in getattr(project, field))]
+    if not kinds:
+        where = f"{kind} section" if kind else "section"
+        names = [s.id for k, field in drafts.SECTION_FIELDS.items()
+                 if kind is None or k == kind for s in getattr(project, field)]
+        raise UnknownRecord(f"there is no {where} {id!r}; there are: "
+                            + (", ".join(names) or "none"))
+    if len(kinds) > 1:
+        raise EditRefused(f"{id} is both a {' and an '.join(kinds)} section; say which "
+                          "with its kind")
+    field = drafts.SECTION_FIELDS[kinds[0]]
+    return kinds[0], next(s for s in getattr(project, field) if s.id == id)
+
+
+def add_section(project: Project, kind: str, section) -> Project:
+    """`project` with the new `kind` section `section` (`drafts.section` makes one)."""
+    field = drafts.SECTION_FIELDS[kind]
+    _refuse_taken(section.id, [s.id for s in getattr(project, field)], f"{kind} section")
+    payload = project.model_dump()
+    payload[field].append(section.model_dump())
+    return Project.model_validate(payload)
+
+
+def update_section(project: Project, id: str, *, kind: str | None = None,
+                   variables: dict | None = None, unset: list[str] = (),
+                   **fields) -> Project:
+    """The section `id` with the fields given by their schema names, the variables
+    given, and without the variables `unset` names."""
+    field = drafts.SECTION_FIELDS[find_section(project, id, kind)[0]]
+    payload = project.model_dump()
+    record = next(s for s in payload[field] if s["id"] == id)
+    record.update(fields)
+    record["variables"].update(variables or {})
+    for variable in unset:
+        if variable not in record["variables"]:
+            raise EditRefused(f"{id} has no variable {variable}; it has: "
+                              + (", ".join(record["variables"]) or "none"))
+        del record["variables"][variable]
+    return Project.model_validate(payload)
+
+
+def remove_section(project: Project, id: str, kind: str | None = None) -> Project:
+    """The project without the section `id`, refused while a structure is built with it."""
+    kind, _ = find_section(project, id, kind)
+    users = [r.id for field in STRUCTURES for r in getattr(project, field)
+             if drafts.section_kind(r) == kind and r.section == id]
+    if users:
+        raise EditRefused(f"the {kind} section {id} is used by {', '.join(users)}; give "
+                          "them another section first")
+    payload = project.model_dump()
+    field = drafts.SECTION_FIELDS[kind]
+    payload[field] = [s for s in payload[field] if s["id"] != id]
+    return Project.model_validate(payload)
+
+
+# ── Phases, one at a time ───────────────────────────────────────────────────
+#
+# The Phases toolbar's Add, Insert, Copy and Delete, the phase panel's fields and the
+# Model explorer's checkbox in Staged construction mode, each made with the list
+# transform the GUI makes (`phases.added` ... `phases.set_active`) and stored the way
+# `PATCH /api/project/phases` stores a list (`replace_phases`).
+
+def find_phase(project: Project, id: str):
+    """The phase `id`."""
+    return project.phases[_index(project.phases, id, "phase")]
+
+
+def add_phase(project: Project, *, before: str | None = None, copy_of: str | None = None,
+              id: str | None = None, **fields) -> tuple[Project, object]:
+    """A new phase -- at the end of the sequence, `before` a phase (Insert), or after
+    `copy_of` with its solver settings (Copy) -- with the id and the fields given.
+    Returns the project and the phase."""
+    for named in (before, copy_of):
+        if named is not None:
+            _index(project.phases, named, "phase")
+    if id is not None:
+        _refuse_taken(id, [phase.id for phase in project.phases], "phase")
+    if before is not None:
+        listed = phases.inserted(project, before)
+    elif copy_of is not None:
+        listed = phases.copied(project, copy_of)
+    else:
+        listed = phases.added(project)
+    fresh = next(phase.id for phase in listed
+                 if phase.id not in {p.id for p in project.phases})
+    payload = [phase.model_dump() for phase in listed]
+    for phase in payload:
+        if phase["id"] == fresh:
+            phase.update(fields, id=id or fresh)
+        if id is not None and phase["parent"] == fresh:
+            phase["parent"] = id
+    edited = replace_phases(project, PhasesUpdate(phases=payload))
+    return edited, next(phase for phase in edited.phases if phase.id == (id or fresh))
+
+
+def update_phase(project: Project, id: str, **fields) -> Project:
+    """The phase `id` with the fields given, by their schema names."""
+    _index(project.phases, id, "phase")
+    payload = [phase.model_dump() for phase in project.phases]
+    next(phase for phase in payload if phase["id"] == id).update(fields)
+    return replace_phases(project, PhasesUpdate(phases=payload))
+
+
+def remove_phase(project: Project, id: str) -> Project:
+    """The project without phase `id`, its children starting from its parent."""
+    _index(project.phases, id, "phase")
+    return replace_phases(project, PhasesUpdate(phases=phases.removed(project, id)))
+
+
+def switch_parts(project: Project, id: str, keys: list[str], active: bool) -> Project:
+    """The parts `keys` in the model (`active`) or out of it from phase `id` on, as the
+    Model explorer's checkbox switches them in Staged construction mode."""
+    _index(project.phases, id, "phase")
+    stageable = project.stageable_keys()
+    for key in keys:
+        if key not in stageable:
+            raise EditRefused(f"there is no part {key!r} to switch; `kratos-cli parts` "
+                              "lists the parts a phase can switch")
+    return replace_phases(project, PhasesUpdate(
+        phases=phases.set_active(project, id, list(keys), active)))
+
+
+def staged_excavation_phases(project: Project) -> Project:
+    """The whole staged-excavation sequence derived from the model -- settle, build the
+    wall, then dig and prop lift by lift (`phases.staged_excavation_phases`) -- replacing
+    whatever is there."""
+    return replace_phases(project, PhasesUpdate(
+        phases=phases.staged_excavation_phases(project)))

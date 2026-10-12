@@ -53,6 +53,43 @@ one the script imported first: a script kept at the repository root sits above b
 folders, so where a module's file is cannot be what decides it."""
 
 
+def with_solids(project: Project) -> Project:
+    """`project` with every drawn and imported solid on disk: what a model script asks
+    for (`core.model.script_writer`), whose parts point at .brep files outside it.
+
+    A part whose .brep is there is left as it is. One whose .brep is gone is built again
+    -- a drawn one from its recipe, an imported one from the file it was read from
+    (`CustomPart.imported_from`) -- and points at the new .brep. An imported part with
+    no file to read again is refused by name.
+    """
+    import json
+
+    gone = [part.key for part in project.custom_parts
+            if not (part.source_file and Path(part.source_file).is_file())]
+    if not gone:
+        return project
+    from core import gmsh_worker
+
+    payload = project.model_dump()
+    for part in payload["custom_parts"]:
+        if part["key"] not in gone:
+            continue
+        source = part.get("imported_from")
+        if part.get("recipe"):
+            built = gmsh_worker.run_blocking(gmsh_worker.create_job, json.dumps(part["recipe"]))
+        elif source and Path(source).is_file():
+            built = gmsh_worker.run_blocking(gmsh_worker.import_job, source,
+                                             Path(source).suffix.lower())
+        else:
+            raise ScriptError(
+                f"the solid {part['label']!r} ({part['key']}) is gone from "
+                f"{part['source_file']}, and the model does not say which file it was "
+                f"imported from" + (f" ({source} is not there)" if source else "")
+                + ". Import it again, then write the script again.")
+        part["source_file"], part["bbox"] = built["brep_path"], tuple(built["bbox"])
+    return Project.model_validate(payload)
+
+
 class ScriptError(RuntimeError):
     """The file could not be run, or did not describe a model. Shown in the command log,
     so the message has to be the whole explanation -- there is no stack trace on screen."""

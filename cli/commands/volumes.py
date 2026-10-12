@@ -15,11 +15,11 @@ from __future__ import annotations
 
 import argparse
 import json
-import re
 from pathlib import Path
 
 from cli.files import add_project, add_writing, written
 from cli.output import Answer, CommandError
+from cli.words import coordinates
 from core import gmsh_worker, session
 from core.geometry.cad_import import CAD_EXTENSIONS, MESH_EXTENSIONS
 from core.model import drafts
@@ -111,7 +111,8 @@ def import_volume(args: argparse.Namespace) -> Answer:
     if not args.file.is_file():
         raise CommandError(f"no such file: {args.file}")
     built = gmsh_worker.run_here(gmsh_worker.import_job, str(args.file.resolve()), extension)
-    project, part = session.with_imported_part(project, args.file.name, built)
+    project, part = session.with_imported_part(project, args.file.name, built,
+                                               source=args.file)
     if args.label is not None:
         project = session.with_value(project, f"custom_parts[{part.key}].label", args.label)
     if args.material is not None:
@@ -151,12 +152,12 @@ def _recipe(project: Project, args: argparse.Namespace) -> dict:
             if args.extrude is not None:
                 raise CommandError("a 2D volume is swept across the whole model, so it "
                                    "takes no --extrude; give its outline with --points x y ...")
-            recipe = drafts.section_prism(project, _points(args.points, 2))
+            recipe = drafts.section_prism(project, coordinates(args.points, 2))
         else:
             if args.extrude is None:
                 raise CommandError("a 3D polygon needs --extrude dx dy dz")
             recipe = {"kind": "polygon_extrude",
-                      "vertices": [list(p) for p in _points(args.points, 3)],
+                      "vertices": [list(p) for p in coordinates(args.points, 3)],
                       "extrusion": list(args.extrude)}
     elif args.kind == "box":
         _need(args, "origin", "size")
@@ -176,43 +177,3 @@ def _need(args: argparse.Namespace, *names: str) -> None:
     missing = [f"--{name}" for name in names if getattr(args, name) is None]
     if missing:
         raise CommandError(f"a {args.kind} needs " + " and ".join(missing))
-
-
-def _points(words: list[str] | None, size: int) -> list[tuple[float, ...]]:
-    """`--points` as points of `size` coordinates: plain numbers, or `@file` with one
-    point per line (commas, semicolons or spaces between numbers; a header line that is
-    not numbers is passed over)."""
-    if not words:
-        raise CommandError("give the corners with --points")
-    if len(words) == 1 and words[0].startswith("@"):
-        numbers = _numbers_in(Path(words[0][1:]), size)
-    else:
-        try:
-            numbers = [float(word) for word in words]
-        except ValueError:
-            raise CommandError("--points takes plain numbers, e.g. --points 0 0 6 0 3 2, "
-                               "or @file") from None
-    what = "pairs (x y)" if size == 2 else "triples (x y z)"
-    if len(numbers) % size:
-        raise CommandError(f"--points takes {what} of numbers; {len(numbers)} numbers do "
-                           f"not make whole {what.split()[0]}.")
-    return [tuple(numbers[i:i + size]) for i in range(0, len(numbers), size)]
-
-
-def _numbers_in(path: Path, size: int) -> list[float]:
-    try:
-        text = path.read_text(encoding="utf-8")
-    except FileNotFoundError:
-        raise CommandError(f"no such file: {path}") from None
-    numbers: list[float] = []
-    for line in text.splitlines():
-        fields = [field for field in re.split(r"[,;\s]+", line.strip()) if field]
-        try:
-            values = [float(field) for field in fields]
-        except ValueError:
-            continue            # a header, or a comment
-        if values and len(values) != size:
-            raise CommandError(f"{path.name}: {line.strip()!r} is not a point of {size} "
-                               "numbers")
-        numbers += values
-    return numbers

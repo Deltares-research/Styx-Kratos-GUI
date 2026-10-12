@@ -1,10 +1,17 @@
-"""What a new soil starts as, said twice and held to one document.
+"""What a new record starts as, said twice and held to one document.
 
 The GUI starts a new soil from `App.PropertySets.KINDS.soil` and offers the six presets
-of `App.MaterialLibrary`; the command line starts one from `core.model.drafts`. Two
-copies of one table drift, so `frontend/tests/fixtures/drafts.js` is the document both
-are held to: this module writes it from the Python, and `frontend/tests/test-drafts.js`
-compares the JavaScript to it (`frontend/tests/run_headless.py drafts`).
+of `App.MaterialLibrary`; it starts a new sheet pile, wall, member, anchor, interface or
+load from the Structure mode's own `draft` functions. The command line starts each from
+`core.model.drafts`. Two copies of one table drift, so `frontend/tests/fixtures/drafts.js`
+is the document both are held to: this module writes it from the Python, and
+`frontend/tests/test-drafts.js` compares the JavaScript to it
+(`frontend/tests/run_headless.py drafts`).
+
+For the structures the document is a list of calls: a JavaScript function, the project
+it is called on and its arguments, and what the Python twin answered for the same
+project. The JavaScript is called with them and has to answer the same record, field
+for field -- or refuse with the same sentence.
 
     python tests/test_draft_parity.py --write
 
@@ -20,14 +27,19 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
+from core import session   # noqa: E402
 from core.model import drafts   # noqa: E402
+from core.model.schemas import DimensionUpdate, UnitsUpdate   # noqa: E402
+from core.model.templates import seed_project   # noqa: E402
+from tests.models.excavation import excavation_project   # noqa: E402
 
 FIXTURE = (pathlib.Path(__file__).resolve().parents[1]
            / "frontend" / "tests" / "fixtures" / "drafts.js")
 
-HEADER = '''/* Generated fixture -- what a new soil starts as, in the one document the GUI
-   (property-sets.js, material-library.js) and the command line (core/model/drafts.py)
-   are both held to. See tests/test_draft_parity.py, which writes and compares it, and
+HEADER = '''/* Generated fixture -- what a new soil or structure starts as, in the one document
+   the GUI (property-sets.js, material-library.js, beams.js, anchors.js, interfaces.js,
+   loads.js, normal-loads.js) and the command line (core/model/drafts.py) are both held
+   to. See tests/test_draft_parity.py, which writes and compares it, and
    frontend/tests/test-drafts.js, which reads it.
 
    Not hand-edited. `python tests/test_draft_parity.py --write` rebuilds it.
@@ -36,16 +48,131 @@ window.DRAFTS_FIXTURE =
 '''
 
 
+def projects() -> dict:
+    """The projects the structure drafts are made on, by name."""
+    section, _ = session.set_dimension(seed_project(), DimensionUpdate(dimension=2))
+    section_kn, _ = session.set_units(section, UnitsUpdate(unit_system="kN"))
+    pile = drafts.sheet_pile(section_kn)
+    section_pile_kn = section_kn.model_copy(update={
+        "beams": [pile], "beam_sections": [drafts.section_for(section_kn, pile)]})
+    solid = seed_project()
+    wall = drafts.wall(solid)
+    member = drafts.member(solid)
+    return {
+        "section": section,
+        "section_kn": section_kn,
+        "section_pile_kn": section_pile_kn,
+        "pile": excavation_project(staged=False),
+        "solid": solid,
+        "solid_wall": solid.model_copy(update={
+            "beams": [wall], "panel_sections": [drafts.section_for(solid, wall)]}),
+        "solid_member": solid.model_copy(update={
+            "beams": [member], "beam_sections": [drafts.section_for(solid, member)]}),
+    }
+
+
+PROJECT_FIELDS = {"name", "dimension", "unit_system", "section_offset", "domain",
+                  "materials", "custom_parts", "beams", "beam_sections", "panel_sections",
+                  "anchors", "anchor_sections", "interfaces", "interface_sections", "loads",
+                  "normal_loads"}
+"""What the draft functions read of a project, which is all the fixture carries of one."""
+
+
+def _record(record) -> dict:
+    """A draft as the JavaScript holds one: the fields its draft sets, and no others."""
+    return record.model_dump(mode="json", exclude_unset=True)
+
+
+def calls(models: dict) -> list[dict]:
+    """Each structure draft, made by the Python on one of `models`: the JavaScript call
+    that has to answer the same, and the answer."""
+    out = []
+
+    def call(title, js, project, args, python):
+        entry = {"title": title, "call": js, "project": project, "args": args}
+        try:
+            made = python(models[project])
+        except drafts.DraftError as refusal:
+            entry["error"] = str(refusal)
+        else:
+            entry["result"] = ([_record(r) for r in made] if isinstance(made, list)
+                               else _record(made))
+        out.append(entry)
+
+    def library(make):
+        """`sectionsFor` on a project with no section of the record's kind yet: the
+        default section, alone."""
+        return lambda p: [drafts.section_for(p, make(p))]
+
+    call("a sheet pile down the middle", "Beams.draft", "section", ["beam"],
+         drafts.sheet_pile)
+    call("a sheet pile along given points, on the first profile", "Beams.draftFromPoints",
+         "pile", [[[20, 0], [20, -6]]], lambda p: drafts.sheet_pile(p, [(20, 0), (20, -6)]))
+    call("a sheet pile below the model is refused", "Beams.draftFromPoints", "section",
+         [[[12, 0], [12, -40]]], lambda p: drafts.sheet_pile(p, [(12, 0), (12, -40)]))
+    call("a sheet pile in the solid model is refused", "Beams.draft", "solid", ["beam"],
+         drafts.sheet_pile)
+    call("the profile a first sheet pile brings", "Beams.sectionsFor", "section",
+         [_record(drafts.sheet_pile(models["section"]))], library(drafts.sheet_pile))
+    call("a wall across the middle of the site", "Beams.draft", "solid", ["panel"],
+         drafts.wall)
+    call("a wall along a given footprint", "Beams.draftPanel", "solid",
+         [[[5, 5], [5, 20]]], lambda p: drafts.wall(p, [(5, 5), (5, 20)]))
+    call("the shell a first wall brings", "Beams.sectionsFor", "solid",
+         [_record(drafts.wall(models["solid"]))], library(drafts.wall))
+    call("a member standing in the middle", "Beams.draft", "solid", ["member"],
+         drafts.member)
+    call("a member along given points", "Beams.draftMember", "solid",
+         [[[3, 0, 3], [3, -10, 3]]], lambda p: drafts.member(p, [(3, 0, 3), (3, -10, 3)]))
+    call("an anchor raking back from the pile", "Anchors.draft", "pile", [], drafts.anchor)
+    call("an anchor head snapped onto the pile", "Anchors.draftFromPoints", "pile",
+         [[[6.4, -2], [20, -8]]], lambda p: drafts.anchor(p, (6.4, -2), (20, -8)))
+    call("an anchor head far from the pile is refused", "Anchors.draftFromPoints", "pile",
+         [[[10, -2], [20, -8]]], lambda p: drafts.anchor(p, (10, -2), (20, -8)))
+    call("an anchor with nothing to hang from is refused", "Anchors.draft", "section", [],
+         drafts.anchor)
+    call("an anchor on a wall", "Anchors.draft", "solid_wall", [], drafts.anchor)
+    call("an anchor on a member", "Anchors.draft", "solid_member", [], drafts.anchor)
+    call("a first anchor in a kN model", "Anchors.draft", "section_pile_kn", [],
+         drafts.anchor)
+    call("the tendon a first anchor brings, in kN", "Anchors.sectionsFor",
+         "section_pile_kn", [_record(drafts.anchor(models["section_pile_kn"]))],
+         library(drafts.anchor))
+    call("an interface on the first pile", "Interfaces.draft", "pile", [],
+         drafts.interface)
+    call("an interface with no pile is a free line", "Interfaces.draft", "section", [],
+         drafts.interface)
+    call("the contact a first interface brings", "Interfaces.sectionsFor", "section",
+         [_record(drafts.interface(models["section"]))], library(drafts.interface))
+    call("a normal load down the middle", "NormalLoads.draft", "section", [],
+         drafts.normal_load)
+    call("a point load", "Loads.draftPoint", "section", [[5, 0]],
+         lambda p: drafts.point_load(p, (5, 0)))
+    call("a point load in kN", "Loads.draftPoint", "section_kn", [[5, 0]],
+         lambda p: drafts.point_load(p, (5, 0)))
+    call("a point load in the solid model is refused", "Loads.draftPoint", "solid",
+         [[5, 0]], lambda p: drafts.point_load(p, (5, 0)))
+    call("a line load picked right to left", "Loads.draftFromPoints", "section",
+         [[[8, 0], [2, 0]]], lambda p: drafts.line_load(p, (8, 2)))
+    call("a surface load in the middle of the site", "Loads.draftSurface", "solid", [],
+         drafts.surface_load)
+    return out
+
+
 def document() -> dict:
+    models = projects()
     return {
         "soil_laws": {str(dimension): law for dimension, law in drafts.SOIL_LAWS.items()},
         "soil_defaults": drafts.SOIL_DEFAULTS_SI,
         "library": drafts.LIBRARY,
+        "projects": {name: project.model_dump(mode="json", include=PROJECT_FIELDS)
+                     for name, project in models.items()},
+        "calls": calls(models),
     }
 
 
 def rendered() -> str:
-    return HEADER + json.dumps(document(), indent=2) + ";\n"
+    return HEADER + json.dumps(document(), indent=2, ensure_ascii=False) + ";\n"
 
 
 def on_disk() -> dict:
@@ -60,6 +187,17 @@ def test_the_fixture_is_what_the_python_says():
 
 def test_the_fixture_is_written_as_this_module_writes_it():
     assert FIXTURE.read_text(encoding="utf-8") == rendered()
+
+
+def test_every_structure_tool_is_called():
+    """A draft function the document does not call is one the two sides can disagree on
+    unseen."""
+    called = {entry["call"] for entry in calls(projects())}
+    assert called >= {"Beams.draft", "Beams.draftFromPoints", "Beams.draftPanel",
+                      "Beams.draftMember", "Beams.sectionsFor", "Anchors.draft",
+                      "Anchors.draftFromPoints", "Anchors.sectionsFor", "Interfaces.draft",
+                      "Interfaces.sectionsFor", "NormalLoads.draft", "Loads.draftPoint",
+                      "Loads.draftFromPoints", "Loads.draftSurface"}
 
 
 if __name__ == "__main__" and "--write" in sys.argv:
