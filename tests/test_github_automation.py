@@ -430,10 +430,13 @@ def test_the_documents_name_the_repository_by_its_new_name(name):
     assert "cd Kratos-GUI" not in text
 
 
-def test_the_link_check_reaches_the_public_repository():
-    """The repository is public, so its own links answer and are checked like any other."""
+def test_the_link_check_skips_only_the_repository_not_yet_published():
+    """Deltares-research/Styx-Kratos-GUI answers 404 until the public copy is made, which
+    would fail every run. Only that address is skipped: any other GitHub link is checked.
+    Once it is published, drop the exclusion and this test with it."""
     excluded = tomllib.loads((GITHUB / "lychee.toml").read_text(encoding="utf-8"))["exclude"]
-    assert not [pattern for pattern in excluded if "Styx-Kratos-GUI" in pattern]
+    github = [pattern for pattern in excluded if "github" in pattern]
+    assert github == [r"^https://github\.com/Deltares-research/Styx-Kratos-GUI"]
 
 
 def test_the_readme_does_not_link_to_the_private_repository():
