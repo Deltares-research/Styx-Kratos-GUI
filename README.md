@@ -64,7 +64,7 @@ See [FEATURES.md](docs/FEATURES.md) for the full list with the status of each fe
 
 | Part | Technology |
 |---|---|
-| Backend | [Python](https://www.python.org/) 3.10+, [FastAPI](https://fastapi.tiangolo.com/), [Uvicorn](https://www.uvicorn.org/), [Pydantic](https://docs.pydantic.dev/) |
+| Backend | [Python](https://www.python.org/) 3.10+, [FastAPI](https://fastapi.tiangolo.com/), [Uvicorn](https://uvicorn.dev/), [Pydantic](https://docs.pydantic.dev/) |
 | Geometry and mesh | [Gmsh](https://gmsh.info/) 4.13 (OpenCASCADE kernel), [NumPy](https://numpy.org/) |
 | Frontend | Plain JavaScript and [three.js](https://threejs.org/), with no build step and no npm |
 | Solver | [Kratos Multiphysics](https://github.com/KratosMultiphysics/Kratos) GeoMechanicsApplication (installed separately, see [KRATOS_SETUP.md](docs/KRATOS_SETUP.md)) |
@@ -185,9 +185,8 @@ Project link: <https://github.com/Deltares-research/Styx-Kratos-GUI>
 ## Authors
 
 Styx was designed and developed by **Marjan Fathian** ([@indigocoral](https://github.com/indigocoral)),
-Deltares. It started on 2026-09-05 at <https://github.com/indigocoral/Kratos-GUI> and moved to
-Deltares-research with its full history: the commits, issues and pull requests from before the
-move are all still here.
+Deltares. It started on 2026-09-05 in a private repository, `indigocoral/Kratos-GUI`, and was
+published here with its commit history: each commit keeps its original author and date.
 
 To cite Styx, use [CITATION.cff](CITATION.cff), or **Cite this repository** on the GitHub page.
 
