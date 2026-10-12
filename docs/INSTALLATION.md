@@ -46,8 +46,8 @@ Check that `python3 --version` prints 3.10 or newer.
 ## Get the code
 
 ```bash
-git clone https://github.com/Deltares-research/Kratos-GUI.git
-cd Kratos-GUI
+git clone https://github.com/Deltares-research/Styx-Kratos-GUI.git
+cd Styx-Kratos-GUI
 ```
 
 You can also download the ZIP from GitHub and unpack it.

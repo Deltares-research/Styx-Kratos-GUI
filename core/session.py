@@ -29,6 +29,7 @@ import os
 import re
 import tempfile
 import time
+from collections.abc import Sequence
 from pathlib import Path
 
 from core import scripting
@@ -832,7 +833,7 @@ def add_material(project: Project, material) -> Project:
 
 def update_material(project: Project, id: str, *, name: str | None = None,
                     color: str | None = None, law: str | None = None,
-                    variables: dict | None = None, unset: list[str] = ()) -> Project:
+                    variables: dict | None = None, unset: Sequence[str] = ()) -> Project:
     """The material `id` with the fields and variables given; `unset` names variables to
     leave out, so the export derives them where it can."""
     payload = project.model_dump()
@@ -956,7 +957,10 @@ def add_structure(project: Project, record, section=None) -> Project:
                           "phase names a part by its id, so no two parts share one.")
     payload = project.model_dump()
     if section is not None:
-        field = drafts.SECTION_FIELDS[drafts.section_kind(record)]
+        kind = drafts.section_kind(record)
+        if kind is None:
+            raise EditRefused(f"{record.id!r} is built with no section")
+        field = drafts.SECTION_FIELDS[kind]
         _refuse_taken(section.id, [s["id"] for s in payload[field]], "section")
         payload[field].append(section.model_dump())
     payload[_collection(record)].append(record.model_dump())
@@ -1036,7 +1040,7 @@ def add_section(project: Project, kind: str, section) -> Project:
 
 
 def update_section(project: Project, id: str, *, kind: str | None = None,
-                   variables: dict | None = None, unset: list[str] = (),
+                   variables: dict | None = None, unset: Sequence[str] = (),
                    **fields) -> Project:
     """The section `id` with the fields given by their schema names, the variables
     given, and without the variables `unset` names."""
@@ -1103,7 +1107,7 @@ def add_phase(project: Project, *, before: str | None = None, copy_of: str | Non
             phase.update(fields, id=id or fresh)
         if id is not None and phase["parent"] == fresh:
             phase["parent"] = id
-    edited = replace_phases(project, PhasesUpdate(phases=payload))
+    edited = replace_phases(project, PhasesUpdate.model_validate({"phases": payload}))
     return edited, next(phase for phase in edited.phases if phase.id == (id or fresh))
 
 
@@ -1112,7 +1116,7 @@ def update_phase(project: Project, id: str, **fields) -> Project:
     _index(project.phases, id, "phase")
     payload = [phase.model_dump() for phase in project.phases]
     next(phase for phase in payload if phase["id"] == id).update(fields)
-    return replace_phases(project, PhasesUpdate(phases=payload))
+    return replace_phases(project, PhasesUpdate.model_validate({"phases": payload}))
 
 
 def remove_phase(project: Project, id: str) -> Project:

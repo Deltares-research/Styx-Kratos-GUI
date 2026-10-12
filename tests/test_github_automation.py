@@ -138,9 +138,11 @@ def test_eslint_leaves_the_vendored_and_the_frozen_code_alone():
     assert "import " not in config, "a plain npx eslint has no plugins to import"
 
 
-def test_mypy_reports_without_failing_the_build_until_its_findings_are_worked_down(lint):
+def test_mypy_fails_the_build_now_its_findings_are_worked_down(lint):
+    """It reported without failing while 142 findings stood (2026-10-12); with none
+    left, a new one fails the lint workflow."""
     job = lint["jobs"]["mypy"]
-    assert job["continue-on-error"] is True
+    assert not job.get("continue-on-error", False)
     assert "mypy" in commands(job) and "requirements-dev.txt" in commands(job)
     pinned = (ROOT / "requirements-dev.txt").read_text(encoding="utf-8")
     assert re.search(rf"^mypy=={SEMVER}$", pinned, re.MULTILINE)
@@ -294,7 +296,7 @@ def test_the_archive_leaves_out_only_what_a_user_does_not_run():
     assert ignored
     needed = ("core", "backend", "cli", "frontend/js", "frontend/index.html",
               "requirements.txt", "run.bat", "run.sh", "kratos-cli.bat", "kratos-cli.sh",
-              "README.md", "LICENSE")
+              "README.md", "LICENSE", "CITATION.cff")
     for pattern in ignored:
         path = pattern.strip("/")
         assert (ROOT / path).exists(), f"{pattern} names nothing"
@@ -322,6 +324,13 @@ def test_the_links_in_the_documentation_are_checked():
     assert "--config .github/lychee.toml" in lychee["with"]["args"]
     assert "*.md" in lychee["with"]["args"]
     assert (GITHUB / "lychee.toml").is_file()
+
+
+def test_the_link_check_settings_are_ones_lychee_accepts():
+    """`lychee-action@v2` runs the newest lychee, and lychee 0.24 refused the old boolean
+    `include_fragments = false` ("wanted string or table"): the whole check failed to start."""
+    settings = tomllib.loads((GITHUB / "lychee.toml").read_text(encoding="utf-8"))
+    assert settings["include_fragments"] in ("none", "anchor-only", "text-only", "full")
 
 
 # ── Branch ruleset ──────────────────────────────────────────────────────────
@@ -384,7 +393,8 @@ def test_the_workflows_themselves_are_linted():
 
 
 def test_advisory_and_flaky_checks_are_not_required(ruleset):
-    """mypy reports only; outside links can be down for reasons no pull request causes."""
+    """mypy is not a required check yet; outside links can be down for reasons no pull
+    request causes."""
     required = required_checks(ruleset)
     assert "mypy" not in required
     for job_id, job in workflow("docs.yml")["jobs"].items():
@@ -393,7 +403,7 @@ def test_advisory_and_flaky_checks_are_not_required(ruleset):
 
 # ── What a contributor reads first ──────────────────────────────────────────
 
-@pytest.mark.parametrize("name", ["LICENSE", "CONTRIBUTING.md", "SECURITY.md"])
+@pytest.mark.parametrize("name", ["LICENSE", "CITATION.cff", "CONTRIBUTING.md", "SECURITY.md"])
 def test_the_community_files_are_there(name):
     assert (ROOT / name).is_file(), name
 
@@ -401,6 +411,65 @@ def test_the_community_files_are_there(name):
 def test_the_readme_points_to_the_contributing_guide_and_the_security_policy():
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     assert "(CONTRIBUTING.md)" in readme and "(SECURITY.md)" in readme
+
+
+# ── Who made it ─────────────────────────────────────────────────────────────
+
+AUTHOR = "Marjan Fathian"
+HOME = "https://github.com/Deltares-research/Styx-Kratos-GUI"
+STARTED = "https://github.com/indigocoral/Kratos-GUI"
+
+
+@pytest.mark.parametrize("name", ["README.md", "docs/INSTALLATION.md", "CITATION.cff",
+                                  ".github/lychee.toml"])
+def test_the_documents_name_the_repository_by_its_new_name(name):
+    """The repository is Styx-Kratos-GUI under Deltares-research. GitHub redirects the old
+    name, but a clone made from an old link lands in a folder the guides do not name."""
+    text = (ROOT / name).read_text(encoding="utf-8")
+    assert "Deltares-research/Kratos-GUI" not in text
+    assert "Deltares-research/Styx-Kratos-GUI" in text.replace("\\", "")
+    assert "cd Kratos-GUI" not in text
+
+
+def test_the_citation_names_the_author():
+    """GitHub reads CITATION.cff at the root and shows "Cite this repository" beside the
+    code, with these authors, in the order given."""
+    citation = load(ROOT / "CITATION.cff")
+    assert citation["cff-version"] == "1.2.0"
+    assert citation["type"] == "software"
+    assert "license" not in citation, "the license is still to be decided"
+    assert citation["repository-code"] == HOME
+    first = citation["authors"][0]
+    assert (first["given-names"], first["family-names"]) == ("Marjan", "Fathian")
+    assert first["affiliation"] == "Deltares"
+    assert {"title", "message", "abstract"} <= set(citation)
+
+
+TO_BE_DECIDED = "still under consideration and has not been decided"
+
+
+def test_the_license_is_still_to_be_decided():
+    """No license is chosen yet. LICENSE says so, and nothing grants one in the meantime:
+    no Apache text in LICENSE, no badge, no license line for contributions."""
+    license_file = (ROOT / "LICENSE").read_text(encoding="utf-8")
+    assert TO_BE_DECIDED in license_file and "Apache" not in license_file
+    assert not (ROOT / "NOTICE").exists(), "a NOTICE file belongs to an Apache license"
+    for name in ("README.md", "CONTRIBUTING.md"):
+        text = (ROOT / name).read_text(encoding="utf-8")
+        assert "Apache" not in text and "to be decided" in text, name
+
+
+def test_the_readme_license_section_says_it_is_to_be_decided():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    section = readme.split("## License", 1)[1].split("\n## ", 1)[0]
+    assert TO_BE_DECIDED in section and "(LICENSE)" in section
+
+
+def test_the_readme_names_the_author_and_where_the_project_started():
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    authors = readme.split("## Authors", 1)[1].split("\n## ", 1)[0]
+    assert AUTHOR in authors and "(CITATION.cff)" in authors
+    assert STARTED in authors, "the history before the move is part of the credit"
 
 
 def test_every_path_has_an_owner():

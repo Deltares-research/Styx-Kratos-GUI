@@ -361,8 +361,8 @@ def add_structure(args: argparse.Namespace) -> Answer:
     project = session.load(args.project)
     record = _drafted(project, args)
     section = drafts.section_for(project, record)
-    if section is not None and getattr(args, "section", None) is not None:
-        kind = drafts.section_kind(record)
+    kind = drafts.section_kind(record)
+    if section is not None and kind is not None and getattr(args, "section", None) is not None:
         library = getattr(project, drafts.SECTION_FIELDS[kind])
         raise CommandError(
             f"there is no {kind} section {args.section!r}; there are: "

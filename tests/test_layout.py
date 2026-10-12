@@ -115,6 +115,7 @@ def test_the_folders_they_replace_are_gone(folder):
 ROOT_FILES = {
     ".gitattributes", ".gitignore", ".gitleaksignore",     # git and gitleaks look only here
     "README.md", "LICENSE", "CONTRIBUTING.md", "SECURITY.md",
+    "CITATION.cff",                                         # GitHub reads it only here
     "run.bat", "run.sh",                                    # what a user double-clicks
     "kratos-cli.bat", "kratos-cli.sh",                      # ... and types, beside them
     "requirements.txt", "requirements-dev.txt",             # the launcher and Dependabot
@@ -580,6 +581,42 @@ NOT_ATTRIBUTES = ("py", "js", "json", "log", "yml", "local", "post", "res", "md"
 PROSE = {tokenize.COMMENT, tokenize.STRING} | (
     {tokenize.FSTRING_MIDDLE} if hasattr(tokenize, "FSTRING_MIDDLE") else set())
 
+F_PREFIX = re.compile(r"[rRbBuU]*[fF]")
+
+
+def without_replacement_fields(literal: str) -> str:
+    """An f-string with each `{...}` blanked, newlines kept so line numbers still hold."""
+    out, depth, i = [], 0, 0
+    while i < len(literal):
+        pair = literal[i:i + 2]
+        if depth == 0 and pair in ("{{", "}}"):
+            out.append(pair)
+            i += 2
+            continue
+        char = literal[i]
+        if char == "{":
+            depth += 1
+        elif char == "}" and depth:
+            depth -= 1
+            char = " "
+        out.append(char if depth == 0 or char == "\n" else " ")
+        i += 1
+    return "".join(out)
+
+
+def prose_spans(text: str) -> list[tuple[int, str]]:
+    """`(first line, text)` for each comment and string in Python source, an f-string's
+    expressions left out on every Python (3.11 tokenises an f-string as one STRING)."""
+    spans = []
+    for token in tokenize.generate_tokens(io.StringIO(text).readline):
+        if token.type not in PROSE:
+            continue
+        string = token.string
+        if token.type == tokenize.STRING and F_PREFIX.match(string):
+            string = without_replacement_fields(string)
+        spans.append((token.start[0], string))
+    return spans
+
 
 def renamed_pattern() -> re.Pattern:
     """A renamed module, named in prose without its package: `kratos_runner`, or
@@ -634,9 +671,7 @@ def renamed_names_in_prose() -> list[str]:
             tree = ast.parse(text, filename=name)
             bound = {alias.asname or alias.name.split(".")[0] for node in ast.walk(tree)
                      if isinstance(node, (ast.Import, ast.ImportFrom)) for alias in node.names}
-            spans = [(token.start[0], token.string) for token in
-                     tokenize.generate_tokens(io.StringIO(text).readline)
-                     if token.type in PROSE]
+            spans = prose_spans(text)
         else:
             bound = set()
             spans = list(enumerate(text.splitlines(), start=1))
@@ -648,6 +683,15 @@ def renamed_names_in_prose() -> list[str]:
                 line = first + span.count("\n", 0, match.start())
                 found.append(f"{name}:{line}: {match.group(0)}")
     return found
+
+
+def test_an_f_strings_expressions_are_code_not_prose():
+    """Python 3.12 tokenises an f-string into its text and its expressions; 3.11 hands
+    the whole of it over as one STRING, so `{deck.parameters}` read as prose there."""
+    text = 'raise DeckError(f"{deck.parameters} is not in {deck.directory!r}, {{deck.x}}")\n'
+    spans = " ".join(span for _, span in prose_spans(text))
+    assert "deck.parameters" not in spans and "deck.directory" not in spans
+    assert "is not in" in spans
 
 
 def test_no_file_names_a_renamed_module_it_does_not_import():

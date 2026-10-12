@@ -23,11 +23,11 @@ from pathlib import Path
 from typing import Callable
 
 import pytest
-from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
 from core.kratos import external_deck
 from backend.main import app
+from tests.api.served import api_routes
 from core.model.templates import seed_project
 from tests import results_run
 from tests.test_importer import stl_text
@@ -267,8 +267,7 @@ def client(monkeypatch, tmp_path):
 
 
 def test_every_route_has_a_contract():
-    routes = {f"{m} {r.path}" for r in app.routes if isinstance(r, APIRoute)
-              for m in r.methods}
+    routes = {f"{m} {r.path}" for r in api_routes(app) for m in r.methods}
     listed = {_id(c) for c in CONTRACTS}
 
     assert routes - listed == set(), "routes with no contract"

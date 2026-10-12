@@ -16,6 +16,7 @@ Everything that is wrong with the *file* raises `ImportRefused`, which the API r
 
 import struct
 import uuid
+from collections.abc import Sequence
 from pathlib import Path
 
 DATA_DIR = Path(__file__).resolve().parents[2] / ".data"
@@ -105,15 +106,16 @@ Triangle = tuple[int, int, int]
 class _Points:
     """Vertices by position, so a corner repeated in every triangle (STL) is one point."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.points: list[Point] = []
         self._index: dict[Point, int] = {}
 
-    def add(self, point: Point) -> int:
-        key = tuple(round(c, 9) for c in point)
+    def add(self, point: Sequence[float]) -> int:
+        x, y, z = point
+        key = (round(x, 9), round(y, 9), round(z, 9))
         if key not in self._index:
             self._index[key] = len(self.points)
-            self.points.append(point)
+            self.points.append((x, y, z))
         return self._index[key]
 
 
@@ -121,21 +123,24 @@ def _read_stl(path: Path) -> tuple[list[Point], list[Triangle]]:
     data = path.read_bytes()
     if not data.strip():
         raise ImportRefused(f"{path.name} is empty.")
-    points, triangles = _Points(), []
+    points = _Points()
+    triangles: list[Triangle] = []
     count = struct.unpack_from("<I", data, 80)[0] if len(data) >= 84 else -1
     if len(data) == 84 + 50 * count:
         for n in range(count):
             values = struct.unpack_from("<12f", data, 84 + 50 * n)
-            triangles.append(tuple(points.add(values[3 + 3 * k: 6 + 3 * k]) for k in range(3)))
+            a, b, c = (points.add(values[3 + 3 * k: 6 + 3 * k]) for k in range(3))
+            triangles.append((a, b, c))
     else:
         corners = []
         for line in data.decode("latin-1").splitlines():
             words = line.split()
             if words[:1] == ["vertex"]:
-                corners.append(points.add(tuple(float(w) for w in words[1:4])))
+                corners.append(points.add([float(w) for w in words[1:4]]))
         if len(corners) % 3:
             raise ImportRefused(f"{path.name} is not a readable STL: a facet is incomplete.")
-        triangles = [tuple(corners[i:i + 3]) for i in range(0, len(corners), 3)]
+        triangles = [(corners[i], corners[i + 1], corners[i + 2])
+                     for i in range(0, len(corners), 3)]
     if not triangles:
         raise ImportRefused(f"{path.name} contains no triangles.")
     return points.points, triangles
@@ -153,7 +158,8 @@ def _read_obj(path: Path) -> tuple[list[Point], list[Triangle]]:
             continue
         try:
             if words[0] == "v":
-                vertices.append(tuple(float(w) for w in words[1:4]))
+                x, y, z = (float(w) for w in words[1:4])
+                vertices.append((x, y, z))
             elif words[0] == "f":
                 # "f 1 2 3", "f 1/1 2/2 3/3" or "f 1//1 ..."; negative indices count from the end.
                 indices = [int(w.split("/")[0]) for w in words[1:]]
@@ -162,7 +168,8 @@ def _read_obj(path: Path) -> tuple[list[Point], list[Triangle]]:
             raise ImportRefused(f"{path.name}, line {number}: {failure}") from failure
     if not faces:
         raise ImportRefused(f"{path.name} contains no faces.")
-    points, triangles = _Points(), []
+    points = _Points()
+    triangles: list[Triangle] = []
     for face in faces:
         if len(face) < 3 or not all(0 <= i < len(vertices) for i in face):
             raise ImportRefused(f"{path.name} has a face that names a vertex it does not have.")

@@ -20,8 +20,9 @@ The one place values *are* converted is a deliberate switch of system
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Final
 
-DEFAULT = "SI"
+DEFAULT: Final = "SI"
 
 
 @dataclass(frozen=True)

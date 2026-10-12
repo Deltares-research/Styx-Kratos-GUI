@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import math
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 
 import gmsh
@@ -38,8 +39,8 @@ from core.geometry import solid_model, meshing
 from core.kratos import deck_files, interfaces
 from core.kratos import materials, parameters
 from core.kratos.materials import material_parameters
-from core.model.schemas import (Beam, LineLoad, MeshRequest, PanelSection, PointLoad,
-                         Project, SurfaceLoad)
+from core.model.schemas import (Beam, LineLoad, Member, MeshRequest, Panel, PanelSection,
+                         PointLoad, Project, SurfaceLoad)
 
 # (dim, gmsh element type) -> (Kratos class, gmsh index order in Kratos' order)
 ELEMENTS: dict[tuple[int, int], tuple[str, tuple[int, ...]]] = {
@@ -310,7 +311,7 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
         names)
     parts.extend(_boundary_parts(boundaries))
     parts.extend(load_parts)
-    supports = [(f"{names[key]}_Support", [node_id[tag]], [], [])
+    supports: list[tuple[str, list[int], list[int], list[int]]] = [(f"{names[key]}_Support", [node_id[tag]], [], [])
                 for key, tag in anchor_supports.items() if tag in node_id]
     parts.extend(supports)
     # A node-only part per side of every tie `_split_ties` found, so the process below
@@ -646,13 +647,13 @@ def _phased_stages(project: Project, deck: _Deck) -> list[parameters.Stage]:
         beams = tuple(name for name in deck.beams if name in live)
         retained = tuple(name for name in deck.retained if name in live)
 
-        extrapolate = ()
+        extrapolate: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = ()
         if beams:
             extrapolate += ((beams, WALL_EXTRAPOLATED),)
         if retained:
             extrapolate += ((retained, INTERFACE_VARIABLES),)
 
-        output = ()
+        output: tuple[tuple[str, str, tuple[str, ...]], ...] = ()
         if beams:
             output += ((beams[0], "output_wall", WALL_OUTPUT_VARIABLES),)
         if retained and deck.right_side:
@@ -727,10 +728,11 @@ def _interface_elements(project: Project, dim: int,
     for interface in active:
         if interface.structure is None:
             segments = _segments(_tagged(1).get(interface.id, []))
-            path = [tuple(point) for point in interface.points]
+            path = [(x, y) for x, y in interface.points or []]
         else:
             segments = beam_rows.get(interface.structure, [])
-            path = [tuple(point) for point in
+            # A sheet pile: an interface follows nothing else, so (x, y).
+            path = [(point[0], point[1]) for point in
                     _beam_of(project, interface.structure).points]
         if not segments:
             raise ExportError(
@@ -988,8 +990,10 @@ def _anchor_of(project: Project, key: str):
     return next(anchor for anchor in project.anchors if anchor.id == key)
 
 
-def _beam_of(project: Project, key: str) -> Beam:
-    return next(beam for beam in project.beams if beam.id == key)
+def _beam_of(project: Project, key: str) -> Beam | Member:
+    """The line structure `key`: a sheet pile, or a member in space."""
+    return next(beam for beam in project.beams
+                if beam.id == key and not isinstance(beam, Panel))
 
 
 def _panel_of(project: Project, key: str):
@@ -1267,7 +1271,7 @@ def _normal_load_conditions(project: Project, dim: int, warnings: list[str],
     return out
 
 
-def _drawn_order(rows: list[list[int]], path: list[tuple[float, float]],
+def _drawn_order(rows: list[list[int]], path: Sequence[tuple[float, ...]],
                  world: dict[int, tuple[float, float, float]]) -> list[list[int]]:
     """Turn each harvested segment to run the way its line was drawn.
 
@@ -1397,8 +1401,8 @@ def _part_names(project: Project) -> dict[str, str]:
         names[anchor.id] = _unique(_sanitise(anchor.name) or anchor.id, used)
     for interface in project.interfaces:
         names[interface.id] = _unique(_sanitise(interface.name) or interface.id, used)
-    for load in project.normal_loads:
-        names[load.id] = _unique(_sanitise(load.name) or load.id, used)
+    for normal in project.normal_loads:
+        names[normal.id] = _unique(_sanitise(normal.name) or normal.id, used)
     for key in project.part_keys():
         names.setdefault(key, _unique(key, used))
     return names
@@ -1449,7 +1453,7 @@ def _number_elements(blocks: list[tuple[str, str, list[list[int]]]],
         nodes, elements = parts.setdefault(names[key], ([], []))
         elements.extend(element_id for element_id, _, _ in entries)
         nodes.extend(n for _, _, connectivity in entries for n in connectivity)
-    ordered = [(name, sorted(set(nodes)), sorted(elements), [])
+    ordered: list[tuple[str, list[int], list[int], list[int]]] = [(name, sorted(set(nodes)), sorted(elements), [])
                for name, (nodes, elements) in parts.items()]
     return numbered, ordered
 
@@ -1466,8 +1470,8 @@ def _number_conditions(
     `_load_variable`), and every reference GeoMechanics deck writes 0 here
     for exactly this condition class.
     """
-    numbered = []
-    parts = []
+    numbered: list[tuple[str, list[tuple[int, int, list[int]]]]] = []
+    parts: list[tuple[str, list[int], list[int], list[int]]] = []
     next_id = 1
     for key, class_name, rows in conditions:
         entries = []
@@ -1625,9 +1629,9 @@ def _part_materials(project: Project, names: dict[str, str],
     material_of.update({p.key: p.mat for p in project.custom_parts if p.mat})
     seen: list[tuple[str, str]] = []
     for key, _, _ in blocks:
-        entry = (names[key], material_of.get(key))
-        if entry[1] and entry not in seen:
-            seen.append(entry)
+        material = material_of.get(key)
+        if material and (names[key], material) not in seen:
+            seen.append((names[key], material))
     return seen
 
 
@@ -1677,8 +1681,8 @@ def _render(coordinates: dict[int, tuple[float, float, float]], node_id: dict[in
         for class_name, entries in blocks:
             lines.append(f"Begin {keyword} {class_name}")
             for entry_id, property_id, connectivity in entries:
-                nodes = "".join(f"{n:6d}" for n in connectivity)
-                lines.append(f"{entry_id:9d}{property_id:11d}{nodes} ")
+                row = "".join(f"{n:6d}" for n in connectivity)
+                lines.append(f"{entry_id:9d}{property_id:11d}{row} ")
             lines += [f"End {keyword}", ""]
 
     for name, nodes, part_elements, part_conditions in parts:

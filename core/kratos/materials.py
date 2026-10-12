@@ -146,7 +146,7 @@ def material_parameters(
     """
     warnings: list[str] = []
     derived: list[str] = []
-    properties = []
+    properties: list[dict] = []
 
     def add(part_name: str, law: str, variables: dict, tables: dict) -> None:
         properties.append({
@@ -173,21 +173,21 @@ def material_parameters(
         _check(section, f"section {section.name!r}")
         add(part_name, section.constitutive_law,
             _beam_variables(section, beam_dim, derived), section.tables)
-    for part_name, section in panel_properties or []:
-        _check(section, f"wall section {section.name!r}")
-        add(part_name, section.constitutive_law, _panel_variables(section), section.tables)
-    for part_name, section, prestress, anchor_dim in anchor_properties or []:
-        _check(section, f"tendon {section.name!r}")
-        add(part_name, section.constitutive_law,
-            _anchor_variables(section, prestress, anchor_dim, warnings), section.tables)
-    for part_name, section, adjacent in interface_properties or []:
-        law = section.constitutive_law
+    for part_name, wall in panel_properties or []:
+        _check(wall, f"wall section {wall.name!r}")
+        add(part_name, wall.constitutive_law, _panel_variables(wall), wall.tables)
+    for part_name, tendon, prestress, anchor_dim in anchor_properties or []:
+        _check(tendon, f"tendon {tendon.name!r}")
+        add(part_name, tendon.constitutive_law,
+            _anchor_variables(tendon, prestress, anchor_dim, warnings), tendon.tables)
+    for part_name, contact, adjacent in interface_properties or []:
+        law = contact.constitutive_law
         if k0 and law != INTERFACE_LAW:
-            elastic.append(f"interface section {section.name!r}")
+            elastic.append(f"interface section {contact.name!r}")
             law = INTERFACE_LAW
         add(part_name, law,
-            _interface_variables(section, project, warnings, adjacent, derived),
-            section.tables)
+            _interface_variables(contact, project, warnings, adjacent, derived),
+            contact.tables)
     if elastic:
         warnings.append(
             "The K0 stage runs elastic: "
@@ -340,13 +340,13 @@ def _interface_variables(section: InterfaceSection, project: Project,
     if shear is None or "INTERFACE_NORMAL_STIFFNESS" not in v:
         modulus = soil.number("YOUNG_MODULUS") if soil is not None else None
         poisson = (soil.number("POISSON_RATIO") or 0.0) if soil is not None else 0.0
-        if shear is None and modulus is None:
-            raise MaterialError(
-                f"interface section {section.name!r} has neither a soil material to "
-                "reduce nor explicit INTERFACE_NORMAL_STIFFNESS and "
-                "INTERFACE_SHEAR_STIFFNESS; one of the two is needed before the deck can "
-                "be written.")
         if shear is None:
+            if modulus is None:
+                raise MaterialError(
+                    f"interface section {section.name!r} has neither a soil material to "
+                    "reduce nor explicit INTERFACE_NORMAL_STIFFNESS and "
+                    "INTERFACE_SHEAR_STIFFNESS; one of the two is needed before the deck "
+                    "can be written.")
             shear = modulus / (2.0 * (1.0 + poisson) * section.virtual_thickness)
         _fill(v, "INTERFACE_NORMAL_STIFFNESS", NORMAL_TO_SHEAR_STIFFNESS * shear,
               derived, label)
@@ -391,8 +391,9 @@ def _beam_variables(section: BeamSection, dim: int = 2,
     else:
         per_metre = 1.0 / section.spacing
         for name in SMEARED_BEAM:
-            if isinstance(v.get(name), (int, float)) and not isinstance(v[name], bool):
-                v[name] = v[name] * per_metre
+            value = v.get(name)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                v[name] = value * per_metre
     return _ordered(v, BEAM_ORDER)
 
 
@@ -430,6 +431,7 @@ def _anchor_variables(section: AnchorSection, prestress: float, dim: int,
     if dim == 2:
         per_metre = 1.0 / section.spacing
         for name in SMEARED_ANCHOR:
-            if isinstance(v.get(name), (int, float)) and not isinstance(v[name], bool):
-                v[name] = v[name] * per_metre
+            value = v.get(name)
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                v[name] = value * per_metre
     return _ordered(v, ANCHOR_ORDER)
