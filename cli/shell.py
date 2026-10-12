@@ -65,8 +65,13 @@ class Leave(Exception):
     """`exit`."""
 
 
+BOM = "\ufeff"
+"""What Windows PowerShell puts before the first line it pipes into a program."""
+
+
 def words(line: str) -> list[str]:
     """The words of `line`, as the shell runs them; [] for a blank line or a comment."""
+    line = line.lstrip(BOM)
     if not line.strip() or line.lstrip().startswith("#"):
         return []
     lexer = shlex.shlex(line, posix=True)
@@ -124,7 +129,7 @@ class Shell:
 
     def _read_lines(self, lines, where: str, top: bool = False) -> int:
         for number, line in enumerate(lines, start=1):
-            line = line.rstrip("\r\n")
+            line = line.rstrip("\r\n").lstrip(BOM)
             if line.strip() and not line.lstrip().startswith("#"):
                 print(f"> {line}")
             try:

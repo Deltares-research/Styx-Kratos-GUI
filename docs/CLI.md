@@ -243,7 +243,8 @@ terminal: the same options, answers, `--json`, refusals and exit codes.
 - **Typed at a terminal**, it goes on after a command fails. On Linux and macOS, Tab
   completes a command and its action, and the lines are kept in `~/.kratos_cli_history`;
   in Windows' console the arrow keys recall the lines of this session.
-- **Read from a file or a pipe**, `kratos-cli shell pit.json < build.txt`, each line is
+- **Read from a file or a pipe**, `kratos-cli shell pit.json < build.txt` (in PowerShell,
+  which has no `<`: `Get-Content build.txt | kratos-cli.bat shell pit.json`), each line is
   echoed as `> line` and the first command that fails stops it, with exit code 1 and the
   number of the line. `source FILE` reads a file the same way inside the shell.
 - **Words** are split as a shell splits them: quotes group (`--name "Soft clay"`), and a

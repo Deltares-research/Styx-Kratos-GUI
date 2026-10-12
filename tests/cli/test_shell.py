@@ -277,6 +277,16 @@ def test_a_fault_in_a_command_is_shown_and_the_shell_goes_on(typed, site, monkey
     assert session.load(site).water.y == -3.0
 
 
+def test_a_byte_order_mark_from_a_powershell_pipe_is_not_part_of_the_line(piped, site):
+    """`Get-Content lines.txt | kratos-cli.bat shell`: Windows PowerShell puts a BOM
+    before the first line it sends a program."""
+    ran = piped("\ufeff# the water\nwater -2\n", site)
+
+    assert ran.code == 0, ran.err
+    assert session.load(site).water.y == -2.0
+    assert shell.words("\ufeffwater -2") == ["water", "-2"]
+
+
 def test_each_line_is_echoed_when_read_from_a_pipe(piped, site):
     ran = piped("water -2\n", site)
 
