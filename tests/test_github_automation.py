@@ -416,8 +416,19 @@ def test_the_readme_points_to_the_contributing_guide_and_the_security_policy():
 # ── Who made it ─────────────────────────────────────────────────────────────
 
 AUTHOR = "Marjan Fathian"
-HOME = "https://github.com/Deltares-research/Kratos-GUI"
+HOME = "https://github.com/Deltares-research/Styx-Kratos-GUI"
 STARTED = "https://github.com/indigocoral/Kratos-GUI"
+
+
+@pytest.mark.parametrize("name", ["README.md", "docs/INSTALLATION.md", "CITATION.cff",
+                                  ".github/lychee.toml"])
+def test_the_documents_name_the_repository_by_its_new_name(name):
+    """The repository is Styx-Kratos-GUI under Deltares-research. GitHub redirects the old
+    name, but a clone made from an old link lands in a folder the guides do not name."""
+    text = (ROOT / name).read_text(encoding="utf-8")
+    assert "Deltares-research/Kratos-GUI" not in text
+    assert "Deltares-research/Styx-Kratos-GUI" in text.replace("\\", "")
+    assert "cd Kratos-GUI" not in text
 
 
 def test_the_citation_names_the_author():

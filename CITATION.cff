@@ -13,7 +13,7 @@ authors:
   - given-names: Marjan
     family-names: Fathian
     affiliation: Deltares
-repository-code: "https://github.com/Deltares-research/Kratos-GUI"
+repository-code: "https://github.com/Deltares-research/Styx-Kratos-GUI"
 keywords:
   - geotechnical engineering
   - finite element method

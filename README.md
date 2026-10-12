@@ -13,7 +13,7 @@
   </p>
 
   <p>
-    <a href="https://github.com/Deltares-research/Kratos-GUI/actions/workflows/tests.yml"><img src="https://github.com/Deltares-research/Kratos-GUI/actions/workflows/tests.yml/badge.svg" alt="Tests"></a>
+    <a href="https://github.com/Deltares-research/Styx-Kratos-GUI/actions/workflows/tests.yml"><img src="https://github.com/Deltares-research/Styx-Kratos-GUI/actions/workflows/tests.yml/badge.svg" alt="Tests"></a>
     <img src="https://img.shields.io/badge/python-3.10%2B-blue" alt="Python 3.10+">
     <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey" alt="Windows | Linux | macOS">
     <a href="LICENSE"><img src="https://img.shields.io/badge/license-to%20be%20decided-lightgrey" alt="License: to be decided"></a>
@@ -23,8 +23,8 @@
     <a href="#getting-started">Getting started</a> ·
     <a href="docs/KRATOS_SETUP.md">Set up Kratos</a> ·
     <a href="docs/USAGE.md">Usage</a> ·
-    <a href="https://github.com/Deltares-research/Kratos-GUI/issues">Report a bug</a> ·
-    <a href="https://github.com/Deltares-research/Kratos-GUI/issues">Request a feature</a>
+    <a href="https://github.com/Deltares-research/Styx-Kratos-GUI/issues">Report a bug</a> ·
+    <a href="https://github.com/Deltares-research/Styx-Kratos-GUI/issues">Request a feature</a>
   </p>
 </div>
 
@@ -78,8 +78,8 @@ Linux, a few system libraries for Gmsh are needed too; [INSTALLATION.md](docs/IN
 lists them for each platform.
 
 ```bash
-git clone https://github.com/Deltares-research/Kratos-GUI.git
-cd Kratos-GUI
+git clone https://github.com/Deltares-research/Styx-Kratos-GUI.git
+cd Styx-Kratos-GUI
 ./run.sh          # Linux and macOS
 .\run.bat         # Windows, or double-click run.bat
 ```
@@ -177,10 +177,10 @@ BSD-licensed.
 
 ## Contact
 
-Use [GitHub issues](https://github.com/Deltares-research/Kratos-GUI/issues) for questions, bug
+Use [GitHub issues](https://github.com/Deltares-research/Styx-Kratos-GUI/issues) for questions, bug
 reports and ideas.
 
-Project link: <https://github.com/Deltares-research/Kratos-GUI>
+Project link: <https://github.com/Deltares-research/Styx-Kratos-GUI>
 
 ## Authors
 
