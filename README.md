@@ -117,6 +117,9 @@ Everything from a new model to its results also works in a terminal, with no bro
 ./kratos-cli.sh export site.json --out deck/      # the .mdpa and the two JSON files
 ./kratos-cli.sh run deck/
 ./kratos-cli.sh results show 1
+./kratos-cli.sh results field 1 uy                # a field's range; --csv FILE for every value
+./kratos-cli.sh script site.json --out site.py    # the whole model, as a Python file
+./kratos-cli.sh shell site.json                   # or type the commands one after another
 ```
 
 [CLI.md](docs/CLI.md) lists every command.

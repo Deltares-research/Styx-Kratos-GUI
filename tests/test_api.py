@@ -1133,7 +1133,8 @@ def test_the_live_shell_replaces_only_the_viewport_and_the_orbit_controller(clie
     # Additions rather than substitutions -- they have no frozen counterpart:
     # soil-volume-dialog.js, canvas-renderer.js, ruler.js, mesh-labels.js,
     # download.js, zip.js, phases.js, results.js, results-render.js, results-view.js,
-    # part-colors.js, water-command.js, node-parts.js, deck.js, results-plot.js.
+    # part-colors.js, water-command.js, script-command.js, node-parts.js, deck.js,
+    # results-plot.js.
     # The assertion above is the one that guards the portability claim.
     assert set(replaced) == {"api.js", "buffers.js", "model.js", "viewport.js", "patches.js",
                              "mesh-settings.js", "import-dialog.js", "mdpa-import-dialog.js",
@@ -1144,7 +1145,8 @@ def test_the_live_shell_replaces_only_the_viewport_and_the_orbit_controller(clie
                              "orbit.js", "ruler.js", "mesh-labels.js",
                              "download.js", "zip.js", "phases.js", "results.js",
                              "results-render.js", "results-view.js", "part-colors.js",
-                             "water-command.js", "node-parts.js", "deck.js",
+                             "water-command.js", "script-command.js", "node-parts.js",
+                             "deck.js",
                              "results-plot.js",
                              # The unit system and the Kratos property sets the editors
                              # show, and the Material sets dialog that replaces the frozen

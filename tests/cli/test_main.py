@@ -16,9 +16,11 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 
-COMMANDS = ["new", "show", "check", "build", "get", "set", "add", "remove", "dimension",
-            "units", "water", "domain", "borehole", "material", "layer", "excavation",
-            "volume", "parts", "mesh", "phases", "export", "run", "calculate", "results"]
+COMMANDS = ["new", "show", "check", "build", "script", "get", "set", "add", "remove",
+            "dimension", "units", "water", "domain", "borehole", "material", "layer", "excavation",
+            "volume", "section", "beam", "wall", "member", "anchor", "interface", "load",
+            "normal-load", "parts", "mesh", "phases", "node", "deck", "export", "run",
+            "calculate", "results", "shell"]
 
 
 def test_an_argument_no_command_takes_is_a_usage_error(cli, site):

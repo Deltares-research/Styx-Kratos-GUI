@@ -47,6 +47,18 @@ def register(commands, common: argparse.ArgumentParser) -> None:
                        help="the project file to write (.json)")
     build.set_defaults(handler=build_project)
 
+    script = commands.add_parser(
+        "script", parents=[common], help="write the model as a Python file that builds it",
+        description="Write the model as one model script: the Python file that builds it "
+                    "again, every value typed out. `run FILE` opens it in the GUI, every "
+                    "command that reads a model takes it, and `python FILE --out DIR` "
+                    "writes its Kratos deck.")
+    add_project(script)
+    script.add_argument("--out", type=Path, required=True, metavar="FILE",
+                        help="the model script to write (.py)")
+    script.add_argument("--force", action="store_true", help="replace a file that is there")
+    script.set_defaults(handler=write_script)
+
     dimension = commands.add_parser(
         "dimension", parents=[common], help="switch between 2D and 3D",
         description="Switch between the plane-strain section and the solid model. "
@@ -121,6 +133,15 @@ def build_project(args: argparse.Namespace) -> Answer:
     session.save(project, args.out)
     return Answer(data={"file": str(args.out), **summary(project)},
                   lines=[f"wrote {args.out}: {headline(project)}"])
+
+
+def write_script(args: argparse.Namespace) -> Answer:
+    project = session.load(args.project)
+    session.write_script(project, args.out, force=args.force, source=args.project)
+    return Answer(data={"file": str(args.out), **summary(project)},
+                  lines=[f"wrote {args.out}: {headline(project)}",
+                         f"next: run {args.out.name} in the GUI's command box, or "
+                         f"python {args.out.name} --out deck/"])
 
 
 # ── The edits with a command of their own ───────────────────────────────────

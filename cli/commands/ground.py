@@ -11,9 +11,9 @@ from __future__ import annotations
 
 import argparse
 
-from cli.commands.edit import parsed
 from cli.files import add_project, add_writing, written
 from cli.output import Answer, CommandError
+from cli.words import action, assignments, edited, file_of, given, noun
 from core import session
 from core.model import drafts
 from core.model.schemas import Project
@@ -30,41 +30,41 @@ def register(commands, common: argparse.ArgumentParser) -> None:
     add_writing(domain)
     domain.set_defaults(handler=set_domain)
 
-    borehole = _noun(commands, common, "borehole", "list, add, change or remove boreholes")
-    _action(borehole, common, "list", list_boreholes, writes=False)
-    add = _action(borehole, common, "add", add_borehole,
+    borehole = noun(commands, common, "borehole", "list, add, change or remove boreholes")
+    action(borehole, common, "list", list_boreholes, writes=False)
+    add = action(borehole, common, "add", add_borehole,
                   help="a borehole; what is not given is copied from the last one")
     add.add_argument("id", nargs="?", help="its id (default: the first free bh<n>)")
     _borehole_fields(add)
-    change = _action(borehole, common, "set", update_borehole)
+    change = action(borehole, common, "set", update_borehole)
     change.add_argument("id")
     _borehole_fields(change)
-    remove = _action(borehole, common, "remove", remove_borehole)
+    remove = action(borehole, common, "remove", remove_borehole)
     remove.add_argument("id")
 
-    material = _noun(commands, common, "material",
+    material = noun(commands, common, "material",
                      "list, add, change or remove materials (soil property sets)")
-    _action(material, common, "list", list_materials, writes=False)
-    _action(material, common, "presets", list_presets, writes=False,
+    action(material, common, "list", list_materials, writes=False)
+    action(material, common, "presets", list_presets, writes=False,
             help="the material library a new soil can start from")
-    add = _action(material, common, "add", add_material, variables=True,
+    add = action(material, common, "add", add_material, variables=True,
                   help="a soil: the default sand, or a library preset, then NAME=VALUE "
                        "variables of its own")
     add.add_argument("id")
     add.add_argument("--preset", help="the library preset to start from (see `presets`)")
     _material_fields(add)
-    change = _action(material, common, "set", update_material, variables=True,
+    change = action(material, common, "set", update_material, variables=True,
                      help="change NAME=VALUE variables, the law, the name or the colour")
     change.add_argument("id")
     _material_fields(change)
     change.add_argument("--unset", action="append", default=[], metavar="NAME",
                         help="leave this variable out, for the export to derive")
-    remove = _action(material, common, "remove", remove_material)
+    remove = action(material, common, "remove", remove_material)
     remove.add_argument("id")
 
-    layer = _noun(commands, common, "layer", "list, add, change, split or remove layers")
-    _action(layer, common, "list", list_layers, writes=False)
-    add = _action(layer, common, "add", add_layer,
+    layer = noun(commands, common, "layer", "list, add, change, split or remove layers")
+    action(layer, common, "list", list_layers, writes=False)
+    add = action(layer, common, "add", add_layer,
                   help="a layer under the stack, down to --bottom or --thickness below "
                        "the last one (default 5 m)")
     add.add_argument("id")
@@ -73,7 +73,7 @@ def register(commands, common: argparse.ArgumentParser) -> None:
     depth = add.add_mutually_exclusive_group()
     depth.add_argument("--bottom", type=float, help="its bottom, at every borehole")
     depth.add_argument("--thickness", type=float)
-    change = _action(layer, common, "set", update_layer,
+    change = action(layer, common, "set", update_layer,
                      help="change a layer; a moved level moves its neighbour's with it")
     change.add_argument("id")
     change.add_argument("--material")
@@ -82,11 +82,11 @@ def register(commands, common: argparse.ArgumentParser) -> None:
     change.add_argument("--bottom", type=float)
     change.add_argument("--at", metavar="BOREHOLE",
                         help="move the level at this borehole only (default: at all)")
-    split = _action(layer, common, "split", split_layer,
+    split = action(layer, common, "split", split_layer,
                     help="halve a layer; the lower half becomes a new layer")
     split.add_argument("id")
     split.add_argument("new_id", nargs="?")
-    remove = _action(layer, common, "remove", remove_layer)
+    remove = action(layer, common, "remove", remove_layer)
     remove.add_argument("id")
 
     excavation = commands.add_parser("excavation", parents=[common],
@@ -105,23 +105,8 @@ def register(commands, common: argparse.ArgumentParser) -> None:
     parts.set_defaults(handler=list_parts)
 
 
-def _noun(commands, common, name: str, help: str):
-    parser = commands.add_parser(name, parents=[common], help=help)
-    add_project(parser)
-    return parser.add_subparsers(dest="action", metavar="<action>", required=True)
 
 
-def _action(actions, common, name: str, handler, *, writes: bool = True,
-            variables: bool = False, help: str | None = None) -> argparse.ArgumentParser:
-    parser = actions.add_parser(name, parents=[common], help=help)
-    if writes:
-        add_writing(parser)
-    parser.set_defaults(handler=handler)
-    if variables:
-        # `NAME=VALUE` words anywhere on the line; `cli.main` gives this command the
-        # words no option took, since argparse cannot take them between options.
-        parser.set_defaults(variables=[])
-    return parser
 
 
 def _borehole_fields(parser: argparse.ArgumentParser) -> None:
@@ -148,7 +133,7 @@ def set_domain(args: argparse.Namespace) -> Answer:
                       lines=[_domain_line(project)])
     project, notes = session.set_domain(project, x=args.x, y=args.y, z=args.z)
     target, where = written(args, project)
-    return Answer(data={"file": _file(target), "domain": project.domain.model_dump(mode="json"),
+    return Answer(data={"file": file_of(target), "domain": project.domain.model_dump(mode="json"),
                         "section_offset": project.section_offset, "notes": notes},
                   lines=[f"{_domain_line(project)}; {where}", *notes])
 
@@ -160,7 +145,7 @@ def set_excavation(args: argparse.Namespace) -> Answer:
                       lines=[_pit_line(project)])
     project, notes = session.set_excavation(project, x=args.x, z=args.z, levels=args.levels)
     target, where = written(args, project)
-    return Answer(data={"file": _file(target),
+    return Answer(data={"file": file_of(target),
                         "excavation": project.excavation.model_dump(mode="json"),
                         "notes": notes},
                   lines=[f"{_pit_line(project)}; {where}", *notes])
@@ -190,19 +175,19 @@ def list_boreholes(args: argparse.Namespace) -> Answer:
 
 def add_borehole(args: argparse.Namespace) -> Answer:
     project = session.add_borehole(session.load(args.project), id=args.id,
-                                   **_given(args, "name", "x", "y", "head", "water"))
-    return _edited(args, project, f"added borehole {project.boreholes[-1].id}")
+                                   **given(args, "name", "x", "y", "head", "water"))
+    return edited(args, project, f"added borehole {project.boreholes[-1].id}")
 
 
 def update_borehole(args: argparse.Namespace) -> Answer:
     project = session.update_borehole(session.load(args.project), args.id,
-                                      **_given(args, "name", "x", "y", "head", "water"))
-    return _edited(args, project, f"changed borehole {args.id}")
+                                      **given(args, "name", "x", "y", "head", "water"))
+    return edited(args, project, f"changed borehole {args.id}")
 
 
 def remove_borehole(args: argparse.Namespace) -> Answer:
     project = session.remove_borehole(session.load(args.project), args.id)
-    return _edited(args, project, f"removed borehole {args.id}")
+    return edited(args, project, f"removed borehole {args.id}")
 
 
 # ── materials ───────────────────────────────────────────────────────────────
@@ -232,7 +217,7 @@ def add_material(args: argparse.Namespace) -> Answer:
     variables = assignments(args.variables)
     if variables:
         project = session.update_material(project, args.id, variables=variables)
-    answer = _edited(args, project, f"added material {args.id}")
+    answer = edited(args, project, f"added material {args.id}")
     answer.lines += notes
     return answer
 
@@ -242,26 +227,14 @@ def update_material(args: argparse.Namespace) -> Answer:
                                       name=args.name, color=args.color, law=args.law,
                                       variables=assignments(args.variables),
                                       unset=args.unset)
-    return _edited(args, project, f"changed material {args.id}")
+    return edited(args, project, f"changed material {args.id}")
 
 
 def remove_material(args: argparse.Namespace) -> Answer:
     project = session.remove_material(session.load(args.project), args.id)
-    return _edited(args, project, f"removed material {args.id}")
+    return edited(args, project, f"removed material {args.id}")
 
 
-def assignments(words: list[str]) -> dict:
-    """`NAME=VALUE` words as variables. A value is JSON when it reads as JSON and text
-    otherwise, as `kratos-cli set` takes it: `YOUNG_MODULUS=2e7`,
-    `GEO_DRAINAGE_TYPE=FULLY_COUPLED`."""
-    out = {}
-    for word in words:
-        name, equals, value = word.partition("=")
-        if not equals or not name:
-            raise CommandError(f"{word!r} is not a variable: give variables as NAME=VALUE, "
-                               "e.g. YOUNG_MODULUS=2e7")
-        out[name] = parsed([value])
-    return out
 
 
 # ── layers ──────────────────────────────────────────────────────────────────
@@ -280,26 +253,26 @@ def list_layers(args: argparse.Namespace) -> Answer:
 def add_layer(args: argparse.Namespace) -> Answer:
     project = session.add_layer(session.load(args.project), args.id, args.material,
                                 name=args.name, bottom=args.bottom, thickness=args.thickness)
-    return _edited(args, project, f"added layer {args.id}")
+    return edited(args, project, f"added layer {args.id}")
 
 
 def update_layer(args: argparse.Namespace) -> Answer:
     project = session.update_layer(session.load(args.project), args.id,
                                    material=args.material, name=args.name, top=args.top,
                                    bottom=args.bottom, at=args.at)
-    return _edited(args, project, f"changed layer {args.id}")
+    return edited(args, project, f"changed layer {args.id}")
 
 
 def split_layer(args: argparse.Namespace) -> Answer:
     before = session.load(args.project)
     project = session.split_layer(before, args.id, args.new_id)
     new = project.layers[[layer.id for layer in project.layers].index(args.id) + 1].id
-    return _edited(args, project, f"split layer {args.id}; its lower half is {new}")
+    return edited(args, project, f"split layer {args.id}; its lower half is {new}")
 
 
 def remove_layer(args: argparse.Namespace) -> Answer:
     project = session.remove_layer(session.load(args.project), args.id)
-    return _edited(args, project, f"removed layer {args.id}")
+    return edited(args, project, f"removed layer {args.id}")
 
 
 # ── parts ───────────────────────────────────────────────────────────────────
@@ -321,18 +294,3 @@ def list_parts(args: argparse.Namespace) -> Answer:
     return Answer(data=rows, lines=[
         f"{row['key']}  {row['label']}" + ("" if row["stageable"] else "  (not staged)")
         for row in rows] or ["No parts yet."])
-
-
-# ── Shared ──────────────────────────────────────────────────────────────────
-
-def _given(args: argparse.Namespace, *names: str) -> dict:
-    return {name: getattr(args, name) for name in names if getattr(args, name) is not None}
-
-
-def _edited(args: argparse.Namespace, project: Project, did: str) -> Answer:
-    target, where = written(args, project)
-    return Answer(data={"file": _file(target)}, lines=[f"{did}; {where}"])
-
-
-def _file(target) -> str | None:
-    return str(target) if target is not None else None

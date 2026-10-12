@@ -12,9 +12,11 @@ from __future__ import annotations
 import argparse
 
 from cli import output
-from cli.commands import analysis, edit, ground, meshing, phases, project, results, volumes
+from cli.commands import (analysis, edit, ground, inspection, interactive, meshing, phases,
+                          project, results, structures, volumes)
 
-GROUPS = (project, edit, ground, volumes, meshing, phases, analysis, results)
+GROUPS = (project, edit, ground, volumes, structures, meshing, phases, inspection, analysis,
+          results, interactive)
 """The command modules, in the order a model is worked through; `--help` lists them so."""
 
 
@@ -47,6 +49,8 @@ def main(argv: list[str] | None = None) -> int:
             if getattr(args, "variables", None) is None:
                 top.error("unrecognized arguments: " + " ".join(extra))
             args.variables = [*args.variables, *extra]
+        if args.json and getattr(args, "csv", False):
+            top.error("--json and --csv: give one of them")
     except SystemExit as stop:
         # --help (0) and a command line argparse cannot read (2), said by argparse.
         return stop.code if isinstance(stop.code, int) else 0
@@ -56,7 +60,7 @@ def main(argv: list[str] | None = None) -> int:
         if isinstance(failure, refusals()):
             return output.refused(failure, args.json)
         raise
-    return output.answered(answer, args.json)
+    return output.answered(answer, args.json, getattr(args, "csv", None))
 
 
 def refusals() -> tuple[type[Exception], ...]:
@@ -76,10 +80,13 @@ def refusals() -> tuple[type[Exception], ...]:
     from core.geometry.solid_model import GeometryError
     from core.kratos.external_deck import DeckError
     from core.kratos.writer import ExportError
+    from core.model.drafts import DraftError
     from core.model.phases import PhaseError
     from core.results.catalog import ResultsError
+    from core.results.fields import UnknownField
+    from core.results.members import UnknownQuantity
 
     return (output.CommandError, session.ProjectFileError, session.EditRefused,
             ValidationError, PhaseError, scripting.ScriptError, DeckError,
             calculation.CalculationError, ResultsError, GeometryError, MeshingError,
-            ExportError, ImportRefused)
+            ExportError, ImportRefused, DraftError, UnknownField, UnknownQuantity)

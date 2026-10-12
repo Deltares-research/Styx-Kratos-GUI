@@ -107,9 +107,35 @@ def _project() -> schemas.Project:
     return schemas.Project.model_validate(payload)
 
 
+EDITS = [
+    ("added", []),
+    ("inserted", ["dig_1"]),
+    ("inserted", ["initial"]),
+    ("removed", ["prop"]),
+    ("removed", ["initial"]),
+    ("copied", ["build_wall"]),
+    ("copied", ["settle"]),
+    ("setActive", ["dig_1", ["wall"], False]),
+    ("setActive", ["prop", ["soil_L1", "anchors"], False]),
+    ("setActive", ["settle", ["soil_L1__lift1"], True]),
+    ("setActive", ["build_wall", ["wall"], False]),
+]
+"""The Phases toolbar's edits and the Model explorer's checkbox, each called on the
+project by its JavaScript name with these arguments after it. The roots and the last
+phase are in it because that is where healing a chain goes wrong."""
+
+PYTHON_EDITS = {"added": phases.added, "inserted": phases.inserted,
+                "removed": phases.removed, "copied": phases.copied,
+                "setActive": phases.set_active}
+
+
 def build() -> dict:
     project = _project()
     return {
+        "edits": [{"call": call, "args": args,
+                   "result": [phase.model_dump(mode="json")
+                              for phase in PYTHON_EDITS[call](project, *args)]}
+                  for call, args in EDITS],
         "project": json.loads(project.model_dump_json()),
         "stageable_keys": project.stageable_keys(),
         "active_parts": {phase.id: sorted(phases.active_parts(project, phase.id))
@@ -130,6 +156,10 @@ def stored() -> dict:
 
 
 # ── The tests ───────────────────────────────────────────────────────────────
+
+def test_every_edit_the_gui_makes_is_in_the_fixture():
+    assert {call for call, _ in EDITS} == set(PYTHON_EDITS)
+
 
 def test_the_fixture_on_disk_is_what_the_server_computes():
     """The fixture is generated, so it can go stale the moment `active_parts` changes

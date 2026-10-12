@@ -11,6 +11,7 @@ a version of this code that no longer exists.
 """
 
 import json
+import shutil
 import zipfile
 
 import pytest
@@ -579,3 +580,40 @@ def test_the_deck_writes_its_system_beside_itself(tmp_path):
                                     "unit_system": "kN"}, tmp_path)
     assert calculation.UNITS_NAME in written
     assert json.loads((tmp_path / calculation.UNITS_NAME).read_text()) == {"unit_system": "kN"}
+
+
+# ── A run anywhere (plan/active/cli-plan.md D12) ────────────────────────────
+# A run id names a directory under the runs root, and only that: it is what a URL
+# carries. A `Path` names a run directory wherever it is -- copied off a cluster, or
+# run in its own deck folder -- which is what `kratos-cli results` reads.
+
+def test_a_run_outside_the_runs_root_is_read_by_its_directory(tmp_path, readable_run,
+                                                               runs_root):
+    elsewhere = tmp_path / "copied" / readable_run
+    shutil.copytree(runs_root / readable_run, elsewhere)
+
+    assert catalog.describe(elsewhere) == catalog.describe(readable_run)
+    assert catalog.stage_fields(elsewhere, 1) == catalog.stage_fields(readable_run, 1)
+    assert (catalog.stage_field(elsewhere, 1, "syy", "elements")
+            == catalog.stage_field(readable_run, 1, "syy", "elements"))
+    assert catalog.stage_at_node(elsewhere, 1, 2) == catalog.stage_at_node(readable_run, 1, 2)
+    assert catalog.file_path(elsewhere, calculation.PARAMETERS_NAME).is_file()
+
+
+def test_a_directory_not_named_as_a_run_is_named_by_its_deck(tmp_path):
+    directory = make_run(tmp_path, "deck", log=finished_log())
+
+    run = catalog.describe(directory)
+
+    assert (run["id"], run["deck"], run["started"]) == ("deck", "Test_model", None)
+    assert run["complete"] and len(run["stages"]) == 3
+
+
+def test_a_run_id_is_never_read_as_a_path(runs_root, outside_run):
+    with pytest.raises(catalog.UnknownRun):
+        catalog.describe(str(outside_run))
+
+
+def test_a_path_that_is_not_a_directory_is_refused(tmp_path):
+    with pytest.raises(catalog.UnknownRun, match="no run directory"):
+        catalog.describe(tmp_path / "nothing here")

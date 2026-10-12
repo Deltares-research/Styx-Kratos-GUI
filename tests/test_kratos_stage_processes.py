@@ -14,6 +14,7 @@ import json
 import pytest
 
 from core.kratos import writer, materials
+from core.model import phases
 from tests.models import excavation
 from core.geometry.solid_model import session
 from core.model.schemas import MeshRequest
@@ -321,3 +322,34 @@ def test_material_parameters_writes_the_k0_variables_on_request():
     assert "K0_NC" not in json.loads(plain)["properties"][0]["Material"]["Variables"]
     assert variables["K0_MAIN_DIRECTION"] == 1
     assert round(variables["K0_NC"], 2) == 0.58
+
+
+# -- What is built from the start ----------------------------------------------
+#
+# "Create default phases" switches nothing off (`phases.default_phases`), so a wall and
+# its interfaces drawn before that are in the model from the first stage. There is no
+# stage before the first for them to carry a stress from, and the first stage is where
+# they arrive.
+
+@pytest.fixture(scope="module")
+def from_the_start() -> dict:
+    project = excavation.excavation_project(staged=False)
+    project = project.model_copy(update={"phases": phases.default_phases(project)})
+    with session():
+        exported = writer.export_project(project, MeshRequest(**project.mesh.model_dump()))
+    return json.loads(exported["project_parameters"])
+
+
+def test_nothing_carries_a_stress_into_the_first_stage(from_the_start):
+    module = "apply_final_stresses_of_previous_stage_to_initial_state"
+    assert module not in modules(from_the_start, "1_Initial_stage", "auxiliary_process_list")
+    carried = carrying(from_the_start, "2_Null_step", "auxiliary_process_list", module)
+    assert "SheetPileWall" in carried and [name for name in carried if "Interface" in name]
+
+
+def test_interfaces_built_from_the_start_find_their_neighbours_in_the_first_stage(
+        from_the_start):
+    module = "find_neighbours_of_interfaces_process"
+    assert len(carrying(from_the_start, "1_Initial_stage", "auxiliary_process_list",
+                        module)) == 8
+    assert module not in modules(from_the_start, "2_Null_step", "auxiliary_process_list")

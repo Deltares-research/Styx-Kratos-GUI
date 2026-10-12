@@ -98,6 +98,21 @@ def run_here(job: Callable[..., Any], *args: Any) -> Any:
         return job(*args)
 
 
+def run_blocking(job: Callable[..., Any], *args: Any) -> Any:
+    """Run `job` and wait for it, from code that is not on the event loop.
+
+    In a process's main thread that is `run_here`. Anywhere else -- a route's worker
+    thread running a model script -- gmsh cannot be initialized (it installs a signal
+    handler, which only the main thread may), so the job goes to the worker and this
+    waits for it.
+    """
+    import threading
+
+    if threading.current_thread() is threading.main_thread():
+        return run_here(job, *args)
+    return executor().submit(job, *args).result()
+
+
 # ── Jobs ────────────────────────────────────────────────────────────────────
 #
 # Top-level functions, because the pool pickles them by qualified name. They take and

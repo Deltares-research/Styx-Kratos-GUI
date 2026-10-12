@@ -10,3 +10,7 @@ tools/              export-ignore
 eslint.config.mjs   export-ignore
 pyproject.toml      export-ignore
 requirements-dev.txt export-ignore
+
+# Shell scripts keep LF on every checkout, Windows' too: bash reads a CR as part of
+# the command it ends.
+*.sh                text eol=lf

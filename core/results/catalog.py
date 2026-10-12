@@ -23,6 +23,12 @@ Three things shape it:
     that does, so `file_path` is deliberately narrow: one flat directory, one plain
     filename, no separators of either kind, checked again after resolution. See
     `UnsafeName`.
+*   **A run is named one of two ways** (`Run`). A `str` is a run id: one directory
+    directly under the runs root, which is what a URL carries and all the routes ever
+    pass, so `run_directory`'s checks stand between a request and the disk. A `Path` is
+    a run directory wherever it is -- copied off another machine, or run in its own deck
+    folder -- which is what `kratos-cli results` reads (`plan/active/cli-plan.md` D12).
+    A `str` is never read as a path.
 
 Nothing here parses a result. Finding the files is this milestone; reading them is the
 next one (`plan/active/postprocessing-plan.md`, P1).
@@ -54,6 +60,9 @@ STAGE_NUMBER = re.compile(r"^(\d+)_")
 """The index `core.kratos.parameters.stage_name` puts in front of every stage name. Stages are
 ordered by it in the fallback path, because the filenames themselves sort lexically and
 that puts a ten-stage deck's stage 10 between 1 and 2."""
+
+Run = str | Path
+"""A run id, or a run directory: see the module docstring."""
 
 RESULTS_SUFFIX = ".post.res"
 MESH_SUFFIX = ".post.msh"
@@ -98,8 +107,11 @@ def runs() -> list[dict]:
     return sorted(found, key=lambda run: (run["started"], run["repeat"]), reverse=True)
 
 
-def _summary(directory: Path, match: re.Match) -> dict:
+def _summary(directory: Path, match: re.Match | None) -> dict:
     """The listing row for one run: what it is, when, how big, and how far it got.
+
+    Without a `match` -- a directory not named the way `calculation` names a run, read
+    by its path -- the deck is the one its `.mdpa` names, and when it started is unknown.
 
     Deliberately cheap -- one directory walk, `st_size`, and nothing opened. "How far
     it got" is the number of stages that wrote results, which is a count of filenames;
@@ -109,11 +121,19 @@ def _summary(directory: Path, match: re.Match) -> dict:
     list cost more than opening a run.
     """
     files = _files(directory)
+    if match is None:
+        mdpa = next((entry["name"] for entry in files if entry["name"].endswith(".mdpa")),
+                    None)
+        deck, started, repeat = (mdpa[:-len(".mdpa")] if mdpa else directory.name), None, 1
+    else:
+        deck = match["deck"]
+        started = f"{match['date']}T{match['hour']}:{match['minute']}"
+        repeat = int(match["repeat"] or 1)
     return {
         "id": directory.name,
-        "deck": match["deck"],
-        "started": f"{match['date']}T{match['hour']}:{match['minute']}",
-        "repeat": int(match["repeat"] or 1),
+        "deck": deck,
+        "started": started,
+        "repeat": repeat,
         "results": sum(1 for entry in files
                        if entry["name"].endswith(RESULTS_SUFFIX)),
         "files": len(files),
@@ -144,16 +164,30 @@ def run_directory(run_id: str) -> Path:
         raise UnknownRun(f"There is no run called {run_id!r}.")
     return directory
 
+def directory_of(run: Run) -> Path:
+    """The directory `run` names: a run id under the runs root (`run_directory`), or a
+    `Path` to a run directory anywhere. See this module's docstring."""
+    if isinstance(run, Path):
+        if not run.is_dir():
+            raise UnknownRun(f"There is no run directory {run}.")
+        return run
+    return run_directory(run)
+
+
+def _named(run: Run) -> str:
+    """A run as a message names it: its id quoted, or its directory."""
+    return str(run) if isinstance(run, Path) else repr(run)
+
 
 # ── Describing one ──────────────────────────────────────────────────────────
 
-def run_unit_system(run_id: str) -> str:
+def run_unit_system(run: Run) -> str:
     """The unit system a run's numbers are in: what its deck recorded beside it
     (`deck_files.UNITS_NAME`), or SI for a run without the record -- a deck case, or a
     run older than the unit system, both of which are SI decks."""
     from core.model import units
 
-    path = run_directory(run_id) / deck_files.UNITS_NAME
+    path = directory_of(run) / deck_files.UNITS_NAME
     try:
         system = json.loads(path.read_text(encoding="utf-8")).get("unit_system")
     except (OSError, ValueError, AttributeError):
@@ -161,10 +195,10 @@ def run_unit_system(run_id: str) -> str:
     return system if system in units.SYSTEMS else units.DEFAULT
 
 
-def describe(run_id: str) -> dict:
+def describe(run: Run) -> dict:
     """One run in full: its stages, its files, and whether it finished."""
-    directory = run_directory(run_id)
-    match = RUN_NAME.match(run_id)
+    directory = directory_of(run)
+    match = RUN_NAME.match(directory.name)
     stages = stage_list(directory)
     failed = failed_at(directory)
     return {
@@ -175,7 +209,7 @@ def describe(run_id: str) -> dict:
         # says what Kratos said, and the files say what is there to look at. The
         # second is the question a postprocessor is actually asking.
         "complete": bool(stages) and all(stage["results"] for stage in stages),
-        "unit_system": run_unit_system(run_id),
+        "unit_system": run_unit_system(run),
         "failed_at": failed,
         "log": calculation.LOG_NAME if (directory / calculation.LOG_NAME).is_file() else None,
     }
@@ -318,7 +352,7 @@ def _files(directory: Path) -> list[dict]:
     return entries
 
 
-def file_path(run_id: str, name: str) -> Path:
+def file_path(run: Run, name: str) -> Path:
     """One file of one run, by name.
 
     A run directory is flat -- `calculation` writes into it and Kratos writes beside that
@@ -329,7 +363,7 @@ def file_path(run_id: str, name: str) -> Path:
     the other. Both separators are rejected on both, and the resolved path is checked
     against the run directory afterwards anyway.
     """
-    directory = run_directory(run_id)
+    directory = directory_of(run)
     if (not name or name in {".", ".."}
             or "/" in name or "\\" in name
             or PureWindowsPath(name).drive):
@@ -338,7 +372,7 @@ def file_path(run_id: str, name: str) -> Path:
     if path.resolve().parent != directory.resolve():
         raise UnsafeName(f"{name!r} is not a file in this run.")
     if not path.is_file():
-        raise UnknownRun(f"{run_id!r} has no file called {name!r}.")
+        raise UnknownRun(f"{_named(run)} has no file called {name!r}.")
     return path
 
 
@@ -394,37 +428,37 @@ def forget_cache() -> None:
         _cache.clear()
 
 
-def stage_record(run_id: str, index: int) -> dict:
+def stage_record(run: Run, index: int) -> dict:
     """One stage of one run, by its 1-based position in the execution list."""
-    stages = stage_list(run_directory(run_id))
+    stages = stage_list(directory_of(run))
     for stage in stages:
         if stage["index"] == index:
             return stage
-    raise UnknownRun(f"{run_id!r} has no stage {index}; it has {len(stages)}.")
+    raise UnknownRun(f"{_named(run)} has no stage {index}; it has {len(stages)}.")
 
 
-def stage_mesh(run_id: str, index: int):
+def stage_mesh(run: Run, index: int):
     from core.results import gid_reader
 
-    stage = stage_record(run_id, index)
+    stage = stage_record(run, index)
     if not stage["mesh_file"]:
-        raise UnknownRun(f"Stage {index} of {run_id!r} wrote no mesh file.")
-    return _parsed(run_directory(run_id) / stage["mesh_file"], gid_reader.read_mesh)
+        raise UnknownRun(f"Stage {index} of {_named(run)} wrote no mesh file.")
+    return _parsed(directory_of(run) / stage["mesh_file"], gid_reader.read_mesh)
 
 
-def stage_results(run_id: str, index: int):
+def stage_results(run: Run, index: int):
     from core.results import gid_reader
 
-    stage = stage_record(run_id, index)
+    stage = stage_record(run, index)
     if not stage["results_file"]:
         raise UnknownRun(
-            f"Stage {index} of {run_id!r} wrote no results. "
+            f"Stage {index} of {_named(run)} wrote no results. "
             "The run stopped before reaching it, or is still going.")
-    return _parsed(run_directory(run_id) / stage["results_file"],
+    return _parsed(directory_of(run) / stage["results_file"],
                    gid_reader.read_results)
 
 
-def stage_geometry(run_id: str, index: int) -> dict:
+def stage_geometry(run: Run, index: int) -> dict:
     """This stage's mesh as buffers the viewport can draw and colour.
 
     The deck is read for the part names and element classes -- neither is in the GiD
@@ -435,49 +469,49 @@ def stage_geometry(run_id: str, index: int) -> dict:
     from core.kratos import mdpa_reader
     from core.results import mesh
 
-    directory = run_directory(run_id)
+    directory = directory_of(run)
     deck = next((path for path in directory.glob("*.mdpa")), None)
     if deck is None:
-        raise UnknownRun(f"{run_id!r} has no .mdpa, so its mesh cannot be named.")
+        raise UnknownRun(f"{_named(run)} has no .mdpa, so its mesh cannot be named.")
     return mesh.stage_sections(_parsed(deck, mdpa_reader.import_mdpa),
-                                      stage_mesh(run_id, index))
+                                      stage_mesh(run, index))
 
 
-def stage_fields(run_id: str, index: int) -> dict:
+def stage_fields(run: Run, index: int) -> dict:
     """The field menu for one stage, derived from what that stage actually wrote."""
     from core.results import fields
 
-    stage = stage_record(run_id, index)
+    stage = stage_record(run, index)
     return {"stage": stage,
-            "groups": fields.catalogue(stage_results(run_id, index),
-                                              run_unit_system(run_id))}
+            "groups": fields.catalogue(stage_results(run, index),
+                                              run_unit_system(run))}
 
 
-def stage_field(run_id: str, index: int, name: str, location: str = "nodes") -> dict:
+def stage_field(run: Run, index: int, name: str, location: str = "nodes") -> dict:
     """One field of one stage: the ids it is defined on, the numbers, and the range."""
     from core.results import fields
 
-    return fields.values(stage_results(run_id, index),
-                                stage_mesh(run_id, index), name, location,
-                                run_unit_system(run_id))
+    return fields.values(stage_results(run, index),
+                                stage_mesh(run, index), name, location,
+                                run_unit_system(run))
 
 
-def stage_displacement(run_id: str, index: int) -> dict:
+def stage_displacement(run: Run, index: int) -> dict:
     """The displacement vectors of one stage -- what a deformed mesh is drawn with."""
     from core.results import fields
 
-    return fields.displacement(stage_results(run_id, index))
+    return fields.displacement(stage_results(run, index))
 
 
-def stage_at_node(run_id: str, index: int, node: int) -> dict:
+def stage_at_node(run: Run, index: int, node: int) -> dict:
     """Every field of one stage, at one node -- what `results at <id>` prints."""
     from core.results import fields
 
-    return fields.at_node(stage_results(run_id, index),
-                                 stage_mesh(run_id, index), node, run_unit_system(run_id))
+    return fields.at_node(stage_results(run, index),
+                                 stage_mesh(run, index), node, run_unit_system(run))
 
 
-def stage_parts(run_id: str, index: int) -> dict:
+def stage_parts(run: Run, index: int) -> dict:
     """The named parts of the deck as this stage saw them.
 
     `written` is filled in, which costs reading every stage's mesh once -- the only way
@@ -488,17 +522,17 @@ def stage_parts(run_id: str, index: int) -> dict:
     from core.kratos import mdpa_reader
     from core.results import gid_reader, parts
 
-    directory = run_directory(run_id)
+    directory = directory_of(run)
     deck = next((path for path in directory.glob("*.mdpa")), None)
     if deck is None:
-        raise UnknownRun(f"{run_id!r} has no .mdpa, so its parts cannot be named.")
+        raise UnknownRun(f"{_named(run)} has no .mdpa, so its parts cannot be named.")
     model = _parsed(deck, mdpa_reader.import_mdpa)
 
     meshes = [_parsed(directory / stage["mesh_file"], gid_reader.read_mesh)
               for stage in stage_list(directory) if stage["mesh_file"]]
     written = parts.written_parts(model, meshes)
 
-    staged = parts.stage_parts(model, stage_mesh(run_id, index), written=written)
+    staged = parts.stage_parts(model, stage_mesh(run, index), written=written)
     return {"parts": [
         {"name": part.name, "kind": part.kind, "declared": part.declared,
          "nodes": part.nodes, "elements": len(part.elements),
@@ -508,11 +542,11 @@ def stage_parts(run_id: str, index: int) -> dict:
 
 # ── Structural members ──────────────────────────────────────────────────────
 
-def _member_files(run_id: str) -> dict[str, list[tuple[dict, Path]]]:
+def _member_files(run: Run) -> dict[str, list[tuple[dict, Path]]]:
     """{member: [(stage row, its json_output file), ...]}, in stage order."""
     from core.results import members
 
-    directory = run_directory(run_id)
+    directory = directory_of(run)
     found: dict[str, list[tuple[dict, Path]]] = {}
     for stage in stage_list(directory):
         for filename in stage["json"]:
@@ -528,7 +562,7 @@ def _member_output(path: Path) -> dict:
     return _parsed(path, members.read_output)
 
 
-def stage_members(run_id: str) -> dict:
+def stage_members(run: Run) -> dict:
     """The members this run wrote curves for, the stages each has, and what each offers.
 
     Read off the files rather than the deck: a member is plottable because its output is
@@ -537,18 +571,18 @@ def stage_members(run_id: str) -> dict:
     from core.results import members
 
     listed = []
-    for name, found in sorted(_member_files(run_id).items()):
+    for name, found in sorted(_member_files(run).items()):
         outputs = [_member_output(path) for _, path in found]
         listed.append({
             "name": name,
             "stages": [stage["index"] for stage, _ in found],
-            "quantities": [entry.summary(run_unit_system(run_id))
+            "quantities": [entry.summary(run_unit_system(run))
                            for entry in members.available(outputs)],
         })
     return {"members": listed}
 
 
-def member_profiles(run_id: str, member: str, quantity: str) -> dict:
+def member_profiles(run: Run, member: str, quantity: str) -> dict:
     """One quantity along one member, a panel per stage that wrote it.
 
     The y of each node comes from the run's own `.mdpa`, undeformed -- the level on the
@@ -557,9 +591,9 @@ def member_profiles(run_id: str, member: str, quantity: str) -> dict:
     from core.kratos import mdpa_reader
     from core.results import members
 
-    files = _member_files(run_id)
+    files = _member_files(run)
     if member not in files:
-        raise UnknownRun(f"{run_id!r} wrote no output for a member called {member!r}; "
+        raise UnknownRun(f"{_named(run)} wrote no output for a member called {member!r}; "
                          f"it has {', '.join(sorted(files)) or 'none'}.")
     entry = members.quantity(quantity)
     outputs = [(stage, _member_output(path)) for stage, path in files[member]]
@@ -567,17 +601,17 @@ def member_profiles(run_id: str, member: str, quantity: str) -> dict:
         raise members.UnknownQuantity(
             f"The {member} output carries no {entry.label.lower()} ({quantity}).")
 
-    directory = run_directory(run_id)
+    directory = directory_of(run)
     deck = next((path for path in directory.glob("*.mdpa")), None)
     if deck is None:
-        raise UnknownRun(f"{run_id!r} has no .mdpa, so its members cannot be placed.")
+        raise UnknownRun(f"{_named(run)} has no .mdpa, so its members cannot be placed.")
     coordinates = _parsed(deck, mdpa_reader.import_mdpa).nodes
 
     return {
         "member": member,
         "quantity": entry.name,
         "label": entry.label,
-        "unit": entry.unit(run_unit_system(run_id)),
+        "unit": entry.unit(run_unit_system(run)),
         "stages": [{"index": stage["index"], "name": stage["name"],
                     "phase": stage["phase"]}
                    | members.profile(output, coordinates, entry)
@@ -585,14 +619,14 @@ def member_profiles(run_id: str, member: str, quantity: str) -> dict:
     }
 
 
-def archive(run_id: str) -> io.BytesIO:
+def archive(run: Run) -> io.BytesIO:
     """The whole run directory as one zip, in memory.
 
     In memory because a run is a few megabytes of text that compresses to a fraction of
     that, and because a temporary file here would be one more thing on disk that
     nothing cleans up -- the complaint this module exists to answer.
     """
-    directory = run_directory(run_id)
+    directory = directory_of(run)
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as out:
         for path in sorted(directory.iterdir()):

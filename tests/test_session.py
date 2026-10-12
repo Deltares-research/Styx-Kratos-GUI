@@ -20,6 +20,7 @@ from core.model.schemas import (Deck, DimensionUpdate, LayersUpdate, MaterialsUp
                                 PhasesUpdate, Project, StructuresUpdate, UnitsUpdate,
                                 WaterLevel, WaterUpdate)
 from core.model.templates import blank_project, seed_project
+from tests.models.excavation import excavation_project
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "projects"
 
@@ -130,6 +131,42 @@ def test_a_failed_save_leaves_the_old_file_as_it_was(tmp_path, monkeypatch):
         session.save(blank_project(), path)
 
     assert path.read_bytes() == before
+    assert [p.name for p in tmp_path.iterdir()] == ["site.json"]
+
+
+def test_a_save_waits_out_a_file_another_program_holds_for_a_moment(tmp_path, monkeypatch):
+    """Windows refuses to replace a file another program has open -- a virus scanner
+    reading the file just written, an indexer -- with "Access is denied". That lasts
+    milliseconds, and the save tries again rather than failing the edit."""
+    path = tmp_path / "site.json"
+    session.save(seed_project(), path)
+    real, refusals = session.os.replace, []
+
+    def held(source, target):
+        if len(refusals) < 2:
+            refusals.append(target)
+            raise PermissionError(13, "Access is denied")
+        real(source, target)
+
+    monkeypatch.setattr(session.os, "replace", held)
+    monkeypatch.setattr(session, "REPLACE_WAIT", 0.0)
+    session.save(blank_project(), path)
+
+    assert len(refusals) == 2
+    assert session.load(path) == blank_project()
+
+
+def test_a_file_held_for_good_is_refused_by_name(tmp_path, monkeypatch):
+    path = tmp_path / "site.json"
+    session.save(seed_project(), path)
+
+    def held(source, target):
+        raise PermissionError(13, "Access is denied")
+
+    monkeypatch.setattr(session.os, "replace", held)
+    monkeypatch.setattr(session, "REPLACE_WAIT", 0.0)
+    with pytest.raises(session.ProjectFileError, match="site.json.*another program"):
+        session.save(blank_project(), path)
     assert [p.name for p in tmp_path.iterdir()] == ["site.json"]
 
 
@@ -661,3 +698,164 @@ def test_a_part_given_a_material_takes_its_colour():
 def test_a_part_given_a_material_the_model_lacks_is_refused():
     with pytest.raises(session.EditRefused, match="Unknown material 'nope'"):
         session.assign_part_material(with_box(seed_project()), "drawn_0", "nope")
+
+
+# ── Structures and their sections ────────────────────────────────────────────
+
+def plane_strain() -> Project:
+    project, _ = session.set_dimension(seed_project(), DimensionUpdate(dimension=2))
+    return project
+
+
+def test_a_first_sheet_pile_brings_its_default_profile():
+    from core.model import drafts
+    project = plane_strain()
+    pile = drafts.sheet_pile(project)
+
+    edited = session.add_structure(project, pile, drafts.section_for(project, pile))
+
+    assert [b.id for b in edited.beams] == ["beam_1"]
+    assert [s.id for s in edited.beam_sections] == ["beamsection_1"]
+
+
+def test_a_structure_needs_an_id_no_other_part_has():
+    from core.model import drafts
+    project = excavation_project(staged=False)
+    anchor = drafts.anchor(project, id="sheetpile")
+
+    with pytest.raises(session.EditRefused, match="already a part 'sheetpile'"):
+        session.add_structure(project, anchor)
+
+
+def test_a_structure_is_changed_field_by_field():
+    project = session.update_structure(excavation_project(staged=False), "strut",
+                                       prestress=1.0e5, name="Prop")
+
+    strut = project.anchors[0]
+    assert (strut.prestress, strut.name) == (1.0e5, "Prop")
+
+
+def test_an_anchor_moved_off_its_pile_is_refused():
+    with pytest.raises(ValidationError, match="not on a sheet pile"):
+        session.update_structure(excavation_project(staged=False), "strut",
+                                 head=(10.0, -1.0))
+
+
+def test_a_structure_that_is_not_there_is_named_with_those_that_are():
+    with pytest.raises(session.UnknownRecord, match="no structure 'wall9'.*sheetpile"):
+        session.update_structure(excavation_project(staged=False), "wall9", name="x")
+
+
+def test_a_pile_carrying_an_anchor_or_an_interface_is_not_removed():
+    project = excavation_project(staged=False)
+
+    with pytest.raises(session.EditRefused, match="strut, wall_contact"):
+        session.remove_structure(project, "sheetpile")
+
+
+def test_a_structure_a_phase_names_is_not_removed():
+    with pytest.raises(session.EditRefused, match="phase 'install_strut' names strut"):
+        session.remove_structure(excavation_project(), "strut")
+
+
+def test_a_removed_structure_takes_its_mesh_size_with_it():
+    project = excavation_project(staged=False)
+    for dependent in ("strut", "wall_contact"):
+        project = session.remove_structure(project, dependent)
+
+    edited = session.remove_structure(project, "sheetpile")
+
+    assert edited.beams == []
+    assert "sheetpile" not in edited.mesh.body_sizes
+
+
+def test_a_section_is_added_changed_and_removed():
+    from core.model import drafts
+    project = plane_strain()
+
+    project = session.add_section(project, "beam", drafts.section(project, "beam", "az26"))
+    project = session.update_section(project, "az26", spacing=1.5, name="AZ 26",
+                                     variables={"I33": 6.0e-4}, unset=["POISSON_RATIO"])
+    az26 = project.beam_sections[0]
+    assert (az26.spacing, az26.name, az26.variables["I33"]) == (1.5, "AZ 26", 6.0e-4)
+    assert "POISSON_RATIO" not in az26.variables
+
+    assert session.remove_section(project, "az26").beam_sections == []
+
+
+def test_a_section_a_structure_uses_is_not_removed():
+    with pytest.raises(session.EditRefused, match="sheetpile"):
+        session.remove_section(excavation_project(staged=False), "sheetpile")
+
+
+def test_a_section_id_two_kinds_share_needs_its_kind():
+    from core.model import drafts
+    project = excavation_project(staged=False)
+    project = session.add_section(project, "anchor",
+                                  drafts.section(project, "anchor", "sheetpile"))
+
+    with pytest.raises(session.EditRefused, match="beam and an anchor section"):
+        session.update_section(project, "sheetpile", name="x")
+    assert session.update_section(project, "sheetpile", kind="anchor",
+                                  name="x").anchor_sections[-1].name == "x"
+
+
+# ── Phases, one at a time ────────────────────────────────────────────────────
+
+def test_a_phase_is_added_at_the_end_with_the_id_and_settings_given():
+    project, phase = session.add_phase(excavation_project(), id="dig_4", name="Dig 4",
+                                       calculation="Plastic", max_iterations=50)
+
+    assert project.phases[-1] == phase
+    assert (phase.id, phase.name, phase.parent, phase.max_iterations) == (
+        "dig_4", "Dig 4", "dig_3", 50)
+
+
+def test_a_phase_inserted_before_another_takes_its_place_in_the_chain():
+    project, phase = session.add_phase(excavation_project(), before="dig_1", id="prep")
+
+    by_id = {p.id: p for p in project.phases}
+    assert (by_id["prep"].parent, by_id["dig_1"].parent) == ("install_sheetpile", "prep")
+
+
+def test_a_copied_phase_follows_its_original():
+    project, phase = session.add_phase(excavation_project(), copy_of="dig_1")
+
+    assert (phase.id, phase.parent, phase.max_iterations) == ("phase_1", "dig_1", 150)
+    assert {p.id: p for p in project.phases}["install_strut"].parent == "phase_1"
+
+
+def test_a_phase_id_that_is_taken_is_refused():
+    with pytest.raises(session.EditRefused, match="already a phase 'dig_1'"):
+        session.add_phase(excavation_project(), id="dig_1")
+
+
+def test_a_phase_is_changed_and_removed():
+    project = session.update_phase(excavation_project(), "dig_1", name="Dig one",
+                                   tolerated_error=1e-5)
+    assert {p.id: p for p in project.phases}["dig_1"].tolerated_error == 1e-5
+
+    project = session.remove_phase(project, "install_strut")
+    assert {p.id: p for p in project.phases}["dig_2"].parent == "dig_1"
+
+
+def test_a_phase_that_is_not_there_is_named_with_those_that_are():
+    with pytest.raises(session.UnknownRecord, match="no phase 'dig_9'.*dig_1"):
+        session.update_phase(excavation_project(), "dig_9", name="x")
+
+
+def test_parts_are_switched_with_the_smallest_instruction():
+    project = session.switch_parts(excavation_project(), "dig_1", ["strut"], True)
+
+    assert {p.id: p for p in project.phases}["dig_1"].activate == ["water_1", "strut"]
+
+
+def test_a_part_the_model_does_not_have_is_not_switched():
+    with pytest.raises(session.EditRefused, match="no part 'stru'"):
+        session.switch_parts(excavation_project(), "dig_1", ["stru"], True)
+
+
+def test_the_staged_excavation_sequence_is_derived_from_the_model():
+    project = session.staged_excavation_phases(excavation_project(staged=False))
+
+    assert project.phases == excavation_project().phases

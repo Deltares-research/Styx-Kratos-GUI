@@ -3,7 +3,9 @@
 A command returns an `Answer`: the data a script reads (`--json`), the lines a person
 reads, and -- when it did not do what it was asked -- the reason. Exit codes
 (plan/active/cli-plan.md D7): 0 done, 1 refused by the model or by Kratos, 2 a command
-line argparse could not read. A refusal goes to stderr as `error: <reason>`; with
+line argparse could not read. A command with a table answers `--csv` with it too: on
+stdout, or into the file `--csv FILE` names (UTF-8, whatever the shell would make of a
+redirect -- Windows PowerShell 5.1's `>` writes UTF-16). A refusal goes to stderr as `error: <reason>`; with
 `--json` it is the answer on stdout as well, so a script reading stdout always gets JSON.
 """
 
@@ -12,6 +14,7 @@ from __future__ import annotations
 import json
 import sys
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from pydantic import ValidationError
 
@@ -32,11 +35,23 @@ class Answer:
     error: str | None = None
     """Set when the command ran but did not do what it was asked -- a run Kratos
     stopped. Exit 1."""
+    csv: str | None = None
+    """What `--csv` prints, for a command whose answer is a table."""
 
 
-def answered(answer: Answer, as_json: bool) -> int:
+STDOUT = "-"
+"""`--csv` given no file: the table goes to stdout."""
+
+
+def answered(answer: Answer, as_json: bool, as_csv: str | None = None) -> int:
     if as_json:
         print(_json(answer.data))
+    elif as_csv and answer.csv is not None and as_csv == STDOUT:
+        sys.stdout.write(answer.csv)
+    elif as_csv and answer.csv is not None:
+        Path(as_csv).write_text(answer.csv, encoding="utf-8", newline="\n")
+        rows = answer.csv.count("\n") - 1
+        print(f"wrote {as_csv} ({rows} row{'s' if rows != 1 else ''})")
     else:
         for line in answer.lines:
             print(line)

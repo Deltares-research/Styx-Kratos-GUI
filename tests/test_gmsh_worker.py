@@ -138,3 +138,22 @@ def test_a_job_that_fails_here_raises_and_still_finalizes():
     with pytest.raises(ValueError, match="no such thing"):
         gmsh_worker.run_here(worker_jobs.fail, "no such thing")
     assert not gmsh.isInitialized()
+
+
+# ── Blocking, from wherever: a model script ────────────────────────────────
+
+def test_a_blocking_job_runs_here_on_the_main_thread():
+    assert gmsh_worker.run_blocking(worker_jobs.pid) == __import__("os").getpid()
+
+
+def test_a_blocking_job_off_the_main_thread_runs_in_the_worker():
+    """A route runs a model script on a worker thread, where gmsh cannot start: it
+    installs a signal handler, which only the main thread may. So the job goes to the
+    worker process, and the thread waits for it."""
+    with ThreadPoolExecutor(max_workers=1) as thread:
+        pid = thread.submit(gmsh_worker.run_blocking, worker_jobs.pid).result(timeout=120)
+        version = thread.submit(gmsh_worker.run_blocking,
+                                gmsh_worker.version_job).result(timeout=120)
+
+    assert pid != __import__("os").getpid()
+    assert version.count(".") == 1

@@ -12,11 +12,13 @@ and it turns that tree into the three things the exporter needs:
 *   `transitions` -- per phase, what changes, which becomes its `stage_preprocess`
     Activate/Deactivate operations.
 
-and one more that is not about export at all:
+and two that are not about export at all:
 
-*   `default_phases` -- the sequence a project gets the first time staged mode is
-    opened, shaped like the reference's seven stages, so the phase editor opens on
-    something that already runs rather than on an empty list.
+*   `default_phases` and `staged_excavation_phases` -- the sequences a project can be
+    given whole.
+*   `added`, `inserted`, `removed`, `copied`, `set_active` -- the edits the GUI's
+    Phases toolbar and Model explorer make to a list, for the command line to make
+    the same way.
 
 Pure model logic: no gmsh, no Kratos, no meshing. It works on part *keys*, the model's
 own namespace (`Project.stageable_keys`), not on deck part names -- one drawn
@@ -246,3 +248,118 @@ def staged_excavation_phases(project: Project) -> list[Phase]:
             max_iterations=150, tolerated_error=1e-3)
 
     return made
+
+
+# -- editing ------------------------------------------------------------------
+#
+# What the Phases toolbar's buttons and the Model explorer's checkbox do to the list
+# (`frontend/js/phases.js`: `added`, `inserted`, `removed`, `copied`, `setActive`), so
+# the command line edits a sequence the way the GUI does. Each returns a new list and
+# leaves the project alone; `core.session` stores it the way `PATCH /api/project/phases`
+# does. `tests/test_phase_parity.py` holds the two sides to the same answers.
+
+def _fresh_id(project: Project, stem: str) -> str:
+    taken = {phase.id for phase in project.phases}
+    number = 1
+    while f"{stem}_{number}" in taken:
+        number += 1
+    return f"{stem}_{number}"
+
+
+def _copies(project: Project) -> list[Phase]:
+    return [phase.model_copy(deep=True) for phase in project.phases]
+
+
+def _last(project: Project) -> Phase | None:
+    try:
+        sequence = linearise(project)
+    except PhaseError:
+        sequence = list(project.phases)
+    return sequence[-1] if sequence else None
+
+
+def added(project: Project) -> list[Phase]:
+    """Add: a blank phase at the end of the sequence, starting from the last one."""
+    listed = _copies(project)
+    tail = _last(project)
+    listed.append(Phase(id=_fresh_id(project, "phase"), name=f"Phase {len(listed) + 1}",
+                        parent=tail.id if tail else None))
+    return listed
+
+
+def inserted(project: Project, id: str) -> list[Phase]:
+    """Insert: a blank phase between `id` and the phase it starts from -- `id` then
+    starts from the new one, or the tree would branch."""
+    listed = _copies(project)
+    at = next((n for n, phase in enumerate(listed) if phase.id == id), None)
+    if at is None:
+        return listed
+    made = Phase(id=_fresh_id(project, "phase"), name="New phase", parent=listed[at].parent)
+    listed[at].parent = made.id
+    listed.insert(at, made)
+    return listed
+
+
+def removed(project: Project, id: str) -> list[Phase]:
+    """Delete: the phase gone and the chain healed -- its children start from its
+    parent, and a deleted root promotes its child."""
+    target = next((phase for phase in project.phases if phase.id == id), None)
+    if target is None:
+        return _copies(project)
+    listed = [phase for phase in _copies(project) if phase.id != id]
+    for phase in listed:
+        if phase.parent == id:
+            phase.parent = target.parent
+    return listed
+
+
+def copied(project: Project, id: str) -> list[Phase]:
+    """Copy: the same solver settings, spliced in after the original, without its parts
+    -- a copy repeats a step with other parts, and the same switches twice would be
+    no-ops."""
+    listed = _copies(project)
+    at = next((n for n, phase in enumerate(listed) if phase.id == id), None)
+    if at is None:
+        return listed
+    original = listed[at]
+    made = Phase(id=_fresh_id(project, "phase"), name=f"{original.name} (copy)",
+                 parent=original.id, calculation=original.calculation,
+                 reset_displacements=original.reset_displacements,
+                 max_iterations=original.max_iterations,
+                 tolerated_error=original.tolerated_error,
+                 time_interval=original.time_interval)
+    for phase in listed:
+        if phase.parent == id:
+            phase.parent = made.id
+    listed.insert(at + 1, made)
+    return listed
+
+
+def set_active(project: Project, id: str, keys: list[str], wanted: bool) -> list[Phase]:
+    """Make each of `keys` in the model (`wanted`) or out of it during phase `id`, with
+    the smallest instruction that does it: none when the phases before already give that
+    state, and never both lists for one part. Only phase `id` changes; the ones after
+    inherit the new state until one of them says otherwise."""
+    listed = _copies(project)
+    if not any(phase.id == id for phase in listed):
+        return listed
+    before = _chain_to(project, id)[:-1]
+
+    def inherited(key: str) -> bool:
+        active = True       # everything starts in the model
+        for phase in before:
+            if key in phase.deactivate:
+                active = False
+            if key in phase.activate:
+                active = True
+        return active
+
+    for phase in listed:
+        if phase.id != id:
+            continue
+        for key in keys:
+            phase.activate = [k for k in phase.activate if k != key]
+            phase.deactivate = [k for k in phase.deactivate if k != key]
+            if wanted != inherited(key):
+                (phase.activate if wanted else phase.deactivate).append(key)
+    return listed

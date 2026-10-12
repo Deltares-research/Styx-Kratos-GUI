@@ -629,12 +629,20 @@ def _phased_stages(project: Project, deck: _Deck) -> list[parameters.Stage]:
                            if name in was and name not in live)
 
         k0 = phase.calculation == "K0 procedure"
-        arriving = [name for name in deck.interfaces if name in activate]
+        # What the first stage holds arrives in it, imported with the mesh rather than
+        # activated, and there is no stage before it to carry a stress from: Kratos
+        # refuses to look one up (`ApplyFinalStressesOfPreviousStageToInitialState`). A
+        # wall in the model from the start -- default phases switch nothing off -- has
+        # its interfaces' neighbours found there, and its stresses carried from the
+        # second stage on.
+        first = index == 0
+        arriving = [name for name in deck.interfaces
+                    if name in (live if first else activate)]
         # Stresses carry over for what was already there *and* still is. A part being
         # installed in this stage has no previous stress to carry, which is why the
         # reference leaves the anchor out of stage 5 and puts it back in stage 6.
-        carried = tuple(name for name in deck.interfaces + deck.structures
-                        if name in live and name in was)
+        carried = () if first else tuple(name for name in deck.interfaces + deck.structures
+                                         if name in live and name in was)
         beams = tuple(name for name in deck.beams if name in live)
         retained = tuple(name for name in deck.retained if name in live)
 

@@ -16,6 +16,7 @@ from pathlib import Path
 import pytest
 
 from backend import launcher
+from tests import shell
 
 ROOT = Path(__file__).resolve().parents[2]
 BAT = ROOT / "kratos-cli.bat"
@@ -49,6 +50,15 @@ def test_the_posix_wrapper_runs_the_command_in_the_platform_environment():
     assert source.startswith("#!/usr/bin/env bash")
 
 
+def test_the_posix_wrapper_uses_the_windows_environment_in_git_bash():
+    """Git Bash on Windows says MINGW64_NT-..., MSYS_NT-... or CYGWIN_NT-...; there the
+    environment is the one `run.bat` makes, with its python under Scripts."""
+    source = SH.read_text(encoding="utf-8")
+
+    assert "MINGW*|MSYS*|CYGWIN*)" in source
+    assert launcher.platform_venv_name("win32") + "/Scripts/python.exe" in source
+
+
 def test_the_command_file_puts_the_repository_on_the_path_not_the_user_s_folder(tmp_path):
     decoys(tmp_path)
 
@@ -67,6 +77,21 @@ def test_the_windows_wrapper_works_from_the_user_s_folder(tmp_path):
     decoys(tmp_path)
 
     ran = subprocess.run(["cmd", "/c", str(BAT), "--json", "new", "here.json"],
+                         cwd=tmp_path, capture_output=True, text=True, encoding="utf-8",
+                         timeout=120)
+
+    assert ran.returncode == 0, ran.stderr
+    assert (tmp_path / "here.json").is_file()
+
+
+@pytest.mark.skipif(shell.bash() is None, reason="no bash on this machine")
+@pytest.mark.skipif(not launcher.venv_python(ROOT / launcher.platform_venv_name()).exists(),
+                    reason="no platform environment made yet")
+def test_the_posix_wrapper_works_from_the_user_s_folder(tmp_path):
+    """On Linux and macOS, and in Git Bash on Windows."""
+    decoys(tmp_path)
+
+    ran = subprocess.run([str(shell.bash()), SH.as_posix(), "--json", "new", "here.json"],
                          cwd=tmp_path, capture_output=True, text=True, encoding="utf-8",
                          timeout=120)
 
