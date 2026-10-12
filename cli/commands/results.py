@@ -307,8 +307,11 @@ def _target(args: argparse.Namespace, name: str) -> Path:
     if args.out is None:
         target = Path(name)
     elif args.out.endswith(("/", "\\")):
-        Path(args.out).mkdir(parents=True, exist_ok=True)
-        target = Path(args.out) / name
+        # Either separator, on every system: off Windows a trailing `\` is a legal
+        # character of a name, and Path would make a folder called `logs\`.
+        folder = Path(args.out.rstrip("/\\") or args.out)
+        folder.mkdir(parents=True, exist_ok=True)
+        target = folder / name
     else:
         target = Path(args.out)
     if target.is_dir():

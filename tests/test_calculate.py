@@ -141,8 +141,8 @@ def test_the_kratos_build_is_put_on_both_paths(monkeypatch, tmp_path):
 
     _, environment = calculation.interpreter()
 
-    assert str(build) in environment["PYTHONPATH"].split(";")
-    assert str(build / "libs") in environment["PATH"].split(";")
+    assert str(build) in environment["PYTHONPATH"].split(os.pathsep)
+    assert str(build / "libs") in environment["PATH"].split(os.pathsep)
 
 
 def repository_root() -> Path:
@@ -189,7 +189,7 @@ def test_the_machine_can_be_configured_in_a_file_instead_of_the_environment(
     interpreter, environment = calculation.interpreter()
 
     assert interpreter == str(python)
-    assert str(build) in environment["PYTHONPATH"].split(";")
+    assert str(build) in environment["PYTHONPATH"].split(os.pathsep)
 
 
 def test_the_environment_still_wins_over_the_file(monkeypatch, tmp_path):
