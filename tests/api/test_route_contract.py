@@ -19,6 +19,7 @@ from __future__ import annotations
 import io
 import json
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Callable
 
 import pytest
@@ -59,6 +60,13 @@ def _structures(c):
     return {k: p[k] for k in keys}
 
 
+def _fresh(name: str) -> str:
+    """A path in a folder of its own, for a route that writes a file."""
+    import tempfile
+
+    return str(Path(tempfile.mkdtemp(prefix="contract-")) / name)
+
+
 def _first_node(c):
     mesh = c.get(f"/api/results/runs/{RUN}/stages/7/mesh").json()
     return mesh["sections"][0]["node_ids"][0]
@@ -89,6 +97,11 @@ CONTRACTS = [
              {"project", "path", "mesh", "invalidates"}, EVERYTHING,
              bad=lambda c: c.post("/api/project/script", json={"path": "no/such/file.py"}),
              bad_status=400),
+    Contract("POST", "/api/project/script/save",
+             lambda c: c.post("/api/project/script/save", json={"path": _fresh("model.py")}),
+             {"path"},
+             bad=lambda c: c.post("/api/project/script/save", json={"path": "model.txt"}),
+             bad_status=422),
     Contract("PATCH", "/api/project/layers",
              lambda c: c.patch("/api/project/layers", json={"layers": _project(c)["layers"]}),
              PROJECT_KEYS,

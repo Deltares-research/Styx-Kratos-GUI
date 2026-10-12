@@ -302,7 +302,7 @@ def test_the_archive_leaves_out_only_what_a_user_does_not_run():
 
 
 def test_shell_scripts_keep_lf_on_every_checkout():
-    """With `core.autocrlf` on, as Git for Windows sets it, a checkout writes CRLF, and
+    """With Git's autocrlf on, as Git for Windows sets it, a checkout writes CRLF, and
     bash reads the CR as part of each command (`set: pipefail\r: invalid option`): a
     clone on Windows could not run `kratos-cli.sh` in Git Bash."""
     lines = (ROOT / ".gitattributes").read_text(encoding="utf-8").splitlines()
