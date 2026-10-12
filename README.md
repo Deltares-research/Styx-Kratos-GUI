@@ -16,7 +16,7 @@
     <a href="https://github.com/Deltares-research/Kratos-GUI/actions/workflows/tests.yml"><img src="https://github.com/Deltares-research/Kratos-GUI/actions/workflows/tests.yml/badge.svg" alt="Tests"></a>
     <img src="https://img.shields.io/badge/python-3.10%2B-blue" alt="Python 3.10+">
     <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey" alt="Windows | Linux | macOS">
-    <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-green" alt="License: Apache-2.0"></a>
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-to%20be%20decided-lightgrey" alt="License: to be decided"></a>
   </p>
 
   <p>
@@ -166,9 +166,9 @@ instead.
 
 ## License
 
-Styx is distributed under the [Apache License 2.0](LICENSE). You may use, modify and
-redistribute it, including commercially, provided you keep the license and copyright notices
-and state the changes you made.
+The license of Styx is still under consideration and has not been decided yet. Until it is,
+no license is granted, as [LICENSE](LICENSE) says: copying, modifying or redistributing Styx
+needs permission.
 
 Styx relies on third-party software under its own licenses. Note that Gmsh, which the launcher
 installs from PyPI, is licensed under the GNU GPL v2 or later. three.js (bundled in
@@ -181,6 +181,15 @@ Use [GitHub issues](https://github.com/Deltares-research/Kratos-GUI/issues) for 
 reports and ideas.
 
 Project link: <https://github.com/Deltares-research/Kratos-GUI>
+
+## Authors
+
+Styx was designed and developed by **Marjan Fathian** ([@indigocoral](https://github.com/indigocoral)),
+Deltares. It started on 2026-09-05 at <https://github.com/indigocoral/Kratos-GUI> and moved to
+Deltares-research with its full history: the commits, issues and pull requests from before the
+move are all still here.
+
+To cite Styx, use [CITATION.cff](CITATION.cff), or **Cite this repository** on the GitHub page.
 
 ## Acknowledgments
 

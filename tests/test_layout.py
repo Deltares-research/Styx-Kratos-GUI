@@ -115,6 +115,7 @@ def test_the_folders_they_replace_are_gone(folder):
 ROOT_FILES = {
     ".gitattributes", ".gitignore", ".gitleaksignore",     # git and gitleaks look only here
     "README.md", "LICENSE", "CONTRIBUTING.md", "SECURITY.md",
+    "CITATION.cff",                                         # GitHub reads it only here
     "run.bat", "run.sh",                                    # what a user double-clicks
     "kratos-cli.bat", "kratos-cli.sh",                      # ... and types, beside them
     "requirements.txt", "requirements-dev.txt",             # the launcher and Dependabot

@@ -75,8 +75,8 @@ pull request.
   The release notes are grouped by these labels.
 - All required checks must pass before the pull request can be merged into `main`.
 
-By submitting a contribution, you agree that it is licensed under the
-[Apache License 2.0](LICENSE), the same license as the project (section 5 of the license).
+The project's license is still to be decided (see [LICENSE](LICENSE)). Contributions are
+released under the license the project chooses.
 
 ## For maintainers
 

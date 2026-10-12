@@ -4,9 +4,12 @@
 exclude = [
     # The app's own address, only there while it runs.
     '^https?://(localhost|127\.0\.0\.1)',
-    # Where the README says the project lives. That repository does not answer yet
-    # (404 on 2026-10-11): remove this line once it does, so its links are checked again.
+    # Where the README says the project lives. A private repository answers 404 to the
+    # link checker, which is not signed in: remove this line only if it becomes public.
     '^https://github\.com/Deltares-research/Kratos-GUI',
+    # Where the project started (README, Authors). Private too; after the move GitHub
+    # redirects it to Deltares-research.
+    '^https://github\.com/indigocoral/Kratos-GUI',
 ]
 
 exclude_path = ["frontend/vendor"]
