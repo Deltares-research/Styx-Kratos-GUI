@@ -1,136 +1,194 @@
-# Gmsh-backed geotechnical modeller mockup
+<div align="center">
+  <img src="frontend/assets/logo.png" alt="Styx logo" width="96" height="96">
 
-The app uses FastAPI and Gmsh to build and mesh real OpenCASCADE solids.
+  <h1>Styx</h1>
 
-## Requirements
+  <p>
+    A browser-based geotechnical modeller for the
+    <a href="https://github.com/KratosMultiphysics/Kratos">Kratos Multiphysics</a>
+    GeoMechanicsApplication.
+    <br>
+    Build a soil and excavation model, mesh it with Gmsh, run it in construction phases, and
+    read the results back.
+  </p>
 
-- Python 3.10 or newer
-- Windows 10/11 (64-bit), or a 64-bit Linux distribution
-- Internet access on the first run so pinned Python dependencies can be installed
+  <p>
+    <a href="https://github.com/Deltares-research/Kratos-GUI/actions/workflows/tests.yml"><img src="https://github.com/Deltares-research/Kratos-GUI/actions/workflows/tests.yml/badge.svg" alt="Tests"></a>
+    <img src="https://img.shields.io/badge/python-3.10%2B-blue" alt="Python 3.10+">
+    <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey" alt="Windows | Linux | macOS">
+    <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-green" alt="License: Apache-2.0"></a>
+  </p>
 
-## Run
+  <p>
+    <a href="#getting-started">Getting started</a> ·
+    <a href="docs/KRATOS_SETUP.md">Set up Kratos</a> ·
+    <a href="docs/USAGE.md">Usage</a> ·
+    <a href="https://github.com/Deltares-research/Kratos-GUI/issues">Report a bug</a> ·
+    <a href="https://github.com/Deltares-research/Kratos-GUI/issues">Request a feature</a>
+  </p>
+</div>
 
-On Windows, double-click `server\run.bat` or run it from Command Prompt. It creates
-`server\.venv-windows`, starts the server, and opens <http://127.0.0.1:8000/>.
+## About the project
 
-On Linux:
+Styx is a single-user modeller for staged geotechnical analyses such as excavations and sheet
+pile walls. It runs as a small local web server, and you use it in your browser. The model is
+built from real OpenCASCADE solids and meshed with [Gmsh](https://gmsh.info/). The app writes
+a Kratos GeoMechanics input deck (`.mdpa`, `MaterialParameters.json` and
+`ProjectParameters.json`) and runs it. It then shows the results in a Results mode in the
+browser.
+
+### Features
+
+- **Geometry**: soil layers, excavations, sheet pile walls, anchors, struts and interfaces, in
+  2D plane strain and 3D.
+- **Materials**: Kratos constitutive laws and their parameters, entered directly in SI or kN
+  units. A default library covers sand, clay, fill and bedrock.
+- **Meshing**: Gmsh, with element size, element order, algorithm and optimisation settings,
+  and local refinement.
+- **Construction phases**: activate and deactivate parts phase by phase, with a K0 initial
+  stage.
+- **Calculate**: one click writes the deck and runs it through Kratos' multistage
+  orchestrator.
+- **Results**: contour plots per phase, a deformed mesh, values at a node, plots along the
+  wall (bending moment, shear force, normal force and displacements), and CSV, SVG and ZIP
+  export.
+- **Scripting**: a command line in the app, plus `run <file.py>` to build a model from a
+  Python script.
+- **Command line**: `kratos-cli` builds, meshes, stages, exports, runs and reads a model in
+  the terminal, without the browser, on the same project file the GUI saves.
+
+See [FEATURES.md](docs/FEATURES.md) for the full list with the status of each feature, and its
+**Main gaps** section for what is planned next.
+
+### Built with
+
+| Part | Technology |
+|---|---|
+| Backend | [Python](https://www.python.org/) 3.10+, [FastAPI](https://fastapi.tiangolo.com/), [Uvicorn](https://www.uvicorn.org/), [Pydantic](https://docs.pydantic.dev/) |
+| Geometry and mesh | [Gmsh](https://gmsh.info/) 4.13 (OpenCASCADE kernel), [NumPy](https://numpy.org/) |
+| Frontend | Plain JavaScript and [three.js](https://threejs.org/), with no build step and no npm |
+| Solver | [Kratos Multiphysics](https://github.com/KratosMultiphysics/Kratos) GeoMechanicsApplication (installed separately, see [KRATOS_SETUP.md](docs/KRATOS_SETUP.md)) |
+
+[ARCHITECTURE.md](docs/ARCHITECTURE.md) explains how the pieces fit together.
+
+## Getting started
+
+You need **Python 3.10 or newer, 64-bit**, and an internet connection for the first run. On
+Linux, a few system libraries for Gmsh are needed too; [INSTALLATION.md](docs/INSTALLATION.md)
+lists them for each platform.
 
 ```bash
-cd server
-./run.sh
+git clone https://github.com/Deltares-research/Kratos-GUI.git
+cd Kratos-GUI
+./run.sh          # Linux and macOS
+.\run.bat         # Windows, or double-click run.bat
 ```
 
-The Linux launcher creates `server/.venv-linux`. Platform-specific environments are intentionally
-separate, so the same checkout can safely move between Windows and Linux. Run `run.bat --check` or
-`./run.sh --check` to install and validate dependencies without starting the application.
+The first start installs the dependencies into a private virtual environment and takes a few
+minutes. Then open **<http://127.0.0.1:8000/>** in your browser (on Windows this happens
+automatically). Press <kbd>Ctrl</kbd>+<kbd>C</kbd> in the terminal to stop the server.
 
-## Useful interactions
+[INSTALLATION.md](docs/INSTALLATION.md) covers the details: per-platform prerequisites, what
+the launcher does, and its `--check`, `--port` and `--host` options.
 
-- Click **Mesh** to open Gmsh properties. Configure size, order, 3D algorithm, optimization,
-  smoothing, curvature sampling and minimum size, then choose **Apply and generate**. The gear tool
-  in the Mesh rail opens the same dialog; **F9** generates again with the saved settings.
-- In the Mesh properties panel, check every soil layer to include and assign an independent target
-  size to each layer. Checked layers are meshed together so their shared surfaces use common nodes.
-- Use **Refine**, **Coarsen**, or **Reset local refinement** before generating the mesh.
-- In **Soil**, open **Modify soil layers**. OK validates and rebuilds the geometry; Cancel restores
-  the previous layers.
-- Open **Material sets** to use the **Default library**. Choose Fill, loose/dense sand,
-  soft/stiff clay or Bedrock and click **Add to project**. Each copy is independently editable
-  in **Properties…**. Interface presets apply strength reduction and permeability to the
-  selected soil material. **OK** saves project materials; **Cancel** discards edits.
-  Built-in presets remain available in every project and use the existing sample soil values.
-- In **Structures**, **Create interface** puts a zero-thickness contact on the first live
-  sheet pile so the wall can slide against the ground instead of being welded to it. The
-  Selection explorer's **Side** row chooses which face is unglued -- both is the usual
-  answer for a retaining wall -- and the **Contact** rows edit the shared property set:
-  the soil whose strength `R_inter` reduces, the virtual thickness the stiffness is
-  derived over, and the permeability. With no sheet pile in the model the tool draws a
-  free interface line through the soil instead, which splits soil from soil. Interfaces
-  are plane strain, so the tool is closed in the 3D model.
+### Kratos, for Calculate
 
-## Calculating
-
-**Calculate** (toolbar, or **F9** outside Mesh mode) meshes the project, writes the deck --
-`<project>.mdpa`, `MaterialParameters.json`, `ProjectParameters.json` -- into a directory of its
-own, and runs it through Kratos' orchestrator. The command log says whether the run succeeded and
-where the files went, and the app switches to **Results** to show it. Each run gets its own
-directory and nothing is cleaned up.
-
-## Results
-
-The **Results** tab reads a run back from its directory, so it also opens runs from earlier
-sessions (`results runs`, then `results open <n>`).
-
-- **Contours.** Choose a phase and a field in the Results panel or the **Choose results**
-  window: bands or smooth shading, colour map, deformed mesh, and **Limits** for the legend's
-  minimum and maximum (empty follows the phase; `results range <min> <max>` does the same).
-- **Plot along the wall.** The rail button, **Plot wall…** or `results plot` opens a window with
-  bending moment, shear force, normal force, displacements and interface tractions plotted
-  against the level, one panel per phase. **Save SVG** and **Save CSV** save the figure or its
-  numbers.
-- `results at <node>` prints every field at one node, `results csv` saves the field on screen,
-  and `results zip` downloads the whole run directory.
-
-Kratos is not installed by `run.bat`, and its compiled extensions are bound to the exact Python
-they were built for, which is usually not the one running the server. So the calculation runs as a
-subprocess, and the server has to be told which interpreter to use:
-
-| Variable | What | Example |
-|---|---|---|
-| `KRATOS_GUI_PYTHON` | The interpreter your Kratos build was made for. Defaults to the server's own. | `C:\Kratos\.venv\Scripts\python.exe` |
-| `KRATOS_GUI_KRATOS` | The build directory, holding `KratosMultiphysics\` and `libs\`. Leave unset if the interpreter already finds Kratos. | `C:\Kratos\bin\Release` |
-| `KRATOS_GUI_RUNS` | Where run directories are made. | `~/KratosGUI/runs` (default) |
-| `KRATOS_GUI_TIMEOUT` | Seconds before a run is given up on. | `3600` (default) |
-
-The first two can also be written down instead of exported, which is usually what you want --
-`run.bat` is started by double-clicking it and inherits no shell you set variables in. Create
-`server\kratos.local.json`:
+You can build, mesh and export models without Kratos. To run them with **Calculate**, install
+the solver into a Python of its own and point Styx at it with a `kratos.local.json` file in the
+repository root:
 
 ```json
 {
-    "python": "C:\\Kratos\\.venv\\Scripts\\python.exe",
-    "kratos": "C:\\Kratos\\bin\\Release"
+    "python": "C:/Kratos/.venv/Scripts/python.exe"
 }
 ```
 
-That file is machine-specific and git-ignored; an environment variable still wins over it. Both
-are read on every run, so a machine can be set up and Calculate pressed again without restarting
-the server. If Kratos cannot be found, the command log says exactly what to write where; the deck
-is written either way, so it can also just be run by hand.
+[KRATOS_SETUP.md](docs/KRATOS_SETUP.md) walks through installing Kratos (PyPI or a source
+build), the configuration options, and troubleshooting.
 
-## Running the tests
+### The command line
 
-One command per tier, from the repository root, with any Python 3.10+; pytest always runs in
-the server's own venv. Test-only tools: `pip install -r server/requirements-dev.txt` into that
-venv (Playwright uses the installed Chrome).
-
-| Command | Runs |
-|---|---|
-| `python tools/test.py quick` | JS syntax check, headless JS suites, pytest without the browser |
-| `python tools/test.py browser` | `quick` plus the browser unit suite (`live/tests/index.html`) through Playwright |
-| `python tools/test.py e2e` | `browser` plus the GUI end-to-end tests |
-| `python tools/test.py kratos` | tests that run Kratos (needs `server/kratos.local.json`) |
-| `python tools/test.py bench` | the Kratos benchmark runner |
-| `python tools/test.py perf` | performance tests |
-| `python tools/test.py all` | everything this machine can run; lists what was skipped and why |
-
-Arguments after the tier go to pytest, e.g. `python tools/test.py quick -k phases -x`. A step
-whose prerequisite is missing (quickjs, Kratos, a browser) is reported as skipped, not failed.
-The headless JS suites need `quickjs`; if the venv cannot install it, point
-`KRATOS_GUI_QUICKJS_PYTHON` at a Python that has it.
-
-Coverage: add `--cov=app --cov-report=html --js-coverage` to a tier that runs the browser
-suite (e.g. `python tools/test.py browser --cov=app --cov-report=html --js-coverage`). The
-server report lands in `server/htmlcov/`, the per-module JS function coverage in
-`server/htmlcov-js/summary.json`.
-
-Without the tier runner: `python -m pytest -q` from `server/` in its venv
-(`server/.venv-linux/bin/python` or `server\.venv-windows\Scripts\python.exe`), and for
-JavaScript:
+Everything from a new model to its results also works in a terminal, with no browser:
 
 ```bash
-python live/tests/run_headless.py
-python live/tests/syntax_check.py
+./kratos-cli.sh new site.json --demo --dim 2     # Windows: kratos-cli.bat
+./kratos-cli.sh mesh site.json
+./kratos-cli.sh phases site.json defaults
+./kratos-cli.sh export site.json --out deck/      # the .mdpa and the two JSON files
+./kratos-cli.sh run deck/
+./kratos-cli.sh results show 1
+./kratos-cli.sh results field 1 uy                # a field's range; --csv FILE for every value
+./kratos-cli.sh script site.json --out site.py    # the whole model, as a Python file
+./kratos-cli.sh shell site.json                   # or type the commands one after another
 ```
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for how the pieces fit together.
+[CLI.md](docs/CLI.md) lists every command.
+
+## Documentation
+
+| Document | Contents |
+|---|---|
+| [INSTALLATION.md](docs/INSTALLATION.md) | Prerequisites per platform, the launcher and its options |
+| [KRATOS_SETUP.md](docs/KRATOS_SETUP.md) | Installing Kratos and connecting it to Styx, with troubleshooting |
+| [USAGE.md](docs/USAGE.md) | A walk through the modes: building, meshing, calculating, results and scripting |
+| [CLI.md](docs/CLI.md) | `kratos-cli`: every step of a model in the terminal, command by command |
+| [TESTING.md](docs/TESTING.md) | The test tiers and how to run them |
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | How a model flows from the browser to Kratos and back |
+| [FEATURES.md](docs/FEATURES.md) | What works, feature by feature, and where the code is |
+| [PROJECT_OVERVIEW.md](docs/PROJECT_OVERVIEW.md) | Code size per module |
+
+## Project layout
+
+```text
+core/          the engine, one package per stage: model/, geometry/ (Gmsh), kratos/ (the deck), analysis/, results/
+backend/       the FastAPI app, the in-memory project store, and the launcher
+cli/           kratos-cli, the command line beside the GUI
+frontend/      the browser app (index.html, js/, css/, three.js), with its own tests in frontend/tests/
+tests/         pytest suites: unit, API, browser, end-to-end, Kratos and performance
+benchmarks/    Kratos benchmark cases and runner
+tools/test.py  the tier runner
+docs/          user guides and design documents
+run.bat        launcher for Windows
+run.sh         launcher for Linux and macOS
+kratos-cli.bat the command line, for Windows
+kratos-cli.sh  the command line, for Linux and macOS
+```
+
+## Contributing
+
+Contributions are welcome: bug reports, feature requests, documentation fixes and code.
+[CONTRIBUTING.md](CONTRIBUTING.md) explains how to set up, how changes are made (tests
+first), and what CI checks on every pull request. [TESTING.md](docs/TESTING.md) lists the
+test tiers.
+
+To report a security problem, do not open an issue. Follow [SECURITY.md](SECURITY.md)
+instead.
+
+## License
+
+Styx is distributed under the [Apache License 2.0](LICENSE). You may use, modify and
+redistribute it, including commercially, provided you keep the license and copyright notices
+and state the changes you made.
+
+Styx relies on third-party software under its own licenses. Note that Gmsh, which the launcher
+installs from PyPI, is licensed under the GNU GPL v2 or later. three.js (bundled in
+`frontend/vendor/`) is MIT-licensed, and Kratos Multiphysics, installed separately, is
+BSD-licensed.
+
+## Contact
+
+Use [GitHub issues](https://github.com/Deltares-research/Kratos-GUI/issues) for questions, bug
+reports and ideas.
+
+Project link: <https://github.com/Deltares-research/Kratos-GUI>
+
+## Acknowledgments
+
+- [Kratos Multiphysics](https://github.com/KratosMultiphysics/Kratos) and its
+  GeoMechanicsApplication, the solver behind Calculate
+- [Deltares](https://www.deltares.nl/)
+- [Gmsh](https://gmsh.info/), for geometry and meshing
+- [three.js](https://threejs.org/), for the 3D viewport
+- [FastAPI](https://fastapi.tiangolo.com/) and [Pydantic](https://docs.pydantic.dev/)
+- [Best-README-Template](https://github.com/othneildrew/Best-README-Template), the structure
+  of this README

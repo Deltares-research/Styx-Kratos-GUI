@@ -1,0 +1,96 @@
+# Static checks, quicker than the tests and independent of them:
+#   ruff    Pyflakes-level mistakes in the Python code (settings in pyproject.toml)
+#   eslint  likely bugs in the frontend's JavaScript (settings in eslint.config.mjs)
+#   actionlint  mistakes in these workflows themselves (settings in .github/actionlint.yaml)
+#   mypy    type errors in core/, backend/ and cli/ (settings in pyproject.toml); reports only, for now
+# The JavaScript syntax check runs with the tests (tools/test.py).
+name: lint
+
+# Pushes count only on main: a pull request's own branch is covered by pull_request.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lint-${{ github.ref }}
+  # A newer push supersedes a pull request's run; every run on main is kept.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  ruff:
+    name: ruff
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      # Only the ruff pin, not the whole test toolchain.
+      - name: ruff, at the version in requirements-dev.txt
+        run: python -m pip install "$(grep -E '^ruff==' requirements-dev.txt | tr -d '\r')"
+
+      - name: ruff check
+        run: ruff check --output-format=github .
+
+  eslint:
+    name: eslint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # The frontend is build-free, so there is no package.json: npx fetches ESLint for
+      # this run only. Dependabot cannot see this pin; bump it by hand.
+      - name: eslint
+        run: npx --yes eslint@10.12.0 --max-warnings 0 frontend
+
+  # The workflows cannot be run locally, so they are checked here: expressions, keys,
+  # runner labels (.github/actionlint.yaml), and their shell scripts through shellcheck.
+  actionlint:
+    name: actionlint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: actionlint
+        run: docker run --rm -v "$PWD:/repo" --workdir /repo rhysd/actionlint:1.7.12 -color
+
+  mypy:
+    name: mypy
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # 97 findings on 2026-10-11. Until they are worked down this reports and never fails
+    # the build; then remove this line and make the check required.
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      # The app's own packages, so mypy sees fastapi's and pydantic's types, and the mypy pin.
+      - name: Python packages
+        run: |
+          python -m pip install -r requirements.txt
+          python -m pip install "$(grep -E '^mypy==' requirements-dev.txt | tr -d '\r')"
+
+      - name: mypy
+        run: python -m mypy

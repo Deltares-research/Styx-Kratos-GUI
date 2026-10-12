@@ -1,0 +1,241 @@
+"""Projects saved before the project had a unit system, converted once, on load.
+
+Until 2026-10-10 a project was written in "engineering" units -- unit weights in kN/m3,
+moduli and pressures in kN/m2, permeability in m/day, loads in kN -- and the exporter
+converted all of it into the SI deck Kratos read. Now the project holds what Kratos
+reads (a constitutive law and its `Variables`, under Kratos' own names) in a unit system
+the project names, and the deck is written verbatim.
+
+An old file is turned into the new shape here, in the SI system, carrying *exactly the
+numbers the old exporter wrote*. So a project opened today exports the deck it exported
+yesterday, and every derivation the old exporter made silently is now a value the user
+can see and change. The constants and expressions below are therefore frozen history,
+not configuration: they are what `core.kratos.materials` did on the day it stopped, and they
+must not follow later changes there.
+
+A file is old when its materials carry the old fields (`g_unsat`). Materials are
+required in every project, so this is decided by the content, not by a version number
+the file may or may not carry.
+"""
+
+from __future__ import annotations
+
+KILO = 1000.0                   # kN -> N
+GRAVITY = 9.81                  # m/s2: unit weight -> density
+SECONDS_PER_DAY = 86_400.0      # m/day -> m/s
+DEFAULT_POROSITY = 0.3
+BULK_MODULUS_SOLID = 1.0e10     # Pa
+BULK_MODULUS_FLUID = 2.2e9      # Pa
+DYNAMIC_VISCOSITY = 1.0e-3      # Pa s
+DEFAULT_WATER_SPECIFIC_WEIGHT = 10.0    # kN/m3
+
+LINEAR_ELASTIC = {2: "GeoLinearElasticPlaneStrain2DLaw", 3: "GeoIncrementalLinearElastic3DLaw"}
+BEAM_LAW = "TimoshenkoBeamElasticConstitutiveLaw"
+PANEL_LAW = "LinearElasticPlaneStress2DLaw"
+ANCHOR_LAW = "TrussConstitutiveLaw"
+INTERFACE_LAW = "GeoIncrementalLinearElasticInterfaceLaw"
+
+UNDRAINED_TYPES = ("Undrained (A)", "Undrained (B)")
+
+
+def is_legacy(value: object) -> bool:
+    """A whole old file: no unit system named, and every material in the old shape.
+
+    A current document that merely carries one old-shaped record -- a script's -- is not
+    one: its loads and pressures are already in its own units, and multiplying them by
+    a thousand would be the very slip this module exists to prevent. Such records are
+    converted one by one (`migrate_records`)."""
+    if not isinstance(value, dict) or "unit_system" in value:
+        return False
+    materials = value.get("materials")
+    return (isinstance(materials, list) and bool(materials)
+            and all(isinstance(m, dict) and "g_unsat" in m for m in materials))
+
+
+def migrate(value: dict) -> dict:
+    """`value`, an old project document, in the current shape and the SI system."""
+    out = dict(value)
+    dim = out.get("dimension", 3)
+    water = out.get("water")
+    water_weight = (water.get("specific_weight", DEFAULT_WATER_SPECIFIC_WEIGHT)
+                    if isinstance(water, dict) else DEFAULT_WATER_SPECIFIC_WEIGHT)
+
+    out["unit_system"] = "SI"
+    out["materials"] = [material(m, dim, water_weight) for m in out.get("materials", [])]
+    out["beam_sections"] = [_beam_section(s) for s in out.get("beam_sections", [])]
+    out["panel_sections"] = [_panel_section(s) for s in out.get("panel_sections", [])]
+    out["anchor_sections"] = [_anchor_section(s) for s in out.get("anchor_sections", [])]
+    out["interface_sections"] = [_interface_section(s)
+                                 for s in out.get("interface_sections", [])]
+    spacing = {sec.get("id"): sec.get("spacing", 2.5) for sec in value.get("anchor_sections", [])
+               if isinstance(sec, dict)}
+    out["anchors"] = [_anchor(a, spacing) for a in out.get("anchors", [])]
+    out["loads"] = [_load(load) for load in out.get("loads", [])]
+    if isinstance(out.get("load"), dict):           # the single load before `loads`
+        out["load"] = _scaled(out["load"], "magnitude")
+    out["normal_loads"] = [_scaled(n, "pressure") for n in out.get("normal_loads", [])]
+    if isinstance(water, dict):
+        out["water"] = {**water, "specific_weight": water_weight * KILO}
+    return out
+
+
+def is_old_record(collection: str, record: object) -> bool:
+    """Is `record`, an entry of `collection`, in the old shape?"""
+    if not isinstance(record, dict) or "variables" in record:
+        return False
+    if collection == "materials":
+        return "g_unsat" in record
+    if collection == "interface_sections":
+        return "normal_stiffness" in record or "shear_stiffness" in record
+    return "E" in record
+
+
+CONVERTERS = {
+    "beam_sections": lambda s: _beam_section(s),
+    "panel_sections": lambda s: _panel_section(s),
+    "anchor_sections": lambda s: _anchor_section(s),
+    "interface_sections": lambda s: _interface_section(s),
+}
+
+
+def migrate_records(value: dict) -> dict:
+    """A current project document in which some property sets are still in the old
+    shape -- a script written against the old fields, say. Each such record is
+    converted as an old file's would be, then expressed in the project's own system.
+    Loads and pressures carry no shape to tell old from new by, and are left alone."""
+    from core.model import units
+
+    out = dict(value)
+    dim = out.get("dimension", 3)
+    system = out.get("unit_system", units.DEFAULT)
+    water = out.get("water")
+    water_weight = DEFAULT_WATER_SPECIFIC_WEIGHT
+    if isinstance(water, dict) and water.get("specific_weight") is not None:
+        water_weight = units.convert(water["specific_weight"], units.SPECIFIC_WEIGHT,
+                                     system, "kN")
+
+    def converted(record: dict) -> dict:
+        if system != "SI":
+            record = {**record, "variables": units.convert_variables(
+                record["variables"], "SI", system)[0]}
+            for key in ("tension_limit", "compression_limit"):
+                if record.get(key) is not None:
+                    record[key] = units.convert(record[key], units.FORCE, "SI", system)
+        return record
+
+    for collection in ("materials", *CONVERTERS):
+        entries = out.get(collection)
+        if not isinstance(entries, list) or not any(
+                is_old_record(collection, e) for e in entries):
+            continue
+        convert = (lambda m: material(m, dim, water_weight)) if collection == "materials"             else CONVERTERS[collection]
+        out[collection] = [converted(convert(e)) if is_old_record(collection, e) else e
+                           for e in entries]
+    return out
+
+
+def material(m: dict, dim: int,
+             water_weight: float = DEFAULT_WATER_SPECIFIC_WEIGHT) -> dict:
+    """One old material record (kN/m3, kN/m2, m/day) as a current one, in SI."""
+    variables = {
+        "GEO_DRAINAGE_TYPE": ("FULLY_COUPLED" if m.get("type") in UNDRAINED_TYPES
+                              else "CONSTANT_PW_FIELD"),
+        "YOUNG_MODULUS": m["E"] * KILO,
+        "POISSON_RATIO": m["nu"],
+        "DENSITY_SOLID": m["g_unsat"] * KILO / GRAVITY,
+        "DENSITY_WATER": water_weight * KILO / GRAVITY,
+        "POROSITY": DEFAULT_POROSITY if m.get("porosity") is None else m["porosity"],
+        "BULK_MODULUS_SOLID": BULK_MODULUS_SOLID,
+        "BULK_MODULUS_FLUID": BULK_MODULUS_FLUID,
+        "DYNAMIC_VISCOSITY": DYNAMIC_VISCOSITY,
+    }
+    permeability = m["k"] / SECONDS_PER_DAY
+    variables.update({"PERMEABILITY_XX": permeability, "PERMEABILITY_YY": permeability,
+                      "PERMEABILITY_XY": 0.0})
+    if dim == 3:
+        variables.update({"PERMEABILITY_ZZ": permeability, "PERMEABILITY_YZ": 0.0,
+                          "PERMEABILITY_ZX": 0.0})
+    if m.get("c") is not None:
+        variables["GEO_COHESION"] = m["c"] * KILO
+    if m.get("phi") is not None:
+        variables["GEO_FRICTION_ANGLE"] = m["phi"]
+    if m.get("k0_nc") is not None:
+        variables["K0_NC"] = m["k0_nc"]
+    out = {"id": m["id"], "name": m["name"], "color": m["color"],
+           # Every model was written as linear elastic: it was the only law mapped.
+           "constitutive_law": LINEAR_ELASTIC.get(dim, LINEAR_ELASTIC[3]),
+           "variables": variables}
+    for key in ("r_inter", "interface_permeability"):
+        if key in m:
+            out[key] = m[key]
+    return out
+
+
+def _beam_section(s: dict) -> dict:
+    variables = {"YOUNG_MODULUS": s["E"] * KILO, "POISSON_RATIO": s["nu"],
+                 "DENSITY": s["density"], "CROSS_AREA": s["area"], "I33": s["inertia"]}
+    if s.get("shear_area") is not None:
+        variables["AREA_EFFECTIVE_Y"] = s["shear_area"]
+    if s.get("inertia_minor") is not None:
+        variables["I22"] = s["inertia_minor"]
+    if s.get("torsional_inertia") is not None:
+        variables["TORSIONAL_INERTIA"] = s["torsional_inertia"]
+    out = {"id": s["id"], "name": s["name"], "constitutive_law": BEAM_LAW,
+           "variables": variables}
+    if "spacing" in s:
+        out["spacing"] = s["spacing"]
+    return out
+
+
+def _panel_section(s: dict) -> dict:
+    return {"id": s["id"], "name": s["name"], "constitutive_law": PANEL_LAW,
+            "variables": {"YOUNG_MODULUS": s["E"] * KILO, "POISSON_RATIO": s["nu"],
+                          "DENSITY": s["density"], "THICKNESS": s["thickness"]}}
+
+
+def _anchor_section(s: dict) -> dict:
+    out = {"id": s["id"], "name": s["name"], "constitutive_law": ANCHOR_LAW,
+           "variables": {"YOUNG_MODULUS": s["E"] * KILO, "CROSS_AREA": s["area"],
+                         "DENSITY": s["density"]}}
+    if "spacing" in s:
+        out["spacing"] = s["spacing"]
+    for key in ("tension_limit", "compression_limit"):
+        if s.get(key) is not None:
+            out[key] = s[key] * KILO
+    return out
+
+
+def _interface_section(s: dict) -> dict:
+    variables = {}
+    if s.get("normal_stiffness") is not None:
+        variables["INTERFACE_NORMAL_STIFFNESS"] = s["normal_stiffness"] * KILO
+    if s.get("shear_stiffness") is not None:
+        variables["INTERFACE_SHEAR_STIFFNESS"] = s["shear_stiffness"] * KILO
+    out = {"id": s["id"], "name": s["name"], "constitutive_law": INTERFACE_LAW,
+           "variables": variables}
+    for key in ("material", "r_inter", "virtual_thickness", "permeability"):
+        if key in s:
+            out[key] = s[key]
+    return out
+
+
+def _anchor(anchor: object, spacing: dict) -> object:
+    """The prestress as the stress the deck carried: kN x 1000, divided by the tendon's
+    spacing for a 2D anchor, as the old exporter smeared it."""
+    if not isinstance(anchor, dict) or not anchor.get("prestress"):
+        return anchor
+    per_metre = (1.0 / spacing.get(anchor.get("section"), 2.5)
+                 if anchor.get("kind", "anchor") == "anchor" else 1.0)
+    return {**anchor, "prestress": anchor["prestress"] * KILO * per_metre}
+
+
+def _scaled(record: object, key: str) -> object:
+    if not isinstance(record, dict) or record.get(key) is None:
+        return record
+    return {**record, key: record[key] * KILO}
+
+
+def _load(load: object) -> object:
+    if not isinstance(load, dict) or "components" not in load:
+        return load
+    return {**load, "components": [c * KILO for c in load["components"]]}

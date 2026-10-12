@@ -1,0 +1,16 @@
+# What `git archive` leaves out of a release download (.github/workflows/release.yml):
+# the development tooling. A user runs the app; the tests, the CI and the linters'
+# settings stay in the repository.
+.github/            export-ignore
+tests/              export-ignore
+frontend/tests/     export-ignore
+benchmarks/         export-ignore
+tools/              export-ignore
+.gitleaksignore     export-ignore
+eslint.config.mjs   export-ignore
+pyproject.toml      export-ignore
+requirements-dev.txt export-ignore
+
+# Shell scripts keep LF on every checkout, Windows' too: bash reads a CR as part of
+# the command it ends.
+*.sh                text eol=lf

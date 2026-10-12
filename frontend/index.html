@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Styx</title>
+<link rel="icon" type="image/png" href="/assets/logo.png">
+<link rel="stylesheet" href="/css/tokens.css">
+<link rel="stylesheet" href="/css/layout.css">
+<link rel="stylesheet" href="/css/components.css">
+<link rel="stylesheet" href="/live/css/live.css">
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ── Title bar ─────────────────────────────────────────────── -->
+  <header id="titlebar">
+    <div class="tb-brand">
+      <img src="/assets/deltares-logo.png" alt="Deltares" class="tb-logo">
+      <span class="tb-brand-sep"></span>
+      <img src="/assets/kratos.png" alt="Kratos Multiphysics" class="tb-logo tb-logo-kratos">
+    </div>
+    <div class="tb-title" id="tb-title"></div>
+    <div class="tb-wincontrols">
+      <button class="wc" title="Minimise"><svg viewBox="0 0 12 12"><path d="M2 6h8"/></svg></button>
+      <button class="wc" title="Maximise"><svg viewBox="0 0 12 12"><rect x="2.5" y="2.5" width="7" height="7"/></svg></button>
+      <button class="wc wc-close" title="Close"><svg viewBox="0 0 12 12"><path d="M3 3l6 6M9 3l-6 6"/></svg></button>
+    </div>
+  </header>
+
+  <!-- ── Menu bar ──────────────────────────────────────────────── -->
+  <nav id="menubar" role="menubar"></nav>
+
+  <!-- ── Main toolbar ──────────────────────────────────────────── -->
+  <div id="maintoolbar"></div>
+
+  <!-- ── Mode tabs ─────────────────────────────────────────────── -->
+  <div id="modetabs"></div>
+
+  <!-- ── Work area ─────────────────────────────────────────────── -->
+  <main id="workarea">
+    <div id="toolrail"></div>
+    <div class="splitter splitter-v" id="split-left" title="Drag to resize"></div>
+
+    <section id="viewport">
+      <canvas id="scene"></canvas>
+
+      <div id="vp-hud-topleft" class="vp-hud">
+        <span class="vp-mode-label" id="vp-mode-label"></span>
+      </div>
+
+      <div id="vp-viewcube" class="vp-hud" title="View presets">
+        <button data-view="front">Front</button>
+        <button data-view="top">Top</button>
+        <button data-view="side">Side</button>
+        <button data-view="iso" class="active">Iso</button>
+      </div>
+
+      <div id="vp-triad"><canvas id="triad"></canvas></div>
+
+      <div id="vp-tooltip" class="vp-tooltip" hidden></div>
+      <div id="vp-loading" class="vp-loading" hidden>
+        <div class="vp-loading-box">
+          <div class="vp-loading-label">Generating mesh…</div>
+          <div class="vp-progress"><i></i></div>
+        </div>
+      </div>
+    </section>
+
+    <div class="splitter splitter-v" id="split-right" title="Drag to resize"></div>
+
+    <aside id="dock">
+      <section class="dock-panel" id="panel-model">
+        <header class="dock-head"><span class="dock-caret">▾</span> Model explorer
+          <span class="dock-head-tools"><button title="Expand all">⊞</button><button title="Collapse all">⊟</button></span>
+        </header>
+        <div class="dock-body" id="tree-model"></div>
+      </section>
+
+      <div class="splitter splitter-h dock-split" id="split-dock1"></div>
+
+      <section class="dock-panel" id="panel-selection">
+        <header class="dock-head"><span class="dock-caret">▾</span> Selection explorer</header>
+        <div class="dock-body" id="grid-selection"></div>
+      </section>
+
+      <div class="splitter splitter-h dock-split" id="split-dock2" hidden></div>
+
+      <section class="dock-panel" id="panel-phases" hidden>
+        <header class="dock-head"><span class="dock-caret">▾</span> Phases explorer</header>
+        <div class="dock-body" id="list-phases"></div>
+      </section>
+
+      <!-- Results mode's own panel. Empty here: frontend/js/patches.js fills it from the
+           open run, and every control in it runs the same `results ...` command the
+           command box does, so there is one code path and not two. -->
+      <section class="dock-panel" id="panel-results" hidden>
+        <header class="dock-head"><span class="dock-caret">▾</span> Results explorer</header>
+        <div class="dock-body" id="panel-results-body"></div>
+      </section>
+    </aside>
+  </main>
+
+  <div class="splitter splitter-h" id="split-cmd" title="Drag to resize"></div>
+
+  <!-- ── Command panel ─────────────────────────────────────────── -->
+  <section id="cmdpanel">
+    <div class="cmd-tabs">
+      <button class="cmd-tab active" data-tab="session">Session</button>
+      <button class="cmd-tab" data-tab="history">Model history</button>
+      <span class="cmd-spacer"></span>
+      <a class="cmd-link" href="#" id="cmd-ref">Command reference</a>
+    </div>
+    <div class="cmd-log" id="cmd-log"></div>
+    <div class="cmd-log" id="cmd-history" hidden></div>
+    <div class="cmd-input">
+      <span class="cmd-prompt">&gt;</span>
+      <input type="text" id="cmd-entry" spellcheck="false" autocomplete="off"
+             placeholder="Type a command, e.g. borehole 0 0 — or gotostructures">
+    </div>
+  </section>
+
+  <!-- ── Status bar ────────────────────────────────────────────── -->
+  <footer id="statusbar">
+    <span class="sb-item sb-hint" id="sb-hint"></span>
+    <span class="sb-spacer"></span>
+    <span class="sb-item sb-coords" id="sb-coords">x 0.000 m &nbsp; y 0.000 m &nbsp; z 0.000 m</span>
+    <span class="sb-sep"></span>
+    <span class="sb-item" id="sb-units">Units: m / kN / day</span>
+    <span class="sb-sep"></span>
+    <span class="sb-item sb-toggle active" id="sb-snap">Snapping</span>
+    <span class="sb-sep"></span>
+    <span class="sb-item" id="sb-zoom">Zoom 100%</span>
+  </footer>
+
+</div>
+
+<!-- Floating layers: menus, flyouts, context menu, modals -->
+<div id="menu-layer"></div>
+<div id="modal-layer"></div>
+
+<!-- ══════════════════════════════════════════════════════════════
+     Scripts.
+
+     Every frozen file below is loaded byte-for-byte from where it already
+     lives; the server mounts those folders in place rather than copying them.
+     js/data.js comes along for its UI chrome (ICONS, MENUS, TOOLBAR, MODES,
+     RAILS) and as an offline seed — frontend/js/model.js replaces its model halves
+     once the project arrives.
+
+     Exactly one frozen script is *not* loaded: js/viewport.js, because it is
+     the only module that invents geometry. frontend/js/viewport.js takes its place
+     with the same public API.
+     ══════════════════════════════════════════════════════════════ -->
+<script src="/vendor/three.min.js"></script>
+<script src="/js/data.js"></script>
+<script src="/live/js/unit-table.js"></script>
+<script src="/live/js/units.js"></script>
+<script src="/live/js/property-sets.js"></script>
+<script src="/live/js/material-library.js"></script>
+<script src="/js/ui.js"></script>
+<script src="/js/orbit.js"></script>
+<!-- The Y-up controller, loaded after the frozen Z-up one it replaces. `App.Orbit`
+     is a plain global assignment there, so this overrides it without editing it. -->
+<script src="/live/js/orbit.js"></script>
+
+<script src="/live/js/api.js"></script>
+<script src="/live/js/download.js"></script>
+<script src="/live/js/zip.js"></script>
+<script src="/live/js/history.js"></script>
+<script src="/live/js/buffers.js"></script>
+<script src="/live/js/model.js"></script>
+<script src="/live/js/canvas-renderer.js"></script>
+<script src="/live/js/ruler.js"></script>
+<script src="/live/js/mesh-labels.js"></script>
+<script src="/live/js/part-colors.js"></script>
+<script src="/live/js/water-command.js"></script>
+<script src="/live/js/script-command.js"></script>
+<script src="/live/js/node-parts.js"></script>
+<script src="/live/js/deck.js"></script>
+<script src="/live/js/viewport.js"></script>
+
+<script src="/js/menubar.js"></script>
+<script src="/js/toolbars.js"></script>
+<script src="/js/explorer.js"></script>
+<script src="/js/command.js"></script>
+<script src="/js/dialogs.js"></script>
+<script src="/js/app.js"></script>
+<script src="/live/js/material-sets.js"></script>
+<script src="/live/js/mesh-settings.js"></script>
+<script src="/live/js/draw-input.js"></script>
+<script src="/live/js/loads.js"></script>
+<script src="/live/js/beams.js"></script>
+<script src="/live/js/anchors.js"></script>
+<script src="/live/js/interfaces.js"></script>
+<script src="/live/js/normal-loads.js"></script>
+<!-- The phase model. Before patches.js, which replaces the frozen phases
+     panel with one that reads it. -->
+<script src="/live/js/phases.js"></script>
+<script src="/live/js/import-dialog.js"></script>
+<script src="/live/js/mdpa-import-dialog.js"></script>
+<script src="/live/js/soil-volume-dialog.js"></script>
+<script src="/live/js/export.js"></script>
+<!-- Reading back what a calculation wrote. `results-render.js` first: it is the
+     arithmetic both of the others use, and the only part with no DOM in it, which is
+     what lets frontend/tests/run_headless.py execute it. Then the command set, then the
+     three.js that draws what it decides. All before calculate.js, which hands over the
+     run just finished, and before patches.js, which routes `results ...` into it. -->
+<script src="/live/js/results-render.js"></script>
+<script src="/live/js/results.js"></script>
+<script src="/live/js/results-plot.js"></script>
+<script src="/live/js/results-view.js"></script>
+<script src="/live/js/calculate.js"></script>
+<script src="/live/js/patches.js"></script>
+</body>
+</html>

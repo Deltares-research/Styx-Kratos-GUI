@@ -1,0 +1,22 @@
+# Link checking for the Markdown documents (the docs workflow, .github/workflows/docs.yml).
+# Links to files in the repository are checked too, so a renamed file shows up here.
+
+exclude = [
+    # The app's own address, only there while it runs.
+    '^https?://(localhost|127\.0\.0\.1)',
+    # Where the README says the project lives. That repository does not answer yet
+    # (404 on 2026-10-11): remove this line once it does, so its links are checked again.
+    '^https://github\.com/Deltares-research/Kratos-GUI',
+]
+
+exclude_path = ["frontend/vendor"]
+
+# The #section part of a link is not checked: GitHub's generated heading ids are not
+# in the Markdown source.
+include_fragments = false
+
+max_retries = 3
+retry_wait_time = 5
+timeout = 30
+# 429: rate-limited, which says nothing about the link itself.
+accept = ["200..=299", "429"]
