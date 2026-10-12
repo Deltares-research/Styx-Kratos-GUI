@@ -29,7 +29,7 @@
 
   var DETAIL = {
     id: 'Staged_excavation_2026-09-22_00-49', deck: 'Staged_excavation',
-    started: '2026-09-22T00:49', repeat: 1, results: 7, files: 30, bytes: 6234567,
+    started: '2026-09-22T00:49', repeat: 1, results: 7, bytes: 6234567,
     complete: true, failed_at: null, log: 'kratos.log',
     stages: [
       { index: 1, name: '1_Initial_stage', phase: 'Initial stage',

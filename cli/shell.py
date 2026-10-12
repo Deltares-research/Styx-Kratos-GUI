@@ -89,7 +89,8 @@ class Shell:
         self.interactive = sys.stdin.isatty() if interactive is None else interactive
         self.read = read or input
         if run is None:
-            from cli.main import main as run
+            from cli.main import main
+            run = main
         self.run = run
         self.stopped: str | None = None
         """Why lines read from the input stopped, for the command to answer with."""
@@ -172,8 +173,8 @@ class Shell:
             return 1
         return self._command(argv)
 
-    def _command(self, argv: list[str]) -> int:
-        argv = _with_project(argv, self.project)
+    def _command(self, typed: list[str]) -> int:
+        argv = _with_project(typed, self.project)
         if argv is None:
             print("error: no project is open: `open FILE` opens one, `new FILE` makes "
                   "one, or name the file on the line.", file=sys.stderr)
@@ -245,7 +246,7 @@ class Shell:
         return self._step(self.redone, self.undone, "redo")
 
     def _step(self, source: list[bytes], target: list[bytes], what: str) -> int:
-        if not source:
+        if not source or self.project is None:
             print(f"nothing to {what}")
             return 0
         current = self._contents()
@@ -307,10 +308,11 @@ def _with_project(argv: list[str], project: Path | None) -> list[str] | None:
     slot, where = _slot(command), at + 1
     if slot is None:
         action = argv[at + 1] if at + 1 < len(argv) else None
-        sub = _subcommands(command).get(action)
-        if sub is None or _slot(sub) is None:
+        sub = _subcommands(command).get(action) if action is not None else None
+        slot = _slot(sub) if sub is not None else None
+        if slot is None:
             return argv
-        slot, where = _slot(sub), at + 2
+        where = at + 2
     if where < len(argv) and _named(argv[where], slot):
         return argv
     if project is None:

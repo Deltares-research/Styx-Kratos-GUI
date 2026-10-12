@@ -13,7 +13,7 @@ exclude_path = ["frontend/vendor"]
 
 # The #section part of a link is not checked: GitHub's generated heading ids are not
 # in the Markdown source.
-include_fragments = false
+include_fragments = "none"
 
 max_retries = 3
 retry_wait_time = 5

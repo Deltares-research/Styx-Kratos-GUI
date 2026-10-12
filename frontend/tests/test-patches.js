@@ -285,6 +285,54 @@
     }).then(restore, function (e) { restore(); throw e; });
   });
 
+  test('renameObject saves an anchor, an interface, a normal load and a load through their own modules', function () {
+    var saved = { anchors: App.ANCHORS, interfaces: App.INTERFACES,
+                  normalLoads: App.NORMAL_LOADS, loads: App.LOADS,
+                  anchorsModule: App.Anchors, interfacesModule: App.Interfaces,
+                  normalLoadsModule: App.NormalLoads, loadsModule: App.Loads,
+                  prompt: window.prompt };
+    var objects = {
+      anchor: { id: 'anchor_1', name: 'Anchor 1' },
+      interface: { id: 'interface_1', name: 'Interface 1' },
+      normal_load: { id: 'normal_1', name: 'Normal load 1' },
+      load: { id: 'point_1', name: 'Point load 1' }
+    };
+    App.ANCHORS = [objects.anchor];
+    App.INTERFACES = [objects.interface];
+    App.NORMAL_LOADS = [objects.normal_load];
+    App.LOADS = [objects.load];
+    var savedWith = {};
+    function saver(kind) {
+      return { save: function (item) { savedWith[kind] = item; return Promise.resolve(item); } };
+    }
+    App.Anchors = Object.assign({}, App.Anchors, saver('anchor'));
+    App.Interfaces = Object.assign({}, App.Interfaces, saver('interface'));
+    App.NormalLoads = Object.assign({}, App.NormalLoads, saver('normal_load'));
+    App.Loads = Object.assign({}, App.Loads, saver('load'));
+    var offered = [];
+    window.prompt = function (message, current) { offered.push(current); return 'Renamed ' + current; };
+
+    function restore() {
+      App.ANCHORS = saved.anchors; App.INTERFACES = saved.interfaces;
+      App.NORMAL_LOADS = saved.normalLoads; App.LOADS = saved.loads;
+      App.Anchors = saved.anchorsModule; App.Interfaces = saved.interfacesModule;
+      App.NormalLoads = saved.normalLoadsModule; App.Loads = saved.loadsModule;
+      window.prompt = saved.prompt;
+    }
+
+    var kinds = Object.keys(objects);
+    return Promise.all(kinds.map(function (kind) {
+      return Promise.resolve(App.LivePatches.renameObject(kind, objects[kind].id));
+    })).then(function () {
+      T.eq(offered, ['Anchor 1', 'Interface 1', 'Normal load 1', 'Point load 1'],
+           'the prompt offers each object\'s current name');
+      kinds.forEach(function (kind) {
+        T.eq(savedWith[kind], objects[kind], kind + ' is saved through its own module');
+        T.ok(/^Renamed /.test(objects[kind].name), kind + ' carries the new name');
+      });
+    }).then(restore, function (e) { restore(); throw e; });
+  });
+
   test('renameObject does nothing when the prompt is cancelled or blank', function () {
     var saved = { beams: App.BEAMS, beamsModule: App.Beams, prompt: window.prompt };
     var beam = { id: 'beam_1', name: 'Sheet pile 1' };

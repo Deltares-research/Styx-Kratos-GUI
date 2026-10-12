@@ -192,8 +192,8 @@ def _components(specs: list[Spec], segments: dict[str, list[list[int]]],
             for edge in _edges_of(rows[index]):
                 if node in edge:
                     shared.setdefault(frozenset(edge[:2]), []).append(index)
-        for edge, holders in shared.items():
-            if edge in barriers:
+        for pair, holders in shared.items():
+            if pair in barriers:
                 continue
             for other in holders[1:]:
                 parent[root(other)] = root(holders[0])
@@ -210,7 +210,7 @@ def _components(specs: list[Spec], segments: dict[str, list[list[int]]],
     return out
 
 
-def _side_of(spec: Spec, elements: list[int], rows: list[int],
+def _side_of(spec: Spec, elements: list[int], rows: list[list[int]],
              coordinates: Coordinates) -> str:
     """Which face of `spec` a group of elements sits on, from their centroids.
 

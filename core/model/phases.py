@@ -87,7 +87,7 @@ def _chain_to(project: Project, phase: Phase | str) -> list[Phase]:
     editor needs that: a half-built branch still has to be able to say what is in it.
     """
     by_id = {each.id: each for each in project.phases}
-    at = by_id[phase] if isinstance(phase, str) else phase
+    at: Phase | None = by_id[phase] if isinstance(phase, str) else phase
     chain: list[Phase] = []
     while at is not None:
         chain.append(at)

@@ -66,7 +66,9 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Any
 
 from core.kratos.deck_files import MATERIALS_NAME
 from core.model import units
@@ -220,12 +222,12 @@ def project_parameters(
     constraints: list[tuple[str, list[bool]]],
     loads: list[tuple[str, str, list[bool], list[float]]],
     stages: list[Stage],
-    normal_loads: list[tuple[str, str, float, float, float]] = (),
+    normal_loads: Sequence[tuple[str, str, float, float, float]] = (),
     *,
     water: tuple[float, float] = (0.0, 10.0),
     deck_name: str = "model",
     domain_size: int = 2,
-    body_parts: list[str] = (),
+    body_parts: Sequence[str] = (),
     rotation_dofs: bool = False,
 ) -> str:
     """`constraints` is (sub-model part name, DISPLACEMENT is_fixed per axis).
@@ -715,7 +717,7 @@ def _normal_load(part_name: str, fluid_pressure_type: str, pressure: float,
     set): unlike the hydrostatic case there is no reference deck for this branch to
     match field for field, so check it against the first real run.
     """
-    parameters = {
+    parameters: dict[str, Any] = {
         "model_part_name": f"PorousDomain.{part_name}",
         "variable_name": "NORMAL_CONTACT_STRESS",
         "active": [True, False],

@@ -14,7 +14,7 @@ from core.analysis import calculation
 from core.geometry.solid_model import GeometryError
 from core.kratos.writer import ExportError
 from core.geometry.meshing import MeshingError
-from core.model.schemas import ExportRequest, Project
+from core.model.schemas import Deck, ExportRequest
 
 router = APIRouter()
 
@@ -53,7 +53,7 @@ async def calculate_project(settings: ExportRequest) -> dict:
     """
     project = store.get()
     if project.deck is not None:
-        return await _calculate_deck(project)
+        return await _calculate_deck(project.deck)
     check_mesh_keys(project, settings)
     export = await run_mesh_job(gmsh_worker.export_job, project,
                                 settings.model_copy(update={"include_materials": True}),
@@ -75,12 +75,12 @@ async def calculate_project(settings: ExportRequest) -> dict:
                      "run": Path(result["directory"]).name}
 
 
-async def _calculate_deck(project: Project) -> dict:
+async def _calculate_deck(deck: Deck) -> dict:
     from core.kratos import external_deck
 
     try:
-        stats = external_deck.stats(project.deck)
-        result = await asyncio.to_thread(calculation.run_deck, project.deck)
+        stats = external_deck.stats(deck)
+        result = await asyncio.to_thread(calculation.run_deck, deck)
     except external_deck.DeckError as failure:
         raise HTTPException(status_code=400, detail=str(failure)) from failure
     except calculation.Busy as busy:

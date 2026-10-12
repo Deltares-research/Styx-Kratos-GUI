@@ -228,6 +228,8 @@ def catalogue(results: Results, system: str = units.DEFAULT) -> list[dict]:
         if definition.source not in available:
             continue
         source = results.field(definition.source)
+        if source is None:
+            continue
         groups.setdefault(definition.group, []).append({
             "name": definition.name,
             "label": definition.label,

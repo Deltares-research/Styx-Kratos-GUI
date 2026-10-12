@@ -149,7 +149,7 @@ def write_script(args: argparse.Namespace) -> Answer:
 def switch_dimension(args: argparse.Namespace) -> Answer:
     project = session.load(args.project)
     project, notes = session.set_dimension(project, DimensionUpdate(
-        dimension=int(args.to[0]), section_offset=args.offset))
+        dimension=2 if args.to[0] == "2" else 3, section_offset=args.offset))
     target, where = written(args, project)
     return Answer(data={"file": _file(target), "dimension": project.dimension,
                         "section_offset": project.section_offset, "notes": notes},

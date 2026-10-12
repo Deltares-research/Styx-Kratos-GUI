@@ -15,7 +15,6 @@ from pathlib import Path
 import pytest
 from fastapi import HTTPException
 from fastapi.exceptions import RequestValidationError
-from fastapi.routing import APIRoute
 from pydantic import ValidationError
 
 from backend.main import app
@@ -24,6 +23,7 @@ from core.kratos.writer import ExportError
 from core.geometry.meshing import MeshingError
 from core.model.schemas import MeshRequest
 from core.model.templates import seed_project
+from tests.api.served import api_routes
 
 ROUTES = Path(__file__).resolve().parents[2] / "backend" / "routes"
 
@@ -45,7 +45,7 @@ def owner(path: str) -> str | None:
     return next((module for matches, module in OWNERS if matches(path)), None)
 
 
-API_ROUTES = [route for route in app.routes if isinstance(route, APIRoute)]
+API_ROUTES = api_routes(app)
 
 
 @pytest.mark.parametrize("route", API_ROUTES,

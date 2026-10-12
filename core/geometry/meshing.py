@@ -9,7 +9,7 @@ import time
 import gmsh
 
 from core.geometry import solid_model
-from core.model.schemas import BoxRefinement, CylinderRefinement, Project
+from core.model.schemas import BoxRefinement, CylinderRefinement, Project, WaterLevel
 from core.geometry.tessellation import DECIMALS, Section
 
 
@@ -386,7 +386,7 @@ def _part_sections(project: Project, built: solid_model.BuildResult, meshed_keys
             continue
         if key == "water":
             if project.water is not None:
-                sections.append(_water_section(project, dim))
+                sections.append(_water_section(project, project.water, dim))
             continue
         if key in loads:
             sections.append(loads[key])
@@ -407,11 +407,11 @@ def _part_sections(project: Project, built: solid_model.BuildResult, meshed_keys
     return sections
 
 
-def _water_section(project: Project, dim: int) -> Section:
+def _water_section(project: Project, water: WaterLevel, dim: int) -> Section:
     """The phreatic level as lines: across the section in 2D, the outline of the level's
     plane in 3D. With the slab's own overhang, as the viewport's water line has it
     (frontend/js/viewport.js `waterLineSpec`), so the level reads past the model's edges."""
-    water, d = project.water, project.domain
+    d = project.domain
     x0, x1 = d.x0 - water.margin, d.x1 + water.margin
     if dim == 2:
         corners = [(x0, water.y, 0.0), (x1, water.y, 0.0)]
@@ -453,11 +453,11 @@ def _interface_sections(interface, project: Project, built: solid_model.BuildRes
     """
     if interface.structure is not None:
         curves = built.curves.get(interface.structure, [])
-        path = next(beam.points for beam in project.beams
+        path = next(beam.points for beam in project.sheet_piles
                     if beam.id == interface.structure)
     else:
         curves = built.curves.get(interface.id, [])
-        path = interface.points
+        path = interface.points or []
     pieces = _line_segments(curves, coordinates)
     if not pieces:
         return []
@@ -599,16 +599,20 @@ def _line_segments(curves: list[int], coordinates: dict[int, tuple[float, float,
     """Each line element on `curves`, corner to corner, rounded for the payload. A
     quadratic line's mid node is skipped, the same way a six-node triangle is drawn by
     its three corners."""
-    out = []
+    out: list[tuple[tuple[float, float, float], tuple[float, float, float]]] = []
     for curve in curves:
         types, _, connectivities = gmsh.model.mesh.getElements(1, curve)
         for element_type, connectivity in zip(types, connectivities):
             node_count = gmsh.model.mesh.getElementProperties(int(element_type))[3]
             for offset in range(0, len(connectivity), node_count):
-                out.append(tuple(
-                    tuple(round(value, DECIMALS) for value in coordinates[int(tag)])
-                    for tag in (connectivity[offset], connectivity[offset + 1])))
+                out.append((_rounded(coordinates[int(connectivity[offset])]),
+                            _rounded(coordinates[int(connectivity[offset + 1])])))
     return out
+
+
+def _rounded(point: tuple[float, float, float]) -> tuple[float, float, float]:
+    x, y, z = point
+    return (round(x, DECIMALS), round(y, DECIMALS), round(z, DECIMALS))
 
 
 def _add_tie_segments(section: Section, curves: list[int]) -> None:
@@ -647,10 +651,11 @@ def _surface_section(key: str, surfaces: list[int],
                 triangle = [int(tag) for tag in connectivity[offset:offset + 3]]
                 indices = [index_of(tag) for tag in triangle]
                 section.indices.extend(indices)
+                a, b, c = triangle
                 unique_edges.update({
-                    tuple(sorted((triangle[0], triangle[1]))),
-                    tuple(sorted((triangle[1], triangle[2]))),
-                    tuple(sorted((triangle[2], triangle[0]))),
+                    (min(a, b), max(a, b)),
+                    (min(b, c), max(b, c)),
+                    (min(c, a), max(c, a)),
                 })
 
     for first, second in sorted(unique_edges):
