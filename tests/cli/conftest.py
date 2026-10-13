@@ -64,6 +64,13 @@ def this_machine_has_no_kratos(request, tmp_path, monkeypatch):
         monkeypatch.delenv(name, raising=False)
 
 
+@pytest.fixture(autouse=True)
+def no_colour_from_this_machine(monkeypatch):
+    """What is printed is compared as text: a terminal's colour settings stay out."""
+    for name in ("NO_COLOR", "FORCE_COLOR", "TERM"):
+        monkeypatch.delenv(name, raising=False)
+
+
 @pytest.fixture
 def stand_in_kratos(monkeypatch):
     """This interpreter in Kratos' place, running `script` in the run directory (the

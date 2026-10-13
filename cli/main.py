@@ -10,8 +10,9 @@ command takes.
 from __future__ import annotations
 
 import argparse
+import sys
 
-from cli import output
+from cli import output, style
 from cli.commands import (analysis, edit, ground, inspection, interactive, meshing, phases,
                           project, results, structures, volumes)
 
@@ -20,8 +21,19 @@ GROUPS = (project, edit, ground, volumes, structures, meshing, phases, inspectio
 """The command modules, in the order a model is worked through; `--help` lists them so."""
 
 
+class Parser(argparse.ArgumentParser):
+    """argparse's parser, saying a command line it cannot read in the colours of the
+    rest (`cli.style`). Its commands' parsers are of this class too: argparse makes a
+    subparser of its parent's class."""
+
+    def error(self, message: str):
+        on = style.enabled(sys.stderr)
+        sys.stderr.write(style.paint(self.format_usage().rstrip("\n"), "dim", on) + "\n")
+        self.exit(2, f"{self.prog}: {style.paint('error:', 'bold red', on)} {message}\n")
+
+
 def parser() -> argparse.ArgumentParser:
-    top = argparse.ArgumentParser(
+    top = Parser(
         prog="kratos-cli",
         description="Build, mesh, stage, export, run and read a Kratos geotechnical "
                     "model in the terminal. The project file is the one the GUI saves.")

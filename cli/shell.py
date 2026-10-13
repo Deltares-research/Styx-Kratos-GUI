@@ -34,25 +34,29 @@ from __future__ import annotations
 import argparse
 import os
 import shlex
+import shutil
 import sys
+import textwrap
 import traceback
 from collections.abc import Callable
 from pathlib import Path
 
+from cli import output, style
+
 WORDS = {
-    "open": "open FILE        work on another project file (.json, or a .py to read)",
-    "close": "close            put the project down",
-    "new": "new FILE ...     make a project file, as `kratos-cli new`, and open it",
-    "undo": "undo             take back the last edit of the open project",
-    "redo": "redo             put back what undo took",
-    "cd": "cd DIR           go to another folder; the open project stays open",
-    "pwd": "pwd              the folder relative paths are read from",
-    "source": "source FILE      run the lines of a file; the first that fails stops it",
-    "help": "help [COMMAND]   this, or what COMMAND takes",
-    "exit": "exit, quit       leave (also Ctrl-D, or Ctrl-Z then Enter on Windows)",
-    "quit": "",
+    "open": ("open FILE", "work on another project file (.json, or a .py to read)"),
+    "close": ("close", "put the project down"),
+    "new": ("new FILE ...", "make a project file, as `kratos-cli new`, and open it"),
+    "undo": ("undo", "take back the last edit of the open project"),
+    "redo": ("redo", "put back what undo took"),
+    "cd": ("cd DIR", "go to another folder; the open project stays open"),
+    "pwd": ("pwd", "the folder relative paths are read from"),
+    "source": ("source FILE", "run the lines of a file; the first that fails stops it"),
+    "help": ("help [COMMAND]", "this, or what COMMAND takes"),
+    "exit": ("exit, quit", "leave (also Ctrl-D, or Ctrl-Z then Enter on Windows)"),
+    "quit": None,
 }
-"""The shell's own words, and the line `help` says each in."""
+"""The shell's own words, and how `help` says each: as typed, and what it does."""
 
 PROJECT_SLOT = "project"
 """The positional the open project goes into. A command whose project has another name
@@ -81,6 +85,20 @@ def words(line: str) -> list[str]:
     return list(lexer)
 
 
+def _has_words(line: str) -> bool:
+    """Whether `line` is more than a blank line or a comment -- an unbalanced quote too,
+    which is refused."""
+    try:
+        return bool(words(line))
+    except ValueError:
+        return True
+
+
+def _hidden(text: str) -> str:
+    """`text`'s escape codes fenced off for readline, which then counts only the rest."""
+    return style.ESCAPE.sub(lambda code: f"\001{code.group()}\002", text)
+
+
 class Shell:
     def __init__(self, project: Path | None = None, *,
                  read: Callable[[str], str] | None = None, interactive: bool | None = None,
@@ -92,6 +110,8 @@ class Shell:
             from cli.main import main
             run = main
         self.run = run
+        self.readline = False
+        """Whether readline reads the lines, and so needs the prompt's colour fenced."""
         self.stopped: str | None = None
         """Why lines read from the input stopped, for the command to answer with."""
         self.undone: list[bytes] = []
@@ -103,13 +123,33 @@ class Shell:
         """Read and run lines to the end of the input or `exit`. 0, or 1 when a line
         read from a pipe failed."""
         if self.interactive:
-            _readline(self)
-            print("kratos-cli shell: a command as after `kratos-cli`, without the project "
-                  "file. `help` lists them; `exit` leaves.")
-            if self.project is None:
-                print("No project is open: `open FILE`, or `new FILE`.")
+            self.readline = _readline(self)
+            self._greet()
             return self._typed()
         return self._read_lines(sys.stdin, "the input", top=True)
+
+    def _greet(self) -> None:
+        on = style.enabled(sys.stdout)
+        print()
+        print(f"{style.paint('kratos-cli shell', 'bold', on)}  "
+              f"{style.paint('a command as after `kratos-cli`, without the project file', 'dim', on)}")
+        print(f"{style.paint('help', 'cyan', on)} lists them, "
+              f"{style.paint('help COMMAND', 'cyan', on)} says what one takes, "
+              f"{style.paint('exit', 'cyan', on)} leaves.")
+        print()
+        self._say_open()
+        print()
+
+    def _say_open(self) -> None:
+        on = style.enabled(sys.stdout)
+        if self.project is None:
+            print(f"{style.paint('No project is open:', 'yellow', on)} "
+                  f"{style.paint('open FILE', 'cyan', on)}, or "
+                  f"{style.paint('new FILE', 'cyan', on)}.")
+            return
+        print(f"{style.paint('open', 'bold green', on)}  "
+              f"{style.paint(self.project.name, 'bold', on)}  "
+              f"{style.paint(f'({self.project.parent})', 'dim', on)}")
 
     def _typed(self) -> int:
         while True:
@@ -126,13 +166,20 @@ class Shell:
             except Leave:
                 return 0
             except KeyboardInterrupt:
-                print("interrupted", file=sys.stderr)
+                output.error("interrupted")
+            if _has_words(line):
+                sys.stderr.flush()
+                print()                             # a blank line before the next prompt
 
     def _read_lines(self, lines, where: str, top: bool = False) -> int:
+        echoed = False
         for number, line in enumerate(lines, start=1):
             line = line.rstrip("\r\n").lstrip(BOM)
             if line.strip() and not line.lstrip().startswith("#"):
-                print(f"> {line}")
+                if echoed:
+                    print()
+                self._echo(line)
+                echoed = True
             try:
                 code = self.line(line)
             except Leave:
@@ -142,12 +189,23 @@ class Shell:
                 if top:
                     self.stopped = why
                 else:
-                    print(f"error: {why}", file=sys.stderr)
+                    output.error(why)
                 return 1
         return 0
 
+    def _echo(self, line: str) -> None:
+        on = style.enabled(sys.stdout)
+        print(f"{style.paint('>', 'bold magenta', on)} {style.paint(line, 'bold', on)}")
+        sys.stdout.flush()
+
     def prompt(self) -> str:
-        return f"{self.project.name if self.project else 'kratos-cli'}> "
+        on = style.enabled(sys.stdout)
+        name = self.project.name if self.project else "kratos-cli"
+        painted = [style.paint(name, "bold cyan", on), style.paint(">", "bold magenta", on)]
+        if on and self.readline:
+            # readline counts what is between \001 and \002 as taking no room.
+            painted = [_hidden(text) for text in painted]
+        return f"{painted[0]}{painted[1]} "
 
     # ── One line ───────────────────────────────────────────────────────────
 
@@ -156,7 +214,7 @@ class Shell:
         try:
             argv = words(line)
         except ValueError as failure:            # an unbalanced quote
-            print(f"error: {failure}: close the quote", file=sys.stderr)
+            output.error(f"{failure}: close the quote")
             return 2
         if argv[:1] == ["kratos-cli"]:
             argv = argv[1:]
@@ -169,15 +227,15 @@ class Shell:
         if own is not None:
             return own(argv[1:])
         if word == "shell":
-            print("error: this is the shell already", file=sys.stderr)
+            output.error("this is the shell already")
             return 1
         return self._command(argv)
 
     def _command(self, typed: list[str]) -> int:
         argv = _with_project(typed, self.project)
         if argv is None:
-            print("error: no project is open: `open FILE` opens one, `new FILE` makes "
-                  "one, or name the file on the line.", file=sys.stderr)
+            output.error("no project is open: `open FILE` opens one, `new FILE` makes "
+                         "one, or name the file on the line.")
             return 1
         before = self._contents()
         try:
@@ -186,8 +244,8 @@ class Shell:
             raise
         except Exception:                           # noqa: BLE001 - shown, then on
             traceback.print_exc()
-            print("error: that was a fault in kratos-cli, not in the model: the "
-                  "traceback above says where.", file=sys.stderr)
+            output.error("that was a fault in kratos-cli, not in the model: the "
+                         "traceback above says where.")
             code = 1
         after = self._contents()
         if before is not None and after != before:
@@ -207,23 +265,22 @@ class Shell:
 
     def _open(self, args: list[str]) -> int:
         if not args:
-            print(f"open: {self.project}" if self.project else "No project is open.")
+            self._say_open()
             return 0
         path = Path(args[0]).expanduser()
         if not path.is_file():
-            print(f"error: no such file: {path}", file=sys.stderr)
+            output.error(f"no such file: {path}")
             return 1
         if path.suffix.lower() not in MODEL_SUFFIXES:
-            print(f"error: {path.name} is not a project (.json) or a model script (.py)",
-                  file=sys.stderr)
+            output.error(f"{path.name} is not a project (.json) or a model script (.py)")
             return 1
         self._switch(path)
-        print(f"open: {self.project}")
+        self._say_open()
         return 0
 
     def _close(self, args: list[str]) -> int:
         self._switch(None)
-        print("No project is open.")
+        self._say_open()
         return 0
 
     def _new(self, args: list[str]) -> int:
@@ -231,7 +288,7 @@ class Shell:
         target = next((word for word in args if not word.startswith("-")), None)
         if code == 0 and target is not None:
             self._switch(Path(target))
-            print(f"open: {self.project}")
+            self._say_open()
         return code
 
     def _switch(self, path: Path | None) -> None:
@@ -247,13 +304,15 @@ class Shell:
 
     def _step(self, source: list[bytes], target: list[bytes], what: str) -> int:
         if not source or self.project is None:
-            print(f"nothing to {what}")
+            print(style.paint(f"nothing to {what}", "dim", style.enabled(sys.stdout)))
             return 0
         current = self._contents()
         if current is not None:
             target.append(current)
         self.project.write_bytes(source.pop())
-        print(f"{what}: {self.project.name} is as it was "
+        on = style.enabled(sys.stdout)
+        print(f"{style.paint(what + ':', 'bold green', on)} "
+              f"{style.paint(self.project.name, 'bold', on)} is as it was "
               f"{'before' if what == 'undo' else 'after'} that edit")
         return 0
 
@@ -261,7 +320,7 @@ class Shell:
         try:
             os.chdir(Path(args[0]).expanduser() if args else Path.home())
         except OSError as failure:
-            print(f"error: {failure}", file=sys.stderr)
+            output.error(str(failure))
             return 1
         print(os.getcwd())
         return 0
@@ -272,25 +331,33 @@ class Shell:
 
     def _source(self, args: list[str]) -> int:
         if not args:
-            print("error: source needs a file of lines", file=sys.stderr)
+            output.error("source needs a file of lines")
             return 2
         path = Path(args[0]).expanduser()
         try:
             lines = path.read_text(encoding="utf-8").splitlines()
         except OSError as failure:
-            print(f"error: {failure}", file=sys.stderr)
+            output.error(str(failure))
             return 1
         return self._read_lines(lines, path.name)
 
     def _help(self, args: list[str]) -> int:
         if args:
             return self.run([args[0], "--help"])
-        print("The shell's own words:")
-        for line in WORDS.values():
-            if line:
-                print(f"  {line}")
-        print("\nAnd every kratos-cli command, without the project file:")
-        self.run(["--help"])
+        on = style.enabled(sys.stdout)
+        sections = [("Shell", [said for said in WORDS.values() if said]), *_command_groups()]
+        width = max(len(name) for _, rows in sections for name, _ in rows) + 3
+        columns = shutil.get_terminal_size((100, 24)).columns
+        for heading, rows in sections:
+            print(style.paint(heading, "bold", on))
+            for name, what in rows:
+                said = textwrap.wrap(what, max(columns - width - 3, 30)) or [""]
+                print(f"  {style.paint(name.ljust(width), 'cyan', on)}{said[0]}")
+                for more in said[1:]:
+                    print(" " * (width + 2) + more)
+            print()
+        print(f"Every command is typed without the project file: the open one is used. "
+              f"{style.paint('help COMMAND', 'cyan', on)} says what COMMAND takes.")
         return 0
 
 
@@ -354,6 +421,27 @@ def _subcommands(parser: argparse.ArgumentParser) -> dict[str, argparse.Argument
     return {}
 
 
+def _command_groups() -> list[tuple[str, list[tuple[str, str]]]]:
+    """The commands under the step of the model each belongs to -- the module of
+    `cli.commands` that registers it, in `cli.main.GROUPS`' order -- each with its help;
+    `shell` left out."""
+    from cli.main import GROUPS
+
+    said = {}
+    for action in _parser()._actions:
+        if isinstance(action, argparse._SubParsersAction):
+            said = {choice.dest: choice.help or "" for choice in action._choices_actions}
+    common = argparse.ArgumentParser(add_help=False)
+    groups = []
+    for group in GROUPS:
+        commands = argparse.ArgumentParser(add_help=False).add_subparsers()
+        group.register(commands, common)
+        rows = [(name, said.get(name, "")) for name in commands.choices if name != "shell"]
+        if rows:
+            groups.append((group.__name__.rsplit(".", 1)[-1].capitalize(), rows))
+    return groups
+
+
 # ── Completion ──────────────────────────────────────────────────────────────
 
 def completions(before: str) -> list[str]:
@@ -381,13 +469,14 @@ def completions(before: str) -> list[str]:
     return []
 
 
-def _readline(shell: Shell) -> None:
+def _readline(shell: Shell) -> bool:
     """Line editing, history kept across sessions and Tab completion, where Python has
-    readline (Linux, macOS). Windows' console edits and recalls lines by itself."""
+    readline (Linux, macOS); whether it has. Windows' console edits and recalls lines by
+    itself."""
     try:
         import readline
     except ImportError:
-        return
+        return False
     history = Path.home() / ".kratos_cli_history"
     try:
         readline.read_history_file(history)
@@ -402,6 +491,7 @@ def _readline(shell: Shell) -> None:
     readline.set_completer(complete)
     readline.set_completer_delims(" \t")
     readline.parse_and_bind("tab: complete")
+    return True
 
 
 def _save_history(readline, history: Path) -> None:
