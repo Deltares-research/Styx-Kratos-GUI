@@ -1,7 +1,7 @@
 @echo off
 setlocal
 
-rem kratos-init-powershell: a PowerShell ready for How_to_create_project.md.
+rem kratos-init-powershell: a PowerShell ready for docs/cli_tutorials/README.md.
 rem Checks that Kratos is set up, builds the Python environment the first time, then opens
 rem PowerShell in the model's folder with $repo, $model, $cli and $py already set, and the
 rem runs kept in that folder too (KRATOS_GUI_RUNS).
