@@ -5,10 +5,11 @@ model, mesh it with Gmsh, export it as a Kratos GeoMechanics deck, run it in con
 phases, and read the results back in its Results mode. It is a FastAPI server
 holding one project, plus a build-free browser front end.
 
-See also: [FEATURES.md](FEATURES.md) (what works, per Kratos feature),
+See also: the [developer guide](README.md) (the big picture, start there),
+[FEATURES.md](../FEATURES.md) (what works, per Kratos feature),
 [PROJECT_OVERVIEW.md](PROJECT_OVERVIEW.md) (code size per module),
-[INSTALLATION.md](INSTALLATION.md) (install and run),
-[KRATOS_SETUP.md](KRATOS_SETUP.md) (configure Kratos).
+[INSTALLATION.md](../INSTALLATION.md) (install and run),
+[KRATOS_SETUP.md](../KRATOS_SETUP.md) (configure Kratos).
 
 ## At a glance
 
@@ -70,7 +71,7 @@ strings and hand them to the same handlers.
 | A finished deck | A Kratos deck written elsewhere, shown as its own mesh and run as its own files, from a script that names it (`external_deck.deck_project`) | `core/kratos/external_deck.py`, `frontend/js/deck.js` |
 | Import mesh | Read an `.mdpa` back into mesh data | `core/kratos/mdpa_reader.py`, `POST /api/import/mdpa` |
 | Export | Write the deck without running it | `POST /api/export/mdpa`, `frontend/js/export.js` |
-| `kratos-cli` | The terminal, without the browser or the server: new, edit any field by path, mesh, phases, export, run a deck, results ([CLI.md](CLI.md)). It edits the project file through `core/session.py`, as the routes do, and runs gmsh in its own process (`gmsh_worker.run_here`) | `cli/`, `kratos-cli.bat`, `kratos-cli.sh` |
+| `kratos-cli` | The terminal, without the browser or the server: new, edit any field by path, mesh, phases, export, run a deck, results ([CLI.md](../CLI.md)). It edits the project file through `core/session.py`, as the routes do, and runs gmsh in its own process (`gmsh_worker.run_here`) | `cli/`, `kratos-cli.bat`, `kratos-cli.sh` |
 
 ## Server modules
 

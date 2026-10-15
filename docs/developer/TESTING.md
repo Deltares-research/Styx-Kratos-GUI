@@ -15,7 +15,7 @@ pytest in the app's own venv. First install the test-only tools into that venv:
 | `python tools/test.py quick` | The JS syntax check, the headless JS suites, and pytest without the browser |
 | `python tools/test.py browser` | Everything in `quick`, plus the browser unit suite (`frontend/tests/index.html`) through Playwright |
 | `python tools/test.py e2e` | Everything in `browser`, plus the GUI end-to-end tests |
-| `python tools/test.py kratos` | The tests that run Kratos (needs [Kratos to be set up](KRATOS_SETUP.md)) |
+| `python tools/test.py kratos` | The tests that run Kratos (needs [Kratos to be set up](../KRATOS_SETUP.md)) |
 | `python tools/test.py bench` | The Kratos benchmark runner |
 | `python tools/test.py perf` | The performance tests |
 | `python tools/test.py all` | Everything this machine can run, with a list of what was skipped and why |
@@ -33,5 +33,5 @@ pytest in the app's own venv. First install the test-only tools into that venv:
   coverage to `htmlcov-js/summary.json`.
 
 CI runs the `e2e` tier on Windows and Ubuntu for every pull request and every push to `main`
-(see [.github/workflows/tests.yml](../.github/workflows/tests.yml)). Line coverage below 95 %
-fails the run. [CONTRIBUTING.md](../CONTRIBUTING.md) lists the other checks CI runs.
+(see [.github/workflows/tests.yml](../../.github/workflows/tests.yml)). Line coverage below 95 %
+fails the run. [CONTRIBUTING.md](../../CONTRIBUTING.md) lists the other checks CI runs.

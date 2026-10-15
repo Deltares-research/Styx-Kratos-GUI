@@ -69,7 +69,7 @@ See [FEATURES.md](docs/FEATURES.md) for the full list with the status of each fe
 | Frontend | Plain JavaScript and [three.js](https://threejs.org/), with no build step and no npm |
 | Solver | [Kratos Multiphysics](https://github.com/KratosMultiphysics/Kratos) GeoMechanicsApplication (installed separately, see [KRATOS_SETUP.md](docs/KRATOS_SETUP.md)) |
 
-[ARCHITECTURE.md](docs/ARCHITECTURE.md) explains how the pieces fit together.
+The [developer guide](docs/developer/README.md) explains how the pieces fit together.
 
 ## Getting started
 
@@ -126,16 +126,24 @@ Everything from a new model to its results also works in a terminal, with no bro
 
 ## Documentation
 
+### For users
+
 | Document | Contents |
 |---|---|
 | [INSTALLATION.md](docs/INSTALLATION.md) | Prerequisites per platform, the launcher and its options |
 | [KRATOS_SETUP.md](docs/KRATOS_SETUP.md) | Installing Kratos and connecting it to Styx, with troubleshooting |
 | [USAGE.md](docs/USAGE.md) | A walk through the modes: building, meshing, calculating, results and scripting |
 | [CLI.md](docs/CLI.md) | `kratos-cli`: every step of a model in the terminal, command by command |
-| [TESTING.md](docs/TESTING.md) | The test tiers and how to run them |
-| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | How a model flows from the browser to Kratos and back |
 | [FEATURES.md](docs/FEATURES.md) | What works, feature by feature, and where the code is |
-| [PROJECT_OVERVIEW.md](docs/PROJECT_OVERVIEW.md) | Code size per module |
+
+### For developers
+
+| Document | Contents |
+|---|---|
+| [Developer guide](docs/developer/README.md) | Start here: who does what (Styx, Gmsh, Kratos), from a drawn model to the deck and its results |
+| [ARCHITECTURE.md](docs/developer/ARCHITECTURE.md) | How a model flows from the browser to Kratos and back, module by module |
+| [TESTING.md](docs/developer/TESTING.md) | The test tiers and how to run them |
+| [PROJECT_OVERVIEW.md](docs/developer/PROJECT_OVERVIEW.md) | Code size per module |
 
 ## Project layout
 
@@ -147,7 +155,7 @@ frontend/      the browser app (index.html, js/, css/, three.js), with its own t
 tests/         pytest suites: unit, API, browser, end-to-end, Kratos and performance
 benchmarks/    Kratos benchmark cases and runner
 tools/test.py  the tier runner
-docs/          user guides and design documents
+docs/          user guides; docs/developer/ for the developer guide and design documents
 run.bat        launcher for Windows
 run.sh         launcher for Linux and macOS
 kratos-cli.bat the command line, for Windows
@@ -158,7 +166,7 @@ kratos-cli.sh  the command line, for Linux and macOS
 
 Contributions are welcome: bug reports, feature requests, documentation fixes and code.
 [CONTRIBUTING.md](CONTRIBUTING.md) explains how to set up, how changes are made (tests
-first), and what CI checks on every pull request. [TESTING.md](docs/TESTING.md) lists the
+first), and what CI checks on every pull request. [TESTING.md](docs/developer/TESTING.md) lists the
 test tiers.
 
 To report a security problem, do not open an issue. Follow [SECURITY.md](SECURITY.md)

@@ -8,10 +8,9 @@
 
 ## Checklist
 
-- [ ] A failing test came first, and it passes now
 - [ ] `python tools/test.py quick` passes (`browser` if the frontend changed)
 - [ ] `python frontend/tests/syntax_check.py` passes, if any JavaScript changed
 - [ ] `ruff check .` passes
 - [ ] If the deck writer or the results reader changed: `python tools/test.py kratos` passes on a machine with Kratos
-- [ ] The documentation (README.md, docs/ARCHITECTURE.md, docs/FEATURES.md) matches the change
+- [ ] The documentation (README.md, docs/developer/ARCHITECTURE.md, docs/FEATURES.md) matches the change
 - [ ] A label is set: `bug`, `enhancement`, `documentation`, `breaking-change` or `dependencies`
