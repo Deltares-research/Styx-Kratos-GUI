@@ -1,0 +1,247 @@
+{
+  "name": "simple_dike",
+  "layered_soil": true,
+  "dimension": 2,
+  "unit_system": "SI",
+  "section_offset": 5.0,
+  "domain": {
+    "x0": 0.0,
+    "x1": 20.0,
+    "z0": 0.0,
+    "z1": 10.0,
+    "y_top": 10.0,
+    "y_bottom": 0.0
+  },
+  "boreholes": [
+    {
+      "id": "bh1",
+      "name": "BH1",
+      "x": 0.0,
+      "y": 0.0,
+      "head": 10.0,
+      "water": 0.0
+    }
+  ],
+  "materials": [
+    {
+      "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
+      "variables": {
+        "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+        "YOUNG_MODULUS": 20000000.0,
+        "POISSON_RATIO": 0.3,
+        "DENSITY_SOLID": 1834.8623853211009,
+        "POROSITY": 0.0,
+        "PERMEABILITY_XX": 1e-05,
+        "GEO_COHESION": 1000.0,
+        "GEO_FRICTION_ANGLE": 30.0,
+        "DENSITY_WATER": 1019.367991845056,
+        "BULK_MODULUS_SOLID": 10000000000.0,
+        "BULK_MODULUS_FLUID": 2200000000.0,
+        "DYNAMIC_VISCOSITY": 0.001,
+        "PERMEABILITY_YY": 1e-05,
+        "PERMEABILITY_XY": 0.0,
+        "K0_NC": 0.5
+      },
+      "tables": {},
+      "id": "m_soil",
+      "name": "soil",
+      "color": "#c4a86a",
+      "r_inter": 0.7,
+      "interface_permeability": "Neutral"
+    }
+  ],
+  "layers": [
+    {
+      "id": "soil",
+      "name": "soil",
+      "mat": "m_soil",
+      "tops": {
+        "bh1": 10.0
+      },
+      "bots": {
+        "bh1": 0.0
+      }
+    }
+  ],
+  "excavation": {
+    "x0": 0.0,
+    "x1": 1.0,
+    "z0": 0.0,
+    "z1": 1.0,
+    "floor_y": -1.0,
+    "levels": [
+      -1.0
+    ]
+  },
+  "wall": {
+    "thickness": 0.5,
+    "top_y": 0.0,
+    "toe_y": -1.0
+  },
+  "struts": {
+    "xs": [],
+    "y": 0.0,
+    "radius": 0.1,
+    "overhang": 0.8,
+    "waler_width": 0.5,
+    "waler_height": 0.6,
+    "waler_offset": 0.5
+  },
+  "anchor_rows": {
+    "xs": [],
+    "head_y": 0.0,
+    "length": 1.0,
+    "inclination_deg": 45.0,
+    "radius": 0.1,
+    "head_offset": 0.4
+  },
+  "piles": {
+    "xs": [],
+    "zs": [],
+    "radius": 0.1,
+    "length": 1.0,
+    "top_y": 0.0
+  },
+  "loads": [
+    {
+      "id": "load",
+      "name": "Load",
+      "kind": "line",
+      "x0": 10.0,
+      "x1": 20.0,
+      "y": 10.0,
+      "thickness": 0.15,
+      "components": [
+        0.0,
+        -10000.0
+      ],
+      "distribution": "Uniform",
+      "active": true,
+      "derived_from": null
+    }
+  ],
+  "beam_sections": [
+    {
+      "constitutive_law": "TimoshenkoBeamElasticConstitutiveLaw",
+      "variables": {
+        "YOUNG_MODULUS": 210000000000.0,
+        "POISSON_RATIO": 0.0,
+        "DENSITY": 7850.0,
+        "CROSS_AREA": 0.015,
+        "I33": 0.0003,
+        "AREA_EFFECTIVE_Y": 0.0075
+      },
+      "tables": {},
+      "id": "steel",
+      "name": "Sheet pile",
+      "spacing": 1.0
+    }
+  ],
+  "panel_sections": [],
+  "beams": [
+    {
+      "id": "sheetpile_1",
+      "name": "sheetpile_1",
+      "kind": "beam",
+      "section": "steel",
+      "points": [
+        [
+          10.0,
+          10.0
+        ],
+        [
+          10.0,
+          3.0
+        ]
+      ],
+      "active": true,
+      "derived_from": null
+    }
+  ],
+  "anchor_sections": [],
+  "anchors": [],
+  "interface_sections": [],
+  "interfaces": [],
+  "normal_loads": [],
+  "wells": {
+    "positions": [],
+    "radius": 0.1,
+    "top_y": 0.0,
+    "length": 1.0
+  },
+  "water": null,
+  "mesh": {
+    "element_size": 1.0,
+    "order": 1,
+    "algorithm_3d": "delaunay",
+    "algorithm_2d": "frontal",
+    "optimization": "gmsh",
+    "smoothing": 10,
+    "curvature_points": 16,
+    "size_min_factor": 0.05,
+    "second_order_linear": true,
+    "body_sizes": {},
+    "refinements": []
+  },
+  "custom_parts": [],
+  "phases": [
+    {
+      "id": "initial",
+      "name": "Initial stage",
+      "parent": null,
+      "calculation": "K0 procedure",
+      "loading": "Staged construction",
+      "activate": [],
+      "deactivate": [
+        "sheetpile_1",
+        "load"
+      ],
+      "reset_displacements": false,
+      "max_iterations": 15,
+      "tolerated_error": 0.0001,
+      "time_interval": 0.0
+    },
+    {
+      "id": "sheet_pile",
+      "name": "Sheet pile",
+      "parent": "initial",
+      "calculation": "Plastic",
+      "loading": "Staged construction",
+      "activate": [
+        "sheetpile_1"
+      ],
+      "deactivate": [],
+      "reset_displacements": true,
+      "max_iterations": 150,
+      "tolerated_error": 0.001,
+      "time_interval": 0.0
+    },
+    {
+      "id": "loading",
+      "name": "Load",
+      "parent": "sheet_pile",
+      "calculation": "Plastic",
+      "loading": "Staged construction",
+      "activate": [
+        "load"
+      ],
+      "deactivate": [],
+      "reset_displacements": false,
+      "max_iterations": 150,
+      "tolerated_error": 0.001,
+      "time_interval": 0.0
+    }
+  ],
+  "deck": null,
+  "soil_body_keys": [
+    "soil_soil"
+  ],
+  "soil_body_labels": {
+    "soil_soil": "soil"
+  },
+  "stageable_parts": [
+    "soil_soil",
+    "sheetpile_1",
+    "load"
+  ]
+}
