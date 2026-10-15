@@ -1,9 +1,9 @@
 """How the app is put together: which module declares each route, and the middleware order.
 
 `backend/main.py` only assembles the app. Every route of the HTTP API lives in the router
-of its group (`backend/routes/`), the groups `docs/ARCHITECTURE.md` lists, so a reader can
-go from a URL to its file. The table below is that mapping; a route outside it fails here,
-which is what keeps the next route from landing in `main.py` again.
+of its group (`backend/routes/`), the groups `docs/developer/ARCHITECTURE.md` lists, so a
+reader can go from a URL to its file. The table below is that mapping; a route outside it
+fails here, which is what keeps the next route from landing in `main.py` again.
 """
 
 from __future__ import annotations

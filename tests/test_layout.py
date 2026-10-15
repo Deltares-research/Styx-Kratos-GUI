@@ -139,10 +139,13 @@ def test_the_python_tools_read_their_settings_from_pyproject(name):
     assert not (ROOT / name).exists(), f"{name} overrides pyproject.toml; merge it there"
 
 
-@pytest.mark.parametrize("name", ["ARCHITECTURE.md", "FEATURES.md", "PROJECT_OVERVIEW.md",
-                                  "INSTALLATION.md", "KRATOS_SETUP.md", "USAGE.md",
-                                  "TESTING.md", "CLI.md"])
+@pytest.mark.parametrize("name", ["FEATURES.md", "INSTALLATION.md", "KRATOS_SETUP.md",
+                                  "USAGE.md", "CLI.md",
+                                  "developer/README.md", "developer/ARCHITECTURE.md",
+                                  "developer/PROJECT_OVERVIEW.md", "developer/TESTING.md"])
 def test_the_documents_are_in_docs_and_linked_from_the_readme(name):
+    """The user guides in `docs/`, and what only a developer needs in `docs/developer/`,
+    so the two never mix."""
     assert (ROOT / "docs" / name).is_file(), name
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     assert f"(docs/{name})" in readme, f"the README's table of documents misses {name}"

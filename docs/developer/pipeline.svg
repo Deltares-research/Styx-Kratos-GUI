@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1040 380" width="1040" height="380" role="img" aria-labelledby="title desc">
+  <title id="title">How a Styx model becomes Kratos results</title>
+  <desc id="desc">Swimlane diagram. The model flows from the Styx GUI or the Styx Python CLI to the Styx project, into Gmsh to build solids and mesh them, back to Styx to split interfaces, stage the phases and write the deck, into Kratos to solve, and back to Styx to read the results the GUI or CLI shows as contours and wall plots.</desc>
+  <style>
+    svg { --bg: #ffffff; --lane: #eef2f0; --ink: #1b2225; --muted: #5a666b; --line: #d3dbd8;
+          --you: #6b6390; --styx: #2a5e8c; --gmsh: #2c7a57; --kratos: #a8640f;
+          --you-soft: #ecebf4; --styx-soft: #e4edf5; --gmsh-soft: #e2f0e9; --kratos-soft: #f6ecdf; }
+    @media (prefers-color-scheme: dark) {
+      svg { --bg: #0d1117; --lane: #161b22; --ink: #e6edf3; --muted: #9aa7ab; --line: #30363d;
+            --you: #aaa2d6; --styx: #7fb2e0; --gmsh: #72c79e; --kratos: #e3a656;
+            --you-soft: #25233a; --styx-soft: #18293a; --gmsh-soft: #16302a; --kratos-soft: #33261a; }
+    }
+    .bg { fill: var(--bg); }
+    .lane { fill: var(--lane); }
+    .divider { stroke: var(--line); stroke-width: 1; }
+    .lane-label { font: 600 12px "Segoe UI", Helvetica, Arial, sans-serif; fill: var(--muted); letter-spacing: 0.04em; }
+    .lane-sub, .s, .note { font: 400 10px Consolas, "DejaVu Sans Mono", Menlo, monospace; fill: var(--muted); }
+    .t { font: 600 12.5px "Segoe UI", Helvetica, Arial, sans-serif; fill: var(--ink); text-anchor: middle; }
+    .s { text-anchor: middle; }
+    .box { stroke-width: 1.5; }
+    .you { fill: var(--you-soft); stroke: var(--you); }
+    .styx { fill: var(--styx-soft); stroke: var(--styx); }
+    .gmsh { fill: var(--gmsh-soft); stroke: var(--gmsh); }
+    .kratos { fill: var(--kratos-soft); stroke: var(--kratos); }
+    .flow { fill: none; stroke: var(--ink); stroke-width: 1.4; opacity: 0.75; }
+    .flow-dash { fill: none; stroke: var(--muted); stroke-width: 1.2; stroke-dasharray: 4 3; }
+    .head { fill: var(--ink); opacity: 0.75; }
+    .head-muted { fill: var(--muted); }
+  </style>
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="head" d="M0,0 L10,5 L0,10 z"/></marker>
+    <marker id="ahm" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="head-muted" d="M0,0 L10,5 L0,10 z"/></marker>
+  </defs>
+
+  <!-- lanes -->
+  <rect class="bg" x="0" y="0" width="1040" height="380"/>
+  <rect class="lane" x="0" y="95" width="1040" height="85"/>
+  <rect class="lane" x="0" y="265" width="1040" height="85"/>
+  <line class="divider" x1="132" y1="10" x2="132" y2="350"/>
+
+  <text class="lane-label" x="16" y="49">STYX GUI</text>
+  <text class="lane-sub" x="16" y="65">or Styx Python CLI</text>
+  <text class="lane-label" x="16" y="134">STYX CORE</text>
+  <text class="lane-sub" x="16" y="150">core/, Python</text>
+  <text class="lane-label" x="16" y="219">GMSH</text>
+  <text class="lane-sub" x="16" y="235">OpenCASCADE</text>
+  <text class="lane-label" x="16" y="304">KRATOS</text>
+  <text class="lane-sub" x="16" y="320">GeoMechanics</text>
+
+  <!-- flow arrows, drawn before the boxes -->
+  <path class="flow" d="M246,52 H302 V105" marker-end="url(#ah)"/>
+  <path class="flow" d="M352,137 H412 V190" marker-end="url(#ah)"/>
+  <path class="flow" d="M462,222 H478" marker-end="url(#ah)"/>
+  <path class="flow" d="M576,222 H632 V169" marker-end="url(#ah)"/>
+  <path class="flow" d="M682,137 H698" marker-end="url(#ah)"/>
+  <path class="flow" d="M796,137 H852 V275" marker-end="url(#ah)"/>
+  <path class="flow" d="M906,307 H962 V169" marker-end="url(#ah)"/>
+  <path class="flow" d="M962,105 V82" marker-end="url(#ah)"/>
+  <!-- the display-only tessellation, back to the 3D view -->
+  <path class="flow-dash" d="M364,222 H210 V84" marker-end="url(#ahm)"/>
+
+  <text class="note" x="846" y="218" text-anchor="end">deck files</text>
+  <text class="note" x="956" y="250" text-anchor="end">run dir</text>
+  <text class="note" x="216" y="212">3D view, display only</text>
+
+  <!-- boxes: x = 150 + i*110, width 96, height 56 -->
+  <rect class="box you" x="150" y="24" width="96" height="56" rx="4"/>
+  <text class="t" x="198" y="48">Model</text>
+  <text class="s" x="198" y="64">type geometry</text>
+
+  <rect class="box styx" x="254" y="109" width="96" height="56" rx="4"/>
+  <text class="t" x="302" y="133">Project</text>
+  <text class="s" x="302" y="149">validated JSON</text>
+
+  <rect class="box gmsh" x="364" y="194" width="96" height="56" rx="4"/>
+  <text class="t" x="412" y="218">Solids</text>
+  <text class="s" x="412" y="234">OCC booleans</text>
+
+  <rect class="box gmsh" x="480" y="194" width="96" height="56" rx="4"/>
+  <text class="t" x="528" y="218">FE mesh</text>
+  <text class="s" x="528" y="234">tri / tet</text>
+
+  <rect class="box styx" x="584" y="109" width="96" height="56" rx="4"/>
+  <text class="t" x="632" y="133">Split + stage</text>
+  <text class="s" x="632" y="149">interfaces, phases</text>
+
+  <rect class="box styx" x="700" y="109" width="96" height="56" rx="4"/>
+  <text class="t" x="748" y="133">Write deck</text>
+  <text class="s" x="748" y="149">.mdpa + 2 JSON</text>
+
+  <rect class="box kratos" x="810" y="279" width="96" height="56" rx="4"/>
+  <text class="t" x="858" y="303">Solve</text>
+  <text class="s" x="858" y="319">stage by stage</text>
+
+  <rect class="box styx" x="914" y="109" width="96" height="56" rx="4"/>
+  <text class="t" x="962" y="133">Read back</text>
+  <text class="s" x="962" y="149">GiD + JSON</text>
+
+  <rect class="box you" x="914" y="24" width="96" height="56" rx="4"/>
+  <text class="t" x="962" y="48">Results</text>
+  <text class="s" x="962" y="64">contours, plots</text>
+</svg>
