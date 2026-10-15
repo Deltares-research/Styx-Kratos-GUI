@@ -11,9 +11,9 @@ from __future__ import annotations
 
 import argparse
 
-from cli.files import add_project, add_writing, written
-from cli.output import Answer, CommandError
-from cli.words import action, assignments, edited, file_of, given, noun
+from cli.terminal.files import add_project, add_writing, written
+from cli.terminal.output import Answer, CommandError
+from cli.terminal.words import action, assignments, edited, file_of, given, noun
 from core import session
 from core.model import drafts
 from core.model.schemas import Project

@@ -25,9 +25,9 @@ from __future__ import annotations
 
 import argparse
 
-from cli.files import add_project, add_writing, written
-from cli.output import Answer
-from cli.words import file_of, given
+from cli.terminal.files import add_project, add_writing, written
+from cli.terminal.output import Answer
+from cli.terminal.words import file_of, given
 from core import session
 from core.model import phases
 from core.model.schemas import Project

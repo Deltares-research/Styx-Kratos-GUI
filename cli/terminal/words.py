@@ -12,8 +12,8 @@ import re
 from pathlib import Path
 
 from cli.commands.edit import parsed
-from cli.files import add_project, add_writing, written
-from cli.output import Answer, CommandError
+from cli.terminal.files import add_project, add_writing, written
+from cli.terminal.output import Answer, CommandError
 from core.model.schemas import Project
 
 
@@ -33,7 +33,7 @@ def action(actions, common, name: str, handler, *, writes: bool = True,
         add_writing(parser)
     parser.set_defaults(handler=handler)
     if variables:
-        # `NAME=VALUE` words anywhere on the line; `cli.main` gives this command the
+        # `NAME=VALUE` words anywhere on the line; `cli.terminal.main` gives this command the
         # words no option took, since argparse cannot take them between options.
         parser.set_defaults(variables=[])
     return parser

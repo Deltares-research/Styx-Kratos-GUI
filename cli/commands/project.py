@@ -7,8 +7,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from cli.files import add_project, add_writing, written
-from cli.output import Answer, CommandError
+from cli.terminal.files import add_project, add_writing, written
+from cli.terminal.output import Answer, CommandError
 from core import session
 from core.model import phases
 from core.model.schemas import DimensionUpdate, MeshRequest, Project, UnitsUpdate

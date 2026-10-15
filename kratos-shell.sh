@@ -2,7 +2,7 @@
 # kratos-shell: open the kratos-cli shell in a folder of your own, with its runs there too.
 # Asks for the folder, or takes it as the first argument; the folder is made if it is not there.
 #   ./kratos-shell.sh                  # asks
-#   ./kratos-shell.sh D:/work/my_dike  # or C:\..., /d/work/..., ~/work/...
+#   ./kratos-shell.sh ~/my_dike        # or C:\..., C:/..., /c/... in Git Bash
 set -euo pipefail
 
 # The repository root: the first folder up from this script that holds kratos-cli.sh.
@@ -24,7 +24,7 @@ if [ -z "$FOLDER" ]; then
     exit 1
 fi
 FOLDER="${FOLDER/#\~/$HOME}"
-# Git Bash on Windows: accept D:\work\my_dike as typed.
+# Git Bash on Windows: accept a Windows path (C:\Users\you\my_dike) as typed.
 if command -v cygpath >/dev/null 2>&1; then
     FOLDER="$(cygpath -u "$FOLDER")"
 fi

@@ -34,7 +34,7 @@ SKIP_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".ico", ".gz", ".zip", ".woff"
                  ".ttf", ".brep", ".pdf"}
 
 EXAMPLES = "exam" + "ples/"
-ALLOWED = ("docs/CLI.md", "cli/tutorial/1_How_to_create_project.md")
+ALLOWED = ("README.md", "docs/CLI.md", "How_to_create_project.md")
 """Besides the files under `EXAMPLES`, what may name them: the pages that point at them."""
 
 

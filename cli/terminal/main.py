@@ -12,7 +12,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from cli import output, style
+from cli.terminal import output, style
 from cli.commands import (analysis, edit, ground, inspection, interactive, meshing, phases,
                           project, results, structures, volumes)
 
@@ -23,7 +23,7 @@ GROUPS = (project, edit, ground, volumes, structures, meshing, phases, inspectio
 
 class Parser(argparse.ArgumentParser):
     """argparse's parser, saying a command line it cannot read in the colours of the
-    rest (`cli.style`). Its commands' parsers are of this class too: argparse makes a
+    rest (`cli.terminal.style`). Its commands' parsers are of this class too: argparse makes a
     subparser of its parent's class."""
 
     def error(self, message: str):

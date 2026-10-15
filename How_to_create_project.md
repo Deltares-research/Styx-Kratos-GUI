@@ -19,6 +19,10 @@ There are three ways to work with it. Pick one:
 | [2](#2-open-the-ready-made-model-in-the-shell) | Open the ready-made model in the shell | `simple_dike.py` | looking around the model and its results |
 | [3](#3-run-the-python-script) | Run the Python script | `simple_dike.py` | one command: write, run, summarise |
 
+In the commands below, `<repo>` is the folder you cloned this repository into, such as
+`C:\Users\you\Styx-Kratos-GUI`. The ready-made model is in
+[`examples/simple_dike/`](examples/simple_dike/).
+
 ---
 
 ## 1. Build the model from scratch
@@ -27,7 +31,7 @@ The model typed command by command, from geometry to results, in a new folder of
 The folder is made if it is not there, and the runs are written into it too.
 
 The only thing it needs is Kratos on this machine. If `kratos.local.json` is not in the
-repository root yet, follow steps 1 and 2 of [Setting up Kratos](../../docs/KRATOS_SETUP.md)
+repository root yet, follow steps 1 and 2 of [Setting up Kratos](docs/KRATOS_SETUP.md)
 first. The very first run also builds the Python environment (`.venv-windows`), which can
 take a few minutes.
 
@@ -36,7 +40,7 @@ take a few minutes.
 Open an empty shell:
 
 ```powershell
-D:\Checkouts\Private\Kratos-GUI\cli\tutorial\kratos-shell.bat   # asks for a "path" + "folder name" to create
+<repo>\kratos-shell.bat   # asks for a "path" + "folder name" to create
 ```
 
 Then type these lines. Lines starting with `#` are comments; `.` is the new folder.
@@ -92,19 +96,19 @@ exit
 
 ### All in one go
 
-[`simple_dike.json`](../../examples/simple_dike_ref/simple_dike.json) is the whole model: the same file the
+[`simple_dike.json`](examples/simple_dike/simple_dike.json) is the whole model: the same file the
 step-by-step commands above build, and the one the GUI saves. Open the shell in the new
 folder, as above:
 
 ```powershell
-D:\Checkouts\Private\Kratos-GUI\cli\tutorial\kratos-shell.bat D:\work\my_dike
+<repo>\kratos-shell.bat $HOME\my_dike
 ```
 
 Then open the JSON file and calculate it. `calculate` meshes the model, writes the Kratos
-input files into a run folder in `D:\work\my_dike`, and runs them:
+input files into a run folder in `my_dike` in your home folder, and runs them:
 
 ```text
-open D:\Checkouts\Private\Kratos-GUI\examples\simple_dike_ref\simple_dike.json
+open <repo>\examples\simple_dike\simple_dike.json
 calculate
 results show 1
 exit
@@ -117,15 +121,15 @@ stages, ...), and `open` your copy instead. `check` says whether it can be meshe
 
 ## Before ways 2 and 3
 
-Run [`kratos-init-powershell.bat`](kratos-init-powershell.bat), in this folder: double-click it, or
+Run [`kratos-init-powershell.bat`](kratos-init-powershell.bat), at the repository root: double-click it, or
 from PowerShell:
 
 ```powershell
-D:\Checkouts\Private\Kratos-GUI\cli\tutorial\kratos-init-powershell.bat
+<repo>\kratos-init-powershell.bat
 ```
 
 It asks for the **project folder**: the folder that holds the model's `.py` file, such as
-`D:\Checkouts\Private\Kratos-GUI\examples\simple_dike_ref`.
+`<repo>\examples\simple_dike`.
 
 It then opens a PowerShell that is ready for ways 2 and 3:
 
@@ -136,7 +140,7 @@ It then opens a PowerShell that is ready for ways 2 and 3:
   minutes.
 
 If Kratos is not set up on this machine yet, it says so and stops: follow steps 1 and 2 of
-[Setting up Kratos](../../docs/KRATOS_SETUP.md), then run it again. `exit` closes the
+[Setting up Kratos](docs/KRATOS_SETUP.md), then run it again. `exit` closes the
 PowerShell it opened.
 
 > [!IMPORTANT]
@@ -197,7 +201,7 @@ In the same PowerShell:
 ```powershell
 & $py simple_dike.py                      # write the input files into this folder
 & $py simple_dike.py --calculate          # write them, run Kratos, print a results summary
-& $py simple_dike.py --out D:\work\deck   # write them somewhere else instead
+& $py simple_dike.py --out $HOME\deck     # write them somewhere else instead
 ```
 
 `--calculate` prints the stages, the settlement (`uy`), the horizontal displacement (`ux`)

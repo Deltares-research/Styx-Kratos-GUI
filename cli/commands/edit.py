@@ -14,8 +14,8 @@ import argparse
 import json
 from pathlib import Path
 
-from cli.files import add_project, add_writing, written
-from cli.output import Answer, CommandError
+from cli.terminal.files import add_project, add_writing, written
+from cli.terminal.output import Answer, CommandError
 from core import session
 
 PATHS = ("a field path: names joined by dots, a record picked by its id in brackets, "

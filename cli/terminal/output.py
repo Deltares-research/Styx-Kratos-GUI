@@ -7,7 +7,7 @@ line argparse could not read. A command with a table answers `--csv` with it too
 stdout, or into the file `--csv FILE` names (UTF-8, whatever the shell would make of a
 redirect -- Windows PowerShell 5.1's `>` writes UTF-16). A refusal goes to stderr as `error: <reason>`; with
 `--json` it is the answer on stdout as well, so a script reading stdout always gets JSON.
-At a terminal the lines a person reads are in colour (`cli.style`); JSON and CSV never are.
+At a terminal the lines a person reads are in colour (`cli.terminal.style`); JSON and CSV never are.
 """
 
 from __future__ import annotations
@@ -19,7 +19,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from cli import style
+from cli.terminal import style
 
 
 class CommandError(Exception):

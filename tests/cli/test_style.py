@@ -1,4 +1,4 @@
-"""`cli.style`: colour for a person at a terminal, and none for a pipe or a file.
+"""`cli.terminal.style`: colour for a person at a terminal, and none for a pipe or a file.
 
 Colour only adds escape codes: take them out again and the text is, character for
 character, what a pipe gets. So a script reading the output, and every other test here,
@@ -11,8 +11,8 @@ import io
 
 import pytest
 
-from cli import style
-from cli.shell import Shell
+from cli.terminal import style
+from cli.terminal.shell import Shell
 
 
 class Terminal(io.StringIO):

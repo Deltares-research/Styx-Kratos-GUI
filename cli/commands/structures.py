@@ -17,8 +17,8 @@ from __future__ import annotations
 
 import argparse
 
-from cli.output import Answer, CommandError
-from cli.words import action, assignments, coordinates, edited, given, noun
+from cli.terminal.output import Answer, CommandError
+from cli.terminal.words import action, assignments, coordinates, edited, given, noun
 from core import session
 from core.model import drafts
 from core.model.schemas import Project

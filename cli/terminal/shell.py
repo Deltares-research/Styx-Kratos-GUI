@@ -5,7 +5,7 @@ A line is a `kratos-cli` command without `kratos-cli` and without the project fi
 `water -2`, `borehole add bh4`, `mesh`, `results field 1 uy`. The open project goes where
 the command takes one (`_with_project`): after the command word (`borehole P add`), or
 after the action for a command whose action comes first. A project or a
-deck named on the line is the one used. The line then runs as `cli.main` runs any
+deck named on the line is the one used. The line then runs as `cli.terminal.main` runs any
 command line, so the shell has no commands, answers or refusals of its own to drift
 from the terminal's -- only these words:
 
@@ -41,7 +41,7 @@ import traceback
 from collections.abc import Callable
 from pathlib import Path
 
-from cli import output, style
+from cli.terminal import output, style
 
 WORDS = {
     "open": ("open FILE", "work on another project file (.json, or a .py to read)"),
@@ -107,7 +107,7 @@ class Shell:
         self.interactive = sys.stdin.isatty() if interactive is None else interactive
         self.read = read or input
         if run is None:
-            from cli.main import main
+            from cli.terminal.main import main
             run = main
         self.run = run
         self.readline = False
@@ -409,7 +409,7 @@ _PARSER: argparse.ArgumentParser | None = None
 def _parser() -> argparse.ArgumentParser:
     global _PARSER
     if _PARSER is None:
-        from cli.main import parser
+        from cli.terminal.main import parser
         _PARSER = parser()
     return _PARSER
 
@@ -423,9 +423,9 @@ def _subcommands(parser: argparse.ArgumentParser) -> dict[str, argparse.Argument
 
 def _command_groups() -> list[tuple[str, list[tuple[str, str]]]]:
     """The commands under the step of the model each belongs to -- the module of
-    `cli.commands` that registers it, in `cli.main.GROUPS`' order -- each with its help;
+    `cli.commands` that registers it, in `cli.terminal.main.GROUPS`' order -- each with its help;
     `shell` left out."""
-    from cli.main import GROUPS
+    from cli.terminal.main import GROUPS
 
     said = {}
     for action in _parser()._actions:

@@ -13,7 +13,7 @@ import os
 from contextlib import contextmanager
 from pathlib import Path
 
-from cli.output import CommandError
+from cli.terminal.output import CommandError
 from core import session
 from core.analysis import calculation
 from core.model.schemas import Project

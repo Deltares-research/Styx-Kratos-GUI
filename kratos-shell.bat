@@ -3,8 +3,9 @@ setlocal
 
 rem kratos-shell: open the kratos-cli shell in a folder of your own, with its runs there too.
 rem Asks for the folder, or takes it as the first argument; the folder is made if it is not there.
-rem   .\kratos-shell.bat                    asks
-rem   .\kratos-shell.bat D:\work\my_dike    or takes it straight away
+rem   .\kratos-shell.bat                         asks
+rem   .\kratos-shell.bat $HOME\my_dike           or takes it straight away (PowerShell)
+rem   kratos-shell.bat %USERPROFILE%\my_dike     ... the same in cmd
 
 rem The repository root: the first folder up from this script that holds kratos-cli.bat.
 set "ROOT=%~dp0"

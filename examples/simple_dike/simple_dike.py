@@ -1,6 +1,6 @@
 """A 2D soil block with one embedded sheet pile and a surface load.
 
-The model of cli/tutorial/1_How_to_create_project.md: a 20 m x 10 m block, a sheet pile
+The model of How_to_create_project.md: a 20 m x 10 m block, a sheet pile
 in the middle from the surface down to y = 3, and a line load on the surface to the
 right of it, meshed at 1 m with linear triangles. simple_dike.json beside it is the same
 model, as the tutorial's commands build it.
@@ -156,7 +156,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--gui", action="store_true",
                         help="open the GUI, whose Results mode lists the runs in DIR")
     args = parser.parse_args(argv)
-    from cli.main import main as kratos_cli
+    from cli.terminal.main import main as kratos_cli
 
     folder = str(args.out.resolve())
     code = kratos_cli(["export", __file__, "--out", folder])

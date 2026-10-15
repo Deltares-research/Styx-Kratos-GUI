@@ -1,7 +1,7 @@
 """What the command-line tests share: a way to run `kratos-cli` in this process, a small
 project file, and a machine with no Kratos and no runs of its own.
 
-`cli.main.main(argv)` is called directly rather than through a subprocess, so a failure
+`cli.terminal.main.main(argv)` is called directly rather than through a subprocess, so a failure
 shows where it happened and a test costs milliseconds. `tests/cli/test_wrappers.py` is
 where the command is started the way a user starts it.
 """
@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from cli.main import main
+from cli.terminal.main import main
 from core import session
 from core.analysis import calculation
 from core.model.schemas import DimensionUpdate

@@ -12,7 +12,7 @@ from pathlib import Path
 if not __package__:
     sys.path[0] = str(Path(__file__).resolve().parents[1])
 
-from cli.main import main  # noqa: E402
+from cli.terminal.main import main  # noqa: E402
 
 # What is printed is UTF-8 wherever it goes: a project's name may hold any character,
 # and a pipe on Windows would otherwise take the console's code page.

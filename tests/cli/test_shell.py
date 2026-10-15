@@ -3,7 +3,7 @@ project open (plan/active/cli-plan.md, SH).
 
 A line is a `kratos-cli` command without `kratos-cli` and without the project file:
 `water -2`, `borehole add bh4`, `mesh`. The shell puts the open project where the
-command takes one, and runs the command as `cli.main` runs it -- the same parser, the
+command takes one, and runs the command as `cli.terminal.main` runs it -- the same parser, the
 same answers, the same refusals. Its own words: `open`, `close`, `undo`, `redo`, `cd`,
 `pwd`, `source`, `help`, `exit`.
 
@@ -23,7 +23,7 @@ from pathlib import Path
 
 import pytest
 
-from cli import shell
+from cli.terminal import shell
 from core import session
 
 ROOT = Path(__file__).resolve().parents[2]
