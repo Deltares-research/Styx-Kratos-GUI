@@ -118,9 +118,6 @@ ROOT_FILES = {
     "CITATION.cff",                                         # GitHub reads it only here
     "run.bat", "run.sh",                                    # what a user double-clicks
     "kratos-cli.bat", "kratos-cli.sh",                      # ... and types, beside them
-    "kratos-shell.bat", "kratos-shell.sh",                  # the CLI tutorial's helpers,
-    "kratos-init-powershell.bat",                           # ... beside kratos-cli
-    "How_to_create_project.md",                             # the tutorial, where it is seen
     "requirements.txt", "requirements-dev.txt",             # the launcher and Dependabot
     "pyproject.toml",                                       # pytest, coverage, mypy, ruff
     "eslint.config.mjs",                                    # its globs are root-relative
