@@ -36,7 +36,7 @@ kratos-cli.bat results field 1 uy
 ```
 
 `kratos-cli calculate crow.json` does `export` and `run` in one step. `kratos-cli.bat` is in
-the repository root (`..\..\..\kratos-cli.bat` from here), or on your `PATH`.
+the repository root (`..\..\kratos-cli.bat` from here), or on your `PATH`.
 
 An edit such as `kratos-cli water crow.json -2` writes into `crow.json`. To try changes
 without touching the example, copy it first.
@@ -49,8 +49,8 @@ python crow.py --out deck/               # write the Kratos deck
 python crow.py --calculate               # write the deck and run it
 ```
 
-`python` is the environment `kratos-cli` runs in: `..\..\..\.venv-windows\Scripts\python.exe`
-on Windows, `../../../.venv-linux/bin/python` on Linux. The script finds the checkout from its
+`python` is the environment `kratos-cli` runs in: `..\..\.venv-windows\Scripts\python.exe`
+on Windows, `../../.venv-linux/bin/python` on Linux. The script finds the checkout from its
 own location, so it runs wherever the repository is.
 
 The script is plain Python: put in constants or loops, change a value, and run it again.
@@ -62,6 +62,6 @@ kratos-cli.bat script crow.json --out crow.py --force
 ```
 
 That writes the checkout's own path into `ROOT`; put back
-`ROOT = Path(__file__).resolve().parents[3]` before committing it.
+`ROOT = Path(__file__).resolve().parents[2]` before committing it.
 
-The commands are all in [docs/CLI.md](../../../docs/CLI.md).
+The commands are all in [docs/CLI.md](../../docs/CLI.md).

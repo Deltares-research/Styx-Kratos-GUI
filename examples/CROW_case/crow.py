@@ -18,7 +18,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[3]
+ROOT = Path(__file__).resolve().parents[2]
 """The checkout this example is in, where `core` is; `python <this file>` needs it on
 the path. Found from this file, so it holds wherever the checkout is."""
 if str(ROOT) not in sys.path:

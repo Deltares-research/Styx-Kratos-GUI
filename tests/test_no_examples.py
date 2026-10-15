@@ -38,7 +38,8 @@ ALLOWED = ("README.md", "docs/CLI.md",
            "docs/cli_tutorials/README.md",
            "docs/cli_tutorials/1_build_from_scratch.md",
            "docs/cli_tutorials/2_open_in_the_shell.md",
-           "docs/cli_tutorials/3_run_the_python_script.md")
+           "docs/cli_tutorials/3_run_the_python_script.md",
+           "docs/cli_tutorials/" + _CASES[0].upper() + "_case.md")
 """Besides the files under `EXAMPLES`, what may name them: the pages that point at them."""
 
 
