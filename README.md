@@ -144,6 +144,7 @@ Everything from a new model to its results also works in a terminal, with no bro
 | [ARCHITECTURE.md](docs/developer/ARCHITECTURE.md) | How a model flows from the browser to Kratos and back, module by module |
 | [TESTING.md](docs/developer/TESTING.md) | The test tiers and how to run them |
 | [PROJECT_OVERVIEW.md](docs/developer/PROJECT_OVERVIEW.md) | Code size per module |
+| [Code map](docs/developer/code-map/GRAPH_REPORT.md) | A generated map of the code and a clickable tree of files and functions |
 
 ## Project layout
 

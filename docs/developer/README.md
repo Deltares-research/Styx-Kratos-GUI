@@ -16,6 +16,7 @@ Using Styx, rather than changing it, is covered by the user guides one folder up
 | [ARCHITECTURE.md](ARCHITECTURE.md) | The modules, the HTTP API, the browser modules and Results mode, step by step |
 | [TESTING.md](TESTING.md) | The test tiers and how to run them |
 | [PROJECT_OVERVIEW.md](PROJECT_OVERVIEW.md) | Code size per module |
+| [code-map/](code-map/GRAPH_REPORT.md) | A generated map of the code: the central classes, what belongs together, a clickable tree of files and functions |
 | [CONTRIBUTING.md](../../CONTRIBUTING.md) | Setting up, test-first changes, and the checks CI runs |
 
 ## The big picture
@@ -128,3 +129,44 @@ only from itself or a package to its left, and `tests/test_layout.py` enforces i
 `session.py`, `gmsh_worker.py` and `scripting.py` sit above all five because they hand work
 to several of them. Beside `core/` are the two front ends, `backend/` (the server) and `cli/`
 (the command line), and `frontend/` (the browser app).
+
+## The code map
+
+[code-map/](code-map/) is a map of the code and its tests made by
+[graphify](https://github.com/safishamsi/graphify). It parses the source and records which
+file defines, imports and calls what, then groups the code that belongs together.
+Benchmarks, CI settings and the vendored three.js are left out
+([.graphifyignore](../../.graphifyignore)).
+
+| File | How to read it |
+|---|---|
+| [GRAPH_TREE.html](code-map/GRAPH_TREE.html) | The place to start. A tree of the repository: click a folder to open it, a file to see its classes and functions. Each node shows how many items sit under it |
+| [GRAPH_REPORT.md](code-map/GRAPH_REPORT.md) | On GitHub, or in any editor. The most connected classes and functions, the groups of code that belong together (each named after its central file or symbol), and where the documents point into the code |
+
+Open `GRAPH_TREE.html` in a browser from your clone; GitHub does not show it. It loads its
+drawing library from d3js.org, so it needs internet.
+
+Read it with two cautions. Edges marked `INFERRED` are matched by name, not proven, so check
+one in the code before relying on it. The report's "Suggested Questions" are generated from
+the graph's shape: starting points for reading, not review findings.
+
+The map is a snapshot: the report's "Graph Freshness" line names the commit it was built
+from. To rebuild it, from the repository root:
+
+```bash
+# Windows
+.venv-windows\Scripts\python.exe -m pip install graphifyy
+.venv-windows\Scripts\graphify.exe update .
+.venv-windows\Scripts\graphify.exe tree --root . --label Styx-Kratos-GUI --output docs/developer/code-map/GRAPH_TREE.html
+# Linux (use .venv-macos on macOS)
+.venv-linux/bin/python -m pip install graphifyy
+.venv-linux/bin/graphify update .
+.venv-linux/bin/graphify tree --root . --label Styx-Kratos-GUI --output docs/developer/code-map/GRAPH_TREE.html
+```
+
+This needs no AI assistant or API key and takes a few seconds. `update` writes to
+`graphify-out/`, which is not committed; copy `GRAPH_REPORT.md` from there into
+`docs/developer/code-map/`. `tree` writes its page straight into the folder.
+`graphify-out/graph.json` answers questions in the terminal too:
+`graphify explain "Project"` lists everything connected to `Project`, and
+`graphify path "A" "B"` the shortest path between two names.

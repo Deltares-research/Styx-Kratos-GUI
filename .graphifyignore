@@ -1,0 +1,8 @@
+# What graphify leaves out of the code map in docs/developer/code-map/ (it also skips what
+# .gitignore skips). The map is for learning the code and its tests, so benchmarks, CI
+# settings and vendored minified libraries stay out, and so does the map itself.
+frontend/vendor/
+benchmarks/
+tools/
+.github/
+docs/developer/code-map/
