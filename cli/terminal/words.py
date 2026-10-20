@@ -39,6 +39,11 @@ def action(actions, common, name: str, handler, *, writes: bool = True,
     return parser
 
 
+def existing(parser: argparse.ArgumentParser, noun: str, command: str | None = None) -> None:
+    """The `id` of a record that is already there, with where its ids are listed."""
+    parser.add_argument("id", help=f"the {noun}'s id, as `{command or noun} list` shows it")
+
+
 def given(args: argparse.Namespace, *names: str) -> dict:
     """The options among `names` the command line gave, by name."""
     return {name: getattr(args, name) for name in names if getattr(args, name) is not None}

@@ -50,6 +50,8 @@ new simple_dike.json --dim 2 --name simple_dike
 #    The site's z extent matters only when the model is switched to 3D.
 #    A borehole is placed on the map, as in the GUI: its --x and --y are map coordinates
 #    (map y is the model's z). Its levels are --head (ground) and --water.
+#    A new project already has one borehole, with the id bh1: `borehole set bh1` changes
+#    it, and `borehole add` would make a second one. `borehole list` shows the ids.
 domain --x 0 20 --y 0 10
 borehole set bh1 --name BH1 --x 0 --y 0 --head 10 --water 0
 

@@ -38,6 +38,25 @@ def test_help_lists_every_command(cli):
         assert command in ran.out
 
 
+def test_every_id_a_command_takes_says_what_it_is():
+    """`borehole set bh1`: the help of each action says what its id is and where the ids
+    are listed, so `help borehole set` answers what `bh1` is."""
+    import argparse
+
+    from cli.terminal.main import parser
+
+    def bare(command: argparse.ArgumentParser, path: str):
+        for action in command._actions:
+            if isinstance(action, argparse._SubParsersAction):
+                for name, sub in action.choices.items():
+                    yield from bare(sub, f"{path} {name}")
+            elif action.dest == "id" and not action.help:
+                yield path
+
+    missing = list(bare(parser(), "kratos-cli"))
+    assert not missing, f"an id without help: {missing}"
+
+
 def test_no_command_is_a_usage_error(cli):
     ran = cli()
 

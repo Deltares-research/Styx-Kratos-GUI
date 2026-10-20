@@ -18,7 +18,8 @@ from __future__ import annotations
 import argparse
 
 from cli.terminal.output import Answer, CommandError
-from cli.terminal.words import action, assignments, coordinates, edited, given, noun
+from cli.terminal.words import (action, assignments, coordinates, edited, existing,
+                                given, noun)
 from core import session
 from core.model import drafts
 from core.model.schemas import Project
@@ -61,13 +62,13 @@ def _register_sections(commands, common) -> None:
     _section_fields(add)
     change = action(sections, common, "set", update_section, variables=True,
                     help="change NAME=VALUE variables and the fields given")
-    change.add_argument("id")
+    existing(change, "section")
     change.add_argument("--kind", choices=KINDS, help="when two kinds share the id")
     _section_fields(change)
     change.add_argument("--unset", action="append", default=[], metavar="NAME",
                         help="leave this variable out, for the export to derive")
     remove = action(sections, common, "remove", remove_section)
-    remove.add_argument("id")
+    existing(remove, "section")
     remove.add_argument("--kind", choices=KINDS, help="when two kinds share the id")
 
 
@@ -174,12 +175,12 @@ def _register_beams(commands, common) -> None:
         _beam_fields(add, kind)
         add.set_defaults(kinds=(kind,))
         change = action(actions, common, "set", update_structure)
-        change.add_argument("id")
+        existing(change, name)
         _beam_fields(change, kind)
         _active(change)
         change.set_defaults(kinds=(kind,))
         remove = action(actions, common, "remove", remove_structure)
-        remove.add_argument("id")
+        existing(remove, name)
         remove.set_defaults(kinds=(kind,))
 
 
@@ -220,12 +221,12 @@ def _register_anchors(commands, common) -> None:
     _anchor_fields(add)
     add.set_defaults(kinds=("anchor", "anchor3d"))
     change = action(actions, common, "set", update_structure)
-    change.add_argument("id")
+    existing(change, "anchor")
     _anchor_fields(change)
     _active(change)
     change.set_defaults(kinds=("anchor", "anchor3d"))
     remove = action(actions, common, "remove", remove_structure)
-    remove.add_argument("id")
+    existing(remove, "anchor")
     remove.set_defaults(kinds=("anchor", "anchor3d"))
 
 
@@ -253,12 +254,12 @@ def _register_interfaces(commands, common) -> None:
     _interface_fields(add)
     add.set_defaults(kinds=("interface",))
     change = action(actions, common, "set", update_structure)
-    change.add_argument("id")
+    existing(change, "interface")
     _interface_fields(change)
     _active(change)
     change.set_defaults(kinds=("interface",))
     remove = action(actions, common, "remove", remove_structure)
-    remove.add_argument("id")
+    existing(remove, "interface")
     remove.set_defaults(kinds=("interface",))
 
 
@@ -287,12 +288,12 @@ def _register_loads(commands, common) -> None:
     _load_fields(add)
     add.set_defaults(kinds=("point", "line", "surface"))
     change = action(actions, common, "set", update_structure)
-    change.add_argument("id")
+    existing(change, "load")
     _load_fields(change)
     _active(change)
     change.set_defaults(kinds=("point", "line", "surface"))
     remove = action(actions, common, "remove", remove_structure)
-    remove.add_argument("id")
+    existing(remove, "load")
     remove.set_defaults(kinds=("point", "line", "surface"))
 
     actions = noun(commands, common, "normal-load",
@@ -305,12 +306,12 @@ def _register_loads(commands, common) -> None:
     _normal_load_fields(add)
     add.set_defaults(kinds=("normal",))
     change = action(actions, common, "set", update_structure)
-    change.add_argument("id")
+    existing(change, "normal load", "normal-load")
     _normal_load_fields(change)
     _active(change)
     change.set_defaults(kinds=("normal",))
     remove = action(actions, common, "remove", remove_structure)
-    remove.add_argument("id")
+    existing(remove, "normal load", "normal-load")
     remove.set_defaults(kinds=("normal",))
 
 
