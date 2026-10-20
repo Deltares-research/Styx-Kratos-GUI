@@ -130,6 +130,23 @@ only from itself or a package to its left, and `tests/test_layout.py` enforces i
 to several of them. Beside `core/` are the two front ends, `backend/` (the server) and `cli/`
 (the command line), and `frontend/` (the browser app).
 
+The folders and files at the top of the repository:
+
+```text
+core/          the engine, one package per stage: model/, geometry/ (Gmsh), kratos/ (the deck), analysis/, results/
+backend/       the FastAPI app, the in-memory project store, and the launcher
+cli/           kratos-cli, the command line beside the GUI
+frontend/      the browser app (index.html, js/, css/, three.js), with its own tests in frontend/tests/
+tests/         pytest suites: unit, API, browser, end-to-end, Kratos and performance
+benchmarks/    Kratos benchmark cases and the script that runs them
+tools/test.py  runs the test tiers (see TESTING.md)
+docs/          user guides; docs/developer/ for the developer guide and design documents
+run.bat        launcher for Windows
+run.sh         launcher for Linux and macOS
+kratos-cli.bat the command line, for Windows
+kratos-cli.sh  the command line, for Linux and macOS
+```
+
 ## The code map
 
 [code-map/](code-map/) is a map of the code and its tests made by

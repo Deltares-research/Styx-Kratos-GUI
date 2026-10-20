@@ -141,7 +141,7 @@ def test_the_python_tools_read_their_settings_from_pyproject(name):
 
 
 @pytest.mark.parametrize("name", ["FEATURES.md", "INSTALLATION.md", "KRATOS_SETUP.md",
-                                  "USAGE.md", "CLI.md",
+                                  "USAGE.md", "CLI.md", "CLI_TUTORIAL.md",
                                   "developer/README.md", "developer/ARCHITECTURE.md",
                                   "developer/PROJECT_OVERVIEW.md", "developer/TESTING.md"])
 def test_the_documents_are_in_docs_and_linked_from_the_readme(name):
