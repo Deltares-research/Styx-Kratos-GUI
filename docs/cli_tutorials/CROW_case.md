@@ -278,15 +278,14 @@ crow.json> normal-load add water_3 --name WaterLoad_Stage3 --hydrostatic --point
 
 #### Step 10. The mesh
 
-The mesh settings are fields of the project. They have no command of their own, so they are
-set by path with `set` and `add`:
+The mesh settings are fields of the project. The size per body and the refinement box have
+no option of their own, so they are set by path with `set` and `add`. `mesh` takes the element
+size and order, keeps them in the project, and meshes:
 
 ```text
-crow.json> set mesh.element_size 5.0
-crow.json> set mesh.order 2
 crow.json> set mesh.body_sizes.sheetpile 0.5
 crow.json> add mesh.refinements '{"kind": "box", "size": 0.75, "thickness": 45.0, "x_min": -1.0, "x_max": 8.0, "y_min": -16.0, "y_max": 1.0, "z_min": -1.0, "z_max": 11.0}'
-crow.json> mesh
+crow.json> mesh --size 5.0 --order 2
 4299 nodes, 2087 elements (2087 Triangle 6)
 ```
 
