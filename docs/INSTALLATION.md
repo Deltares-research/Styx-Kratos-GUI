@@ -117,4 +117,4 @@ Pass these to `run.bat` or `run.sh` in the same way:
   [KRATOS_SETUP.md](KRATOS_SETUP.md).
 - To learn how to build a model and read its results in the app: [USAGE.md](USAGE.md).
 - To use Styx in a terminal, without the browser: [CLI.md](CLI.md) lists the commands, and
-  the [CLI tutorial](CLI_TUTORIAL.md) builds a full model.
+  the [CLI tutorial](cli_tutorials/README.md) builds a full model.

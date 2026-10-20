@@ -5,6 +5,7 @@
 .venv/
 .venv-*/
 /.data/
+/styx-public.git/
 
 # Which python runs Kratos, and where its build is: one machine's answer, not the
 # project's. See core/analysis/calculation.py.

@@ -1,11 +1,11 @@
-"""`shell`: the commands typed one after another, with a project open (`cli/shell.py`)."""
+"""`shell`: the commands typed one after another, with a project open (`cli/terminal/shell.py`)."""
 
 from __future__ import annotations
 
 import argparse
 from pathlib import Path
 
-from cli.output import Answer
+from cli.terminal.output import Answer
 
 
 def register(commands, common: argparse.ArgumentParser) -> None:
@@ -23,10 +23,10 @@ def register(commands, common: argparse.ArgumentParser) -> None:
 
 
 def run_shell(args: argparse.Namespace) -> Answer:
-    from cli.shell import Shell
+    from cli.terminal.shell import Shell
 
     if args.project is not None and not args.project.is_file():
-        from cli.output import CommandError
+        from cli.terminal.output import CommandError
         raise CommandError(f"no such file: {args.project}. `kratos-cli new {args.project}` "
                            "makes it, or start the shell without one and `new` it there.")
     shell = Shell(args.project)

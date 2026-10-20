@@ -45,6 +45,9 @@ kratos-cli results field 1 uy
 `kratos-cli calculate site.json` does `export` and `run` in one step, like the GUI's Calculate
 button.
 
+A whole model to start from is in [`examples/CROW_case/`](../examples/CROW_case/README.md): the
+CROW excavation wall, as a project file (`crow.json`) and as a model script (`crow.py`).
+
 ## The commands
 
 | Command | What it does |

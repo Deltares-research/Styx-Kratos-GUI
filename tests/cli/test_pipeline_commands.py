@@ -124,6 +124,27 @@ def test_the_deck_is_the_one_the_gui_exports(cli, site, tmp_path):
         == json.loads(answer["materials"])
 
 
+def test_a_model_with_nothing_to_mesh_is_not_exported(cli, tmp_path):
+    """A model with no soil meshes to 0 nodes; its deck would run and compute nothing,
+    so nothing is written and the user is told what is missing."""
+    path = session.save(blank_project(), tmp_path / "empty.json")
+
+    ran = cli("export", path, "--out", tmp_path / "out")
+
+    assert ran.code == 1
+    assert "nothing to mesh" in ran.err and "layer add" in ran.err
+    assert not (tmp_path / "out").exists()
+
+
+def test_a_model_with_nothing_to_mesh_is_not_meshed(cli, tmp_path):
+    path = session.save(blank_project(), tmp_path / "empty.json")
+
+    ran = cli("mesh", path)
+
+    assert ran.code == 1
+    assert "nothing to mesh" in ran.err
+
+
 def test_a_deck_is_not_exported(cli, tmp_path):
     path = session.save(blank_project().model_copy(update={
         "deck": Deck(directory=str(tmp_path))}), tmp_path / "deck.json")

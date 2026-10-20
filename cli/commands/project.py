@@ -7,8 +7,9 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from cli.files import add_project, add_writing, written
-from cli.output import Answer, CommandError
+from cli.commands.meshing import nothing_to_mesh
+from cli.terminal.files import add_project, add_writing, written
+from cli.terminal.output import Answer, CommandError
 from core import session
 from core.model import phases
 from core.model.schemas import DimensionUpdate, MeshRequest, Project, UnitsUpdate
@@ -113,10 +114,14 @@ def show_project(args: argparse.Namespace) -> Answer:
 
 
 def check_project(args: argparse.Namespace) -> Answer:
-    """What the schema cannot say on its own: that the phases run in one order, and that
-    the mesh settings name only bodies the model has. Loading has validated the rest."""
+    """What the schema cannot say on its own: that there is something to mesh, that the
+    phases run in one order, and that the mesh settings name only bodies the model has.
+    Loading has validated the rest."""
     project = session.load(args.project)
     if project.deck is None:
+        empty = nothing_to_mesh(project)
+        if empty:
+            raise CommandError(empty)
         phases.linearise(project)
         unknown = session.unknown_mesh_keys(project, MeshRequest(**project.mesh.model_dump()))
         if unknown:
@@ -235,8 +240,8 @@ def described(data: dict) -> list[str]:
         + (f", section at z = {data['section_offset']:g}"
            if data["section_offset"] is not None else ""),
         f"  domain      x {domain['x0']:g} .. {domain['x1']:g}, "
-        f"y {domain['y_bottom']:g} .. {domain['y_top']:g}, "
-        f"z {domain['z0']:g} .. {domain['z1']:g}",
+        f"y {domain['y_bottom']:g} .. {domain['y_top']:g}"
+        + (f", z {domain['z0']:g} .. {domain['z1']:g}" if data["dimension"] != 2 else ""),
         f"  boreholes   {names(data['boreholes'])}",
         f"  materials   {names(data['materials'])}",
         f"  layers      {names(data['layers'])}",

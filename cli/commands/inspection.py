@@ -17,7 +17,7 @@ import json
 from pathlib import Path
 
 from cli.commands.meshing import mesh_settings
-from cli.output import Answer, CommandError
+from cli.terminal.output import Answer, CommandError
 from core import gmsh_worker, session
 from core.kratos import deck_files, external_deck, mdpa_reader, node_parts
 
@@ -33,7 +33,7 @@ def register(commands, common: argparse.ArgumentParser) -> None:
                     "is written in memory to answer.")
     node.add_argument("source", type=Path)
     node.add_argument("nodes", nargs="+", type=int, metavar="NODE")
-    # A project is a SOURCE too, so the shell gives `node` the open one (cli/shell.py).
+    # A project is a SOURCE too, so the shell gives `node` the open one (cli/terminal/shell.py).
     node.set_defaults(handler=show_nodes, project_slot="source")
 
     deck = commands.add_parser("deck", parents=[common], help="look into a Kratos deck")

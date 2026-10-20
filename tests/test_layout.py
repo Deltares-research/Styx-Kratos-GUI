@@ -141,7 +141,7 @@ def test_the_python_tools_read_their_settings_from_pyproject(name):
 
 
 @pytest.mark.parametrize("name", ["FEATURES.md", "INSTALLATION.md", "KRATOS_SETUP.md",
-                                  "USAGE.md", "CLI.md", "CLI_TUTORIAL.md",
+                                  "USAGE.md", "CLI.md", "cli_tutorials/README.md",
                                   "developer/README.md", "developer/ARCHITECTURE.md",
                                   "developer/PROJECT_OVERVIEW.md", "developer/TESTING.md"])
 def test_the_documents_are_in_docs_and_linked_from_the_readme(name):
@@ -177,6 +177,24 @@ def test_the_command_line_is_a_front_end_of_core_not_of_the_server():
                  for path in files for line, name in imports(parsed(path))
                  if name.split(".")[0] in WEB]
     assert not crossings, "cli reaches into the web layer:\n" + "\n".join(crossings)
+
+
+def test_the_shared_terminal_helpers_do_not_import_a_command():
+    """`cli/commands/` uses `cli/terminal/`, not the other way round: a helper every
+    command shares must not depend on one command's module. `main.py` is the exception,
+    because it is where the commands are loaded and registered."""
+    files = sorted(p for p in (ROOT / "cli" / "terminal").glob("*.py") if p.name != "main.py")
+    assert files, "no Python files under cli/terminal/"
+    crossings = []
+    for path in files:
+        tree = parsed(path)
+        names = imports(tree) +[(node.lineno, f"cli.{alias.name}") for node in ast.walk(tree)
+                  if isinstance(node, ast.ImportFrom) and node.module == "cli"
+                  for alias in node.names]
+        crossings += [f"{path.relative_to(ROOT).as_posix()}:{line} imports {name}"
+                      for line, name in names
+                      if name == "cli.commands" or name.startswith("cli.commands.")]
+    assert not crossings, "a shared helper imports a command:\n" + "\n".join(crossings)
 
 
 # ── The packages inside core ────────────────────────────────────────────────

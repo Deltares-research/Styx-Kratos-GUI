@@ -84,6 +84,17 @@ def test_check_passes_a_model_that_can_be_meshed_and_staged(cli, site):
     assert "ok" in ran.out.lower()
 
 
+def test_check_refuses_a_model_with_nothing_to_mesh(cli, tmp_path):
+    """A model with no soil layer and no solid validates, but meshes to 0 nodes: `check`
+    says so before `export` writes an empty deck."""
+    path = session.save(blank_project(), tmp_path / "empty.json")
+
+    ran = cli("check", path)
+
+    assert ran.code == 1
+    assert "nothing to mesh" in ran.err and "layer add" in ran.err
+
+
 def test_check_refuses_phases_that_branch(cli, site):
     """The schema accepts a branching tree (an editor has to be able to hold one); a
     deck cannot run it, and `check` is where that is said."""

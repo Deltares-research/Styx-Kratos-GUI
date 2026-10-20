@@ -17,8 +17,9 @@ from __future__ import annotations
 
 import argparse
 
-from cli.output import Answer, CommandError
-from cli.words import action, assignments, coordinates, edited, given, noun
+from cli.terminal.output import Answer, CommandError
+from cli.terminal.words import (action, assignments, coordinates, edited, existing,
+                                given, noun)
 from core import session
 from core.model import drafts
 from core.model.schemas import Project
@@ -56,17 +57,18 @@ def _register_sections(commands, common) -> None:
                       "of its own")
     add.add_argument("kind", choices=KINDS,
                      help="beam (sheet piles and members), panel (walls), anchor, interface")
-    add.add_argument("id")
+    add.add_argument("id", help="its id, which `section set` and the --section of a "
+                                     "structure refer to it by")
     _section_fields(add)
     change = action(sections, common, "set", update_section, variables=True,
                     help="change NAME=VALUE variables and the fields given")
-    change.add_argument("id")
+    existing(change, "section")
     change.add_argument("--kind", choices=KINDS, help="when two kinds share the id")
     _section_fields(change)
     change.add_argument("--unset", action="append", default=[], metavar="NAME",
                         help="leave this variable out, for the export to derive")
     remove = action(sections, common, "remove", remove_section)
-    remove.add_argument("id")
+    existing(remove, "section")
     remove.add_argument("--kind", choices=KINDS, help="when two kinds share the id")
 
 
@@ -98,14 +100,14 @@ def list_sections(args: argparse.Namespace) -> Answer:
 
 def add_section(args: argparse.Namespace) -> Answer:
     project = session.load(args.project)
-    project = session.add_section(project, args.kind,
-                                  drafts.section(project, args.kind, args.id, name=args.name))
+    section = drafts.section(project, args.kind, args.id, name=args.name)
+    project = session.add_section(project, args.kind, section)
     fields = _section_values(args, args.kind)
     variables = assignments(args.variables)
     if fields or variables:
         project = session.update_section(project, args.id, kind=args.kind,
                                          variables=variables, **fields)
-    return edited(args, project, f"added {args.kind} section {args.id}")
+    return edited(args, project, f"added {args.kind} section {args.id} ({section.name})")
 
 
 def update_section(args: argparse.Namespace) -> Answer:
@@ -173,12 +175,12 @@ def _register_beams(commands, common) -> None:
         _beam_fields(add, kind)
         add.set_defaults(kinds=(kind,))
         change = action(actions, common, "set", update_structure)
-        change.add_argument("id")
+        existing(change, name)
         _beam_fields(change, kind)
         _active(change)
         change.set_defaults(kinds=(kind,))
         remove = action(actions, common, "remove", remove_structure)
-        remove.add_argument("id")
+        existing(remove, name)
         remove.set_defaults(kinds=(kind,))
 
 
@@ -219,12 +221,12 @@ def _register_anchors(commands, common) -> None:
     _anchor_fields(add)
     add.set_defaults(kinds=("anchor", "anchor3d"))
     change = action(actions, common, "set", update_structure)
-    change.add_argument("id")
+    existing(change, "anchor")
     _anchor_fields(change)
     _active(change)
     change.set_defaults(kinds=("anchor", "anchor3d"))
     remove = action(actions, common, "remove", remove_structure)
-    remove.add_argument("id")
+    existing(remove, "anchor")
     remove.set_defaults(kinds=("anchor", "anchor3d"))
 
 
@@ -252,12 +254,12 @@ def _register_interfaces(commands, common) -> None:
     _interface_fields(add)
     add.set_defaults(kinds=("interface",))
     change = action(actions, common, "set", update_structure)
-    change.add_argument("id")
+    existing(change, "interface")
     _interface_fields(change)
     _active(change)
     change.set_defaults(kinds=("interface",))
     remove = action(actions, common, "remove", remove_structure)
-    remove.add_argument("id")
+    existing(remove, "interface")
     remove.set_defaults(kinds=("interface",))
 
 
@@ -279,19 +281,19 @@ def _register_loads(commands, common) -> None:
     listed = action(actions, common, "list", list_structures, writes=False)
     listed.set_defaults(kinds=("point", "line", "surface"))
     add = action(actions, common, "add", add_structure,
-                 help="a load, 20 kN down unless --components says otherwise: point and "
-                      "line in 2D, surface in 3D")
+                 help="a load, down unless --components says otherwise: 20 kN for a "
+                      "point, 20 kN/m for a line (2D), 20 kN/m2 for a surface (3D)")
     add.add_argument("load_kind", choices=("point", "line", "surface"))
     add.add_argument("id", nargs="?", help="its id (default: the first free load_<n>)")
     _load_fields(add)
     add.set_defaults(kinds=("point", "line", "surface"))
     change = action(actions, common, "set", update_structure)
-    change.add_argument("id")
+    existing(change, "load")
     _load_fields(change)
     _active(change)
     change.set_defaults(kinds=("point", "line", "surface"))
     remove = action(actions, common, "remove", remove_structure)
-    remove.add_argument("id")
+    existing(remove, "load")
     remove.set_defaults(kinds=("point", "line", "surface"))
 
     actions = noun(commands, common, "normal-load",
@@ -304,12 +306,12 @@ def _register_loads(commands, common) -> None:
     _normal_load_fields(add)
     add.set_defaults(kinds=("normal",))
     change = action(actions, common, "set", update_structure)
-    change.add_argument("id")
+    existing(change, "normal load", "normal-load")
     _normal_load_fields(change)
     _active(change)
     change.set_defaults(kinds=("normal",))
     remove = action(actions, common, "remove", remove_structure)
-    remove.add_argument("id")
+    existing(remove, "normal load", "normal-load")
     remove.set_defaults(kinds=("normal",))
 
 
@@ -322,8 +324,9 @@ def _load_fields(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--y", type=float,
                         help="line, surface: its level (default: the top of the model)")
     parser.add_argument("--components", type=float, nargs="+", metavar="F",
-                        help="x y in 2D, x y z in 3D; a force, per metre for a line, per "
-                             "square metre for a surface")
+                        help="x y in 2D, x y z in 3D, in the project's units: N or kN for "
+                             "a point, N/m or kN/m for a line, Pa or kPa for a surface; "
+                             "down is negative")
 
 
 def _normal_load_fields(parser: argparse.ArgumentParser) -> None:

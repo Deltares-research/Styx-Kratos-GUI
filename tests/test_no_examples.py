@@ -1,10 +1,14 @@
-"""The repository carries no example case: no model, test, fixture, comment or document
-that belongs to one.
+"""The examples stay in the examples folder: no model, test, fixture, comment or document
+outside it belongs to an example case.
 
-The example cases and their reference decks live outside the repository, on the machine
-that has them. Nothing tracked may name them or reach for them, so a clone is complete
-without them and nothing quietly skips because they are absent. This test reads every
-tracked text file and every tracked path.
+The examples folder holds models for people to read and run: project files, model scripts
+and command files for `kratos-cli` and its tutorial, one folder per model. Nothing else may
+name them or reach for them, so no code or test depends on an example, and an example can
+be changed or dropped without breaking the build. This test reads every tracked text file
+and every tracked path.
+
+The exceptions are the folder itself, `EXAMPLES` below, and the pages in `ALLOWED` that
+point people at it.
 
 The words are assembled rather than written out, so this file does not trip itself.
 """
@@ -28,6 +32,19 @@ FORBIDDEN = re.compile(
 
 SKIP_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".ico", ".gz", ".zip", ".woff", ".woff2",
                  ".ttf", ".brep", ".pdf"}
+
+EXAMPLES = "exam" + "ples/"
+ALLOWED = ("README.md", "docs/CLI.md", "docs/developer/README.md",
+           "docs/cli_tutorials/README.md",
+           "docs/cli_tutorials/1_build_from_scratch.md",
+           "docs/cli_tutorials/2_open_in_the_shell.md",
+           "docs/cli_tutorials/3_run_the_python_script.md",
+           "docs/cli_tutorials/" + _CASES[0].upper() + "_case.md")
+"""Besides the files under `EXAMPLES`, what may name them: the pages that point at them."""
+
+
+def allowed(name: str) -> bool:
+    return name.startswith(EXAMPLES) or name in ALLOWED
 
 
 def tracked_files() -> list[str]:
@@ -61,7 +78,8 @@ def test_the_pattern_finds_the_cases_and_leaves_ordinary_words_alone():
 
 
 def test_no_tracked_path_names_an_example_case():
-    named = [name for name in tracked_files() if FORBIDDEN.search(name)]
+    named = [name for name in tracked_files()
+             if FORBIDDEN.search(name) and not allowed(name)]
     assert not named, "tracked paths that belong to an example case:\n  " + "\n  ".join(named)
 
 
@@ -69,7 +87,7 @@ def test_no_tracked_file_mentions_an_example_case():
     found = {}
     for name in tracked_files():
         path = ROOT / name
-        if path.suffix.lower() in SKIP_SUFFIXES or not path.is_file():
+        if path.suffix.lower() in SKIP_SUFFIXES or not path.is_file() or allowed(name):
             continue
         try:
             text = path.read_text(encoding="utf-8")

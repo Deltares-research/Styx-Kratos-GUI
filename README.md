@@ -85,8 +85,8 @@ Do these steps in this order. Each step has its own guide.
    shows how to install Kratos and how to tell Styx where it is.
 3. Use the command line (optional). `kratos-cli` does the same work as the browser app, from
    a new model to its results, in a terminal. [CLI.md](docs/CLI.md) lists every command. The
-   [CLI tutorial](docs/CLI_TUTORIAL.md) builds an excavation with a sheet pile wall, one
-   command at a time.
+   [CLI tutorial](docs/cli_tutorials/README.md) builds a first model, a sheet pile in a soil
+   block, from the first command to its results.
 
 ## Documentation
 
@@ -98,7 +98,8 @@ Do these steps in this order. Each step has its own guide.
 | [KRATOS_SETUP.md](docs/KRATOS_SETUP.md) | How to install Kratos, connect it to Styx, and solve common problems |
 | [USAGE.md](docs/USAGE.md) | How to use the app, mode by mode: build a model, mesh it, calculate it, read the results, and use scripts |
 | [CLI.md](docs/CLI.md) | Every `kratos-cli` command, with examples |
-| [CLI_TUTORIAL.md](docs/CLI_TUTORIAL.md) | A tutorial in the terminal: build an excavation with a sheet pile wall, run it, and read the bending moment in the wall |
+| [cli_tutorials/README.md](docs/cli_tutorials/README.md) | The `kratos-cli` tutorial: a first model, built, run and read in the terminal |
+| [CROW_case.md](docs/cli_tutorials/CROW_case.md) | A second `kratos-cli` tutorial: the CROW excavation wall, a staged sheet-pile excavation, in three ways |
 | [FEATURES.md](docs/FEATURES.md) | What works, feature by feature, and where the code is |
 
 ### For developers

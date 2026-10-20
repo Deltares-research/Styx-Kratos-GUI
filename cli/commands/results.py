@@ -20,7 +20,7 @@ machine or not (plan D12). `--stage` takes a stage's number or words of its phas
 ("first excavation"); without it, the last stage that wrote results is read, which is
 where the GUI opens a run too. Each answer is the one the `/api/results` routes give for
 the same question, and `--csv` writes the file the GUI's `results csv` and
-`results plot csv` save (`cli.tables`).
+`results plot csv` save (`cli.terminal.tables`).
 """
 
 from __future__ import annotations
@@ -30,9 +30,9 @@ import re
 import shutil
 from pathlib import Path
 
-from cli import tables
-from cli.files import add_runs_dir, environment
-from cli.output import STDOUT, Answer, CommandError
+from cli.terminal import tables
+from cli.terminal.files import add_runs_dir, environment
+from cli.terminal.output import STDOUT, Answer, CommandError
 from core.analysis import calculation
 from core.results import catalog, fields
 

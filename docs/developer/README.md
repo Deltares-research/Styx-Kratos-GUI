@@ -135,12 +135,15 @@ The folders and files at the top of the repository:
 ```text
 core/          the engine, one package per stage: model/, geometry/ (Gmsh), kratos/ (the deck), analysis/, results/
 backend/       the FastAPI app, the in-memory project store, and the launcher
-cli/           kratos-cli, the command line beside the GUI
+cli/           kratos-cli, the command line beside the GUI, and the tutorial's helper scripts
+               (kratos-shell.bat/.sh, kratos-init-powershell.bat)
+examples/      ready-made models for kratos-cli, one folder per model
 frontend/      the browser app (index.html, js/, css/, three.js), with its own tests in frontend/tests/
 tests/         pytest suites: unit, API, browser, end-to-end, Kratos and performance
 benchmarks/    Kratos benchmark cases and the script that runs them
 tools/test.py  runs the test tiers (see TESTING.md)
-docs/          user guides; docs/developer/ for the developer guide and design documents
+docs/          user guides; docs/cli_tutorials/ for the command-line tutorials, docs/developer/
+               for the developer guide and design documents
 run.bat        launcher for Windows
 run.sh         launcher for Linux and macOS
 kratos-cli.bat the command line, for Windows

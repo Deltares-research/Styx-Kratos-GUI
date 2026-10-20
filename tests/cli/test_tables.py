@@ -1,4 +1,4 @@
-"""`cli.tables`: the CSV files `kratos-cli results` writes, number for number the ones
+"""`cli.terminal.tables`: the CSV files `kratos-cli results` writes, number for number the ones
 the GUI saves.
 
 The GUI writes a number with JavaScript's `String(value)`; the expected strings below
@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from cli import tables
+from cli.terminal import tables
 
 
 @pytest.mark.parametrize("value, written", [

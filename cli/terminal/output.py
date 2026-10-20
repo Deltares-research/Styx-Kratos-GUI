@@ -7,6 +7,7 @@ line argparse could not read. A command with a table answers `--csv` with it too
 stdout, or into the file `--csv FILE` names (UTF-8, whatever the shell would make of a
 redirect -- Windows PowerShell 5.1's `>` writes UTF-16). A refusal goes to stderr as `error: <reason>`; with
 `--json` it is the answer on stdout as well, so a script reading stdout always gets JSON.
+At a terminal the lines a person reads are in colour (`cli.terminal.style`); JSON and CSV never are.
 """
 
 from __future__ import annotations
@@ -17,6 +18,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from pydantic import ValidationError
+
+from cli.terminal import style
 
 
 class CommandError(Exception):
@@ -51,23 +54,47 @@ def answered(answer: Answer, as_json: bool, as_csv: str | None = None) -> int:
     elif as_csv and answer.csv is not None:
         Path(as_csv).write_text(answer.csv, encoding="utf-8", newline="\n")
         rows = answer.csv.count("\n") - 1
-        print(f"wrote {as_csv} ({rows} row{'s' if rows != 1 else ''})")
+        print_lines(f"wrote {as_csv} ({rows} row{'s' if rows != 1 else ''})")
     else:
-        for line in answer.lines:
-            print(line)
-    for warning in answer.warnings:
-        print(f"warning: {warning}", file=sys.stderr)
+        print_lines(*answer.lines)
+    for message in answer.warnings:
+        warning(message)
     if answer.error:
-        print(f"error: {answer.error}", file=sys.stderr)
+        error(answer.error)
         return 1
     return 0
+
+
+def print_lines(*lines: str) -> None:
+    """Print human-readable lines to stdout, styled when output is a terminal."""
+    for line in style.answer(list(lines), style.enabled(sys.stdout)):
+        print(line)
+
+
+def error(message: str) -> None:
+    """`error: message`, on stderr."""
+    _flagged("error:", "bold red", message)
+
+
+def warning(message: str) -> None:
+    """`warning: message`, on stderr."""
+    _flagged("warning:", "bold yellow", message)
+
+
+def _flagged(flag: str, colour: str, message: str) -> None:
+    sys.stdout.flush()                  # Keep earlier stdout output ahead of this stderr message.
+    on = style.enabled(sys.stderr)
+    lines = message.split("\n")
+    print(style.paint(flag, colour, on), *style.answer(lines[:1], on), file=sys.stderr)
+    for line in style.answer(lines[1:], on):
+        print(line, file=sys.stderr)
 
 
 def refused(failure: BaseException, as_json: bool) -> int:
     message = describe(failure)
     if as_json:
         print(_json({"ok": False, "error": message}))
-    print(f"error: {message}", file=sys.stderr)
+    error(message)
     return 1
 
 
