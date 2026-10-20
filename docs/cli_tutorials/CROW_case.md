@@ -221,9 +221,11 @@ crow.json> beam add sheetpile --name SheetPileWall --section sheetpile --points 
 added sheet pile sheetpile (SheetPileWall); wrote ...\crow.json
 ```
 
+- Per metre of wall: E = 8.44 GPa, A = 0.4924 m², I = 9.95·10⁻³ m⁴, density 298 kg/m³.
 - The wall is a solid plate 0.4924 m thick: `I33` is t³/12. The large `AREA_EFFECTIVE_Y`
   (twenty times the area) leaves shear deformation out.
-- `--points 5 0 5 -13` runs the wall from the ground surface at x = 5 down to its toe at −13.
+- `--points 5 0 5 -13` runs the wall from the ground surface at x = 5 m down to its toe at
+  y = −13 m.
 
 #### Step 7. The strut
 
@@ -237,6 +239,7 @@ crow.json> anchor add strut --name Strut --section strand --head 5 -1.5 --tail 4
 added anchor strut (Strut); wrote ...\crow.json
 ```
 
+- One strut per metre of wall (`--spacing 1`): E = 210 GPa, A = 4.76·10⁻⁵ m².
 - The strut is massless and has no force limits (`none` clears a limit).
 - Its head is snapped onto the wall, because it becomes one of the wall's nodes. A head more
   than 1 m from any structure is refused.

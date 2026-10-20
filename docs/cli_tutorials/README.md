@@ -1,13 +1,13 @@
 # Simple dike with `kratos-cli`
 
 This is a simple tutorial on using the Styx Python CLI.
-As an example, a 2D plane-strain model of a soil block with a sheet pile and a surface load, is built and run from PowerShell.
+As an example, a 2D plane-strain model of a soil block with a sheet pile and a line load on its surface, is built and run from PowerShell.
 
 | Part | What it is |
 |---|---|
-| **Soil** | a 20 m × 10 m block, from (0, 0) to (20, 10), linear elastic |
-| **Sheet pile** | a steel beam at x = 10, from the surface (y = 10) down to y = 3 |
-| **Load** | 10 kPa downward on the surface, from x = 10 to x = 20 |
+| **Soil** | a 20 m × 10 m block, from (0, 0) m to (20, 10) m; linear elastic, E = 20 MPa, ν = 0.3, unit weight 18 kN/m³, dry |
+| **Sheet pile** | a steel beam at x = 10 m, from the ground surface (y = 10 m) down to y = 3 m; E = 210 GPa, A = 0.015 m²/m, I = 3·10⁻⁴ m⁴/m |
+| **Load** | 10 kN/m downward on the ground surface, from x = 10 m to x = 20 m (a line load in the 2D section) |
 | **Mesh** | 1 m linear triangles |
 | **Stages** | 1 K0 on the soil alone → 2 the sheet pile is installed → 3 the load is applied |
 
