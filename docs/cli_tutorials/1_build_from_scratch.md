@@ -24,8 +24,19 @@ Open an empty shell. It asks for the folder to work in:
 <repo>\cli\kratos-shell.bat
 ```
 
-Then type the lines below, or paste them all at once. Lines starting with `#` are
-comments, and `.` is the folder you chose.
+```text
+Folder for the model and its runs: C:\Users\you\simple_dike
+
+kratos-cli shell: type one command per line. The open project is used, so leave out its file name.
+help lists the commands, help COMMAND explains one, exit closes the shell.
+
+No project is open. Start one with new FILE, or open one with open FILE.
+
+kratos-cli>
+```
+
+No project is open yet: the first line below makes one. Type the lines below, or paste
+them all at once. Lines starting with `#` are comments, and `.` is the folder you chose.
 
 ```text
 # 1. A new 2D project. simple_dike.json is the file the model is saved in, after every

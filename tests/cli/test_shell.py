@@ -321,7 +321,11 @@ def test_at_a_terminal_a_blank_line_follows_each_answer(typed, tmp_path, monkeyp
 
 def test_the_greeting_names_the_open_project_or_says_how_to_open_one(typed, site):
     assert "site.json" in typed([], site)[1]
-    assert "open FILE" in typed([])[1]
+    greeting = typed([])[1]
+    assert "No project is open. Start one with new FILE, or open one with open FILE." \
+        in greeting
+    assert "leave out its file name" in greeting
+    assert "help lists the commands" in greeting and "exit closes the shell" in greeting
 
 
 # ── Completion ──────────────────────────────────────────────────────────────

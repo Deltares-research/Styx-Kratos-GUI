@@ -131,11 +131,11 @@ class Shell:
     def _greet(self) -> None:
         on = style.enabled(sys.stdout)
         print()
-        print(f"{style.paint('kratos-cli shell', 'bold', on)}  "
-              f"{style.paint('a command as after `kratos-cli`, without the project file', 'dim', on)}")
-        print(f"{style.paint('help', 'cyan', on)} lists them, "
-              f"{style.paint('help COMMAND', 'cyan', on)} says what one takes, "
-              f"{style.paint('exit', 'cyan', on)} leaves.")
+        print(f"{style.paint('kratos-cli shell:', 'bold', on)} type one command per line. "
+              "The open project is used, so leave out its file name.")
+        print(f"{style.paint('help', 'cyan', on)} lists the commands, "
+              f"{style.paint('help COMMAND', 'cyan', on)} explains one, "
+              f"{style.paint('exit', 'cyan', on)} closes the shell.")
         print()
         self._say_open()
         print()
@@ -143,9 +143,9 @@ class Shell:
     def _say_open(self) -> None:
         on = style.enabled(sys.stdout)
         if self.project is None:
-            print(f"{style.paint('No project is open:', 'yellow', on)} "
-                  f"{style.paint('open FILE', 'cyan', on)}, or "
-                  f"{style.paint('new FILE', 'cyan', on)}.")
+            # Not a warning: it is how every shell started without a project begins.
+            print(f"No project is open. Start one with {style.paint('new FILE', 'cyan', on)}, "
+                  f"or open one with {style.paint('open FILE', 'cyan', on)}.")
             return
         print(f"{style.paint('open', 'bold green', on)}  "
               f"{style.paint(self.project.name, 'bold', on)}  "

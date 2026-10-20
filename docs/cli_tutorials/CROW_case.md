@@ -73,8 +73,11 @@ out of the repository:
 ```
 
 ```text
-kratos-cli shell: a command as after `kratos-cli`, without the project file. `help` lists them; `exit` leaves.
-No project is open: `open FILE`, or `new FILE`.
+kratos-cli shell: type one command per line. The open project is used, so leave out its file name.
+help lists the commands, help COMMAND explains one, exit closes the shell.
+
+No project is open. Start one with new FILE, or open one with open FILE.
+
 kratos-cli>
 ```
 
