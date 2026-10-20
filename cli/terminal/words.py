@@ -8,10 +8,10 @@ variables, and coordinates typed as plain numbers or read from a file.
 from __future__ import annotations
 
 import argparse
+import json
 import re
 from pathlib import Path
 
-from cli.commands.edit import parsed
 from cli.terminal.files import add_project, add_writing, written
 from cli.terminal.output import Answer, CommandError
 from core.model.schemas import Project
@@ -52,6 +52,26 @@ def edited(args: argparse.Namespace, project: Project, did: str) -> Answer:
 
 def file_of(target) -> str | None:
     return str(target) if target is not None else None
+
+
+def parsed(words: list[str]) -> object:
+    """The value the words on the command line give. Several words are one text --
+    `set site.json name Pit A` -- since a shell has already split them."""
+    text = " ".join(words)
+    if text.startswith("@"):
+        path = Path(text[1:])
+        try:
+            text = path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            raise CommandError(f"no such file: {path}") from None
+        try:
+            return json.loads(text)
+        except ValueError as failure:
+            raise CommandError(f"{path} is not valid JSON: {failure}") from None
+    try:
+        return json.loads(text)
+    except ValueError:
+        return text
 
 
 def assignments(words: list[str]) -> dict:

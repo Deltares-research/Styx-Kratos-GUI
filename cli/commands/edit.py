@@ -12,10 +12,10 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
 
 from cli.terminal.files import add_project, add_writing, written
-from cli.terminal.output import Answer, CommandError
+from cli.terminal.output import Answer
+from cli.terminal.words import parsed
 from core import session
 
 PATHS = ("a field path: names joined by dots, a record picked by its id in brackets, "
@@ -71,26 +71,6 @@ def add_value(args: argparse.Namespace) -> Answer:
 def remove_value(args: argparse.Namespace) -> Answer:
     project = session.without_value(session.load(args.project), args.path)
     return _edited(args, project, f"removed {args.path}")
-
-
-def parsed(words: list[str]) -> object:
-    """The value the words on the command line give. Several words are one text --
-    `set site.json name Pit A` -- since a shell has already split them."""
-    text = " ".join(words)
-    if text.startswith("@"):
-        path = Path(text[1:])
-        try:
-            text = path.read_text(encoding="utf-8")
-        except FileNotFoundError:
-            raise CommandError(f"no such file: {path}") from None
-        try:
-            return json.loads(text)
-        except ValueError as failure:
-            raise CommandError(f"{path} is not valid JSON: {failure}") from None
-    try:
-        return json.loads(text)
-    except ValueError:
-        return text
 
 
 def _edited(args: argparse.Namespace, project, did: str, value: object = None) -> Answer:
