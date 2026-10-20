@@ -137,10 +137,10 @@ class Shell:
               f"{style.paint('help COMMAND', 'cyan', on)} explains one, "
               f"{style.paint('exit', 'cyan', on)} closes the shell.")
         print()
-        self._say_open()
+        self._show_project_status()
         print()
 
-    def _say_open(self) -> None:
+    def _show_project_status(self) -> None:
         on = style.enabled(sys.stdout)
         if self.project is None:
             # Not a warning: it is how every shell started without a project begins.
@@ -265,7 +265,7 @@ class Shell:
 
     def _open(self, args: list[str]) -> int:
         if not args:
-            self._say_open()
+            self._show_project_status()
             return 0
         path = Path(args[0]).expanduser()
         if not path.is_file():
@@ -275,12 +275,12 @@ class Shell:
             output.error(f"{path.name} is not a project (.json) or a model script (.py)")
             return 1
         self._switch(path)
-        self._say_open()
+        self._show_project_status()
         return 0
 
     def _close(self, args: list[str]) -> int:
         self._switch(None)
-        self._say_open()
+        self._show_project_status()
         return 0
 
     def _new(self, args: list[str]) -> int:
@@ -288,7 +288,7 @@ class Shell:
         target = next((word for word in args if not word.startswith("-")), None)
         if code == 0 and target is not None:
             self._switch(Path(target))
-            self._say_open()
+            self._show_project_status()
         return code
 
     def _switch(self, path: Path | None) -> None:
