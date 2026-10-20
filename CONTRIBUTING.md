@@ -19,8 +19,9 @@ things to include are:
 
 ## Setting up
 
-Follow [Getting started](README.md#getting-started) in the README. `run.bat` (Windows) or
-`./run.sh` (Linux, macOS) creates the app's venv. Then add the test tools to that venv:
+Install Styx as [INSTALLATION.md](docs/INSTALLATION.md) describes. The first start of
+`run.bat` (Windows) or `./run.sh` (Linux, macOS) creates a virtual environment (venv) for the
+app. Then add the test tools to that venv:
 
 ```bash
 # Windows
