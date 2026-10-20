@@ -54,19 +54,19 @@ def answered(answer: Answer, as_json: bool, as_csv: str | None = None) -> int:
     elif as_csv and answer.csv is not None:
         Path(as_csv).write_text(answer.csv, encoding="utf-8", newline="\n")
         rows = answer.csv.count("\n") - 1
-        said(f"wrote {as_csv} ({rows} row{'s' if rows != 1 else ''})")
+        print_lines(f"wrote {as_csv} ({rows} row{'s' if rows != 1 else ''})")
     else:
-        said(*answer.lines)
-    for warning in answer.warnings:
-        warned(warning)
+        print_lines(*answer.lines)
+    for message in answer.warnings:
+        warning(message)
     if answer.error:
         error(answer.error)
         return 1
     return 0
 
 
-def said(*lines: str) -> None:
-    """Lines for a person to read, on stdout."""
+def print_lines(*lines: str) -> None:
+    """Print human-readable lines to stdout, styled when output is a terminal."""
     for line in style.answer(list(lines), style.enabled(sys.stdout)):
         print(line)
 
@@ -76,7 +76,7 @@ def error(message: str) -> None:
     _flagged("error:", "bold red", message)
 
 
-def warned(message: str) -> None:
+def warning(message: str) -> None:
     """`warning: message`, on stderr."""
     _flagged("warning:", "bold yellow", message)
 
