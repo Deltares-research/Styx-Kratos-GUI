@@ -75,16 +75,16 @@ section set steel CROSS_AREA=0.015 I33=3e-4 AREA_EFFECTIVE_Y=0.0075
 beam add sheetpile_1 --name sheetpile_1 --section steel --points 10 10 10 3
 
 # 5. The load: 10 kPa downward on the surface, from x = 10 to x = 20.
-load add line load --name Load --x 10 20 --y 10 --components 0 -10000
+load add line surcharge --name Load --x 10 20 --y 10 --components 0 -10000
 
 # 6. The mesh: 1 m elements, linear.
 set mesh.element_size 1
 set mesh.order 1
 
 # 7. The stages: K0 on the soil alone, then the sheet pile, then the load.
-phases add initial --name "Initial stage" --calculation k0 --deactivate sheetpile_1 load
+phases add initial --name "Initial stage" --calculation k0 --deactivate sheetpile_1 surcharge
 phases add sheet_pile --name "Sheet pile" --activate sheetpile_1 --reset-displacements --max-iterations 150 --tolerance 1e-3
-phases add loading --name Load --activate load --max-iterations 150 --tolerance 1e-3
+phases add loading --name Load --activate surcharge --max-iterations 150 --tolerance 1e-3
 
 # 8. Check the model, write the input files, run Kratos and read the results.
 show

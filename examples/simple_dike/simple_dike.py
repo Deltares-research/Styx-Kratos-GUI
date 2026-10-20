@@ -114,7 +114,7 @@ def project() -> Project:
         beam_sections=[sheet_pile],
         beams=[Beam(id="sheetpile_1", name="sheetpile_1", section=sheet_pile.id,
                     points=[(SHEET_PILE_X, DOMAIN_TOP_Y), (SHEET_PILE_X, SHEET_PILE_TOE_Y)])],
-        loads=[LineLoad(id="load", name="Load", x0=LOAD_X0, x1=LOAD_X1,
+        loads=[LineLoad(id="surcharge", name="Load", x0=LOAD_X0, x1=LOAD_X1,
                         y=DOMAIN_TOP_Y, components=(0.0, LOAD))],
 
         mesh=MeshSettings(element_size=ELEMENT_SIZE, order=ELEMENT_ORDER),
@@ -122,13 +122,13 @@ def project() -> Project:
         phases=[
             # The ground alone, its stresses set by K0.
             Phase(id="initial", name="Initial stage", calculation="K0 procedure",
-                  deactivate=["sheetpile_1", "load"]),
+                  deactivate=["sheetpile_1", "surcharge"]),
             # Displacements reset, so what follows is measured from the ground it went into.
             Phase(id="sheet_pile", name="Sheet pile", parent="initial",
                   activate=["sheetpile_1"], reset_displacements=True,
                   max_iterations=150, tolerated_error=1e-3),
             Phase(id="loading", name="Load", parent="sheet_pile",
-                  activate=["load"], max_iterations=150, tolerated_error=1e-3),
+                  activate=["surcharge"], max_iterations=150, tolerated_error=1e-3),
         ],
 
         # Required by the schema. A layered model with one excavation level cuts no

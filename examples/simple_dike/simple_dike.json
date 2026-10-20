@@ -104,7 +104,7 @@
   },
   "loads": [
     {
-      "id": "load",
+      "id": "surcharge",
       "name": "Load",
       "kind": "line",
       "x0": 10.0,
@@ -194,7 +194,7 @@
       "activate": [],
       "deactivate": [
         "sheetpile_1",
-        "load"
+        "surcharge"
       ],
       "reset_displacements": false,
       "max_iterations": 15,
@@ -223,7 +223,7 @@
       "calculation": "Plastic",
       "loading": "Staged construction",
       "activate": [
-        "load"
+        "surcharge"
       ],
       "deactivate": [],
       "reset_displacements": false,
@@ -242,6 +242,6 @@
   "stageable_parts": [
     "soil_soil",
     "sheetpile_1",
-    "load"
+    "surcharge"
   ]
 }
