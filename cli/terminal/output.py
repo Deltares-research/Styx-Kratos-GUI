@@ -82,7 +82,7 @@ def warning(message: str) -> None:
 
 
 def _flagged(flag: str, colour: str, message: str) -> None:
-    sys.stdout.flush()                              # what came before is said before it
+    sys.stdout.flush()                  # Keep earlier stdout output ahead of this stderr message.
     on = style.enabled(sys.stderr)
     lines = message.split("\n")
     print(style.paint(flag, colour, on), *style.answer(lines[:1], on), file=sys.stderr)
