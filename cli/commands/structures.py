@@ -279,8 +279,8 @@ def _register_loads(commands, common) -> None:
     listed = action(actions, common, "list", list_structures, writes=False)
     listed.set_defaults(kinds=("point", "line", "surface"))
     add = action(actions, common, "add", add_structure,
-                 help="a load, 20 kN down unless --components says otherwise: point and "
-                      "line in 2D, surface in 3D")
+                 help="a load, down unless --components says otherwise: 20 kN for a "
+                      "point, 20 kN/m for a line (2D), 20 kN/m2 for a surface (3D)")
     add.add_argument("load_kind", choices=("point", "line", "surface"))
     add.add_argument("id", nargs="?", help="its id (default: the first free load_<n>)")
     _load_fields(add)
@@ -322,8 +322,9 @@ def _load_fields(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--y", type=float,
                         help="line, surface: its level (default: the top of the model)")
     parser.add_argument("--components", type=float, nargs="+", metavar="F",
-                        help="x y in 2D, x y z in 3D; a force, per metre for a line, per "
-                             "square metre for a surface")
+                        help="x y in 2D, x y z in 3D, in the project's units: N or kN for "
+                             "a point, N/m or kN/m for a line, Pa or kPa for a surface; "
+                             "down is negative")
 
 
 def _normal_load_fields(parser: argparse.ArgumentParser) -> None:

@@ -74,7 +74,9 @@ section set steel YOUNG_MODULUS=2.1e11 POISSON_RATIO=0.0 DENSITY=7850.0
 section set steel CROSS_AREA=0.015 I33=3e-4 AREA_EFFECTIVE_Y=0.0075
 beam add sheetpile_1 --name sheetpile_1 --section steel --points 10 10 10 3
 
-# 5. The load: 10 kPa downward on the surface, from x = 10 to x = 20.
+# 5. The load: 10 kN/m downward on the ground surface, from x = 10 to x = 20.
+#    In the 2D section the ground surface is a line, so this is a line load.
+#    --components is its x and y force per metre, in N/m: 0 -10000.
 load add line surcharge --name Load --x 10 20 --y 10 --components 0 -10000
 
 # 6. The mesh: 1 m elements, linear.

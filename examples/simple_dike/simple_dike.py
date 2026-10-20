@@ -1,4 +1,4 @@
-"""A 2D soil block with one embedded sheet pile and a surface load.
+"""A 2D soil block with one embedded sheet pile and a line load on its surface.
 
 The model of docs/cli_tutorials/README.md: a 20 m x 10 m block, a sheet pile
 in the middle from the surface down to y = 3, and a line load on the surface to the
@@ -65,7 +65,8 @@ SHEET_PILE_TOE_Y = 3.0
 # The load: (10, 10) to (20, 10), right of the sheet pile.
 LOAD_X0, LOAD_X1 = 10.0, 20.0
 LOAD = -10_000.0
-"""N/m, downward: 10 kPa. The demo leaves the size to the Kratos deck."""
+"""N/m, downward: 10 kN/m along the ground surface. The demo leaves the size to the
+Kratos deck."""
 
 ELEMENT_SIZE = 1.0
 ELEMENT_ORDER = 1
