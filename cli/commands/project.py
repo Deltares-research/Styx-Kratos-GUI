@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from cli.commands.meshing import nothing_to_mesh
 from cli.terminal.files import add_project, add_writing, written
 from cli.terminal.output import Answer, CommandError
 from core import session
@@ -113,10 +114,14 @@ def show_project(args: argparse.Namespace) -> Answer:
 
 
 def check_project(args: argparse.Namespace) -> Answer:
-    """What the schema cannot say on its own: that the phases run in one order, and that
-    the mesh settings name only bodies the model has. Loading has validated the rest."""
+    """What the schema cannot say on its own: that there is something to mesh, that the
+    phases run in one order, and that the mesh settings name only bodies the model has.
+    Loading has validated the rest."""
     project = session.load(args.project)
     if project.deck is None:
+        empty = nothing_to_mesh(project)
+        if empty:
+            raise CommandError(empty)
         phases.linearise(project)
         unknown = session.unknown_mesh_keys(project, MeshRequest(**project.mesh.model_dump()))
         if unknown:

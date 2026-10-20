@@ -48,6 +48,7 @@ def mesh_model(args: argparse.Namespace) -> Answer:
     changed = _with_settings(project, args)
     mesh = gmsh_worker.run_here(gmsh_worker.mesh_job, changed.model_dump_json(),
                                 mesh_settings(changed).model_dump_json())
+    _refuse_empty(changed, mesh["stats"])
     lines = [_stats_line(mesh["stats"])]
     target = None
     if changed != project:
@@ -90,8 +91,26 @@ def exported(project: Project) -> dict:
     """The deck of `project`, as `POST /api/export/mdpa` makes it: meshed with the
     project's own settings, the materials file included."""
     settings = ExportRequest(**mesh_settings(project).model_dump(), include_materials=True)
-    return gmsh_worker.run_here(gmsh_worker.export_job, project.model_dump_json(),
-                                settings.model_dump_json())
+    export = gmsh_worker.run_here(gmsh_worker.export_job, project.model_dump_json(),
+                                  settings.model_dump_json())
+    _refuse_empty(project, export["stats"])
+    return export
+
+
+def nothing_to_mesh(project: Project) -> str | None:
+    """Why `project` would mesh to nothing, or None: a model with no soil body and no
+    solid of its own has nothing for gmsh to fill, and its deck would hold no nodes."""
+    if project.soil_bodies() or project.custom_parts:
+        return None
+    return ("the model has nothing to mesh: no soil layer and no solid. "
+            "`layer add` adds a soil layer.")
+
+
+def _refuse_empty(project: Project, stats: dict) -> None:
+    """A mesh with no elements is refused, not reported: a deck of 0 nodes runs in
+    Kratos without complaint and computes nothing."""
+    if stats["elements"] == 0:
+        raise CommandError(nothing_to_mesh(project) or "the mesh has no elements.")
 
 
 def _with_settings(project: Project, args: argparse.Namespace) -> Project:
