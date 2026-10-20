@@ -153,8 +153,11 @@ def set_excavation(args: argparse.Namespace) -> Answer:
 
 def _domain_line(project: Project) -> str:
     d = project.domain
-    return (f"domain x {d.x0:g} .. {d.x1:g}, y {d.y_bottom:g} .. {d.y_top:g}, "
-            f"z {d.z0:g} .. {d.z1:g}")
+    extent = f"domain x {d.x0:g} .. {d.x1:g}, y {d.y_bottom:g} .. {d.y_top:g}"
+    if project.dimension == 2:
+        # A 2D model is the cut at one z: the z range only bounds where it may be made.
+        return f"{extent} (2D section at z = {project.section_offset:g})"
+    return f"{extent}, z {d.z0:g} .. {d.z1:g}"
 
 
 def _pit_line(project: Project) -> str:

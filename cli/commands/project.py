@@ -240,8 +240,8 @@ def described(data: dict) -> list[str]:
         + (f", section at z = {data['section_offset']:g}"
            if data["section_offset"] is not None else ""),
         f"  domain      x {domain['x0']:g} .. {domain['x1']:g}, "
-        f"y {domain['y_bottom']:g} .. {domain['y_top']:g}, "
-        f"z {domain['z0']:g} .. {domain['z1']:g}",
+        f"y {domain['y_bottom']:g} .. {domain['y_top']:g}"
+        + (f", z {domain['z0']:g} .. {domain['z1']:g}" if data["dimension"] != 2 else ""),
         f"  boreholes   {names(data['boreholes'])}",
         f"  materials   {names(data['materials'])}",
         f"  layers      {names(data['layers'])}",

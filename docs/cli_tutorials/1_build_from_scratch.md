@@ -33,7 +33,9 @@ new simple_dike.json --dim 2 --name simple_dike
 
 # 2. The soil block, 20 m wide and 10 m high, and a borehole.
 #    The ground is at y = 10 and the water at y = 0, so the soil is dry.
-domain --x 0 20 --y 0 10 --z 0 10
+#    A 2D model is a vertical cut through the site at one z (z = 0 in a new project).
+#    The site's z extent matters only when the model is switched to 3D.
+domain --x 0 20 --y 0 10
 borehole set bh1 --name BH1 --x 0 --y 0 --head 10 --water 0
 
 # 3. The soil: one linear elastic material, and one layer of it down to y = 0.

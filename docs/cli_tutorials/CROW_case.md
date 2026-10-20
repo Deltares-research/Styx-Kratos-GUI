@@ -104,7 +104,7 @@ put `<repo>\kratos-cli.bat` in front and the project file after the command word
 
 ```text
 kratos-cli> new crow.json --force --dim 2 --name "CROW excavation wall"
-wrote crow.json: CROW excavation wall (2D section at z = 10, SI)
+wrote crow.json: CROW excavation wall (2D section at z = 0, SI)
 open  crow.json  (...\crow)
 crow.json>
 ```
@@ -117,8 +117,8 @@ crow.json>
 
 ```text
 crow.json> domain --x 0 80 --y -60 0 --z 0 10
-domain x 0 .. 80, y -60 .. 0, z 0 .. 10; wrote ...\crow.json
-The section at z = 10 is outside the new domain, so it is cut through its middle, at z = 5.
+domain x 0 .. 80, y -60 .. 0 (2D section at z = 5); wrote ...\crow.json
+The section at z = 0 is outside the new domain, so it is cut through its middle, at z = 5.
 
 crow.json> borehole set bh1 --name BH1 --x 0 --y 0 --head 0 --water -1.5
 changed borehole bh1; wrote ...\crow.json

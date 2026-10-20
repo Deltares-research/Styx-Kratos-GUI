@@ -23,7 +23,7 @@ class Terminal(io.StringIO):
 ANSWER = [
     "simple_dike  (C:\\work\\simple_dike.json)",
     "  2D plane strain, SI units, section at z = 5",
-    "  domain      x 0 .. 20, y 0 .. 10, z 0 .. 10",
+    "  domain      x 0 .. 20, y 0 .. 10",
     "  boreholes   bh1",
     "1  initial  Initial stage",
     "     calculation: K0 procedure; deactivates sheetpile_1, load",
