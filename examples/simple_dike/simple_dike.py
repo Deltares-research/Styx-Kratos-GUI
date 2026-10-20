@@ -95,7 +95,7 @@ def project() -> Project:
                     })
 
     # A steel sheet pile, per metre of wall.
-    sheet_pile = BeamSection(id="steel", name="Sheet pile", variables={
+    sheet_pile = BeamSection(id="sheet_pile", name="Sheet pile", variables={
         "YOUNG_MODULUS": 2.1e11, "POISSON_RATIO": 0.0, "DENSITY": 7_850.0,
         "CROSS_AREA": 0.015, "I33": 3.0e-4, "AREA_EFFECTIVE_Y": 0.0075})
 

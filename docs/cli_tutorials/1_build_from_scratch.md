@@ -66,13 +66,16 @@ material set m_soil PERMEABILITY_XX=1e-5 PERMEABILITY_YY=1e-5 PERMEABILITY_XY=0.
 material set m_soil GEO_COHESION=1000.0 GEO_FRICTION_ANGLE=30.0 K0_NC=0.5
 layer add soil --name soil --material m_soil --bottom 0
 
-# 4. The sheet pile: a steel section, and a beam of it from (10, 10) down to (10, 3).
-section add beam steel --name "Sheet pile"
+# 4. The sheet pile: define its steel and cross-section properties, then place a 2D beam
+#    from the ground surface at (10, 10) down to its toe at (10, 3).
+#    In `section add beam ID`, the id is how later commands refer to the section. A section
+#    has no separate material: its steel properties are set on it below.
+section add beam sheet_pile --name "Sheet pile"
 #    Steel: E = 210 GPa, 7850 kg/m3
-section set steel YOUNG_MODULUS=2.1e11 POISSON_RATIO=0.0 DENSITY=7850.0
+section set sheet_pile YOUNG_MODULUS=2.1e11 POISSON_RATIO=0.0 DENSITY=7850.0
 #    Profile, per metre of wall: area (m2), bending stiffness I (m4), shear area (m2)
-section set steel CROSS_AREA=0.015 I33=3e-4 AREA_EFFECTIVE_Y=0.0075
-beam add sheetpile_1 --name sheetpile_1 --section steel --points 10 10 10 3
+section set sheet_pile CROSS_AREA=0.015 I33=3e-4 AREA_EFFECTIVE_Y=0.0075
+beam add sheetpile_1 --name sheetpile_1 --section sheet_pile --points 10 10 10 3
 
 # 5. The load: 10 kN/m downward on the ground surface, from x = 10 to x = 20.
 #    In the 2D section the ground surface is a line, so this is a line load.

@@ -132,7 +132,7 @@
         "AREA_EFFECTIVE_Y": 0.0075
       },
       "tables": {},
-      "id": "steel",
+      "id": "sheet_pile",
       "name": "Sheet pile",
       "spacing": 1.0
     }
@@ -143,7 +143,7 @@
       "id": "sheetpile_1",
       "name": "sheetpile_1",
       "kind": "beam",
-      "section": "steel",
+      "section": "sheet_pile",
       "points": [
         [
           10.0,

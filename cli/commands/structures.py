@@ -56,7 +56,8 @@ def _register_sections(commands, common) -> None:
                       "of its own")
     add.add_argument("kind", choices=KINDS,
                      help="beam (sheet piles and members), panel (walls), anchor, interface")
-    add.add_argument("id")
+    add.add_argument("id", help="its id, which `section set` and the --section of a "
+                                     "structure refer to it by")
     _section_fields(add)
     change = action(sections, common, "set", update_section, variables=True,
                     help="change NAME=VALUE variables and the fields given")
@@ -98,14 +99,14 @@ def list_sections(args: argparse.Namespace) -> Answer:
 
 def add_section(args: argparse.Namespace) -> Answer:
     project = session.load(args.project)
-    project = session.add_section(project, args.kind,
-                                  drafts.section(project, args.kind, args.id, name=args.name))
+    section = drafts.section(project, args.kind, args.id, name=args.name)
+    project = session.add_section(project, args.kind, section)
     fields = _section_values(args, args.kind)
     variables = assignments(args.variables)
     if fields or variables:
         project = session.update_section(project, args.id, kind=args.kind,
                                          variables=variables, **fields)
-    return edited(args, project, f"added {args.kind} section {args.id}")
+    return edited(args, project, f"added {args.kind} section {args.id} ({section.name})")
 
 
 def update_section(args: argparse.Namespace) -> Answer:

@@ -215,7 +215,7 @@ A structure is built from a **section**, which holds its Kratos variables, and a
 
 ```text
 crow.json> section add beam sheetpile --name "Sheet pile" --spacing 1 YOUNG_MODULUS=8444900000.0 POISSON_RATIO=0.0 DENSITY=298.36 CROSS_AREA=0.4924 I33=0.009948850085333335 AREA_EFFECTIVE_Y=10.0
-added beam section sheetpile; wrote ...\crow.json
+added beam section sheetpile (Sheet pile); wrote ...\crow.json
 
 crow.json> beam add sheetpile --name SheetPileWall --section sheetpile --points 5 0 5 -13
 added sheet pile sheetpile (SheetPileWall); wrote ...\crow.json
@@ -233,7 +233,7 @@ A strut is an anchor whose free end is a pinned support:
 
 ```text
 crow.json> section add anchor strand --name Strut --spacing 1 --tension-limit none --compression-limit none YOUNG_MODULUS=210000000000.0 CROSS_AREA=4.7619e-05 DENSITY=0.0
-added anchor section strand; wrote ...\crow.json
+added anchor section strand (Strut); wrote ...\crow.json
 
 crow.json> anchor add strut --name Strut --section strand --head 5 -1.5 --tail 4 -1.5
 added anchor strut (Strut); wrote ...\crow.json
@@ -248,7 +248,7 @@ added anchor strut (Strut); wrote ...\crow.json
 
 ```text
 crow.json> section add interface contact --name "Wall contact" --material none --r-inter 0.7 --virtual-thickness 1.0
-added interface section contact; wrote ...\crow.json
+added interface section contact (Wall contact); wrote ...\crow.json
 
 crow.json> interface add wall_contact --name Interface --section contact --structure sheetpile --side both
 added interface wall_contact (Interface); wrote ...\crow.json
