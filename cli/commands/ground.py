@@ -11,9 +11,9 @@ from __future__ import annotations
 
 import argparse
 
-from cli.files import add_project, add_writing, written
-from cli.output import Answer, CommandError
-from cli.words import action, assignments, edited, file_of, given, noun
+from cli.terminal.files import add_project, add_writing, written
+from cli.terminal.output import Answer, CommandError
+from cli.terminal.words import action, assignments, edited, existing, file_of, given, noun
 from core import session
 from core.model import drafts
 from core.model.schemas import Project
@@ -37,10 +37,10 @@ def register(commands, common: argparse.ArgumentParser) -> None:
     add.add_argument("id", nargs="?", help="its id (default: the first free bh<n>)")
     _borehole_fields(add)
     change = action(borehole, common, "set", update_borehole)
-    change.add_argument("id")
+    existing(change, "borehole")
     _borehole_fields(change)
     remove = action(borehole, common, "remove", remove_borehole)
-    remove.add_argument("id")
+    existing(remove, "borehole")
 
     material = noun(commands, common, "material",
                      "list, add, change or remove materials (soil property sets)")
@@ -50,24 +50,25 @@ def register(commands, common: argparse.ArgumentParser) -> None:
     add = action(material, common, "add", add_material, variables=True,
                   help="a soil: the default sand, or a library preset, then NAME=VALUE "
                        "variables of its own")
-    add.add_argument("id")
+    add.add_argument("id", help="its id, which `material set` and a layer's --material "
+                                "refer to it by")
     add.add_argument("--preset", help="the library preset to start from (see `presets`)")
     _material_fields(add)
     change = action(material, common, "set", update_material, variables=True,
                      help="change NAME=VALUE variables, the law, the name or the colour")
-    change.add_argument("id")
+    existing(change, "material")
     _material_fields(change)
     change.add_argument("--unset", action="append", default=[], metavar="NAME",
                         help="leave this variable out, for the export to derive")
     remove = action(material, common, "remove", remove_material)
-    remove.add_argument("id")
+    existing(remove, "material")
 
     layer = noun(commands, common, "layer", "list, add, change, split or remove layers")
     action(layer, common, "list", list_layers, writes=False)
     add = action(layer, common, "add", add_layer,
                   help="a layer under the stack, down to --bottom or --thickness below "
                        "the last one (default 5 m)")
-    add.add_argument("id")
+    add.add_argument("id", help="its id, which `layer set` refers to it by")
     add.add_argument("--material", required=True)
     add.add_argument("--name")
     depth = add.add_mutually_exclusive_group()
@@ -75,7 +76,7 @@ def register(commands, common: argparse.ArgumentParser) -> None:
     depth.add_argument("--thickness", type=float)
     change = action(layer, common, "set", update_layer,
                      help="change a layer; a moved level moves its neighbour's with it")
-    change.add_argument("id")
+    existing(change, "layer")
     change.add_argument("--material")
     change.add_argument("--name")
     change.add_argument("--top", type=float)
@@ -84,10 +85,10 @@ def register(commands, common: argparse.ArgumentParser) -> None:
                         help="move the level at this borehole only (default: at all)")
     split = action(layer, common, "split", split_layer,
                     help="halve a layer; the lower half becomes a new layer")
-    split.add_argument("id")
+    existing(split, "layer")
     split.add_argument("new_id", nargs="?")
     remove = action(layer, common, "remove", remove_layer)
-    remove.add_argument("id")
+    existing(remove, "layer")
 
     excavation = commands.add_parser("excavation", parents=[common],
                                      help="show or set the pit and the levels it is dug to")
@@ -111,8 +112,12 @@ def register(commands, common: argparse.ArgumentParser) -> None:
 
 def _borehole_fields(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--name")
-    parser.add_argument("--x", type=float, help="plan x, in metres")
-    parser.add_argument("--y", type=float, help="plan y (along z in the model), in metres")
+    # Map coordinates, as the GUI's borehole dialog gives them: the map's y is
+    # the model's z. Its height is not a coordinate -- that is --head and --water.
+    parser.add_argument("--x", type=float, help="its position on the map: x, in metres")
+    parser.add_argument("--y", type=float,
+                        help="its position on the map: y, in metres (the model's z, out of "
+                             "the 2D section; not a height)")
     parser.add_argument("--head", type=float, help="the ground level there")
     parser.add_argument("--water", type=float, help="the phreatic level there")
 
@@ -153,8 +158,11 @@ def set_excavation(args: argparse.Namespace) -> Answer:
 
 def _domain_line(project: Project) -> str:
     d = project.domain
-    return (f"domain x {d.x0:g} .. {d.x1:g}, y {d.y_bottom:g} .. {d.y_top:g}, "
-            f"z {d.z0:g} .. {d.z1:g}")
+    extent = f"domain x {d.x0:g} .. {d.x1:g}, y {d.y_bottom:g} .. {d.y_top:g}"
+    if project.dimension == 2:
+        # A 2D model is the cut at one z: the z range only bounds where it may be made.
+        return f"{extent} (2D section at z = {project.section_offset:g})"
+    return f"{extent}, z {d.z0:g} .. {d.z1:g}"
 
 
 def _pit_line(project: Project) -> str:

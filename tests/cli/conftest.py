@@ -1,7 +1,7 @@
 """What the command-line tests share: a way to run `kratos-cli` in this process, a small
 project file, and a machine with no Kratos and no runs of its own.
 
-`cli.main.main(argv)` is called directly rather than through a subprocess, so a failure
+`cli.terminal.main.main(argv)` is called directly rather than through a subprocess, so a failure
 shows where it happened and a test costs milliseconds. `tests/cli/test_wrappers.py` is
 where the command is started the way a user starts it.
 """
@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from cli.main import main
+from cli.terminal.main import main
 from core import session
 from core.analysis import calculation
 from core.model.schemas import DimensionUpdate
@@ -61,6 +61,13 @@ def this_machine_has_no_kratos(request, tmp_path, monkeypatch):
         return
     monkeypatch.setattr(calculation, "SETTINGS_FILE", tmp_path / "no-settings.json")
     for name in (calculation.PYTHON_ENV, calculation.KRATOS_ENV, calculation.TIMEOUT_ENV):
+        monkeypatch.delenv(name, raising=False)
+
+
+@pytest.fixture(autouse=True)
+def no_colour_from_this_machine(monkeypatch):
+    """What is printed is compared as text: a terminal's colour settings stay out."""
+    for name in ("NO_COLOR", "FORCE_COLOR", "TERM"):
         monkeypatch.delenv(name, raising=False)
 
 

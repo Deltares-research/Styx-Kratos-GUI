@@ -3,7 +3,7 @@ project open (plan/active/cli-plan.md, SH).
 
 A line is a `kratos-cli` command without `kratos-cli` and without the project file:
 `water -2`, `borehole add bh4`, `mesh`. The shell puts the open project where the
-command takes one, and runs the command as `cli.main` runs it -- the same parser, the
+command takes one, and runs the command as `cli.terminal.main` runs it -- the same parser, the
 same answers, the same refusals. Its own words: `open`, `close`, `undo`, `redo`, `cd`,
 `pwd`, `source`, `help`, `exit`.
 
@@ -23,7 +23,7 @@ from pathlib import Path
 
 import pytest
 
-from cli import shell
+from cli.terminal import shell
 from core import session
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -198,6 +198,16 @@ def test_help_lists_its_own_words_and_the_commands(typed):
     assert "borehole" in out and "results" in out
 
 
+def test_help_lists_the_commands_under_the_step_of_the_model_they_belong_to(typed):
+    code, out, err = typed(["help"])
+    headings = [line for line in out.splitlines() if line and not line[0].isspace()]
+
+    assert {"Shell", "Project", "Ground", "Structures", "Phases", "Results"} <= set(headings)
+    after = out.split("\nGround\n", 1)[1].split("\n\n", 1)[0]
+    assert "  borehole" in after and "  layer" in after
+    assert "  shell " not in out                    # it is the shell already
+
+
 def test_help_with_a_command_is_that_command_s_help(typed):
     code, out, err = typed(["help water"])
 
@@ -291,6 +301,31 @@ def test_each_line_is_echoed_when_read_from_a_pipe(piped, site):
     ran = piped("water -2\n", site)
 
     assert "> water -2" in ran.out
+
+
+def test_a_blank_line_parts_one_echoed_command_from_the_next(piped, site):
+    ran = piped("water -2\nwater -3\n", site)
+
+    assert ran.out.startswith("> water -2\n")
+    assert "\n\n> water -3\n" in ran.out
+
+
+def test_at_a_terminal_a_blank_line_follows_each_answer(typed, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+
+    code, out, err = typed(["pwd", "", "# a comment", "pwd"])
+
+    assert out.count(f"{tmp_path}\n\n") == 2
+    assert "\n\n\n" not in out.rstrip("\n")       # nothing typed, nothing added
+
+
+def test_the_greeting_names_the_open_project_or_says_how_to_open_one(typed, site):
+    assert "site.json" in typed([], site)[1]
+    greeting = typed([])[1]
+    assert "No project is open. Start one with new FILE, or open one with open FILE." \
+        in greeting
+    assert "leave out its file name" in greeting
+    assert "help lists the commands" in greeting and "exit closes the shell" in greeting
 
 
 # ── Completion ──────────────────────────────────────────────────────────────

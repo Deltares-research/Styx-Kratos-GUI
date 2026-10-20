@@ -124,7 +124,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.out is None and not args.calculate:
         parser.error("give --out DIR to write the deck, --calculate to run it, or both")
-    from cli.main import main as kratos_cli
+    from cli.terminal.main import main as kratos_cli
 
     if args.out is None:
         return kratos_cli(["calculate", __file__])

@@ -31,7 +31,7 @@ from pathlib import Path
 
 import pytest
 
-from cli import main
+from cli.terminal import main
 
 ROOT = Path(__file__).resolve().parents[2]
 JS = ROOT / "frontend" / "js"

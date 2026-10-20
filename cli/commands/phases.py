@@ -25,9 +25,9 @@ from __future__ import annotations
 
 import argparse
 
-from cli.files import add_project, add_writing, written
-from cli.output import Answer
-from cli.words import file_of, given
+from cli.terminal.files import add_project, add_writing, written
+from cli.terminal.output import Answer
+from cli.terminal.words import existing, file_of, given
 from core import session
 from core.model import phases
 from core.model.schemas import Project
@@ -48,7 +48,7 @@ def register(commands, common: argparse.ArgumentParser) -> None:
     listed.set_defaults(handler=list_phases)
     show = actions.add_parser("show", parents=[common],
                               help="what is in the model during a phase")
-    show.add_argument("id")
+    existing(show, "phase", "phases")
     show.set_defaults(handler=show_phase)
 
     for name, handler, help in (
@@ -80,7 +80,7 @@ def register(commands, common: argparse.ArgumentParser) -> None:
     copy.set_defaults(handler=copy_phase)
 
     change = actions.add_parser("set", parents=[common], help="change a phase")
-    change.add_argument("id")
+    existing(change, "phase", "phases")
     _phase_fields(change)
     change.add_argument("--parent", help="the phase it starts from")
     add_writing(change)
@@ -88,7 +88,7 @@ def register(commands, common: argparse.ArgumentParser) -> None:
 
     remove = actions.add_parser("remove", parents=[common],
                                 help="remove a phase; its children start from its parent")
-    remove.add_argument("id")
+    existing(remove, "phase", "phases")
     add_writing(remove)
     remove.set_defaults(handler=remove_phase)
 
@@ -96,7 +96,7 @@ def register(commands, common: argparse.ArgumentParser) -> None:
         switch = actions.add_parser(
             name, parents=[common],
             help=f"switch parts {'into' if wanted else 'out of'} the model from a phase on")
-        switch.add_argument("id")
+        existing(switch, "phase", "phases")
         switch.add_argument("keys", nargs="+", metavar="KEY",
                             help="part keys, as `kratos-cli parts` lists them")
         add_writing(switch)
@@ -131,7 +131,8 @@ def _parts(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--activate", nargs="+", default=[], metavar="KEY",
                         help="parts it switches into the model")
     parser.add_argument("--deactivate", nargs="+", default=[], metavar="KEY",
-                        help="parts it switches out of the model")
+                        help="parts it switches out of the model; every part starts in the "
+                             "model, so the first phase switches off what is not built yet")
 
 
 FIELDS = ("name", "calculation", "reset_displacements", "max_iterations", "tolerated_error",

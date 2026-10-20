@@ -44,6 +44,20 @@ def test_domain_sets_the_extents_given_and_shows_them(cli, empty):
     assert "60" in cli("domain", empty).out
 
 
+def test_a_2d_domain_names_its_section_not_its_z_range(cli, empty):
+    """A 2D model is the cut at one z; the z range is kept for the switch to 3D, and
+    printed only there."""
+    ran = cli("domain", empty, "--x", "0", "20", "--y", "0", "10")
+
+    assert ran.code == 0
+    assert "domain x 0 .. 20, y 0 .. 10 (2D section at z = 0)" in ran.out
+    assert "z -10 .. 10" not in ran.out and "z -10 .. 10" not in cli("show", empty).out
+
+    assert cli("dimension", empty, "3").code == 0
+    assert "z -10 .. 10" in cli("domain", empty).out
+    assert "z -10 .. 10" in cli("show", empty).out
+
+
 def test_domain_says_when_it_moves_the_section(cli, empty):
     ran = cli("domain", empty, "--z", "0", "4")
 

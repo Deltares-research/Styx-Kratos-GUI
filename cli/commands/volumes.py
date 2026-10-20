@@ -17,9 +17,9 @@ import argparse
 import json
 from pathlib import Path
 
-from cli.files import add_project, add_writing, written
-from cli.output import Answer, CommandError
-from cli.words import coordinates
+from cli.terminal.files import add_project, add_writing, written
+from cli.terminal.output import Answer, CommandError
+from cli.terminal.words import coordinates
 from core import gmsh_worker, session
 from core.geometry.cad_import import CAD_EXTENSIONS, MESH_EXTENSIONS
 from core.model import drafts

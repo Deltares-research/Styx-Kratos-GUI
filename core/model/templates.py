@@ -94,7 +94,9 @@ def blank_project() -> Project:
         name="Untitled project",
         layered_soil=True,
         dimension=2,
-        domain=Domain(x0=0.0, x1=20.0, z0=0.0, z1=20.0, y_top=0.0, y_bottom=-15.0),
+        # Centred on z = 0, so the 2D section is cut there: a section has to lie strictly
+        # inside the z extent, and the middle is where a new one goes.
+        domain=Domain(x0=0.0, x1=20.0, z0=-10.0, z1=10.0, y_top=0.0, y_bottom=-15.0),
         boreholes=[Borehole(id="bh1", name="BH-1", x=0.0, y=0.0, head=0.0, water=-1.5)],
         materials=[],
         layers=[],

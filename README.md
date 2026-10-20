@@ -122,6 +122,8 @@ Everything from a new model to its results also works in a terminal, with no bro
 ./kratos-cli.sh shell site.json                   # or type the commands one after another
 ```
 
+New to the command line? [cli_tutorials/README.md](docs/cli_tutorials/README.md) walks through
+a first model, a sheet pile in a soil block, from the first command to its results.
 [CLI.md](docs/CLI.md) lists every command.
 
 ## Documentation
@@ -131,6 +133,8 @@ Everything from a new model to its results also works in a terminal, with no bro
 | [INSTALLATION.md](docs/INSTALLATION.md) | Prerequisites per platform, the launcher and its options |
 | [KRATOS_SETUP.md](docs/KRATOS_SETUP.md) | Installing Kratos and connecting it to Styx, with troubleshooting |
 | [USAGE.md](docs/USAGE.md) | A walk through the modes: building, meshing, calculating, results and scripting |
+| [cli_tutorials/README.md](docs/cli_tutorials/README.md) | The `kratos-cli` tutorial: a first model, built, run and read in the terminal |
+| [CROW_case.md](docs/cli_tutorials/CROW_case.md) | A second `kratos-cli` tutorial: the CROW excavation wall, a staged sheet-pile excavation, in three ways |
 | [CLI.md](docs/CLI.md) | `kratos-cli`: every step of a model in the terminal, command by command |
 | [TESTING.md](docs/TESTING.md) | The test tiers and how to run them |
 | [ARCHITECTURE.md](docs/ARCHITECTURE.md) | How a model flows from the browser to Kratos and back |
@@ -142,12 +146,14 @@ Everything from a new model to its results also works in a terminal, with no bro
 ```text
 core/          the engine, one package per stage: model/, geometry/ (Gmsh), kratos/ (the deck), analysis/, results/
 backend/       the FastAPI app, the in-memory project store, and the launcher
-cli/           kratos-cli, the command line beside the GUI
+cli/           kratos-cli, the command line beside the GUI, and the tutorial's helper scripts
+               (kratos-shell.bat/.sh, kratos-init-powershell.bat)
 frontend/      the browser app (index.html, js/, css/, three.js), with its own tests in frontend/tests/
+examples/      ready-made models for kratos-cli, one folder per model
 tests/         pytest suites: unit, API, browser, end-to-end, Kratos and performance
 benchmarks/    Kratos benchmark cases and runner
 tools/test.py  the tier runner
-docs/          user guides and design documents
+docs/          user guides and design documents; docs/cli_tutorials/ is the command-line tutorial
 run.bat        launcher for Windows
 run.sh         launcher for Linux and macOS
 kratos-cli.bat the command line, for Windows

@@ -8,12 +8,12 @@ variables, and coordinates typed as plain numbers or read from a file.
 from __future__ import annotations
 
 import argparse
+import json
 import re
 from pathlib import Path
 
-from cli.commands.edit import parsed
-from cli.files import add_project, add_writing, written
-from cli.output import Answer, CommandError
+from cli.terminal.files import add_project, add_writing, written
+from cli.terminal.output import Answer, CommandError
 from core.model.schemas import Project
 
 
@@ -33,10 +33,15 @@ def action(actions, common, name: str, handler, *, writes: bool = True,
         add_writing(parser)
     parser.set_defaults(handler=handler)
     if variables:
-        # `NAME=VALUE` words anywhere on the line; `cli.main` gives this command the
+        # `NAME=VALUE` words anywhere on the line; `cli.terminal.main` gives this command the
         # words no option took, since argparse cannot take them between options.
         parser.set_defaults(variables=[])
     return parser
+
+
+def existing(parser: argparse.ArgumentParser, noun: str, command: str | None = None) -> None:
+    """The `id` of a record that is already there, with where its ids are listed."""
+    parser.add_argument("id", help=f"the {noun}'s id, as `{command or noun} list` shows it")
 
 
 def given(args: argparse.Namespace, *names: str) -> dict:
@@ -52,6 +57,26 @@ def edited(args: argparse.Namespace, project: Project, did: str) -> Answer:
 
 def file_of(target) -> str | None:
     return str(target) if target is not None else None
+
+
+def parsed(words: list[str]) -> object:
+    """The value the words on the command line give. Several words are one text --
+    `set site.json name Pit A` -- since a shell has already split them."""
+    text = " ".join(words)
+    if text.startswith("@"):
+        path = Path(text[1:])
+        try:
+            text = path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            raise CommandError(f"no such file: {path}") from None
+        try:
+            return json.loads(text)
+        except ValueError as failure:
+            raise CommandError(f"{path} is not valid JSON: {failure}") from None
+    try:
+        return json.loads(text)
+    except ValueError:
+        return text
 
 
 def assignments(words: list[str]) -> dict:

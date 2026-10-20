@@ -13,8 +13,8 @@ import argparse
 from pathlib import Path
 
 from cli.commands.meshing import exported
-from cli.files import add_project, add_runs_dir, environment
-from cli.output import Answer, CommandError
+from cli.terminal.files import add_project, add_runs_dir, environment
+from cli.terminal.output import Answer, CommandError
 from core import session
 from core.analysis import calculation
 from core.kratos import deck_files, external_deck
