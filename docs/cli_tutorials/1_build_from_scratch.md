@@ -89,6 +89,8 @@ load add line surcharge --name Load --x 10 20 --y 10 --components 0 -10000
 mesh --size 1 --order 1
 
 # 7. The stages: K0 on the soil alone, then the sheet pile, then the load.
+#    Every part starts in the model, so the first stage switches off what is not built yet:
+#    the sheet pile and the load. The later stages switch them back on, one at a time.
 phases add initial --name "Initial stage" --calculation k0 --deactivate sheetpile_1 surcharge
 phases add sheet_pile --name "Sheet pile" --activate sheetpile_1 --reset-displacements --max-iterations 150 --tolerance 1e-3
 phases add loading --name Load --activate surcharge --max-iterations 150 --tolerance 1e-3

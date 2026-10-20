@@ -131,7 +131,8 @@ def _parts(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--activate", nargs="+", default=[], metavar="KEY",
                         help="parts it switches into the model")
     parser.add_argument("--deactivate", nargs="+", default=[], metavar="KEY",
-                        help="parts it switches out of the model")
+                        help="parts it switches out of the model; every part starts in the "
+                             "model, so the first phase switches off what is not built yet")
 
 
 FIELDS = ("name", "calculation", "reset_displacements", "max_iterations", "tolerated_error",
