@@ -111,8 +111,12 @@ def register(commands, common: argparse.ArgumentParser) -> None:
 
 def _borehole_fields(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--name")
-    parser.add_argument("--x", type=float, help="plan x, in metres")
-    parser.add_argument("--y", type=float, help="plan y (along z in the model), in metres")
+    # Map coordinates, as the GUI's borehole dialog gives them: the map's y is
+    # the model's z. Its height is not a coordinate -- that is --head and --water.
+    parser.add_argument("--x", type=float, help="its position on the map: x, in metres")
+    parser.add_argument("--y", type=float,
+                        help="its position on the map: y, in metres (the model's z, out of "
+                             "the 2D section; not a height)")
     parser.add_argument("--head", type=float, help="the ground level there")
     parser.add_argument("--water", type=float, help="the phreatic level there")
 

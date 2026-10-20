@@ -28,13 +28,17 @@ Then type the lines below, or paste them all at once. Lines starting with `#` ar
 comments, and `.` is the folder you chose.
 
 ```text
-# 1. A new 2D project. The shell opens it and saves every edit into it.
+# 1. A new 2D project. simple_dike.json is the file the model is saved in, after every
+#    command; --name is the model's name, which also names the Kratos input files.
+#    Axes: x runs across the section, y points up, z runs out of the section.
 new simple_dike.json --dim 2 --name simple_dike
 
 # 2. The soil block, 20 m wide and 10 m high, and a borehole.
 #    The ground is at y = 10 and the water at y = 0, so the soil is dry.
 #    A 2D model is a vertical cut through the site at one z (z = 0 in a new project).
 #    The site's z extent matters only when the model is switched to 3D.
+#    A borehole is placed on the map, as in the GUI: its --x and --y are map coordinates
+#    (map y is the model's z). Its levels are --head (ground) and --water.
 domain --x 0 20 --y 0 10
 borehole set bh1 --name BH1 --x 0 --y 0 --head 10 --water 0
 
