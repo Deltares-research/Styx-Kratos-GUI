@@ -405,6 +405,7 @@ table.lay-table tr.sel:hover td { background: var(--c-select); }   /* keep selec
 .dlg-simple ul { margin: 0 0 10px; padding-left: 20px; color: var(--c-ink-soft); }
 .dlg-simple code { font-family: var(--font-mono); background: #eef1f6; padding: 1px 4px; border-radius: 2px; }
 
+.about-wordmark { height: 36px; display: block; margin: 2px 0 12px; }
 .about-powered { margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--c-border); }
 .about-powered p { margin-bottom: 10px; font-size: var(--fs-sm); }
 .about-logos { display: flex; align-items: center; gap: 28px; }

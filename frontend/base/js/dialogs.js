@@ -1215,11 +1215,11 @@ App.Dialogs = (function () {
   function about() {
     open({
       title: 'About ' + App.PRODUCT.name,
-      width: 480, height: 330,
+      width: 480, height: 310,
       buttons: [{ label: 'OK', primary: true }],
       build: function (body) {
         body.appendChild(el('div.dlg-simple', null, [
-          el('h3', { text: App.PRODUCT.name }),
+          el('img.about-wordmark', { src: '/assets/styx-about.png', alt: App.PRODUCT.name }),
           el('p', { text: App.PRODUCT.version }),
           el('p', { text: 'a browser-based geotechnical modeller' }),
           el('div.about-powered', null, [
