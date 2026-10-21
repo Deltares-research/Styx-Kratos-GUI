@@ -27,7 +27,7 @@ import argparse
 
 from cli.terminal.files import add_project, add_writing, written
 from cli.terminal.output import Answer
-from cli.terminal.words import existing, file_of, given
+from cli.terminal.words import existing, file_of, given, id_and_name, id_help, named_ids
 from core import session
 from core.model import phases
 from core.model.schemas import Project
@@ -62,7 +62,7 @@ def register(commands, common: argparse.ArgumentParser) -> None:
 
     add = actions.add_parser("add", parents=[common],
                              help="a phase at the end of the sequence, or --before one")
-    add.add_argument("id", nargs="?", help="its id (default: the first free phase_<n>)")
+    add.add_argument("id", nargs="?", help=id_help("the first free phase_<n>"))
     add.add_argument("--before", metavar="PHASE",
                      help="insert it between this phase and the one it starts from")
     _phase_fields(add)
@@ -73,7 +73,7 @@ def register(commands, common: argparse.ArgumentParser) -> None:
     copy = actions.add_parser("copy", parents=[common],
                               help="a phase with the same solver settings, after it")
     copy.add_argument("original")
-    copy.add_argument("--id", help="the copy's id (default: the first free phase_<n>)")
+    copy.add_argument("--id", help=id_help("the first free phase_<n>"))
     _phase_fields(copy)
     _parts(copy)
     add_writing(copy)
@@ -173,12 +173,14 @@ def staged_phases(args: argparse.Namespace) -> Answer:
     return _replaced(args, session.staged_excavation_phases(session.load(args.project)))
 
 
+@named_ids()
 def add_phase(args: argparse.Namespace) -> Answer:
     project, phase = session.add_phase(session.load(args.project), before=args.before,
                                        id=args.id, **given(args, *FIELDS))
     return _added(args, project, phase)
 
 
+@named_ids()
 def copy_phase(args: argparse.Namespace) -> Answer:
     project, phase = session.add_phase(session.load(args.project), copy_of=args.original,
                                        id=args.id, **given(args, *FIELDS))
@@ -210,7 +212,7 @@ def _added(args: argparse.Namespace, project: Project, phase) -> Answer:
     for keys, wanted in ((args.activate, True), (args.deactivate, False)):
         if keys:
             project = session.switch_parts(project, phase.id, keys, wanted)
-    return _edited(args, project, f"added phase {phase.id} ({phase.name}) after "
+    return _edited(args, project, f"added phase ({id_and_name(phase)}) after "
                                   f"{phase.parent or 'nothing: it is the first'}")
 
 

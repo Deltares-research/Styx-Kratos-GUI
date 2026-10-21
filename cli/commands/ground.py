@@ -13,7 +13,8 @@ import argparse
 
 from cli.terminal.files import add_project, add_writing, written
 from cli.terminal.output import Answer, CommandError
-from cli.terminal.words import action, assignments, edited, existing, file_of, given, noun
+from cli.terminal.words import (action, assignments, edited, existing, file_of, given,
+                                id_help, named_ids, noun)
 from core import session
 from core.model import drafts
 from core.model.schemas import Project
@@ -34,7 +35,7 @@ def register(commands, common: argparse.ArgumentParser) -> None:
     action(borehole, common, "list", list_boreholes, writes=False)
     add = action(borehole, common, "add", add_borehole,
                   help="a borehole; what is not given is copied from the last one")
-    add.add_argument("id", nargs="?", help="its id (default: the first free bh<n>)")
+    add.add_argument("id", nargs="?", help=id_help("the first free bh<n>"))
     _borehole_fields(add)
     change = action(borehole, common, "set", update_borehole)
     existing(change, "borehole")
@@ -50,8 +51,7 @@ def register(commands, common: argparse.ArgumentParser) -> None:
     add = action(material, common, "add", add_material, variables=True,
                   help="a soil: the default sand, or a library preset, then NAME=VALUE "
                        "variables of its own")
-    add.add_argument("id", help="its id, which `material set` and a layer's --material "
-                                "refer to it by")
+    add.add_argument("id", nargs="?", help=id_help())
     add.add_argument("--preset", help="the library preset to start from (see `presets`)")
     _material_fields(add)
     change = action(material, common, "set", update_material, variables=True,
@@ -68,7 +68,7 @@ def register(commands, common: argparse.ArgumentParser) -> None:
     add = action(layer, common, "add", add_layer,
                   help="a layer under the stack, down to --bottom or --thickness below "
                        "the last one (default 5 m)")
-    add.add_argument("id", help="its id, which `layer set` refers to it by")
+    add.add_argument("id", nargs="?", help=id_help())
     add.add_argument("--material", required=True)
     add.add_argument("--name")
     depth = add.add_mutually_exclusive_group()
@@ -181,6 +181,7 @@ def list_boreholes(args: argparse.Namespace) -> Answer:
         for b in project.boreholes])
 
 
+@named_ids()
 def add_borehole(args: argparse.Namespace) -> Answer:
     project = session.add_borehole(session.load(args.project), id=args.id,
                                    **given(args, "name", "x", "y", "head", "water"))
@@ -214,6 +215,7 @@ def list_presets(args: argparse.Namespace) -> Answer:
         for entry in drafts.LIBRARY])
 
 
+@named_ids(required=True)
 def add_material(args: argparse.Namespace) -> Answer:
     project = session.load(args.project)
     try:
@@ -258,6 +260,7 @@ def list_layers(args: argparse.Namespace) -> Answer:
                   lines=lines or ["No layers yet."])
 
 
+@named_ids(required=True)
 def add_layer(args: argparse.Namespace) -> Answer:
     project = session.add_layer(session.load(args.project), args.id, args.material,
                                 name=args.name, bottom=args.bottom, thickness=args.thickness)
@@ -289,12 +292,10 @@ def list_parts(args: argparse.Namespace) -> Answer:
     """Every part of the model by its key -- the names phases activate and deactivate --
     with what to call it and whether a phase can switch it."""
     project = session.load(args.project)
-    labels = dict(project.soil_body_labels)
+    labels = session.part_names(project)
     for part in project.custom_parts:
-        labels[part.key] = part.label + (f" (soil of {part.mat})" if part.mat else "")
-    for record in (*project.beams, *project.anchors, *project.interfaces,
-                   *project.normal_loads, *project.loads):
-        labels.setdefault(record.id, record.name)
+        if part.mat:
+            labels[part.key] += f" (soil of {part.mat})"
     stageable = project.stageable_keys()
     keys = list(dict.fromkeys([*project.part_keys(), *stageable]))
     rows = [{"key": key, "label": labels.get(key, key), "stageable": key in stageable}

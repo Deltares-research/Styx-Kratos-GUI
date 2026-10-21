@@ -107,6 +107,20 @@ def test_material_add_from_a_preset_with_variables_of_its_own(cli, site):
     assert clay.variables["GEO_DRAINAGE_TYPE"] == "CONSTANT_PW_FIELD"
 
 
+def test_a_material_and_a_layer_given_only_a_name_take_it_as_their_id(cli, site):
+    assert cli("material", site, "add", "--name", "peat").code == 0
+    assert cli("layer", site, "add", "--name", "peat layer", "--material", "peat").code == 0
+
+    project = session.load(site)
+    assert (project.materials[-1].id, project.layers[-1].id) == ("peat", "peat layer")
+
+
+def test_a_material_with_neither_an_id_nor_a_name_is_refused(cli, site):
+    ran = cli("material", site, "add", "--preset", "m3")
+
+    assert ran.code == 1 and "--name" in ran.err
+
+
 def test_material_set_and_unset_variables(cli, site):
     assert cli("material", site, "set", "m1", "K0_NC=0.5", "--unset", "GEO_COHESION",
                "--name", "Fill, wet").code == 0
