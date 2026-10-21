@@ -405,6 +405,18 @@ table.lay-table tr.sel:hover td { background: var(--c-select); }   /* keep selec
 .dlg-simple ul { margin: 0 0 10px; padding-left: 20px; color: var(--c-ink-soft); }
 .dlg-simple code { font-family: var(--font-mono); background: #eef1f6; padding: 1px 4px; border-radius: 2px; }
 
+.about-powered { margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--c-border); }
+.about-powered p { margin-bottom: 10px; font-size: var(--fs-sm); }
+.about-logos { display: flex; align-items: center; gap: 28px; }
+/* The Kratos logo sits on a white plate; multiply lets the dialog's grey show through it. */
+.about-logo-kratos { height: 30px; display: block; mix-blend-mode: multiply; }
+.about-logo-deltares {
+  height: 26px; aspect-ratio: 1967 / 381; display: block;
+  background: var(--brand-primary);
+  -webkit-mask: url(/assets/deltares-logo.png) center / contain no-repeat;
+          mask: url(/assets/deltares-logo.png) center / contain no-repeat;
+}
+
 .mock-banner {
   margin-top: 6px; padding: 8px 10px;
   background: #fff6e0; border: 1px solid #e8c97a; border-radius: var(--radius);
