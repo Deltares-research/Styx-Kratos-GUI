@@ -1,9 +1,7 @@
 <div align="center">
   <h1>
-    <picture>
-      <source media="(prefers-color-scheme: dark)" srcset="frontend/assets/STYX-wordmark-transparent-light.png">
-      <img src="frontend/assets/STYX-wordmark-transparent-dark.png" alt="Styx" width="400">
-    </picture>
+    <img src="frontend/assets/STYX-wordmark-transparent-dark.png#gh-light-mode-only" alt="Styx" width="400">
+    <img src="frontend/assets/STYX-wordmark-transparent-light.png#gh-dark-mode-only" alt="Styx" width="400">
   </h1>
 
   <p>
