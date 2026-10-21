@@ -97,6 +97,18 @@ CROW excavation wall, as a project file (`crow.json`) and as a model script (`cr
 model: `show`, `check`, `get`, the `list` actions, `parts`, `phases show`, `node`, `mesh`
 (without `--size` or `--order`), `export` and `calculate`.
 
+## Axes
+
+x runs across the section, y points up, and z runs out of the section. The command line,
+the project file and the GUI use these same three names.
+
+A 2D model is the vertical cut through the site at one z, in the middle of the z extent:
+z = 0 in a new project. `dimension P 2d --offset Z` cuts it at another z. In 2D,
+`domain --z` only bounds where that cut may be, so a 2D model can leave it out.
+
+A borehole is placed on the map, as in the GUI: its `--x` is the model's x and its `--y`
+is the model's z. Its levels are `--head` (the ground) and `--water`.
+
 ## The ground, command by command
 
 An empty site, built up to a staged excavation. The numbers are in the project's units
@@ -128,7 +140,10 @@ kratos-cli parts pit.json                                 # soil_top__lift1, ...
 - **Materials** start as the GUI starts them: the default loose sand, or a library preset
   (`--preset`). The law follows the model's dimension, and the values are converted into
   the project's units. Variables given as `NAME=VALUE` are Kratos' own, in the project's
-  units.
+  units; `get P materials[ID].variables` lists the values a material has. `--color` is a
+  `#rrggbb` colour, such as `#c4a86a`. The export derives some variables that are left
+  out, and its warning lists them. It also derives `K0_NC` as 1 − sin φ from
+  `GEO_FRICTION_ANGLE`, into `initial_materials.json`, but that warning does not list it.
 - **The excavation** is dug in its `--levels`, shallowest first. Each lift is a body of
   its own, deactivated in its own phase. In a layered model, a pit with one level is not
   dug at all, and the command says so.
@@ -217,6 +232,14 @@ kratos-cli phases pit.json list
 - **`set PHASE`** changes `--name`, `--calculation k0|plastic|null`,
   `--reset-displacements` / `--keep-displacements`, `--max-iterations`, `--tolerance`
   (the residual relative tolerance), `--time-interval` (days) and `--parent`.
+- **Defaults.** A phase that is not given these options is a plastic calculation with
+  at most 15 iterations, a tolerance of 1e-4, the displacements of the phase before kept,
+  and a time interval of 0 days. `phases show ID` prints a phase's settings.
+- **The solver** is the same for every phase and no option changes it: a static U-Pw
+  analysis (displacements and water pressure), Newton-Raphson iterations on a residual
+  criterion, one step per phase, and the direct `skyline_lu_factorization` linear solver.
+  It is written into `ProjectParameters.json`, and `SOLVER` in
+  [`core/kratos/parameters.py`](../core/kratos/parameters.py) lists every setting.
 - A sequence that would branch, two phases starting from one, is refused, because Kratos
   runs one sequence. So is a part the model does not have.
 
@@ -238,7 +261,10 @@ pit.json> exit
 the open project where the command takes one (`borehole P add`, `node P 30`). A project
 named on the line is the one used (`water other.json -3`), and a command that takes no
 project, `results` or `run`, is given none. Everything else is the command as it is in the
-terminal: the same options, answers, `--json`, refusals and exit codes.
+terminal: the same options, answers, `--json`, refusals and exit codes. A line that starts
+with `kratos-cli` is read without it, so a `next: kratos-cli ...` hint can be pasted as
+printed. `help COMMAND` prints the command's usage as the terminal has it, with the
+project file as `project`: in the shell, leave it out.
 
 - **Its own words:** `open FILE`, `close`, `new FILE ...` (which opens what it makes),
   `undo` and `redo` (the edits of the open project, one command each, as in the GUI),
@@ -321,9 +347,13 @@ kratos-cli results field D:/copied/Pit_A_2026-10-12_09-14 uy   # a run anywhere
 
 - **`RUN`** is a run's id, its number in `results runs`, or the path of a run directory,
   wherever it is: one copied off another machine reads the same, whatever its folder is
-  called.
-- **`--stage`** takes a stage's number or words of its phase. Without it, the last stage
-  that wrote results is read, which is where the GUI's Results mode opens a run.
+  called. In `results show 1`, `1` is the newest run, not a stage.
+- **`--stage`** takes a stage's number, as `results show` lists it, or words of its phase.
+  Without it, the last stage that wrote results is read, which is where the GUI's Results
+  mode opens a run.
+- **Pictures.** The command line gives numbers and CSV files. To see a field drawn on the
+  mesh, or a profile as a plot, open the run in the GUI's Results mode: start the GUI with
+  the same `KRATOS_GUI_RUNS` as the run was made with.
 - **A field** is one of the names `results fields` lists, as in the GUI's results log
   (`u`, `uy`, `syy`, `p`, `q`, `pw`, ...). A stress is read per element, as the solver
   computed it, unless `--location nodes` averages it onto the nodes.
@@ -424,6 +454,12 @@ files are named after the project; `--name mesh` names them `mesh.mdpa`.
 the deck stays as it was and every run is kept. The runs root is `KRATOS_GUI_RUNS`, or
 `~/KratosGUI/runs`, which the GUI's Results mode reads too. `--runs-dir` puts the run somewhere
 else. Kratos is found the way the GUI finds it: [KRATOS_SETUP.md](KRATOS_SETUP.md).
+
+`run` and `calculate` print nothing while Kratos runs. The run directory and its copy of
+the deck are there from the start; `kratos.log`, Kratos' own output, is written into it
+when the run ends. The run time grows quickly with the mesh: `mesh P` reports the number
+of nodes and elements before a run, and `--timeout` (an hour by default) stops a run that
+takes too long.
 
 ## Output and exit codes
 
