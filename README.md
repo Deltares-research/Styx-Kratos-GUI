@@ -1,7 +1,10 @@
 <div align="center">
-  <img src="frontend/assets/logo.png" alt="Styx logo" width="96" height="96">
-
-  <h1>Styx</h1>
+  <h1>
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="frontend/assets/STYX-wordmark-transparent-light.png">
+      <img src="frontend/assets/STYX-wordmark-transparent-dark.png" alt="Styx" width="400">
+    </picture>
+  </h1>
 
   <p>
     A browser-based geotechnical modeller for the
