@@ -1489,9 +1489,8 @@ App.LivePatches = (function () {
 
      A panel with nothing in it and no way out of it would be the commonest thing
      anybody sees, so it carries the button that fills it. `default_phases` on the
-     server builds the sequence -- settle, build, then alternate digging and propping
-     -- from the model as it stands, which for a staged excavation is its seven
-     stages exactly. */
+     server makes the initial stage and the null step; every later phase is the
+     user's to add (`core/model/phases.py`). */
   function emptyPhaseState() {
     var el = App.UI.el;
     var wrap = el('div.lay-hint', { style: 'padding:10px' });
@@ -1954,6 +1953,114 @@ App.LivePatches = (function () {
     resultsCaret(panel);
   }
 
+  /* ── What the command panel says about itself ────────────────────────────
+     The mockup's welcome, `help`, command reference, Model history and canned
+     answers (js/data.js:914-956, js/dialogs.js:1240) describe a demo: a command line
+     that "accepts a small set of demo commands", a model of 50 × 40 × 25 m whatever
+     is open, `plate` answering "Plate_5" without building anything, and `calculate`
+     saying no solver is attached. One list of the commands this build has feeds
+     `help` and the command reference both, so the two cannot disagree again. */
+  var COMMANDS = [
+    ['run <file.py>', 'build the model from a Python file'],
+    ['script <file.py>', 'write the model as a Python file that builds it'],
+    ['mesh', 'generate the finite element mesh'],
+    ['calculate', 'mesh the model and run it in Kratos (F9)'],
+    ['results', 'open what a calculation wrote (try "results runs")'],
+    ['export', 'write the Kratos deck'],
+    ['phases', 'the Phases overview: every phase, its time and result'],
+    ['water <level>|off', 'set or remove the water level, e.g. water -1.5'],
+    ['units [SI|kN]', 'show the unit system, or convert the project to another'],
+    ['borehole <x> <y>', 'add a borehole'],
+    ['soillayers', 'open the Modify soil layers window'],
+    ['materials', 'open the Material sets window'],
+    ['cleargeometry', 'remove the drawn and imported solids'],
+    ['colour <part>|all|off', 'draw a part of the mesh in its own colour'],
+    ['node <id>', 'which SubModelParts a node is in'],
+    ['gotosoil, gotostructures, gotomesh, gotoflow, gotostaged', 'open a mode'],
+    ['view iso|top|front|side', 'a standard view'],
+    ['zoomfit', 'zoom to fit the model'],
+    ['clear', 'clear the session log'],
+    ['help', 'this list']
+  ];
+
+  /* The canned words of js/data.js that build nothing, and where the real tool is. */
+  var PLACEHOLDERS = {
+    soillayer: 'Soil > Modify soil layers…, or `kratos-cli layer add` in a terminal',
+    plate: 'Structures > Create wall panel… (3D), or `kratos-cli wall add`',
+    beam: 'Structures > Create sheet pile…, or `kratos-cli beam add`',
+    anchor: 'Structures > Create anchor…, or `kratos-cli anchor add`',
+    surface: 'the Create surface tool of Structures mode',
+    line: 'the Create line tool of Structures mode',
+    point: 'the Create point tool of Structures mode'
+  };
+
+  /* Every first word js/command.js answers itself: its mode jumps, its `switch`, and
+     the canned answers. Anything else it would call a demo command it does not know. */
+  var SHELL_WORDS = ['gotosoil', 'gotostructures', 'gotomesh', 'gotoflow', 'gotostaged',
+                     'gotoflowconditions', 'clear', 'view', 'zoomfit', 'soillayers',
+                     'materials', 'mesh', 'borehole'];
+
+  function helpLines() {
+    return [['note', 'Commands:']].concat(COMMANDS.map(function (row) {
+      var name = row[0].length < 22 ? (row[0] + '                      ').slice(0, 22)
+                                    : row[0] + '  ';
+      return ['note', '  ' + name + row[1]];
+    }));
+  }
+
+  function shellAnswers(word) {
+    return SHELL_WORDS.indexOf(word) >= 0
+      || Object.prototype.hasOwnProperty.call(App.CMD_RESPONSES || {}, word);
+  }
+
+  function replaceMockupText() {
+    var product = App.PRODUCT || {};
+    App.CMD_WELCOME = [
+      ['note', '# ' + (product.name || 'Styx') + ' — ' + (product.version || '')],
+      ['note', '# Type a command and press Enter. "help" lists the commands.'],
+      ['note', '# Try:  run tests/models/excavation.py  ·  help'],
+      ['ok', 'Project "' + (product.project || 'Untitled project') + '" opened.']
+    ];
+    // Filled with what is typed, by the command box below; js/data.js's list was a
+    // session nobody had.
+    App.CMD_HISTORY = [];
+    if (!App.CMD_RESPONSES) return;
+    App.CMD_RESPONSES.help = helpLines();
+    Object.keys(PLACEHOLDERS).forEach(function (word) {
+      App.CMD_RESPONSES[word] = [['note', '"' + word + '" builds nothing in the command box '
+                                          + 'yet. Use ' + PLACEHOLDERS[word] + '.']];
+    });
+  }
+
+  function commandReference() {
+    var el = App.UI.el;
+    App.Dialogs.open({
+      title: 'Command reference',
+      width: 620, height: 520,
+      buttons: [{ label: 'Close', primary: true }],
+      build: function (body) {
+        var list = el('ul');
+        COMMANDS.forEach(function (row) {
+          list.appendChild(el('li', null, [el('code', { text: row[0] }),
+                                           el('span', { text: '  —  ' + row[1] })]));
+        });
+        body.appendChild(el('div.dlg-simple', null, [
+          el('p', { text: 'Type a command in the box below the log and press Enter. '
+                          + 'The arrow keys bring back earlier commands. `results` alone '
+                          + 'lists all its forms.' }),
+          list,
+          el('p', { text: 'kratos-cli does the same work in a terminal: see docs/CLI.md.' })
+        ]));
+      }
+    });
+  }
+
+  function recordHistory(text) {
+    var history = typeof document !== 'undefined' && document.getElementById('cmd-history');
+    if (!history || !App.UI) return;
+    history.appendChild(App.UI.el('div.cmd-line.echo', { text: '> ' + text }));
+  }
+
   function install() {
     if (installed || typeof App.runAction !== 'function' || !App.Command) return;
     installed = true;
@@ -1992,6 +2099,13 @@ App.LivePatches = (function () {
 
     var frozenAction = App.runAction;
     App.runAction = function (item) {
+      // A menu item or tool from the mockup that nothing implements yet.
+      if (item && !item.action) {
+        if (item.label && App.Command) {
+          App.Command.note('"' + item.label + '" is not available in Styx yet.');
+        }
+        return;
+      }
       // Refused rather than quietly ignored: the button is greyed out, so anything
       // that still gets here came from a keyboard shortcut or a menu that was open
       // when the mode changed, and silence would read as a broken command.
@@ -2493,22 +2607,10 @@ App.LivePatches = (function () {
       if (treeHost) treeHost.addEventListener('contextmenu', onTreeContextMenu, true);
     }
 
-    /* `help` is a canned list in the frozen mockup (js/data.js:866). The commands this
-       build really has belong in it, or the only way to find them is to read the
-       source. Spliced above the mode-jump line so the scripting entry point is the
-       first thing in the list rather than the last. */
-    if (App.CMD_RESPONSES && App.CMD_RESPONSES.help &&
-        !App.CMD_RESPONSES.help.some(function (line) { return /run </.test(line[1]); })) {
-      App.CMD_RESPONSES.help.splice(1, 0,
-        ['note', '  run <file.py>         build the model from a Python file'],
-        ['note', '  script <file.py>      write the model as a Python file that builds it'],
-        ['note', '  export                write the Kratos deck'],
-        ['note', '  cleargeometry         remove drawn/imported custom geometry'],
-        ['note', '  results               open what a calculation wrote (try "results runs")'],
-        ['note', '  colour <part>|all|off draw a part of the mesh in its own colour'],
-        ['note', '  water <level>|off     set or remove the water level, e.g. water -1.5'],
-        ['note', '  node <id>             which SubModelParts a node is in'],
-        ['note', '  phases                the Phases overview: every phase, its time and result']);
+    replaceMockupText();
+    if (App.Dialogs && App.Dialogs.commandReference && !App.Dialogs.commandReference.__live) {
+      App.Dialogs.commandReference = commandReference;
+      App.Dialogs.commandReference.__live = true;
     }
 
     /* ── Results mode ─────────────────────────────────────────────────────
@@ -3263,6 +3365,11 @@ App.LivePatches = (function () {
       if (runScriptCommand(text)) return;
 
       var cmd = (text || '').trim().split(/\s+/)[0].toLowerCase();
+      if (cmd === 'calculate') {
+        if (App.Command.write) App.Command.write('echo', '> ' + text.trim());
+        if (App.Calculate) return App.Calculate.run();
+        return;
+      }
       if (cmd === 'phases') {
         if (App.Command.write) App.Command.write('echo', '> ' + text.trim());
         phasesDialog();
@@ -3320,6 +3427,13 @@ App.LivePatches = (function () {
 
       if (/^_?mesh(?:\s|$)/i.test((text || '').trim())) {
         requestMesh(false, text.trim());
+        return;
+      }
+      // js/command.js would call it "not in the demo command list".
+      if (!shellAnswers(cmd.replace(/^_/, ''))) {
+        if (App.Command.write) App.Command.write('echo', '> ' + text.trim());
+        App.Command.err('Unknown command "' + text.trim().split(/\s+/)[0]
+                        + '". Type help to see the commands.');
         return;
       }
       return frozenRun(text);
@@ -3597,6 +3711,7 @@ App.LivePatches = (function () {
           if (!text) return;
           event.preventDefault(); event.stopImmediatePropagation();
           cmdHistory.push(text); cmdIndex = cmdHistory.length;
+          recordHistory(text);
           entry.value = '';
           App.Command.run(text);
           return;
@@ -3633,6 +3748,8 @@ App.LivePatches = (function () {
   return {
     install: install, meshSummary: meshSummary,
     collapsibleResultsPanel: collapsibleResultsPanel,
+    COMMANDS: COMMANDS, helpLines: helpLines, shellAnswers: shellAnswers,
+    replaceMockupText: replaceMockupText,
     snapshotLayers: snapshotLayers, restoreLayers: restoreLayers,
     snapshotSoil: snapshotSoil, restoreSoil: restoreSoil, pitRefinement: pitRefinement,
     isDeletableCustomPart: isDeletableCustomPart, tagTreeRowsWithObjKeys: tagTreeRowsWithObjKeys,

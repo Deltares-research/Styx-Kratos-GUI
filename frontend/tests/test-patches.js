@@ -878,4 +878,102 @@
     }).then(function () { unfetch(); restore(ctx); },
             function (e) { unfetch(); restore(ctx); throw e; });
   });
+
+  /* The command panel's own words. The mockup's welcome, `help`, command reference,
+     model history and canned answers described a demo that no longer exists. */
+  function textOf(lines) {
+    return lines.map(function (line) { return line[0] + ':' + line[1]; }).join('\n');
+  }
+
+  test('help lists the real commands and calls none of them a demo', function () {
+    var ctx = harness();
+    try {
+      var help = textOf(App.CMD_RESPONSES.help);
+      ['run <file.py>', 'calculate', 'units', 'phases', 'export', 'water', 'results']
+        .forEach(function (word) { T.ok(help.indexOf(word) >= 0, 'help names ' + word + ':\n' + help); });
+      T.ok(!/demo|mockup/i.test(help), help);
+    } finally { restore(ctx); }
+  });
+
+  test('the welcome and the model history say nothing the project does not hold', function () {
+    var ctx = harness();
+    try {
+      var welcome = textOf(App.CMD_WELCOME);
+      T.ok(!/mockup|demo/i.test(welcome), welcome);
+      T.ok(!/boreholes|soil layers|×/.test(welcome), 'no fixed model geometry:\n' + welcome);
+      T.eq(App.CMD_HISTORY, [], 'no invented commands in the Model history tab');
+    } finally { restore(ctx); }
+  });
+
+  test('a placeholder command builds nothing and does not say it did', function () {
+    var ctx = harness();
+    try {
+      ['soillayer', 'plate', 'beam', 'anchor', 'surface', 'line', 'point'].forEach(function (word) {
+        var answer = textOf(App.CMD_RESPONSES[word]);
+        T.ok(!/^ok:/m.test(answer), word + ' claims success: ' + answer);
+        T.ok(!/_\d+\b/.test(answer), word + ' names an object that does not exist: ' + answer);
+      });
+    } finally { restore(ctx); }
+  });
+
+  test('calculate in the command box runs the calculation', function () {
+    var ctx = harness();
+    var saved = App.Calculate, ran = 0;
+    App.Calculate = { run: function () { ran += 1; return Promise.resolve(); } };
+    return Promise.resolve(App.Command.run('calculate')).then(function () {
+      T.eq(ran, 1);
+      T.eq(ctx.frozen, [], 'not the mockup answer "no solver is attached"');
+    }).then(function () { App.Calculate = saved; restore(ctx); },
+            function (e) { App.Calculate = saved; restore(ctx); throw e; });
+  });
+
+  test('an unknown command points to help, not to a demo list', function () {
+    var ctx = harness();
+    return Promise.resolve(App.Command.run('frobnicate 3')).then(function () {
+      T.eq(ctx.frozen, [], 'the mockup interpreter does not answer it');
+      T.ok(ctx.lines.some(function (l) {
+        return /^err:Unknown command "frobnicate"/.test(l) && /help/.test(l) && !/demo/.test(l);
+      }), ctx.lines.join(' | '));
+    }).then(function () { restore(ctx); }, function (e) { restore(ctx); throw e; });
+  });
+
+  test('a command the mockup interpreter owns still reaches it', function () {
+    var ctx = harness();
+    return Promise.resolve(App.Command.run('zoomfit')).then(function () {
+      T.eq(ctx.frozen, ['zoomfit']);
+    }).then(function () { restore(ctx); }, function (e) { restore(ctx); throw e; });
+  });
+
+  test('a menu item with no action says it is not available yet', function () {
+    var ctx = harness();
+    var notes = [];
+    App.Command.note = function (text) { notes.push(text); };
+    try {
+      App.runAction({ label: 'Print…' });
+      T.eq(notes, ['"Print…" is not available in Styx yet.']);
+    } finally { restore(ctx); }
+  });
+
+  test('the command reference lists the commands help lists', function () {
+    var ctx = harness();
+    var layer = document.getElementById('modal-layer');
+    var made = !layer;
+    if (made) {
+      layer = document.createElement('div');
+      layer.id = 'modal-layer';
+      document.body.appendChild(layer);
+    }
+    try {
+      App.Dialogs.commandReference();
+      var text = layer.textContent;
+      ['calculate', 'results', 'units', 'run <file.py>'].forEach(function (word) {
+        T.ok(text.indexOf(word) >= 0, 'the reference names ' + word + ': ' + text);
+      });
+      T.ok(!/demo|mockup|would list/i.test(text), text);
+    } finally {
+      App.UI.clear(layer);
+      if (made) layer.remove();
+      restore(ctx);
+    }
+  });
 })();
