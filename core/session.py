@@ -131,7 +131,8 @@ def write_script(project: Project, path: str | Path, *, force: bool = False,
     if path.exists() and not force:
         raise EditRefused(f"{path} is there already, and may have been edited by hand: "
                           "give --force to replace it.")
-    return _write(path, script_writer.script(project, source=source, name=path.name))
+    return _write(path, script_writer.script(project, source=source, name=path.name,
+                                             folder=path.parent))
 
 
 def _write(path: Path, text: str) -> Path:

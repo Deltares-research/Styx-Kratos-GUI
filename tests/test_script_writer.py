@@ -109,6 +109,45 @@ def test_it_names_how_it_is_used(text):
     assert 'if __name__ == "__main__":' in text
 
 
+# ── Where the file finds the checkout ───────────────────────────────────────
+
+def run_as(text: str, file: Path) -> dict:
+    """The file's module-level code, run as if it were saved at `file`."""
+    namespace = {"__file__": str(file), "__name__": "model"}
+    exec(compile(text, str(file), "exec"), namespace)
+    return namespace
+
+
+def test_a_file_in_the_checkout_finds_it_from_the_folders_above():
+    """A model script kept in the repository works in every clone of it, so it holds no
+    path of the computer it was written on."""
+    root = script_writer.ROOT
+    text = script_writer.script(templates.blank_project(), folder=root / "models")
+
+    assert root.as_posix() not in text
+    assert run_as(text, root / "models" / "pit" / "model.py")["ROOT"] == root
+
+
+def test_a_file_outside_the_checkout_also_keeps_the_one_it_was_written_from(tmp_path):
+    """Run by a Python outside the checkout, from a folder outside it, the folders above
+    and the environment find nothing: the checkout it was written from is the last
+    place to look."""
+    text = script_writer.script(templates.blank_project(), folder=tmp_path)
+
+    assert f'Path("{script_writer.ROOT.as_posix()}")' in text
+    assert run_as(text, tmp_path / "model.py")["ROOT"] == script_writer.ROOT
+
+
+def test_writing_a_file_into_the_checkout_leaves_its_path_out(monkeypatch, tmp_path):
+    monkeypatch.setattr(script_writer, "ROOT", tmp_path)
+
+    written = session.write_script(templates.blank_project(), tmp_path / "pit.py")
+
+    text = written.read_text(encoding="utf-8")
+    assert tmp_path.as_posix() not in text
+    assert "Path(sys.prefix).resolve().parent]:" in text
+
+
 def test_a_field_the_writer_has_no_heading_for_is_still_written(monkeypatch, tmp_path):
     """The writer walks the schema: a field it was never told about lands under
     "Other", and the round trip still holds."""

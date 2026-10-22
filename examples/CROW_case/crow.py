@@ -1,8 +1,7 @@
 """CROW excavation wall, as a model script.
 
-Written by `kratos-cli script crow.json --out crow.py`; the same model as crow.json
-beside it. Every value is the model's own, typed out; constants and loops can be put in
-by hand.
+Written by kratos-cli from crow.json on 2026-10-21. Every value is the model's own,
+typed out; constants and loops can be put in by hand.
 
     run crow.py                   in the GUI's command box: open it there
     kratos-cli show crow.py       and every kratos-cli command that reads a model
@@ -18,9 +17,22 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
-"""The checkout this example is in, where `core` is; `python <this file>` needs it on
-the path. Found from this file, so it holds wherever the checkout is."""
+
+def checkout() -> Path:
+    """The checkout, where `core` is: a folder above this file, or the one the Python
+    that runs it is in (.venv-windows and the others sit in the checkout's root)."""
+    here = Path(__file__).resolve().parent
+    for folder in [here, *here.parents, Path(sys.prefix).resolve().parent]:
+        if (folder / "core" / "model" / "schemas.py").is_file():
+            return folder
+    if "core" in sys.modules:                       # opened inside Styx, which has it
+        return Path(sys.modules["core"].__file__).resolve().parents[1]
+    sys.exit(f"{Path(__file__).name}: no Styx checkout found; run it with the Python "
+             "that kratos-cli uses")
+
+
+ROOT = checkout()
+"""`python <this file>` needs it on the path."""
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
