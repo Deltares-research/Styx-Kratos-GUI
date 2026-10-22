@@ -191,6 +191,17 @@
     });
   });
 
+  test('opening a run counts its files and the series of each stage', function () {
+    setup();
+    return App.Results.handleCommand('results open ' + DETAIL.id).then(function () {
+      // The detail carries the files themselves, not a count as the listing does.
+      T.ok(said(', 2 files, '), 'the file count: ' + lines().join(' | '));
+      T.ok(!said('[object Object]'), 'no object in the summary: ' + lines().join(' | '));
+      T.ok(said('+1 series'), 'one series: ' + lines().join(' | '));
+      T.ok(!said('seriess'), '"series" is its own plural: ' + lines().join(' | '));
+    });
+  });
+
   test('an index with nothing listed yet is refused with advice', function () {
     setup();
     return App.Results.handleCommand('results open 1').then(function () {

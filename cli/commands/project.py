@@ -229,9 +229,12 @@ def described(data: dict) -> list[str]:
     def names(values: list) -> str:
         return ", ".join(values) if values else "none"
 
+    def counted(count: int, kind: str) -> str:
+        noun = kind.replace("_", " ")
+        return f"{count} {noun.removesuffix('s') if count == 1 else noun}"
+
     domain = data["domain"]
-    structures = ", ".join(f"{count} {kind.replace('_', ' ')}"
-                           for kind, count in data["structures"].items())
+    structures = ", ".join(counted(count, kind) for kind, count in data["structures"].items())
     water = data["water"]
     lines = [
         f"{data['name']}  ({data['file']})",

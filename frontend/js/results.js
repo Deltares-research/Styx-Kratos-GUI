@@ -124,8 +124,9 @@ App.Results = (function () {
     return out;
   }
 
-  function plural(count, noun) {
-    return count + ' ' + noun + (count === 1 ? '' : 's');
+  /* `nouns` for the words whose plural is not an added s, such as "series". */
+  function plural(count, noun, nouns) {
+    return count + ' ' + (count === 1 ? noun : (nouns || noun + 's'));
   }
 
   function runLine(run, index) {
@@ -426,12 +427,12 @@ App.Results = (function () {
 
   function report(run) {
     log('ok', run.id + ' — ' + run.deck + ', ' + when(run.started) + ', '
-              + plural(run.stages.length, 'stage') + ', ' + plural(run.files, 'file')
+              + plural(run.stages.length, 'stage') + ', ' + plural(run.files.length, 'file')
               + ', ' + size(run.bytes) + '.');
     run.stages.forEach(function (stage) {
       log('note', '  ' + pad(stage.index, 4) + pad(stage.phase, 30)
                   + (stage.results ? 'results' : 'no results')
-                  + (stage.json.length ? '  +' + plural(stage.json.length, 'series') : ''));
+                  + (stage.json.length ? '  +' + plural(stage.json.length, 'series', 'series') : ''));
     });
     if (run.failed_at) {
       log('err', 'The run stopped in phase ' + run.failed_at.index + ' of '
