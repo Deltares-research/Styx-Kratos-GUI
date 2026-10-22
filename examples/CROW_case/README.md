@@ -38,7 +38,7 @@ kratos-cli.bat results field 1 uy
 `kratos-cli calculate crow.json` does `export` and `run` in one step. `kratos-cli.bat` is in
 the repository root (`..\..\kratos-cli.bat` from here), or on your `PATH`.
 
-An edit such as `kratos-cli water crow.json -2` writes into `crow.json`. To try changes
+An edit such as `kratos-cli set crow.json mesh.element_size 4` writes into `crow.json`. To try changes
 without touching the example, copy it first.
 
 ## The model script

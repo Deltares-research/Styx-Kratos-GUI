@@ -1046,6 +1046,7 @@ window.DRAFTS_FIXTURE =
           ],
           "fluid_pressure_type": "Hydrostatic",
           "pressure": 0.0,
+          "reference_coordinate": -1.0,
           "active": true
         },
         {
@@ -1068,6 +1069,7 @@ window.DRAFTS_FIXTURE =
           ],
           "fluid_pressure_type": "Hydrostatic",
           "pressure": 0.0,
+          "reference_coordinate": -1.0,
           "active": true
         },
         {
@@ -1090,6 +1092,7 @@ window.DRAFTS_FIXTURE =
           ],
           "fluid_pressure_type": "Hydrostatic",
           "pressure": 0.0,
+          "reference_coordinate": -1.0,
           "active": true
         }
       ],

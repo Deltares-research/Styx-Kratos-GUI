@@ -214,6 +214,11 @@ def convert_project(payload: dict, target: str) -> tuple[dict, list[str]]:
                     for load in payload.get("loads", [])]
     out["normal_loads"] = [{**n, "pressure": value(n.get("pressure", 0.0), STRESS)}
                            for n in payload.get("normal_loads", [])]
+    out["boundary_conditions"] = [
+        {**c, "value": value(c.get("value", 0.0), STRESS),
+         "pressure_tension_cut_off": value(c.get("pressure_tension_cut_off", 0.0), STRESS)}
+        if c.get("kind") == "water_pressure" else c
+        for c in payload.get("boundary_conditions", [])]
     water = payload.get("water")
     if isinstance(water, dict):
         out["water"] = {**water,

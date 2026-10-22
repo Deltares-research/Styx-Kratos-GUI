@@ -653,10 +653,12 @@ App.Model = (function () {
   function pendingWater() { return water; }
 
   /* ── The water line ──────────────────────────────────────────────────────
-     Two numbers, and both of them are the deck's: `y` is the level
-     `core.kratos.parameters._pore_pressure` states the whole ground's water pressure about,
-     and `specific_weight` scales that pressure, every hydrostatic normal load, and
-     DENSITY_WATER in the materials file. Nothing in the GUI could change either until
+     Two numbers. `y` is the level a new hydrostatic water pressure condition or
+     normal load is given, which the record then keeps as its own (`core.model.drafts`);
+     only a normal load saved without a level still reads it at export
+     (`core.kratos.parameters._normal_load`). The level fixes no pressure by itself.
+     `specific_weight` scales the water pressures and DENSITY_WATER in the materials
+     file. Nothing in the GUI could change either until
      now -- the frozen `water` entry in js/data.js:631 lists three borehole levels from
      a different project altogether.
 

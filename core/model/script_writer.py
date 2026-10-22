@@ -44,6 +44,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
     "The structures": ("beam_sections", "panel_sections", "beams", "anchor_sections",
                        "anchors", "interface_sections", "interfaces"),
     "The loads": ("loads", "normal_loads"),
+    "The boundary conditions": ("boundary_conditions",),
     "Drawn and imported solids": ("custom_parts",),
     "The seeded demo pit": ("wall", "struts", "anchor_rows", "piles", "wells"),
     "The mesh": ("mesh",),

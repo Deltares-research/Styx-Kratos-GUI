@@ -687,10 +687,11 @@ class NormalLoad(Base):
     Two ways to size it, picked by `fluid_pressure_type`, matching Kratos
     GeoMechanics' own `ApplyNormalLoadTableProcess`:
 
-    *   `"Hydrostatic"` derives the pressure from `Project.water` at export time --
-        zero at the phreatic level, increasing with depth below it -- so the load
-        tracks the water table rather than a value copied onto each stage's record.
-        This is a staged excavation's `WaterLoad_StageN` arrangement.
+    *   `"Hydrostatic"` derives the pressure from a water level at export time -- zero at
+        the level, increasing with depth below it. The level is the load's own
+        `reference_coordinate`, which a new load is given (`drafts.normal_load`); one
+        saved without it reads `Project.water`. This is a staged excavation's
+        `WaterLoad_StageN` arrangement.
     *   `"Uniform"` applies `pressure` everywhere along the line instead, for a load
         that is not water: a surcharge normal to a sloped face, say.
     """
@@ -704,7 +705,12 @@ class NormalLoad(Base):
     `pressure` -- the wrong thing to fall into without asking for it."""
     pressure: float = 0.0
     """A stress in the project's units, compression positive. Read only when `fluid_pressure_type` is
-    `"Uniform"`; a hydrostatic load is derived from `Project.water` instead."""
+    `"Uniform"`; a hydrostatic load is derived from its water level instead."""
+    reference_coordinate: float | None = None
+    """The water level of a hydrostatic load, m, under the name Kratos'
+    `ApplyNormalLoadTableProcess` gives it. `None`, which only a load saved before the
+    level was copied in has, is the project's own (`Project.water`). Read only when
+    `fluid_pressure_type` is `"Hydrostatic"`."""
     active: bool = True
 
     @model_validator(mode="before")
@@ -733,6 +739,9 @@ class NormalLoad(Base):
                 )
         if not math.isfinite(self.pressure):
             raise ValueError(f"normal load {self.id!r} has a non-finite pressure")
+        if self.reference_coordinate is not None and not math.isfinite(
+                self.reference_coordinate):
+            raise ValueError(f"normal load {self.id!r} has a non-finite water level")
         return self
 
 
@@ -946,8 +955,152 @@ class WaterLevel(Base):
     specific_weight: float | None = Field(default=None, gt=0)
     """In the project's units. None is water's 10 kN/m3 in whatever system the project
     uses (`Project.water_specific_weight`). Read by a `NormalLoad` in `"Hydrostatic"` mode
-    (`core/kratos/parameters.py:_normal_load`); otherwise unused. One value for the whole
-    project, the same way `y` is one phreatic level -- not a per-load setting."""
+    (`core/kratos/parameters.py:_normal_load`) and by every `WaterPressureCondition`
+    (`_water_pressure`). One value for the whole project, the same way `y` is one
+    phreatic level -- not a per-load setting."""
+
+
+# ── Boundary conditions ─────────────────────────────────────────────────────
+
+FACES = ("bottom", "left", "right", "front", "back", "top")
+"""The faces of the domain box a condition can name. Front and back exist in 3D only; a
+2D section has no boundary along z."""
+
+Face = Literal["bottom", "left", "right", "front", "back", "top"]
+
+ConditionTarget = Literal["domain", "face", "part", "line", "point"]
+"""What a condition acts on: the first of the two questions the GUI's condition dialog
+asks. The second -- which face, which part, where -- is the field it names (`face`,
+`part`, `points`). Two fields rather than one overloaded value, so the record holds the
+dialog's two answers as they are and nothing has to guess what kind a value is."""
+
+TARGET_ORDER = ("domain", "part", "face", "line", "point")
+"""The order fixed conditions are written in, least specific first: where two act on
+one node, Kratos keeps the value written last, so the more specific target wins."""
+
+
+class WaterPressureCondition(Base):
+    """A water pressure the user prescribes: on the whole soil, on one soil part, on a
+    face of the domain, along a drawn line, or at a point.
+
+    Nothing else puts a water pressure in the deck: a project with no such record has no
+    water pressure process at all, whatever its water level. Each record is complete in
+    itself -- a hydrostatic one carries its own level -- so two of them can hold two
+    water levels. The fields carry the names of Kratos' `ApplyScalarConstraintTableProcess`
+    (GeoMechanicsApplication), so the record reads like the process it is written as
+    (`core/kratos/parameters.py:_water_pressure`):
+
+    *   `"Uniform"`: `value` at every node.
+    *   `"Hydrostatic"`: zero at the horizontal level `reference_coordinate`, growing with
+        depth below it.
+    *   `"Phreatic_Multi_Line"`: hydrostatic below the phreatic line through
+        (`x_coordinates[i]`, `y_coordinates[i]`, `z_coordinates[i]`).
+
+    Above the level Kratos' formula gives suction, which is positive in its sign
+    convention; `pressure_tension_cut_off` is the most it may reach, and the Kratos
+    default 0 holds the pressure at zero there. `is_fixed=False` makes the record start
+    values only -- an initial field the calculation then changes.
+
+    The target is `on` and the one field it names:
+
+    *   `"domain"`: every soil node.
+    *   `"face"`: the face `face` of the domain. A face the model does not have (front
+        and back in 2D) is left out with a warning, so switching dimension keeps the
+        record.
+    *   `"part"`: the soil part `part`, a key `Project.part_keys` lists -- a layer
+        (`soil_<id>`, with every lift dug out of it), one of its bodies, or a custom part
+        that has a material.
+    *   `"line"`: the polyline `points` (two or more), and `"point"`: the one point in
+        `points`. Both are drawn in the 2D section and embedded in its mesh the way a
+        normal load's line is; a 3D export leaves them out with a warning.
+    """
+    id: Ident
+    name: str
+    kind: Literal["water_pressure"] = "water_pressure"
+    on: ConditionTarget
+    face: Face | None = None
+    part: str | None = None
+    points: list[tuple[float, float]] | None = None
+    fluid_pressure_type: Literal["Uniform", "Hydrostatic", "Phreatic_Multi_Line"] = \
+        "Hydrostatic"
+    is_fixed: bool = True
+    value: float = 0.0
+    """A stress in the project's units, Kratos' sign (compression negative). Read only
+    when `fluid_pressure_type` is `"Uniform"`."""
+    reference_coordinate: float | None = None
+    """The water level, m: the height where the pressure is zero. Required when
+    `fluid_pressure_type` is `"Hydrostatic"`, and read only then."""
+    x_coordinates: list[float] | None = None
+    y_coordinates: list[float] | None = None
+    z_coordinates: list[float] | None = None
+    """The phreatic line, m, x increasing; `z_coordinates` may be left out, which is all
+    zeros. Read only when `fluid_pressure_type` is `"Phreatic_Multi_Line"`; the line may
+    start and end outside the domain."""
+    pressure_tension_cut_off: float = Field(default=0.0, ge=0)
+    """A stress in the project's units. Read by `"Hydrostatic"` and
+    `"Phreatic_Multi_Line"`."""
+    active: bool = True
+
+    @model_validator(mode="after")
+    def _usable(self) -> WaterPressureCondition:
+        noun = f"water pressure condition {self.id!r}"
+        self._check_target(noun)
+        numbers = [self.value, self.pressure_tension_cut_off]
+        if self.reference_coordinate is not None:
+            numbers.append(self.reference_coordinate)
+        if not all(math.isfinite(v) for v in numbers):
+            raise ValueError(f"{noun} has a non-finite value")
+        if self.fluid_pressure_type == "Hydrostatic" and self.reference_coordinate is None:
+            raise ValueError(f"{noun} is Hydrostatic, which needs its water level "
+                             "(reference_coordinate)")
+        if (self.x_coordinates is None) != (self.y_coordinates is None):
+            raise ValueError(f"{noun} needs both x_coordinates and y_coordinates, or "
+                             "neither")
+        if self.z_coordinates is not None and self.x_coordinates is None:
+            raise ValueError(f"{noun} has z_coordinates but no x_coordinates and "
+                             "y_coordinates")
+        if self.x_coordinates is not None and self.y_coordinates is not None:
+            xs, ys = self.x_coordinates, self.y_coordinates
+            zs = self.z_coordinates if self.z_coordinates is not None else [0.0] * len(xs)
+            if len(xs) != len(ys) or len(xs) != len(zs) or len(xs) < 2:
+                raise ValueError(f"{noun}: the phreatic line needs two or more points, "
+                                 "with as many x as y (and z) coordinates")
+            if not all(math.isfinite(v) for v in xs + ys + zs):
+                raise ValueError(f"{noun}: the phreatic line has a non-finite coordinate")
+            if any(second <= first for first, second in zip(xs, xs[1:])):
+                raise ValueError(f"{noun}: the x coordinates of the phreatic line must "
+                                 "increase")
+        elif self.fluid_pressure_type == "Phreatic_Multi_Line":
+            raise ValueError(f"{noun} is a Phreatic_Multi_Line, which needs the points of "
+                             "the line (x_coordinates and y_coordinates)")
+        return self
+
+    def _check_target(self, noun: str) -> None:
+        """`on` and the one field it names, and none of the others."""
+        named = {"face": self.face, "part": self.part, "points": self.points}
+        wanted = {"face": "face", "part": "part", "line": "points",
+                  "point": "points"}.get(self.on)
+        stray = sorted(field for field, value in named.items()
+                       if value is not None and field != wanted)
+        if stray:
+            raise ValueError(f"{noun} is on {self.on!r}, which takes no "
+                             + " or ".join(stray))
+        if wanted is not None and not named[wanted]:
+            raise ValueError(f"{noun} is on {self.on!r}, which needs {wanted}")
+        if self.points is None:
+            return
+        if not all(math.isfinite(v) for point in self.points for v in point):
+            raise ValueError(f"{noun} has a non-finite coordinate")
+        if self.on == "point" and len(self.points) != 1:
+            raise ValueError(f"{noun} is on a point, which is one point, not "
+                             f"{len(self.points)}")
+        if self.on == "line":
+            if len(self.points) < 2:
+                raise ValueError(f"{noun} is on a line, which needs at least two points")
+            for first, second in zip(self.points, self.points[1:]):
+                if first == second:
+                    raise ValueError(f"{noun} repeats the point {first}; every segment "
+                                     "needs length")
 
 
 class Phase(Base):
@@ -1060,10 +1213,10 @@ class LayersUpdate(Base):
     # here rather than on an endpoint of its own for the same reason: the water level
     # is validated against the model it belongs to, not on its own.
     #
-    # It is not merely cosmetic. `core.kratos.parameters._pore_pressure` states the whole
-    # ground's water pressure from these two numbers, `_normal_load` sizes every
-    # hydrostatic load from them, and `core.kratos.materials` derives DENSITY_WATER from
-    # the specific weight -- so this row is the deck's water table.
+    # It is not merely cosmetic. Every hydrostatic water pressure condition and normal
+    # load with no level of its own is measured from `y` (`core.kratos.parameters.
+    # _water_pressure`, `_normal_load`), the specific weight scales all of them, and
+    # `core.kratos.materials` derives DENSITY_WATER from it.
     water: WaterLevel | None = None
     # Custom soil bodies, so reassigning one's material is validated against the
     # same library in the same request.
@@ -1095,6 +1248,11 @@ class StructuresUpdate(Base):
     interface_sections: list[InterfaceSection] | None = None
     interfaces: list[Interface] | None = None
     normal_loads: list[NormalLoad] | None = None
+
+
+class ConditionsUpdate(Base):
+    """The boundary conditions, replaced as one list (`core.session.replace_conditions`)."""
+    boundary_conditions: list[WaterPressureCondition]
 
 
 class PhasesUpdate(Base):
@@ -1267,8 +1425,13 @@ class Project(Base):
     water: WaterLevel | None = None
     """The phreatic level, or `None` for a model without one -- which is what a new
     project starts as. A model is not born with a water table at somebody else's depth;
-    it has one when its author sets one. Without it the deck is dry: zero pore pressure,
-    still fixed (`core.kratos.parameters._pore_pressure`)."""
+    it has one when its author sets one. The level fixes no pressure by itself: it is
+    the level a new hydrostatic `WaterPressureCondition` or `NormalLoad` is given
+    (`core.model.drafts`), which the record then keeps as its own. Only a hydrostatic
+    normal load saved without a level still reads it at export."""
+    boundary_conditions: list[WaterPressureCondition] = Field(default_factory=list)
+    """The conditions the user prescribes on the model's boundaries and soil. The deck
+    holds these and no others: a project with none fixes no water pressure."""
     mesh: MeshSettings = Field(default_factory=MeshSettings)
     custom_parts: list[CustomPart] = Field(default_factory=list)
     phases: list[Phase] = Field(default_factory=list)
@@ -1387,16 +1550,17 @@ class Project(Base):
 
     @model_validator(mode="after")
     def _water_for_hydrostatic_loads(self) -> Project:
-        """A hydrostatic normal load's pressure is derived from `water` at export time.
-        With no water level there is nothing to derive it from, and quietly writing zero
-        would be a wall with no water against it."""
+        """A hydrostatic normal load with no level of its own takes `water`'s at export
+        time. With no water level either there is nothing to derive it from, and quietly
+        writing zero would be a wall with no water against it."""
         if self.water is None:
             for load in self.normal_loads:
-                if load.fluid_pressure_type == "Hydrostatic":
+                if (load.fluid_pressure_type == "Hydrostatic"
+                        and load.reference_coordinate is None):
                     raise ValueError(
                         f"normal load {load.name!r} is hydrostatic, which needs a water "
-                        "level to measure its pressure from; set one, or make the load "
-                        "uniform"
+                        "level to measure its pressure from; give it one, set the "
+                        "project's, or make the load uniform"
                     )
         return self
 
@@ -1430,6 +1594,21 @@ class Project(Base):
         _reject_duplicates([s.id for s in self.interface_sections], "interface_section")
         _reject_duplicates([i.id for i in self.interfaces], "interface")
         _reject_duplicates([n.id for n in self.normal_loads], "normal_load")
+        _reject_duplicates([c.id for c in self.boundary_conditions], "boundary condition")
+        # A condition on a line is a gmsh physical group of its own, named by its id, in
+        # the namespace the parts' groups are in.
+        parts = set(self.stageable_keys()) | {"excavation", "water"}
+        collisions = sorted(c.id for c in self.boundary_conditions if c.id in parts)
+        if collisions:
+            raise ValueError("boundary condition id collides with an existing model part "
+                             "key: " + ", ".join(collisions))
+        soil = self.soil_part_keys()
+        for condition in self.boundary_conditions:
+            if condition.on == "part" and condition.part not in soil:
+                raise ValueError(
+                    f"boundary condition {condition.id!r} is on part {condition.part!r}, "
+                    "which is not a soil part of this project; the soil parts are "
+                    + (", ".join(soil) or "none"))
 
         # Interfaces are the one collection whose references are checked here rather
         # than left to blow up in the exporter: an interface names a section *and* a
@@ -1748,6 +1927,15 @@ class Project(Base):
             return []
         return [n for n in self.normal_loads if n.active]
 
+    @property
+    def drawn_water_pressures(self) -> list[WaterPressureCondition]:
+        """The active water pressure conditions on a drawn line or point, which the
+        section embeds: 2D only, like `active_normal_loads`."""
+        if self.dimension != 2:
+            return []
+        return [c for c in self.boundary_conditions
+                if c.kind == "water_pressure" and c.active and c.on in ("line", "point")]
+
     # The kind-wise views of the two mixed collections. Every consumer wants one
     # dimension's worth at a time -- the 2D build, the 3D build, the exporter's element
     # tables -- and `isinstance` scattered through all of them would say much less about
@@ -1939,6 +2127,14 @@ class Project(Base):
                     continue     # this layer does not reach this band
                 inside.append((f"{key}__{suffix or 'pit'}", low, high, True))
         return outside + inside
+
+    def soil_part_keys(self) -> list[str]:
+        """What a condition on a soil part may name: each layer, each body dug out of a
+        staged one, and each custom part that has a material -- the soil a user can
+        pick in the explorer, the viewport or the Mesh properties dialog."""
+        keys = [f"soil_{layer.id}" for layer in self.layers]
+        keys += [key for key, *_ in self.soil_bodies() if key not in keys]
+        return keys + [part.key for part in self.custom_parts if part.mat is not None]
 
     def expand_body_keys(self, keys: list[str]) -> list[str]:
         """Turn a list that may name soil *layers* into one naming soil *bodies*.

@@ -98,9 +98,9 @@ def test_a_line_load_lands_on_the_ground_surface():
     assert all(abs(deck.nodes[n][1] - top) < 1e-9 for n in loaded)
 
 
-def test_a_hydrostatic_normal_load_needs_and_uses_the_water_level():
-    with pytest.raises(Exception):
-        project_with("pile", "normal_loads")       # hydrostatic, no water: refused
+def test_a_hydrostatic_normal_load_carries_its_own_water_level():
+    # The test model's water loads name their level, so they need no project water.
+    project_with("pile", "normal_loads")
     _, deck = export_of("pile", "water", "normal_loads")
     assert any("NormalLoad" in name for name in classes(deck))
 

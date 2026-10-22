@@ -164,7 +164,7 @@ def build_geometry(project: Project) -> BuildResult:
 
         owners = _fragment(owners, dim)
         owners = _imprint_load_footprints(project, owners, dim)
-        owners, curves, faces = _embed_beams(project, owners, dim, notes)
+        owners, curves, faces, points = _embed_beams(project, owners, dim, notes)
         ties, tie_nodes = _attach_anchors(project, dim, notes)
 
         volumes = _assign_by_priority(owners)
@@ -190,6 +190,7 @@ def build_geometry(project: Project) -> BuildResult:
         _tag_physical_groups(volumes, dim)
         _tag_physical_groups(faces, 2, clear=False)
         _tag_physical_groups(curves, 1, clear=False)
+        _tag_physical_groups(points, 0, clear=False)
         _tag_physical_groups(ties, 1, clear=False)
         _tag_physical_groups({key: [tag] for key, tag in tie_nodes.items()}, 0,
                              clear=False, suffix="_Support")
@@ -254,7 +255,7 @@ def _build_layered_soil(project: Project) -> BuildResult:
             owners = _section(owners, project.cut_at(), notes)
             overlays = _drop_overlays(overlays, notes)
 
-        owners, curves, faces = _embed_beams(
+        owners, curves, faces, points = _embed_beams(
             project, _imprint_load_footprints(project, _fragment(owners, dim), dim),
             dim, notes,
         )
@@ -267,6 +268,7 @@ def _build_layered_soil(project: Project) -> BuildResult:
         _tag_physical_groups(volumes, dim)
         _tag_physical_groups(faces, 2, clear=False)
         _tag_physical_groups(curves, 1, clear=False)
+        _tag_physical_groups(points, 0, clear=False)
         _tag_physical_groups(ties, 1, clear=False)
         _tag_physical_groups({key: [tag] for key, tag in tie_nodes.items()}, 0,
                              clear=False, suffix="_Support")
@@ -698,7 +700,8 @@ def _split_at(points: Sequence[tuple[float, ...]],
 
 def _embed_beams(project: Project, owners: dict[int, set[str]], dim: int,
                  log: list[str] | None = None
-                 ) -> tuple[dict[int, set[str]], dict[str, list[int]], dict[str, list[int]]]:
+                 ) -> tuple[dict[int, set[str]], dict[str, list[int]], dict[str, list[int]],
+                            dict[str, list[int]]]:
     """Fragment the section with each sheet pile, and keep the curves it leaves behind.
 
     The same imprint `_imprint_load_footprints` performs, with the opposite half of the
@@ -712,14 +715,18 @@ def _embed_beams(project: Project, owners: dict[int, set[str]], dim: int,
     tools are clipped to the model first, so a pile drawn past the domain edge or over
     the excavated void contributes only the part that has soil around it.
 
+    A water pressure condition at a point is a tool too, a vertex: the fragment makes it
+    a vertex of the face it lies in, so the mesh has a node exactly there.
+
     Returns the rebuilt owners, the beam key -> curve tags map (also holding every
-    free interface's and normal load's own curves, embedded the same way), and the
-    panel key -> face tags map (3D only; a 2D section has no wall panels in it).
+    free interface's, normal load's and water pressure line's own curves, embedded the
+    same way), the panel key -> face tags map (3D only; a 2D section has no wall panels
+    in it), and the condition key -> point tags map of the water pressure points.
     """
     if dim == 3:
-        return _embed_3d_structures(project, owners, log)
+        return (*_embed_3d_structures(project, owners, log), {})
     if not owners:
-        return owners, {}, {}
+        return owners, {}, {}, {}
     active = [beam for beam in project.sheet_piles if beam.active]
     # A 3D wall or member has no place in a plane-strain cut -- it is not drawn in the
     # section's plane and has no in-plane polyline to embed. Saying so is honest;
@@ -731,8 +738,9 @@ def _embed_beams(project: Project, owners: dict[int, set[str]], dim: int,
                        "model only; it is not part of this section")
     free = [i for i in project.active_interfaces if i.structure is None]
     normal_loads = project.active_normal_loads
-    if not active and not free and not normal_loads:
-        return owners, {}, {}
+    drawn = project.drawn_water_pressures
+    if not active and not free and not normal_loads and not drawn:
+        return owners, {}, {}, {}
 
     def point(x: float, y: float) -> int:
         """A 2D record's own coordinates: the section has been moved to z = 0."""
@@ -766,6 +774,18 @@ def _embed_beams(project: Project, owners: dict[int, set[str]], dim: int,
         for start, end in zip(vertices, vertices[1:]):
             tools.append((1, gmsh.model.occ.addLine(start, end)))
             owner_of_tool.append(load.id)
+
+    # A water pressure on a drawn line, for the same reason again: its nodes are the
+    # ones on its own mesh edges (`core.kratos.writer._water_pressures`). One at a point
+    # is a vertex the fragment embeds, and its node is the one on that vertex.
+    for condition in drawn:
+        vertices = [point(x, y) for x, y in condition.points or []]
+        if condition.on == "point":
+            tools.append((0, vertices[0]))
+            owner_of_tool.append(condition.id)
+        for start, end in zip(vertices, vertices[1:]):
+            tools.append((1, gmsh.model.occ.addLine(start, end)))
+            owner_of_tool.append(condition.id)
 
     inputs = [(dim, tag) for tag in owners]
 
@@ -815,7 +835,17 @@ def _embed_beams(project: Project, owners: dict[int, set[str]], dim: int,
         for beam in active:
             log.append(f"Info    : {beam.id} lies outside the soil in this section "
                        "and is not part of the model")
-    return rebuilt, beam_curves, {}
+    # A point is in the model when it lies in or on one of the faces; one outside them
+    # survives the fragment as a free vertex, and has no soil node to fix.
+    points: dict[str, list[int]] = {}
+    for key, pieces in zip(owner_of_tool, mapping[len(inputs):]):
+        for piece_dim, tag in pieces:
+            if piece_dim == 0 and any(
+                    gmsh.model.isInside(2, surface,
+                                        list(gmsh.model.getBoundingBox(0, tag)[:3]))
+                    for surface in rebuilt):
+                points.setdefault(key, []).append(tag)
+    return rebuilt, beam_curves, {}, points
 
 
 def _section_sweeps(project: Project, log: list[str] | None = None

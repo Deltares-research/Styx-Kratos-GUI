@@ -1117,10 +1117,11 @@ def test_gravity_is_applied_before_the_loads_that_sit_on_the_model(piled):
 
 # -- The pore-pressure field -------------------------------------------------
 # `WATER_PRESSURE`, hydrostatic about `Project.water`, fixed over the whole porous
-# domain. Every reference deck carries it in every stage, and this exporter carried it in
-# none until Milestone C's task 19 (plan sec 7.2). Like gravity it is a whole-model
-# condition rather than anything a phase switches, so it is not filtered and does not
-# vary between stages.
+# domain: the seed project's water pressure condition on the whole soil
+# (`WaterPressureCondition`, on="domain"), which every reference deck carries in every
+# stage. On the whole soil it is not filtered by the phases and does not vary between
+# stages. A project without such a condition fixes no water pressure at all
+# (tests/test_kratos_water_pressure.py).
 
 
 def _pressure_processes(export: dict) -> list[list[dict]]:
@@ -1130,7 +1131,7 @@ def _pressure_processes(export: dict) -> list[list[dict]]:
             for stage in doc["stages"].values()]
 
 
-def test_every_stage_of_every_deck_fixes_the_pore_pressure(section, solid, piled):
+def test_every_stage_carries_the_condition_on_the_whole_soil(section, solid, piled):
     for export in (section, solid, piled):
         found = _pressure_processes(export)
         assert found and all(len(stage) == 1 for stage in found), export["deck_name"]
@@ -1145,17 +1146,16 @@ def test_the_pore_pressure_field_covers_the_whole_porous_domain(section):
     assert process["process_name"] == "ApplyScalarConstraintTableProcess"
 
 
-def test_the_pore_pressure_is_read_off_the_projects_own_water_level(session):
-    """Not a number of this module's own. The same `Project.water` a hydrostatic
-    `NormalLoad` already reads, so the water table and the water loads on it cannot
-    disagree."""
+def test_the_pore_pressure_is_the_condition_s_level_and_the_project_s_water(session):
+    """The level is the condition's own, so moving the project's leaves it; the water's
+    weight is the project's one value, the same a hydrostatic `NormalLoad` reads."""
     project = seed_project()
     project.water.y = -4.25
     project.water.specific_weight = 9_900.0
     exported = writer.export_project(project, MeshRequest(element_size=6.0, order=1))
     (process,) = _pressure_processes(exported)[0]
     parameters = process["Parameters"]
-    assert parameters["reference_coordinate"] == -4.25
+    assert parameters["reference_coordinate"] == -1.5
     assert parameters["specific_weight"] == 9900.0
     assert parameters["gravity_direction"] == 1
     assert parameters["is_fixed"] is True
@@ -1164,21 +1164,26 @@ def test_the_pore_pressure_is_read_off_the_projects_own_water_level(session):
     assert parameters["table"] == 0
 
 
-def test_the_two_water_processes_agree_with_each_other(session):
-    """A hydrostatic `NormalLoad` and the field it acts in are derived from the same two
-    numbers. If they ever came from different places, a deck could carry a water load
-    referenced to one level inside ground pressurised about another."""
-    project = seed_project()
+def test_each_water_process_keeps_its_own_level_and_shares_the_water(session):
+    """A condition carries its level; a hydrostatic `NormalLoad` saved without one (the
+    test model's) still reads the project's. Both weigh the same water."""
+    from tests.models import excavation
+    payload = excavation.excavation_project(staged=False).model_dump()
+    for load in payload["normal_loads"]:
+        load["reference_coordinate"] = None
+    project = schemas.Project.model_validate(payload)
     project.water.y = -2.75
     exported = writer.export_project(project, MeshRequest(element_size=6.0, order=1))
     doc = json.loads(exported["project_parameters"])
     stage = next(iter(doc["stages"].values()))["stage_settings"]["processes"]
-    water = [p["Parameters"] for p in stage["constraints_process_list"]
-             + stage["loads_process_list"]
+    conditions = [p["Parameters"] for p in stage["constraints_process_list"]
+                  if p["Parameters"].get("fluid_pressure_type") == "Hydrostatic"]
+    loads = [p["Parameters"] for p in stage["loads_process_list"]
              if p["Parameters"].get("fluid_pressure_type") == "Hydrostatic"]
-    assert water
-    assert {p["reference_coordinate"] for p in water} == {-2.75}
-    assert len({p["specific_weight"] for p in water}) == 1
+    assert conditions and loads
+    assert {p["reference_coordinate"] for p in conditions} == {excavation.WATER_Y}
+    assert {p["reference_coordinate"] for p in loads} == {-2.75}
+    assert len({p["specific_weight"] for p in conditions + loads}) == 1
 
 
 STEEL = {"YOUNG_MODULUS": 2.1e11, "POISSON_RATIO": 0.3, "DENSITY": 7850.0,

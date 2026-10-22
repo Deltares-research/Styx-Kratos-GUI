@@ -1736,6 +1736,26 @@ window.PHASE_FIXTURE =
       "thickness": 0.06,
       "specific_weight": null
     },
+    "boundary_conditions": [
+      {
+        "id": "pore_pressure",
+        "name": "Pore pressure",
+        "kind": "water_pressure",
+        "on": "domain",
+        "face": null,
+        "part": null,
+        "points": null,
+        "fluid_pressure_type": "Hydrostatic",
+        "is_fixed": true,
+        "value": 0.0,
+        "reference_coordinate": -1.5,
+        "x_coordinates": null,
+        "y_coordinates": null,
+        "z_coordinates": null,
+        "pressure_tension_cut_off": 0.0,
+        "active": true
+      }
+    ],
     "mesh": {
       "element_size": 2.5,
       "order": 2,

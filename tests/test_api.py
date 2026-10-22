@@ -827,7 +827,7 @@ def test_patch_layers_can_move_the_water_line(client):
 
 def test_patch_layers_can_change_the_specific_weight(client):
     """The other half of the pair, and the one that silently scales every hydrostatic
-    pressure in the deck -- `_pore_pressure` and `_normal_load` both read it."""
+    pressure in the deck -- `_water_pressure` and `_normal_load` both read it."""
     project = seed_project()
     water = project.water.model_dump()
     water.update(specific_weight=9.81)

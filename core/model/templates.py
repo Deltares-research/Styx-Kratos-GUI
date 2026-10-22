@@ -27,6 +27,7 @@ from core.model.schemas import (
     SurfaceLoad,
     Wall,
     WaterLevel,
+    WaterPressureCondition,
     Wells,
 )
 
@@ -144,5 +145,9 @@ def seed_project(simple: bool = True) -> Project:
         # js/viewport.js:215-227 — 15 m pipes hanging from the surface.
         wells=Wells(positions=[(18.0, 15.0), (32.0, 25.0)], radius=0.35, top_y=0.0, length=15.0),
         water=WaterLevel(y=-1.5),
+        # The demo's ground is under water: hydrostatic about the level, fixed.
+        boundary_conditions=[WaterPressureCondition(
+            id="pore_pressure", name="Pore pressure", on="domain",
+            reference_coordinate=-1.5)],
         mesh=MeshSettings(element_size=2.5, order=2),
     )

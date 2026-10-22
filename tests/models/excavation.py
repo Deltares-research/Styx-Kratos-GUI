@@ -22,7 +22,8 @@ from core.model import phases
 from core.model.schemas import (Anchor, AnchorRows, AnchorSection, Beam, BeamSection, Borehole,
                          BoxRefinement, Domain, Excavation, Interface, InterfaceSection,
                          LineLoad, Material, MeshSettings, NormalLoad, Piles, Project,
-                         SoilLayer, Struts, Wall, WaterLevel, Wells)
+                         SoilLayer, Struts, Wall, WaterLevel, WaterPressureCondition,
+                         Wells)
 
 NAME = "Staged excavation"
 
@@ -136,6 +137,10 @@ def excavation_project(staged: bool = True) -> Project:
         piles=Piles(xs=[], zs=[], radius=0.1, length=1.0, top_y=DOMAIN_TOP_Y),
         wells=Wells(positions=[], radius=0.1, length=1.0, top_y=DOMAIN_TOP_Y),
         water=WaterLevel(y=WATER_Y),
+        # The pore pressure, hydrostatic about the water level on the whole soil.
+        boundary_conditions=[WaterPressureCondition(
+            id="pore_pressure", name="Pore pressure", on="domain",
+            reference_coordinate=WATER_Y)],
         beam_sections=[sheet_pile],
         beams=[Beam(id="sheetpile", name="SheetPileWall", section=sheet_pile.id,
                     points=[(WALL_X, DOMAIN_TOP_Y), (WALL_X, WALL_TOE_Y)])],
@@ -153,7 +158,7 @@ def excavation_project(staged: bool = True) -> Project:
         # that level, then that level's floor back to the symmetry plane.
         normal_loads=[
             NormalLoad(id=f"water_{index}", name=f"WaterLoad_Stage{index}",
-                       fluid_pressure_type="Hydrostatic",
+                       fluid_pressure_type="Hydrostatic", reference_coordinate=WATER_Y,
                        points=[(WALL_X, WATER_Y), (WALL_X, level), (DOMAIN_LEFT_X, level)])
             for index, level in enumerate(LIFTS, start=1)
         ],

@@ -206,6 +206,26 @@ class Stage:
     materials_filename: str = MATERIALS_NAME
 
 
+@dataclass(frozen=True)
+class WaterPressure:
+    """One `WaterPressureCondition` (core/model/schemas.py) on one deck part, resolved.
+
+    `part` is the sub-model part it acts on, or `None` for the whole porous domain. A
+    condition on a face the excavation splits arrives as one entry per segment, so each
+    one goes with its lift (`Stage.active`), and so does one on a staged part, one entry
+    per body. `reference_coordinate` is the record's own level."""
+    part: str | None
+    fluid_pressure_type: str
+    is_fixed: bool
+    value: float
+    reference_coordinate: float
+    x_coordinates: tuple[float, ...]
+    y_coordinates: tuple[float, ...]
+    z_coordinates: tuple[float, ...]
+    pressure_tension_cut_off: float
+    specific_weight: float
+
+
 def stage_name(index: int, phase_name: str) -> str:
     """`1_Initial_stage`: the position in the sequence, then the phase's own name.
 
@@ -224,7 +244,7 @@ def project_parameters(
     stages: list[Stage],
     normal_loads: Sequence[tuple[str, str, float, float, float]] = (),
     *,
-    water: tuple[float, float] = (0.0, 10.0),
+    water_pressures: Sequence[WaterPressure] = (),
     deck_name: str = "model",
     domain_size: int = 2,
     body_parts: Sequence[str] = (),
@@ -237,10 +257,9 @@ def project_parameters(
     `normal_loads` is (sub-model part name, fluid_pressure_type, pressure, water level,
     water specific weight) -- one per active `NormalLoad`; the last three are read only
     for the mode `fluid_pressure_type` names (see `_normal_load`).
-    `water` is (phreatic level, specific weight) from `Project.water`, which every stage
-    fixes the pore pressure about (see `_pore_pressure`). The same two numbers a
-    hydrostatic entry of `normal_loads` carries, passed once because the field exists
-    whether or not any load stands in it.
+    `water_pressures` is the user's water pressure conditions, in the order they are
+    written: start values first, so that where a fixed value acts on the same node it is
+    the one that stays (see `_water_pressure`). Nothing else fixes a water pressure.
 
     The keyword arguments are what the analysis block needs and the process lists do
     not: `deck_name` is the .mdpa's name without its extension (Kratos appends it) and
@@ -266,9 +285,10 @@ def project_parameters(
         ]
         constraint_processes = [_constraint(name, is_fixed)
                                 for name, is_fixed in constraints if keep(name)]
-        # The water table, in every stage of every deck and filtered by nothing: it is a
-        # property of the ground rather than of anything a phase switches on and off.
-        constraint_processes.append(_pore_pressure(*water))
+        # On the whole soil a condition is filtered by nothing, as the soil is the porous
+        # domain itself; on a face or a part it goes with the stretch or body it names.
+        constraint_processes += [_water_pressure(pressure) for pressure in water_pressures
+                                 if pressure.part is None or keep(pressure.part)]
         constraint_processes += [_master_slave_constraint(master, slave)
                                  for master, slave in stage.ties]
         auxiliary = _auxiliary(stage)
@@ -635,44 +655,67 @@ def _constraint(part_name: str, is_fixed: list[bool]) -> dict:
     }
 
 
-def _pore_pressure(water_y: float, specific_weight: float) -> dict:
-    """Fix `WATER_PRESSURE` hydrostatically about the phreatic level, over the whole
-    porous domain.
+def _water_pressure(pressure: WaterPressure) -> dict:
+    """Prescribe `WATER_PRESSURE` on one part, or on the whole porous domain.
 
-    Copied field for field from `staged_construction_for_generated_mesh.json`, where it
-    appears unchanged in all seven stages, and from ten of the eleven stage files under
-    `test/`. Without it the `U_Pw` solver's pressure degrees of freedom are unconstrained
-    everywhere.
+    The three shapes are each copied field for field from a working deck:
 
-    Three things worth pointing at:
+    *   `"Hydrostatic"` on the whole domain from `staged_construction_for_generated_mesh.json`,
+        where it appears unchanged in all seven stages, and on a boundary part from
+        Kratos' `tests/Muskat/saturated_hydrostatic`, which adds
+        `pressure_tension_cut_off`. The key is written only when it is not Kratos'
+        default 0, so the staged reference is matched exactly.
+    *   `"Uniform"` from Kratos' `tests/seepage_tests/fixed_bottom_boundary`: `value` and
+        no `fluid_pressure_type` at all, which is how the process is told to apply one
+        value everywhere.
+    *   `"Phreatic_Multi_Line"` from Kratos' `tests/Muskat/van_genuchten_hydrostatic`,
+        with one `table` entry per point of the line.
 
-    *   **`PorousDomain`, not the computational model part.** Gravity acts on what the
-        solver assembles, because only elements have weight; the water table is a
-        property of the ground itself and is stated over the whole model.
-    *   **`table` is a bare `0`, not `[0, 0, 0]`.** This is the *scalar* constraint
-        process, and it rejects a list -- the sort of thing only a reference deck
-        tells you.
-    *   **Both numbers come from `Project.water`**, which is also where a hydrostatic
-        `NormalLoad` gets them (`_normal_load`). One source, so a deck cannot carry a
-        water load referenced to one level inside ground pressurised about another.
+    Two things worth pointing at:
 
-    Kept in step with the GUI note in plan sec 7.2: the eventual water-line tool edits
-    `Project.water`, and this process follows it without further work.
+    *   **`PorousDomain`, not the computational model part**, for the whole soil.
+        Gravity acts on what the solver assembles, because only elements have weight;
+        the water table is a property of the ground itself and is stated over the whole
+        model.
+    *   **`table` is a bare `0`, not `[0, 0, 0]`**, except for the multi-line. This is
+        the *scalar* constraint process, and it rejects a list -- the sort of thing only
+        a reference deck tells you.
     """
+    parameters: dict[str, Any] = {
+        "model_part_name": ("PorousDomain" if pressure.part is None
+                            else f"PorousDomain.{pressure.part}"),
+        "variable_name": "WATER_PRESSURE",
+        "is_fixed": pressure.is_fixed,
+    }
+    if pressure.fluid_pressure_type == "Uniform":
+        parameters.update({"value": pressure.value, "table": 0})
+    elif pressure.fluid_pressure_type == "Hydrostatic":
+        parameters.update({
+            "table": 0,
+            "fluid_pressure_type": "Hydrostatic",
+            "gravity_direction": 1,
+            "reference_coordinate": pressure.reference_coordinate,
+            "specific_weight": pressure.specific_weight,
+        })
+    else:
+        points = len(pressure.x_coordinates)
+        parameters.update({
+            "table": [0] * points,
+            "fluid_pressure_type": pressure.fluid_pressure_type,
+            "gravity_direction": 1,
+            "out_of_plane_direction": 2,
+            "x_coordinates": list(pressure.x_coordinates),
+            "y_coordinates": list(pressure.y_coordinates),
+            "z_coordinates": list(pressure.z_coordinates),
+            "specific_weight": pressure.specific_weight,
+        })
+    if pressure.fluid_pressure_type != "Uniform" and pressure.pressure_tension_cut_off:
+        parameters["pressure_tension_cut_off"] = pressure.pressure_tension_cut_off
     return {
         "python_module": "apply_scalar_constraint_table_process",
         "kratos_module": "KratosMultiphysics.GeoMechanicsApplication",
         "process_name": "ApplyScalarConstraintTableProcess",
-        "Parameters": {
-            "model_part_name": "PorousDomain",
-            "variable_name": "WATER_PRESSURE",
-            "is_fixed": True,
-            "table": 0,
-            "fluid_pressure_type": "Hydrostatic",
-            "gravity_direction": 1,
-            "reference_coordinate": water_y,
-            "specific_weight": specific_weight,
-        },
+        "Parameters": parameters,
     }
 
 

@@ -39,8 +39,9 @@ from core.geometry import solid_model, meshing
 from core.kratos import deck_files, interfaces
 from core.kratos import materials, parameters
 from core.kratos.materials import material_parameters
-from core.model.schemas import (Beam, LineLoad, Member, MeshRequest, Panel, PanelSection,
-                         PointLoad, Project, SurfaceLoad)
+from core.model.schemas import (TARGET_ORDER, Beam, LineLoad, Member, MeshRequest, Panel,
+                                PanelSection, PointLoad, Project, SurfaceLoad,
+                                WaterPressureCondition)
 
 # (dim, gmsh element type) -> (Kratos class, gmsh index order in Kratos' order)
 ELEMENTS: dict[tuple[int, int], tuple[str, tuple[int, ...]]] = {
@@ -304,12 +305,21 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
     # Read off the harvested blocks rather than the geometry: after the interface split
     # a body's nodes are the copies it actually ended up with, and those are the ones a
     # constraint has to name.
+    body_nodes = {key: {node_id[tag] for row in rows for tag in row if tag in node_id}
+                  for key, _, rows in soil_blocks}
     boundaries, boundary_owners = _segment_boundaries(
         project, boundaries,
-        {key: {node_id[tag] for row in rows for tag in row if tag in node_id}
-         for key, _, rows in soil_blocks if key.startswith("soil_")},
+        {key: nodes for key, nodes in body_nodes.items() if key.startswith("soil_")},
         names)
     parts.extend(_boundary_parts(boundaries))
+    # The soil a condition can name: every layer body, and every custom part that has a
+    # material -- what `soil_blocks` holds besides, a 3D wall or strut, is not soil.
+    soil_keys = set(project.soil_part_keys())
+    water_parts, water_pressures = _water_pressures(
+        project, dim, boundaries, boundary_owners, names,
+        {key: nodes for key, nodes in body_nodes.items() if key in soil_keys},
+        node_id, warnings)
+    parts.extend(water_parts)
     parts.extend(load_parts)
     supports: list[tuple[str, list[int], list[int], list[int]]] = [(f"{names[key]}_Support", [node_id[tag]], [], [])
                 for key, tag in anchor_supports.items() if tag in node_id]
@@ -343,14 +353,17 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
     condition_keys = {key for key, _, rows in conditions if rows}
     active_loads = [(names[load.id], *_load_variable(load, dim))
                     for load in project.loads if load.id in condition_keys]
-    # A hydrostatic load cannot exist without a water level (`Project` rejects it), so
-    # the level read here is only ever missing for a uniform load, which ignores it.
+    # A hydrostatic load cannot exist without a water level of its own or the project's
+    # (`Project` rejects it), so the level read here is only ever missing for a uniform
+    # load, which ignores it.
     normal_load_processes = [
         (names[load.id], load.fluid_pressure_type, load.pressure,
-         project.water.y if project.water is not None else project.domain.y_bottom,
+         load.reference_coordinate if load.reference_coordinate is not None
+         else project.water.y if project.water is not None else project.domain.y_bottom,
          project.water_specific_weight)
         for load in project.active_normal_loads if load.id in condition_keys
     ]
+    _unused_water_level(project, warnings)
     beam_properties = [(names[key], project.beam_section(_beam_of(project, key).section),
                         dim)
                        for key, _, _ in beam_blocks]
@@ -469,7 +482,7 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
         [(name, variable, load_mask, value) for name, variable, value in active_loads],
         stages,
         normal_load_processes,
-        water=_phreatic(project),
+        water_pressures=water_pressures,
         deck_name=deck_name(project),
         domain_size=dim,
         body_parts=body_parts,
@@ -1033,21 +1046,6 @@ def _load_variable(load: PointLoad | LineLoad | SurfaceLoad,
 
 # ── Reading the mesh back out of gmsh ───────────────────────────────────────
 
-def _phreatic(project: Project) -> tuple[float, float]:
-    """(level, specific weight) the pore pressure is fixed about.
-
-    A dry model has no level, and its pressure degrees of freedom still need fixing. The
-    level is then the bottom of the model: Kratos writes
-    `min(-gamma * (level - y), pressure_tension_cut_off)` at each node and the cut-off
-    defaults to 0 (GeoMechanicsApplication, apply_constant_hydrostatic_pressure_process.cpp),
-    so every node at or above it -- which is every node -- gets exactly zero, fixed. The
-    same process the validated decks use, so nothing new is asked of Kratos.
-    """
-    if project.water is None:
-        return (project.domain.y_bottom, project.water_specific_weight)
-    return (project.water.y, project.water_specific_weight)
-
-
 def _world_coordinates() -> dict[int, tuple[float, float, float]]:
     tags, flat, _ = gmsh.model.mesh.getNodes()
     return {int(tag): (float(flat[3 * i]), float(flat[3 * i + 1]), float(flat[3 * i + 2]))
@@ -1405,6 +1403,10 @@ def _part_names(project: Project) -> dict[str, str]:
         names[normal.id] = _unique(_sanitise(normal.name) or normal.id, used)
     for key in project.part_keys():
         names.setdefault(key, _unique(key, used))
+    # Last, so a condition never moves a name the parts above already had.
+    for condition in project.boundary_conditions:
+        if condition.on in ("line", "point"):
+            names[condition.id] = _unique(_sanitise(condition.name) or condition.id, used)
     return names
 
 
@@ -1615,6 +1617,165 @@ def _boundary_constraints(project: Project, dim: int,
         is_fixed[axis] = True
         out.append((name, is_fixed))
     return out
+
+
+# ── Water pressure ──────────────────────────────────────────────────────────
+
+FACE_PARTS = {"bottom": "Bottom_Fixed", "left": "Left_Edge", "right": "Right_Edge",
+              "front": "Front_Edge", "back": "Back_Edge", "top": "Top_Surface"}
+"""A condition's face (`schemas.FACES`) -> the node part `_boundary_nodes` writes for it.
+The names are older than the conditions and stay, so a deck's parts keep their names
+whatever is prescribed on them."""
+
+
+def _water_pressures(project: Project, dim: int,
+                     boundaries: list[tuple[str, int, list[int]]],
+                     boundary_owners: dict[str, str], names: dict[str, str],
+                     body_nodes: dict[str, set[int]], node_id: dict[int, int],
+                     warnings: list[str]
+                     ) -> tuple[list[tuple[str, list[int], list[int], list[int]]],
+                                list[parameters.WaterPressure]]:
+    """The node parts the water pressure lines and points add, and every active
+    condition as the processes it is written as.
+
+    A face is every part `_boundary_nodes` and `_segment_boundaries` made of it: the
+    remainder under the face's own name, and one segment per excavation lift that
+    reaches it, which then goes with its lift. A part is every body dug out of it
+    (`Project.expand_body_keys`), each of which goes with its lift the same way. A line
+    is the nodes on its own mesh edges, and a point the node on its own vertex
+    (`solid_model._embed_beams`).
+
+    Written start values first, then the fixed ones least specific first
+    (`schemas.TARGET_ORDER`): Kratos keeps the value written last on a node, so a face
+    beats the whole soil and a point beats a face. `body_nodes` is the node ids of each
+    soil body, which the parts and the overlap check read.
+    """
+    faces: dict[str, list[str]] = {}
+    for name, _, _ in boundaries:
+        owner = boundary_owners.get(name)
+        faces.setdefault(name[len(names[owner]) + 1:] if owner else name, []).append(name)
+    face_nodes = {name: set(nodes) for name, _, nodes in boundaries}
+    lines = _tagged(1) if dim == 2 else {}
+    vertices = _tagged(0) if dim == 2 else {}
+
+    parts: list[tuple[str, list[int], list[int], list[int]]] = []
+    resolved: list[tuple[WaterPressureCondition, list[str | None], set[int]]] = []
+    for condition in project.boundary_conditions:
+        if condition.kind != "water_pressure" or not condition.active:
+            continue
+        noun = f"water pressure condition {condition.name!r}"
+        targets: list[str | None]
+        if condition.on == "domain":
+            targets = [None]
+            nodes = set().union(*body_nodes.values()) if body_nodes else set()
+        elif condition.on == "part":
+            bodies = [key for key in project.expand_body_keys([condition.part])
+                      if key in body_nodes]
+            if not bodies:
+                warnings.append(f"{noun} is on part {condition.part!r}, which has no soil "
+                                f"in this {dim}D model; it is left out.")
+                continue
+            targets = [names[key] for key in bodies]
+            nodes = set().union(*(body_nodes[key] for key in bodies))
+        elif condition.on in ("line", "point"):
+            if dim != 2:
+                warnings.append(f"{noun} is on a {condition.on}, which is drawn in the 2D "
+                                "section; this 3D deck leaves it out.")
+                continue
+            if condition.on == "line":
+                tags = {tag for row in _segments(lines.get(condition.id, [])) for tag in row}
+            else:
+                tags = {int(tag) for entity in vertices.get(condition.id, [])
+                        for tag in gmsh.model.mesh.getNodes(0, entity)[0]}
+            nodes = {node_id[tag] for tag in tags if tag in node_id}
+            if not nodes:
+                raise ExportError(
+                    f"{noun} has no mesh at its {condition.on} -- it lies outside the soil "
+                    "in this section, so there is nothing for the pressure to act on.")
+            parts.append((names[condition.id], sorted(nodes), [], []))
+            targets = [names[condition.id]]
+        else:
+            targets = list(faces.get(FACE_PARTS[condition.face], []))
+            if not targets:
+                warnings.append(f"{noun} is on the {condition.face} face, which this "
+                                f"{dim}D model does not have; it is left out.")
+                continue
+            nodes = set().union(*(face_nodes[name] for name in targets))
+        resolved.append((condition, targets, nodes))
+
+    # Stable, so each group keeps the order the user gave the conditions in.
+    resolved.sort(key=lambda entry: (entry[0].is_fixed, TARGET_ORDER.index(entry[0].on)))
+    _overlapping_water_pressures(resolved, warnings)
+    out = [parameters.WaterPressure(
+        part=target, fluid_pressure_type=condition.fluid_pressure_type,
+        is_fixed=condition.is_fixed, value=condition.value,
+        # Required of a hydrostatic record, and read for nothing else.
+        reference_coordinate=(condition.reference_coordinate
+                              if condition.reference_coordinate is not None else 0.0),
+        x_coordinates=tuple(condition.x_coordinates or ()),
+        y_coordinates=tuple(condition.y_coordinates or ()),
+        z_coordinates=tuple(condition.z_coordinates
+                            or [0.0] * len(condition.x_coordinates or ())),
+        pressure_tension_cut_off=condition.pressure_tension_cut_off,
+        specific_weight=project.water_specific_weight)
+        for condition, targets, _ in resolved for target in targets]
+
+    # A soil whose water pressure stays as it starts (`CONSTANT_PW_FIELD`, what
+    # `core.kratos.materials` fills in) needs nothing to fix it: a dry model of such soil
+    # runs, and gives the results it gave when the export still fixed zero everywhere.
+    # One that couples it does not, and is the one to say something about.
+    used = ({layer.mat for layer in project.layers}
+            | {part.mat for part in project.custom_parts if part.mat is not None})
+    coupled = [m.name for m in project.materials if m.id in used
+               and m.variables.get("GEO_DRAINAGE_TYPE", "CONSTANT_PW_FIELD")
+               != "CONSTANT_PW_FIELD"]
+    if not out and coupled:
+        warnings.append(
+            "no water pressure condition is set, so nothing fixes the water pressure, "
+            f"and {', '.join(repr(name) for name in coupled)} couples it to the "
+            "deformation (GEO_DRAINAGE_TYPE); Kratos may not be able to solve it. Add a "
+            "water pressure condition (for a dry model: Uniform, value 0, on the whole "
+            "soil).")
+    return parts, out
+
+
+def _overlapping_water_pressures(
+        resolved: list[tuple[WaterPressureCondition, list[str | None], set[int]]],
+        warnings: list[str]) -> None:
+    """Say so when two fixed conditions on the same kind of target share nodes.
+
+    Across kinds the order settles it and is the point of writing the more specific one
+    last; between two of one kind -- two parts that meet, two faces at a corner, two
+    whole-soil records -- it is only the list order, which the user should know."""
+    fixed = [(condition, nodes) for condition, _, nodes in resolved if condition.is_fixed]
+    for index, (first, first_nodes) in enumerate(fixed):
+        for second, second_nodes in fixed[index + 1:]:
+            if first.on != second.on:
+                continue
+            shared = len(first_nodes & second_nodes)
+            if shared:
+                warnings.append(
+                    f"water pressure conditions {first.name!r} and {second.name!r} both "
+                    f"fix the pressure on {shared} shared node(s); the deck keeps "
+                    f"{second.name!r}'s value there, as it comes later in the list.")
+
+
+def _unused_water_level(project: Project, warnings: list[str]) -> None:
+    """Say so when the project has a water level and nothing in the deck reads it: since
+    the level fixes no pressure by itself, a model with no water pressure condition is a
+    model whose author may expect pore pressures it will not get."""
+    if project.water is None:
+        return
+    conditions = any(c.kind == "water_pressure" and c.active
+                     for c in project.boundary_conditions)
+    loads = any(load.fluid_pressure_type == "Hydrostatic"
+                and load.reference_coordinate is None
+                for load in project.active_normal_loads)
+    if not conditions and not loads:
+        warnings.append(
+            f"the water level ({project.water.y:g} m) fixes no pressure by itself, and no "
+            "water pressure condition or normal load uses it. Add a water pressure "
+            "condition if the soil should be under water.")
 
 
 def _part_materials(project: Project, names: dict[str, str],

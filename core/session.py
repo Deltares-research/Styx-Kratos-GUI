@@ -36,8 +36,9 @@ from core import scripting
 from core.kratos import materials
 from core.model import drafts, phases, units
 from core.model.load_translation import translate as translate_loads
-from core.model.schemas import (CustomPart, DimensionUpdate, LayersUpdate, MaterialsUpdate,
-                                MeshRequest, Panel, PhasesUpdate, Project, StructuresUpdate,
+from core.model.schemas import (ConditionsUpdate, CustomPart, DimensionUpdate, LayersUpdate,
+                                MaterialsUpdate, MeshRequest, Panel, PhasesUpdate, Project,
+                                StructuresUpdate,
                                 UnitsUpdate, WaterLevel, WaterUpdate, point_on_panel,
                                 point_on_polyline)
 from core.model.wall_translation import translate as translate_walls
@@ -1069,6 +1070,61 @@ def remove_section(project: Project, id: str, kind: str | None = None) -> Projec
     payload = project.model_dump()
     field = drafts.SECTION_FIELDS[kind]
     payload[field] = [s for s in payload[field] if s["id"] != id]
+    return Project.model_validate(payload)
+
+
+# ── Boundary conditions ─────────────────────────────────────────────────────
+#
+# What `kratos-cli boundary` and the GUI's boundary conditions dialog edit. A condition
+# on a line or a point is a gmsh physical group named by its id, so an id is refused
+# that any part or structure already has, as for a structure.
+
+def replace_conditions(project: Project, update: ConditionsUpdate) -> Project:
+    """The boundary conditions, as one list."""
+    payload = project.model_dump()
+    payload["boundary_conditions"] = [c.model_dump() for c in update.boundary_conditions]
+    return Project.model_validate(payload)
+
+
+def find_condition(project: Project, id: str):
+    """The boundary condition `id`."""
+    return project.boundary_conditions[
+        _index(project.boundary_conditions, id, "boundary condition")]
+
+
+def add_condition(project: Project, record) -> Project:
+    """`project` with the boundary condition `record` (`drafts.water_pressure_condition`)."""
+    taken = set(project.part_keys()) | set(project.stageable_keys()) | RESERVED
+    taken |= {r.id for field in STRUCTURES for r in getattr(project, field)}
+    taken |= {c.id for c in project.boundary_conditions}
+    if record.id in taken:
+        raise EditRefused(f"there is already a part or a condition {record.id!r}; give "
+                          "another id.")
+    payload = project.model_dump()
+    payload["boundary_conditions"].append(record.model_dump())
+    return Project.model_validate(payload)
+
+
+def update_condition(project: Project, id: str, **fields) -> Project:
+    """The boundary condition `id` with the fields given, by their schema names.
+
+    A new `on` drops what the old target named (`face`, `part`, `points`) unless it is
+    given too, as the dialog does when its first question gets another answer."""
+    find_condition(project, id)
+    payload = project.model_dump()
+    record = next(c for c in payload["boundary_conditions"] if c["id"] == id)
+    if "on" in fields and fields["on"] != record["on"]:
+        record.update({"face": None, "part": None, "points": None})
+    record.update(fields)
+    return Project.model_validate(payload)
+
+
+def remove_condition(project: Project, id: str) -> Project:
+    """The project without the boundary condition `id`."""
+    find_condition(project, id)
+    payload = project.model_dump()
+    payload["boundary_conditions"] = [c for c in payload["boundary_conditions"]
+                                      if c["id"] != id]
     return Project.model_validate(payload)
 
 

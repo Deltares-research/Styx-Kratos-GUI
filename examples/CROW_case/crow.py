@@ -39,7 +39,7 @@ if str(ROOT) not in sys.path:
 from core.model.schemas import (  # noqa: E402
     Anchor, AnchorRows, AnchorSection, Beam, BeamSection, Borehole, BoxRefinement, Domain,
     Excavation, Interface, InterfaceSection, LineLoad, Material, MeshSettings, NormalLoad,
-    Phase, Piles, Project, SoilLayer, Struts, Wall, WaterLevel, Wells)
+    Phase, Piles, Project, SoilLayer, Struts, Wall, WaterPressureCondition, Wells)
 
 
 # ── The site ──────────────────────────────────────────────────────────────────────────────
@@ -133,7 +133,12 @@ EXCAVATION = Excavation(
     levels=[-2.0, -5.0, -8.0],
 )
 
-WATER = WaterLevel(y=-1.5)
+# The pore pressure: hydrostatic about the phreatic level at -1.5 m, fixed on the whole
+# soil. The condition carries its own level, as each water load below does.
+BOUNDARY_CONDITIONS = [
+    WaterPressureCondition(id="pore_pressure", name="Pore pressure", on="domain",
+                           fluid_pressure_type="Hydrostatic", reference_coordinate=-1.5),
+]
 
 
 # ── The structures ────────────────────────────────────────────────────────────────────────
@@ -210,18 +215,21 @@ NORMAL_LOADS = [
         name="WaterLoad_Stage1",
         points=[(5.0, -1.5), (5.0, -2.0), (0.0, -2.0)],
         fluid_pressure_type="Hydrostatic",
+        reference_coordinate=-1.5,
     ),
     NormalLoad(
         id="water_2",
         name="WaterLoad_Stage2",
         points=[(5.0, -1.5), (5.0, -5.0), (0.0, -5.0)],
         fluid_pressure_type="Hydrostatic",
+        reference_coordinate=-1.5,
     ),
     NormalLoad(
         id="water_3",
         name="WaterLoad_Stage3",
         points=[(5.0, -1.5), (5.0, -8.0), (0.0, -8.0)],
         fluid_pressure_type="Hydrostatic",
+        reference_coordinate=-1.5,
     ),
 ]
 
@@ -344,7 +352,7 @@ def project() -> Project:
         materials=MATERIALS,
         layers=LAYERS,
         excavation=EXCAVATION,
-        water=WATER,
+        boundary_conditions=BOUNDARY_CONDITIONS,
         beam_sections=BEAM_SECTIONS,
         beams=BEAMS,
         anchor_sections=ANCHOR_SECTIONS,

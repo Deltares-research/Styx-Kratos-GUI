@@ -24,7 +24,7 @@ from core.model import units
 from core.model.schemas import (Anchor, AnchorSection, BeamSection, Beam, Borehole, Interface,
                                 InterfaceSection, LineLoad, Material, Member, NormalLoad, Panel,
                                 PanelSection, PointLoad, Project, SoilLayer, SpaceAnchor,
-                                SurfaceLoad)
+                                SurfaceLoad, WaterPressureCondition)
 
 SOIL_LAWS = {2: "GeoLinearElasticPlaneStrain2DLaw", 3: "GeoIncrementalLinearElastic3DLaw"}
 """The law a new soil starts with, by the project's dimension (`App.PropertySets.lawFor`)."""
@@ -304,6 +304,12 @@ def _middle(project: Project) -> list[tuple[float, float]]:
     return [(x, d.y_top), (x, d.y_top - (d.y_top - d.y_bottom) * 0.5)]
 
 
+def _centre(project: Project) -> tuple[float, float]:
+    """The middle of the section: where a new point goes for the user to move."""
+    d = project.domain
+    return (d.x0 + (d.x1 - d.x0) * 0.5, d.y_bottom + (d.y_top - d.y_bottom) * 0.5)
+
+
 def _finite(points, message: str) -> None:
     if not all(math.isfinite(value) for point in points for value in point):
         raise DraftError(message)
@@ -568,19 +574,75 @@ def interface(project: Project, structure: str | None = None, points=None, *,
 
 def normal_load(project: Project, points=None, *, id: str | None = None,
                 name: str | None = None, hydrostatic: bool = False,
-                pressure: float = 0.0) -> NormalLoad:
+                pressure: float = 0.0,
+                reference_coordinate: float | None = None) -> NormalLoad:
     """A new normal load along `points`, or down the middle of the section: a uniform
     pressure, zero until it is given (`App.NormalLoads.draft`). Hydrostatic only when
-    asked -- it derives the pressure from the water and ignores the number."""
+    asked -- it derives the pressure from a water level and ignores the number: its own
+    `reference_coordinate` when given, else the project's, copied into the record as a
+    water pressure condition's is (`water_pressure_condition`)."""
     if project.dimension != 2:
         raise DraftError("A normal load is a plane-strain object; switch to 2D to create "
                          "one.")
     id, default_name = _named(id, [n.id for n in project.normal_loads], "normalload_",
                               "Normal load")
     line = _middle(project) if points is None else [(p[0], p[1]) for p in points]
+    if hydrostatic and reference_coordinate is None and project.water is not None:
+        reference_coordinate = project.water.y
+    # Passed only when given, so a record that names no level reads as the GUI's draft
+    # does, field for field (`tests/test_draft_parity.py` compares the fields set).
+    level = {} if reference_coordinate is None else {
+        "reference_coordinate": reference_coordinate}
     return NormalLoad(id=id, name=name or default_name, kind="normal", points=line,
                       fluid_pressure_type="Hydrostatic" if hydrostatic else "Uniform",
-                      pressure=pressure, active=True)
+                      pressure=pressure, active=True, **level)
+
+
+# Boundary conditions
+
+def water_pressure_condition(
+        project: Project, on: str, *, face: str | None = None, part: str | None = None,
+        points=None, id: str | None = None, name: str | None = None,
+        fluid_pressure_type: str = "Hydrostatic", is_fixed: bool = True,
+        value: float = 0.0, reference_coordinate: float | None = None,
+        x_coordinates: Sequence[float] | None = None,
+        y_coordinates: Sequence[float] | None = None,
+        z_coordinates: Sequence[float] | None = None,
+        pressure_tension_cut_off: float = 0.0) -> WaterPressureCondition:
+    """A new water pressure condition on `on`: `"domain"` for the whole soil, `"face"`
+    with `face`, `"part"` with `part`, or `"line"` / `"point"` with `points` (down the
+    middle of the section, or at its centre, when none are given).
+
+    A hydrostatic condition with no `reference_coordinate` takes the project's water
+    level, copied into the record, so the record says what it is measured from; with no
+    water level either, there is no level to give it. A line or a point is drawn in the
+    2D section and nowhere else, as a normal load is."""
+    if on in ("line", "point") and project.dimension != 2:
+        raise DraftError(f"A water pressure {on} is drawn in the 2D section; switch to 2D "
+                         "to create one, or put the condition on the whole soil, a face "
+                         "or a part.")
+    if fluid_pressure_type == "Hydrostatic" and reference_coordinate is None:
+        if project.water is None:
+            raise DraftError("A hydrostatic water pressure needs the level where its "
+                             "pressure is zero: give its reference_coordinate. For a dry "
+                             "model, add no water pressure condition, or a Uniform one "
+                             "with value 0.")
+        reference_coordinate = project.water.y
+    taken = [c.id for c in project.boundary_conditions]
+    id, default_name = _named(id, taken, "waterpressure_", "Water pressure")
+    drawn = None
+    if on == "line":
+        drawn = _middle(project) if points is None else [(p[0], p[1]) for p in points]
+    elif on == "point":
+        drawn = [_centre(project)] if points is None else [(p[0], p[1]) for p in points]
+    return WaterPressureCondition(
+        id=id, name=name or default_name, on=on, face=face, part=part, points=drawn,
+        fluid_pressure_type=fluid_pressure_type, is_fixed=is_fixed, value=value,
+        reference_coordinate=reference_coordinate,
+        x_coordinates=None if x_coordinates is None else list(x_coordinates),
+        y_coordinates=None if y_coordinates is None else list(y_coordinates),
+        z_coordinates=None if z_coordinates is None else list(z_coordinates),
+        pressure_tension_cut_off=pressure_tension_cut_off, active=True)
 
 
 # Loads

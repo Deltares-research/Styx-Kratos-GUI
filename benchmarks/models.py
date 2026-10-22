@@ -60,8 +60,9 @@ def column(layers: list[tuple[float, float, dict]], width: float = 1.0,
            name: str = "Soil column") -> Project:
     """A soil column `width` wide, its layers as (top, bottom, material) from the top.
 
-    Rollers on the sides and a fixed base are the exporter's own boundaries; a single K0
-    phase when `k0_stage`, otherwise the unphased single stage."""
+    Rollers on the sides and a fixed base are the exporter's own boundaries, and the pore
+    pressure is fixed hydrostatically on the whole column; a single K0 phase when
+    `k0_stage`, otherwise the unphased single stage."""
     p = blank_project().model_dump(mode="json")
     top, bottom = layers[0][0], layers[-1][1]
     p["name"] = name
@@ -86,6 +87,12 @@ def column(layers: list[tuple[float, float, dict]], width: float = 1.0,
                        "floor_y": bottom + 0.5 * (top - bottom)}
     p["section_offset"] = 0.5
     p["water"] = {"y": water_y} if water_y is not None else None
+    # Hydrostatic about the water level, or about the base -- zero everywhere -- in a
+    # dry column.
+    p["boundary_conditions"] = [{"id": "pore_pressure", "name": "Pore pressure",
+                                 "kind": "water_pressure", "on": "domain",
+                                 "reference_coordinate":
+                                     water_y if water_y is not None else bottom}]
     p["mesh"] = {"element_size": min(width, (top - bottom) / 10), "order": 2}
     if k0_stage:
         p["phases"] = [{"id": "initial", "name": "Initial stage", "calculation": "K0 procedure"}]
