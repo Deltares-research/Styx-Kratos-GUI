@@ -1,188 +1,212 @@
-# Architecture
+# Architecture reference
 
-Styx is a Deltares/Kratos-branded geotechnical modeller. You build a soil and excavation
-model, mesh it with Gmsh, export it as a Kratos GeoMechanics deck, run it in construction
-phases, and read the results back in its Results mode. It is a FastAPI server
-holding one project, plus a build-free browser front end.
+This page lists the parts of Styx: the libraries, the steps from a model to its results,
+the modules of the engine, the server, the command line and the browser app, and the HTTP
+API. It is for developers who change Styx. For the big picture, read the
+[developer guide](README.md) first.
 
-See also: the [developer guide](README.md) (the big picture, start there),
-[FEATURES.md](../FEATURES.md) (what works, per Kratos feature),
-[PROJECT_OVERVIEW.md](PROJECT_OVERVIEW.md) (code size per module),
-[INSTALLATION.md](../INSTALLATION.md) (install and run),
-[KRATOS_SETUP.md](../KRATOS_SETUP.md) (configure Kratos).
+Related pages: [FEATURES.md](../FEATURES.md) (what works),
+[PROJECT_OVERVIEW.md](PROJECT_OVERVIEW.md) (code size), [TESTING.md](TESTING.md) (how to run
+the tests).
 
-## At a glance
+## Libraries and runtime
 
-### Backend
+### Server and engine
 
-| Layer | What |
+| Part | What |
 |---|---|
-| Framework | FastAPI 0.115.6 + Uvicorn 0.34.0 |
-| Validation | Pydantic 2.10.4. `Project` (`core/model/schemas.py`) is the single source of truth |
-| Geometry/mesh | Gmsh 4.13.1 (OpenCASCADE kernel) |
-| Numerics | NumPy 2.2.1 |
-| State | One project in memory (`backend/store.py`). No database, no auth. Run results live on disk |
-| Concurrency | Gmsh in a `ProcessPoolExecutor(max_workers=1)` (`core/gmsh_worker.py`). Kratos in a subprocess per run (`core/analysis/calculation.py`) |
-| Solver | Kratos MultiPhysics GeoMechanicsApplication. Not installed by the launcher; found through `KRATOS_GUI_PYTHON` / `KRATOS_GUI_KRATOS` or `kratos.local.json` |
-| Tests | pytest 8.3.4 + httpx `TestClient`, 1273 cases. `python -m pytest -q` from the repository root, with an interpreter that has gmsh |
+| Web framework | FastAPI 0.143.0 and Uvicorn 0.34.0 |
+| Validation | Pydantic 2.12.5. `Project` in `core/model/schemas.py` is the one description of a model. |
+| Geometry and mesh | Gmsh 4.13.1 (OpenCASCADE kernel) |
+| Numerics | NumPy 2.2.6 (Python 3.10) or 2.3.5 (Python 3.11 and newer) |
+| State | One project in memory (`backend/store.py`). No database and no login. Runs are folders on disk. |
+| Processes | Gmsh in a `ProcessPoolExecutor(max_workers=1)` (`core/gmsh_worker.py`). Kratos in a new subprocess for each run (`core/analysis/calculation.py`). |
+| Solver | Kratos Multiphysics GeoMechanicsApplication. The launcher does not install it. Styx finds it through `kratos.local.json` or `KRATOS_GUI_PYTHON` and `KRATOS_GUI_KRATOS`. |
 
-### Frontend
+The versions are the fixed versions in [requirements.txt](../../requirements.txt).
 
-| Layer | What |
+### Browser app
+
+| Part | What |
 |---|---|
-| 3D | three.js (vendored), the only dependency |
-| Build | **None.** No npm, no bundler, no transpiler |
-| Style | ES5 IIFE modules on a global `App` namespace, 44 `<script>` tags in `frontend/index.html` |
-| Fallback renderer | Hand-written CPU painter (`frontend/js/canvas-renderer.js`) when there is no WebGL |
-| HTTP | `fetch` wrapper (`frontend/js/api.js`) |
-| Tests | ~90-line browser harness (`frontend/tests/index.html`, 36 test files). The DOM-free suites also run headless under quickjs: `python frontend/tests/run_headless.py`, 302 cases in 9 suites. `python frontend/tests/syntax_check.py` parses every JS file |
+| 3D view | three.js, in `frontend/vendor/`. It is the only dependency. |
+| Build | None: no npm, no bundler, no transpiler |
+| Code style | ES5 modules (immediately invoked functions) on a global `App` object, loaded by `<script>` tags in `frontend/index.html` |
+| Renderer without WebGL | A CPU painter (`frontend/js/canvas-renderer.js`) |
+| HTTP | A `fetch` wrapper (`frontend/js/api.js`) |
 
-## How a model flows
+## From a model to its results
 
 Module paths are relative to `core/`.
 
-| Step | Module | Note |
+| Step | Module | What happens |
 |---|---|---|
-| 1. Edit | `model/schemas.py` | Every PATCH re-validates the *whole* project |
-| 2. Build | `geometry/solid_model.py` | Boxes → boolean fragment → cut pit → embed structures; 2D sections and 3D solids |
-| 3. Draw | `geometry/tessellation.py` | OCC `importStl()`, ~0.1 s, for display only (not an FE mesh) |
-| 4. Mesh | `geometry/meshing.py` | Real tet/tri mesh, re-derived from the geometry each time |
-| 5. Split | `kratos/interfaces.py` | Duplicate nodes along a wall, zero-thickness contact elements |
-| 6. Phase | `model/phases.py` | The phase tree resolved into the sequence of stages Kratos runs: what is active, water, loads |
-| 7. Export | `kratos/writer.py`, `kratos/materials.py`, `kratos/parameters.py` | `.mdpa` + `MaterialParameters.json` + `ProjectParameters.json` (one stage per phase, with GiD and JSON output processes) |
-| 8. Solve | `analysis/calculation.py` → `analysis/kratos_main.py` | Kratos' orchestrator in a subprocess, writing into a run directory of its own (`~/KratosGUI/runs/<deck>_<stamp>/`) |
-| 9. Read back | `results/catalog.py` → `results/gid_reader.py`, `results/fields.py`, `results/mesh.py`, `results/parts.py` | The run's GiD ASCII (`.post.msh` / `.post.res`) parsed into fields per stage, joined to the deck's parts |
-| 10. Members | `results/members.py` | The deck's `<stage>__output_<member>.json` turned into curves along the wall and its interface |
+| 1. Edit | `model/schemas.py`, `session.py` | Each edit checks the full project again |
+| 2. Build | `geometry/solid_model.py` | Boxes, then a boolean fragment, then the pit cut out, then the structures embedded. 2D sections and 3D solids. |
+| 3. Draw | `geometry/tessellation.py` | A fast surface triangulation (about 0.1 s) for the view only. It is not a finite-element mesh. |
+| 4. Mesh | `geometry/meshing.py` | The finite-element mesh, made again from the geometry each time |
+| 5. Split | `kratos/interfaces.py` | Duplicates the nodes along a wall and writes zero-thickness contact elements |
+| 6. Phases | `model/phases.py` | Makes the phase tree into the list of stages that Kratos runs |
+| 7. Export | `kratos/writer.py`, `kratos/materials.py`, `kratos/parameters.py` | Writes the `.mdpa`, `MaterialParameters.json` and `ProjectParameters.json` (one stage for each phase, with GiD and JSON output) |
+| 8. Solve | `analysis/calculation.py` → `analysis/kratos_main.py` | Runs the Kratos orchestrator in a subprocess, in a new run folder (`~/KratosGUI/runs/<deck>_<time>/`) |
+| 9. Read | `results/catalog.py` → `results/gid_reader.py`, `results/fields.py`, `results/mesh.py`, `results/parts.py` | Reads the GiD ASCII files (`.post.msh`, `.post.res`) into fields for each stage, and joins them to the parts of the deck |
+| 10. Members | `results/members.py` | Reads the `<stage>__output_<member>.json` files into curves along the wall and its interface |
 
-Steps 2–5 run in the gmsh worker process. Step 8 is the only step that needs Kratos. Steps 9–10
-read files only, so a run from last week, or a run on another machine, can be opened
-again.
+Steps 2 to 5 run in the Gmsh worker process. Only step 8 needs Kratos. Steps 9 and 10 only
+read files, so you can open an old run, or a run from a different computer.
 
-## Ways in
-
-The command box is the primary interface. Menus, rails and panels build the same command
-strings and hand them to the same handlers.
+## Ways into the model
 
 | Entry | What it does | Code |
 |---|---|---|
-| The GUI | Draw soil, structures, loads, water, phases; mesh; Calculate (F9) | `frontend/js/*`, `patches.js` |
-| Command box | `mesh`, `water`, `phases`, `node <id>`, `colour <part>`, `results …`, `results plot …` | each module's `handleCommand` |
-| `run <file.py>` | Builds the open model by running a Python file that defines a `Project` (e.g. `run tests/models/excavation.py`) | `core/scripting.py`, `POST /api/project/script` |
-| A finished deck | A Kratos deck written elsewhere, shown as its own mesh and run as its own files, from a script that names it (`external_deck.deck_project`) | `core/kratos/external_deck.py`, `frontend/js/deck.js` |
-| Import mesh | Read an `.mdpa` back into mesh data | `core/kratos/mdpa_reader.py`, `POST /api/import/mdpa` |
-| Export | Write the deck without running it | `POST /api/export/mdpa`, `frontend/js/export.js` |
-| `kratos-cli` | The terminal, without the browser or the server: new, edit any field by path, mesh, phases, export, run a deck, results ([CLI.md](../CLI.md)). It edits the project file through `core/session.py`, as the routes do, and runs gmsh in its own process (`gmsh_worker.run_here`) | `cli/`, `kratos-cli.bat`, `kratos-cli.sh` |
+| The GUI | Draw soil, structures, loads, water and phases; mesh; Calculate (F9) | `frontend/js/*`, `patches.js` |
+| Command box | `mesh`, `calculate`, `water`, `units`, `phases`, `node <id>`, `colour <part>`, `results …`, `results plot …` | `patches.js` (`App.Command.run`) and the `command` or `handleCommand` function of each module |
+| `run <file.py>` | Runs a Python file that returns a `Project` (for example `run tests/models/excavation.py`) | `core/scripting.py`, `POST /api/project/script` |
+| Existing deck | Shows a Kratos deck that was written somewhere else as its own mesh, and runs its own files. A script names it with `external_deck.deck_project`. | `core/kratos/external_deck.py`, `frontend/js/deck.js` |
+| Import mesh | Reads an `.mdpa` file back into mesh data, for view only | `core/kratos/mdpa_reader.py`, `POST /api/import/mdpa` |
+| Export | Writes the deck without running it | `POST /api/export/mdpa`, `frontend/js/export.js` |
+| `kratos-cli` | The terminal, without a browser or a server ([CLI.md](../CLI.md)). It changes the project file through `core/session.py`, as the routes do, and runs Gmsh in its own process (`gmsh_worker.run_here`). | `cli/`, `kratos-cli.bat`, `kratos-cli.sh` |
 
-## Server modules
+The Results menu and the Results panel build `results …` command strings and give them to
+the same handler as the command box. So each results action has one implementation.
 
-`backend/` is the FastAPI server: `main.py` (assembles the app), `middleware.py`
-(Host/Origin check, no-cache), `routes/` (one module per API group, below), `store.py`
-(the one project), `launcher.py` (portable setup).
+## Engine modules (`core/`)
 
-`core/` is the engine, in plain Python with no web framework. Each of its five packages
-is one stage of the pipeline the data goes through:
+`core/` is the engine, in plain Python, without a web framework. Each of its five packages
+is one step of the pipeline:
 
 | Package | Modules |
 |---|---|
-| `core/model/` | `schemas.py` (the `Project`), `units.py` (unit systems), `migration.py` (old project files), `templates.py` (blank and starting projects), `phases.py` (phase tree → stages), `wall_translation.py`, `load_translation.py` (section ↔ solid translation) |
-| `core/geometry/` | `solid_model.py` (OCC solids), `tessellation.py` (display), `meshing.py` (FE mesh), `cad_import.py` (CAD import), `primitives.py` (geometry recipes) |
-| `core/kratos/` | `writer.py` (the deck), `materials.py` (MaterialParameters.json), `parameters.py` (ProjectParameters.json: stages, solver, output), `interfaces.py` (split nodes along walls), `deck_files.py` (the deck's file names), `external_deck.py` (finished decks), `mdpa_reader.py`, `node_parts.py` |
-| `core/analysis/` | `calculation.py` (run directory, subprocess, failure reading), `kratos_main.py` (runs inside Kratos' Python) |
-| `core/results/` | `catalog.py` (runs registry, file access, cache), `gid_reader.py` (GiD ASCII), `fields.py` (catalogue, units, invariants), `mesh.py` (drawable buffers), `parts.py`, `members.py` (wall and interface curves) |
-| `core/` | `scripting.py` (`run <file.py>`), `gmsh_worker.py` (the gmsh process pool) and `session.py` (every edit of a project, and the project file: the HTTP routes and the command line make their edits through it). They send work into several packages, so they stay at the top |
+| `core/model/` | `schemas.py` (the `Project`), `units.py` (unit systems), `migration.py` (old project files), `templates.py` (empty and demo projects), `drafts.py` (where a new structure goes, as the GUI tools put it), `phases.py` (phase tree → stages), `script_writer.py` (the model as a Python script), `wall_translation.py` and `load_translation.py` (2D ↔ 3D) |
+| `core/geometry/` | `solid_model.py` (OpenCASCADE solids), `tessellation.py` (view), `meshing.py` (finite-element mesh), `cad_import.py` (CAD files), `primitives.py` (recipes for drawn solids) |
+| `core/kratos/` | `writer.py` (the deck), `materials.py` (`MaterialParameters.json`), `parameters.py` (`ProjectParameters.json`: stages, solver, output), `interfaces.py` (split nodes along walls), `deck_files.py` (file names of the deck), `external_deck.py` (existing decks), `mdpa_reader.py`, `node_parts.py` |
+| `core/analysis/` | `calculation.py` (run folder, subprocess, failure messages), `kratos_main.py` (runs inside the Python of Kratos) |
+| `core/results/` | `catalog.py` (list of runs, file access, cache), `gid_reader.py` (GiD ASCII), `fields.py` (quantities, units, invariants), `mesh.py` (buffers for the view), `parts.py`, `members.py` (curves along walls and interfaces) |
+| `core/` | `session.py` (each edit of a project, and the project file: the HTTP routes and the command line both use it), `gmsh_worker.py` (the Gmsh process), `scripting.py` (`run <file.py>`). They send work to several packages, so they are above all five. |
 
-Imports go one way: **model ← geometry ← kratos ← analysis ← results**. A package may import
-from its own package or one to its left, never to its right. `tests/test_layout.py`
-holds the code to it, with no exceptions. Where a lower package and a higher one need
-the same answer, the lower one gives it: the edges a load is applied on are chosen in
-`geometry/meshing.py` (`loaded_elements`), and both the mesh preview and the exporter's
-load conditions read them from there.
+### Import rule
 
-Every `__init__.py` in `core/` is empty. Kratos is started with
-`-m core.analysis.kratos_main`, and its interpreter has neither pydantic nor gmsh.
+Imports go in one direction: **model ← geometry ← kratos ← analysis ← results**. A package
+can import from itself or from a package to its left, never from a package to its right.
+`tests/test_layout.py` checks this rule, with no exceptions.
+
+If a lower package and a higher package need the same answer, the lower package gives it.
+For example, `geometry/meshing.py` (`loaded_elements`) selects the edges that a load acts
+on, and both the mesh preview and the export read them from there.
+
+Each `__init__.py` in `core/` is empty, because Kratos starts `core.analysis.kratos_main`
+with `-m` in a Python that has no pydantic and no Gmsh.
+
+## Server modules (`backend/`)
+
+| Module | What |
+|---|---|
+| `main.py` | Makes the FastAPI app and mounts the browser files |
+| `middleware.py` | Checks the Host and Origin headers, and switches off the browser cache for the app files |
+| `routes/` | One module for each group of the HTTP API (see below). `routes/common.py` has what they share: the upload limit (256 MB), the answer to a refused edit, and the mesh jobs. |
+| `store.py` | The one open project |
+| `launcher.py` | Makes the virtual environment and starts the server (`run.bat`, `run.sh`) |
+
+A route that changes the project does the change through `core/session.py`, and only adds
+the HTTP parts.
 
 ## HTTP API
 
-Each group is one module in `backend/routes/`; what they share (upload limit, the
-answer to a refused edit, mesh jobs) is in `backend/routes/common.py`. A route that edits
-the project makes the edit through `core/session.py` and only adds the HTTP around it.
-
 | Group | Module | Routes |
 |---|---|---|
-| Project | `routes/project.py` | `GET/PUT /api/project`, `POST /api/project/new`, `/reset`, `/script`; `PATCH /api/project/layers`, `/materials`, `/structures`, `/phases`, `/dimension`, `/units`; `PUT /api/project/water`; `POST /api/project/phases/defaults` |
-| Geometry | `routes/geometry.py` | `GET /api/geometry`, `POST /api/geometry/create`, `/import`, `DELETE /api/geometry/parts/{key}`, `DELETE /api/project/custom_parts` |
+| Project | `routes/project.py` | `GET`/`PUT /api/project`; `POST /api/project/new`, `/reset`, `/script`, `/script/save`, `/phases/defaults`; `PATCH /api/project/layers`, `/materials`, `/structures`, `/phases`, `/dimension`, `/units`; `PUT /api/project/water`; `DELETE /api/project/custom_parts` |
+| Geometry | `routes/geometry.py` | `GET /api/geometry`; `POST /api/geometry/create`, `/import`; `DELETE /api/geometry/parts/{key}` |
 | Mesh | `routes/mesh.py` | `POST /api/mesh`, `/api/mesh/labels`, `/api/mesh/node-parts` |
 | Decks | `routes/decks.py` | `POST /api/export/mdpa`, `/api/import/mdpa`, `/api/calculate` |
-| Results | `routes/results.py` | `GET /api/results/runs`, `/runs/{run}`, `/runs/{run}/files/{name}`, `/runs/{run}/archive` |
-| Results per stage | `routes/results.py` | `GET /api/results/runs/{run}/stages/{n}/fields`, `/mesh`, `/field/{name}`, `/displacement`, `/at/{node}`, `/parts` |
-| Results per member | `routes/results.py` | `GET /api/results/runs/{run}/members`, `/members/{member}/{quantity}` |
+| Runs | `routes/results.py` | `GET /api/results/runs`, `/runs/{run}`, `/runs/{run}/files/{name}`, `/runs/{run}/archive` |
+| Results of a stage | `routes/results.py` | `GET /api/results/runs/{run}/stages/{n}/fields`, `/mesh`, `/field/{name}`, `/displacement`, `/at/{node}`, `/parts` |
+| Results of a member | `routes/results.py` | `GET /api/results/runs/{run}/members`, `/members/{member}/{quantity}` |
 | Health | `main.py` | `GET /api/health` |
 
-## Browser modules
+## Command-line modules (`cli/`)
 
-| Role | Modules |
+| Module | What |
 |---|---|
-| Shell (frozen) | `frontend/base/js` and `frontend/base/css`, the original mockup's UI, served unchanged at `/js` and `/css`: menus, toolbars, explorer, dialogs, command box |
-| Glue | `patches.js` wires the live behaviour into the frozen shell: menu actions, rails, panels, windows |
-| Data | `api.js`, `model.js` (server project → shape the shell expects), `buffers.js`, `history.js` (undo/redo) |
-| View | `viewport.js` (three.js), `orbit.js` (Y-up camera, replaces the base one), `canvas-renderer.js`, `ruler.js`, `mesh-labels.js`, `part-colors.js`, `node-parts.js` |
-| Modelling tools | `draw-input.js`, `beams.js`, `anchors.js`, `interfaces.js`, `loads.js`, `normal-loads.js`, `water-command.js`, `soil-volume-dialog.js`, `material-library.js` |
+| `cli/terminal/main.py` | The parser and the entry point of `kratos-cli` |
+| `cli/terminal/shell.py` | `kratos-cli shell`: commands one after the other in one process, with undo and redo |
+| `cli/terminal/files.py` | The project file that a command reads, and where an edit is written |
+| `cli/terminal/output.py`, `style.py`, `tables.py` | The answer of a command: text, JSON, colour, CSV |
+| `cli/terminal/words.py` | How the words of a command line become a command and its values |
+| `cli/commands/project.py` | `new`, `show`, `check`, `build`, `script`, `dimension`, `units`, `water` |
+| `cli/commands/edit.py` | `get`, `set`, `add`, `remove` |
+| `cli/commands/ground.py`, `volumes.py` | `domain`, `borehole`, `material`, `layer`, `excavation`, `parts`; `volume` |
+| `cli/commands/structures.py` | `section`, `beam`, `wall`, `member`, `anchor`, `interface`, `load`, `normal-load` |
+| `cli/commands/meshing.py`, `phases.py` | `mesh`, `export`; `phases` |
+| `cli/commands/inspection.py`, `analysis.py`, `results.py` | `node`, `deck show`; `run`, `calculate`; `results` |
+| `cli/commands/interactive.py` | `shell` |
+| `cli/kratos-shell.*`, `cli/kratos-init-powershell.bat` | Helper scripts for the tutorials |
+
+## Browser modules (`frontend/`)
+
+The browser app has two layers. `frontend/base/` is the UI of the first design (menus,
+tool bars, explorer, dialogs, command box). It stays unchanged, and the server serves it at
+`/js` and `/css`. `frontend/js/` is the live layer: `patches.js` connects it to the frozen
+shell. Only the camera of `base/js/orbit.js` is replaced; all other behaviour is wrapped by
+`patches.js`.
+
+| Role | Modules in `frontend/js/` |
+|---|---|
+| Connection to the shell | `patches.js`: menu actions, tool rails, panels, windows, the command box |
+| Data | `api.js`, `model.js` (server project → shape that the shell needs), `buffers.js`, `history.js` (undo and redo), `units.js`, `unit-table.js` |
+| View | `viewport.js` (three.js), `orbit.js` (camera with y up), `canvas-renderer.js`, `ruler.js`, `mesh-labels.js`, `part-colors.js`, `node-parts.js` |
+| Modelling tools | `draw-input.js`, `beams.js`, `anchors.js`, `interfaces.js`, `loads.js`, `normal-loads.js`, `water-command.js`, `soil-volume-dialog.js` |
+| Materials | `material-sets.js`, `material-library.js`, `property-sets.js` |
 | Mesh and phases | `mesh-settings.js`, `phases.js` |
-| Files | `export.js`, `import-dialog.js`, `mdpa-import-dialog.js`, `download.js`, `zip.js`, `deck.js` |
-| Calculate and results | `calculate.js`, `results.js` (the `results …` commands), `results-render.js` (colours, legend, CSV), `results-view.js` (the contour on screen), `results-plot.js` (`results plot …` and its SVG figure) |
+| Files and scripts | `export.js`, `import-dialog.js`, `mdpa-import-dialog.js`, `download.js`, `zip.js`, `deck.js`, `script-command.js` |
+| Calculation and results | `calculate.js`, `results.js` (the `results …` commands), `results-render.js` (colours, legend, CSV), `results-view.js` (the contours on screen), `results-plot.js` (`results plot …` and its SVG figure) |
 
 ## Results mode
 
-```
-run directory (~/KratosGUI/runs/<deck>_<stamp>/)
+```text
+run folder (~/KratosGUI/runs/<deck>_<time>/)
   <deck>.mdpa, ProjectParameters.json           → part names, stage order, output names
   <deck>_<stage>.post.msh / .post.res           → results/gid_reader → results/fields, mesh, parts
   <stage>__output_wall.json, __output_interface → results/members
         │
-        ▼  results/catalog.py (finds files, parses once, caches by size + mtime)
+        ▼  results/catalog.py (finds the files, reads each one once, caches by size and time)
   /api/results/... routes
         │
         ▼
-  results.js         `results open | phase | field | range | csv …`   (DOM-free, tested)
-  results-render.js  colours, bands, legend ticks, CSV                 (DOM-free, tested)
-  results-plot.js    `results plot …`, the per-phase SVG figure        (DOM-free, tested)
-  results-view.js    contoured mesh and legend in the viewport          (DOM)
+  results.js         `results open | phase | field | range | csv …`   (no DOM, tested)
+  results-render.js  colours, bands, legend ticks, CSV                 (no DOM, tested)
+  results-plot.js    `results plot …`, the SVG figure for each phase   (no DOM, tested)
+  results-view.js    contours and legend in the viewport               (DOM)
   patches.js         Results panel, Choose results window, plot window  (DOM)
 ```
 
-- **Results are read from what the deck already writes**: GiD ASCII and the JSON output
-  processes. There is no second writer. Interface elements are absent from the GiD output,
-  so interface tractions come only from the JSON files.
-- **Contours.** A field is chosen per phase, with banded or smooth colours, a choice of
-  colour maps, deformed mesh, editable legend limits (`results range`), a value-at-node
-  probe and CSV export.
-- **Plot along the wall.** Bending moment, shear force, normal force, displacements and
-  interface tractions against the level y, one panel per phase. It follows Kratos' own
-  staged-excavation validation figure, with Kratos' sign convention. The window is modeless and can
-  save SVG or CSV.
+- **One source of results:** Styx reads only what the deck writes, the GiD ASCII files and
+  the JSON output. The GiD output has no interface elements, so the interface tractions
+  come only from the JSON files.
+- **Contours:** one field for each phase, with colour bands or smooth colours, colour maps,
+  the deformed mesh, legend limits (`results range`), values at a node, and CSV export.
+- **Plot along the wall:** bending moment, shear force, normal force, displacements and
+  interface tractions against the level y, one panel for each phase. It follows the Kratos
+  staged-excavation validation figure and its sign convention. The window can save SVG or
+  CSV.
 
-## Testing
+## Tests
 
-| Suite | How to run | What it covers |
-|---|---|---|
-| Server | `python -m pytest -q` from the repository root (1273 cases, ~70 s) | Schema, geometry, meshing, export (golden decks), phases, API, results parsing |
-| Live Kratos regression | Part of the server suite; skipped where Kratos is not installed | The staged test model (`tests/models/excavation.py`) run through Kratos once per session and checked for invariants any correct run holds: every stage has output, parts and stages agree with the deck, hydrostatic pore pressure, signs, wall curves (`tests/test_results_regression.py`) |
-| Headless JS | `python frontend/tests/run_headless.py` (302 cases) | Every DOM-free module: phases, results, results-render, results-plot, part colours, water, node parts, mesh settings, deck |
-| JS syntax | `python frontend/tests/syntax_check.py` | Every `frontend/base/js`, `frontend/js` and test file parses. One syntax error silently disables the whole live layer |
-| Browser | open `frontend/tests/index.html` | Everything, including DOM, three.js and real events |
+[TESTING.md](TESTING.md) tells you how to run the tests. Two facts about the design of the
+tests:
 
-No recorded Kratos run is kept in the repository. Without Kratos, the results pipeline
-is exercised on synthetic GiD output from `tests/fakes/` (a fake runner and
-`gid_writer.py`), built from the same test model.
+- **No recorded Kratos run is in the repository.** Without Kratos, the results code is
+  tested on GiD output that `tests/fakes/` (a fake runner and `gid_writer.py`) makes from
+  the test model.
+- **One syntax error stops the full live layer** of the browser app, so
+  `frontend/tests/syntax_check.py` parses each JavaScript file in each test tier.
 
-## Ideas that carry the design
+## Design decisions
 
-| Idea | Why |
+| Decision | Reason |
 |---|---|
-| Gmsh in a 1-worker subprocess | It is a process-global singleton, and the subprocess also contains OCC hard crashes |
-| Kratos in a subprocess, configured by path | Its compiled extensions are bound to the Python they were built for, which is usually not the server's |
-| Frozen `frontend/base/` + live `frontend/js/` | The server mounts the base files in place. Only the camera in `orbit.js` is replaced; the rest is wrapped by `patches.js` |
-| Part keys | One string is the gmsh physical group, `userData.key`, tree `obj:` and `OBJECT_PROPS` key |
-| The command line is the feature | Every button builds a command string. One implementation per action, and every model can be scripted (`run <file.py>`) |
-| DOM-free logic, thin DOM | Anything decidable without a page goes in a module with no `document`, so the headless runner can test it. `patches.js` and `results-view.js` only host it |
-| Runs are directories, results are files | A run never changes after it finishes and is read back from disk, so results survive server restarts and can be zipped and shared |
+| Gmsh in one worker process | Gmsh keeps one global model in each process, and the worker process also contains OpenCASCADE crashes |
+| Kratos in a subprocess, found by its path | Its compiled modules work only in the Python that they were made for, which is usually not the Python of the server |
+| Frozen `frontend/base/` and live `frontend/js/` | The first design stays as it is. The live code wraps it, so the two never mix. |
+| Part keys | One string is the Gmsh physical group, the `userData.key` in the view, the `obj:` of the tree, and the `OBJECT_PROPS` key |
+| Logic without DOM, thin DOM code | Logic that needs no page goes into a module without `document`, so the tests can run it without a browser. `patches.js` and `results-view.js` only connect it to the page. |
+| Runs are folders, results are files | A run never changes after it ends, and Styx reads it from disk. So results survive a restart of the server, and you can share a run as a ZIP file. |
