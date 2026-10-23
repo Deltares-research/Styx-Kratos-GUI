@@ -291,6 +291,26 @@ def kratos_values(variable: str, tolerance: float):
     return check
 
 
+def seepage_balance(tolerance: float = 1e-3, above: float = 0.02):
+    """Case C: what comes in on the left leaves on the right, and that discharge is
+    Dupuit and Charny's, or up to `above` more (the unsaturated soil above the phreatic
+    line carries some water too)."""
+    def check(ctx: Context) -> Outcome:
+        stage = last_stage(ctx)
+        rate = catalog.stage_results(ctx.run_id, stage).field("NODAL_WATER_FLOW_RATE").values
+        mesh = catalog.stage_mesh(ctx.run_id, stage)
+        inflow = -sum(v[0] for n, v in rate.items() if abs(mesh.nodes[n][0]) < 1e-9)
+        outflow = sum(v[0] for n, v in rate.items()
+                      if abs(mesh.nodes[n][0] - muskat.WIDTH) < 1e-9)
+        charny = muskat.CHARNY_DISCHARGE
+        ok = (abs(outflow - inflow) <= tolerance * inflow
+              and charny <= outflow <= (1 + above) * charny)
+        return Outcome("Q in = Q out = K (H1² − H2²) / 2L", ok,
+                       f"in {inflow:.4g}, out {outflow:.4g} m³/s/m",
+                       f"{charny:.4g} to {(1 + above) * charny:.4g}")
+    return check
+
+
 # ── The catalogue ───────────────────────────────────────────────────────────
 
 SAND = models.material("sand", "Sand", 18.0, k0=0.6)
@@ -377,7 +397,8 @@ CASES = [
                  kratos_values("EFFECTIVE_SATURATION", 0.02)]),
     Case("BM-FLOW-C", "Full Muskat with a seepage face", "Kratos tests/seepage_tests; "
          "Dupuit-Charny discharge",
-         blocked="needs a seepage boundary condition (groundwater flow plan, step 3)"),
+         build=lambda: muskat.seepage(max_iterations=200),
+         checks=[seepage_balance()]),
 ]
 
 BY_ID = {case.id: case for case in CASES}

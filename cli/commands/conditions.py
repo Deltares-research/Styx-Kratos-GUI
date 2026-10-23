@@ -6,8 +6,10 @@ water level, and one with no displacement condition holds nothing still. Each re
 what the GUI's boundary conditions dialog makes -- its target (`--domain`, `--face`,
 `--part`, `--line`, `--point`: the dialog's first question, and which one) and what it
 prescribes there: displacements held at zero (`--fixed`, `--roller`, `--fix`,
-`core.model.drafts.displacement_condition`) or a water pressure (`--water-pressure`,
-`core.model.drafts.water_pressure_condition`). `boundary standard` puts back the
+`core.model.drafts.displacement_condition`), a water pressure (`--water-pressure`,
+`core.model.drafts.water_pressure_condition`), or a seepage face, where water may leave
+the soil in a groundwater flow calculation (`--seepage`, on a face or a line,
+`core.model.drafts.seepage_condition`). `boundary standard` puts back the
 supports a new project starts with. `gravity` switches the self weight on and off.
 
 A hydrostatic water pressure given no `--reference-coordinate` is given the project's
@@ -42,8 +44,9 @@ def register(commands, common: argparse.ArgumentParser) -> None:
     action(actions, common, "list", list_conditions, writes=False)
     add = action(actions, common, "add", add_condition,
                  help="a support (--fixed, --roller, --fix) on a face, a soil part, a "
-                      "drawn line or a point, or a water pressure (--water-pressure) there "
-                      "or on the whole soil")
+                      "drawn line or a point, a water pressure (--water-pressure) there "
+                      "or on the whole soil, or a seepage face (--seepage) on a face or "
+                      "a line")
     add.add_argument("id", nargs="?", help="its id (default: the first free one)")
     _fields(add)
     change = action(actions, common, "set", update_condition,
@@ -86,6 +89,10 @@ def _fields(parser: argparse.ArgumentParser) -> None:
                         help="a drawn line in the 2D section, x y x y ..., or @file")
     target.add_argument("--point", nargs="+", metavar="N",
                         help="a point in the 2D section, x y")
+    parser.add_argument("--seepage", action="store_true",
+                        help="a seepage face, where water may leave the soil in a "
+                             "groundwater flow calculation: on a face, or a line along the "
+                             "soil's outer boundary")
     parser.add_argument("--water-pressure", choices=PRESSURE_TYPES, metavar="TYPE",
                         help="Uniform (--value), Hydrostatic (--reference-coordinate) or "
                              "Phreatic_Multi_Line (--phreatic-line)")
@@ -140,10 +147,12 @@ def list_conditions(args: argparse.Namespace) -> Answer:
 def add_condition(args: argparse.Namespace) -> Answer:
     project = session.load(args.project)
     support = args.roller or args.fix is not None
+    if args.seepage:
+        return _add_seepage(args, project)
     if args.water_pressure is None and not support and args.is_fixed is not True:
         raise CommandError("say what the condition prescribes: --fixed, --roller or "
-                           "--fix AXIS ... for a support, or --water-pressure "
-                           + "|".join(PRESSURE_TYPES))
+                           "--fix AXIS ... for a support, --water-pressure "
+                           + "|".join(PRESSURE_TYPES) + ", or --seepage")
     target = _target(args)
     if target is None:
         raise CommandError("say where it acts: --domain, --face FACE, --part KEY, "
@@ -180,9 +189,48 @@ def add_condition(args: argparse.Namespace) -> Answer:
     return answer
 
 
+def _add_seepage(args: argparse.Namespace, project: Project) -> Answer:
+    """`add --seepage`: a seepage face on a face or a line, and nothing else."""
+    _only_seepage(args)
+    target = _target(args)
+    if target is None or target["on"] not in ("face", "line"):
+        raise CommandError("a seepage face is on --face FACE or --line X Y X Y ..., along "
+                           "the soil's outer boundary")
+    record = drafts.seepage_condition(project, target.pop("on"), id=args.id,
+                                      name=args.name, **target)
+    return edited(args, session.add_condition(project, record), f"added {line(record)}")
+
+
+def _only_seepage(args: argparse.Namespace) -> None:
+    """Refuse what a seepage face does not take: what a support or a water pressure
+    prescribes."""
+    others = [option for option, given_value in (
+        ("--water-pressure", args.water_pressure), ("--roller", args.roller or None),
+        ("--fix", args.fix), ("--fixed or --initial", args.is_fixed),
+        *((option, getattr(args, field)) for field, option in WATER_OPTIONS.items()))
+        if given_value is not None]
+    if others:
+        raise CommandError(f"{', '.join(others)} do not belong to a seepage face: it "
+                           "prescribes nothing but where water may leave the soil")
+
+
 def update_condition(args: argparse.Namespace) -> Answer:
     project = session.load(args.project)
     record = session.find_condition(project, args.id)
+    if record.kind == "seepage":
+        _only_seepage(args)
+        fields = given(args, "name", "active")
+        target = _target(args)
+        if target is not None:
+            if target["on"] not in ("face", "line"):
+                raise CommandError("a seepage face is on --face FACE or --line X Y X Y ...")
+            fields.update(target)
+        project = session.update_condition(project, args.id, **fields)
+        return edited(args, project,
+                      f"changed {line(session.find_condition(project, args.id))}")
+    if args.seepage:
+        raise CommandError(f"{args.id} is a {record.kind.replace('_', ' ')} condition; "
+                           "remove it and add a seepage face instead")
     if record.kind == "displacement":
         return _update_support(args, project, record)
     if args.roller or args.fix is not None:
@@ -323,6 +371,8 @@ def prescribed(record) -> str:
     if record.kind == "displacement":
         held = [axis for axis, fixed in zip("xyz", record.fixed) if fixed]
         return "fixed in " + " ".join(held)
+    if record.kind == "seepage":
+        return "water may leave the soil here"
     if record.fluid_pressure_type == "Uniform":
         what = f"{record.value:g} uniform"
     elif record.fluid_pressure_type == "Hydrostatic":

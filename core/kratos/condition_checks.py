@@ -7,6 +7,9 @@ does not have, a K0 procedure with gravity off. The export (`core.kratos.writer`
 `kratos-cli check` prints them without meshing, so both say the same thing in the same
 words.
 
+A seepage face (`SeepageCondition`) belongs to a groundwater flow calculation; a
+deformation deck leaves it out and says so.
+
 A groundwater flow project (`core.model.phases.groundwater_flow`) has warnings of its own
 instead of the ones about deformation -- the structures and loads it leaves out (the
 supports it leaves out silently), a soil fixed everywhere,
@@ -23,7 +26,7 @@ from __future__ import annotations
 
 from core.model import phases
 from core.model.schemas import (DisplacementCondition, Material, Phase, Project,
-                                WaterPressureCondition)
+                                SeepageCondition, WaterPressureCondition)
 
 SECTION_FACES = ("bottom", "left", "right", "top")
 """The faces a 2D section has. Front and back bound the solid model along z only."""
@@ -43,6 +46,7 @@ def warnings(project: Project) -> list[str]:
         out += _weightless_flow(project)
         out += _unused_water_level(project)
         return out
+    out += _seepage_outside_flow(project)
     out += _rigid_body(project)
     out += _unpinned_water(project)
     out += _free_water_in_phases(project)
@@ -80,7 +84,8 @@ def written(project: Project, condition) -> bool:
 
 def noun(condition) -> str:
     """`condition`, as a warning names it."""
-    kind = "water pressure" if condition.kind == "water_pressure" else "displacement"
+    kind = {"water_pressure": "water pressure", "seepage": "seepage"}.get(
+        condition.kind, "displacement")
     return f"{kind} condition {condition.name!r}"
 
 
@@ -104,6 +109,16 @@ def held_by_section(project: Project, condition) -> bool:
     `App.BoundaryConditions.heldBySection`)."""
     return (isinstance(condition, DisplacementCondition) and project.dimension == 2
             and condition.on == "face" and condition.face not in SECTION_FACES)
+
+
+def _seepage_outside_flow(project: Project) -> list[str]:
+    """A seepage face in a deformation project: the deck has no seepage strategy to open
+    and close it, so it is left out."""
+    faces = [c for c in project.boundary_conditions
+             if isinstance(c, SeepageCondition) and written(project, c)]
+    return [f"{noun(c)} is left out: a seepage face belongs to a groundwater flow "
+            "calculation, and this project's phases are not \"Groundwater flow\"."
+            for c in faces]
 
 
 def _rigid_body(project: Project) -> list[str]:

@@ -25,7 +25,8 @@ from core.geometry import solid_model
 from core.kratos import condition_checks, external_deck, materials, writer
 from core.model import phases
 from core.model.schemas import (Beam, BeamSection, DisplacementCondition, Phase,
-                                WaterPressureCondition, standard_conditions)
+                                SeepageCondition, WaterPressureCondition,
+                                standard_conditions)
 from tests import mdpa
 from tests.models import muskat as muskat_model
 from tests.models.muskat import FLOW, HEADS, HEIGHT, VAN_GENUCHTEN, head, muskat
@@ -322,6 +323,132 @@ def test_the_biot_coefficient_is_kratos_own_rule():
     assert materials.biot({"YOUNG_MODULUS": 1e7, "POISSON_RATIO": 0.3,
                            "BULK_MODULUS_SOLID": 1e9}) == pytest.approx(1 - 1e7 / 1.2 / 1e9)
     assert materials.biot({}) == 1.0
+
+
+# ── Case C: a seepage face ──────────────────────────────────────────────────
+
+REFERENCE_SEEPAGE_STRATEGY = {
+    "strategy_type": "newton_raphson_with_seepage",
+    "convergence_criterion": "residual_criterion",
+    "residual_relative_tolerance": 1.0e-04,
+    "residual_absolute_tolerance": 1.0e-09,
+    "min_iterations": 6,
+    "max_iterations": 50,
+    "number_cycles": 1,
+    "reduction_factor": 1.0,
+    "increase_factor": 1.0,
+}
+"""Kratos' `tests/seepage_tests/fixed_bottom_boundary`: its strategy settings."""
+
+REFERENCE_SEEPAGE_PROCESS = {
+    "python_module": "apply_seepage_boundary_process",
+    "kratos_module": "KratosMultiphysics.GeoMechanicsApplication",
+    "process_name": "ApplySeepageBoundaryProcess",
+}
+"""The same deck's seepage process, less its part name."""
+
+
+@pytest.fixture(scope="module")
+def case_c(gmsh_session):
+    """With the reference deck's 50 iterations, so its strategy block can be compared."""
+    return writer.export_project(muskat_model.seepage(max_iterations=50))
+
+
+def test_a_seepage_face_is_solved_by_the_seepage_strategy(case_c):
+    solver = settings(case_c)["solver_settings"]
+    assert {key: solver[key] for key in REFERENCE_SEEPAGE_STRATEGY} == \
+        REFERENCE_SEEPAGE_STRATEGY
+    assert solver["solver_type"] == "Pw"
+
+
+def test_the_seepage_face_is_one_process_on_its_own_part(case_c):
+    loads = settings(case_c)["processes"]["loads_process_list"]
+    seepage = [p for p in loads if p["process_name"] == "ApplySeepageBoundaryProcess"]
+    assert [{k: v for k, v in p.items() if k != "Parameters"} for p in seepage] == [
+        REFERENCE_SEEPAGE_PROCESS]
+    assert seepage[0]["Parameters"] == {"model_part_name": "PorousDomain.Seepage_face"}
+    assert "Seepage_face" in settings(case_c)["solver_settings"][
+        "processes_sub_model_part_list"]
+
+
+def test_the_deck_is_the_stem_muskat_geometry_s(case_c):
+    """What the STEM Muskat test of FEA-Tools' GeometryGenerator holds its mesh to: one
+    element type, one condition type, the seepage face a part of nodes and conditions,
+    each head a part of nodes alone."""
+    deck = mdpa.parse(case_c["mdpa"])
+    assert {block.name for block in deck.elements} == {"SteadyStatePwElement2D3N"}
+    assert {block.name for block in deck.conditions} == {"GeoSeepageCondition2D2N"}
+    face = deck.parts["Seepage_face"]
+    assert face.nodes and len(face.conditions) == len(face.nodes) - 1
+    assert deck.parts["Tail_water"].nodes and not deck.parts["Tail_water"].conditions
+    assert not deck.parts["Left_Edge"].conditions
+
+
+def test_the_seepage_conditions_run_up_the_right_face_from_the_tail_water(case_c):
+    """At 0.04 m along the face: 3.52 m of it, 88 edges."""
+    deck = mdpa.parse(case_c["mdpa"])
+    nodes = {int(row[0]): row[1:] for row in case_c["nodes"]}
+    face = deck.parts["Seepage_face"].nodes
+    assert all(nodes[n][0] == pytest.approx(muskat_model.WIDTH) for n in face)
+    heights = sorted(nodes[n][1] for n in face)
+    assert heights[0] == pytest.approx(muskat_model.TAIL_LEVEL)
+    assert heights[-1] == pytest.approx(HEIGHT)
+    assert len(deck.parts["Seepage_face"].conditions) == 88
+
+
+def test_a_seepage_stage_writes_the_nodal_flow_rate(case_c):
+    output = settings(case_c)["output_processes"]["gid_output"][0]["Parameters"]
+    results = output["postprocess_parameters"]["result_file_configuration"]
+    assert results["nodal_results"] == [*REFERENCE_NODAL_RESULTS, "NODAL_WATER_FLOW_RATE"]
+
+
+def test_too_few_iterations_for_the_seepage_face_are_said(case_c):
+    """89 nodes on the face, which the strategy opens one per iteration."""
+    assert any("allows 50 iterations, and its seepage faces have 89 nodes" in w
+               for w in case_c["warnings"])
+    export = writer.export_project(muskat_model.seepage(max_iterations=100))
+    assert not any("seepage faces have" in w for w in export["warnings"])
+
+
+def test_a_quadratic_seepage_face_has_three_node_conditions(gmsh_session):
+    deck = mdpa.parse(writer.export_project(muskat_model.seepage(order=2))["mdpa"])
+    assert {block.name for block in deck.conditions} == {"GeoSeepageCondition2D3N"}
+    for block in deck.conditions:
+        assert all(len(row) == 3 for row in block.entries.values())
+
+
+def test_a_seepage_face_on_a_face_is_every_edge_of_it(gmsh_session):
+    face = SeepageCondition(id="top", name="Top", on="face", face="top")
+    deck = mdpa.parse(writer.export_project(muskat(conditions=[*HEADS, face]))["mdpa"])
+    nodes = deck.parts["Top"].nodes
+    assert len(deck.parts["Top"].conditions) == len(nodes) - 1
+    assert all(deck.nodes[n][1] == pytest.approx(HEIGHT) for n in nodes)
+
+
+def test_a_seepage_line_through_the_soil_is_refused(gmsh_session):
+    inside = SeepageCondition(id="inside", name="Inside", on="line",
+                              points=[(0.8, 1.0), (0.8, 3.0)])
+    with pytest.raises(writer.ExportError,
+                       match="'Inside' runs through the soil: .* mesh edges have soil on "
+                             "both sides"):
+        writer.export_project(muskat(conditions=[*HEADS, inside]))
+
+
+def test_a_seepage_face_in_a_deformation_project_is_left_out_and_said(gmsh_session):
+    face = SeepageCondition(id="top", name="Top", on="face", face="top")
+    project = muskat(conditions=[*standard_conditions(), *HEADS, face],
+                     phases=[Phase(id="p", name="P")])
+    export = writer.export_project(project)
+    assert any("seepage condition 'Top' is left out: a seepage face belongs to a "
+               "groundwater flow calculation" in w for w in export["warnings"])
+    assert not mdpa.parse(export["mdpa"]).conditions
+
+
+def test_a_seepage_condition_takes_a_face_or_a_line_only():
+    with pytest.raises(ValueError):
+        SeepageCondition(id="s", name="S", on="domain")
+    with pytest.raises(ValueError, match="needs face"):
+        SeepageCondition(id="s", name="S", on="face")
 
 
 # ── Refusals ────────────────────────────────────────────────────────────────

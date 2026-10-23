@@ -1,5 +1,5 @@
-"""Groundwater flow, run in Kratos: the semi-Muskat column (`tests/models/muskat.py`, cases
-A and B of plan/active/groundwater-flow-plan.md). Opt-in: `pytest --run-kratos`.
+"""Groundwater flow, run in Kratos: the Muskat column (`tests/models/muskat.py`, cases A, B
+and C of plan/active/groundwater-flow-plan.md). Opt-in: `pytest --run-kratos`.
 
 Case A: the head falls linearly from the left face to the right one, a field the
 elements hold exactly, so the water pressure at every node and the flux everywhere are
@@ -12,6 +12,12 @@ and 0.05 m (2026-10-24): 9 Pa of water pressure, 0.015 of saturation, 1 % of the
 below the phreatic line. One value moves more: the flux at node 1440, 5 cm from the
 right face just below the phreatic line, where it changes fast. There it is 23 % above
 Kratos' (Kratos' own mesh is not converged there either), and is held to 30 %.
+
+Case C, a seepage face above the tail water, has no Kratos values either. It is held to
+what the physics demands: the water that comes in on the left leaves on the right, the
+discharge is that of Dupuit and Charny, and the face is open (at zero pressure, letting
+water out) from the tail water up to an exit point and closed above it. Both meshes put
+the exit point at about 1.85 m (2026-10-24).
 """
 
 from __future__ import annotations
@@ -152,3 +158,51 @@ def test_case_b_flux_below_the_phreatic_line_is_kratos_own(case_b, node):
 def test_case_b_dry_soil_carries_no_flux(case_b):
     qx, qy = at(case_b, "FLUID_FLUX_VECTOR", 890)[:2]
     assert abs(qx) <= DRY_FLUX and abs(qy) <= DRY_FLUX
+
+
+# ── Case C: a seepage face ──────────────────────────────────────────────────
+
+@pytest.fixture(scope="module", params=[1, 2], ids=["linear", "quadratic"])
+def case_c(request):
+    """The face's nodes, bottom to top: (y, water pressure, nodal flow rate); and the
+    flow rate into the left face (negative, taken in)."""
+    deck, run_id = run(muskat.seepage(order=request.param, max_iterations=200))
+    results = catalog.stage_results(run_id, 1)
+    mesh = catalog.stage_mesh(run_id, 1)
+    pressure = results.field("WATER_PRESSURE").values
+    rate = results.field("NODAL_WATER_FLOW_RATE").values
+    face = sorted((mesh.nodes[n][1], pressure[n][0], rate[n][0]) for n in rate
+                  if abs(mesh.nodes[n][0] - muskat.WIDTH) < 1e-9
+                  and mesh.nodes[n][1] >= muskat.TAIL_LEVEL - 1e-9)
+    inflow = sum(rate[n][0] for n in rate if abs(mesh.nodes[n][0]) < 1e-9)
+    outflow = sum(rate[n][0] for n in rate if abs(mesh.nodes[n][0] - muskat.WIDTH) < 1e-9)
+    return face, inflow, outflow
+
+
+def exit_point(face) -> float:
+    """The highest node the strategy opened: fixed at zero, letting water out."""
+    return max(y for y, pressure, rate in face if pressure == 0.0 and rate > 0.0)
+
+
+def test_case_c_lets_out_what_comes_in(case_c):
+    _, inflow, outflow = case_c
+    assert outflow == pytest.approx(-inflow, rel=1e-3)
+
+
+def test_case_c_discharge_is_dupuit_and_charny_s(case_c):
+    """A little above it (0.7 % at this mesh): the Van Genuchten soil lets some water
+    through above the phreatic line, which Charny's free surface does not."""
+    _, _, outflow = case_c
+    assert muskat.CHARNY_DISCHARGE <= outflow <= 1.02 * muskat.CHARNY_DISCHARGE
+
+
+def test_case_c_water_leaves_the_face_above_the_tail_water(case_c):
+    """Open from the tail water up to the exit point (1.84 m linear, 1.86 m quadratic),
+    closed above it: no water flows in, and no node keeps a pressure above the
+    atmosphere."""
+    face, _, _ = case_c
+    top = exit_point(face)
+    assert 1.7 <= top <= 2.0
+    assert all(rate > 0.0 for y, pressure, rate in face if pressure == 0.0)
+    assert all(pressure == 0.0 for y, pressure, _ in face if y <= top)
+    assert all(pressure > -1.0 for y, pressure, _ in face if y > top)

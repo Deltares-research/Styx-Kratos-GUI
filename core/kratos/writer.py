@@ -42,7 +42,7 @@ from core.kratos import materials, parameters
 from core.kratos.materials import material_parameters
 from core.model.schemas import (TARGET_ORDER, Beam, DisplacementCondition, LineLoad, Member,
                                 MeshRequest, Panel, PanelSection, PointLoad, Project,
-                                SurfaceLoad, WaterPressureCondition)
+                                SeepageCondition, SurfaceLoad, WaterPressureCondition)
 
 # (dim, gmsh element type) -> (Kratos class, gmsh index order in Kratos' order)
 ELEMENTS: dict[tuple[int, int], tuple[str, tuple[int, ...]]] = {
@@ -140,6 +140,14 @@ NORMAL_LOAD_CONDITIONS: dict[tuple[int, int], str] = {
     (2, 2): "UPwNormalFaceLoadCondition2D2N",
     (2, 3): "LineNormalLoadDiffOrderCondition2D3N",
 }
+
+SEEPAGE_CONDITIONS: dict[int, str] = {
+    2: "GeoSeepageCondition2D2N",
+    3: "GeoSeepageCondition2D3N",
+}
+"""A seepage face's condition, by nodes on a mesh edge (`schemas.SeepageCondition`): the
+linear one is Kratos' `tests/seepage_tests` and the STEM Muskat test's, the quadratic one
+registered beside it."""
 
 # The edges of a 2D continuum element, in the order its own geometry generates them.
 # Kratos matches a condition to its element by exact node-id sequence -- its
@@ -283,8 +291,13 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
     anchor_blocks, anchor_supports = (([], {}) if flow else
                                       _anchor_ties(project, dim, _world_coordinates()))
     blocks.extend(anchor_blocks)
-    conditions = [] if flow else (_load_conditions(project, dim, world, warnings) +
-                                  _normal_load_conditions(project, dim, warnings, world))
+    # A flow deck's only conditions are its seepage faces; a deformation deck's are its
+    # loads, and a seepage face is left out of it (`condition_checks.warnings` says so).
+    conditions = (_seepage_conditions(project, soil_blocks, world, warnings) if flow else
+                  _load_conditions(project, dim, world, warnings) +
+                  _normal_load_conditions(project, dim, warnings, world))
+    if flow and conditions:
+        warnings.extend(_seepage_iterations(project, conditions))
     # Last, because it rewrites what everything above produced: the interface unglues
     # the soil from the structures already harvested, so it needs their connectivity in
     # hand -- and the nodes it adds have to be in `world` before the boundary groups and
@@ -492,6 +505,7 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
         unsaturated=tuple(name for name, material in part_materials
                           if project.material(material).variables.get(
                               "RETENTION_LAW", SATURATED) != SATURATED),
+        seepage=tuple(names[key] for key, _, rows in conditions if flow and rows),
     )
     stages = _stages(project, deck, wall_parts, staged_ties)
     # The initial stage reads a materials file of its own. Rendered only when a stage
@@ -607,6 +621,9 @@ class _Deck:
     unsaturated: tuple[str, ...] = ()
     """The soil parts whose retention law makes the permeability depend on the water
     pressure, so that a flow stage with any of them in it is solved by Newton-Raphson."""
+    seepage: tuple[str, ...] = ()
+    """The parts of the seepage faces' conditions: a flow stage with any is solved by the
+    seepage strategy, in every phase."""
 
 
 def _deck_active(deck: _Deck, keys: set[str]) -> frozenset[str]:
@@ -740,10 +757,21 @@ def _phased_stages(project: Project, deck: _Deck) -> list[parameters.Stage]:
             materials_filename=(deck_files.INITIAL_MATERIALS_NAME if k0
                                 else deck_files.MATERIALS_NAME),
             conditions=frozenset(key for key in keys if key in water),
-            flow_strategy=(("newton_raphson" if any(name in live for name in deck.unsaturated)
-                            else "linear") if flow else None),
+            flow_strategy=_flow_strategy(deck, live) if flow else None,
+            seepage=deck.seepage if flow else (),
         ))
     return out
+
+
+def _flow_strategy(deck: _Deck, live: frozenset[str]) -> str:
+    """The `parameters.FLOW_STRATEGIES` entry a flow stage is solved with: the seepage
+    strategy where there is a seepage face, Newton-Raphson where a soil's permeability
+    depends on the water pressure, one linear solve otherwise."""
+    if deck.seepage:
+        return "newton_raphson_with_seepage"
+    if any(name in live for name in deck.unsaturated):
+        return "newton_raphson"
+    return "linear"
 
 
 # ── Interfaces ──────────────────────────────────────────────────────────────
@@ -1448,9 +1476,10 @@ def _part_names(project: Project) -> dict[str, str]:
         names[normal.id] = _unique(_sanitise(normal.name) or normal.id, used)
     for key in project.part_keys():
         names.setdefault(key, _unique(key, used))
-    # Last, so a condition never moves a name the parts above already had.
+    # Last, so a condition never moves a name the parts above already had. A seepage
+    # face on a face of the domain is a part of its own too, of its conditions.
     for condition in project.boundary_conditions:
-        if condition.on in ("line", "point"):
+        if condition.on in ("line", "point") or isinstance(condition, SeepageCondition):
             names[condition.id] = _unique(_sanitise(condition.name) or condition.id, used)
     return names
 
@@ -1503,6 +1532,83 @@ def _number_elements(blocks: list[tuple[str, str, list[list[int]]]],
     ordered: list[tuple[str, list[int], list[int], list[int]]] = [(name, sorted(set(nodes)), sorted(elements), [])
                for name, (nodes, elements) in parts.items()]
     return numbered, ordered
+
+
+def _seepage_conditions(project: Project,
+                        soil_blocks: list[tuple[str, str, list[list[int]]]],
+                        world: dict[int, tuple[float, float, float]],
+                        warnings: list[str]) -> list[tuple[str, str, list[list[int]]]]:
+    """Each seepage face's conditions (`schemas.SeepageCondition`): one per mesh edge of
+    its target, as the soil element bounding it traverses that edge.
+
+    The soil's outer boundary is the edges one element has; an edge two elements share
+    is inside the soil. A face is the boundary edges on the face's plane, measured from
+    the meshed soil as `_boundary_nodes` measures it. A line is its own mesh edges
+    (`solid_model._embed_beams`), and has to be on the boundary: Kratos refuses a seepage
+    condition with an element on each side, and so does the export, before the run."""
+    faces = [c for c in project.boundary_conditions
+             if isinstance(c, SeepageCondition) and condition_checks.written(project, c)]
+    if not faces:
+        return []
+    shared: dict[frozenset[int], int] = {}
+    edge_of: dict[frozenset[int], tuple[int, ...]] = {}
+    for _, _, rows in soil_blocks:
+        for row in rows:
+            for order in EDGES.get(len(row), ()):
+                edge = tuple(row[index] for index in order)
+                key = frozenset(edge[:2])
+                shared[key] = shared.get(key, 0) + 1
+                edge_of.setdefault(key, edge)
+    boundary = {key: edge for key, edge in edge_of.items() if shared[key] == 1}
+    soil_tags = {tag for edge in edge_of.values() for tag in edge}
+    out = []
+    for condition in faces:
+        noun = condition_checks.noun(condition)
+        if condition.on == "line":
+            segments = _segments(_tagged(1).get(condition.id, []))
+            if not segments:
+                raise ExportError(
+                    f"{noun} has no mesh along its line -- it lies outside the soil in "
+                    "this section, so there is no face for the water to seep out of.")
+            inside = [row for row in segments if frozenset(row[:2]) not in boundary]
+            if inside:
+                raise ExportError(
+                    f"{noun} runs through the soil: {len(inside)} of its "
+                    f"{len(segments)} mesh edges have soil on both sides. A seepage face "
+                    "is on the soil's outer boundary; draw the line along it, or put the "
+                    "condition on a face.")
+            rows = [list(boundary[frozenset(row[:2])]) for row in segments]
+        else:
+            part = FACE_PARTS[condition.face or ""]
+            axis, attribute = next((axis, attribute) for name, axis, attribute
+                                   in BOUNDARIES if name == part)
+            values = [world[tag][axis] for tag in soil_tags]
+            plane = min(values) if attribute in LOWER_FACES else max(values)
+            rows = [list(edge) for edge in boundary.values()
+                    if all(abs(world[tag][axis] - plane) <= TOLERANCE for tag in edge)]
+            if not rows:
+                warnings.append(f"{noun} is on the {condition.face} face, which has no "
+                                "soil edge in this model; it is left out.")
+                continue
+        out.append((condition.id, SEEPAGE_CONDITIONS[len(rows[0])], rows))
+    return out
+
+
+def _seepage_iterations(project: Project,
+                        conditions: list[tuple[str, str, list[list[int]]]]) -> list[str]:
+    """The phases that may run out of iterations before their seepage faces settle.
+
+    The seepage strategy opens or closes one node of a face per iteration, so a phase
+    that allows fewer iterations than its faces have nodes may stop before the faces
+    have found where the water leaves them. How many it needs depends on how many nodes
+    open: the Muskat column's face of 89 nodes opens 35 of them, in 35 iterations
+    (tests/kratos/test_live_flow.py). A warning, then, not a refusal."""
+    nodes = len({tag for _, _, rows in conditions for row in rows for tag in row})
+    return [f"phase {phase.name!r} allows {phase.max_iterations} iterations, and its "
+            f"seepage faces have {nodes} nodes, which the seepage strategy opens or "
+            "closes one per iteration; it may stop before the faces settle. If it does, "
+            "give the phase more iterations."
+            for phase in project.phases if phase.max_iterations < nodes]
 
 
 def _number_conditions(
@@ -1673,7 +1779,8 @@ def _condition_targets(project: Project, dim: int,
     (`solid_model._embed_beams`). `body_nodes` is the node ids of each soil body.
 
     A groundwater flow deck (`flow`) has no displacements, so it writes no displacement
-    condition and no part for one.
+    condition and no part for one. A seepage face is not a node part: its conditions
+    make its part (`_seepage_conditions`).
     """
     faces: dict[str, list[str]] = {}
     for name, _, _ in boundaries:
@@ -1689,7 +1796,8 @@ def _condition_targets(project: Project, dim: int,
         # Left out of this dimension altogether is `condition_checks.warnings`' to say.
         if not condition_checks.written(project, condition):
             continue
-        if flow and isinstance(condition, DisplacementCondition):
+        if isinstance(condition, SeepageCondition) or (
+                flow and isinstance(condition, DisplacementCondition)):
             continue
         noun = condition_checks.noun(condition)
         targets: list[str | None]

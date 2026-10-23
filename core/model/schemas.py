@@ -1078,7 +1078,7 @@ class WaterPressureCondition(Base):
                              "the line (x_coordinates and y_coordinates)")
         return self
 
-def _check_target(record: WaterPressureCondition | DisplacementCondition,
+def _check_target(record: WaterPressureCondition | DisplacementCondition | SeepageCondition,
                   noun: str) -> None:
     """`on` and the one field it names, and none of the others: the target check both
     kinds of condition share."""
@@ -1149,13 +1149,60 @@ class DisplacementCondition(Base):
         return self
 
 
-def standard_conditions() -> list[DisplacementCondition | WaterPressureCondition]:
+SeepageTarget = Literal["face", "line"]
+"""Where a seepage face can be: a face of the domain, or a line drawn along the soil's
+outer boundary."""
+
+
+class SeepageCondition(Base):
+    """A seepage face: a stretch of the soil's outer boundary where the water may leave
+    the soil but not enter it, such as the downstream slope of a dike above the tail
+    water.
+
+    In a groundwater flow calculation only. The deck writes a `GeoSeepageCondition2D2N`
+    (`2D3N` in a quadratic mesh) on each mesh edge of the target, one
+    `ApplySeepageBoundaryProcess` on them, and solves the stage with Kratos'
+    `newton_raphson_with_seepage` strategy (`core/kratos/parameters.py`). The strategy
+    decides node by node, while it iterates: a free node where the water pressure would
+    be above the atmosphere (negative, in Kratos' sign) is fixed at zero, and the water
+    flows out there; a fixed node through which water would flow in is freed again.
+    Where the water pressure stays below the atmosphere the face is closed, as a
+    boundary with no condition is.
+
+    The target is `on` and the field it names, as for a `WaterPressureCondition`: the
+    face `face`, or the polyline `points`, drawn in the 2D section. Every mesh edge of
+    the target has to be on the soil's outer boundary, as Kratos requires; a line
+    through the soil is refused at export. A seepage face is not switched by phases: it
+    acts in every stage, as Kratos collects the seepage nodes once, from every seepage
+    condition in the model. A deformation calculation leaves it out, with a warning.
+    """
+    id: Ident
+    name: str
+    kind: Literal["seepage"] = "seepage"
+    on: SeepageTarget
+    face: Face | None = None
+    part: str | None = None
+    points: list[tuple[float, float]] | None = None
+    active: bool = True
+
+    @model_validator(mode="after")
+    def _usable(self) -> SeepageCondition:
+        _check_target(self, f"seepage condition {self.id!r}")
+        return self
+
+
+AnyCondition = DisplacementCondition | WaterPressureCondition | SeepageCondition
+"""Any one boundary condition, for a type annotation (`BoundaryCondition` is the same
+union, told apart by `kind` when a project is read)."""
+
+
+def standard_conditions() -> list[AnyCondition]:
     """The supports a model starts with: the bottom fixed, every side on rollers.
 
     What a new project has, what a project saved before the conditions existed opens
     with, and what `core.session.standard_conditions` puts back. Displacements only: no
     project gets a water pressure it did not ask for."""
-    out: list[DisplacementCondition | WaterPressureCondition] = [DisplacementCondition(
+    out: list[AnyCondition] = [DisplacementCondition(
         id="fixed_bottom", name="Fixed bottom", on="face", face="bottom")]
     for face in ("left", "right", "front", "back"):
         fixed = [False, False, False]
@@ -1166,8 +1213,8 @@ def standard_conditions() -> list[DisplacementCondition | WaterPressureCondition
     return out
 
 
-BoundaryCondition = Annotated[DisplacementCondition | WaterPressureCondition,
-                              Field(discriminator="kind")]
+BoundaryCondition = Annotated[DisplacementCondition | WaterPressureCondition
+                              | SeepageCondition, Field(discriminator="kind")]
 """One record of `Project.boundary_conditions`, told apart by its `kind`."""
 
 
@@ -2012,7 +2059,7 @@ class Project(Base):
         return [n for n in self.normal_loads if n.active]
 
     @property
-    def drawn_conditions(self) -> list[DisplacementCondition | WaterPressureCondition]:
+    def drawn_conditions(self) -> list[AnyCondition]:
         """The active boundary conditions on a drawn line or point, which the section
         embeds: 2D only, like `active_normal_loads`."""
         if self.dimension != 2:

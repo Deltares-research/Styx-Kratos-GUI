@@ -28,7 +28,9 @@ A groundwater flow stage (a "Groundwater flow" phase) is solved by a second refe
 analysis, `FLOW_SOLVER`, read off Kratos' own `tests/Muskat` decks, with the strategy the
 project calls for (`FLOW_STRATEGIES`). It writes its own results (`FLOW_NODAL_RESULTS`):
 its elements carry the water pressure alone, so there is no displacement or stress to
-write.
+write. A stage with a seepage face adds one `ApplySeepageBoundaryProcess` per face to its
+`loads_process_list`, as Kratos' `tests/seepage_tests` decks do, and writes the nodal
+water flow rate the seepage strategy computes.
 
 `stage_settings.processes.constraints_process_list` and `.loads_process_list` are
 filled in, because both are fully determined by the project already exported to the
@@ -106,10 +108,14 @@ Kratos writes 0, so a deck with gravity off does not ask for it (`_gid_output`).
 
 FLOW_NODAL_RESULTS = ("WATER_PRESSURE", "EFFECTIVE_SATURATION", "FLUID_FLUX_VECTOR")
 FLOW_GAUSS_POINT_RESULTS = ("HYDRAULIC_HEAD",)
+SEEPAGE_NODAL_RESULTS = ("NODAL_WATER_FLOW_RATE",)
 """What a groundwater flow stage writes: the reference decks' nodal list, the saturation
 and the flux made nodal by the extrapolation process the stage carries
 (`core.kratos.writer.FLOW_EXTRAPOLATED`), and the head as a deformation stage writes
-it, which the water pressure elements compute too (`Pw_element.cpp`)."""
+it, which the water pressure elements compute too (`Pw_element.cpp`). A stage with a
+seepage face also writes `SEEPAGE_NODAL_RESULTS`: the water each node takes in or lets
+out, which the seepage strategy works out to decide where the face is open (as Kratos'
+`tests/seepage_tests` decks write it)."""
 
 SOLVER = {
     "solver_type": "U_Pw",
@@ -180,12 +186,26 @@ FLOW_STRATEGIES: dict[str, dict[str, Any]] = {
         "reduction_factor": 1.0,
         "increase_factor": 1.0,
     },
+    "newton_raphson_with_seepage": {
+        "strategy_type": "newton_raphson_with_seepage",
+        "convergence_criterion": "residual_criterion",
+        "residual_relative_tolerance": 1e-4,
+        "residual_absolute_tolerance": 1e-9,
+        "min_iterations": 6,
+        "max_iterations": 50,
+        "number_cycles": 1,
+        "reduction_factor": 1.0,
+        "increase_factor": 1.0,
+    },
 }
 """A flow stage's strategy, by name, with the Newton settings of the reference deck that
 uses it: `linear` for a saturated soil, whose flow is linear in the water pressure
 (`saturated_hydrostatic`), `newton_raphson` for one whose retention law makes the
-permeability depend on it (`van_genuchten_hydrostatic`). Which one a stage gets is
-derived from its soil (`core.kratos.writer`), not chosen. A phase's own iterations and
+permeability depend on it (`van_genuchten_hydrostatic`), `newton_raphson_with_seepage`
+for a stage with a seepage face (`seepage_tests`), which opens and closes the face node
+by node as it iterates. Kratos refuses more than one cycle for that one. Which one a
+stage gets is derived from its soil and its conditions (`core.kratos.writer`), not
+chosen. A phase's own iterations and
 tolerance replace the deck's, as in a deformation stage; a linear stage has none."""
 
 # Metres, and a *step*, not a tolerance. The master and slave nodes of a tie are copies
@@ -250,7 +270,8 @@ class Stage:
     no phases cannot drift from `SOLVER` by way of a copy made in this file.
 
     `flow_strategy` is `None` for a deformation stage, and for a groundwater flow stage
-    the `FLOW_STRATEGIES` entry it is solved with.
+    the `FLOW_STRATEGIES` entry it is solved with. `seepage` is the parts of the seepage
+    faces it has, each with its own `ApplySeepageBoundaryProcess`.
     """
     name: str
     activate: tuple[str, ...] = ()
@@ -271,6 +292,7 @@ class Stage:
     materials_filename: str = MATERIALS_NAME
     conditions: frozenset[str] | None = None
     flow_strategy: str | None = None
+    seepage: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -354,6 +376,7 @@ def project_parameters(
             for name, fluid_pressure_type, pressure, water_y, specific_weight
             in normal_loads if keep(name)
         ]
+        loads_processes += [_seepage(name) for name in stage.seepage]
         constraint_processes = [_constraint(name, is_fixed)
                                 for name, is_fixed in constraints if keep(name)]
         # On the whole soil a condition is filtered by nothing, as the soil is the porous
@@ -484,7 +507,7 @@ def _stage(stage: Stage, index: int, constraint_processes: list[dict],
             "processes": processes,
             "output_processes": {
                 "gid_output": [_gid_output(f"{deck_name}_{stage.name}", gravity,
-                                           flow)]},
+                                           flow, seepage=bool(stage.seepage))]},
         },
     }
     preprocess = _preprocess(stage, deck_name)
@@ -672,15 +695,18 @@ def _solver_settings(deck_name: str, domain_size: int, body_parts: list[str],
     return settings
 
 
-def _gid_output(output_name: str, gravity: bool = True, flow: bool = False) -> dict:
+def _gid_output(output_name: str, gravity: bool = True, flow: bool = False,
+                seepage: bool = False) -> dict:
     """GiD ASCII results beside the deck, one file per stage.
 
     The same writer, flags and result list as the reference decks in `test/`, which is
     also what Kratos' own GeoMechanicsApplication test helpers read back when they
     compare two runs. Without gravity the hydraulic head is left out: it would be 0.
-    A groundwater flow stage writes the flow results (`FLOW_NODAL_RESULTS`).
+    A groundwater flow stage writes the flow results (`FLOW_NODAL_RESULTS`), and the
+    nodal water flow rate when it has a seepage face (`SEEPAGE_NODAL_RESULTS`).
     """
-    nodal = FLOW_NODAL_RESULTS if flow else NODAL_RESULTS
+    nodal = (FLOW_NODAL_RESULTS + (SEEPAGE_NODAL_RESULTS if seepage else ())) if flow \
+        else NODAL_RESULTS
     gauss = [name for name in (FLOW_GAUSS_POINT_RESULTS if flow else GAUSS_POINT_RESULTS)
              if gravity or name != "HYDRAULIC_HEAD"]
     return {
@@ -874,6 +900,18 @@ def _normal_load(part_name: str, fluid_pressure_type: str, pressure: float,
         "kratos_module": "KratosMultiphysics.GeoMechanicsApplication",
         "process_name": "ApplyNormalLoadTableProcess",
         "Parameters": parameters,
+    }
+
+
+def _seepage(part_name: str) -> dict:
+    """A seepage face: Kratos' `ApplySeepageBoundaryProcess`, which names the part of
+    `GeoSeepageCondition`s and nothing else. The strategy does the work
+    (`FLOW_STRATEGIES`); copied from Kratos' `tests/seepage_tests` decks."""
+    return {
+        "python_module": "apply_seepage_boundary_process",
+        "kratos_module": "KratosMultiphysics.GeoMechanicsApplication",
+        "process_name": "ApplySeepageBoundaryProcess",
+        "Parameters": {"model_part_name": f"PorousDomain.{part_name}"},
     }
 
 

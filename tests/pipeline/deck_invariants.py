@@ -267,7 +267,11 @@ def _rotations(face: tuple[int, ...]) -> set[tuple[int, ...]]:
 
 
 def _condition_order(deck) -> list[str]:
-    soil = [b for b in deck.elements if "SmallStrain" in b.name and "Interface" not in b.name]
+    # The water pressure elements of a groundwater flow deck are soil too: a seepage
+    # face is found by its element the same way.
+    soil = [b for b in deck.elements
+            if ("SmallStrain" in b.name or "SteadyStatePw" in b.name)
+            and "Interface" not in b.name]
     dimension = deck_dimension(deck)
     allowed: set[tuple[int, ...]] = set()
     for block in soil:

@@ -14,6 +14,12 @@ column of a Van Genuchten soil, the right face at 1.62 m, started from a phreati
 It has no exact answer; `KRATOS_B` holds Kratos' own regression values, at the
 coordinates of the nodes it checks them at.
 
+`seepage` is case C, the full Muskat problem (the STEM Muskat geometry of Deltares'
+FEA-Tools `GeometryGenerator`): the right face is the tail water up to 0.48 m and a
+seepage face above it, where the water leaves the soil between the tail water and the
+exit point of the phreatic line. Its checks are the water balance and the discharge of
+Dupuit and Charny, `CHARNY_DISCHARGE`.
+
 It is also a script the GUI can open:
 
     run tests/models/muskat.py
@@ -21,9 +27,10 @@ It is also a script the GUI can open:
 
 from __future__ import annotations
 
-from core.model.schemas import (AnchorRows, Borehole, Domain, Excavation, Material,
-                                MeshSettings, Phase, Piles, Project, SoilLayer, Struts,
-                                Wall, WaterPressureCondition, Wells)
+from core.model.schemas import (AnchorRows, Borehole, BoxRefinement, Domain, Excavation,
+                                Material, MeshSettings, Phase, Piles, Project,
+                                SeepageCondition, SoilLayer, Struts, Wall,
+                                WaterPressureCondition, Wells)
 
 NAME = "Semi-Muskat, saturated"
 
@@ -188,6 +195,48 @@ def at_point(mesh, values: dict, x: float, y: float) -> list[float]:
             return [sum(w * value for w, value in zip(weights, column))
                     for column in zip(*corners)]
     raise ValueError(f"({x}, {y}) is in no element of the mesh")
+
+
+# ── Case C ──────────────────────────────────────────────────────────────────
+
+TAIL_LEVEL = 0.48
+"""The tail water on the right face, m: below it a fixed head, above it the seepage face."""
+
+FACE_SIZE = 0.04
+"""m: the element size along the right face, as the STEM geometry meshes it."""
+
+CHARNY_DISCHARGE = CONDUCTIVITY * (LEFT_LEVEL ** 2 - TAIL_LEVEL ** 2) / (2 * WIDTH)
+"""m3/s per metre: the discharge of Dupuit and Charny, K (H1² - H2²) / 2L, exact for a
+saturated flow with a free surface. About 1.88e-5. A Van Genuchten soil lets some
+water through above the phreatic line too, so its discharge is a little larger."""
+
+TAIL = WaterPressureCondition(
+    id="tail_water", name="Tail water", on="line",
+    points=[(WIDTH, 0.0), (WIDTH, TAIL_LEVEL)], reference_coordinate=TAIL_LEVEL,
+    pressure_tension_cut_off=CUT_OFF)
+SEEPAGE_FACE = SeepageCondition(id="seepage_face", name="Seepage face", on="line",
+                                points=[(WIDTH, TAIL_LEVEL), (WIDTH, HEIGHT)])
+START = WaterPressureCondition(
+    id="start", name="Start", on="domain", is_fixed=False, reference_coordinate=LEFT_LEVEL,
+    pressure_tension_cut_off=CUT_OFF)
+"""The start values of `tests/seepage_tests`: hydrostatic about the upstream level."""
+
+
+def seepage(order: int = 1, max_iterations: int = 100) -> Project:
+    """Case C: the Van Genuchten soil, the left head at 3.0 m, the tail water and the
+    seepage face on the right face, meshed at 0.4 m and at `FACE_SIZE` along the right
+    face, started from `START`. The flow phase has the seepage decks' tolerance of 1e-4
+    and `max_iterations`: the seepage strategy opens one node of the face per iteration,
+    and the face has 89 nodes at this size, of which 35 open (35 iterations, linear)."""
+    return muskat(
+        conditions=[head("left_head", "left", LEFT_LEVEL), TAIL, SEEPAGE_FACE, START],
+        phases=[Phase(id="flow", name="Flow", calculation="Groundwater flow",
+                      max_iterations=max_iterations, tolerated_error=1e-4)],
+        soil={**SOIL, **VAN_GENUCHTEN}, order=order,
+        mesh=MeshSettings(element_size=0.4, order=order, refinements=[BoxRefinement(
+            kind="box", size=FACE_SIZE, thickness=0.5, x_min=WIDTH - 0.12, x_max=WIDTH,
+            y_min=0.0, y_max=HEIGHT, z_min=0.0, z_max=1.0)]),
+        name="Muskat, seepage face")
 
 
 def project() -> Project:

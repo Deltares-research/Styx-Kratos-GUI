@@ -211,6 +211,10 @@ DEFINITIONS: tuple[Definition, ...] = (
     Definition("effective_saturation", "Effective saturation", "Groundwater",
                "EFFECTIVE_SATURATION", _component(0), units.DIMENSIONLESS),
     *_vector("FLUID_FLUX_VECTOR", "flux", "Groundwater", "q", units.VELOCITY),
+    # What a stage with a seepage face adds (`parameters.SEEPAGE_NODAL_RESULTS`): the
+    # water each node lets out (positive) or takes in, per metre of the section.
+    Definition("flow_rate", "Nodal water flow rate", "Groundwater",
+               "NODAL_WATER_FLOW_RATE", _component(0), units.FLOW_RATE),
 )
 
 BY_NAME = {definition.name: definition for definition in DEFINITIONS}
