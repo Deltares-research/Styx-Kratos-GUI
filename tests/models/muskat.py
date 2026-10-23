@@ -9,6 +9,11 @@ value. No support: a flow calculation leaves them out.
 The head is linear in x between the faces, so the answer is known exactly
 (`exact_water_pressure`, `EXACT_FLUX`), on any mesh.
 
+`van_genuchten` is case B, Kratos' `tests/Muskat/van_genuchten_hydrostatic`: the same
+column of a Van Genuchten soil, the right face at 1.62 m, started from a phreatic line.
+It has no exact answer; `KRATOS_B` holds Kratos' own regression values, at the
+coordinates of the nodes it checks them at.
+
 It is also a script the GUI can open:
 
     run tests/models/muskat.py
@@ -117,6 +122,72 @@ def muskat(conditions: list | None = None, phases: list[Phase] | None = None,
     )
     fields.update(changes)
     return Project(**fields)
+
+
+# ── Case B ──────────────────────────────────────────────────────────────────
+
+RIGHT_LEVEL_B = 1.62
+"""The right face's level in case B: 1.62 m in its deck, where case A has 1.6 m."""
+
+PHREATIC_START = WaterPressureCondition(
+    id="initial_phreatic", name="Initial phreatic line", on="domain",
+    fluid_pressure_type="Phreatic_Multi_Line", is_fixed=False,
+    x_coordinates=[-0.25, 0.05, 1.6, 1.7], y_coordinates=[3.22, 3.22, 0.48, 0.48],
+    z_coordinates=[0.0, 0.0, 0.0, 0.0])
+"""The water pressure case B starts from: a phreatic line, start values only. The x of
+its first point is the deck's -0.25 (its README says -0.05)."""
+
+KRATOS_B = {
+    198: ((0.8304801232729199, 3.716939567583279), {"WATER_PRESSURE": 7939.92}),
+    244: ((0.9434537187649228, 2.180925085276376), {"WATER_PRESSURE": -2753.0}),
+    183: ((0.8117444171098307, 0.2649876821528811), {"WATER_PRESSURE": -20549.3}),
+    273: ((1.522244011956799, 1.513952935239066),
+          {"EFFECTIVE_SATURATION": 1.0, "FLUID_FLUX_VECTOR": (8.1665e-06, -1.08412e-06)}),
+    890: ((1.522173923948319, 3.89326785097679),
+          {"EFFECTIVE_SATURATION": 0.485245, "FLUID_FLUX_VECTOR": (4.6101e-09, 4.7292e-11)}),
+    1440: ((1.518261045603592, 2.068026372947416),
+           {"EFFECTIVE_SATURATION": 0.991294,
+            "FLUID_FLUX_VECTOR": (2.37856e-06, -1.57026e-06)}),
+}
+"""Kratos' regression values of case B (`test_Muskat.py`), by its node number: the node's
+(x, y) in its `common/column.mdpa`, and the values it asserts there."""
+
+
+def van_genuchten(order: int = 2, size: float = 0.1) -> Project:
+    """Case B, meshed at `size`: the Van Genuchten soil, the phreatic start, the heads at
+    3.0 m and 1.62 m, and the flow phase with the deck's Newton-Raphson settings (100
+    iterations, a relative tolerance of 1e-3).
+
+    0.1 m rather than case A's 0.4 m: with this soil, Newton-Raphson falls into a cycle
+    and stops without converging on some meshes (0.2 m and 0.15 m), and 0.1 m is the
+    coarsest uniform size tried on which it converges and lands within 15 Pa of Kratos'
+    values."""
+    return muskat(
+        conditions=[head("left_head", "left", LEFT_LEVEL),
+                    head("right_head", "right", RIGHT_LEVEL_B), PHREATIC_START],
+        phases=[Phase(id="flow", name="Flow", calculation="Groundwater flow",
+                      max_iterations=100, tolerated_error=1e-3)],
+        soil={**SOIL, **VAN_GENUCHTEN}, order=order,
+        mesh=MeshSettings(element_size=size, order=order),
+        name="Semi-Muskat, Van Genuchten")
+
+
+def at_point(mesh, values: dict, x: float, y: float) -> list[float]:
+    """A nodal result of a run at (x, y): interpolated linearly between the corners of the
+    triangle that holds the point. `mesh` is `catalog.stage_mesh`, `values` a field's
+    values by node. Corners only: a quadratic deck solves the water pressure there, and
+    its mid-side values are interpolated already."""
+    for nodes in mesh.elements().values():
+        a, b, c = (mesh.nodes[n] for n in nodes[:3])
+        area = (b[1] - c[1]) * (a[0] - c[0]) + (c[0] - b[0]) * (a[1] - c[1])
+        first = ((b[1] - c[1]) * (x - c[0]) + (c[0] - b[0]) * (y - c[1])) / area
+        second = ((c[1] - a[1]) * (x - c[0]) + (a[0] - c[0]) * (y - c[1])) / area
+        weights = (first, second, 1.0 - first - second)
+        if min(weights) >= -1e-9:
+            corners = [values[n] for n in nodes[:3]]
+            return [sum(w * value for w, value in zip(weights, column))
+                    for column in zip(*corners)]
+    raise ValueError(f"({x}, {y}) is in no element of the mesh")
 
 
 def project() -> Project:

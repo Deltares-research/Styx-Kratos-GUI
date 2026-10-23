@@ -1,10 +1,17 @@
-"""Groundwater flow, run in Kratos: the semi-Muskat column (`tests/models/muskat.py`, case
-A of plan/active/groundwater-flow-plan.md) against its exact solution. Opt-in:
-`pytest --run-kratos`.
+"""Groundwater flow, run in Kratos: the semi-Muskat column (`tests/models/muskat.py`, cases
+A and B of plan/active/groundwater-flow-plan.md). Opt-in: `pytest --run-kratos`.
 
-The head falls linearly from the left face to the right one, a field the elements hold
-exactly, so the water pressure at every node and the flux everywhere are checked to
-within what the result files print, on any mesh.
+Case A: the head falls linearly from the left face to the right one, a field the
+elements hold exactly, so the water pressure at every node and the flux everywhere are
+checked to within what the result files print, on any mesh.
+
+Case B, a Van Genuchten soil, has no exact answer. It is checked against Kratos' own
+regression values, read off the Styx run at the coordinates of Kratos' nodes, since the
+two meshes differ. The tolerances are what the answer moves by between meshes of 0.1 m
+and 0.05 m (2026-10-24): 9 Pa of water pressure, 0.015 of saturation, 1 % of the flux
+below the phreatic line. One value moves more: the flux at node 1440, 5 cm from the
+right face just below the phreatic line, where it changes fast. There it is 23 % above
+Kratos' (Kratos' own mesh is not converged there either), and is held to 30 %.
 """
 
 from __future__ import annotations
@@ -99,3 +106,49 @@ def test_each_phase_is_solved_with_its_own_heads():
 
     assert worst_pressure(deck, run_id, 1, muskat.RIGHT_LEVEL) <= PRESSURE_TOLERANCE
     assert worst_pressure(deck, run_id, 2, 1.0) <= PRESSURE_TOLERANCE
+
+
+# ── Case B: a Van Genuchten soil ────────────────────────────────────────────
+
+CASE_B_TOLERANCE = {"WATER_PRESSURE": 10.0, "EFFECTIVE_SATURATION": 0.02}
+"""Pa, and a fraction of full saturation: just above what the 0.1 m and 0.05 m meshes
+differ by."""
+
+FLUX_TOLERANCE = {273: 0.02, 1440: 0.30}
+"""Relative, by Kratos node (see the module docstring for 1440)."""
+
+DRY_FLUX = 1e-8
+"""m/s: at node 890, high in the dry soil, the flux is a few 1e-9 in both codes."""
+
+
+@pytest.fixture(scope="module")
+def case_b():
+    _, run_id = run(muskat.van_genuchten(size=0.05))
+    return catalog.stage_mesh(run_id, 1), catalog.stage_results(run_id, 1)
+
+
+def at(case, variable: str, node: int) -> list[float]:
+    mesh, results = case
+    (x, y), _ = muskat.KRATOS_B[node]
+    return muskat.at_point(mesh, results.field(variable).values, x, y)
+
+
+@pytest.mark.parametrize("node, variable", [
+    (node, variable) for node, (_, values) in muskat.KRATOS_B.items()
+    for variable in values if variable != "FLUID_FLUX_VECTOR"])
+def test_case_b_is_kratos_own_answer(case_b, node, variable):
+    _, expected = muskat.KRATOS_B[node]
+    assert at(case_b, variable, node)[0] == pytest.approx(
+        expected[variable], abs=CASE_B_TOLERANCE[variable])
+
+
+@pytest.mark.parametrize("node", [273, 1440])
+def test_case_b_flux_below_the_phreatic_line_is_kratos_own(case_b, node):
+    _, expected = muskat.KRATOS_B[node]
+    qx, qy = at(case_b, "FLUID_FLUX_VECTOR", node)[:2]
+    assert (qx, qy) == pytest.approx(expected["FLUID_FLUX_VECTOR"], rel=FLUX_TOLERANCE[node])
+
+
+def test_case_b_dry_soil_carries_no_flux(case_b):
+    qx, qy = at(case_b, "FLUID_FLUX_VECTOR", 890)[:2]
+    assert abs(qx) <= DRY_FLUX and abs(qy) <= DRY_FLUX

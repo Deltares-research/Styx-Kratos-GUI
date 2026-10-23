@@ -274,6 +274,23 @@ def darcy_flux(tolerance: float = 1e-3):
     return check
 
 
+def kratos_values(variable: str, tolerance: float):
+    """Case B: the run read at the coordinates of the nodes Kratos checks, against Kratos'
+    own regression values (`tests.models.muskat.KRATOS_B`), within `tolerance`."""
+    def check(ctx: Context) -> Outcome:
+        stage = last_stage(ctx)
+        mesh = catalog.stage_mesh(ctx.run_id, stage)
+        values = catalog.stage_results(ctx.run_id, stage).field(variable).values
+        worst = 0.0
+        for (x, y), expected in muskat.KRATOS_B.values():
+            if variable in expected:
+                got = muskat.at_point(mesh, values, x, y)[0]
+                worst = max(worst, abs(got - expected[variable]))
+        return Outcome(f"{variable} = Kratos' at its nodes", worst <= tolerance,
+                       f"worst {worst:.3g}", f"≤ {tolerance:g}")
+    return check
+
+
 # ── The catalogue ───────────────────────────────────────────────────────────
 
 SAND = models.material("sand", "Sand", 18.0, k0=0.6)
@@ -354,9 +371,10 @@ CASES = [
          build=lambda: muskat.muskat(order=2),
          checks=[exact_flow_pressure(), darcy_flux()]),
     Case("BM-FLOW-B", "Semi-Muskat column, Van Genuchten soil",
-         "Kratos tests/Muskat/van_genuchten_hydrostatic",
-         blocked="needs the initial phreatic line checked and Kratos' values read at its "
-                 "node coordinates (groundwater flow plan, step 2)"),
+         "Kratos tests/Muskat/van_genuchten_hydrostatic (its regression values)",
+         build=lambda: muskat.van_genuchten(size=0.05),
+         checks=[kratos_values("WATER_PRESSURE", 10.0),
+                 kratos_values("EFFECTIVE_SATURATION", 0.02)]),
     Case("BM-FLOW-C", "Full Muskat with a seepage face", "Kratos tests/seepage_tests; "
          "Dupuit-Charny discharge",
          blocked="needs a seepage boundary condition (groundwater flow plan, step 3)"),

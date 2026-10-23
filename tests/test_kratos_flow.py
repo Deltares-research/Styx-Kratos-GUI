@@ -4,8 +4,10 @@ steady-state flow of the water alone.
 The deck is held to Kratos' own `tests/Muskat/saturated_hydrostatic` (case A of
 plan/active/groundwater-flow-plan.md), process for process: its solver block, the two
 fixed heads, gravity, the extrapolation of the saturation and the flux, and the results
-it writes. The reference values are copied here, as the other deck tests copy theirs, so
-the quick tier needs no Kratos checkout.
+it writes. Case B, `tests/Muskat/van_genuchten_hydrostatic`, is held to its deck the same
+way: the Newton-Raphson block, the initial phreatic line and the Van Genuchten soil. The
+reference values are copied here, as the other deck tests copy theirs, so the quick tier
+needs no Kratos checkout.
 
 The rest is what a flow project is: water pressure elements and nothing that acts on a
 displacement, a stage per phase, and the export's refusals -- a mix of flow and
@@ -25,6 +27,7 @@ from core.model import phases
 from core.model.schemas import (Beam, BeamSection, DisplacementCondition, Phase,
                                 WaterPressureCondition, standard_conditions)
 from tests import mdpa
+from tests.models import muskat as muskat_model
 from tests.models.muskat import FLOW, HEADS, HEIGHT, VAN_GENUCHTEN, head, muskat
 from tests.models.muskat import SOIL as REFERENCE_SOIL
 
@@ -62,6 +65,61 @@ REFERENCE_GRAVITY = {"variable_name": "VOLUME_ACCELERATION", "active": [False, T
                      "value": [0.0, -9.81, 0.0], "table": [0, 0, 0]}
 REFERENCE_EXTRAPOLATED = ["EFFECTIVE_SATURATION", "FLUID_FLUX_VECTOR"]
 REFERENCE_NODAL_RESULTS = ["WATER_PRESSURE", "EFFECTIVE_SATURATION", "FLUID_FLUX_VECTOR"]
+
+# ── Kratos' tests/Muskat/van_genuchten_hydrostatic, copied ──────────────────
+
+REFERENCE_SOLVER_B = {
+    **{key: value for key, value in REFERENCE_SOLVER.items() if key != "strategy_type"},
+    "strategy_type": "newton_raphson",
+    "convergence_criterion": "residual_criterion",
+    "residual_relative_tolerance": 1.0e-03,
+    "residual_absolute_tolerance": 1.0e-15,
+    "min_iterations": 6,
+    "max_iterations": 100,
+    "number_cycles": 1,
+    "reduction_factor": 1.0,
+    "increase_factor": 1.0,
+}
+"""Its `solver_settings`, less what names its own mesh and files."""
+
+REFERENCE_CONSTRAINTS_B = [
+    {"variable_name": "WATER_PRESSURE", "is_fixed": False, "table": [0, 0, 0, 0],
+     "fluid_pressure_type": "Phreatic_Multi_Line", "gravity_direction": 1,
+     "out_of_plane_direction": 2, "x_coordinates": [-0.25, 5.0e-02, 1.6, 1.7],
+     "y_coordinates": [3.22, 3.22, 0.48, 0.48], "z_coordinates": [0.0, 0.0, 0.0, 0.0],
+     "specific_weight": 1.0e+04},
+    *({"variable_name": "WATER_PRESSURE", "is_fixed": True,
+       "fluid_pressure_type": "Hydrostatic", "gravity_direction": 1,
+       "reference_coordinate": level, "table": 0, "pressure_tension_cut_off": 1.0e+05,
+       "specific_weight": 1.0e+04}
+      for level in (3.0, 1.62)),
+]
+"""Its `constraints_process_list`, less the part names: the phreatic start values on the
+whole soil first, then the left and right heads."""
+
+REFERENCE_SOIL_B = {
+    "GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
+    "YOUNG_MODULUS": 1.0e+04,
+    "POISSON_RATIO": 0.4,
+    "DENSITY_SOLID": 2.29e+03,
+    "DENSITY_WATER": 1.01937e+03,
+    "POROSITY": 0.3333,
+    "BULK_MODULUS_SOLID": 6.7e+19,
+    "BULK_MODULUS_FLUID": 1.0e+20,
+    "PERMEABILITY_XX": 6.9444e-13,
+    "PERMEABILITY_YY": 6.9444e-13,
+    "PERMEABILITY_XY": 0.0,
+    "DYNAMIC_VISCOSITY": 1.0e-03,
+    "BIOT_COEFFICIENT": 1.0,
+    "RETENTION_LAW": "VanGenuchtenLaw",
+    "SATURATED_SATURATION": 0.403,
+    "RESIDUAL_SATURATION": 2.5e-02,
+    "VAN_GENUCHTEN_AIR_ENTRY_PRESSURE": 2.611e+03,
+    "VAN_GENUCHTEN_GN": 1.377,
+    "VAN_GENUCHTEN_GL": 1.25,
+    "MINIMUM_RELATIVE_PERMEABILITY": 1.0e-05,
+}
+"""Its MaterialParametersNonLinear.json `Variables`."""
 """The soil is `tests.models.muskat.SOIL`, copied from the same deck."""
 
 
@@ -211,20 +269,35 @@ def test_each_phase_is_a_steady_state_with_its_own_heads(gmsh_session):
         assert stage["problem_data"]["start_time"] == start
 
 
-def test_a_soil_whose_permeability_follows_the_pressure_is_solved_by_newton(gmsh_session):
-    soil = {**REFERENCE_SOIL, **VAN_GENUCHTEN}
-    export = writer.export_project(muskat(soil=soil, phases=[
-        Phase(id="flow", name="Flow", calculation="Groundwater flow",
-              max_iterations=100, tolerated_error=1e-3)]))
-    solver = settings(export)["solver_settings"]
-    assert {key: solver[key] for key in (
-        "strategy_type", "convergence_criterion", "residual_relative_tolerance",
-        "residual_absolute_tolerance", "min_iterations", "max_iterations",
-        "number_cycles", "reduction_factor", "increase_factor")} == {
-        "strategy_type": "newton_raphson", "convergence_criterion": "residual_criterion",
-        "residual_relative_tolerance": 1e-3, "residual_absolute_tolerance": 1e-15,
-        "min_iterations": 6, "max_iterations": 100, "number_cycles": 1,
-        "reduction_factor": 1.0, "increase_factor": 1.0}
+# ── Case B: a Van Genuchten soil ────────────────────────────────────────────
+
+@pytest.fixture(scope="module")
+def case_b(gmsh_session):
+    """Meshed at 0.4 m: the deck does not depend on the size."""
+    return writer.export_project(muskat_model.van_genuchten(size=0.4))
+
+
+def test_a_soil_whose_permeability_follows_the_pressure_is_solved_by_newton(case_b):
+    """The reference Newton-Raphson block, with the phase's 100 iterations and its
+    tolerance of 1e-3."""
+    solver = settings(case_b)["solver_settings"]
+    assert {key: solver[key] for key in REFERENCE_SOLVER_B} == REFERENCE_SOLVER_B
+    assert "reset_totals" not in solver
+
+
+def test_the_phreatic_start_comes_first_and_the_heads_replace_it(case_b):
+    """The project lists the phreatic line last; the deck writes start values before the
+    fixed ones, as the reference does, so the heads have the last word on the faces."""
+    constraints = settings(case_b)["processes"]["constraints_process_list"]
+    assert [without_part(p["Parameters"]) for p in constraints] == REFERENCE_CONSTRAINTS_B
+    assert [p["Parameters"]["model_part_name"] for p in constraints] == [
+        "PorousDomain", "PorousDomain.Left_Edge", "PorousDomain.Right_Edge"]
+
+
+def test_the_van_genuchten_soil_is_the_reference_one(case_b):
+    soil = json.loads(case_b["materials"])["properties"][0]["Material"]["Variables"]
+    assert soil == REFERENCE_SOIL_B
+    assert not case_b["warnings"]
 
 
 def test_a_phase_s_iterations_are_its_own(gmsh_session):

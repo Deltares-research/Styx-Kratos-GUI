@@ -41,7 +41,7 @@ Part A lists what Styx sends to Kratos. Part B lists what the GUI and `kratos-cl
 | Tolerances | Relative 1e-4, absolute 1e-9, 6 to 15 iterations, reduction factor 0.5, increase factor 2.0. You can change the maximum number of iterations and the relative tolerance for each phase. | Tested | same |
 | Time steps | One step for each stage (Δt = 1). The settling stages are at negative time, as in the reference deck. | Tested | [kratos/writer.py](../core/kratos/writer.py) |
 | Units | One unit system for each project: SI (N, m, kg, s) or kN (kN, m, t, s). You type all values in it, the input files contain them without conversion, and the results come back in it. | Tested in both systems | [model/units.py](../core/model/units.py) |
-| Groundwater flow | A project whose phases are all "Groundwater flow": solver type `Pw`, `Steady_State_Groundwater_Flow`, `sparse_lu` linear solver. One linear solve for a saturated soil, Newton-Raphson for a soil with another retention law. The deck holds the soil only. 2D only. A project that mixes flow and deformation phases is refused. | Tested: the deck against the Kratos reference `tests/Muskat/saturated_hydrostatic`, and a Kratos run against the exact solution | [kratos/parameters.py](../core/kratos/parameters.py) `FLOW_SOLVER` |
+| Groundwater flow | A project whose phases are all "Groundwater flow": solver type `Pw`, `Steady_State_Groundwater_Flow`, `sparse_lu` linear solver. One linear solve for a saturated soil, Newton-Raphson for a soil with another retention law. The deck holds the soil only. 2D only. A project that mixes flow and deformation phases is refused. | Tested: the decks against the Kratos references `tests/Muskat/saturated_hydrostatic` and `van_genuchten_hydrostatic`; Kratos runs against the exact solution (saturated) and against the Kratos regression values (Van Genuchten) | [kratos/parameters.py](../core/kratos/parameters.py) `FLOW_SOLVER` |
 | Dynamics, consolidation, arc-length control, updated mesh | Not supported. The `time_interval` of a phase is not exported. | Not available | [model/schemas.py](../core/model/schemas.py) `Phase` |
 
 ### A2. Soil elements
@@ -264,9 +264,10 @@ REST API: `/api/project`, `/api/mesh`, `/api/calculate`, `/api/results/…`.
    (`mohr_coulomb_project` in `tests/models/excavation.py` is ready for it).
    User-defined models (UDSM, UMAT) are written as typed, also without a test.
 2. **No factor of safety.** Styx has no φ–c reduction phase.
-3. **Groundwater flow is saturated and 2D only.** A steady-state flow runs in 2D. The
-   Van Genuchten case and the seepage face are not checked yet, and a project cannot mix
-   flow phases with deformation phases.
+3. **Groundwater flow is steady-state and 2D only.** There is no seepage face yet, and a
+   project cannot mix flow phases with deformation phases. With a Van Genuchten soil, the
+   Newton-Raphson iterations can fall into a cycle on some meshes and stop without
+   converging; another element size then helps.
 4. **3D is not proven.** No 3D element, law or interface has run in Kratos in a test.
 5. **Fixed solver settings.** The calculation type of the phases chooses the analysis
    (deformation or groundwater flow). You cannot change the linear solver.
