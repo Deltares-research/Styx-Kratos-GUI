@@ -56,10 +56,21 @@ SECTION_NOTE = ("The front and back supports are kept for the solid model; the 2
 """Said under a 2D list that leaves them out, in the CLI and in the GUI's command box
 alike."""
 
+FLOW_NOTE = ("A groundwater flow calculation leaves the supports out: it solves the "
+             "water pressure alone.")
+"""Said under the list of a groundwater flow project with supports, in the CLI and in the
+GUI's command box alike; the Model explorer marks each support "(unused in flow)"."""
+
 
 def listed(project: Project) -> list:
     """The conditions a list shows the user: all but the ones `held_by_section`."""
     return [c for c in project.boundary_conditions if not held_by_section(project, c)]
+
+
+def unused_in_flow(project: Project, condition) -> bool:
+    """Whether the export leaves the support `condition` out because the project is a
+    groundwater flow calculation (`App.BoundaryConditions.unusedInFlow`)."""
+    return isinstance(condition, DisplacementCondition) and _flow(project)
 
 
 def written(project: Project, condition) -> bool:

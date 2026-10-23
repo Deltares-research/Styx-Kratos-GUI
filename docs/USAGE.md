@@ -328,10 +328,25 @@ clear its check boxes first. The supports are on in every phase.
 In the **Phases** window, select a phase and set:
 
 - **Name** and **Start from phase**
-- **Calculation type**: **K0 procedure** (calculates the initial stresses), **Plastic**, or
-  **Null step**
+- **Calculation type**: **K0 procedure** (calculates the initial stresses), **Plastic**,
+  **Null step**, or **Groundwater flow**
 - **Reset displacements to zero**
 - **Max iterations** and **Tolerated error**
+
+A **Groundwater flow** phase calculates a steady-state flow of the water through the soil.
+It calculates the water pressure only, so the soil does not move:
+
+- Give every phase the type Groundwater flow. Calculate refuses a project that has both
+  flow phases and deformation phases.
+- Use a 2D model, and give every soil material a `PERMEABILITY_XX`.
+- In each phase, switch on at least one fixed water pressure condition on a face or a
+  line, where the head is known. A boundary with no water pressure condition lets no water
+  through.
+- The calculation uses the soil only. It leaves out sheet piles, anchors, interfaces and
+  loads, and says so. It also leaves out the supports: the Model explorer marks them
+  "(unused in flow)", and **Reset displacements to zero** is greyed out.
+- The results are the water pressure, the hydraulic head, the effective saturation and the
+  flux `q` (the specific discharge, in m/s).
 
 The window also lists the parts that each phase switches on and off, and the result of the
 last calculation for each phase.

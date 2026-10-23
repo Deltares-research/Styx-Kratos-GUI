@@ -240,15 +240,29 @@ def test_a_2d_list_leaves_the_front_and_back_supports_out_as_the_gui_does(cli, t
     assert "roller_front" in listed and condition_checks.SECTION_NOTE not in listed
 
 
-def test_the_note_under_a_2d_list_is_the_gui_s_word_for_word():
+def test_a_flow_project_notes_that_its_supports_are_left_out(cli, tmp_path):
+    """As the GUI's command box does; its explorer marks each support instead."""
+    from core.kratos import condition_checks
+    path = tmp_path / "new.json"
+    assert cli("new", path).code == 0
+    assert condition_checks.FLOW_NOTE not in cli("boundary", path, "list").out
+    assert cli("phases", path, "add", "flow", "--calculation", "flow").code == 0
+    listed = cli("boundary", path, "list").out
+    assert listed.strip().endswith(condition_checks.FLOW_NOTE)
+    assert "fixed_bottom" in listed
+
+
+@pytest.mark.parametrize("name", ["SECTION_NOTE", "FLOW_NOTE"])
+def test_the_notes_under_a_list_are_the_gui_s_word_for_word(name):
     import re
     from pathlib import Path
     from core.kratos import condition_checks
     source = (Path(__file__).resolve().parents[2] / "frontend" / "js"
               / "boundary-conditions.js").read_text(encoding="utf-8")
-    found = re.search(r"var SECTION_NOTE = ((?:'[^']*'\s*\+?\s*)+);", source)
-    assert found, "SECTION_NOTE is not in boundary-conditions.js"
-    assert "".join(re.findall(r"'([^']*)'", found.group(1))) == condition_checks.SECTION_NOTE
+    found = re.search(rf"var {name} = ((?:'[^']*'\s*\+?\s*)+);", source)
+    assert found, f"{name} is not in boundary-conditions.js"
+    assert "".join(re.findall(r"'([^']*)'", found.group(1))) == getattr(condition_checks,
+                                                                         name)
 
 
 @pytest.mark.parametrize("argv, fixed", [

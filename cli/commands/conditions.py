@@ -119,11 +119,14 @@ def _fields(parser: argparse.ArgumentParser) -> None:
 def listed_lines(project: Project) -> list[str]:
     """The conditions, one line each, as `boundary list` prints them and the GUI's
     command box says them (`App.BoundaryConditions.command`): a 2D model's front and
-    back supports are left out, with a note that they are."""
+    back supports are left out, with a note that they are, and a groundwater flow
+    project's supports are noted as left out of its deck."""
     records = condition_checks.listed(project)
     lines = [line(record) for record in records] or ["No boundary conditions yet."]
     if len(records) < len(project.boundary_conditions):
         lines.append(condition_checks.SECTION_NOTE)
+    if any(condition_checks.unused_in_flow(project, record) for record in records):
+        lines.append(condition_checks.FLOW_NOTE)
     return lines
 
 
