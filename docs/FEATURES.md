@@ -116,6 +116,7 @@ and adds only the values that are missing
 | Load distribution | Uniform only. No load that changes with time. | — | Not available |
 | Water pressure conditions | `ApplyScalarConstraintTableProcess`: `Uniform`, `Hydrostatic` (about the level of the condition) or `Phreatic_Multi_Line`, fixed or as start values only, on the whole soil, a soil part, a face, a drawn line or a point. Without a condition, Styx fixes no water pressure. | 2D, 3D (lines and points 2D) | Tested |
 | Water conditions for each phase | A phase switches a water pressure condition on or off, as it does a load. A stage writes the conditions its phase has on. | 2D, 3D | Tested |
+| Seepage face | `GeoSeepageCondition2D2N` / `2D3N` on the mesh edges of a face or of a line along the soil's outer boundary, one `ApplySeepageBoundaryProcess`, and the `newton_raphson_with_seepage` strategy. Groundwater flow only, in every phase. A line through the soil is refused. | 2D | Tested: the deck against Kratos' `tests/seepage_tests` and the STEM Muskat geometry, and a Kratos run against the water balance and the Dupuit-Charny discharge |
 | Water level of a borehole | Styx keeps the water level of a borehole, but does not export it. | — | Not exported |
 | Displacement conditions | `ApplyVectorConstraintTableProcess` on a face, a soil part, a drawn line or a point, in the components x, y, z that you select. A new project has the bottom fixed and the sides on rollers. | 2D, 3D (lines and points 2D) | Tested |
 | Anchor tail support | The tail node is fixed | 2D, 3D | Tested |
@@ -141,7 +142,7 @@ and adds only the values that are missing
 | Output | Variables | Status |
 |---|---|---|
 | GiD ASCII files (`.post.res`, `.post.msh`), one pair for each stage | Nodal `DISPLACEMENT`, `TOTAL_DISPLACEMENT`, `WATER_PRESSURE`; `CAUCHY_STRESS_TENSOR` and `HYDRAULIC_HEAD` (not with gravity off) at the Gauss points | Tested |
-| Groundwater flow, one pair of GiD files for each stage | Nodal `WATER_PRESSURE`, `EFFECTIVE_SATURATION` and `FLUID_FLUX_VECTOR` (the last two extrapolated from the Gauss points); `HYDRAULIC_HEAD` at the Gauss points (not with gravity off) | Tested |
+| Groundwater flow, one pair of GiD files for each stage | Nodal `WATER_PRESSURE`, `EFFECTIVE_SATURATION` and `FLUID_FLUX_VECTOR` (the last two extrapolated from the Gauss points), and `NODAL_WATER_FLOW_RATE` with a seepage face; `HYDRAULIC_HEAD` at the Gauss points (not with gravity off) | Tested |
 | Wall forces at the nodes | `AXIAL_FORCE`, `BENDING_MOMENT`, `SHEAR_FORCE` | Tested: a live Kratos run is checked, and agrees with the Kratos reference curves |
 | Interface tractions | `GEO_EFFECTIVE_TRACTION_VECTOR`, written to JSON on the retained side | Tested |
 
@@ -214,7 +215,7 @@ and adds only the values that are missing
 | Feature | Detail | Status |
 |---|---|---|
 | Runs | List all runs, open one, go through its phases | Tested |
-| Quantities | \|u\|, u_x, u_y, u_z, total and for each phase; σ'xx, σ'yy, σ'zz, σ'xy, σ'yz, σ'xz; p', q, σ1, σ2, σ3, τ_max; pore pressure; hydraulic head (with gravity on); effective saturation and the flux q, q_x, q_y, q_z of a groundwater flow run. Total stresses and saturation if Kratos wrote them. | Tested |
+| Quantities | \|u\|, u_x, u_y, u_z, total and for each phase; σ'xx, σ'yy, σ'zz, σ'xy, σ'yz, σ'xz; p', q, σ1, σ2, σ3, τ_max; pore pressure; hydraulic head (with gravity on); effective saturation, the flux q, q_x, q_y, q_z and, with a seepage face, the nodal water flow rate of a groundwater flow run. Total stresses and saturation if Kratos wrote them. | Tested |
 | Signs and units | Compression is negative, as Kratos writes it. All quantities are in the unit system of the run (Pa for SI, kPa for kN); lengths in m. | Tested |
 | Display | Colour bands or smooth shading, colour map, reversed scale, automatic or fixed range, deformed mesh with a selected or automatic scale | Tested |
 | Values at a node | All quantities at one node (`results at <node>`) | Tested |
@@ -264,8 +265,9 @@ REST API: `/api/project`, `/api/mesh`, `/api/calculate`, `/api/results/…`.
    (`mohr_coulomb_project` in `tests/models/excavation.py` is ready for it).
    User-defined models (UDSM, UMAT) are written as typed, also without a test.
 2. **No factor of safety.** Styx has no φ–c reduction phase.
-3. **Groundwater flow is steady-state and 2D only.** There is no seepage face yet, and a
-   project cannot mix flow phases with deformation phases. With a Van Genuchten soil, the
+3. **Groundwater flow is steady-state and 2D only.** A project cannot mix flow phases
+   with deformation phases, and a drawn condition line has no element size of its own
+   (a box refinement gives a seepage face its fine mesh). With a Van Genuchten soil, the
    Newton-Raphson iterations can fall into a cycle on some meshes and stop without
    converging; another element size then helps.
 4. **3D is not proven.** No 3D element, law or interface has run in Kratos in a test.

@@ -101,6 +101,7 @@ Do these steps in this order. Each step has its own guide.
 | [CLI.md](docs/CLI.md) | Every `kratos-cli` command, with examples |
 | [cli_tutorials/README.md](docs/cli_tutorials/README.md) | The `kratos-cli` tutorial: a first model, built, run and read in the terminal |
 | [CROW_case.md](docs/cli_tutorials/CROW_case.md) | A second `kratos-cli` tutorial: the CROW excavation wall, a staged sheet-pile excavation, in three ways |
+| [Muskat_case.md](docs/cli_tutorials/Muskat_case.md) | A groundwater flow tutorial: the Muskat soil column, saturated, with a Van Genuchten soil, and with a seepage face |
 | [FEATURES.md](docs/FEATURES.md) | What works, feature by feature, and where the code is |
 
 ### For developers

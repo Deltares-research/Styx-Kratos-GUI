@@ -1,9 +1,13 @@
-# Semi-Muskat column, groundwater flow
+# Muskat column, groundwater flow
 
-A steady-state groundwater flow through a column of soil, between two faces held at
-different water levels. The two models are Kratos' GeoMechanicsApplication tests
+A steady-state groundwater flow through a column of soil, from a face held at a water
+level of 3.0 m to a lower one. Cases A and B are Kratos' GeoMechanicsApplication tests
 `tests/Muskat/saturated_hydrostatic` and `tests/Muskat/van_genuchten_hydrostatic`, with
-the same soil, heads and solver settings.
+the same soil, heads and solver settings. Case C is the full Muskat problem, with a
+seepage face, on the STEM Muskat geometry of Deltares' FEA-Tools `GeometryGenerator`.
+
+[docs/cli_tutorials/Muskat_case.md](../../docs/cli_tutorials/Muskat_case.md) builds all
+three with `kratos-cli`, step by step.
 
 | File | What it is |
 |---|---|
@@ -11,10 +15,12 @@ the same soil, heads and solver settings.
 | `muskat_saturated.py` | Case A as a model script |
 | `muskat_van_genuchten.json` | Case B, a Van Genuchten soil: the project file |
 | `muskat_van_genuchten.py` | Case B as a model script |
+| `muskat_seepage.json` | Case C, a seepage face: the project file |
+| `muskat_seepage.py` | Case C as a model script |
 
 ## The models
 
-Both models have:
+All three models have:
 
 - **Column**: 1.62 m wide and 4 m high, one soil with an intrinsic permeability of
   6.9444e-13 m² (a saturated hydraulic conductivity K of 6.94e-6 m/s).
@@ -24,13 +30,13 @@ Both models have:
 - **Supports**: none. A groundwater flow calculation solves the water pressure only.
 - **Phases**: one phase, of the type **Groundwater flow**.
 
-| | Case A, saturated | Case B, Van Genuchten |
-|---|---|---|
-| Retention law | `SaturatedLaw` | `VanGenuchtenLaw` |
-| Right face level | 1.6 m | 1.62 m |
-| Start values | none | a phreatic line from (−0.25, 3.22) to (1.7, 0.48), not fixed |
-| Solver | one linear solve | Newton-Raphson, at most 100 iterations, tolerance 1e-3 |
-| Mesh | quadratic, 0.4 m, 0.0625 m along the right face | quadratic, 0.1 m |
+| | Case A, saturated | Case B, Van Genuchten | Case C, seepage face |
+|---|---|---|---|
+| Retention law | `SaturatedLaw` | `VanGenuchtenLaw` | `VanGenuchtenLaw` |
+| Right face | held at 1.6 m | held at 1.62 m | held at 0.48 m below 0.48 m (the tail water), a seepage face above |
+| Start values | none | a phreatic line from (−0.25, 3.22) to (1.7, 0.48) | hydrostatic about 3.0 m |
+| Solver | one linear solve | Newton-Raphson, at most 100 iterations, tolerance 1e-3 | the seepage strategy, at most 100 iterations, tolerance 1e-4 |
+| Mesh | quadratic, 0.4 m, 0.0625 m along the right face | quadratic, 0.1 m | linear, 0.4 m, 0.04 m along the right face |
 
 ## Case A: the exact answer
 
@@ -61,14 +67,31 @@ saturation.
 The effective saturation that the results show can be a little above 1 (up to 1.02). Kratos
 calculates it at the Gauss points and extrapolates it to the nodes.
 
+## Case C: the water balance
+
+Kratos' seepage strategy decides, node by node while it iterates, where the seepage face
+is open: there the water pressure is zero and the water flows out. It opens the face from
+the tail water up to an exit point at about 1.85 m, and keeps it closed above.
+
+- The water that comes in on the left leaves on the right: 1.893e-5 m³/s per metre, in and
+  out.
+- That is within 1 % of the discharge of Dupuit and Charny,
+  K (3.0² − 0.48²) / (2 × 1.62) = 1.88e-5 m³/s per metre. The unsaturated soil above the
+  phreatic line carries a little water too.
+- `flow_rate` (**Nodal water flow rate** in Results) is the water each node takes in
+  (negative) or lets out (positive), per metre of the section.
+
+The seepage strategy opens one node per iteration, so the phase needs at least as many
+iterations as nodes open. The export warns when a phase allows fewer iterations than
+its seepage faces have nodes.
+
 ## In the GUI
 
-1. Open `muskat_saturated.json` or `muskat_van_genuchten.json` with
-   **File > Open project…**, or type `run examples/Muskat_case/muskat_saturated.py` in the
-   command box.
+1. Open one of the `.json` files with **File > Open project…**, or type
+   `run examples/Muskat_case/muskat_saturated.py` in the command box.
 2. Click **Calculate**.
-3. In **Results**, show **Pore pressure**, **Hydraulic head**, **Effective saturation** or
-   **q_x**.
+3. In **Results**, show **Pore pressure**, **Hydraulic head**, **Effective saturation**,
+   **q_x** or, for case C, **Nodal water flow rate**.
 
 ## From the command line
 
@@ -84,7 +107,7 @@ The model scripts write the deck and run it:
 
 ```bash
 python muskat_saturated.py --out deck/            # write the Kratos deck
-python muskat_van_genuchten.py --calculate        # write the deck, run it, print the results
+python muskat_seepage.py --calculate              # write the deck, run it, print the results
 ```
 
 `python` is the environment `kratos-cli` runs in: `..\..\.venv-windows\Scripts\python.exe`
