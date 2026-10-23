@@ -80,6 +80,35 @@ def linearise(project: Project) -> list[Phase]:
     return order
 
 
+GROUNDWATER_FLOW = "Groundwater flow"
+"""The calculation type of a flow phase (`schemas.Phase.calculation`)."""
+
+
+def groundwater_flow(project: Project) -> bool:
+    """Whether the project is a groundwater flow calculation: it has phases, and every
+    one of them is a "Groundwater flow". Raises `PhaseError` when some are and some are
+    not.
+
+    One type for the whole sequence, because the element type is in the .mdpa and every
+    stage reads that one file: a flow stage needs water pressure elements, a K0, Plastic
+    or Null step stage the coupled ones. A project without phases is one deformation
+    stage, as it always was.
+    """
+    flow = [phase for phase in project.phases if phase.calculation == GROUNDWATER_FLOW]
+    if not flow:
+        return False
+    other = [phase for phase in project.phases if phase.calculation != GROUNDWATER_FLOW]
+    if other:
+        def named(phases: list[Phase]) -> str:
+            return ", ".join(repr(phase.name) for phase in phases)
+        raise PhaseError(
+            f"one calculation cannot mix groundwater flow phases ({named(flow)}) with "
+            f"deformation phases ({named(other)}): a flow phase solves the water "
+            "pressure alone, on elements a deformation phase cannot use. Give every "
+            "phase the same calculation type.")
+    return True
+
+
 def _chain_to(project: Project, phase: Phase | str) -> list[Phase]:
     """The phases from the root down to `phase`, inclusive.
 

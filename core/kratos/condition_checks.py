@@ -7,6 +7,11 @@ does not have, a K0 procedure with gravity off. The export (`core.kratos.writer`
 `kratos-cli check` prints them without meshing, so both say the same thing in the same
 words.
 
+A groundwater flow project (`core.model.phases.groundwater_flow`) has warnings of its own
+instead of the ones about deformation -- the structures and loads it leaves out (the
+supports it leaves out silently), a soil fixed everywhere,
+gravity off -- and the refusals of `flow_refusal`, which both say before meshing too.
+
 The ones that need the mesh -- two conditions sharing nodes, a part with no soil in this
 dimension, a line with no mesh at it -- stay with the export.
 
@@ -17,7 +22,8 @@ for loading the mesher.
 from __future__ import annotations
 
 from core.model import phases
-from core.model.schemas import DisplacementCondition, Project, WaterPressureCondition
+from core.model.schemas import (DisplacementCondition, Material, Phase, Project,
+                                WaterPressureCondition)
 
 SECTION_FACES = ("bottom", "left", "right", "top")
 """The faces a 2D section has. Front and back bound the solid model along z only."""
@@ -31,6 +37,12 @@ def warnings(project: Project) -> list[str]:
             left_out = _left_out(project, condition)
             if left_out:
                 out.append(left_out)
+    if _flow(project):
+        out += _left_out_of_flow(project)
+        out += _water_fixed_everywhere(project)
+        out += _weightless_flow(project)
+        out += _unused_water_level(project)
+        return out
     out += _rigid_body(project)
     out += _unpinned_water(project)
     out += _free_water_in_phases(project)
@@ -124,13 +136,18 @@ def _unpinned_water(project: Project) -> list[str]:
         "(for a dry model: Uniform, value 0, on the whole soil)."]
 
 
+def _soil_materials(project: Project) -> list[Material]:
+    """The materials the soil uses: the layers' and the custom parts'."""
+    used = ({layer.mat for layer in project.layers}
+            | {part.mat for part in project.custom_parts if part.mat is not None})
+    return [m for m in project.materials if m.id in used]
+
+
 def _coupled_soils(project: Project) -> list[str]:
     """The names of the soil materials in use that couple the water pressure to the
     deformation (`GEO_DRAINAGE_TYPE` other than `CONSTANT_PW_FIELD`)."""
-    used = ({layer.mat for layer in project.layers}
-            | {part.mat for part in project.custom_parts if part.mat is not None})
-    return [m.name for m in project.materials if m.id in used
-            and m.variables.get("GEO_DRAINAGE_TYPE", "CONSTANT_PW_FIELD")
+    return [m.name for m in _soil_materials(project)
+            if m.variables.get("GEO_DRAINAGE_TYPE", "CONSTANT_PW_FIELD")
             != "CONSTANT_PW_FIELD"]
 
 
@@ -195,3 +212,103 @@ def _weightless_k0(project: Project) -> list[str]:
     return [f"phase {phase.name!r} is a K0 procedure, whose stresses come from the self "
             "weight; with gravity off they are zero."
             for phase in project.phases if phase.calculation == "K0 procedure"]
+
+
+# ── Groundwater flow ────────────────────────────────────────────────────────
+
+def _flow(project: Project) -> bool:
+    """Whether the project is a groundwater flow calculation. A mix of flow and
+    deformation phases is not one: `flow_refusal` says why it cannot be exported."""
+    try:
+        return phases.groundwater_flow(project)
+    except phases.PhaseError:
+        return False
+
+
+def flow_refusal(project: Project) -> str | None:
+    """Why the export refuses this groundwater flow project, or None. None too for a
+    project that is not one, except a mix of flow and deformation phases."""
+    try:
+        if not phases.groundwater_flow(project):
+            return None
+    except phases.PhaseError as failure:
+        return str(failure)
+    if project.dimension != 2:
+        return ("a groundwater flow calculation is 2D only for now: switch the model to "
+                "the 2D section.")
+    missing = [m.name for m in _soil_materials(project)
+               if m.number("PERMEABILITY_XX") is None]
+    if missing:
+        return (f"{', '.join(repr(name) for name in missing)} has no PERMEABILITY_XX, "
+                "and a groundwater flow calculation cannot run without it: give the "
+                "soil its intrinsic permeability (m²).")
+    unheld = _unheld_flow_phase(project)
+    if unheld is not None:
+        return (f"in phase {unheld.name!r} no fixed water pressure condition is on, and "
+                "none that keeps its values (Hydrostatic or Phreatic) was on before, so "
+                "the water pressure has no single solution. Switch on a fixed water "
+                "pressure condition where the head is known, on a face or a line.")
+    return None
+
+
+def _unheld_flow_phase(project: Project) -> Phase | None:
+    """The first phase in which nothing fixes the water pressure, or None. The same
+    rule as `_free_water_in_phases`: a fixed Hydrostatic or Phreatic condition keeps its
+    nodes fixed after its phase, a fixed Uniform one does not."""
+    try:
+        order = phases.linearise(project)
+    except phases.PhaseError:
+        return None
+    fixed = [c for c in _water_pressures(project) if c.is_fixed]
+    kept = False
+    for phase in order:
+        on = phases.active_parts(project, phase)
+        now = [c for c in fixed if c.id in on]
+        if not now and not kept:
+            return phase
+        kept = kept or any(c.fluid_pressure_type != "Uniform" for c in now)
+    return None
+
+
+def _left_out_of_flow(project: Project) -> list[str]:
+    """What a groundwater flow deck does not write: its elements carry the water
+    pressure alone, so nothing that acts on a displacement has anything to act on.
+
+    The displacement conditions are left out without a word: every new project has the
+    standard supports, nobody expects a support to change the flow, and a boundary with
+    no water pressure condition lets no water through, as a fixed one would suggest."""
+    dim = project.dimension
+    anchors: list = (project.plane_anchors if dim == 2
+                     else [*project.plane_anchors, *project.space_anchors])
+    kinds: tuple[tuple[str, list], ...] = (
+        ("structures", [b for b in project.structures_for(dim) if b.active]),
+        ("anchors", [a for a in anchors if a.active]),
+        ("interfaces", project.active_interfaces),
+        ("loads", [load for load in project.loads_for(dim) if load.active]),
+        ("normal loads", project.active_normal_loads),
+    )
+    return [f"a groundwater flow calculation writes the soil alone: the {kind} "
+            f"{_names(records)} are left out."
+            for kind, records in kinds if records]
+
+
+def _water_fixed_everywhere(project: Project) -> list[str]:
+    """A fixed condition on the whole soil leaves no node free, so no water flows."""
+    return [f"{noun(c)} fixes the water pressure at every node of the soil, so no water "
+            "can flow. Fix it on the faces or lines where the head is known instead, and "
+            "give the soil a start value (not fixed) if it needs one."
+            for c in _water_pressures(project) if c.is_fixed and c.on == "domain"]
+
+
+def _weightless_flow(project: Project) -> list[str]:
+    """Without gravity the water has no weight: the flow follows the pressure alone, and
+    the hydraulic head is not written (`parameters._gid_output`)."""
+    if project.gravity:
+        return []
+    return ["gravity is off, so the water has no weight: it flows from the pressure "
+            "differences alone, and the hydraulic head is not written. Turn gravity on, "
+            "unless the section is a horizontal one."]
+
+
+def _names(records: list) -> str:
+    return ", ".join(repr(record.name) for record in records)

@@ -153,12 +153,14 @@ class Definition:
         return units.label(self.quantity, system) or "-"
 
 
-def _displacements(source: str, prefix: str, group: str, label: str) -> tuple:
+def _vector(source: str, prefix: str, group: str, label: str,
+            quantity: units.Quantity = units.LENGTH) -> tuple:
+    """A vector's magnitude and components, `u`, `ux`, `uy`, `uz`."""
     return (
-        Definition(prefix, f"|{label}|", group, source, _magnitude, units.LENGTH),
-        Definition(f"{prefix}x", f"{label}_x", group, source, _component(0), units.LENGTH),
-        Definition(f"{prefix}y", f"{label}_y", group, source, _component(1), units.LENGTH),
-        Definition(f"{prefix}z", f"{label}_z", group, source, _component(2), units.LENGTH),
+        Definition(prefix, f"|{label}|", group, source, _magnitude, quantity),
+        Definition(f"{prefix}x", f"{label}_x", group, source, _component(0), quantity),
+        Definition(f"{prefix}y", f"{label}_y", group, source, _component(1), quantity),
+        Definition(f"{prefix}z", f"{label}_z", group, source, _component(2), quantity),
     )
 
 
@@ -189,8 +191,8 @@ DEFINITIONS: tuple[Definition, ...] = (
     # the two are separate groups rather than one. `TOTAL_DISPLACEMENT` accumulates
     # across stages, `DISPLACEMENT` is what this stage alone did -- confirmed against a
     # real seven-stage run, where the two differ in both magnitude and sign.
-    *_displacements("TOTAL_DISPLACEMENT", "u", "Deformations", "u"),
-    *_displacements("DISPLACEMENT", "du", "Phase deformations", "Δu"),
+    *_vector("TOTAL_DISPLACEMENT", "u", "Deformations", "u"),
+    *_vector("DISPLACEMENT", "du", "Phase deformations", "Δu"),
 
     *_stresses("CAUCHY_STRESS_TENSOR", "Effective stresses", ""),
     # Written only once the deck asks for it (P4). Offered automatically when it is
@@ -203,6 +205,12 @@ DEFINITIONS: tuple[Definition, ...] = (
                _component(0), units.LENGTH),
     Definition("saturation", "Degree of saturation", "Groundwater",
                "DEGREE_OF_SATURATION", _component(0), units.DIMENSIONLESS),
+    # What a groundwater flow stage writes (`parameters.FLOW_NODAL_RESULTS`): the
+    # saturation of the pores the retention law gives, and the specific discharge,
+    # the volume of water through a unit area per second.
+    Definition("effective_saturation", "Effective saturation", "Groundwater",
+               "EFFECTIVE_SATURATION", _component(0), units.DIMENSIONLESS),
+    *_vector("FLUID_FLUX_VECTOR", "flux", "Groundwater", "q", units.VELOCITY),
 )
 
 BY_NAME = {definition.name: definition for definition in DEFINITIONS}

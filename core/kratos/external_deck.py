@@ -230,6 +230,9 @@ def _phase(name: str, stage: dict, parent: str | None, *, activate: list[str],
 
 
 def _calculation(stage: dict, title: str) -> str:
+    solver = (stage.get("stage_settings") or {}).get("solver_settings") or {}
+    if "groundwater_flow" in str(solver.get("solution_type", "")).lower():
+        return "Groundwater flow"
     processes = (stage.get("stage_settings") or {}).get("processes") or {}
     for group in processes.values():
         for process in group if isinstance(group, list) else []:

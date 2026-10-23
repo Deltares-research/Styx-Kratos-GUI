@@ -52,6 +52,14 @@ ELEMENTS: dict[tuple[int, int], tuple[str, tuple[int, ...]]] = {
     (3, 11): ("SmallStrainUPwDiffOrderElement3D10N", (0, 1, 2, 3, 4, 5, 6, 7, 9, 8)),
 }
 
+# The soil of a groundwater flow project: water pressure elements, the ones Kratos'
+# `tests/Muskat` decks are made of (`SteadyStatePwElement2D6N` there). 2D only, as the
+# flow calculation is (`condition_checks.flow_refusal`).
+FLOW_ELEMENTS: dict[tuple[int, int], tuple[str, tuple[int, ...]]] = {
+    (2, 2): ("SteadyStatePwElement2D3N", (0, 1, 2)),
+    (2, 9): ("SteadyStatePwElement2D6N", (0, 1, 2, 3, 4, 5)),
+}
+
 # Sheet piles: 1D structural elements living inside the 2D section, sharing its nodes.
 # Both 2D classes and their (end, end, midside) connectivity are read off reference
 # GeoMechanics decks, one of each order, so the gmsh order maps straight through.
@@ -214,6 +222,14 @@ def export_project(project: Project, settings: MeshRequest | None = None,
 
 
 def _export(project: Project, settings: MeshRequest, include_materials: bool) -> dict:
+    # Before meshing: a flow project that cannot run says so without the wait.
+    refused = condition_checks.flow_refusal(project)
+    if refused:
+        raise ExportError(refused)
+    # A groundwater flow deck is the soil alone, of water pressure elements: no
+    # structure, contact, load or support, as nothing in it has a displacement to act
+    # on. What it leaves out, `condition_checks.warnings` says.
+    flow = phases.groundwater_flow(project)
     mesh = meshing.mesh_project(
         project, element_size=settings.element_size, order=settings.order,
         refinements=settings.refinements, algorithm_3d=settings.algorithm_3d,
@@ -243,12 +259,14 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
     coordinates = _kratos_coordinates(world, dim)
     bodies = _bodies(project, dim)
     soil_blocks = [(key, name, _oriented(rows, coordinates, dim))
-                   for key, name, rows in _harvest(bodies, dim)]
+                   for key, name, rows in _harvest(bodies, dim,
+                                                   FLOW_ELEMENTS if flow else ELEMENTS)]
     blocks = list(soil_blocks)
     # Not passed through `_oriented`: a line has no signed area to be inside out, and
     # its 3-node form would collide with the triangle entry in `FLIP`. The mesher
     # already emits each segment in the order the beam was drawn.
-    beam_blocks = _harvest(_beam_bodies(project, dim), 1, BEAMS, model_dim=dim)
+    beam_blocks = [] if flow else _harvest(_beam_bodies(project, dim), 1, BEAMS,
+                                           model_dim=dim)
     # A beam's node order is its local axis, and the sign of every force it reports
     # follows it, so it runs the way the user drew it rather than the way gmsh built
     # the curve. Done here, before the interface split reads these rows: which face of
@@ -259,17 +277,19 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
     blocks.extend(beam_blocks)
     # Nor are the wall shells: a sheet of steel has two faces and no "inside out", so
     # there is no signed area to correct -- only a normal, which is the wall's own.
-    panel_blocks = _harvest(_panel_bodies(project, dim), 2, SHELLS, model_dim=dim)
+    panel_blocks = [] if flow else _harvest(_panel_bodies(project, dim), 2, SHELLS,
+                                            model_dim=dim)
     blocks.extend(panel_blocks)
-    anchor_blocks, anchor_supports = _anchor_ties(project, dim, _world_coordinates())
+    anchor_blocks, anchor_supports = (([], {}) if flow else
+                                      _anchor_ties(project, dim, _world_coordinates()))
     blocks.extend(anchor_blocks)
-    conditions = (_load_conditions(project, dim, world, warnings) +
-                 _normal_load_conditions(project, dim, warnings, world))
+    conditions = [] if flow else (_load_conditions(project, dim, world, warnings) +
+                                  _normal_load_conditions(project, dim, warnings, world))
     # Last, because it rewrites what everything above produced: the interface unglues
     # the soil from the structures already harvested, so it needs their connectivity in
     # hand -- and the nodes it adds have to be in `world` before the boundary groups and
     # the node table are read off it.
-    interface_blocks, interface_ties = _interface_elements(
+    interface_blocks, interface_ties = ([], []) if flow else _interface_elements(
         project, dim, soil_blocks, beam_blocks, conditions, world, coordinates, warnings)
     blocks.extend(interface_blocks)
     # Named here rather than in `_part_names`: which bodies a contact actually runs
@@ -319,7 +339,7 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
     condition_parts, resolved = _condition_targets(
         project, dim, boundaries, boundary_owners, names,
         {key: nodes for key, nodes in body_nodes.items() if key in soil_keys},
-        node_id, warnings)
+        node_id, warnings, flow)
     parts.extend(condition_parts)
     water_pressures = _water_pressures(project, resolved, warnings)
     parts.extend(load_parts)
@@ -387,7 +407,8 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
     try:
         material_file, material_warnings = (
             material_parameters(project, part_materials, dim, beam_properties,
-                                anchor_properties, panel_properties, interface_properties)
+                                anchor_properties, panel_properties, interface_properties,
+                                flow=flow)
             if include_materials else (None, [])
         )
     except materials.MaterialError as failure:
@@ -468,6 +489,9 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
         ties=tuple((master, slave, key) for key, (master, slave) in ties.items())
              if dim == 2 else (),
         right_side=right_side_part,
+        unsaturated=tuple(name for name, material in part_materials
+                          if project.material(material).variables.get(
+                              "RETENTION_LAW", SATURATED) != SATURATED),
     )
     stages = _stages(project, deck, wall_parts, staged_ties)
     # The initial stage reads a materials file of its own. Rendered only when a stage
@@ -480,7 +504,7 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
             project, part_materials, dim, beam_properties, anchor_properties,
             panel_properties, interface_properties, k0=True)
     processes = parameters.project_parameters(
-        _displacements(dim, boundaries, resolved) + anchor_fixities,
+        [] if flow else _displacements(dim, boundaries, resolved) + anchor_fixities,
         [(name, variable, load_mask, value) for name, variable, value in active_loads],
         stages,
         normal_load_processes,
@@ -549,6 +573,12 @@ def _adjacent_material(project: Project, key: str, names: dict[str, str],
 WALL_OUTPUT_VARIABLES = ("BENDING_MOMENT", "SHEAR_FORCE", "AXIAL_FORCE",
                          "TOTAL_DISPLACEMENT")
 WALL_EXTRAPOLATED = ("AXIAL_FORCE", "BENDING_MOMENT", "SHEAR_FORCE")
+FLOW_EXTRAPOLATED = ("EFFECTIVE_SATURATION", "FLUID_FLUX_VECTOR")
+"""What a groundwater flow stage makes nodal, over its soil, as the reference decks do:
+the saturation and the flux are Gauss-point values of the water pressure elements."""
+SATURATED = "SaturatedLaw"
+"""Kratos' retention law when a material names none: a soil saturated whatever its water
+pressure, whose flow is linear in it."""
 INTERFACE_VARIABLES = ("GEO_EFFECTIVE_TRACTION_VECTOR",)
 RIGHT_SIDE_PART = "Right_Side_Of_Right_Interfaces"
 """The retained-side nodes of the retained-side interfaces, as a node-only sub-model
@@ -574,6 +604,9 @@ class _Deck:
     structures: tuple[str, ...]
     ties: tuple[tuple[str, str, str], ...] = ()
     right_side: str | None = None
+    unsaturated: tuple[str, ...] = ()
+    """The soil parts whose retention law makes the permeability depend on the water
+    pressure, so that a flow stage with any of them in it is solved by Newton-Raphson."""
 
 
 def _deck_active(deck: _Deck, keys: set[str]) -> frozenset[str]:
@@ -624,7 +657,7 @@ def _phased_stages(project: Project, deck: _Deck) -> list[parameters.Stage]:
     # means.
     settling = 0
     for phase, _, _ in steps:
-        if phase.calculation == "Plastic":
+        if phase.calculation not in ("K0 procedure", "Null step"):
             break
         settling += 1
 
@@ -665,7 +698,11 @@ def _phased_stages(project: Project, deck: _Deck) -> list[parameters.Stage]:
         beams = tuple(name for name in deck.beams if name in live)
         retained = tuple(name for name in deck.retained if name in live)
 
+        flow = phase.calculation == phases.GROUNDWATER_FLOW
+        bodies = tuple(name for name in deck.bodies if name in live)
         extrapolate: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = ()
+        if flow and bodies:
+            extrapolate += ((bodies, FLOW_EXTRAPOLATED),)
         if beams:
             extrapolate += ((beams, WALL_EXTRAPOLATED),)
         if retained:
@@ -682,7 +719,7 @@ def _phased_stages(project: Project, deck: _Deck) -> list[parameters.Stage]:
             activate=activate,
             deactivate=deactivate,
             active=live,
-            bodies=tuple(name for name in deck.bodies if name in live),
+            bodies=bodies,
             start_time=float(index - settling),
             modeler=index == 0,
             # The tie holds the two copies of a split node together for as long as the
@@ -703,6 +740,8 @@ def _phased_stages(project: Project, deck: _Deck) -> list[parameters.Stage]:
             materials_filename=(deck_files.INITIAL_MATERIALS_NAME if k0
                                 else deck_files.MATERIALS_NAME),
             conditions=frozenset(key for key in keys if key in water),
+            flow_strategy=(("newton_raphson" if any(name in live for name in deck.unsaturated)
+                            else "linear") if flow else None),
         ))
     return out
 
@@ -1620,7 +1659,7 @@ def _condition_targets(project: Project, dim: int,
                        boundaries: list[tuple[str, int, list[int]]],
                        boundary_owners: dict[str, str], names: dict[str, str],
                        body_nodes: dict[str, set[int]], node_id: dict[int, int],
-                       warnings: list[str]
+                       warnings: list[str], flow: bool = False
                        ) -> tuple[list[tuple[str, list[int], list[int], list[int]]],
                                   list[Resolved]]:
     """The node parts the drawn lines and points add, and every condition the deck
@@ -1632,6 +1671,9 @@ def _condition_targets(project: Project, dim: int,
     (`Project.expand_body_keys`), each of which goes with its lift the same way. A line
     is the nodes on its own mesh edges, and a point the node on its own vertex
     (`solid_model._embed_beams`). `body_nodes` is the node ids of each soil body.
+
+    A groundwater flow deck (`flow`) has no displacements, so it writes no displacement
+    condition and no part for one.
     """
     faces: dict[str, list[str]] = {}
     for name, _, _ in boundaries:
@@ -1646,6 +1688,8 @@ def _condition_targets(project: Project, dim: int,
     for condition in project.boundary_conditions:
         # Left out of this dimension altogether is `condition_checks.warnings`' to say.
         if not condition_checks.written(project, condition):
+            continue
+        if flow and isinstance(condition, DisplacementCondition):
             continue
         noun = condition_checks.noun(condition)
         targets: list[str | None]

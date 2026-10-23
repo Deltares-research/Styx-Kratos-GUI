@@ -1202,7 +1202,12 @@ class Phase(Base):
     """The phase this one starts from. `None` only for the first, which starts from the
     model as built."""
 
-    calculation: Literal["K0 procedure", "Plastic", "Null step"] = "Plastic"
+    calculation: Literal["K0 procedure", "Plastic", "Null step",
+                         "Groundwater flow"] = "Plastic"
+    """"Groundwater flow" is a steady-state flow of the water alone (Kratos' `Pw` solver,
+    `Steady_State_Groundwater_Flow`). It needs water pressure elements, and the mesh is
+    one for all the phases, so a project mixes it with no other type: the export refuses
+    the mix (`core.model.phases.groundwater_flow`)."""
     loading: Literal["Staged construction"] = "Staged construction"
 
     activate: list[Ident] = Field(default_factory=list)

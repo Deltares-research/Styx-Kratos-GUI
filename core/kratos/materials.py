@@ -16,7 +16,8 @@ stands. It does three things on top, and no others:
 
 *   **Fills what is missing and can be derived** -- the fluid constants, the water's
     density, the symmetric permeabilities, a beam's shear areas, an interface's
-    stiffness and strength from its soil, K0 from Jaky. A value the user gave is never
+    stiffness and strength from its soil, K0 from Jaky, and in a groundwater flow deck
+    the Biot coefficient. A value the user gave is never
     replaced, and every filled-in name is listed in the export's warnings.
 *   **Smears** a 2D pile or anchor over its out-of-plane `spacing` -- plane strain models
     a metre run of wall. Geometry, not units.
@@ -127,6 +128,7 @@ def material_parameters(
     panel_properties: list[tuple[str, PanelSection]] | None = None,
     interface_properties: list[tuple[str, InterfaceSection, Material | None]] | None = None,
     k0: bool = False,
+    flow: bool = False,
 ) -> tuple[str, list[str]]:
     """Render MaterialParameters.json for the exported parts.
 
@@ -143,6 +145,10 @@ def material_parameters(
     initial stage runs. That stage is elastic whatever the model: a soil or contact with
     another law gets the elastic one in this file, exactly as Kratos' own Mohr-Coulomb
     staged-excavation reference runs its stage 1 on an elastic materials file.
+
+    `flow` is a groundwater flow deck's file: its water pressure elements will not run
+    without a `BIOT_COEFFICIENT` (`Pw_element.cpp`'s `Check`), which the coupled ones
+    derive by themselves, so it is filled in the same way (`biot`).
     """
     warnings: list[str] = []
     derived: list[str] = []
@@ -167,7 +173,7 @@ def material_parameters(
         if k0 and law not in LINEAR_ELASTIC:
             elastic.append(f"material {material.name!r}")
             law = LINEAR_ELASTIC[0] if dim == 2 else LINEAR_ELASTIC[1]
-        add(part_name, law, _variables(material, dim, k0, project, derived),
+        add(part_name, law, _variables(material, dim, k0, project, derived, flow),
             material.tables)
     for part_name, section, beam_dim in beam_properties or []:
         _check(section, f"section {section.name!r}")
@@ -249,7 +255,7 @@ def _fill(variables: dict, name: str, value, derived: list[str], label: str) -> 
 
 
 def _variables(material: Material, dim: int, k0: bool, project: Project,
-               derived: list[str] | None = None) -> dict:
+               derived: list[str] | None = None, flow: bool = False) -> dict:
     """A soil's `Variables`: as given, plus what is missing and derivable."""
     derived = [] if derived is None else derived
     system = project.unit_system
@@ -276,6 +282,8 @@ def _variables(material: Material, dim: int, k0: bool, project: Project,
             _fill(v, "PERMEABILITY_ZZ", permeability, derived, label)
             _fill(v, "PERMEABILITY_YZ", 0.0, derived, label)
             _fill(v, "PERMEABILITY_ZX", 0.0, derived, label)
+    if flow:
+        _fill(v, "BIOT_COEFFICIENT", biot(v), derived, label)
     v = _ordered(v, SOIL_ORDER)
 
     if k0:
@@ -286,6 +294,21 @@ def _variables(material: Material, dim: int, k0: bool, project: Project,
         _fill(k0_v, "K0_NC", jaky(material), derived, label)
         v.update(_ordered(k0_v, K0_ORDER))
     return v
+
+
+def biot(variables: dict) -> float:
+    """The Biot coefficient 1 - K / K_s, as Kratos' coupled elements derive it when it
+    is not given (`GeoTransportEquationUtilities::CalculateBiotCoefficient`): K the
+    drained bulk modulus of the elastic soil, E / (3 (1 - 2 nu)), and K_s the grains'.
+    1, incompressible grains, when the soil does not say enough to derive it. A steady
+    flow does not read it; a transient one does."""
+    young = variables.get("YOUNG_MODULUS")
+    poisson = variables.get("POISSON_RATIO")
+    grains = variables.get("BULK_MODULUS_SOLID")
+    if not (isinstance(young, (int, float)) and isinstance(poisson, (int, float))
+            and isinstance(grains, (int, float))) or not grains or poisson >= 0.5:
+        return 1.0
+    return 1.0 - young / (3.0 * (1.0 - 2.0 * poisson)) / grains
 
 
 def jaky(material: Material) -> float | None:

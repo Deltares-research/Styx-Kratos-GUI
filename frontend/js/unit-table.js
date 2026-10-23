@@ -168,6 +168,17 @@ App.UNIT_TABLE =
         "kN": "m/s²"
       }
     },
+    "velocity": {
+      "dimension": [
+        0,
+        1,
+        -1
+      ],
+      "labels": {
+        "SI": "m/s",
+        "kN": "m/s"
+      }
+    },
     "dimensionless": {
       "dimension": [
         0,

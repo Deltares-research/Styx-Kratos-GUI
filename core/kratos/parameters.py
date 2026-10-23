@@ -24,6 +24,12 @@ documented reference analysis, and the parts of them the project really does det
 the export rather than defaulted. When those fields do grow a home in `Project`, this
 is where they replace `SOLVER`.
 
+A groundwater flow stage (a "Groundwater flow" phase) is solved by a second reference
+analysis, `FLOW_SOLVER`, read off Kratos' own `tests/Muskat` decks, with the strategy the
+project calls for (`FLOW_STRATEGIES`). It writes its own results (`FLOW_NODAL_RESULTS`):
+its elements carry the water pressure alone, so there is no displacement or stress to
+write.
+
 `stage_settings.processes.constraints_process_list` and `.loads_process_list` are
 filled in, because both are fully determined by the project already exported to the
 .mdpa: the domain boundaries and their sub-model parts, and each load's own components
@@ -98,6 +104,13 @@ its nodes -- the height against gravity minus the water pressure over the water 
 (`DENSITY_WATER` times g) -- interpolated. With no gravity there is no water weight and
 Kratos writes 0, so a deck with gravity off does not ask for it (`_gid_output`)."""
 
+FLOW_NODAL_RESULTS = ("WATER_PRESSURE", "EFFECTIVE_SATURATION", "FLUID_FLUX_VECTOR")
+FLOW_GAUSS_POINT_RESULTS = ("HYDRAULIC_HEAD",)
+"""What a groundwater flow stage writes: the reference decks' nodal list, the saturation
+and the flux made nodal by the extrapolation process the stage carries
+(`core.kratos.writer.FLOW_EXTRAPOLATED`), and the head as a deformation stage writes
+it, which the water pressure elements compute too (`Pw_element.cpp`)."""
+
 SOLVER = {
     "solver_type": "U_Pw",
     "model_part_name": "PorousDomain",
@@ -133,6 +146,47 @@ it is slower on a large mesh but cannot fail to converge on a small or ill-condi
 one, which is the wrong first impression for a button that either works or does not.
 Everything a project genuinely decides -- dimension, sub-model parts, rotations --
 is filled in around this by `_solver_settings` rather than being listed here."""
+
+FLOW_SOLVER = {
+    "solver_type": "Pw",
+    "model_part_name": "PorousDomain",
+    "solution_type": "Steady_State_Groundwater_Flow",
+    "time_stepping": {"time_step": TIME_STEP, "max_delta_time_factor": 1000.0},
+    "buffer_size": 2,
+    "echo_level": ECHO_LEVEL,
+    "clear_storage": False,
+    "compute_reactions": True,
+    "move_mesh_flag": False,
+    "reform_dofs_at_each_step": True,
+    "block_builder": True,
+    "linear_solver_settings": {"solver_type": "LinearSolversApplication.sparse_lu",
+                               "scaling": True},
+}
+"""The groundwater flow analysis: a steady state of the water pressure alone, copied
+field for field from Kratos' `tests/Muskat/saturated_hydrostatic/ProjectParameters.json`
+and `van_genuchten_hydrostatic`, whose solver blocks differ in the strategy only. What
+the project decides is filled in by `_solver_settings`, as for `SOLVER`."""
+
+FLOW_STRATEGIES: dict[str, dict[str, Any]] = {
+    "linear": {"strategy_type": "linear"},
+    "newton_raphson": {
+        "strategy_type": "newton_raphson",
+        "convergence_criterion": "residual_criterion",
+        "residual_relative_tolerance": 1e-3,
+        "residual_absolute_tolerance": 1e-15,
+        "min_iterations": 6,
+        "max_iterations": 100,
+        "number_cycles": 1,
+        "reduction_factor": 1.0,
+        "increase_factor": 1.0,
+    },
+}
+"""A flow stage's strategy, by name, with the Newton settings of the reference deck that
+uses it: `linear` for a saturated soil, whose flow is linear in the water pressure
+(`saturated_hydrostatic`), `newton_raphson` for one whose retention law makes the
+permeability depend on it (`van_genuchten_hydrostatic`). Which one a stage gets is
+derived from its soil (`core.kratos.writer`), not chosen. A phase's own iterations and
+tolerance replace the deck's, as in a deformation stage; a linear stage has none."""
 
 # Metres, and a *step*, not a tolerance. The master and slave nodes of a tie are copies
 # of the same source node -- `core.kratos.writer` gives each duplicate its original's exact
@@ -194,6 +248,9 @@ class Stage:
     `max_iterations` and `tolerated_error` are `None` for "whatever `SOLVER` says",
     rather than being defaulted to its values here, so that the deck of a project with
     no phases cannot drift from `SOLVER` by way of a copy made in this file.
+
+    `flow_strategy` is `None` for a deformation stage, and for a groundwater flow stage
+    the `FLOW_STRATEGIES` entry it is solved with.
     """
     name: str
     activate: tuple[str, ...] = ()
@@ -213,6 +270,7 @@ class Stage:
     tolerated_error: float | None = None
     materials_filename: str = MATERIALS_NAME
     conditions: frozenset[str] | None = None
+    flow_strategy: str | None = None
 
 
 @dataclass(frozen=True)
@@ -317,7 +375,8 @@ def project_parameters(
                                   stage=stage)
         rendered[stage.name] = _stage(stage, index, constraint_processes,
                                       loads_processes, auxiliary, solver, deck_name,
-                                      gravity=gravity)
+                                      gravity=gravity,
+                                      flow=stage.flow_strategy is not None)
 
     return json.dumps({
         "orchestrator": {
@@ -393,7 +452,8 @@ def _auxiliary(stage: Stage) -> list[dict]:
 
 def _stage(stage: Stage, index: int, constraint_processes: list[dict],
            loads_processes: list[dict], auxiliary: list[dict],
-           solver: dict, deck_name: str, gravity: bool = True) -> dict:
+           solver: dict, deck_name: str, gravity: bool = True,
+           flow: bool = False) -> dict:
     """One entry of `stages`. Each stage occupies its own unit interval of time --
     stage *n* runs from `start_time` to `start_time + 1` -- because the orchestrator
     runs them one after another over a single model: a second stage starting where the
@@ -423,7 +483,8 @@ def _stage(stage: Stage, index: int, constraint_processes: list[dict],
             "solver_settings": dict(solver),
             "processes": processes,
             "output_processes": {
-                "gid_output": [_gid_output(f"{deck_name}_{stage.name}", gravity)]},
+                "gid_output": [_gid_output(f"{deck_name}_{stage.name}", gravity,
+                                           flow)]},
         },
     }
     preprocess = _preprocess(stage, deck_name)
@@ -580,9 +641,13 @@ def _solver_settings(deck_name: str, domain_size: int, body_parts: list[str],
     stages -- iterations, tolerance and whether displacements start again from zero
     (plan sec C5). They come off the phase record; a stage that says nothing about them
     solves the way `SOLVER` does.
+
+    A groundwater flow stage starts from `FLOW_SOLVER` and its strategy instead. It has
+    no displacements to reset, and a linear one no iterations to count.
     """
+    strategy = stage.flow_strategy if stage is not None else None
     settings = {
-        **SOLVER,
+        **(SOLVER if strategy is None else {**FLOW_SOLVER, **FLOW_STRATEGIES[strategy]}),
         "domain_size": domain_size,
         "rotation_dofs": rotation_dofs,
         "model_import_settings": ({"input_type": "use_input_model_part"} if imported else
@@ -596,7 +661,10 @@ def _solver_settings(deck_name: str, domain_size: int, body_parts: list[str],
         return settings
     settings["material_import_settings"] = {
         "materials_filename": stage.materials_filename}
-    settings["reset_totals"] = stage.reset_displacements
+    if strategy is None:
+        settings["reset_totals"] = stage.reset_displacements
+    elif strategy == "linear":
+        return settings
     if stage.max_iterations is not None:
         settings["max_iterations"] = stage.max_iterations
     if stage.tolerated_error is not None:
@@ -604,14 +672,17 @@ def _solver_settings(deck_name: str, domain_size: int, body_parts: list[str],
     return settings
 
 
-def _gid_output(output_name: str, gravity: bool = True) -> dict:
+def _gid_output(output_name: str, gravity: bool = True, flow: bool = False) -> dict:
     """GiD ASCII results beside the deck, one file per stage.
 
     The same writer, flags and result list as the reference decks in `test/`, which is
     also what Kratos' own GeoMechanicsApplication test helpers read back when they
     compare two runs. Without gravity the hydraulic head is left out: it would be 0.
+    A groundwater flow stage writes the flow results (`FLOW_NODAL_RESULTS`).
     """
-    gauss = [name for name in GAUSS_POINT_RESULTS if gravity or name != "HYDRAULIC_HEAD"]
+    nodal = FLOW_NODAL_RESULTS if flow else NODAL_RESULTS
+    gauss = [name for name in (FLOW_GAUSS_POINT_RESULTS if flow else GAUSS_POINT_RESULTS)
+             if gravity or name != "HYDRAULIC_HEAD"]
     return {
         "python_module": "gid_output_process",
         "kratos_module": "KratosMultiphysics",
@@ -633,7 +704,7 @@ def _gid_output(output_name: str, gravity: bool = True) -> dict:
                     "node_output": False,
                     "skin_output": False,
                     "plane_output": [],
-                    "nodal_results": list(NODAL_RESULTS),
+                    "nodal_results": list(nodal),
                     "gauss_point_results": gauss,
                 },
                 "point_data_configuration": [],
