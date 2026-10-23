@@ -82,7 +82,7 @@ Genuchten soil.
 | `interface P list\|add\|set\|remove ...` | Interfaces, in 2D: `add [ID] [--structure PILE \| --points ...] [--side both\|left\|right]` |
 | `load P list\|add\|set\|remove ...` | Loads: `add point [--at X Y]`, `add line [--x FROM TO]` (2D), `add surface [--x ...] [--z ...]` (3D), `--components ...` |
 | `normal-load P list\|add\|set\|remove ...` | Pressures normal to a line, in 2D: `add [ID] --points ... [--hydrostatic [--reference-coordinate Y] \| --pressure S]` |
-| `boundary P list\|add\|set\|remove\|standard ...` | The boundary conditions: `add [ID] --face F\|--part KEY\|--line ...\|--point X Y --fixed\|--roller\|--fix AXIS ...` for a support, `add [ID] --domain\|... --water-pressure TYPE ...` for a water pressure; `standard` puts back the standard supports |
+| `boundary P list\|add\|set\|remove\|standard ...` | The boundary conditions: `add [ID] --face F\|--part KEY\|--line ...\|--point X Y --fixed\|--roller\|--fix AXIS ...` for a support, `add [ID] --domain\|... --water-pressure TYPE ...` for a water pressure, `add [ID] --face F\|--line ... --seepage` for a seepage face; `standard` puts back the standard supports |
 | `gravity P [on\|off]` | Show, or switch on or off, the self weight of every body (on in a new project) |
 | `parts P` | Every part by its key, and every water pressure condition: the names phases activate and deactivate |
 | `mesh P [--size S] [--order 1\|2]` | Mesh the model and report its size. `--size` and `--order` are kept in the project |
@@ -229,6 +229,7 @@ kratos-cli boundary pit.json add well --point 30 -20 --water-pressure Uniform --
 kratos-cli boundary pit.json add start --domain --water-pressure Phreatic_Multi_Line --phreatic-line 0 -1 60 -3 --initial
 kratos-cli boundary pit.json set head --inactive
 kratos-cli boundary pit.json remove well
+kratos-cli boundary dam.json add exit --seepage --line 1.62 0.48 1.62 4     # a seepage face
 ```
 
 - **Supports.** `--fixed` holds x, y and z; `--roller` holds the component normal to its
@@ -266,6 +267,15 @@ kratos-cli boundary pit.json remove well
   that couples the water pressure to the deformation the pressure is then free, and the
   export warns about it. A condition a phase names cannot be removed; take it out of
   those phases first. The supports are on in every phase.
+- **Seepage face.** `--seepage` makes a seepage face, where water may leave the soil in a
+  groundwater flow calculation: on `--face F`, or on `--line X Y X Y ...` along the soil's
+  outer boundary. It takes no other option. Kratos' seepage strategy decides, node by node
+  while it iterates, where the face is open: there the water pressure is zero and the water
+  flows out; elsewhere the face is closed, as a boundary with no condition is. It opens or
+  closes one node per iteration, so the export warns when a phase allows fewer iterations
+  than its seepage faces have nodes. A seepage line through the soil is refused, and a
+  deformation calculation leaves a seepage face out, with a warning. It is on in every
+  phase.
 - **Overlap.** The export writes the start values first, then the fixed conditions from the
   least to the most specific target: the whole soil, a part, a face, a line, a point. On a
   node two of them share, the more specific one wins. Two fixed conditions on the same kind
@@ -326,6 +336,8 @@ kratos-cli phases pit.json list
 - **Defaults.** A phase that is not given these options is a plastic calculation with
   at most 15 iterations, a tolerance of 1e-4, the displacements of the phase before kept,
   and a time interval of 0 days. `phases show ID` prints a phase's settings.
+- **A seepage face** (`boundary add --seepage`, above) makes a flow phase use Kratos'
+  seepage strategy, `newton_raphson_with_seepage`.
 - **The solver** of a deformation phase is the same for every phase and no option
   changes it: a static U-Pw analysis (displacements and water pressure), Newton-Raphson
   iterations on a residual criterion, one step per phase, and the direct

@@ -349,3 +349,58 @@ def test_check_warns_about_a_k0_phase_without_gravity(cli, dry):
 
     assert "is a K0 procedure, whose stresses come from the self weight" \
         in cli("check", dry).err
+
+
+# ── Seepage faces ───────────────────────────────────────────────────────────
+
+@pytest.mark.parametrize("argv, expected", [
+    (["--face", "right"], {"on": "face", "face": "right", "points": None}),
+    (["--line", "25", "-1", "25", "-6"],
+     {"on": "line", "face": None, "points": [(25.0, -1.0), (25.0, -6.0)]}),
+])
+def test_seepage_makes_a_seepage_face_on_a_face_or_a_line(cli, dry, argv, expected):
+    """`drafts.seepage_condition`, as the GUI's window and its seepage line tool make it."""
+    ran = cli("boundary", dry, "add", "--seepage", *argv)
+
+    assert ran.code == 0, ran.err
+    [record] = conditions(dry)
+    assert record.kind == "seepage" and record.id == "seepage_1"
+    assert {key: getattr(record, key) for key in expected} == expected
+    assert "water may leave the soil here" in ran.out
+
+
+@pytest.mark.parametrize("argv, message", [
+    (["--domain"], "a seepage face is on --face FACE or --line"),
+    (["--point", "1", "-1"], "a seepage face is on --face FACE or --line"),
+    (["--face", "top", "--water-pressure", "Uniform"], "--water-pressure do not belong"),
+    (["--face", "top", "--roller"], "--roller do not belong"),
+    (["--face", "top", "--reference-coordinate", "1"], "--reference-coordinate do not"),
+])
+def test_a_seepage_face_takes_a_face_or_a_line_and_nothing_else(cli, dry, argv, message):
+    ran = cli("boundary", dry, "add", "--seepage", *argv)
+
+    assert ran.code == 1
+    assert message in ran.err
+
+
+def test_set_moves_a_seepage_face_and_keeps_it_one(cli, dry):
+    assert cli("boundary", dry, "add", "exit", "--seepage", "--face", "right").code == 0
+
+    ran = cli("boundary", dry, "set", "exit", "--line", "25", "0", "25", "-4",
+              "--name", "Exit")
+    assert ran.code == 0, ran.err
+    [record] = conditions(dry)
+    assert (record.kind, record.on, record.face, record.name) == ("seepage", "line", None,
+                                                                  "Exit")
+    assert cli("boundary", dry, "set", "exit", "--fixed").code == 1
+    listed = cli("boundary", dry, "list").out
+    assert "exit  Exit  seepage on line (25, 0) -> (25, -4); water may leave the soil here" \
+        in listed
+
+
+def test_check_says_a_seepage_face_needs_a_flow_calculation(cli, dry):
+    assert cli("boundary", dry, "add", "--face", "bottom", "--fixed").code == 0
+    assert cli("boundary", dry, "add", "--seepage", "--face", "right").code == 0
+
+    ran = cli("check", dry)
+    assert "seepage condition 'Seepage face 1' is left out" in ran.err + ran.out

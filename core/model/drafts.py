@@ -24,7 +24,7 @@ from core.model import units
 from core.model.schemas import (Anchor, AnchorSection, BeamSection, Beam, Borehole, Interface,
                                 InterfaceSection, LineLoad, Material, Member, NormalLoad, Panel,
                                 PanelSection, PointLoad, Project, SoilLayer, SpaceAnchor,
-                                SurfaceLoad, WaterPressureCondition)
+                                SeepageCondition, SurfaceLoad, WaterPressureCondition)
 from core.model.schemas import (FACE_NORMALS, ConditionTarget, DisplacementCondition, Face,
                                 PressureType, standard_conditions as standard_set)
 
@@ -718,6 +718,35 @@ def water_pressure_condition(
         y_coordinates=None if y_coordinates is None else list(y_coordinates),
         z_coordinates=None if z_coordinates is None else list(z_coordinates),
         pressure_tension_cut_off=pressure_tension_cut_off, active=True)
+
+
+def seepage_condition(project: Project, on: ConditionTarget, *, face: Face | None = None,
+                      points=None, id: str | None = None,
+                      name: str | None = None) -> SeepageCondition:
+    """A new seepage face on `on`: `"face"` with `face`, or `"line"` with `points` (down
+    the right side of the section to half its depth when none are given: a seepage face
+    is on the soil's outer boundary, so the middle of the section is no place for one)."""
+    if on not in ("face", "line"):
+        raise DraftError("A seepage face is on a face of the model, or on a line along the "
+                         "soil's outer boundary.")
+    if on == "line" and project.dimension != 2:
+        raise DraftError("A seepage line is drawn in the 2D section; switch to 2D to "
+                         "create one, or put the seepage face on a face.")
+    drawn = None
+    if on == "line":
+        drawn = _right_side(project) if points is None else [(p[0], p[1]) for p in points]
+    taken = [c.id for c in project.boundary_conditions]
+    id, default_name = _named(id, taken, "seepage_", "Seepage face")
+    return SeepageCondition(id=id, name=name or default_name, kind="seepage",
+                            on="face" if on == "face" else "line", face=face, part=None,
+                            points=drawn, active=True)
+
+
+def _right_side(project: Project) -> list[tuple[float, float]]:
+    """Down the right side of the section to half its depth: where a new seepage line
+    goes for the user to move."""
+    d = project.domain
+    return [(d.x1, d.y_top), (d.x1, d.y_top - (d.y_top - d.y_bottom) * 0.5)]
 
 
 # Loads
