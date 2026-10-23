@@ -1,5 +1,5 @@
 """`boundary`: the conditions on the model's boundaries and soil, in the terminal
-(plan/active/boundary-conditions-plan.md, 2.7).
+(plan/done/boundary-conditions-plan.md, 2.7).
 
 Each new record is `core.model.drafts`' and each edit `core.session`'s, so the command
 line makes what the GUI's dialog makes. A support holds the components it is given; a
@@ -219,6 +219,36 @@ def test_a_new_project_lists_the_standard_supports(cli, tmp_path):
     assert "fixed_bottom  Fixed bottom  displacement on the bottom face; fixed in x y z" \
         in listed
     assert "roller_left  Roller left  displacement on the left face; fixed in x" in listed
+
+
+def test_a_2d_list_leaves_the_front_and_back_supports_out_as_the_gui_does(cli, tmp_path):
+    """They stay in the project for the solid model; the GUI's explorer, window and
+    command box leave them out too (`App.BoundaryConditions.heldBySection`)."""
+    from core.kratos import condition_checks
+    path = tmp_path / "new.json"
+    assert cli("new", path).code == 0
+    listed = cli("boundary", path, "list").out
+    assert "roller_front" not in listed and "roller_back" not in listed
+    assert listed.strip().endswith(condition_checks.SECTION_NOTE)
+    assert "roller_front" not in cli("show", path).out
+    assert [c.id for c in conditions(path)][-2:] == ["roller_front", "roller_back"]
+
+    payload = session.load(path).model_dump()
+    payload["dimension"] = 3
+    session.save(Project.model_validate(payload), path)
+    listed = cli("boundary", path, "list").out
+    assert "roller_front" in listed and condition_checks.SECTION_NOTE not in listed
+
+
+def test_the_note_under_a_2d_list_is_the_gui_s_word_for_word():
+    import re
+    from pathlib import Path
+    from core.kratos import condition_checks
+    source = (Path(__file__).resolve().parents[2] / "frontend" / "js"
+              / "boundary-conditions.js").read_text(encoding="utf-8")
+    found = re.search(r"var SECTION_NOTE = ((?:'[^']*'\s*\+?\s*)+);", source)
+    assert found, "SECTION_NOTE is not in boundary-conditions.js"
+    assert "".join(re.findall(r"'([^']*)'", found.group(1))) == condition_checks.SECTION_NOTE
 
 
 @pytest.mark.parametrize("argv, fixed", [

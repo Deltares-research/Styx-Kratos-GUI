@@ -233,7 +233,9 @@ kratos-cli boundary pit.json remove well
   vertical (x) or horizontal (y) line; `--fix x y` holds the components named. A 2D deck
   never holds z. A support is not put on the whole soil. A model with no support and no
   anchor can move as a rigid body; the export and `check` warn about it. `standard`
-  replaces the supports on the faces with the standard ones and keeps the rest.
+  replaces the supports on the faces with the standard ones and keeps the rest. In a 2D
+  model, `list`, `standard` and `show` leave out the front and back supports, as the GUI
+  does, and say so: they stay in the project for the solid model.
 - **Where.** One of `--domain` (the whole soil), `--face bottom|left|right|top|front|back`
   (front and back exist in 3D only), `--part KEY` (a soil part, as `parts` lists it: a layer
   `soil_<id>` with all its lifts, one body, or a custom part with a material), `--line X Y

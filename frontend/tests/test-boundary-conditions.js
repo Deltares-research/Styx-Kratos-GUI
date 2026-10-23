@@ -47,7 +47,11 @@
     T.eq(answer.body, null);
     var lines = answer.message.split('\n');
     T.eq(lines[0], 'fixed_bottom  fixed_bottom  displacement on the bottom face; fixed in x y z');
-    T.eq(lines[5], 'pore  pore  water pressure on the whole soil; hydrostatic about -2 m, fixed');
+    T.eq(lines[3], 'pore  pore  water pressure on the whole soil; hydrostatic about -2 m, fixed');
+    T.eq(lines.length, 5, 'a 2D list leaves the front and back supports out');
+    T.ok(/kept for the solid model/.test(lines[4]));
+    var solid = BC().command('boundary list', section(standard(), { dimension: 3 }));
+    T.ok(/roller_front/.test(solid.message) && !/kept for the solid/.test(solid.message));
     T.eq(BC().command('boundary', section([])).message, 'No boundary conditions yet.');
   });
 

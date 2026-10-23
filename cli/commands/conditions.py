@@ -23,6 +23,7 @@ from cli.terminal.files import add_project, add_writing, written
 from cli.terminal.output import Answer, CommandError
 from cli.terminal.words import action, coordinates, edited, existing, given, noun
 from core import session
+from core.kratos import condition_checks
 from core.model import drafts
 from core.model.schemas import FACES, Project
 
@@ -115,12 +116,22 @@ def _fields(parser: argparse.ArgumentParser) -> None:
 
 # ── list, add, set, remove ──────────────────────────────────────────────────
 
+def listed_lines(project: Project) -> list[str]:
+    """The conditions, one line each, as `boundary list` prints them and the GUI's
+    command box says them (`App.BoundaryConditions.command`): a 2D model's front and
+    back supports are left out, with a note that they are."""
+    records = condition_checks.listed(project)
+    lines = [line(record) for record in records] or ["No boundary conditions yet."]
+    if len(records) < len(project.boundary_conditions):
+        lines.append(condition_checks.SECTION_NOTE)
+    return lines
+
+
 def list_conditions(args: argparse.Namespace) -> Answer:
     project = session.load(args.project)
-    records = project.boundary_conditions
+    records = condition_checks.listed(project)
     return Answer(data=[record.model_dump(mode="json") for record in records],
-                  lines=[line(record) for record in records]
-                  or ["No boundary conditions yet."])
+                  lines=listed_lines(project))
 
 
 def add_condition(args: argparse.Namespace) -> Answer:
@@ -222,7 +233,7 @@ def standard_conditions(args: argparse.Namespace) -> Answer:
     project = session.standard_conditions(session.load(args.project))
     answer = edited(args, project, "the standard supports: the bottom fixed, the sides on "
                                    "rollers")
-    answer.lines += [line(record) for record in project.boundary_conditions]
+    answer.lines += listed_lines(project)
     return answer
 
 
@@ -336,4 +347,4 @@ def _xy(values) -> str:
 def summary(project: Project) -> list[dict]:
     """The conditions as `show` lists them: id, kind and where."""
     return [{"id": c.id, "kind": c.kind, "on": target(c), "active": c.active}
-            for c in project.boundary_conditions]
+            for c in condition_checks.listed(project)]

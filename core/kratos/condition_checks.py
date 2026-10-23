@@ -1,6 +1,6 @@
 """What the export says about a model's boundary conditions before it meshes anything.
 
-The warnings of plan/active/boundary-conditions-plan.md sec 2.3 that the project alone
+The warnings of plan/done/boundary-conditions-plan.md sec 2.3 that the project alone
 answers: a model nothing holds still, a water level nothing reads, a coupled soil with
 nothing to fix its water pressure, a condition on a face or a drawn line this dimension
 does not have, a K0 procedure with gravity off. The export (`core.kratos.writer`) adds them to its own, and
@@ -27,7 +27,7 @@ def warnings(project: Project) -> list[str]:
     """The project's boundary condition warnings, in the order the export says them."""
     out: list[str] = []
     for condition in project.boundary_conditions:
-        if condition.active and not _plane_strain_holds(project, condition):
+        if condition.active and not held_by_section(project, condition):
             left_out = _left_out(project, condition)
             if left_out:
                 out.append(left_out)
@@ -37,6 +37,17 @@ def warnings(project: Project) -> list[str]:
     out += _unused_water_level(project)
     out += _weightless_k0(project)
     return out
+
+
+SECTION_NOTE = ("The front and back supports are kept for the solid model; the 2D "
+                "section holds z by itself.")
+"""Said under a 2D list that leaves them out, in the CLI and in the GUI's command box
+alike."""
+
+
+def listed(project: Project) -> list:
+    """The conditions a list shows the user: all but the ones `held_by_section`."""
+    return [c for c in project.boundary_conditions if not held_by_section(project, c)]
 
 
 def written(project: Project, condition) -> bool:
@@ -62,11 +73,12 @@ def _left_out(project: Project, condition) -> str | None:
     return None
 
 
-def _plane_strain_holds(project: Project, condition) -> bool:
+def held_by_section(project: Project, condition) -> bool:
     """A displacement support on the front or back face of a 2D model: left out, and
     nothing to say about it, because the plane-strain section holds z everywhere. Every
     project starts with rollers there (`schemas.standard_conditions`), for the solid
-    model."""
+    model. Not listed either, by the CLI or the GUI (`listed`; its twin is
+    `App.BoundaryConditions.heldBySection`)."""
     return (isinstance(condition, DisplacementCondition) and project.dimension == 2
             and condition.on == "face" and condition.face not in SECTION_FACES)
 

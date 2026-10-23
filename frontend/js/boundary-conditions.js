@@ -323,6 +323,21 @@ App.BoundaryConditions = (function () {
       : 'Gravity is on: every body has its self weight.';
   }
 
+  /* Said under a 2D list that leaves the front and back supports out
+     (`condition_checks.SECTION_NOTE`). */
+  var SECTION_NOTE = 'The front and back supports are kept for the solid model; the 2D '
+    + 'section holds z by itself.';
+
+  /* The conditions a list shows, one line each, as `kratos-cli boundary list` prints
+     them (`cli/commands/conditions.py` `listed_lines`). */
+  function listedLines(project) {
+    var all = records(project);
+    var shown = all.filter(function (record) { return !heldBySection(record, project); });
+    var lines = shown.length ? shown.map(line) : ['No boundary conditions yet.'];
+    if (shown.length < all.length) lines.push(SECTION_NOTE);
+    return lines;
+  }
+
   /* ── The command box: `boundary` and `gravity` ───────────────────────── */
 
   /* `false` for a line that is not this command; otherwise `{ok, message, body}`,
@@ -345,9 +360,7 @@ App.BoundaryConditions = (function () {
     }
 
     if (!arg || arg === 'list') {
-      var lines = records(project).map(line);
-      return { ok: true, body: null,
-               message: lines.length ? lines.join('\n') : 'No boundary conditions yet.' };
+      return { ok: true, body: null, message: listedLines(project).join('\n') };
     }
     if (arg === 'standard') {
       return { ok: true, body: { boundary_conditions: withStandard(project) },
@@ -1034,7 +1047,8 @@ App.BoundaryConditions = (function () {
     standardConditions: standardConditions, withStandard: withStandard,
     soilPartKeys: soilPartKeys, facesOf: facesOf, heldBySection: heldBySection,
     waterIn: waterIn,
-    line: line, label: label, gravityLine: gravityLine, command: command,
+    line: line, listedLines: listedLines, label: label, gravityLine: gravityLine,
+    command: command,
     grid: grid, others: others, applyGrid: applyGrid, parsePoints: parsePoints,
     isConditionKey: isConditionKey, find: find,
     save: save, remove: remove, applyStandard: applyStandard, setGravity: setGravity,

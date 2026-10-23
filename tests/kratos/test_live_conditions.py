@@ -1,5 +1,5 @@
 """The boundary conditions and gravity, run in Kratos
-(plan/active/boundary-conditions-plan.md, step A4). Opt-in: `pytest --run-kratos`.
+(plan/done/boundary-conditions-plan.md, step A4). Opt-in: `pytest --run-kratos`.
 
 What running them found, 2026-10-23:
 
