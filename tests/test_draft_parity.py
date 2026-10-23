@@ -61,6 +61,7 @@ def projects() -> dict:
     return {
         "section": section,
         "section_kn": section_kn,
+        "dry": section.model_copy(update={"water": None, "boundary_conditions": []}),
         "section_pile_kn": section_pile_kn,
         "pile": excavation_project(staged=False),
         "solid": solid,
@@ -74,7 +75,7 @@ def projects() -> dict:
 PROJECT_FIELDS = {"name", "dimension", "unit_system", "section_offset", "domain",
                   "materials", "custom_parts", "beams", "beam_sections", "panel_sections",
                   "anchors", "anchor_sections", "interfaces", "interface_sections", "loads",
-                  "normal_loads"}
+                  "normal_loads", "water", "boundary_conditions"}
 """What the draft functions read of a project, which is all the fixture carries of one."""
 
 
@@ -146,6 +147,58 @@ def calls(models: dict) -> list[dict]:
          [_record(drafts.interface(models["section"]))], library(drafts.interface))
     call("a normal load down the middle", "NormalLoads.draft", "section", [],
          drafts.normal_load)
+    call("a hydrostatic normal load takes the water level", "NormalLoads.draft", "section",
+         [{"hydrostatic": True}], lambda p: drafts.normal_load(p, hydrostatic=True))
+    call("a hydrostatic normal load in a dry model has no level", "NormalLoads.draft",
+         "dry", [{"hydrostatic": True}], lambda p: drafts.normal_load(p, hydrostatic=True))
+    call("a support on a face, fixed", "BoundaryConditions.draftDisplacement", "section",
+         ["face", {"face": "left"}],
+         lambda p: drafts.displacement_condition(p, "face", face="left"))
+    call("a roller on the bottom", "BoundaryConditions.draftDisplacement", "section",
+         ["face", {"face": "bottom", "roller": True}],
+         lambda p: drafts.displacement_condition(p, "face", face="bottom", roller=True))
+    call("a roller along a vertical line", "BoundaryConditions.draftDisplacement",
+         "section", ["line", {"points": [[5, 0], [5, -5]], "roller": True}],
+         lambda p: drafts.displacement_condition(p, "line", points=[(5, 0), (5, -5)],
+                                                 roller=True))
+    call("a roller along a sloping line is refused", "BoundaryConditions.draftDisplacement",
+         "section", ["line", {"points": [[0, 0], [5, -5]], "roller": True}],
+         lambda p: drafts.displacement_condition(p, "line", points=[(0, 0), (5, -5)],
+                                                 roller=True))
+    call("a support point at the centre, holding y", "BoundaryConditions.draftDisplacement",
+         "section", ["point", {"fixed": [False, True, False]}],
+         lambda p: drafts.displacement_condition(p, "point", fixed=(False, True, False)))
+    call("a support on the whole soil is refused", "BoundaryConditions.draftDisplacement",
+         "section", ["domain", {}], lambda p: drafts.displacement_condition(p, "domain"))
+    call("a support line in the solid model is refused",
+         "BoundaryConditions.draftDisplacement", "solid", ["line", {}],
+         lambda p: drafts.displacement_condition(p, "line"))
+    call("a hydrostatic pressure takes the water level",
+         "BoundaryConditions.draftWaterPressure", "section", ["domain", {}],
+         lambda p: drafts.water_pressure_condition(p, "domain"))
+    call("a hydrostatic pressure with no level anywhere is refused",
+         "BoundaryConditions.draftWaterPressure", "dry", ["domain", {}],
+         lambda p: drafts.water_pressure_condition(p, "domain"))
+    call("a uniform pressure along a line, initial", "BoundaryConditions.draftWaterPressure",
+         "dry", ["line", {"fluid_pressure_type": "Uniform", "value": -5000,
+                          "is_fixed": False}],
+         lambda p: drafts.water_pressure_condition(p, "line", fluid_pressure_type="Uniform",
+                                                   value=-5000, is_fixed=False))
+    call("a phreatic line on a face", "BoundaryConditions.draftWaterPressure", "dry",
+         ["face", {"face": "right", "fluid_pressure_type": "Phreatic_Multi_Line",
+                   "x_coordinates": [0, 25], "y_coordinates": [-1, -2],
+                   "pressure_tension_cut_off": 100000}],
+         lambda p: drafts.water_pressure_condition(
+             p, "face", face="right", fluid_pressure_type="Phreatic_Multi_Line",
+             x_coordinates=[0, 25], y_coordinates=[-1, -2], pressure_tension_cut_off=100000))
+    call("a water pressure point in the solid model is refused",
+         "BoundaryConditions.draftWaterPressure", "solid", ["point", {}],
+         lambda p: drafts.water_pressure_condition(p, "point"))
+    call("the standard supports, with ids no condition has",
+         "BoundaryConditions.standardConditions", "section", [],
+         drafts.standard_conditions)
+    call("the standard supports of a project with none", "BoundaryConditions.standardConditions",
+         "dry", [], drafts.standard_conditions)
     call("a point load", "Loads.draftPoint", "section", [[5, 0]],
          lambda p: drafts.point_load(p, (5, 0)))
     call("a point load in kN", "Loads.draftPoint", "section_kn", [[5, 0]],
@@ -197,7 +250,10 @@ def test_every_structure_tool_is_called():
                       "Beams.draftMember", "Beams.sectionsFor", "Anchors.draft",
                       "Anchors.draftFromPoints", "Anchors.sectionsFor", "Interfaces.draft",
                       "Interfaces.sectionsFor", "NormalLoads.draft", "Loads.draftPoint",
-                      "Loads.draftFromPoints", "Loads.draftSurface"}
+                      "Loads.draftFromPoints", "Loads.draftSurface",
+                      "BoundaryConditions.draftDisplacement",
+                      "BoundaryConditions.draftWaterPressure",
+                      "BoundaryConditions.standardConditions"}
 
 
 if __name__ == "__main__" and "--write" in sys.argv:

@@ -25,6 +25,8 @@ from core.model.schemas import (Anchor, AnchorSection, BeamSection, Beam, Boreho
                                 InterfaceSection, LineLoad, Material, Member, NormalLoad, Panel,
                                 PanelSection, PointLoad, Project, SoilLayer, SpaceAnchor,
                                 SurfaceLoad, WaterPressureCondition)
+from core.model.schemas import (FACE_NORMALS, ConditionTarget, DisplacementCondition, Face,
+                                PressureType, standard_conditions as standard_set)
 
 SOIL_LAWS = {2: "GeoLinearElasticPlaneStrain2DLaw", 3: "GeoIncrementalLinearElastic3DLaw"}
 """The law a new soil starts with, by the project's dimension (`App.PropertySets.lawFor`)."""
@@ -600,10 +602,82 @@ def normal_load(project: Project, points=None, *, id: str | None = None,
 
 # Boundary conditions
 
+def displacement_condition(
+        project: Project, on: ConditionTarget, *, face: Face | None = None,
+        part: str | None = None, points=None, fixed: Sequence[bool] | None = None,
+        roller: bool = False, id: str | None = None,
+        name: str | None = None) -> DisplacementCondition:
+    """A new displacement condition on `on`: `"face"` with `face`, `"part"` with
+    `part`, or `"line"` / `"point"` with `points` (down the middle of the section, or at
+    its centre, when none are given). Fixed in x, y and z unless `fixed` says which.
+
+    `roller=True` holds only the component normal to the target: a face's own normal
+    (`schemas.FACE_NORMALS`), x for a vertical line and y for a horizontal one. Any other
+    target has no one normal, and says so."""
+    if on == "domain":
+        raise DraftError("A displacement condition on the whole soil would hold the whole "
+                         "model still; put it on a face, a part, a line or a point.")
+    if on in ("line", "point") and project.dimension != 2:
+        raise DraftError(f"A displacement {on} is drawn in the 2D section; switch to 2D "
+                         "to create one, or put the condition on a face or a part.")
+    drawn = None
+    if on == "line":
+        drawn = _middle(project) if points is None else [(p[0], p[1]) for p in points]
+    elif on == "point":
+        drawn = [_centre(project)] if points is None else [(p[0], p[1]) for p in points]
+    if roller:
+        held = [False, False, False]
+        held[_normal(on, face, drawn)] = True
+        fixed = held
+    elif fixed is None:
+        fixed = (True, True, True)
+    if len(fixed) != 3:
+        raise DraftError("A displacement condition holds x, y and z: give three values.")
+    taken = [c.id for c in project.boundary_conditions]
+    id, default_name = _named(id, taken, "displacement_", "Displacement")
+    # Every field given, `kind` too, so the record reads as the GUI's draft does, field
+    # for field (`tests/test_draft_parity.py` compares the fields set).
+    return DisplacementCondition(
+        id=id, name=name or default_name, kind="displacement", on=on, face=face,
+        part=part, points=drawn, fixed=(bool(fixed[0]), bool(fixed[1]), bool(fixed[2])),
+        active=True)
+
+
+def _normal(on: str, face: str | None, points) -> int:
+    """The axis a roller on this target holds."""
+    if on == "face" and face in FACE_NORMALS:
+        return FACE_NORMALS[face]
+    if on == "line" and points:
+        if all(abs(x - points[0][0]) < 1e-9 for x, _ in points):
+            return 0
+        if all(abs(y - points[0][1]) < 1e-9 for _, y in points):
+            return 1
+        raise DraftError("A roller holds the component normal to its line, and a sloping "
+                         "line has no x or y normal; give the components it fixes.")
+    raise DraftError(f"A roller on a {on} has no normal to hold; give the components it "
+                     "fixes.")
+
+
+def standard_conditions(
+        project: Project) -> list[DisplacementCondition | WaterPressureCondition]:
+    """The standard supports -- the bottom fixed, every side on rollers -- with ids no
+    other condition of `project` has (`schemas.standard_conditions`)."""
+    taken = [c.id for c in project.boundary_conditions]
+    out: list[DisplacementCondition | WaterPressureCondition] = []
+    for record in standard_set():
+        id = record.id
+        if id in taken:
+            id, _ = _named(None, taken, f"{record.id}_", "")
+        taken.append(id)
+        out.append(DisplacementCondition(**{**record.model_dump(), "id": id}))
+    return out
+
+
 def water_pressure_condition(
-        project: Project, on: str, *, face: str | None = None, part: str | None = None,
-        points=None, id: str | None = None, name: str | None = None,
-        fluid_pressure_type: str = "Hydrostatic", is_fixed: bool = True,
+        project: Project, on: ConditionTarget, *, face: Face | None = None,
+        part: str | None = None, points=None, id: str | None = None,
+        name: str | None = None, fluid_pressure_type: PressureType = "Hydrostatic",
+        is_fixed: bool = True,
         value: float = 0.0, reference_coordinate: float | None = None,
         x_coordinates: Sequence[float] | None = None,
         y_coordinates: Sequence[float] | None = None,
@@ -636,7 +710,8 @@ def water_pressure_condition(
     elif on == "point":
         drawn = [_centre(project)] if points is None else [(p[0], p[1]) for p in points]
     return WaterPressureCondition(
-        id=id, name=name or default_name, on=on, face=face, part=part, points=drawn,
+        id=id, name=name or default_name, kind="water_pressure", on=on, face=face,
+        part=part, points=drawn,
         fluid_pressure_type=fluid_pressure_type, is_fixed=is_fixed, value=value,
         reference_coordinate=reference_coordinate,
         x_coordinates=None if x_coordinates is None else list(x_coordinates),

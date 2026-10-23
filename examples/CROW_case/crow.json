@@ -347,6 +347,51 @@
   "water": null,
   "boundary_conditions": [
     {
+      "id": "fixed_bottom",
+      "name": "Fixed bottom",
+      "kind": "displacement",
+      "on": "face",
+      "face": "bottom",
+      "part": null,
+      "points": null,
+      "fixed": [
+        true,
+        true,
+        true
+      ],
+      "active": true
+    },
+    {
+      "id": "roller_left",
+      "name": "Roller left",
+      "kind": "displacement",
+      "on": "face",
+      "face": "left",
+      "part": null,
+      "points": null,
+      "fixed": [
+        true,
+        false,
+        false
+      ],
+      "active": true
+    },
+    {
+      "id": "roller_right",
+      "name": "Roller right",
+      "kind": "displacement",
+      "on": "face",
+      "face": "right",
+      "part": null,
+      "points": null,
+      "fixed": [
+        true,
+        false,
+        false
+      ],
+      "active": true
+    },
+    {
       "id": "pore_pressure",
       "name": "Pore pressure",
       "kind": "water_pressure",
@@ -365,6 +410,7 @@
       "active": true
     }
   ],
+  "gravity": true,
   "mesh": {
     "element_size": 5.0,
     "order": 2,

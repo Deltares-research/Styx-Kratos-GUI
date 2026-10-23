@@ -30,16 +30,16 @@
         "YOUNG_MODULUS": 20000000.0,
         "POISSON_RATIO": 0.3,
         "DENSITY_SOLID": 1834.8623853211009,
-        "POROSITY": 0.0,
-        "PERMEABILITY_XX": 1e-05,
-        "GEO_COHESION": 1000.0,
-        "GEO_FRICTION_ANGLE": 30.0,
         "DENSITY_WATER": 1019.367991845056,
+        "POROSITY": 0.0,
         "BULK_MODULUS_SOLID": 10000000000.0,
         "BULK_MODULUS_FLUID": 2200000000.0,
         "DYNAMIC_VISCOSITY": 0.001,
+        "PERMEABILITY_XX": 1e-05,
         "PERMEABILITY_YY": 1e-05,
         "PERMEABILITY_XY": 0.0,
+        "GEO_COHESION": 1000.0,
+        "GEO_FRICTION_ANGLE": 30.0,
         "K0_NC": 0.5
       },
       "tables": {},
@@ -68,19 +68,19 @@
     "x1": 1.0,
     "z0": 0.0,
     "z1": 1.0,
-    "floor_y": -1.0,
+    "floor_y": 9.0,
     "levels": [
-      -1.0
+      9.0
     ]
   },
   "wall": {
     "thickness": 0.5,
-    "top_y": 0.0,
-    "toe_y": -1.0
+    "top_y": 10.0,
+    "toe_y": 9.0
   },
   "struts": {
     "xs": [],
-    "y": 0.0,
+    "y": 10.0,
     "radius": 0.1,
     "overhang": 0.8,
     "waler_width": 0.5,
@@ -89,7 +89,7 @@
   },
   "anchor_rows": {
     "xs": [],
-    "head_y": 0.0,
+    "head_y": 10.0,
     "length": 1.0,
     "inclination_deg": 45.0,
     "radius": 0.1,
@@ -100,7 +100,7 @@
     "zs": [],
     "radius": 0.1,
     "length": 1.0,
-    "top_y": 0.0
+    "top_y": 10.0
   },
   "loads": [
     {
@@ -166,10 +166,58 @@
   "wells": {
     "positions": [],
     "radius": 0.1,
-    "top_y": 0.0,
+    "top_y": 10.0,
     "length": 1.0
   },
   "water": null,
+  "boundary_conditions": [
+    {
+      "id": "fixed_bottom",
+      "name": "Fixed bottom",
+      "kind": "displacement",
+      "on": "face",
+      "face": "bottom",
+      "part": null,
+      "points": null,
+      "fixed": [
+        true,
+        true,
+        true
+      ],
+      "active": true
+    },
+    {
+      "id": "roller_left",
+      "name": "Roller left",
+      "kind": "displacement",
+      "on": "face",
+      "face": "left",
+      "part": null,
+      "points": null,
+      "fixed": [
+        true,
+        false,
+        false
+      ],
+      "active": true
+    },
+    {
+      "id": "roller_right",
+      "name": "Roller right",
+      "kind": "displacement",
+      "on": "face",
+      "face": "right",
+      "part": null,
+      "points": null,
+      "fixed": [
+        true,
+        false,
+        false
+      ],
+      "active": true
+    }
+  ],
+  "gravity": true,
   "mesh": {
     "element_size": 1.0,
     "order": 1,

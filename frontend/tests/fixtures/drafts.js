@@ -351,6 +351,107 @@ window.DRAFTS_FIXTURE =
       "interface_sections": [],
       "interfaces": [],
       "normal_loads": [],
+      "water": {
+        "y": -1.5,
+        "margin": 3.0,
+        "thickness": 0.06,
+        "specific_weight": null
+      },
+      "boundary_conditions": [
+        {
+          "id": "fixed_bottom",
+          "name": "Fixed bottom",
+          "kind": "displacement",
+          "on": "face",
+          "face": "bottom",
+          "part": null,
+          "points": null,
+          "fixed": [
+            true,
+            true,
+            true
+          ],
+          "active": true
+        },
+        {
+          "id": "roller_left",
+          "name": "Roller left",
+          "kind": "displacement",
+          "on": "face",
+          "face": "left",
+          "part": null,
+          "points": null,
+          "fixed": [
+            true,
+            false,
+            false
+          ],
+          "active": true
+        },
+        {
+          "id": "roller_right",
+          "name": "Roller right",
+          "kind": "displacement",
+          "on": "face",
+          "face": "right",
+          "part": null,
+          "points": null,
+          "fixed": [
+            true,
+            false,
+            false
+          ],
+          "active": true
+        },
+        {
+          "id": "roller_front",
+          "name": "Roller front",
+          "kind": "displacement",
+          "on": "face",
+          "face": "front",
+          "part": null,
+          "points": null,
+          "fixed": [
+            false,
+            false,
+            true
+          ],
+          "active": true
+        },
+        {
+          "id": "roller_back",
+          "name": "Roller back",
+          "kind": "displacement",
+          "on": "face",
+          "face": "back",
+          "part": null,
+          "points": null,
+          "fixed": [
+            false,
+            false,
+            true
+          ],
+          "active": true
+        },
+        {
+          "id": "pore_pressure",
+          "name": "Pore pressure",
+          "kind": "water_pressure",
+          "on": "domain",
+          "face": null,
+          "part": null,
+          "points": null,
+          "fluid_pressure_type": "Hydrostatic",
+          "is_fixed": true,
+          "value": 0.0,
+          "reference_coordinate": -1.5,
+          "x_coordinates": null,
+          "y_coordinates": null,
+          "z_coordinates": null,
+          "pressure_tension_cut_off": 0.0,
+          "active": true
+        }
+      ],
       "custom_parts": []
     },
     "section_kn": {
@@ -579,6 +680,337 @@ window.DRAFTS_FIXTURE =
       "interface_sections": [],
       "interfaces": [],
       "normal_loads": [],
+      "water": {
+        "y": -1.5,
+        "margin": 3.0,
+        "thickness": 0.06,
+        "specific_weight": null
+      },
+      "boundary_conditions": [
+        {
+          "id": "fixed_bottom",
+          "name": "Fixed bottom",
+          "kind": "displacement",
+          "on": "face",
+          "face": "bottom",
+          "part": null,
+          "points": null,
+          "fixed": [
+            true,
+            true,
+            true
+          ],
+          "active": true
+        },
+        {
+          "id": "roller_left",
+          "name": "Roller left",
+          "kind": "displacement",
+          "on": "face",
+          "face": "left",
+          "part": null,
+          "points": null,
+          "fixed": [
+            true,
+            false,
+            false
+          ],
+          "active": true
+        },
+        {
+          "id": "roller_right",
+          "name": "Roller right",
+          "kind": "displacement",
+          "on": "face",
+          "face": "right",
+          "part": null,
+          "points": null,
+          "fixed": [
+            true,
+            false,
+            false
+          ],
+          "active": true
+        },
+        {
+          "id": "roller_front",
+          "name": "Roller front",
+          "kind": "displacement",
+          "on": "face",
+          "face": "front",
+          "part": null,
+          "points": null,
+          "fixed": [
+            false,
+            false,
+            true
+          ],
+          "active": true
+        },
+        {
+          "id": "roller_back",
+          "name": "Roller back",
+          "kind": "displacement",
+          "on": "face",
+          "face": "back",
+          "part": null,
+          "points": null,
+          "fixed": [
+            false,
+            false,
+            true
+          ],
+          "active": true
+        },
+        {
+          "id": "pore_pressure",
+          "name": "Pore pressure",
+          "kind": "water_pressure",
+          "on": "domain",
+          "face": null,
+          "part": null,
+          "points": null,
+          "fluid_pressure_type": "Hydrostatic",
+          "is_fixed": true,
+          "value": 0.0,
+          "reference_coordinate": -1.5,
+          "x_coordinates": null,
+          "y_coordinates": null,
+          "z_coordinates": null,
+          "pressure_tension_cut_off": 0.0,
+          "active": true
+        }
+      ],
+      "custom_parts": []
+    },
+    "dry": {
+      "name": "Deep excavation — Rotterdam Zuid",
+      "dimension": 2,
+      "unit_system": "SI",
+      "section_offset": 12.5,
+      "domain": {
+        "x0": 0.0,
+        "x1": 25.0,
+        "z0": 0.0,
+        "z1": 25.0,
+        "y_top": 0.0,
+        "y_bottom": -25.0
+      },
+      "materials": [
+        {
+          "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+            "YOUNG_MODULUS": 15000000.0,
+            "POISSON_RATIO": 0.3,
+            "DENSITY_SOLID": 1732.9255861365953,
+            "DENSITY_WATER": 1019.367991845056,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000000.0,
+            "BULK_MODULUS_FLUID": 2200000000.0,
+            "DYNAMIC_VISCOSITY": 0.001,
+            "PERMEABILITY_XX": 1.1574074074074073e-05,
+            "PERMEABILITY_YY": 1.1574074074074073e-05,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 1.1574074074074073e-05,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0,
+            "GEO_COHESION": 1000.0,
+            "GEO_FRICTION_ANGLE": 30.0
+          },
+          "tables": {},
+          "id": "m1",
+          "name": "Fill",
+          "color": "#d8c48a",
+          "r_inter": 0.7,
+          "interface_permeability": "Neutral"
+        },
+        {
+          "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+            "YOUNG_MODULUS": 25000000.0,
+            "POISSON_RATIO": 0.28,
+            "DENSITY_SOLID": 1834.8623853211009,
+            "DENSITY_WATER": 1019.367991845056,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000000.0,
+            "BULK_MODULUS_FLUID": 2200000000.0,
+            "DYNAMIC_VISCOSITY": 0.001,
+            "PERMEABILITY_XX": 1.736111111111111e-05,
+            "PERMEABILITY_YY": 1.736111111111111e-05,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 1.736111111111111e-05,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0,
+            "GEO_COHESION": 500.0,
+            "GEO_FRICTION_ANGLE": 32.0
+          },
+          "tables": {},
+          "id": "m2",
+          "name": "Sand, loose",
+          "color": "#c4a86a",
+          "r_inter": 0.7,
+          "interface_permeability": "Neutral"
+        },
+        {
+          "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
+            "YOUNG_MODULUS": 4000000.0,
+            "POISSON_RATIO": 0.35,
+            "DENSITY_SOLID": 1529.051987767584,
+            "DENSITY_WATER": 1019.367991845056,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000000.0,
+            "BULK_MODULUS_FLUID": 2200000000.0,
+            "DYNAMIC_VISCOSITY": 0.001,
+            "PERMEABILITY_XX": 1.1574074074074074e-09,
+            "PERMEABILITY_YY": 1.1574074074074074e-09,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 1.1574074074074074e-09,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0,
+            "GEO_COHESION": 5000.0,
+            "GEO_FRICTION_ANGLE": 22.0
+          },
+          "tables": {},
+          "id": "m3",
+          "name": "Clay, soft",
+          "color": "#8fa86b",
+          "r_inter": 0.5,
+          "interface_permeability": "Impermeable"
+        },
+        {
+          "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
+            "YOUNG_MODULUS": 12000000.0,
+            "POISSON_RATIO": 0.33,
+            "DENSITY_SOLID": 1783.893985728848,
+            "DENSITY_WATER": 1019.367991845056,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000000.0,
+            "BULK_MODULUS_FLUID": 2200000000.0,
+            "DYNAMIC_VISCOSITY": 0.001,
+            "PERMEABILITY_XX": 5.787037037037037e-09,
+            "PERMEABILITY_YY": 5.787037037037037e-09,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 5.787037037037037e-09,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0,
+            "GEO_COHESION": 15000.0,
+            "GEO_FRICTION_ANGLE": 25.0
+          },
+          "tables": {},
+          "id": "m4",
+          "name": "Clay, stiff",
+          "color": "#6f8fa8",
+          "r_inter": 0.55,
+          "interface_permeability": "Impermeable"
+        },
+        {
+          "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+            "YOUNG_MODULUS": 45000000.0,
+            "POISSON_RATIO": 0.25,
+            "DENSITY_SOLID": 1936.7991845056065,
+            "DENSITY_WATER": 1019.367991845056,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000000.0,
+            "BULK_MODULUS_FLUID": 2200000000.0,
+            "DYNAMIC_VISCOSITY": 0.001,
+            "PERMEABILITY_XX": 5.787037037037037e-05,
+            "PERMEABILITY_YY": 5.787037037037037e-05,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 5.787037037037037e-05,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0,
+            "GEO_COHESION": 0.0,
+            "GEO_FRICTION_ANGLE": 36.0
+          },
+          "tables": {},
+          "id": "m5",
+          "name": "Sand, dense",
+          "color": "#b08a6a",
+          "r_inter": 0.75,
+          "interface_permeability": "Neutral"
+        },
+        {
+          "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+            "YOUNG_MODULUS": 2000000000.0,
+            "POISSON_RATIO": 0.2,
+            "DENSITY_SOLID": 2446.4831804281343,
+            "DENSITY_WATER": 1019.367991845056,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000000.0,
+            "BULK_MODULUS_FLUID": 2200000000.0,
+            "DYNAMIC_VISCOSITY": 0.001,
+            "PERMEABILITY_XX": 0.0,
+            "PERMEABILITY_YY": 0.0,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 0.0,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0
+          },
+          "tables": {},
+          "id": "m6",
+          "name": "Bedrock",
+          "color": "#8d8d99",
+          "r_inter": 1.0,
+          "interface_permeability": "Impermeable"
+        }
+      ],
+      "loads": [
+        {
+          "id": "load",
+          "name": "SurfaceLoad_1",
+          "kind": "surface",
+          "x0": 1.0,
+          "x1": 10.0,
+          "z0": 14.0,
+          "z1": 26.0,
+          "y": null,
+          "thickness": 0.25,
+          "components": [
+            0.0,
+            -20000.0,
+            0.0
+          ],
+          "distribution": "Uniform",
+          "active": true,
+          "derived_from": null
+        },
+        {
+          "id": "load_2d",
+          "name": "LineLoad_1",
+          "kind": "line",
+          "x0": 1.0,
+          "x1": 10.0,
+          "y": 0.0,
+          "thickness": 0.25,
+          "components": [
+            0.0,
+            -20000.0
+          ],
+          "distribution": "Uniform",
+          "active": true,
+          "derived_from": "load"
+        }
+      ],
+      "beam_sections": [],
+      "panel_sections": [],
+      "beams": [],
+      "anchor_sections": [],
+      "anchors": [],
+      "interface_sections": [],
+      "interfaces": [],
+      "normal_loads": [],
+      "water": null,
+      "boundary_conditions": [],
       "custom_parts": []
     },
     "section_pile_kn": {
@@ -841,6 +1273,107 @@ window.DRAFTS_FIXTURE =
       "interface_sections": [],
       "interfaces": [],
       "normal_loads": [],
+      "water": {
+        "y": -1.5,
+        "margin": 3.0,
+        "thickness": 0.06,
+        "specific_weight": null
+      },
+      "boundary_conditions": [
+        {
+          "id": "fixed_bottom",
+          "name": "Fixed bottom",
+          "kind": "displacement",
+          "on": "face",
+          "face": "bottom",
+          "part": null,
+          "points": null,
+          "fixed": [
+            true,
+            true,
+            true
+          ],
+          "active": true
+        },
+        {
+          "id": "roller_left",
+          "name": "Roller left",
+          "kind": "displacement",
+          "on": "face",
+          "face": "left",
+          "part": null,
+          "points": null,
+          "fixed": [
+            true,
+            false,
+            false
+          ],
+          "active": true
+        },
+        {
+          "id": "roller_right",
+          "name": "Roller right",
+          "kind": "displacement",
+          "on": "face",
+          "face": "right",
+          "part": null,
+          "points": null,
+          "fixed": [
+            true,
+            false,
+            false
+          ],
+          "active": true
+        },
+        {
+          "id": "roller_front",
+          "name": "Roller front",
+          "kind": "displacement",
+          "on": "face",
+          "face": "front",
+          "part": null,
+          "points": null,
+          "fixed": [
+            false,
+            false,
+            true
+          ],
+          "active": true
+        },
+        {
+          "id": "roller_back",
+          "name": "Roller back",
+          "kind": "displacement",
+          "on": "face",
+          "face": "back",
+          "part": null,
+          "points": null,
+          "fixed": [
+            false,
+            false,
+            true
+          ],
+          "active": true
+        },
+        {
+          "id": "pore_pressure",
+          "name": "Pore pressure",
+          "kind": "water_pressure",
+          "on": "domain",
+          "face": null,
+          "part": null,
+          "points": null,
+          "fluid_pressure_type": "Hydrostatic",
+          "is_fixed": true,
+          "value": 0.0,
+          "reference_coordinate": -1.5,
+          "x_coordinates": null,
+          "y_coordinates": null,
+          "z_coordinates": null,
+          "pressure_tension_cut_off": 0.0,
+          "active": true
+        }
+      ],
       "custom_parts": []
     },
     "pile": {
@@ -1096,6 +1629,107 @@ window.DRAFTS_FIXTURE =
           "active": true
         }
       ],
+      "water": {
+        "y": -1.0,
+        "margin": 3.0,
+        "thickness": 0.06,
+        "specific_weight": null
+      },
+      "boundary_conditions": [
+        {
+          "id": "fixed_bottom",
+          "name": "Fixed bottom",
+          "kind": "displacement",
+          "on": "face",
+          "face": "bottom",
+          "part": null,
+          "points": null,
+          "fixed": [
+            true,
+            true,
+            true
+          ],
+          "active": true
+        },
+        {
+          "id": "roller_left",
+          "name": "Roller left",
+          "kind": "displacement",
+          "on": "face",
+          "face": "left",
+          "part": null,
+          "points": null,
+          "fixed": [
+            true,
+            false,
+            false
+          ],
+          "active": true
+        },
+        {
+          "id": "roller_right",
+          "name": "Roller right",
+          "kind": "displacement",
+          "on": "face",
+          "face": "right",
+          "part": null,
+          "points": null,
+          "fixed": [
+            true,
+            false,
+            false
+          ],
+          "active": true
+        },
+        {
+          "id": "roller_front",
+          "name": "Roller front",
+          "kind": "displacement",
+          "on": "face",
+          "face": "front",
+          "part": null,
+          "points": null,
+          "fixed": [
+            false,
+            false,
+            true
+          ],
+          "active": true
+        },
+        {
+          "id": "roller_back",
+          "name": "Roller back",
+          "kind": "displacement",
+          "on": "face",
+          "face": "back",
+          "part": null,
+          "points": null,
+          "fixed": [
+            false,
+            false,
+            true
+          ],
+          "active": true
+        },
+        {
+          "id": "pore_pressure",
+          "name": "Pore pressure",
+          "kind": "water_pressure",
+          "on": "domain",
+          "face": null,
+          "part": null,
+          "points": null,
+          "fluid_pressure_type": "Hydrostatic",
+          "is_fixed": true,
+          "value": 0.0,
+          "reference_coordinate": -1.0,
+          "x_coordinates": null,
+          "y_coordinates": null,
+          "z_coordinates": null,
+          "pressure_tension_cut_off": 0.0,
+          "active": true
+        }
+      ],
       "custom_parts": []
     },
     "solid": {
@@ -1308,6 +1942,107 @@ window.DRAFTS_FIXTURE =
       "interface_sections": [],
       "interfaces": [],
       "normal_loads": [],
+      "water": {
+        "y": -1.5,
+        "margin": 3.0,
+        "thickness": 0.06,
+        "specific_weight": null
+      },
+      "boundary_conditions": [
+        {
+          "id": "fixed_bottom",
+          "name": "Fixed bottom",
+          "kind": "displacement",
+          "on": "face",
+          "face": "bottom",
+          "part": null,
+          "points": null,
+          "fixed": [
+            true,
+            true,
+            true
+          ],
+          "active": true
+        },
+        {
+          "id": "roller_left",
+          "name": "Roller left",
+          "kind": "displacement",
+          "on": "face",
+          "face": "left",
+          "part": null,
+          "points": null,
+          "fixed": [
+            true,
+            false,
+            false
+          ],
+          "active": true
+        },
+        {
+          "id": "roller_right",
+          "name": "Roller right",
+          "kind": "displacement",
+          "on": "face",
+          "face": "right",
+          "part": null,
+          "points": null,
+          "fixed": [
+            true,
+            false,
+            false
+          ],
+          "active": true
+        },
+        {
+          "id": "roller_front",
+          "name": "Roller front",
+          "kind": "displacement",
+          "on": "face",
+          "face": "front",
+          "part": null,
+          "points": null,
+          "fixed": [
+            false,
+            false,
+            true
+          ],
+          "active": true
+        },
+        {
+          "id": "roller_back",
+          "name": "Roller back",
+          "kind": "displacement",
+          "on": "face",
+          "face": "back",
+          "part": null,
+          "points": null,
+          "fixed": [
+            false,
+            false,
+            true
+          ],
+          "active": true
+        },
+        {
+          "id": "pore_pressure",
+          "name": "Pore pressure",
+          "kind": "water_pressure",
+          "on": "domain",
+          "face": null,
+          "part": null,
+          "points": null,
+          "fluid_pressure_type": "Hydrostatic",
+          "is_fixed": true,
+          "value": 0.0,
+          "reference_coordinate": -1.5,
+          "x_coordinates": null,
+          "y_coordinates": null,
+          "z_coordinates": null,
+          "pressure_tension_cut_off": 0.0,
+          "active": true
+        }
+      ],
       "custom_parts": []
     },
     "solid_wall": {
@@ -1554,6 +2289,107 @@ window.DRAFTS_FIXTURE =
       "interface_sections": [],
       "interfaces": [],
       "normal_loads": [],
+      "water": {
+        "y": -1.5,
+        "margin": 3.0,
+        "thickness": 0.06,
+        "specific_weight": null
+      },
+      "boundary_conditions": [
+        {
+          "id": "fixed_bottom",
+          "name": "Fixed bottom",
+          "kind": "displacement",
+          "on": "face",
+          "face": "bottom",
+          "part": null,
+          "points": null,
+          "fixed": [
+            true,
+            true,
+            true
+          ],
+          "active": true
+        },
+        {
+          "id": "roller_left",
+          "name": "Roller left",
+          "kind": "displacement",
+          "on": "face",
+          "face": "left",
+          "part": null,
+          "points": null,
+          "fixed": [
+            true,
+            false,
+            false
+          ],
+          "active": true
+        },
+        {
+          "id": "roller_right",
+          "name": "Roller right",
+          "kind": "displacement",
+          "on": "face",
+          "face": "right",
+          "part": null,
+          "points": null,
+          "fixed": [
+            true,
+            false,
+            false
+          ],
+          "active": true
+        },
+        {
+          "id": "roller_front",
+          "name": "Roller front",
+          "kind": "displacement",
+          "on": "face",
+          "face": "front",
+          "part": null,
+          "points": null,
+          "fixed": [
+            false,
+            false,
+            true
+          ],
+          "active": true
+        },
+        {
+          "id": "roller_back",
+          "name": "Roller back",
+          "kind": "displacement",
+          "on": "face",
+          "face": "back",
+          "part": null,
+          "points": null,
+          "fixed": [
+            false,
+            false,
+            true
+          ],
+          "active": true
+        },
+        {
+          "id": "pore_pressure",
+          "name": "Pore pressure",
+          "kind": "water_pressure",
+          "on": "domain",
+          "face": null,
+          "part": null,
+          "points": null,
+          "fluid_pressure_type": "Hydrostatic",
+          "is_fixed": true,
+          "value": 0.0,
+          "reference_coordinate": -1.5,
+          "x_coordinates": null,
+          "y_coordinates": null,
+          "z_coordinates": null,
+          "pressure_tension_cut_off": 0.0,
+          "active": true
+        }
+      ],
       "custom_parts": []
     },
     "solid_member": {
@@ -1802,6 +2638,107 @@ window.DRAFTS_FIXTURE =
       "interface_sections": [],
       "interfaces": [],
       "normal_loads": [],
+      "water": {
+        "y": -1.5,
+        "margin": 3.0,
+        "thickness": 0.06,
+        "specific_weight": null
+      },
+      "boundary_conditions": [
+        {
+          "id": "fixed_bottom",
+          "name": "Fixed bottom",
+          "kind": "displacement",
+          "on": "face",
+          "face": "bottom",
+          "part": null,
+          "points": null,
+          "fixed": [
+            true,
+            true,
+            true
+          ],
+          "active": true
+        },
+        {
+          "id": "roller_left",
+          "name": "Roller left",
+          "kind": "displacement",
+          "on": "face",
+          "face": "left",
+          "part": null,
+          "points": null,
+          "fixed": [
+            true,
+            false,
+            false
+          ],
+          "active": true
+        },
+        {
+          "id": "roller_right",
+          "name": "Roller right",
+          "kind": "displacement",
+          "on": "face",
+          "face": "right",
+          "part": null,
+          "points": null,
+          "fixed": [
+            true,
+            false,
+            false
+          ],
+          "active": true
+        },
+        {
+          "id": "roller_front",
+          "name": "Roller front",
+          "kind": "displacement",
+          "on": "face",
+          "face": "front",
+          "part": null,
+          "points": null,
+          "fixed": [
+            false,
+            false,
+            true
+          ],
+          "active": true
+        },
+        {
+          "id": "roller_back",
+          "name": "Roller back",
+          "kind": "displacement",
+          "on": "face",
+          "face": "back",
+          "part": null,
+          "points": null,
+          "fixed": [
+            false,
+            false,
+            true
+          ],
+          "active": true
+        },
+        {
+          "id": "pore_pressure",
+          "name": "Pore pressure",
+          "kind": "water_pressure",
+          "on": "domain",
+          "face": null,
+          "part": null,
+          "points": null,
+          "fluid_pressure_type": "Hydrostatic",
+          "is_fixed": true,
+          "value": 0.0,
+          "reference_coordinate": -1.5,
+          "x_coordinates": null,
+          "y_coordinates": null,
+          "z_coordinates": null,
+          "pressure_tension_cut_off": 0.0,
+          "active": true
+        }
+      ],
       "custom_parts": []
     }
   },
@@ -2392,6 +3329,536 @@ window.DRAFTS_FIXTURE =
         "pressure": 0.0,
         "active": true
       }
+    },
+    {
+      "title": "a hydrostatic normal load takes the water level",
+      "call": "NormalLoads.draft",
+      "project": "section",
+      "args": [
+        {
+          "hydrostatic": true
+        }
+      ],
+      "result": {
+        "id": "normalload_1",
+        "name": "Normal load 1",
+        "kind": "normal",
+        "points": [
+          [
+            12.5,
+            0.0
+          ],
+          [
+            12.5,
+            -12.5
+          ]
+        ],
+        "fluid_pressure_type": "Hydrostatic",
+        "pressure": 0.0,
+        "reference_coordinate": -1.5,
+        "active": true
+      }
+    },
+    {
+      "title": "a hydrostatic normal load in a dry model has no level",
+      "call": "NormalLoads.draft",
+      "project": "dry",
+      "args": [
+        {
+          "hydrostatic": true
+        }
+      ],
+      "result": {
+        "id": "normalload_1",
+        "name": "Normal load 1",
+        "kind": "normal",
+        "points": [
+          [
+            12.5,
+            0.0
+          ],
+          [
+            12.5,
+            -12.5
+          ]
+        ],
+        "fluid_pressure_type": "Hydrostatic",
+        "pressure": 0.0,
+        "active": true
+      }
+    },
+    {
+      "title": "a support on a face, fixed",
+      "call": "BoundaryConditions.draftDisplacement",
+      "project": "section",
+      "args": [
+        "face",
+        {
+          "face": "left"
+        }
+      ],
+      "result": {
+        "id": "displacement_1",
+        "name": "Displacement 1",
+        "kind": "displacement",
+        "on": "face",
+        "face": "left",
+        "part": null,
+        "points": null,
+        "fixed": [
+          true,
+          true,
+          true
+        ],
+        "active": true
+      }
+    },
+    {
+      "title": "a roller on the bottom",
+      "call": "BoundaryConditions.draftDisplacement",
+      "project": "section",
+      "args": [
+        "face",
+        {
+          "face": "bottom",
+          "roller": true
+        }
+      ],
+      "result": {
+        "id": "displacement_1",
+        "name": "Displacement 1",
+        "kind": "displacement",
+        "on": "face",
+        "face": "bottom",
+        "part": null,
+        "points": null,
+        "fixed": [
+          false,
+          true,
+          false
+        ],
+        "active": true
+      }
+    },
+    {
+      "title": "a roller along a vertical line",
+      "call": "BoundaryConditions.draftDisplacement",
+      "project": "section",
+      "args": [
+        "line",
+        {
+          "points": [
+            [
+              5,
+              0
+            ],
+            [
+              5,
+              -5
+            ]
+          ],
+          "roller": true
+        }
+      ],
+      "result": {
+        "id": "displacement_1",
+        "name": "Displacement 1",
+        "kind": "displacement",
+        "on": "line",
+        "face": null,
+        "part": null,
+        "points": [
+          [
+            5.0,
+            0.0
+          ],
+          [
+            5.0,
+            -5.0
+          ]
+        ],
+        "fixed": [
+          true,
+          false,
+          false
+        ],
+        "active": true
+      }
+    },
+    {
+      "title": "a roller along a sloping line is refused",
+      "call": "BoundaryConditions.draftDisplacement",
+      "project": "section",
+      "args": [
+        "line",
+        {
+          "points": [
+            [
+              0,
+              0
+            ],
+            [
+              5,
+              -5
+            ]
+          ],
+          "roller": true
+        }
+      ],
+      "error": "A roller holds the component normal to its line, and a sloping line has no x or y normal; give the components it fixes."
+    },
+    {
+      "title": "a support point at the centre, holding y",
+      "call": "BoundaryConditions.draftDisplacement",
+      "project": "section",
+      "args": [
+        "point",
+        {
+          "fixed": [
+            false,
+            true,
+            false
+          ]
+        }
+      ],
+      "result": {
+        "id": "displacement_1",
+        "name": "Displacement 1",
+        "kind": "displacement",
+        "on": "point",
+        "face": null,
+        "part": null,
+        "points": [
+          [
+            12.5,
+            -12.5
+          ]
+        ],
+        "fixed": [
+          false,
+          true,
+          false
+        ],
+        "active": true
+      }
+    },
+    {
+      "title": "a support on the whole soil is refused",
+      "call": "BoundaryConditions.draftDisplacement",
+      "project": "section",
+      "args": [
+        "domain",
+        {}
+      ],
+      "error": "A displacement condition on the whole soil would hold the whole model still; put it on a face, a part, a line or a point."
+    },
+    {
+      "title": "a support line in the solid model is refused",
+      "call": "BoundaryConditions.draftDisplacement",
+      "project": "solid",
+      "args": [
+        "line",
+        {}
+      ],
+      "error": "A displacement line is drawn in the 2D section; switch to 2D to create one, or put the condition on a face or a part."
+    },
+    {
+      "title": "a hydrostatic pressure takes the water level",
+      "call": "BoundaryConditions.draftWaterPressure",
+      "project": "section",
+      "args": [
+        "domain",
+        {}
+      ],
+      "result": {
+        "id": "waterpressure_1",
+        "name": "Water pressure 1",
+        "kind": "water_pressure",
+        "on": "domain",
+        "face": null,
+        "part": null,
+        "points": null,
+        "fluid_pressure_type": "Hydrostatic",
+        "is_fixed": true,
+        "value": 0.0,
+        "reference_coordinate": -1.5,
+        "x_coordinates": null,
+        "y_coordinates": null,
+        "z_coordinates": null,
+        "pressure_tension_cut_off": 0.0,
+        "active": true
+      }
+    },
+    {
+      "title": "a hydrostatic pressure with no level anywhere is refused",
+      "call": "BoundaryConditions.draftWaterPressure",
+      "project": "dry",
+      "args": [
+        "domain",
+        {}
+      ],
+      "error": "A hydrostatic water pressure needs the level where its pressure is zero: give its reference_coordinate. For a dry model, add no water pressure condition, or a Uniform one with value 0."
+    },
+    {
+      "title": "a uniform pressure along a line, initial",
+      "call": "BoundaryConditions.draftWaterPressure",
+      "project": "dry",
+      "args": [
+        "line",
+        {
+          "fluid_pressure_type": "Uniform",
+          "value": -5000,
+          "is_fixed": false
+        }
+      ],
+      "result": {
+        "id": "waterpressure_1",
+        "name": "Water pressure 1",
+        "kind": "water_pressure",
+        "on": "line",
+        "face": null,
+        "part": null,
+        "points": [
+          [
+            12.5,
+            0.0
+          ],
+          [
+            12.5,
+            -12.5
+          ]
+        ],
+        "fluid_pressure_type": "Uniform",
+        "is_fixed": false,
+        "value": -5000.0,
+        "reference_coordinate": null,
+        "x_coordinates": null,
+        "y_coordinates": null,
+        "z_coordinates": null,
+        "pressure_tension_cut_off": 0.0,
+        "active": true
+      }
+    },
+    {
+      "title": "a phreatic line on a face",
+      "call": "BoundaryConditions.draftWaterPressure",
+      "project": "dry",
+      "args": [
+        "face",
+        {
+          "face": "right",
+          "fluid_pressure_type": "Phreatic_Multi_Line",
+          "x_coordinates": [
+            0,
+            25
+          ],
+          "y_coordinates": [
+            -1,
+            -2
+          ],
+          "pressure_tension_cut_off": 100000
+        }
+      ],
+      "result": {
+        "id": "waterpressure_1",
+        "name": "Water pressure 1",
+        "kind": "water_pressure",
+        "on": "face",
+        "face": "right",
+        "part": null,
+        "points": null,
+        "fluid_pressure_type": "Phreatic_Multi_Line",
+        "is_fixed": true,
+        "value": 0.0,
+        "reference_coordinate": null,
+        "x_coordinates": [
+          0.0,
+          25.0
+        ],
+        "y_coordinates": [
+          -1.0,
+          -2.0
+        ],
+        "z_coordinates": null,
+        "pressure_tension_cut_off": 100000.0,
+        "active": true
+      }
+    },
+    {
+      "title": "a water pressure point in the solid model is refused",
+      "call": "BoundaryConditions.draftWaterPressure",
+      "project": "solid",
+      "args": [
+        "point",
+        {}
+      ],
+      "error": "A water pressure point is drawn in the 2D section; switch to 2D to create one, or put the condition on the whole soil, a face or a part."
+    },
+    {
+      "title": "the standard supports, with ids no condition has",
+      "call": "BoundaryConditions.standardConditions",
+      "project": "section",
+      "args": [],
+      "result": [
+        {
+          "id": "fixed_bottom_1",
+          "name": "Fixed bottom",
+          "kind": "displacement",
+          "on": "face",
+          "face": "bottom",
+          "part": null,
+          "points": null,
+          "fixed": [
+            true,
+            true,
+            true
+          ],
+          "active": true
+        },
+        {
+          "id": "roller_left_1",
+          "name": "Roller left",
+          "kind": "displacement",
+          "on": "face",
+          "face": "left",
+          "part": null,
+          "points": null,
+          "fixed": [
+            true,
+            false,
+            false
+          ],
+          "active": true
+        },
+        {
+          "id": "roller_right_1",
+          "name": "Roller right",
+          "kind": "displacement",
+          "on": "face",
+          "face": "right",
+          "part": null,
+          "points": null,
+          "fixed": [
+            true,
+            false,
+            false
+          ],
+          "active": true
+        },
+        {
+          "id": "roller_front_1",
+          "name": "Roller front",
+          "kind": "displacement",
+          "on": "face",
+          "face": "front",
+          "part": null,
+          "points": null,
+          "fixed": [
+            false,
+            false,
+            true
+          ],
+          "active": true
+        },
+        {
+          "id": "roller_back_1",
+          "name": "Roller back",
+          "kind": "displacement",
+          "on": "face",
+          "face": "back",
+          "part": null,
+          "points": null,
+          "fixed": [
+            false,
+            false,
+            true
+          ],
+          "active": true
+        }
+      ]
+    },
+    {
+      "title": "the standard supports of a project with none",
+      "call": "BoundaryConditions.standardConditions",
+      "project": "dry",
+      "args": [],
+      "result": [
+        {
+          "id": "fixed_bottom",
+          "name": "Fixed bottom",
+          "kind": "displacement",
+          "on": "face",
+          "face": "bottom",
+          "part": null,
+          "points": null,
+          "fixed": [
+            true,
+            true,
+            true
+          ],
+          "active": true
+        },
+        {
+          "id": "roller_left",
+          "name": "Roller left",
+          "kind": "displacement",
+          "on": "face",
+          "face": "left",
+          "part": null,
+          "points": null,
+          "fixed": [
+            true,
+            false,
+            false
+          ],
+          "active": true
+        },
+        {
+          "id": "roller_right",
+          "name": "Roller right",
+          "kind": "displacement",
+          "on": "face",
+          "face": "right",
+          "part": null,
+          "points": null,
+          "fixed": [
+            true,
+            false,
+            false
+          ],
+          "active": true
+        },
+        {
+          "id": "roller_front",
+          "name": "Roller front",
+          "kind": "displacement",
+          "on": "face",
+          "face": "front",
+          "part": null,
+          "points": null,
+          "fixed": [
+            false,
+            false,
+            true
+          ],
+          "active": true
+        },
+        {
+          "id": "roller_back",
+          "name": "Roller back",
+          "kind": "displacement",
+          "on": "face",
+          "face": "back",
+          "part": null,
+          "points": null,
+          "fixed": [
+            false,
+            false,
+            true
+          ],
+          "active": true
+        }
+      ]
     },
     {
       "title": "a point load",

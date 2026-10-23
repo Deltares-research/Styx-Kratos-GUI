@@ -37,8 +37,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from core.model.schemas import (  # noqa: E402
-    Anchor, AnchorRows, AnchorSection, Beam, BeamSection, Borehole, BoxRefinement, Domain,
-    Excavation, Interface, InterfaceSection, LineLoad, Material, MeshSettings, NormalLoad,
+    Anchor, AnchorRows, AnchorSection, Beam, BeamSection, Borehole, BoxRefinement,
+    DisplacementCondition, Domain, Excavation, Interface, InterfaceSection, LineLoad, Material, MeshSettings, NormalLoad,
     Phase, Piles, Project, SoilLayer, Struts, Wall, WaterPressureCondition, Wells)
 
 
@@ -133,9 +133,17 @@ EXCAVATION = Excavation(
     levels=[-2.0, -5.0, -8.0],
 )
 
+# The supports: the bottom fixed in x and y, the left side (the symmetry plane) and the
+# right side on rollers, held in x. The plane-strain section holds z by itself.
 # The pore pressure: hydrostatic about the phreatic level at -1.5 m, fixed on the whole
 # soil. The condition carries its own level, as each water load below does.
 BOUNDARY_CONDITIONS = [
+    DisplacementCondition(id="fixed_bottom", name="Fixed bottom", on="face", face="bottom",
+                          fixed=(True, True, True)),
+    DisplacementCondition(id="roller_left", name="Roller left", on="face", face="left",
+                          fixed=(True, False, False)),
+    DisplacementCondition(id="roller_right", name="Roller right", on="face", face="right",
+                          fixed=(True, False, False)),
     WaterPressureCondition(id="pore_pressure", name="Pore pressure", on="domain",
                            fluid_pressure_type="Hydrostatic", reference_coordinate=-1.5),
 ]

@@ -105,16 +105,16 @@ and adds only the values that are missing
 
 | Feature | Kratos | Dim | Status |
 |---|---|---|---|
-| Self weight | `VOLUME_ACCELERATION` on the computational part, in every stage | 2D, 3D | Tested |
+| Self weight | `VOLUME_ACCELERATION` on the computational part, in every stage. Gravity can be switched off for the whole model (`gravity off`, or the **Gravity** row). | 2D, 3D | Tested |
 | Point load | `PointLoadCondition2D1N` / `3D1N`, `POINT_LOAD` | 2D, 3D | Tested |
 | Line load | `LineLoadCondition2D2N` / `LineLoadDiffOrderCondition2D3N`, `LINE_LOAD` | 2D | Tested |
 | Surface load | `UPwFaceLoadCondition3D3N` / `SurfaceLoadDiffOrderCondition3D6N`, `SURFACE_LOAD` | 3D | Limited |
 | Normal load (uniform or hydrostatic) | `LineNormalLoadCondition2D2N` / `LineNormalLoadDiffOrderCondition2D3N` with `ApplyNormalLoadTableProcess` | 2D | Tested for hydrostatic, from a reference deck. Limited for uniform. |
 | Change between 2D and 3D | Styx converts point, line and surface loads, and sheet piles and panels, and links them with `derived_from` | — | Tested |
 | Load distribution | Uniform only. No load that changes with time. | — | Not available |
-| Pore pressure | `ApplyScalarConstraintTableProcess`, hydrostatic below one horizontal phreatic level for the full model | 2D, 3D | Tested |
-| Water level of a borehole, sloping water level, water level for each phase | Styx keeps the water level of a borehole, but uses only the global level | — | Not exported |
-| Boundary conditions | `Bottom_Fixed` fully fixed. Left, right, front and back edges as rollers. Top surface free. | 2D, 3D | Tested |
+| Water pressure conditions | `ApplyScalarConstraintTableProcess`: `Uniform`, `Hydrostatic` (about the level of the condition) or `Phreatic_Multi_Line`, fixed or as start values only, on the whole soil, a soil part, a face, a drawn line or a point. Without a condition, Styx fixes no water pressure. | 2D, 3D (lines and points 2D) | Tested |
+| Water level of a borehole, water conditions for each phase | Styx keeps the water level of a borehole, but does not export it. A condition acts in every phase. | — | Not exported |
+| Displacement conditions | `ApplyVectorConstraintTableProcess` on a face, a soil part, a drawn line or a point, in the components x, y, z that you select. A new project has the bottom fixed and the sides on rollers. | 2D, 3D (lines and points 2D) | Tested |
 | Anchor tail support | The tail node is fixed | 2D, 3D | Tested |
 
 ### A7. Construction phases
@@ -155,7 +155,7 @@ and adds only the values that are missing
 | Checks | The server checks the full project at each edit | Tested |
 | Display | WebGL, with a CPU renderer when no GPU is available | Tested |
 | 2D and 3D | Change between a 2D plane-strain section (at a z offset that you select) and the 3D model. Loads and walls are converted. | Tested |
-| Modes | Soil, Structures, Mesh, Flow conditions, Staged construction, Results | Tested. Flow conditions only changes the water level. |
+| Modes | Soil, Structures, Mesh, Flow conditions, Staged construction, Results | Tested. Flow conditions sets the water level and the water pressure conditions. |
 | Panels | Model explorer, Selection explorer, docked panels, right-click menus | Tested |
 | Navigation | Iso, top, front and side views; zoom to fit; rotate; rulers on all four edges in 2D | Tested |
 | Placeholder items | Some menu items and tools of the first design do nothing. They show *"…" is not available in Styx yet*. | — |
@@ -182,7 +182,8 @@ and adds only the values that are missing
 | Interfaces | A **Side** row selects the faces that get the interface. Contact properties are shared. Without a pile, the tool draws a free line. |
 | Loads | Point, line and surface loads by their components. You can switch each one off. |
 | Normal loads | A line with uniform or hydrostatic pressure |
-| Water | One water level for the full model. You can change the specific weight of the water. |
+| Water | One water level for the full model. A new hydrostatic condition or normal load takes it as its own level. You can change the specific weight of the water. |
+| Boundary conditions | The **Boundary conditions** window: a row for each face and one for the whole soil, with the support and the water pressure on each, and the conditions on parts, lines and points. Tools draw a support or a water pressure along a line or at a point (2D). **Gravity** on or off. |
 
 ### B4. Mesh
 
@@ -226,6 +227,7 @@ and adds only the values that are missing
 | `mesh`, `calculate`, `export` | Makes the mesh, calculates, or writes the Kratos files |
 | `phases` | Opens the **Phases** window |
 | `water`, `units`, `borehole`, `cleargeometry` | Changes the water level, the unit system, the boreholes, or removes drawn and imported solids |
+| `boundary`, `gravity` | Lists the boundary conditions or puts the standard supports back; shows gravity or switches it on or off |
 | `soillayers`, `materials` | Opens the soil windows |
 | `colour`, `node` | Shows parts of the mesh in colour, or the parts that contain a node |
 | `results …` | `runs`, `open`, `phase`, `fields`, `field`, `at`, `bands`, `smooth`, `map`, `deform`, `range`, `reverse`, `mesh`, `plot`, `csv`, `files`, `get`, `zip` |
@@ -258,8 +260,8 @@ REST API: `/api/project`, `/api/mesh`, `/api/calculate`, `/api/results/…`.
    (`mohr_coulomb_project` in `tests/models/excavation.py` is ready for it).
    User-defined models (UDSM, UMAT) are written as typed, also without a test.
 2. **No factor of safety.** Styx has no φ–c reduction phase.
-3. **Only one flat water level.** No sloping phreatic line, no level for each phase, and no
-   groundwater flow calculation.
+3. **No water conditions for each phase.** A water pressure condition acts in every phase,
+   and there is no groundwater flow calculation.
 4. **3D is not proven.** No 3D element, law or interface has run in Kratos in a test.
 5. **Fixed solver settings.** You cannot change the analysis type or the linear solver.
 6. **No excavation tool in the GUI.** A pit with lifts needs `kratos-cli excavation` or a

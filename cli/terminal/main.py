@@ -13,11 +13,11 @@ import argparse
 import sys
 
 from cli.terminal import output, style
-from cli.commands import (analysis, edit, ground, inspection, interactive, meshing, phases,
-                          project, results, structures, volumes)
+from cli.commands import (analysis, conditions, edit, ground, inspection, interactive,
+                          meshing, phases, project, results, structures, volumes)
 
-GROUPS = (project, edit, ground, volumes, structures, meshing, phases, inspection, analysis,
-          results, interactive)
+GROUPS = (project, edit, ground, volumes, structures, conditions, meshing, phases, inspection,
+          analysis, results, interactive)
 """The command modules, in the order a model is worked through; `--help` lists them so."""
 
 

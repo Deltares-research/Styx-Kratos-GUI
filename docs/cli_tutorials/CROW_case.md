@@ -90,7 +90,7 @@ put `<repo>\kratos-cli.bat` in front and the project file after the command word
 
 | In the shell | The same command on its own, in PowerShell |
 |---|---|
-| `water -1.5` | `<repo>\kratos-cli.bat water $HOME\crow\crow.json -1.5` |
+| `parts` | `<repo>\kratos-cli.bat parts $HOME\crow\crow.json` |
 | `layer add L_top ...` | `<repo>\kratos-cli.bat layer $HOME\crow\crow.json add L_top ...` |
 
 > [!TIP]
@@ -177,18 +177,24 @@ crow.json> layer add L_bot --name Soil_Bottom --material m_lower --bottom -60
 The upper ground is split at −8 as well as at −12, so that the deepest lift of the pit ends
 exactly on a layer boundary.
 
-#### Step 5. The pit and the water level
+#### Step 5. The pit and the pore pressure
 
 ```text
 crow.json> excavation --x 0 5 --z 0 10 --levels -2 -5 -8
 excavation x 0 .. 5, z 0 .. 10, dug to -2, -5, -8; wrote ...\crow.json
 
-crow.json> water -1.5
-Water level: -1.50 m (specific weight 10000). wrote ...\crow.json
+crow.json> boundary add pore_pressure --name "Pore pressure" --domain --water-pressure Hydrostatic --reference-coordinate -1.5
+added pore_pressure  Pore pressure  water pressure on the whole soil; hydrostatic about -1.5 m, fixed; wrote ...\crow.json
 ```
 
-The pit runs from the symmetry plane (x = 0) to the wall (x = 5). Each level is one lift, and
-each lift becomes a soil part of its own, which a stage can switch off.
+- The pit runs from the symmetry plane (x = 0) to the wall (x = 5). Each level is one lift,
+  and each lift becomes a soil part of its own, which a stage can switch off.
+- The pore pressure is a boundary condition: hydrostatic on the whole soil, zero at the
+  phreatic level −1.5 m, and fixed in every stage. Without it the deck fixes no water
+  pressure. The model sets no project water level (`water`): the condition and the water
+  loads of step 9 carry the level themselves.
+- `boundary list` shows the conditions. A new project already has the displacement
+  conditions: the bottom fixed, and the left and right sides on rollers.
 
 **Check your progress.** `parts` lists the part keys the stages switch on and off:
 
@@ -269,12 +275,13 @@ added line load surcharge (Load); wrote ...\crow.json
 ```
 
 One hydrostatic water load per lift. Each runs from the water table down the exposed face of
-the wall, then back along that lift's floor to the symmetry plane:
+the wall, then back along that lift's floor to the symmetry plane. Its pressure is zero at
+its `--reference-coordinate`, the phreatic level:
 
 ```text
-crow.json> normal-load add water_1 --name WaterLoad_Stage1 --hydrostatic --points 5 -1.5 5 -2 0 -2
-crow.json> normal-load add water_2 --name WaterLoad_Stage2 --hydrostatic --points 5 -1.5 5 -5 0 -5
-crow.json> normal-load add water_3 --name WaterLoad_Stage3 --hydrostatic --points 5 -1.5 5 -8 0 -8
+crow.json> normal-load add water_1 --name WaterLoad_Stage1 --hydrostatic --reference-coordinate -1.5 --points 5 -1.5 5 -2 0 -2
+crow.json> normal-load add water_2 --name WaterLoad_Stage2 --hydrostatic --reference-coordinate -1.5 --points 5 -1.5 5 -5 0 -5
+crow.json> normal-load add water_3 --name WaterLoad_Stage3 --hydrostatic --reference-coordinate -1.5 --points 5 -1.5 5 -8 0 -8
 ```
 
 ### Part 3: the mesh and the stages

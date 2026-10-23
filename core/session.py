@@ -1080,9 +1080,14 @@ def remove_section(project: Project, id: str, kind: str | None = None) -> Projec
 # that any part or structure already has, as for a structure.
 
 def replace_conditions(project: Project, update: ConditionsUpdate) -> Project:
-    """The boundary conditions, as one list."""
+    """The boundary conditions, as one list, and gravity: what
+    `PATCH /api/project/conditions` sends. A field the update leaves out stays."""
     payload = project.model_dump()
-    payload["boundary_conditions"] = [c.model_dump() for c in update.boundary_conditions]
+    if update.boundary_conditions is not None:
+        payload["boundary_conditions"] = [c.model_dump()
+                                          for c in update.boundary_conditions]
+    if update.gravity is not None:
+        payload["gravity"] = update.gravity
     return Project.model_validate(payload)
 
 
@@ -1093,7 +1098,8 @@ def find_condition(project: Project, id: str):
 
 
 def add_condition(project: Project, record) -> Project:
-    """`project` with the boundary condition `record` (`drafts.water_pressure_condition`)."""
+    """`project` with the boundary condition `record` (`drafts.water_pressure_condition`,
+    `drafts.displacement_condition`)."""
     taken = set(project.part_keys()) | set(project.stageable_keys()) | RESERVED
     taken |= {r.id for field in STRUCTURES for r in getattr(project, field)}
     taken |= {c.id for c in project.boundary_conditions}
@@ -1117,6 +1123,25 @@ def update_condition(project: Project, id: str, **fields) -> Project:
         record.update({"face": None, "part": None, "points": None})
     record.update(fields)
     return Project.model_validate(payload)
+
+
+def standard_conditions(project: Project) -> Project:
+    """The standard supports put back: the bottom fixed, the sides on rollers
+    (`schemas.standard_conditions`), in place of every displacement condition on a face.
+    The water pressure conditions and the conditions on parts, lines and points stay, so
+    the button and `kratos-cli boundary standard` undo only what they replace."""
+    payload = project.model_dump()
+    kept = [c for c in payload["boundary_conditions"]
+            if not (c["kind"] == "displacement" and c["on"] == "face")]
+    payload["boundary_conditions"] = kept
+    standard = drafts.standard_conditions(Project.model_validate(payload))
+    payload["boundary_conditions"] = [c.model_dump() for c in standard] + kept
+    return Project.model_validate(payload)
+
+
+def set_gravity(project: Project, on: bool) -> Project:
+    """`project` with gravity on or off (`kratos-cli gravity`, the explorer's check box)."""
+    return Project.model_validate({**project.model_dump(), "gravity": on})
 
 
 def remove_condition(project: Project, id: str) -> Project:

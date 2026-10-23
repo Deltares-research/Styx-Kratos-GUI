@@ -230,16 +230,23 @@ FIRST = ("id", "key", "name", "label")
 """Written first in a record, whatever the schema's order: what the record is called."""
 
 
+ALWAYS = {"boundary_conditions"}
+"""Fields written even at their default: a reader sees every condition the model has,
+also the standard supports a project starts with."""
+
+
 def _fields(model: BaseModel):
-    """`(name, value)` for every field a constructor call needs: the required ones, and
-    those that differ from their default. What names the record comes first (`FIRST`)."""
+    """`(name, value)` for every field a constructor call needs: the required ones, those
+    in `ALWAYS`, and those that differ from their default. What names the record comes
+    first (`FIRST`)."""
     fields = type(model).model_fields
     order = [name for name in FIRST if name in fields] + [
         name for name in fields if name not in FIRST]
     for name in order:
         info = fields[name]
         value = getattr(model, name)
-        if info.is_required() or value != info.get_default(call_default_factory=True):
+        if (info.is_required() or name in ALWAYS
+                or value != info.get_default(call_default_factory=True)):
             yield name, value
 
 

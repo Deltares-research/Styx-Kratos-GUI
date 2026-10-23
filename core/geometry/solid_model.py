@@ -715,13 +715,13 @@ def _embed_beams(project: Project, owners: dict[int, set[str]], dim: int,
     tools are clipped to the model first, so a pile drawn past the domain edge or over
     the excavated void contributes only the part that has soil around it.
 
-    A water pressure condition at a point is a tool too, a vertex: the fragment makes it
-    a vertex of the face it lies in, so the mesh has a node exactly there.
+    A boundary condition at a point is a tool too, a vertex: the fragment makes it a
+    vertex of the face it lies in, so the mesh has a node exactly there.
 
     Returns the rebuilt owners, the beam key -> curve tags map (also holding every
-    free interface's, normal load's and water pressure line's own curves, embedded the
-    same way), the panel key -> face tags map (3D only; a 2D section has no wall panels
-    in it), and the condition key -> point tags map of the water pressure points.
+    free interface's, normal load's and boundary condition line's own curves, embedded
+    the same way), the panel key -> face tags map (3D only; a 2D section has no wall
+    panels in it), and the condition key -> point tags map of the condition points.
     """
     if dim == 3:
         return (*_embed_3d_structures(project, owners, log), {})
@@ -738,7 +738,7 @@ def _embed_beams(project: Project, owners: dict[int, set[str]], dim: int,
                        "model only; it is not part of this section")
     free = [i for i in project.active_interfaces if i.structure is None]
     normal_loads = project.active_normal_loads
-    drawn = project.drawn_water_pressures
+    drawn = project.drawn_conditions
     if not active and not free and not normal_loads and not drawn:
         return owners, {}, {}, {}
 
@@ -775,9 +775,9 @@ def _embed_beams(project: Project, owners: dict[int, set[str]], dim: int,
             tools.append((1, gmsh.model.occ.addLine(start, end)))
             owner_of_tool.append(load.id)
 
-    # A water pressure on a drawn line, for the same reason again: its nodes are the
-    # ones on its own mesh edges (`core.kratos.writer._water_pressures`). One at a point
-    # is a vertex the fragment embeds, and its node is the one on that vertex.
+    # A boundary condition on a drawn line, for the same reason again: its nodes are the
+    # ones on its own mesh edges (`core.kratos.writer._condition_targets`). One at a
+    # point is a vertex the fragment embeds, and its node is the one on that vertex.
     for condition in drawn:
         vertices = [point(x, y) for x, y in condition.points or []]
         if condition.on == "point":

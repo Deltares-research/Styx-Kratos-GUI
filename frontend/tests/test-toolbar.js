@@ -68,8 +68,11 @@
        is a line one (see NORMAL_LOAD_CONDITIONS in core/kratos/writer.py). */
     /* And the rulers, which measure the two named axes of one section plane: in 3D
        the screen edges are three axes mixed by the orbit. See test-ruler.js. */
+    /* And a boundary condition drawn along a line or at a point, which the section
+       embeds as a normal load's line is. */
     T.eq(App.LivePatches.TWO_D_ONLY,
-         ['interface', 'createNormalLoad', 'toggleRuler']);
+         ['interface', 'createNormalLoad', 'toggleRuler', 'createSupportLine',
+          'createSupportPoint', 'createWaterPressureLine', 'createWaterPressurePoint']);
     T.eq(App.LivePatches.availableIn3D('interface'), false);
     T.eq(App.LivePatches.availableIn3D('createNormalLoad'), false);
     T.eq(App.LivePatches.availableIn3D('createSheetPile'), true);
@@ -292,7 +295,7 @@
       '-', 'drawPoint', 'drawLine', 'drawPolygon', 'drawBox',
       '-', 'plate', 'beam', 'embedded', 'createSheetPile', 'createMember',
       'createAnchor', 'interface',
-      '-', 'createLoad', 'prescribed',
+      '-', 'createLoad', 'createBoundaryCondition',
       '-', 'tunnel',
       '-', 'importModel'
     ]);

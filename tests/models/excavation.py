@@ -23,7 +23,7 @@ from core.model.schemas import (Anchor, AnchorRows, AnchorSection, Beam, BeamSec
                          BoxRefinement, Domain, Excavation, Interface, InterfaceSection,
                          LineLoad, Material, MeshSettings, NormalLoad, Piles, Project,
                          SoilLayer, Struts, Wall, WaterLevel, WaterPressureCondition,
-                         Wells)
+                         Wells, standard_conditions)
 
 NAME = "Staged excavation"
 
@@ -137,8 +137,9 @@ def excavation_project(staged: bool = True) -> Project:
         piles=Piles(xs=[], zs=[], radius=0.1, length=1.0, top_y=DOMAIN_TOP_Y),
         wells=Wells(positions=[], radius=0.1, length=1.0, top_y=DOMAIN_TOP_Y),
         water=WaterLevel(y=WATER_Y),
-        # The pore pressure, hydrostatic about the water level on the whole soil.
-        boundary_conditions=[WaterPressureCondition(
+        # The standard supports, and the pore pressure, hydrostatic about the water
+        # level on the whole soil.
+        boundary_conditions=[*standard_conditions(), WaterPressureCondition(
             id="pore_pressure", name="Pore pressure", on="domain",
             reference_coordinate=WATER_Y)],
         beam_sections=[sheet_pile],

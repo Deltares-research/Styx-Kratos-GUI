@@ -30,7 +30,8 @@ uses `.venv-windows`, as `kratos-cli.bat` does, so a shell script of commands ru
 ```bash
 kratos-cli new site.json --demo --dim 2 --name "Pit A"   # or without --demo: an empty site
 kratos-cli show site.json
-kratos-cli water site.json -2
+kratos-cli water site.json -2                 # the level a new water pressure condition takes
+kratos-cli boundary site.json set pore_pressure --reference-coordinate -2
 kratos-cli set site.json mesh.element_size 1.5
 kratos-cli mesh site.json
 kratos-cli phases site.json defaults
@@ -53,8 +54,8 @@ CROW excavation wall, as a project file (`crow.json`) and as a model script (`cr
 | Command | What it does |
 |---|---|
 | `new FILE [--dim 2\|3] [--units SI\|kN] [--name NAME] [--demo] [--force]` | Write a new project file: an empty site, or the demo model |
-| `show P` | What the model holds: layers, materials, parts, structures, water, phases, mesh |
-| `check P` | That the phases run in one order and the mesh settings name only parts the model has |
+| `show P` | What the model holds: layers, materials, parts, structures, water, conditions, gravity, phases, mesh |
+| `check P` | That the phases run in one order and the mesh settings name only parts the model has, and what the export will warn about the boundary conditions |
 | `build SCRIPT.py --out FILE` | Write the project a model script describes |
 | `script P --out FILE.py [--force]` | Write the model as a model script: the Python file that builds it again |
 | `get P [PATH]` | Print a field as JSON (the whole project without a path) |
@@ -63,7 +64,7 @@ CROW excavation wall, as a project file (`crow.json`) and as a model script (`cr
 | `remove P PATH` | Remove a record, or a key of a mapping |
 | `dimension P 2d\|3d [--offset Z]` | Switch between the plane-strain section and the solid model |
 | `units P [SI\|kN]` | Show the unit system, or convert the whole project to another |
-| `water P [LEVEL\|off]` | Show, set or remove the water level |
+| `water P [LEVEL\|off]` | Show, set or remove the water level. It fixes no pressure by itself: a new hydrostatic condition or normal load takes it as its level |
 | `domain P [--x FROM TO] [--y BOTTOM TOP] [--z FROM TO]` | Show or set the model's extents |
 | `borehole P list\|add\|set\|remove ...` | Boreholes: a new one copies the last one's levels, and every layer gets levels there |
 | `material P list\|presets\|add\|set\|remove ...` | Soils as Kratos property sets: `add ID [--preset m3] [NAME=VALUE ...]`, `set ID NAME=VALUE ... [--unset NAME]` |
@@ -77,7 +78,9 @@ CROW excavation wall, as a project file (`crow.json`) and as a model script (`cr
 | `anchor P list\|add\|set\|remove ...` | Anchors and struts: `add [ID] [--head ...] [--tail ...] [--prestress S]`, the head snapped onto a structure |
 | `interface P list\|add\|set\|remove ...` | Interfaces, in 2D: `add [ID] [--structure PILE \| --points ...] [--side both\|left\|right]` |
 | `load P list\|add\|set\|remove ...` | Loads: `add point [--at X Y]`, `add line [--x FROM TO]` (2D), `add surface [--x ...] [--z ...]` (3D), `--components ...` |
-| `normal-load P list\|add\|set\|remove ...` | Pressures normal to a line, in 2D: `add [ID] --points ... [--hydrostatic \| --pressure S]` |
+| `normal-load P list\|add\|set\|remove ...` | Pressures normal to a line, in 2D: `add [ID] --points ... [--hydrostatic [--reference-coordinate Y] \| --pressure S]` |
+| `boundary P list\|add\|set\|remove\|standard ...` | The boundary conditions: `add [ID] --face F\|--part KEY\|--line ...\|--point X Y --fixed\|--roller\|--fix AXIS ...` for a support, `add [ID] --domain\|... --water-pressure TYPE ...` for a water pressure; `standard` puts back the standard supports |
+| `gravity P [on\|off]` | Show, or switch on or off, the self weight of every body (on in a new project) |
 | `parts P` | Every part by its key, the names phases activate and deactivate |
 | `mesh P [--size S] [--order 1\|2]` | Mesh the model and report its size. `--size` and `--order` are kept in the project |
 | `phases P [list\|show\|defaults\|staged-excavation\|add\|copy\|set\|remove\|activate\|deactivate] ...` | The construction sequence, edited as the GUI's Phases toolbar edits it |
@@ -126,6 +129,7 @@ kratos-cli layer pit.json add mid --material clay --bottom -10
 kratos-cli layer pit.json add bottom --material sand --bottom -40
 kratos-cli excavation pit.json --x 0 6 --z 0 10 --levels -2 -4.5 -7
 kratos-cli water pit.json -1
+kratos-cli boundary pit.json add pore --domain --water-pressure Hydrostatic   # about -1 m
 kratos-cli parts pit.json                                 # soil_top__lift1, ... for the phases
 ```
 
@@ -152,6 +156,11 @@ kratos-cli parts pit.json                                 # soil_top__lift1, ...
   `--extrude dx dy dz`, and there are `box` (`--origin`, `--size`) and `cylinder`
   (`--center`, `--axis`, `--radius`). `volume import FILE` reads .step, .iges, .brep, .stl
   or .obj. With `--material`, a volume is soil.
+- **The water level** fixes no pressure by itself. A water pressure condition does
+  (`boundary`, below): `boundary add --domain --water-pressure Hydrostatic` gives the
+  soil hydrostatic pore pressures about the water level, and keeps that level as its own.
+  The borehole's `--water` is where the water stands in that borehole; the export does
+  not read it.
 - **Coordinates are plain numbers**, `--points 0 0 6 0 3 2`, because a word starting with
   a minus, like `-3,2`, would be read as an option. A long outline can come from a file:
   `--points @outline.csv`, one point per line.
@@ -196,6 +205,63 @@ kratos-cli set pit.json mesh.body_sizes.sheet 0.5
 - **Ids are part keys.** A phase switches a structure by its id, so no two parts share
   one, and `wall`, `struts`, `anchors`, `piles`, `water`, `wells` and `excavation` are
   taken.
+
+## The boundary conditions, command by command
+
+The deck holds the conditions the model lists, and no others. `boundary list` shows them.
+A new project, and a project file saved before the conditions existed, has the standard
+supports: the bottom fixed (`fixed_bottom`), the left and right sides on rollers that hold
+x (`roller_left`, `roller_right`), and the front and back on rollers that hold z
+(`roller_front`, `roller_back`, which a 2D section leaves out, as plane strain holds z
+already). It has no water pressure condition.
+
+```bash
+kratos-cli boundary pit.json set fixed_bottom --roller          # the bottom holds y only
+kratos-cli boundary pit.json add strip --line 0 -12 6 -12 --fix y
+kratos-cli boundary pit.json add pin --point 30 -40 --fixed
+kratos-cli boundary pit.json standard                           # the standard supports back
+kratos-cli boundary pit.json add pore --domain --water-pressure Hydrostatic --reference-coordinate -1
+kratos-cli boundary pit.json add head --face right --water-pressure Hydrostatic --reference-coordinate 0 --pressure-tension-cut-off 1e5
+kratos-cli boundary pit.json add well --point 30 -20 --water-pressure Uniform --value -150000
+kratos-cli boundary pit.json add start --domain --water-pressure Phreatic_Multi_Line --phreatic-line 0 -1 60 -3 --initial
+kratos-cli boundary pit.json set head --inactive
+kratos-cli boundary pit.json remove well
+```
+
+- **Supports.** `--fixed` holds x, y and z; `--roller` holds the component normal to its
+  face (x on the left and right, y on the bottom and top, z on the front and back), or to a
+  vertical (x) or horizontal (y) line; `--fix x y` holds the components named. A 2D deck
+  never holds z. A support is not put on the whole soil. A model with no support and no
+  anchor can move as a rigid body; the export and `check` warn about it. `standard`
+  replaces the supports on the faces with the standard ones and keeps the rest.
+- **Where.** One of `--domain` (the whole soil), `--face bottom|left|right|top|front|back`
+  (front and back exist in 3D only), `--part KEY` (a soil part, as `parts` lists it: a layer
+  `soil_<id>` with all its lifts, one body, or a custom part with a material), `--line X Y
+  X Y ...` or `--point X Y` (drawn in the 2D section, and left out of a 3D deck). `set` with
+  another of these moves the condition.
+- **Water pressure.** `--water-pressure` takes Kratos' `fluid_pressure_type`:
+  `Hydrostatic` is zero at `--reference-coordinate` (in metres) and grows with depth below
+  it; `Uniform` is `--value` at every node, a stress in the project's units with Kratos'
+  sign (compression negative); `Phreatic_Multi_Line` is hydrostatic below the line
+  `--phreatic-line X Y X Y ...`, x increasing. Above the level the pressure is held at zero
+  unless `--pressure-tension-cut-off` allows suction up to that value.
+- **Its own level.** A `Hydrostatic` condition given no `--reference-coordinate` takes the
+  water level, keeps it as its own, and says so. With no water level either it is refused.
+  A dry model needs no water pressure condition, unless a soil couples the water pressure
+  to the deformation (`GEO_DRAINAGE_TYPE`): then `--water-pressure Uniform --value 0` on
+  the whole soil, which the export's warning asks for.
+- **Fixed or initial.** A condition holds the pressure in every stage (`--fixed`, the
+  default). `--initial` gives start values only, which the calculation then changes.
+- **Overlap.** The export writes the start values first, then the fixed conditions from the
+  least to the most specific target: the whole soil, a part, a face, a line, a point. On a
+  node two of them share, the more specific one wins. Two fixed conditions on the same kind
+  of target that share nodes give a warning.
+- **Gravity.** `gravity P off` takes the self weight out of every stage, for a model loaded
+  by its conditions alone; `gravity P on` puts it back. A K0 procedure takes its stresses
+  from the self weight, so with gravity off they are zero, and the export says so.
+- `check` prints what the export will warn about the conditions: a model nothing holds, a
+  water level that fixes nothing, a coupled soil with no water pressure condition, a
+  condition this dimension does not have, a K0 procedure with gravity off.
 
 ## The stages, command by command
 
@@ -381,6 +447,8 @@ viewport's. A command can also be typed with a leading `_` in the box (`_mesh`).
 | `mesh` | `kratos-cli mesh P` |
 | `phases` | `kratos-cli phases P` |
 | `water <level>`, `water off` | `kratos-cli water P LEVEL`, `kratos-cli water P off` |
+| `boundary`, `boundary list`, `boundary standard` | `kratos-cli boundary P list`, `kratos-cli boundary P standard` |
+| `gravity`, `gravity on`, `gravity off` | `kratos-cli gravity P`, `kratos-cli gravity P on`, `kratos-cli gravity P off` |
 | `units`, `units <system>` | `kratos-cli units P`, `kratos-cli units P kN` |
 | `node <id>` | `kratos-cli node P NODE` |
 | `cleargeometry` | `kratos-cli volume P clear` |

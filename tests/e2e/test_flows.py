@@ -220,3 +220,33 @@ def test_the_units_command_converts_the_project_and_the_status_bar_follows(app_p
     command(app_page, "units")
     assert "kN, m, t, s" in log_text(app_page)
     assert app_page.errors == []
+
+
+def test_the_boundary_conditions_are_set_in_their_window_and_by_command(app_page, live_server):
+    """The standard supports a new project has, the dialog's whole-soil row given a dry
+    pore pressure, and gravity switched off from the command box: each one write the
+    server stores."""
+    url = live_server["url"] + "/api/project"
+    command(app_page, "boundary list")
+    app_page.wait_for_function("document.querySelector('#cmd-log').innerText"
+                               ".indexOf('fixed_bottom') >= 0", timeout=LONG)
+
+    app_page.evaluate("App.runAction({action: 'boundaryConditions'})")
+    rows = app_page.locator(".boundary-conditions table.bc-grid tr")
+    soil = rows.last
+    soil.locator("select.bc-water").select_option("Uniform")
+    soil.locator("input.bc-number").fill("0")
+    app_page.get_by_role("button", name="Save").click()
+    app_page.wait_for_function("(App.PROJECT.boundary_conditions || []).some(function (c) {"
+                               " return c.kind === 'water_pressure' && c.on === 'domain'; })",
+                               timeout=LONG)
+    stored = app_page.request.get(url).json()
+    water = [c for c in stored["boundary_conditions"] if c["kind"] == "water_pressure"]
+    assert [(c["on"], c["fluid_pressure_type"], c["value"]) for c in water] == [
+        ("domain", "Uniform", 0.0)]
+    assert sum(c["kind"] == "displacement" for c in stored["boundary_conditions"]) == 5
+
+    command(app_page, "gravity off")
+    app_page.wait_for_function("App.PROJECT.gravity === false", timeout=LONG)
+    assert app_page.request.get(url).json()["gravity"] is False
+    assert app_page.errors == []

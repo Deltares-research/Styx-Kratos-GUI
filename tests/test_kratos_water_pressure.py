@@ -71,11 +71,12 @@ def water_processes(export: dict, stage: str = "1_Stage") -> list[dict]:
 def test_a_project_saved_before_the_conditions_existed_has_none():
     payload = seed_project().model_dump()
     del payload["boundary_conditions"]
-    assert Project.model_validate(payload).boundary_conditions == []
+    assert not any(c.kind == "water_pressure"
+                   for c in Project.model_validate(payload).boundary_conditions)
 
 
 def test_a_new_project_has_no_water_pressure_condition():
-    assert blank_project().boundary_conditions == []
+    assert not any(c.kind == "water_pressure" for c in blank_project().boundary_conditions)
 
 
 @pytest.mark.parametrize("fields, message", [

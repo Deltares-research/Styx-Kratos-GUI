@@ -169,7 +169,11 @@ App.Model = (function () {
       // Shown in 3D too, for the same reason an interface is: the polyline is part of
       // the solid model even though the pressure it applies is plane strain only.
       NORMAL_LOADS: (project.normal_loads || [])
-        .map(function (n) { return JSON.parse(JSON.stringify(n)); })
+        .map(function (n) { return JSON.parse(JSON.stringify(n)); }),
+      // Both kinds, in every dimension: a line kept from the section stays in the list
+      // in 3D, as the export keeps it, and says there that it is left out.
+      BOUNDARY_CONDITIONS: (project.boundary_conditions || [])
+        .map(function (c) { return JSON.parse(JSON.stringify(c)); })
     };
   }
 
@@ -250,6 +254,7 @@ App.Model = (function () {
     App.INTERFACES = mapped.INTERFACES;
     App.INTERFACE_SECTIONS = mapped.INTERFACE_SECTIONS;
     App.NORMAL_LOADS = mapped.NORMAL_LOADS;
+    App.BOUNDARY_CONDITIONS = mapped.BOUNDARY_CONDITIONS;
     App.PROJECT = project;
     rebuildDerived();
     syncTitle(project);
@@ -337,6 +342,9 @@ App.Model = (function () {
   var previousInterfaceKeys = [];
   var normalLoadNode = null;
   var previousNormalLoadKeys = [];
+  var modelConditionsNode = null;
+  var boundaryNode = null;
+  var previousConditionKeys = [];
 
   /* The frozen tree's "Water levels" node lists two mockup levels from js/data.js:677
      and a layered_soil project discards it along with the rest of that tree, so the
@@ -451,6 +459,134 @@ App.Model = (function () {
     return interfaceNode;
   }
 
+  /* "Model conditions": the boundary conditions, one row each, and gravity. The frozen
+     tree's own "Model conditions" (js/data.js) lists a demo's rows -- Domain, Water,
+     Climate -- that select nothing, and two rows of one label would be the dead-twin
+     problem `dropFrozenInterfaceRow` solves; it is dropped the same way. */
+  function ensureModelConditionsNode() {
+    if (!boundaryNode) {
+      boundaryNode = { label: 'Boundary conditions', icon: 'prescribed', count: 0,
+                       eye: true, obj: 'group:conditions', children: [] };
+    }
+    if (!modelConditionsNode) {
+      modelConditionsNode = { label: 'Model conditions', icon: 'settings', children: [] };
+    }
+    Object.keys(App.TREES || {}).forEach(function (mode) {
+      var nodes = App.TREES[mode] || [];
+      for (var i = nodes.length - 1; i >= 0; i -= 1) {
+        if (nodes[i] && nodes[i] !== modelConditionsNode
+            && nodes[i].label === 'Model conditions') nodes.splice(i, 1);
+      }
+    });
+    return modelConditionsNode;
+  }
+
+  /* A condition's own row: what it is, in the words `boundary list` uses. */
+  function conditionChild(record) {
+    var label = App.BoundaryConditions ? App.BoundaryConditions.label(record) : record.name;
+    return { label: label + (record.active === false ? '  (inactive)' : ''),
+             icon: record.kind === 'displacement' ? 'prescribed' : 'water',
+             leaf: true, eye: true, obj: record.id };
+  }
+
+  function yesNo(get, set) {
+    return {
+      kind: 'select',
+      options: function () { return [{ value: 'yes', text: 'Yes' }, { value: 'no', text: 'No' }]; },
+      get: function () { return get() ? 'yes' : 'no'; },
+      set: function (value) { return set(value === 'yes'); }
+    };
+  }
+
+  function conditionNumberEditor(record, field, unit, check) {
+    return {
+      kind: 'number', decimals: 3, unit: unit,
+      get: function () { return record[field]; },
+      set: function (value) {
+        if (!Number.isFinite(value)) return 'The value must be a number.';
+        if (check) { var problem = check(value); if (problem) return problem; }
+        record[field] = value;
+        return null;
+      }
+    };
+  }
+
+  /* The Selection explorer's rows for one condition. Each editor changes the copy in
+     App.BOUNDARY_CONDITIONS, and `App.commitSelectionEdit` sends it
+     (App.BoundaryConditions.save); the server refuses what does not validate, and the
+     stored project comes back. */
+  function conditionProps(record) {
+    var support = record.kind === 'displacement';
+    var where = record.on === 'domain' ? 'Whole soil'
+      : record.on === 'face' ? 'Face: ' + record.face
+      : record.on === 'part' ? 'Part: ' + record.part
+      : (record.on === 'line' ? 'Line: ' : 'Point: ')
+        + (record.points || []).map(function (p) { return fixed(p[0]) + ' ' + fixed(p[1]); })
+          .join(', ');
+    var general = [
+      ['Condition', support ? 'Support' : 'Water pressure', '', true],
+      ['Where', where, '', true],
+      ['Active', record.active !== false ? 'Yes' : 'No', '', false,
+       yesNo(function () { return record.active !== false; },
+             function (on) { record.active = on; return null; })],
+      ['Edit', '', '', false, { kind: 'button', text: 'Edit condition…',
+        run: function () { if (App.BoundaryConditions) App.BoundaryConditions.edit(record.id); } }],
+      ['Delete', '', '', false, { kind: 'button', text: 'Delete condition',
+        run: function () { if (App.BoundaryConditions) App.BoundaryConditions.remove(record.id); } }]
+    ];
+    var what = [];
+    if (support) {
+      ['x', 'y', 'z'].forEach(function (axis, i) {
+        what.push(['Fixed ' + axis, record.fixed[i] ? 'Yes' : 'No', '', false,
+                   yesNo(function () { return record.fixed[i]; }, function (on) {
+                     var next = record.fixed.slice();
+                     next[i] = on;
+                     if (!next.some(Boolean)) return 'A support holds x, y or z; delete it to '
+                       + 'hold nothing.';
+                     record.fixed = next;
+                     return null;
+                   })]);
+      });
+    } else {
+      var stress = App.Units.label('stress');
+      what.push(['Type', record.fluid_pressure_type.replace(/_/g, ' '), '', true]);
+      if (record.fluid_pressure_type === 'Uniform') {
+        what.push(['Value', String(record.value), stress, false,
+                   conditionNumberEditor(record, 'value', stress)]);
+      }
+      if (record.fluid_pressure_type === 'Hydrostatic') {
+        what.push(['Reference level', fixed(record.reference_coordinate), 'm', false,
+                   conditionNumberEditor(record, 'reference_coordinate', 'm')]);
+      }
+      if (record.fluid_pressure_type !== 'Uniform') {
+        what.push(['Tension cut-off', String(record.pressure_tension_cut_off), stress, false,
+                   conditionNumberEditor(record, 'pressure_tension_cut_off', stress,
+                     function (value) {
+                       return value < 0 ? 'The cut-off is 0 or more.' : null;
+                     })]);
+      }
+      what.push(['Fixed', record.is_fixed ? 'Yes' : 'No', '', false,
+                 yesNo(function () { return record.is_fixed; },
+                       function (on) { record.is_fixed = on; return null; })]);
+    }
+    return {
+      title: record.name, icon: support ? 'prescribed' : 'water',
+      groups: { 'General': general, 'Prescribed': what }
+    };
+  }
+
+  function gravityProps() {
+    return {
+      title: 'Gravity', icon: 'settings',
+      groups: { 'General': [
+        ['Gravity acts', App.PROJECT && App.PROJECT.gravity === false ? 'No' : 'Yes', '', false,
+         yesNo(function () { return !(App.PROJECT && App.PROJECT.gravity === false); },
+               function (on) { App.PENDING_GRAVITY = on; return null; })],
+        ['', 'The self weight of every body, in every stage.', '', true]
+      ] }
+    };
+  }
+
   function ensureNormalLoadNode() {
     if (!normalLoadNode) {
       normalLoadNode = { label: 'Normal loads', icon: 'load', count: 0,
@@ -521,7 +657,7 @@ App.Model = (function () {
   function syncTrees(layeredSoil, soil) {
     var top = layeredSoil ? (soil ? [soil] : []) : topLevelUnion();
     [customGeometryNode, importedMeshNode, sheetPileNode, anchorNode, interfaceNode,
-     normalLoadNode, loadConditionsNode, waterLevelNode]
+     normalLoadNode, loadConditionsNode, waterLevelNode, modelConditionsNode]
       .forEach(function (node) {
         if (node && !containsNode(top, node)) top.push(node);
       });
@@ -1330,8 +1466,24 @@ App.Model = (function () {
        normalLoadPressureEditor(record)]
     ];
     if (hydrostatic) {
-      sizing.push(['Water level', fixed((App.PROJECT && App.PROJECT.water
-                                         && App.PROJECT.water.y) || 0), 'm', true]);
+      // Its own level, or -- a load saved before it had one -- the water level it
+      // reads at export, which an edit here then makes its own.
+      var water = App.PROJECT && App.PROJECT.water;
+      var own = record.reference_coordinate !== null
+        && record.reference_coordinate !== undefined;
+      sizing.push([own ? 'Reference level' : 'Reference level (the water level)',
+                   fixed(own ? record.reference_coordinate : (water ? water.y : 0)), 'm',
+                   false, {
+                     kind: 'number', decimals: 3, unit: 'm',
+                     get: function () {
+                       return own ? record.reference_coordinate : (water ? water.y : 0);
+                     },
+                     set: function (value) {
+                       if (!Number.isFinite(value)) return 'The level must be a number.';
+                       record.reference_coordinate = value;
+                       return null;
+                     }
+                   }]);
     }
 
     return {
@@ -1582,6 +1734,25 @@ App.Model = (function () {
       App.OBJECT_PROPS[record.id] = normalLoadProps(record);
     });
     previousNormalLoadKeys = normalLoads.map(function (record) { return record.id; });
+
+    var conditions = App.BOUNDARY_CONDITIONS || [];
+    var conditionsNode = ensureModelConditionsNode();
+    // A 2D model's front and back supports are kept for the solid model, not listed.
+    var listed = conditions.filter(function (record) {
+      return !(App.BoundaryConditions && App.BoundaryConditions.heldBySection(record, App.PROJECT));
+    });
+    boundaryNode.count = listed.length;
+    boundaryNode.children = listed.map(conditionChild);
+    var gravityOn = !(App.PROJECT && App.PROJECT.gravity === false);
+    conditionsNode.children = [boundaryNode, {
+      label: 'Gravity  ·  ' + (gravityOn ? 'on' : 'off'), icon: 'settings', leaf: true,
+      obj: 'gravity' }];
+    previousConditionKeys.forEach(function (key) { delete App.OBJECT_PROPS[key]; });
+    conditions.forEach(function (record) {
+      App.OBJECT_PROPS[record.id] = conditionProps(record);
+    });
+    App.OBJECT_PROPS.gravity = gravityProps();
+    previousConditionKeys = conditions.map(function (record) { return record.id; });
 
     // Last, so every node it has to place already exists.
     syncTrees(!!(App.PROJECT && App.PROJECT.layered_soil), sharedSoilNodes[0]);

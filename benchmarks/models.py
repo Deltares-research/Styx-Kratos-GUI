@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from core.model import migration, phases
 from tests.models import excavation
-from core.model.schemas import Project
+from core.model.schemas import Project, standard_conditions
 from core.model.templates import blank_project
 
 
@@ -89,10 +89,10 @@ def column(layers: list[tuple[float, float, dict]], width: float = 1.0,
     p["water"] = {"y": water_y} if water_y is not None else None
     # Hydrostatic about the water level, or about the base -- zero everywhere -- in a
     # dry column.
-    p["boundary_conditions"] = [{"id": "pore_pressure", "name": "Pore pressure",
-                                 "kind": "water_pressure", "on": "domain",
-                                 "reference_coordinate":
-                                     water_y if water_y is not None else bottom}]
+    p["boundary_conditions"] = [
+        *(c.model_dump() for c in standard_conditions()),
+        {"id": "pore_pressure", "name": "Pore pressure", "kind": "water_pressure",
+         "on": "domain", "reference_coordinate": water_y if water_y is not None else bottom}]
     p["mesh"] = {"element_size": min(width, (top - bottom) / 10), "order": 2}
     if k0_stage:
         p["phases"] = [{"id": "initial", "name": "Initial stage", "calculation": "K0 procedure"}]

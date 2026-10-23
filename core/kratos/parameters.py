@@ -249,6 +249,7 @@ def project_parameters(
     domain_size: int = 2,
     body_parts: Sequence[str] = (),
     rotation_dofs: bool = False,
+    gravity: bool = True,
 ) -> str:
     """`constraints` is (sub-model part name, DISPLACEMENT is_fixed per axis).
     `loads` is (sub-model part name, Kratos variable, active per axis, value).
@@ -265,16 +266,17 @@ def project_parameters(
     not: `deck_name` is the .mdpa's name without its extension (Kratos appends it) and
     the stem every result file is named after, `domain_size` is 2 or 3, `body_parts`
     names every element-carrying sub-model part, and `rotation_dofs` says whether
-    anything in the deck has rotations -- a beam or a shell does, soil does not."""
+    anything in the deck has rotations -- a beam or a shell does, soil does not.
+    `gravity` is `Project.gravity`: off, no stage has the self weight process."""
     rendered: dict[str, dict] = {}
     for index, stage in enumerate(stages):
         live = stage.active
         keep = (lambda name: True) if live is None else (lambda name: name in live)
 
-        # Gravity first, and in every stage of every deck: it is what gives the
+        # Gravity first, and in every stage of a deck that has it: it is what gives the
         # continuum elements their self weight, and it is not filtered because the part
         # it names is the one the solver assembles out of whatever is active.
-        loads_processes = [_gravity()]
+        loads_processes = [_gravity()] if gravity else []
         # In the project's units, which are the deck's: written as they stand.
         loads_processes += [_load(name, variable, active, list(value))
                             for name, variable, active, value in loads if keep(name)]
@@ -802,8 +804,9 @@ def _gravity() -> dict:
     *   **Axis 1, always.** Y is up in both dimensions this exporter writes, and it is
         the same axis the constraint and normal-load processes already name as
         `gravity_direction` and the materials file as `K0_MAIN_DIRECTION`.
-    *   **Every stage, filtered by nothing.** There is no project in which the ground
-        has no weight, so there is no condition to put this behind.
+    *   **Every stage, filtered by nothing.** The ground has its weight in every stage
+        or in none: `Project.gravity` is one switch for the whole sequence, on unless the
+        user turns it off.
     """
     return _load(COMPUTATIONAL_MODEL_PART, "VOLUME_ACCELERATION",
                  [False, True, False], [0.0, -GRAVITY, 0.0])

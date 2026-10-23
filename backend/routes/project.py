@@ -15,8 +15,9 @@ from backend import store
 from backend.routes.common import refusals
 from core import session
 from core.model import phases
-from core.model.schemas import (DimensionUpdate, LayersUpdate, MaterialsUpdate, PhasesUpdate, Project,
-                          StructuresUpdate, UnitsUpdate, WaterUpdate)
+from core.model.schemas import (ConditionsUpdate, DimensionUpdate, LayersUpdate, MaterialsUpdate,
+                                PhasesUpdate, Project, StructuresUpdate, UnitsUpdate,
+                                WaterUpdate)
 
 router = APIRouter()
 
@@ -142,6 +143,20 @@ async def patch_structures(update: StructuresUpdate) -> dict:
     with refusals():
         project = session.replace_structures(store.get(), update)
     store.put(project)
+    return {"project": project, "invalidates": ["project", "tree", "geometry", "mesh"]}
+
+
+@router.patch("/api/project/conditions")
+async def patch_conditions(update: ConditionsUpdate) -> dict:
+    """Replace the boundary conditions as one list, and set gravity
+    (`session.replace_conditions`); a field left out stays as it is. What the GUI's
+    boundary conditions dialog, its explorer rows and the `boundary` and `gravity`
+    commands send (frontend/js/boundary-conditions.js)."""
+    with refusals():
+        project = session.replace_conditions(store.get(), update)
+    store.put(project)
+    # A condition on a drawn line or point is embedded in the section, so the mesh
+    # changes with it.
     return {"project": project, "invalidates": ["project", "tree", "geometry", "mesh"]}
 
 

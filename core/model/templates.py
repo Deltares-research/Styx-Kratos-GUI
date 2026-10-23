@@ -29,6 +29,7 @@ from core.model.schemas import (
     WaterLevel,
     WaterPressureCondition,
     Wells,
+    standard_conditions,
 )
 
 _DEMO_MATERIALS = [
@@ -146,7 +147,7 @@ def seed_project(simple: bool = True) -> Project:
         wells=Wells(positions=[(18.0, 15.0), (32.0, 25.0)], radius=0.35, top_y=0.0, length=15.0),
         water=WaterLevel(y=-1.5),
         # The demo's ground is under water: hydrostatic about the level, fixed.
-        boundary_conditions=[WaterPressureCondition(
+        boundary_conditions=[*standard_conditions(), WaterPressureCondition(
             id="pore_pressure", name="Pore pressure", on="domain",
             reference_coordinate=-1.5)],
         mesh=MeshSettings(element_size=2.5, order=2),

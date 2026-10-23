@@ -30,7 +30,7 @@ explorer**, below the Model explorer.
 Some menu items and tools come from the first design of the GUI and do nothing yet. When you
 click one, the log shows *"…" is not available in Styx yet*. These are, for example:
 **Import soil layers…**, **Create plate**, **Create beam**, **Create embedded beam**,
-**Create prescribed displacement**, **Tunnel designer…**, the wells, drains and flow
+**Tunnel designer…**, the wells, drains and flow
 functions, **Pack project…**, **Print…**, the **Expert** menu (except **Command line**), and
 **Help** → **Reference manual** and **Tutorial manual**.
 
@@ -43,7 +43,7 @@ Do the modes from left to right:
 | Soil | Add boreholes, make the soil layers, and select the soil materials |
 | Structures | Add sheet piles, anchors, interfaces, loads, and drawn or imported solids |
 | Mesh | Set the mesh size and make the mesh |
-| Flow conditions | Set the water level |
+| Flow conditions | Set the water level and the water pressure conditions |
 | Staged construction | Make the construction phases, and select the active parts in each phase |
 | Results | Look at the results of a calculation |
 
@@ -103,8 +103,9 @@ Styx keeps the layers without gaps. When you change the bottom or the thickness 
 the top of the layer below it moves too.
 
 > [!NOTE]
-> Each borehole has a **Water level** field. Styx keeps this value, but Kratos uses only the
-> global water level of [Flow conditions mode](#flow-conditions-mode).
+> Each borehole has a **Water level** field. Styx keeps this value, but does not send it to
+> Kratos. The water pressures come from the water pressure conditions of
+> [Flow conditions mode](#flow-conditions-mode).
 
 ### Material sets
 
@@ -143,7 +144,8 @@ lift of the pit as its own soil body, for example *Soil_Top · lift 1*.
 | Anchor | Click **Create anchor…** (in 3D: **Create anchor in space…**). Styx puts the head of the anchor on a sheet pile, a wall panel or a member. Then change the head, the tail and the prestress in the Selection explorer. |
 | Interface (2D only) | Click **Create interface**. See [Interfaces](#interfaces). |
 | Point or line load (2D), surface load (3D) | Click **Create load**. Type the position and the load components, or click **Pick on model…** and click in the viewport. |
-| Normal load (2D only) | Click **Create normal load**. Type the two end points. Select **Uniform** and type the pressure, or select **Hydrostatic** to calculate the pressure from the water level. |
+| Normal load (2D only) | Click **Create normal load**. Type the two end points. Select **Uniform** and type the pressure, or select **Hydrostatic** and type the **Reference level**, where the pressure is zero. An empty level takes the water level. |
+| Support (2D only, along a line or at a point) | Click **Create boundary condition** and select **Line prescribed displacement** or **Point prescribed displacement**. Click the points in the viewport, then select the components to fix. See [Boundary conditions](#boundary-conditions). |
 | Point, line, surface, or box (3D only) | Click the tool, then click the points in the viewport. You can also type `x y` or `x y z` in the command box for each point. Press <kbd>Enter</kbd> to finish a line or a surface, or <kbd>Esc</kbd> to stop. |
 | Solid from a CAD file | Click **Import model…** and select a STEP, IGES, BREP, STL or OBJ file. |
 
@@ -197,15 +199,74 @@ the parts that contain a node, type `node <id>`.
 
 ## Flow conditions mode
 
-The model has one horizontal water level. Kratos uses it to calculate a hydrostatic pore
-pressure in the full model.
+The water pressures in the soil come from the water pressure conditions only. A model with
+no water pressure condition has no fixed water pressure, also when it has a water level.
+See [Boundary conditions](#boundary-conditions).
 
-To change the water level, select **Global water level** in the Model explorer. Then change
-**Level** or **Specific weight** in the Selection explorer. You can also type `water -1.5` to
-set the level to -1.5 m, or `water off` to remove the water.
+The model has one horizontal water level. A new hydrostatic water pressure condition or
+normal load takes this level as its own. To change the water level, select **Global water
+level** in the Model explorer. Then change **Level** or **Specific weight** in the Selection
+explorer. You can also type `water -1.5` to set the level to -1.5 m, or `water off` to
+remove the water. A condition keeps its own level when the water level changes.
 
-The tools in the tool rail of this mode (water level, well, drain, flow functions) are not
-available yet.
+**Create water pressure line** draws a water pressure along a line or at a point (2D).
+**Boundary conditions…** opens the window of all conditions. The well, drain and flow
+function tools are not available yet.
+
+## Boundary conditions
+
+Kratos gets the boundary conditions of the model and no others. Open the **Boundary
+conditions** window from the Structures or Flow conditions tool rail, or from **Flow
+conditions** → **Boundary conditions…**. The Model explorer lists the conditions under
+**Model conditions** → **Boundary conditions**. Select one to change it in the Selection
+explorer.
+
+To add one condition, click **Create boundary condition** in the Structures or Mesh tool
+rail, or select **Create boundary condition…** in the **Structures** or **Mesh** menu. The
+window asks for the condition and where it acts. For a line, type the points or click **Pick
+on model…** and click them in the viewport; right-click to end the line.
+
+Styx finds a face of the model on the soil: the left face is the soil at the lowest x, and
+the bottom face is the soil at the lowest y. On a slope or a step, the soil can touch such a
+face at one corner only, so a roller on that face holds one node. To hold a sloping or
+stepped edge, put a support on a line along it. A roller on a sloping line is not possible,
+because a support holds x or y and a sloping line has no x or y normal; select the
+components to hold.
+
+| Condition | What it does |
+|---|---|
+| Support | Holds the displacement at zero in x, y or z. **Fixed** holds all components. **Roller** holds the component normal to the face, or to a vertical or horizontal line. A 2D model does not hold z. |
+| Water pressure, Uniform | One pressure at each node of the target, compression negative |
+| Water pressure, Hydrostatic | Zero at its **Reference level**, growing with depth below it. **Tension cut-off** is the most suction above the level; 0 holds the pressure at zero there. |
+| Water pressure, Phreatic line | Hydrostatic below a line through points that you type, x increasing |
+
+A condition acts on the whole soil (water pressure only), a face of the model, a soil part,
+a line or a point. Lines and points are drawn in the 2D section. A water pressure is fixed in
+every phase, or, with **Initial**, only gives the start values.
+
+The viewport does not show the conditions when a model opens. To show a condition, turn on
+its eye in the Model explorer, or select it there; the eye of **Boundary conditions** shows
+all of them. A condition that you only selected goes away when you select something else.
+In 2D, a support that holds x and y has the clamp symbol (a stem on hatched ground), and a
+support that holds one of them has a triangle on rollers. A 2D model does not list its
+front and back supports: the section holds z without them. They stay in the project for the
+solid model, and the calculation files of a 2D model do not contain them.
+
+The window has a row for each face of the model and one for the whole soil. For each row,
+select the support and the water pressure, and type the level or the value. **More…** opens
+the full form of the water pressure, and **Add condition…** makes a condition on a part, a
+line or a point. **Standard conditions** sets the bottom to fixed and the sides to rollers.
+**Clear** removes the conditions on the faces and on the whole soil. Click **Save** to keep
+the changes.
+
+A new project has the standard supports and no water pressure condition. For a dry model
+whose soil couples the water pressure to the deformation (`GEO_DRAINAGE_TYPE` other than
+`CONSTANT_PW_FIELD`), add a **Uniform** water pressure of 0 on the whole soil. The export
+warns about it, and about a model that nothing holds.
+
+**Gravity** is on in a new project. Clear it in the window, or select **Model conditions**
+→ **Gravity**, to remove the self weight from every phase. A K0 phase then has zero
+stresses.
 
 ## Staged construction mode
 
@@ -340,6 +401,8 @@ Type a command in the command box below the log, and press <kbd>Enter</kbd>. Use
 | `calculate` | Calculates the model, as the **Calculate** button |
 | `phases` | Opens the **Phases** window |
 | `water <level>`, `water off` | Sets or removes the water level |
+| `boundary`, `boundary standard` | Lists the boundary conditions, or puts the standard supports back |
+| `gravity`, `gravity on`, `gravity off` | Shows gravity, or switches it on or off |
 | `units`, `units SI`, `units kN` | Shows or changes the unit system |
 | `borehole <x> <y>` | Adds a borehole |
 | `soillayers`, `materials` | Opens the **Modify soil layers** or **Material sets** window |

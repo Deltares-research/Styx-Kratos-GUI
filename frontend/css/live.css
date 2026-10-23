@@ -403,3 +403,19 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
 .phases-overview-box.failed { color: #d64545; }
 .phases-overview-error { white-space: pre-wrap; font-size: var(--fs-sm); max-height: 200px;
   overflow: auto; margin: 0 0 10px; }
+
+/* ── Boundary conditions ───────────────────────────────────────── */
+.boundary-conditions { flex: 1 1 auto; display: block; }
+.bc-grid { border-collapse: collapse; width: 100%; }
+.bc-grid th { text-align: left; font-weight: 600; color: var(--c-ink-soft);
+  font-size: var(--fs-sm); padding: 2px 6px; border-bottom: 1px solid var(--c-border); }
+.bc-grid td { padding: 3px 6px; }
+.bc-grid select, .bc-grid input.bc-number { height: 24px; font: inherit; }
+.bc-grid input.bc-number { width: 90px; }
+.bc-grid input:disabled, .bc-grid select:disabled { color: var(--c-ink-faint); }
+.bc-heading { font-weight: 600; margin: 14px 0 4px; }
+.bc-other { display: flex; gap: 8px; align-items: center; padding: 2px 0;
+  font-family: var(--font-mono); font-size: var(--fs-sm); }
+.bc-other span { flex: 1 1 auto; }
+.bc-gravity { display: block; margin-top: 12px; }
+.bc-axes label { margin-right: 6px; }

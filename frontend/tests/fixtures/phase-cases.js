@@ -1738,6 +1738,81 @@ window.PHASE_FIXTURE =
     },
     "boundary_conditions": [
       {
+        "id": "fixed_bottom",
+        "name": "Fixed bottom",
+        "kind": "displacement",
+        "on": "face",
+        "face": "bottom",
+        "part": null,
+        "points": null,
+        "fixed": [
+          true,
+          true,
+          true
+        ],
+        "active": true
+      },
+      {
+        "id": "roller_left",
+        "name": "Roller left",
+        "kind": "displacement",
+        "on": "face",
+        "face": "left",
+        "part": null,
+        "points": null,
+        "fixed": [
+          true,
+          false,
+          false
+        ],
+        "active": true
+      },
+      {
+        "id": "roller_right",
+        "name": "Roller right",
+        "kind": "displacement",
+        "on": "face",
+        "face": "right",
+        "part": null,
+        "points": null,
+        "fixed": [
+          true,
+          false,
+          false
+        ],
+        "active": true
+      },
+      {
+        "id": "roller_front",
+        "name": "Roller front",
+        "kind": "displacement",
+        "on": "face",
+        "face": "front",
+        "part": null,
+        "points": null,
+        "fixed": [
+          false,
+          false,
+          true
+        ],
+        "active": true
+      },
+      {
+        "id": "roller_back",
+        "name": "Roller back",
+        "kind": "displacement",
+        "on": "face",
+        "face": "back",
+        "part": null,
+        "points": null,
+        "fixed": [
+          false,
+          false,
+          true
+        ],
+        "active": true
+      },
+      {
         "id": "pore_pressure",
         "name": "Pore pressure",
         "kind": "water_pressure",
@@ -1756,6 +1831,7 @@ window.PHASE_FIXTURE =
         "active": true
       }
     ],
+    "gravity": true,
     "mesh": {
       "element_size": 2.5,
       "order": 2,

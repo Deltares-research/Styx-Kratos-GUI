@@ -79,7 +79,7 @@ is one step of the pipeline:
 |---|---|
 | `core/model/` | `schemas.py` (the `Project`), `units.py` (unit systems), `migration.py` (old project files), `templates.py` (empty and demo projects), `drafts.py` (where a new structure goes, as the GUI tools put it), `phases.py` (phase tree → stages), `script_writer.py` (the model as a Python script), `wall_translation.py` and `load_translation.py` (2D ↔ 3D) |
 | `core/geometry/` | `solid_model.py` (OpenCASCADE solids), `tessellation.py` (view), `meshing.py` (finite-element mesh), `cad_import.py` (CAD files), `primitives.py` (recipes for drawn solids) |
-| `core/kratos/` | `writer.py` (the deck), `materials.py` (`MaterialParameters.json`), `parameters.py` (`ProjectParameters.json`: stages, solver, output), `interfaces.py` (split nodes along walls), `deck_files.py` (file names of the deck), `external_deck.py` (existing decks), `mdpa_reader.py`, `node_parts.py` |
+| `core/kratos/` | `writer.py` (the deck), `materials.py` (`MaterialParameters.json`), `parameters.py` (`ProjectParameters.json`: stages, solver, output), `condition_checks.py` (the boundary condition warnings the export and `check` share), `interfaces.py` (split nodes along walls), `deck_files.py` (file names of the deck), `external_deck.py` (existing decks), `mdpa_reader.py`, `node_parts.py` |
 | `core/analysis/` | `calculation.py` (run folder, subprocess, failure messages), `kratos_main.py` (runs inside the Python of Kratos) |
 | `core/results/` | `catalog.py` (list of runs, file access, cache), `gid_reader.py` (GiD ASCII), `fields.py` (quantities, units, invariants), `mesh.py` (buffers for the view), `parts.py`, `members.py` (curves along walls and interfaces) |
 | `core/` | `session.py` (each edit of a project, and the project file: the HTTP routes and the command line both use it), `gmsh_worker.py` (the Gmsh process), `scripting.py` (`run <file.py>`). They send work to several packages, so they are above all five. |
@@ -114,7 +114,7 @@ the HTTP parts.
 
 | Group | Module | Routes |
 |---|---|---|
-| Project | `routes/project.py` | `GET`/`PUT /api/project`; `POST /api/project/new`, `/reset`, `/script`, `/script/save`, `/phases/defaults`; `PATCH /api/project/layers`, `/materials`, `/structures`, `/phases`, `/dimension`, `/units`; `PUT /api/project/water`; `DELETE /api/project/custom_parts` |
+| Project | `routes/project.py` | `GET`/`PUT /api/project`; `POST /api/project/new`, `/reset`, `/script`, `/script/save`, `/phases/defaults`; `PATCH /api/project/layers`, `/materials`, `/structures`, `/conditions`, `/phases`, `/dimension`, `/units`; `PUT /api/project/water`; `DELETE /api/project/custom_parts` |
 | Geometry | `routes/geometry.py` | `GET /api/geometry`; `POST /api/geometry/create`, `/import`; `DELETE /api/geometry/parts/{key}` |
 | Mesh | `routes/mesh.py` | `POST /api/mesh`, `/api/mesh/labels`, `/api/mesh/node-parts` |
 | Decks | `routes/decks.py` | `POST /api/export/mdpa`, `/api/import/mdpa`, `/api/calculate` |
@@ -136,6 +136,7 @@ the HTTP parts.
 | `cli/commands/edit.py` | `get`, `set`, `add`, `remove` |
 | `cli/commands/ground.py`, `volumes.py` | `domain`, `borehole`, `material`, `layer`, `excavation`, `parts`; `volume` |
 | `cli/commands/structures.py` | `section`, `beam`, `wall`, `member`, `anchor`, `interface`, `load`, `normal-load` |
+| `cli/commands/conditions.py` | `boundary`, `gravity` |
 | `cli/commands/meshing.py`, `phases.py` | `mesh`, `export`; `phases` |
 | `cli/commands/inspection.py`, `analysis.py`, `results.py` | `node`, `deck show`; `run`, `calculate`; `results` |
 | `cli/commands/interactive.py` | `shell` |

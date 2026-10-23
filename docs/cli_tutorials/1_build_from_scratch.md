@@ -74,6 +74,9 @@ material set m_soil PERMEABILITY_XX=1e-5 PERMEABILITY_YY=1e-5 PERMEABILITY_XY=0.
 #    K0_NC can be left out: the export then writes 1 - sin(phi), which is 0.5 here too.
 material set m_soil GEO_COHESION=1000.0 GEO_FRICTION_ANGLE=30.0 K0_NC=0.5
 layer add soil --name soil --material m_soil --bottom 0
+#    The block stands on the supports a new project has: the bottom fixed and the sides
+#    on rollers. It is dry, so it needs no water pressure condition.
+boundary list
 
 # 4. The sheet pile: define its steel and cross-section properties, then place a 2D beam
 #    from the ground surface at (10, 10) down to its toe at (10, 3).

@@ -121,6 +121,14 @@ CONTRACTS = [
              lambda c: c.patch("/api/project/structures", json=_structures(c)),
              PROJECT_KEYS,
              bad=lambda c: c.patch("/api/project/structures", json={}), bad_status=422),
+    Contract("PATCH", "/api/project/conditions",
+             lambda c: c.patch("/api/project/conditions", json={
+                 "boundary_conditions": _project(c)["boundary_conditions"],
+                 "gravity": True}),
+             PROJECT_KEYS,
+             bad=lambda c: c.patch("/api/project/conditions", json={"boundary_conditions": [
+                 {"id": "d", "name": "d", "kind": "displacement", "on": "domain"}]}),
+             bad_status=422),
     Contract("PATCH", "/api/project/phases",
              lambda c: c.patch("/api/project/phases", json={"phases": []}), PROJECT_KEYS,
              bad=lambda c: c.patch("/api/project/phases", json={"phases": [

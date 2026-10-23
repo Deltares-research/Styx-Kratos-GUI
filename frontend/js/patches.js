@@ -305,7 +305,14 @@ App.LivePatches = (function () {
     if (App.Interfaces && App.Interfaces.isInterfaceKey(key)) return 'interface';
     if (App.NormalLoads && App.NormalLoads.isNormalLoadKey(key)) return 'normal_load';
     if (App.Loads && App.Loads.isLoadKey(key)) return 'load';
+    if (App.BoundaryConditions && App.BoundaryConditions.isConditionKey(key)) {
+      return 'condition';
+    }
     return null;
+  }
+
+  function conditionByKey(key) {
+    return (App.BOUNDARY_CONDITIONS || []).filter(function (item) { return item.id === key; })[0];
   }
 
   function partByKey(key) {
@@ -339,7 +346,8 @@ App.LivePatches = (function () {
       : kind === 'anchor' ? anchorByKey(key)
       : kind === 'interface' ? interfaceByKey(key)
       : kind === 'normal_load' ? normalLoadByKey(key)
-      : kind === 'load' ? loadByKey(key) : null;
+      : kind === 'load' ? loadByKey(key)
+      : kind === 'condition' ? conditionByKey(key) : null;
     return obj ? (kind === 'part' ? obj.label : obj.name) : '';
   }
 
@@ -395,6 +403,12 @@ App.LivePatches = (function () {
       load.name = name;
       return App.Loads.save(load).catch(reportRenameError);
     }
+    if (kind === 'condition') {
+      var condition = conditionByKey(key);
+      if (!condition) return;
+      condition.name = name;
+      return App.BoundaryConditions.save(condition).catch(reportRenameError);
+    }
   }
 
   function deleteObject(kind, key) {
@@ -404,6 +418,7 @@ App.LivePatches = (function () {
     if (kind === 'interface') return App.Interfaces.remove(key);
     if (kind === 'normal_load') return App.NormalLoads.remove(key);
     if (kind === 'load') return App.Loads.remove(key);
+    if (kind === 'condition') return App.BoundaryConditions.remove(key);
   }
 
   /* explorer.js builds one tree DOM row per App.TREES[mode] node, in the same
@@ -634,6 +649,102 @@ App.LivePatches = (function () {
     return true;
   }
 
+  /* The Flow conditions rail and menu: the water pressure conditions. The frozen
+     "Create water level" draws nothing -- the water level is the `water` command and
+     its explorer row -- so the rail's water tools are the conditions' instead. */
+  /* The rail button of the boundary conditions, in Structures and Mesh mode. A new
+     object each call: a rail item is one button, and the dimension gate below sets each
+     flyout's items on their own. */
+  function conditionTool() {
+    return {
+      icon: 'prescribed', action: 'createBoundaryCondition',
+      tip: 'Create boundary condition',
+      flyout: [
+        { icon: 'prescribed', label: 'Create boundary condition…',
+          action: 'createBoundaryCondition' },
+        { icon: 'prescribed', label: 'Boundary conditions…', action: 'boundaryConditions' },
+        { icon: 'prescribed', label: 'Line prescribed displacement',
+          action: 'createSupportLine' },
+        { icon: 'prescribed', label: 'Point prescribed displacement',
+          action: 'createSupportPoint' }
+      ]
+    };
+  }
+
+  function installBoundaryConditionTools() {
+    var mesh = (App.RAILS || {}).mesh;
+    if (mesh && !mesh.some(function (tool) { return tool && tool.icon === 'prescribed'; })) {
+      mesh.push('-', conditionTool());
+    }
+    var flow = (App.RAILS || {}).flow;
+    if (flow && !flow.some(function (tool) { return tool && tool.action === 'boundaryConditions'; })) {
+      flow.forEach(function (tool) {
+        if (tool && tool.icon === 'waterlevel' && !tool.action) {
+          tool.action = 'createWaterPressureLine';
+          tool.tip = 'Create water pressure line';
+          tool.flyout = [
+            { icon: 'waterlevel', label: 'Water pressure line',
+              action: 'createWaterPressureLine' },
+            { icon: 'waterlevel', label: 'Water pressure point',
+              action: 'createWaterPressurePoint' }
+          ];
+        }
+      });
+      flow.splice(2, 0, { icon: 'settings', tip: 'Boundary conditions…',
+                          action: 'boundaryConditions' });
+    }
+    var menus = App.MENUS || [];
+    var flowMenu = menus.filter(function (m) { return m.label === 'Flow conditions'; })[0];
+    if (flowMenu && !flowMenu.items.some(function (i) { return i && i.action === 'boundaryConditions'; })) {
+      flowMenu.items.unshift({ label: 'Boundary conditions…', icon: 'settings',
+                               action: 'boundaryConditions' }, '-');
+    }
+    var structuresMenu = menus.filter(function (m) { return m.label === 'Structures'; })[0];
+    var items = structuresMenu ? structuresMenu.items : [];
+    items.slice().forEach(function (item) {
+      if (item && item.label === 'Create prescribed displacement') {
+        item.label = 'Boundary conditions…';
+        item.action = 'boundaryConditions';
+        item.sub = false;
+        items.splice(items.indexOf(item), 0, { label: 'Create boundary condition…',
+                                               icon: 'prescribed',
+                                               action: 'createBoundaryCondition' });
+      }
+    });
+    var meshMenu = menus.filter(function (m) { return m.label === 'Mesh'; })[0];
+    if (meshMenu && !meshMenu.items.some(function (i) {
+      return i && i.action === 'createBoundaryCondition';
+    })) {
+      meshMenu.items.push('-',
+        { label: 'Create boundary condition…', icon: 'prescribed',
+          action: 'createBoundaryCondition' },
+        { label: 'Boundary conditions…', icon: 'prescribed', action: 'boundaryConditions' });
+    }
+  }
+
+  /* `boundary ...` and `gravity ...`, typed. What to send is App.BoundaryConditions'
+     (tested headless); this sends it and redraws. `false` when it is not this
+     command. */
+  function runBoundaryCommand(text) {
+    if (!App.BoundaryConditions) return false;
+    var answer = App.BoundaryConditions.command(text, App.PROJECT);
+    if (answer === false) return false;
+    if (App.Command.write) App.Command.write('echo', '> ' + String(text).trim());
+    if (!answer.ok) { App.Command.err(answer.message); return true; }
+    if (!answer.body) { App.Command.note(answer.message); return true; }
+    App.Api.patch('/api/project/conditions', answer.body)
+      .then(function (result) {
+        App.Model.apply(result.project);
+        return App.Viewport.refresh();
+      })
+      .then(function () {
+        if (App.Explorer && App.state) App.Explorer.mountTree(App.state.mode);
+        App.Command.ok(answer.message);
+      })
+      .catch(function (error) { App.Command.err(error.message); });
+    return true;
+  }
+
   /* `water ...`, typed: set, show or remove the project's water level. What to send is
      `App.WaterCommand`'s (tested headless); this sends it and redraws from the project
      the server stored. `false` when it is not this command. */
@@ -641,7 +752,8 @@ App.LivePatches = (function () {
     if (!App.WaterCommand) return false;
     var answer = App.WaterCommand.command(text, {
       water: App.PROJECT ? App.PROJECT.water : null,
-      domain: App.PROJECT ? App.PROJECT.domain : null
+      domain: App.PROJECT ? App.PROJECT.domain : null,
+      conditions: App.PROJECT ? App.PROJECT.boundary_conditions : null
     });
     if (answer === false) return false;
     if (App.Command.write) App.Command.write('echo', '> ' + String(text).trim());
@@ -878,6 +990,7 @@ App.LivePatches = (function () {
   function openProperties(kind, key) {
     var owner = kind === 'load' ? App.Loads
       : kind === 'normal_load' ? App.NormalLoads
+      : kind === 'condition' ? App.BoundaryConditions
       : kind === 'beam' ? App.Beams : null;
     // Anchors and interfaces are deliberately not here: their `edit` saves the record
     // rather than opening anything, so calling it would write, not show.
@@ -944,7 +1057,9 @@ App.LivePatches = (function () {
      element is a surface with a different node layout and no fixture to pin it. */
   /* The rulers measure two named axes of one plane. In 3D the screen edges are three
      axes mixed by the orbit, so a number on an edge would be a number for nothing. */
-  var TWO_D_ONLY = ['interface', 'createNormalLoad', 'toggleRuler'];
+  var TWO_D_ONLY = ['interface', 'createNormalLoad', 'toggleRuler', 'createSupportLine',
+                    'createSupportPoint', 'createWaterPressureLine',
+                    'createWaterPressurePoint'];
 
   function availableIn2D(action) { return THREE_D_ONLY.indexOf(action) < 0; }
 
@@ -992,7 +1107,7 @@ App.LivePatches = (function () {
     ['drawPoint', 'drawLine', 'drawPolygon', 'drawBox'],
     ['plate', 'beam', 'embedded', 'createSheetPile', 'createMember', 'createAnchor',
      'interface'],
-    ['createLoad', 'prescribed'],
+    ['createLoad', 'createBoundaryCondition'],
     ['tunnel'],
     ['importModel']
   ];
@@ -1073,6 +1188,14 @@ App.LivePatches = (function () {
       if (item.action === 'createNormalLoad') { item.disabled = !is2d; return; }
       item.disabled = is2d ? item.loadKind === 'surface' : item.loadKind !== 'surface';
     });
+    // A support drawn along a line or at a point is plane strain; the windows are not.
+    ['structures', 'mesh'].forEach(function (mode) {
+      (((App.RAILS || {})[mode] || []).filter(function (tool) {
+        return tool && tool.icon === 'prescribed';
+      })[0] || { flyout: [] }).flyout.forEach(function (item) {
+        item.disabled = TWO_D_ONLY.indexOf(item.action) >= 0 ? !is2d : false;
+      });
+    });
 
     // Neither structure tool is gated by dimension any more: each dimension has its
     // own kind of them. What changes is which one the tool makes, so the tool says so.
@@ -1144,6 +1267,8 @@ App.LivePatches = (function () {
     if (App.Model.setImportedParts) App.Model.setImportedParts([]);
     // Coloured parts were parts of the document that is no longer open.
     if (App.PartColors) App.PartColors.on.clear();
+    // So were the boundary conditions shown: the next model's open hidden, as any does.
+    if (App.Viewport.forgetConditionEyes) App.Viewport.forgetConditionEyes();
 
     /* And a calculation's results, for exactly the same reason as the .mdpa above:
        they belong to the document that produced them. A different project is open
@@ -1969,6 +2094,8 @@ App.LivePatches = (function () {
     ['export', 'write the Kratos deck'],
     ['phases', 'the Phases overview: every phase, its time and result'],
     ['water <level>|off', 'set or remove the water level, e.g. water -1.5'],
+    ['boundary [list|standard]', 'the boundary conditions, or put the standard supports back'],
+    ['gravity [on|off]', 'show, or switch on or off, the self weight'],
     ['units [SI|kN]', 'show the unit system, or convert the project to another'],
     ['borehole <x> <y>', 'add a borehole'],
     ['soillayers', 'open the Modify soil layers window'],
@@ -2230,6 +2357,27 @@ App.LivePatches = (function () {
         if (App.NormalLoads) App.NormalLoads.start();
         return;
       }
+      if (item && item.action === 'boundaryConditions') {
+        if (App.BoundaryConditions) App.BoundaryConditions.open();
+        return;
+      }
+      if (item && item.action === 'createBoundaryCondition') {
+        if (App.BoundaryConditions) App.BoundaryConditions.openRecord(null);
+        return;
+      }
+      var drawnConditions = {
+        createSupportLine: ['displacement', 'line'],
+        createSupportPoint: ['displacement', 'point'],
+        createWaterPressureLine: ['water_pressure', 'line'],
+        createWaterPressurePoint: ['water_pressure', 'point']
+      };
+      if (item && drawnConditions[item.action]) {
+        if (App.BoundaryConditions) {
+          App.BoundaryConditions.draw(drawnConditions[item.action][0],
+                                      drawnConditions[item.action][1]);
+        }
+        return;
+      }
       if (item && item.action === 'exportModel') {
         if (App.Export) App.Export.run();
         return;
@@ -2432,6 +2580,10 @@ App.LivePatches = (function () {
         if (tool.icon === 'polygon') tool.action = 'drawPolygon';
         // The frozen rail drew an interface button but had nothing to hang on it.
         if (tool.icon === 'interface') tool.action = 'interface';
+        // And a prescribed displacement tool, which is a boundary condition: the button
+        // opens the window of one new condition, the flyout the window of them all, or
+        // draws one along a line or at a point.
+        if (tool.icon === 'prescribed') Object.assign(tool, conditionTool());
         if (tool.icon === 'load') {
           tool.action = 'createLoad';
           (tool.flyout || []).forEach(function (item) {
@@ -2543,6 +2695,7 @@ App.LivePatches = (function () {
       }
     }
 
+    installBoundaryConditionTools();
     installResultsMode();
     installPhasesOverview();
 
@@ -3357,6 +3510,8 @@ App.LivePatches = (function () {
       if (runColourCommand(text)) return;
       // `water <level>` / `water off`: the project's water level.
       if (runWaterCommand(text)) return;
+      // `boundary list|standard`, `gravity [on|off]`: the boundary conditions.
+      if (runBoundaryCommand(text)) return;
       // `units` / `units <system>`: the project's unit system.
       if (runUnitsCommand(text)) return;
       // `node <id>`: which SubModelParts a node is in.
@@ -3536,6 +3691,20 @@ App.LivePatches = (function () {
         // Same as the pile: the Contact rows edit the shared property set in place,
         // so the whole library rides along in the one validated write.
         if (contact) return App.Interfaces.save(contact, copy(App.INTERFACE_SECTIONS || []));
+      }
+
+      if (App.BoundaryConditions && App.BoundaryConditions.isConditionKey(reselect)) {
+        var condition = (App.BOUNDARY_CONDITIONS || []).filter(function (item) {
+          return item.id === reselect;
+        })[0];
+        // The record is the whole write, as for a normal load.
+        if (condition) return App.BoundaryConditions.save(condition);
+      }
+      if (reselect === 'gravity' && App.BoundaryConditions) {
+        var on = App.PENDING_GRAVITY;
+        App.PENDING_GRAVITY = undefined;
+        if (on !== undefined) return App.BoundaryConditions.setGravity(on);
+        return;
       }
 
       if (App.NormalLoads && App.NormalLoads.isNormalLoadKey(reselect)) {

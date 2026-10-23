@@ -36,12 +36,13 @@ import gmsh
 
 from core.model import phases
 from core.geometry import solid_model, meshing
+from core.kratos import condition_checks
 from core.kratos import deck_files, interfaces
 from core.kratos import materials, parameters
 from core.kratos.materials import material_parameters
-from core.model.schemas import (TARGET_ORDER, Beam, LineLoad, Member, MeshRequest, Panel,
-                                PanelSection, PointLoad, Project, SurfaceLoad,
-                                WaterPressureCondition)
+from core.model.schemas import (TARGET_ORDER, Beam, DisplacementCondition, LineLoad, Member,
+                                MeshRequest, Panel, PanelSection, PointLoad, Project,
+                                SurfaceLoad, WaterPressureCondition)
 
 # (dim, gmsh element type) -> (Kratos class, gmsh index order in Kratos' order)
 ELEMENTS: dict[tuple[int, int], tuple[str, tuple[int, ...]]] = {
@@ -315,11 +316,12 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
     # The soil a condition can name: every layer body, and every custom part that has a
     # material -- what `soil_blocks` holds besides, a 3D wall or strut, is not soil.
     soil_keys = set(project.soil_part_keys())
-    water_parts, water_pressures = _water_pressures(
+    condition_parts, resolved = _condition_targets(
         project, dim, boundaries, boundary_owners, names,
         {key: nodes for key, nodes in body_nodes.items() if key in soil_keys},
         node_id, warnings)
-    parts.extend(water_parts)
+    parts.extend(condition_parts)
+    water_pressures = _water_pressures(project, resolved, warnings)
     parts.extend(load_parts)
     supports: list[tuple[str, list[int], list[int], list[int]]] = [(f"{names[key]}_Support", [node_id[tag]], [], [])
                 for key, tag in anchor_supports.items() if tag in node_id]
@@ -363,7 +365,7 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
          project.water_specific_weight)
         for load in project.active_normal_loads if load.id in condition_keys
     ]
-    _unused_water_level(project, warnings)
+    warnings.extend(condition_checks.warnings(project))
     beam_properties = [(names[key], project.beam_section(_beam_of(project, key).section),
                         dim)
                        for key, _, _ in beam_blocks]
@@ -478,7 +480,7 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
             project, part_materials, dim, beam_properties, anchor_properties,
             panel_properties, interface_properties, k0=True)
     processes = parameters.project_parameters(
-        _boundary_constraints(project, dim, boundaries) + anchor_fixities,
+        _displacements(dim, boundaries, resolved) + anchor_fixities,
         [(name, variable, load_mask, value) for name, variable, value in active_loads],
         stages,
         normal_load_processes,
@@ -489,6 +491,7 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
         # A Timoshenko beam and a shell carry rotations; soil, a truss tendon and an
         # interface do not, and dofs no element uses cost memory for nothing.
         rotation_dofs=bool(beam_blocks or panel_blocks),
+        gravity=project.gravity,
     )
     return {
         "mdpa": _render(coordinates, node_id, numbered, condition_blocks, parts),
@@ -1549,9 +1552,9 @@ def _segment_boundaries(project: Project, boundaries: list[tuple[str, int, list[
 
     Only where it is needed. A face no lift touches (the far side, the bottom) never
     loses a body, so splitting it would buy nothing and add parts to every process list
-    that names it. `Top_Surface` is skipped even where a lift does reach it: it is the
-    free surface and is never constrained (`_boundary_constraints`), so segmenting it
-    would produce parts nothing reads.
+    that names it. `Top_Surface` is skipped even where a lift does reach it, unless a
+    boundary condition is on the top face: it is the free surface, and with nothing on
+    it segmenting it would produce parts nothing reads.
 
     Segments overlap by one node at each seam, and deliberately: the node between two
     lifts belongs to both, and the node at the final floor belongs to the last lift
@@ -1567,6 +1570,8 @@ def _segment_boundaries(project: Project, boundaries: list[tuple[str, int, list[
              if inside and "__lift" in key]
     if not lifts:
         return boundaries, {}
+    top = any(c.active and c.on == "face" and c.face == "top"
+              for c in project.boundary_conditions)
 
     # Nodes that exist only in lifts. Subtracting these rather than all lift nodes is
     # what leaves the seams in the remainder -- and it leaves structural nodes lying on
@@ -1579,8 +1584,8 @@ def _segment_boundaries(project: Project, boundaries: list[tuple[str, int, list[
     owners: dict[str, str] = {}
     for name, axis, nodes in boundaries:
         touching = [key for key in lifts
-                    if body_nodes.get(key, set()) & set(nodes)] if name != "Top_Surface" \
-            else []
+                    if body_nodes.get(key, set()) & set(nodes)] \
+            if name != "Top_Surface" or top else []
         if not touching:
             out.append((name, axis, nodes))
             continue
@@ -1595,60 +1600,35 @@ def _segment_boundaries(project: Project, boundaries: list[tuple[str, int, list[
 
 
 
-def _boundary_constraints(project: Project, dim: int,
-                          boundaries: list[tuple[str, int, list[int]]]
-                          ) -> list[tuple[str, list[bool]]]:
-    """DISPLACEMENT fixities for a box domain: pinned at the bottom, rollers on the
-    sides. `Top_Surface` is deliberately excluded -- it is the free or loaded surface,
-    never a fixed one.
-    """
-    ndof = [True, True, dim == 3]
-    out = []
-    for name, axis, _ in boundaries:
-        if name == "Top_Surface":
-            continue
-        if name == "Bottom_Fixed":
-            out.append((name, list(ndof)))
-            continue
-        # Kratos coordinates are world coordinates in both dimensions, so the world
-        # axis is the vector index. In 2D the only axis this never sees is z, which
-        # `_boundary_nodes` has already dropped.
-        is_fixed = [False, False, False]
-        is_fixed[axis] = True
-        out.append((name, is_fixed))
-    return out
-
-
-# ── Water pressure ──────────────────────────────────────────────────────────
+# ── Boundary conditions ─────────────────────────────────────────────────────
 
 FACE_PARTS = {"bottom": "Bottom_Fixed", "left": "Left_Edge", "right": "Right_Edge",
               "front": "Front_Edge", "back": "Back_Edge", "top": "Top_Surface"}
 """A condition's face (`schemas.FACES`) -> the node part `_boundary_nodes` writes for it.
 The names are older than the conditions and stay, so a deck's parts keep their names
-whatever is prescribed on them."""
+whatever is prescribed on them -- `Bottom_Fixed` also when the bottom is a roller."""
+
+Resolved = tuple[DisplacementCondition | WaterPressureCondition, list[str | None], set[int]]
+"""A condition, the deck parts it is written on (`None` for the whole porous domain), and
+the node ids those hold."""
 
 
-def _water_pressures(project: Project, dim: int,
-                     boundaries: list[tuple[str, int, list[int]]],
-                     boundary_owners: dict[str, str], names: dict[str, str],
-                     body_nodes: dict[str, set[int]], node_id: dict[int, int],
-                     warnings: list[str]
-                     ) -> tuple[list[tuple[str, list[int], list[int], list[int]]],
-                                list[parameters.WaterPressure]]:
-    """The node parts the water pressure lines and points add, and every active
-    condition as the processes it is written as.
+def _condition_targets(project: Project, dim: int,
+                       boundaries: list[tuple[str, int, list[int]]],
+                       boundary_owners: dict[str, str], names: dict[str, str],
+                       body_nodes: dict[str, set[int]], node_id: dict[int, int],
+                       warnings: list[str]
+                       ) -> tuple[list[tuple[str, list[int], list[int], list[int]]],
+                                  list[Resolved]]:
+    """The node parts the drawn lines and points add, and every condition the deck
+    writes with the parts it is written on.
 
     A face is every part `_boundary_nodes` and `_segment_boundaries` made of it: the
     remainder under the face's own name, and one segment per excavation lift that
     reaches it, which then goes with its lift. A part is every body dug out of it
     (`Project.expand_body_keys`), each of which goes with its lift the same way. A line
     is the nodes on its own mesh edges, and a point the node on its own vertex
-    (`solid_model._embed_beams`).
-
-    Written start values first, then the fixed ones least specific first
-    (`schemas.TARGET_ORDER`): Kratos keeps the value written last on a node, so a face
-    beats the whole soil and a point beats a face. `body_nodes` is the node ids of each
-    soil body, which the parts and the overlap check read.
+    (`solid_model._embed_beams`). `body_nodes` is the node ids of each soil body.
     """
     faces: dict[str, list[str]] = {}
     for name, _, _ in boundaries:
@@ -1659,17 +1639,18 @@ def _water_pressures(project: Project, dim: int,
     vertices = _tagged(0) if dim == 2 else {}
 
     parts: list[tuple[str, list[int], list[int], list[int]]] = []
-    resolved: list[tuple[WaterPressureCondition, list[str | None], set[int]]] = []
+    resolved: list[Resolved] = []
     for condition in project.boundary_conditions:
-        if condition.kind != "water_pressure" or not condition.active:
+        # Left out of this dimension altogether is `condition_checks.warnings`' to say.
+        if not condition_checks.written(project, condition):
             continue
-        noun = f"water pressure condition {condition.name!r}"
+        noun = condition_checks.noun(condition)
         targets: list[str | None]
         if condition.on == "domain":
             targets = [None]
             nodes = set().union(*body_nodes.values()) if body_nodes else set()
         elif condition.on == "part":
-            bodies = [key for key in project.expand_body_keys([condition.part])
+            bodies = [key for key in project.expand_body_keys([condition.part or ""])
                       if key in body_nodes]
             if not bodies:
                 warnings.append(f"{noun} is on part {condition.part!r}, which has no soil "
@@ -1678,10 +1659,6 @@ def _water_pressures(project: Project, dim: int,
             targets = [names[key] for key in bodies]
             nodes = set().union(*(body_nodes[key] for key in bodies))
         elif condition.on in ("line", "point"):
-            if dim != 2:
-                warnings.append(f"{noun} is on a {condition.on}, which is drawn in the 2D "
-                                "section; this 3D deck leaves it out.")
-                continue
             if condition.on == "line":
                 tags = {tag for row in _segments(lines.get(condition.id, [])) for tag in row}
             else:
@@ -1691,22 +1668,57 @@ def _water_pressures(project: Project, dim: int,
             if not nodes:
                 raise ExportError(
                     f"{noun} has no mesh at its {condition.on} -- it lies outside the soil "
-                    "in this section, so there is nothing for the pressure to act on.")
+                    "in this section, so there is nothing for it to act on.")
             parts.append((names[condition.id], sorted(nodes), [], []))
             targets = [names[condition.id]]
         else:
-            targets = list(faces.get(FACE_PARTS[condition.face], []))
-            if not targets:
+            on_face = faces.get(FACE_PARTS[condition.face or ""], [])
+            if not on_face:
                 warnings.append(f"{noun} is on the {condition.face} face, which this "
                                 f"{dim}D model does not have; it is left out.")
                 continue
-            nodes = set().union(*(face_nodes[name] for name in targets))
+            targets = list(on_face)
+            nodes = set().union(*(face_nodes[name] for name in on_face))
         resolved.append((condition, targets, nodes))
+    return parts, resolved
 
+
+def _displacements(dim: int, boundaries: list[tuple[str, int, list[int]]],
+                   resolved: list[Resolved]) -> list[tuple[str, list[bool]]]:
+    """(part name, DISPLACEMENT is_fixed per axis) for every displacement condition.
+
+    The faces in the order of `BOUNDARIES` -- each one's lift segments, then what is
+    left of it -- which is the order the deck has always had its supports in, then the
+    parts, lines and points in the order the user gave them. A 2D section has no z
+    displacement, so its deck never fixes one.
+    """
+    def mask(condition: DisplacementCondition) -> list[bool]:
+        return [held and (axis < 2 or dim == 3)
+                for axis, held in enumerate(condition.fixed)]
+
+    held = [(condition, targets) for condition, targets, _ in resolved
+            if isinstance(condition, DisplacementCondition)]
+    out = [(name, mask(condition)) for name, _, _ in boundaries
+           for condition, targets in held if condition.on == "face" and name in targets]
+    out += [(target, mask(condition)) for condition, targets in held
+            if condition.on != "face" for target in targets if target is not None]
+    return out
+
+
+def _water_pressures(project: Project, resolved: list[Resolved],
+                     warnings: list[str]) -> list[parameters.WaterPressure]:
+    """Every water pressure condition, as the processes it is written as.
+
+    Written start values first, then the fixed ones least specific first
+    (`schemas.TARGET_ORDER`): Kratos keeps the value written last on a node, so a face
+    beats the whole soil and a point beats a face.
+    """
+    pressures = [(condition, targets, nodes) for condition, targets, nodes in resolved
+                 if isinstance(condition, WaterPressureCondition)]
     # Stable, so each group keeps the order the user gave the conditions in.
-    resolved.sort(key=lambda entry: (entry[0].is_fixed, TARGET_ORDER.index(entry[0].on)))
-    _overlapping_water_pressures(resolved, warnings)
-    out = [parameters.WaterPressure(
+    pressures.sort(key=lambda entry: (entry[0].is_fixed, TARGET_ORDER.index(entry[0].on)))
+    _overlapping_water_pressures(pressures, warnings)
+    return [parameters.WaterPressure(
         part=target, fluid_pressure_type=condition.fluid_pressure_type,
         is_fixed=condition.is_fixed, value=condition.value,
         # Required of a hydrostatic record, and read for nothing else.
@@ -1718,25 +1730,7 @@ def _water_pressures(project: Project, dim: int,
                             or [0.0] * len(condition.x_coordinates or ())),
         pressure_tension_cut_off=condition.pressure_tension_cut_off,
         specific_weight=project.water_specific_weight)
-        for condition, targets, _ in resolved for target in targets]
-
-    # A soil whose water pressure stays as it starts (`CONSTANT_PW_FIELD`, what
-    # `core.kratos.materials` fills in) needs nothing to fix it: a dry model of such soil
-    # runs, and gives the results it gave when the export still fixed zero everywhere.
-    # One that couples it does not, and is the one to say something about.
-    used = ({layer.mat for layer in project.layers}
-            | {part.mat for part in project.custom_parts if part.mat is not None})
-    coupled = [m.name for m in project.materials if m.id in used
-               and m.variables.get("GEO_DRAINAGE_TYPE", "CONSTANT_PW_FIELD")
-               != "CONSTANT_PW_FIELD"]
-    if not out and coupled:
-        warnings.append(
-            "no water pressure condition is set, so nothing fixes the water pressure, "
-            f"and {', '.join(repr(name) for name in coupled)} couples it to the "
-            "deformation (GEO_DRAINAGE_TYPE); Kratos may not be able to solve it. Add a "
-            "water pressure condition (for a dry model: Uniform, value 0, on the whole "
-            "soil).")
-    return parts, out
+        for condition, targets, _ in pressures for target in targets]
 
 
 def _overlapping_water_pressures(
@@ -1758,24 +1752,6 @@ def _overlapping_water_pressures(
                     f"water pressure conditions {first.name!r} and {second.name!r} both "
                     f"fix the pressure on {shared} shared node(s); the deck keeps "
                     f"{second.name!r}'s value there, as it comes later in the list.")
-
-
-def _unused_water_level(project: Project, warnings: list[str]) -> None:
-    """Say so when the project has a water level and nothing in the deck reads it: since
-    the level fixes no pressure by itself, a model with no water pressure condition is a
-    model whose author may expect pore pressures it will not get."""
-    if project.water is None:
-        return
-    conditions = any(c.kind == "water_pressure" and c.active
-                     for c in project.boundary_conditions)
-    loads = any(load.fluid_pressure_type == "Hydrostatic"
-                and load.reference_coordinate is None
-                for load in project.active_normal_loads)
-    if not conditions and not loads:
-        warnings.append(
-            f"the water level ({project.water.y:g} m) fixes no pressure by itself, and no "
-            "water pressure condition or normal load uses it. Add a water pressure "
-            "condition if the soil should be under water.")
 
 
 def _part_materials(project: Project, names: dict[str, str],

@@ -339,6 +339,9 @@ def _normal_load_fields(parser: argparse.ArgumentParser) -> None:
                       help="--pressure everywhere along the line")
     parser.add_argument("--pressure", type=float,
                         help="a stress, compression positive, for a uniform load")
+    parser.add_argument("--reference-coordinate", type=float, metavar="Y",
+                        help="a hydrostatic load's water level, in metres (default: the "
+                             "project's, copied into the load)")
 
 
 # ── list, add, set, remove ──────────────────────────────────────────────────
@@ -431,7 +434,8 @@ def _drafted(project: Project, args: argparse.Namespace):
     if kind == "normal":
         return drafts.normal_load(project, _points(args.points, 2),
                                   hydrostatic=bool(args.hydrostatic),
-                                  pressure=args.pressure or 0.0, **named)
+                                  pressure=args.pressure or 0.0,
+                                  reference_coordinate=args.reference_coordinate, **named)
     components = _components(project, args.components)
     if args.load_kind == "point":
         return drafts.point_load(project, args.at, components=components, **named)
@@ -471,7 +475,12 @@ def _fields(project: Project, record, args: argparse.Namespace) -> dict:
             fields["points"] = coordinates(args.points, 2)
         if args.hydrostatic is not None:
             fields["fluid_pressure_type"] = "Hydrostatic" if args.hydrostatic else "Uniform"
-        fields.update(given(args, "pressure"))
+        fields.update(given(args, "pressure", "reference_coordinate"))
+        # A load made hydrostatic takes the project's level as a new one does
+        # (`drafts.normal_load`), so it says what it is measured from.
+        if (args.hydrostatic and record.reference_coordinate is None
+                and "reference_coordinate" not in fields and project.water is not None):
+            fields["reference_coordinate"] = project.water.y
     if kind in ("point", "line", "surface"):
         if args.at is not None:
             fields["x"], fields["y"] = args.at
@@ -536,8 +545,10 @@ def _line(record) -> str:
     if kind in ("point", "line", "surface"):
         where += "; " + _xy(record.components)
     if kind == "normal":
-        where += ("; hydrostatic" if record.fluid_pressure_type == "Hydrostatic"
-                  else f"; {record.pressure:g} uniform")
+        where += (f"; {record.pressure:g} uniform" if record.fluid_pressure_type == "Uniform"
+                  else "; hydrostatic about the water level"
+                  if record.reference_coordinate is None
+                  else f"; hydrostatic about {record.reference_coordinate:g} m")
     section = f"  section {record.section}" if hasattr(record, "section") else ""
     side = f", {record.side}" if kind == "interface" and record.points else ""
     return (f"{record.id}  {record.name}  {where}{side}{section}"

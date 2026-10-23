@@ -974,6 +974,10 @@ asks. The second -- which face, which part, where -- is the field it names (`fac
 `part`, `points`). Two fields rather than one overloaded value, so the record holds the
 dialog's two answers as they are and nothing has to guess what kind a value is."""
 
+PressureType = Literal["Uniform", "Hydrostatic", "Phreatic_Multi_Line"]
+"""How a water pressure condition gives each node its pressure: Kratos'
+`fluid_pressure_type`, under its own names (`WaterPressureCondition`)."""
+
 TARGET_ORDER = ("domain", "part", "face", "line", "point")
 """The order fixed conditions are written in, least specific first: where two act on
 one node, Kratos keeps the value written last, so the more specific target wins."""
@@ -1021,8 +1025,7 @@ class WaterPressureCondition(Base):
     face: Face | None = None
     part: str | None = None
     points: list[tuple[float, float]] | None = None
-    fluid_pressure_type: Literal["Uniform", "Hydrostatic", "Phreatic_Multi_Line"] = \
-        "Hydrostatic"
+    fluid_pressure_type: PressureType = "Hydrostatic"
     is_fixed: bool = True
     value: float = 0.0
     """A stress in the project's units, Kratos' sign (compression negative). Read only
@@ -1044,7 +1047,7 @@ class WaterPressureCondition(Base):
     @model_validator(mode="after")
     def _usable(self) -> WaterPressureCondition:
         noun = f"water pressure condition {self.id!r}"
-        self._check_target(noun)
+        _check_target(self, noun)
         numbers = [self.value, self.pressure_tension_cut_off]
         if self.reference_coordinate is not None:
             numbers.append(self.reference_coordinate)
@@ -1075,32 +1078,97 @@ class WaterPressureCondition(Base):
                              "the line (x_coordinates and y_coordinates)")
         return self
 
-    def _check_target(self, noun: str) -> None:
-        """`on` and the one field it names, and none of the others."""
-        named = {"face": self.face, "part": self.part, "points": self.points}
-        wanted = {"face": "face", "part": "part", "line": "points",
-                  "point": "points"}.get(self.on)
-        stray = sorted(field for field, value in named.items()
-                       if value is not None and field != wanted)
-        if stray:
-            raise ValueError(f"{noun} is on {self.on!r}, which takes no "
-                             + " or ".join(stray))
-        if wanted is not None and not named[wanted]:
-            raise ValueError(f"{noun} is on {self.on!r}, which needs {wanted}")
-        if self.points is None:
-            return
-        if not all(math.isfinite(v) for point in self.points for v in point):
-            raise ValueError(f"{noun} has a non-finite coordinate")
-        if self.on == "point" and len(self.points) != 1:
-            raise ValueError(f"{noun} is on a point, which is one point, not "
-                             f"{len(self.points)}")
-        if self.on == "line":
-            if len(self.points) < 2:
-                raise ValueError(f"{noun} is on a line, which needs at least two points")
-            for first, second in zip(self.points, self.points[1:]):
-                if first == second:
-                    raise ValueError(f"{noun} repeats the point {first}; every segment "
-                                     "needs length")
+def _check_target(record: WaterPressureCondition | DisplacementCondition,
+                  noun: str) -> None:
+    """`on` and the one field it names, and none of the others: the target check both
+    kinds of condition share."""
+    named = {"face": record.face, "part": record.part, "points": record.points}
+    wanted = {"face": "face", "part": "part", "line": "points",
+              "point": "points"}.get(record.on)
+    stray = sorted(field for field, value in named.items()
+                   if value is not None and field != wanted)
+    if stray:
+        raise ValueError(f"{noun} is on {record.on!r}, which takes no "
+                         + " or ".join(stray))
+    if wanted is not None and not named[wanted]:
+        raise ValueError(f"{noun} is on {record.on!r}, which needs {wanted}")
+    if record.points is None:
+        return
+    if not all(math.isfinite(v) for point in record.points for v in point):
+        raise ValueError(f"{noun} has a non-finite coordinate")
+    if record.on == "point" and len(record.points) != 1:
+        raise ValueError(f"{noun} is on a point, which is one point, not "
+                         f"{len(record.points)}")
+    if record.on == "line":
+        if len(record.points) < 2:
+            raise ValueError(f"{noun} is on a line, which needs at least two points")
+        for first, second in zip(record.points, record.points[1:]):
+            if first == second:
+                raise ValueError(f"{noun} repeats the point {first}; every segment "
+                                 "needs length")
+
+
+FACE_NORMALS = {"bottom": 1, "top": 1, "left": 0, "right": 0, "front": 2, "back": 2}
+"""The axis normal to each face (x 0, y 1, z 2): what a roller on it holds."""
+
+
+class DisplacementCondition(Base):
+    """Displacements the user holds at zero: on a face of the domain, on a soil part,
+    along a drawn line, or at a point.
+
+    `fixed` is the components held, x, y and z: all three for a fixed support, the one
+    normal to a face for a roller (`FACE_NORMALS`). A 2D section has no z displacement,
+    so its deck holds only x and y whatever the third says, and a face the section does
+    not have (front and back) is left out without a word: the plane-strain section holds
+    z everywhere already. Written as Kratos' `ApplyVectorConstraintTableProcess` on the
+    target's node part (`core/kratos/parameters.py:_constraint`).
+
+    The target is `on` and the field it names, as for a `WaterPressureCondition`, except
+    that the whole soil (`"domain"`) is no target for a displacement: it would hold the
+    model still.
+    """
+    id: Ident
+    name: str
+    kind: Literal["displacement"] = "displacement"
+    on: ConditionTarget
+    face: Face | None = None
+    part: str | None = None
+    points: list[tuple[float, float]] | None = None
+    fixed: tuple[bool, bool, bool] = (True, True, True)
+    active: bool = True
+
+    @model_validator(mode="after")
+    def _usable(self) -> DisplacementCondition:
+        noun = f"displacement condition {self.id!r}"
+        if self.on == "domain":
+            raise ValueError(f"{noun} is on the whole soil, which would hold the whole "
+                             "model still; put it on a face, a part, a line or a point")
+        _check_target(self, noun)
+        if not any(self.fixed):
+            raise ValueError(f"{noun} holds no component; fix x, y or z, or remove it")
+        return self
+
+
+def standard_conditions() -> list[DisplacementCondition | WaterPressureCondition]:
+    """The supports a model starts with: the bottom fixed, every side on rollers.
+
+    What a new project has, what a project saved before the conditions existed opens
+    with, and what `core.session.standard_conditions` puts back. Displacements only: no
+    project gets a water pressure it did not ask for."""
+    out: list[DisplacementCondition | WaterPressureCondition] = [DisplacementCondition(
+        id="fixed_bottom", name="Fixed bottom", on="face", face="bottom")]
+    for face in ("left", "right", "front", "back"):
+        fixed = [False, False, False]
+        fixed[FACE_NORMALS[face]] = True
+        out.append(DisplacementCondition(
+            id=f"roller_{face}", name=f"Roller {face}", on="face", face=face,
+            fixed=(fixed[0], fixed[1], fixed[2])))
+    return out
+
+
+BoundaryCondition = Annotated[DisplacementCondition | WaterPressureCondition,
+                              Field(discriminator="kind")]
+"""One record of `Project.boundary_conditions`, told apart by its `kind`."""
 
 
 class Phase(Base):
@@ -1251,8 +1319,10 @@ class StructuresUpdate(Base):
 
 
 class ConditionsUpdate(Base):
-    """The boundary conditions, replaced as one list (`core.session.replace_conditions`)."""
-    boundary_conditions: list[WaterPressureCondition]
+    """The boundary conditions, replaced as one list, and gravity
+    (`core.session.replace_conditions`). A field left out stays as it is."""
+    boundary_conditions: list[BoundaryCondition] | None = None
+    gravity: bool | None = None
 
 
 class PhasesUpdate(Base):
@@ -1429,9 +1499,19 @@ class Project(Base):
     the level a new hydrostatic `WaterPressureCondition` or `NormalLoad` is given
     (`core.model.drafts`), which the record then keeps as its own. Only a hydrostatic
     normal load saved without a level still reads it at export."""
-    boundary_conditions: list[WaterPressureCondition] = Field(default_factory=list)
+    boundary_conditions: list[BoundaryCondition] = Field(
+        default_factory=standard_conditions)
     """The conditions the user prescribes on the model's boundaries and soil. The deck
-    holds these and no others: a project with none fixes no water pressure."""
+    holds these and no others: a project with no water pressure condition fixes no water
+    pressure, and one with no displacement condition holds nothing still. Left out --
+    every project saved before the conditions existed, and a new one -- it is the
+    standard supports (`standard_conditions`), which are what the export always wrote;
+    given, even empty, it is exactly what it lists."""
+    gravity: bool = True
+    """Whether gravity acts: the self weight of every body, in every stage. On unless the
+    user switches it off -- for a model loaded by its boundary conditions alone, say. A
+    K0 procedure derives its stresses from the self weight, so with gravity off they are
+    zero (`core.kratos.condition_checks`)."""
     mesh: MeshSettings = Field(default_factory=MeshSettings)
     custom_parts: list[CustomPart] = Field(default_factory=list)
     phases: list[Phase] = Field(default_factory=list)
@@ -1928,13 +2008,13 @@ class Project(Base):
         return [n for n in self.normal_loads if n.active]
 
     @property
-    def drawn_water_pressures(self) -> list[WaterPressureCondition]:
-        """The active water pressure conditions on a drawn line or point, which the
-        section embeds: 2D only, like `active_normal_loads`."""
+    def drawn_conditions(self) -> list[DisplacementCondition | WaterPressureCondition]:
+        """The active boundary conditions on a drawn line or point, which the section
+        embeds: 2D only, like `active_normal_loads`."""
         if self.dimension != 2:
             return []
         return [c for c in self.boundary_conditions
-                if c.kind == "water_pressure" and c.active and c.on in ("line", "point")]
+                if c.active and c.on in ("line", "point")]
 
     # The kind-wise views of the two mixed collections. Every consumer wants one
     # dimension's worth at a time -- the 2D build, the 3D build, the exporter's element

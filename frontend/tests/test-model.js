@@ -954,7 +954,7 @@
     withProject(project(TWO, [], true), function () {
       T.eq(topLabels(App.TREES.soil),
            ['Soil', 'Custom geometry', 'Imported mesh', 'Sheet piles', 'Anchors',
-            'Interfaces', 'Normal loads', 'Loads']);
+            'Interfaces', 'Normal loads', 'Loads', 'Model conditions']);
     });
   });
 

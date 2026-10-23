@@ -23,7 +23,9 @@ the GiD result files (`*.post.res`, `*.post.msh`) and the sheet pile's curves
 file runs from anywhere: in the repository, or copied into a folder of your own.
 
 SI units (N, m), dry, plane strain. Three stages: K0 on the soil alone, then the sheet
-pile is installed, then the load is applied.
+pile is installed, then the load is applied. The block stands on a fixed bottom with
+rollers on its sides; it is dry, so it has no water pressure condition (its soil keeps
+the water pressure it starts with, zero).
 """
 
 from __future__ import annotations
@@ -50,9 +52,10 @@ ROOT = checkout()
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from core.model.schemas import (AnchorRows, Beam, BeamSection, Borehole, Domain,  # noqa: E402
-                                Excavation, LineLoad, Material, MeshSettings, Phase,
-                                Piles, Project, SoilLayer, Struts, Wall, Wells)
+from core.model.schemas import (AnchorRows, Beam, BeamSection, Borehole,  # noqa: E402
+                                DisplacementCondition, Domain, Excavation, LineLoad,
+                                Material, MeshSettings, Phase, Piles, Project, SoilLayer,
+                                Struts, Wall, Wells)
 
 # The soil block: (0, 0) to (20, 10).
 DOMAIN_LEFT_X, DOMAIN_RIGHT_X = 0.0, 20.0
@@ -70,6 +73,17 @@ Kratos deck."""
 
 ELEMENT_SIZE = 1.0
 ELEMENT_ORDER = 1
+
+# The supports: the bottom fixed in x and y, the sides on rollers held in x. The
+# plane-strain section holds z by itself. No water pressure condition: the block is dry.
+BOUNDARY_CONDITIONS = [
+    DisplacementCondition(id="fixed_bottom", name="Fixed bottom", on="face", face="bottom",
+                          fixed=(True, True, True)),
+    DisplacementCondition(id="roller_left", name="Roller left", on="face", face="left",
+                          fixed=(True, False, False)),
+    DisplacementCondition(id="roller_right", name="Roller right", on="face", face="right",
+                          fixed=(True, False, False)),
+]
 
 
 def project() -> Project:
@@ -117,6 +131,7 @@ def project() -> Project:
                     points=[(SHEET_PILE_X, DOMAIN_TOP_Y), (SHEET_PILE_X, SHEET_PILE_TOE_Y)])],
         loads=[LineLoad(id="surcharge", name="Load", x0=LOAD_X0, x1=LOAD_X1,
                         y=DOMAIN_TOP_Y, components=(0.0, LOAD))],
+        boundary_conditions=BOUNDARY_CONDITIONS,
 
         mesh=MeshSettings(element_size=ELEMENT_SIZE, order=ELEMENT_ORDER),
 

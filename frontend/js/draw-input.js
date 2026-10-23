@@ -69,6 +69,16 @@ App.DrawInput = (function () {
   function commit() {
     var recipe = null;
     
+    // A line a tool asked for (a boundary condition's) goes to that tool, not into a
+    // drawn solid: the points are what it wants.
+    if (activeMode === 'line' && activeOptions && activeOptions.onComplete
+        && vertices.length >= 2) {
+      var drawn = vertices.slice();
+      var done = activeOptions.onComplete;
+      finish();
+      done(drawn);
+      return;
+    }
     if (activeMode === 'load' && vertices.length >= ((activeOptions && activeOptions.count) || 2)) {
       var completed = vertices.slice();
       var callback = activeOptions && activeOptions.onComplete;

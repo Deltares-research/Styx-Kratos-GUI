@@ -7,10 +7,12 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from cli.commands import conditions
 from cli.commands.meshing import nothing_to_mesh
 from cli.terminal.files import add_project, add_writing, written
 from cli.terminal.output import Answer, CommandError
 from core import session
+from core.kratos import condition_checks
 from core.model import phases
 from core.model.schemas import DimensionUpdate, MeshRequest, Project, UnitsUpdate
 from core.model.templates import blank_project, seed_project
@@ -37,7 +39,8 @@ def register(commands, common: argparse.ArgumentParser) -> None:
     show.set_defaults(handler=show_project)
 
     check = commands.add_parser("check", parents=[common],
-                                help="check that a model can be meshed and staged")
+                                help="check that a model can be meshed and staged, and "
+                                     "say what the export will warn about its conditions")
     add_project(check)
     check.set_defaults(handler=check_project)
 
@@ -116,7 +119,9 @@ def show_project(args: argparse.Namespace) -> Answer:
 def check_project(args: argparse.Namespace) -> Answer:
     """What the schema cannot say on its own: that there is something to mesh, that the
     phases run in one order, and that the mesh settings name only bodies the model has.
-    Loading has validated the rest."""
+    Loading has validated the rest. The export's warnings about the boundary conditions
+    that need no mesh (`core.kratos.condition_checks`) are said too, as warnings: the model
+    can still be exported."""
     project = session.load(args.project)
     if project.deck is None:
         empty = nothing_to_mesh(project)
@@ -127,8 +132,10 @@ def check_project(args: argparse.Namespace) -> Answer:
         if unknown:
             raise CommandError("the mesh settings name bodies this model does not have: "
                                + ", ".join(unknown))
-    return Answer(data={"ok": True, "file": str(args.project), **summary(project)},
-                  lines=[f"ok: {headline(project)}"])
+    warnings = condition_checks.warnings(project)
+    return Answer(data={"ok": True, "file": str(args.project), **summary(project),
+                        "warnings": warnings},
+                  lines=[f"ok: {headline(project)}"], warnings=warnings)
 
 
 def build_project(args: argparse.Namespace) -> Answer:
@@ -188,8 +195,13 @@ def set_water(args: argparse.Namespace) -> Answer:
                                "metres, e.g. -1.5, or off to remove it.") from None
     project = session.set_water_level(project, level)
     target, where = written(args, project)
-    return Answer(data={"file": _file(target), "water": _water(project)},
-                  lines=[f"{_water_line(project)} {where}"])
+    lines = [f"{_water_line(project)} {where}"]
+    if level is not None and not any(c.kind == "water_pressure"
+                                     for c in project.boundary_conditions):
+        lines.append("The water level fixes no pressure by itself. For pore pressures "
+                     "about it: kratos-cli boundary P add --domain --water-pressure "
+                     "Hydrostatic")
+    return Answer(data={"file": _file(target), "water": _water(project)}, lines=lines)
 
 
 # ── Saying what a model is ──────────────────────────────────────────────────
@@ -212,6 +224,8 @@ def summary(project: Project) -> dict:
                        "normal_loads": len(project.normal_loads)},
         "custom_parts": [p.key for p in project.custom_parts],
         "water": _water(project),
+        "boundary_conditions": conditions.summary(project),
+        "gravity": project.gravity,
         "phases": [p.id for p in project.phases],
         "mesh": {"element_size": project.mesh.element_size, "order": project.mesh.order},
         "deck": project.deck.directory if project.deck is not None else None,
@@ -251,6 +265,11 @@ def described(data: dict) -> list[str]:
         f"  parts       {names(data['parts'])}",
         f"  structures  {structures}",
         f"  water       {'none' if water is None else format(water['y'], '.2f') + ' m'}",
+        "  conditions  " + (", ".join(
+            f"{c['id']} ({c['kind'].replace('_', ' ')} on {c['on']}"
+            + ("" if c["active"] else ", inactive") + ")"
+            for c in data["boundary_conditions"]) or "none"),
+        f"  gravity     {'on' if data['gravity'] else 'off'}",
         f"  phases      {names(data['phases'])}",
         f"  mesh        element size {data['mesh']['element_size']:g}, "
         f"order {data['mesh']['order']}",
