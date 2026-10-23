@@ -1999,7 +1999,8 @@ window.PHASE_FIXTURE =
       "piles",
       "load",
       "water",
-      "wells"
+      "wells",
+      "pore_pressure"
     ]
   },
   "stageable_keys": [
@@ -2018,12 +2019,14 @@ window.PHASE_FIXTURE =
     "piles",
     "load",
     "water",
-    "wells"
+    "wells",
+    "pore_pressure"
   ],
   "active_parts": {
     "initial": [
       "excavation",
       "piles",
+      "pore_pressure",
       "soil_L1",
       "soil_L2",
       "soil_L2__pit",
@@ -2036,6 +2039,7 @@ window.PHASE_FIXTURE =
     "null_step": [
       "excavation",
       "piles",
+      "pore_pressure",
       "soil_L1",
       "soil_L2",
       "soil_L2__pit",
@@ -2049,6 +2053,7 @@ window.PHASE_FIXTURE =
       "excavation",
       "load",
       "piles",
+      "pore_pressure",
       "soil_L1",
       "soil_L2",
       "soil_L2__pit",
@@ -2063,6 +2068,7 @@ window.PHASE_FIXTURE =
       "excavation",
       "load",
       "piles",
+      "pore_pressure",
       "soil_L1__lift1",
       "soil_L2",
       "soil_L2__pit",
@@ -2078,6 +2084,7 @@ window.PHASE_FIXTURE =
       "excavation",
       "load",
       "piles",
+      "pore_pressure",
       "soil_L1__lift1",
       "soil_L2",
       "soil_L2__pit",
@@ -2093,6 +2100,7 @@ window.PHASE_FIXTURE =
       "excavation",
       "load",
       "piles",
+      "pore_pressure",
       "soil_L1",
       "soil_L1__lift2",
       "soil_L2",
@@ -2109,6 +2117,7 @@ window.PHASE_FIXTURE =
       "excavation",
       "load",
       "piles",
+      "pore_pressure",
       "soil_L1",
       "soil_L1__lift2",
       "soil_L2",

@@ -1079,11 +1079,26 @@ def remove_section(project: Project, id: str, kind: str | None = None) -> Projec
 # on a line or a point is a gmsh physical group named by its id, so an id is refused
 # that any part or structure already has, as for a structure.
 
+def _refuse_staged_conditions(project: Project, kept: set[str]) -> None:
+    """Refuse to remove a water pressure condition a phase still switches: which phases
+    should lose it is a modelling decision, as for a structure (`remove_structure`)."""
+    gone = {c.id for c in project.boundary_conditions if c.id not in kept}
+    users = [(phase.id, sorted(gone & set(phase.activate + phase.deactivate)))
+             for phase in project.phases]
+    users = [(phase, named) for phase, named in users if named]
+    if users:
+        listed = "; ".join(f"phase {phase!r} names {', '.join(named)}"
+                           for phase, named in users)
+        raise EditRefused(f"cannot remove a condition that a phase still switches "
+                          f"({listed}); take it out of those phases first")
+
+
 def replace_conditions(project: Project, update: ConditionsUpdate) -> Project:
     """The boundary conditions, as one list, and gravity: what
     `PATCH /api/project/conditions` sends. A field the update leaves out stays."""
     payload = project.model_dump()
     if update.boundary_conditions is not None:
+        _refuse_staged_conditions(project, {c.id for c in update.boundary_conditions})
         payload["boundary_conditions"] = [c.model_dump()
                                           for c in update.boundary_conditions]
     if update.gravity is not None:
@@ -1147,6 +1162,7 @@ def set_gravity(project: Project, on: bool) -> Project:
 def remove_condition(project: Project, id: str) -> Project:
     """The project without the boundary condition `id`."""
     find_condition(project, id)
+    _refuse_staged_conditions(project, {c.id for c in project.boundary_conditions} - {id})
     payload = project.model_dump()
     payload["boundary_conditions"] = [c for c in payload["boundary_conditions"]
                                       if c["id"] != id]

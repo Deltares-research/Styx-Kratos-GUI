@@ -146,8 +146,9 @@ def test_the_parts_alive_in_each_stage_are_the_phase_model_s(client, run, index)
              client.get(f"/api/results/runs/{RUN}/stages/{index}/parts").json()["parts"]}
     with_elements = {name for name, p in parts.items() if p["declared"]}
     interfaces = {name for name in with_elements if name.startswith("Interface_")}
-    expected = ({names[key] for key in phases.active_parts(project, project.phases[index - 1])}
-                & with_elements) - interfaces
+    # A water pressure condition is switched by a phase too, and has no part of its own.
+    expected = ({names[key] for key in phases.active_parts(project, project.phases[index - 1])
+                 if key in names} & with_elements) - interfaces
     alive = {name for name, p in parts.items() if p["alive"]} - interfaces
     assert alive == expected
 

@@ -293,7 +293,7 @@ def list_parts(args: argparse.Namespace) -> Answer:
     for part in project.custom_parts:
         labels[part.key] = part.label + (f" (soil of {part.mat})" if part.mat else "")
     for record in (*project.beams, *project.anchors, *project.interfaces,
-                   *project.normal_loads, *project.loads):
+                   *project.normal_loads, *project.loads, *project.boundary_conditions):
         labels.setdefault(record.id, record.name)
     stageable = project.stageable_keys()
     keys = list(dict.fromkeys([*project.part_keys(), *stageable]))

@@ -113,7 +113,8 @@ and adds only the values that are missing
 | Change between 2D and 3D | Styx converts point, line and surface loads, and sheet piles and panels, and links them with `derived_from` | — | Tested |
 | Load distribution | Uniform only. No load that changes with time. | — | Not available |
 | Water pressure conditions | `ApplyScalarConstraintTableProcess`: `Uniform`, `Hydrostatic` (about the level of the condition) or `Phreatic_Multi_Line`, fixed or as start values only, on the whole soil, a soil part, a face, a drawn line or a point. Without a condition, Styx fixes no water pressure. | 2D, 3D (lines and points 2D) | Tested |
-| Water level of a borehole, water conditions for each phase | Styx keeps the water level of a borehole, but does not export it. A condition acts in every phase. | — | Not exported |
+| Water conditions for each phase | A phase switches a water pressure condition on or off, as it does a load. A stage writes the conditions its phase has on. | 2D, 3D | Tested |
+| Water level of a borehole | Styx keeps the water level of a borehole, but does not export it. | — | Not exported |
 | Displacement conditions | `ApplyVectorConstraintTableProcess` on a face, a soil part, a drawn line or a point, in the components x, y, z that you select. A new project has the bottom fixed and the sides on rollers. | 2D, 3D (lines and points 2D) | Tested |
 | Anchor tail support | The tail node is fixed | 2D, 3D | Tested |
 
@@ -137,7 +138,7 @@ and adds only the values that are missing
 
 | Output | Variables | Status |
 |---|---|---|
-| GiD ASCII files (`.post.res`, `.post.msh`), one pair for each stage | Nodal `DISPLACEMENT`, `TOTAL_DISPLACEMENT`, `WATER_PRESSURE`; `CAUCHY_STRESS_TENSOR` at the Gauss points | Tested |
+| GiD ASCII files (`.post.res`, `.post.msh`), one pair for each stage | Nodal `DISPLACEMENT`, `TOTAL_DISPLACEMENT`, `WATER_PRESSURE`; `CAUCHY_STRESS_TENSOR` and `HYDRAULIC_HEAD` (not with gravity off) at the Gauss points | Tested |
 | Wall forces at the nodes | `AXIAL_FORCE`, `BENDING_MOMENT`, `SHEAR_FORCE` | Tested: a live Kratos run is checked, and agrees with the Kratos reference curves |
 | Interface tractions | `GEO_EFFECTIVE_TRACTION_VECTOR`, written to JSON on the retained side | Tested |
 
@@ -210,7 +211,7 @@ and adds only the values that are missing
 | Feature | Detail | Status |
 |---|---|---|
 | Runs | List all runs, open one, go through its phases | Tested |
-| Quantities | \|u\|, u_x, u_y, u_z, total and for each phase; σ'xx, σ'yy, σ'zz, σ'xy, σ'yz, σ'xz; p', q, σ1, σ2, σ3, τ_max; pore pressure. Total stresses, hydraulic head and saturation if Kratos wrote them. | Tested |
+| Quantities | \|u\|, u_x, u_y, u_z, total and for each phase; σ'xx, σ'yy, σ'zz, σ'xy, σ'yz, σ'xz; p', q, σ1, σ2, σ3, τ_max; pore pressure; hydraulic head (with gravity on). Total stresses and saturation if Kratos wrote them. | Tested |
 | Signs and units | Compression is negative, as Kratos writes it. All quantities are in the unit system of the run (Pa for SI, kPa for kN); lengths in m. | Tested |
 | Display | Colour bands or smooth shading, colour map, reversed scale, automatic or fixed range, deformed mesh with a selected or automatic scale | Tested |
 | Values at a node | All quantities at one node (`results at <node>`) | Tested |
@@ -260,8 +261,8 @@ REST API: `/api/project`, `/api/mesh`, `/api/calculate`, `/api/results/…`.
    (`mohr_coulomb_project` in `tests/models/excavation.py` is ready for it).
    User-defined models (UDSM, UMAT) are written as typed, also without a test.
 2. **No factor of safety.** Styx has no φ–c reduction phase.
-3. **No water conditions for each phase.** A water pressure condition acts in every phase,
-   and there is no groundwater flow calculation.
+3. **No groundwater flow calculation.** The water pressures come from the conditions
+   that each phase has on.
 4. **3D is not proven.** No 3D element, law or interface has run in Kratos in a test.
 5. **Fixed solver settings.** You cannot change the analysis type or the linear solver.
 6. **No excavation tool in the GUI.** A pit with lifts needs `kratos-cli excavation` or a

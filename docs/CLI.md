@@ -81,7 +81,7 @@ CROW excavation wall, as a project file (`crow.json`) and as a model script (`cr
 | `normal-load P list\|add\|set\|remove ...` | Pressures normal to a line, in 2D: `add [ID] --points ... [--hydrostatic [--reference-coordinate Y] \| --pressure S]` |
 | `boundary P list\|add\|set\|remove\|standard ...` | The boundary conditions: `add [ID] --face F\|--part KEY\|--line ...\|--point X Y --fixed\|--roller\|--fix AXIS ...` for a support, `add [ID] --domain\|... --water-pressure TYPE ...` for a water pressure; `standard` puts back the standard supports |
 | `gravity P [on\|off]` | Show, or switch on or off, the self weight of every body (on in a new project) |
-| `parts P` | Every part by its key, the names phases activate and deactivate |
+| `parts P` | Every part by its key, and every water pressure condition: the names phases activate and deactivate |
 | `mesh P [--size S] [--order 1\|2]` | Mesh the model and report its size. `--size` and `--order` are kept in the project |
 | `phases P [list\|show\|defaults\|staged-excavation\|add\|copy\|set\|remove\|activate\|deactivate] ...` | The construction sequence, edited as the GUI's Phases toolbar edits it |
 | `node SOURCE NODE ...` | Which SubModelParts a node of the deck is in, and the nodes an interface split from it |
@@ -250,8 +250,17 @@ kratos-cli boundary pit.json remove well
   A dry model needs no water pressure condition, unless a soil couples the water pressure
   to the deformation (`GEO_DRAINAGE_TYPE`): then `--water-pressure Uniform --value 0` on
   the whole soil, which the export's warning asks for.
-- **Fixed or initial.** A condition holds the pressure in every stage (`--fixed`, the
-  default). `--initial` gives start values only, which the calculation then changes.
+- **Fixed or initial.** A condition holds the pressure in every stage it is on in
+  (`--fixed`, the default). `--initial` gives start values only, which the calculation
+  then changes.
+- **Per phase.** A water pressure condition is on in every phase until a phase switches
+  it off: `phases P deactivate PHASE ID` and `phases P activate PHASE ID`, as for a part
+  (below). A phase with no condition on keeps the pressures the last phase ended with:
+  Kratos leaves the nodes of a `Hydrostatic` or `Phreatic_Multi_Line` condition fixed at
+  those values. A `Uniform` condition frees its nodes when its phase ends, so in a soil
+  that couples the water pressure to the deformation the pressure is then free, and the
+  export warns about it. A condition a phase names cannot be removed; take it out of
+  those phases first. The supports are on in every phase.
 - **Overlap.** The export writes the start values first, then the fixed conditions from the
   least to the most specific target: the whole soil, a part, a face, a line, a point. On a
   node two of them share, the more specific one wins. Two fixed conditions on the same kind
@@ -260,13 +269,15 @@ kratos-cli boundary pit.json remove well
   by its conditions alone; `gravity P on` puts it back. A K0 procedure takes its stresses
   from the self weight, so with gravity off they are zero, and the export says so.
 - `check` prints what the export will warn about the conditions: a model nothing holds, a
-  water level that fixes nothing, a coupled soil with no water pressure condition, a
-  condition this dimension does not have, a K0 procedure with gravity off.
+  water level that fixes nothing, a coupled soil with no water pressure condition or a
+  phase that leaves its water free, a condition this dimension does not have, a K0
+  procedure with gravity off.
 
 ## The stages, command by command
 
-A phase says what it changes about the model it starts from: the parts it switches on and
-off, and how it is solved. `kratos-cli parts P` lists the keys a phase can switch.
+A phase says what it changes about the model it starts from: the parts and the water
+pressure conditions it switches on and off, and how it is solved. `kratos-cli parts P`
+lists the keys a phase can switch.
 
 ```bash
 kratos-cli phases pit.json staged-excavation       # derived from the model, all at once
@@ -278,6 +289,10 @@ kratos-cli phases pit.json add dig_1 --name "Dig 1" --activate water_1 --deactiv
 kratos-cli phases pit.json add props --name "Strut and tie" --activate strut tie
 kratos-cli phases pit.json add dig_2 --name "Dig 2" --deactivate soil_top__lift2
 kratos-cli phases pit.json show dig_2              # what is in the model then
+kratos-cli boundary pit.json add low --domain --water-pressure Hydrostatic --reference-coordinate -6
+kratos-cli phases pit.json deactivate initial low  # the low level is off at first ...
+kratos-cli phases pit.json activate dig_2 low      # ... and on from dig_2, in place of pore
+kratos-cli phases pit.json deactivate dig_2 pore
 kratos-cli phases pit.json list
 ```
 

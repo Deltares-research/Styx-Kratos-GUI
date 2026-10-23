@@ -143,6 +143,21 @@
          ['soil_L1', 'soil_L2', 'soil_L1__lift1', 'drawn_1']);
   });
 
+  test('the phase panel names the water conditions each phase has on', function () {
+    var project = section(standard().concat([
+      pressure('high', 'domain', { name: 'High' }),
+      pressure('low', 'domain', { name: 'Low', reference_coordinate: -6 })]), {
+      stageable_parts: ['soil_L1', 'soil_L2', 'high', 'low'],
+      phases: [{ id: 'p1', name: 'One', parent: null, activate: [], deactivate: ['low'] },
+               { id: 'p2', name: 'Two', parent: 'p1', activate: ['low'],
+                 deactivate: ['high'] },
+               { id: 'p3', name: 'Dry', parent: 'p2', activate: [], deactivate: ['low'] }]
+    });
+    T.eq(BC().waterIn(project, 'p1'), 'High');
+    T.eq(BC().waterIn(project, 'p2'), 'Low');
+    T.eq(BC().waterIn(project, 'p3'), 'None');
+  });
+
   test('points are typed as x y pairs', function () {
     T.eq(BC().parsePoints('0 -5, 5 -5'), [[0, -5], [5, -5]]);
     T.eq(BC().parsePoints('0 -5, 5'), null);

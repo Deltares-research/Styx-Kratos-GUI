@@ -911,6 +911,7 @@ App.Viewport = (function () {
       : [];
     var conditionKeys = conditionKeysOf(App.PROJECT);
     conditionIds = conditionKeys.supports.concat(conditionKeys.water);
+    waterIds = conditionKeys.water.slice();
     modeGroups = computeModeGroups(
       soilKeys, customKeys, !!(App.PROJECT && App.PROJECT.layered_soil), loadKeys,
       beamKeys.concat(anchorKeys), normalLoadKeys, conditionKeys);
@@ -1494,11 +1495,22 @@ App.Viewport = (function () {
      "Roller left" in the explorer shows its rollers. The next selection or mode change
      takes it away again. */
   var conditionIds = [];
+  var waterIds = [];
   var revealed = [];
 
+  /* Whether the eye lets `key` be drawn in `mode`. In Staged construction a water
+     pressure condition has the phase's checkbox in place of its eye, and the stage is
+     what is read there: the conditions the selected phase has on are drawn, the others
+     not (`phaseHidden`). */
+  function eyeOpen(key, mode) {
+    if (mode === 'staged' && waterIds.indexOf(key) >= 0) return true;
+    return visible[key] !== false;
+  }
+
   function shownByMode(key) {
-    return (modeGroups[App.state && App.state.mode] || []).indexOf(key) >= 0
-           && visible[key] !== false && !phaseHidden()[key];
+    var mode = App.state && App.state.mode;
+    return (modeGroups[mode] || []).indexOf(key) >= 0
+           && eyeOpen(key, mode) && !phaseHidden()[key];
   }
 
   function hideRevealed() {
@@ -1576,7 +1588,7 @@ App.Viewport = (function () {
     var hidden = phaseHidden();
     revealed = [];
     Object.keys(groups).forEach(function (k) {
-      groups[k].visible = wanted.indexOf(k) >= 0 && visible[k] !== false
+      groups[k].visible = wanted.indexOf(k) >= 0 && eyeOpen(k, mode)
                           && !hidden[k];
     });
     if (mode === 'mesh' && !meshBuilt && groups.mesh) groups.mesh.visible = false;

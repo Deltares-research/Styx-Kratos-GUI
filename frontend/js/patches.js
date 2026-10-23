@@ -1744,9 +1744,8 @@ App.LivePatches = (function () {
      looks editable and is thrown away on save is worse than an absent one, and the
      three groups below are exactly what `schemas.Phase` carries.
 
-     "Pore pressure calc." stays, read-only, saying what it actually is: the reference
-     deck never varies it and a per-phase phreatic level is deliberately out of scope
-     (plan sec 7.11). "Global water level" is the honest version of that row. */
+     "Water conditions" is read-only: the water pressure conditions the phase has on,
+     which the Model explorer's check boxes switch (App.BoundaryConditions.waterIn). */
   function phaseProps(phase) {
     var parent = phase.parent == null ? null : phaseById(phase.parent);
     return {
@@ -1756,7 +1755,8 @@ App.LivePatches = (function () {
         ['Calculation type', 'select', 'calculation',
          ['K0 procedure', 'Plastic', 'Null step']],
         ['Loading type', 'static', phase.loading || 'Staged construction'],
-        ['Pore pressure calc.', 'static', 'Global water level'],
+        ['Water conditions', 'static', App.BoundaryConditions
+          ? App.BoundaryConditions.waterIn(App.PROJECT, phase.id) : ''],
         ['Time interval', 'number', 'time_interval', { min: 0 }, 'day']
       ],
       'Deformation control': [

@@ -1192,11 +1192,9 @@ class Phase(Base):
     is a legitimate thing to have half-built in the editor, and refusing it here would
     make it impossible to type.
 
-    Out of scope deliberately: a per-phase phreatic level ("Pore
-    pressure calculation type" in the phase panel). The reference deck never varies
-    it -- it changes which water *load* is active, not the water table -- so there is
-    no worked example to follow and inventing one would be guessing. See
-    plan/outdated/staged-construction-plan.md sec 7.
+    The water in a phase is its water pressure conditions: their ids are stageable
+    keys (`Project.stageable_keys`), so a phase switches one on or off as it does a
+    load -- a high level, then a low one.
     """
     id: Ident
     name: str
@@ -1676,8 +1674,9 @@ class Project(Base):
         _reject_duplicates([n.id for n in self.normal_loads], "normal_load")
         _reject_duplicates([c.id for c in self.boundary_conditions], "boundary condition")
         # A condition on a line is a gmsh physical group of its own, named by its id, in
-        # the namespace the parts' groups are in.
-        parts = set(self.stageable_keys()) | {"excavation", "water"}
+        # the namespace the parts' groups are in -- and a water pressure condition is a
+        # key a phase names, in the namespace of the parts and loads.
+        parts = set(self._staged_parts_and_loads()) | {"excavation", "water"}
         collisions = sorted(c.id for c in self.boundary_conditions if c.id in parts)
         if collisions:
             raise ValueError("boundary condition id collides with an existing model part "
@@ -2289,10 +2288,24 @@ class Project(Base):
         kept as separate lists rather than by widening `part_keys`, which would change
         draw order: `part_keys` feeds tessellation, and a key appearing there makes the
         viewport look for geometry that a load pad in the simple example does not have.
+
+        The water pressure conditions are stageable too, last: a phase switches the
+        water on and off as it does a load -- the pit pumped dry, a level that drops.
+        The supports are not; they hold the model in every phase.
         """
         if self.deck is not None:
             # A deck's phases are its stages, and they switch the deck's own parts.
             return list(self.deck.parts)
+        keys = self._staged_parts_and_loads()
+        seen = set(keys)
+        for condition in self.boundary_conditions:
+            if condition.kind == "water_pressure" and condition.id not in seen:
+                seen.add(condition.id)
+                keys.append(condition.id)
+        return keys
+
+    def _staged_parts_and_loads(self) -> list[str]:
+        """`stageable_keys` without the conditions: the parts, then every load id."""
         keys = list(self.part_keys())
         seen = set(keys)
         for load in [l.id for l in self.loads] + [n.id for n in self.normal_loads]:

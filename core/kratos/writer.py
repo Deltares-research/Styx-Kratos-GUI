@@ -631,6 +631,8 @@ def _phased_stages(project: Project, deck: _Deck) -> list[parameters.Stage]:
     out: list[parameters.Stage] = []
     keys = set(project.stageable_keys())
     live = _deck_active(deck, keys)
+    # The water pressure conditions a phase switches, as it does a load.
+    water = {c.id for c in project.boundary_conditions if c.kind == "water_pressure"}
     for index, (phase, switched_on, switched_off) in enumerate(steps):
         was = live
         keys = (set(keys) - switched_off) | switched_on
@@ -700,6 +702,7 @@ def _phased_stages(project: Project, deck: _Deck) -> list[parameters.Stage]:
             tolerated_error=phase.tolerated_error,
             materials_filename=(deck_files.INITIAL_MATERIALS_NAME if k0
                                 else deck_files.MATERIALS_NAME),
+            conditions=frozenset(key for key in keys if key in water),
         ))
     return out
 
@@ -1717,7 +1720,7 @@ def _water_pressures(project: Project, resolved: list[Resolved],
                  if isinstance(condition, WaterPressureCondition)]
     # Stable, so each group keeps the order the user gave the conditions in.
     pressures.sort(key=lambda entry: (entry[0].is_fixed, TARGET_ORDER.index(entry[0].on)))
-    _overlapping_water_pressures(pressures, warnings)
+    _overlapping_water_pressures(project, pressures, warnings)
     return [parameters.WaterPressure(
         part=target, fluid_pressure_type=condition.fluid_pressure_type,
         is_fixed=condition.is_fixed, value=condition.value,
@@ -1729,22 +1732,35 @@ def _water_pressures(project: Project, resolved: list[Resolved],
         z_coordinates=tuple(condition.z_coordinates
                             or [0.0] * len(condition.x_coordinates or ())),
         pressure_tension_cut_off=condition.pressure_tension_cut_off,
-        specific_weight=project.water_specific_weight)
+        specific_weight=project.water_specific_weight,
+        condition=condition.id)
         for condition, targets, _ in pressures for target in targets]
 
 
 def _overlapping_water_pressures(
+        project: Project,
         resolved: list[tuple[WaterPressureCondition, list[str | None], set[int]]],
         warnings: list[str]) -> None:
-    """Say so when two fixed conditions on the same kind of target share nodes.
+    """Say so when two fixed conditions on the same kind of target share nodes in a
+    phase that has both on.
 
     Across kinds the order settles it and is the point of writing the more specific one
     last; between two of one kind -- two parts that meet, two faces at a corner, two
-    whole-soil records -- it is only the list order, which the user should know."""
+    whole-soil records -- it is only the list order, which the user should know. Two
+    conditions the phases never have on together -- a high level, then a low one -- do
+    not meet."""
+    try:
+        on_together = [phases.active_parts(project, phase)
+                       for phase in phases.linearise(project)]
+    except phases.PhaseError:
+        on_together = []
     fixed = [(condition, nodes) for condition, _, nodes in resolved if condition.is_fixed]
     for index, (first, first_nodes) in enumerate(fixed):
         for second, second_nodes in fixed[index + 1:]:
             if first.on != second.on:
+                continue
+            if on_together and not any(first.id in keys and second.id in keys
+                                       for keys in on_together):
                 continue
             shared = len(first_nodes & second_nodes)
             if shared:

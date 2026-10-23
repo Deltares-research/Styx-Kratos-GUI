@@ -283,6 +283,21 @@ def test_with_gravity_off_no_stage_has_the_self_weight(gmsh_session):
     assert "VOLUME_ACCELERATION" not in loads(off)
 
 
+def test_the_hydraulic_head_is_written_only_with_gravity(gmsh_session):
+    """Kratos computes the head from the water weight, which gravity gives: without it
+    every value would be 0."""
+    def gauss(export: dict) -> list[str]:
+        doc = json.loads(export["project_parameters"])
+        stage = doc["stages"]["1_Stage"]["stage_settings"]
+        output = stage["output_processes"]["gid_output"][0]["Parameters"]
+        return output["postprocess_parameters"]["result_file_configuration"][
+            "gauss_point_results"]
+    assert gauss(writer.export_project(section(None), MESH)) == [
+        "CAUCHY_STRESS_TENSOR", "HYDRAULIC_HEAD"]
+    assert gauss(writer.export_project(session.set_gravity(section(None), False), MESH)) == [
+        "CAUCHY_STRESS_TENSOR"]
+
+
 def test_a_k0_phase_with_gravity_off_is_warned_about():
     from tests.models.excavation import excavation_project
     project = session.set_gravity(excavation_project(), False)

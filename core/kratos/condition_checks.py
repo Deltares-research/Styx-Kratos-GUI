@@ -16,6 +16,7 @@ for loading the mesher.
 
 from __future__ import annotations
 
+from core.model import phases
 from core.model.schemas import DisplacementCondition, Project, WaterPressureCondition
 
 SECTION_FACES = ("bottom", "left", "right", "top")
@@ -32,6 +33,7 @@ def warnings(project: Project) -> list[str]:
                 out.append(left_out)
     out += _rigid_body(project)
     out += _unpinned_water(project)
+    out += _free_water_in_phases(project)
     out += _unused_water_level(project)
     out += _weightless_k0(project)
     return out
@@ -99,11 +101,7 @@ def _unpinned_water(project: Project) -> list[str]:
     (tests/kratos/test_live_conditions.py)."""
     if _water_pressures(project):
         return []
-    used = ({layer.mat for layer in project.layers}
-            | {part.mat for part in project.custom_parts if part.mat is not None})
-    coupled = [m.name for m in project.materials if m.id in used
-               and m.variables.get("GEO_DRAINAGE_TYPE", "CONSTANT_PW_FIELD")
-               != "CONSTANT_PW_FIELD"]
+    coupled = _coupled_soils(project)
     if not coupled:
         return []
     return [
@@ -112,6 +110,52 @@ def _unpinned_water(project: Project) -> list[str]:
         "(GEO_DRAINAGE_TYPE): the self weight then builds up water pressures the model "
         "does not have, and the displacements with them. Add a water pressure condition "
         "(for a dry model: Uniform, value 0, on the whole soil)."]
+
+
+def _coupled_soils(project: Project) -> list[str]:
+    """The names of the soil materials in use that couple the water pressure to the
+    deformation (`GEO_DRAINAGE_TYPE` other than `CONSTANT_PW_FIELD`)."""
+    used = ({layer.mat for layer in project.layers}
+            | {part.mat for part in project.custom_parts if part.mat is not None})
+    return [m.name for m in project.materials if m.id in used
+            and m.variables.get("GEO_DRAINAGE_TYPE", "CONSTANT_PW_FIELD")
+            != "CONSTANT_PW_FIELD"]
+
+
+def _free_water_in_phases(project: Project) -> list[str]:
+    """A phase in which nothing holds the water pressure of a coupled soil.
+
+    What a phase that switches its conditions off leaves depends on the Kratos process
+    (tests/kratos/test_live_conditions.py): a fixed Hydrostatic or Phreatic condition
+    keeps its nodes fixed at their last values after its phase, so the later phases
+    carry them; a fixed Uniform one frees its nodes when its phase ends. So a phase is
+    unheld when no fixed condition is on in it and no fixed Hydrostatic or Phreatic one
+    was on before it. Unphased projects are `_unpinned_water`'s."""
+    pressures = _water_pressures(project)
+    if not project.phases or not pressures:
+        return []
+    coupled = _coupled_soils(project)
+    if not coupled:
+        return []
+    try:
+        order = phases.linearise(project)
+    except phases.PhaseError:
+        return []
+    fixed = [c for c in pressures if c.is_fixed]
+    kept = False
+    out: list[str] = []
+    for phase in order:
+        on = phases.active_parts(project, phase)
+        now = [c for c in fixed if c.id in on]
+        if not now and not kept:
+            out.append(
+                f"in phase {phase.name!r} no fixed water pressure condition is on and "
+                "none that keeps its values (Hydrostatic or Phreatic) was on before, so "
+                f"the water pressure of {', '.join(repr(name) for name in coupled)} is "
+                "free there, and the self weight builds up pressures the model does not "
+                "have. Switch a water pressure condition on in that phase.")
+        kept = kept or any(c.fluid_pressure_type != "Uniform" for c in now)
+    return out
 
 
 def _unused_water_level(project: Project) -> list[str]:

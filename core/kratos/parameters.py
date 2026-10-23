@@ -92,7 +92,11 @@ ECHO_LEVEL = 1
 and the only account of a failure a user ever sees."""
 
 NODAL_RESULTS = ("DISPLACEMENT", "TOTAL_DISPLACEMENT", "WATER_PRESSURE")
-GAUSS_POINT_RESULTS = ("CAUCHY_STRESS_TENSOR",)
+GAUSS_POINT_RESULTS = ("CAUCHY_STRESS_TENSOR", "HYDRAULIC_HEAD")
+"""`HYDRAULIC_HEAD` is the soil element's own: at each integration point, the head of
+its nodes -- the height against gravity minus the water pressure over the water weight
+(`DENSITY_WATER` times g) -- interpolated. With no gravity there is no water weight and
+Kratos writes 0, so a deck with gravity off does not ask for it (`_gid_output`)."""
 
 SOLVER = {
     "solver_type": "U_Pw",
@@ -183,6 +187,10 @@ class Stage:
     contains, so nothing is filtered out of it, which is exactly how it exported before
     staged construction existed.
 
+    `conditions` is the water pressure conditions on in this stage, by id: a condition
+    a phase switched off is not written in it. `None` writes every one, as an unphased
+    deck does.
+
     `max_iterations` and `tolerated_error` are `None` for "whatever `SOLVER` says",
     rather than being defaulted to its values here, so that the deck of a project with
     no phases cannot drift from `SOLVER` by way of a copy made in this file.
@@ -204,6 +212,7 @@ class Stage:
     max_iterations: int | None = None
     tolerated_error: float | None = None
     materials_filename: str = MATERIALS_NAME
+    conditions: frozenset[str] | None = None
 
 
 @dataclass(frozen=True)
@@ -213,7 +222,8 @@ class WaterPressure:
     `part` is the sub-model part it acts on, or `None` for the whole porous domain. A
     condition on a face the excavation splits arrives as one entry per segment, so each
     one goes with its lift (`Stage.active`), and so does one on a staged part, one entry
-    per body. `reference_coordinate` is the record's own level."""
+    per body. `reference_coordinate` is the record's own level, and `condition` the
+    record's id, which a phase switches (`Stage.conditions`)."""
     part: str | None
     fluid_pressure_type: str
     is_fixed: bool
@@ -224,6 +234,7 @@ class WaterPressure:
     z_coordinates: tuple[float, ...]
     pressure_tension_cut_off: float
     specific_weight: float
+    condition: str = ""
 
 
 def stage_name(index: int, phase_name: str) -> str:
@@ -289,8 +300,11 @@ def project_parameters(
                                 for name, is_fixed in constraints if keep(name)]
         # On the whole soil a condition is filtered by nothing, as the soil is the porous
         # domain itself; on a face or a part it goes with the stretch or body it names.
+        # And it is in the stages whose phase has it switched on.
         constraint_processes += [_water_pressure(pressure) for pressure in water_pressures
-                                 if pressure.part is None or keep(pressure.part)]
+                                 if (pressure.part is None or keep(pressure.part))
+                                 and (stage.conditions is None
+                                      or pressure.condition in stage.conditions)]
         constraint_processes += [_master_slave_constraint(master, slave)
                                  for master, slave in stage.ties]
         auxiliary = _auxiliary(stage)
@@ -302,7 +316,8 @@ def project_parameters(
                                   rotation_dofs, imported=stage.modeler or index > 0,
                                   stage=stage)
         rendered[stage.name] = _stage(stage, index, constraint_processes,
-                                      loads_processes, auxiliary, solver, deck_name)
+                                      loads_processes, auxiliary, solver, deck_name,
+                                      gravity=gravity)
 
     return json.dumps({
         "orchestrator": {
@@ -378,7 +393,7 @@ def _auxiliary(stage: Stage) -> list[dict]:
 
 def _stage(stage: Stage, index: int, constraint_processes: list[dict],
            loads_processes: list[dict], auxiliary: list[dict],
-           solver: dict, deck_name: str) -> dict:
+           solver: dict, deck_name: str, gravity: bool = True) -> dict:
     """One entry of `stages`. Each stage occupies its own unit interval of time --
     stage *n* runs from `start_time` to `start_time + 1` -- because the orchestrator
     runs them one after another over a single model: a second stage starting where the
@@ -408,7 +423,7 @@ def _stage(stage: Stage, index: int, constraint_processes: list[dict],
             "solver_settings": dict(solver),
             "processes": processes,
             "output_processes": {
-                "gid_output": [_gid_output(f"{deck_name}_{stage.name}")]},
+                "gid_output": [_gid_output(f"{deck_name}_{stage.name}", gravity)]},
         },
     }
     preprocess = _preprocess(stage, deck_name)
@@ -589,13 +604,14 @@ def _solver_settings(deck_name: str, domain_size: int, body_parts: list[str],
     return settings
 
 
-def _gid_output(output_name: str) -> dict:
+def _gid_output(output_name: str, gravity: bool = True) -> dict:
     """GiD ASCII results beside the deck, one file per stage.
 
     The same writer, flags and result list as the reference decks in `test/`, which is
     also what Kratos' own GeoMechanicsApplication test helpers read back when they
-    compare two runs.
+    compare two runs. Without gravity the hydraulic head is left out: it would be 0.
     """
+    gauss = [name for name in GAUSS_POINT_RESULTS if gravity or name != "HYDRAULIC_HEAD"]
     return {
         "python_module": "gid_output_process",
         "kratos_module": "KratosMultiphysics",
@@ -618,7 +634,7 @@ def _gid_output(output_name: str) -> dict:
                     "skin_output": False,
                     "plane_output": [],
                     "nodal_results": list(NODAL_RESULTS),
-                    "gauss_point_results": list(GAUSS_POINT_RESULTS),
+                    "gauss_point_results": gauss,
                 },
                 "point_data_configuration": [],
             },

@@ -403,3 +403,74 @@ def test_the_water_pressure_entry_is_what_the_process_is_written_from():
         "gravity_direction": 1, "reference_coordinate": 1.6, "specific_weight": 1e4,
         "pressure_tension_cut_off": 1e5,
     }
+
+
+# ── Water conditions per phase ──────────────────────────────────────────────
+
+def _phased(conditions: list[dict], phases: list[dict], **changes) -> Project:
+    return section(conditions, phases=phases, **changes)
+
+
+HIGH_THEN_LOW = [
+    {"id": "p1", "name": "High water", "deactivate": ["low"]},
+    {"id": "p2", "name": "Low water", "parent": "p1", "activate": ["low"],
+     "deactivate": ["high"]},
+    {"id": "p3", "name": "Dry", "parent": "p2", "deactivate": ["low"]},
+]
+
+
+def test_a_water_condition_is_a_key_a_phase_switches_and_a_support_is_not():
+    project = section([condition("pore"), {"id": "fix", "name": "fix",
+                                           "kind": "displacement", "on": "face",
+                                           "face": "bottom", "fixed": [True, True, True]}])
+    assert "pore" in project.stageable_keys()
+    assert "pore" in project.stageable_parts
+    assert "fix" not in project.stageable_keys()
+
+
+def test_each_stage_writes_the_water_conditions_its_phase_has_on(gmsh_session):
+    export = writer.export_project(_phased(
+        [condition("high", reference_coordinate=0.0),
+         condition("low", reference_coordinate=-5.0)], HIGH_THEN_LOW), MESH)
+    levels = [[p["reference_coordinate"] for p in water_processes(export, stage)]
+              for stage in ("1_High_water", "2_Low_water", "3_Dry")]
+    assert levels == [[0.0], [-5.0], []]
+
+
+def test_two_conditions_no_phase_has_on_together_are_not_warned_about(gmsh_session):
+    export = writer.export_project(_phased(
+        [condition("high", reference_coordinate=0.0),
+         condition("low", reference_coordinate=-5.0)], HIGH_THEN_LOW), MESH)
+    assert not any("both fix the pressure" in w for w in export["warnings"])
+
+
+def test_a_condition_a_phase_switches_cannot_be_removed():
+    project = _phased([condition("high", reference_coordinate=0.0),
+                       condition("low", reference_coordinate=-5.0)], HIGH_THEN_LOW)
+    with pytest.raises(session.EditRefused, match="phase 'p1' names low"):
+        session.remove_condition(project, "low")
+    from core.model.schemas import ConditionsUpdate
+    with pytest.raises(session.EditRefused, match="take it out of those phases first"):
+        session.replace_conditions(project, ConditionsUpdate(
+            boundary_conditions=[project.boundary_conditions[0]]))
+
+
+def _coupled(project: Project) -> Project:
+    payload = project.model_dump()
+    for material in payload["materials"]:
+        material["variables"]["GEO_DRAINAGE_TYPE"] = "FULLY_COUPLED"
+    return Project.model_validate(payload)
+
+
+def test_a_phase_that_leaves_a_coupled_soil_s_water_free_is_warned_about():
+    """A Hydrostatic condition keeps its nodes fixed after its phase, a Uniform one does
+    not (tests/kratos/test_live_conditions.py)."""
+    from core.kratos import condition_checks
+    kept = _coupled(_phased([condition("high", reference_coordinate=0.0),
+                             condition("low", reference_coordinate=-5.0)], HIGH_THEN_LOW))
+    assert not any("is free there" in w for w in condition_checks.warnings(kept))
+    freed = _coupled(_phased(
+        [condition("high", fluid_pressure_type="Uniform", value=0.0),
+         condition("low", fluid_pressure_type="Uniform", value=-50.0)], HIGH_THEN_LOW))
+    assert [w for w in condition_checks.warnings(freed) if "is free there" in w] == [
+        next(w for w in condition_checks.warnings(freed) if "phase 'Dry'" in w)]

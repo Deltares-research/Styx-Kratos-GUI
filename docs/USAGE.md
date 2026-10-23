@@ -242,7 +242,9 @@ components to hold.
 
 A condition acts on the whole soil (water pressure only), a face of the model, a soil part,
 a line or a point. Lines and points are drawn in the 2D section. A water pressure is fixed in
-every phase, or, with **Initial**, only gives the start values.
+each phase that has it on, or, with **Initial**, only gives the start values. To change the
+water from one phase to the next, see
+[Switch water conditions on and off](#switch-water-conditions-on-and-off).
 
 The viewport does not show the conditions when a model opens. To show a condition, turn on
 its eye in the Model explorer, or select it there; the eye of **Boundary conditions** shows
@@ -301,6 +303,25 @@ Use the buttons at the top of the Phases explorer to change the sequence:
    part in the viewport.
 
 The phases after the selected phase keep this change until a later phase changes it again.
+
+### Switch water conditions on and off
+
+A water pressure condition is on in every phase until a phase switches it off. In
+Staged construction mode, each water pressure condition under **Model conditions** →
+**Boundary conditions** has a check box for the selected phase, as a part has. For
+example, to lower the water from a level at -1 m to a level at -6 m in phase 3:
+
+1. Add a second hydrostatic condition with its **Reference level** at -6 m.
+2. Select the first phase, and clear the check box of the -6 m condition.
+3. Select phase 3. Select the check box of the -6 m condition, and clear the check box of
+   the -1 m condition.
+
+The viewport shows the water conditions that the selected phase has on. A phase with no
+water condition on keeps the water pressures that the phase before it ended with, for a
+**Hydrostatic** or **Phreatic line** condition. A **Uniform** condition does not keep its
+values: after its phase, the water pressure of a soil that couples it to the deformation is
+free, and the export warns about it. You cannot delete a condition that a phase switches;
+clear its check boxes first. The supports are on in every phase.
 
 ### Phase settings
 

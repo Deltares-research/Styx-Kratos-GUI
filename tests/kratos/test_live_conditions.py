@@ -15,6 +15,10 @@ What running them found, 2026-10-23:
   to about 1.5 MPa under the self weight and the block settles 8 m instead of 0.65 m. A
   Uniform 0 condition on the whole soil gives the dry answer, which is the one a
   `CONSTANT_PW_FIELD` soil gives with no condition. The export's warning says so.
+* Water conditions switched by phases (2026-10-23): each stage has the pressures of the
+  conditions its phase has on. A phase with none on keeps the last Hydrostatic values,
+  fixed (Kratos does not free them), but a Uniform condition's nodes are freed when its
+  phase ends, so a coupled soil's pressure then builds up (1.3 to 1.7 MPa here).
 """
 
 from __future__ import annotations
@@ -143,3 +147,78 @@ def test_a_dry_coupled_soil_needs_its_uniform_zero_as_the_warning_says():
     assert water_pressure(free) > 1e5
     assert settlement(fixed) == pytest.approx(settlement(drained), rel=1e-6)
     assert settlement(free) > 5 * settlement(fixed)
+
+
+# ── Water conditions per phase ──────────────────────────────────────────────
+
+def test_the_hydraulic_head_below_the_level_is_the_level():
+    """Kratos' own head (`HYDRAULIC_HEAD`, at the integration points): the height minus
+    the water pressure over the water weight. Under a hydrostatic level at -1 m it is
+    -1 m; an element the level crosses interpolates across the kink at the level."""
+    p = block().model_dump(mode="json")
+    p["boundary_conditions"].append({"id": "pore", "name": "pore", "kind": "water_pressure",
+                                     "on": "domain", "fluid_pressure_type": "Hydrostatic",
+                                     "reference_coordinate": -1.0})
+    _, outcome = run(Project.model_validate(p))
+    run_id = Path(outcome["directory"]).name
+    names = [f["name"] for group in catalog.stage_fields(run_id, 1)["groups"]
+             for f in group["fields"]]
+    assert "head" in names
+    per_element = catalog.stage_field(run_id, 1, "head", "elements")["values"]
+    at_level = [value for value in per_element if abs(value + 1.0) < 1e-6]
+    assert len(at_level) > 0.8 * len(per_element)
+
+
+def _switched(fluid_pressure_type: str, drainage: str | None = None) -> Project:
+    """A 40 m block whose phases switch a high and a low water condition on the whole
+    soil: high, low, none, high again."""
+    def water(id: str, level: float) -> dict:
+        record = {"id": id, "name": id, "kind": "water_pressure", "on": "domain",
+                  "fluid_pressure_type": fluid_pressure_type}
+        if fluid_pressure_type == "Hydrostatic":
+            record["reference_coordinate"] = level
+        else:
+            record["value"] = level * 10_000.0
+        return record
+
+    p = block().model_dump(mode="json")
+    if drainage:
+        for material in p["materials"]:
+            material["variables"]["GEO_DRAINAGE_TYPE"] = drainage
+    p["boundary_conditions"] += [water("high", 0.0), water("low", -5.0)]
+    p["phases"] = [
+        {"id": "p1", "name": "High", "calculation": "K0 procedure", "deactivate": ["low"]},
+        {"id": "p2", "name": "Low", "parent": "p1", "activate": ["low"],
+         "deactivate": ["high"]},
+        {"id": "p3", "name": "None", "parent": "p2", "deactivate": ["low"]},
+        {"id": "p4", "name": "High again", "parent": "p3", "activate": ["high"]},
+    ]
+    return Project.model_validate(p)
+
+
+def _pressure_range(outcome: dict, stage: int) -> tuple[float, float]:
+    field = catalog.stage_results(Path(outcome["directory"]).name, stage).field(
+        "WATER_PRESSURE")
+    values = [value[0] if isinstance(value, list) else value
+              for value in field.values.values()]
+    return min(values), max(values)
+
+
+@pytest.mark.parametrize("drainage", [None, "FULLY_COUPLED"])
+def test_a_phase_switches_the_water_and_a_hydrostatic_condition_s_values_stay(drainage):
+    """Each phase has the pressures of the condition it switches on. A phase with none
+    on keeps the last ones: Kratos leaves a Hydrostatic condition's nodes fixed after
+    its phase, in a coupled soil as well."""
+    _, outcome = run(_switched("Hydrostatic", drainage))
+    lowest = [_pressure_range(outcome, stage)[0] for stage in (1, 2, 3, 4)]
+    assert lowest == pytest.approx([-400_000.0, -350_000.0, -350_000.0, -400_000.0])
+
+
+def test_a_uniform_condition_switched_off_leaves_a_coupled_soil_s_water_free():
+    """Kratos frees a Uniform condition's nodes when its phase ends, so with nothing
+    switched on the coupled soil's own pressure builds up -- what the export's
+    warning says (`condition_checks._free_water_in_phases`)."""
+    deck, outcome = run(_switched("Uniform", "FULLY_COUPLED"))
+    assert any("phase 'None'" in w and "is free there" in w for w in deck["warnings"])
+    assert _pressure_range(outcome, 2) == pytest.approx((-50_000.0, -50_000.0))
+    assert _pressure_range(outcome, 3)[1] > 1e6

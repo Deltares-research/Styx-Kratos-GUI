@@ -190,14 +190,15 @@ def test_supports_and_boundaries_are_not_answered_with_a_yes_or_no(run):
 def test_every_stage_agrees_with_the_phase_model_about_what_exists(run, project):
     """`phases.active_parts` resolves the phase tree on the input side -- it is what greys
     out a part before anything is calculated -- and the run has to agree with it in every
-    stage. Interfaces, loads and supports carry no written elements and are outside the
-    comparison."""
+    stage. Interfaces, loads, supports and water conditions carry no written elements and
+    are outside the comparison."""
     names = writer._part_names(project)
     for index, phase in enumerate(project.phases, start=1):
         parts = {part["name"]: part for part in catalog.stage_parts(run, index)["parts"]}
         with_elements = {name for name, part in parts.items() if part["declared"]}
         interfaces = {name for name in with_elements if name.startswith("Interface_")}
-        expected = ({names[key] for key in phases.active_parts(project, phase)}
+        # A water pressure condition is switched by a phase too, and has no part of its own.
+        expected = ({names[key] for key in phases.active_parts(project, phase) if key in names}
                     & with_elements) - interfaces
         alive = {name for name, part in parts.items() if part["alive"]} - interfaces
         assert alive == expected, f"stage {index} ({phase.name})"
@@ -216,7 +217,7 @@ def test_the_field_menu_is_exactly_what_this_deck_writes(run):
         "Phase deformations": ["du", "dux", "duy", "duz"],
         "Effective stresses": ["sxx", "syy", "szz", "sxy", "syz", "sxz",
                                "p", "q", "s1", "s2", "s3", "tau_max"],
-        "Groundwater": ["pw"],
+        "Groundwater": ["pw", "head"],
     }
 
 
@@ -226,7 +227,7 @@ def test_the_units_offered_are_the_runs_own(run):
              for group in catalog.stage_fields(run, 7)["groups"]
              for field in group["fields"]}
 
-    assert units["u"] == "m"
+    assert units["u"] == units["head"] == "m"
     assert units["p"] == units["q"] == units["pw"] == "Pa"
 
 
