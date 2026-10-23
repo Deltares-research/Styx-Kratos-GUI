@@ -3695,6 +3695,115 @@ window.DRAFTS_FIXTURE =
       "error": "A water pressure point is drawn in the 2D section; switch to 2D to create one, or put the condition on the whole soil, a face or a part."
     },
     {
+      "title": "a seepage face on the right face",
+      "call": "BoundaryConditions.draftSeepage",
+      "project": "section",
+      "args": [
+        "face",
+        {
+          "face": "right"
+        }
+      ],
+      "result": {
+        "id": "seepage_1",
+        "name": "Seepage face 1",
+        "kind": "seepage",
+        "on": "face",
+        "face": "right",
+        "part": null,
+        "points": null,
+        "active": true
+      }
+    },
+    {
+      "title": "a seepage line down the right side",
+      "call": "BoundaryConditions.draftSeepage",
+      "project": "section",
+      "args": [
+        "line",
+        {}
+      ],
+      "result": {
+        "id": "seepage_1",
+        "name": "Seepage face 1",
+        "kind": "seepage",
+        "on": "line",
+        "face": null,
+        "part": null,
+        "points": [
+          [
+            25.0,
+            0.0
+          ],
+          [
+            25.0,
+            -12.5
+          ]
+        ],
+        "active": true
+      }
+    },
+    {
+      "title": "a seepage line drawn",
+      "call": "BoundaryConditions.draftSeepage",
+      "project": "section",
+      "args": [
+        "line",
+        {
+          "points": [
+            [
+              25,
+              -1
+            ],
+            [
+              25,
+              -6
+            ]
+          ],
+          "name": "Exit"
+        }
+      ],
+      "result": {
+        "id": "seepage_1",
+        "name": "Exit",
+        "kind": "seepage",
+        "on": "line",
+        "face": null,
+        "part": null,
+        "points": [
+          [
+            25.0,
+            -1.0
+          ],
+          [
+            25.0,
+            -6.0
+          ]
+        ],
+        "active": true
+      }
+    },
+    {
+      "title": "a seepage face on the whole soil is refused",
+      "call": "BoundaryConditions.draftSeepage",
+      "project": "section",
+      "args": [
+        "domain",
+        {}
+      ],
+      "error": "A seepage face is on a face of the model, or on a line along the soil's outer boundary."
+    },
+    {
+      "title": "a seepage line in the solid model is refused",
+      "call": "BoundaryConditions.draftSeepage",
+      "project": "solid",
+      "args": [
+        "line",
+        {}
+      ],
+      "error": "A seepage line is drawn in the 2D section; switch to 2D to create one, or put the seepage face on a face."
+    },
+    {
       "title": "the standard supports, with ids no condition has",
       "call": "BoundaryConditions.standardConditions",
       "project": "section",

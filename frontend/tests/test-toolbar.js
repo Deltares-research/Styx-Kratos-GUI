@@ -72,7 +72,8 @@
        embeds as a normal load's line is. */
     T.eq(App.LivePatches.TWO_D_ONLY,
          ['interface', 'createNormalLoad', 'toggleRuler', 'createSupportLine',
-          'createSupportPoint', 'createWaterPressureLine', 'createWaterPressurePoint']);
+          'createSupportPoint', 'createWaterPressureLine', 'createWaterPressurePoint',
+          'createSeepageLine']);
     T.eq(App.LivePatches.availableIn3D('interface'), false);
     T.eq(App.LivePatches.availableIn3D('createNormalLoad'), false);
     T.eq(App.LivePatches.availableIn3D('createSheetPile'), true);

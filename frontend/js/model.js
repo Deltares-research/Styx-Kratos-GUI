@@ -523,6 +523,7 @@ App.Model = (function () {
      stored project comes back. */
   function conditionProps(record) {
     var support = record.kind === 'displacement';
+    var seepage = record.kind === 'seepage';
     var where = record.on === 'domain' ? 'Whole soil'
       : record.on === 'face' ? 'Face: ' + record.face
       : record.on === 'part' ? 'Part: ' + record.part
@@ -530,7 +531,8 @@ App.Model = (function () {
         + (record.points || []).map(function (p) { return fixed(p[0]) + ' ' + fixed(p[1]); })
           .join(', ');
     var general = [
-      ['Condition', support ? 'Support' : 'Water pressure', '', true],
+      ['Condition', support ? 'Support' : seepage ? 'Seepage face' : 'Water pressure', '',
+       true],
       ['Where', where, '', true],
       ['Active', record.active !== false ? 'Yes' : 'No', '', false,
        yesNo(function () { return record.active !== false; },
@@ -553,6 +555,9 @@ App.Model = (function () {
                      return null;
                    })]);
       });
+    } else if (seepage) {
+      what.push(['', 'Water may leave the soil here, in a groundwater flow calculation.',
+                 '', true]);
     } else {
       var stress = App.Units.label('stress');
       what.push(['Type', record.fluid_pressure_type.replace(/_/g, ' '), '', true]);

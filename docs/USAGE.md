@@ -257,7 +257,8 @@ solid model, and the calculation files of a 2D model do not contain them.
 The window has a row for each face of the model and one for the whole soil. For each row,
 select the support and the water pressure, and type the level or the value. **More…** opens
 the full form of the water pressure, and **Add condition…** makes a condition on a part, a
-line or a point. **Standard conditions** sets the bottom to fixed and the sides to rollers.
+line or a point. In the water pressure column of a face, **Seepage face** makes that face a
+seepage face (see below). **Standard conditions** sets the bottom to fixed and the sides to rollers.
 **Clear** removes the conditions on the faces and on the whole soil. Click **Save** to keep
 the changes.
 
@@ -269,6 +270,24 @@ warns about it, and about a model that nothing holds.
 **Gravity** is on in a new project. Clear it in the window, or select **Model conditions**
 → **Gravity**, to remove the self weight from every phase. A K0 phase then has zero
 stresses.
+
+A **seepage face** is a part of the soil's outer boundary where the water may leave the
+soil in a groundwater flow calculation, for example the downstream face of a dam above the
+tail water. Kratos decides, while it calculates, where the face is open: there the water
+pressure is zero and the water flows out. Make one in one of these ways:
+
+- In the **Boundary conditions** window, select **Seepage face** in the water pressure
+  column of a face.
+- In **Create boundary condition**, select the condition **Seepage face**, on a face or a
+  line.
+- In Flow conditions mode, open the water pressure tool of the tool rail, select
+  **Seepage line** and draw the line along the boundary.
+
+A seepage line through the soil is refused when you calculate. The viewport shows a seepage
+face as a line with arrows that point out of the soil. Kratos opens or closes one node of
+the face for each iteration, so give the phase enough iterations: the calculation warns
+when the phase allows fewer iterations than the face has nodes. A deformation calculation
+leaves a seepage face out, and warns.
 
 ## Staged construction mode
 

@@ -194,6 +194,19 @@ def calls(models: dict) -> list[dict]:
     call("a water pressure point in the solid model is refused",
          "BoundaryConditions.draftWaterPressure", "solid", ["point", {}],
          lambda p: drafts.water_pressure_condition(p, "point"))
+    call("a seepage face on the right face", "BoundaryConditions.draftSeepage", "section",
+         ["face", {"face": "right"}],
+         lambda p: drafts.seepage_condition(p, "face", face="right"))
+    call("a seepage line down the right side", "BoundaryConditions.draftSeepage", "section",
+         ["line", {}], lambda p: drafts.seepage_condition(p, "line"))
+    call("a seepage line drawn", "BoundaryConditions.draftSeepage", "section",
+         ["line", {"points": [[25, -1], [25, -6]], "name": "Exit"}],
+         lambda p: drafts.seepage_condition(p, "line", points=[(25, -1), (25, -6)],
+                                            name="Exit"))
+    call("a seepage face on the whole soil is refused", "BoundaryConditions.draftSeepage",
+         "section", ["domain", {}], lambda p: drafts.seepage_condition(p, "domain"))
+    call("a seepage line in the solid model is refused", "BoundaryConditions.draftSeepage",
+         "solid", ["line", {}], lambda p: drafts.seepage_condition(p, "line"))
     call("the standard supports, with ids no condition has",
          "BoundaryConditions.standardConditions", "section", [],
          drafts.standard_conditions)

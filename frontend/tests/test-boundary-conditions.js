@@ -132,6 +132,50 @@
     T.ok(byId.roller_front && byId.roller_back, 'a face the grid does not show stays');
   });
 
+  function seepage(id, on, extra) {
+    return Object.assign({ id: id, name: id, kind: 'seepage', on: on, face: null,
+                           part: null, points: null, active: true }, extra || {});
+  }
+
+  test('a seepage face is a choice of a face row, read and written back', function () {
+    var project = section(standard().concat([seepage('out', 'face', { face: 'right' })]));
+    var rows = BC().grid(project);
+    T.eq([rows[2].water, rows[2].seepageId], ['seepage', 'out']);
+    T.eq(BC().others(project).map(function (c) { return c.id; }), [],
+         'a seepage face on a face is in the grid, not below it');
+    rows[2].water = 'none';                     // the right face closed
+    rows[3].water = 'seepage';                  // the top open
+    var list = BC().applyGrid(project, rows);
+    var faces = list.filter(function (c) { return c.kind === 'seepage'; });
+    T.eq(faces.map(function (c) { return [c.on, c.face, c.name]; }),
+         [['face', 'top', 'Seepage top']]);
+    rows = BC().grid(project);
+    rows[4].water = 'seepage';
+    var error = null;
+    try { BC().applyGrid(project, rows); } catch (e) { error = e; }
+    T.ok(error && /on a face, not the whole soil/.test(error.message));
+  });
+
+  test('a seepage face says what it is, in the list and in the explorer', function () {
+    var record = seepage('exit', 'line', { points: [[20, -1], [20, -6]] });
+    T.eq(BC().line(record),
+         'exit  exit  seepage on line (20, -1) -> (20, -6); water may leave the soil here');
+    T.eq(BC().label(record), 'exit  ·  seepage');
+  });
+
+  test('a seepage face draws its line, arrows out of the soil and the word', function () {
+    var spec = App.Viewport.conditionGlyphSpec(
+      seepage('exit', 'line', { points: [[20, -1], [20, -6]] }), section());
+    T.eq(spec.lines[0], [[20, -1, 5], [20, -6, 5]]);
+    T.ok(spec.symbols.length > 1 && spec.symbols.every(function (s) {
+      return s.arrow && s.outward[0] === 1 && s.outward[1] === 0;
+    }), 'every arrow points out of the right side');
+    T.eq(spec.label.text, 'seepage');
+    var top = App.Viewport.conditionGlyphSpec(seepage('top', 'face', { face: 'top' }),
+                                              section());
+    T.eq(top.symbols[0].outward, [0, 1]);
+  });
+
   test('a hydrostatic row with no level takes the water level', function () {
     var rows = BC().grid(section([]));
     rows[4].water = 'Hydrostatic';

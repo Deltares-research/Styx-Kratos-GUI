@@ -686,7 +686,9 @@ App.LivePatches = (function () {
             { icon: 'waterlevel', label: 'Water pressure line',
               action: 'createWaterPressureLine' },
             { icon: 'waterlevel', label: 'Water pressure point',
-              action: 'createWaterPressurePoint' }
+              action: 'createWaterPressurePoint' },
+            { icon: 'waterlevel', label: 'Seepage line',
+              action: 'createSeepageLine' }
           ];
         }
       });
@@ -1059,7 +1061,7 @@ App.LivePatches = (function () {
      axes mixed by the orbit, so a number on an edge would be a number for nothing. */
   var TWO_D_ONLY = ['interface', 'createNormalLoad', 'toggleRuler', 'createSupportLine',
                     'createSupportPoint', 'createWaterPressureLine',
-                    'createWaterPressurePoint'];
+                    'createWaterPressurePoint', 'createSeepageLine'];
 
   function availableIn2D(action) { return THREE_D_ONLY.indexOf(action) < 0; }
 
@@ -2381,7 +2383,8 @@ App.LivePatches = (function () {
         createSupportLine: ['displacement', 'line'],
         createSupportPoint: ['displacement', 'point'],
         createWaterPressureLine: ['water_pressure', 'line'],
-        createWaterPressurePoint: ['water_pressure', 'point']
+        createWaterPressurePoint: ['water_pressure', 'point'],
+        createSeepageLine: ['seepage', 'line']
       };
       if (item && drawnConditions[item.action]) {
         if (App.BoundaryConditions) {

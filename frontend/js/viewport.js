@@ -578,6 +578,35 @@ App.Viewport = (function () {
       return spec;
     }
 
+    // A seepage face: its edge or line, with arrows out of the soil, and the word.
+    if (record.kind === 'seepage') {
+      var path = record.on === 'face'
+        ? faceOutline(project, record.face, outlines)
+        : (record.points || []).map(function (q) { return [q[0], q[1], z]; });
+      if (!path || path.length < 2 || !two) {
+        if (path) spec.lines.push(path);
+        return spec;
+      }
+      spec.lines.push(path);
+      var centre = [(d.x0 + d.x1) / 2, (d.y_bottom + d.y_top) / 2];
+      for (var k = 0; k + 1 < path.length; k += 1) {
+        var a = path[k], b = path[k + 1];
+        var length = Math.hypot(b[0] - a[0], b[1] - a[1]);
+        if (!(length > 0)) continue;
+        var normalOut = [(b[1] - a[1]) / length, -(b[0] - a[0]) / length];
+        var middle = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+        if ((middle[0] - centre[0]) * normalOut[0] + (middle[1] - centre[1]) * normalOut[1] < 0) {
+          normalOut = [-normalOut[0], -normalOut[1]];
+        }
+        alongLine([a, b], SYMBOL_SPACING * spec.size).forEach(function (at) {
+          spec.symbols.push({ at: [at[0], at[1], z], outward: normalOut, arrow: true });
+        });
+      }
+      var mid = path[Math.floor(path.length / 2)];
+      spec.label = { text: 'seepage', at: [mid[0], mid[1], z] };
+      return spec;
+    }
+
     // A water pressure: its level or line, dashed, and what it is.
     spec.dashed = true;
     var type = record.fluid_pressure_type;
@@ -646,7 +675,11 @@ App.Viewport = (function () {
         group.add(segments ? new THREE.LineSegments(geometry, material)
                            : new THREE.Line(geometry, material));
       }
-      if (symbol.roller) {
+      if (symbol.arrow) {
+        // Water leaving the soil: a short arrow pointing out of it.
+        stroke([p(0, 0.15 * s), p(0, 1.0 * s), p(-0.25 * s, 0.7 * s), p(0, 1.0 * s),
+                p(0.25 * s, 0.7 * s)]);
+      } else if (symbol.roller) {
         // A triangle on three rollers.
         stroke([p(0, 0), p(-0.5 * s, 0.8 * s), p(0.5 * s, 0.8 * s), p(0, 0)]);
         [-0.34, 0, 0.34].forEach(function (along) {
