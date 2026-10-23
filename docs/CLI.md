@@ -55,7 +55,7 @@ CROW excavation wall, as a project file (`crow.json`) and as a model script (`cr
 |---|---|
 | `new FILE [--dim 2\|3] [--units SI\|kN] [--name NAME] [--demo] [--force]` | Write a new project file: an empty site, or the demo model |
 | `show P` | What the model holds: layers, materials, parts, structures, water, conditions, gravity, phases, mesh |
-| `check P` | That the phases run in one order and the mesh settings name only parts the model has, and what the export will warn about the boundary conditions |
+| `check P` | That the phases run in one order, the mesh settings name only parts the model has and a groundwater flow project can be exported, and what the export will warn about the boundary conditions |
 | `build SCRIPT.py --out FILE` | Write the project a model script describes |
 | `script P --out FILE.py [--force]` | Write the model as a model script: the Python file that builds it again |
 | `get P [PATH]` | Print a field as JSON (the whole project without a path) |
@@ -312,17 +312,25 @@ kratos-cli phases pit.json list
   phase on, as the Model explorer's checkbox does, with the smallest instruction that
   does it: switching a part back to what the phase inherits drops the instruction.
   `add` and `copy` take `--activate` and `--deactivate` the same way.
-- **`set PHASE`** changes `--name`, `--calculation k0|plastic|null`,
+- **`set PHASE`** changes `--name`, `--calculation k0|plastic|null|flow`,
   `--reset-displacements` / `--keep-displacements`, `--max-iterations`, `--tolerance`
   (the residual relative tolerance), `--time-interval` (days) and `--parent`.
+- **`flow`** (also `groundwater-flow`) is the Groundwater flow calculation: a
+  steady-state flow of the water alone, on the soil. Every phase of a project must then
+  be a flow phase, and `check` and `export` refuse a project that mixes flow and
+  deformation phases. A flow phase has no displacements, so it refuses
+  `--reset-displacements` and `--keep-displacements`.
 - **Defaults.** A phase that is not given these options is a plastic calculation with
   at most 15 iterations, a tolerance of 1e-4, the displacements of the phase before kept,
   and a time interval of 0 days. `phases show ID` prints a phase's settings.
-- **The solver** is the same for every phase and no option changes it: a static U-Pw
-  analysis (displacements and water pressure), Newton-Raphson iterations on a residual
-  criterion, one step per phase, and the direct `skyline_lu_factorization` linear solver.
-  It is written into `ProjectParameters.json`, and `SOLVER` in
-  [`core/kratos/parameters.py`](../core/kratos/parameters.py) lists every setting.
+- **The solver** of a deformation phase is the same for every phase and no option
+  changes it: a static U-Pw analysis (displacements and water pressure), Newton-Raphson
+  iterations on a residual criterion, one step per phase, and the direct
+  `skyline_lu_factorization` linear solver. It is written into `ProjectParameters.json`,
+  and `SOLVER` in [`core/kratos/parameters.py`](../core/kratos/parameters.py) lists every
+  setting. A flow phase uses the Pw solver (`FLOW_SOLVER` there): one linear solve for a
+  saturated soil, Newton-Raphson iterations with the phase's `--max-iterations` and
+  `--tolerance` for a soil with another retention law.
 - A sequence that would branch, two phases starting from one, is refused, because Kratos
   runs one sequence. So is a part the model does not have.
 

@@ -124,6 +124,37 @@ def test_a_calculation_type_that_is_not_one_is_refused(cli, pit):
     ran = cli("phases", pit, "set", "dig_1", "--calculation", "elastic")
 
     assert ran.code == 2
+    assert "use k0, plastic, null or flow" in ran.err
+
+
+@pytest.mark.parametrize("word", ["flow", "Groundwater flow", "groundwater-flow"])
+def test_flow_is_the_groundwater_flow_calculation(cli, pit, word):
+    """The GUI's "Groundwater flow" in the Calculation type select."""
+    assert cli("phases", pit, "add", "seep", "--calculation", word).code == 0
+
+    assert _phase(pit, "seep").calculation == "Groundwater flow"
+    assert "calculation: Groundwater flow" in cli("phases", pit).out
+
+
+def test_a_flow_phase_lists_no_displacement_reset(cli, pit):
+    """A phase reset before it became a flow phase keeps the value, greyed out in the
+    GUI, and the lists leave it out: a flow phase has no displacements."""
+    assert cli("phases", pit, "set", "install_sheetpile", "--calculation", "flow").code == 0
+
+    assert _phase(pit, "install_sheetpile").reset_displacements
+    assert "displacements reset" not in cli("phases", pit, "show", "install_sheetpile").out
+
+
+@pytest.mark.parametrize("option", ["--reset-displacements", "--keep-displacements"])
+def test_a_flow_phase_refuses_the_displacement_options(cli, pit, option):
+    before = pit.read_text(encoding="utf-8")
+
+    ran = cli("phases", pit, "set", "dig_1", "--calculation", "flow", option)
+
+    assert ran.code == 1
+    assert "groundwater flow phase" in ran.err and option in ran.err
+    assert pit.read_text(encoding="utf-8") == before
+    assert cli("phases", pit, "add", "seep", "--calculation", "flow", option).code == 1
 
 
 # ── node, deck show ─────────────────────────────────────────────────────────

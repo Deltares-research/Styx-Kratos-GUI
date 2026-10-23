@@ -18,7 +18,9 @@ Model explorer make (`core.model.phases`), stored the way the GUI stores it
                        parts in or out of the model from that phase on, with the
                        smallest instruction that does it, as the explorer's checkbox
 
-A sequence that would branch, or a part the model does not have, is refused.
+A sequence that would branch, or a part the model does not have, is refused. So is
+--reset-displacements or --keep-displacements on a groundwater flow phase, which has no
+displacements: the GUI greys that box out.
 """
 
 from __future__ import annotations
@@ -26,7 +28,7 @@ from __future__ import annotations
 import argparse
 
 from cli.terminal.files import add_project, add_writing, written
-from cli.terminal.output import Answer
+from cli.terminal.output import Answer, CommandError
 from cli.terminal.words import existing, file_of, given
 from core import session
 from core.model import phases
@@ -34,7 +36,9 @@ from core.model.schemas import Project
 
 CALCULATIONS = {"k0": "K0 procedure", "k0 procedure": "K0 procedure", "k0-procedure":
                 "K0 procedure", "plastic": "Plastic", "null": "Null step",
-                "null step": "Null step", "null-step": "Null step"}
+                "null step": "Null step", "null-step": "Null step",
+                "flow": phases.GROUNDWATER_FLOW, "groundwater flow": phases.GROUNDWATER_FLOW,
+                "groundwater-flow": phases.GROUNDWATER_FLOW}
 
 
 def register(commands, common: argparse.ArgumentParser) -> None:
@@ -108,13 +112,14 @@ def _calculation(word: str) -> str:
         return CALCULATIONS[word.strip().lower()]
     except KeyError:
         raise argparse.ArgumentTypeError(
-            f"{word!r} is not a calculation type: use k0, plastic or null") from None
+            f"{word!r} is not a calculation type: use k0, plastic, null or flow") from None
 
 
 def _phase_fields(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--name")
     parser.add_argument("--calculation", type=_calculation,
-                        help="k0 (the K0 procedure), plastic or null (a null step)")
+                        help="k0 (the K0 procedure), plastic, null (a null step) or flow "
+                             "(groundwater flow)")
     reset = parser.add_mutually_exclusive_group()
     reset.add_argument("--reset-displacements", dest="reset_displacements",
                        action="store_const", const=True,
@@ -176,18 +181,21 @@ def staged_phases(args: argparse.Namespace) -> Answer:
 def add_phase(args: argparse.Namespace) -> Answer:
     project, phase = session.add_phase(session.load(args.project), before=args.before,
                                        id=args.id, **given(args, *FIELDS))
+    _no_reset_in_flow(args, phase)
     return _added(args, project, phase)
 
 
 def copy_phase(args: argparse.Namespace) -> Answer:
     project, phase = session.add_phase(session.load(args.project), copy_of=args.original,
                                        id=args.id, **given(args, *FIELDS))
+    _no_reset_in_flow(args, phase)
     return _added(args, project, phase)
 
 
 def update_phase(args: argparse.Namespace) -> Answer:
     project = session.update_phase(session.load(args.project), args.id,
                                    **given(args, *FIELDS, "parent"))
+    _no_reset_in_flow(args, session.find_phase(project, args.id))
     return _edited(args, project, f"changed phase {args.id}")
 
 
@@ -205,6 +213,15 @@ def switch_parts(args: argparse.Namespace) -> Answer:
 
 
 # ── Shared ──────────────────────────────────────────────────────────────────
+
+def _no_reset_in_flow(args: argparse.Namespace, phase) -> None:
+    """A groundwater flow phase solves the water pressure alone: the box that resets
+    its displacements is greyed out in the GUI, and the option refused here."""
+    if args.reset_displacements is not None and phase.calculation == phases.GROUNDWATER_FLOW:
+        raise CommandError(f"phase {phase.id!r} is a groundwater flow phase, which has no "
+                           "displacements: leave out --reset-displacements and "
+                           "--keep-displacements.")
+
 
 def _added(args: argparse.Namespace, project: Project, phase) -> Answer:
     for keys, wanted in ((args.activate, True), (args.deactivate, False)):
@@ -233,7 +250,7 @@ def _records(project) -> list[dict]:
 def _settings(phase) -> str:
     settings = [f"calculation: {phase.calculation}",
                 f"{phase.max_iterations} iterations, tolerance {phase.tolerated_error:g}"]
-    if phase.reset_displacements:
+    if phase.reset_displacements and phase.calculation != phases.GROUNDWATER_FLOW:
         settings.append("displacements reset")
     if phase.time_interval:
         settings.append(f"{phase.time_interval:g} days")

@@ -121,6 +121,38 @@ def test_check_refuses_phases_that_branch(cli, site):
     assert "'a'" in ran.err and "'b'" in ran.err
 
 
+def test_check_refuses_flow_and_deformation_phases_mixed(cli, site):
+    """The groundwater flow refusals of the export (`condition_checks.flow_refusal`),
+    said before meshing, in the export's words."""
+    payload = json.loads(site.read_text(encoding="utf-8"))
+    payload["phases"] = [
+        {"id": "initial", "name": "Initial stage", "calculation": "K0 procedure"},
+        {"id": "flow", "name": "Flow", "parent": "initial",
+         "calculation": "Groundwater flow"},
+    ]
+    site.write_text(json.dumps(payload), encoding="utf-8")
+
+    ran = cli("check", site)
+
+    assert ran.code == 1
+    assert ("cannot mix groundwater flow phases ('Flow') with deformation phases "
+            "('Initial stage')") in ran.err
+
+
+def test_check_refuses_a_flow_phase_with_no_fixed_head(cli, site):
+    payload = json.loads(site.read_text(encoding="utf-8"))
+    payload["phases"] = [{"id": "flow", "name": "Flow", "calculation": "Groundwater flow"}]
+    payload["boundary_conditions"] = []
+    for material in payload["materials"]:
+        material["variables"]["PERMEABILITY_XX"] = 1e-12
+    site.write_text(json.dumps(payload), encoding="utf-8")
+
+    ran = cli("check", site)
+
+    assert ran.code == 1
+    assert "in phase 'Flow' no fixed water pressure condition is on" in ran.err
+
+
 # ── build ───────────────────────────────────────────────────────────────────
 
 def test_build_writes_the_project_a_script_describes(cli, tmp_path):

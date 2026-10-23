@@ -119,15 +119,19 @@ def show_project(args: argparse.Namespace) -> Answer:
 def check_project(args: argparse.Namespace) -> Answer:
     """What the schema cannot say on its own: that there is something to mesh, that the
     phases run in one order, and that the mesh settings name only bodies the model has.
-    Loading has validated the rest. The export's warnings about the boundary conditions
-    that need no mesh (`core.kratos.condition_checks`) are said too, as warnings: the model
-    can still be exported."""
+    Loading has validated the rest. A groundwater flow project the export refuses
+    (`condition_checks.flow_refusal`) is refused here, in the same words. The export's
+    warnings about the boundary conditions that need no mesh (`core.kratos.condition_checks`)
+    are said too, as warnings: the model can still be exported."""
     project = session.load(args.project)
     if project.deck is None:
         empty = nothing_to_mesh(project)
         if empty:
             raise CommandError(empty)
         phases.linearise(project)
+        refused = condition_checks.flow_refusal(project)
+        if refused:
+            raise CommandError(refused)
         unknown = session.unknown_mesh_keys(project, MeshRequest(**project.mesh.model_dump()))
         if unknown:
             raise CommandError("the mesh settings name bodies this model does not have: "
