@@ -482,9 +482,15 @@ App.Model = (function () {
   }
 
   /* A condition's own row: what it is, in the words `boundary list` uses. */
+  /* A support in a groundwater flow project says it is left out, as an inactive
+     condition says it is inactive (`App.BoundaryConditions.unusedInFlow`). */
   function conditionChild(record) {
-    var label = App.BoundaryConditions ? App.BoundaryConditions.label(record) : record.name;
-    return { label: label + (record.active === false ? '  (inactive)' : ''),
+    var conditions = App.BoundaryConditions;
+    var label = conditions ? conditions.label(record) : record.name;
+    var note = record.active === false ? '  (inactive)'
+      : conditions && conditions.unusedInFlow(record, App.PROJECT)
+        ? '  (unused in flow)' : '';
+    return { label: label + note,
              icon: record.kind === 'displacement' ? 'prescribed' : 'water',
              leaf: true, eye: true, obj: record.id };
   }

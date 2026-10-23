@@ -141,6 +141,47 @@
     }));
   });
 
+  /* The calculation type select of the selected phase, and its Reset displacements box. */
+  function phaseControls(ctx) {
+    var grid = ctx.layer.querySelector('.phases-overview .pgrid');
+    return { select: grid.querySelector('select'),
+             reset: grid.querySelector('input.pgrid-check') };
+  }
+
+  test('phases window: Groundwater flow is a calculation type, and choosing it is one PATCH',
+       function () {
+    var ctx = rig(model());
+    App.runAction({ action: 'phases' });
+    var select = phaseControls(ctx).select;
+    T.ok(Array.prototype.some.call(select.options, function (o) {
+      return o.value === 'Groundwater flow';
+    }), 'the select offers Groundwater flow');
+    T.ok(!phaseControls(ctx).reset.disabled, 'a deformation phase can reset displacements');
+    select.value = 'Groundwater flow';
+    select.dispatchEvent(new Event('change'));
+    return done(ctx, new Promise(function (r) { setTimeout(r, 20); }).then(function () {
+      T.eq(ctx.patches.length, 1);
+      T.eq(ctx.patches[0].body.phases[0].calculation, 'Groundwater flow');
+    }));
+  });
+
+  test('phases window: a groundwater flow phase greys out Reset displacements', function () {
+    var flow = JSON.parse(JSON.stringify(model()));
+    flow.phases.forEach(function (phase) {
+      phase.calculation = 'Groundwater flow';
+      phase.reset_displacements = true;
+    });
+    var ctx = rig(flow);
+    try {
+      App.runAction({ action: 'phases' });
+      var reset = phaseControls(ctx).reset;
+      T.ok(reset.disabled, 'the box cannot be changed');
+      T.ok(/no displacements/.test(reset.title), 'its tooltip says why');
+      reset.click();
+      T.eq(ctx.patches.length, 0, 'nothing is sent');
+    } finally { ctx.restore(); }
+  });
+
   test('phases window: a project with no phases says how to make them', function () {
     var bare = JSON.parse(JSON.stringify(model()));
     bare.phases = [];

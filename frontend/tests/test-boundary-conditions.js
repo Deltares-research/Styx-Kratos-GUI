@@ -55,6 +55,23 @@
     T.eq(BC().command('boundary', section([])).message, 'No boundary conditions yet.');
   });
 
+  test('a groundwater flow project notes that its supports are left out, as the CLI does',
+       function () {
+    var flow = section(standard().concat([pressure('pore', 'domain')]), {
+      phases: [{ id: 'flow', name: 'Flow', calculation: 'Groundwater flow' }] });
+    var lines = BC().command('boundary list', flow).message.split('\n');
+    T.eq(lines[lines.length - 1], 'A groundwater flow calculation leaves the supports out: '
+         + 'it solves the water pressure alone.');
+    var mixed = section(standard(), { phases: [
+      { id: 'a', name: 'A', calculation: 'Plastic' },
+      { id: 'flow', name: 'Flow', calculation: 'Groundwater flow', parent: 'a' }] });
+    T.ok(!/groundwater flow/.test(BC().command('boundary list', mixed).message),
+         'a mix is not a flow project: the export refuses it');
+    var water = section([pressure('pore', 'domain')], { phases: flow.phases });
+    T.ok(!/groundwater flow/.test(BC().command('boundary list', water).message),
+         'no support, no note');
+  });
+
   test('boundary standard sends the standard supports and keeps the water', function () {
     var project = section([support('bottom', 'bottom', [false, true, false]),
                            pressure('pore', 'domain')]);
@@ -219,6 +236,21 @@
     T.eq(conditions.children[3].label, 'pore  ·  h = -2.00 m');
     T.eq(node[0].children[1].label, 'Gravity  ·  off');
     T.ok(App.OBJECT_PROPS.pore && App.OBJECT_PROPS.gravity);
+  });
+
+  test('the explorer marks the supports of a groundwater flow project as left out',
+       function () {
+    var project = section(standard().concat([pressure('pore', 'domain')]), {
+      phases: [{ id: 'flow', name: 'Flow', calculation: 'Groundwater flow' }] });
+    App.BOUNDARY_CONDITIONS = JSON.parse(JSON.stringify(project.boundary_conditions));
+    App.PROJECT = project;
+    App.Model.rebuildDerived();
+    var tree = App.TREES[Object.keys(App.TREES)[0]];
+    var conditions = tree.filter(function (n) {
+      return n.label === 'Model conditions'; })[0].children[0];
+    T.eq(conditions.children[1].label,
+         'roller_left  ·  x fixed  (unused in flow)');
+    T.eq(conditions.children[3].label, 'pore  ·  h = -2.00 m', 'the water is written');
   });
 
   test('a support is a row of symbols along its face; front and back draw nothing in 2D',

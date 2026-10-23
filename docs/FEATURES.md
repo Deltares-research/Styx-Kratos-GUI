@@ -41,6 +41,7 @@ Part A lists what Styx sends to Kratos. Part B lists what the GUI and `kratos-cl
 | Tolerances | Relative 1e-4, absolute 1e-9, 6 to 15 iterations, reduction factor 0.5, increase factor 2.0. You can change the maximum number of iterations and the relative tolerance for each phase. | Tested | same |
 | Time steps | One step for each stage (Δt = 1). The settling stages are at negative time, as in the reference deck. | Tested | [kratos/writer.py](../core/kratos/writer.py) |
 | Units | One unit system for each project: SI (N, m, kg, s) or kN (kN, m, t, s). You type all values in it, the input files contain them without conversion, and the results come back in it. | Tested in both systems | [model/units.py](../core/model/units.py) |
+| Groundwater flow | A project whose phases are all "Groundwater flow": solver type `Pw`, `Steady_State_Groundwater_Flow`, `sparse_lu` linear solver. One linear solve for a saturated soil, Newton-Raphson for a soil with another retention law. The deck holds the soil only. 2D only. A project that mixes flow and deformation phases is refused. | Tested: the deck against the Kratos reference `tests/Muskat/saturated_hydrostatic`, and a Kratos run against the exact solution | [kratos/parameters.py](../core/kratos/parameters.py) `FLOW_SOLVER` |
 | Dynamics, consolidation, arc-length control, updated mesh | Not supported. The `time_interval` of a phase is not exported. | Not available | [model/schemas.py](../core/model/schemas.py) `Phase` |
 
 ### A2. Soil elements
@@ -49,9 +50,10 @@ Part A lists what Styx sends to Kratos. Part B lists what the GUI and `kratos-cl
 |---|---|---|---|
 | 2D plane strain | `UPwSmallStrainElement2D3N` (triangle) | `SmallStrainUPwDiffOrderElement2D6N` | Tested against the Kratos reference results |
 | 3D | `UPwSmallStrainElement3D4N` (tetrahedron) | `SmallStrainUPwDiffOrderElement3D10N` | Limited: no 3D reference run |
+| 2D groundwater flow | `SteadyStatePwElement2D3N` | `SteadyStatePwElement2D6N` | Tested against the exact solution of the semi-Muskat column |
 
 Styx makes triangles and tetrahedra only. It does not make quadrilaterals or hexahedra.
-See `ELEMENTS` in [kratos/writer.py](../core/kratos/writer.py).
+See `ELEMENTS` and `FLOW_ELEMENTS` in [kratos/writer.py](../core/kratos/writer.py).
 
 ### A3. Structural elements
 
@@ -122,7 +124,7 @@ and adds only the values that are missing
 
 | Feature | Detail | Status |
 |---|---|---|
-| Phase types | K0 procedure, plastic, null step | Tested |
+| Phase types | K0 procedure, plastic, null step, groundwater flow. Every phase of a groundwater flow project is a flow phase. | Tested |
 | Phase tree | Each phase has a parent, and keeps only what it switches on and off. Kratos needs one sequence, so Styx makes the tree into a list. A tree that branches is refused. | Tested |
 | Default phases | **Create default phases** (GUI) and `phases P defaults` (CLI) make the initial phase (K0) and a null step | Tested |
 | Staged excavation sequence | `phases P staged-excavation` (CLI) and model scripts make the full sequence: K0, null step, wall installation, then one phase for each lift with its water load, and each anchor after the lift that uncovers it. It reproduces the 7 stages of the Kratos staged-excavation reference. The GUI has no button for it. | Tested |
@@ -139,6 +141,7 @@ and adds only the values that are missing
 | Output | Variables | Status |
 |---|---|---|
 | GiD ASCII files (`.post.res`, `.post.msh`), one pair for each stage | Nodal `DISPLACEMENT`, `TOTAL_DISPLACEMENT`, `WATER_PRESSURE`; `CAUCHY_STRESS_TENSOR` and `HYDRAULIC_HEAD` (not with gravity off) at the Gauss points | Tested |
+| Groundwater flow, one pair of GiD files for each stage | Nodal `WATER_PRESSURE`, `EFFECTIVE_SATURATION` and `FLUID_FLUX_VECTOR` (the last two extrapolated from the Gauss points); `HYDRAULIC_HEAD` at the Gauss points (not with gravity off) | Tested |
 | Wall forces at the nodes | `AXIAL_FORCE`, `BENDING_MOMENT`, `SHEAR_FORCE` | Tested: a live Kratos run is checked, and agrees with the Kratos reference curves |
 | Interface tractions | `GEO_EFFECTIVE_TRACTION_VECTOR`, written to JSON on the retained side | Tested |
 
@@ -211,7 +214,7 @@ and adds only the values that are missing
 | Feature | Detail | Status |
 |---|---|---|
 | Runs | List all runs, open one, go through its phases | Tested |
-| Quantities | \|u\|, u_x, u_y, u_z, total and for each phase; σ'xx, σ'yy, σ'zz, σ'xy, σ'yz, σ'xz; p', q, σ1, σ2, σ3, τ_max; pore pressure; hydraulic head (with gravity on). Total stresses and saturation if Kratos wrote them. | Tested |
+| Quantities | \|u\|, u_x, u_y, u_z, total and for each phase; σ'xx, σ'yy, σ'zz, σ'xy, σ'yz, σ'xz; p', q, σ1, σ2, σ3, τ_max; pore pressure; hydraulic head (with gravity on); effective saturation and the flux q, q_x, q_y, q_z of a groundwater flow run. Total stresses and saturation if Kratos wrote them. | Tested |
 | Signs and units | Compression is negative, as Kratos writes it. All quantities are in the unit system of the run (Pa for SI, kPa for kN); lengths in m. | Tested |
 | Display | Colour bands or smooth shading, colour map, reversed scale, automatic or fixed range, deformed mesh with a selected or automatic scale | Tested |
 | Values at a node | All quantities at one node (`results at <node>`) | Tested |
@@ -251,7 +254,7 @@ REST API: `/api/project`, `/api/mesh`, `/api/calculate`, `/api/results/…`.
 
 | Item | Detail |
 |---|---|
-| Benchmarks | Analytical and self-consistency checks in `benchmarks/`: K0 columns, weight above and below the water, hydrostatic column, symmetric excavation, 2D against 3D, mesh convergence, order 1 against order 2, saturated block, building pit, line loads in stages, balance of reactions. They need Kratos. |
+| Benchmarks | Analytical and self-consistency checks in `benchmarks/`: K0 columns, weight above and below the water, hydrostatic column, symmetric excavation, 2D against 3D, mesh convergence, order 1 against order 2, saturated block, building pit, line loads in stages, balance of reactions, the three Muskat groundwater flow cases. They need Kratos. |
 | Server tests | pytest, 105 test files in `tests/`. Run them with `python tools/test.py quick`. |
 | JavaScript tests | 54 test files in `frontend/tests/`, run in a browser with Playwright (`python tools/test.py browser`). The files that do not use the DOM also run without a browser under quickjs. |
 
@@ -261,10 +264,12 @@ REST API: `/api/project`, `/api/mesh`, `/api/calculate`, `/api/results/…`.
    (`mohr_coulomb_project` in `tests/models/excavation.py` is ready for it).
    User-defined models (UDSM, UMAT) are written as typed, also without a test.
 2. **No factor of safety.** Styx has no φ–c reduction phase.
-3. **No groundwater flow calculation.** The water pressures come from the conditions
-   that each phase has on.
+3. **Groundwater flow is saturated and 2D only.** A steady-state flow runs in 2D. The
+   Van Genuchten case and the seepage face are not checked yet, and a project cannot mix
+   flow phases with deformation phases.
 4. **3D is not proven.** No 3D element, law or interface has run in Kratos in a test.
-5. **Fixed solver settings.** You cannot change the analysis type or the linear solver.
+5. **Fixed solver settings.** The calculation type of the phases chooses the analysis
+   (deformation or groundwater flow). You cannot change the linear solver.
 6. **No excavation tool in the GUI.** A pit with lifts needs `kratos-cli excavation` or a
    model script.
 7. **No single-element test** to check a soil model on its own.

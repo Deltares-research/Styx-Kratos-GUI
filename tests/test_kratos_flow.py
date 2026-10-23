@@ -22,12 +22,11 @@ import pytest
 from core.geometry import solid_model
 from core.kratos import condition_checks, external_deck, materials, writer
 from core.model import phases
-from core.model.schemas import (AnchorRows, Beam, BeamSection, Borehole,
-                                DisplacementCondition, Domain, Excavation, Material,
-                                MeshSettings, Phase, Piles, Project, SoilLayer, Struts,
-                                Wall, WaterPressureCondition, Wells,
-                                standard_conditions)
+from core.model.schemas import (Beam, BeamSection, DisplacementCondition, Phase,
+                                WaterPressureCondition, standard_conditions)
 from tests import mdpa
+from tests.models.muskat import FLOW, HEADS, HEIGHT, VAN_GENUCHTEN, head, muskat
+from tests.models.muskat import SOIL as REFERENCE_SOIL
 
 # ── Kratos' tests/Muskat/saturated_hydrostatic, copied ──────────────────────
 
@@ -63,81 +62,10 @@ REFERENCE_GRAVITY = {"variable_name": "VOLUME_ACCELERATION", "active": [False, T
                      "value": [0.0, -9.81, 0.0], "table": [0, 0, 0]}
 REFERENCE_EXTRAPOLATED = ["EFFECTIVE_SATURATION", "FLUID_FLUX_VECTOR"]
 REFERENCE_NODAL_RESULTS = ["WATER_PRESSURE", "EFFECTIVE_SATURATION", "FLUID_FLUX_VECTOR"]
-
-REFERENCE_SOIL = {
-    "GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
-    "YOUNG_MODULUS": 1.0e+04,
-    "POISSON_RATIO": 0.4,
-    "DENSITY_SOLID": 2.29e+03,
-    "DENSITY_WATER": 1.01937e+03,
-    "POROSITY": 0.3333,
-    "BULK_MODULUS_SOLID": 6.7e+19,
-    "BULK_MODULUS_FLUID": 1.0e+20,
-    "PERMEABILITY_XX": 6.9444e-13,
-    "PERMEABILITY_YY": 6.9444e-13,
-    "PERMEABILITY_XY": 0.0,
-    "DYNAMIC_VISCOSITY": 1.0e-03,
-    "BIOT_COEFFICIENT": 1.0,
-    "RETENTION_LAW": "SaturatedLaw",
-    "SATURATED_SATURATION": 0.403,
-}
-"""Its MaterialParameters.json `Variables`."""
-
-VAN_GENUCHTEN = {
-    "RETENTION_LAW": "VanGenuchtenLaw",
-    "RESIDUAL_SATURATION": 2.5e-02,
-    "VAN_GENUCHTEN_AIR_ENTRY_PRESSURE": 2.611e+03,
-    "VAN_GENUCHTEN_GN": 1.377,
-    "VAN_GENUCHTEN_GL": 1.25,
-    "MINIMUM_RELATIVE_PERMEABILITY": 1.0e-05,
-}
-"""What `van_genuchten_hydrostatic` changes in the material."""
+"""The soil is `tests.models.muskat.SOIL`, copied from the same deck."""
 
 
-# ── The model ───────────────────────────────────────────────────────────────
-
-WIDTH, HEIGHT = 1.62, 4.0
-FLOW = Phase(id="flow", name="Flow", calculation="Groundwater flow")
-
-
-def head(id: str, face: str, level: float, **fields) -> WaterPressureCondition:
-    return WaterPressureCondition(id=id, name=id, on="face", face=face,
-                                  reference_coordinate=level,
-                                  pressure_tension_cut_off=1e5, **fields)
-
-
-HEADS = [head("left_head", "left", 3.0), head("right_head", "right", 1.6)]
-
-
-def muskat(conditions: list | None = None, phases: list[Phase] | None = None,
-           soil: dict | None = None, order: int = 1, **changes) -> Project:
-    """Case A: a 1.62 m by 4 m column of saturated soil between two fixed heads."""
-    material = Material(id="sand", name="sand", color="#c4a86a",
-                        constitutive_law="GeoLinearElasticPlaneStrain2DLaw",
-                        variables=REFERENCE_SOIL if soil is None else soil)
-    fields = dict(
-        name="muskat",
-        layered_soil=True,
-        dimension=2,
-        domain=Domain(x0=0.0, x1=WIDTH, z0=0.0, z1=1.0, y_top=HEIGHT, y_bottom=0.0),
-        boreholes=[Borehole(id="bh1", name="BH1", x=0.0, y=0.0, head=HEIGHT, water=0.0)],
-        materials=[material],
-        layers=[SoilLayer(id="soil", name="soil", mat=material.id,
-                          tops={"bh1": HEIGHT}, bots={"bh1": 0.0})],
-        boundary_conditions=HEADS if conditions is None else conditions,
-        phases=[FLOW] if phases is None else phases,
-        mesh=MeshSettings(element_size=0.4, order=order),
-        excavation=Excavation(x0=0.0, x1=1.0, z0=0.0, z1=1.0, levels=[HEIGHT - 1.0]),
-        wall=Wall(thickness=0.5, top_y=HEIGHT, toe_y=HEIGHT - 1.0),
-        struts=Struts(xs=[], y=HEIGHT, radius=0.1),
-        anchor_rows=AnchorRows(xs=[], head_y=HEIGHT, length=1.0, inclination_deg=45.0,
-                               radius=0.1),
-        piles=Piles(xs=[], zs=[], radius=0.1, length=1.0, top_y=HEIGHT),
-        wells=Wells(positions=[], radius=0.1, top_y=HEIGHT, length=1.0),
-    )
-    fields.update(changes)
-    return Project(**fields)
-
+# ── The model is tests/models/muskat.py ─────────────────────────────────────
 
 @pytest.fixture(scope="module")
 def gmsh_session():

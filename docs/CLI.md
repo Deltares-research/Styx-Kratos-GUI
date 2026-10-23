@@ -48,6 +48,8 @@ button.
 
 A whole model to start from is in [`examples/CROW_case/`](../examples/CROW_case/README.md): the
 CROW excavation wall, as a project file (`crow.json`) and as a model script (`crow.py`).
+[`examples/Muskat_case/`](../examples/Muskat_case/README.md) is a groundwater flow model: the
+semi-Muskat column of Kratos' tests, with its exact answer.
 
 ## The commands
 

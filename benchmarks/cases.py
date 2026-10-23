@@ -15,6 +15,7 @@ from core.kratos import writer, materials
 from core.results import catalog
 from benchmarks import models
 from benchmarks.runner import Case, Context, Outcome
+from tests.models import muskat
 
 # ── Reading a run ───────────────────────────────────────────────────────────
 
@@ -248,6 +249,31 @@ def richardson(coarse: str, medium: str, fine: str, low: float = 1.5, high: floa
     return check
 
 
+def exact_flow_pressure(tolerance: float = 0.5):
+    """The semi-Muskat column: the water pressure at every node is the exact one of a head
+    falling linearly from the left face to the right (`tests.models.muskat`)."""
+    def check(ctx: Context) -> Outcome:
+        stage = last_stage(ctx)
+        values = catalog.stage_results(ctx.run_id, stage).field("WATER_PRESSURE").values
+        mesh = catalog.stage_mesh(ctx.run_id, stage)
+        worst = max(abs(v[0] - muskat.exact_water_pressure(*mesh.nodes[n][:2]))
+                    for n, v in values.items())
+        return Outcome("p_w = γ_w (y − h(x)), h linear from 3.0 m to 1.6 m", worst <= tolerance,
+                       f"worst {worst:.3f} Pa", f"≤ {tolerance:g} Pa")
+    return check
+
+
+def darcy_flux(tolerance: float = 1e-3):
+    """The flux is Darcy's, horizontal and the same everywhere: q = K Δh / L."""
+    def check(ctx: Context) -> Outcome:
+        values = catalog.stage_results(ctx.run_id, last_stage(ctx)).field(
+            "FLUID_FLUX_VECTOR").values.values()
+        worst = max(max(abs(q[0] - muskat.EXACT_FLUX), abs(q[1])) for q in values)
+        return Outcome("q = (K Δh / L, 0) at every node", worst <= tolerance * muskat.EXACT_FLUX,
+                       f"worst {worst:.3g} m/s", f"≤ {tolerance:g} × {muskat.EXACT_FLUX:.4g} m/s")
+    return check
+
+
 # ── The catalogue ───────────────────────────────────────────────────────────
 
 SAND = models.material("sand", "Sand", 18.0, k0=0.6)
@@ -323,6 +349,17 @@ CASES = [
          blocked="needs REACTION output (MF-01)"),
     Case("BM-EQ-01", "Reactions balance weight and loads", "self-consistency",
          blocked="needs REACTION output (MF-01)"),
+    Case("BM-FLOW-A", "Semi-Muskat column, saturated: steady flow between two heads",
+         "Kratos tests/Muskat/saturated_hydrostatic; analytical: linear head, Darcy flux",
+         build=lambda: muskat.muskat(order=2),
+         checks=[exact_flow_pressure(), darcy_flux()]),
+    Case("BM-FLOW-B", "Semi-Muskat column, Van Genuchten soil",
+         "Kratos tests/Muskat/van_genuchten_hydrostatic",
+         blocked="needs the initial phreatic line checked and Kratos' values read at its "
+                 "node coordinates (groundwater flow plan, step 2)"),
+    Case("BM-FLOW-C", "Full Muskat with a seepage face", "Kratos tests/seepage_tests; "
+         "Dupuit-Charny discharge",
+         blocked="needs a seepage boundary condition (groundwater flow plan, step 3)"),
 ]
 
 BY_ID = {case.id: case for case in CASES}

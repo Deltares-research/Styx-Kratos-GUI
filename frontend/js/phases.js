@@ -49,6 +49,18 @@ App.Phases = (function () {
 
   function copy(value) { return JSON.parse(JSON.stringify(value)); }
 
+  var GROUNDWATER_FLOW = 'Groundwater flow';
+
+  /* Whether the project is a groundwater flow calculation: it has phases, and every one
+     is a "Groundwater flow" phase (`core.model.phases.groundwater_flow`). A mix of flow
+     and deformation phases is not one; the export refuses it. */
+  function groundwaterFlow(project) {
+    var list = phasesOf(project);
+    return list.length > 0 && list.every(function (phase) {
+      return phase.calculation === GROUNDWATER_FLOW;
+    });
+  }
+
   /* Both lists are optional on the wire -- pydantic defaults them and a phase that
      says nothing carries neither -- so every reader goes through here. */
   function listOf(phase, field) { return (phase && phase[field]) || []; }
@@ -459,6 +471,7 @@ App.Phases = (function () {
   }
 
   return {
+    GROUNDWATER_FLOW: GROUNDWATER_FLOW, groundwaterFlow: groundwaterFlow,
     chainTo: chainTo, activeParts: activeParts, stageableKeys: stageableKeys,
     hiddenKeys: hiddenKeys,
     order: order, branchProblem: branchProblem, rows: rows, overview: overview,

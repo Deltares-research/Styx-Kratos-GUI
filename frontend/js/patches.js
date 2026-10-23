@@ -1745,22 +1745,28 @@ App.LivePatches = (function () {
      three groups below are exactly what `schemas.Phase` carries.
 
      "Water conditions" is read-only: the water pressure conditions the phase has on,
-     which the Model explorer's check boxes switch (App.BoundaryConditions.waterIn). */
+     which the Model explorer's check boxes switch (App.BoundaryConditions.waterIn).
+
+     A "Groundwater flow" phase solves the water pressure alone, so its "Reset
+     displacements to zero" box is greyed out, with the reason as its tooltip; the CLI
+     refuses the option on such a phase. */
   function phaseProps(phase) {
     var parent = phase.parent == null ? null : phaseById(phase.parent);
+    var flow = phase.calculation === App.Phases.GROUNDWATER_FLOW;
     return {
       'General': [
         ['Name', 'text', 'name'],
         ['Start from phase', 'static', parent ? parent.name : 'the model as built'],
         ['Calculation type', 'select', 'calculation',
-         ['K0 procedure', 'Plastic', 'Null step']],
+         ['K0 procedure', 'Plastic', 'Null step', App.Phases.GROUNDWATER_FLOW]],
         ['Loading type', 'static', phase.loading || 'Staged construction'],
         ['Water conditions', 'static', App.BoundaryConditions
           ? App.BoundaryConditions.waterIn(App.PROJECT, phase.id) : ''],
         ['Time interval', 'number', 'time_interval', { min: 0 }, 'day']
       ],
       'Deformation control': [
-        ['Reset displacements to zero', 'check', 'reset_displacements']
+        ['Reset displacements to zero', 'check', 'reset_displacements',
+         flow ? { greyed: 'A groundwater flow phase has no displacements.' } : null]
       ],
       'Numerical control': [
         ['Max iterations', 'number', 'max_iterations', { min: 1, integer: true }],
@@ -1826,6 +1832,12 @@ App.LivePatches = (function () {
     } else if (kind === 'check') {
       control = el('input.pgrid-check', { type: 'checkbox' });
       control.checked = !!phase[spec[2]];
+      if (spec[3] && spec[3].greyed) {
+        control.disabled = true;
+        control.title = spec[3].greyed;
+        return el('div.pgrid-row', { title: spec[3].greyed },
+                  [key, el('div.pgrid-val.readonly', null, [control])]);
+      }
       control.addEventListener('change', function () { commit(control.checked); });
     } else {
       var bounds = spec[3] || {};

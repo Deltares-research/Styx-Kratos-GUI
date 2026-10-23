@@ -328,6 +328,17 @@ App.BoundaryConditions = (function () {
   var SECTION_NOTE = 'The front and back supports are kept for the solid model; the 2D '
     + 'section holds z by itself.';
 
+  /* Said under the list of a groundwater flow project with supports
+     (`condition_checks.FLOW_NOTE`). */
+  var FLOW_NOTE = 'A groundwater flow calculation leaves the supports out: it solves the '
+    + 'water pressure alone.';
+
+  /* Whether the export of `project` leaves the support `record` out because the project
+     is a groundwater flow calculation (`condition_checks.unused_in_flow`). */
+  function unusedInFlow(record, project) {
+    return record.kind === 'displacement' && App.Phases.groundwaterFlow(project);
+  }
+
   /* The conditions a list shows, one line each, as `kratos-cli boundary list` prints
      them (`cli/commands/conditions.py` `listed_lines`). */
   function listedLines(project) {
@@ -335,6 +346,9 @@ App.BoundaryConditions = (function () {
     var shown = all.filter(function (record) { return !heldBySection(record, project); });
     var lines = shown.length ? shown.map(line) : ['No boundary conditions yet.'];
     if (shown.length < all.length) lines.push(SECTION_NOTE);
+    if (shown.some(function (record) { return unusedInFlow(record, project); })) {
+      lines.push(FLOW_NOTE);
+    }
     return lines;
   }
 
@@ -1046,7 +1060,7 @@ App.BoundaryConditions = (function () {
     draftDisplacement: draftDisplacement, draftWaterPressure: draftWaterPressure,
     standardConditions: standardConditions, withStandard: withStandard,
     soilPartKeys: soilPartKeys, facesOf: facesOf, heldBySection: heldBySection,
-    waterIn: waterIn,
+    unusedInFlow: unusedInFlow, waterIn: waterIn,
     line: line, listedLines: listedLines, label: label, gravityLine: gravityLine,
     command: command,
     grid: grid, others: others, applyGrid: applyGrid, parsePoints: parsePoints,
