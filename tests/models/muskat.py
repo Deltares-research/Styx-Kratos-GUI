@@ -1,7 +1,7 @@
 """The semi-Muskat column: a steady-state groundwater flow between two fixed heads.
 
 Kratos' own `tests/Muskat/saturated_hydrostatic` (case A of
-plan/active/groundwater-flow-plan.md), as a project: a 1.62 m by 4 m column of saturated
+plan/done/groundwater-flow-plan.md), as a project: a 1.62 m by 4 m column of saturated
 soil, the water held at a level of 3.0 m on the left face and 1.6 m on the right, one
 "Groundwater flow" phase. The soil and the heads are the reference deck's, value for
 value. No support: a flow calculation leaves them out.

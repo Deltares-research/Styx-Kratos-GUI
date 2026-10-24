@@ -1,5 +1,5 @@
 """Groundwater flow, run in Kratos: the Muskat column (`tests/models/muskat.py`, cases A, B
-and C of plan/active/groundwater-flow-plan.md). Opt-in: `pytest --run-kratos`.
+and C of plan/done/groundwater-flow-plan.md). Opt-in: `pytest --run-kratos`.
 
 Case A: the head falls linearly from the left face to the right one, a field the
 elements hold exactly, so the water pressure at every node and the flux everywhere are

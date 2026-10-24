@@ -2,7 +2,7 @@
 steady-state flow of the water alone.
 
 The deck is held to Kratos' own `tests/Muskat/saturated_hydrostatic` (case A of
-plan/active/groundwater-flow-plan.md), process for process: its solver block, the two
+plan/done/groundwater-flow-plan.md), process for process: its solver block, the two
 fixed heads, gravity, the extrapolation of the saturation and the flux, and the results
 it writes. Case B, `tests/Muskat/van_genuchten_hydrostatic`, is held to its deck the same
 way: the Newton-Raphson block, the initial phreatic line and the Van Genuchten soil. The
