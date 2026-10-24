@@ -2821,6 +2821,58 @@ window.DRAFTS_FIXTURE =
       "error": "The sheet pile must stay inside the model domain."
     },
     {
+      "title": "a sheet pile standing out above the ground",
+      "call": "Beams.draftFromPoints",
+      "project": "section",
+      "args": [
+        [
+          [
+            12,
+            5
+          ],
+          [
+            12,
+            -6
+          ]
+        ]
+      ],
+      "result": {
+        "id": "beam_1",
+        "name": "Sheet pile 1",
+        "kind": "beam",
+        "section": "beamsection_1",
+        "points": [
+          [
+            12.0,
+            5.0
+          ],
+          [
+            12.0,
+            -6.0
+          ]
+        ],
+        "active": true
+      }
+    },
+    {
+      "title": "a sheet pile wholly above the ground is refused",
+      "call": "Beams.draftFromPoints",
+      "project": "section",
+      "args": [
+        [
+          [
+            12,
+            5
+          ],
+          [
+            12,
+            1
+          ]
+        ]
+      ],
+      "error": "A sheet pile may stand out above the ground, but part of it has to be in the soil."
+    },
+    {
       "title": "a sheet pile in the solid model is refused",
       "call": "Beams.draft",
       "project": "solid",

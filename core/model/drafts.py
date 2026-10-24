@@ -320,11 +320,15 @@ def sheet_pile(project: Project, points=None, *, id: str | None = None,
         raise DraftError("A sheet pile needs at least two points.")
     span = project.extent()
     flat = [(p[0], p[1]) for p in points]
+    # Only the top is free: a pile may stand out above the ground (`Project`'s check).
     for x, y in flat:
         _finite([(x, y)], "Every pile coordinate must be a number.")
-        if x < span.x0 or x > span.x1 or y < span.y_bottom or y > span.y_top:
+        if x < span.x0 or x > span.x1 or y < span.y_bottom:
             raise DraftError("The sheet pile must stay inside the model domain.")
     _no_repeats(flat, "sheet pile")
+    if min(y for _, y in flat) >= span.y_top:
+        raise DraftError("A sheet pile may stand out above the ground, but part of it "
+                         "has to be in the soil.")
     id, default_name = _named(id, [b.id for b in project.beams], "beam_", "Sheet pile")
     return Beam(id=id, name=name or default_name, kind="beam",
                 section=section or _first_section(project, "beam"), points=flat,

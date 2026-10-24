@@ -191,6 +191,14 @@ def test_a_sheet_pile_outside_the_model_or_in_3d_is_refused():
         drafts.sheet_pile(seed_project())
     with pytest.raises(drafts.DraftError, match="same point twice"):
         drafts.sheet_pile(_plane_strain(), [(12, 0), (12, 0)])
+    with pytest.raises(drafts.DraftError, match="part of it has to be in the soil"):
+        drafts.sheet_pile(_plane_strain(), [(12, 5), (12, 0)])
+
+
+def test_a_sheet_pile_may_stand_out_above_the_ground():
+    pile = drafts.sheet_pile(_plane_strain(), [(12, 5), (12, -7.5)])
+
+    assert pile.points == [(12, 5), (12, -7.5)]
 
 
 def test_a_new_wall_is_swept_from_the_ground_to_half_the_depth():

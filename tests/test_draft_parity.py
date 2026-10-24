@@ -111,6 +111,12 @@ def calls(models: dict) -> list[dict]:
          "pile", [[[20, 0], [20, -6]]], lambda p: drafts.sheet_pile(p, [(20, 0), (20, -6)]))
     call("a sheet pile below the model is refused", "Beams.draftFromPoints", "section",
          [[[12, 0], [12, -40]]], lambda p: drafts.sheet_pile(p, [(12, 0), (12, -40)]))
+    call("a sheet pile standing out above the ground", "Beams.draftFromPoints",
+         "section", [[[12, 5], [12, -6]]],
+         lambda p: drafts.sheet_pile(p, [(12, 5), (12, -6)]))
+    call("a sheet pile wholly above the ground is refused", "Beams.draftFromPoints",
+         "section", [[[12, 5], [12, 1]]],
+         lambda p: drafts.sheet_pile(p, [(12, 5), (12, 1)]))
     call("a sheet pile in the solid model is refused", "Beams.draft", "solid", ["beam"],
          drafts.sheet_pile)
     call("the profile a first sheet pile brings", "Beams.sectionsFor", "section",

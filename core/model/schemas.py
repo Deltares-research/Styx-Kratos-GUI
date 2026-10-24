@@ -1879,12 +1879,20 @@ class Project(Base):
                 raise ValueError(
                     f"beam {beam.id} references unknown beam section {beam.section!r}"
                 )
+            # A pile may stand out above the ground -- a load at its head is carried
+            # down it into the soil, and `solid_model._embed_beams` keeps that part --
+            # so its top is not held to the model. Its sides and toe are, and some of
+            # it has to be in the ground, or nothing holds it.
             for x, y in beam.points:
-                if not (extent.x0 <= x <= extent.x1
-                        and extent.y_bottom <= y <= extent.y_top):
+                if not (extent.x0 <= x <= extent.x1 and extent.y_bottom <= y):
                     raise ValueError(
                         f"beam {beam.id!r} lies outside the domain at ({x}, {y})"
                     )
+            if min(y for _, y in beam.points) >= extent.y_top:
+                raise ValueError(
+                    f"beam {beam.id!r} lies wholly above the ground; part of it has to "
+                    "be in the soil"
+                )
         # A member stands in the same profile library the sheet piles use; a panel has
         # its own, because a thickness is not an area and an inertia.
         for member in self.members:

@@ -83,6 +83,40 @@ def test_a_sheet_pile_reaching_up_into_a_custom_layer_is_accepted():
     ))
 
 
+AZ26 = {"id": "az26", "name": "AZ 26", "E": 2.1e8, "nu": 0.3,
+        "area": 0.02, "inertia": 5e-4, "density": 7850.0}
+
+
+def pile_along(*points) -> dict:
+    payload = seed_project(simple=True).model_dump()
+    payload.update(beam_sections=[AZ26],
+                   beams=[{"id": "beam_1", "name": "Sheet pile 1", "kind": "beam",
+                           "section": "az26", "points": [list(p) for p in points]}])
+    return payload
+
+
+def test_a_sheet_pile_standing_out_above_the_ground_is_accepted():
+    """The bug as reported: a pile 5 m above the top layer was "outside the domain"."""
+    top = seed_project(simple=True).domain.y_top
+    Project.model_validate(pile_along((10.0, top + 5.0), (10.0, top - 7.5)))
+
+
+def test_a_sheet_pile_wholly_above_the_ground_is_refused():
+    top = seed_project(simple=True).domain.y_top
+    with pytest.raises(Exception, match="wholly above the ground"):
+        Project.model_validate(pile_along((10.0, top + 5.0), (10.0, top)))
+
+
+def test_a_sheet_pile_past_the_side_or_the_bottom_is_still_refused():
+    domain = seed_project(simple=True).domain
+    with pytest.raises(Exception, match="outside the domain"):
+        Project.model_validate(pile_along((domain.x1 + 1.0, domain.y_top),
+                                          (domain.x1 + 1.0, domain.y_top - 5.0)))
+    with pytest.raises(Exception, match="outside the domain"):
+        Project.model_validate(pile_along((10.0, domain.y_top),
+                                          (10.0, domain.y_bottom - 1.0)))
+
+
 def test_an_anchor_in_a_custom_layer_above_ground_is_accepted():
     Project.model_validate(project_with(
         beam_sections=[{"id": "az26", "name": "AZ 26", "E": 2.1e8, "nu": 0.3,
