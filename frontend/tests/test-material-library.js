@@ -83,7 +83,7 @@
   }
 
   function roundTrip(extra) {
-    var project = { domain: {}, boreholes: [], layers: [], custom_parts: [],
+    var project = { domain: {}, layers: [], custom_parts: [],
                     materials: [serverMaterial(extra)] };
     return App.Model.materialsToServer(App.Model.fromProject(project).MATERIALS)[0];
   }
@@ -101,7 +101,7 @@
 
   test('the browser\'s copy is its own: an edit does not reach the project it came from',
        function () {
-    var project = { domain: {}, boreholes: [], layers: [], custom_parts: [],
+    var project = { domain: {}, layers: [], custom_parts: [],
                     materials: [serverMaterial()] };
     var mapped = App.Model.fromProject(project).MATERIALS[0];
     mapped.variables.YOUNG_MODULUS = 1;

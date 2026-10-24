@@ -197,7 +197,7 @@ App.Viewport = (function () {
   }
 
   /* The extent a symbol is sized against: what is drawn, not what is declared.
-     `project.domain` is the block the boreholes describe and stays tens of metres
+     `project.domain` is the block the layers fill and stays tens of metres
      wide around a 0.1 x 1 m column, so `size` -- the bounding box the viewport is
      framing -- is preferred whenever there is one. In 2D only the two axes on
      screen count: the third is edge-on to the camera. */
@@ -245,8 +245,8 @@ App.Viewport = (function () {
       });
       return spec;
     }
-    // The load's own elevation, not `d.y_top`: the domain is only the borehole block,
-    // so a pad on a drawn embankment was being dragged down onto the borehole soil the
+    // The load's own elevation, not `d.y_top`: the domain is only the layer block,
+    // so a pad on a drawn embankment was being dragged down onto the layer soil the
     // moment the model switched to 3D. Mirrors the server's `Project.elevation_of`,
     // including what an unset level means -- see `loadElevation`.
     var y = loadElevation(load, project);
@@ -383,7 +383,7 @@ App.Viewport = (function () {
         outlinePoints = [spec.anchors[0], spec.anchors[spec.anchors.length - 1]];
       } else {
         // The same elevation the arrows use, or the outline stays behind on the
-        // borehole soil while the arrows move up onto the embankment.
+        // layer soil while the arrows move up onto the embankment.
         var pad = loadElevation(load, project);
         outlinePoints = [
           [load.x0, pad, load.z0], [load.x1, pad, load.z0],
@@ -449,7 +449,7 @@ App.Viewport = (function () {
   }
 
   /* The faces of the soil as the build drew it. The export finds a face on the meshed
-     soil (core/kratos/writer.py `_boundary_nodes`), not on `project.domain`: a borehole
+     soil (core/kratos/writer.py `_boundary_nodes`), not on `project.domain`: a layer
      stack shallower than the domain, or a drawn body beyond it, moves the face. This
      takes the same rule to the drawn sections -- the soil's lowest and highest plane
      on each axis, across the soil points that lie on it. Null with no soil drawn.
@@ -2797,8 +2797,8 @@ App.Viewport = (function () {
     // js/viewport.js rebuilds its soil boxes from App.LAYERS client-side. Here the soil
     // geometry is the server's, tessellated by /api/geometry, so there is nothing to
     // rebuild locally: a committed change reaches the scene through refresh() instead.
-    // Kept because the frozen callers (js/app.js createBorehole, js/command.js borehole)
-    // call it unconditionally, and refresh() would re-fetch the project and discard the
+    // Kept because the frozen callers (js/app.js, js/command.js) call it
+    // unconditionally, and refresh() would re-fetch the project and discard the
     // client-side edit they just made.
     rebuildSoil: function () {},
     refresh: refresh, gridReference: gridReference, computeModeGroups: computeModeGroups,

@@ -21,7 +21,7 @@ var App = window.App || {};
 
 App.Anchors = (function () {
 
-  /* How far the model reaches, which is not the same as the borehole domain: a drawn
+  /* How far the model reaches, which is not the same as the domain: a drawn
      or imported part may stand above `y_top`, and a structure placed on one is on
      model geometry. `App.Model.extentOf` mirrors the server's `Project.extent`; the
      fallback keeps this module usable in a page that has no App.Model. */

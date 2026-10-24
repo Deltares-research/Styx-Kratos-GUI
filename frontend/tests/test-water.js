@@ -6,7 +6,7 @@
    every hydrostatic load from the same two numbers, and `core.kratos.materials` derives
    DENSITY_WATER from the specific weight. Until now nothing in the GUI could change
    either of them -- the Selection explorer's `water` entry was still the mockup's
-   three borehole rows from js/data.js:631, which describe a different project.
+   three water rows from js/data.js:631, which describe a different project.
 
    See plan/outdated/staged-construction-plan.md sec 7.2, "the GUI follow-on Marjan asked for".
    A *per-stage* phreatic level is a further step and deliberately not here.
@@ -20,23 +20,20 @@
       layered_soil: true,
       dimension: 2,
       domain: { x0: 0, x1: 50, z0: 0, z1: 40, y_top: 0, y_bottom: -25 },
-      boreholes: [{ id: 'bh1', name: 'BH-1', x: 0, y: 0, head: 0, water: -1.5 }],
       materials: [
 { id: 'm2', name: 'Sand', color: '#c4a86a',
           constitutive_law: 'GeoLinearElasticPlaneStrain2DLaw',
           variables: { YOUNG_MODULUS: 2.5e7, POISSON_RATIO: 0.28, DENSITY_SOLID: 1834.86,
                        GEO_COHESION: 500, GEO_FRICTION_ANGLE: 32 } }
       ],
-      layers: [{ id: 'L1', name: 'Soil_1', mat: 'm2',
-                 tops: { bh1: 0 }, bots: { bh1: -25 } }],
+      layers: [{ id: 'L1', name: 'Soil_1', mat: 'm2', top: 0, bottom: -25 }],
       custom_parts: [],
       water: water || { y: -1.5, margin: 3.0, thickness: 0.06, specific_weight: 10.0 }
     };
   }
 
   function withProject(p, fn) {
-    var saved = { LAYERS: App.LAYERS, MATERIALS: App.MATERIALS,
-                  BOREHOLES: App.BOREHOLES, PROJECT: App.PROJECT,
+    var saved = { LAYERS: App.LAYERS, MATERIALS: App.MATERIALS, PROJECT: App.PROJECT,
                   props: App.OBJECT_PROPS, trees: {} };
     Object.keys(App.TREES || {}).forEach(function (m) { saved.trees[m] = App.TREES[m]; });
     App.OBJECT_PROPS = Object.assign({}, App.OBJECT_PROPS);
@@ -45,7 +42,7 @@
       return fn();
     } finally {
       App.LAYERS = saved.LAYERS; App.MATERIALS = saved.MATERIALS;
-      App.BOREHOLES = saved.BOREHOLES; App.PROJECT = saved.PROJECT;
+      App.PROJECT = saved.PROJECT;
       App.OBJECT_PROPS = saved.props;
       Object.keys(saved.trees).forEach(function (m) { App.TREES[m] = saved.trees[m]; });
     }
@@ -61,7 +58,7 @@
 
   /* ── The panel describes this project ─────────────────────────────────── */
 
-  test('the water panel shows the project level, not the mockup boreholes', function () {
+  test('the water panel shows the project level, not the mockup rows', function () {
     withProject(project({ y: -4.25, margin: 3, thickness: 0.06, specific_weight: 10 }),
                 function () {
       T.eq(row('Geometry', 'Level')[1], '-4.250');

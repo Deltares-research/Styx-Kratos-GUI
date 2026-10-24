@@ -11,27 +11,11 @@ App.LivePatches = (function () {
      twice. Module scope, because install() may be called more than once (the tests do)
      and neither may be reset when it is. */
   var cmdHistory = [], cmdIndex = 0, commandBoxBound = false;
-  var activeLayerEdit = null;
 
   function copy(value) { return JSON.parse(JSON.stringify(value)); }
   function snapshotLayers() { return copy(App.LAYERS || []); }
   function restoreLayers(snapshot) {
     App.LAYERS = copy(snapshot);
-    if (App.Model && App.Model.rebuildDerived) App.Model.rebuildDerived();
-    if (App.Explorer && App.state) App.Explorer.mountTree(App.state.mode);
-  }
-
-  /* The soil dialog edits boreholes and layers together -- adding a borehole adds
-     a tops/bots key to every layer -- so they have to be snapshotted, restored
-     and saved as one unit. */
-  function snapshotSoil() {
-    return { layers: copy(App.LAYERS || []), boreholes: copy(App.BOREHOLES || []),
-             materials: copy(App.MATERIALS || []) };
-  }
-  function restoreSoil(snapshot) {
-    App.LAYERS = copy(snapshot.layers);
-    App.BOREHOLES = copy(snapshot.boreholes);
-    if (snapshot.materials) App.MATERIALS = copy(snapshot.materials);
     if (App.Model && App.Model.rebuildDerived) App.Model.rebuildDerived();
     if (App.Explorer && App.state) App.Explorer.mountTree(App.state.mode);
   }
@@ -800,46 +784,6 @@ App.LivePatches = (function () {
     return true;
   }
 
-  /* ── Boreholes ─────────────────────────────────────────────────────────
-     Soil > Create borehole, its rail tool and `borehole [x] [y]` all add one through
-     `POST /api/project/boreholes`, which is `session.add_borehole` -- what `kratos-cli
-     borehole add` calls -- so the GUI and the terminal make the same borehole: its id,
-     its name, 10 m past the last one unless told, and every layer's levels copied
-     from the last borehole. The frozen `App.addBorehole` did the same to the
-     browser's copy only, which the next Model.apply threw away. */
-  function addBorehole(fields) {
-    return App.Api.post('/api/project/boreholes', fields || {})
-      .then(function (result) {
-        App.Model.apply(result.project);
-        var boreholes = result.project.boreholes || [];
-        var added = boreholes[boreholes.length - 1];
-        return App.Viewport.refresh().then(function () {
-          if (App.Explorer && App.state) App.Explorer.mountTree(App.state.mode);
-          App.Command.ok('Added borehole ' + added.id + ' (' + added.name + ') at x = '
-                         + Number(added.x).toFixed(2) + ' m, y = '
-                         + Number(added.y).toFixed(2) + ' m.');
-          return added;
-        });
-      })
-      .catch(function (error) { App.Command.err(error.message); });
-  }
-
-  /* `borehole [x] [y]`: map coordinates, as `kratos-cli borehole add --x --y` takes
-     them -- y is the map's, the model's z, not a height. Either may be left out. */
-  function runBoreholeCommand(text) {
-    var words = String(text || '').trim().split(/\s+/).slice(1);
-    var numbers = words.map(Number);
-    if (words.length > 2 || numbers.some(function (n) { return !isFinite(n); })) {
-      App.Command.err('"' + words.join(' ') + '" is not a position. Use `borehole`, '
-                      + '`borehole <x>` or `borehole <x> <y>`, e.g. borehole 40 0.');
-      return null;
-    }
-    var fields = {};
-    if (words.length > 0) fields.x = numbers[0];
-    if (words.length > 1) fields.y = numbers[1];
-    return addBorehole(fields);
-  }
-
   /* `units` / `units <system>`, typed: show the project's unit system, or convert the
      whole project to another one. What to send is `App.Units`'s (tested headless); this
      sends it, redraws from the project the server stored, and prints what the server
@@ -910,143 +854,6 @@ App.LivePatches = (function () {
       .catch(function (err) {
         if (App.Command && App.Command.err) App.Command.err('Error deleting geometry: ' + err.message);
       });
-  }
-
-  /* Custom soil volumes, listed in the frozen "Modify soil layers" window.
-
-     They are kept out of the layer table on purpose: that table is the borehole
-     stack -- per-borehole tops and bottoms that must tile the domain gap-free --
-     and a polygon prism has no place in it. What is editable here is what the
-     two have in common: the name and the material. The shape is coordinates, so
-     it is edited as coordinates. */
-  function addSoilBodySection(dialog) {
-    var bodies = ((App.PROJECT && App.PROJECT.custom_parts) || [])
-      .filter(function (part) { return !!part.mat; });
-
-    var el = App.UI.el;
-    var pane = dialog.querySelector('.lay-pane');
-    if (!pane) return;
-    var previous = pane.querySelector('.soil-body-section');
-    if (previous) previous.remove();
-
-    var section = el('div.soil-body-section');
-    section.appendChild(el('div.soil-body-section-head', { text: 'Custom soil volumes' }));
-    var selected = bodies.length ? bodies[0].key : null;
-    var actions = el('div.lay-toolbar');
-    function persistStack() {
-      if (!App.MATERIALS.length) App.addMaterial();
-      return App.Api.patch('/api/project/layers', {
-        layers: copy(App.LAYERS), boreholes: copy(App.BOREHOLES),
-        materials: App.Model.materialsToServer(App.MATERIALS)
-      }).then(function (response) {
-        App.Model.apply(response.project);
-        if (activeLayerEdit) activeLayerEdit.snapshot = snapshotSoil();
-      });
-    }
-    function refreshBodies() {
-      if (activeLayerEdit) activeLayerEdit.snapshot = snapshotSoil();
-      addSoilBodySection(dialog);
-    }
-    ['Add', 'Insert', 'Delete'].forEach(function (label) {
-      var button = el('button.btn.btn-sm', { text: label, type: 'button' });
-      button.disabled = label === 'Delete' && !selected;
-      button.addEventListener('click', function () {
-        button.disabled = true;
-        persistStack().then(function () {
-          if (label === 'Delete') {
-            return deleteRequest('/api/geometry/parts/' + encodeURIComponent(selected),
-                                 'Could not delete the custom layer.')
-              .then(function () { return App.Model.load(); })
-              .then(function () { return App.Viewport.refresh(); }).then(refreshBodies);
-          }
-          App.SoilVolumeDialog.open(null, {
-            insertBefore: label === 'Insert' ? selected : null, onSaved: refreshBodies
-          });
-        }).catch(function (error) { App.Command.err(error.message); })
-          .then(function () { button.disabled = label === 'Delete' && !selected; });
-      });
-      actions.appendChild(button);
-    });
-    section.appendChild(actions);
-
-    var table = el('table.lay-table');
-    var headRow = el('tr');
-    ['Volume', 'Material', 'Size', ''].forEach(function (h) {
-      headRow.appendChild(el('th', { text: h }));
-    });
-    table.appendChild(el('thead', null, headRow));
-    var tbody = el('tbody');
-    table.appendChild(tbody);
-
-    /* Saved straight away: this window's OK covers the layer stack, which these
-       are not part of, so there is nothing for it to commit on their behalf. */
-    function save() {
-      return App.commitSelectionEdit(App.state.selection);
-    }
-
-    bodies.forEach(function (part) {
-      var tr = el('tr');
-      tr.classList.toggle('selected', part.key === selected);
-      tr.addEventListener('mousedown', function () {
-        selected = part.key;
-        Array.prototype.forEach.call(tbody.children, function (row) {
-          row.classList.toggle('selected', row === tr);
-        });
-      });
-
-      var name = el('input.cell-input', { value: part.label });
-      name.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter') { e.preventDefault(); name.blur(); }
-      });
-      name.addEventListener('change', function () {
-        var value = name.value.trim();
-        if (!value) { name.value = part.label; return; }
-        part.label = value;
-        save();
-      });
-      tr.appendChild(el('td', null, name));
-
-      var matCell = el('div.cell-mat');
-      var swatch = el('span.tree-swatch');
-      swatch.style.background = part.color;
-      var select = el('select');
-      (App.MATERIALS || []).forEach(function (m) {
-        select.appendChild(el('option', { value: m.id, text: m.name }));
-      });
-      select.value = part.mat;
-      select.addEventListener('change', function () {
-        part.mat = select.value;
-        part.color = App.matById(part.mat).color;
-        swatch.style.background = part.color;
-        save();
-      });
-      matCell.appendChild(swatch);
-      matCell.appendChild(select);
-      tr.appendChild(el('td', null, matCell));
-
-      var size = App.SoilVolumeDialog && part.recipe
-        ? App.SoilVolumeDialog.measure(App.PROJECT, part.recipe) : null;
-      tr.appendChild(el('td', { text: size ? size.value.toFixed(1) + ' ' + size.unit : '—',
-                                style: 'font-family:var(--font-mono);font-size:11.5px' }));
-
-      var edit = el('button.btn.btn-sm', { type: 'button', text: 'Coordinates…' });
-      edit.addEventListener('click', function () {
-        dialog.querySelector('.dlg-x').click();   // the stack editor is modal
-        App.SoilVolumeDialog.open(part);
-      });
-      tr.appendChild(el('td', null, edit));
-
-      tbody.appendChild(tr);
-    });
-
-    section.appendChild(table);
-    section.appendChild(el('div.lay-hint', { text:
-      'These are solids defined by coordinates, not borehole layers, so they have no ' +
-      'top/bottom in the stack above. Insert creates a body before the selected row. ' +
-      'Custom actions save the current borehole edits; custom changes save immediately.' }));
-
-    var hint = pane.querySelector('.lay-hint');
-    if (hint) pane.insertBefore(section, hint); else pane.appendChild(section);
   }
 
   /* "Properties…" has been on this menu since the frozen mockup drew it, and did
@@ -1329,23 +1136,6 @@ App.LivePatches = (function () {
     setTimeout(function () { if (menu.openAt === lent) menu.openAt = openAt; }, 0);
   }
 
-  /* "Modify soil layers…" (js/dialogs.js:216) draws a toolbar whose last two buttons,
-     Water levels and Field data, only log that they are a mockup. They carry no
-     attribute to find them by except their glyph, so they are matched by it: the
-     same App.UI.icon markup the dialog drew them with. */
-  var SOIL_DIALOG_NOT_YET = ['waterlevel', 'flowfn'];
-
-  function greySoilDialogTools(dialog) {
-    if (!dialog || !App.UI || !App.UI.icon) return;
-    var glyphs = SOIL_DIALOG_NOT_YET.map(function (name) { return App.UI.icon(name).innerHTML; });
-    Array.prototype.forEach.call(dialog.querySelectorAll('.dlg-toolbar .tbtn'), function (b) {
-      var svg = b.querySelector('svg');
-      if (!svg || glyphs.indexOf(svg.innerHTML) < 0) return;
-      b.disabled = true;
-      b.classList.add('disabled');
-    });
-  }
-
   /* The title bar's minimise, maximise and close (frontend/index.html) are drawn like a
      desktop window's and have no listener: a page cannot minimise the browser it is
      in. Greyed, and their tooltips say so. */
@@ -1385,27 +1175,31 @@ App.LivePatches = (function () {
   function railKey(tool) { return (tool && (tool.action || tool.icon)) || ''; }
 
   /* The Soil rail opens on what a soil is made of: the material sets, then the
-     layers that use them, then the boreholes that carry the layers. */
+     layers that use them. */
   var SOIL_RAIL_GROUPS = [
     ['select'],
-    ['materials', 'soilLayers', 'createBorehole'],
+    ['materials', 'soilLayers'],
     ['createSoilVolume']
   ];
+
+  /* The frozen "Create borehole" (js/data.js): a layer has one top and one bottom,
+     so there is no borehole to make. */
+  var SOIL_DROPPED = ['createBorehole'];
 
   function orderStructuresRail(tools) {
     return orderRail(tools, STRUCTURES_RAIL_GROUPS, STRUCTURES_RAIL_DROPPED);
   }
 
-  function orderSoilRail(tools) { return orderRail(tools, SOIL_RAIL_GROUPS, []); }
+  function orderSoilRail(tools) { return orderRail(tools, SOIL_RAIL_GROUPS, SOIL_DROPPED); }
 
   /* The Soil menu reads as its rail does; importing layers is a menu-only door. */
   var SOIL_MENU_GROUPS = [
-    ['materials', 'soilLayers', 'createBorehole'],
+    ['materials', 'soilLayers'],
     ['importSoilLayers'],
     ['createSoilVolume']
   ];
 
-  function orderSoilMenu(items) { return orderRail(items, SOIL_MENU_GROUPS, []); }
+  function orderSoilMenu(items) { return orderRail(items, SOIL_MENU_GROUPS, SOIL_DROPPED); }
 
   /* Moves the entry whose key is `moving` to just before the one whose key is
      `anchor`, in place: the frozen tabs and menu bar read these very arrays. Leaves
@@ -2615,7 +2409,6 @@ App.LivePatches = (function () {
     ['boundary [list|standard]', 'the boundary conditions, or put the standard supports back'],
     ['gravity [on|off]', 'show, or switch on or off, the self weight'],
     ['units [SI|kN]', 'show the unit system, or convert the project to another'],
-    ['borehole [x] [y]', 'add a borehole at map x, y (default: 10 m past the last one)'],
     ['soillayers', 'open the Modify soil layers window'],
     ['materials', 'open the Material sets window'],
     ['cleargeometry', 'remove the drawn and imported solids'],
@@ -2833,7 +2626,6 @@ App.LivePatches = (function () {
       if (item && item.action === 'toggleNodeLabels') { toggleLabels('nodes'); return; }
       if (item && item.action === 'toggleElementLabels') { toggleLabels('elements'); return; }
 
-      if (item && item.action === 'createBorehole') return addBorehole({});
       if (item && item.action === 'importModel') {
         if (App.ImportDialog) App.ImportDialog.open();
         return;
@@ -4102,13 +3894,6 @@ App.LivePatches = (function () {
         stagesDialog();
         return;
       }
-      // js/command.js answers `borehole` in its own switch, adding one to the
-      // browser's copy only, so it is taken here and sent to the server instead.
-      if (cmd.replace(/^_/, '') === 'borehole') {
-        if (App.Command.write) App.Command.write('echo', '> ' + text.trim());
-        runBoreholeCommand(text);
-        return;
-      }
       if (cmd === 'cleargeometry') {
         if (App.Command.note) App.Command.note('Clearing custom geometry...');
         return deleteRequest('/api/project/custom_parts', 'Could not clear custom geometry.')
@@ -4173,73 +3958,21 @@ App.LivePatches = (function () {
       return frozenRun(text);
     };
 
-    if (App.Dialogs && App.Dialogs.soilLayers) {
-      var frozenSoilLayers = App.Dialogs.soilLayers;
-      App.Dialogs.soilLayers = function () {
-        var snapshot = snapshotSoil();
-        frozenSoilLayers();
-        var dialogs = document.querySelectorAll('#modal-layer .dialog');
-        var dialog = dialogs[dialogs.length - 1];
-        if (!dialog) return;
-        activeLayerEdit = { snapshot: snapshot, dialog: dialog, committed: false };
-        addSoilBodySection(dialog);
-        greySoilDialogTools(dialog);
-
-        dialog.addEventListener('click', function (event) {
-          if (event.target.closest('.dlg-x') && activeLayerEdit && !activeLayerEdit.committed) {
-            restoreSoil(activeLayerEdit.snapshot);
-            activeLayerEdit = null;
-          }
-        }, true);
-
-        var buttons = dialog.querySelectorAll('.dlg-foot .btn');
-        Array.prototype.forEach.call(buttons, function (oldButton) {
-          var button = oldButton.cloneNode(true); // strips the frozen close/update listener
-          oldButton.parentNode.replaceChild(button, oldButton);
-          if (button.textContent.trim() === 'Cancel') {
-            button.addEventListener('click', function () {
-              restoreSoil(activeLayerEdit ? activeLayerEdit.snapshot : snapshot);
-              var close = dialog.querySelector('.dlg-x');
-              activeLayerEdit = null;
-              close.click();
-            });
-          } else if (button.textContent.trim() === 'OK') {
-            button.addEventListener('click', function () {
-              Array.prototype.forEach.call(dialog.querySelectorAll('.dlg-foot .btn'), function (b) {
-                b.disabled = true;
-              });
-              App.Api.patch('/api/project/layers', { layers: copy(App.LAYERS),
-                                                     materials: App.Model.materialsToServer(App.MATERIALS),
-                                                     boreholes: copy(App.BOREHOLES) })
-                .then(function (response) {
-                  App.Model.apply(response.project);
-                  return App.Viewport.refresh();
-                })
-                .then(function () {
-                  App.Command.ok('Soil layers updated — ' + App.LAYERS.length + ' layers, '
-                                 + App.BOREHOLES.length + ' boreholes. Geometry regenerated.');
-                  if (activeLayerEdit) activeLayerEdit.committed = true;
-                  dialog.querySelector('.dlg-x').click();
-                  activeLayerEdit = null;
-                })
-                .catch(function (error) {
-                  Array.prototype.forEach.call(dialog.querySelectorAll('.dlg-foot .btn'), function (b) {
-                    b.disabled = false;
-                  });
-                  if (App.Command.err) App.Command.err(error.message);
-                  else App.Command.write('err', error.message);
-                });
-            });
-          }
-        });
-      };
+    /* The frozen "Modify soil layers" drew the stack once per borehole; the live
+       window (js/soil-layers-dialog.js) has one layer table. Opened by the Soil menu,
+       the rail and `soillayers`, which all call App.Dialogs.soilLayers. */
+    if (App.Dialogs && App.SoilLayersDialog) {
+      App.Dialogs.soilLayers = App.SoilLayersDialog.open;
     }
+    /* The Model explorer's Delete on a layer: the frozen one closed the gap once per
+       borehole. */
+    if (App.SoilLayersDialog) App.deleteLayerById = App.SoilLayersDialog.removeById;
 
     /* Edits made straight from the Model/Selection explorer — a layer deleted or
        renamed from the tree, a material reassigned, a level or a domain extent
        typed into the property grid. The frozen hook only refreshes the browser;
-       here the soil model goes to the server as one request, because the layers,
-       the boreholes and the domain are validated together. A rejected write is
+       here the soil model goes to the server as one request, because the layers
+       and the domain are validated together. A rejected write is
        rolled back by re-reading the stored project, so the grid can never keep
        showing a value the model does not hold. */
     App.commitSelectionEdit = function (objKey) {
@@ -4303,7 +4036,6 @@ App.LivePatches = (function () {
 
       return App.Api.patch('/api/project/layers', {
         layers: copy(App.LAYERS),
-        boreholes: copy(App.BOREHOLES),
         domain: copy(App.Model.pendingDomain()),
         // Rides along with the domain because it is edited from the same panel and is
         // the same kind of thing: one object for the whole project. Sent on every
@@ -4369,12 +4101,6 @@ App.LivePatches = (function () {
               b.disabled = true;
             });
 
-            /* This dialog can be opened from inside the soil-layer dialog. Both
-               Model.apply and refresh() overwrite App.LAYERS/App.BOREHOLES from
-               the server, which would silently throw away soil edits the user
-               has not committed yet -- so hold them and put them back. */
-            var pending = activeLayerEdit ? snapshotSoil() : null;
-
             App.Api.patch('/api/project/materials',
                           { materials: App.Model.materialsToServer(App.MATERIALS) })
               .then(function (response) {
@@ -4382,7 +4108,6 @@ App.LivePatches = (function () {
                 return App.Viewport.refresh();
               })
               .then(function () {
-                if (pending) restoreSoil(pending);
                 App.Command.ok('Material sets saved — ' + App.MATERIALS.length
                                + ' soil materials. Geometry regenerated.');
                 committed = true;
@@ -4449,11 +4174,6 @@ App.LivePatches = (function () {
       var alreadyBound = commandBoxBound;
       commandBoxBound = true;
       if (!alreadyBound) document.addEventListener('keydown', function (event) {
-        if (event.key === 'Escape' && activeLayerEdit && !activeLayerEdit.committed) {
-          // activeLayerEdit.snapshot is a {layers, boreholes} pair, not a bare array.
-          restoreSoil(activeLayerEdit.snapshot);
-          activeLayerEdit = null;
-        }
         var entry = document.getElementById('cmd-entry');
         if (entry && event.target === entry && event.key === 'Enter') {
           var text = entry.value.trim();
@@ -4491,7 +4211,6 @@ App.LivePatches = (function () {
     installed = false;
     inFlight = false;
     modeInFlight = false;
-    activeLayerEdit = null;
   }
 
   return {
@@ -4500,7 +4219,6 @@ App.LivePatches = (function () {
     COMMANDS: COMMANDS, helpLines: helpLines, shellAnswers: shellAnswers,
     replaceMockupText: replaceMockupText,
     snapshotLayers: snapshotLayers, restoreLayers: restoreLayers,
-    snapshotSoil: snapshotSoil, restoreSoil: restoreSoil,
     isDeletableCustomPart: isDeletableCustomPart, tagTreeRowsWithObjKeys: tagTreeRowsWithObjKeys,
     MODES: MODES, patchFor: patchFor, sectionLabel: sectionLabel,
     DEFAULT_MODEL_MODE: DEFAULT_MODEL_MODE,
@@ -4512,7 +4230,7 @@ App.LivePatches = (function () {
     syncDimensionAvailability: syncDimensionAvailability, syncHistoryButtons: syncHistoryButtons,
     NOT_YET: NOT_YET, NOT_YET_TIP: NOT_YET_TIP, implemented: implemented,
     greyEverythingNotYet: greyEverythingNotYet, syncCheckMarks: syncCheckMarks,
-    gateViewportItems: gateViewportItems, greySoilDialogTools: greySoilDialogTools,
+    gateViewportItems: gateViewportItems,
     newProject: newProject, openProject: openProject, saveProject: saveProject,
     projectFileName: projectFileName, projectFromFileText: projectFromFileText,
     projectNameFromFile: projectNameFromFile,
@@ -4526,8 +4244,7 @@ App.LivePatches = (function () {
     moveBefore: moveBefore,
     STRUCTURES_RAIL_GROUPS: STRUCTURES_RAIL_GROUPS,
     nameSoilBodyActions: nameSoilBodyActions,
-    addSoilBodySection: addSoilBodySection,
-    deleteCustomPart: deleteCustomPart, onTreeContextMenu: onTreeContextMenu,
+    deleteRequest: deleteRequest, deleteCustomPart: deleteCustomPart, onTreeContextMenu: onTreeContextMenu,
     objectKind: objectKind, renameObject: renameObject, deleteObject: deleteObject,
     syncCalculate: syncCalculate, calculateTip: calculateTip, CALCULATE_TIP: CALCULATE_TIP,
     resetForTests: resetForTests

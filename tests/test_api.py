@@ -1120,6 +1120,9 @@ def test_the_live_shell_replaces_only_the_viewport_and_the_orbit_controller(clie
                              "vocabulary.js",
                              "mesh-settings.js", "import-dialog.js", "mdpa-import-dialog.js",
                              "draw-input.js", "soil-volume-dialog.js", "canvas-renderer.js",
+                             # The Modify soil layers window, in place of the frozen one in
+                             # js/dialogs.js, which drew the stack once per borehole.
+                             "soil-layers-dialog.js",
                              "export.js", "calculate.js", "history.js", "loads.js",
                              "beams.js", "anchors.js",
                              "interfaces.js", "normal-loads.js", "boundary-conditions.js",

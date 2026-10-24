@@ -9,7 +9,7 @@
 (function () {
 
   var GLOBALS = ['Api', 'Command', 'Viewport', 'PROJECT', 'state', 'runAction',
-                 'selectObject', 'setMode', 'LAYERS', 'MATERIALS', 'BOREHOLES', 'LOADS',
+                 'selectObject', 'setMode', 'LAYERS', 'MATERIALS', 'LOADS',
                  'BEAMS', 'BEAM_SECTIONS', 'PANEL_SECTIONS', 'ANCHORS', 'ANCHOR_SECTIONS',
                  'INTERFACES', 'INTERFACE_SECTIONS', 'NORMAL_LOADS'];
 

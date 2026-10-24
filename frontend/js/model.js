@@ -2,8 +2,8 @@
    model.js — the server's project, in the shape the frozen UI expects.
 
    js/data.js is still loaded verbatim, but only its UI chrome (ICONS, MENUS,
-   TOOLBAR, MODES, RAILS) is used as-is. The model halves -- MATERIALS,
-   BOREHOLES, LAYERS -- are replaced from the server here, and the two derived
+   TOOLBAR, MODES, RAILS) is used as-is. The model halves -- MATERIALS and
+   LAYERS -- are replaced from the server here, and the two derived
    structures are rebuilt.
 
    Those derived structures are the reason this file exists. App.TREES and
@@ -118,9 +118,6 @@ App.Model = (function () {
     return {
       domain: project.domain,
       water: project.water,
-      BOREHOLES: project.boreholes.map(function (b) {
-        return { id: b.id, name: b.name, x: b.x, y: b.y, head: b.head, water: b.water };
-      }),
       // A soil is a Kratos property set (core/model/schemas.py Material): its law and
       // its Variables, under Kratos' names, in the project's units -- carried as they
       // are, because the library goes back in one PATCH that replaces it wholesale and
@@ -134,8 +131,7 @@ App.Model = (function () {
                  rInter: m.r_inter, interfacePerm: m.interface_permeability };
       }),
       LAYERS: project.layers.map(function (l) {
-        return { id: l.id, name: l.name, mat: l.mat,
-                 tops: Object.assign({}, l.tops), bots: Object.assign({}, l.bots) };
+        return { id: l.id, name: l.name, mat: l.mat, top: l.top, bottom: l.bottom };
       }),
       // Every 2D-native record is built into the solid model too, on the section
       // plane it was drawn on (core/geometry/solid_model.py's `_section_sweeps`), so 3D shows
@@ -242,7 +238,6 @@ App.Model = (function () {
     // that reads the project before the PATCH that would have justified it.
     water = mapped.water ? Object.assign({ margin: 3.0, thickness: 0.06,
                                            specific_weight: null }, mapped.water) : null;
-    App.BOREHOLES = mapped.BOREHOLES;
     App.MATERIALS = mapped.MATERIALS;
     App.LAYERS = mapped.LAYERS;
     App.LOADS = mapped.LOADS;
@@ -615,7 +610,7 @@ App.Model = (function () {
      from it. A label this list does not name keeps its place at the end rather
      than being dropped. */
   var TREE_ORDER = [
-    'Attributes library', 'Soil', 'Boreholes', 'Geometry', 'Custom geometry',
+    'Attributes library', 'Soil', 'Geometry', 'Custom geometry',
     'Imported mesh', 'Structures', 'Sheet piles', 'Anchors', 'Interfaces',
     'Normal loads', 'Loads', 'Water levels', 'Flow conditions', 'Mesh',
     'Model conditions'
@@ -627,6 +622,10 @@ App.Model = (function () {
     });
   }
 
+  /* The frozen Soil tree's "Boreholes" node (js/data.js): a layer has one top and
+     one bottom, so there are no boreholes to list. */
+  var TREE_DROPPED = ['boreholes'];
+
   /* The union of every mode's top-level nodes. Deduped by identity first, then by
      label: the Soil and Structures trees carry *different* "Attributes library"
      objects (js/data.js:673,683), and once one tree serves both modes the richer
@@ -635,7 +634,7 @@ App.Model = (function () {
     var out = [];
     Object.keys(App.TREES || {}).forEach(function (mode) {
       (App.TREES[mode] || []).forEach(function (node) {
-        if (!node || out.indexOf(node) >= 0) return;
+        if (!node || out.indexOf(node) >= 0 || TREE_DROPPED.indexOf(node.obj) >= 0) return;
         var twin = -1;
         out.forEach(function (seen, i) { if (seen.label === node.label) twin = i; });
         if (twin < 0) out.push(node);
@@ -811,7 +810,7 @@ App.Model = (function () {
      (`core.kratos.parameters._normal_load`). The level fixes no pressure by itself.
      `specific_weight` scales the water pressures and DENSITY_WATER in the materials
      file. Nothing in the GUI could change either until
-     now -- the frozen `water` entry in js/data.js:631 lists three borehole levels from
+     now -- the frozen `water` entry in js/data.js:631 lists three water levels from
      a different project altogether.
 
      Bounds mirror the server's rather than inventing any: `gt=0` on the weight, and
@@ -1607,17 +1606,15 @@ App.Model = (function () {
 
   function layerProps(layer, i) {
     var m = App.matById(layer.mat);
-    var tops = App.BOREHOLES.map(function (bh) { return layer.tops[bh.id]; });
-    var bots = App.BOREHOLES.map(function (bh) { return layer.bots[bh.id]; });
 
     return {
-      title: 'BoreholeVolume_' + (i + 1) + ' (' + layer.name + ')', icon: 'cube',
+      title: 'SoilLayer_' + (i + 1) + ' (' + layer.name + ')', icon: 'cube',
       groups: {
         'General':  [['Material', m.name, '', false, App.LayerEditors.material(layer)],
                      // Filled in from the geometry response, which measures it.
                      ['Volume', '—', 'm³', true],
                      ['Active', true]],
-        'Geometry': geometryRows(bots, tops, layer),
+        'Geometry': geometryRows(layer),
         'Mesh':     [['Coarseness factor', '1.000'], ['Element count', '—', '', true]]
       }
     };
@@ -1629,27 +1626,25 @@ App.Model = (function () {
      because moving the section is a mode switch (PATCH /api/project/dimension), not
      a property edit. z stays either way: for the elevation sections it bounds the
      cut, and it is the layer's own stratigraphy rather than the domain. */
-  /* The frozen level editors (js/data.js App.LayerEditors) pass whatever they are given
-     to App.setLayerTopLevel/BottomLevel, and NaN fails every bound check in there, so
-     it was written into the stack as a level. Guarded here rather than edited there:
-     the frozen file stays frozen. */
+  /* NaN fails every bound check of a level edit (js/soil-layers-dialog.js
+     `setTop`, `setBottom`), so it would be written into the stack as a level. */
   function finiteOnly(editor) {
     var set = editor.set;
     editor.set = function (v) { return Number.isFinite(v) ? set(v) : 'The level must be a number.'; };
     return editor;
   }
 
-  function geometryRows(bots, tops, layer) {
+  function geometryRows(layer) {
     var hidden = outOfPlaneAxis(App.PROJECT);
     var rows = [];
     if (hidden !== 'x') {
       rows.push(['x min', fixed(domain.x0), 'm', false, domainEditor('x0')]);
       rows.push(['x max', fixed(domain.x1), 'm', false, domainEditor('x1')]);
     }
-    rows.push(['y min', fixed(Math.min.apply(null, bots)), 'm', false,
-               finiteOnly(App.LayerEditors.bottomLevel(layer))]);
-    rows.push(['y max', fixed(Math.max.apply(null, tops)), 'm', false,
-               finiteOnly(App.LayerEditors.topLevel(layer))]);
+    rows.push(['y min', fixed(layer.bottom), 'm', false,
+               finiteOnly(App.SoilLayersDialog.levelEditor(layer, 'bottom'))]);
+    rows.push(['y max', fixed(layer.top), 'm', false,
+               finiteOnly(App.SoilLayersDialog.levelEditor(layer, 'top'))]);
     if (hidden !== 'z') {
       rows.push(['z min', fixed(domain.z0), 'm', false, domainEditor('z0')]);
       rows.push(['z max', fixed(domain.z1), 'm', false, domainEditor('z1')]);
@@ -1666,7 +1661,7 @@ App.Model = (function () {
     var customParts = (App.PROJECT && App.PROJECT.custom_parts) || [];
 
     /* A custom part with a material is soil, so it sits under Soil beside the
-       borehole-stack layers. Without one it is plain geometry and stays under
+       layers of the stack. Without one it is plain geometry and stays under
        Custom geometry. */
     var soilBodies = customParts.filter(function (p) { return !!p.mat; });
     var plainParts = customParts.filter(function (p) { return !p.mat; });
@@ -1689,7 +1684,7 @@ App.Model = (function () {
     Object.keys(App.OBJECT_PROPS).forEach(function (key) {
       if (key.indexOf('soil_') === 0) delete App.OBJECT_PROPS[key];
     });
-    // Replaces the frozen mockup's three borehole rows wholesale, the same way the
+    // Replaces the frozen mockup's three water rows wholesale, the same way the
     // soil rows are replaced above: they describe a project nobody has open.
     // A model without a water level has no row and no property grid for one.
     if (water) {

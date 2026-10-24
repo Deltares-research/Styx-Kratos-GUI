@@ -97,7 +97,7 @@
   test('the rows that work are left alone', function () {
     withInstall(function () {});
     [['File', /^Export model/], ['View', /^Zoom to fit$/], ['Soil', /^Modify soil layers/],
-     ['Help', /^Command reference$/], ['Help', /^About/], ['Soil', /^Create borehole$/]
+     ['Help', /^Command reference$/], ['Help', /^About/]
     ].forEach(function (pair) {
       T.eq(!!row(pair[0], pair[1])[0].disabled, false, pair[0] + ' > ' + pair[1]);
     });
@@ -112,7 +112,7 @@
 
   test('the rail tools with nothing behind them are marked, in every mode', function () {
     withInstall(function () {});
-    T.eq(notYetTips('soil'), [], 'Create borehole adds one on the server');
+    T.eq(notYetTips('soil'), []);
     T.eq(notYetTips('structures'), ['Select multiple objects', 'Create point', 'Create plate',
          'Create beam', 'Create embedded beam row', 'Tunnel designer']);
     T.eq(notYetTips('mesh'), ['Refine mesh', 'Coarsen mesh', 'Reset local refinement']);
@@ -201,96 +201,20 @@
     });
   });
 
-  /* ── Boreholes, as the terminal makes them ─────────────────────────── */
+  /* ── No boreholes ────────────────────────────────────────────────────
+     A layer has one top and one bottom, so there is no borehole to make: not from the
+     menu, not from the rail and not typed. */
 
-  /* withInstall, for a test that waits on the server: the stubs stay in place until
-     its answer has been drawn. The server's answer is a project whose last borehole
-     is the new one, as `POST /api/project/boreholes` sends it. */
-  function withServer(body) {
-    var saved = { action: App.runAction, command: App.Command, api: App.Api,
-                  apply: App.Model.apply, refresh: App.Viewport.refresh,
-                  tree: App.Explorer && App.Explorer.mountTree };
-    var ctx = { notes: [], frozen: [], typed: [], posts: [], applied: [] };
-    var project = { boreholes: [{ id: 'bh1', name: 'BH-1', x: 0, y: 0 },
-                                { id: 'bh2', name: 'BH-2', x: 10, y: 3 }] };
-    App.runAction = function (item) { ctx.frozen.push(item && item.action); };
-    App.Command = { note: function (t) { ctx.notes.push(t); },
-                    ok: function (t) { ctx.notes.push(t); },
-                    err: function (t) { ctx.notes.push(t); },
-                    write: function (kind, t) { ctx.notes.push(kind + ':' + t); },
-                    run: function (t) { ctx.typed.push(t); } };
-    function pending() { return new Promise(function () {}); }
-    App.Api = { get: pending, put: pending, patch: pending,
-                post: function (path, payload) {
-                  ctx.posts.push([path, payload]);
-                  return Promise.resolve({ project: project });
-                } };
-    App.Model.apply = function (p) { ctx.applied.push(p); };
-    App.Viewport.refresh = function () { return Promise.resolve(); };
-    if (App.Explorer) App.Explorer.mountTree = function () {};
-    App.LivePatches.install();
-    ctx.notes.length = 0;
-    ctx.frozen.length = 0;
-    function restore() {
-      App.runAction = saved.action; App.Command = saved.command; App.Api = saved.api;
-      App.Model.apply = saved.apply; App.Viewport.refresh = saved.refresh;
-      if (App.Explorer) App.Explorer.mountTree = saved.tree;
-      App.LivePatches.resetForTests();
-    }
-    return Promise.resolve().then(function () { return body(ctx); })
-      .then(function () { return new Promise(function (done) { setTimeout(done, 0); }); })
-      .then(restore, function (err) { restore(); throw err; });
-  }
-
-  test('Create borehole adds one on the server, the way `kratos-cli borehole add` does',
+  test('there is no borehole to make, from the menu, the rail or the command box',
        function () {
-    var ctx;
-    return withServer(function (c) {
-      ctx = c;
-      App.runAction({ action: 'createBorehole', label: 'Create borehole' });
-    }).then(function () {
-      T.eq(ctx.posts, [['/api/project/boreholes', {}]],
-           'nothing given: the server places it 10 m past the last one');
-      T.eq(ctx.frozen, [], 'the frozen dispatcher only changed the browser copy');
-      T.eq(ctx.applied.length, 1, 'what the server stored is what is drawn');
-      // Other suites' requests may still be failing into the log; only this one's line
-      // is this test's business.
-      T.eq(ctx.notes.filter(function (n) { return /borehole/i.test(n); }),
-           ['Added borehole bh2 (BH-2) at x = 10.00 m, y = 3.00 m.']);
-    });
-  });
-
-  test('typed, `borehole [x] [y]` sends the map position it was given', function () {
-    var ctx;
-    return withServer(function (c) {
-      ctx = c;
-      App.Command.run('borehole 40 2');
-      App.Command.run('borehole 40');
-      App.Command.run('borehole');
-    }).then(function () {
-      T.eq(ctx.typed, [], 'the frozen interpreter never sees it');
-      T.eq(ctx.posts.map(function (p) { return p[1]; }), [{ x: 40, y: 2 }, { x: 40 }, {}]);
-    });
-  });
-
-  test('a `borehole` position that is not two numbers is refused, and nothing is sent',
-       function () {
-    var ctx;
-    return withServer(function (c) {
-      ctx = c;
-      App.Command.run('borehole north 5');
-      App.Command.run('borehole 1 2 3');
-    }).then(function () {
-      T.eq(ctx.posts, []);
-      T.eq(ctx.notes.filter(function (n) { return /is not a position/.test(n); }).length, 2,
-           ctx.notes.join(' | '));
-    });
-  });
-
-  test('help lists `borehole`, as it lists every command that builds something',
-       function () {
-    T.eq(App.LivePatches.COMMANDS.filter(function (c) { return /^borehole/.test(c[0]); })
-           .length, 1);
+    withInstall(function () {});
+    T.eq(row('Soil', /borehole/i).length, 0, 'Soil > Create borehole');
+    T.eq((App.RAILS.soil || []).filter(function (t) {
+      return t && /borehole/i.test(t.action || t.icon || '');
+    }).length, 0, 'the Soil rail');
+    T.eq(App.LivePatches.COMMANDS.filter(function (c) { return /borehole/.test(c[0]); })
+           .length, 0, 'help');
+    T.eq(App.LivePatches.shellAnswers('borehole'), false, 'typed: an unknown command');
   });
 
   /* ── Menu twins ────────────────────────────────────────────────────── */
@@ -457,22 +381,6 @@
   });
 
   /* ── The frozen dialogs and the tree ───────────────────────────────── */
-
-  test('Water levels and Field data are greyed in Modify soil layers', function () {
-    var dialog = document.createElement('div');
-    var bar = document.createElement('div');
-    bar.className = 'dlg-toolbar';
-    ['borehole', 'waterlevel', 'flowfn', 'materials'].forEach(function (name) {
-      var b = document.createElement('button');
-      b.className = 'tbtn';
-      b.appendChild(App.UI.icon(name));
-      bar.appendChild(b);
-    });
-    dialog.appendChild(bar);
-    App.LivePatches.greySoilDialogTools(dialog);
-    var off = Array.prototype.map.call(bar.children, function (b) { return b.disabled; });
-    T.eq(off, [false, true, true, false]);
-  });
 
   test("the frozen tree menu's dead Properties… is greyed; the live one is not touched",
        function () {

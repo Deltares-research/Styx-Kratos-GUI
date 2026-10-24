@@ -11,10 +11,6 @@
       name: 'Test site',
       layered_soil: !!layeredSoil,
       domain: { x0: 0, x1: 50, z0: 0, z1: 40, y_top: 0, y_bottom: -25 },
-      boreholes: [
-        { id: 'bh1', name: 'BH-1', x: 0, y: 0, head: 0, water: -1.5 },
-        { id: 'bh2', name: 'BH-2', x: 28, y: 4, head: -0.4, water: -1.8 }
-      ],
       materials: [
         { id: 'm2', name: 'Sand, loose', color: '#c4a86a',
           constitutive_law: 'GeoLinearElasticPlaneStrain2DLaw',
@@ -31,20 +27,20 @@
   }
 
   var TWO = [
-    { id: 'L1', name: 'Soil_1', mat: 'm2', tops: { bh1: 0, bh2: -0.4 }, bots: { bh1: -8, bh2: -9.2 } },
-    { id: 'L2', name: 'Soil_2', mat: 'm4', tops: { bh1: -8, bh2: -9.2 }, bots: { bh1: -25, bh2: -25 } }
+    { id: 'L1', name: 'Soil_1', mat: 'm2', top: 0, bottom: -8 },
+    { id: 'L2', name: 'Soil_2', mat: 'm4', top: -8, bottom: -25 }
   ];
 
   var THREE_LAYERS = [
-    { id: 'L1', name: 'Soil_1', mat: 'm2', tops: { bh1: 0, bh2: -0.4 }, bots: { bh1: -4, bh2: -5 } },
-    { id: 'L3', name: 'Peat',   mat: 'm4', tops: { bh1: -4, bh2: -5 },  bots: { bh1: -8, bh2: -9.2 } },
-    { id: 'L2', name: 'Soil_2', mat: 'm4', tops: { bh1: -8, bh2: -9.2 }, bots: { bh1: -25, bh2: -25 } }
+    { id: 'L1', name: 'Soil_1', mat: 'm2', top: 0, bottom: -4 },
+    { id: 'L3', name: 'Peat',   mat: 'm4', top: -4, bottom: -8 },
+    { id: 'L2', name: 'Soil_2', mat: 'm4', top: -8, bottom: -25 }
   ];
 
   /* Every test restores the globals, so ordering cannot leak. */
   function withProject(p, fn) {
     var saved = {
-      LAYERS: App.LAYERS, MATERIALS: App.MATERIALS, BOREHOLES: App.BOREHOLES,
+      LAYERS: App.LAYERS, MATERIALS: App.MATERIALS,
       LOADS: App.LOADS, PROJECT: App.PROJECT, props: App.OBJECT_PROPS, trees: {},
       BEAMS: App.BEAMS, BEAM_SECTIONS: App.BEAM_SECTIONS,
       ANCHORS: App.ANCHORS, ANCHOR_SECTIONS: App.ANCHOR_SECTIONS,
@@ -61,7 +57,6 @@
     } finally {
       App.LAYERS = saved.LAYERS;
       App.MATERIALS = saved.MATERIALS;
-      App.BOREHOLES = saved.BOREHOLES;
       App.LOADS = saved.LOADS;
       App.BEAMS = saved.BEAMS;
       App.BEAM_SECTIONS = saved.BEAM_SECTIONS;
@@ -108,17 +103,14 @@
     T.eq(m.id, 'm2');
   });
 
-  test('layers keep their per-borehole tops and bottoms', function () {
+  test('a layer arrives with one top and one bottom', function () {
     var l = App.Model.fromProject(project(TWO)).LAYERS[0];
-    T.eq(l.tops, { bh1: 0, bh2: -0.4 });
-    T.eq(l.bots, { bh1: -8, bh2: -9.2 });
-    T.eq(l.mat, 'm2');
+    T.eq(l, { id: 'L1', name: 'Soil_1', mat: 'm2', top: 0, bottom: -8 });
   });
 
   test('apply installs the globals the frozen scripts already close over', function () {
     withProject(project(TWO), function () {
       T.eq(App.LAYERS.length, 2);
-      T.eq(App.BOREHOLES.length, 2);
       T.eq(App.matById('m4').name, 'Clay, stiff');
     });
   });
@@ -593,15 +585,29 @@
     });
   });
 
-  test('layer depths in the property grid span the boreholes', function () {
+  test('the property grid shows the layer\'s top and bottom', function () {
     withProject(project(TWO), function () {
-      var geom = App.OBJECT_PROPS.soil_L1.groups.Geometry;
+      var props = App.OBJECT_PROPS.soil_L1;
+      var geom = props.groups.Geometry;
       function value(label) {
         return geom.filter(function (r) { return r[0] === label; })[0][1];
       }
-      T.eq(value('y max'), '0.000');       // highest top, at bh1
-      T.eq(value('y min'), '-9.200');      // lowest bottom, at bh2
+      T.eq(props.title, 'SoilLayer_1 (Soil_1)');
+      T.eq(value('y max'), '0.000');
+      T.eq(value('y min'), '-8.000');
       T.eq(value('x max'), '50.000');      // from the project domain, not a literal
+    });
+  });
+
+  test('a level typed in the property grid moves the neighbour\'s level', function () {
+    withProject(project(TWO), function () {
+      var row = App.OBJECT_PROPS.soil_L1.groups.Geometry.filter(function (r) {
+        return r[0] === 'y min';
+      })[0];
+      T.eq(row[4].set(-10), null);
+      T.eq([App.LAYERS[0].bottom, App.LAYERS[1].top], [-10, -10]);
+      T.ok(/must be a number/.test(row[4].set(NaN)));
+      T.ok(/below the bottom of the layer below/.test(row[4].set(-30)));
     });
   });
 
@@ -1014,6 +1020,7 @@
            known, 'out of order: ' + known.join(', '));
       T.eq(labels.filter(function (l) { return l === 'Attributes library'; }).length, 1,
            'the two Attributes library nodes were merged into one');
+      T.eq(labels.indexOf('Boreholes'), -1, 'the frozen Boreholes node is left out');
     });
   });
 
@@ -1032,7 +1039,7 @@
     });
   });
 
-  var ORDER = ['Attributes library', 'Soil', 'Boreholes', 'Geometry', 'Custom geometry',
+  var ORDER = ['Attributes library', 'Soil', 'Geometry', 'Custom geometry',
                'Structures', 'Sheet piles', 'Anchors', 'Interfaces', 'Loads',
                'Flow conditions', 'Mesh', 'Model conditions'];
 
