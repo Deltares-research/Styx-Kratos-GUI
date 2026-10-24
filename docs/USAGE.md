@@ -19,7 +19,7 @@ GUI is the part of Styx that you use in the browser. To install Styx, see
 | Mode tabs | Below the toolbar | One tab for each step of the work, from **Soil** to **Results** |
 | Tool rail | Left | The tools of the mode that is open |
 | Viewport | Centre | The model. Click an object to select it. |
-| Model explorer | Right, top | A tree of all the objects in the model. Clear a check box to hide an object. |
+| Model explorer | Right, top | A tree of all the objects in the model. A group, such as **Sheet piles**, shows when the model has one. Clear a check box to hide an object. |
 | Selection explorer | Right, bottom | The properties of the selected object. You can edit most of them here. |
 | Command panel | Bottom | The **Session** log with all messages, the **Model history** tab with the commands that you typed, and the command box |
 | Status bar | Very bottom | The mode, the server status, the cursor coordinates, the unit system, snapping and zoom |
