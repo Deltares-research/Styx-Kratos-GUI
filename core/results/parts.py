@@ -1,4 +1,4 @@
-"""Which part of the model an element belongs to, and what a phase did to it.
+"""Which part of the model an element belongs to, and what a stage did to it.
 
 GiD names a mesh block `Kratos_Triangle2D6_Mesh_2`. That is a block index and an element
 type, and it says nothing about whether the block is the top soil layer, the third
@@ -16,17 +16,17 @@ the two defects that combined to cause it.)
 
 A part with no elements in a stage's mesh is one of:
 
-*   **deactivated by that phase.** Kratos writes the block and leaves it empty. This is
-    how a staged result recovers the construction sequence -- no phase record is
+*   **deactivated by that stage.** Kratos writes the block and leaves it empty. This is
+    how a staged result recovers the construction sequence -- no stage record is
     consulted and none is needed. Verified against a real seven-stage excavation run, where
-    the three excavation lifts drop out at stages 4, 6 and 7 exactly as the phase names
+    the three excavation lifts drop out at stages 4, 6 and 7 exactly as the stage names
     say they should.
 *   **never written by this output at all.** The GiD writer emits only the element types
     it has a geometry for, and it has none for
     `Geo_UPwLineInterfacePlaneStrainDiffOrderElement3Plus3N`. The interfaces are in the
     deck, they are solved, and they appear in none of the seven stages.
 
-Calling the second "removed in this phase" would be a false statement about the model,
+Calling the second "removed in this stage" would be a false statement about the model,
 so the two are kept apart. Telling them apart needs the whole run rather than one stage
 -- hence `written_parts`, and hence `StagePart.written` being `None` when nobody asked.
 """
@@ -58,7 +58,7 @@ class StagePart:
 
         `None` for a part that owns no elements -- a support, a boundary, a node group.
         Aliveness is not a question about those, and answering `False` would put them
-        in the explorer greyed out as though a phase had removed them.
+        in the explorer greyed out as though a stage had removed them.
         """
         if not self.declared:
             return None
@@ -71,7 +71,7 @@ class StagePart:
     was given one stage, and one stage cannot answer it), and the part owns no elements
     to write -- a support, a boundary, a node group. `False` is a real answer, and it
     means this output format has no geometry for the part's element type, not that a
-    phase removed it. See the module docstring.
+    stage removed it. See the module docstring.
     """
 
 
@@ -97,7 +97,7 @@ def written_parts(model: MdpaModel, meshes: list[GidMesh]) -> set[str]:
 
     A fact about the whole run, which is why it takes every stage's mesh. What it is
     for is the one distinction a single stage cannot make: a part missing from this
-    stage because the phase removed it, against a part missing from every stage because
+    stage because the stage removed it, against a part missing from every stage because
     this output format has no geometry for its element type.
     """
     present: set[int] = set()

@@ -2,7 +2,7 @@
    results window, the plot window, "Results at node", and the Results menu.
 
    Opened the way the app opens them -- `App.runAction` after `LivePatches.install()` --
-   with the server's results routes answered by a stand-in for one two-phase run. Every
+   with the server's results routes answered by a stand-in for one two-stage run. Every
    `results ...` command the windows issue goes through `App.Results.handleCommand`, and
    is recorded there: the windows are only ever a face on those commands. */
 
@@ -12,9 +12,9 @@
   var BASE = '/api/results/runs/' + RUN;
 
   var STAGES = [
-    { index: 1, name: '1_Initial', phase: 'Initial', base: 'Deck_1', results: true,
+    { index: 1, name: '1_Initial', stage: 'Initial', base: 'Deck_1', results: true,
       results_file: 'Deck_1.post.res', mesh_file: 'Deck_1.post.msh', json: [] },
-    { index: 2, name: '2_Dig', phase: 'Dig', base: 'Deck_2', results: true,
+    { index: 2, name: '2_Dig', stage: 'Dig', base: 'Deck_2', results: true,
       results_file: 'Deck_2.post.res', mesh_file: 'Deck_2.post.msh',
       json: ['2_Dig__output_wall.json'] }
   ];
@@ -45,7 +45,7 @@
 
   function plot(quantity) {
     return { member: 'wall', quantity: quantity, label: quantity, unit: 'kNm/m', stages: [
-      { index: 2, name: '2_Dig', phase: 'Dig', points: [[0, -5], [10, -2], [0, 0]],
+      { index: 2, name: '2_Dig', stage: 'Dig', points: [[0, -5], [10, -2], [0, 0]],
         nodes: [1, 2, 3], min: { value: 0, y: -5 }, max: { value: 10, y: -2 } }] };
   }
 
@@ -165,7 +165,7 @@
       var windows = ctx.layer.querySelectorAll('.dlg-results');
       T.eq(windows.length, 1, 'a second press brings the same window forward');
       T.eq(ctx.layer.querySelectorAll('.scrim').length, 0, 'no scrim: the viewport stays live');
-      T.ok(windows[0].querySelector('[data-res="phase"]'), 'the phase can be chosen');
+      T.ok(windows[0].querySelector('[data-res="stage"]'), 'the stage can be chosen');
       T.ok(windows[0].textContent.indexOf(RUN) >= 0, 'the run is named');
     }));
   });
@@ -175,11 +175,11 @@
     return done(ctx, App.Results.handleCommand('results open ' + RUN).then(function () {
       App.runAction({ action: 'chooseResults' });
       var win = dialogTitled(ctx, 'Choose results');
-      var phase = win.querySelector('[data-res="phase"]');
-      phase.value = '1';
-      phase.dispatchEvent(new Event('change'));
+      var stage = win.querySelector('[data-res="stage"]');
+      stage.value = '1';
+      stage.dispatchEvent(new Event('change'));
       return settle(40).then(function () {
-        T.ok(ctx.commands.indexOf('results phase 1') >= 0, ctx.commands.join(' | '));
+        T.ok(ctx.commands.indexOf('results stage 1') >= 0, ctx.commands.join(' | '));
         T.eq(App.Results.stage(), 1);
         button(dialogTitled(ctx, 'Choose results'), 'Fit range').click();
         button(dialogTitled(ctx, 'Choose results'), 'Download run').click();
@@ -252,17 +252,17 @@
     }));
   });
 
-  test('results: the Results menu lists the phases and fields of the open run', function () {
+  test('results: the Results menu lists the stages and fields of the open run', function () {
     var ctx = rig();
     return done(ctx, App.Results.handleCommand('results open ' + RUN).then(function () {
       return settle(30);
     }).then(function () {
       var menu = (App.MENUS || []).filter(function (m) { return m.label === 'Results'; })[0];
       T.ok(menu, 'there is a Results menu');
-      var phase = menu.items.filter(function (i) { return i && i.label === 'Phase'; })[0];
+      var stage = menu.items.filter(function (i) { return i && i.label === 'Stage'; })[0];
       var fields = menu.items.filter(function (i) { return i && i.label === 'Field'; })[0];
-      T.eq(phase.sub.length, 2, 'one entry per phase');
-      T.ok(phase.sub[1].checked, 'the phase on screen is ticked');
+      T.eq(stage.sub.length, 2, 'one entry per stage');
+      T.ok(stage.sub[1].checked, 'the stage on screen is ticked');
       T.ok(fields.sub.some(function (s) { return s.cmd === 'results field uy'; }));
     }));
   });

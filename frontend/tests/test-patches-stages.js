@@ -1,8 +1,8 @@
-/* The Phases window and the docked phase list (frontend/js/patches.js).
+/* The Stages window and the docked stage list (frontend/js/patches.js).
 
    Both are DOM built through the real App.UI / App.Dialogs, opened the way the app opens
-   them (`App.runAction({action: 'phases'})`, and `mountLivePhases` behind the dock), on
-   the recorded test model -- seven phases, parts switched off and on along the way.
+   them (`App.runAction({action: 'stages'})`, and `mountLiveStages` behind the dock), on
+   the recorded test model -- seven stages, parts switched off and on along the way.
    What reaches the server is recorded as the PATCH it would be. */
 
 (function () {
@@ -26,7 +26,7 @@
     document.body.appendChild(layer);
     document.body.appendChild(dock);
     App.OBJECT_PROPS = Object.assign({}, App.OBJECT_PROPS);
-    App.state = { mode: 'staged', phase: null };
+    App.state = { mode: 'staged', stage: null };
     App.Model.apply(JSON.parse(JSON.stringify(project)));
     var applyModel = App.Model.apply;
     App.Model = Object.assign({}, App.Model, {
@@ -37,7 +37,7 @@
       patch: function (path, body) {
         ctx.patches.push({ path: path, body: body });
         var next = JSON.parse(JSON.stringify(App.PROJECT));
-        next.phases = body.phases;
+        next.stages = body.stages;
         return Promise.resolve({ project: next });
       },
       post: function (path, body) {
@@ -52,7 +52,7 @@
                     run: function () {} };
     App.Viewport = Object.assign({}, App.Viewport, {
       refresh: function () { return Promise.resolve(); },
-      applyPhaseVisibility: function () { ctx.visibility = (ctx.visibility || 0) + 1; }
+      applyStageVisibility: function () { ctx.visibility = (ctx.visibility || 0) + 1; }
     });
     // The shell's own functions, which install() wraps -- js/app.js is not on this page.
     App.runAction = function () {};
@@ -79,7 +79,7 @@
   function model() { return window.VIEWPORT_PAYLOADS.project; }
 
   function windowRows(ctx) {
-    return Array.prototype.slice.call(ctx.layer.querySelectorAll('.phases-overview .phase-row'));
+    return Array.prototype.slice.call(ctx.layer.querySelectorAll('.stages-overview .phase-row'));
   }
 
   function done(ctx, promise) {
@@ -87,137 +87,178 @@
                                          function (e) { ctx.restore(); throw e; });
   }
 
-  test('phases window: one row per phase, with the properties and the log of the selected one', function () {
+  test('stages window: one row per stage, with the properties and the log of the selected one', function () {
     var ctx = rig(model());
     try {
-      App.runAction({ action: 'phases' });
+      App.runAction({ action: 'stages' });
       var rows = windowRows(ctx);
-      T.eq(rows.length, model().phases.length);
-      var right = ctx.layer.querySelector('.phases-overview > div:nth-child(2)');
-      T.ok(/Staged construction/.test(right.textContent), 'what the phase changes is listed');
+      T.eq(rows.length, model().stages.length);
+      var right = ctx.layer.querySelector('.stages-overview > div:nth-child(2)');
+      T.ok(/Staged construction/.test(right.textContent), 'what the stage changes is listed');
       T.ok(/Log info for last calculation/.test(
-        ctx.layer.querySelector('.phases-overview-log').textContent));
+        ctx.layer.querySelector('.stages-overview-log').textContent));
     } finally { ctx.restore(); }
   });
 
-  test('phases window: clicking a phase selects it, and the viewport follows', function () {
+  test('stages window: clicking a stage selects it, and the viewport follows', function () {
     var ctx = rig(model());
     try {
-      App.runAction({ action: 'phases' });
-      var last = windowRows(ctx)[model().phases.length - 1];
+      App.runAction({ action: 'stages' });
+      var last = windowRows(ctx)[model().stages.length - 1];
       last.click();
-      T.eq(App.state.phase, model().phases[model().phases.length - 1].id);
-      T.ok(ctx.visibility > 0, 'the viewport was asked to redraw the phase');
-      T.ok(windowRows(ctx)[model().phases.length - 1].classList.contains('selected'));
+      T.eq(App.state.phase, model().stages[model().stages.length - 1].id);
+      T.ok(ctx.visibility > 0, 'the viewport was asked to redraw the stage');
+      T.ok(windowRows(ctx)[model().stages.length - 1].classList.contains('selected'));
     } finally { ctx.restore(); }
   });
 
-  test('phases window: a part switched off can be switched back on from the list', function () {
+  test('stages window: a part switched off can be switched back on from the list', function () {
     var ctx = rig(model());
-    App.runAction({ action: 'phases' });
-    windowRows(ctx)[model().phases.length - 1].click();
+    App.runAction({ action: 'stages' });
+    windowRows(ctx)[model().stages.length - 1].click();
     var button = Array.prototype.filter.call(ctx.layer.querySelectorAll('button'), function (b) {
       return b.textContent === 'Switch on';
     })[0];
-    T.ok(button, 'the last phase has dug something away');
+    T.ok(button, 'the last stage has dug something away');
     button.click();
     return done(ctx, Promise.resolve().then(function () {
       T.eq(ctx.patches.length, 1);
-      T.eq(ctx.patches[0].path, '/api/project/phases');
+      T.eq(ctx.patches[0].path, '/api/project/stages');
       T.ok(ctx.lines.some(function (l) { return /switched on in/.test(l); }), ctx.lines.join(' | '));
     }));
   });
 
-  test("phases window: renaming a phase writes the sequence with the new name", function () {
+  test("stages window: renaming a stage writes the sequence with the new name", function () {
     var ctx = rig(model());
-    App.runAction({ action: 'phases' });
-    var input = ctx.layer.querySelector('.phases-overview .pgrid input.cell-input');
+    App.runAction({ action: 'stages' });
+    var input = ctx.layer.querySelector('.stages-overview .pgrid input.cell-input');
     T.ok(input, 'the name is editable');
-    input.value = 'Renamed phase';
+    input.value = 'Renamed stage';
     input.dispatchEvent(new Event('change'));
     return done(ctx, new Promise(function (r) { setTimeout(r, 20); }).then(function () {
       T.eq(ctx.patches.length, 1);
-      T.ok(ctx.patches[0].body.phases.some(function (p) { return p.name === 'Renamed phase'; }));
+      T.ok(ctx.patches[0].body.stages.some(function (p) { return p.name === 'Renamed stage'; }));
     }));
   });
 
-  test('phases window: a project with no phases says how to make them', function () {
+  /* The calculation type select of the selected stage, and its Reset displacements box. */
+  function stageControls(ctx) {
+    var grid = ctx.layer.querySelector('.stages-overview .pgrid');
+    return { select: grid.querySelector('select'),
+             reset: grid.querySelector('input.pgrid-check') };
+  }
+
+  test('stages window: Groundwater flow is a calculation type, and choosing it is one PATCH',
+       function () {
+    var ctx = rig(model());
+    App.runAction({ action: 'stages' });
+    var select = stageControls(ctx).select;
+    T.ok(Array.prototype.some.call(select.options, function (o) {
+      return o.value === 'Groundwater flow';
+    }), 'the select offers Groundwater flow');
+    T.ok(!stageControls(ctx).reset.disabled, 'a deformation stage can reset displacements');
+    select.value = 'Groundwater flow';
+    select.dispatchEvent(new Event('change'));
+    return done(ctx, new Promise(function (r) { setTimeout(r, 20); }).then(function () {
+      T.eq(ctx.patches.length, 1);
+      T.eq(ctx.patches[0].body.stages[0].calculation, 'Groundwater flow');
+    }));
+  });
+
+  test('stages window: a groundwater flow stage greys out Reset displacements', function () {
+    var flow = JSON.parse(JSON.stringify(model()));
+    flow.stages.forEach(function (stage) {
+      stage.calculation = 'Groundwater flow';
+      stage.reset_displacements = true;
+    });
+    var ctx = rig(flow);
+    try {
+      App.runAction({ action: 'stages' });
+      var reset = stageControls(ctx).reset;
+      T.ok(reset.disabled, 'the box cannot be changed');
+      T.ok(/no displacements/.test(reset.title), 'its tooltip says why');
+      reset.click();
+      T.eq(ctx.patches.length, 0, 'nothing is sent');
+    } finally { ctx.restore(); }
+  });
+
+  test('stages window: a project with no stages says how to make them', function () {
     var bare = JSON.parse(JSON.stringify(model()));
-    bare.phases = [];
+    bare.stages = [];
     var ctx = rig(bare);
     try {
-      App.runAction({ action: 'phases' });
-      T.ok(/no phases yet/.test(ctx.layer.textContent));
+      App.runAction({ action: 'stages' });
+      T.ok(/no stages yet/.test(ctx.layer.textContent));
     } finally { ctx.restore(); }
   });
 
   /* The dock is `App.Explorer.mountPhases`, which patches.js replaces on install with
-     its own -- the frozen one lists js/data.js's mockup phases. */
+     its own -- the frozen one lists js/data.js's mockup stages. */
 
-  test('phase list: the dock lists every phase, and a click selects one', function () {
+  test('stage list: the dock lists every stage, and a click selects one', function () {
     var ctx = rig(model());
     try {
       App.Explorer.mountPhases();
       var rows = ctx.dock.querySelectorAll('.phase-row');
-      T.eq(rows.length, model().phases.length);
+      T.eq(rows.length, model().stages.length);
       rows[2].click();
-      T.eq(App.state.phase, model().phases[2].id);
+      T.eq(App.state.phase, model().stages[2].id);
       T.ok(ctx.dock.querySelectorAll('.phase-row')[2].classList.contains('selected'),
            'redrawn with the new selection');
     } finally { ctx.restore(); }
   });
 
-  test('phase list: the toolbar adds and deletes phases through one PATCH each', function () {
+  test('stage list: the toolbar adds and deletes stages through one PATCH each', function () {
     var ctx = rig(model());
-    App.state.phase = model().phases[1].id;
+    App.state.phase = model().stages[1].id;
     App.Explorer.mountPhases();
-    var buttons = ctx.dock.querySelectorAll('.phase-toolbar button.tbtn');
+    var buttons = ctx.dock.querySelectorAll('.stage-toolbar button.tbtn');
     T.eq(buttons.length, 4, 'add, insert, duplicate, delete');
     buttons[0].click();
     return done(ctx, new Promise(function (r) { setTimeout(r, 20); }).then(function () {
-      T.eq(ctx.patches[0].body.phases.length, model().phases.length + 1, 'one added');
-      App.state.phase = model().phases[1].id;
+      T.eq(ctx.patches[0].body.stages.length, model().stages.length + 1, 'one added');
+      App.state.phase = model().stages[1].id;
       App.Explorer.mountPhases();
-      ctx.dock.querySelectorAll('.phase-toolbar button.tbtn')[3].click();
+      ctx.dock.querySelectorAll('.stage-toolbar button.tbtn')[3].click();
       return new Promise(function (r) { setTimeout(r, 20); });
     }).then(function () {
       T.eq(ctx.patches.length, 2);
-      T.ok(ctx.patches[1].body.phases.every(function (p) { return p.id !== model().phases[1].id; }),
-           'the selected phase is gone');
+      T.ok(ctx.patches[1].body.stages.every(function (p) { return p.id !== model().stages[1].id; }),
+           'the selected stage is gone');
     }));
   });
 
-  test("phase list: the dock's Phases… button opens the window", function () {
+  test("stage list: the dock's Stages… button opens the window", function () {
     var ctx = rig(model());
     try {
       App.Explorer.mountPhases();
       var open = Array.prototype.filter.call(ctx.dock.querySelectorAll('button'), function (b) {
-        return b.textContent === 'Phases…'; })[0];
+        return b.textContent === 'Stages…'; })[0];
       open.click();
-      T.eq(windowRows(ctx).length, model().phases.length);
+      T.eq(windowRows(ctx).length, model().stages.length);
     } finally { ctx.restore(); }
   });
 
-  test('phase list: with no phases the dock offers to create the defaults', function () {
+  test('stage list: with no stages the dock offers to create the defaults', function () {
     var bare = JSON.parse(JSON.stringify(model()));
-    bare.phases = [];
+    bare.stages = [];
     var ctx = rig(bare);
     App.Explorer.mountPhases();
     var button = Array.prototype.filter.call(ctx.dock.querySelectorAll('button'), function (b) {
       return /default/i.test(b.textContent);
     })[0];
-    T.ok(button, 'a button to create the default phases');
+    T.ok(button, 'a button to create the default stages');
     button.click();
     return done(ctx, new Promise(function (r) { setTimeout(r, 20); }).then(function () {
-      T.eq(ctx.posts[0].path, '/api/project/phases/defaults');
+      T.eq(ctx.posts[0].path, '/api/project/stages/defaults');
     }));
   });
 
-  test('staged mode: clicking a part switches it for the selected phase', function () {
+  test('staged mode: clicking a part switches it for the selected stage', function () {
     var ctx = rig(model());
-    var phase = model().phases[model().phases.length - 1];
-    App.state.phase = phase.id;
-    var key = App.Phases.stageableKeys(App.PROJECT)[0];
+    var stage = model().stages[model().stages.length - 1];
+    App.state.phase = stage.id;
+    var key = App.Stages.stageableKeys(App.PROJECT)[0];
     App.selectObject(key, 'viewport');
     return done(ctx, new Promise(function (r) { setTimeout(r, 20); }).then(function () {
       T.eq(ctx.patches.length, 1, 'one PATCH of the sequence');

@@ -168,6 +168,28 @@ App.UNIT_TABLE =
         "kN": "m/s²"
       }
     },
+    "velocity": {
+      "dimension": [
+        0,
+        1,
+        -1
+      ],
+      "labels": {
+        "SI": "m/s",
+        "kN": "m/s"
+      }
+    },
+    "flow rate per metre": {
+      "dimension": [
+        0,
+        2,
+        -1
+      ],
+      "labels": {
+        "SI": "m³/s/m",
+        "kN": "m³/s/m"
+      }
+    },
     "dimensionless": {
       "dimension": [
         0,

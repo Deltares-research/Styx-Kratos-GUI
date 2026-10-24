@@ -2,6 +2,6 @@
  "export_model_s": 0.3044,
  "open_and_step_20_stages_s": 0.2051,
  "page_calculate_to_first_results_s": 0.8019,
- "page_phase_switch_s": 0.1767,
+ "page_stage_switch_s": 0.1767,
  "read_model_stage_cold_s": 0.0516
 }

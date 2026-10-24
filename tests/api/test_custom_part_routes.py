@@ -1,14 +1,14 @@
 """Deleting custom parts must never leave the stored project invalid.
 
 Both delete routes used to mutate the stored project in place and skip validation. A
-phase that still named the deleted part then made every later validated edit -- layers,
-materials, structures, phases -- fail with 422 "phase ... names no such part", and the
+stage that still named the deleted part then made every later validated edit -- layers,
+materials, structures, stages -- fail with 422 "stage ... names no such part", and the
 only way out was a reset (plan/active/full-test-and-validation-plan.md, finding F3).
 
 The policy pinned here:
 
-* a part a **phase** names is not deleted: 422 naming the phase, nothing changes. Which
-  phases should lose the part is a modelling decision the user makes, not this route;
+* a part a **stage** names is not deleted: 422 naming the stage, nothing changes. Which
+  stages should lose the part is a modelling decision the user makes, not this route;
 * a part the **mesh settings** name (`body_sizes`) is deleted, and its size entry goes
   with it: a size is a property *of* that part and means nothing without it.
 """
@@ -37,8 +37,8 @@ def _box(client, origin=(0, 0, 0), label="Box") -> str:
     return response.json()["parts"][0]["key"]
 
 
-def _phase_naming(client, key: str) -> None:
-    response = client.patch("/api/project/phases", json={"phases": [
+def _stage_naming(client, key: str) -> None:
+    response = client.patch("/api/project/stages", json={"stages": [
         {"id": "initial", "name": "Initial stage"},
         {"id": "dig_1", "name": "Dig", "parent": "initial", "deactivate": [key]},
     ]})
@@ -51,9 +51,9 @@ def _layers_patch_still_works(client) -> None:
     assert response.status_code == 200, response.text
 
 
-def test_deleting_a_part_a_phase_names_is_refused_naming_the_phase(client):
+def test_deleting_a_part_a_stage_names_is_refused_naming_the_stage(client):
     key = _box(client)
-    _phase_naming(client, key)
+    _stage_naming(client, key)
 
     response = client.delete(f"/api/geometry/parts/{key}")
 
@@ -65,10 +65,10 @@ def test_deleting_a_part_a_phase_names_is_refused_naming_the_phase(client):
     _layers_patch_still_works(client)
 
 
-def test_clearing_custom_parts_a_phase_names_is_refused_naming_the_phase(client):
+def test_clearing_custom_parts_a_stage_names_is_refused_naming_the_stage(client):
     key = _box(client)
     _box(client, origin=(5, 5, 0), label="Other")
-    _phase_naming(client, key)
+    _stage_naming(client, key)
 
     response = client.delete("/api/project/custom_parts")
 
@@ -79,10 +79,10 @@ def test_clearing_custom_parts_a_phase_names_is_refused_naming_the_phase(client)
     _layers_patch_still_works(client)
 
 
-def test_a_part_freed_from_its_phases_can_then_be_deleted(client):
+def test_a_part_freed_from_its_stages_can_then_be_deleted(client):
     key = _box(client)
-    _phase_naming(client, key)
-    client.patch("/api/project/phases", json={"phases": []})
+    _stage_naming(client, key)
+    client.patch("/api/project/stages", json={"stages": []})
 
     assert client.delete(f"/api/geometry/parts/{key}").status_code == 200
     _layers_patch_still_works(client)

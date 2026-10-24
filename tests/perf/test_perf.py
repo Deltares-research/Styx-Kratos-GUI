@@ -9,7 +9,7 @@ What is measured is what a user waits for:
 * reading one stage of a run back -- the final stage of a real run of the test model
   (skipped without Kratos), and a synthetic 20-stage run, cold (finding F10's cache is
   what keeps the warm case cheap);
-* in the page, the time from `results phase <n>` to that phase drawn (tests/e2e).
+* in the page, the time from `results stage <n>` to that stage drawn (tests/e2e).
 """
 
 from __future__ import annotations
@@ -80,7 +80,7 @@ def test_reading_the_final_stage_of_a_run_cold(request, monkeypatch):
 
 def test_opening_a_twenty_stage_run_and_stepping_through_it(request, tmp_path, monkeypatch):
     """A long staged deck: 20 stages. The parts listing reads every stage's mesh once; after
-    that, stepping through the phases must cost a field, not a re-parse (F10)."""
+    that, stepping through the stages must cost a field, not a re-parse (F10)."""
     from tests.fakes import gid_writer
 
     project = excavation.excavation_project(staged=True)

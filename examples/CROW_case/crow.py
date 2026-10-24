@@ -1,8 +1,7 @@
 """CROW excavation wall, as a model script.
 
-Written by `kratos-cli script crow.json --out crow.py`; the same model as crow.json
-beside it. Every value is the model's own, typed out; constants and loops can be put in
-by hand.
+Written by kratos-cli from crow.json on 2026-10-21. Every value is the model's own,
+typed out; constants and loops can be put in by hand.
 
     run crow.py                   in the GUI's command box: open it there
     kratos-cli show crow.py       and every kratos-cli command that reads a model
@@ -18,16 +17,29 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
-"""The checkout this example is in, where `core` is; `python <this file>` needs it on
-the path. Found from this file, so it holds wherever the checkout is."""
+
+def checkout() -> Path:
+    """The checkout, where `core` is: a folder above this file, or the one the Python
+    that runs it is in (.venv-windows and the others sit in the checkout's root)."""
+    here = Path(__file__).resolve().parent
+    for folder in [here, *here.parents, Path(sys.prefix).resolve().parent]:
+        if (folder / "core" / "model" / "schemas.py").is_file():
+            return folder
+    if "core" in sys.modules:                       # opened inside Styx, which has it
+        return Path(sys.modules["core"].__file__).resolve().parents[1]
+    sys.exit(f"{Path(__file__).name}: no Styx checkout found; run it with the Python "
+             "that kratos-cli uses")
+
+
+ROOT = checkout()
+"""`python <this file>` needs it on the path."""
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from core.model.schemas import (  # noqa: E402
-    Anchor, AnchorRows, AnchorSection, Beam, BeamSection, Borehole, BoxRefinement, Domain,
-    Excavation, Interface, InterfaceSection, LineLoad, Material, MeshSettings, NormalLoad,
-    Phase, Piles, Project, SoilLayer, Struts, Wall, WaterLevel, Wells)
+    Anchor, AnchorSection, Beam, BeamSection, Borehole, BoxRefinement, DisplacementCondition,
+    Domain, Excavation, Interface, InterfaceSection, LineLoad, Material, MeshSettings,
+    NormalLoad, Project, SoilLayer, Stage, WaterPressureCondition)
 
 
 # ── The site ──────────────────────────────────────────────────────────────────────────────
@@ -121,7 +133,20 @@ EXCAVATION = Excavation(
     levels=[-2.0, -5.0, -8.0],
 )
 
-WATER = WaterLevel(y=-1.5)
+# The supports: the bottom fixed in x and y, the left side (the symmetry plane) and the
+# right side on rollers, held in x. The plane-strain section holds z by itself.
+# The pore pressure: hydrostatic about the phreatic level at -1.5 m, fixed on the whole
+# soil. The condition carries its own level, as each water load below does.
+BOUNDARY_CONDITIONS = [
+    DisplacementCondition(id="fixed_bottom", name="Fixed bottom", on="face", face="bottom",
+                          fixed=(True, True, True)),
+    DisplacementCondition(id="roller_left", name="Roller left", on="face", face="left",
+                          fixed=(True, False, False)),
+    DisplacementCondition(id="roller_right", name="Roller right", on="face", face="right",
+                          fixed=(True, False, False)),
+    WaterPressureCondition(id="pore_pressure", name="Pore pressure", on="domain",
+                           fluid_pressure_type="Hydrostatic", reference_coordinate=-1.5),
+]
 
 
 # ── The structures ────────────────────────────────────────────────────────────────────────
@@ -196,37 +221,25 @@ NORMAL_LOADS = [
     NormalLoad(
         id="water_1",
         name="WaterLoad_Stage1",
-        points=[(5.0, -1.5), (5.0, -2.0), (0.0, -2.0)],
+        points=[(0.0, -2.0), (5.0, -2.0), (5.0, -1.5)],
         fluid_pressure_type="Hydrostatic",
+        reference_coordinate=-1.5,
     ),
     NormalLoad(
         id="water_2",
         name="WaterLoad_Stage2",
-        points=[(5.0, -1.5), (5.0, -5.0), (0.0, -5.0)],
+        points=[(0.0, -5.0), (5.0, -5.0), (5.0, -1.5)],
         fluid_pressure_type="Hydrostatic",
+        reference_coordinate=-1.5,
     ),
     NormalLoad(
         id="water_3",
         name="WaterLoad_Stage3",
-        points=[(5.0, -1.5), (5.0, -8.0), (0.0, -8.0)],
+        points=[(0.0, -8.0), (5.0, -8.0), (5.0, -1.5)],
         fluid_pressure_type="Hydrostatic",
+        reference_coordinate=-1.5,
     ),
 ]
-
-
-# ── The seeded demo pit ───────────────────────────────────────────────────────────────────
-# The demo's own wall ring, struts, anchors, piles and wells. A layered model builds
-# none of them; the schema requires them all the same.
-
-WALL = Wall(thickness=0.5, top_y=0.0, toe_y=-1.0)
-
-STRUTS = Struts(xs=[], y=0.0, radius=0.1)
-
-ANCHOR_ROWS = AnchorRows(xs=[], head_y=0.0, length=1.0, inclination_deg=45.0, radius=0.1)
-
-PILES = Piles(xs=[], zs=[], radius=0.1, length=1.0, top_y=0.0)
-
-WELLS = Wells(positions=[], radius=0.1, top_y=0.0, length=1.0)
 
 
 # ── The mesh ──────────────────────────────────────────────────────────────────────────────
@@ -250,10 +263,10 @@ MESH = MeshSettings(
 )
 
 
-# ── The construction phases ───────────────────────────────────────────────────────────────
+# ── The construction stages ───────────────────────────────────────────────────────────────
 
-PHASES = [
-    Phase(
+STAGES = [
+    Stage(
         id="initial",
         name="Initial stage",
         calculation="K0 procedure",
@@ -267,14 +280,14 @@ PHASES = [
             "water_3",
         ],
     ),
-    Phase(
+    Stage(
         id="null_step",
         name="Null step",
         parent="initial",
         calculation="Null step",
         max_iterations=150,
     ),
-    Phase(
+    Stage(
         id="install_sheetpile",
         name="SheetPileWall installation",
         parent="null_step",
@@ -283,7 +296,7 @@ PHASES = [
         max_iterations=150,
         tolerated_error=0.001,
     ),
-    Phase(
+    Stage(
         id="dig_1",
         name="First excavation",
         parent="install_sheetpile",
@@ -292,7 +305,7 @@ PHASES = [
         max_iterations=150,
         tolerated_error=0.001,
     ),
-    Phase(
+    Stage(
         id="install_strut",
         name="Strut installation",
         parent="dig_1",
@@ -300,7 +313,7 @@ PHASES = [
         max_iterations=150,
         tolerated_error=0.001,
     ),
-    Phase(
+    Stage(
         id="dig_2",
         name="Second excavation",
         parent="install_strut",
@@ -309,7 +322,7 @@ PHASES = [
         max_iterations=150,
         tolerated_error=0.001,
     ),
-    Phase(
+    Stage(
         id="dig_3",
         name="Third excavation",
         parent="dig_2",
@@ -332,7 +345,7 @@ def project() -> Project:
         materials=MATERIALS,
         layers=LAYERS,
         excavation=EXCAVATION,
-        water=WATER,
+        boundary_conditions=BOUNDARY_CONDITIONS,
         beam_sections=BEAM_SECTIONS,
         beams=BEAMS,
         anchor_sections=ANCHOR_SECTIONS,
@@ -341,13 +354,8 @@ def project() -> Project:
         interfaces=INTERFACES,
         loads=LOADS,
         normal_loads=NORMAL_LOADS,
-        wall=WALL,
-        struts=STRUTS,
-        anchor_rows=ANCHOR_ROWS,
-        piles=PILES,
-        wells=WELLS,
         mesh=MESH,
-        phases=PHASES,
+        stages=STAGES,
     )
 
 

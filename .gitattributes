@@ -8,6 +8,7 @@ benchmarks/         export-ignore
 tools/              export-ignore
 .gitleaksignore     export-ignore
 eslint.config.mjs   export-ignore
+.graphifyignore     export-ignore
 pyproject.toml      export-ignore
 requirements-dev.txt export-ignore
 

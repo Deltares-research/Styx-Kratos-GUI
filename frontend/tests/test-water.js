@@ -9,7 +9,7 @@
    three borehole rows from js/data.js:631, which describe a different project.
 
    See plan/outdated/staged-construction-plan.md sec 7.2, "the GUI follow-on Marjan asked for".
-   A *per-phase* phreatic level is a further step and deliberately not here.
+   A *per-stage* phreatic level is a further step and deliberately not here.
    ══════════════════════════════════════════════════════════════════ */
 
 (function () {

@@ -18,8 +18,12 @@ from cli.terminal.output import Answer, CommandError
 from core.model.schemas import Project
 from core.session import EditRefused
 
-NEW_ID = "its id, which other commands and the phases refer to it by"
+NEW_ID = "its id, which other commands and the stages refer to it by"
 """The start of the help of every `add` command's id; `id_help` says the rest."""
+
+
+NAME_HELP = "the name shown in lists and in the GUI's model explorer"
+"""The help of every record's `--name`, so no command leaves it out."""
 
 
 def noun(commands, common, name: str, help: str):
@@ -59,7 +63,7 @@ def id_help(otherwise: str | None = None) -> str:
 def named_ids(required: bool = False):
     """The handler of a command that adds a record, with the record's --name as its id
     when no id is typed: then the name the user gave is also the word other commands and
-    the phases take. A `required` id is refused when neither is given; otherwise the
+    the stages take. A `required` id is refused when neither is given; otherwise the
     command numbers one, as the GUI does."""
     def wrap(handler):
         @functools.wraps(handler)
@@ -84,7 +88,7 @@ def named_ids(required: bool = False):
 
 
 def id_and_name(record) -> str:
-    """Both, labelled: other commands and phases take the id, and an id such as `load`
+    """Both, labelled: other commands and stages take the id, and an id such as `load`
     next to a name reads as one word without the labels."""
     return f"id {record.id}, name {record.name}"
 

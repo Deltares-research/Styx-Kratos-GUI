@@ -58,7 +58,7 @@
   });
 
   test('a vertex the field has no value for is a hole, not a zero', function () {
-    /* A node in a body this phase excavated. Zero is a real stress, and a floor of
+    /* A node in a body this stage excavated. Zero is a real stress, and a floor of
        them through a pit reads as a result rather than as an absence. */
     var out = R.vertexValues(section(), field({ ids: [1, 2], values: [0, -0.5] }));
 
@@ -148,7 +148,7 @@
   });
 
   test('a flat field does not divide by zero', function () {
-    /* Every value identical — an untouched phase, or a field that is zero everywhere.
+    /* Every value identical — an untouched stage, or a field that is zero everywhere.
        The normaliser is (v - min) / (max - min), and this is the case that makes it
        0/0 and paints the model with NaN. */
     var colors = R.colors({ values: [5, 5, 5], missing: 0 }, { min: 5, max: 5 });

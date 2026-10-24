@@ -20,6 +20,9 @@ filterwarnings = [
     # time. Ours to neither fix nor be failed by; the blanket rule above still applies to
     # everything in core/ and backend/.
     "ignore:The anyio.abc.BlockingPortal alias is deprecated:DeprecationWarning",
+    # uvicorn 0.34 calls asyncio.iscoroutinefunction when it starts, which Python 3.14
+    # deprecates. Only the e2e server start meets it.
+    "ignore:'asyncio.iscoroutinefunction' is deprecated:DeprecationWarning:uvicorn.config",
 ]
 
 # ── coverage, for `pytest --cov` (plan/alpha-test-plan.md Task 0.5) ─────────

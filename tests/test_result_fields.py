@@ -104,7 +104,7 @@ def test_the_catalogue_offers_only_what_the_file_contains(stage):
     assert "u" in names(catalogue), "TOTAL_DISPLACEMENT is in the file"
     assert "p" in names(catalogue), "CAUCHY_STRESS_TENSOR is in the file"
     assert "pw" in names(catalogue), "WATER_PRESSURE is in the file"
-    # DISPLACEMENT is not in this file, so the phase-displacement group must not be
+    # DISPLACEMENT is not in this file, so the stage-displacement group must not be
     # offered. This is the whole of decision 1.3: the menu comes from the file, so a
     # variable Kratos declined to write costs a missing entry and nothing else.
     assert "du" not in names(catalogue)
@@ -346,7 +346,7 @@ def test_a_node_value_is_the_mean_of_the_elements_that_touch_it(stage):
 
 
 def test_a_node_no_live_element_touches_is_left_out(stage):
-    """A node of a body this phase deactivated is still in the node table and has no
+    """A node of a body this stage deactivated is still in the node table and has no
     element on it. It must not appear as zero -- zero is a stress, and a floor of
     zeroes through an excavated pit would read as a real result."""
     mesh, results = stage

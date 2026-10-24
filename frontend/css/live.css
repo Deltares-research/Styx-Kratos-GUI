@@ -137,6 +137,30 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
    state for these, because none of them did anything. Matches .tbtn.disabled. */
 .rail-btn.disabled { color: var(--c-disabled); pointer-events: none; }
 
+/* ── What Styx does not do yet ──────────────────────────────────────────────
+   patches.js NOT_YET / `implemented`. A rail tool with nothing behind it is greyed
+   like one of the wrong dimension, but keeps its pointer events so that its tip --
+   "… — not available yet" -- can still say why. It carries aria-disabled rather
+   than `disabled`, which would stop the tip too; patches.js guardNotYet refuses the
+   click. The hover is held at grey so it does not light up as if it were ready. */
+.rail-btn.disabled.not-yet,
+.rail-btn.disabled.not-yet:hover {
+  pointer-events: auto; cursor: not-allowed;
+  background: none; border-color: transparent; color: var(--c-disabled);
+}
+
+/* Buttons the live layer greys with the `disabled` attribute alone -- the stage
+   toolbar, the soil-volume table, a dialog's footer while it saves -- looked exactly
+   as pressable as before, because the frozen sheet styles only the `.disabled`
+   class. The Calculate button is left to its own section further down. */
+.tbtn:disabled:not(.tbtn-cta) { color: var(--c-disabled); pointer-events: none; }
+.btn:disabled { opacity: .5; pointer-events: none; }
+.rail-btn:disabled:not(.not-yet) { color: var(--c-disabled); pointer-events: none; }
+
+/* The title bar's window controls, which a page cannot work. */
+.wc:disabled svg { stroke: rgba(255, 255, 255, .4); }
+.wc:disabled:hover { background: none; }
+
 /* ── 2D rulers ──────────────────────────────────────────────────────
    One canvas per viewport edge, painted by frontend/js/ruler.js from the same
    visible rectangle the camera is drawn with. They sit *over* the scene rather
@@ -236,7 +260,7 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
 
 /* ── The Results explorer ─────────────────────────────────────────────── */
 
-/* A mode's own dock panel (Phases, Results) is put away with `hidden` when its tab is
+/* A mode's own dock panel (Stages, Results) is put away with `hidden` when its tab is
    left. `.dock-panel { display: flex }` in the frozen css/layout.css outranks the
    browser's `[hidden]` rule, so without this both stayed on screen in every tab. */
 .dock-panel[hidden] { display: none; }
@@ -264,7 +288,7 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
   white-space: nowrap;
 }
 /* The legend's Min ... Max boxes: two equal boxes that shrink with the dock column,
-   then Auto and the unit. An empty box shows the phase's own value as its placeholder. */
+   then Auto and the unit. An empty box shows the stage's own value as its placeholder. */
 .res-limits { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .res-limits input {
   flex: 1 1 0; min-width: 0; width: 0;
@@ -330,7 +354,7 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
 .dlg-results .res-limits button { font-size: 11px; padding: 2px 8px; }
 
 /* The plot window (patches.js `openPlotWindow`): a member's results along it, a panel
-   per phase. The figure is one SVG drawn by frontend/js/results-plot.js; it is scaled to the
+   per stage. The figure is one SVG drawn by frontend/js/results-plot.js; it is scaled to the
    window's width and scrolls vertically when its rows do not fit. `.dlg-body` is a flex
    row, so the window's content is one column that fills it. */
 .dlg-plot .dlg-body { overflow: hidden; padding: 0; }
@@ -369,13 +393,13 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
 .tree-paint.empty-slot { visibility: hidden; cursor: default; }
 
 /* The Model explorer's checkbox in Staged construction mode means "in the model in the
-   selected phase" (addPhaseChecks in frontend/js/patches.js). A group whose parts differ
-   shows a dash; a state this phase inherited rather than set itself is ticked in grey. */
-.tree-eye.phase-check.mixed::after {
+   selected stage" (addStageChecks in frontend/js/patches.js). A group whose parts differ
+   shows a dash; a state this stage inherited rather than set itself is ticked in grey. */
+.tree-eye.stage-check.mixed::after {
   opacity: 1; width: 7px; height: 0; transform: none;
   border: 0; border-bottom: 1.6px solid var(--brand-primary);
 }
-.tree-eye.phase-check.inherited::after { border-color: var(--c-ink-faint); }
+.tree-eye.stage-check.inherited::after { border-color: var(--c-ink-faint); }
 
 /* Overlapping nodes of an imported deck, fanned apart (paintNodeFans in
    frontend/js/viewport.js). Inert like the labels' overlay: clicks go through to the canvas,
@@ -391,15 +415,61 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
 }
 .vp-node-fans[hidden] { display: none; }
 
-/* The Phases overview (patches.js `phasesDialog`): the phase list, a line per phase. */
-.phases-overview-list .phase-row { gap: 6px; }
-.phases-overview-list .phase-name { flex: 1 1 auto; min-width: 0; overflow: hidden;
+/* The Stages overview (patches.js `stagesDialog`): the stage list, a line per stage. */
+.stages-overview-list .phase-row { gap: 6px; }
+.stages-overview-list .phase-name { flex: 1 1 auto; min-width: 0; overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap; }
-.phases-overview-list .phase-kind { flex: 0 0 auto; }
+.stages-overview-list .phase-kind { flex: 0 0 auto; }
 .phase-dot.failed { background: #d64545; }
-.phases-overview-box { margin: 6px 0 10px; padding: 8px; min-height: 48px;
+.stages-overview-box { margin: 6px 0 10px; padding: 8px; min-height: 48px;
   border: 1px solid var(--c-line); background: var(--c-panel-2); }
-.phases-overview-box.done, .phases-overview-box.initial { color: var(--brand-green); }
-.phases-overview-box.failed { color: #d64545; }
-.phases-overview-error { white-space: pre-wrap; font-size: var(--fs-sm); max-height: 200px;
+.stages-overview-box.done, .stages-overview-box.initial { color: var(--brand-green); }
+.stages-overview-box.failed { color: #d64545; }
+.stages-overview-error { white-space: pre-wrap; font-size: var(--fs-sm); max-height: 200px;
   overflow: auto; margin: 0 0 10px; }
+
+/* ── Boundary conditions ───────────────────────────────────────── */
+.boundary-conditions { flex: 1 1 auto; display: block; }
+.bc-grid { border-collapse: collapse; width: 100%; }
+.bc-grid th { text-align: left; font-weight: 600; color: var(--c-ink-soft);
+  font-size: var(--fs-sm); padding: 2px 6px; border-bottom: 1px solid var(--c-border); }
+.bc-grid td { padding: 3px 6px; }
+.bc-grid select, .bc-grid input.bc-number { height: 24px; font: inherit; }
+.bc-grid input.bc-number { width: 90px; }
+.bc-grid input:disabled, .bc-grid select:disabled { color: var(--c-ink-faint); }
+.bc-heading { font-weight: 600; margin: 14px 0 4px; }
+.bc-other { display: flex; gap: 8px; align-items: center; padding: 2px 0;
+  font-family: var(--font-mono); font-size: var(--fs-sm); }
+.bc-other span { flex: 1 1 auto; }
+.bc-gravity { display: block; margin-top: 12px; }
+.bc-axes label { margin-right: 6px; }
+
+/* ── Calculate: greyed out, and while it runs ─────────────────────────────
+   patches.js `syncCalculate`. The frozen `.tbtn.disabled` only greys the text, which
+   on the green call-to-action would be grey on green: a button that still looks
+   pressable. Greyed, it is drawn as a plain toolbar button that has gone quiet.
+   It keeps its pointer events, unlike other greyed buttons, so its tip can say why
+   it is grey; the click is refused by App.runAction. */
+#maintoolbar .tbtn-cta.disabled,
+#maintoolbar .tbtn-cta.disabled:hover {
+  background: var(--c-panel); border-color: var(--c-border); color: var(--c-disabled);
+  pointer-events: auto; cursor: not-allowed;
+}
+
+/* Running: still green, so it reads as the same button busy rather than broken, but
+   pale, with a turning ring in place of the play arrow and "Calculating…" beside it. */
+#maintoolbar .tbtn-cta.calculating,
+#maintoolbar .tbtn-cta.calculating:hover {
+  background: #e3f6f0; border-color: #00996f; color: #00805f; cursor: progress;
+}
+.tbtn.calculating svg, .rail-btn.calculating svg { display: none; }
+.tbtn.calculating::before, .rail-btn.calculating::before {
+  content: ''; width: 11px; height: 11px; box-sizing: border-box;
+  border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%;
+  animation: calculate-spin 0.9s linear infinite;
+}
+.rail-btn.calculating::before { width: 15px; height: 15px; }
+@keyframes calculate-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .tbtn.calculating::before, .rail-btn.calculating::before { animation: none; }
+}

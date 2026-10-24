@@ -250,7 +250,7 @@ App.ResultsView = (function () {
       + '<i style="background:linear-gradient(to top,' + stops.join(',') + ')"></i>'
       + '<ul>' + rows + '</ul>'
       + '</div>'
-      + '<div class="vp-legend-foot">phase ' + payload.stage + '</div>';
+      + '<div class="vp-legend-foot">stage ' + payload.stage + '</div>';
   }
 
   function css(rgb) {

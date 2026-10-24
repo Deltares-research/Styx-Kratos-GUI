@@ -19,8 +19,9 @@ things to include are:
 
 ## Setting up
 
-Follow [Getting started](README.md#getting-started) in the README. `run.bat` (Windows) or
-`./run.sh` (Linux, macOS) creates the app's venv. Then add the test tools to that venv:
+Install Styx as [INSTALLATION.md](docs/INSTALLATION.md) describes. The first start of
+`run.bat` (Windows) or `./run.sh` (Linux, macOS) creates a virtual environment (venv) for the
+app. Then add the test tools to that venv:
 
 ```bash
 # Windows
@@ -29,11 +30,12 @@ Follow [Getting started](README.md#getting-started) in the README. `run.bat` (Wi
 .venv-linux/bin/python -m pip install -r requirements-dev.txt
 ```
 
-[TESTING.md](docs/TESTING.md) lists the test tiers and what each one needs.
+[TESTING.md](docs/developer/TESTING.md) lists the test tiers and what each one needs. The
+[developer guide](docs/developer/README.md) explains how the pieces fit together.
 
 ## Making a change
 
-1. Create a branch from `main`, for example `git checkout -b fix/phase-order`.
+1. Create a branch from `main`, for example `git checkout -b fix/stage-order`.
 2. **Write a failing test first, then make it pass.** The project follows test-driven
    development. A logic change comes with an automated test, not with a manual check in the
    browser.

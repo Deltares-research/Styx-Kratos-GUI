@@ -116,7 +116,7 @@ def test_the_excavated_pit_is_missing_from_the_soil_section(full):
 #
 # With more than one excavation level the soil inside the pit outline stays in the
 # model, split into the lifts it is dug in, because each lift is deactivated in its own
-# phase (plan/outdated/staged-construction-plan.md sec A1). `Project.soil_bodies` names them;
+# stage (plan/outdated/staged-construction-plan.md sec A1). `Project.soil_bodies` names them;
 # these tests are what says the geometry agrees with those names.
 
 
@@ -214,7 +214,7 @@ def test_no_entity_belongs_to_two_staged_bodies(staged):
 
 
 def test_each_staged_body_is_its_own_physical_group(staged):
-    """One body, one group, one sub-model part -- which is what lets a phase deactivate
+    """One body, one group, one sub-model part -- which is what lets a stage deactivate
     one lift without taking its neighbour with it."""
     project, result = staged
     groups = {gmsh.model.getPhysicalName(dim, tag): (dim, tag)

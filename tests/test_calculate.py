@@ -471,7 +471,7 @@ def test_markers_with_windows_line_endings_are_read():
 
 
 # ── Which stage failed ──────────────────────────────────────────────────────
-# "It failed" and "phase 5 failed" are a very different message on a seven-stage deck,
+# "It failed" and "stage 5 failed" are a very different message on a seven-stage deck,
 # and the deck has no stage banner of its own to read: `SequentialOrchestrator.Run`
 # loops over the execution list printing nothing that names the stage. Checked against
 # Kratos' own source and against a real seven-stage run log, not inferred -- see
@@ -518,7 +518,7 @@ def test_a_failure_in_the_very_first_stage_is_named():
 
 
 def test_a_stage_name_may_contain_spaces():
-    """`Stage.name` comes from `Phase.name`, which the user types."""
+    """A Kratos stage's name comes from `Stage.name`, which the user types."""
     output = marker("begin", 2, 3, "Dig to -4.5 m")
     assert calculation.failed_stage(output) == (2, 3, "Dig to -4.5 m")
 
@@ -635,7 +635,7 @@ def test_the_wrapper_still_does_the_base_class_work(capsys):
 
 def test_begin_is_printed_before_the_preprocess_runs(capsys):
     """The preprocess is itself a place a deck fails -- it is where the Activate and
-    Deactivate operations execute, so a phase naming a part the mdpa does not carry
+    Deactivate operations execute, so a stage naming a part the mdpa does not carry
     throws there. Announced after it, that failure would be blamed on the stage
     before."""
     from core.analysis import kratos_main

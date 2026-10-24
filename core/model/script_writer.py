@@ -44,18 +44,19 @@ GROUPS: dict[str, tuple[str, ...]] = {
     "The structures": ("beam_sections", "panel_sections", "beams", "anchor_sections",
                        "anchors", "interface_sections", "interfaces"),
     "The loads": ("loads", "normal_loads"),
+    "The boundary conditions": ("boundary_conditions",),
     "Drawn and imported solids": ("custom_parts",),
     "The seeded demo pit": ("wall", "struts", "anchor_rows", "piles", "wells"),
     "The mesh": ("mesh",),
-    "The construction phases": ("phases",),
+    "The construction stages": ("stages",),
 }
 """`Project` fields, under the heading they are written beneath, in this order. A field
 with a record or a list for its value that is in no group goes under "Other"."""
 
 NOTES = {
-    "The seeded demo pit": "The demo's own wall ring, struts, anchors, piles and wells. A "
-                           "layered model builds\n# none of them; the schema requires them "
-                           "all the same.",
+    "The seeded demo pit": "The demo's own wall ring, struts, anchors, piles and wells, "
+                           "which the full build\n# (layered_soil=False) raises. A layered "
+                           "model leaves them out.",
     "Drawn and imported solids": "Each a .brep under .data/; `scripting.with_solids` builds "
                                  "one again from its recipe or\n# its source file when it "
                                  "is not there.",
@@ -63,19 +64,21 @@ NOTES = {
 
 
 def script(project: Project, source: str | Path | None = None,
-           written: datetime.date | None = None, name: str = "model.py") -> str:
-    """The Python file that builds `project`, to be saved as `name`. `source` is the
-    project file it came from, named in the file's docstring with the day it was
+           written: datetime.date | None = None, name: str = "model.py",
+           folder: str | Path | None = None) -> str:
+    """The Python file that builds `project`, to be saved as `name` in `folder`. `source`
+    is the project file it came from, named in the file's docstring with the day it was
     `written`."""
     head = _docstring(project, source, written, name)
+    preamble = _preamble(folder)
     if project.deck is not None:
-        return _deck_script(project, project.deck, head)
+        return _deck_script(project, project.deck, head, preamble)
     written_fields = dict(_fields(project))
     inline = {name: value for name, value in written_fields.items() if not _record(value)}
     groups = _grouped([name for name in written_fields if name not in inline])
     classes = sorted({type(model).__name__ for model in _models(project)})
 
-    body = [head, PREAMBLE,
+    body = [head, preamble,
             _imports("core.model.schemas", classes)]
     if project.custom_parts:
         body.append("from core import scripting  # noqa: E402\n")
@@ -99,17 +102,40 @@ def script(project: Project, source: str | Path | None = None,
 
 # ── The file around the model ───────────────────────────────────────────────
 
-PREAMBLE = f'''from __future__ import annotations
+PREAMBLE = '''from __future__ import annotations
 
 import sys
 from pathlib import Path
 
-ROOT = Path({json.dumps(ROOT.as_posix())})
-"""The checkout this was written from, where `core` is; `python <this file>` needs
-it on the path. Change it when the checkout moves."""
+
+def checkout() -> Path:
+    """The checkout, where `core` is: a folder above this file, or the one the Python
+    that runs it is in (.venv-windows and the others sit in the checkout's root){also}."""
+    here = Path(__file__).resolve().parent
+    for folder in [here, *here.parents, Path(sys.prefix).resolve().parent{written}]:
+        if (folder / "core" / "model" / "schemas.py").is_file():
+            return folder
+    if "core" in sys.modules:                       # opened inside Styx, which has it
+        return Path(sys.modules["core"].__file__).resolve().parents[1]
+    sys.exit(f"{{Path(__file__).name}}: no Styx checkout found; run it with the Python "
+             "that kratos-cli uses")
+
+
+ROOT = checkout()
+"""`python <this file>` needs it on the path."""
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 '''
+
+
+def _preamble(folder: str | Path | None) -> str:
+    """The lines that find the checkout. A file saved outside it also keeps the checkout
+    it was written from, as the last place to look. One saved inside it does not: the
+    folders above it find the checkout, and no path of one computer is committed."""
+    if folder is not None and Path(folder).resolve().is_relative_to(ROOT):
+        return PREAMBLE.format(also="", written="")
+    return PREAMBLE.format(also=",\n    or else the one it was written from",
+                           written=f",\n                   Path({json.dumps(ROOT.as_posix())})")
 
 MAIN = '''
 def main(argv: list[str] | None = None) -> int:
@@ -155,10 +181,10 @@ def _docstring(project: Project, source, written, name: str) -> str:
             '...).\n"""\n')
 
 
-def _deck_script(project: Project, deck: Deck, head: str) -> str:
+def _deck_script(project: Project, deck: Deck, head: str, preamble: str) -> str:
     arguments = [_flat(deck.directory), _flat(deck.parameters), f"name={_flat(project.name)}"]
     return "\n".join([
-        head, PREAMBLE,
+        head, preamble,
         _imports("core.kratos.external_deck", ["deck_project"]),
         "from core.model.schemas import Project  # noqa: E402\n",
         _heading("The deck"),
@@ -204,16 +230,23 @@ FIRST = ("id", "key", "name", "label")
 """Written first in a record, whatever the schema's order: what the record is called."""
 
 
+ALWAYS = {"boundary_conditions"}
+"""Fields written even at their default: a reader sees every condition the model has,
+also the standard supports a project starts with."""
+
+
 def _fields(model: BaseModel):
-    """`(name, value)` for every field a constructor call needs: the required ones, and
-    those that differ from their default. What names the record comes first (`FIRST`)."""
+    """`(name, value)` for every field a constructor call needs: the required ones, those
+    in `ALWAYS`, and those that differ from their default. What names the record comes
+    first (`FIRST`)."""
     fields = type(model).model_fields
     order = [name for name in FIRST if name in fields] + [
         name for name in fields if name not in FIRST]
     for name in order:
         info = fields[name]
         value = getattr(model, name)
-        if info.is_required() or value != info.get_default(call_default_factory=True):
+        if (info.is_required() or name in ALWAYS
+                or value != info.get_default(call_default_factory=True)):
             yield name, value
 
 

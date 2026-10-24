@@ -10,10 +10,12 @@
 
    Two ways to size one, picked by `fluid_pressure_type`:
 
-     • "Hydrostatic" derives the pressure from the project's own water level,
-       zero at the phreatic surface and increasing with depth -- the usual
-       case for an exposed excavation face (a staged excavation's
-       WaterLoad_StageN arrangement).
+     • "Hydrostatic" derives the pressure from a water level, zero at that
+       level and increasing with depth -- the usual case for an exposed
+       excavation face (a staged excavation's WaterLoad_StageN arrangement).
+       The level is the load's own `reference_coordinate`, which a new load is
+       given from the project's water level; one saved before it had one reads
+       the project's at export.
      • "Uniform" applies a fixed `pressure` everywhere along the line instead,
        for a load that is not water.
 
@@ -61,24 +63,29 @@ App.NormalLoads = (function () {
 
   /* A free line down the middle of the section, the same default a free
      interface gets when there is no pile to follow -- the user then edits
-     each point's x/y in the explorer. */
-  function draft(project) {
+     each point's x/y in the explorer. `options.hydrostatic` makes it hydrostatic,
+     with the project's water level copied in as its own (`drafts.normal_load`). */
+  function draft(project, options) {
+    options = options || {};
     if (!available(project)) throw new Error(unavailableMessage(project));
     var id = nextId(project.normal_loads || [], 'normalload_');
     var d = project.domain;
     var x = d.x0 + (d.x1 - d.x0) * 0.5;
-    return {
+    var record = {
       id: id,
       name: 'Normal load ' + id.slice('normalload_'.length),
       kind: 'normal',
       points: [[x, d.y_top], [x, d.y_top - (d.y_top - d.y_bottom) * 0.5]],
-      // Uniform, so the magnitude asked for on the form is the magnitude applied.
-      // Hydrostatic derives its pressure from the water level and ignores that
+      // Uniform unless asked, so the magnitude asked for on the form is the magnitude
+      // applied. Hydrostatic derives its pressure from a water level and ignores that
       // number, which is not something to default anyone into.
-      fluid_pressure_type: 'Uniform',
+      fluid_pressure_type: options.hydrostatic ? 'Hydrostatic' : 'Uniform',
       pressure: 0.0,
       active: true
     };
+    // Set only when there is one, as the Python twin leaves the field unset.
+    if (options.hydrostatic && project.water) record.reference_coordinate = project.water.y;
+    return record;
   }
 
   function validate(record) {
@@ -192,6 +199,21 @@ App.NormalLoads = (function () {
         return [Number(control.value), Number(controls.ys[index].value)];
       });
       record.fluid_pressure_type = controls.type.value;
+      var level = controls.level.value.trim();
+      if (record.fluid_pressure_type === 'Hydrostatic') {
+        if (level !== '') record.reference_coordinate = Number(level);
+        else if (App.PROJECT && App.PROJECT.water) {
+          record.reference_coordinate = App.PROJECT.water.y;
+        } else {
+          message.textContent = 'Give the level where the pressure is zero: the model has '
+            + 'no water level to take it from.';
+          return null;
+        }
+        if (!Number.isFinite(record.reference_coordinate)) {
+          message.textContent = 'The reference level must be a number.';
+          return null;
+        }
+      }
       // Asked for every time, in either mode: a load whose magnitude was never given
       // is one nobody has finished describing, and Number('') would quietly read a
       // blank box as a load of zero.
@@ -238,20 +260,23 @@ App.NormalLoads = (function () {
           var x = input(point[0]), y = input(point[1]);
           controls.xs.push(x);
           controls.ys.push(y);
-          row('x' + n, x, n === 1 ? 'Start of the loaded line [m].'
-                                  : 'Point ' + n + ' of the loaded line [m].');
+          row('x' + n, x, n === 1
+            ? 'Start of the loaded line [m]. The load presses on the soil on the right '
+              + 'of the line as drawn, where its arrows point.'
+            : 'Point ' + n + ' of the loaded line [m].');
           row('y' + n, y, 'Elevation of point ' + n + ' [m].');
         });
 
         controls.type = el('select.mesh-setting-control');
         [['Uniform', 'Uniform pressure'],
-         ['Hydrostatic', 'Hydrostatic (from the water level)']].forEach(function (choice) {
+         ['Hydrostatic', 'Hydrostatic (from a water level)']].forEach(function (choice) {
           controls.type.appendChild(el('option', { value: choice[0], text: choice[1] }));
         });
         controls.type.value = record.fluid_pressure_type;
         row('Type', controls.type,
             'Uniform applies the pressure below. Hydrostatic ignores it and derives '
-            + 'the pressure from the water level instead, growing with depth.');
+            + 'the pressure from the reference level instead, growing with depth.');
+
 
         // Blank on a new load rather than pre-filled with nought, so the magnitude is
         // something the user states rather than something they can walk past.
@@ -259,6 +284,14 @@ App.NormalLoads = (function () {
         row('Pressure', controls.pressure,
             'Required. Magnitude [' + App.Units.label('stress')
             + '], normal to the line, compression positive.');
+
+        var water = App.PROJECT && App.PROJECT.water;
+        controls.level = input(record.reference_coordinate !== undefined
+                               && record.reference_coordinate !== null
+                               ? record.reference_coordinate : (water ? water.y : ''));
+        row('Reference level', controls.level,
+            'Hydrostatic: the level where the pressure is zero [m]. Empty takes the '
+            + 'water level, which the load then keeps as its own.');
 
         controls.active = el('input.mesh-setting-control', { type: 'checkbox' });
         controls.active.checked = record.active !== false;

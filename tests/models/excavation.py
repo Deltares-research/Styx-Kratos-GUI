@@ -4,7 +4,7 @@ It carries every feature a staged excavation uses, each once, so a test about an
 has it to hand: three soil layers, a pit dug in three lifts, a sheet-pile wall, a strut
 from the wall to a pinned support, an interface on both faces of the wall, a surcharge
 behind it, a water table, one hydrostatic water load per lift, a graded mesh carried by
-the project, and the staged construction sequence `phases.staged_excavation_phases`
+the project, and the staged construction sequence `stages.staged_excavation_stages`
 derives from all of that. `mohr_coulomb_project` is the same model with Mohr-Coulomb
 soils and Coulomb contacts.
 
@@ -18,11 +18,11 @@ It is also a script the GUI can open, through the same path a user's own model t
 
 from __future__ import annotations
 
-from core.model import phases
-from core.model.schemas import (Anchor, AnchorRows, AnchorSection, Beam, BeamSection, Borehole,
+from core.model import stages
+from core.model.schemas import (Anchor, AnchorSection, Beam, BeamSection, Borehole,
                          BoxRefinement, Domain, Excavation, Interface, InterfaceSection,
-                         LineLoad, Material, MeshSettings, NormalLoad, Piles, Project,
-                         SoilLayer, Struts, Wall, WaterLevel, Wells)
+                         LineLoad, Material, MeshSettings, NormalLoad, Project,
+                         SoilLayer, WaterLevel, WaterPressureCondition, standard_conditions)
 
 NAME = "Staged excavation"
 
@@ -81,7 +81,7 @@ def _soil(id_, name, color, modulus, poisson, weight, cohesion, phi, permeabilit
 
 def excavation_project(staged: bool = True) -> Project:
     """The model. `staged=False` is the same geometry with no construction sequence, for
-    a test about the mesh or the deck that should not depend on the phases."""
+    a test about the mesh or the deck that should not depend on the stages."""
     borehole = "bh1"
     upper = _soil("m_upper", "Soft clay", "#c4a86a", 2.0e6, 0.3, 17_000.0, 2_000.0,
                   25.0, 1.0e-8, 0.58)
@@ -127,15 +127,12 @@ def excavation_project(staged: bool = True) -> Project:
         # Against the left edge, the model's symmetry plane, dug in three lifts.
         excavation=Excavation(x0=DOMAIN_LEFT_X, x1=WALL_X, z0=Z0, z1=Z1,
                               levels=list(LIFTS)),
-        # Unused by the layered build path; emptied so none of the seeded 3D pit
-        # furniture can reach the deck.
-        wall=Wall(thickness=0.5, top_y=DOMAIN_TOP_Y, toe_y=WALL_TOE_Y),
-        struts=Struts(xs=[], y=STRUT_Y, radius=0.1),
-        anchor_rows=AnchorRows(xs=[], head_y=STRUT_Y, length=1.0,
-                               inclination_deg=45.0, radius=0.1),
-        piles=Piles(xs=[], zs=[], radius=0.1, length=1.0, top_y=DOMAIN_TOP_Y),
-        wells=Wells(positions=[], radius=0.1, length=1.0, top_y=DOMAIN_TOP_Y),
         water=WaterLevel(y=WATER_Y),
+        # The standard supports, and the pore pressure, hydrostatic about the water
+        # level on the whole soil.
+        boundary_conditions=[*standard_conditions(), WaterPressureCondition(
+            id="pore_pressure", name="Pore pressure", on="domain",
+            reference_coordinate=WATER_Y)],
         beam_sections=[sheet_pile],
         beams=[Beam(id="sheetpile", name="SheetPileWall", section=sheet_pile.id,
                     points=[(WALL_X, DOMAIN_TOP_Y), (WALL_X, WALL_TOE_Y)])],
@@ -149,12 +146,13 @@ def excavation_project(staged: bool = True) -> Project:
                               structure="sheetpile", side="both")],
         loads=[LineLoad(id="surcharge", name="Load", x0=WALL_X, x1=DOMAIN_RIGHT_X,
                         y=DOMAIN_TOP_Y, components=(0.0, SURCHARGE))],
-        # One water load per lift: the exposed wall face from the water table down to
-        # that level, then that level's floor back to the symmetry plane.
+        # One water load per lift: that level's floor from the symmetry plane to the
+        # wall, then up the exposed wall face to the water table -- the soil that stays
+        # on the right of the line, where a normal load presses.
         normal_loads=[
             NormalLoad(id=f"water_{index}", name=f"WaterLoad_Stage{index}",
-                       fluid_pressure_type="Hydrostatic",
-                       points=[(WALL_X, WATER_Y), (WALL_X, level), (DOMAIN_LEFT_X, level)])
+                       fluid_pressure_type="Hydrostatic", reference_coordinate=WATER_Y,
+                       points=[(DOMAIN_LEFT_X, level), (WALL_X, level), (WALL_X, WATER_Y)])
             for index, level in enumerate(LIFTS, start=1)
         ],
     )
@@ -162,7 +160,7 @@ def excavation_project(staged: bool = True) -> Project:
         return project
     return Project.model_validate(
         project.model_dump()
-        | {"phases": [phase.model_dump() for phase in phases.staged_excavation_phases(project)]})
+        | {"stages": [stage.model_dump() for stage in stages.staged_excavation_stages(project)]})
 
 
 MOHR_COULOMB = "GeoMohrCoulombLawPlaneStrain"
@@ -179,7 +177,7 @@ STRENGTHS = {
 }
 
 MOHR_COULOMB_SOLVER = {"dig_3": (1e-3, 300)}
-"""phase id -> (residual relative tolerance, max iterations), typed per phase."""
+"""stage id -> (residual relative tolerance, max iterations), typed per stage."""
 
 
 def mohr_coulomb_project(staged: bool = True) -> Project:
@@ -199,7 +197,7 @@ def mohr_coulomb_project(staged: bool = True) -> Project:
     contact = data["interface_sections"][0]
     contact.update(constitutive_law=COULOMB_CONTACT, r_inter=None,
                    variables={"GEO_ENABLE_TENSION_CUT_OFF": False, **RETENTION})
-    for phase in data["phases"]:
-        if phase["id"] in MOHR_COULOMB_SOLVER:
-            phase["tolerated_error"], phase["max_iterations"] = MOHR_COULOMB_SOLVER[phase["id"]]
+    for stage in data["stages"]:
+        if stage["id"] in MOHR_COULOMB_SOLVER:
+            stage["tolerated_error"], stage["max_iterations"] = MOHR_COULOMB_SOLVER[stage["id"]]
     return Project.model_validate(data)

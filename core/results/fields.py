@@ -153,12 +153,14 @@ class Definition:
         return units.label(self.quantity, system) or "-"
 
 
-def _displacements(source: str, prefix: str, group: str, label: str) -> tuple:
+def _vector(source: str, prefix: str, group: str, label: str,
+            quantity: units.Quantity = units.LENGTH) -> tuple:
+    """A vector's magnitude and components, `u`, `ux`, `uy`, `uz`."""
     return (
-        Definition(prefix, f"|{label}|", group, source, _magnitude, units.LENGTH),
-        Definition(f"{prefix}x", f"{label}_x", group, source, _component(0), units.LENGTH),
-        Definition(f"{prefix}y", f"{label}_y", group, source, _component(1), units.LENGTH),
-        Definition(f"{prefix}z", f"{label}_z", group, source, _component(2), units.LENGTH),
+        Definition(prefix, f"|{label}|", group, source, _magnitude, quantity),
+        Definition(f"{prefix}x", f"{label}_x", group, source, _component(0), quantity),
+        Definition(f"{prefix}y", f"{label}_y", group, source, _component(1), quantity),
+        Definition(f"{prefix}z", f"{label}_z", group, source, _component(2), quantity),
     )
 
 
@@ -185,12 +187,12 @@ def _stresses(source: str, group: str, mark: str) -> tuple:
 
 
 DEFINITIONS: tuple[Definition, ...] = (
-    # Total, then per-phase: the order a user looks for them in, and the reason
+    # Total, then per-stage: the order a user looks for them in, and the reason
     # the two are separate groups rather than one. `TOTAL_DISPLACEMENT` accumulates
     # across stages, `DISPLACEMENT` is what this stage alone did -- confirmed against a
     # real seven-stage run, where the two differ in both magnitude and sign.
-    *_displacements("TOTAL_DISPLACEMENT", "u", "Deformations", "u"),
-    *_displacements("DISPLACEMENT", "du", "Phase deformations", "Δu"),
+    *_vector("TOTAL_DISPLACEMENT", "u", "Deformations", "u"),
+    *_vector("DISPLACEMENT", "du", "Stage deformations", "Δu"),
 
     *_stresses("CAUCHY_STRESS_TENSOR", "Effective stresses", ""),
     # Written only once the deck asks for it (P4). Offered automatically when it is
@@ -203,11 +205,21 @@ DEFINITIONS: tuple[Definition, ...] = (
                _component(0), units.LENGTH),
     Definition("saturation", "Degree of saturation", "Groundwater",
                "DEGREE_OF_SATURATION", _component(0), units.DIMENSIONLESS),
+    # What a groundwater flow stage writes (`parameters.FLOW_NODAL_RESULTS`): the
+    # saturation of the pores the retention law gives, and the specific discharge,
+    # the volume of water through a unit area per second.
+    Definition("effective_saturation", "Effective saturation", "Groundwater",
+               "EFFECTIVE_SATURATION", _component(0), units.DIMENSIONLESS),
+    *_vector("FLUID_FLUX_VECTOR", "flux", "Groundwater", "q", units.VELOCITY),
+    # What a stage with a seepage face adds (`parameters.SEEPAGE_NODAL_RESULTS`): the
+    # water each node lets out (positive) or takes in, per metre of the section.
+    Definition("flow_rate", "Nodal water flow rate", "Groundwater",
+               "NODAL_WATER_FLOW_RATE", _component(0), units.FLOW_RATE),
 )
 
 BY_NAME = {definition.name: definition for definition in DEFINITIONS}
 
-GROUP_ORDER = ("Deformations", "Phase deformations", "Effective stresses",
+GROUP_ORDER = ("Deformations", "Stage deformations", "Effective stresses",
                "Total stresses", "Strains", "Groundwater")
 
 
@@ -300,7 +312,7 @@ def values(results: Results, mesh: GidMesh, name: str, location: str = "nodes",
 DEFORM_SOURCES = ("TOTAL_DISPLACEMENT", "DISPLACEMENT")
 """What a deformed mesh is drawn with, in order of preference. Total first: the shape
 of the model at this stage is the sum of everything that has happened to it, and the
-per-phase increment is a different picture."""
+per-stage increment is a different picture."""
 
 
 def displacement(results: Results) -> dict:

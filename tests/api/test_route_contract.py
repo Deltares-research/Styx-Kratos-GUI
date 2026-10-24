@@ -83,7 +83,7 @@ EVERYTHING = {"project", "tree", "geometry", "mesh"}
 CONTRACTS = [
     Contract("GET", "/api/health", lambda c: c.get("/api/health"), {"ok", "gmsh_version"}),
     Contract("GET", "/api/project", lambda c: c.get("/api/project"),
-             {"name", "layers", "materials", "phases", "deck", "mesh"}),
+             {"name", "layers", "materials", "stages", "deck", "mesh"}),
     Contract("PUT", "/api/project", lambda c: c.put("/api/project", json=_project(c)),
              {"name", "layers", "materials"},
              bad=lambda c: c.put("/api/project", json={**_project(c), "no_such_key": 1}),
@@ -108,6 +108,11 @@ CONTRACTS = [
              bad=lambda c: c.patch("/api/project/layers", json={"layers": [
                  {**_project(c)["layers"][0], "mat": "no_such_material"}]}),
              bad_status=422),
+    Contract("POST", "/api/project/boreholes",
+             lambda c: c.post("/api/project/boreholes", json={"x": 50.0}), PROJECT_KEYS,
+             bad=lambda c: c.post("/api/project/boreholes", json={
+                 "id": _project(c)["boreholes"][0]["id"]}),
+             bad_status=422),
     Contract("PUT", "/api/project/water",
              lambda c: c.put("/api/project/water", json={"water": None}), PROJECT_KEYS,
              bad=lambda c: c.put("/api/project/water", json={}), bad_status=422),
@@ -121,12 +126,25 @@ CONTRACTS = [
              lambda c: c.patch("/api/project/structures", json=_structures(c)),
              PROJECT_KEYS,
              bad=lambda c: c.patch("/api/project/structures", json={}), bad_status=422),
-    Contract("PATCH", "/api/project/phases",
-             lambda c: c.patch("/api/project/phases", json={"phases": []}), PROJECT_KEYS,
-             bad=lambda c: c.patch("/api/project/phases", json={"phases": [
+    Contract("PATCH", "/api/project/conditions",
+             lambda c: c.patch("/api/project/conditions", json={
+                 "boundary_conditions": _project(c)["boundary_conditions"],
+                 "gravity": True}),
+             PROJECT_KEYS,
+             bad=lambda c: c.patch("/api/project/conditions", json={"boundary_conditions": [
+                 {"id": "d", "name": "d", "kind": "displacement", "on": "domain"}]}),
+             bad_status=422),
+    Contract("PATCH", "/api/project/stages",
+             lambda c: c.patch("/api/project/stages", json={"stages": []}), PROJECT_KEYS,
+             bad=lambda c: c.patch("/api/project/stages", json={"stages": [
                  {"id": "a", "name": "A"}, {"id": "b", "name": "B", "parent": "a",
                                             "deactivate": ["no_such_part"]}]}),
              bad_status=422),
+    Contract("POST", "/api/project/stages/defaults",
+             lambda c: c.post("/api/project/stages/defaults"), PROJECT_KEYS),
+    # The pre-rename routes, kept so old clients keep working.
+    Contract("PATCH", "/api/project/phases",
+             lambda c: c.patch("/api/project/phases", json={"phases": []}), PROJECT_KEYS),
     Contract("POST", "/api/project/phases/defaults",
              lambda c: c.post("/api/project/phases/defaults"), PROJECT_KEYS),
     Contract("PATCH", "/api/project/dimension",
@@ -346,8 +364,8 @@ def deck_client(client, tmp_path):
 REFUSED_FOR_A_DECK = [
     ("POST", "/api/mesh", COARSE), ("POST", "/api/mesh/labels", COARSE),
     ("POST", "/api/mesh/node-parts", COARSE), ("POST", "/api/export/mdpa", COARSE),
-    ("PATCH", "/api/project/phases", {"phases": []}),
-    ("POST", "/api/project/phases/defaults", None),
+    ("PATCH", "/api/project/stages", {"stages": []}),
+    ("POST", "/api/project/stages/defaults", None),
 ]
 
 

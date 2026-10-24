@@ -68,13 +68,22 @@ def test_show_says_what_the_model_is(cli, site):
         assert word in ran.out
 
 
+def test_show_counts_one_structure_in_the_singular(cli, site):
+    assert cli("beam", site, "add", "--points", "5", "0", "5", "-10").code == 0
+
+    line = next(line for line in cli("show", site).out.splitlines() if "structures" in line)
+
+    assert line.split(None, 1)[1] == ("1 beam, 0 anchors, 0 interfaces, 2 loads, "
+                                      "0 normal loads")
+
+
 def test_show_as_json_is_a_summary_a_script_can_read(cli, site):
     answer = cli("--json", "show", site).json()
 
     assert answer["dimension"] == 2
     assert answer["layers"] == ["L1", "L2"]
     assert answer["parts"] == session.load(site).part_keys()
-    assert answer["phases"] == []
+    assert answer["stages"] == []
 
 
 def test_check_passes_a_model_that_can_be_meshed_and_staged(cli, site):
@@ -95,11 +104,11 @@ def test_check_refuses_a_model_with_nothing_to_mesh(cli, tmp_path):
     assert "nothing to mesh" in ran.err and "layer add" in ran.err
 
 
-def test_check_refuses_phases_that_branch(cli, site):
+def test_check_refuses_stages_that_branch(cli, site):
     """The schema accepts a branching tree (an editor has to be able to hold one); a
     deck cannot run it, and `check` is where that is said."""
     payload = json.loads(site.read_text(encoding="utf-8"))
-    payload["phases"] = [
+    payload["stages"] = [
         {"id": "initial", "name": "Initial stage"},
         {"id": "a", "name": "A", "parent": "initial"},
         {"id": "b", "name": "B", "parent": "initial"},
@@ -110,6 +119,38 @@ def test_check_refuses_phases_that_branch(cli, site):
 
     assert ran.code == 1
     assert "'a'" in ran.err and "'b'" in ran.err
+
+
+def test_check_refuses_flow_and_deformation_stages_mixed(cli, site):
+    """The groundwater flow refusals of the export (`condition_checks.flow_refusal`),
+    said before meshing, in the export's words."""
+    payload = json.loads(site.read_text(encoding="utf-8"))
+    payload["stages"] = [
+        {"id": "initial", "name": "Initial stage", "calculation": "K0 procedure"},
+        {"id": "flow", "name": "Flow", "parent": "initial",
+         "calculation": "Groundwater flow"},
+    ]
+    site.write_text(json.dumps(payload), encoding="utf-8")
+
+    ran = cli("check", site)
+
+    assert ran.code == 1
+    assert ("cannot mix groundwater flow stages ('Flow') with deformation stages "
+            "('Initial stage')") in ran.err
+
+
+def test_check_refuses_a_flow_stage_with_no_fixed_head(cli, site):
+    payload = json.loads(site.read_text(encoding="utf-8"))
+    payload["stages"] = [{"id": "flow", "name": "Flow", "calculation": "Groundwater flow"}]
+    payload["boundary_conditions"] = []
+    for material in payload["materials"]:
+        material["variables"]["PERMEABILITY_XX"] = 1e-12
+    site.write_text(json.dumps(payload), encoding="utf-8")
+
+    ran = cli("check", site)
+
+    assert ran.code == 1
+    assert "in stage 'Flow' no fixed water pressure condition is on" in ran.err
 
 
 # ── build ───────────────────────────────────────────────────────────────────
@@ -201,12 +242,12 @@ def test_a_script_is_not_edited_in_place(cli, tmp_path):
     assert cli("water", script, "-2", "--out", tmp_path / "wet.json").code == 0
 
 
-def test_an_edit_of_a_deck_s_phases_is_refused(cli, tmp_path):
+def test_an_edit_of_a_deck_s_stages_is_refused(cli, tmp_path):
     path = session.save(blank_project().model_copy(update={
         "deck": Deck(directory=str(tmp_path))}), tmp_path / "deck.json")
     before = path.read_bytes()
 
-    ran = cli("phases", path, "defaults")
+    ran = cli("stages", path, "defaults")
 
     assert ran.code == 1
     assert "Edit the deck" in ran.err

@@ -308,7 +308,8 @@
   test('the contact rows edit the shared library and reject a bad value', function () {
     withProject(contactedProject(), function () {
       var rows = App.OBJECT_PROPS.interface_1.groups.Contact;
-      var reduction = rows.filter(function (row) { return row[0] === 'R_inter'; })[0];
+      var reduction = rows.filter(function (row) {
+        return row[0] === 'R_inter (Coulomb law only)'; })[0];
       T.eq(reduction[4].set(0.55), null);
       T.eq(App.INTERFACE_SECTIONS[0].r_inter, 0.55);
       T.ok(reduction[4].set(1.4), 'a contact stronger than the soil is refused');
@@ -321,8 +322,41 @@
     p.interface_sections[0].r_inter = null;
     withProject(p, function () {
       var row = App.OBJECT_PROPS.interface_1.groups.Contact.filter(function (r) {
-        return r[0] === 'R_inter'; })[0];
-      T.eq(row.slice(0, 4), ['R_inter', 'each soil’s own', '', true]);
+        return r[0] === 'R_inter (Coulomb law only)'; })[0];
+      T.eq(row.slice(0, 4), ['R_inter (Coulomb law only)', 'each soil’s own', '', true]);
+    });
+  });
+
+  test('the contact stiffnesses come first and are typed in place', function () {
+    /* The two numbers a user comes to set. Left out they read "derived", and the export
+       takes them from the soil; typed, a button puts them back to that. The CLI's way
+       to the same is `section set ID INTERFACE_NORMAL_STIFFNESS=...`. */
+    withProject(contactedProject(), function () {
+      var rows = App.OBJECT_PROPS.interface_1.groups.Contact;
+      T.eq(rows.slice(0, 2).map(function (row) { return row.slice(0, 2); }),
+           [['INTERFACE_NORMAL_STIFFNESS', 'derived'], ['INTERFACE_SHEAR_STIFFNESS', 'derived']]);
+      T.eq(rows[0][3], false, 'editable while derived');
+      T.ok(!rows.some(function (row) { return row[0] === 'Stiffness'; }),
+           'nothing to put back while both are derived');
+      T.eq(rows[0][4].set(2e9), null);
+      T.eq(App.INTERFACE_SECTIONS[0].variables.INTERFACE_NORMAL_STIFFNESS, 2e9);
+      T.ok(rows[1][4].set(-1), 'a stiffness at or below zero is refused');
+      T.eq(App.INTERFACE_SECTIONS[0].variables.INTERFACE_SHEAR_STIFFNESS, undefined);
+    });
+  });
+
+  test('typed stiffnesses can be put back to the derived ones', function () {
+    var p = contactedProject();
+    p.interface_sections[0].variables = { INTERFACE_NORMAL_STIFFNESS: 2e9,
+                                          INTERFACE_SHEAR_STIFFNESS: 2e8 };
+    withProject(p, function () {
+      var rows = App.OBJECT_PROPS.interface_1.groups.Contact;
+      T.eq(rows[0].slice(0, 2), ['INTERFACE_NORMAL_STIFFNESS', '2000000000']);
+      var reset = rows.filter(function (row) { return row[0] === 'Stiffness'; })[0];
+      var committed = App.commitSelectionEdit;
+      App.commitSelectionEdit = function () {};
+      try { reset[4].run(); } finally { App.commitSelectionEdit = committed; }
+      T.eq(App.INTERFACE_SECTIONS[0].variables, {});
     });
   });
 
@@ -954,7 +988,7 @@
     withProject(project(TWO, [], true), function () {
       T.eq(topLabels(App.TREES.soil),
            ['Soil', 'Custom geometry', 'Imported mesh', 'Sheet piles', 'Anchors',
-            'Interfaces', 'Normal loads', 'Loads']);
+            'Interfaces', 'Normal loads', 'Loads', 'Model conditions']);
     });
   });
 
@@ -989,7 +1023,7 @@
 
   var ORDER = ['Attributes library', 'Soil', 'Boreholes', 'Geometry', 'Custom geometry',
                'Structures', 'Sheet piles', 'Anchors', 'Interfaces', 'Loads',
-               'Mesh', 'Flow conditions', 'Model conditions'];
+               'Flow conditions', 'Mesh', 'Model conditions'];
 
   test('real mesh statistics replace the frozen tree and property literals', function () {
     withProject(project(TWO), function () {

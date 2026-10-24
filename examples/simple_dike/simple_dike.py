@@ -23,7 +23,9 @@ the GiD result files (`*.post.res`, `*.post.msh`) and the sheet pile's curves
 file runs from anywhere: in the repository, or copied into a folder of your own.
 
 SI units (N, m), dry, plane strain. Three stages: K0 on the soil alone, then the sheet
-pile is installed, then the load is applied.
+pile is installed, then the load is applied. The block stands on a fixed bottom with
+rollers on its sides; it is dry, so it has no water pressure condition (its soil keeps
+the water pressure it starts with, zero).
 """
 
 from __future__ import annotations
@@ -50,9 +52,9 @@ ROOT = checkout()
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from core.model.schemas import (AnchorRows, Beam, BeamSection, Borehole, Domain,  # noqa: E402
-                                Excavation, LineLoad, Material, MeshSettings, Phase,
-                                Piles, Project, SoilLayer, Struts, Wall, Wells)
+from core.model.schemas import (Beam, BeamSection, Borehole,  # noqa: E402
+                                DisplacementCondition, Domain, LineLoad, Material,
+                                MeshSettings, Project, SoilLayer, Stage)
 
 # The soil block: (0, 0) to (20, 10).
 DOMAIN_LEFT_X, DOMAIN_RIGHT_X = 0.0, 20.0
@@ -70,6 +72,17 @@ Kratos deck."""
 
 ELEMENT_SIZE = 1.0
 ELEMENT_ORDER = 1
+
+# The supports: the bottom fixed in x and y, the sides on rollers held in x. The
+# plane-strain section holds z by itself. No water pressure condition: the block is dry.
+BOUNDARY_CONDITIONS = [
+    DisplacementCondition(id="fixed_bottom", name="Fixed bottom", on="face", face="bottom",
+                          fixed=(True, True, True)),
+    DisplacementCondition(id="roller_left", name="Roller left", on="face", face="left",
+                          fixed=(True, False, False)),
+    DisplacementCondition(id="roller_right", name="Roller right", on="face", face="right",
+                          fixed=(True, False, False)),
+]
 
 
 def project() -> Project:
@@ -117,30 +130,21 @@ def project() -> Project:
                     points=[(SHEET_PILE_X, DOMAIN_TOP_Y), (SHEET_PILE_X, SHEET_PILE_TOE_Y)])],
         loads=[LineLoad(id="surcharge", name="Load", x0=LOAD_X0, x1=LOAD_X1,
                         y=DOMAIN_TOP_Y, components=(0.0, LOAD))],
+        boundary_conditions=BOUNDARY_CONDITIONS,
 
         mesh=MeshSettings(element_size=ELEMENT_SIZE, order=ELEMENT_ORDER),
 
-        phases=[
+        stages=[
             # The ground alone, its stresses set by K0.
-            Phase(id="initial", name="Initial stage", calculation="K0 procedure",
+            Stage(id="initial", name="Initial stage", calculation="K0 procedure",
                   deactivate=["sheetpile_1", "surcharge"]),
             # Displacements reset, so what follows is measured from the ground it went into.
-            Phase(id="sheet_pile", name="Sheet pile", parent="initial",
+            Stage(id="sheet_pile", name="Sheet pile", parent="initial",
                   activate=["sheetpile_1"], reset_displacements=True,
                   max_iterations=150, tolerated_error=1e-3),
-            Phase(id="loading", name="Load", parent="sheet_pile",
+            Stage(id="loading", name="Load", parent="sheet_pile",
                   activate=["surcharge"], max_iterations=150, tolerated_error=1e-3),
         ],
-
-        # Required by the schema. A layered model with one excavation level cuts no
-        # pit and builds none of the 3D demo structures, so none of this is in the deck.
-        excavation=Excavation(x0=0.0, x1=1.0, z0=0.0, z1=1.0, levels=[DOMAIN_TOP_Y - 1.0]),
-        wall=Wall(thickness=0.5, top_y=DOMAIN_TOP_Y, toe_y=DOMAIN_TOP_Y - 1.0),
-        struts=Struts(xs=[], y=DOMAIN_TOP_Y, radius=0.1),
-        anchor_rows=AnchorRows(xs=[], head_y=DOMAIN_TOP_Y, length=1.0, inclination_deg=45.0,
-                               radius=0.1),
-        piles=Piles(xs=[], zs=[], radius=0.1, length=1.0, top_y=DOMAIN_TOP_Y),
-        wells=Wells(positions=[], radius=0.1, top_y=DOMAIN_TOP_Y, length=1.0),
     )
 
 

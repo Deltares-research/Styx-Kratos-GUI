@@ -1215,17 +1215,22 @@ App.Dialogs = (function () {
   function about() {
     open({
       title: 'About ' + App.PRODUCT.name,
-      width: 480, height: 300,
+      width: 480, height: 310,
       buttons: [{ label: 'OK', primary: true }],
       build: function (body) {
         body.appendChild(el('div.dlg-simple', null, [
-          el('h3', { text: App.PRODUCT.name }),
+          el('img.about-wordmark', { src: '/assets/styx-about.png', alt: App.PRODUCT.name }),
           el('p', { text: App.PRODUCT.version }),
-          el('p', { text: 'A user-interface concept for a 3D finite element geotechnical ' +
-                          'modelling application.' }),
-          el('div.mock-banner', { text:
-            'This is a front-end mockup only. There is no computational kernel, no file I/O and ' +
-            'no persistence — every value shown is sample data.' })
+          el('p', { text: 'a browser-based geotechnical modeller' }),
+          el('div.about-powered', null, [
+            el('p', { text: 'Powered by' }),
+            el('div.about-logos', null, [
+              el('img.about-logo-kratos', { src: '/assets/kratos.png',
+                                            alt: 'Kratos Multiphysics' }),
+              // The wordmark is white, for the title bar: drawn here in Deltares blue.
+              el('span.about-logo-deltares', { role: 'img', 'aria-label': 'Deltares' })
+            ])
+          ])
         ]));
       }
     });

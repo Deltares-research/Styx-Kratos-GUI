@@ -10,7 +10,7 @@ those requests from this recording instead of a server, so the module can be boo
 driven in the test page.
 
 The model is the test model (`tests/models/excavation.py`, staged) at a coarse mesh:
-staged phases, a sheet pile with interfaces both sides, a strut, line loads and a water
+staged stages, a sheet pile with interfaces both sides, a strut, line loads and a water
 level -- most of what the viewport draws -- in a file small enough to commit. Plus one
 imported `.mdpa` preview (the coarse deck of the same model), for the imported-mesh half.
 

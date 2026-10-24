@@ -18,7 +18,7 @@ from __future__ import annotations
 import argparse
 
 from cli.terminal.output import Answer, CommandError
-from cli.terminal.words import (action, assignments, coordinates, edited, existing,
+from cli.terminal.words import (NAME_HELP, action, assignments, coordinates, edited, existing,
                                 given, id_and_name, id_help, named_ids, noun)
 from core import session
 from core.model import drafts
@@ -59,8 +59,10 @@ def _register_sections(commands, common) -> None:
                      help="beam (sheet piles and members), panel (walls), anchor, interface")
     add.add_argument("id", nargs="?", help=id_help())
     _section_fields(add)
+    add.epilog = SECTION_VARIABLES
     change = action(sections, common, "set", update_section, variables=True,
                     help="change NAME=VALUE variables and the fields given")
+    change.epilog = SECTION_VARIABLES
     existing(change, "section")
     change.add_argument("--kind", choices=KINDS, help="when two kinds share the id")
     _section_fields(change)
@@ -71,17 +73,35 @@ def _register_sections(commands, common) -> None:
     remove.add_argument("--kind", choices=KINDS, help="when two kinds share the id")
 
 
+SECTION_VARIABLES = (
+    "Variables are NAME=VALUE words anywhere on the line: Kratos' names, in the project's "
+    "units. An interface section takes INTERFACE_NORMAL_STIFFNESS and "
+    "INTERFACE_SHEAR_STIFFNESS, stiffness per area; left out, the export derives them from "
+    "the soil each stretch of the interface runs against (shear = G / virtual thickness, "
+    "normal = 10 x shear). A Coulomb law (--law GeoInterfaceCoulombLawPlaneStrain) also "
+    "reads GEO_COHESION and GEO_FRICTION_ANGLE, derived from the soil with --r-inter when "
+    "left out.")
+"""What `section add` and `section set` say about their NAME=VALUE words."""
+
+
 def _section_fields(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--name")
+    parser.add_argument("--name", help=NAME_HELP)
     parser.add_argument("--law", help="the Kratos constitutive law")
     parser.add_argument("--spacing", help="beam, anchor: out-of-plane centres, in metres")
     parser.add_argument("--tension-limit", help="anchor: the working limit, a force, or none")
     parser.add_argument("--compression-limit", help="anchor: a force, or none (a tendon)")
-    parser.add_argument("--material", help="interface: one soil for the whole contact, or "
-                                           "none for the soil each stretch runs against")
-    parser.add_argument("--r-inter", help="interface: the strength reduction, or none for "
-                                          "each soil's own")
-    parser.add_argument("--virtual-thickness", help="interface: in metres")
+    parser.add_argument("--material",
+                        help="interface: take the stiffness and strength from this material "
+                             "along the whole interface (default, none: from the soil on "
+                             "each side, stretch by stretch)")
+    parser.add_argument("--r-inter",
+                        help="interface: the factor on the soil's cohesion and tan(phi), 0 "
+                             "to 1, or none for each soil's own; only a Coulomb law reads "
+                             "the strength, the default elastic law reads the stiffnesses "
+                             "only")
+    parser.add_argument("--virtual-thickness",
+                        help="interface: in metres; a derived stiffness is the soil's shear "
+                             "modulus over it")
     parser.add_argument("--permeability", choices=("Neutral", "Drain", "Impermeable"),
                         help="interface")
 
@@ -92,9 +112,22 @@ def list_sections(args: argparse.Namespace) -> Answer:
     for kind, field in drafts.SECTION_FIELDS.items():
         for section in getattr(project, field):
             rows.append({"kind": kind, **section.model_dump(mode="json")})
-            lines.append(f"{kind}  {section.id}  {section.name}  {section.constitutive_law}, "
-                         f"{len(section.variables)} variables")
+            line = (f"{kind}  {section.id}  {section.name}  {section.constitutive_law}, "
+                    f"{len(section.variables)} variables")
+            if kind == "interface":
+                line += "; " + _interface_stiffness(section)
+            lines.append(line)
     return Answer(data=rows, lines=lines or ["No sections yet."])
+
+
+def _interface_stiffness(section) -> str:
+    """The two stiffnesses as typed, or that the export derives them -- the GUI's two
+    stiffness rows say the same."""
+    typed = [(label, section.number(name)) for label, name in
+             (("normal", "INTERFACE_NORMAL_STIFFNESS"), ("shear", "INTERFACE_SHEAR_STIFFNESS"))]
+    return ", ".join(f"{label} stiffness {value:g}" if value is not None
+                     else f"{label} stiffness derived from the soil"
+                     for label, value in typed)
 
 
 @named_ids(required=True)
@@ -185,7 +218,7 @@ def _register_beams(commands, common) -> None:
 
 
 def _beam_fields(parser: argparse.ArgumentParser, kind: str) -> None:
-    parser.add_argument("--name")
+    parser.add_argument("--name", help=NAME_HELP)
     parser.add_argument("--section", help="the section it is built with (default: the "
                                           "first there is, or the GUI's default)")
     if kind == "panel":
@@ -231,7 +264,7 @@ def _register_anchors(commands, common) -> None:
 
 
 def _anchor_fields(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--name")
+    parser.add_argument("--name", help=NAME_HELP)
     parser.add_argument("--section", help="its tendon (default: the first there is)")
     parser.add_argument("--head", nargs="+", metavar="N",
                         help="on a pile, a wall or a member: x y in 2D, x y z in 3D")
@@ -264,7 +297,7 @@ def _register_interfaces(commands, common) -> None:
 
 
 def _interface_fields(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--name")
+    parser.add_argument("--name", help=NAME_HELP)
     parser.add_argument("--section", help="its contact properties (default: the first)")
     place = parser.add_mutually_exclusive_group()
     place.add_argument("--structure", help="the sheet pile it follows")
@@ -317,7 +350,7 @@ def _register_loads(commands, common) -> None:
 
 
 def _load_fields(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--name")
+    parser.add_argument("--name", help=NAME_HELP)
     parser.add_argument("--at", type=float, nargs=2, metavar=("X", "Y"), help="point")
     parser.add_argument("--x", type=float, nargs=2, metavar=("FROM", "TO"),
                         help="line, surface")
@@ -331,8 +364,10 @@ def _load_fields(parser: argparse.ArgumentParser) -> None:
 
 
 def _normal_load_fields(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--name")
-    parser.add_argument("--points", nargs="+", metavar="N", help="the line, x y ...")
+    parser.add_argument("--name", help=NAME_HELP)
+    parser.add_argument("--points", nargs="+", metavar="N",
+                        help="the line, x y ...; it presses on the soil on the right of "
+                             "the line as drawn, where its arrows point in the GUI")
     kind = parser.add_mutually_exclusive_group()
     kind.add_argument("--hydrostatic", dest="hydrostatic", action="store_const", const=True,
                       help="from the water level down, as the water pressure on a face")
@@ -340,6 +375,9 @@ def _normal_load_fields(parser: argparse.ArgumentParser) -> None:
                       help="--pressure everywhere along the line")
     parser.add_argument("--pressure", type=float,
                         help="a stress, compression positive, for a uniform load")
+    parser.add_argument("--reference-coordinate", type=float, metavar="Y",
+                        help="a hydrostatic load's water level, in metres (default: the "
+                             "project's, copied into the load)")
 
 
 # ── list, add, set, remove ──────────────────────────────────────────────────
@@ -433,7 +471,8 @@ def _drafted(project: Project, args: argparse.Namespace):
     if kind == "normal":
         return drafts.normal_load(project, _points(args.points, 2),
                                   hydrostatic=bool(args.hydrostatic),
-                                  pressure=args.pressure or 0.0, **named)
+                                  pressure=args.pressure or 0.0,
+                                  reference_coordinate=args.reference_coordinate, **named)
     components = _components(project, args.components)
     if args.load_kind == "point":
         return drafts.point_load(project, args.at, components=components, **named)
@@ -473,7 +512,12 @@ def _fields(project: Project, record, args: argparse.Namespace) -> dict:
             fields["points"] = coordinates(args.points, 2)
         if args.hydrostatic is not None:
             fields["fluid_pressure_type"] = "Hydrostatic" if args.hydrostatic else "Uniform"
-        fields.update(given(args, "pressure"))
+        fields.update(given(args, "pressure", "reference_coordinate"))
+        # A load made hydrostatic takes the project's level as a new one does
+        # (`drafts.normal_load`), so it says what it is measured from.
+        if (args.hydrostatic and record.reference_coordinate is None
+                and "reference_coordinate" not in fields and project.water is not None):
+            fields["reference_coordinate"] = project.water.y
     if kind in ("point", "line", "surface"):
         if args.at is not None:
             fields["x"], fields["y"] = args.at
@@ -538,8 +582,10 @@ def _line(record) -> str:
     if kind in ("point", "line", "surface"):
         where += "; " + _xy(record.components)
     if kind == "normal":
-        where += ("; hydrostatic" if record.fluid_pressure_type == "Hydrostatic"
-                  else f"; {record.pressure:g} uniform")
+        where += (f"; {record.pressure:g} uniform" if record.fluid_pressure_type == "Uniform"
+                  else "; hydrostatic about the water level"
+                  if record.reference_coordinate is None
+                  else f"; hydrostatic about {record.reference_coordinate:g} m")
     section = f"  section {record.section}" if hasattr(record, "section") else ""
     side = f", {record.side}" if kind == "interface" and record.points else ""
     return (f"{record.id}  {record.name}  {where}{side}{section}"

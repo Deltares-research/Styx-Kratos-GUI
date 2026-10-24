@@ -431,15 +431,15 @@ def test_a_buried_line_load_in_3d_warns_rather_than_vanishing(session):
 # `kratos/writer.py`'s two `if dim == 2 else []` guards keep a 3D deck from staging its
 # structures: no automatic wall-installation stage, and no master/slave tie. That is
 # the restriction plan sec 7.13 says to keep -- but it used to be silent, and the
-# phases panel is visible in 3D projects, so a user could build a sequence here and
+# stages panel is visible in 3D projects, so a user could build a sequence here and
 # never be told which part of it the deck dropped.
 #
-# What the guards do *not* stop is the phase list itself, and these tests say so in
+# What the guards do *not* stop is the stage list itself, and these tests say so in
 # both directions: the warning is about the structures, not about staging as a whole.
 
-def _phased(project: Project, activate: list[str]) -> Project:
+def _staged(project: Project, activate: list[str]) -> Project:
     payload = project.model_dump()
-    payload["phases"] = [
+    payload["stages"] = [
         {"id": "initial", "name": "Initial", "calculation": "K0 procedure",
          "deactivate": activate},
         {"id": "build", "name": "Build", "parent": "initial", "activate": activate},
@@ -447,16 +447,16 @@ def _phased(project: Project, activate: list[str]) -> Project:
     return Project.model_validate(payload)
 
 
-def test_a_3d_phase_list_still_activates_and_deactivates_its_parts(session):
+def test_a_3d_stage_list_still_activates_and_deactivates_its_parts(session):
     """The restriction is narrower than "staging is 2D only", and a warning that
     claimed otherwise would send a user to redraw a model that works.
 
-    A panel and an anchor switched off in the first phase and on in the second come
+    A panel and an anchor switched off in the first stage and on in the second come
     out as a Deactivate and an Activate operation, exactly as they would in plane
     strain. Only the *implicit* sheet-pile staging and the interface ties are dropped.
     """
     export = writer.export_project(
-        _phased(structured([PANEL, MEMBER], [ANCHOR]), ["panel_1", "anchor_1"]),
+        _staged(structured([PANEL, MEMBER], [ANCHOR]), ["panel_1", "anchor_1"]),
         MeshRequest(element_size=6.0, order=1))
     doc = json.loads(export["project_parameters"])
 
@@ -472,7 +472,7 @@ def test_a_3d_phase_list_still_activates_and_deactivates_its_parts(session):
 
 def test_a_3d_project_with_structures_says_they_are_not_staged(session):
     """The silent skip, made audible. A 2D deck installs its wall in a stage of its
-    own even with no phases at all; the same model in 3D gets one stage and said
+    own even with no stages at all; the same model in 3D gets one stage and said
     nothing about the difference."""
     export = writer.export_project(structured([PANEL, MEMBER], [ANCHOR]),
                                    MeshRequest(element_size=6.0, order=1))

@@ -20,7 +20,7 @@ router = APIRouter()
 @router.delete("/api/project/custom_parts")
 async def clear_custom_parts() -> dict:
     """Delete every custom part (`session.without_custom_parts`): refused, naming the
-    phase, while a phase still uses one of them."""
+    stage, while a stage still uses one of them."""
     project = store.get()
     with refusals():
         project = session.without_custom_parts(project, [p.key for p in project.custom_parts])

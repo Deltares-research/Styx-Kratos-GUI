@@ -4,7 +4,8 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Styx</title>
-<link rel="icon" type="image/png" href="/assets/logo.png">
+<link rel="icon" type="image/png" sizes="32x32" href="/assets/styx-icon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="/assets/styx-icon-192.png">
 <link rel="stylesheet" href="/css/tokens.css">
 <link rel="stylesheet" href="/css/layout.css">
 <link rel="stylesheet" href="/css/components.css">
@@ -17,9 +18,7 @@
   <!-- ── Title bar ─────────────────────────────────────────────── -->
   <header id="titlebar">
     <div class="tb-brand">
-      <img src="/assets/deltares-logo.png" alt="Deltares" class="tb-logo">
-      <span class="tb-brand-sep"></span>
-      <img src="/assets/kratos.png" alt="Kratos Multiphysics" class="tb-logo tb-logo-kratos">
+      <img src="/assets/styx-titlebar.png" alt="Styx" class="tb-logo">
     </div>
     <div class="tb-title" id="tb-title"></div>
     <div class="tb-wincontrols">
@@ -88,7 +87,7 @@
       <div class="splitter splitter-h dock-split" id="split-dock2" hidden></div>
 
       <section class="dock-panel" id="panel-phases" hidden>
-        <header class="dock-head"><span class="dock-caret">▾</span> Phases explorer</header>
+        <header class="dock-head"><span class="dock-caret">▾</span> Stages explorer</header>
         <div class="dock-body" id="list-phases"></div>
       </section>
 
@@ -155,6 +154,8 @@
      ══════════════════════════════════════════════════════════════ -->
 <script src="/vendor/three.min.js"></script>
 <script src="/js/data.js"></script>
+<!-- Right after the frozen data: its "phase" labels read "stage" before anything draws them. -->
+<script src="/live/js/vocabulary.js"></script>
 <script src="/live/js/unit-table.js"></script>
 <script src="/live/js/units.js"></script>
 <script src="/live/js/property-sets.js"></script>
@@ -195,9 +196,10 @@
 <script src="/live/js/anchors.js"></script>
 <script src="/live/js/interfaces.js"></script>
 <script src="/live/js/normal-loads.js"></script>
-<!-- The phase model. Before patches.js, which replaces the frozen phases
+<script src="/live/js/boundary-conditions.js"></script>
+<!-- The stage model. Before patches.js, which replaces the frozen stages
      panel with one that reads it. -->
-<script src="/live/js/phases.js"></script>
+<script src="/live/js/stages.js"></script>
 <script src="/live/js/import-dialog.js"></script>
 <script src="/live/js/mdpa-import-dialog.js"></script>
 <script src="/live/js/soil-volume-dialog.js"></script>

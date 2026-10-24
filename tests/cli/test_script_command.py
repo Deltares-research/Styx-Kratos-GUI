@@ -90,7 +90,7 @@ def test_a_model_built_in_the_terminal_comes_back_whole(cli, tmp_path):
         ("normal-load", path, "add", "water_1", "--hydrostatic", "--points", "5", "-1", "5",
          "-2", "0", "-2"),
         ("set", path, "mesh.body_sizes.sheet", "0.5"),
-        ("phases", path, "staged-excavation"),
+        ("stages", path, "staged-excavation"),
     ):
         ran = cli(*argv)
         assert ran.code == 0, (argv, ran.err)

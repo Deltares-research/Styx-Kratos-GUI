@@ -655,9 +655,9 @@
 
 /* ── Loads in Staged construction ─────────────────────────────────────────
    A layered-soil project (the blank project, the test model) drew its loads in Structures mode
-   and dropped them in Staged construction, the one mode where a load's phase matters:
-   the surcharge vanished as soon as the user moved on from Structures. A phase that
-   switches a load off still hides it -- that is `phaseHidden`'s job, not this one's. */
+   and dropped them in Staged construction, the one mode where a load's stage matters:
+   the surcharge vanished as soon as the user moved on from Structures. A stage that
+   switches a load off still hides it -- that is `stageHidden`'s job, not this one's. */
 (function () {
   test('a layered project draws its loads in Staged construction', function () {
     var groups = App.Viewport.computeModeGroups(

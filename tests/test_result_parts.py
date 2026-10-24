@@ -1,4 +1,4 @@
-"""Which part of the model an element belongs to, and what a phase did to it.
+"""Which part of the model an element belongs to, and what a stage did to it.
 
 GiD names its mesh blocks `Kratos_Triangle2D6_Mesh_2`, which says nothing about whether
 that is the top soil layer or the third excavation lift. The names are in the `.mdpa`
@@ -7,9 +7,9 @@ own element ids -- so the join is a lookup, not a guess.
 
 The second thing here is subtler and is the difference between a postprocessor that can
 be trusted and one that cannot: a part with no elements in this stage's mesh may have
-been *deactivated by the phase*, or may be one the GiD writer never writes at all. The
+been *deactivated by the stage*, or may be one the GiD writer never writes at all. The
 interfaces are the second kind -- they are in the deck, they are solved, and they appear
-in none of the seven stages of the real run. Reporting them as "removed in this phase"
+in none of the seven stages of the real run. Reporting them as "removed in this stage"
 would be a lie about the model.
 """
 
@@ -118,7 +118,7 @@ def test_an_element_no_part_claims_is_simply_absent(model):
     assert 404 not in owner
 
 
-# ── What the phase did ──────────────────────────────────────────────────────
+# ── What the stage did ──────────────────────────────────────────────────────
 
 def test_a_part_whose_elements_are_in_this_stage_is_alive(model):
     by_name = {p.name: p for p in parts.stage_parts(model, stage_mesh(1, 2))}
@@ -128,9 +128,9 @@ def test_a_part_whose_elements_are_in_this_stage_is_alive(model):
     assert by_name["Soil_Top"].elements == [1]
 
 
-def test_a_part_the_phase_deactivated_is_not_alive(model):
+def test_a_part_the_stage_deactivated_is_not_alive(model):
     """The excavated lift. Its block is in the stage mesh with nothing in it, and that
-    is exactly how a staged result learns what is still standing -- no phase record is
+    is exactly how a staged result learns what is still standing -- no stage record is
     consulted and none is needed."""
     by_name = {p.name: p for p in parts.stage_parts(model, stage_mesh(1))}
 
@@ -150,7 +150,7 @@ def test_a_part_gid_never_writes_is_told_apart_from_one_that_was_removed(model):
                                                          written=written)}
 
     assert by_name["Soil_Top_lift1"].written is True
-    assert by_name["Soil_Top_lift1"].alive is False, "removed by this phase"
+    assert by_name["Soil_Top_lift1"].alive is False, "removed by this stage"
     assert by_name["Wall_contact"].written is False, "never written by the GiD output"
     assert by_name["Wall_contact"].alive is False
 
@@ -198,7 +198,7 @@ def test_parts_keep_the_order_the_deck_declares_them_in(model):
 
 def test_the_real_run_reads_its_construction_sequence_out_of_the_files(monkeypatch):
     """The end-to-end claim of this task, against a seven-stage Kratos run of the test
-    model (skipped without Kratos): the phases a staged model went through are
+    model (skipped without Kratos): the stages a staged model went through are
     recoverable from its output alone.
 
     The excavation lifts leave one at a time, the wall arrives when it is installed and

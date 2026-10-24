@@ -17,10 +17,11 @@ Part keys (`Project.part_keys`) are the contract with the frozen frontend: each 
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
+from pydantic import (BaseModel, Field, SerializerFunctionWrapHandler, computed_field,
+                      field_validator, model_serializer, model_validator)
 
 from core.model import migration, units
 
@@ -238,7 +239,7 @@ class Excavation(Base):
     """The lifts the pit is dug in, shallowest first, each strictly below the last.
 
     A staged excavation is not one hole that appears at once: each lift is its own body
-    in the mesh, deactivated in its own phase (`Excavated_Soil_1/2/3` in Kratos'
+    in the mesh, deactivated in its own stage (`Excavated_Soil_1/2/3` in Kratos'
     staged-excavation reference deck). One level means an unstaged pit, which is what every project
     written before this field had, and is why it defaults to `[floor_y]` rather than to
     empty.
@@ -687,10 +688,11 @@ class NormalLoad(Base):
     Two ways to size it, picked by `fluid_pressure_type`, matching Kratos
     GeoMechanics' own `ApplyNormalLoadTableProcess`:
 
-    *   `"Hydrostatic"` derives the pressure from `Project.water` at export time --
-        zero at the phreatic level, increasing with depth below it -- so the load
-        tracks the water table rather than a value copied onto each stage's record.
-        This is a staged excavation's `WaterLoad_StageN` arrangement.
+    *   `"Hydrostatic"` derives the pressure from a water level at export time -- zero at
+        the level, increasing with depth below it. The level is the load's own
+        `reference_coordinate`, which a new load is given (`drafts.normal_load`); one
+        saved without it reads `Project.water`. This is a staged excavation's
+        `WaterLoad_StageN` arrangement.
     *   `"Uniform"` applies `pressure` everywhere along the line instead, for a load
         that is not water: a surcharge normal to a sloped face, say.
     """
@@ -704,7 +706,12 @@ class NormalLoad(Base):
     `pressure` -- the wrong thing to fall into without asking for it."""
     pressure: float = 0.0
     """A stress in the project's units, compression positive. Read only when `fluid_pressure_type` is
-    `"Uniform"`; a hydrostatic load is derived from `Project.water` instead."""
+    `"Uniform"`; a hydrostatic load is derived from its water level instead."""
+    reference_coordinate: float | None = None
+    """The water level of a hydrostatic load, m, under the name Kratos'
+    `ApplyNormalLoadTableProcess` gives it. `None`, which only a load saved before the
+    level was copied in has, is the project's own (`Project.water`). Read only when
+    `fluid_pressure_type` is `"Hydrostatic"`."""
     active: bool = True
 
     @model_validator(mode="before")
@@ -733,6 +740,9 @@ class NormalLoad(Base):
                 )
         if not math.isfinite(self.pressure):
             raise ValueError(f"normal load {self.id!r} has a non-finite pressure")
+        if self.reference_coordinate is not None and not math.isfinite(
+                self.reference_coordinate):
+            raise ValueError(f"normal load {self.id!r} has a non-finite water level")
         return self
 
 
@@ -946,54 +956,316 @@ class WaterLevel(Base):
     specific_weight: float | None = Field(default=None, gt=0)
     """In the project's units. None is water's 10 kN/m3 in whatever system the project
     uses (`Project.water_specific_weight`). Read by a `NormalLoad` in `"Hydrostatic"` mode
-    (`core/kratos/parameters.py:_normal_load`); otherwise unused. One value for the whole
-    project, the same way `y` is one phreatic level -- not a per-load setting."""
+    (`core/kratos/parameters.py:_normal_load`) and by every `WaterPressureCondition`
+    (`_water_pressure`). One value for the whole project, the same way `y` is one
+    phreatic level -- not a per-load setting."""
 
 
-class Phase(Base):
-    """One construction phase: what changes about the model, and how it is solved.
+# ── Boundary conditions ─────────────────────────────────────────────────────
 
-    The field names follow the phase panel the GUI already draws (js/data.js:559),
+FACES = ("bottom", "left", "right", "front", "back", "top")
+"""The faces of the domain box a condition can name. Front and back exist in 3D only; a
+2D section has no boundary along z."""
+
+Face = Literal["bottom", "left", "right", "front", "back", "top"]
+
+ConditionTarget = Literal["domain", "face", "part", "line", "point"]
+"""What a condition acts on: the first of the two questions the GUI's condition dialog
+asks. The second -- which face, which part, where -- is the field it names (`face`,
+`part`, `points`). Two fields rather than one overloaded value, so the record holds the
+dialog's two answers as they are and nothing has to guess what kind a value is."""
+
+PressureType = Literal["Uniform", "Hydrostatic", "Phreatic_Multi_Line"]
+"""How a water pressure condition gives each node its pressure: Kratos'
+`fluid_pressure_type`, under its own names (`WaterPressureCondition`)."""
+
+TARGET_ORDER = ("domain", "part", "face", "line", "point")
+"""The order fixed conditions are written in, least specific first: where two act on
+one node, Kratos keeps the value written last, so the more specific target wins."""
+
+
+class WaterPressureCondition(Base):
+    """A water pressure the user prescribes: on the whole soil, on one soil part, on a
+    face of the domain, along a drawn line, or at a point.
+
+    Nothing else puts a water pressure in the deck: a project with no such record has no
+    water pressure process at all, whatever its water level. Each record is complete in
+    itself -- a hydrostatic one carries its own level -- so two of them can hold two
+    water levels. The fields carry the names of Kratos' `ApplyScalarConstraintTableProcess`
+    (GeoMechanicsApplication), so the record reads like the process it is written as
+    (`core/kratos/parameters.py:_water_pressure`):
+
+    *   `"Uniform"`: `value` at every node.
+    *   `"Hydrostatic"`: zero at the horizontal level `reference_coordinate`, growing with
+        depth below it.
+    *   `"Phreatic_Multi_Line"`: hydrostatic below the phreatic line through
+        (`x_coordinates[i]`, `y_coordinates[i]`, `z_coordinates[i]`).
+
+    Above the level Kratos' formula gives suction, which is positive in its sign
+    convention; `pressure_tension_cut_off` is the most it may reach, and the Kratos
+    default 0 holds the pressure at zero there. `is_fixed=False` makes the record start
+    values only -- an initial field the calculation then changes.
+
+    The target is `on` and the one field it names:
+
+    *   `"domain"`: every soil node.
+    *   `"face"`: the face `face` of the domain. A face the model does not have (front
+        and back in 2D) is left out with a warning, so switching dimension keeps the
+        record.
+    *   `"part"`: the soil part `part`, a key `Project.part_keys` lists -- a layer
+        (`soil_<id>`, with every lift dug out of it), one of its bodies, or a custom part
+        that has a material.
+    *   `"line"`: the polyline `points` (two or more), and `"point"`: the one point in
+        `points`. Both are drawn in the 2D section and embedded in its mesh the way a
+        normal load's line is; a 3D export leaves them out with a warning.
+    """
+    id: Ident
+    name: str
+    kind: Literal["water_pressure"] = "water_pressure"
+    on: ConditionTarget
+    face: Face | None = None
+    part: str | None = None
+    points: list[tuple[float, float]] | None = None
+    fluid_pressure_type: PressureType = "Hydrostatic"
+    is_fixed: bool = True
+    value: float = 0.0
+    """A stress in the project's units, Kratos' sign (compression negative). Read only
+    when `fluid_pressure_type` is `"Uniform"`."""
+    reference_coordinate: float | None = None
+    """The water level, m: the height where the pressure is zero. Required when
+    `fluid_pressure_type` is `"Hydrostatic"`, and read only then."""
+    x_coordinates: list[float] | None = None
+    y_coordinates: list[float] | None = None
+    z_coordinates: list[float] | None = None
+    """The phreatic line, m, x increasing; `z_coordinates` may be left out, which is all
+    zeros. Read only when `fluid_pressure_type` is `"Phreatic_Multi_Line"`; the line may
+    start and end outside the domain."""
+    pressure_tension_cut_off: float = Field(default=0.0, ge=0)
+    """A stress in the project's units. Read by `"Hydrostatic"` and
+    `"Phreatic_Multi_Line"`."""
+    active: bool = True
+
+    @model_validator(mode="after")
+    def _usable(self) -> WaterPressureCondition:
+        noun = f"water pressure condition {self.id!r}"
+        _check_target(self, noun)
+        numbers = [self.value, self.pressure_tension_cut_off]
+        if self.reference_coordinate is not None:
+            numbers.append(self.reference_coordinate)
+        if not all(math.isfinite(v) for v in numbers):
+            raise ValueError(f"{noun} has a non-finite value")
+        if self.fluid_pressure_type == "Hydrostatic" and self.reference_coordinate is None:
+            raise ValueError(f"{noun} is Hydrostatic, which needs its water level "
+                             "(reference_coordinate)")
+        if (self.x_coordinates is None) != (self.y_coordinates is None):
+            raise ValueError(f"{noun} needs both x_coordinates and y_coordinates, or "
+                             "neither")
+        if self.z_coordinates is not None and self.x_coordinates is None:
+            raise ValueError(f"{noun} has z_coordinates but no x_coordinates and "
+                             "y_coordinates")
+        if self.x_coordinates is not None and self.y_coordinates is not None:
+            xs, ys = self.x_coordinates, self.y_coordinates
+            zs = self.z_coordinates if self.z_coordinates is not None else [0.0] * len(xs)
+            if len(xs) != len(ys) or len(xs) != len(zs) or len(xs) < 2:
+                raise ValueError(f"{noun}: the phreatic line needs two or more points, "
+                                 "with as many x as y (and z) coordinates")
+            if not all(math.isfinite(v) for v in xs + ys + zs):
+                raise ValueError(f"{noun}: the phreatic line has a non-finite coordinate")
+            if any(second <= first for first, second in zip(xs, xs[1:])):
+                raise ValueError(f"{noun}: the x coordinates of the phreatic line must "
+                                 "increase")
+        elif self.fluid_pressure_type == "Phreatic_Multi_Line":
+            raise ValueError(f"{noun} is a Phreatic_Multi_Line, which needs the points of "
+                             "the line (x_coordinates and y_coordinates)")
+        return self
+
+def _check_target(record: WaterPressureCondition | DisplacementCondition | SeepageCondition,
+                  noun: str) -> None:
+    """`on` and the one field it names, and none of the others: the target check both
+    kinds of condition share."""
+    named = {"face": record.face, "part": record.part, "points": record.points}
+    wanted = {"face": "face", "part": "part", "line": "points",
+              "point": "points"}.get(record.on)
+    stray = sorted(field for field, value in named.items()
+                   if value is not None and field != wanted)
+    if stray:
+        raise ValueError(f"{noun} is on {record.on!r}, which takes no "
+                         + " or ".join(stray))
+    if wanted is not None and not named[wanted]:
+        raise ValueError(f"{noun} is on {record.on!r}, which needs {wanted}")
+    if record.points is None:
+        return
+    if not all(math.isfinite(v) for point in record.points for v in point):
+        raise ValueError(f"{noun} has a non-finite coordinate")
+    if record.on == "point" and len(record.points) != 1:
+        raise ValueError(f"{noun} is on a point, which is one point, not "
+                         f"{len(record.points)}")
+    if record.on == "line":
+        if len(record.points) < 2:
+            raise ValueError(f"{noun} is on a line, which needs at least two points")
+        for first, second in zip(record.points, record.points[1:]):
+            if first == second:
+                raise ValueError(f"{noun} repeats the point {first}; every segment "
+                                 "needs length")
+
+
+FACE_NORMALS = {"bottom": 1, "top": 1, "left": 0, "right": 0, "front": 2, "back": 2}
+"""The axis normal to each face (x 0, y 1, z 2): what a roller on it holds."""
+
+
+class DisplacementCondition(Base):
+    """Displacements the user holds at zero: on a face of the domain, on a soil part,
+    along a drawn line, or at a point.
+
+    `fixed` is the components held, x, y and z: all three for a fixed support, the one
+    normal to a face for a roller (`FACE_NORMALS`). A 2D section has no z displacement,
+    so its deck holds only x and y whatever the third says, and a face the section does
+    not have (front and back) is left out without a word: the plane-strain section holds
+    z everywhere already. Written as Kratos' `ApplyVectorConstraintTableProcess` on the
+    target's node part (`core/kratos/parameters.py:_constraint`).
+
+    The target is `on` and the field it names, as for a `WaterPressureCondition`, except
+    that the whole soil (`"domain"`) is no target for a displacement: it would hold the
+    model still.
+    """
+    id: Ident
+    name: str
+    kind: Literal["displacement"] = "displacement"
+    on: ConditionTarget
+    face: Face | None = None
+    part: str | None = None
+    points: list[tuple[float, float]] | None = None
+    fixed: tuple[bool, bool, bool] = (True, True, True)
+    active: bool = True
+
+    @model_validator(mode="after")
+    def _usable(self) -> DisplacementCondition:
+        noun = f"displacement condition {self.id!r}"
+        if self.on == "domain":
+            raise ValueError(f"{noun} is on the whole soil, which would hold the whole "
+                             "model still; put it on a face, a part, a line or a point")
+        _check_target(self, noun)
+        if not any(self.fixed):
+            raise ValueError(f"{noun} holds no component; fix x, y or z, or remove it")
+        return self
+
+
+SeepageTarget = Literal["face", "line"]
+"""Where a seepage face can be: a face of the domain, or a line drawn along the soil's
+outer boundary."""
+
+
+class SeepageCondition(Base):
+    """A seepage face: a stretch of the soil's outer boundary where the water may leave
+    the soil but not enter it, such as the downstream slope of a dike above the tail
+    water.
+
+    In a groundwater flow calculation only. The deck writes a `GeoSeepageCondition2D2N`
+    (`2D3N` in a quadratic mesh) on each mesh edge of the target, one
+    `ApplySeepageBoundaryProcess` on them, and solves the stage with Kratos'
+    `newton_raphson_with_seepage` strategy (`core/kratos/parameters.py`). The strategy
+    decides node by node, while it iterates: a free node where the water pressure would
+    be above the atmosphere (negative, in Kratos' sign) is fixed at zero, and the water
+    flows out there; a fixed node through which water would flow in is freed again.
+    Where the water pressure stays below the atmosphere the face is closed, as a
+    boundary with no condition is.
+
+    The target is `on` and the field it names, as for a `WaterPressureCondition`: the
+    face `face`, or the polyline `points`, drawn in the 2D section. Every mesh edge of
+    the target has to be on the soil's outer boundary, as Kratos requires; a line
+    through the soil is refused at export. A seepage face is not switched by stages: it
+    acts in every stage, as Kratos collects the seepage nodes once, from every seepage
+    condition in the model. A deformation calculation leaves it out, with a warning.
+    """
+    id: Ident
+    name: str
+    kind: Literal["seepage"] = "seepage"
+    on: SeepageTarget
+    face: Face | None = None
+    part: str | None = None
+    points: list[tuple[float, float]] | None = None
+    active: bool = True
+
+    @model_validator(mode="after")
+    def _usable(self) -> SeepageCondition:
+        _check_target(self, f"seepage condition {self.id!r}")
+        return self
+
+
+AnyCondition = DisplacementCondition | WaterPressureCondition | SeepageCondition
+"""Any one boundary condition, for a type annotation (`BoundaryCondition` is the same
+union, told apart by `kind` when a project is read)."""
+
+
+def standard_conditions() -> list[AnyCondition]:
+    """The supports a model starts with: the bottom fixed, every side on rollers.
+
+    What a new project has, what a project saved before the conditions existed opens
+    with, and what `core.session.standard_conditions` puts back. Displacements only: no
+    project gets a water pressure it did not ask for."""
+    out: list[AnyCondition] = [DisplacementCondition(
+        id="fixed_bottom", name="Fixed bottom", on="face", face="bottom")]
+    for face in ("left", "right", "front", "back"):
+        fixed = [False, False, False]
+        fixed[FACE_NORMALS[face]] = True
+        out.append(DisplacementCondition(
+            id=f"roller_{face}", name=f"Roller {face}", on="face", face=face,
+            fixed=(fixed[0], fixed[1], fixed[2])))
+    return out
+
+
+BoundaryCondition = Annotated[DisplacementCondition | WaterPressureCondition
+                              | SeepageCondition, Field(discriminator="kind")]
+"""One record of `Project.boundary_conditions`, told apart by its `kind`."""
+
+
+class Stage(Base):
+    """One construction stage: what changes about the model, and how it is solved.
+
+    The field names follow the stage panel the GUI already draws (js/data.js:559),
     because that is the UI this feeds and a second vocabulary would have to be
     translated twice.
 
-    **A phase stores a diff, not a state.** `activate` and `deactivate` say what this
-    phase changes about the model it inherits from `parent`; they do not describe the
+    **A stage stores a diff, not a state.** `activate` and `deactivate` say what this
+    stage changes about the model it inherits from `parent`; they do not describe the
     whole model. Two reasons, and both matter: the reference deck's `stage_preprocess`
     *is* that diff, so nothing has to be reconstructed on export; and storing absolute
-    state would mean rewriting every later phase whenever a part is added to the model.
-    Resolving diff to state is one function, in `core.model.phases`, which is the only place
+    state would mean rewriting every later stage whenever a part is added to the model.
+    Resolving diff to state is one function, in `core.model.stages`, which is the only place
     that walks the parent chain.
 
     `parent` makes a tree, and a tree can branch. Kratos cannot run one: its orchestrator
     runs a flat `execution_list`. Linearising the tree, and refusing one that cannot be
-    linearised, is the export's job (`core.model.phases`) rather than this class's -- a branch
+    linearised, is the export's job (`core.model.stages`) rather than this class's -- a branch
     is a legitimate thing to have half-built in the editor, and refusing it here would
     make it impossible to type.
 
-    Out of scope deliberately: a per-phase phreatic level ("Pore
-    pressure calculation type" in the phase panel). The reference deck never varies
-    it -- it changes which water *load* is active, not the water table -- so there is
-    no worked example to follow and inventing one would be guessing. See
-    plan/outdated/staged-construction-plan.md sec 7.
+    The water in a stage is its water pressure conditions: their ids are stageable
+    keys (`Project.stageable_keys`), so a stage switches one on or off as it does a
+    load -- a high level, then a low one.
     """
     id: Ident
     name: str
     parent: Ident | None = None
-    """The phase this one starts from. `None` only for the first, which starts from the
+    """The stage this one starts from. `None` only for the first, which starts from the
     model as built."""
 
-    calculation: Literal["K0 procedure", "Plastic", "Null step"] = "Plastic"
+    calculation: Literal["K0 procedure", "Plastic", "Null step",
+                         "Groundwater flow"] = "Plastic"
+    """"Groundwater flow" is a steady-state flow of the water alone (Kratos' `Pw` solver,
+    `Steady_State_Groundwater_Flow`). It needs water pressure elements, and the mesh is
+    one for all the stages, so a project mixes it with no other type: the export refuses
+    the mix (`core.model.stages.groundwater_flow`)."""
     loading: Literal["Staged construction"] = "Staged construction"
 
     activate: list[Ident] = Field(default_factory=list)
     deactivate: list[Ident] = Field(default_factory=list)
 
     # The three the reference deck actually varies between its stages (see
-    # plan sec 0.2). Their defaults are its initial stage's own values, so a phase that
+    # plan sec 0.2). Their defaults are its initial stage's own values, so a stage that
     # says nothing solves the way that one does.
     reset_displacements: bool = False
-    """Kratos' `reset_totals`: start this phase's displacements from zero. The reference
+    """Kratos' `reset_totals`: start this stage's displacements from zero. The reference
     turns it on when the wall is installed, so the wall's own deflection is measured
     from the ground it was built into rather than from the undisturbed state."""
 
@@ -1002,17 +1274,22 @@ class Phase(Base):
     """Kratos' `residual_relative_tolerance`."""
 
     time_interval: float = Field(default=0.0, ge=0)
-    """Days. Zero for the static phases this exporter writes; carried because the phase
-    panel has it and a consolidation phase would need it."""
+    """Days. Zero for the static stages this exporter writes; carried because the stage
+    panel has it and a consolidation stage would need it."""
 
     @model_validator(mode="after")
-    def _one_instruction_per_part(self) -> Phase:
+    def _one_instruction_per_part(self) -> Stage:
         both = sorted(set(self.activate) & set(self.deactivate))
         if both:
             raise ValueError(
-                f"phase {self.id!r} both activates and deactivates: {', '.join(both)}"
+                f"stage {self.id!r} both activates and deactivates: {', '.join(both)}"
             )
         return self
+
+
+Phase = Stage
+"""Deprecated: the name Styx used before it took Kratos' word. Kept so old model
+scripts and imports keep working."""
 
 
 class MeshSettings(Base):
@@ -1044,6 +1321,18 @@ class WaterUpdate(Base):
     water: WaterLevel | None
 
 
+class BoreholeCreate(Base):
+    """`POST /api/project/boreholes`: one new borehole (`session.add_borehole`, what
+    `kratos-cli borehole add` calls). A field left out comes from the last borehole,
+    `x` as 10 m past it (`drafts.borehole`)."""
+    id: Ident | None = None
+    name: str | None = None
+    x: float | None = None
+    y: float | None = None
+    head: float | None = None
+    water: float | None = None
+
+
 class LayersUpdate(Base):
     layers: list[SoilLayer]
     materials: list[Material] | None = None
@@ -1060,10 +1349,10 @@ class LayersUpdate(Base):
     # here rather than on an endpoint of its own for the same reason: the water level
     # is validated against the model it belongs to, not on its own.
     #
-    # It is not merely cosmetic. `core.kratos.parameters._pore_pressure` states the whole
-    # ground's water pressure from these two numbers, `_normal_load` sizes every
-    # hydrostatic load from them, and `core.kratos.materials` derives DENSITY_WATER from
-    # the specific weight -- so this row is the deck's water table.
+    # It is not merely cosmetic. Every hydrostatic water pressure condition and normal
+    # load with no level of its own is measured from `y` (`core.kratos.parameters.
+    # _water_pressure`, `_normal_load`), the specific weight scales all of them, and
+    # `core.kratos.materials` derives DENSITY_WATER from it.
     water: WaterLevel | None = None
     # Custom soil bodies, so reassigning one's material is validated against the
     # same library in the same request.
@@ -1097,20 +1386,37 @@ class StructuresUpdate(Base):
     normal_loads: list[NormalLoad] | None = None
 
 
-class PhasesUpdate(Base):
+class ConditionsUpdate(Base):
+    """The boundary conditions, replaced as one list, and gravity
+    (`core.session.replace_conditions`). A field left out stays as it is."""
+    boundary_conditions: list[BoundaryCondition] | None = None
+    gravity: bool | None = None
+
+
+class StagesUpdate(Base):
     """The construction sequence, replaced wholesale.
 
-    Its own endpoint rather than a ride-along on `StructuresUpdate`, because a phase is
+    Its own endpoint rather than a ride-along on `StructuresUpdate`, because a stage is
     the one collection that is *about* the others: `activate`/`deactivate` name part
     keys, so the list can only be validated against a model that has already settled.
     Sent together with a structure edit, which of the two the keys should be checked
     against would depend on the order they were applied in.
 
     Required rather than optional, and `[]` is meaningful: it is how a project goes
-    back to being unphased, which must export exactly the deck it exported before
+    back to being unstaged, which must export exactly the deck it exported before
     staged construction existed (plan sec 7.18).
     """
-    phases: list[Phase]
+    stages: list[Stage]
+
+    @model_validator(mode="before")
+    @classmethod
+    def _stages_were_phases(cls, value: object) -> object:
+        """A client written before the rename sends `phases`."""
+        return migration.rename_phases(value) if isinstance(value, dict) else value
+
+
+PhasesUpdate = StagesUpdate
+"""Deprecated alias of `StagesUpdate`."""
 
 
 class UnitsUpdate(Base):
@@ -1198,8 +1504,12 @@ class Deck(Base):
     """The orchestrator file, by name inside `directory`. It names everything else."""
     parts: list[str] = Field(default_factory=list)
     """The deck's parts that some stage computes on or loads, in the order the stages
-    first name them -- what this project's phases switch on and off (`stageable_keys`).
+    first name them -- what this project's stages switch on and off (`stageable_keys`).
     Read off the deck when it is opened, so that validating a project never has to."""
+
+
+FULL_BUILD_BLOCKS = ("excavation", "wall", "struts", "anchor_rows", "piles", "wells")
+"""The `Project` fields the full build (`layered_soil` false) reads, and needs given."""
 
 
 class Project(Base):
@@ -1214,7 +1524,7 @@ class Project(Base):
     the excavation is staged. `False` takes the full path, which additionally raises the
     seeded 3D wall ring, strut frame and pile group and cuts the excavation void.
 
-    Named `simple_example` until the phase editor made it user-visible, which was the
+    Named `simple_example` until the stage editor made it user-visible, which was the
     wrong name twice over: it is not about examples, and the models that set it are not
     simple -- a staged model script sets it. The old spelling is still accepted on the
     way in (see `_reconcile_layered_soil`); nothing writes it any more.
@@ -1238,12 +1548,17 @@ class Project(Base):
     boreholes: list[Borehole]
     materials: list[Material]
     layers: list[SoilLayer]
-    excavation: Excavation
-    wall: Wall
-    struts: Struts
-    anchor_rows: AnchorRows
-    piles: Piles
-    loads: list[PointLoad | LineLoad | SurfaceLoad] = Field(default_factory=list)
+    excavation: Excavation | None = None
+    """The pit, or `None` for a model that digs none. A layered model reads it only when
+    it has two or more levels (`pit_levels`); the full build needs it always."""
+    # The seeded demo's own structures, which only the full build raises
+    # (`solid_model._build_solids`). `None` in a model that has none of them; the full
+    # build needs all of them, and the validator says so.
+    wall: Wall | None = None
+    struts: Struts | None = None
+    anchor_rows: AnchorRows | None = None
+    piles: Piles | None = None
+    loads:list[PointLoad | LineLoad | SurfaceLoad] = Field(default_factory=list)
     beam_sections: list[BeamSection] = Field(default_factory=list)
     panel_sections: list[PanelSection] = Field(default_factory=list)
     # One collection per family, holding every kind of it: a 2D sheet pile, a 3D wall
@@ -1263,16 +1578,31 @@ class Project(Base):
     # like a free interface (an arbitrary polyline, no 3D translation), not a
     # translated x/y vector like the three kinds `loads[]` already holds.
     normal_loads: list[NormalLoad] = Field(default_factory=list)
-    wells: Wells
+    wells: Wells | None = None
     water: WaterLevel | None = None
     """The phreatic level, or `None` for a model without one -- which is what a new
     project starts as. A model is not born with a water table at somebody else's depth;
-    it has one when its author sets one. Without it the deck is dry: zero pore pressure,
-    still fixed (`core.kratos.parameters._pore_pressure`)."""
+    it has one when its author sets one. The level fixes no pressure by itself: it is
+    the level a new hydrostatic `WaterPressureCondition` or `NormalLoad` is given
+    (`core.model.drafts`), which the record then keeps as its own. Only a hydrostatic
+    normal load saved without a level still reads it at export."""
+    boundary_conditions: list[BoundaryCondition] = Field(
+        default_factory=standard_conditions)
+    """The conditions the user prescribes on the model's boundaries and soil. The deck
+    holds these and no others: a project with no water pressure condition fixes no water
+    pressure, and one with no displacement condition holds nothing still. Left out --
+    every project saved before the conditions existed, and a new one -- it is the
+    standard supports (`standard_conditions`), which are what the export always wrote;
+    given, even empty, it is exactly what it lists."""
+    gravity: bool = True
+    """Whether gravity acts: the self weight of every body, in every stage. On unless the
+    user switches it off -- for a model loaded by its boundary conditions alone, say. A
+    K0 procedure derives its stresses from the self weight, so with gravity off they are
+    zero (`core.kratos.condition_checks`)."""
     mesh: MeshSettings = Field(default_factory=MeshSettings)
     custom_parts: list[CustomPart] = Field(default_factory=list)
-    phases: list[Phase] = Field(default_factory=list)
-    """The construction sequence, in creation order. Empty means an unphased project --
+    stages: list[Stage] = Field(default_factory=list)
+    """The construction sequence, in creation order. Empty means an unstaged project --
     every project written before staged construction -- which exports exactly what it
     always did. That is the compatibility contract; see `test_export_golden.py`."""
     deck: Deck | None = None
@@ -1282,10 +1612,22 @@ class Project(Base):
     @classmethod
     def _migrate_legacy_units(cls, value: object) -> object:
         """A project saved before the unit system existed, converted once into the
-        current shape in SI, with the numbers the old exporter wrote (`core/model/migration.py`)."""
+        current shape in SI, with the numbers the old exporter wrote (`core/model/migration.py`).
+        A project saved before 2026-10 also calls its stages `phases`."""
+        if isinstance(value, dict):
+            value = migration.rename_phases(value)
         if migration.is_legacy(value):
             return migration.migrate(value)
         return migration.migrate_records(value) if isinstance(value, dict) else value
+
+    @model_serializer(mode="wrap")
+    def _leave_out_absent_blocks(self, handler: SerializerFunctionWrapHandler) -> dict:
+        """A model without a pit or the demo's structures says nothing about them: the
+        saved file, the API's project and `model_dump` leave the `None` blocks out,
+        so the GUI's Save and `kratos-cli save` write the same file."""
+        data = handler(self)
+        return {key: value for key, value in data.items()
+                if value is not None or key not in FULL_BUILD_BLOCKS}
 
     @model_validator(mode="before")
     @classmethod
@@ -1387,16 +1729,17 @@ class Project(Base):
 
     @model_validator(mode="after")
     def _water_for_hydrostatic_loads(self) -> Project:
-        """A hydrostatic normal load's pressure is derived from `water` at export time.
-        With no water level there is nothing to derive it from, and quietly writing zero
-        would be a wall with no water against it."""
+        """A hydrostatic normal load with no level of its own takes `water`'s at export
+        time. With no water level either there is nothing to derive it from, and quietly
+        writing zero would be a wall with no water against it."""
         if self.water is None:
             for load in self.normal_loads:
-                if load.fluid_pressure_type == "Hydrostatic":
+                if (load.fluid_pressure_type == "Hydrostatic"
+                        and load.reference_coordinate is None):
                     raise ValueError(
                         f"normal load {load.name!r} is hydrostatic, which needs a water "
-                        "level to measure its pressure from; set one, or make the load "
-                        "uniform"
+                        "level to measure its pressure from; give it one, set the "
+                        "project's, or make the load uniform"
                     )
         return self
 
@@ -1430,6 +1773,22 @@ class Project(Base):
         _reject_duplicates([s.id for s in self.interface_sections], "interface_section")
         _reject_duplicates([i.id for i in self.interfaces], "interface")
         _reject_duplicates([n.id for n in self.normal_loads], "normal_load")
+        _reject_duplicates([c.id for c in self.boundary_conditions], "boundary condition")
+        # A condition on a line is a gmsh physical group of its own, named by its id, in
+        # the namespace the parts' groups are in -- and a water pressure condition is a
+        # key a stage names, in the namespace of the parts and loads.
+        parts = set(self._staged_parts_and_loads()) | {"excavation", "water"}
+        collisions = sorted(c.id for c in self.boundary_conditions if c.id in parts)
+        if collisions:
+            raise ValueError("boundary condition id collides with an existing model part "
+                             "key: " + ", ".join(collisions))
+        soil = self.soil_part_keys()
+        for condition in self.boundary_conditions:
+            if condition.on == "part" and condition.part not in soil:
+                raise ValueError(
+                    f"boundary condition {condition.id!r} is on part {condition.part!r}, "
+                    "which is not a soil part of this project; the soil parts are "
+                    + (", ".join(soil) or "none"))
 
         # Interfaces are the one collection whose references are checked here rather
         # than left to blow up in the exporter: an interface names a section *and* a
@@ -1481,7 +1840,7 @@ class Project(Base):
                 "anchor id collides with an existing model part key: " + ", ".join(collisions)
             )
 
-        self._check_phases()
+        self._check_stages()
 
         known = {m.id for m in self.materials}
         for layer in self.layers:
@@ -1604,7 +1963,12 @@ class Project(Base):
         # 3D must not fail on a stale section plane the user cannot even see.
 
         if not self.layered_soil:
-            e = self.excavation
+            missing = [name for name in FULL_BUILD_BLOCKS if getattr(self, name) is None]
+            if missing:
+                raise ValueError(
+                    "a project with layered_soil false builds the seeded demo pit, and "
+                    f"needs {', '.join(missing)}")
+            e = self.pit()
             if not self.domain.contains_plan(e.x0, e.x1, e.z0, e.z1):
                 raise ValueError("excavation extends outside the domain in plan")
             # Every lift, not only the last: an intermediate level above the ground or
@@ -1718,6 +2082,17 @@ class Project(Base):
     def borehole_ids(self) -> list[str]:
         return [b.id for b in self.boreholes]
 
+    def pit_levels(self) -> list[float]:
+        """The levels the pit is dug to, shallowest first; none without an excavation."""
+        return list(self.excavation.levels) if self.excavation is not None else []
+
+    def pit(self) -> Excavation:
+        """The excavation, for code that runs only when there is one: the full build,
+        and a pit dug in lifts."""
+        if self.excavation is None:
+            raise ValueError("the project has no excavation")
+        return self.excavation
+
     def beam_section(self, section_id: str) -> BeamSection:
         return next(s for s in self.beam_sections if s.id == section_id)
 
@@ -1747,6 +2122,15 @@ class Project(Base):
         if self.dimension != 2:
             return []
         return [n for n in self.normal_loads if n.active]
+
+    @property
+    def drawn_conditions(self) -> list[AnyCondition]:
+        """The active boundary conditions on a drawn line or point, which the section
+        embeds: 2D only, like `active_normal_loads`."""
+        if self.dimension != 2:
+            return []
+        return [c for c in self.boundary_conditions
+                if c.active and c.on in ("line", "point")]
 
     # The kind-wise views of the two mixed collections. Every consumer wants one
     # dimension's worth at a time -- the 2D build, the 3D build, the exporter's element
@@ -1795,59 +2179,59 @@ class Project(Base):
         """Everything a 3D model builds structure from, in `beams[]` order."""
         return [b for b in self.beams if isinstance(b, (Panel, Member))]
 
-    def _check_phases(self) -> None:
-        """The construction sequence is a tree of real phases over real parts.
+    def _check_stages(self) -> None:
+        """The construction sequence is a tree of real stages over real parts.
 
         Structure only. Whether the tree can be flattened into the one sequence Kratos
         runs is the export's question, not this one -- a branch is a legitimate thing to
         have half-built in the editor, and refusing it here would make it impossible to
-        type (see `Phase`).
+        type (see `Stage`).
         """
-        if not self.phases:
+        if not self.stages:
             return
-        _reject_duplicates([phase.id for phase in self.phases], "phase")
+        _reject_duplicates([stage.id for stage in self.stages], "stage")
 
-        ids = {phase.id for phase in self.phases}
-        roots = [phase.id for phase in self.phases if phase.parent is None]
+        ids = {stage.id for stage in self.stages}
+        roots = [stage.id for stage in self.stages if stage.parent is None]
         if len(roots) != 1:
             raise ValueError(
-                "a construction sequence needs exactly one root phase -- the one that "
+                "a construction sequence needs exactly one root stage -- the one that "
                 f"starts from the model as built -- but {len(roots)} have no parent"
             )
-        for phase in self.phases:
-            if phase.parent is not None and phase.parent not in ids:
+        for stage in self.stages:
+            if stage.parent is not None and stage.parent not in ids:
                 raise ValueError(
-                    f"phase {phase.id!r} starts from nowhere: there is no phase "
-                    f"{phase.parent!r}"
+                    f"stage {stage.id!r} starts from nowhere: there is no stage "
+                    f"{stage.parent!r}"
                 )
-            if phase.parent == phase.id:
-                raise ValueError(f"phase {phase.id!r} starts from itself")
+            if stage.parent == stage.id:
+                raise ValueError(f"stage {stage.id!r} starts from itself")
 
-        # Every phase has to reach the root by following parents. Anything that does not
-        # is in a cycle, which would make `core.model.phases` walk for ever.
-        parents = {phase.id: phase.parent for phase in self.phases}
+        # Every stage has to reach the root by following parents. Anything that does not
+        # is in a cycle, which would make `core.model.stages` walk for ever.
+        parents = {stage.id: stage.parent for stage in self.stages}
         for start in ids:
             seen: set[str] = set()
             at: str | None = start
             while at is not None:
                 if at in seen:
                     raise ValueError(
-                        f"phases form a cycle through {at!r}; every phase must lead "
+                        f"stages form a cycle through {at!r}; every stage must lead "
                         "back to the one that starts from the model as built"
                     )
                 seen.add(at)
                 at = parents[at]
 
-        # A phase may only name parts the model actually has. Caught here rather than at
-        # export because a phase naming a deleted structure is a modelling mistake the
+        # A stage may only name parts the model actually has. Caught here rather than at
+        # export because a stage naming a deleted structure is a modelling mistake the
         # user can fix, and finding it only when Calculate is pressed would be late.
         parts = set(self.stageable_keys())
-        for phase in self.phases:
-            unknown = sorted({key for key in phase.activate + phase.deactivate
+        for stage in self.stages:
+            unknown = sorted({key for key in stage.activate + stage.deactivate
                               if key not in parts})
             if unknown:
                 raise ValueError(
-                    f"phase {phase.id!r} names no such part: {', '.join(unknown)}"
+                    f"stage {stage.id!r} names no such part: {', '.join(unknown)}"
                 )
 
     @computed_field  # type: ignore[prop-decorator]
@@ -1898,7 +2282,7 @@ class Project(Base):
         is what every project did before staged construction existed.
 
         With several, the soil inside the pit's plan outline is *kept* -- it has to be,
-        because each lift is deactivated in its own phase -- and split into the lifts it
+        because each lift is deactivated in its own stage -- and split into the lifts it
         is dug in. A body is the intersection of one layer with one lift, so a lift
         deeper than the layer it starts in cannot produce a single body spanning two
         materials. What lies below the final floor but still inside the outline is its
@@ -1919,14 +2303,15 @@ class Project(Base):
         layers = [(f"soil_{layer.id}", layer.bots[bh], layer.tops[bh])
                   for layer in self.layers]
         outside = [(key, bottom, top, False) for key, bottom, top in layers]
-        if len(self.excavation.levels) < 2:
+        levels = self.pit_levels()
+        if len(levels) < 2:
             return outside
 
         # The lifts, top down, then the ground below the final floor. `None` marks that
         # last one: it is the part of the outline that is never dug.
         bands: list[tuple[str | None, float, float]] = []
         ceiling = self.domain.y_top
-        for index, level in enumerate(self.excavation.levels, start=1):
+        for index, level in enumerate(levels, start=1):
             bands.append((f"lift{index}", level, ceiling))
             ceiling = level
         bands.append((None, self.domain.y_bottom, ceiling))
@@ -1939,6 +2324,14 @@ class Project(Base):
                     continue     # this layer does not reach this band
                 inside.append((f"{key}__{suffix or 'pit'}", low, high, True))
         return outside + inside
+
+    def soil_part_keys(self) -> list[str]:
+        """What a condition on a soil part may name: each layer, each body dug out of a
+        staged one, and each custom part that has a material -- the soil a user can
+        pick in the explorer, the viewport or the Mesh properties dialog."""
+        keys = [f"soil_{layer.id}" for layer in self.layers]
+        keys += [key for key, *_ in self.soil_bodies() if key not in keys]
+        return keys + [part.key for part in self.custom_parts if part.mat is not None]
 
     def expand_body_keys(self, keys: list[str]) -> list[str]:
         """Turn a list that may name soil *layers* into one naming soil *bodies*.
@@ -1984,16 +2377,29 @@ class Project(Base):
         ] + [load.id for load in self.loads] + [n.id for n in self.normal_loads] \
           + beams + (["water"] if self.water is not None else []) + ["wells"] + customs
 
+    @property
+    def phases(self) -> list[Stage]:
+        """Deprecated alias of `stages`, the name before Styx took Kratos' word."""
+        return self.stages
+
+    def model_copy(self, *, update: Mapping[str, Any] | None = None,
+                   deep: bool = False) -> Project:
+        """`model_copy` skips validation, so an old `update={"phases": ...}` would be
+        silently dropped; it is renamed here as on load."""
+        if update and "phases" in update:
+            update = migration.rename_phases(dict(update))
+        return super().model_copy(update=update, deep=deep)
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def stageable_parts(self) -> list[str]:
         """`stageable_keys`, published with the project.
 
-        The browser resolves the phase tree too (`frontend/js/phases.js`), and resolving it
+        The browser resolves the stage tree too (`frontend/js/stages.js`), and resolving it
         starts from "everything is active" -- so it needs the same namespace the server
         starts from. It cannot derive it: the staging namespace is `part_keys` plus
         every load id, and a `layered_soil` project draws no load pads, so a load that
-        a phase may legitimately name appears nowhere the viewport can see.
+        a stage may legitimately name appears nowhere the viewport can see.
 
         Named `stageable_parts` rather than `stageable_keys` because a computed field
         may not share a name with a method on the same model.
@@ -2001,22 +2407,36 @@ class Project(Base):
         return self.stageable_keys()
 
     def stageable_keys(self) -> list[str]:
-        """What a phase may switch on and off, which is wider than what is drawn.
+        """What a stage may switch on and off, which is wider than what is drawn.
 
         `part_keys` is the *render* namespace, in draw order, and the simple example
         deliberately draws no load pads -- so a project built that way has line loads
         that appear nowhere in it. They are still real parts of the deck: the reference
-        stages one, `Load`, which arrives with the wall and stays. A phase has to be
+        stages one, `Load`, which arrives with the wall and stays. A stage has to be
         able to name them, so the staging namespace is `part_keys` plus every load id.
 
         Everything drawn is stageable; not everything stageable is drawn. The two are
         kept as separate lists rather than by widening `part_keys`, which would change
         draw order: `part_keys` feeds tessellation, and a key appearing there makes the
         viewport look for geometry that a load pad in the simple example does not have.
+
+        The water pressure conditions are stageable too, last: a stage switches the
+        water on and off as it does a load -- the pit pumped dry, a level that drops.
+        The supports are not; they hold the model in every stage.
         """
         if self.deck is not None:
-            # A deck's phases are its stages, and they switch the deck's own parts.
+            # A deck's Styx stages are its Kratos stages, and they switch the deck's own parts.
             return list(self.deck.parts)
+        keys = self._staged_parts_and_loads()
+        seen = set(keys)
+        for condition in self.boundary_conditions:
+            if condition.kind == "water_pressure" and condition.id not in seen:
+                seen.add(condition.id)
+                keys.append(condition.id)
+        return keys
+
+    def _staged_parts_and_loads(self) -> list[str]:
+        """`stageable_keys` without the conditions: the parts, then every load id."""
         keys = list(self.part_keys())
         seen = set(keys)
         for load in [l.id for l in self.loads] + [n.id for n in self.normal_loads]:

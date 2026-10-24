@@ -1,9 +1,9 @@
 """The parsed-file cache and the event loop (finding F10).
 
 Opening a run asks for every stage's mesh (`stage_parts` reads them all to tell a part a
-phase removed from one the writer never emits) plus the deck, and switching phase asks
+stage removed from one the writer never emits) plus the deck, and switching stage asks
 for the next stage's results. The cache used to hold 8 entries and clear itself whole
-when full, so a 7-stage run -- one deck plus seven meshes -- overflowed on every phase
+when full, so a 7-stage run -- one deck plus seven meshes -- overflowed on every stage
 switch and everything was parsed again. And the routes were `async def` doing that
 parsing on the event loop, so one slow stage stalled every other request.
 """

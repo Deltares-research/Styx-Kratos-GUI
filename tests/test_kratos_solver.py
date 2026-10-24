@@ -202,7 +202,7 @@ def test_the_linear_solver_is_the_direct_skyline_one_on_one_thread(section):
 
 def test_the_default_tolerances_and_step_controls(section):
     """Relative 1e-4, absolute 1e-9, 6 to 15 iterations, halving and doubling -- the
-    defaults a phase can override (`Phase.max_iterations`, `tolerated_error`)."""
+    defaults a stage can override (`Stage.max_iterations`, `tolerated_error`)."""
     solver = stages(section)[0]["solver_settings"]
     assert (solver["residual_relative_tolerance"], solver["residual_absolute_tolerance"]) == (1e-4, 1e-9)
     assert (solver["min_iterations"], solver["max_iterations"]) == (6, 15)

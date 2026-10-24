@@ -65,20 +65,22 @@ def calculate_model(args: argparse.Namespace) -> Answer:
     export = exported(project)
     with environment(args):
         result = calculation.run(export)
-    return _ran(result | {"stats": export["stats"]}, warnings=export["warnings"])
+    return _ran(result | {"stats": export["stats"]}, warnings=export["warnings"],
+                notes=export.get("notes", []))
 
 
-def _ran(result: dict, warnings: list[str] | None = None) -> Answer:
+def _ran(result: dict, warnings: list[str] | None = None,
+         notes: list[str] | None = None) -> Answer:
     run = Path(result["directory"]).name
     data = result | {"run": run}
     if result["ok"]:
         lines = [f"run {run} finished in {result['seconds']:g} s: "
                  f"{len(result['outputs'])} files in {result['directory']}",
                  f"next: kratos-cli results show {run}"]
-        return Answer(data=data, lines=lines, warnings=warnings or [])
+        return Answer(data=data, lines=lines, warnings=warnings or [], notes=notes or [])
     stage = result.get("stage")
     where = f" in stage {stage['index']} of {stage['of']} ({stage['name']})" if stage else ""
     lines = [f"run {run} stopped{where}; Kratos' own output is in "
              f"{Path(result['directory']) / result['log']}"]
-    return Answer(data=data, lines=lines, warnings=warnings or [],
+    return Answer(data=data, lines=lines, warnings=warnings or [], notes=notes or [],
                   error=result.get("error") or "Kratos did not finish the run.")

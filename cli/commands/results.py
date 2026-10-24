@@ -16,7 +16,7 @@
 
 RUN is a run's id, its number in `results runs` -- nobody is going to retype
 `Pit_A_2026-10-12_09-14` -- or the path of a run directory anywhere, copied off another
-machine or not (plan D12). `--stage` takes a stage's number or words of its phase
+machine or not (plan D12). `--stage` takes a stage's number or words of its stage
 ("first excavation"); without it, the last stage that wrote results is read, which is
 where the GUI opens a run too. Each answer is the one the `/api/results` routes give for
 the same question, and `--csv` writes the file the GUI's `results csv` and
@@ -49,7 +49,7 @@ def register(commands, common: argparse.ArgumentParser) -> None:
                                             "or a run directory")
         if stage:
             parser.add_argument("--stage", metavar="STAGE",
-                                help="its number, or words of its phase (default: the "
+                                help="its number, or words of its stage (default: the "
                                      "last stage that wrote results)")
         if csv:
             parser.add_argument("--csv", nargs="?", const=STDOUT, metavar="FILE",
@@ -185,7 +185,7 @@ def show_field(args: argparse.Namespace) -> Answer:
                   f"  max {tables.shown(high[0])} at {where} {high[1]}",
                   "`--csv` writes every value."]
     return Answer(data=field, lines=lines,
-                  csv=tables.field_csv(field, label, stage["phase"]))
+                  csv=tables.field_csv(field, label, stage["stage"]))
 
 
 def show_at_node(args: argparse.Namespace) -> Answer:
@@ -214,9 +214,10 @@ def list_members(args: argparse.Namespace) -> Answer:
         return Answer(data=listed, lines=["This run wrote no member output: there is no "
                                           "wall in it, or no stage with one."])
     lines = ["This run wrote curves for:"]
+    width = max(len(member["name"]) for member in listed["members"]) + 2
     for member in listed["members"]:
         stages = "stages " + ", ".join(map(str, member["stages"]))
-        lines.append(f"  {member['name']:<12}{stages:<22}"
+        lines.append(f"  {member['name']:<{width}}{stages:<22}"
                      + ", ".join(entry["name"] for entry in member["quantities"]))
     lines.append("`kratos-cli results profile <run> wall M` reads one.")
     return Answer(data=listed, lines=lines)
@@ -244,7 +245,7 @@ def show_profile(args: argparse.Namespace) -> Answer:
         extremes = (f"min {tables.shown(low['value'])} at y {tables.shown(low['y'])}, "
                     f"max {tables.shown(high['value'])} at y {tables.shown(high['y'])}"
                     if low else "no values")
-        lines.append(f"  {entry['index']:>3}  {entry['phase']:<30}{extremes}")
+        lines.append(f"  {entry['index']:>3}  {entry['stage']:<30}{extremes}")
     lines.append("`--csv` writes every point.")
     return Answer(data=plot, lines=lines, csv=tables.profile_csv(plot))
 
@@ -362,11 +363,11 @@ def _stage(run: catalog.Run, wanted: str | None, given: str) -> dict:
     else:
         words = re.sub(r"[^a-z0-9]+", " ", wanted.lower()).strip()
         found = next((stage for stage in stages
-                      if words in stage["phase"].lower()
+                      if words in stage["stage"].lower()
                       or words in re.sub(r"[^a-z0-9]+", " ", stage["name"].lower())), None)
     if found is None:
         raise CommandError(f"In {_label(run)}, no stage matches {wanted!r}. Its stages: "
-                           + ", ".join(f"{stage['index']} {stage['phase']}"
+                           + ", ".join(f"{stage['index']} {stage['stage']}"
                                        for stage in stages) + ".")
     return found
 
@@ -385,14 +386,14 @@ def _stage_lines(stages: list[dict]) -> list[str]:
     lines = []
     for stage in stages:
         series = len(stage["json"])
-        lines.append(f"  {stage['index']:>3}  {stage['phase']:<30}"
+        lines.append(f"  {stage['index']:>3}  {stage['stage']:<30}"
                      + ("results" if stage["results"] else "no results")
                      + (f"  +{series} series" if series else ""))
     return lines
 
 
 def _named_stage(stage: dict) -> str:
-    return f"{stage['index']} ({stage['phase']})"
+    return f"{stage['index']} ({stage['stage']})"
 
 
 def _tidy(name: str) -> str:

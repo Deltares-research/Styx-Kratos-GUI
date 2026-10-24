@@ -1,0 +1,220 @@
+{
+  "name": "muskat_seepage",
+  "layered_soil": true,
+  "dimension": 2,
+  "unit_system": "SI",
+  "section_offset": 0.5,
+  "domain": {
+    "x0": 0.0,
+    "x1": 1.62,
+    "z0": 0.0,
+    "z1": 1.0,
+    "y_top": 4.0,
+    "y_bottom": 0.0
+  },
+  "boreholes": [
+    {
+      "id": "bh1",
+      "name": "BH1",
+      "x": 0.0,
+      "y": 0.0,
+      "head": 4.0,
+      "water": 0.0
+    }
+  ],
+  "materials": [
+    {
+      "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
+      "variables": {
+        "GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
+        "YOUNG_MODULUS": 10000.0,
+        "POISSON_RATIO": 0.4,
+        "DENSITY_SOLID": 2290.0,
+        "DENSITY_WATER": 1019.37,
+        "POROSITY": 0.3333,
+        "BULK_MODULUS_SOLID": 6.7e+19,
+        "BULK_MODULUS_FLUID": 1e+20,
+        "PERMEABILITY_XX": 6.9444e-13,
+        "PERMEABILITY_YY": 6.9444e-13,
+        "PERMEABILITY_XY": 0.0,
+        "DYNAMIC_VISCOSITY": 0.001,
+        "BIOT_COEFFICIENT": 1.0,
+        "RETENTION_LAW": "VanGenuchtenLaw",
+        "SATURATED_SATURATION": 0.403,
+        "RESIDUAL_SATURATION": 0.025,
+        "VAN_GENUCHTEN_AIR_ENTRY_PRESSURE": 2611.0,
+        "VAN_GENUCHTEN_GN": 1.377,
+        "VAN_GENUCHTEN_GL": 1.25,
+        "MINIMUM_RELATIVE_PERMEABILITY": 1e-05
+      },
+      "tables": {},
+      "id": "m_soil",
+      "name": "soil",
+      "color": "#c4a86a",
+      "r_inter": 0.7,
+      "interface_permeability": "Neutral"
+    }
+  ],
+  "layers": [
+    {
+      "id": "soil",
+      "name": "soil",
+      "mat": "m_soil",
+      "tops": {
+        "bh1": 4.0
+      },
+      "bots": {
+        "bh1": 0.0
+      }
+    }
+  ],
+  "loads": [],
+  "beam_sections": [],
+  "panel_sections": [],
+  "beams": [],
+  "anchor_sections": [],
+  "anchors": [],
+  "interface_sections": [],
+  "interfaces": [],
+  "normal_loads": [],
+  "water": null,
+  "boundary_conditions": [
+    {
+      "id": "left_head",
+      "name": "Left head",
+      "kind": "water_pressure",
+      "on": "face",
+      "face": "left",
+      "part": null,
+      "points": null,
+      "fluid_pressure_type": "Hydrostatic",
+      "is_fixed": true,
+      "value": 0.0,
+      "reference_coordinate": 3.0,
+      "x_coordinates": null,
+      "y_coordinates": null,
+      "z_coordinates": null,
+      "pressure_tension_cut_off": 100000.0,
+      "active": true
+    },
+    {
+      "id": "tail_water",
+      "name": "Tail water",
+      "kind": "water_pressure",
+      "on": "line",
+      "face": null,
+      "part": null,
+      "points": [
+        [
+          1.62,
+          0.0
+        ],
+        [
+          1.62,
+          0.48
+        ]
+      ],
+      "fluid_pressure_type": "Hydrostatic",
+      "is_fixed": true,
+      "value": 0.0,
+      "reference_coordinate": 0.48,
+      "x_coordinates": null,
+      "y_coordinates": null,
+      "z_coordinates": null,
+      "pressure_tension_cut_off": 100000.0,
+      "active": true
+    },
+    {
+      "id": "seepage_face",
+      "name": "Seepage face",
+      "kind": "seepage",
+      "on": "line",
+      "face": null,
+      "part": null,
+      "points": [
+        [
+          1.62,
+          0.48
+        ],
+        [
+          1.62,
+          4.0
+        ]
+      ],
+      "active": true
+    },
+    {
+      "id": "start",
+      "name": "Start values",
+      "kind": "water_pressure",
+      "on": "domain",
+      "face": null,
+      "part": null,
+      "points": null,
+      "fluid_pressure_type": "Hydrostatic",
+      "is_fixed": false,
+      "value": 0.0,
+      "reference_coordinate": 3.0,
+      "x_coordinates": null,
+      "y_coordinates": null,
+      "z_coordinates": null,
+      "pressure_tension_cut_off": 100000.0,
+      "active": true
+    }
+  ],
+  "gravity": true,
+  "mesh": {
+    "element_size": 0.4,
+    "order": 1,
+    "algorithm_3d": "delaunay",
+    "algorithm_2d": "frontal",
+    "optimization": "gmsh",
+    "smoothing": 10,
+    "curvature_points": 16,
+    "size_min_factor": 0.05,
+    "second_order_linear": true,
+    "body_sizes": {},
+    "refinements": [
+      {
+        "kind": "box",
+        "size": 0.04,
+        "thickness": 0.5,
+        "x_min": 1.5,
+        "x_max": 1.62,
+        "z_min": 0.0,
+        "z_max": 1.0,
+        "y_min": 0.0,
+        "y_max": 4.0
+      }
+    ]
+  },
+  "custom_parts": [],
+  "stages": [
+    {
+      "id": "flow",
+      "name": "Flow",
+      "parent": null,
+      "calculation": "Groundwater flow",
+      "loading": "Staged construction",
+      "activate": [],
+      "deactivate": [],
+      "reset_displacements": false,
+      "max_iterations": 100,
+      "tolerated_error": 0.0001,
+      "time_interval": 0.0
+    }
+  ],
+  "deck": null,
+  "soil_body_keys": [
+    "soil_soil"
+  ],
+  "soil_body_labels": {
+    "soil_soil": "soil"
+  },
+  "stageable_parts": [
+    "soil_soil",
+    "left_head",
+    "tail_water",
+    "start"
+  ]
+}
