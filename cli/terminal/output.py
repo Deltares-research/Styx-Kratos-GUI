@@ -35,6 +35,9 @@ class Answer:
     """What a person reads, one line each."""
     warnings: list[str] = field(default_factory=list)
     """Said on stderr whichever way the answer goes: the exporter's, above all."""
+    notes: list[str] = field(default_factory=list)
+    """Said after the answer, as `note:`: what the exporter worked out for the user --
+    the numbers an interface took from its soil -- which needs no action."""
     error: str | None = None
     """Set when the command ran but did not do what it was asked -- a run Kratos
     stopped. Exit 1."""
@@ -57,6 +60,9 @@ def answered(answer: Answer, as_json: bool, as_csv: str | None = None) -> int:
         print_lines(f"wrote {as_csv} ({rows} row{'s' if rows != 1 else ''})")
     else:
         print_lines(*answer.lines)
+    if not as_json:
+        for message in answer.notes:
+            note(message)
     for message in answer.warnings:
         warning(message)
     if answer.error:
@@ -74,6 +80,12 @@ def print_lines(*lines: str) -> None:
 def error(message: str) -> None:
     """`error: message`, on stderr."""
     _flagged("error:", "bold red", message)
+
+
+def note(message: str) -> None:
+    """`note: message`, on stdout: information, not a problem."""
+    on = style.enabled(sys.stdout)
+    print(style.paint("note:", "cyan", on), *style.answer([message], on))
 
 
 def warning(message: str) -> None:

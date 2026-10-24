@@ -81,6 +81,7 @@ async def calculate_project(settings: ExportRequest) -> dict:
     # rather than left to the client to split off the path, because the two platforms
     # spell a path separator differently and the client would have to know which.
     return result | {"stats": export["stats"], "warnings": export["warnings"],
+                     "notes": export.get("notes", []),
                      "run": Path(result["directory"]).name}
 
 
@@ -96,7 +97,7 @@ async def _calculate_deck(deck: Deck) -> dict:
         raise HTTPException(status_code=409, detail=str(busy)) from busy
     except calculation.CalculationError as failure:
         raise HTTPException(status_code=500, detail=str(failure)) from failure
-    return result | {"stats": stats, "warnings": [],
+    return result | {"stats": stats, "warnings": [], "notes": [],
                      "run": Path(result["directory"]).name}
 
 

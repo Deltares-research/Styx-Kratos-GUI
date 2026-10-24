@@ -118,7 +118,9 @@ App.Export = (function () {
                                                'application/zip')).then(function () {
           inFlight = false;
           target = null;
-          (result.warnings || []).forEach(function (warning) { log('note', warning); });
+          (result.notes || []).concat(result.warnings || []).forEach(function (line) {
+            log('note', line);
+          });
           log('ok', 'Exported ' + archive + ': ' + integer(result.stats.elements)
                     + ' elements, ' + integer(result.stats.nodes) + ' nodes.');
           if (done) done(result);

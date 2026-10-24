@@ -68,12 +68,13 @@ def export_deck(args: argparse.Namespace) -> Answer:
     files = calculation.write_deck(export, args.out)
     return Answer(
         data={"directory": str(args.out), "deck_name": export["deck_name"],
-              "files": files, "stats": export["stats"], "warnings": export["warnings"]},
+              "files": files, "stats": export["stats"], "warnings": export["warnings"],
+              "notes": export.get("notes", [])},
         lines=[f"wrote the Kratos deck {export['deck_name']} to {args.out}:",
                *(f"  {name}" for name in files),
                _stats_line(export["stats"]),
                f"next: kratos-cli run {args.out}"],
-        warnings=export["warnings"])
+        warnings=export["warnings"], notes=export.get("notes", []))
 
 
 def mesh_settings(project: Project) -> MeshRequest:

@@ -116,7 +116,9 @@ App.Calculate = (function () {
   }
 
   function report(result) {
-    (result.warnings || []).forEach(function (warning) { log('note', warning); });
+    (result.notes || []).concat(result.warnings || []).forEach(function (line) {
+      log('note', line);
+    });
 
     if (result.ok) {
       log('ok', 'Calculation finished in ' + result.seconds + ' s: '
