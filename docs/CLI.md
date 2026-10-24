@@ -179,7 +179,7 @@ kratos-cli anchor pit.json add strut --head 6 -1 --tail 5 -1
 kratos-cli anchor pit.json add tie --head 6.3 -3.5 --prestress 1e5
 kratos-cli interface pit.json add contact --structure sheet
 kratos-cli load pit.json add line surcharge --x 6 60 --components 0 -10000
-kratos-cli normal-load pit.json add water_1 --hydrostatic --points 6 -1 6 -2 0 -2
+kratos-cli normal-load pit.json add water_1 --hydrostatic --points 0 -2 6 -2 6 -1
 kratos-cli set pit.json mesh.body_sizes.sheet 0.5
 ```
 
@@ -195,7 +195,17 @@ kratos-cli set pit.json mesh.body_sizes.sheet 0.5
   and `--unset NAME` leaves one out for the export to derive. `--spacing` belongs to beam
   and anchor sections; `--tension-limit` and `--compression-limit` to anchors;
   `--material`, `--r-inter`, `--virtual-thickness` and `--permeability` to interfaces.
-  `none` clears an optional one.
+  `none` clears an optional one. An interface's stiffnesses are
+  `INTERFACE_NORMAL_STIFFNESS=...` and `INTERFACE_SHEAR_STIFFNESS=...`; left out, they are
+  derived from the soil each stretch runs against, and `section list` says which.
+- **Which side a normal load presses on.** The soil on the right of its line as drawn,
+  where its arrows point in the GUI: `water_1` above runs along the pit floor to the wall
+  and then up the wall face, with the retained ground on its right. On the outside of the
+  model a normal load presses in whichever way it is drawn. `export` warns about a load
+  that pulls on the soil, or whose arrows point out of it.
+- **A sheet pile may stand out of the soil**, as one above a dike's crest or in a dug
+  pit: the piece outside the soil stays in the model as long as some of the pile is in
+  it. Its interface stops where the soil does.
 - **Dimensions.** A sheet pile, an interface, a normal load and point and line loads are
   2D; a wall, a member and a surface load are 3D. Switching the dimension carries walls
   and loads across, as the GUI does (`dimension`).
@@ -466,6 +476,13 @@ kratos-cli results field D:/copied/Pit_A_2026-10-12_09-14 uy   # a run anywhere
 - **`profile MEMBER [QUANTITY]`**: `M`, `Q`, `N`, `ux`, `uy` along a wall, `tn`, `ts` along
   an interface, or a word of the label (`moment`, `shear`, `normal`). Without a quantity it
   is the bending moment. `--stage` narrows it to one stage.
+- **Which interface members a run has.** In a model with an excavation, `interface` is the
+  face of the wall on the retained side. In a model without one, such as a dike with a
+  sheet pile, each face has its own member: `interface_left` and `interface_right`, left
+  and right of the pile as drawn (`results profile 1 interface_left tn`). An interface
+  flatter than 45 degrees has `interface_below` and `interface_above` instead. With more
+  than one interface, the member names start with the interface's id: `contact_left`.
+  `results members` lists them.
 - **`--csv FILE`** writes the file the GUI saves (`results csv`, and the plot window's
   `results plot csv`), number for number, in UTF-8. `--csv` alone prints it, for a pipe;
   in Windows PowerShell 5.1, `>` would save that as UTF-16, so give the file instead. `--json` gives what the GUI's `/api/results`

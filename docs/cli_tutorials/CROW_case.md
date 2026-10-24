@@ -263,6 +263,13 @@ added interface wall_contact (Interface); wrote ...\crow.json
 - `--material none`: each stretch of the interface takes the soil it runs against, reduced
   by `R_inter` = 0.7.
 - `--side both` puts the interface on both faces of the wall.
+- The stiffnesses are derived from that soil: shear = G / virtual thickness, normal =
+  10 x shear. To use your own, type them on the section, in N/m³:
+  `section set contact INTERFACE_NORMAL_STIFFNESS=1e9 INTERFACE_SHEAR_STIFFNESS=1e8`.
+  `section list` shows which ones are typed and which are derived.
+- `R_inter` reduces the soil's cohesion and tan φ. Only a Coulomb law
+  (`--law GeoInterfaceCoulombLawPlaneStrain`) reads the strength; the default elastic law
+  reads the two stiffnesses only.
 
 #### Step 9. The loads
 
@@ -274,14 +281,16 @@ crow.json> load add line surcharge --name Load --x 5 80 --y 0 --components 0 -20
 added line load surcharge (Load); wrote ...\crow.json
 ```
 
-One hydrostatic water load per lift. Each runs from the water table down the exposed face of
-the wall, then back along that lift's floor to the symmetry plane. Its pressure is zero at
-its `--reference-coordinate`, the phreatic level:
+One hydrostatic water load per lift. Each runs along that lift's floor from the symmetry plane
+to the wall, then up the exposed face of the wall to the water table. A normal load presses
+on the soil on the right of its line as drawn, where its arrows point in the GUI, so the
+ground that stays is on the right of this walk. Its pressure is zero at its
+`--reference-coordinate`, the phreatic level:
 
 ```text
-crow.json> normal-load add water_1 --name WaterLoad_Stage1 --hydrostatic --reference-coordinate -1.5 --points 5 -1.5 5 -2 0 -2
-crow.json> normal-load add water_2 --name WaterLoad_Stage2 --hydrostatic --reference-coordinate -1.5 --points 5 -1.5 5 -5 0 -5
-crow.json> normal-load add water_3 --name WaterLoad_Stage3 --hydrostatic --reference-coordinate -1.5 --points 5 -1.5 5 -8 0 -8
+crow.json> normal-load add water_1 --name WaterLoad_Stage1 --hydrostatic --reference-coordinate -1.5 --points 0 -2 5 -2 5 -1.5
+crow.json> normal-load add water_2 --name WaterLoad_Stage2 --hydrostatic --reference-coordinate -1.5 --points 0 -5 5 -5 5 -1.5
+crow.json> normal-load add water_3 --name WaterLoad_Stage3 --hydrostatic --reference-coordinate -1.5 --points 0 -8 5 -8 5 -1.5
 ```
 
 ### Part 3: the mesh and the stages
@@ -364,11 +373,13 @@ wrote the Kratos deck CROW_excavation_wall to deck:
   kratos_gui_units.json
 4299 nodes, 2087 elements (2087 Triangle 6)
 next: kratos-cli run deck
-warning: Derived where a property set left them out (type a value to replace it): interface section 'Wall contact': GEO_DRAINAGE_TYPE; interface section 'Wall contact': INTERFACE_NORMAL_STIFFNESS; ...
+note: interface 'Wall contact' against 'Upper ground' (Interface_Soil_Top, ...): normal stiffness 3.75e+06 and shear stiffness 3.75e+05 N/m³, 10 G / t and G / t (E = 9e+05 Pa, nu = 0.2, t = 1 m); cohesion 700 Pa = 0.7 x 1000, ...
+note: interface 'Wall contact' against 'Deep sand' (Interface_Soil_Bottom, Interface_Soil_Bottom_pit): ...
 ```
 
-The warning is expected: the exporter derives the interface's stiffness and strength from
-the soil beside it, which is what this model intends. The files are named after the project;
+The notes say what the exporter took from the soil beside the interface, which is what this
+model asks for: one line per soil, with the parts of the interface against it and the
+numbers. Nothing needs to be done about them. The files are named after the project;
 `--name mesh` would write `mesh.mdpa` instead.
 
 #### Step 13. Look into the deck (optional)
@@ -739,7 +750,7 @@ Way 1 writes into the working folder you chose; ways 2 and 3 into the project fo
 | `error: ...`, and nothing changed | The command was refused as a whole, and the project was not written. The message names the field. |
 | `no stage matches 'dig_3'` | `--stage` takes the stage's number or words of its name, not the phase id. |
 | `error: no project is open` | Start with `new FILE` or `open FILE`, or name the project on the line. |
-| `warning: Derived where a property set left them out` | Expected for this interface: see step 12. |
+| `note: interface 'Wall contact' against ...` | What the interface took from the soil: see step 12. |
 | `'/c/Users/...' is not a run` | A Git Bash path given to a Windows program. Use `C:/Users/...`, or the run's number. |
 | `nothing to undo` | `undo` steps back only through commands of this shell session that changed the project. |
 | *The term '\kratos-cli.bat' is not recognized* | `$cli` is empty: type the command in the PowerShell from [Before ways 2 and 3](#before-ways-2-and-3). |
