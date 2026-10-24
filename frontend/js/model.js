@@ -626,6 +626,27 @@ App.Model = (function () {
      one bottom, so there are no boreholes to list. */
   var TREE_DROPPED = ['boreholes'];
 
+  /* The frozen rows of the same kind, by label: the mockup's water level of a
+     borehole, in its Attributes library and its Flow conditions node. */
+  var TREE_ROWS_DROPPED = ['BoreholeWaterLevel_1'];
+
+  /* Takes those rows out of `nodes` and their children, in place: the frozen nodes
+     are shared between the mode trees. A count that counted them is kept right. */
+  function dropFrozenRows(nodes) {
+    (nodes || []).forEach(function (node) {
+      if (!node || !node.children) return;
+      var kept = node.children.filter(function (child) {
+        return TREE_ROWS_DROPPED.indexOf(child && child.label) < 0;
+      });
+      if (kept.length !== node.children.length) {
+        if (node.count === node.children.length) node.count = kept.length;
+        node.children = kept;
+      }
+      dropFrozenRows(kept);
+    });
+    return nodes;
+  }
+
   /* The union of every mode's top-level nodes. Deduped by identity first, then by
      label: the Soil and Structures trees carry *different* "Attributes library"
      objects (js/data.js:673,683), and once one tree serves both modes the richer
@@ -643,7 +664,7 @@ App.Model = (function () {
         }
       });
     });
-    return out;
+    return dropFrozenRows(out);
   }
 
   function orderTree(nodes) {

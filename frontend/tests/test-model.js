@@ -1021,6 +1021,13 @@
       T.eq(labels.filter(function (l) { return l === 'Attributes library'; }).length, 1,
            'the two Attributes library nodes were merged into one');
       T.eq(labels.indexOf('Boreholes'), -1, 'the frozen Boreholes node is left out');
+      T.eq(nodeLabelled(App.TREES.soil, 'BoreholeWaterLevel_1'), null,
+           'and so is the frozen water level of a borehole');
+      var library = nodeLabelled(App.TREES.soil, 'Attributes library');
+      var levels = (library.children || []).filter(function (n) {
+        return n.label === 'Water levels';
+      })[0];
+      if (levels) T.eq(levels.count, levels.children.length, 'its count follows');
     });
   });
 
