@@ -63,45 +63,6 @@
       }
     }
   ],
-  "excavation": {
-    "x0": 0.0,
-    "x1": 1.0,
-    "z0": 0.0,
-    "z1": 1.0,
-    "floor_y": 3.0,
-    "levels": [
-      3.0
-    ]
-  },
-  "wall": {
-    "thickness": 0.5,
-    "top_y": 4.0,
-    "toe_y": 3.0
-  },
-  "struts": {
-    "xs": [],
-    "y": 4.0,
-    "radius": 0.1,
-    "overhang": 0.8,
-    "waler_width": 0.5,
-    "waler_height": 0.6,
-    "waler_offset": 0.5
-  },
-  "anchor_rows": {
-    "xs": [],
-    "head_y": 4.0,
-    "length": 1.0,
-    "inclination_deg": 45.0,
-    "radius": 0.1,
-    "head_offset": 0.4
-  },
-  "piles": {
-    "xs": [],
-    "zs": [],
-    "radius": 0.1,
-    "length": 1.0,
-    "top_y": 4.0
-  },
   "loads": [],
   "beam_sections": [],
   "panel_sections": [],
@@ -111,12 +72,6 @@
   "interface_sections": [],
   "interfaces": [],
   "normal_loads": [],
-  "wells": {
-    "positions": [],
-    "radius": 0.1,
-    "top_y": 4.0,
-    "length": 1.0
-  },
   "water": null,
   "boundary_conditions": [
     {

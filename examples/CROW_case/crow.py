@@ -37,9 +37,9 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from core.model.schemas import (  # noqa: E402
-    Anchor, AnchorRows, AnchorSection, Beam, BeamSection, Borehole, BoxRefinement,
-    DisplacementCondition, Domain, Excavation, Interface, InterfaceSection, LineLoad, Material, MeshSettings, NormalLoad,
-    Piles, Project, SoilLayer, Stage, Struts, Wall, WaterPressureCondition, Wells)
+    Anchor, AnchorSection, Beam, BeamSection, Borehole, BoxRefinement, DisplacementCondition,
+    Domain, Excavation, Interface, InterfaceSection, LineLoad, Material, MeshSettings,
+    NormalLoad, Project, SoilLayer, Stage, WaterPressureCondition)
 
 
 # ── The site ──────────────────────────────────────────────────────────────────────────────
@@ -242,21 +242,6 @@ NORMAL_LOADS = [
 ]
 
 
-# ── The seeded demo pit ───────────────────────────────────────────────────────────────────
-# The demo's own wall ring, struts, anchors, piles and wells. A layered model builds
-# none of them; the schema requires them all the same.
-
-WALL = Wall(thickness=0.5, top_y=0.0, toe_y=-1.0)
-
-STRUTS = Struts(xs=[], y=0.0, radius=0.1)
-
-ANCHOR_ROWS = AnchorRows(xs=[], head_y=0.0, length=1.0, inclination_deg=45.0, radius=0.1)
-
-PILES = Piles(xs=[], zs=[], radius=0.1, length=1.0, top_y=0.0)
-
-WELLS = Wells(positions=[], radius=0.1, top_y=0.0, length=1.0)
-
-
 # ── The mesh ──────────────────────────────────────────────────────────────────────────────
 
 MESH = MeshSettings(
@@ -369,11 +354,6 @@ def project() -> Project:
         interfaces=INTERFACES,
         loads=LOADS,
         normal_loads=NORMAL_LOADS,
-        wall=WALL,
-        struts=STRUTS,
-        anchor_rows=ANCHOR_ROWS,
-        piles=PILES,
-        wells=WELLS,
         mesh=MESH,
         stages=STAGES,
     )

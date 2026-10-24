@@ -19,10 +19,9 @@ a model script does:
 from __future__ import annotations
 
 from core import scripting
-from core.model.schemas import (AnchorRows, Beam, BeamSection, Borehole, CustomPart, Domain,
-                                Excavation, Interface, InterfaceSection, Material,
-                                MeshSettings, NormalLoad, Stage, Piles, Project, SoilLayer,
-                                Struts, Wall, Wells, standard_conditions)
+from core.model.schemas import (Beam, BeamSection, Borehole, CustomPart, Domain, Interface,
+                                InterfaceSection, Material, MeshSettings, NormalLoad, Stage,
+                                Project, SoilLayer, standard_conditions)
 
 NAME = "Drawn ground"
 
@@ -103,15 +102,6 @@ def drawn_ground_project(staged: bool = True) -> Project:
                    [(WALL_X, DOMAIN_TOP_Y), (WALL_X, LAYER_TOP_Y),
                     (DOMAIN_RIGHT_X, LAYER_TOP_Y), (DOMAIN_RIGHT_X, DOMAIN_TOP_Y)]),
         ],
-        # Unused by the layered build path; emptied so none of the seeded 3D pit
-        # furniture can reach the deck.
-        excavation=Excavation(x0=0.0, x1=1.0, z0=Z0, z1=Z1, floor_y=LAYER_TOP_Y),
-        wall=Wall(thickness=0.5, top_y=DOMAIN_TOP_Y, toe_y=WALL_TOE_Y),
-        struts=Struts(xs=[], y=0.0, radius=0.1),
-        anchor_rows=AnchorRows(xs=[], head_y=0.0, length=1.0, inclination_deg=45.0,
-                               radius=0.1),
-        piles=Piles(xs=[], zs=[], radius=0.1, length=1.0, top_y=DOMAIN_TOP_Y),
-        wells=Wells(positions=[], radius=0.1, length=1.0, top_y=DOMAIN_TOP_Y),
         boundary_conditions=standard_conditions(),
         beam_sections=[pile],
         # Drawn from the toe up, so its left face is the -x one.

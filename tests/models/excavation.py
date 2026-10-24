@@ -19,11 +19,10 @@ It is also a script the GUI can open, through the same path a user's own model t
 from __future__ import annotations
 
 from core.model import stages
-from core.model.schemas import (Anchor, AnchorRows, AnchorSection, Beam, BeamSection, Borehole,
+from core.model.schemas import (Anchor, AnchorSection, Beam, BeamSection, Borehole,
                          BoxRefinement, Domain, Excavation, Interface, InterfaceSection,
-                         LineLoad, Material, MeshSettings, NormalLoad, Piles, Project,
-                         SoilLayer, Struts, Wall, WaterLevel, WaterPressureCondition,
-                         Wells, standard_conditions)
+                         LineLoad, Material, MeshSettings, NormalLoad, Project,
+                         SoilLayer, WaterLevel, WaterPressureCondition, standard_conditions)
 
 NAME = "Staged excavation"
 
@@ -128,14 +127,6 @@ def excavation_project(staged: bool = True) -> Project:
         # Against the left edge, the model's symmetry plane, dug in three lifts.
         excavation=Excavation(x0=DOMAIN_LEFT_X, x1=WALL_X, z0=Z0, z1=Z1,
                               levels=list(LIFTS)),
-        # Unused by the layered build path; emptied so none of the seeded 3D pit
-        # furniture can reach the deck.
-        wall=Wall(thickness=0.5, top_y=DOMAIN_TOP_Y, toe_y=WALL_TOE_Y),
-        struts=Struts(xs=[], y=STRUT_Y, radius=0.1),
-        anchor_rows=AnchorRows(xs=[], head_y=STRUT_Y, length=1.0,
-                               inclination_deg=45.0, radius=0.1),
-        piles=Piles(xs=[], zs=[], radius=0.1, length=1.0, top_y=DOMAIN_TOP_Y),
-        wells=Wells(positions=[], radius=0.1, length=1.0, top_y=DOMAIN_TOP_Y),
         water=WaterLevel(y=WATER_Y),
         # The standard supports, and the pore pressure, hydrostatic about the water
         # level on the whole soil.

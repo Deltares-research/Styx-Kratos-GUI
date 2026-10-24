@@ -28,10 +28,9 @@ It is also a script the GUI can open:
 
 from __future__ import annotations
 
-from core.model.schemas import (AnchorRows, Borehole, BoxRefinement, Domain, Excavation,
-                                Material, MeshSettings, Stage, Piles, Project,
-                                SeepageCondition, SoilLayer, Struts, Wall,
-                                WaterPressureCondition, Wells)
+from core.model.schemas import (Borehole, BoxRefinement, Domain, Material, MeshSettings,
+                                Stage, Project, SeepageCondition, SoilLayer,
+                                WaterPressureCondition)
 
 NAME = "Semi-Muskat, saturated"
 
@@ -133,15 +132,6 @@ def muskat(conditions: list | None = None, stages: list[Stage] | None = None,
         boundary_conditions=HEADS if conditions is None else conditions,
         stages=[FLOW] if stages is None else stages,
         mesh=MeshSettings(element_size=0.4, order=order),
-        # Required by the schema. A layered model with one excavation level cuts no pit
-        # and builds none of the 3D demo structures.
-        excavation=Excavation(x0=0.0, x1=1.0, z0=0.0, z1=1.0, levels=[HEIGHT - 1.0]),
-        wall=Wall(thickness=0.5, top_y=HEIGHT, toe_y=HEIGHT - 1.0),
-        struts=Struts(xs=[], y=HEIGHT, radius=0.1),
-        anchor_rows=AnchorRows(xs=[], head_y=HEIGHT, length=1.0, inclination_deg=45.0,
-                               radius=0.1),
-        piles=Piles(xs=[], zs=[], radius=0.1, length=1.0, top_y=HEIGHT),
-        wells=Wells(positions=[], radius=0.1, top_y=HEIGHT, length=1.0),
     )
     fields.update(changes)
     return Project(**fields)
