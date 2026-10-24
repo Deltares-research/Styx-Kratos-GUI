@@ -16,10 +16,11 @@ from pathlib import Path
 
 import pytest
 
+from core import scripting
 from core.analysis import calculation
 from core.geometry import solid_model
 from core.kratos import materials, writer
-from core.model.schemas import InterfaceSection, Material, Project
+from core.model.schemas import InterfaceSection, Material, Phase, Project
 from core.model.templates import seed_project
 from core.results import catalog, members
 from tests import mdpa
@@ -65,6 +66,177 @@ def test_a_pile_standing_out_of_the_ground_runs():
     above its crest. The piece above the ground has nodes no soil element holds; before
     the pile is installed no element holds them at all, and every stage still runs."""
     run(drawn_ground.standing_pile_project())
+
+
+CONTACTS = r"""
+import importlib, json
+import KratosMultiphysics as Kratos
+from KratosMultiphysics.project import Project
+
+with open("ProjectParameters.json", encoding="utf-8") as handle:
+    project = Project(Kratos.Parameters(handle.read()))
+entry = Kratos.Registry[project.GetSettings()["orchestrator"]["name"].GetString()]
+getattr(importlib.import_module(entry["ModuleName"]), entry["ClassName"])(project).Run()
+variable = Kratos.KratosGlobals.GetVariable
+part = project.GetModel()["PorousDomain"]
+names = ("INTERFACE_NORMAL_STIFFNESS", "INTERFACE_SHEAR_STIFFNESS", "GEO_COHESION",
+         "GEO_FRICTION_ANGLE")
+
+
+def at_points(element, name):
+    return [list(point) for point in element.CalculateOnIntegrationPoints(
+        variable(name), part.ProcessInfo)]
+
+
+with open("contacts.json", "w", encoding="utf-8") as handle:
+    json.dump([
+        {"nodes": [node.Id for node in element.GetNodes()],
+         "properties": {name: element.Properties[variable(name)] for name in names
+                        if element.Properties.Has(variable(name))},
+         "traction": at_points(element, "GEO_EFFECTIVE_TRACTION_VECTOR"),
+         "relative": at_points(element, "GEO_RELATIVE_DISPLACEMENT_VECTOR")}
+        for element in part.Elements
+        if element.Properties.Has(variable("INTERFACE_SHEAR_STIFFNESS"))], handle)
+"""
+"""Runs a deck to its end and writes, per contact element, its nodes, its properties and
+its traction (normal, shear) and relative displacement (opening, slip) at each
+integration point. What `results profile` reads is the traction extrapolated to the
+nodes; this is the value the law computed."""
+
+
+def contacts(project: Project, directory: Path) -> tuple[dict, list[dict]]:
+    """`project` exported and run in `directory`, and every contact element at the end."""
+    with solid_model.session():
+        export = writer.export_project(project)
+    calculation.write_deck(export, directory)
+    python, environment = calculation.interpreter()
+    done = subprocess.run([python, "-c", CONTACTS], cwd=directory, env=environment,
+                          capture_output=True, text=True, timeout=600)
+    written = directory / "contacts.json"
+    assert written.is_file(), done.stdout[-600:] + done.stderr[-600:]
+    return export, json.loads(written.read_text(encoding="utf-8"))
+
+
+def displacements(outcome: dict, stage: int) -> dict[int, list[float]]:
+    return catalog.stage_results(Path(outcome["directory"]).name,
+                                 stage).field("DISPLACEMENT").values
+
+
+# ── Master and slave, after Kratos' test_master_slave_constraints.py ───────
+
+def tie_pairs(deck: mdpa.Deck) -> list[tuple[int, int]]:
+    """(master, slave) per tied point: the two copies of one soil node, one per face."""
+    masters = {deck.nodes[n]: n for n in deck.parts["Wall_contact_Master"].nodes}
+    return [(masters[deck.nodes[n]], n) for n in deck.parts["Wall_contact_Slave"].nodes]
+
+
+def uneven_fills() -> dict:
+    """The drawn-ground model with the right fill made of the layer's soil: softer and
+    lighter than the left fill, so the two faces of the future wall settle by different
+    amounts, and only the tie can hold them together."""
+    data = drawn_ground.drawn_ground_project().model_dump()
+    right = next(part for part in data["custom_parts"] if part["key"] == "drawn_1")
+    right["mat"] = right["recipe"]["material"] = "m_ground"
+    return data
+
+
+def without_the_tie(export: dict) -> dict:
+    doc = json.loads(export["project_parameters"])
+    for stage in doc["stages"].values():
+        processes = stage["stage_settings"]["processes"]["constraints_process_list"]
+        processes[:] = [p for p in processes if p["process_name"]
+                        != "AssignMasterSlaveConstraintsToNeighboursUtility"]
+    return export | {"project_parameters": json.dumps(doc)}
+
+
+def run_export(export: dict) -> dict:
+    outcome = calculation.run(export)
+    assert outcome["ok"], (outcome["stage"], (outcome["error"] or "")[-600:])
+    return outcome
+
+
+@pytest.fixture(scope="module")
+def tied():
+    """The uneven fills split along the wall line and tied, run; its first stage is the
+    K0 stage, before the wall and its contact are installed."""
+    project = scripting.with_solids(Project.model_validate(uneven_fills()))
+    with solid_model.session():
+        export = writer.export_project(project)
+    return export, run_export(export)
+
+
+def test_before_installation_the_tie_holds_the_split_soil_as_one(tied):
+    """Before the wall is installed the soil along its line is split and nothing but
+    the tie joins the two faces. The ground then has to settle as if it had never been
+    split: every node as in the same model without an interface, and the two copies of
+    each split node by the same amount. The results file keeps six decimals, so equal
+    means equal to 1e-6 m."""
+    export, outcome = tied
+    data = uneven_fills()
+    data["interfaces"] = []
+    for phase in data["phases"]:
+        for key in ("activate", "deactivate"):
+            phase[key] = [k for k in phase[key] if k != "wall_contact"]
+    bonded_export, bonded_outcome = run(scripting.with_solids(Project.model_validate(data)))
+
+    deck, bonded_deck = mdpa.parse(export["mdpa"]), mdpa.parse(bonded_export["mdpa"])
+    split, whole = displacements(outcome, 1), displacements(bonded_outcome, 1)
+    at = {xyz: n for n, xyz in bonded_deck.nodes.items()}
+    compared = 0
+    for node, xyz in deck.nodes.items():
+        if node in split and xyz in at:
+            assert split[node][:2] == pytest.approx(whole[at[xyz]][:2], abs=1e-6), xyz
+            compared += 1
+    assert compared > len(deck.nodes) // 2
+    pairs = tie_pairs(deck)
+    assert len(pairs) == 8, "both copies of every node along the wall above its toe"
+    for master, slave in pairs:
+        assert split[master][:2] == pytest.approx(split[slave][:2], abs=1e-6)
+
+
+def test_without_the_tie_the_two_faces_settle_apart(tied):
+    """The check above can tell: the same deck with the tie left out lets the softer
+    right fill settle past the left one along the split, by about half a millimetre."""
+    export, _ = tied
+    outcome = run_export(without_the_tie(export))
+    u = displacements(outcome, 1)
+    apart = max(abs(u[master][1] - u[slave][1])
+                for master, slave in tie_pairs(mdpa.parse(export["mdpa"])))
+    assert apart > 1e-4, apart
+
+
+@pytest.mark.parametrize("stiffness, apart", [(1e2, True), (1e12, False)],
+                         ids=["weak", "stiff"])
+def test_once_the_wall_is_installed_its_contact_holds_the_faces_not_the_tie(stiffness,
+                                                                           apart):
+    """In the stage that installs the wall the tie is gone and the contact is what
+    joins each face to the wall. A surcharge on the left fill alone settles the left
+    face: through a weak contact the right face hardly follows, through a stiff one it
+    moves with the wall, as one. A tie left in place would hold the faces together
+    through the weak contact too."""
+    data = drawn_ground.drawn_ground_project(staged=False).model_dump()
+    data["normal_loads"] = [{"id": "surcharge", "name": "Surcharge", "pressure": 50_000.0,
+                             "points": [(drawn_ground.DOMAIN_LEFT_X, drawn_ground.DOMAIN_TOP_Y),
+                                        (drawn_ground.WALL_X, drawn_ground.DOMAIN_TOP_Y)]}]
+    data["interface_sections"][0]["variables"] = {"INTERFACE_NORMAL_STIFFNESS": stiffness,
+                                                  "INTERFACE_SHEAR_STIFFNESS": stiffness}
+    built = ["sheetpile", "wall_contact", "surcharge"]
+    data["phases"] = [
+        Phase(id="initial", name="Initial", calculation="K0 procedure",
+              deactivate=built).model_dump(),
+        Phase(id="load", name="Load", parent="initial", activate=built,
+              reset_displacements=True).model_dump(),
+    ]
+    export, outcome = run(scripting.with_solids(Project.model_validate(data)))
+    u = displacements(outcome, 2)
+    for master, slave in tie_pairs(mdpa.parse(export["mdpa"])):
+        left, right = u[master][1], u[slave][1]
+        assert left < 0.0, "the master is the left face's copy, under the surcharge"
+        if apart:
+            assert abs(left) > 1.5 * abs(right), (left, right)
+        else:
+            assert left == pytest.approx(right, abs=1e-5)
+
 
 # ── After Kratos' tests/test_interface.py ──────────────────────────────────
 
@@ -112,31 +284,79 @@ def test_a_weak_interface_lets_the_pile_move_through_the_soil():
     assert pile > 1e4 * ground, (pile, ground)
 
 
+# ── What an elastic contact carries ────────────────────────────────────────
+
+ELASTIC_PULL = 100_000.0
+"""N/m up on the pile head, carried by the default elastic contact."""
+
+
+@pytest.fixture(scope="module")
+def pulled(tmp_path_factory):
+    """The pile pulled up through an elastic contact with the stiffness derived from
+    the soil: the project, the deck and every contact element at the end."""
+    project = drawn_ground.pushed_pile_project(load=(0.0, ELASTIC_PULL))
+    export, elements = contacts(project, tmp_path_factory.mktemp("pulled"))
+    return project, mdpa.parse(export["mdpa"]), elements
+
+
+def along(deck: mdpa.Deck, element: dict) -> tuple[float, float, float]:
+    """The element's length and the y of its two ends, off its structure-side nodes."""
+    (xa, ya, _), (xb, yb, _) = (deck.nodes[n] for n in element["nodes"][:2])
+    return math.hypot(xb - xa, yb - ya), ya, yb
+
+
+def test_a_contact_starts_from_the_stress_in_the_ground_beside_it(pulled):
+    """The traction is the stress the contact started with plus its stiffness times its
+    opening and slip. Kratos starts a contact, when it is installed, from the stress of
+    the soil element beside it -- which the deck names to it -- so after the K0 stage
+    the normal traction starts at K0 times the vertical stress, here dry soil, and the
+    shear at nought. A contact that found no soil element beside it starts at nought,
+    and the pile then stands in ground that pushes on it with nothing."""
+    project, deck, elements = pulled
+    fill, ground = project.material("m_fill"), project.material("m_ground")
+    weight = {key: m.variables["DENSITY_SOLID"] * 9.81 for key, m in
+              (("fill", fill), ("ground", ground))}
+    top = drawn_ground.DOMAIN_TOP_Y
+    layer = drawn_ground.LAYER_TOP_Y
+
+    def vertical(y: float) -> float:
+        return (weight["fill"] * (top - max(y, layer))
+                + weight["ground"] * max(layer - y, 0.0))
+
+    for element in elements:
+        _, ya, yb = along(deck, element)
+        in_fill = (ya + yb) / 2 > layer
+        k0 = materials.jaky(fill if in_fill else ground)
+        normal, shear = (element["properties"][name] for name in
+                         ("INTERFACE_NORMAL_STIFFNESS", "INTERFACE_SHEAR_STIFFNESS"))
+        # Lobatto points: one end, the middle, the other end.
+        for y, (tn, ts, *_), (un, us, *_) in zip((ya, (ya + yb) / 2, yb),
+                                                element["traction"], element["relative"]):
+            assert tn - normal * un == pytest.approx(-k0 * vertical(y), rel=0.01, abs=50.0)
+            assert ts == pytest.approx(shear * us, rel=1e-6, abs=1e-6)
+
+
+def test_the_contact_carries_the_pull_on_the_pile_into_the_ground(pulled):
+    """The pile hangs in the contact and nothing else: its toe stands on a copy of the
+    soil node that only contact elements reach. The shear along both faces, integrated
+    over the pile, is the pull less the pile's own weight."""
+    project, deck, elements = pulled
+    carried = 0.0
+    for element in elements:
+        length, _, _ = along(deck, element)
+        shears = [abs(point[1]) for point in element["traction"]]
+        # Three-point Lobatto, end, middle, end: weights 1/3, 4/3, 1/3 on a half-length of 1.
+        carried += length / 2 * (shears[0] + 4 * shears[1] + shears[2]) / 3
+    section = project.beam_sections[0].variables
+    length = drawn_ground.DOMAIN_TOP_Y - drawn_ground.WALL_TOE_Y
+    weight = section["DENSITY"] * section["CROSS_AREA"] * 9.81 * length
+    assert carried == pytest.approx(ELASTIC_PULL - weight, rel=0.005)
+
+
 COULOMB_CONTACT = "GeoInterfaceCoulombLawPlaneStrain"
 
 
 # ── After Kratos' test_mohr_coulomb_with_tension_cutoff.py ─────────────────
-
-SLIPPED = r"""
-import importlib, json
-import KratosMultiphysics as Kratos
-from KratosMultiphysics.project import Project
-
-with open("ProjectParameters.json", encoding="utf-8") as handle:
-    project = Project(Kratos.Parameters(handle.read()))
-entry = Kratos.Registry[project.GetSettings()["orchestrator"]["name"].GetString()]
-getattr(importlib.import_module(entry["ModuleName"]), entry["ClassName"])(project).Run()
-variable = Kratos.KratosGlobals.GetVariable
-part = project.GetModel()["PorousDomain"]
-with open("slipped.json", "w", encoding="utf-8") as handle:
-    json.dump([
-        [element.Properties[variable("GEO_COHESION")],
-         element.Properties[variable("GEO_FRICTION_ANGLE")],
-         [list(point) for point in element.CalculateOnIntegrationPoints(
-             variable("GEO_EFFECTIVE_TRACTION_VECTOR"), part.ProcessInfo)]]
-        for element in part.Elements
-        if element.Properties.Has(variable("INTERFACE_SHEAR_STIFFNESS"))], handle)
-"""
 
 PULL = 150_000.0
 """N/m up on the pile head: enough for the contact to slip along the fill and the top
@@ -153,17 +373,9 @@ def slipped(variables: dict, tmp_path: Path) -> list[tuple[float, float, float, 
     project = drawn_ground.pushed_pile_project(variables=SOFT | variables,
                                                law=COULOMB_CONTACT, load=(0.0, PULL),
                                                max_iterations=50)
-    with solid_model.session():
-        export = writer.export_project(project)
-    calculation.write_deck(export, tmp_path)
-    python, environment = calculation.interpreter()
-    done = subprocess.run([python, "-c", SLIPPED], cwd=tmp_path, env=environment,
-                          capture_output=True, text=True, timeout=600)
-    written = tmp_path / "slipped.json"
-    assert written.is_file(), done.stdout[-600:] + done.stderr[-600:]
-    return [(c, phi, tn, ts)
-            for c, phi, points in json.loads(written.read_text(encoding="utf-8"))
-            for tn, ts, *_ in points]
+    _, elements = contacts(project, tmp_path)
+    return [(e["properties"]["GEO_COHESION"], e["properties"]["GEO_FRICTION_ANGLE"], tn, ts)
+            for e in elements for tn, ts, *_ in e["traction"]]
 
 
 def strength(c: float, phi: float, tn: float) -> float:
