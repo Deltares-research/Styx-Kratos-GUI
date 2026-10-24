@@ -84,13 +84,10 @@ def blank_project() -> Project:
     x-y section, and the client comes up in it rather than drawing the solid model
     first and replacing it once the project arrives.
 
-    The schema still requires an excavation/wall/strut/anchor/pile/load/well block
-    each (there is no "absent" state for them), but `layered_soil` mode -- the mode
-    a blank project opens in -- never reads any of those fields when building geometry
-    (see `_build_layered_soil`); they carry harmless placeholder values so the model
-    validates. `boreholes` needs exactly the one entry `_build_layered_soil` indexes
-    for its reference column, even though `layers` being empty means it never reads a
-    depth off it.
+    No excavation and none of the seeded demo's structures: a model has them when its
+    author adds them. `boreholes` needs exactly the one entry `_build_layered_soil`
+    indexes for its reference column, even though `layers` being empty means it never
+    reads a depth off it.
     """
     return Project(
         name="Untitled project",
@@ -102,20 +99,19 @@ def blank_project() -> Project:
         boreholes=[Borehole(id="bh1", name="BH-1", x=0.0, y=0.0, head=0.0, water=-1.5)],
         materials=[],
         layers=[],
-        excavation=Excavation(x0=0.0, x1=1.0, z0=0.0, z1=1.0, floor_y=-1.0),
-        wall=Wall(thickness=0.5, top_y=0.0, toe_y=-1.0),
-        struts=Struts(xs=[], y=0.0, radius=0.1),
-        anchor_rows=AnchorRows(xs=[], head_y=0.0, length=1.0, inclination_deg=45.0, radius=0.1),
-        piles=Piles(xs=[], zs=[], radius=0.1, length=1.0, top_y=0.0),
-        loads=[],
-        wells=Wells(positions=[], radius=0.1, top_y=0.0, length=1.0),
         # No water level: a new model has none until its author sets one.
         mesh=MeshSettings(),
     )
 
 
 def seed_project(simple: bool = True) -> Project:
-    """A fresh, independently-mutable copy of the demo model."""
+    """A fresh, independently-mutable copy of the demo model.
+
+    `simple` is the layered model, which raises none of the demo's wall ring, struts,
+    anchor rows, piles and wells, so it has none of them; the full build has them all.
+    Both keep the pit: a layered model digs it once it has two or more levels.
+    """
+    demo = {} if simple else _demo_structures()
     return Project(
         name="Deep excavation — Rotterdam Zuid",
         layered_soil=simple,
@@ -126,16 +122,6 @@ def seed_project(simple: bool = True) -> Project:
         materials=_materials(3),
         layers=[l.model_copy(deep=True) for l in _LAYERS],
         excavation=Excavation(x0=12.0, x1=38.0, z0=10.0, z1=30.0, floor_y=-7.0),
-        wall=Wall(thickness=0.8, top_y=0.6, toe_y=-14.0),
-        # js/viewport.js:120 — length PY1-PY0+1.6, i.e. 0.8 m past each pit face.
-        struts=Struts(xs=[14.0, 20.0, 26.0, 32.0], y=-3.0, radius=0.28, overhang=0.8,
-                      waler_width=0.5, waler_height=0.6),
-        # js/viewport.js:141-155 — two rows, outward and downward at 35 degrees.
-        anchor_rows=AnchorRows(xs=[15.0, 21.0, 27.0, 33.0], head_y=-4.5, length=11.0,
-                        inclination_deg=35.0, radius=0.11),
-        # js/viewport.js:166-171 — 4x3 grid hanging from the pit floor.
-        piles=Piles(xs=[16.0, 22.0, 28.0, 34.0], zs=[14.0, 20.0, 26.0],
-                    radius=0.3, length=9.0, top_y=-7.0),
         # js/viewport.js:180 — 9 x 12 m pad centred at (5.5, 20); magnitude js/data.js:426,
         # 20 kN/m2 there, in Pa here: the project is SI.
         loads=[SurfaceLoad(
@@ -143,12 +129,30 @@ def seed_project(simple: bool = True) -> Project:
             x0=1.0, x1=10.0, z0=14.0, z1=26.0, thickness=0.25,
             components=(0.0, -20_000.0, 0.0),
         )],
-        # js/viewport.js:215-227 — 15 m pipes hanging from the surface.
-        wells=Wells(positions=[(18.0, 15.0), (32.0, 25.0)], radius=0.35, top_y=0.0, length=15.0),
         water=WaterLevel(y=-1.5),
         # The demo's ground is under water: hydrostatic about the level, fixed.
         boundary_conditions=[*standard_conditions(), WaterPressureCondition(
             id="pore_pressure", name="Pore pressure", on="domain",
             reference_coordinate=-1.5)],
         mesh=MeshSettings(element_size=2.5, order=2),
+        **demo,
     )
+
+
+def _demo_structures() -> dict:
+    """The full build's own structures, which only `seed_project(simple=False)` has."""
+    return {
+        "wall": Wall(thickness=0.8, top_y=0.6, toe_y=-14.0),
+        # js/viewport.js:120 — length PY1-PY0+1.6, i.e. 0.8 m past each pit face.
+        "struts": Struts(xs=[14.0, 20.0, 26.0, 32.0], y=-3.0, radius=0.28, overhang=0.8,
+                         waler_width=0.5, waler_height=0.6),
+        # js/viewport.js:141-155 — two rows, outward and downward at 35 degrees.
+        "anchor_rows": AnchorRows(xs=[15.0, 21.0, 27.0, 33.0], head_y=-4.5, length=11.0,
+                                  inclination_deg=35.0, radius=0.11),
+        # js/viewport.js:166-171 — 4x3 grid hanging from the pit floor.
+        "piles": Piles(xs=[16.0, 22.0, 28.0, 34.0], zs=[14.0, 20.0, 26.0],
+                       radius=0.3, length=9.0, top_y=-7.0),
+        # js/viewport.js:215-227 — 15 m pipes hanging from the surface.
+        "wells": Wells(positions=[(18.0, 15.0), (32.0, 25.0)], radius=0.35, top_y=0.0,
+                       length=15.0),
+    }

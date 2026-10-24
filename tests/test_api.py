@@ -203,7 +203,8 @@ def test_geometry_follows_the_project(client):
 def test_a_geometry_failure_is_reported_not_swallowed(client):
     """An OCC boolean that produces nothing must surface as an error the command log can
     show, never as an empty model that looks like a rendering bug."""
-    impossible = seed_project().model_dump()
+    # The full build: the layered seed raises no wall.
+    impossible = seed_project(simple=False).model_dump()
     impossible["wall"]["thickness"] = 1e-9
 
     client.put("/api/project", json=impossible)

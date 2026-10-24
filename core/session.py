@@ -885,9 +885,22 @@ def set_excavation(project: Project, *, x: tuple[float, float] | None = None,
                    levels: list[float] | None = None) -> tuple[Project, list[str]]:
     """The pit: its plan outline (`x`, `z` as from, to) and the levels it is dug to,
     shallowest first -- one lift per level, each its own body, deactivated in its own
-    stage. The floor is the last level."""
+    stage. The floor is the last level.
+
+    A project without a pit gets one when `x`, `z` and `levels` are all given. A 2D
+    model is one cut through z, so its pit spans the domain's z range unless `z` says
+    otherwise."""
     payload = project.model_dump()
     pit = payload["excavation"]
+    if pit is None:
+        if z is None and project.dimension == 2:
+            z = (project.domain.z0, project.domain.z1)
+        missing = [name for name, value in (("x", x), ("z", z), ("levels", levels))
+                   if value is None]
+        if missing:
+            raise EditRefused(f"the project has no excavation yet; give "
+                              f"{', '.join(missing)} to make one")
+        pit = payload["excavation"] = {}
     if x is not None:
         pit["x0"], pit["x1"] = x
     if z is not None:

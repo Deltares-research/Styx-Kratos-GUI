@@ -153,7 +153,9 @@ kratos-cli parts pit.json                                 # soil_top__lift1, ...
   `GEO_FRICTION_ANGLE`, into `initial_materials.json`, but that warning does not list it.
 - **The excavation** is dug in its `--levels`, shallowest first. Each lift is a body of
   its own, deactivated in its own stage. In a layered model, a pit with one level is not
-  dug at all, and the command says so.
+  dug at all, and the command says so. A new project has no pit. The first `excavation`
+  command makes one, and it needs `--x` and `--levels`. In 3D it also needs `--z`. In 2D
+  the pit spans the model's z range.
 - **Volumes**: in 2D, `volume add polygon --points x y x y ...` is an outline in the
   section plane, swept across the whole model. In 3D, `polygon` takes `x y z` points and
   `--extrude dx dy dz`, and there are `box` (`--origin`, `--size`) and `cylinder`
