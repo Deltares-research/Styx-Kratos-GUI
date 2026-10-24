@@ -691,7 +691,7 @@ App.LivePatches = (function () {
   /* The Flow conditions rail and menu: the water pressure conditions. The frozen
      "Create water level" draws nothing -- the water level is the `water` command and
      its explorer row -- so the rail's water tools are the conditions' instead. */
-  /* The rail button of the boundary conditions, in Structures and Mesh mode. A new
+  /* The rail button of the boundary conditions, in Structures mode. A new
      object each call: a rail item is one button, and the dimension gate below sets each
      flyout's items on their own. */
   function conditionTool() {
@@ -711,10 +711,6 @@ App.LivePatches = (function () {
   }
 
   function installBoundaryConditionTools() {
-    var mesh = (App.RAILS || {}).mesh;
-    if (mesh && !mesh.some(function (tool) { return tool && tool.icon === 'prescribed'; })) {
-      mesh.push('-', conditionTool());
-    }
     var flow = (App.RAILS || {}).flow;
     if (flow && !flow.some(function (tool) { return tool && tool.action === 'boundaryConditions'; })) {
       flow.forEach(function (tool) {
@@ -752,15 +748,6 @@ App.LivePatches = (function () {
                                                action: 'createBoundaryCondition' });
       }
     });
-    var meshMenu = menus.filter(function (m) { return m.label === 'Mesh'; })[0];
-    if (meshMenu && !meshMenu.items.some(function (i) {
-      return i && i.action === 'createBoundaryCondition';
-    })) {
-      meshMenu.items.push('-',
-        { label: 'Create boundary condition…', icon: 'prescribed',
-          action: 'createBoundaryCondition' },
-        { label: 'Boundary conditions…', icon: 'prescribed', action: 'boundaryConditions' });
-    }
   }
 
   /* `boundary ...` and `gravity ...`, typed. What to send is App.BoundaryConditions'

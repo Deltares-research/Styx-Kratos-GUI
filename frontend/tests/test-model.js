@@ -745,12 +745,10 @@
     T.ok(rows.indexOf('Corners') >= 0, 'the corner editor stays either way');
   });
 
-  test('with no custom parts, the node still exists but is empty', function () {
+  test('with no custom parts, the tree has no Custom geometry row', function () {
     withProject(project(TWO, [], true), function () {
-      var node = customGeometryNode(App.TREES.soil);
-      T.ok(node, 'the node should exist even with nothing drawn yet');
-      T.eq(node.count, 0);
-      T.eq(node.children.length, 0);
+      T.ok(!customGeometryNode(App.TREES.soil),
+           'an empty "Custom geometry [0]" row reads as if the model had some');
     });
   });
 
@@ -985,15 +983,27 @@
   });
 
   test('the tree is ordered: what the model is made of, then what is built on it', function () {
-    withProject(project(TWO, [], true), function () {
+    var p = anchoredProject();
+    p.layered_soil = true;
+    p.custom_parts = [PART];
+    withProject(p, function () {
       T.eq(topLabels(App.TREES.soil),
-           ['Soil', 'Custom geometry', 'Imported mesh', 'Sheet piles', 'Anchors',
-            'Interfaces', 'Normal loads', 'Loads', 'Model conditions']);
+           ['Soil', 'Custom geometry', 'Sheet piles', 'Anchors', 'Model conditions']);
+    });
+  });
+
+  /* A group the model has nothing in has no row: an empty "Sheet piles [0]" row reads
+     as if the model had sheet piles. Model conditions stays, for gravity. */
+  test('a model with nothing but soil lists only Soil and Model conditions', function () {
+    withProject(project(TWO, [], true), function () {
+      T.eq(topLabels(App.TREES.soil), ['Soil', 'Model conditions']);
+      T.ok(!nodeLabelled(App.TREES.soil, 'Boundary conditions'),
+           'no "Boundary conditions [0]" row for a model without any');
     });
   });
 
   test('a full project keeps its frozen nodes, in the same one order', function () {
-    withProject(piledProject(), function () {
+    withProject(anchoredProject(), function () {
       var labels = topLabels(App.TREES.soil);
       ['Sheet piles', 'Anchors'].forEach(function (label) {
         T.ok(labels.indexOf(label) >= 0, label + ' is missing from the Soil-mode tree: '
@@ -1011,9 +1021,10 @@
      and `obj`, so a group row without them gets an empty slot -- which is why Loads,
      Sheet piles and Anchors had no box while Soil did. */
   test('every group row carries a visibility box, like Soil', function () {
-    withProject(piledProject(), function () {
-      ['Soil', 'Custom geometry', 'Sheet piles', 'Anchors', 'Interfaces',
-       'Loads'].forEach(function (label) {
+    var p = anchoredProject();
+    p.custom_parts = [PART];
+    withProject(p, function () {
+      ['Soil', 'Custom geometry', 'Sheet piles', 'Anchors'].forEach(function (label) {
         var node = nodeLabelled(App.TREES.soil, label);
         T.ok(node && node.eye === true, label + ' has no visibility checkbox');
         T.ok(node && node.obj, label + ' has no viewport key for the checkbox to toggle');

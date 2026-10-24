@@ -197,8 +197,8 @@ conditions** → **Boundary conditions…**. The Model explorer lists the condit
 **Model conditions** → **Boundary conditions**. Select one to change it in the Selection
 explorer.
 
-To add one condition, click **Create boundary condition** in the Structures or Mesh tool
-rail, or select **Create boundary condition…** in the **Structures** or **Mesh** menu. The
+To add one condition, click **Create boundary condition** in the Structures tool rail, or
+select **Create boundary condition…** in the **Structures** menu. The
 window asks for the condition and where it acts. For a line, type the points or click **Pick
 on model…** and click them in the viewport; right-click to end the line.
 

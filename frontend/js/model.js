@@ -664,14 +664,19 @@ App.Model = (function () {
      A layered_soil project has none of the frozen demo structure behind it, so
      its tree is the live nodes alone; a full project keeps its frozen nodes and
      gains the live ones. Either way a live node that is already in the tree stays
-     where it is rather than being added a second time. */
+     where it is rather than being added a second time.
+
+     A live group the model has nothing in is left out: an empty "Sheet piles [0]"
+     row reads as if the model had sheet piles. It comes back with its first member. */
   function syncTrees(layeredSoil, soil) {
     var top = layeredSoil ? (soil ? [soil] : []) : topLevelUnion();
-    [customGeometryNode, importedMeshNode, sheetPileNode, anchorNode, interfaceNode,
-     normalLoadNode, loadConditionsNode, waterLevelNode, modelConditionsNode]
-      .forEach(function (node) {
-        if (node && !containsNode(top, node)) top.push(node);
-      });
+    var groups = [customGeometryNode, importedMeshNode, sheetPileNode, anchorNode,
+                  interfaceNode, normalLoadNode, loadConditionsNode];
+    function empty(node) { return groups.indexOf(node) >= 0 && !(node.children || []).length; }
+    top = top.filter(function (node) { return !empty(node); });
+    groups.concat([waterLevelNode, modelConditionsNode]).forEach(function (node) {
+      if (node && !empty(node) && !containsNode(top, node)) top.push(node);
+    });
     var tree = orderTree(top);
     Object.keys(App.TREES || {}).forEach(function (mode) { App.TREES[mode] = tree; });
     return tree;
@@ -1778,9 +1783,10 @@ App.Model = (function () {
     boundaryNode.count = listed.length;
     boundaryNode.children = listed.map(conditionChild);
     var gravityOn = !(App.PROJECT && App.PROJECT.gravity === false);
-    conditionsNode.children = [boundaryNode, {
+    // No "Boundary conditions [0]" row for a model without any; gravity always acts or not.
+    conditionsNode.children = (listed.length ? [boundaryNode] : []).concat([{
       label: 'Gravity  ·  ' + (gravityOn ? 'on' : 'off'), icon: 'settings', leaf: true,
-      obj: 'gravity' }];
+      obj: 'gravity' }]);
     previousConditionKeys.forEach(function (key) { delete App.OBJECT_PROPS[key]; });
     conditions.forEach(function (record) {
       App.OBJECT_PROPS[record.id] = conditionProps(record);
