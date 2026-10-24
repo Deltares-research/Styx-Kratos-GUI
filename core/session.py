@@ -1025,6 +1025,7 @@ def remove_structure(project: Project, id: str) -> Project:
     if _collection(record) == "beams":
         hanging = [a.id for a in project.anchors if _hangs_from(a, record)]
         hanging += [i.id for i in project.interfaces if i.structure == id]
+        hanging += [load.id for load in project.loads if _stands_on(load, record, project)]
         if hanging:
             raise EditRefused(f"{id} carries {', '.join(hanging)}; remove or move them "
                               "first")
@@ -1043,6 +1044,18 @@ def _hangs_from(anchor, structure) -> bool:
     if points is None or len(points[0]) != len(anchor.head):
         return False
     return point_on_polyline(anchor.head, points)
+
+
+def _stands_on(load, structure, project: Project) -> bool:
+    """Whether `load` is a point load above the ground that only `structure` holds up:
+    off the model, on the pile (the test `Project` holds it to)."""
+    points = getattr(structure, "points", None)
+    if load.kind != "point" or points is None or len(points[0]) != 2:
+        return False
+    extent = project.extent()
+    inside = (extent.x0 <= load.x <= extent.x1
+              and extent.y_bottom <= load.y <= extent.y_top)
+    return not inside and point_on_polyline((load.x, load.y), points)
 
 
 def find_section(project: Project, id: str, kind: str | None = None) -> tuple[str, object]:

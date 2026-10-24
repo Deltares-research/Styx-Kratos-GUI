@@ -117,6 +117,46 @@ def test_a_sheet_pile_past_the_side_or_the_bottom_is_still_refused():
                                           (10.0, domain.y_bottom - 1.0)))
 
 
+def point_load_at(x: float, y: float) -> dict:
+    return {"id": "load_1", "name": "PointLoad_1", "kind": "point",
+            "x": x, "y": y, "components": [0.0, -30.0]}
+
+
+def test_a_point_load_on_the_head_of_a_pile_above_the_ground_is_accepted():
+    top = seed_project(simple=True).domain.y_top
+    payload = pile_along((10.0, top + 5.0), (10.0, top - 7.5))
+    payload["loads"] = [point_load_at(10.0, top + 5.0)]
+    Project.model_validate(payload)
+
+
+def test_a_point_load_in_the_air_off_any_pile_is_refused():
+    top = seed_project(simple=True).domain.y_top
+    payload = pile_along((10.0, top + 5.0), (10.0, top - 7.5))
+    payload["loads"] = [point_load_at(12.0, top + 5.0)]
+    with pytest.raises(Exception, match="has to be on a sheet pile"):
+        Project.model_validate(payload)
+
+
+def test_a_point_load_on_an_inactive_pile_above_the_ground_is_refused():
+    """An inactive pile is not meshed, so nothing would carry the load."""
+    top = seed_project(simple=True).domain.y_top
+    payload = pile_along((10.0, top + 5.0), (10.0, top - 7.5))
+    payload["beams"][0]["active"] = False
+    payload["loads"] = [point_load_at(10.0, top + 5.0)]
+    with pytest.raises(Exception, match="has to be on a sheet pile"):
+        Project.model_validate(payload)
+
+
+def test_a_pile_carrying_a_point_load_above_the_ground_cannot_be_removed():
+    from core import session
+
+    top = seed_project(simple=True).domain.y_top
+    payload = pile_along((10.0, top + 5.0), (10.0, top - 7.5))
+    payload["loads"] = [point_load_at(10.0, top + 5.0)]
+    with pytest.raises(session.EditRefused, match="carries load_1"):
+        session.remove_structure(Project.model_validate(payload), "beam_1")
+
+
 def test_an_anchor_in_a_custom_layer_above_ground_is_accepted():
     Project.model_validate(project_with(
         beam_sections=[{"id": "az26", "name": "AZ 26", "E": 2.1e8, "nu": 0.3,

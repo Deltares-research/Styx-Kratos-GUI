@@ -55,6 +55,10 @@ def projects() -> dict:
     pile = drafts.sheet_pile(section_kn)
     section_pile_kn = section_kn.model_copy(update={
         "beams": [pile], "beam_sections": [drafts.section_for(section_kn, pile)]})
+    # A pile standing 5 m out of the ground, which a point load may sit on.
+    tall = drafts.sheet_pile(section, [(12, 5), (12, -6)])
+    section_tall_pile = section.model_copy(update={
+        "beams": [tall], "beam_sections": [drafts.section_for(section, tall)]})
     solid = seed_project()
     wall = drafts.wall(solid)
     member = drafts.member(solid)
@@ -63,6 +67,7 @@ def projects() -> dict:
         "section_kn": section_kn,
         "dry": section.model_copy(update={"water": None, "boundary_conditions": []}),
         "section_pile_kn": section_pile_kn,
+        "section_tall_pile": section_tall_pile,
         "pile": excavation_project(staged=False),
         "solid": solid,
         "solid_wall": solid.model_copy(update={
@@ -222,6 +227,13 @@ def calls(models: dict) -> list[dict]:
          lambda p: drafts.point_load(p, (5, 0)))
     call("a point load in kN", "Loads.draftPoint", "section_kn", [[5, 0]],
          lambda p: drafts.point_load(p, (5, 0)))
+    call("a point load on the head of a pile above the ground", "Loads.draftPoint",
+         "section_tall_pile", [[12, 5]], lambda p: drafts.point_load(p, (12, 5)))
+    call("a point load picked beside a pile above the ground snaps onto it",
+         "Loads.draftPoint", "section_tall_pile", [[12.4, 4.8]],
+         lambda p: drafts.point_load(p, (12.4, 4.8)))
+    call("a point load in the air, off any pile, is refused", "Loads.draftPoint",
+         "section_tall_pile", [[20, 5]], lambda p: drafts.point_load(p, (20, 5)))
     call("a point load in the solid model is refused", "Loads.draftPoint", "solid",
          [[5, 0]], lambda p: drafts.point_load(p, (5, 0)))
     call("a line load picked right to left", "Loads.draftFromPoints", "section",

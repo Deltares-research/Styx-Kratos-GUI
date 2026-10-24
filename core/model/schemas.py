@@ -1820,11 +1820,20 @@ class Project(Base):
         # domain is only the layer block. See `Project.extent`.
         extent = self.extent()
         for load in self.loads:
+            # A point load may also sit on the part of a pile above the ground, which
+            # carries it down into the soil (`meshing.loaded_elements` puts it on the
+            # pile's node there). Only a live pile: an inactive one is not meshed.
             if load.kind == "point" and not (
                 extent.x0 <= load.x <= extent.x1
                 and extent.y_bottom <= load.y <= extent.y_top
+            ) and not any(
+                point_on_polyline((load.x, load.y), beam.points, ATTACHMENT_TOLERANCE)
+                for beam in self.sheet_piles if beam.active
             ):
-                raise ValueError(f"point load {load.id!r} lies outside the domain")
+                raise ValueError(
+                    f"point load {load.id!r} lies outside the domain; above the ground "
+                    "it has to be on a sheet pile"
+                )
             if load.kind == "line" and not (
                 extent.x0 <= load.x0 < load.x1 <= extent.x1
                 and extent.y_bottom <= load.y <= extent.y_top

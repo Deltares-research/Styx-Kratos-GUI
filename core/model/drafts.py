@@ -750,7 +750,13 @@ def point_load(project: Project, at=None, *, id: str | None = None,
         raise DraftError("A 2D point load needs one finite x-y coordinate.")
     span = project.extent()
     if at[0] < span.x0 or at[0] > span.x1 or at[1] < span.y_bottom or at[1] > span.y_top:
-        raise DraftError("The point-load coordinate must stay inside the model domain.")
+        # Outside the model it may still be on a pile standing out above the ground,
+        # snapped onto it the way an anchor head is.
+        snapped = nearest_on_pile(project, at)
+        if snapped is None or snapped[1] > SNAP_DISTANCE:
+            raise DraftError("The point-load coordinate must stay inside the model "
+                             "domain, or be on a sheet pile.")
+        at = tuple(_round(value) for value in snapped[0])
     id, default_name = _load_id(project, id, "PointLoad")
     return PointLoad(id=id, name=name or default_name, kind="point", x=at[0], y=at[1],
                      thickness=0.25,
