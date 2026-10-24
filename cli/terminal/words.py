@@ -17,6 +17,10 @@ from cli.terminal.output import Answer, CommandError
 from core.model.schemas import Project
 
 
+NAME_HELP = "the name shown in lists and in the GUI's model explorer"
+"""The help of every record's `--name`, so no command leaves it out."""
+
+
 def noun(commands, common, name: str, help: str):
     """The command `name`, which takes a project and then one of its actions."""
     parser = commands.add_parser(name, parents=[common], help=help)

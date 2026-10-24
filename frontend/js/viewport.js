@@ -265,8 +265,10 @@ App.Viewport = (function () {
      Walking the line in the order its points are stored, a positive pressure pushes to
      the right of the walking direction -- so a line drawn left to right along the top
      of the ground pushes down into it, which is the reading anyone expects. A negative
-     pressure flips the arrows. This is the symbol's convention; the sign Kratos itself
-     applies comes from the condition's own node order (core/kratos/writer.py). */
+     pressure flips the arrows. The deck presses the same way: the exporter writes each
+     segment against the drawn line, because Kratos presses to the left of a
+     condition's own node order (core/kratos/writer.py, `_normal_load_conditions`), and
+     warns where the arrows point out of the soil. */
   function normalLoadGlyphSpec(load, project) {
     var points = load.points || [];
     var span = modelSpan(project, frame && frame.size);

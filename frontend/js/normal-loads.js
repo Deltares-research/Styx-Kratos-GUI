@@ -260,8 +260,10 @@ App.NormalLoads = (function () {
           var x = input(point[0]), y = input(point[1]);
           controls.xs.push(x);
           controls.ys.push(y);
-          row('x' + n, x, n === 1 ? 'Start of the loaded line [m].'
-                                  : 'Point ' + n + ' of the loaded line [m].');
+          row('x' + n, x, n === 1
+            ? 'Start of the loaded line [m]. The load presses on the soil on the right '
+              + 'of the line as drawn, where its arrows point.'
+            : 'Point ' + n + ' of the loaded line [m].');
           row('y' + n, y, 'Elevation of point ' + n + ' [m].');
         });
 

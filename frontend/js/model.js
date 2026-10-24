@@ -1369,25 +1369,48 @@ App.Model = (function () {
     geometry.push(['Delete', '', '', false, { kind: 'button', text: 'Delete interface',
       run: function () { if (App.Interfaces) App.Interfaces.remove(record.id); } }]);
 
-    var properties = [
+    function check(s) { return App.Interfaces ? App.Interfaces.validateSection(s) : null; }
+    // The two stiffnesses first, typed in place: what a user comes here to set. Left
+    // out they read "derived" -- the soil's own shear modulus over the virtual thickness
+    // supplies them at export -- and the button puts them back to that.
+    var stiffnesses = ['INTERFACE_NORMAL_STIFFNESS', 'INTERFACE_SHEAR_STIFFNESS'];
+    var properties = stiffnesses.map(function (name) {
+      return App.PropertySets.typedRow('interface', contact, name, check);
+    });
+    var typed = stiffnesses.filter(function (name) {
+      return (contact.variables || {})[name] !== undefined;
+    });
+    if (typed.length) {
+      properties.push(['Stiffness', '', '', false, { kind: 'button',
+        text: 'Derive from the soil', run: function () {
+          typed.forEach(function (name) {
+            App.PropertySets.assign(contact, name, undefined, check);
+          });
+          // The same write a typed value makes: the whole section library with it.
+          if (App.commitSelectionEdit) App.commitSelectionEdit(record.id);
+        } }]);
+    }
+    properties = properties.concat([
       ['Soil', (App.matById && contact.material
                 && (App.matById(contact.material) || {}).name) || contact.material
                || ADJACENT_SOIL.text,
        '', false, contactMaterialEditor(contact)],
+      // Only a Coulomb law reads the strength R_inter reduces; the default elastic one
+      // reads the two stiffnesses alone (`kratos-cli section add --help` says the same).
       contact.r_inter === null || contact.r_inter === undefined
-        ? ['R_inter', 'each soil’s own', '', true]
-        : ['R_inter', String(contact.r_inter), '', false,
+        ? ['R_inter (Coulomb law only)', 'each soil’s own', '', true]
+        : ['R_inter (Coulomb law only)', String(contact.r_inter), '', false,
            contactNumberEditor(contact, 'r_inter', '', 2)],
       ['Virtual thickness', String(contact.virtual_thickness), 'm', false,
        contactNumberEditor(contact, 'virtual_thickness', 'm', 4)],
       ['Permeability', contact.permeability || 'Neutral', '', false,
        contactPermeabilityEditor(contact)]
-    ];
-    // Kratos' own variables. One the contact leaves out reads "derived" rather than
-    // zero: the soil's own E and strength supply it at export.
+    ]);
+    // The rest of Kratos' own variables. One the contact leaves out reads "derived"
+    // rather than zero: the soil's own strength supplies it at export.
     properties = properties.concat(App.PropertySets.rows('interface', contact,
-      App.PROJECT && App.PROJECT.dimension, function (s) {
-        return App.Interfaces ? App.Interfaces.validateSection(s) : null;
+      App.PROJECT && App.PROJECT.dimension, check).filter(function (row) {
+        return stiffnesses.indexOf(row[0]) < 0;
       }));
 
     return {

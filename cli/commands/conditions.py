@@ -23,7 +23,7 @@ import argparse
 
 from cli.terminal.files import add_project, add_writing, written
 from cli.terminal.output import Answer, CommandError
-from cli.terminal.words import action, coordinates, edited, existing, given, noun
+from cli.terminal.words import NAME_HELP, action, coordinates, edited, existing, given, noun
 from core import session
 from core.kratos import condition_checks
 from core.model import drafts
@@ -76,7 +76,7 @@ def register(commands, common: argparse.ArgumentParser) -> None:
 
 
 def _fields(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--name")
+    parser.add_argument("--name", help=NAME_HELP)
     target = parser.add_mutually_exclusive_group()
     target.add_argument("--domain", action="store_true",
                         help="the whole soil (water pressure only)")

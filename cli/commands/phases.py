@@ -29,7 +29,7 @@ import argparse
 
 from cli.terminal.files import add_project, add_writing, written
 from cli.terminal.output import Answer, CommandError
-from cli.terminal.words import existing, file_of, given
+from cli.terminal.words import NAME_HELP, existing, file_of, given
 from core import session
 from core.model import phases
 from core.model.schemas import Project
@@ -116,7 +116,7 @@ def _calculation(word: str) -> str:
 
 
 def _phase_fields(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--name")
+    parser.add_argument("--name", help=NAME_HELP)
     parser.add_argument("--calculation", type=_calculation,
                         help="k0 (the K0 procedure), plastic, null (a null step) or flow "
                              "(groundwater flow)")

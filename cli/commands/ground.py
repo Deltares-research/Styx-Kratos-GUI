@@ -13,7 +13,7 @@ import argparse
 
 from cli.terminal.files import add_project, add_writing, written
 from cli.terminal.output import Answer, CommandError
-from cli.terminal.words import action, assignments, edited, existing, file_of, given, noun
+from cli.terminal.words import NAME_HELP, action, assignments, edited, existing, file_of, given, noun
 from core import session
 from core.model import drafts
 from core.model.schemas import Project
@@ -70,7 +70,7 @@ def register(commands, common: argparse.ArgumentParser) -> None:
                        "the last one (default 5 m)")
     add.add_argument("id", help="its id, which `layer set` refers to it by")
     add.add_argument("--material", required=True)
-    add.add_argument("--name")
+    add.add_argument("--name", help=NAME_HELP)
     depth = add.add_mutually_exclusive_group()
     depth.add_argument("--bottom", type=float, help="its bottom, at every borehole")
     depth.add_argument("--thickness", type=float)
@@ -78,7 +78,7 @@ def register(commands, common: argparse.ArgumentParser) -> None:
                      help="change a layer; a moved level moves its neighbour's with it")
     existing(change, "layer")
     change.add_argument("--material")
-    change.add_argument("--name")
+    change.add_argument("--name", help=NAME_HELP)
     change.add_argument("--top", type=float)
     change.add_argument("--bottom", type=float)
     change.add_argument("--at", metavar="BOREHOLE",
@@ -111,7 +111,7 @@ def register(commands, common: argparse.ArgumentParser) -> None:
 
 
 def _borehole_fields(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--name")
+    parser.add_argument("--name", help=NAME_HELP)
     # Map coordinates, as the GUI's borehole dialog gives them: the map's y is
     # the model's z. Its height is not a coordinate -- that is --head and --water.
     parser.add_argument("--x", type=float, help="its position on the map: x, in metres")
@@ -123,7 +123,7 @@ def _borehole_fields(parser: argparse.ArgumentParser) -> None:
 
 
 def _material_fields(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--name")
+    parser.add_argument("--name", help=NAME_HELP)
     parser.add_argument("--color", help="a #rrggbb colour")
     parser.add_argument("--law", help="the Kratos constitutive law (default: linear "
                                       "elastic for the model's dimension)")
