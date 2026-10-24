@@ -77,6 +77,20 @@ def test_members_are_what_the_run_wrote_curves_for(cli, client, run):
     assert "wall" in cli("results", "members", run).out
 
 
+def test_a_long_member_name_keeps_its_own_column(cli, run, monkeypatch):
+    """A wall without a pit has a member per face, `interface_left`, longer than the
+    name column was: it ran into the stages."""
+    from core.results import catalog
+
+    quantities = [{"name": "tn"}, {"name": "ts"}]
+    monkeypatch.setattr(catalog, "stage_members", lambda _: {"members": [
+        {"name": "interface_right", "stages": [3, 4], "quantities": quantities},
+        {"name": "wall", "stages": [3, 4], "quantities": [{"name": "M"}]}]})
+    lines = cli("results", "members", run).out.splitlines()[1:3]
+
+    assert [line.index("stages") for line in lines] == [len("  interface_right  ")] * 2
+
+
 def test_a_profile_is_the_plot_route_s_curves(cli, client, run):
     ran = cli("--json", "results", "profile", run, "wall", "M")
 

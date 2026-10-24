@@ -214,9 +214,10 @@ def list_members(args: argparse.Namespace) -> Answer:
         return Answer(data=listed, lines=["This run wrote no member output: there is no "
                                           "wall in it, or no stage with one."])
     lines = ["This run wrote curves for:"]
+    width = max(len(member["name"]) for member in listed["members"]) + 2
     for member in listed["members"]:
         stages = "stages " + ", ".join(map(str, member["stages"]))
-        lines.append(f"  {member['name']:<12}{stages:<22}"
+        lines.append(f"  {member['name']:<{width}}{stages:<22}"
                      + ", ".join(entry["name"] for entry in member["quantities"]))
     lines.append("`kratos-cli results profile <run> wall M` reads one.")
     return Answer(data=listed, lines=lines)
