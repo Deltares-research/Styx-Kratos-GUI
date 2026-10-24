@@ -859,3 +859,46 @@ def test_the_staged_excavation_sequence_is_derived_from_the_model():
     project = session.staged_excavation_phases(excavation_project(staged=False))
 
     assert project.phases == excavation_project().phases
+
+
+# ── A project file opened on another computer ──────────────────────────────
+
+def test_a_project_file_from_another_computer_keeps_its_drawn_parts(tmp_path):
+    """The file names each drawn part's .brep by the path it had where it was drawn.
+    Opened anywhere else that path is not there, and the mesher left the part out
+    without a word: the deck had no levee. Its recipe is in the file, so it is built
+    again, and the deck is the one its author exported."""
+    from core.geometry import solid_model
+    from core.kratos import writer
+    from tests.models import drawn_ground
+
+    here = drawn_ground.project()
+    elsewhere = here.model_dump(mode="json")
+    for part in elsewhere["custom_parts"]:
+        part["source_file"] = "C:/Checkouts/Someone-else/.data/" + Path(part["source_file"]).name
+    path = tmp_path / "dike.json"
+    path.write_text(json.dumps(elsewhere), encoding="utf-8")
+
+    opened = session.load(path)
+    assert all(Path(part.source_file).is_file() for part in opened.custom_parts)
+    assert session.load(path).custom_parts == opened.custom_parts, \
+        "the second read reuses what the first one built"
+    with solid_model.session():
+        assert writer.export_project(opened)["mdpa"] == writer.export_project(here)["mdpa"]
+
+
+def test_a_part_that_cannot_be_built_again_is_said_to_be_missing(tmp_path):
+    from core.geometry import solid_model
+    from core.kratos import writer
+    from tests.models import drawn_ground
+
+    data = drawn_ground.project().model_dump(mode="json")
+    data.update(interfaces=[], phases=[])
+    data["custom_parts"][1].update(source_file="C:/nowhere/gone.brep", recipe=None,
+                                   source="import")
+    path = tmp_path / "dike.json"
+    path.write_text(json.dumps(data), encoding="utf-8")
+    project = session.load(path)
+    with solid_model.session():
+        export = writer.export_project(project)
+    assert any("Fill right (drawn_1) is not in the model" in w for w in export["warnings"])

@@ -96,7 +96,9 @@ def load(path: str | Path) -> Project:
     if not isinstance(value, dict):
         raise ProjectFileError(f"{path} is not a project file -- expected the JSON the "
                                "GUI's Save writes.")
-    return Project.model_validate(value)
+    # A drawn part's .brep is a path on the computer it was drawn on: built again from
+    # its recipe here, so the file is the same model wherever it is opened.
+    return scripting.with_solids(Project.model_validate(value), strict=False)
 
 
 def save(project: Project, path: str | Path) -> Path:

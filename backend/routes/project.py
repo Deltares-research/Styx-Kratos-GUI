@@ -8,6 +8,8 @@ that would leave the model inconsistent is refused field by field rather than st
 
 from __future__ import annotations
 
+import asyncio
+
 from fastapi import APIRouter, HTTPException
 from fastapi.exceptions import RequestValidationError
 
@@ -29,7 +31,12 @@ async def get_project() -> Project:
 
 @router.put("/api/project")
 async def put_project(project: Project) -> Project:
-    return store.put(project)
+    """Replace the model with the one the GUI opened or edited. A file opened on another
+    computer names .brep files that are not here; its drawn parts are built again from
+    their recipes (`scripting.with_solids`), off the event loop."""
+    from core import scripting
+
+    return store.put(await asyncio.to_thread(scripting.with_solids, project, False))
 
 
 @router.post("/api/project/reset")
