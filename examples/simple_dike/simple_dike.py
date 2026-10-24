@@ -54,7 +54,7 @@ if str(ROOT) not in sys.path:
 
 from core.model.schemas import (AnchorRows, Beam, BeamSection, Borehole,  # noqa: E402
                                 DisplacementCondition, Domain, Excavation, LineLoad,
-                                Material, MeshSettings, Phase, Piles, Project, SoilLayer,
+                                Material,                                 MeshSettings, Piles, Project, SoilLayer, Stage,
                                 Struts, Wall, Wells)
 
 # The soil block: (0, 0) to (20, 10).
@@ -135,15 +135,15 @@ def project() -> Project:
 
         mesh=MeshSettings(element_size=ELEMENT_SIZE, order=ELEMENT_ORDER),
 
-        phases=[
+        stages=[
             # The ground alone, its stresses set by K0.
-            Phase(id="initial", name="Initial stage", calculation="K0 procedure",
+            Stage(id="initial", name="Initial stage", calculation="K0 procedure",
                   deactivate=["sheetpile_1", "surcharge"]),
             # Displacements reset, so what follows is measured from the ground it went into.
-            Phase(id="sheet_pile", name="Sheet pile", parent="initial",
+            Stage(id="sheet_pile", name="Sheet pile", parent="initial",
                   activate=["sheetpile_1"], reset_displacements=True,
                   max_iterations=150, tolerated_error=1e-3),
-            Phase(id="loading", name="Load", parent="sheet_pile",
+            Stage(id="loading", name="Load", parent="sheet_pile",
                   activate=["surcharge"], max_iterations=150, tolerated_error=1e-3),
         ],
 

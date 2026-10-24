@@ -10,8 +10,8 @@
        results                 what is open
        results runs            every run on this machine, newest first
        results open <id|n>     make one current; a bare number indexes the last listing
-       results phase <n|+|->   choose a construction phase, or step through them
-       results fields          what this phase can show
+       results stage <n|+|->   choose a construction stage, or step through them
+       results fields          what this stage can show
        results field <name>    draw it
        results at <node id>    every field at one node
        results bands <n> | smooth | map <name> | deform <f|auto|off>
@@ -73,7 +73,7 @@ App.Results = (function () {
                    mesh: false, min: null, max: null };
 
   /* The field to draw when a stage is opened and nothing has been asked for, most
-     wanted first. Vertical phase displacement is what settles after an excavation
+     wanted first. Vertical stage displacement is what settles after an excavation
      step, so it is what gets looked at. By *name*, not by position: a stage that did
      not write DISPLACEMENT falls through to whatever it did write rather than to
      nothing. */
@@ -83,7 +83,7 @@ App.Results = (function () {
     map: DEFAULTS.map, bands: DEFAULTS.bands, deform: DEFAULTS.deform,
     reversed: DEFAULTS.reversed, mesh: DEFAULTS.mesh,
     /* null means "follow the field". A typed range is kept across a change of stage
-       on purpose: a range that re-fits itself every phase makes every phase look
+       on purpose: a range that re-fits itself every stage makes every stage look
        identical, which is the opposite of what stepping through them is for. */
     min: DEFAULTS.min, max: DEFAULTS.max
   };
@@ -141,7 +141,7 @@ App.Results = (function () {
     return (App.Api && App.Api.base) || '';
   }
 
-  /* `encodeURIComponent`, not a raw join: a stage name comes from a phase name the
+  /* `encodeURIComponent`, not a raw join: a stage name comes from a stage name the
      user typed, so an output file can legitimately carry a space or an ampersand. The
      server takes the decoded name and refuses anything with a separator in it. */
   function fileUrl(runId, name) {
@@ -177,7 +177,7 @@ App.Results = (function () {
      run's results belong to the document that produced them.
 
      It notifies, like every other change: the panel and the menu are drawn from this
-     module's state, and without it they would go on offering the phases of a run that
+     module's state, and without it they would go on offering the stages of a run that
      is no longer open. */
   function forget() {
     ticket += 1;
@@ -283,7 +283,7 @@ App.Results = (function () {
 
      `POST /api/calculate` names the run but does not describe it, so this reads it as
      well. The id alone is not enough and was the bug: a run recorded by name only is
-     "open" with no stages in it, which draws an empty phase list, reports every field
+     "open" with no stages in it, which draws an empty stage list, reports every field
      as absent, and can only be recovered by typing `results open <the id already on
      screen>`. Pressing Calculate has to leave something that can be looked at.
 
@@ -310,7 +310,7 @@ App.Results = (function () {
   /* Which request is the latest. Opening a run, choosing a stage and choosing a field
      each take a new ticket; a reply that comes back holding an older one is for
      something the user has already moved on from, and is dropped. Without it, two
-     quick `results phase +` left the slower reply on screen labelled as the newer. */
+     quick `results stage +` left the slower reply on screen labelled as the newer. */
   var ticket = 0;
 
   /* Subscribe to "something on screen changed". The Results panel is DOM and lives in
@@ -344,8 +344,8 @@ App.Results = (function () {
   var USAGE = [
     'results runs            every run on this machine, newest first',
     'results open <id|n>     open one; a bare number indexes the last listing',
-    'results phase <n|name>  choose a construction phase; + and - step through them',
-    'results fields          what this phase can show',
+    'results stage <n|name>  choose a construction stage; + and - step through them',
+    'results fields          what this stage can show',
     'results field <name>    draw it, e.g. `results field p`',
     'results at <node id>    every field at one node',
     'results deform <f|auto|off> / bands <n> / smooth / range auto|<min> <max>',
@@ -354,7 +354,7 @@ App.Results = (function () {
     'results reverse         flip the colour ramp end for end',
     'results mesh [on|off]   draw the element outlines over the shading',
     'results csv             the field on screen, as a file',
-    'results plot [member] [quantity]   M, Q, N, ux, tn, ts along the wall, per phase;',
+    'results plot [member] [quantity]   M, Q, N, ux, tn, ts along the wall, per stage;',
     '                        `results plot members` lists them, `plot csv`/`svg` saves',
     'results files / get <file> / zip     the run directory itself'
   ];
@@ -414,7 +414,7 @@ App.Results = (function () {
       view = { stage: null, mesh: null, catalogue: null, field: null,
                location: 'nodes', displacement: null };
       if (!quiet) report(run);
-      else log('ok', run.id + ' is open — ' + plural(run.stages.length, 'phase')
+      else log('ok', run.id + ' is open — ' + plural(run.stages.length, 'stage')
                      + '. Results mode shows it; `results fields` lists what it has.');
       changed();
       // Straight to the end of the construction sequence, which is what someone
@@ -430,16 +430,16 @@ App.Results = (function () {
               + plural(run.stages.length, 'stage') + ', ' + plural(run.files.length, 'file')
               + ', ' + size(run.bytes) + '.');
     run.stages.forEach(function (stage) {
-      log('note', '  ' + pad(stage.index, 4) + pad(stage.phase, 30)
+      log('note', '  ' + pad(stage.index, 4) + pad(stage.stage, 30)
                   + (stage.results ? 'results' : 'no results')
                   + (stage.json.length ? '  +' + plural(stage.json.length, 'series', 'series') : ''));
     });
     if (run.failed_at) {
-      log('err', 'The run stopped in phase ' + run.failed_at.index + ' of '
+      log('err', 'The run stopped in stage ' + run.failed_at.index + ' of '
                  + run.failed_at.of + ' ("' + tidy(run.failed_at.name)
-                 + '"). The phases before it are complete and can be read.');
+                 + '"). The stages before it are complete and can be read.');
     } else if (!run.complete) {
-      log('note', 'Not every phase wrote results, and the log does not say why — '
+      log('note', 'Not every stage wrote results, and the log does not say why — '
                   + (run.log ? 'see ' + run.log + ' in the run directory.'
                              : 'there is no log in the run directory.'));
     }
@@ -511,8 +511,8 @@ App.Results = (function () {
     return readable.length ? readable[readable.length - 1].index : null;
   }
 
-  /* A number, or any part of a phase name. The name match is deliberately loose --
-     `results phase first excavation` for `2_First_excavation` -- because the stage
+  /* A number, or any part of a stage name. The name match is deliberately loose --
+     `results stage first excavation` for `2_First_excavation` -- because the stage
      name is a mangling of something the user typed and nobody will retype the
      mangling. */
   function findStage(token) {
@@ -523,14 +523,14 @@ App.Results = (function () {
     }
     var wanted = token.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
     return stages.filter(function (s) {
-      return (s.phase || '').toLowerCase().indexOf(wanted) !== -1
+      return (s.stage || '').toLowerCase().indexOf(wanted) !== -1
           || (s.name || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').indexOf(wanted) !== -1;
     })[0] || null;
   }
 
   /* Load a stage's mesh and field menu, and put back whatever field was on screen.
 
-     Keeping the field is the point of the whole mode: stepping through the phases on
+     Keeping the field is the point of the whole mode: stepping through the stages on
      one quantity is the thing it is for, and retyping the field at every step would
      make that unusable. */
   function useStage(index, quiet) {
@@ -545,11 +545,11 @@ App.Results = (function () {
       view.mesh = both[0];
       view.catalogue = both[1];
       view.field = null;
-      if (!quiet) log('ok', 'Phase ' + index + ' — ' + stageName(index) + ': '
+      if (!quiet) log('ok', 'Stage ' + index + ' — ' + stageName(index) + ': '
                             + plural(both[0].sections.length, 'part') + ' drawn.');
       changed();
       if (wanted && offered(wanted)) return useField(wanted, view.location, true);
-      if (wanted) log('note', '"' + wanted + '" is not available in this phase.');
+      if (wanted) log('note', '"' + wanted + '" is not available in this stage.');
 
       /* Nothing chosen yet: draw something rather than nothing. An empty viewport in
          Results mode is indistinguishable from a broken one, and "open a run, see a
@@ -562,12 +562,12 @@ App.Results = (function () {
 
   function stageName(index) {
     var found = stagesOf().filter(function (s) { return s.index === index; })[0];
-    return found ? found.phase : String(index);
+    return found ? found.stage : String(index);
   }
 
-  /* One readable phase forwards or backwards. Phases that wrote nothing are stepped
+  /* One readable stage forwards or backwards. Stages that wrote nothing are stepped
      over rather than landed on: a run that died partway leaves gaps, and stopping on
-     one would put the viewer on a phase it cannot draw. */
+     one would put the viewer on a stage it cannot draw. */
   function step(direction) {
     var readable = stagesOf().filter(function (s) { return s.results; });
     if (!readable.length) return null;
@@ -575,11 +575,11 @@ App.Results = (function () {
     if (at < 0) return readable[direction > 0 ? 0 : readable.length - 1];
     var next = at + direction;
     if (next < 0) {
-      log('note', 'Already at the first phase with results.');
+      log('note', 'Already at the first stage with results.');
       return null;
     }
     if (next >= readable.length) {
-      log('note', 'Already at the last phase with results.');
+      log('note', 'Already at the last stage with results.');
       return null;
     }
     return readable[next];
@@ -602,12 +602,12 @@ App.Results = (function () {
     }
     var found = findStage(token);
     if (!found) {
-      log('err', 'No phase matches "' + token + '" in ' + openRun.id + '.');
+      log('err', 'No stage matches "' + token + '" in ' + openRun.id + '.');
       listStages();
       return Promise.resolve();
     }
     if (!found.results) {
-      log('err', 'Phase ' + found.index + ' ("' + found.phase
+      log('err', 'Stage ' + found.index + ' ("' + found.stage
                  + '") wrote no results — the run stopped before it.');
       return Promise.resolve();
     }
@@ -616,7 +616,7 @@ App.Results = (function () {
 
   function listStages() {
     stagesOf().forEach(function (s) {
-      log('note', '  ' + pad(s.index, 4) + pad(s.phase, 30)
+      log('note', '  ' + pad(s.index, 4) + pad(s.stage, 30)
                   + (s.results ? '' : 'no results')
                   + (s.index === view.stage ? '   ← shown' : ''));
     });
@@ -650,10 +650,10 @@ App.Results = (function () {
 
   function listFields() {
     if (!view.catalogue) {
-      log('err', 'No phase is open. `results phase <n>` chooses one.');
+      log('err', 'No stage is open. `results stage <n>` chooses one.');
       return Promise.resolve();
     }
-    log('ok', 'Phase ' + view.stage + ' — ' + stageName(view.stage) + ' offers:');
+    log('ok', 'Stage ' + view.stage + ' — ' + stageName(view.stage) + ' offers:');
     view.catalogue.groups.forEach(function (group) {
       log('note', '  ' + group.name);
       group.fields.forEach(function (entry) {
@@ -669,8 +669,8 @@ App.Results = (function () {
     var row = offered(name);
     if (!row) {
       // Refused here rather than by the server: the catalogue already said what this
-      // phase has, so there is no reason to spend a round trip learning it again.
-      log('err', '"' + name + '" is not available in phase ' + view.stage
+      // stage has, so there is no reason to spend a round trip learning it again.
+      log('err', '"' + name + '" is not available in stage ' + view.stage
                  + '. `results fields` lists what is.');
       return Promise.resolve();
     }
@@ -689,7 +689,7 @@ App.Results = (function () {
       view.location = at;
       changed();
       if (!quiet) {
-        log('ok', field.label + ' (' + field.unit + '), phase ' + view.stage + ': '
+        log('ok', field.label + ' (' + field.unit + '), stage ' + view.stage + ': '
                   + App.ResultsRender.format(field.min) + ' to '
                   + App.ResultsRender.format(field.max)
                   + ' over ' + plural(field.ids.length, at === 'nodes' ? 'node' : 'element')
@@ -820,7 +820,7 @@ App.Results = (function () {
 
   function atNode(token) {
     if (!view.stage) {
-      log('err', 'No phase is open. `results phase <n>` chooses one.');
+      log('err', 'No stage is open. `results stage <n>` chooses one.');
       return Promise.resolve();
     }
     if (!/^\d+$/.test((token || '').trim())) {
@@ -832,7 +832,7 @@ App.Results = (function () {
     return App.Api.get(path).then(function (answer) {
       log('ok', 'Node ' + answer.node + ' at ('
                 + answer.at.map(function (c) { return c.toFixed(3); }).join(', ')
-                + ') in phase ' + view.stage + ':');
+                + ') in stage ' + view.stage + ':');
       var group = null;
       answer.values.forEach(function (row) {
         if (row.group !== group) { group = row.group; log('note', '  ' + group); }
@@ -847,7 +847,7 @@ App.Results = (function () {
 
   function exportCsv() {
     if (!needField('`results csv` saves it')) return Promise.resolve();
-    var name = [openRun.id, 'phase' + view.stage, view.field.field].join('_') + '.csv';
+    var name = [openRun.id, 'stage' + view.stage, view.field.field].join('_') + '.csv';
     App.Download.anchor(name, App.ResultsRender.csv(view.field, {
       run: openRun.id, stage: stageName(view.stage)
     }), 'text/csv');
@@ -892,24 +892,24 @@ App.Results = (function () {
     if (verb === 'open') return openById(parts[2]);
     if (verb === 'files') return listFiles();
     // The name is the rest of the line, not the next token: an output file is named
-    // after a phase, and a phase name is something the user typed spaces into.
+    // after a stage, and a stage name is something the user typed spaces into.
     if (verb === 'get') return getFile(rest);
     if (verb === 'zip' || verb === 'archive') return getArchive();
 
-    // Phase and field. `phase` takes the rest of the line for the same reason `get`
-    // does -- "first excavation" is two words and one phase.
-    if (verb === 'phase' || verb === 'stage') return chooseStage(rest);
+    // Stage and field. `stage` takes the rest of the line for the same reason `get`
+    // does -- "first excavation" is two words and one stage.
+    if (verb === 'stage' || verb === 'phase') return chooseStage(rest);
     if (verb === 'fields') return listFields();
     if (verb === 'field') {
       if (!view.catalogue) {
-        log('err', 'No phase is open. `results phase <n>` chooses one.');
+        log('err', 'No stage is open. `results stage <n>` chooses one.');
         return Promise.resolve();
       }
       return useField(parts[2], (parts[3] || '').toLowerCase() || null);
     }
     if (verb === 'at') return atNode(parts[2]);
     if (verb === 'csv') return exportCsv();
-    // The wall and interface curves, phase by phase: frontend/js/results-plot.js.
+    // The wall and interface curves, stage by stage: frontend/js/results-plot.js.
     if (verb === 'plot' && App.ResultsPlot) return App.ResultsPlot.command(rest);
     if (verb === 'bands' || verb === 'smooth' || verb === 'map'
         || verb === 'deform' || verb === 'range' || verb === 'mesh'

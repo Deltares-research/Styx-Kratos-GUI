@@ -1,4 +1,4 @@
-/* Phase-5 overlays: frozen callbacks must report the server's mesh statistics. */
+/* Stage-5 overlays: frozen callbacks must report the server's mesh statistics. */
 
 (function () {
   test('mesh summaries use computed counts and timing', function () {
@@ -845,7 +845,7 @@
     }).then(function () { restore(ctx); }, function (e) { restore(ctx); throw e; });
   });
 
-  /* `cleargeometry` is refused while a phase still uses one of the parts (finding F3).
+  /* `cleargeometry` is refused while a stage still uses one of the parts (finding F3).
      It used to report "cleared" whatever the server said. */
   function refusingFetch(detail) {
     var saved = window.fetch;
@@ -860,7 +860,7 @@
     var ctx = harness();
     var loaded = 0;
     App.Model.load = function () { loaded += 1; return Promise.resolve(); };
-    var unfetch = refusingFetch("cannot delete a part that a phase still uses (phase 'dig_1' names drawn_0)");
+    var unfetch = refusingFetch("cannot delete a part that a stage still uses (stage 'dig_1' names drawn_0)");
     return Promise.resolve(App.Command.run('cleargeometry')).then(function () {
       T.ok(ctx.lines.some(function (l) { return /^err:.*dig_1/.test(l); }), ctx.lines.join(' | '));
       T.ok(!ctx.lines.some(function (l) { return /^ok:/.test(l); }), 'no success line');
@@ -879,7 +879,7 @@
     var ctx = harness();
     try {
       var help = textOf(App.CMD_RESPONSES.help);
-      ['run <file.py>', 'calculate', 'units', 'phases', 'export', 'water', 'results']
+      ['run <file.py>', 'calculate', 'units', 'stages', 'export', 'water', 'results']
         .forEach(function (word) { T.ok(help.indexOf(word) >= 0, 'help names ' + word + ':\n' + help); });
       T.ok(!/demo|mockup/i.test(help), help);
     } finally { restore(ctx); }

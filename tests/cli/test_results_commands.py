@@ -107,7 +107,7 @@ def test_without_a_stage_the_last_one_with_results_is_read(cli, run):
     assert "stage 7" in cli("results", "field", run, "uy").out
 
 
-def test_a_stage_can_be_named_by_its_phase(cli, run):
+def test_a_stage_can_be_named_by_its_stage(cli, run):
     by_name = cli("--json", "results", "fields", run, "--stage", "first excavation").json()
 
     assert by_name["stage"]["index"] == 4
@@ -211,7 +211,7 @@ def test_files_keeps_a_long_name_apart_from_its_size(cli, run):
 
 def test_a_field_as_csv_is_the_gui_s_csv(cli, run):
     """The file the GUI's `results csv` saves (`ResultsRender.csv`): id and value, with
-    the run and the phase in the header."""
+    the run and the stage in the header."""
     field = cli("--json", "results", "field", run, "uy", "--stage", "7").json()
 
     ran = cli("results", "field", run, "uy", "--stage", "7", "--csv")
@@ -232,12 +232,12 @@ def test_a_profile_as_csv_is_the_gui_s_plot_csv(cli, run):
 
     assert ran.code == 0, ran.err
     lines = ran.out.splitlines()
-    assert lines[0] == "stage,phase,node,y [m],M [N·m/m]"
+    assert lines[0] == "stage,name,node,y [m],M [N·m/m]"
     assert len(lines) == 1 + sum(len(stage["points"]) for stage in plot["stages"])
     stage = plot["stages"][0]
-    index, phase, node, y, value = lines[1].split(",")
-    assert (int(index), phase, int(node), [float(value), float(y)]) == (
-        stage["index"], stage["phase"], stage["nodes"][0], stage["points"][0])
+    index, name, node, y, value = lines[1].split(",")
+    assert (int(index), name, int(node), [float(value), float(y)]) == (
+        stage["index"], stage["stage"], stage["nodes"][0], stage["points"][0])
 
 
 def test_csv_and_json_together_are_a_usage_error(cli, run):

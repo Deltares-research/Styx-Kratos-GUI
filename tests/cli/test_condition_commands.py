@@ -246,7 +246,7 @@ def test_a_flow_project_notes_that_its_supports_are_left_out(cli, tmp_path):
     path = tmp_path / "new.json"
     assert cli("new", path).code == 0
     assert condition_checks.FLOW_NOTE not in cli("boundary", path, "list").out
-    assert cli("phases", path, "add", "flow", "--calculation", "flow").code == 0
+    assert cli("stages", path, "add", "flow", "--calculation", "flow").code == 0
     listed = cli("boundary", path, "list").out
     assert listed.strip().endswith(condition_checks.FLOW_NOTE)
     assert "fixed_bottom" in listed
@@ -343,8 +343,8 @@ def test_gravity_shows_and_switches_the_self_weight(cli, dry):
     assert session.load(dry).gravity is True
 
 
-def test_check_warns_about_a_k0_phase_without_gravity(cli, dry):
-    assert cli("phases", dry, "defaults").code == 0
+def test_check_warns_about_a_k0_stage_without_gravity(cli, dry):
+    assert cli("stages", dry, "defaults").code == 0
     assert cli("gravity", dry, "off").code == 0
 
     assert "is a K0 procedure, whose stresses come from the self weight" \

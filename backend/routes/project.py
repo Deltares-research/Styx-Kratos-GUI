@@ -16,9 +16,9 @@ from fastapi.exceptions import RequestValidationError
 from backend import store
 from backend.routes.common import refusals
 from core import session
-from core.model import phases
+from core.model import stages
 from core.model.schemas import (BoreholeCreate, ConditionsUpdate, DimensionUpdate, LayersUpdate,
-                                MaterialsUpdate, PhasesUpdate, Project, StructuresUpdate,
+                                MaterialsUpdate, StagesUpdate, Project, StructuresUpdate,
                                 UnitsUpdate, WaterUpdate)
 
 router = APIRouter()
@@ -182,39 +182,41 @@ async def patch_conditions(update: ConditionsUpdate) -> dict:
     return {"project": project, "invalidates": ["project", "tree", "geometry", "mesh"]}
 
 
-@router.patch("/api/project/phases")
-async def patch_phases(update: PhasesUpdate) -> dict:
-    """Replace the construction sequence (`session.replace_phases`).
+@router.patch("/api/project/stages")
+@router.patch("/api/project/phases", include_in_schema=False, deprecated=True)
+async def patch_stages(update: StagesUpdate) -> dict:
+    """Replace the construction sequence (`session.replace_stages`).
 
     A tree that does not linearise is answered like a field that does not validate --
-    a 422 on `phases`, naming the phases that branch -- because to the editor it is
+    a 422 on `stages`, naming the stages that branch -- because to the editor it is
     one: the sequence it sent cannot be stored.
 
-    Only `project` is invalidated. A phase list changes the deck and the panel, not the
+    Only `project` is invalidated. A stage list changes the deck and the panel, not the
     geometry or the mesh: every part it names already exists, which is what makes a
     key valid in the first place.
     """
     try:
         with refusals():
-            project = session.replace_phases(store.get(), update)
-    except phases.PhaseError as failure:
+            project = session.replace_stages(store.get(), update)
+    except stages.StageError as failure:
         raise RequestValidationError([{
-            "type": "value_error", "loc": ("body", "phases"), "msg": str(failure),
-            "input": [phase.model_dump() for phase in update.phases],
+            "type": "value_error", "loc": ("body", "stages"), "msg": str(failure),
+            "input": [stage.model_dump() for stage in update.stages],
         }]) from failure
     store.put(project)
     return {"project": project, "invalidates": ["project"]}
 
 
-@router.post("/api/project/phases/defaults")
-async def seed_default_phases() -> dict:
-    """What "Create default phases" gives: the initial stage, then the null step.
+@router.post("/api/project/stages/defaults")
+@router.post("/api/project/phases/defaults", include_in_schema=False, deprecated=True)
+async def seed_default_stages() -> dict:
+    """What "Create default stages" gives: the initial stage, then the null step.
 
-    `session.default_phases` makes it; this endpoint is only the way the GUI reaches it.
+    `session.default_stages` makes it; this endpoint is only the way the GUI reaches it.
     It replaces whatever is there: it is the way back out of a broken sequence.
     """
     with refusals():
-        project = session.default_phases(store.get())
+        project = session.default_stages(store.get())
     store.put(project)
     return {"project": project, "invalidates": ["project"]}
 

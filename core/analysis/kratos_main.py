@@ -49,7 +49,7 @@ def announcing(orchestrator_class):
 
     `begin` is printed *before* the preprocess rather than after, because the
     preprocess is itself a place a deck fails -- it is where the Activate and
-    Deactivate operations run, so a phase naming a part the mdpa does not have throws
+    Deactivate operations run, so a stage naming a part the mdpa does not have throws
     here. `end` is printed after the postprocess, so a stage is only finished once
     everything belonging to it is.
 

@@ -323,7 +323,7 @@ crow.json> mesh --size 5.0 --order 2
 One command derives the whole sequence from the model:
 
 ```text
-crow.json> phases staged-excavation
+crow.json> stages staged-excavation
 1  initial  Initial stage
      calculation: K0 procedure; deactivates sheetpile, strut, wall_contact, surcharge, water_1, water_2, water_3
 2  null_step  Null step  (after initial)
@@ -347,9 +347,9 @@ right after the lift that exposes its head.
 To look at a stage, or change one:
 
 ```text
-crow.json> phases show dig_2                             what is in the model during that stage
-crow.json> phases set dig_1 --max-iterations 300         more iterations for the first dig
-crow.json> phases deactivate dig_3 strut                 take the strut out from dig_3 on
+crow.json> stages show dig_2                             what is in the model during that stage
+crow.json> stages set dig_1 --max-iterations 300         more iterations for the first dig
+crow.json> stages deactivate dig_3 strut                 take the strut out from dig_3 on
 crow.json> undo                                          ...and put it back
 ```
 
@@ -486,7 +486,7 @@ crow.json> results profile 1 wall M --stage 7 --csv wall_M.csv
 wrote wall_M.csv (53 rows)
 ```
 
-The CSV has one row per wall node: `stage,phase,node,y [m],M [N·m/m]`. Always give `--csv` a
+The CSV has one row per wall node: `stage,name,node,y [m],M [N·m/m]`. Always give `--csv` a
 file name: in Windows PowerShell 5.1, redirecting with `>` would save the file as UTF-16.
 
 #### Fields over the whole mesh
@@ -518,14 +518,14 @@ crow.json> results at 1 14 --stage 7                    every field at node 14
 ```
 
 - **Which stage.** Without `--stage`, a command reads the last stage. `--stage` takes the
-  stage's **number** (`7`) or **words of its name** (`third`, `"first excavation"`), not the
-  phase id (`dig_3`).
+  stage's **number** (`7`) or **words of its name** (`third`, `"first excavation"`), not its
+  id (`dig_3`).
 - **Stresses** are read per element, as Kratos computed them. `--location nodes` averages
   them onto the nodes.
 - **Why 0.34 m?** That settlement is at the far-right corner (node 14). It is the total since
   the start, K0 stage included, in an elastic soil. The last lift adds less than a
   millimetre there: `results at 1 14 --stage 7` shows Δu_y = −9.79e-4 m. To see what one
-  stage did, read the phase fields `du`, `dux` and `duy`.
+  stage did, read the stage fields `du`, `dux` and `duy`.
 
 #### The raw files
 
@@ -660,7 +660,7 @@ Then type these lines. `deck` is a folder in the model's folder, and `1` is the 
 # The model
 show
 parts
-phases list
+stages list
 
 # Write the input files, then run them
 export --out deck
@@ -701,7 +701,7 @@ command name. In the model's folder:
 ```powershell
 & $cli show   crow.py                        # what the model holds
 & $cli parts  crow.py                        # its parts
-& $cli phases crow.py list                   # its stages
+& $cli stages crow.py list                   # its stages
 & $cli export crow.py --out deck             # write the input files
 & $cli run    deck --runs-dir .              # run Kratos
 & $cli results profile 1 wall M --runs-dir . # read a result
@@ -748,7 +748,7 @@ Way 1 writes into the working folder you chose; ways 2 and 3 into the project fo
 | What you see | What it means |
 |---|---|
 | `error: ...`, and nothing changed | The command was refused as a whole, and the project was not written. The message names the field. |
-| `no stage matches 'dig_3'` | `--stage` takes the stage's number or words of its name, not the phase id. |
+| `no stage matches 'dig_3'` | `--stage` takes the stage's number or words of its name, not the stage id. |
 | `error: no project is open` | Start with `new FILE` or `open FILE`, or name the project on the line. |
 | `note: interface section 'Wall contact' against ...` | What the interface took from the soil: see step 12. |
 | `'/c/Users/...' is not a run` | A Git Bash path given to a Windows program. Use `C:/Users/...`, or the run's number. |

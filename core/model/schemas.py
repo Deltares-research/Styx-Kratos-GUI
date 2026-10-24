@@ -17,7 +17,7 @@ Part keys (`Project.part_keys`) are the contract with the frozen frontend: each 
 from __future__ import annotations
 
 import math
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
@@ -238,7 +238,7 @@ class Excavation(Base):
     """The lifts the pit is dug in, shallowest first, each strictly below the last.
 
     A staged excavation is not one hole that appears at once: each lift is its own body
-    in the mesh, deactivated in its own phase (`Excavated_Soil_1/2/3` in Kratos'
+    in the mesh, deactivated in its own stage (`Excavated_Soil_1/2/3` in Kratos'
     staged-excavation reference deck). One level means an unstaged pit, which is what every project
     written before this field had, and is why it defaults to `[floor_y]` rather than to
     empty.
@@ -1172,7 +1172,7 @@ class SeepageCondition(Base):
     The target is `on` and the field it names, as for a `WaterPressureCondition`: the
     face `face`, or the polyline `points`, drawn in the 2D section. Every mesh edge of
     the target has to be on the soil's outer boundary, as Kratos requires; a line
-    through the soil is refused at export. A seepage face is not switched by phases: it
+    through the soil is refused at export. A seepage face is not switched by stages: it
     acts in every stage, as Kratos collects the seepage nodes once, from every seepage
     condition in the model. A deformation calculation leaves it out, with a warning.
     """
@@ -1218,53 +1218,53 @@ BoundaryCondition = Annotated[DisplacementCondition | WaterPressureCondition
 """One record of `Project.boundary_conditions`, told apart by its `kind`."""
 
 
-class Phase(Base):
-    """One construction phase: what changes about the model, and how it is solved.
+class Stage(Base):
+    """One construction stage: what changes about the model, and how it is solved.
 
-    The field names follow the phase panel the GUI already draws (js/data.js:559),
+    The field names follow the stage panel the GUI already draws (js/data.js:559),
     because that is the UI this feeds and a second vocabulary would have to be
     translated twice.
 
-    **A phase stores a diff, not a state.** `activate` and `deactivate` say what this
-    phase changes about the model it inherits from `parent`; they do not describe the
+    **A stage stores a diff, not a state.** `activate` and `deactivate` say what this
+    stage changes about the model it inherits from `parent`; they do not describe the
     whole model. Two reasons, and both matter: the reference deck's `stage_preprocess`
     *is* that diff, so nothing has to be reconstructed on export; and storing absolute
-    state would mean rewriting every later phase whenever a part is added to the model.
-    Resolving diff to state is one function, in `core.model.phases`, which is the only place
+    state would mean rewriting every later stage whenever a part is added to the model.
+    Resolving diff to state is one function, in `core.model.stages`, which is the only place
     that walks the parent chain.
 
     `parent` makes a tree, and a tree can branch. Kratos cannot run one: its orchestrator
     runs a flat `execution_list`. Linearising the tree, and refusing one that cannot be
-    linearised, is the export's job (`core.model.phases`) rather than this class's -- a branch
+    linearised, is the export's job (`core.model.stages`) rather than this class's -- a branch
     is a legitimate thing to have half-built in the editor, and refusing it here would
     make it impossible to type.
 
-    The water in a phase is its water pressure conditions: their ids are stageable
-    keys (`Project.stageable_keys`), so a phase switches one on or off as it does a
+    The water in a stage is its water pressure conditions: their ids are stageable
+    keys (`Project.stageable_keys`), so a stage switches one on or off as it does a
     load -- a high level, then a low one.
     """
     id: Ident
     name: str
     parent: Ident | None = None
-    """The phase this one starts from. `None` only for the first, which starts from the
+    """The stage this one starts from. `None` only for the first, which starts from the
     model as built."""
 
     calculation: Literal["K0 procedure", "Plastic", "Null step",
                          "Groundwater flow"] = "Plastic"
     """"Groundwater flow" is a steady-state flow of the water alone (Kratos' `Pw` solver,
     `Steady_State_Groundwater_Flow`). It needs water pressure elements, and the mesh is
-    one for all the phases, so a project mixes it with no other type: the export refuses
-    the mix (`core.model.phases.groundwater_flow`)."""
+    one for all the stages, so a project mixes it with no other type: the export refuses
+    the mix (`core.model.stages.groundwater_flow`)."""
     loading: Literal["Staged construction"] = "Staged construction"
 
     activate: list[Ident] = Field(default_factory=list)
     deactivate: list[Ident] = Field(default_factory=list)
 
     # The three the reference deck actually varies between its stages (see
-    # plan sec 0.2). Their defaults are its initial stage's own values, so a phase that
+    # plan sec 0.2). Their defaults are its initial stage's own values, so a stage that
     # says nothing solves the way that one does.
     reset_displacements: bool = False
-    """Kratos' `reset_totals`: start this phase's displacements from zero. The reference
+    """Kratos' `reset_totals`: start this stage's displacements from zero. The reference
     turns it on when the wall is installed, so the wall's own deflection is measured
     from the ground it was built into rather than from the undisturbed state."""
 
@@ -1273,17 +1273,22 @@ class Phase(Base):
     """Kratos' `residual_relative_tolerance`."""
 
     time_interval: float = Field(default=0.0, ge=0)
-    """Days. Zero for the static phases this exporter writes; carried because the phase
-    panel has it and a consolidation phase would need it."""
+    """Days. Zero for the static stages this exporter writes; carried because the stage
+    panel has it and a consolidation stage would need it."""
 
     @model_validator(mode="after")
-    def _one_instruction_per_part(self) -> Phase:
+    def _one_instruction_per_part(self) -> Stage:
         both = sorted(set(self.activate) & set(self.deactivate))
         if both:
             raise ValueError(
-                f"phase {self.id!r} both activates and deactivates: {', '.join(both)}"
+                f"stage {self.id!r} both activates and deactivates: {', '.join(both)}"
             )
         return self
+
+
+Phase = Stage
+"""Deprecated: the name Styx used before it took Kratos' word. Kept so old model
+scripts and imports keep working."""
 
 
 class MeshSettings(Base):
@@ -1387,20 +1392,30 @@ class ConditionsUpdate(Base):
     gravity: bool | None = None
 
 
-class PhasesUpdate(Base):
+class StagesUpdate(Base):
     """The construction sequence, replaced wholesale.
 
-    Its own endpoint rather than a ride-along on `StructuresUpdate`, because a phase is
+    Its own endpoint rather than a ride-along on `StructuresUpdate`, because a stage is
     the one collection that is *about* the others: `activate`/`deactivate` name part
     keys, so the list can only be validated against a model that has already settled.
     Sent together with a structure edit, which of the two the keys should be checked
     against would depend on the order they were applied in.
 
     Required rather than optional, and `[]` is meaningful: it is how a project goes
-    back to being unphased, which must export exactly the deck it exported before
+    back to being unstaged, which must export exactly the deck it exported before
     staged construction existed (plan sec 7.18).
     """
-    phases: list[Phase]
+    stages: list[Stage]
+
+    @model_validator(mode="before")
+    @classmethod
+    def _stages_were_phases(cls, value: object) -> object:
+        """A client written before the rename sends `phases`."""
+        return migration.rename_phases(value) if isinstance(value, dict) else value
+
+
+PhasesUpdate = StagesUpdate
+"""Deprecated alias of `StagesUpdate`."""
 
 
 class UnitsUpdate(Base):
@@ -1488,8 +1503,12 @@ class Deck(Base):
     """The orchestrator file, by name inside `directory`. It names everything else."""
     parts: list[str] = Field(default_factory=list)
     """The deck's parts that some stage computes on or loads, in the order the stages
-    first name them -- what this project's phases switch on and off (`stageable_keys`).
+    first name them -- what this project's stages switch on and off (`stageable_keys`).
     Read off the deck when it is opened, so that validating a project never has to."""
+
+
+FULL_BUILD_BLOCKS = ("excavation", "wall", "struts", "anchor_rows", "piles", "wells")
+"""The `Project` fields the full build (`layered_soil` false) reads, and needs given."""
 
 
 class Project(Base):
@@ -1504,7 +1523,7 @@ class Project(Base):
     the excavation is staged. `False` takes the full path, which additionally raises the
     seeded 3D wall ring, strut frame and pile group and cuts the excavation void.
 
-    Named `simple_example` until the phase editor made it user-visible, which was the
+    Named `simple_example` until the stage editor made it user-visible, which was the
     wrong name twice over: it is not about examples, and the models that set it are not
     simple -- a staged model script sets it. The old spelling is still accepted on the
     way in (see `_reconcile_layered_soil`); nothing writes it any more.
@@ -1528,12 +1547,17 @@ class Project(Base):
     boreholes: list[Borehole]
     materials: list[Material]
     layers: list[SoilLayer]
-    excavation: Excavation
-    wall: Wall
-    struts: Struts
-    anchor_rows: AnchorRows
-    piles: Piles
-    loads: list[PointLoad | LineLoad | SurfaceLoad] = Field(default_factory=list)
+    excavation: Excavation | None = None
+    """The pit, or `None` for a model that digs none. A layered model reads it only when
+    it has two or more levels (`pit_levels`); the full build needs it always."""
+    # The seeded demo's own structures, which only the full build raises
+    # (`solid_model._build_solids`). `None` in a model that has none of them; the full
+    # build needs all of them, and the validator says so.
+    wall: Wall | None = None
+    struts: Struts | None = None
+    anchor_rows: AnchorRows | None = None
+    piles: Piles | None = None
+    loads:list[PointLoad | LineLoad | SurfaceLoad] = Field(default_factory=list)
     beam_sections: list[BeamSection] = Field(default_factory=list)
     panel_sections: list[PanelSection] = Field(default_factory=list)
     # One collection per family, holding every kind of it: a 2D sheet pile, a 3D wall
@@ -1553,7 +1577,7 @@ class Project(Base):
     # like a free interface (an arbitrary polyline, no 3D translation), not a
     # translated x/y vector like the three kinds `loads[]` already holds.
     normal_loads: list[NormalLoad] = Field(default_factory=list)
-    wells: Wells
+    wells: Wells | None = None
     water: WaterLevel | None = None
     """The phreatic level, or `None` for a model without one -- which is what a new
     project starts as. A model is not born with a water table at somebody else's depth;
@@ -1576,8 +1600,8 @@ class Project(Base):
     zero (`core.kratos.condition_checks`)."""
     mesh: MeshSettings = Field(default_factory=MeshSettings)
     custom_parts: list[CustomPart] = Field(default_factory=list)
-    phases: list[Phase] = Field(default_factory=list)
-    """The construction sequence, in creation order. Empty means an unphased project --
+    stages: list[Stage] = Field(default_factory=list)
+    """The construction sequence, in creation order. Empty means an unstaged project --
     every project written before staged construction -- which exports exactly what it
     always did. That is the compatibility contract; see `test_export_golden.py`."""
     deck: Deck | None = None
@@ -1587,7 +1611,10 @@ class Project(Base):
     @classmethod
     def _migrate_legacy_units(cls, value: object) -> object:
         """A project saved before the unit system existed, converted once into the
-        current shape in SI, with the numbers the old exporter wrote (`core/model/migration.py`)."""
+        current shape in SI, with the numbers the old exporter wrote (`core/model/migration.py`).
+        A project saved before 2026-10 also calls its stages `phases`."""
+        if isinstance(value, dict):
+            value = migration.rename_phases(value)
         if migration.is_legacy(value):
             return migration.migrate(value)
         return migration.migrate_records(value) if isinstance(value, dict) else value
@@ -1739,7 +1766,7 @@ class Project(Base):
         _reject_duplicates([c.id for c in self.boundary_conditions], "boundary condition")
         # A condition on a line is a gmsh physical group of its own, named by its id, in
         # the namespace the parts' groups are in -- and a water pressure condition is a
-        # key a phase names, in the namespace of the parts and loads.
+        # key a stage names, in the namespace of the parts and loads.
         parts = set(self._staged_parts_and_loads()) | {"excavation", "water"}
         collisions = sorted(c.id for c in self.boundary_conditions if c.id in parts)
         if collisions:
@@ -1803,7 +1830,7 @@ class Project(Base):
                 "anchor id collides with an existing model part key: " + ", ".join(collisions)
             )
 
-        self._check_phases()
+        self._check_stages()
 
         known = {m.id for m in self.materials}
         for layer in self.layers:
@@ -1926,7 +1953,12 @@ class Project(Base):
         # 3D must not fail on a stale section plane the user cannot even see.
 
         if not self.layered_soil:
-            e = self.excavation
+            missing = [name for name in FULL_BUILD_BLOCKS if getattr(self, name) is None]
+            if missing:
+                raise ValueError(
+                    "a project with layered_soil false builds the seeded demo pit, and "
+                    f"needs {', '.join(missing)}")
+            e = self.pit()
             if not self.domain.contains_plan(e.x0, e.x1, e.z0, e.z1):
                 raise ValueError("excavation extends outside the domain in plan")
             # Every lift, not only the last: an intermediate level above the ground or
@@ -2040,6 +2072,17 @@ class Project(Base):
     def borehole_ids(self) -> list[str]:
         return [b.id for b in self.boreholes]
 
+    def pit_levels(self) -> list[float]:
+        """The levels the pit is dug to, shallowest first; none without an excavation."""
+        return list(self.excavation.levels) if self.excavation is not None else []
+
+    def pit(self) -> Excavation:
+        """The excavation, for code that runs only when there is one: the full build,
+        and a pit dug in lifts."""
+        if self.excavation is None:
+            raise ValueError("the project has no excavation")
+        return self.excavation
+
     def beam_section(self, section_id: str) -> BeamSection:
         return next(s for s in self.beam_sections if s.id == section_id)
 
@@ -2126,59 +2169,59 @@ class Project(Base):
         """Everything a 3D model builds structure from, in `beams[]` order."""
         return [b for b in self.beams if isinstance(b, (Panel, Member))]
 
-    def _check_phases(self) -> None:
-        """The construction sequence is a tree of real phases over real parts.
+    def _check_stages(self) -> None:
+        """The construction sequence is a tree of real stages over real parts.
 
         Structure only. Whether the tree can be flattened into the one sequence Kratos
         runs is the export's question, not this one -- a branch is a legitimate thing to
         have half-built in the editor, and refusing it here would make it impossible to
-        type (see `Phase`).
+        type (see `Stage`).
         """
-        if not self.phases:
+        if not self.stages:
             return
-        _reject_duplicates([phase.id for phase in self.phases], "phase")
+        _reject_duplicates([stage.id for stage in self.stages], "stage")
 
-        ids = {phase.id for phase in self.phases}
-        roots = [phase.id for phase in self.phases if phase.parent is None]
+        ids = {stage.id for stage in self.stages}
+        roots = [stage.id for stage in self.stages if stage.parent is None]
         if len(roots) != 1:
             raise ValueError(
-                "a construction sequence needs exactly one root phase -- the one that "
+                "a construction sequence needs exactly one root stage -- the one that "
                 f"starts from the model as built -- but {len(roots)} have no parent"
             )
-        for phase in self.phases:
-            if phase.parent is not None and phase.parent not in ids:
+        for stage in self.stages:
+            if stage.parent is not None and stage.parent not in ids:
                 raise ValueError(
-                    f"phase {phase.id!r} starts from nowhere: there is no phase "
-                    f"{phase.parent!r}"
+                    f"stage {stage.id!r} starts from nowhere: there is no stage "
+                    f"{stage.parent!r}"
                 )
-            if phase.parent == phase.id:
-                raise ValueError(f"phase {phase.id!r} starts from itself")
+            if stage.parent == stage.id:
+                raise ValueError(f"stage {stage.id!r} starts from itself")
 
-        # Every phase has to reach the root by following parents. Anything that does not
-        # is in a cycle, which would make `core.model.phases` walk for ever.
-        parents = {phase.id: phase.parent for phase in self.phases}
+        # Every stage has to reach the root by following parents. Anything that does not
+        # is in a cycle, which would make `core.model.stages` walk for ever.
+        parents = {stage.id: stage.parent for stage in self.stages}
         for start in ids:
             seen: set[str] = set()
             at: str | None = start
             while at is not None:
                 if at in seen:
                     raise ValueError(
-                        f"phases form a cycle through {at!r}; every phase must lead "
+                        f"stages form a cycle through {at!r}; every stage must lead "
                         "back to the one that starts from the model as built"
                     )
                 seen.add(at)
                 at = parents[at]
 
-        # A phase may only name parts the model actually has. Caught here rather than at
-        # export because a phase naming a deleted structure is a modelling mistake the
+        # A stage may only name parts the model actually has. Caught here rather than at
+        # export because a stage naming a deleted structure is a modelling mistake the
         # user can fix, and finding it only when Calculate is pressed would be late.
         parts = set(self.stageable_keys())
-        for phase in self.phases:
-            unknown = sorted({key for key in phase.activate + phase.deactivate
+        for stage in self.stages:
+            unknown = sorted({key for key in stage.activate + stage.deactivate
                               if key not in parts})
             if unknown:
                 raise ValueError(
-                    f"phase {phase.id!r} names no such part: {', '.join(unknown)}"
+                    f"stage {stage.id!r} names no such part: {', '.join(unknown)}"
                 )
 
     @computed_field  # type: ignore[prop-decorator]
@@ -2229,7 +2272,7 @@ class Project(Base):
         is what every project did before staged construction existed.
 
         With several, the soil inside the pit's plan outline is *kept* -- it has to be,
-        because each lift is deactivated in its own phase -- and split into the lifts it
+        because each lift is deactivated in its own stage -- and split into the lifts it
         is dug in. A body is the intersection of one layer with one lift, so a lift
         deeper than the layer it starts in cannot produce a single body spanning two
         materials. What lies below the final floor but still inside the outline is its
@@ -2250,14 +2293,15 @@ class Project(Base):
         layers = [(f"soil_{layer.id}", layer.bots[bh], layer.tops[bh])
                   for layer in self.layers]
         outside = [(key, bottom, top, False) for key, bottom, top in layers]
-        if len(self.excavation.levels) < 2:
+        levels = self.pit_levels()
+        if len(levels) < 2:
             return outside
 
         # The lifts, top down, then the ground below the final floor. `None` marks that
         # last one: it is the part of the outline that is never dug.
         bands: list[tuple[str | None, float, float]] = []
         ceiling = self.domain.y_top
-        for index, level in enumerate(self.excavation.levels, start=1):
+        for index, level in enumerate(levels, start=1):
             bands.append((f"lift{index}", level, ceiling))
             ceiling = level
         bands.append((None, self.domain.y_bottom, ceiling))
@@ -2323,16 +2367,29 @@ class Project(Base):
         ] + [load.id for load in self.loads] + [n.id for n in self.normal_loads] \
           + beams + (["water"] if self.water is not None else []) + ["wells"] + customs
 
+    @property
+    def phases(self) -> list[Stage]:
+        """Deprecated alias of `stages`, the name before Styx took Kratos' word."""
+        return self.stages
+
+    def model_copy(self, *, update: Mapping[str, Any] | None = None,
+                   deep: bool = False) -> Project:
+        """`model_copy` skips validation, so an old `update={"phases": ...}` would be
+        silently dropped; it is renamed here as on load."""
+        if update and "phases" in update:
+            update = migration.rename_phases(dict(update))
+        return super().model_copy(update=update, deep=deep)
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def stageable_parts(self) -> list[str]:
         """`stageable_keys`, published with the project.
 
-        The browser resolves the phase tree too (`frontend/js/phases.js`), and resolving it
+        The browser resolves the stage tree too (`frontend/js/stages.js`), and resolving it
         starts from "everything is active" -- so it needs the same namespace the server
         starts from. It cannot derive it: the staging namespace is `part_keys` plus
         every load id, and a `layered_soil` project draws no load pads, so a load that
-        a phase may legitimately name appears nowhere the viewport can see.
+        a stage may legitimately name appears nowhere the viewport can see.
 
         Named `stageable_parts` rather than `stageable_keys` because a computed field
         may not share a name with a method on the same model.
@@ -2340,12 +2397,12 @@ class Project(Base):
         return self.stageable_keys()
 
     def stageable_keys(self) -> list[str]:
-        """What a phase may switch on and off, which is wider than what is drawn.
+        """What a stage may switch on and off, which is wider than what is drawn.
 
         `part_keys` is the *render* namespace, in draw order, and the simple example
         deliberately draws no load pads -- so a project built that way has line loads
         that appear nowhere in it. They are still real parts of the deck: the reference
-        stages one, `Load`, which arrives with the wall and stays. A phase has to be
+        stages one, `Load`, which arrives with the wall and stays. A stage has to be
         able to name them, so the staging namespace is `part_keys` plus every load id.
 
         Everything drawn is stageable; not everything stageable is drawn. The two are
@@ -2353,12 +2410,12 @@ class Project(Base):
         draw order: `part_keys` feeds tessellation, and a key appearing there makes the
         viewport look for geometry that a load pad in the simple example does not have.
 
-        The water pressure conditions are stageable too, last: a phase switches the
+        The water pressure conditions are stageable too, last: a stage switches the
         water on and off as it does a load -- the pit pumped dry, a level that drops.
-        The supports are not; they hold the model in every phase.
+        The supports are not; they hold the model in every stage.
         """
         if self.deck is not None:
-            # A deck's phases are its stages, and they switch the deck's own parts.
+            # A deck's Styx stages are its Kratos stages, and they switch the deck's own parts.
             return list(self.deck.parts)
         keys = self._staged_parts_and_loads()
         seen = set(keys)

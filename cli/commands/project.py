@@ -13,7 +13,7 @@ from cli.terminal.files import add_project, add_writing, written
 from cli.terminal.output import Answer, CommandError
 from core import session
 from core.kratos import condition_checks
-from core.model import phases
+from core.model import stages
 from core.model.schemas import DimensionUpdate, MeshRequest, Project, UnitsUpdate
 from core.model.templates import blank_project, seed_project
 
@@ -118,7 +118,7 @@ def show_project(args: argparse.Namespace) -> Answer:
 
 def check_project(args: argparse.Namespace) -> Answer:
     """What the schema cannot say on its own: that there is something to mesh, that the
-    phases run in one order, and that the mesh settings name only bodies the model has.
+    stages run in one order, and that the mesh settings name only bodies the model has.
     Loading has validated the rest. A groundwater flow project the export refuses
     (`condition_checks.flow_refusal`) is refused here, in the same words. The export's
     warnings about the boundary conditions that need no mesh (`core.kratos.condition_checks`)
@@ -128,7 +128,7 @@ def check_project(args: argparse.Namespace) -> Answer:
         empty = nothing_to_mesh(project)
         if empty:
             raise CommandError(empty)
-        phases.linearise(project)
+        stages.linearise(project)
         refused = condition_checks.flow_refusal(project)
         if refused:
             raise CommandError(refused)
@@ -230,7 +230,7 @@ def summary(project: Project) -> dict:
         "water": _water(project),
         "boundary_conditions": conditions.summary(project),
         "gravity": project.gravity,
-        "phases": [p.id for p in project.phases],
+        "stages": [p.id for p in project.stages],
         "mesh": {"element_size": project.mesh.element_size, "order": project.mesh.order},
         "deck": project.deck.directory if project.deck is not None else None,
     }
@@ -274,7 +274,7 @@ def described(data: dict) -> list[str]:
             + ("" if c["active"] else ", inactive") + ")"
             for c in data["boundary_conditions"]) or "none"),
         f"  gravity     {'on' if data['gravity'] else 'off'}",
-        f"  phases      {names(data['phases'])}",
+        f"  stages      {names(data['stages'])}",
         f"  mesh        element size {data['mesh']['element_size']:g}, "
         f"order {data['mesh']['order']}",
     ]

@@ -234,7 +234,7 @@
     ]
   },
   "custom_parts": [],
-  "phases": [
+  "stages": [
     {
       "id": "flow",
       "name": "Flow",

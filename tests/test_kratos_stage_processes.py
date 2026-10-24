@@ -2,7 +2,7 @@
 
 Two questions, and they are separate. *What* a process looks like is settled by copying
 the reference deck field for field (`core/kratos/parameters.py`). *Which stages it belongs
-in* is derived from the phase tree (`core/kratos/writer.py:_phased_stages`), and that is what
+in* is derived from the stage tree (`core/kratos/writer.py:_staged_stages`), and that is what
 most of this file is about, because it is the part that can be wrong in a way no schema
 catches.
 
@@ -14,7 +14,7 @@ import json
 import pytest
 
 from core.kratos import writer, materials
-from core.model import phases
+from core.model import stages
 from tests.models import drawn_ground, excavation
 from core.geometry.solid_model import session
 from core.model.schemas import MeshRequest
@@ -94,7 +94,7 @@ def test_a_support_arrives_with_the_structure_it_holds(doc):
 
 def test_each_water_load_arrives_with_its_own_excavation(doc):
     """The reference changes the exposed water surface per lift: `WaterLoad_Stage2`
-    arrives as `WaterLoad_Stage1` leaves. Nothing special happens here -- the phases say
+    arrives as `WaterLoad_Stage1` leaves. Nothing special happens here -- the stages say
     so, and the filter does the rest."""
     def water(stage):
         return sorted(named(p)[0] for p in processes(doc, stage, "loads_process_list")
@@ -116,7 +116,7 @@ def test_the_surcharge_arrives_with_the_wall_and_stays(doc):
 
 # -- C3: the K0 procedure ----------------------------------------------------
 
-def test_the_k0_procedure_runs_in_the_k0_phase_only(doc):
+def test_the_k0_procedure_runs_in_the_k0_stage_only(doc):
     assert stages_with(doc, "auxiliary_process_list",
                        "apply_k0_procedure_process") == ["1_Initial_stage"]
 
@@ -338,7 +338,7 @@ def test_material_parameters_writes_the_k0_variables_on_request():
 
 # -- What is built from the start ----------------------------------------------
 #
-# "Create default phases" switches nothing off (`phases.default_phases`), so a wall and
+# "Create default stages" switches nothing off (`stages.default_stages`), so a wall and
 # its interfaces drawn before that are in the model from the first stage. There is no
 # stage before the first for them to carry a stress from, and the first stage is where
 # they arrive.
@@ -346,7 +346,7 @@ def test_material_parameters_writes_the_k0_variables_on_request():
 @pytest.fixture(scope="module")
 def from_the_start() -> dict:
     project = excavation.excavation_project(staged=False)
-    project = project.model_copy(update={"phases": phases.default_phases(project)})
+    project = project.model_copy(update={"stages": stages.default_stages(project)})
     with session():
         exported = writer.export_project(project, MeshRequest(**project.mesh.model_dump()))
     return json.loads(exported["project_parameters"])

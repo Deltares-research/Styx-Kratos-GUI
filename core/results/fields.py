@@ -187,12 +187,12 @@ def _stresses(source: str, group: str, mark: str) -> tuple:
 
 
 DEFINITIONS: tuple[Definition, ...] = (
-    # Total, then per-phase: the order a user looks for them in, and the reason
+    # Total, then per-stage: the order a user looks for them in, and the reason
     # the two are separate groups rather than one. `TOTAL_DISPLACEMENT` accumulates
     # across stages, `DISPLACEMENT` is what this stage alone did -- confirmed against a
     # real seven-stage run, where the two differ in both magnitude and sign.
     *_vector("TOTAL_DISPLACEMENT", "u", "Deformations", "u"),
-    *_vector("DISPLACEMENT", "du", "Phase deformations", "Δu"),
+    *_vector("DISPLACEMENT", "du", "Stage deformations", "Δu"),
 
     *_stresses("CAUCHY_STRESS_TENSOR", "Effective stresses", ""),
     # Written only once the deck asks for it (P4). Offered automatically when it is
@@ -219,7 +219,7 @@ DEFINITIONS: tuple[Definition, ...] = (
 
 BY_NAME = {definition.name: definition for definition in DEFINITIONS}
 
-GROUP_ORDER = ("Deformations", "Phase deformations", "Effective stresses",
+GROUP_ORDER = ("Deformations", "Stage deformations", "Effective stresses",
                "Total stresses", "Strains", "Groundwater")
 
 
@@ -312,7 +312,7 @@ def values(results: Results, mesh: GidMesh, name: str, location: str = "nodes",
 DEFORM_SOURCES = ("TOTAL_DISPLACEMENT", "DISPLACEMENT")
 """What a deformed mesh is drawn with, in order of preference. Total first: the shape
 of the model at this stage is the sum of everything that has happened to it, and the
-per-phase increment is a different picture."""
+per-stage increment is a different picture."""
 
 
 def displacement(results: Results) -> dict:

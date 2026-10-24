@@ -1,4 +1,4 @@
-"""Groundwater flow: a project whose phases are all "Groundwater flow" exports Kratos'
+"""Groundwater flow: a project whose stages are all "Groundwater flow" exports Kratos'
 steady-state flow of the water alone.
 
 The deck is held to Kratos' own `tests/Muskat/saturated_hydrostatic` (case A of
@@ -10,8 +10,8 @@ reference values are copied here, as the other deck tests copy theirs, so the qu
 needs no Kratos checkout.
 
 The rest is what a flow project is: water pressure elements and nothing that acts on a
-displacement, a stage per phase, and the export's refusals -- a mix of flow and
-deformation phases, a 3D model, a soil with no permeability, a phase with no fixed
+displacement, a stage per stage, and the export's refusals -- a mix of flow and
+deformation stages, a 3D model, a soil with no permeability, a stage with no fixed
 head.
 """
 
@@ -23,8 +23,8 @@ import pytest
 
 from core.geometry import solid_model
 from core.kratos import condition_checks, external_deck, materials, writer
-from core.model import phases
-from core.model.schemas import (Beam, BeamSection, DisplacementCondition, Phase,
+from core.model import stages
+from core.model.schemas import (Beam, BeamSection, DisplacementCondition, Stage,
                                 SeepageCondition, WaterPressureCondition,
                                 standard_conditions)
 from tests import mdpa
@@ -137,12 +137,12 @@ def case_a(gmsh_session):
     return writer.export_project(muskat(order=2))
 
 
-def stages(export: dict) -> dict:
+def deck_stages(export: dict) -> dict:
     return json.loads(export["project_parameters"])["stages"]
 
 
 def settings(export: dict, stage: str = "1_Flow") -> dict:
-    return stages(export)[stage]["stage_settings"]
+    return deck_stages(export)[stage]["stage_settings"]
 
 
 def without_part(parameters: dict) -> dict:
@@ -250,15 +250,15 @@ def test_gravity_off_is_said():
 
 # ── Stages ──────────────────────────────────────────────────────────────────
 
-def test_each_phase_is_a_steady_state_with_its_own_heads(gmsh_session):
+def test_each_stage_is_a_steady_state_with_its_own_heads(gmsh_session):
     low = head("low_right", "right", 1.0)
     export = writer.export_project(muskat(
         conditions=[*HEADS, low],
-        phases=[Phase(id="high", name="High", calculation="Groundwater flow",
+        stages=[Stage(id="high", name="High", calculation="Groundwater flow",
                       deactivate=["low_right"]),
-                Phase(id="low", name="Low", parent="high", calculation="Groundwater flow",
+                Stage(id="low", name="Low", parent="high", calculation="Groundwater flow",
                       activate=["low_right"], deactivate=["right_head"])]))
-    deck = stages(export)
+    deck = deck_stages(export)
     assert list(deck) == ["1_High", "2_Low"]
     levels = [[p["Parameters"]["reference_coordinate"]
                for p in deck[name]["stage_settings"]["processes"]["constraints_process_list"]]
@@ -279,7 +279,7 @@ def case_b(gmsh_session):
 
 
 def test_a_soil_whose_permeability_follows_the_pressure_is_solved_by_newton(case_b):
-    """The reference Newton-Raphson block, with the phase's 100 iterations and its
+    """The reference Newton-Raphson block, with the stage's 100 iterations and its
     tolerance of 1e-3."""
     solver = settings(case_b)["solver_settings"]
     assert {key: solver[key] for key in REFERENCE_SOLVER_B} == REFERENCE_SOLVER_B
@@ -301,10 +301,10 @@ def test_the_van_genuchten_soil_is_the_reference_one(case_b):
     assert not case_b["warnings"]
 
 
-def test_a_phase_s_iterations_are_its_own(gmsh_session):
+def test_a_stage_s_iterations_are_its_own(gmsh_session):
     soil = {**REFERENCE_SOIL, **VAN_GENUCHTEN}
-    export = writer.export_project(muskat(soil=soil, phases=[
-        Phase(id="flow", name="Flow", calculation="Groundwater flow",
+    export = writer.export_project(muskat(soil=soil, stages=[
+        Stage(id="flow", name="Flow", calculation="Groundwater flow",
               max_iterations=40, tolerated_error=1e-5)]))
     solver = settings(export)["solver_settings"]
     assert (solver["max_iterations"], solver["residual_relative_tolerance"]) == (40, 1e-5)
@@ -437,7 +437,7 @@ def test_a_seepage_line_through_the_soil_is_refused(gmsh_session):
 def test_a_seepage_face_in_a_deformation_project_is_left_out_and_said(gmsh_session):
     face = SeepageCondition(id="top", name="Top", on="face", face="top")
     project = muskat(conditions=[*standard_conditions(), *HEADS, face],
-                     phases=[Phase(id="p", name="P")])
+                     stages=[Stage(id="p", name="P")])
     export = writer.export_project(project)
     assert any("seepage condition 'Top' is left out: a seepage face belongs to a "
                "groundwater flow calculation" in w for w in export["warnings"])
@@ -453,19 +453,19 @@ def test_a_seepage_condition_takes_a_face_or_a_line_only():
 
 # ── Refusals ────────────────────────────────────────────────────────────────
 
-def test_flow_and_deformation_phases_cannot_be_mixed():
-    project = muskat(phases=[FLOW, Phase(id="load", name="Load", parent="flow")])
-    with pytest.raises(phases.PhaseError, match="cannot mix groundwater flow phases"):
-        phases.groundwater_flow(project)
-    with pytest.raises(writer.ExportError, match=r"\('Flow'\) with deformation phases "
+def test_flow_and_deformation_stages_cannot_be_mixed():
+    project = muskat(stages=[FLOW, Stage(id="load", name="Load", parent="flow")])
+    with pytest.raises(stages.StageError, match="cannot mix groundwater flow stages"):
+        stages.groundwater_flow(project)
+    with pytest.raises(writer.ExportError, match=r"\('Flow'\) with deformation stages "
                                                  r"\('Load'\)"):
         writer.export_project(project)
 
 
-def test_a_project_without_flow_phases_is_not_a_flow_project():
-    assert not phases.groundwater_flow(muskat(phases=[]))
-    assert not phases.groundwater_flow(muskat(phases=[Phase(id="p", name="P")]))
-    assert condition_checks.flow_refusal(muskat(phases=[])) is None
+def test_a_project_without_flow_stages_is_not_a_flow_project():
+    assert not stages.groundwater_flow(muskat(stages=[]))
+    assert not stages.groundwater_flow(muskat(stages=[Stage(id="p", name="P")]))
+    assert condition_checks.flow_refusal(muskat(stages=[])) is None
 
 
 def test_a_3d_flow_project_is_refused():
@@ -479,22 +479,22 @@ def test_a_soil_without_permeability_is_refused():
     assert "'sand' has no PERMEABILITY_XX" in condition_checks.flow_refusal(muskat(soil=soil))
 
 
-def test_a_phase_with_no_fixed_head_is_refused():
+def test_a_stage_with_no_fixed_head_is_refused():
     start = WaterPressureCondition(id="start", name="Start", on="domain",
                                    reference_coordinate=3.0, is_fixed=False)
     refusal = condition_checks.flow_refusal(muskat(conditions=[start]))
-    assert "in phase 'Flow' no fixed water pressure condition is on" in refusal
+    assert "in stage 'Flow' no fixed water pressure condition is on" in refusal
 
 
-def test_a_head_kept_from_an_earlier_phase_holds_the_next():
-    project = muskat(phases=[
-        FLOW, Phase(id="after", name="After", parent="flow",
+def test_a_head_kept_from_an_earlier_stage_holds_the_next():
+    project = muskat(stages=[
+        FLOW, Stage(id="after", name="After", parent="flow",
                     calculation="Groundwater flow",
                     deactivate=["left_head", "right_head"])])
     assert condition_checks.flow_refusal(project) is None
 
 
-def test_an_imported_flow_deck_s_stage_is_a_groundwater_flow_phase():
+def test_an_imported_flow_deck_s_stage_is_a_groundwater_flow_stage():
     stage = {"stage_settings": {"solver_settings": {
         "solution_type": "Steady_State_Groundwater_Flow"}}}
-    assert external_deck._calculation(stage, "stage 1") == phases.GROUNDWATER_FLOW
+    assert external_deck._calculation(stage, "stage 1") == stages.GROUNDWATER_FLOW

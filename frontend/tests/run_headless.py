@@ -2,7 +2,7 @@
 
 `frontend/tests/index.html` is the real suite and always will be: most of it drives a
 THREE.js scene, a dock layout and real DOM events, and those need a browser. But a
-good part of the live layer is pure logic -- the phase model, the water line, the
+good part of the live layer is pure logic -- the stage model, the water line, the
 buffers -- and until now *none* of it had ever been executed, only bracket-checked
 (plan sec 7.17). That is the largest untested surface in the project, and Milestone D
 adds to it.
@@ -11,7 +11,7 @@ This runs the pure-logic part under `quickjs`, a JavaScript engine that installs
 ordinary Python wheel. No Node, no browser, no build step.
 
     python frontend/tests/run_headless.py            # everything listed below
-    python frontend/tests/run_headless.py phases     # one suite
+    python frontend/tests/run_headless.py stages     # one suite
 
 What it does *not* do is pretend to be a browser. There is no DOM here and no attempt
 at one: a suite gets into the list below only because it touches neither, and a suite
@@ -35,9 +35,9 @@ JS = ROOT / "frontend" / "js"
 # Each suite: the sources it needs, then the test file. Order matters -- these are
 # plain scripts sharing one global, exactly as the browser loads them.
 SUITES = {
-    "phases": (
-        [TESTS / "fixtures" / "phase-cases.js", JS / "phases.js"],
-        TESTS / "test-phases.js",
+    "stages": (
+        [TESTS / "fixtures" / "stage-cases.js", JS / "stages.js"],
+        TESTS / "test-stages.js",
     ),
     # `results.js` loads no other module and touches no DOM, by design -- see its
     # header. Everything it reaches the world through, the suite replaces.
@@ -83,7 +83,7 @@ SUITES = {
     # `run <case.py>` for a deck case: whether its mesh came along, the Model explorer
     # rows and the log line. Showing it and switching to the Mesh tab are DOM.
     "deck": (
-        [JS / "phases.js", JS / "deck.js"],
+        [JS / "stages.js", JS / "deck.js"],
         TESTS / "test-deck.js",
     ),
     # `results plot` and the figure it draws: the wall and interface curves per stage.

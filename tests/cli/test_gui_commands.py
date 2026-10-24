@@ -15,7 +15,7 @@ The dispatchers, in the order the box asks them (`frontend/js/patches.js`,
   (`results-plot.js`) for `results plot`;
 * the small commands, each a module whose `command`/`parse` answers `false` for a line
   that is not its own (`colour`, `water`, `units`, `node`);
-* the words `App.Command.run` itself tests (`phases`, `run`, `export`, `mesh`, ...);
+* the words `App.Command.run` itself tests (`stages`, `run`, `export`, `mesh`, ...);
 * the mockup's interpreter (`base/js/command.js`): its mode jumps, its `switch`, and the
   canned answers of `App.CMD_RESPONSES` (`base/js/data.js`).
 
@@ -147,7 +147,7 @@ def documented() -> tuple[set[str], set[str], set[str]]:
 
 def test_the_reader_finds_the_dispatchers():
     """A reader that found nothing would pass everything below."""
-    assert {"run", "export", "mesh", "phases", "water", "units", "node", "colour",
+    assert {"run", "export", "mesh", "stages", "water", "units", "node", "colour",
             "results", "view", "gotosoil", "help", "calculate"} <= gui_commands()
     assert {"runs", "open", "field", "at", "csv", "plot", "deform"} <= results_verbs()
     assert {"members", "csv", "svg"} <= plot_verbs()

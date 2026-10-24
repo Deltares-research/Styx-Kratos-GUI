@@ -34,7 +34,7 @@ file's own `GaussPoints` block declares.
 
 ── Empty is a real answer ───────────────────────────────────────────────────
 
-A stage writes an element block with nothing in it for a body that phase deactivated,
+A stage writes an element block with nothing in it for a body that stage deactivated,
 and a `Values` block with nothing in it for a variable the element does not implement
 (the beam does not compute `CAUCHY_STRESS_TENSOR` on its integration points, and the
 runs on this machine all carry an empty `lin2_element_gp` block saying so). Neither is

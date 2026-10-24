@@ -277,13 +277,13 @@ App.BoundaryConditions = (function () {
       && record.on === 'face' && SECTION_FACES.indexOf(record.face) < 0;
   }
 
-  /* The water pressure conditions `phaseId` has on, by name, as the phase panel says
-     them: a phase switches them as it does a part (App.Phases.activeParts). */
-  function waterIn(project, phaseId) {
+  /* The water pressure conditions `stageId` has on, by name, as the stage panel says
+     them: a stage switches them as it does a part (App.Stages.activeParts). */
+  function waterIn(project, stageId) {
     var water = records(project).filter(function (record) {
       return record.kind === 'water_pressure' && record.active !== false;
     });
-    var on = App.Phases ? App.Phases.activeParts(project, phaseId) : null;
+    var on = App.Stages ? App.Stages.activeParts(project, stageId) : null;
     var names = water.filter(function (record) {
       return !on || on.indexOf(record.id) >= 0;
     }).map(function (record) { return record.name; });
@@ -369,7 +369,7 @@ App.BoundaryConditions = (function () {
   /* Whether the export of `project` leaves the support `record` out because the project
      is a groundwater flow calculation (`condition_checks.unused_in_flow`). */
   function unusedInFlow(record, project) {
-    return record.kind === 'displacement' && App.Phases.groundwaterFlow(project);
+    return record.kind === 'displacement' && App.Stages.groundwaterFlow(project);
   }
 
   /* The conditions a list shows, one line each, as `kratos-cli boundary list` prints

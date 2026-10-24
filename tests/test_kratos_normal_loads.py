@@ -250,7 +250,7 @@ def test_trench_water_drawn_the_other_way_round_is_warned_about():
     (warning,) = pulling_warnings(Project.model_validate(data))
     assert warning.startswith("normal load 'Trench water' pulls on the soil instead of "
                               "pressing on it, along its whole line: no soil is on its "
-                              "right in phase 'Dig trench'.")
+                              "right in stage 'Dig trench'.")
 
 
 def test_the_staged_excavation_s_water_loads_press_on_the_soil():

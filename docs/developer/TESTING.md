@@ -39,7 +39,7 @@ failed, when something that it needs is missing: quickjs, Kratos or a browser.
 ## Options
 
 - **Select tests:** the arguments after the tier go to pytest. For example,
-  `python tools/test.py quick -k phases -x` runs the tests with "phases" in their name, and
+  `python tools/test.py quick -k stages -x` runs the tests with "stages" in their name, and
   stops at the first failure.
 - **JavaScript tests without a browser:** these need the `quickjs` package. If it does not
   install in the virtual environment, set `KRATOS_GUI_QUICKJS_PYTHON` to a Python that has

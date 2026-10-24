@@ -22,7 +22,7 @@
 
    ── Holes are not zeroes ─────────────────────────────────────────────────
 
-   A vertex can have no value: it belongs to a body this phase excavated, or to a part
+   A vertex can have no value: it belongs to a body this stage excavated, or to a part
    the GiD writer does not emit. `null` travels all the way to the colour buffer, where
    it becomes ABSENT grey. Substituting zero would paint a floor of "no stress" across
    an open pit, which reads as a result rather than as an absence.

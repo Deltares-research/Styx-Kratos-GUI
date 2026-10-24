@@ -1,4 +1,4 @@
-"""`mesh`, `phases`, `export`, `run`, `calculate`, `results`: from a project file to a
+"""`mesh`, `stages`, `export`, `run`, `calculate`, `results`: from a project file to a
 Kratos deck on disk, through Kratos, to the results it left.
 
 The deck on disk is the hand-over point (plan sec 0): `export` writes it, `run` runs a
@@ -53,22 +53,22 @@ def test_a_deck_is_not_meshed(cli, tmp_path):
     assert "not meshed here" in ran.err
 
 
-# ── phases ──────────────────────────────────────────────────────────────────
+# ── stages ──────────────────────────────────────────────────────────────────
 
-def test_phases_defaults_gives_the_initial_stage_and_the_null_step(cli, site):
-    assert cli("phases", site, "defaults").code == 0
+def test_stages_defaults_gives_the_initial_stage_and_the_null_step(cli, site):
+    assert cli("stages", site, "defaults").code == 0
 
-    phases = session.load(site).phases
-    assert len(phases) == 2 and phases[1].parent == phases[0].id
-    listed = cli("phases", site, "list").out
-    assert all(phase.id in listed for phase in phases)
+    stages = session.load(site).stages
+    assert len(stages) == 2 and stages[1].parent == stages[0].id
+    listed = cli("stages", site, "list").out
+    assert all(stage.id in listed for stage in stages)
 
 
-def test_phases_list_says_when_there_are_none(cli, site):
-    ran = cli("phases", site, "list")
+def test_stages_list_says_when_there_are_none(cli, site):
+    ran = cli("stages", site, "list")
 
     assert ran.code == 0
-    assert "no phases" in ran.out.lower()
+    assert "no stages" in ran.out.lower()
 
 
 # ── export ──────────────────────────────────────────────────────────────────

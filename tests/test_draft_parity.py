@@ -15,7 +15,7 @@ for field -- or refuse with the same sentence.
 
     python tests/test_draft_parity.py --write
 
-rewrites it after a deliberate change. The pattern is `tests/test_phase_parity.py`'s: a
+rewrites it after a deliberate change. The pattern is `tests/test_stage_parity.py`'s: a
 `.js` file assigning one global, which Python reads by stripping the assignment.
 """
 

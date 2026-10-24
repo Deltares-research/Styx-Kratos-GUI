@@ -10,8 +10,8 @@ Each edit takes a `Project` and returns a new one; the project it was given is n
 changed. An edit is validated as a whole project before it is returned, so a change
 that would leave the model inconsistent is refused field by field (a pydantic
 `ValidationError`) rather than made. The refusals that are not about one field are this
-module's own: `EditRefused`, and `UnknownPart` and `DeckReadOnly` under it. A phase
-sequence that cannot run is `core.model.phases.PhaseError`.
+module's own: `EditRefused`, and `UnknownPart` and `DeckReadOnly` under it. A stage
+sequence that cannot run is `core.model.stages.StageError`.
 
 What is *not* here is anything slow. Building a solid or reading a CAD file is gmsh's
 work, in the worker (`core.gmsh_worker`); the edit that adds the part takes what gmsh
@@ -34,10 +34,10 @@ from pathlib import Path
 
 from core import scripting
 from core.kratos import materials
-from core.model import drafts, phases, units
+from core.model import drafts, stages, units
 from core.model.load_translation import translate as translate_loads
 from core.model.schemas import (ConditionsUpdate, CustomPart, DimensionUpdate, LayersUpdate,
-                                MaterialsUpdate, MeshRequest, Panel, PhasesUpdate, Project,
+                                MaterialsUpdate, MeshRequest, Panel, StagesUpdate, Project,
                                 StructuresUpdate,
                                 UnitsUpdate, WaterLevel, WaterUpdate, point_on_panel,
                                 point_on_polyline)
@@ -253,48 +253,48 @@ def replace_structures(project: Project, update: StructuresUpdate) -> Project:
     return Project.model_validate(payload)
 
 
-# ── Phases ──────────────────────────────────────────────────────────────────
+# ── Stages ──────────────────────────────────────────────────────────────────
 
-def replace_phases(project: Project, update: PhasesUpdate) -> Project:
+def replace_stages(project: Project, update: StagesUpdate) -> Project:
     """The construction sequence.
 
     Two validations, and they are different things. The schema's own checks run first
-    -- one root, no cycles, no part both activated and deactivated in one phase, every
+    -- one root, no cycles, no part both activated and deactivated in one stage, every
     key a key the model has. Then the tree has to *linearise*: Kratos runs one flat
-    `execution_list`, so two phases starting from the same parent have no order to run
-    in, and that is `phases.PhaseError`, naming the phases that branch.
+    `execution_list`, so two stages starting from the same parent have no order to run
+    in, and that is `stages.StageError`, naming the stages that branch.
 
     `linearise` is deliberately not a schema validator: a branch is a legitimate thing
     to have half-built in an editor, and refusing it in `Project` would make it
     impossible to type. It is refused here, at the edit, rather than at export, because
     this is where whoever made it can still see what they did.
     """
-    _phases_of_a_deck_are_read_only(project)
+    _stages_of_a_deck_are_read_only(project)
     payload = project.model_dump()
-    payload["phases"] = [phase.model_dump() for phase in update.phases]
+    payload["stages"] = [stage.model_dump() for stage in update.stages]
     edited = Project.model_validate(payload)
-    phases.linearise(edited)
+    stages.linearise(edited)
     return edited
 
 
-def default_phases(project: Project) -> Project:
-    """The initial stage, then the null step (`phases.default_phases` is the authority).
+def default_stages(project: Project) -> Project:
+    """The initial stage, then the null step (`stages.default_stages` is the authority).
 
-    It replaces whatever is there rather than refusing when phases already exist: it is
+    It replaces whatever is there rather than refusing when stages already exist: it is
     the way back out of a sequence that has been broken.
     """
-    _phases_of_a_deck_are_read_only(project)
+    _stages_of_a_deck_are_read_only(project)
     payload = project.model_dump()
-    payload["phases"] = [phase.model_dump() for phase in phases.default_phases(project)]
+    payload["stages"] = [stage.model_dump() for stage in stages.default_stages(project)]
     return Project.model_validate(payload)
 
 
-def _phases_of_a_deck_are_read_only(project: Project) -> None:
-    """A deck's phases are its stages, read from it (`core.kratos.external_deck`); the
+def _stages_of_a_deck_are_read_only(project: Project) -> None:
+    """A deck's stages are its stages, read from it (`core.kratos.external_deck`); the
     deck is what is calculated, so an edit made here would change nothing that is."""
     if project.deck is not None:
         raise DeckReadOnly(
-            f"The phases of {project.name} are the stages of its Kratos deck "
+            f"The stages of {project.name} are the stages of its Kratos deck "
             f"({project.deck.parameters} in {project.deck.directory}), shown as they "
             f"are. Edit the deck to change them, then run its script again.")
 
@@ -455,20 +455,20 @@ def with_imported_part(project: Project, filename: str | None, built: dict,
 def without_custom_parts(project: Project, keys: list[str]) -> Project:
     """`project` minus the custom parts `keys`, validated like any other edit.
 
-    A part a phase still names is refused, not quietly unstaged: which phases should
+    A part a stage still names is refused, not quietly unstaged: which stages should
     lose it is a modelling decision. Left to validation instead, the project would be
     one every later edit fails on with "names no such part". A mesh size for the part
     goes with it -- it describes nothing else.
     """
     gone = set(keys)
-    users = [(phase.id, sorted(gone & set(phase.activate + phase.deactivate)))
-             for phase in project.phases]
-    users = [(phase, named) for phase, named in users if named]
+    users = [(stage.id, sorted(gone & set(stage.activate + stage.deactivate)))
+             for stage in project.stages]
+    users = [(stage, named) for stage, named in users if named]
     if users:
-        listed = "; ".join(f"phase {phase!r} names {', '.join(named)}"
-                           for phase, named in users)
-        raise EditRefused(f"cannot delete a part that a phase still uses ({listed}); take "
-                          "it out of those phases first")
+        listed = "; ".join(f"stage {stage!r} names {', '.join(named)}"
+                           for stage, named in users)
+        raise EditRefused(f"cannot delete a part that a stage still uses ({listed}); take "
+                          "it out of those stages first")
     payload = project.model_dump()
     payload["custom_parts"] = [p for p in payload["custom_parts"] if p["key"] not in gone]
     payload["mesh"]["body_sizes"] = {k: v for k, v in payload["mesh"]["body_sizes"].items()
@@ -578,7 +578,7 @@ def with_added(project: Project, path: str, value: object) -> Project:
 def without_value(project: Project, path: str) -> Project:
     """`project` without the record or the mapping key at `path`.
 
-    A custom part goes the way `without_custom_part` takes it -- refused while a phase
+    A custom part goes the way `without_custom_part` takes it -- refused while a stage
     uses it, its mesh size with it -- rather than simply being dropped from the list.
     """
     payload = project.model_dump(mode="json")
@@ -591,10 +591,10 @@ def without_value(project: Project, path: str) -> Project:
 
 
 def _validated_edit(project: Project, payload: dict, tokens: list[tuple[str, str]]) -> Project:
-    """The edited payload as a project. An edit inside the phases is one of the phases,
+    """The edited payload as a project. An edit inside the stages is one of the stages,
     so it has to linearise as well, and a deck's are not edited at all."""
-    if tokens[0][1] == "phases":
-        return replace_phases(project, PhasesUpdate(phases=payload["phases"]))
+    if tokens[0][1] == "stages":
+        return replace_stages(project, StagesUpdate(stages=payload["stages"]))
     return Project.model_validate(payload)
 
 
@@ -619,6 +619,9 @@ def _tokens(path: str) -> list[tuple[str, str]]:
         at = match.end()
     if not tokens:
         raise PathError("give a path, e.g. mesh.element_size")
+    if tokens[0] == ("field", "phases"):
+        # The field's name before it took Kratos' word; a script that still says it works.
+        tokens[0] = ("field", "stages")
     return tokens
 
 
@@ -882,7 +885,7 @@ def set_excavation(project: Project, *, x: tuple[float, float] | None = None,
                    levels: list[float] | None = None) -> tuple[Project, list[str]]:
     """The pit: its plan outline (`x`, `z` as from, to) and the levels it is dug to,
     shallowest first -- one lift per level, each its own body, deactivated in its own
-    phase. The floor is the last level."""
+    stage. The floor is the last level."""
     payload = project.model_dump()
     pit = payload["excavation"]
     if x is not None:
@@ -893,9 +896,9 @@ def set_excavation(project: Project, *, x: tuple[float, float] | None = None,
         pit["levels"], pit["floor_y"] = list(levels), levels[-1]
     edited = Project.model_validate(payload)
     notes = []
-    if edited.layered_soil and len(edited.excavation.levels) < 2:
+    if edited.layered_soil and len(edited.pit_levels()) < 2:
         notes.append("With one level a layered model digs nothing: its pit is cut only "
-                     "when it is dug in two or more levels, one phase per lift.")
+                     "when it is dug in two or more levels, one stage per lift.")
     return edited, notes
 
 
@@ -932,7 +935,7 @@ def _refuse_taken(id: str, taken: list[str], what: str) -> None:
 # `PATCH /api/project/structures` (`replace_structures` above): a sheet pile, wall or
 # member, an anchor, an interface, a normal load or a load, each with the section it is
 # built with when the project has none by that id yet (`drafts.section_for`). The
-# collections share one namespace with the soil bodies -- the keys a phase switches --
+# collections share one namespace with the soil bodies -- the keys a stage switches --
 # so an id is refused that any part already has.
 
 STRUCTURES = ("beams", "anchors", "interfaces", "normal_loads", "loads")
@@ -972,7 +975,7 @@ def add_structure(project: Project, record, section=None) -> Project:
     taken |= {r.id for field in STRUCTURES for r in getattr(project, field)} | RESERVED
     if record.id in taken:
         raise EditRefused(f"there is already a part {record.id!r}; give another id. A "
-                          "phase names a part by its id, so no two parts share one.")
+                          "stage names a part by its id, so no two parts share one.")
     payload = project.model_dump()
     if section is not None:
         kind = drafts.section_kind(record)
@@ -997,17 +1000,17 @@ def update_structure(project: Project, id: str, **fields) -> Project:
 def remove_structure(project: Project, id: str) -> Project:
     """The project without the structure `id`, and without its mesh size.
 
-    Refused while a phase names it -- which phases should lose it is a modelling decision,
+    Refused while a stage names it -- which stages should lose it is a modelling decision,
     as for a custom part (`without_custom_parts`) -- and, for a pile, while an anchor
     hangs from it or an interface follows it: those would be left on nothing.
     """
     record = find_structure(project, id)
-    users = [phase.id for phase in project.phases
-             if id in phase.activate or id in phase.deactivate]
+    users = [stage.id for stage in project.stages
+             if id in stage.activate or id in stage.deactivate]
     if users:
-        raise EditRefused("cannot remove a structure a phase still uses ("
-                          + "; ".join(f"phase {phase!r} names {id}" for phase in users)
-                          + "); take it out of those phases first")
+        raise EditRefused("cannot remove a structure a stage still uses ("
+                          + "; ".join(f"stage {stage!r} names {id}" for stage in users)
+                          + "); take it out of those stages first")
     if _collection(record) == "beams":
         hanging = [a.id for a in project.anchors if _hangs_from(a, record)]
         hanging += [i.id for i in project.interfaces if i.structure == id]
@@ -1096,17 +1099,17 @@ def remove_section(project: Project, id: str, kind: str | None = None) -> Projec
 # that any part or structure already has, as for a structure.
 
 def _refuse_staged_conditions(project: Project, kept: set[str]) -> None:
-    """Refuse to remove a water pressure condition a phase still switches: which phases
+    """Refuse to remove a water pressure condition a stage still switches: which stages
     should lose it is a modelling decision, as for a structure (`remove_structure`)."""
     gone = {c.id for c in project.boundary_conditions if c.id not in kept}
-    users = [(phase.id, sorted(gone & set(phase.activate + phase.deactivate)))
-             for phase in project.phases]
-    users = [(phase, named) for phase, named in users if named]
+    users = [(stage.id, sorted(gone & set(stage.activate + stage.deactivate)))
+             for stage in project.stages]
+    users = [(stage, named) for stage, named in users if named]
     if users:
-        listed = "; ".join(f"phase {phase!r} names {', '.join(named)}"
-                           for phase, named in users)
-        raise EditRefused(f"cannot remove a condition that a phase still switches "
-                          f"({listed}); take it out of those phases first")
+        listed = "; ".join(f"stage {stage!r} names {', '.join(named)}"
+                           for stage, named in users)
+        raise EditRefused(f"cannot remove a condition that a stage still switches "
+                          f"({listed}); take it out of those stages first")
 
 
 def replace_conditions(project: Project, update: ConditionsUpdate) -> Project:
@@ -1185,76 +1188,76 @@ def remove_condition(project: Project, id: str) -> Project:
     return Project.model_validate(payload)
 
 
-# ── Phases, one at a time ───────────────────────────────────────────────────
+# ── Stages, one at a time ───────────────────────────────────────────────────
 #
-# The Phases toolbar's Add, Insert, Copy and Delete, the phase panel's fields and the
+# The Stages toolbar's Add, Insert, Copy and Delete, the stage panel's fields and the
 # Model explorer's checkbox in Staged construction mode, each made with the list
-# transform the GUI makes (`phases.added` ... `phases.set_active`) and stored the way
-# `PATCH /api/project/phases` stores a list (`replace_phases`).
+# transform the GUI makes (`stages.added` ... `stages.set_active`) and stored the way
+# `PATCH /api/project/stages` stores a list (`replace_stages`).
 
-def find_phase(project: Project, id: str):
-    """The phase `id`."""
-    return project.phases[_index(project.phases, id, "phase")]
+def find_stage(project: Project, id: str):
+    """The stage `id`."""
+    return project.stages[_index(project.stages, id, "stage")]
 
 
-def add_phase(project: Project, *, before: str | None = None, copy_of: str | None = None,
+def add_stage(project: Project, *, before: str | None = None, copy_of: str | None = None,
               id: str | None = None, **fields) -> tuple[Project, object]:
-    """A new phase -- at the end of the sequence, `before` a phase (Insert), or after
+    """A new stage -- at the end of the sequence, `before` a stage (Insert), or after
     `copy_of` with its solver settings (Copy) -- with the id and the fields given.
-    Returns the project and the phase."""
+    Returns the project and the stage."""
     for named in (before, copy_of):
         if named is not None:
-            _index(project.phases, named, "phase")
+            _index(project.stages, named, "stage")
     if id is not None:
-        _refuse_taken(id, [phase.id for phase in project.phases], "phase")
+        _refuse_taken(id, [stage.id for stage in project.stages], "stage")
     if before is not None:
-        listed = phases.inserted(project, before)
+        listed = stages.inserted(project, before)
     elif copy_of is not None:
-        listed = phases.copied(project, copy_of)
+        listed = stages.copied(project, copy_of)
     else:
-        listed = phases.added(project)
-    fresh = next(phase.id for phase in listed
-                 if phase.id not in {p.id for p in project.phases})
-    payload = [phase.model_dump() for phase in listed]
-    for phase in payload:
-        if phase["id"] == fresh:
-            phase.update(fields, id=id or fresh)
-        if id is not None and phase["parent"] == fresh:
-            phase["parent"] = id
-    edited = replace_phases(project, PhasesUpdate.model_validate({"phases": payload}))
-    return edited, next(phase for phase in edited.phases if phase.id == (id or fresh))
+        listed = stages.added(project)
+    fresh = next(stage.id for stage in listed
+                 if stage.id not in {p.id for p in project.stages})
+    payload = [stage.model_dump() for stage in listed]
+    for stage in payload:
+        if stage["id"] == fresh:
+            stage.update(fields, id=id or fresh)
+        if id is not None and stage["parent"] == fresh:
+            stage["parent"] = id
+    edited = replace_stages(project, StagesUpdate.model_validate({"stages": payload}))
+    return edited, next(stage for stage in edited.stages if stage.id == (id or fresh))
 
 
-def update_phase(project: Project, id: str, **fields) -> Project:
-    """The phase `id` with the fields given, by their schema names."""
-    _index(project.phases, id, "phase")
-    payload = [phase.model_dump() for phase in project.phases]
-    next(phase for phase in payload if phase["id"] == id).update(fields)
-    return replace_phases(project, PhasesUpdate.model_validate({"phases": payload}))
+def update_stage(project: Project, id: str, **fields) -> Project:
+    """The stage `id` with the fields given, by their schema names."""
+    _index(project.stages, id, "stage")
+    payload = [stage.model_dump() for stage in project.stages]
+    next(stage for stage in payload if stage["id"] == id).update(fields)
+    return replace_stages(project, StagesUpdate.model_validate({"stages": payload}))
 
 
-def remove_phase(project: Project, id: str) -> Project:
-    """The project without phase `id`, its children starting from its parent."""
-    _index(project.phases, id, "phase")
-    return replace_phases(project, PhasesUpdate(phases=phases.removed(project, id)))
+def remove_stage(project: Project, id: str) -> Project:
+    """The project without stage `id`, its children starting from its parent."""
+    _index(project.stages, id, "stage")
+    return replace_stages(project, StagesUpdate(stages=stages.removed(project, id)))
 
 
 def switch_parts(project: Project, id: str, keys: list[str], active: bool) -> Project:
-    """The parts `keys` in the model (`active`) or out of it from phase `id` on, as the
+    """The parts `keys` in the model (`active`) or out of it from stage `id` on, as the
     Model explorer's checkbox switches them in Staged construction mode."""
-    _index(project.phases, id, "phase")
+    _index(project.stages, id, "stage")
     stageable = project.stageable_keys()
     for key in keys:
         if key not in stageable:
             raise EditRefused(f"there is no part {key!r} to switch; `kratos-cli parts` "
-                              "lists the parts a phase can switch")
-    return replace_phases(project, PhasesUpdate(
-        phases=phases.set_active(project, id, list(keys), active)))
+                              "lists the parts a stage can switch")
+    return replace_stages(project, StagesUpdate(
+        stages=stages.set_active(project, id, list(keys), active)))
 
 
-def staged_excavation_phases(project: Project) -> Project:
+def staged_excavation_stages(project: Project) -> Project:
     """The whole staged-excavation sequence derived from the model -- settle, build the
-    wall, then dig and prop lift by lift (`phases.staged_excavation_phases`) -- replacing
+    wall, then dig and prop lift by lift (`stages.staged_excavation_stages`) -- replacing
     whatever is there."""
-    return replace_phases(project, PhasesUpdate(
-        phases=phases.staged_excavation_phases(project)))
+    return replace_stages(project, StagesUpdate(
+        stages=stages.staged_excavation_stages(project)))

@@ -3,7 +3,7 @@
 Kratos' own `tests/Muskat/saturated_hydrostatic` (case A of
 plan/done/groundwater-flow-plan.md), as a project: a 1.62 m by 4 m column of saturated
 soil, the water held at a level of 3.0 m on the left face and 1.6 m on the right, one
-"Groundwater flow" phase. The soil and the heads are the reference deck's, value for
+"Groundwater flow" stage. The soil and the heads are the reference deck's, value for
 value. No support: a flow calculation leaves them out.
 
 The head is linear in x between the faces, so the answer is known exactly
@@ -29,7 +29,7 @@ It is also a script the GUI can open:
 from __future__ import annotations
 
 from core.model.schemas import (AnchorRows, Borehole, BoxRefinement, Domain, Excavation,
-                                Material, MeshSettings, Phase, Piles, Project,
+                                Material, MeshSettings, Stage, Piles, Project,
                                 SeepageCondition, SoilLayer, Struts, Wall,
                                 WaterPressureCondition, Wells)
 
@@ -72,7 +72,7 @@ VAN_GENUCHTEN = {
 }
 """What Kratos' `tests/Muskat/van_genuchten_hydrostatic` changes in the material."""
 
-FLOW = Phase(id="flow", name="Flow", calculation="Groundwater flow")
+FLOW = Stage(id="flow", name="Flow", calculation="Groundwater flow")
 
 CONDUCTIVITY = SOIL["PERMEABILITY_XX"] * SOIL["DENSITY_WATER"] * 9.81 / SOIL["DYNAMIC_VISCOSITY"]
 """K = k rho_w g / mu, m/s: the hydraulic conductivity Kratos' flow element uses."""
@@ -113,10 +113,10 @@ KRATOS_A = {
 answer, to the digits Kratos keeps."""
 
 
-def muskat(conditions: list | None = None, phases: list[Phase] | None = None,
+def muskat(conditions: list | None = None, stages: list[Stage] | None = None,
            soil: dict | None = None, order: int = 1, **changes) -> Project:
-    """The column, meshed at 0.4 m: `conditions` in place of the two heads, `phases` in
-    place of the one flow phase, `soil` in place of the material's variables, and any
+    """The column, meshed at 0.4 m: `conditions` in place of the two heads, `stages` in
+    place of the one flow stage, `soil` in place of the material's variables, and any
     other `Project` field in `changes`."""
     material = Material(id="sand", name="sand", color="#c4a86a",
                         constitutive_law="GeoLinearElasticPlaneStrain2DLaw",
@@ -131,7 +131,7 @@ def muskat(conditions: list | None = None, phases: list[Phase] | None = None,
         layers=[SoilLayer(id="soil", name="soil", mat=material.id,
                           tops={"bh1": HEIGHT}, bots={"bh1": 0.0})],
         boundary_conditions=HEADS if conditions is None else conditions,
-        phases=[FLOW] if phases is None else phases,
+        stages=[FLOW] if stages is None else stages,
         mesh=MeshSettings(element_size=0.4, order=order),
         # Required by the schema. A layered model with one excavation level cuts no pit
         # and builds none of the 3D demo structures.
@@ -178,7 +178,7 @@ KRATOS_B = {
 
 def van_genuchten(order: int = 2, size: float = 0.1) -> Project:
     """Case B, meshed at `size`: the Van Genuchten soil, the phreatic start, the heads at
-    3.0 m and 1.62 m, and the flow phase with the deck's Newton-Raphson settings (100
+    3.0 m and 1.62 m, and the flow stage with the deck's Newton-Raphson settings (100
     iterations, a relative tolerance of 1e-3).
 
     0.1 m rather than case A's 0.4 m: with this soil, Newton-Raphson falls into a cycle
@@ -188,7 +188,7 @@ def van_genuchten(order: int = 2, size: float = 0.1) -> Project:
     return muskat(
         conditions=[head("left_head", "left", LEFT_LEVEL),
                     head("right_head", "right", RIGHT_LEVEL_B), PHREATIC_START],
-        phases=[Phase(id="flow", name="Flow", calculation="Groundwater flow",
+        stages=[Stage(id="flow", name="Flow", calculation="Groundwater flow",
                       max_iterations=100, tolerated_error=1e-3)],
         soil={**SOIL, **VAN_GENUCHTEN}, order=order,
         mesh=MeshSettings(element_size=size, order=order),
@@ -241,12 +241,12 @@ START = WaterPressureCondition(
 def seepage(order: int = 1, max_iterations: int = 100) -> Project:
     """Case C: the Van Genuchten soil, the left head at 3.0 m, the tail water and the
     seepage face on the right face, meshed at 0.4 m and at `FACE_SIZE` along the right
-    face, started from `START`. The flow phase has the seepage decks' tolerance of 1e-4
+    face, started from `START`. The flow stage has the seepage decks' tolerance of 1e-4
     and `max_iterations`: the seepage strategy opens one node of the face per iteration,
     and the face has 89 nodes at this size, of which 35 open (35 iterations, linear)."""
     return muskat(
         conditions=[head("left_head", "left", LEFT_LEVEL), TAIL, SEEPAGE_FACE, START],
-        phases=[Phase(id="flow", name="Flow", calculation="Groundwater flow",
+        stages=[Stage(id="flow", name="Flow", calculation="Groundwater flow",
                       max_iterations=max_iterations, tolerated_error=1e-4)],
         soil={**SOIL, **VAN_GENUCHTEN}, order=order,
         mesh=MeshSettings(element_size=0.4, order=order, refinements=[BoxRefinement(

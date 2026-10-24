@@ -67,7 +67,7 @@ largest files and one row for the rest.
 | `core/results/gid_reader.py` | 351 | 200 | 5 | 3 | 9 |
 | `core/kratos/external_deck.py` | 342 | 197 | 1 | 17 | 0 |
 | `core/results/fields.py` | 385 | 187 | 2 | 15 | 1 |
-| `core/model/phases.py` | 365 | 182 | 1 | 17 | 0 |
+| `core/model/stages.py` | 365 | 182 | 1 | 17 | 0 |
 | `core/model/migration.py` | 243 | 173 | 0 | 13 | 0 |
 | `core/geometry/cad_import.py` | 242 | 170 | 2 | 10 | 2 |
 | `core/scripting.py` | 271 | 151 | 1 | 9 | 0 |
@@ -86,7 +86,7 @@ largest files and one row for the rest.
 | `cli/commands/results.py` | 411 | 306 | 0 | 25 | 0 |
 | `cli/commands/ground.py` | 304 | 223 | 0 | 22 | 0 |
 | `cli/commands/project.py` | 272 | 216 | 0 | 16 | 0 |
-| `cli/commands/phases.py` | 257 | 180 | 0 | 19 | 0 |
+| `cli/commands/stages.py` | 257 | 180 | 0 | 19 | 0 |
 | `cli/commands/inspection.py` | 203 | 150 | 0 | 11 | 0 |
 | `cli/commands/volumes.py` | 179 | 135 | 0 | 10 | 0 |
 | `cli/commands/meshing.py` | 127 | 90 | 0 | 9 | 0 |
@@ -130,7 +130,7 @@ largest files and one row for the rest.
 | `tests/test_build.py` | 420 | 234 | 0 | 27 | 0 |
 | `tests/test_meshing_2d.py` | 377 | 232 | 0 | 33 | 0 |
 | `tests/test_export_golden.py` | 375 | 228 | 0 | 30 | 0 |
-| `tests/test_phases.py` | 400 | 228 | 0 | 40 | 0 |
+| `tests/test_stages.py` | 400 | 228 | 0 | 40 | 0 |
 | `tests/pipeline/deck_invariants.py` | 315 | 227 | 0 | 16 | 0 |
 | `tests/test_kratos_stage_processes.py` | 355 | 211 | 0 | 40 | 0 |
 | 114 smaller files | 15,193 | 9,513 | 16 | 1227 | 42 |
@@ -161,7 +161,7 @@ largest files and one row for the rest.
 | `frontend/js/results-plot.js` | 476 | 307 | 59 |
 | `frontend/js/material-sets.js` | 358 | 299 | 59 |
 | `frontend/js/draw-input.js` | 330 | 278 | 22 |
-| `frontend/js/phases.js` | 468 | 262 | 54 |
+| `frontend/js/stages.js` | 468 | 262 | 54 |
 | `frontend/js/mesh-labels.js` | 397 | 259 | 42 |
 | `frontend/js/interfaces.js` | 325 | 242 | 43 |
 | `frontend/js/normal-loads.js` | 323 | 241 | 44 |
@@ -215,7 +215,7 @@ largest files and one row for the rest.
 | `frontend/tests/test-viewport.js` | 670 | 455 | 100 |
 | `frontend/tests/test-normal-loads.js` | 492 | 405 | 113 |
 | `frontend/tests/test-frozen-ui.js` | 443 | 390 | 80 |
-| `frontend/tests/test-phases.js` | 521 | 383 | 99 |
+| `frontend/tests/test-stages.js` | 521 | 383 | 99 |
 | `frontend/tests/test-results-plot.js` | 443 | 352 | 90 |
 | `frontend/tests/test-results-render.js` | 481 | 315 | 61 |
 | `frontend/tests/test-viewport-live.js` | 357 | 315 | 82 |
@@ -229,7 +229,7 @@ largest files and one row for the rest.
 | `frontend/tests/test-water.js` | 295 | 209 | 53 |
 | `frontend/tests/test-import-dialogs.js` | 237 | 208 | 55 |
 | `frontend/tests/test-results-view.js` | 229 | 202 | 46 |
-| `frontend/tests/test-patches-phases.js` | 229 | 200 | 54 |
+| `frontend/tests/test-patches-stages.js` | 229 | 200 | 54 |
 | `frontend/tests/test-mesh-labels.js` | 239 | 182 | 31 |
 | `frontend/tests/test-node-parts.js` | 263 | 178 | 48 |
 | `frontend/tests/test-draw-pointer.js` | 197 | 173 | 40 |

@@ -46,13 +46,13 @@
       quantities: [QUANTITIES.M, QUANTITIES.Q, QUANTITIES.N, QUANTITIES.ux] }
   ] };
 
-  function stage(index, name, phase, points) {
+  function stage(index, name, stage, points) {
     var low = null, high = null;
     points.forEach(function (p) {
       if (!low || p[0] < low.value) low = { value: p[0], y: p[1] };
       if (!high || p[0] > high.value) high = { value: p[0], y: p[1] };
     });
-    return { index: index, name: name, phase: phase, points: points,
+    return { index: index, name: name, stage: stage, points: points,
              nodes: points.map(function (_, i) { return 100 + i; }),
              min: low, max: high };
   }
@@ -183,7 +183,7 @@
     });
   }
 
-  test('there is one panel per stage, in stage order, titled by the phase', function () {
+  test('there is one panel per stage, in stage order, titled by the stage', function () {
     var svg = P.svg(plotOf('M'));
     T.ok(/^<svg[\s>]/.test(svg), 'an svg element');
     var all = panels(svg);
@@ -260,16 +260,16 @@
 
   test('a stage with nothing to draw says so instead of drawing a line', function () {
     var plot = plotOf('M');
-    plot.stages[0] = { index: 3, name: '3_x', phase: 'x', points: [], nodes: [],
+    plot.stages[0] = { index: 3, name: '3_x', stage: 'x', points: [], nodes: [],
                        min: null, max: null };
     var panel = panels(P.svg(plot))[0];
     T.ok(panel.indexOf('rp-line') === -1, 'no line');
     T.ok(panel.indexOf('no values') !== -1, 'a note');
   });
 
-  test('a phase name is escaped, not injected', function () {
+  test('a stage name is escaped, not injected', function () {
     var plot = plotOf('M');
-    plot.stages[0].phase = 'Dig <deep> & wide';
+    plot.stages[0].stage = 'Dig <deep> & wide';
     var svg = P.svg(plot);
     T.ok(svg.indexOf('Dig &lt;deep&gt; &amp; wide') !== -1);
     T.ok(svg.indexOf('<deep>') === -1);
@@ -409,7 +409,7 @@
       T.eq(saved.length, 1);
       T.eq(saved[0].name, RUN + '_wall_M.csv');
       var lines = saved[0].text.trim().split('\n');
-      T.eq(lines[0], 'stage,phase,node,y [m],M [kNm/m]');
+      T.eq(lines[0], 'stage,name,node,y [m],M [kNm/m]');
       T.eq(lines.length, 1 + 5 + 5);
       T.eq(lines[1], '3,SheetPileWall installation,100,-13,0');
     });

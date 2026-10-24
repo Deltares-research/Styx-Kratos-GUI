@@ -1,10 +1,10 @@
 """The Muskat column built in the GUI, through its windows, and calculated from the
 toolbar. Opt-in: `--run-e2e`; with `--run-kratos` too, Kratos itself calculates.
 
-Each test opens the column with its soil, mesh and phase (a model script, as a user runs
+Each test opens the column with its soil, mesh and stage (a model script, as a user runs
 one) and gives it its water in the GUI: the heads and the tail water in the Boundary
 conditions windows, the seepage face in Create boundary condition, and the calculation
-type in the Phases window. The deck the GUI then exports is the deck of
+type in the Stages window. The deck the GUI then exports is the deck of
 `tests/models/muskat.py`, less the names (`tests/muskat_reference.deck_view`), which is
 held to Kratos' own `tests/Muskat` elsewhere. With Kratos, the run gives the answer:
 case A Kratos' own values at its nodes, case C the water balance and the exit point of
@@ -26,7 +26,7 @@ from tests.models import muskat
 
 LONG = 120_000
 
-COLUMN = '''from core.model.schemas import Phase
+COLUMN = '''from core.model.schemas import Stage
 from tests.models import muskat
 
 
@@ -35,19 +35,19 @@ def project():
     model = {model}
     return model.model_copy(update={{
         "boundary_conditions": [c for c in model.boundary_conditions if c.id in {keep!r}],
-        "phases": [phase.model_copy(update={{"calculation": "Plastic"}})
-                   for phase in model.phases]}})
+        "stages": [stage.model_copy(update={{"calculation": "Plastic"}})
+                   for stage in model.stages]}})
 '''
-"""A model script: `model` with only the conditions in `keep`, and its phase not yet a
-groundwater flow phase."""
+"""A model script: `model` with only the conditions in `keep`, and its stage not yet a
+groundwater flow stage."""
 
 
 def open_column(page, directory: Path, name: str, model: str, keep: tuple, doc: str):
     script = directory / f"{name}.py"
     script.write_text(COLUMN.format(model=model, keep=keep, doc=doc), encoding="utf-8")
     command(page, f"run {script.as_posix()}")
-    page.wait_for_function("App.PROJECT && App.PROJECT.phases.length === 1"
-                           " && App.PROJECT.phases[0].calculation === 'Plastic'",
+    page.wait_for_function("App.PROJECT && App.PROJECT.stages.length === 1"
+                           " && App.PROJECT.stages[0].calculation === 'Plastic'",
                            timeout=LONG)
 
 
@@ -103,10 +103,10 @@ def on_a_line(page, kind: str, name: str, points: str, **water):
 
 
 def groundwater_flow(page):
-    """The phase's calculation type, in the Phases window."""
-    command(page, "phases")
-    window(page).locator(".phases-overview .pgrid select").select_option("Groundwater flow")
-    page.wait_for_function("App.PROJECT.phases[0].calculation === 'Groundwater flow'",
+    """The stage's calculation type, in the Stages window."""
+    command(page, "stages")
+    window(page).locator(".stages-overview .pgrid select").select_option("Groundwater flow")
+    page.wait_for_function("App.PROJECT.stages[0].calculation === 'Groundwater flow'",
                            timeout=LONG)
     window(page).get_by_role("button", name="Close").click()
 
@@ -141,7 +141,7 @@ def kratos(request) -> bool:
 def test_case_a_built_in_the_gui_is_kratos_model_and_answer(app_page, live_server,
                                                             tmp_path, kratos):
     open_column(app_page, tmp_path, "column", "muskat.muskat(order=2)", (),
-                "The saturated column, with no water and a deformation phase.")
+                "The saturated column, with no water and a deformation stage.")
     head_on_face(app_page, "Left", "Left head", 3.0)
     head_on_face(app_page, "Right", "Right head", 1.6)
     groundwater_flow(app_page)

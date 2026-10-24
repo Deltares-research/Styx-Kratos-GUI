@@ -39,7 +39,7 @@ if str(ROOT) not in sys.path:
 from core.model.schemas import (  # noqa: E402
     Anchor, AnchorRows, AnchorSection, Beam, BeamSection, Borehole, BoxRefinement,
     DisplacementCondition, Domain, Excavation, Interface, InterfaceSection, LineLoad, Material, MeshSettings, NormalLoad,
-    Phase, Piles, Project, SoilLayer, Struts, Wall, WaterPressureCondition, Wells)
+    Piles, Project, SoilLayer, Stage, Struts, Wall, WaterPressureCondition, Wells)
 
 
 # ── The site ──────────────────────────────────────────────────────────────────────────────
@@ -278,10 +278,10 @@ MESH = MeshSettings(
 )
 
 
-# ── The construction phases ───────────────────────────────────────────────────────────────
+# ── The construction stages ───────────────────────────────────────────────────────────────
 
-PHASES = [
-    Phase(
+STAGES = [
+    Stage(
         id="initial",
         name="Initial stage",
         calculation="K0 procedure",
@@ -295,14 +295,14 @@ PHASES = [
             "water_3",
         ],
     ),
-    Phase(
+    Stage(
         id="null_step",
         name="Null step",
         parent="initial",
         calculation="Null step",
         max_iterations=150,
     ),
-    Phase(
+    Stage(
         id="install_sheetpile",
         name="SheetPileWall installation",
         parent="null_step",
@@ -311,7 +311,7 @@ PHASES = [
         max_iterations=150,
         tolerated_error=0.001,
     ),
-    Phase(
+    Stage(
         id="dig_1",
         name="First excavation",
         parent="install_sheetpile",
@@ -320,7 +320,7 @@ PHASES = [
         max_iterations=150,
         tolerated_error=0.001,
     ),
-    Phase(
+    Stage(
         id="install_strut",
         name="Strut installation",
         parent="dig_1",
@@ -328,7 +328,7 @@ PHASES = [
         max_iterations=150,
         tolerated_error=0.001,
     ),
-    Phase(
+    Stage(
         id="dig_2",
         name="Second excavation",
         parent="install_strut",
@@ -337,7 +337,7 @@ PHASES = [
         max_iterations=150,
         tolerated_error=0.001,
     ),
-    Phase(
+    Stage(
         id="dig_3",
         name="Third excavation",
         parent="dig_2",
@@ -375,7 +375,7 @@ def project() -> Project:
         piles=PILES,
         wells=WELLS,
         mesh=MESH,
-        phases=PHASES,
+        stages=STAGES,
     )
 
 

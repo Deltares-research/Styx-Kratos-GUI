@@ -68,8 +68,8 @@ def test_a_model_runs_from_its_script_to_results_and_downloads(app_page):
     calculate(app_page)
     window = app_page.locator(".dlg-results")
     window.wait_for(state="visible")
-    phase = window.locator('select[data-res="phase"]')
-    phase.select_option("1")
+    stage = window.locator('select[data-res="stage"]')
+    stage.select_option("1")
     app_page.wait_for_function("App.Results.stage() === 1", timeout=LONG)
     with app_page.expect_download() as download:
         window.get_by_role("button", name="Download run").click()
@@ -77,24 +77,24 @@ def test_a_model_runs_from_its_script_to_results_and_downloads(app_page):
     assert app_page.errors == []
 
 
-def test_rapid_phase_switching_with_deformation_ends_on_the_last_phase(app_page):
+def test_rapid_stage_switching_with_deformation_ends_on_the_last_stage(app_page):
     """Finding F7 in the real page: replies arriving out of order must not leave a
-    phase drawn under another's label."""
+    stage drawn under another's label."""
     run_model(app_page)
     calculate(app_page)
     command(app_page, "results deform 10")
-    app_page.evaluate("() => { App.Command.run('results phase 2');"
-                      " App.Command.run('results phase 5');"
-                      " App.Command.run('results phase 3'); }")
+    app_page.evaluate("() => { App.Command.run('results stage 2');"
+                      " App.Command.run('results stage 5');"
+                      " App.Command.run('results stage 3'); }")
     app_page.wait_for_function("App.Results.stage() === 3", timeout=LONG)
     app_page.wait_for_timeout(1500)
     assert app_page.evaluate("App.Results.stage()") == 3
     legend = app_page.locator("#vp-legend .vp-legend-foot")
-    assert legend.inner_text().strip() == "phase 3"
+    assert legend.inner_text().strip() == "stage 3"
     assert app_page.errors == []
 
 
-def test_a_part_a_phase_uses_cannot_be_deleted_and_editing_goes_on(app_page):
+def test_a_part_a_stage_uses_cannot_be_deleted_and_editing_goes_on(app_page):
     """Finding F3 in the real page."""
     run_model(app_page)
     key = app_page.evaluate("""async () => {
@@ -104,10 +104,10 @@ def test_a_part_a_phase_uses_cannot_be_deleted_and_editing_goes_on(app_page):
                                 label: 'Block'})});
         return (await r.json()).parts[0].key; }""")
     app_page.evaluate(f"""async () => {{
-        const phases = App.PROJECT.phases.slice();
-        phases[phases.length - 1] = Object.assign({{}}, phases[phases.length - 1],
-          {{deactivate: (phases[phases.length - 1].deactivate || []).concat(['{key}'])}});
-        await App.Api.patch('/api/project/phases', {{phases: phases}});
+        const stages = App.PROJECT.stages.slice();
+        stages[stages.length - 1] = Object.assign({{}}, stages[stages.length - 1],
+          {{deactivate: (stages[stages.length - 1].deactivate || []).concat(['{key}'])}});
+        await App.Api.patch('/api/project/stages', {{stages: stages}});
         await App.Model.load(); }}""")
     command(app_page, "cleargeometry")
     app_page.wait_for_function("document.querySelector('#cmd-log').innerText"
@@ -128,7 +128,7 @@ def test_switching_to_3d_and_undoing_restores_the_project(app_page):
     app_page.keyboard.press("Control+z")
     app_page.wait_for_function("App.PROJECT.dimension === 2", timeout=LONG)
     after = app_page.request.get(app_page.url + "api/project").json()
-    for key in ("beams", "loads", "anchors", "interfaces", "layers", "phases"):
+    for key in ("beams", "loads", "anchors", "interfaces", "layers", "stages"):
         assert after[key] == before[key], key
 
 
@@ -158,7 +158,7 @@ def test_a_deck_case_opens_with_its_own_mesh_and_parts(app_page, tmp_path):
     assert app_page.evaluate("App.state.mode") == "mesh"
     assert app_page.locator("#tree-model").get_by_text("Imported mesh").count() >= 1
     stages = PARAMETERS["orchestrator"]["settings"]["execution_list"]
-    assert app_page.evaluate("App.PROJECT.phases.length") == len(stages)
+    assert app_page.evaluate("App.PROJECT.stages.length") == len(stages)
 
 
 def test_a_model_built_by_hand_from_a_new_project_meshes(app_page):

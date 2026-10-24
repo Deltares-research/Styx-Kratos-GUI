@@ -20,7 +20,7 @@ from core import scripting
 from core.analysis import calculation
 from core.geometry import solid_model
 from core.kratos import materials, writer
-from core.model.schemas import InterfaceSection, Material, Phase, Project
+from core.model.schemas import InterfaceSection, Material, Stage, Project
 from core.model.templates import seed_project
 from core.results import catalog, members
 from tests import mdpa
@@ -174,9 +174,9 @@ def test_before_installation_the_tie_holds_the_split_soil_as_one(tied):
     export, outcome = tied
     data = uneven_fills()
     data["interfaces"] = []
-    for phase in data["phases"]:
+    for stage in data["stages"]:
         for key in ("activate", "deactivate"):
-            phase[key] = [k for k in phase[key] if k != "wall_contact"]
+            stage[key] = [k for k in stage[key] if k != "wall_contact"]
     bonded_export, bonded_outcome = run(scripting.with_solids(Project.model_validate(data)))
 
     deck, bonded_deck = mdpa.parse(export["mdpa"]), mdpa.parse(bonded_export["mdpa"])
@@ -221,10 +221,10 @@ def test_once_the_wall_is_installed_its_contact_holds_the_faces_not_the_tie(stif
     data["interface_sections"][0]["variables"] = {"INTERFACE_NORMAL_STIFFNESS": stiffness,
                                                   "INTERFACE_SHEAR_STIFFNESS": stiffness}
     built = ["sheetpile", "wall_contact", "surcharge"]
-    data["phases"] = [
-        Phase(id="initial", name="Initial", calculation="K0 procedure",
+    data["stages"] = [
+        Stage(id="initial", name="Initial", calculation="K0 procedure",
               deactivate=built).model_dump(),
-        Phase(id="load", name="Load", parent="initial", activate=built,
+        Stage(id="load", name="Load", parent="initial", activate=built,
               reset_displacements=True).model_dump(),
     ]
     export, outcome = run(scripting.with_solids(Project.model_validate(data)))

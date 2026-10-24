@@ -82,7 +82,7 @@ def test_it_is_python_and_grouped_as_a_model_script_is(text):
     headings = [line for line in text.splitlines() if line.startswith("# ── ")]
     order = [heading.split("── ", 1)[1].split(" ─")[0] for heading in headings]
     assert order[:4] == ["The site", "The soil", "The structures", "The loads"]
-    assert "The mesh" in order and order[-1] == "The construction phases"
+    assert "The mesh" in order and order[-1] == "The construction stages"
 
 
 def test_one_constructor_per_record_with_kratos_names_as_keys(text):
@@ -90,7 +90,7 @@ def test_one_constructor_per_record_with_kratos_names_as_keys(text):
 
     assert text.count("Material(") == len(project.materials)
     assert text.count("SoilLayer(") == len(project.layers)
-    assert text.count("Phase(") == len(project.phases)
+    assert text.count("Stage(") == len(project.stages)
     assert '"YOUNG_MODULUS":' in text and '"POISSON_RATIO":' in text
 
 

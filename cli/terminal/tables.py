@@ -89,12 +89,12 @@ def field_csv(field: dict, run: str | None = None, stage: str | None = None) -> 
 
 def profile_csv(plot: dict) -> str:
     """One quantity along one member, a row per point, stage after stage."""
-    lines = [f"stage,phase,node,y [m],{plot['quantity']} [{plot['unit']}]"]
+    lines = [f"stage,name,node,y [m],{plot['quantity']} [{plot['unit']}]"]
     for stage in plot["stages"]:
         nodes = stage.get("nodes") or []
         for at, (value, y) in enumerate(stage["points"]):
             lines.append(",".join([str(stage["index"]),
-                                   cell(stage.get("phase") or stage.get("name")),
+                                   cell(stage.get("stage") or stage.get("name")),
                                    str(nodes[at]) if at < len(nodes) else "",
                                    js_number(y), js_number(value)]))
     return "\n".join(lines) + "\n"

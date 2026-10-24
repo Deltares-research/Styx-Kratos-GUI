@@ -1,7 +1,7 @@
 # The command line: `kratos-cli`
 
 `kratos-cli` does in the terminal what the GUI does in the browser: it builds a model, meshes
-it, defines the construction phases, writes the Kratos deck, runs it and reads the results
+it, defines the construction stages, writes the Kratos deck, runs it and reads the results
 back. It needs no server and no browser.
 
 It works on the same project file the GUI's **Save** writes. A model can move between the two
@@ -34,7 +34,7 @@ kratos-cli water site.json -2                 # the level a new water pressure c
 kratos-cli boundary site.json set pore_pressure --reference-coordinate -2
 kratos-cli set site.json mesh.element_size 1.5
 kratos-cli mesh site.json
-kratos-cli phases site.json defaults
+kratos-cli stages site.json defaults
 kratos-cli check site.json
 kratos-cli export site.json --out deck/      # Pit_A.mdpa, MaterialParameters.json, ProjectParameters.json
 kratos-cli run deck/
@@ -57,8 +57,8 @@ Genuchten soil.
 | Command | What it does |
 |---|---|
 | `new FILE [--dim 2\|3] [--units SI\|kN] [--name NAME] [--demo] [--force]` | Write a new project file: an empty site, or the demo model |
-| `show P` | What the model holds: layers, materials, parts, structures, water, conditions, gravity, phases, mesh |
-| `check P` | That the phases run in one order, the mesh settings name only parts the model has and a groundwater flow project can be exported, and what the export will warn about the boundary conditions |
+| `show P` | What the model holds: layers, materials, parts, structures, water, conditions, gravity, stages, mesh |
+| `check P` | That the stages run in one order, the mesh settings name only parts the model has and a groundwater flow project can be exported, and what the export will warn about the boundary conditions |
 | `build SCRIPT.py --out FILE` | Write the project a model script describes |
 | `script P --out FILE.py [--force]` | Write the model as a model script: the Python file that builds it again |
 | `get P [PATH]` | Print a field as JSON (the whole project without a path) |
@@ -84,9 +84,9 @@ Genuchten soil.
 | `normal-load P list\|add\|set\|remove ...` | Pressures normal to a line, in 2D: `add [ID] --points ... [--hydrostatic [--reference-coordinate Y] \| --pressure S]` |
 | `boundary P list\|add\|set\|remove\|standard ...` | The boundary conditions: `add [ID] --face F\|--part KEY\|--line ...\|--point X Y --fixed\|--roller\|--fix AXIS ...` for a support, `add [ID] --domain\|... --water-pressure TYPE ...` for a water pressure, `add [ID] --face F\|--line ... --seepage` for a seepage face; `standard` puts back the standard supports |
 | `gravity P [on\|off]` | Show, or switch on or off, the self weight of every body (on in a new project) |
-| `parts P` | Every part by its key, and every water pressure condition: the names phases activate and deactivate |
+| `parts P` | Every part by its key, and every water pressure condition: the names stages activate and deactivate |
 | `mesh P [--size S] [--order 1\|2]` | Mesh the model and report its size. `--size` and `--order` are kept in the project |
-| `phases P [list\|show\|defaults\|staged-excavation\|add\|copy\|set\|remove\|activate\|deactivate] ...` | The construction sequence, edited as the GUI's Phases toolbar edits it |
+| `stages P [list\|show\|defaults\|staged-excavation\|add\|copy\|set\|remove\|activate\|deactivate] ...` | The construction sequence, edited as the GUI's Stages toolbar edits it. `phases` is the old name and still works |
 | `node SOURCE NODE ...` | Which SubModelParts a node of the deck is in, and the nodes an interface split from it |
 | `deck show SOURCE` | A deck's mesh, SubModelParts and stages |
 | `export P --out DIR [--name NAME]` | Write the Kratos deck into `DIR` |
@@ -100,7 +100,7 @@ Genuchten soil.
 | `shell [P]` | Type commands one after another, without `kratos-cli` and the project file |
 
 `P` is a project file (`.json`), or a model script (`.py`) for the commands that only read the
-model: `show`, `check`, `get`, the `list` actions, `parts`, `phases show`, `node`, `mesh`
+model: `show`, `check`, `get`, the `list` actions, `parts`, `stages show`, `node`, `mesh`
 (without `--size` or `--order`), `export` and `calculate`.
 
 ## Axes
@@ -133,7 +133,7 @@ kratos-cli layer pit.json add bottom --material sand --bottom -40
 kratos-cli excavation pit.json --x 0 6 --z 0 10 --levels -2 -4.5 -7
 kratos-cli water pit.json -1
 kratos-cli boundary pit.json add pore --domain --water-pressure Hydrostatic   # about -1 m
-kratos-cli parts pit.json                                 # soil_top__lift1, ... for the phases
+kratos-cli parts pit.json                                 # soil_top__lift1, ... for the stages
 ```
 
 - **Boreholes** carry the soil stack. A new borehole is put 10 m past the last one and
@@ -152,7 +152,7 @@ kratos-cli parts pit.json                                 # soil_top__lift1, ...
   out, and its warning lists them. It also derives `K0_NC` as 1 − sin φ from
   `GEO_FRICTION_ANGLE`, into `initial_materials.json`, but that warning does not list it.
 - **The excavation** is dug in its `--levels`, shallowest first. Each lift is a body of
-  its own, deactivated in its own phase. In a layered model, a pit with one level is not
+  its own, deactivated in its own stage. In a layered model, a pit with one level is not
   dug at all, and the command says so.
 - **Volumes**: in 2D, `volume add polygon --points x y x y ...` is an outline in the
   section plane, swept across the whole model. In 3D, `polygon` takes `x y z` points and
@@ -212,10 +212,10 @@ kratos-cli set pit.json mesh.body_sizes.sheet 0.5
 - **Anchors.** The head is snapped onto the nearest pile, wall or member within a metre,
   because it becomes one of its nodes; a head further away is refused. With no `--tail`,
   the anchor rakes back from its head. A strut is an anchor whose tail is a pinned support.
-- **Removing.** A structure a phase names, or a pile an anchor or an interface depends
+- **Removing.** A structure a stage names, or a pile an anchor or an interface depends
   on, is not removed; the refusal names what still uses it. A section in use is not
   removed either.
-- **Ids are part keys.** A phase switches a structure by its id, so no two parts share
+- **Ids are part keys.** A stage switches a structure by its id, so no two parts share
   one, and `wall`, `struts`, `anchors`, `piles`, `water`, `wells` and `excavation` are
   taken.
 
@@ -269,23 +269,23 @@ kratos-cli boundary dam.json add exit --seepage --line 1.62 0.48 1.62 4     # a 
 - **Fixed or initial.** A condition holds the pressure in every stage it is on in
   (`--fixed`, the default). `--initial` gives start values only, which the calculation
   then changes.
-- **Per phase.** A water pressure condition is on in every phase until a phase switches
-  it off: `phases P deactivate PHASE ID` and `phases P activate PHASE ID`, as for a part
-  (below). A phase with no condition on keeps the pressures the last phase ended with:
+- **Per stage.** A water pressure condition is on in every stage until a stage switches
+  it off: `stages P deactivate STAGE ID` and `stages P activate STAGE ID`, as for a part
+  (below). A stage with no condition on keeps the pressures the last stage ended with:
   Kratos leaves the nodes of a `Hydrostatic` or `Phreatic_Multi_Line` condition fixed at
-  those values. A `Uniform` condition frees its nodes when its phase ends, so in a soil
+  those values. A `Uniform` condition frees its nodes when its stage ends, so in a soil
   that couples the water pressure to the deformation the pressure is then free, and the
-  export warns about it. A condition a phase names cannot be removed; take it out of
-  those phases first. The supports are on in every phase.
+  export warns about it. A condition a stage names cannot be removed; take it out of
+  those stages first. The supports are on in every stage.
 - **Seepage face.** `--seepage` makes a seepage face, where water may leave the soil in a
   groundwater flow calculation: on `--face F`, or on `--line X Y X Y ...` along the soil's
   outer boundary. It takes no other option. Kratos' seepage strategy decides, node by node
   while it iterates, where the face is open: there the water pressure is zero and the water
   flows out; elsewhere the face is closed, as a boundary with no condition is. It opens or
-  closes one node per iteration, so the export warns when a phase allows fewer iterations
+  closes one node per iteration, so the export warns when a stage allows fewer iterations
   than its seepage faces have nodes. A seepage line through the soil is refused, and a
   deformation calculation leaves a seepage face out, with a warning. It is on in every
-  phase.
+  stage.
 - **Overlap.** The export writes the start values first, then the fixed conditions from the
   least to the most specific target: the whole soil, a part, a face, a line, a point. On a
   node two of them share, the more specific one wins. Two fixed conditions on the same kind
@@ -295,68 +295,74 @@ kratos-cli boundary dam.json add exit --seepage --line 1.62 0.48 1.62 4     # a 
   from the self weight, so with gravity off they are zero, and the export says so.
 - `check` prints what the export will warn about the conditions: a model nothing holds, a
   water level that fixes nothing, a coupled soil with no water pressure condition or a
-  phase that leaves its water free, a condition this dimension does not have, a K0
+  stage that leaves its water free, a condition this dimension does not have, a K0
   procedure with gravity off.
 
 ## The stages, command by command
 
-A phase says what it changes about the model it starts from: the parts and the water
+A stage says what it changes about the model it starts from: the parts and the water
 pressure conditions it switches on and off, and how it is solved. `kratos-cli parts P`
-lists the keys a phase can switch.
+lists the keys a stage can switch.
+
+Stages were called *phases* before Styx took Kratos' word for them. The old name still
+works everywhere: `kratos-cli phases ...`, a `phases` path in `get`, `set`, `add` and
+`remove`, a project file saved with a `phases` list (it opens with `stages`), and the
+`/api/project/phases` routes. Styx saves the file with `stages`, which older versions of
+Styx cannot read.
 
 ```bash
-kratos-cli phases pit.json staged-excavation       # derived from the model, all at once
+kratos-cli stages pit.json staged-excavation       # derived from the model, all at once
 # or one by one:
-kratos-cli phases pit.json defaults                # the initial stage and the null step
-kratos-cli phases pit.json deactivate initial sheet strut tie contact surcharge water_1
-kratos-cli phases pit.json add wall --name Wall --activate sheet contact surcharge --reset-displacements
-kratos-cli phases pit.json add dig_1 --name "Dig 1" --activate water_1 --deactivate soil_top__lift1 --max-iterations 150 --tolerance 1e-3
-kratos-cli phases pit.json add props --name "Strut and tie" --activate strut tie
-kratos-cli phases pit.json add dig_2 --name "Dig 2" --deactivate soil_top__lift2
-kratos-cli phases pit.json show dig_2              # what is in the model then
+kratos-cli stages pit.json defaults                # the initial stage and the null step
+kratos-cli stages pit.json deactivate initial sheet strut tie contact surcharge water_1
+kratos-cli stages pit.json add wall --name Wall --activate sheet contact surcharge --reset-displacements
+kratos-cli stages pit.json add dig_1 --name "Dig 1" --activate water_1 --deactivate soil_top__lift1 --max-iterations 150 --tolerance 1e-3
+kratos-cli stages pit.json add props --name "Strut and tie" --activate strut tie
+kratos-cli stages pit.json add dig_2 --name "Dig 2" --deactivate soil_top__lift2
+kratos-cli stages pit.json show dig_2              # what is in the model then
 kratos-cli boundary pit.json add low --domain --water-pressure Hydrostatic --reference-coordinate -6
-kratos-cli phases pit.json deactivate initial low  # the low level is off at first ...
-kratos-cli phases pit.json activate dig_2 low      # ... and on from dig_2, in place of pore
-kratos-cli phases pit.json deactivate dig_2 pore
-kratos-cli phases pit.json list
+kratos-cli stages pit.json deactivate initial low  # the low level is off at first ...
+kratos-cli stages pit.json activate dig_2 low      # ... and on from dig_2, in place of pore
+kratos-cli stages pit.json deactivate dig_2 pore
+kratos-cli stages pit.json list
 ```
 
 - **`staged-excavation`** derives the whole sequence from the model, as a model script's
-  `phases.staged_excavation_phases` does: settle the ground, install each wall with its
+  `stages.staged_excavation_stages` does: settle the ground, install each wall with its
   interfaces and the loads, then dig lift by lift with its water load, each anchor after
   the lift that exposes its head. **`defaults`** makes only the initial stage and the
-  null step, as the GUI's Create default phases does. Both replace the sequence there is.
-- **`add [ID]`** puts a phase at the end of the sequence (the toolbar's Add); with
-  `--before PHASE` it goes between that phase and the one it starts from (Insert).
-  **`copy PHASE`** puts a phase with the same solver settings right after `PHASE` (Copy),
-  and the phases after it then start from the copy. **`remove`** heals the chain: the
-  removed phase's children start from its parent.
-- **`activate` / `deactivate PHASE KEY ...`** put parts in or out of the model from that
-  phase on, as the Model explorer's checkbox does, with the smallest instruction that
-  does it: switching a part back to what the phase inherits drops the instruction.
+  null step, as the GUI's Create default stages does. Both replace the sequence there is.
+- **`add [ID]`** puts a stage at the end of the sequence (the toolbar's Add); with
+  `--before STAGE` it goes between that stage and the one it starts from (Insert).
+  **`copy STAGE`** puts a stage with the same solver settings right after `STAGE` (Copy),
+  and the stages after it then start from the copy. **`remove`** heals the chain: the
+  removed stage's children start from its parent.
+- **`activate` / `deactivate STAGE KEY ...`** put parts in or out of the model from that
+  stage on, as the Model explorer's checkbox does, with the smallest instruction that
+  does it: switching a part back to what the stage inherits drops the instruction.
   `add` and `copy` take `--activate` and `--deactivate` the same way.
-- **`set PHASE`** changes `--name`, `--calculation k0|plastic|null|flow`,
+- **`set STAGE`** changes `--name`, `--calculation k0|plastic|null|flow`,
   `--reset-displacements` / `--keep-displacements`, `--max-iterations`, `--tolerance`
   (the residual relative tolerance), `--time-interval` (days) and `--parent`.
 - **`flow`** (also `groundwater-flow`) is the Groundwater flow calculation: a
-  steady-state flow of the water alone, on the soil. Every phase of a project must then
-  be a flow phase, and `check` and `export` refuse a project that mixes flow and
-  deformation phases. A flow phase has no displacements, so it refuses
+  steady-state flow of the water alone, on the soil. Every stage of a project must then
+  be a flow stage, and `check` and `export` refuse a project that mixes flow and
+  deformation stages. A flow stage has no displacements, so it refuses
   `--reset-displacements` and `--keep-displacements`.
-- **Defaults.** A phase that is not given these options is a plastic calculation with
-  at most 15 iterations, a tolerance of 1e-4, the displacements of the phase before kept,
-  and a time interval of 0 days. `phases show ID` prints a phase's settings.
-- **A seepage face** (`boundary add --seepage`, above) makes a flow phase use Kratos'
+- **Defaults.** A stage that is not given these options is a plastic calculation with
+  at most 15 iterations, a tolerance of 1e-4, the displacements of the stage before kept,
+  and a time interval of 0 days. `stages show ID` prints a stage's settings.
+- **A seepage face** (`boundary add --seepage`, above) makes a flow stage use Kratos'
   seepage strategy, `newton_raphson_with_seepage`.
-- **The solver** of a deformation phase is the same for every phase and no option
+- **The solver** of a deformation stage is the same for every stage and no option
   changes it: a static U-Pw analysis (displacements and water pressure), Newton-Raphson
-  iterations on a residual criterion, one step per phase, and the direct
+  iterations on a residual criterion, one step per stage, and the direct
   `skyline_lu_factorization` linear solver. It is written into `ProjectParameters.json`,
   and `SOLVER` in [`core/kratos/parameters.py`](../core/kratos/parameters.py) lists every
-  setting. A flow phase uses the Pw solver (`FLOW_SOLVER` there): one linear solve for a
-  saturated soil, Newton-Raphson iterations with the phase's `--max-iterations` and
+  setting. A flow stage uses the Pw solver (`FLOW_SOLVER` there): one linear solve for a
+  saturated soil, Newton-Raphson iterations with the stage's `--max-iterations` and
   `--tolerance` for a soil with another retention law.
-- A sequence that would branch, two phases starting from one, is refused, because Kratos
+- A sequence that would branch, two stages starting from one, is refused, because Kratos
   runs one sequence. So is a part the model does not have.
 
 ## The shell
@@ -366,7 +372,7 @@ kratos-cli phases pit.json list
 pit.json> water -2
 pit.json> borehole add bh2 --x 30
 pit.json> undo
-pit.json> phases staged-excavation
+pit.json> stages staged-excavation
 pit.json> calculate
 pit.json> results field 1 uy
 pit.json> exit
@@ -410,7 +416,7 @@ python pit.py --calculate                     # and run it, as Calculate does
 
 `script` writes the model as the Python that builds it again: a `project()` that returns
 it, grouped as a hand-written model script is (the site, the soil, the structures, the
-loads, the mesh, the phases), one constructor per record, with Kratos' own variable names as
+loads, the mesh, the stages), one constructor per record, with Kratos' own variable names as
 the keys. The next session opens that file instead of typing the model again: `run pit.py`
 in the GUI's command box, or `kratos-cli ... pit.py`. In the GUI, `script pit.py` writes the
 same file from the open model.
@@ -464,7 +470,7 @@ kratos-cli results field D:/copied/Pit_A_2026-10-12_09-14 uy   # a run anywhere
 - **`RUN`** is a run's id, its number in `results runs`, or the path of a run directory,
   wherever it is: one copied off another machine reads the same, whatever its folder is
   called. In `results show 1`, `1` is the newest run, not a stage.
-- **`--stage`** takes a stage's number, as `results show` lists it, or words of its phase.
+- **`--stage`** takes a stage's number, as `results show` lists it, or words of its name.
   Without it, the last stage that wrote results is read, which is where the GUI's Results
   mode opens a run.
 - **Pictures.** The command line gives numbers and CSV files. To see a field drawn on the
@@ -502,7 +508,7 @@ viewport's. A command can also be typed with a leading `_` in the box (`_mesh`).
 | `script <file.py> [--force]` | `kratos-cli script P --out FILE.py` |
 | `export` | `kratos-cli export P --out DIR` |
 | `mesh` | `kratos-cli mesh P` |
-| `phases` | `kratos-cli phases P` |
+| `stages`, `phases` | `kratos-cli stages P` |
 | `water <level>`, `water off` | `kratos-cli water P LEVEL`, `kratos-cli water P off` |
 | `boundary`, `boundary list`, `boundary standard` | `kratos-cli boundary P list`, `kratos-cli boundary P standard` |
 | `gravity`, `gravity on`, `gravity off` | `kratos-cli gravity P`, `kratos-cli gravity P on`, `kratos-cli gravity P off` |
@@ -522,7 +528,7 @@ viewport's. A command can also be typed with a leading `_` in the box (`_mesh`).
 | `results` | `kratos-cli results show RUN` |
 | `results runs`, `results list` | `kratos-cli results runs` |
 | `results open <id\|n>` | `kratos-cli results show RUN`: every `results` command names its run |
-| `results phase <n\|name>`, `results stage <n\|name>` | `--stage S` on `kratos-cli results fields\|field\|at\|profile` |
+| `results stage <n\|name>`, `results phase <n\|name>` | `--stage S` on `kratos-cli results fields\|field\|at\|profile` |
 | `results fields` | `kratos-cli results fields RUN` |
 | `results field <name> [nodes\|elements]` | `kratos-cli results field RUN NAME --location nodes` |
 | `results at <node>` | `kratos-cli results at RUN NODE` |
@@ -547,7 +553,7 @@ record in a list by its id in brackets:
 ```bash
 kratos-cli get site.json layers[L1].tops
 kratos-cli set site.json materials[m1].variables.YOUNG_MODULUS 2.5e7
-kratos-cli add site.json phases '{"id": "dig_1", "name": "Dig", "parent": "null_step", "deactivate": ["soil_L1"]}'
+kratos-cli add site.json stages '{"id": "dig_1", "name": "Dig", "parent": "null_step", "deactivate": ["soil_L1"]}'
 kratos-cli add site.json materials @clay.json
 kratos-cli remove site.json materials[clay2]
 ```

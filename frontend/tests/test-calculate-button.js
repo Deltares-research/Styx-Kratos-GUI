@@ -6,7 +6,7 @@
 
   function project(overrides) {
     var base = { name: 'pit', dimension: 3, soil_body_keys: ['soil_L1'], custom_parts: [],
-                 phases: [], deck: null, mesh: { element_size: 2.5, order: 1 } };
+                 stages: [], deck: null, mesh: { element_size: 2.5, order: 1 } };
     Object.keys(overrides || {}).forEach(function (key) { base[key] = overrides[key]; });
     return base;
   }
@@ -58,15 +58,15 @@
     T.eq(App.Calculate.state(deck, false).ok, true);
   });
 
-  test('calculate state: a phase tree with no single order is refused with its reason', function () {
-    var branched = project({ phases: [
+  test('calculate state: a stage tree with no single order is refused with its reason', function () {
+    var branched = project({ stages: [
       { id: 'p0', name: 'Initial', parent: null },
       { id: 'p1', name: 'Dig A', parent: 'p0' },
       { id: 'p2', name: 'Dig B', parent: 'p0' }
     ] });
     var now = App.Calculate.state(branched, false);
     T.eq(now.ok, false);
-    T.eq(now.reason, App.Phases.branchProblem(branched));
+    T.eq(now.reason, App.Stages.branchProblem(branched));
     T.ok(/"Dig A" and "Dig B"/.test(now.reason), now.reason);
   });
 
@@ -158,7 +158,7 @@
       var reason = App.Calculate.state(BLANK, false).reason;
       T.ok(greyed(calculateButton()), 'the toolbar button');
       T.eq(String(App.LivePatches.calculateTip), reason, 'its tip is the reason');
-      T.eq(menuItem().disabled, true, 'the Phases menu item');
+      T.eq(menuItem().disabled, true, 'the Stages menu item');
       T.ok(railButton().classList.contains('disabled') && railButton().disabled,
            'the Staged construction rail tool');
 

@@ -137,7 +137,7 @@ def edges_of(connectivity: list[int], nnode: int, element_type: str) -> list[tup
 def stage_sections(model: MdpaModel, mesh: GidMesh) -> dict:
     """Every part with something to draw in this stage, as render-ready buffers.
 
-    A part this phase deactivated has no elements in the stage mesh and so produces no
+    A part this stage deactivated has no elements in the stage mesh and so produces no
     section at all. It is not missing information: `/stages/{n}/parts` still lists it,
     which is where the explorer learns that it exists and is switched off.
     """

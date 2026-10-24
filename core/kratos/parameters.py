@@ -24,7 +24,7 @@ documented reference analysis, and the parts of them the project really does det
 the export rather than defaulted. When those fields do grow a home in `Project`, this
 is where they replace `SOLVER`.
 
-A groundwater flow stage (a "Groundwater flow" phase) is solved by a second reference
+A groundwater flow stage (a "Groundwater flow" stage) is solved by a second reference
 analysis, `FLOW_SOLVER`, read off Kratos' own `tests/Muskat` decks, with the strategy the
 project calls for (`FLOW_STRATEGIES`). It writes its own results (`FLOW_NODAL_RESULTS`):
 its elements carry the water pressure alone, so there is no displacement or stress to
@@ -205,7 +205,7 @@ permeability depend on it (`van_genuchten_hydrostatic`), `newton_raphson_with_se
 for a stage with a seepage face (`seepage_tests`), which opens and closes the face node
 by node as it iterates. Kratos refuses more than one cycle for that one. Which one a
 stage gets is derived from its soil and its conditions (`core.kratos.writer`), not
-chosen. A phase's own iterations and
+chosen. A stage's own iterations and
 tolerance replace the deck's, as in a deformation stage; a linear stage has none."""
 
 # Metres, and a *step*, not a tolerance. The master and slave nodes of a tie are copies
@@ -252,22 +252,22 @@ class Stage:
 
     This module renders; it does not derive. Which parts are active in a stage, which
     processes a stage wants and what it solves with are all questions about the
-    *project* -- they need the phase tree and the mapping from model keys to deck part
+    *project* -- they need the stage tree and the mapping from model keys to deck part
     names, and both live in `core.kratos.writer`. So a `Stage` arrives with the answers.
 
     `active` is the deck part names live during this stage, and it drives the process
     filter: a process is emitted only where every part it names is active (plan sec
-    C3). `None` means "no opinion" -- the unphased deck says nothing about what a stage
+    C3). `None` means "no opinion" -- the unstaged deck says nothing about what a stage
     contains, so nothing is filtered out of it, which is exactly how it exported before
     staged construction existed.
 
     `conditions` is the water pressure conditions on in this stage, by id: a condition
-    a phase switched off is not written in it. `None` writes every one, as an unphased
+    a stage switched off is not written in it. `None` writes every one, as an unstaged
     deck does.
 
     `max_iterations` and `tolerated_error` are `None` for "whatever `SOLVER` says",
     rather than being defaulted to its values here, so that the deck of a project with
-    no phases cannot drift from `SOLVER` by way of a copy made in this file.
+    no stages cannot drift from `SOLVER` by way of a copy made in this file.
 
     `flow_strategy` is `None` for a deformation stage, and for a groundwater flow stage
     the `FLOW_STRATEGIES` entry it is solved with. `seepage` is the parts of the seepage
@@ -303,7 +303,7 @@ class WaterPressure:
     condition on a face the excavation splits arrives as one entry per segment, so each
     one goes with its lift (`Stage.active`), and so does one on a staged part, one entry
     per body. `reference_coordinate` is the record's own level, and `condition` the
-    record's id, which a phase switches (`Stage.conditions`)."""
+    record's id, which a stage switches (`Stage.conditions`)."""
     part: str | None
     fluid_pressure_type: str
     is_fixed: bool
@@ -317,15 +317,15 @@ class WaterPressure:
     condition: str = ""
 
 
-def stage_name(index: int, phase_name: str) -> str:
-    """`1_Initial_stage`: the position in the sequence, then the phase's own name.
+def stage_name(index: int, label: str) -> str:
+    """`1_Initial_stage`: the position in the sequence, then the stage's own name.
 
     The reference deck's own shape, and not only cosmetic -- every result file a stage
     writes is named after it, so the name has to survive being part of a filename on
     any platform. Anything that is not a letter, a digit or an underscore becomes one,
-    runs collapse, and a phase named entirely in punctuation still gets a stage.
+    runs collapse, and a stage named entirely in punctuation still gets a stage.
     """
-    cleaned = re.sub(r"_+", "_", re.sub(r"[^A-Za-z0-9]+", "_", phase_name)).strip("_")
+    cleaned = re.sub(r"_+", "_", re.sub(r"[^A-Za-z0-9]+", "_", label)).strip("_")
     return f"{index + 1}_{cleaned or 'Stage'}"
 
 
@@ -381,7 +381,7 @@ def project_parameters(
                                 for name, is_fixed in constraints if keep(name)]
         # On the whole soil a condition is filtered by nothing, as the soil is the porous
         # domain itself; on a face or a part it goes with the stretch or body it names.
-        # And it is in the stages whose phase has it switched on.
+        # And it is in the stages whose stage has it switched on.
         constraint_processes += [_water_pressure(pressure) for pressure in water_pressures
                                  if (pressure.part is None or keep(pressure.part))
                                  and (stage.conditions is None
@@ -543,7 +543,7 @@ def _process_parts(processes: list[dict],
 def _k0_procedure(parts: tuple[str, ...]) -> dict:
     """Set the initial stress state from K0 rather than by solving for it.
 
-    Runs in the K0 phase only, over the soil bodies active in it -- it reads `K0_NC`
+    Runs in the K0 stage only, over the soil bodies active in it -- it reads `K0_NC`
     and `K0_MAIN_DIRECTION` off each body's material, which is why the initial stage
     reads a materials file of its own (`core.kratos.materials`, plan sec C4).
     """
@@ -662,7 +662,7 @@ def _solver_settings(deck_name: str, domain_size: int, body_parts: list[str],
 
     `stage` overrides the three numbers the reference deck actually varies between its
     stages -- iterations, tolerance and whether displacements start again from zero
-    (plan sec C5). They come off the phase record; a stage that says nothing about them
+    (plan sec C5). They come off the stage record; a stage that says nothing about them
     solves the way `SOLVER` does.
 
     A groundwater flow stage starts from `FLOW_SOLVER` and its strategy instead. It has
@@ -924,7 +924,7 @@ def _gravity() -> dict:
 
     *   **The computational model part, not the bodies one by one.** That part is what
         the solver assembles out of the bodies a stage has active, so a body switched
-        off in a phase drops out of it without gravity having to be restated -- which is
+        off in a stage drops out of it without gravity having to be restated -- which is
         why the reference never varies this process between stages.
     *   **Axis 1, always.** Y is up in both dimensions this exporter writes, and it is
         the same axis the constraint and normal-load processes already name as

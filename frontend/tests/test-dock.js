@@ -42,9 +42,9 @@ function dockFixture(options) {
   dock.appendChild(splitter('split-dock1'));
   dock.appendChild(panel('panel-selection'));
   dock.appendChild(splitter('split-dock2'));
-  var phases = panel('panel-phases');
-  phases.hidden = !options.phases;
-  dock.appendChild(phases);
+  var stages = panel('panel-phases');
+  stages.hidden = !options.stages;
+  dock.appendChild(stages);
   var results = panel('panel-results');
   results.hidden = !options.results;
   dock.appendChild(results);
@@ -85,7 +85,7 @@ test('clicking a dock header collapses its panel and turns the caret', function 
 });
 
 test('every dock section collapses, not just the first', function () {
-  withDock({ phases: true }, function (dock) {
+  withDock({ stages: true }, function (dock) {
     [['panel-model', '--r-model'],
      ['panel-selection', '--r-selection'],
      ['panel-phases', '--r-phases']].forEach(function (pair) {
@@ -111,14 +111,14 @@ test('collapsing the selection panel hands the slack to the last open panel', fu
     T.eq(dock.style.getPropertyValue('--r-model'), '1fr',
          'without it the dock would end in dead space');
   });
-  withDock({ phases: true }, function (dock) {
+  withDock({ stages: true }, function (dock) {
     head(dock, 'panel-selection').click();
     T.eq(dock.style.getPropertyValue('--r-phases'), '1fr');
     T.eq(dock.style.getPropertyValue('--r-model'), '', 'the model panel keeps its height');
   });
 });
 
-test('a hidden phases panel takes no part in the layout', function () {
+test('a hidden stages panel takes no part in the layout', function () {
   withDock({}, function (dock) {
     head(dock, 'panel-selection').click();
     T.eq(dock.style.getPropertyValue('--r-phases'), '',
@@ -127,7 +127,7 @@ test('a hidden phases panel takes no part in the layout', function () {
 });
 
 test('a splitter that would resize a collapsed panel is disabled', function () {
-  withDock({ phases: true }, function (dock) {
+  withDock({ stages: true }, function (dock) {
     head(dock, 'panel-model').click();
     T.ok(dock.querySelector('#split-dock1').classList.contains('disabled'));
     head(dock, 'panel-model').click();
@@ -142,7 +142,7 @@ test('a splitter that would resize a collapsed panel is disabled', function () {
    DOCK_ROWS names the three frozen panels and a panel missing from it gets no click
    handler at all. The live layer wires this one. */
 function withResultsDock(body) {
-  var dock = dockFixture({ phases: true, results: true });
+  var dock = dockFixture({ stages: true, results: true });
   App.UI.collapsibleDock(dock);
   App.LivePatches.collapsibleResultsPanel(dock);
   try {
@@ -171,7 +171,7 @@ test('collapsing the Results explorer touches none of the grid rows', function (
   withResultsDock(function (dock) {
     head(dock, 'panel-results').click();
     /* It sits in an implicit `auto` row -- #dock's grid-template-rows stops at the
-       phases panel -- so hiding its body is the whole of the collapse. */
+       stages panel -- so hiding its body is the whole of the collapse. */
     T.eq(dock.style.getPropertyValue('--r-model'), '');
     T.eq(dock.style.getPropertyValue('--r-selection'), '');
     T.eq(dock.style.getPropertyValue('--r-phases'), '');
@@ -194,7 +194,7 @@ test('wiring the Results explorer twice still collapses on one click', function 
    stayed on screen in every tab after. Computed style, because the attribute alone was
    always set correctly. */
 test('a hidden dock panel is not drawn', function () {
-  withDock({ phases: false, results: false }, function (dock) {
+  withDock({ stages: false, results: false }, function (dock) {
     ['panel-phases', 'panel-results'].forEach(function (id) {
       T.eq(getComputedStyle(dock.querySelector('#' + id)).display, 'none', id);
     });

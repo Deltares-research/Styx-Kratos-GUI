@@ -854,7 +854,7 @@ def test_module_aliases_finds_a_module_and_leaves_an_attribute_alone():
         "from core import scripting as script\n"
         "import core.results.catalog as results\n"
         "from core.model.schemas import Project as P\n"
-        "from core.model import phases\n"
+        "from core.model import stages\n"
         "def later():\n"
         "    from core.results import fields as result_fields\n")
     assert module_aliases(tree) == [(1, "writer as kratos"), (2, "scripting as script"),

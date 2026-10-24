@@ -121,7 +121,7 @@ def test_a_dry_model_has_no_water_part(session):
     payload = excavation_project().model_dump()
     payload["water"] = None
     payload["normal_loads"] = []
-    payload["phases"] = []
+    payload["stages"] = []
     mesh = meshing.mesh_project(Project.model_validate(payload))
     assert "water" not in {part.key for part in mesh.parts}
 

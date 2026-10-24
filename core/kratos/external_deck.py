@@ -36,7 +36,7 @@ import shutil
 from pathlib import Path, PurePath
 
 from core.kratos import deck_files, mdpa_reader, node_parts
-from core.model.schemas import Deck, Domain, Phase, Project
+from core.model.schemas import Deck, Domain, Stage, Project
 from core.model.templates import blank_project
 
 
@@ -83,7 +83,7 @@ def deck_project(directory: str | Path, parameters: str = deck_files.PARAMETERS_
                          z1=blank.domain.z1, y_top=max(y1, y0 + 1e-3),
                          y_bottom=y0).model_dump(),
         "deck": source.model_dump(),
-        "phases": [phase.model_dump() for phase in phases(settings)],
+        "stages": [stage.model_dump() for stage in styx_stages(settings)],
     })
 
 
@@ -135,12 +135,12 @@ def stats(deck: Deck) -> dict:
             "elements": sum(len(entity.entries) for entity in model.elements)}
 
 
-# ── Its stages, as phases ───────────────────────────────────────────────────
+# ── Its stages, as Styx stages ───────────────────────────────────────────────────
 #
-# What lets the Phase explorer list a deck's own sequence. A stage says which parts it
+# What lets the Stage explorer list a deck's own sequence. A stage says which parts it
 # computes on (`problem_domain_sub_model_part_list`) and which it loads
 # (`loads_process_list`); the difference between one stage and the next is exactly the
-# diff a `Phase` stores. Read-only: the deck is what runs, so these are never exported
+# diff a `Stage` stores. Read-only: the deck is what runs, so these are never exported
 # (`core.session.DeckReadOnly`).
 
 MODEL_PART_PREFIX = "PorousDomain."
@@ -178,11 +178,11 @@ def stageable_parts(parameters: dict) -> list[str]:
     return out
 
 
-def phases(parameters: dict) -> list[Phase]:
-    """One phase per stage, in run order, each starting from the one before.
+def styx_stages(parameters: dict) -> list[Stage]:
+    """One Styx `Stage` per Kratos stage, in run order, each starting from the one before.
 
-    Phases resolve from "everything is there" (`core.model.phases.active_parts`), so the first
-    one deactivates what its stage does not have; every later one stores only what
+    Stages resolve from "everything is there" (`core.model.stages.active_parts`), so the first
+    one deactivates what its Kratos stage does not have; every later one stores only what
     changed. The calculation type is read where the deck says it: a K0 stage runs the
     K0 procedure process, and a null step is named as one -- the deck has no other
     marker for it.
@@ -190,14 +190,14 @@ def phases(parameters: dict) -> list[Phase]:
     order = ((parameters.get("orchestrator") or {}).get("settings") or {})         .get("execution_list") or list(parameters.get("stages") or {})
     stages = parameters.get("stages") or {}
     everything = stageable_parts(parameters)
-    out: list[Phase] = []
+    out: list[Stage] = []
     before = set(everything)
     for name in order:
         stage = stages.get(name)
         if not isinstance(stage, dict):
             continue
         now = stage_parts(stage)
-        out.append(_phase(name, stage, out[-1].id if out else None,
+        out.append(_styx_stage(name, stage, out[-1].id if out else None,
                           activate=[key for key in everything
                                     if key in now and key not in before],
                           deactivate=[key for key in everything
@@ -206,8 +206,8 @@ def phases(parameters: dict) -> list[Phase]:
     return out
 
 
-def _phase(name: str, stage: dict, parent: str | None, *, activate: list[str],
-           deactivate: list[str]) -> Phase:
+def _styx_stage(name: str, stage: dict, parent: str | None, *, activate: list[str],
+           deactivate: list[str]) -> Stage:
     settings = stage.get("stage_settings") or {}
     solver = settings.get("solver_settings") or {}
     problem = settings.get("problem_data") or {}
@@ -223,10 +223,10 @@ def _phase(name: str, stage: dict, parent: str | None, *, activate: list[str],
         fields["tolerated_error"] = float(tolerance)
     start, end = problem.get("start_time"), problem.get("end_time")
     if isinstance(start, (int, float)) and isinstance(end, (int, float)) and end > start:
-        # Seconds in the deck, days in a phase. The K0 and null steps span one
+        # Seconds in the deck, days in a stage. The K0 and null steps span one
         # second of pseudo-time, which is no time at all to anyone reading days.
         fields["time_interval"] = round((end - start) / SECONDS_PER_DAY, 3)
-    return Phase(**fields)
+    return Stage(**fields)
 
 
 def _calculation(stage: dict, title: str) -> str:

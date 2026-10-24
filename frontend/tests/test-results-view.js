@@ -159,7 +159,7 @@
     });
   });
 
-  test('results view: the legend names the field, its unit and the phase, escaped', function () {
+  test('results view: the legend names the field, its unit and the stage, escaped', function () {
     stage(function (ctx) {
       var p = payload();
       p.field = Object.assign({}, p.field, { label: '<b>u</b>', unit: 'm' });
@@ -169,7 +169,7 @@
       T.eq(legend.querySelector('.vp-legend-title').textContent, '<b>u</b>',
            'markup in a label is text, not HTML');
       T.eq(legend.querySelector('.vp-legend-unit').textContent, 'm');
-      T.ok(/phase 3/.test(legend.querySelector('.vp-legend-foot').textContent));
+      T.ok(/stage 3/.test(legend.querySelector('.vp-legend-foot').textContent));
       T.eq(legend.querySelectorAll('li').length, 7, 'seven ticks');
       V.clear();
       T.ok(legend.hidden, 'cleared with the drawing');

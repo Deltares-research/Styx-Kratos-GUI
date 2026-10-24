@@ -58,16 +58,16 @@
   test('a groundwater flow project notes that its supports are left out, as the CLI does',
        function () {
     var flow = section(standard().concat([pressure('pore', 'domain')]), {
-      phases: [{ id: 'flow', name: 'Flow', calculation: 'Groundwater flow' }] });
+      stages: [{ id: 'flow', name: 'Flow', calculation: 'Groundwater flow' }] });
     var lines = BC().command('boundary list', flow).message.split('\n');
     T.eq(lines[lines.length - 1], 'A groundwater flow calculation leaves the supports out: '
          + 'it solves the water pressure alone.');
-    var mixed = section(standard(), { phases: [
+    var mixed = section(standard(), { stages: [
       { id: 'a', name: 'A', calculation: 'Plastic' },
       { id: 'flow', name: 'Flow', calculation: 'Groundwater flow', parent: 'a' }] });
     T.ok(!/groundwater flow/.test(BC().command('boundary list', mixed).message),
          'a mix is not a flow project: the export refuses it');
-    var water = section([pressure('pore', 'domain')], { phases: flow.phases });
+    var water = section([pressure('pore', 'domain')], { stages: flow.stages });
     T.ok(!/groundwater flow/.test(BC().command('boundary list', water).message),
          'no support, no note');
   });
@@ -208,12 +208,12 @@
          ['soil_L1', 'soil_L2', 'soil_L1__lift1', 'drawn_1']);
   });
 
-  test('the phase panel names the water conditions each phase has on', function () {
+  test('the stage panel names the water conditions each stage has on', function () {
     var project = section(standard().concat([
       pressure('high', 'domain', { name: 'High' }),
       pressure('low', 'domain', { name: 'Low', reference_coordinate: -6 })]), {
       stageable_parts: ['soil_L1', 'soil_L2', 'high', 'low'],
-      phases: [{ id: 'p1', name: 'One', parent: null, activate: [], deactivate: ['low'] },
+      stages: [{ id: 'p1', name: 'One', parent: null, activate: [], deactivate: ['low'] },
                { id: 'p2', name: 'Two', parent: 'p1', activate: ['low'],
                  deactivate: ['high'] },
                { id: 'p3', name: 'Dry', parent: 'p2', activate: [], deactivate: ['low'] }]
@@ -307,7 +307,7 @@
   test('the explorer marks the supports of a groundwater flow project as left out',
        function () {
     var project = section(standard().concat([pressure('pore', 'domain')]), {
-      phases: [{ id: 'flow', name: 'Flow', calculation: 'Groundwater flow' }] });
+      stages: [{ id: 'flow', name: 'Flow', calculation: 'Groundwater flow' }] });
     App.BOUNDARY_CONDITIONS = JSON.parse(JSON.stringify(project.boundary_conditions));
     App.PROJECT = project;
     App.Model.rebuildDerived();

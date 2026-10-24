@@ -68,11 +68,11 @@ top and the bottom have no water pressure condition, so no water flows through t
 
 ### The calculation
 
-One phase, of the type Groundwater flow, and a mesh of quadratic triangles of 0.4 m:
+One stage, of the type Groundwater flow, and a mesh of quadratic triangles of 0.4 m:
 
 ```text
-PS> kratos-cli phases muskat.json add flow --name Flow --calculation flow
-added phase flow (Flow) after nothing: it is the first; wrote muskat.json
+PS> kratos-cli stages muskat.json add flow --name Flow --calculation flow
+added stage flow (Flow) after nothing: it is the first; wrote muskat.json
 
 PS> kratos-cli set muskat.json mesh.element_size 0.4
 mesh.element_size = 0.4; wrote muskat.json
@@ -148,7 +148,7 @@ added start  Initial phreatic line  water pressure on the whole soil; phreatic l
 The reference deck allows 100 iterations, with a relative tolerance of 1e-3:
 
 ```powershell
-kratos-cli phases muskat_vg.json set flow --max-iterations 100 --tolerance 1e-3
+kratos-cli stages muskat_vg.json set flow --max-iterations 100 --tolerance 1e-3
 kratos-cli set muskat_vg.json mesh.element_size 0.1
 ```
 
@@ -202,11 +202,11 @@ The calculation starts from a horizontal water level at 3.0 m, as Kratos' seepag
 
 ```powershell
 kratos-cli boundary muskat_seepage.json add start --name "Start values" --domain --water-pressure Hydrostatic --reference-coordinate 3 --pressure-tension-cut-off 1e5 --initial
-kratos-cli phases muskat_seepage.json set flow --tolerance 1e-4
+kratos-cli stages muskat_seepage.json set flow --tolerance 1e-4
 ```
 
 Kratos' seepage strategy decides, node by node, where the face is open. It changes one
-node per iteration, so the face gets a fine mesh, and the phase keeps its 100 iterations.
+node per iteration, so the face gets a fine mesh, and the stage keeps its 100 iterations.
 The mesh is linear triangles of 0.4 m, refined to 0.04 m along the right face:
 
 ```powershell
@@ -215,7 +215,7 @@ kratos-cli set muskat_seepage.json mesh.order 1
 kratos-cli add muskat_seepage.json mesh.refinements '{"kind": "box", "size": 0.04, "thickness": 0.5, "x_min": 1.5, "x_max": 1.62, "y_min": 0, "y_max": 4, "z_min": 0, "z_max": 1}'
 ```
 
-The face then has 89 nodes, of which about 35 open, one per iteration. If a phase allows
+The face then has 89 nodes, of which about 35 open, one per iteration. If a stage allows
 fewer iterations than its seepage faces have nodes, `export` and `calculate` warn that it
 may stop too soon.
 

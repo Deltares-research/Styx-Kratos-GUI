@@ -15,9 +15,9 @@ import pytest
 from pydantic import ValidationError
 
 from core import session
-from core.model import phases
-from core.model.schemas import (Deck, DimensionUpdate, LayersUpdate, MaterialsUpdate, Phase,
-                                PhasesUpdate, Project, StructuresUpdate, UnitsUpdate,
+from core.model import stages
+from core.model.schemas import (Deck, DimensionUpdate, LayersUpdate, MaterialsUpdate, Stage,
+                                StagesUpdate, Project, StructuresUpdate, UnitsUpdate,
                                 WaterLevel, WaterUpdate)
 from core.model.templates import blank_project, seed_project
 from tests.models.excavation import excavation_project
@@ -218,37 +218,37 @@ def test_structures_replace_only_the_kinds_given():
     assert edited.beams == project.beams
 
 
-# ── Phases ──────────────────────────────────────────────────────────────────
+# ── Stages ──────────────────────────────────────────────────────────────────
 
-def test_phases_are_stored():
-    sequence = [Phase(id="initial", name="Initial stage"),
-                Phase(id="dig", name="Dig", parent="initial")]
+def test_stages_are_stored():
+    sequence = [Stage(id="initial", name="Initial stage"),
+                Stage(id="dig", name="Dig", parent="initial")]
 
-    edited = session.replace_phases(staged(), PhasesUpdate(phases=sequence))
+    edited = session.replace_stages(staged(), StagesUpdate(stages=sequence))
 
-    assert [p.id for p in edited.phases] == ["initial", "dig"]
-
-
-def test_phases_that_branch_are_refused_naming_the_branches():
-    sequence = [Phase(id="initial", name="Initial stage"),
-                Phase(id="a", name="A", parent="initial"),
-                Phase(id="b", name="B", parent="initial")]
-
-    with pytest.raises(phases.PhaseError, match="'a'.*'b'|'b'.*'a'"):
-        session.replace_phases(staged(), PhasesUpdate(phases=sequence))
+    assert [p.id for p in edited.stages] == ["initial", "dig"]
 
 
-def test_the_default_phases_are_the_model_s_own():
+def test_stages_that_branch_are_refused_naming_the_branches():
+    sequence = [Stage(id="initial", name="Initial stage"),
+                Stage(id="a", name="A", parent="initial"),
+                Stage(id="b", name="B", parent="initial")]
+
+    with pytest.raises(stages.StageError, match="'a'.*'b'|'b'.*'a'"):
+        session.replace_stages(staged(), StagesUpdate(stages=sequence))
+
+
+def test_the_default_stages_are_the_model_s_own():
     project = staged()
 
-    assert session.default_phases(project).phases == phases.default_phases(project)
+    assert session.default_stages(project).stages == stages.default_stages(project)
 
 
 @pytest.mark.parametrize("edit", [
-    lambda p: session.replace_phases(p, PhasesUpdate(phases=[])),
-    session.default_phases,
+    lambda p: session.replace_stages(p, StagesUpdate(stages=[])),
+    session.default_stages,
 ], ids=["replace", "defaults"])
-def test_the_phases_of_a_deck_are_read_only(edit):
+def test_the_stages_of_a_deck_are_read_only(edit):
     with pytest.raises(session.DeckReadOnly, match="Edit the deck"):
         edit(a_deck())
 
@@ -362,11 +362,11 @@ def test_removing_a_part_takes_its_mesh_size_with_it():
     assert session.without_custom_part(project, "drawn_0").mesh.body_sizes == {}
 
 
-def test_a_part_a_phase_uses_is_not_removed():
+def test_a_part_a_stage_uses_is_not_removed():
     project = with_box(seed_project())
-    project = session.replace_phases(project, PhasesUpdate(phases=[
-        Phase(id="initial", name="Initial stage"),
-        Phase(id="dig_1", name="Dig", parent="initial", deactivate=["drawn_0"])]))
+    project = session.replace_stages(project, StagesUpdate(stages=[
+        Stage(id="initial", name="Initial stage"),
+        Stage(id="dig_1", name="Dig", parent="initial", deactivate=["drawn_0"])]))
 
     with pytest.raises(session.EditRefused, match="dig_1.*drawn_0"):
         session.without_custom_parts(project, ["drawn_0"])
@@ -391,6 +391,14 @@ def test_a_value_is_read_by_its_path():
     assert session.value_at(project, "layers[1].id") == "L2"
     assert session.value_at(project, "layers[L1].tops[bh1]") == project.layers[0].tops["bh1"]
     assert session.value_at(project, "") == project.model_dump(mode="json")
+
+
+def test_a_path_may_still_say_phases():
+    project = session.default_stages(seed_project())
+
+    assert session.value_at(project, "phases") == session.value_at(project, "stages")
+    renamed = session.with_value(project, f"phases[{project.stages[0].id}].name", "First")
+    assert renamed.stages[0].name == "First"
 
 
 def test_a_path_that_names_nothing_says_what_is_there():
@@ -443,20 +451,20 @@ def test_the_fields_with_an_edit_of_their_own_are_not_set_directly(path):
         session.with_value(seed_project(), path, 2)
 
 
-def test_phases_set_by_path_still_have_to_run_in_one_order():
-    project = session.with_value(staged(), "phases", [
+def test_stages_set_by_path_still_have_to_run_in_one_order():
+    project = session.with_value(staged(), "stages", [
         {"id": "initial", "name": "Initial stage"},
         {"id": "a", "name": "A", "parent": "initial"},
     ])
-    with pytest.raises(phases.PhaseError):
-        session.with_added(project, "phases", {"id": "b", "name": "B", "parent": "initial"})
+    with pytest.raises(stages.StageError):
+        session.with_added(project, "stages", {"id": "b", "name": "B", "parent": "initial"})
 
 
-def test_a_custom_part_removed_by_path_is_checked_against_the_phases():
+def test_a_custom_part_removed_by_path_is_checked_against_the_stages():
     project = with_box(seed_project())
-    project = session.replace_phases(project, PhasesUpdate(phases=[
-        Phase(id="initial", name="Initial stage"),
-        Phase(id="dig_1", name="Dig", parent="initial", deactivate=["drawn_0"])]))
+    project = session.replace_stages(project, StagesUpdate(stages=[
+        Stage(id="initial", name="Initial stage"),
+        Stage(id="dig_1", name="Dig", parent="initial", deactivate=["drawn_0"])]))
 
     with pytest.raises(session.EditRefused, match="dig_1"):
         session.without_value(project, "custom_parts[drawn_0]")
@@ -753,8 +761,8 @@ def test_a_pile_carrying_an_anchor_or_an_interface_is_not_removed():
         session.remove_structure(project, "sheetpile")
 
 
-def test_a_structure_a_phase_names_is_not_removed():
-    with pytest.raises(session.EditRefused, match="phase 'install_strut' names strut"):
+def test_a_structure_a_stage_names_is_not_removed():
+    with pytest.raises(session.EditRefused, match="stage 'install_strut' names strut"):
         session.remove_structure(excavation_project(), "strut")
 
 
@@ -800,54 +808,54 @@ def test_a_section_id_two_kinds_share_needs_its_kind():
                                   name="x").anchor_sections[-1].name == "x"
 
 
-# ── Phases, one at a time ────────────────────────────────────────────────────
+# ── Stages, one at a time ────────────────────────────────────────────────────
 
-def test_a_phase_is_added_at_the_end_with_the_id_and_settings_given():
-    project, phase = session.add_phase(excavation_project(), id="dig_4", name="Dig 4",
+def test_a_stage_is_added_at_the_end_with_the_id_and_settings_given():
+    project, stage = session.add_stage(excavation_project(), id="dig_4", name="Dig 4",
                                        calculation="Plastic", max_iterations=50)
 
-    assert project.phases[-1] == phase
-    assert (phase.id, phase.name, phase.parent, phase.max_iterations) == (
+    assert project.stages[-1] == stage
+    assert (stage.id, stage.name, stage.parent, stage.max_iterations) == (
         "dig_4", "Dig 4", "dig_3", 50)
 
 
-def test_a_phase_inserted_before_another_takes_its_place_in_the_chain():
-    project, phase = session.add_phase(excavation_project(), before="dig_1", id="prep")
+def test_a_stage_inserted_before_another_takes_its_place_in_the_chain():
+    project, stage = session.add_stage(excavation_project(), before="dig_1", id="prep")
 
-    by_id = {p.id: p for p in project.phases}
+    by_id = {p.id: p for p in project.stages}
     assert (by_id["prep"].parent, by_id["dig_1"].parent) == ("install_sheetpile", "prep")
 
 
-def test_a_copied_phase_follows_its_original():
-    project, phase = session.add_phase(excavation_project(), copy_of="dig_1")
+def test_a_copied_stage_follows_its_original():
+    project, stage = session.add_stage(excavation_project(), copy_of="dig_1")
 
-    assert (phase.id, phase.parent, phase.max_iterations) == ("phase_1", "dig_1", 150)
-    assert {p.id: p for p in project.phases}["install_strut"].parent == "phase_1"
-
-
-def test_a_phase_id_that_is_taken_is_refused():
-    with pytest.raises(session.EditRefused, match="already a phase 'dig_1'"):
-        session.add_phase(excavation_project(), id="dig_1")
+    assert (stage.id, stage.parent, stage.max_iterations) == ("stage_1", "dig_1", 150)
+    assert {p.id: p for p in project.stages}["install_strut"].parent == "stage_1"
 
 
-def test_a_phase_is_changed_and_removed():
-    project = session.update_phase(excavation_project(), "dig_1", name="Dig one",
+def test_a_stage_id_that_is_taken_is_refused():
+    with pytest.raises(session.EditRefused, match="already a stage 'dig_1'"):
+        session.add_stage(excavation_project(), id="dig_1")
+
+
+def test_a_stage_is_changed_and_removed():
+    project = session.update_stage(excavation_project(), "dig_1", name="Dig one",
                                    tolerated_error=1e-5)
-    assert {p.id: p for p in project.phases}["dig_1"].tolerated_error == 1e-5
+    assert {p.id: p for p in project.stages}["dig_1"].tolerated_error == 1e-5
 
-    project = session.remove_phase(project, "install_strut")
-    assert {p.id: p for p in project.phases}["dig_2"].parent == "dig_1"
+    project = session.remove_stage(project, "install_strut")
+    assert {p.id: p for p in project.stages}["dig_2"].parent == "dig_1"
 
 
-def test_a_phase_that_is_not_there_is_named_with_those_that_are():
-    with pytest.raises(session.UnknownRecord, match="no phase 'dig_9'.*dig_1"):
-        session.update_phase(excavation_project(), "dig_9", name="x")
+def test_a_stage_that_is_not_there_is_named_with_those_that_are():
+    with pytest.raises(session.UnknownRecord, match="no stage 'dig_9'.*dig_1"):
+        session.update_stage(excavation_project(), "dig_9", name="x")
 
 
 def test_parts_are_switched_with_the_smallest_instruction():
     project = session.switch_parts(excavation_project(), "dig_1", ["strut"], True)
 
-    assert {p.id: p for p in project.phases}["dig_1"].activate == ["water_1", "strut"]
+    assert {p.id: p for p in project.stages}["dig_1"].activate == ["water_1", "strut"]
 
 
 def test_a_part_the_model_does_not_have_is_not_switched():
@@ -856,9 +864,9 @@ def test_a_part_the_model_does_not_have_is_not_switched():
 
 
 def test_the_staged_excavation_sequence_is_derived_from_the_model():
-    project = session.staged_excavation_phases(excavation_project(staged=False))
+    project = session.staged_excavation_stages(excavation_project(staged=False))
 
-    assert project.phases == excavation_project().phases
+    assert project.stages == excavation_project().stages
 
 
 # ── A project file opened on another computer ──────────────────────────────
@@ -893,7 +901,7 @@ def test_a_part_that_cannot_be_built_again_is_said_to_be_missing(tmp_path):
     from tests.models import drawn_ground
 
     data = drawn_ground.project().model_dump(mode="json")
-    data.update(interfaces=[], phases=[])
+    data.update(interfaces=[], stages=[])
     data["custom_parts"][1].update(source_file="C:/nowhere/gone.brep", recipe=None,
                                    source="import")
     path = tmp_path / "dike.json"

@@ -35,7 +35,7 @@ app. Then add the test tools to that venv:
 
 ## Making a change
 
-1. Create a branch from `main`, for example `git checkout -b fix/phase-order`.
+1. Create a branch from `main`, for example `git checkout -b fix/stage-order`.
 2. **Write a failing test first, then make it pass.** The project follows test-driven
    development. A logic change comes with an automated test, not with a manual check in the
    browser.

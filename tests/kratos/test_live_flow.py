@@ -31,7 +31,7 @@ import pytest
 from core.analysis import calculation
 from core.geometry import solid_model
 from core.kratos import writer
-from core.model.schemas import Phase, Project
+from core.model.schemas import Stage, Project
 from core.results import catalog
 from tests.models import muskat
 from tests.results_run import require_kratos
@@ -127,16 +127,16 @@ def test_case_a_is_kratos_own_answer(case_a, node, variable):
         assert got[0] == pytest.approx(expected[variable], abs=KRATOS_A_TOLERANCE[variable])
 
 
-def test_each_phase_is_solved_with_its_own_heads():
-    """The second phase lowers the right head: its own condition on, the first one off.
+def test_each_stage_is_solved_with_its_own_heads():
+    """The second stage lowers the right head: its own condition on, the first one off.
     A switched-off Hydrostatic condition keeps its nodes fixed at their last values, so
     the new one has to replace them for the second stage to be the lower flow."""
     low = muskat.head("low_right", "right", 1.0)
     project = muskat.muskat(
         conditions=[*muskat.HEADS, low], order=2,
-        phases=[Phase(id="flow", name="Flow", calculation="Groundwater flow",
+        stages=[Stage(id="flow", name="Flow", calculation="Groundwater flow",
                       deactivate=["low_right"]),
-                Phase(id="lower", name="Lower", parent="flow",
+                Stage(id="lower", name="Lower", parent="flow",
                       calculation="Groundwater flow",
                       activate=["low_right"], deactivate=["right_head"])])
     deck, run_id = run(project)

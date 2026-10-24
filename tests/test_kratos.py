@@ -926,7 +926,7 @@ def test_an_anchor_saved_in_a_3d_project_is_not_exported(session):
 # ── Staged excavation: bodies, their edges and their materials ──────────────
 #
 # A staged deck keeps the excavated soil so each lift can be deactivated in its own
-# phase (plan/outdated/staged-construction-plan.md sec A1). Three things follow from that, and
+# stage (plan/outdated/staged-construction-plan.md sec A1). Three things follow from that, and
 # none of them is true of an unstaged deck: every lift is its own sub-model part, every
 # lift carries its layer's material, and the domain edge a lift touches is segmented so
 # the lift's own edge constraint can leave the deck with it.
@@ -961,7 +961,7 @@ def staged(session):
 
 
 def test_every_staged_body_is_its_own_sub_model_part(staged):
-    """One lift, one part: what a phase's Deactivate operation names."""
+    """One lift, one part: what a stage's Deactivate operation names."""
     deck = deck_of(staged)
     names = {writer._part_names(staged_project())[key]
              for key, *_ in staged_project().soil_bodies()}
@@ -1047,7 +1047,7 @@ def test_an_unstaged_deck_keeps_one_whole_edge(section):
 
 def test_the_anchor_support_is_its_own_named_part(anchored):
     """One node, in no element but the truss: what the reference calls Strut_Support
-    and pins from the phase the anchor arrives in."""
+    and pins from the stage the anchor arrives in."""
     deck = deck_of(anchored)
     part = deck.parts["Anchor_1_Support"]
 
@@ -1133,7 +1133,7 @@ def test_gravity_is_applied_before_the_loads_that_sit_on_the_model(piled):
 # `WATER_PRESSURE`, hydrostatic about `Project.water`, fixed over the whole porous
 # domain: the seed project's water pressure condition on the whole soil
 # (`WaterPressureCondition`, on="domain"), which every reference deck carries in every
-# stage. On the whole soil it is not filtered by the phases and does not vary between
+# stage. On the whole soil it is not filtered by the stages and does not vary between
 # stages. A project without such a condition fixes no water pressure at all
 # (tests/test_kratos_water_pressure.py).
 

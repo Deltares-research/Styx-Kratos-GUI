@@ -4,7 +4,7 @@ It carries every feature a staged excavation uses, each once, so a test about an
 has it to hand: three soil layers, a pit dug in three lifts, a sheet-pile wall, a strut
 from the wall to a pinned support, an interface on both faces of the wall, a surcharge
 behind it, a water table, one hydrostatic water load per lift, a graded mesh carried by
-the project, and the staged construction sequence `phases.staged_excavation_phases`
+the project, and the staged construction sequence `stages.staged_excavation_stages`
 derives from all of that. `mohr_coulomb_project` is the same model with Mohr-Coulomb
 soils and Coulomb contacts.
 
@@ -18,7 +18,7 @@ It is also a script the GUI can open, through the same path a user's own model t
 
 from __future__ import annotations
 
-from core.model import phases
+from core.model import stages
 from core.model.schemas import (Anchor, AnchorRows, AnchorSection, Beam, BeamSection, Borehole,
                          BoxRefinement, Domain, Excavation, Interface, InterfaceSection,
                          LineLoad, Material, MeshSettings, NormalLoad, Piles, Project,
@@ -82,7 +82,7 @@ def _soil(id_, name, color, modulus, poisson, weight, cohesion, phi, permeabilit
 
 def excavation_project(staged: bool = True) -> Project:
     """The model. `staged=False` is the same geometry with no construction sequence, for
-    a test about the mesh or the deck that should not depend on the phases."""
+    a test about the mesh or the deck that should not depend on the stages."""
     borehole = "bh1"
     upper = _soil("m_upper", "Soft clay", "#c4a86a", 2.0e6, 0.3, 17_000.0, 2_000.0,
                   25.0, 1.0e-8, 0.58)
@@ -169,7 +169,7 @@ def excavation_project(staged: bool = True) -> Project:
         return project
     return Project.model_validate(
         project.model_dump()
-        | {"phases": [phase.model_dump() for phase in phases.staged_excavation_phases(project)]})
+        | {"stages": [stage.model_dump() for stage in stages.staged_excavation_stages(project)]})
 
 
 MOHR_COULOMB = "GeoMohrCoulombLawPlaneStrain"
@@ -186,7 +186,7 @@ STRENGTHS = {
 }
 
 MOHR_COULOMB_SOLVER = {"dig_3": (1e-3, 300)}
-"""phase id -> (residual relative tolerance, max iterations), typed per phase."""
+"""stage id -> (residual relative tolerance, max iterations), typed per stage."""
 
 
 def mohr_coulomb_project(staged: bool = True) -> Project:
@@ -206,7 +206,7 @@ def mohr_coulomb_project(staged: bool = True) -> Project:
     contact = data["interface_sections"][0]
     contact.update(constitutive_law=COULOMB_CONTACT, r_inter=None,
                    variables={"GEO_ENABLE_TENSION_CUT_OFF": False, **RETENTION})
-    for phase in data["phases"]:
-        if phase["id"] in MOHR_COULOMB_SOLVER:
-            phase["tolerated_error"], phase["max_iterations"] = MOHR_COULOMB_SOLVER[phase["id"]]
+    for stage in data["stages"]:
+        if stage["id"] in MOHR_COULOMB_SOLVER:
+            stage["tolerated_error"], stage["max_iterations"] = MOHR_COULOMB_SOLVER[stage["id"]]
     return Project.model_validate(data)

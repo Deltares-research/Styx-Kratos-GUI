@@ -10,7 +10,7 @@ words.
 A seepage face (`SeepageCondition`) belongs to a groundwater flow calculation; a
 deformation deck leaves it out and says so.
 
-A groundwater flow project (`core.model.phases.groundwater_flow`) has warnings of its own
+A groundwater flow project (`core.model.stages.groundwater_flow`) has warnings of its own
 instead of the ones about deformation -- the structures and loads it leaves out (the
 supports it leaves out silently), a soil fixed everywhere,
 gravity off -- and the refusals of `flow_refusal`, which both say before meshing too.
@@ -24,8 +24,8 @@ for loading the mesher.
 
 from __future__ import annotations
 
-from core.model import phases
-from core.model.schemas import (DisplacementCondition, Material, Phase, Project,
+from core.model import stages
+from core.model.schemas import (DisplacementCondition, Material, Stage, Project,
                                 SeepageCondition, WaterPressureCondition)
 
 SECTION_FACES = ("bottom", "left", "right", "top")
@@ -49,7 +49,7 @@ def warnings(project: Project) -> list[str]:
     out += _seepage_outside_flow(project)
     out += _rigid_body(project)
     out += _unpinned_water(project)
-    out += _free_water_in_phases(project)
+    out += _free_water_in_stages(project)
     out += _unused_water_level(project)
     out += _weightless_k0(project)
     return out
@@ -117,7 +117,7 @@ def _seepage_outside_flow(project: Project) -> list[str]:
     faces = [c for c in project.boundary_conditions
              if isinstance(c, SeepageCondition) and written(project, c)]
     return [f"{noun(c)} is left out: a seepage face belongs to a groundwater flow "
-            "calculation, and this project's phases are not \"Groundwater flow\"."
+            "calculation, and this project's stages are not \"Groundwater flow\"."
             for c in faces]
 
 
@@ -177,38 +177,38 @@ def _coupled_soils(project: Project) -> list[str]:
             != "CONSTANT_PW_FIELD"]
 
 
-def _free_water_in_phases(project: Project) -> list[str]:
-    """A phase in which nothing holds the water pressure of a coupled soil.
+def _free_water_in_stages(project: Project) -> list[str]:
+    """A stage in which nothing holds the water pressure of a coupled soil.
 
-    What a phase that switches its conditions off leaves depends on the Kratos process
+    What a stage that switches its conditions off leaves depends on the Kratos process
     (tests/kratos/test_live_conditions.py): a fixed Hydrostatic or Phreatic condition
-    keeps its nodes fixed at their last values after its phase, so the later phases
-    carry them; a fixed Uniform one frees its nodes when its phase ends. So a phase is
+    keeps its nodes fixed at their last values after its stage, so the later stages
+    carry them; a fixed Uniform one frees its nodes when its stage ends. So a stage is
     unheld when no fixed condition is on in it and no fixed Hydrostatic or Phreatic one
-    was on before it. Unphased projects are `_unpinned_water`'s."""
+    was on before it. Unstaged projects are `_unpinned_water`'s."""
     pressures = _water_pressures(project)
-    if not project.phases or not pressures:
+    if not project.stages or not pressures:
         return []
     coupled = _coupled_soils(project)
     if not coupled:
         return []
     try:
-        order = phases.linearise(project)
-    except phases.PhaseError:
+        order = stages.linearise(project)
+    except stages.StageError:
         return []
     fixed = [c for c in pressures if c.is_fixed]
     kept = False
     out: list[str] = []
-    for phase in order:
-        on = phases.active_parts(project, phase)
+    for stage in order:
+        on = stages.active_parts(project, stage)
         now = [c for c in fixed if c.id in on]
         if not now and not kept:
             out.append(
-                f"in phase {phase.name!r} no fixed water pressure condition is on and "
+                f"in stage {stage.name!r} no fixed water pressure condition is on and "
                 "none that keeps its values (Hydrostatic or Phreatic) was on before, so "
                 f"the water pressure of {', '.join(repr(name) for name in coupled)} is "
                 "free there, and the self weight builds up pressures the model does not "
-                "have. Switch a water pressure condition on in that phase.")
+                "have. Switch a water pressure condition on in that stage.")
         kept = kept or any(c.fluid_pressure_type != "Uniform" for c in now)
     return out
 
@@ -232,32 +232,32 @@ def _unused_water_level(project: Project) -> list[str]:
 
 def _weightless_k0(project: Project) -> list[str]:
     """A K0 procedure derives its stresses from the self weight, which gravity off
-    leaves out: the stresses it starts the next phase with are zero."""
+    leaves out: the stresses it starts the next stage with are zero."""
     if project.gravity:
         return []
-    return [f"phase {phase.name!r} is a K0 procedure, whose stresses come from the self "
+    return [f"stage {stage.name!r} is a K0 procedure, whose stresses come from the self "
             "weight; with gravity off they are zero."
-            for phase in project.phases if phase.calculation == "K0 procedure"]
+            for stage in project.stages if stage.calculation == "K0 procedure"]
 
 
 # ── Groundwater flow ────────────────────────────────────────────────────────
 
 def _flow(project: Project) -> bool:
     """Whether the project is a groundwater flow calculation. A mix of flow and
-    deformation phases is not one: `flow_refusal` says why it cannot be exported."""
+    deformation stages is not one: `flow_refusal` says why it cannot be exported."""
     try:
-        return phases.groundwater_flow(project)
-    except phases.PhaseError:
+        return stages.groundwater_flow(project)
+    except stages.StageError:
         return False
 
 
 def flow_refusal(project: Project) -> str | None:
     """Why the export refuses this groundwater flow project, or None. None too for a
-    project that is not one, except a mix of flow and deformation phases."""
+    project that is not one, except a mix of flow and deformation stages."""
     try:
-        if not phases.groundwater_flow(project):
+        if not stages.groundwater_flow(project):
             return None
-    except phases.PhaseError as failure:
+    except stages.StageError as failure:
         return str(failure)
     if project.dimension != 2:
         return ("a groundwater flow calculation is 2D only for now: switch the model to "
@@ -268,30 +268,30 @@ def flow_refusal(project: Project) -> str | None:
         return (f"{', '.join(repr(name) for name in missing)} has no PERMEABILITY_XX, "
                 "and a groundwater flow calculation cannot run without it: give the "
                 "soil its intrinsic permeability (m²).")
-    unheld = _unheld_flow_phase(project)
+    unheld = _unheld_flow_stage(project)
     if unheld is not None:
-        return (f"in phase {unheld.name!r} no fixed water pressure condition is on, and "
+        return (f"in stage {unheld.name!r} no fixed water pressure condition is on, and "
                 "none that keeps its values (Hydrostatic or Phreatic) was on before, so "
                 "the water pressure has no single solution. Switch on a fixed water "
                 "pressure condition where the head is known, on a face or a line.")
     return None
 
 
-def _unheld_flow_phase(project: Project) -> Phase | None:
-    """The first phase in which nothing fixes the water pressure, or None. The same
-    rule as `_free_water_in_phases`: a fixed Hydrostatic or Phreatic condition keeps its
-    nodes fixed after its phase, a fixed Uniform one does not."""
+def _unheld_flow_stage(project: Project) -> Stage | None:
+    """The first stage in which nothing fixes the water pressure, or None. The same
+    rule as `_free_water_in_stages`: a fixed Hydrostatic or Phreatic condition keeps its
+    nodes fixed after its stage, a fixed Uniform one does not."""
     try:
-        order = phases.linearise(project)
-    except phases.PhaseError:
+        order = stages.linearise(project)
+    except stages.StageError:
         return None
     fixed = [c for c in _water_pressures(project) if c.is_fixed]
     kept = False
-    for phase in order:
-        on = phases.active_parts(project, phase)
+    for stage in order:
+        on = stages.active_parts(project, stage)
         now = [c for c in fixed if c.id in on]
         if not now and not kept:
-            return phase
+            return stage
         kept = kept or any(c.fluid_pressure_type != "Uniform" for c in now)
     return None
 

@@ -95,7 +95,7 @@ def test_a_block_with_no_coordinates_of_its_own_still_reads():
 
 
 def test_an_empty_element_block_is_a_block_with_no_elements():
-    """What a body deactivated in this phase looks like. It is not an error and not an
+    """What a body deactivated in this stage looks like. It is not an error and not an
     absent block: the part is still declared, and it has nothing in it."""
     text = dedent("""
         MESH "Kratos_Triangle2D6_Mesh_4" dimension 2 ElemType Triangle Nnode 6

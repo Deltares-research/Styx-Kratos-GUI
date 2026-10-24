@@ -4,7 +4,7 @@ heads, with an unsaturated zone above the phreatic line.
 Kratos' GeoMechanicsApplication test `tests/Muskat/van_genuchten_hydrostatic`, built as a
 Styx model: a 1.62 m by 4 m column of a Van Genuchten soil, the water held at a level of
 3.0 m on the left face and 1.62 m on the right, started from a phreatic line, and one
-"Groundwater flow" phase. muskat_van_genuchten.json beside it is the same model, as the
+"Groundwater flow" stage. muskat_van_genuchten.json beside it is the same model, as the
 GUI saves it.
 
     python muskat_van_genuchten.py               write the deck into this folder
@@ -55,7 +55,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from core.model.schemas import (AnchorRows, Borehole, Domain, Excavation,  # noqa: E402
-                                Material, MeshSettings, Phase, Piles, Project, SoilLayer,
+                                Material, MeshSettings, Piles, Project, SoilLayer, Stage,
                                 Struts, Wall, WaterPressureCondition, Wells)
 
 # The column: (0, 0) to (1.62, 4).
@@ -143,7 +143,7 @@ def project() -> Project:
 
         mesh=MeshSettings(element_size=ELEMENT_SIZE, order=ELEMENT_ORDER),
 
-        phases=[Phase(id="flow", name="Flow", calculation="Groundwater flow",
+        stages=[Stage(id="flow", name="Flow", calculation="Groundwater flow",
                       max_iterations=MAX_ITERATIONS, tolerated_error=TOLERANCE)],
 
         # Required by the schema. A layered model with one excavation level cuts no

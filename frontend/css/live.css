@@ -149,7 +149,7 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
   background: none; border-color: transparent; color: var(--c-disabled);
 }
 
-/* Buttons the live layer greys with the `disabled` attribute alone -- the phase
+/* Buttons the live layer greys with the `disabled` attribute alone -- the stage
    toolbar, the soil-volume table, a dialog's footer while it saves -- looked exactly
    as pressable as before, because the frozen sheet styles only the `.disabled`
    class. The Calculate button is left to its own section further down. */
@@ -260,7 +260,7 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
 
 /* ── The Results explorer ─────────────────────────────────────────────── */
 
-/* A mode's own dock panel (Phases, Results) is put away with `hidden` when its tab is
+/* A mode's own dock panel (Stages, Results) is put away with `hidden` when its tab is
    left. `.dock-panel { display: flex }` in the frozen css/layout.css outranks the
    browser's `[hidden]` rule, so without this both stayed on screen in every tab. */
 .dock-panel[hidden] { display: none; }
@@ -288,7 +288,7 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
   white-space: nowrap;
 }
 /* The legend's Min ... Max boxes: two equal boxes that shrink with the dock column,
-   then Auto and the unit. An empty box shows the phase's own value as its placeholder. */
+   then Auto and the unit. An empty box shows the stage's own value as its placeholder. */
 .res-limits { display: flex; align-items: center; gap: 4px; min-width: 0; }
 .res-limits input {
   flex: 1 1 0; min-width: 0; width: 0;
@@ -354,7 +354,7 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
 .dlg-results .res-limits button { font-size: 11px; padding: 2px 8px; }
 
 /* The plot window (patches.js `openPlotWindow`): a member's results along it, a panel
-   per phase. The figure is one SVG drawn by frontend/js/results-plot.js; it is scaled to the
+   per stage. The figure is one SVG drawn by frontend/js/results-plot.js; it is scaled to the
    window's width and scrolls vertically when its rows do not fit. `.dlg-body` is a flex
    row, so the window's content is one column that fills it. */
 .dlg-plot .dlg-body { overflow: hidden; padding: 0; }
@@ -393,13 +393,13 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
 .tree-paint.empty-slot { visibility: hidden; cursor: default; }
 
 /* The Model explorer's checkbox in Staged construction mode means "in the model in the
-   selected phase" (addPhaseChecks in frontend/js/patches.js). A group whose parts differ
-   shows a dash; a state this phase inherited rather than set itself is ticked in grey. */
-.tree-eye.phase-check.mixed::after {
+   selected stage" (addStageChecks in frontend/js/patches.js). A group whose parts differ
+   shows a dash; a state this stage inherited rather than set itself is ticked in grey. */
+.tree-eye.stage-check.mixed::after {
   opacity: 1; width: 7px; height: 0; transform: none;
   border: 0; border-bottom: 1.6px solid var(--brand-primary);
 }
-.tree-eye.phase-check.inherited::after { border-color: var(--c-ink-faint); }
+.tree-eye.stage-check.inherited::after { border-color: var(--c-ink-faint); }
 
 /* Overlapping nodes of an imported deck, fanned apart (paintNodeFans in
    frontend/js/viewport.js). Inert like the labels' overlay: clicks go through to the canvas,
@@ -415,17 +415,17 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
 }
 .vp-node-fans[hidden] { display: none; }
 
-/* The Phases overview (patches.js `phasesDialog`): the phase list, a line per phase. */
-.phases-overview-list .phase-row { gap: 6px; }
-.phases-overview-list .phase-name { flex: 1 1 auto; min-width: 0; overflow: hidden;
+/* The Stages overview (patches.js `stagesDialog`): the stage list, a line per stage. */
+.stages-overview-list .phase-row { gap: 6px; }
+.stages-overview-list .phase-name { flex: 1 1 auto; min-width: 0; overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap; }
-.phases-overview-list .phase-kind { flex: 0 0 auto; }
+.stages-overview-list .phase-kind { flex: 0 0 auto; }
 .phase-dot.failed { background: #d64545; }
-.phases-overview-box { margin: 6px 0 10px; padding: 8px; min-height: 48px;
+.stages-overview-box { margin: 6px 0 10px; padding: 8px; min-height: 48px;
   border: 1px solid var(--c-line); background: var(--c-panel-2); }
-.phases-overview-box.done, .phases-overview-box.initial { color: var(--brand-green); }
-.phases-overview-box.failed { color: #d64545; }
-.phases-overview-error { white-space: pre-wrap; font-size: var(--fs-sm); max-height: 200px;
+.stages-overview-box.done, .stages-overview-box.initial { color: var(--brand-green); }
+.stages-overview-box.failed { color: #d64545; }
+.stages-overview-error { white-space: pre-wrap; font-size: var(--fs-sm); max-height: 200px;
   overflow: auto; margin: 0 0 10px; }
 
 /* ── Boundary conditions ───────────────────────────────────────── */

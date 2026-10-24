@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1040 380" width="1040" height="380" role="img" aria-labelledby="title desc">
   <title id="title">How a Styx model becomes Kratos results</title>
-  <desc id="desc">Swimlane diagram. The model flows from the Styx GUI or the Styx Python CLI to the Styx project, into Gmsh to build solids and mesh them, back to Styx to split interfaces, stage the phases and write the deck, into Kratos to solve, and back to Styx to read the results the GUI or CLI shows as contours and wall plots.</desc>
+  <desc id="desc">Swimlane diagram. The model flows from the Styx GUI or the Styx Python CLI to the Styx project, into Gmsh to build solids and mesh them, back to Styx to split interfaces, order the stages and write the deck, into Kratos to solve, and back to Styx to read the results the GUI or CLI shows as contours and wall plots.</desc>
   <style>
     svg { --bg: #ffffff; --lane: #eef2f0; --ink: #1b2225; --muted: #5a666b; --line: #d3dbd8;
           --you: #6b6390; --styx: #2a5e8c; --gmsh: #2c7a57; --kratos: #a8640f;
@@ -82,7 +82,7 @@
 
   <rect class="box styx" x="584" y="109" width="96" height="56" rx="4"/>
   <text class="t" x="632" y="133">Split + stage</text>
-  <text class="s" x="632" y="149">interfaces, phases</text>
+  <text class="s" x="632" y="149">interfaces, stages</text>
 
   <rect class="box styx" x="700" y="109" width="96" height="56" rx="4"/>
   <text class="t" x="748" y="133">Write deck</text>

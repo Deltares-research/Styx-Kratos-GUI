@@ -9,7 +9,7 @@
     <a href="https://github.com/KratosMultiphysics/Kratos">Kratos Multiphysics</a>
     GeoMechanicsApplication.
     <br>
-    Build a soil and excavation model, mesh it with Gmsh, run it in construction phases, and
+    Build a soil and excavation model, mesh it with Gmsh, run it in construction stages, and
     read the results back.
   </p>
 
@@ -47,11 +47,11 @@ browser.
   units. A default library covers sand, clay, fill and bedrock.
 - **Meshing**: Gmsh, with element size, element order, algorithm and optimisation settings,
   and local refinement.
-- **Construction phases**: activate and deactivate parts phase by phase, with a K0 initial
+- **Construction stages**: activate and deactivate parts stage by stage, with a K0 initial
   stage.
 - **Calculate**: one click writes the deck and runs it through Kratos' multistage
   orchestrator.
-- **Results**: contour plots per phase, a deformed mesh, values at a node, plots along the
+- **Results**: contour plots per stage, a deformed mesh, values at a node, plots along the
   wall (bending moment, shear force, normal force and displacements), and CSV, SVG and ZIP
   export.
 - **Scripting**: a command line in the app, plus `run <file.py>` to build a model from a

@@ -29,7 +29,7 @@ App.Calculate = (function () {
 
   /* ── Can it calculate now? ────────────────────────────────────────────────
 
-     One answer for every way in -- the toolbar's Calculate, the Phases menu, the
+     One answer for every way in -- the toolbar's Calculate, the Stages menu, the
      Staged construction rail, F9 and `calculate` in the command box -- so that what
      is greyed out and what is refused cannot disagree (js/patches.js `syncCalculate`).
      Pure: it reads the project it is given and nothing else, so the tests can ask it
@@ -45,7 +45,7 @@ App.Calculate = (function () {
          and no solid -- and so is the first sentence, so the GUI, `kratos-cli check`
          and the server's 422 say it the same way. What follows it is the GUI's own
          way to fix it, where the CLI names `layer add`.
-     *   a phase tree with no single order (`App.Phases.branchProblem`).
+     *   a stage tree with no single order (`App.Stages.branchProblem`).
 
      A deck case is always worth a try: the server runs its files as they are, and
      its soil is in the deck, not in `soil_body_keys`. What the model is made of --
@@ -68,8 +68,8 @@ App.Calculate = (function () {
     if (!(project.soil_body_keys || []).length && !(project.custom_parts || []).length) {
       return { ok: false, running: false, reason: nothingToMesh(project) };
     }
-    var branched = App.Phases && App.Phases.branchProblem
-      ? App.Phases.branchProblem(project) : null;
+    var branched = App.Stages && App.Stages.branchProblem
+      ? App.Stages.branchProblem(project) : null;
     if (branched) return { ok: false, running: false, reason: branched };
     return { ok: true, running: false, reason: '' };
   }
@@ -134,11 +134,11 @@ App.Calculate = (function () {
        `result.stage` is what `calculate.failed_stage` worked out from the markers
        `core.analysis.kratos_main` prints around each stage; null on a deck that finished, and on
        one that never reached a stage at all. On a seven-stage deck the difference
-       between "it failed" and "phase 5 failed" is most of the message, so it is said
+       between "it failed" and "stage 5 failed" is most of the message, so it is said
        before the reason rather than buried in it. */
     if (result.stage) {
-      log('err', 'Phase ' + result.stage.index + ' of ' + result.stage.of + ' ("'
-                 + result.stage.name + '") failed. The phases before it ran.');
+      log('err', 'Stage ' + result.stage.index + ' of ' + result.stage.of + ' ("'
+                 + result.stage.name + '") failed. The stages before it ran.');
     }
     // The server sends the tail of Kratos' output, which is where its reason is. The
     // whole of it is on disk, so the log file is named rather than the tail extended:

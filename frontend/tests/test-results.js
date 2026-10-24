@@ -32,12 +32,12 @@
     started: '2026-09-22T00:49', repeat: 1, results: 7, bytes: 6234567,
     complete: true, failed_at: null, log: 'kratos.log',
     stages: [
-      { index: 1, name: '1_Initial_stage', phase: 'Initial stage',
+      { index: 1, name: '1_Initial_stage', stage: 'Initial stage',
         base: 'Staged_excavation_1_Initial_stage',
         results_file: 'Staged_excavation_1_Initial_stage.post.res',
         mesh_file: 'Staged_excavation_1_Initial_stage.post.msh',
         results: true, json: [] },
-      { index: 2, name: '2_First_excavation', phase: 'First excavation',
+      { index: 2, name: '2_First_excavation', stage: 'First excavation',
         base: 'Staged_excavation_2_First_excavation',
         results_file: 'Staged_excavation_2_First_excavation.post.res',
         mesh_file: 'Staged_excavation_2_First_excavation.post.msh',
@@ -402,8 +402,8 @@
 
   test('a finished calculation is READ, not just named', function () {
     /* The bug this pins: `remember` used to record the id and nothing else, so the
-       run was "open" with no stages in it. The Results panel drew an empty phase
-       dropdown, every field said "this phase wrote nothing", and the only way out
+       run was "open" with no stages in it. The Results panel drew an empty stage
+       dropdown, every field said "this stage wrote nothing", and the only way out
        was to type `results open <the id it was already showing>`.
 
        Pressing Calculate has to leave a run that can be looked at. */
@@ -415,7 +415,7 @@
     }).then(function () {
       T.eq(App.Results.current(), DETAIL.id);
       T.eq(App.Results.state().stages.length, 2, 'the run was read');
-      T.eq(App.Results.stage(), 2, 'and a phase was chosen');
+      T.eq(App.Results.stage(), 2, 'and a stage was chosen');
     });
   });
 
@@ -441,7 +441,7 @@
       T.eq(App.Results.stage(), null);
       T.eq(App.Results.state().stages, []);
       T.eq(App.Results.options().bands, 32, 'display options go back to default');
-      T.ok(beats > 0, 'and the panel is told, or it keeps offering the old phases');
+      T.ok(beats > 0, 'and the panel is told, or it keeps offering the old stages');
     });
   });
 
@@ -503,7 +503,7 @@
   };
 
   var CATALOGUE = {
-    stage: { index: 1, name: '1_Initial_stage', phase: 'Initial stage' },
+    stage: { index: 1, name: '1_Initial_stage', stage: 'Initial stage' },
     groups: [
       { name: 'Deformations', fields: [
           { name: 'u', label: '|u|', unit: 'm', locations: ['nodes'] },
@@ -566,9 +566,9 @@
 
   test('opening a run draws something without anything being typed', function () {
     /* An empty viewport in Results mode is indistinguishable from a broken one.
-       This catalogue has no phase displacements, so the preference falls through to
+       This catalogue has no stage displacements, so the preference falls through to
        the next best thing it does have: total vertical displacement, which is the
-       same quantity measured from the start of the model rather than of the phase. */
+       same quantity measured from the start of the model rather than of the stage. */
     return showing().then(function () {
       T.ok(drawn.length > 0, 'nothing was drawn');
       T.eq(drawn[drawn.length - 1].field.field, 'uy');
@@ -576,20 +576,20 @@
     });
   });
 
-  test('the default field is the vertical phase displacement when the stage has it',
+  test('the default field is the vertical stage displacement when the stage has it',
        function () {
     /* What settles after an excavation step, and what gets looked at first. Chosen by
        name rather than by position so that a stage which did not write DISPLACEMENT
        falls through to whatever it did write instead of drawing nothing. */
     setup();
     viewing();
-    var withPhase = JSON.parse(JSON.stringify(CATALOGUE));
-    withPhase.groups.splice(1, 0, { name: 'Phase deformations', fields: [
+    var withStage = JSON.parse(JSON.stringify(CATALOGUE));
+    withStage.groups.splice(1, 0, { name: 'Stage deformations', fields: [
       { name: 'du', label: '|Δu|', unit: 'm', locations: ['nodes'] },
       { name: 'duy', label: 'Δu_y', unit: 'm', locations: ['nodes'] }] });
     var base = App.Api.get;
     App.Api.get = function (path) {
-      if (/\/fields$/.test(path)) { api.calls.push(path); return Promise.resolve(withPhase); }
+      if (/\/fields$/.test(path)) { api.calls.push(path); return Promise.resolve(withStage); }
       return base(path);
     };
 
@@ -611,7 +611,7 @@
     });
   });
 
-  test('a phase that offers nothing draws nothing rather than failing', function () {
+  test('a stage that offers nothing draws nothing rather than failing', function () {
     setup();
     viewing();
     var empty = { stage: { index: 1 }, groups: [] };
@@ -626,9 +626,9 @@
     });
   });
 
-  test('results phase chooses a stage by number', function () {
+  test('results stage chooses a stage by number', function () {
     return showing().then(function () {
-      return App.Results.handleCommand('results phase 1');
+      return App.Results.handleCommand('results stage 1');
     }).then(function () {
       T.eq(App.Results.stage(), 1);
       T.ok(api.calls.some(function (p) { return /\/stages\/1\/mesh$/.test(p); }),
@@ -636,23 +636,23 @@
     });
   });
 
-  test('results phase chooses a stage by name, however it is spelled', function () {
+  test('results stage chooses a stage by name, however it is spelled', function () {
     return showing().then(function () {
-      return App.Results.handleCommand('results phase first excavation');
+      return App.Results.handleCommand('results stage first excavation');
     }).then(function () {
       T.eq(App.Results.stage(), 2, 'matched "2_First_excavation"');
     });
   });
 
-  test('results phase + and - step through the construction sequence', function () {
-    /* What the Results menu's "Next phase" and "Previous phase" run, and the thing
+  test('results stage + and - step through the construction sequence', function () {
+    /* What the Results menu's "Next stage" and "Previous stage" run, and the thing
        this mode is most used for: one quantity, walked forwards through the build. */
     return showing().then(function () {
-      T.eq(App.Results.stage(), 2, 'opened on the last phase');
-      return App.Results.handleCommand('results phase -');
+      T.eq(App.Results.stage(), 2, 'opened on the last stage');
+      return App.Results.handleCommand('results stage -');
     }).then(function () {
       T.eq(App.Results.stage(), 1);
-      return App.Results.handleCommand('results phase +');
+      return App.Results.handleCommand('results stage +');
     }).then(function () {
       T.eq(App.Results.stage(), 2);
     });
@@ -660,29 +660,29 @@
 
   test('stepping past either end stays put and says so', function () {
     return showing().then(function () {
-      return App.Results.handleCommand('results phase +');
+      return App.Results.handleCommand('results stage +');
     }).then(function () {
-      T.eq(App.Results.stage(), 2, 'already at the last phase');
+      T.eq(App.Results.stage(), 2, 'already at the last stage');
       T.ok(said('last'), 'got: ' + lines().join(' | '));
-      return App.Results.handleCommand('results phase 1');
+      return App.Results.handleCommand('results stage 1');
     }).then(function () {
       log = [];
-      return App.Results.handleCommand('results phase -');
+      return App.Results.handleCommand('results stage -');
     }).then(function () {
       T.eq(App.Results.stage(), 1);
       T.ok(said('first'), 'got: ' + lines().join(' | '));
     });
   });
 
-  test('stepping skips a phase that wrote no results', function () {
+  test('stepping skips a stage that wrote no results', function () {
     /* A run that died partway leaves gaps. Stepping has to land on something
-       readable rather than on a phase that cannot be drawn. */
+       readable rather than on a stage that cannot be drawn. */
     setup();
     viewing();
     var gapped = JSON.parse(JSON.stringify(DETAIL));
-    gapped.stages.push({ index: 3, name: '3_Strut', phase: 'Strut', results: false,
+    gapped.stages.push({ index: 3, name: '3_Strut', stage: 'Strut', results: false,
                          mesh_file: null, results_file: null, json: [] });
-    gapped.stages.push({ index: 4, name: '4_Dig', phase: 'Dig', results: true,
+    gapped.stages.push({ index: 4, name: '4_Dig', stage: 'Dig', results: true,
                          mesh_file: 'm', results_file: 'r', json: [] });
     var base = App.Api.get;
     App.Api.get = function (path) {
@@ -693,16 +693,16 @@
       return base(path);
     };
     return App.Results.handleCommand('results open ' + DETAIL.id).then(function () {
-      T.eq(App.Results.stage(), 4, 'opened on the last readable phase');
-      return App.Results.handleCommand('results phase -');
+      T.eq(App.Results.stage(), 4, 'opened on the last readable stage');
+      return App.Results.handleCommand('results stage -');
     }).then(function () {
-      T.eq(App.Results.stage(), 2, 'phase 3 wrote nothing, so it is stepped over');
+      T.eq(App.Results.stage(), 2, 'stage 3 wrote nothing, so it is stepped over');
     });
   });
 
-  test('a phase that does not exist leaves the current one alone', function () {
+  test('a stage that does not exist leaves the current one alone', function () {
     return showing().then(function () {
-      return App.Results.handleCommand('results phase 9');
+      return App.Results.handleCommand('results stage 9');
     }).then(function () {
       T.eq(App.Results.stage(), 2);
       T.ok(lines('err').length > 0);
@@ -755,7 +755,7 @@
     });
   });
 
-  test('changing phase redraws the field that was on screen', function () {
+  test('changing stage redraws the field that was on screen', function () {
     /* Stepping through the construction sequence on one quantity is the single most
        useful thing this mode does, and having to retype the field each time would
        make it unusable. */
@@ -763,7 +763,7 @@
       return App.Results.handleCommand('results field uy');
     }).then(function () {
       drawn = [];
-      return App.Results.handleCommand('results phase 1');
+      return App.Results.handleCommand('results stage 1');
     }).then(function () {
       T.eq(drawn.length, 1);
       T.eq(drawn[0].field.field, 'uy');
@@ -798,8 +798,8 @@
     });
   });
 
-  test('results range takes two numbers and holds them across a phase change', function () {
-    /* What makes two phases comparable: a range that moves with each stage makes
+  test('results range takes two numbers and holds them across a stage change', function () {
+    /* What makes two stages comparable: a range that moves with each stage makes
        every stage look the same. */
     return showing().then(function () {
       return App.Results.handleCommand('results field uy');
@@ -808,7 +808,7 @@
     }).then(function () {
       T.eq(drawn[drawn.length - 1].options.min, -2);
       T.eq(drawn[drawn.length - 1].options.max, 0);
-      return App.Results.handleCommand('results phase 1');
+      return App.Results.handleCommand('results stage 1');
     }).then(function () {
       T.eq(drawn[drawn.length - 1].options.min, -2, 'a typed range is not recomputed');
     });
@@ -893,7 +893,7 @@
 
   /* ── Replies that arrive after the user has moved on (finding F7) ────────
 
-     Pressing `results phase +` twice quickly, or picking one field and then another,
+     Pressing `results stage +` twice quickly, or picking one field and then another,
      leaves the first request in flight. Its reply must not be taken for the second's:
      it used to be tagged with whatever stage was current when it *arrived*, cached
      under that stage, and drawn there. */
@@ -923,7 +923,7 @@
     return mesh;
   }
 
-  test('a late reply for a phase already left is dropped', function () {
+  test('a late reply for a stage already left is dropped', function () {
     var release, first;
     return showing().then(function () {
       var base = App.Api.get;
@@ -932,20 +932,20 @@
         return base(path);
       };
       release = held(/\/stages\/(1)\/mesh$/, function () { return markedMesh(1); });
-      first = App.Results.handleCommand('results phase 1');
-      return App.Results.handleCommand('results phase 2');
+      first = App.Results.handleCommand('results stage 1');
+      return App.Results.handleCommand('results stage 2');
     }).then(function () {
       release();
       return first;
     }).then(function () {
-      T.eq(App.Results.stage(), 2, 'still on the phase chosen last');
+      T.eq(App.Results.stage(), 2, 'still on the stage chosen last');
       var last = drawn[drawn.length - 1];
       T.eq(last.stage, 2);
-      T.eq(last.mesh.which, 2, 'drawn on the mesh of the phase shown');
+      T.eq(last.mesh.which, 2, 'drawn on the mesh of the stage shown');
     });
   });
 
-  test("a late displacement reply is not cached as another phase's", function () {
+  test("a late displacement reply is not cached as another stage's", function () {
     var release, firstStep;
     function vectors(stage) {
       return { source: 'TOTAL_DISPLACEMENT', ids: [1, 2, 3],
@@ -961,9 +961,9 @@
         return base(path);
       };
       release = held(/\/stages\/(1)\/displacement$/, function () { return vectors(1); });
-      firstStep = App.Results.handleCommand('results phase 1');
+      firstStep = App.Results.handleCommand('results stage 1');
     }).then(function () {
-      return App.Results.handleCommand('results phase 2');
+      return App.Results.handleCommand('results stage 2');
     }).then(function () {
       release();
       return firstStep;
@@ -973,8 +973,8 @@
       var last = drawn[drawn.length - 1];
       T.eq(last.stage, 2);
       T.ok(last.displacement && last.displacement.stage === 2,
-           'displacement belongs to phase 2: ' + JSON.stringify(last.displacement));
-      T.eq(last.displacement.values[0][0], 2, "phase 2's own vectors");
+           'displacement belongs to stage 2: ' + JSON.stringify(last.displacement));
+      T.eq(last.displacement.values[0][0], 2, "stage 2's own vectors");
     });
   });
 
@@ -997,7 +997,7 @@
     var release, first;
     return showing().then(function () {
       release = held(/\/stages\/(1)\/fields$/, function () { return CATALOGUE; });
-      first = App.Results.handleCommand('results phase 1');
+      first = App.Results.handleCommand('results stage 1');
       App.Results.forget();
       release();
       return first;
@@ -1085,7 +1085,7 @@
     });
   });
 
-  test('the mesh setting is kept from one phase to the next', function () {
+  test('the mesh setting is kept from one stage to the next', function () {
     return showing().then(function () {
       return App.Results.handleCommand('results mesh on');
     }).then(function () {
@@ -1162,7 +1162,7 @@
   });
 
   test('results csv with nothing on screen says what to do first', function () {
-    /* Opening a run now draws a default field, so "nothing on screen" needs a phase
+    /* Opening a run now draws a default field, so "nothing on screen" needs a stage
        that genuinely offers nothing -- a stage that wrote no results at all. */
     setup();
     viewing();

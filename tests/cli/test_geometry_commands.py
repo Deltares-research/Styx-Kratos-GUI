@@ -186,7 +186,7 @@ def test_excavation_with_one_level_says_it_digs_nothing(cli, site):
 
 # ── parts ───────────────────────────────────────────────────────────────────
 
-def test_parts_lists_what_a_phase_can_switch(cli, site):
+def test_parts_lists_what_a_stage_can_switch(cli, site):
     cli("excavation", site, "--x", "2", "8", "--levels", "-2", "-4", "-6")
 
     ran = cli("parts", site)

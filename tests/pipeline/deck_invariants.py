@@ -314,7 +314,7 @@ def _condition_order(deck) -> list[str]:
 # A stage reads the .mdpa through its preprocess modeler or through its solver's
 # `input_type: "mdpa"`. Twice in one stage adds every element a second time ("an element
 # with the same Id already exists"); again in a later stage replaces the model and
-# everything the stages before it did. A one-phase deck once did the first.
+# everything the stages before it did. A one-stage deck once did the first.
 def _mesh_read_once(params) -> list[str]:
     order = ((params.get("orchestrator") or {}).get("settings") or {}).get("execution_list")
     if not order:

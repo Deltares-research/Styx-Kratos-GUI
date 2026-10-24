@@ -34,7 +34,7 @@ from dataclasses import dataclass
 
 import gmsh
 
-from core.model import phases
+from core.model import stages
 from core.geometry import solid_model, meshing
 from core.kratos import condition_checks
 from core.kratos import deck_files, interfaces
@@ -237,7 +237,7 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
     # A groundwater flow deck is the soil alone, of water pressure elements: no
     # structure, contact, load or support, as nothing in it has a displacement to act
     # on. What it leaves out, `condition_checks.warnings` says.
-    flow = phases.groundwater_flow(project)
+    flow = stages.groundwater_flow(project)
     mesh = meshing.mesh_project(
         project, element_size=settings.element_size, order=settings.order,
         refinements=settings.refinements, algorithm_3d=settings.algorithm_3d,
@@ -390,14 +390,14 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
                        if not pit or key.partition("__")[2] in outside]
     right_side_part = None
     face_parts: list[tuple[str, str]] = []
-    if project.phases and retained_blocks and pit:
+    if project.stages and retained_blocks and pit:
         retained_nodes = sorted({node_id[tag] for _, rows in retained_blocks
                                  for row in rows for tag in row[len(row) // 2:]
                                  if tag in node_id})
         if retained_nodes:
             right_side_part = RIGHT_SIDE_PART
             parts.append((right_side_part, retained_nodes, [], []))
-    elif project.phases and retained_blocks:
+    elif project.stages and retained_blocks:
         several = len({key for key, _, _ in interface_faces}) > 1
         for key, face, tags in interface_faces:
             nodes = sorted({node_id[tag] for tag in tags if tag in node_id})
@@ -481,19 +481,19 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
     staged_ties = list(ties.values()) if dim == 2 else []
     # Said out loud rather than left to be noticed in the deck (plan sec 7.13). The
     # restriction above stays -- nothing here invents a construction sequence for a 3D
-    # structure -- but the phases panel is visible in 3D projects, so a user can build a
+    # structure -- but the stages panel is visible in 3D projects, so a user can build a
     # sequence in one and would otherwise get a deck quietly missing a part of it.
     #
     # Scoped to the case where the guards actually withhold something. A 3D project with
     # no structures loses nothing to them, and a warning on every 3D export is one people
     # stop reading. Deliberately *not* a claim that staging is plane-strain only: an
-    # explicit phase list activates and deactivates its parts in 3D exactly as in 2D, and
+    # explicit stage list activates and deactivates its parts in 3D exactly as in 2D, and
     # `test_kratos_3d.py` holds both halves of that.
     if dim == 3 and (beam_blocks or interface_blocks):
         warnings.append(
             "staged construction is plane strain only where structures are concerned: "
             "this 3D model's walls, members and contacts are not staged, so they are "
-            "present in every stage and get no installation stage of their own. A phase "
+            "present in every stage and get no installation stage of their own. A stage "
             "list still switches soil bodies, panels and anchors on and off as usual."
         )
 
@@ -535,20 +535,20 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
                               "RETENTION_LAW", SATURATED) != SATURATED),
         seepage=tuple(names[key] for key, _, rows in conditions if flow and rows),
     )
-    stages = _stages(project, deck, wall_parts, staged_ties)
+    kratos_stages = _stages(project, deck, wall_parts, staged_ties)
     # The initial stage reads a materials file of its own. Rendered only when a stage
-    # actually names it, so an unphased deck is not shipped a file nothing opens.
+    # actually names it, so an unstaged deck is not shipped a file nothing opens.
     initial_materials = None
     if include_materials and any(
             stage.materials_filename == deck_files.INITIAL_MATERIALS_NAME
-            for stage in stages):
+            for stage in kratos_stages):
         initial_materials, _ = material_parameters(
             project, part_materials, dim, beam_properties, anchor_properties,
             panel_properties, interface_properties, k0=True)
     processes = parameters.project_parameters(
         [] if flow else _displacements(dim, boundaries, resolved) + anchor_fixities,
         [(name, variable, load_mask, value) for name, variable, value in active_loads],
-        stages,
+        kratos_stages,
         normal_load_processes,
         water_pressures=water_pressures,
         deck_name=deck_name(project),
@@ -606,11 +606,11 @@ def _adjacent_material(project: Project, key: str, names: dict[str, str],
 
 
 # ── Stages ──────────────────────────────────────────────────────────────────
-# Turning `Project.phases` into the deck's stages. The phase model speaks the user's
+# Turning `Project.stages` into the deck's Kratos stages. The model speaks the user's
 # vocabulary -- one drawn `Interface`, one soil body per lift -- and the deck speaks its
 # own, in which that interface is eight parts and each of them is tied to the body it
 # runs against. Translating between the two is this section's whole job, and it is why
-# `core.model.phases` knows nothing about Kratos: the model has no business knowing that
+# `core.model.stages` knows nothing about Kratos: the model has no business knowing that
 # digging out a lift also removes a contact.
 
 WALL_OUTPUT_VARIABLES = ("BENDING_MOMENT", "SHEAR_FORCE", "AXIAL_FORCE",
@@ -626,7 +626,7 @@ INTERFACE_VARIABLES = ("GEO_EFFECTIVE_TRACTION_VECTOR",)
 RIGHT_SIDE_PART = "Right_Side_Of_Right_Interfaces"
 """The retained-side nodes of the retained-side interfaces, as a node-only sub-model
 part. Written only when something reads it -- the `JsonOutputProcess` a staged deck
-carries -- so an unphased project does not grow a part it never names (plan sec C7)."""
+carries -- so an unstaged project does not grow a part it never names (plan sec C7)."""
 
 
 @dataclass(frozen=True)
@@ -655,7 +655,7 @@ class _Deck:
     pressure, so that a flow stage with any of them in it is solved by Newton-Raphson."""
     seepage: tuple[str, ...] = ()
     """The parts of the seepage faces' conditions: a flow stage with any is solved by the
-    seepage strategy, in every phase."""
+    seepage strategy, in every stage."""
 
 
 def _deck_active(deck: _Deck, keys: set[str]) -> frozenset[str]:
@@ -675,13 +675,13 @@ def _stages(project: Project, deck: _Deck, staged_parts: list[str],
             staged_ties: list[tuple[str, str]]) -> list[parameters.Stage]:
     """The deck's stages, in execution order.
 
-    A project with no phases exports exactly the deck it exported before staged
+    A project with no stages exports exactly the deck it exported before staged
     construction existed -- one stage, or the implicit two a sheet pile has always
     produced. That is the compatibility contract, and it is a gate rather than a
     special case of the staged path so that nothing in the staged path can reach a
     project that never asked for it.
     """
-    if not project.phases:
+    if not project.stages:
         if not staged_parts:
             return [parameters.Stage(name=parameters.STAGE_NAME)]
         return [
@@ -692,30 +692,30 @@ def _stages(project: Project, deck: _Deck, staged_parts: list[str],
                 name=parameters.WALL_INSTALLATION_STAGE_NAME,
                 activate=tuple(staged_parts), start_time=1.0),
         ]
-    return _phased_stages(project, deck)
+    return _sequenced_stages(project, deck)
 
 
-def _phased_stages(project: Project, deck: _Deck) -> list[parameters.Stage]:
-    """One stage per phase. Raises `phases.PhaseError` if the tree does not linearise."""
-    steps = phases.transitions(project)
+def _sequenced_stages(project: Project, deck: _Deck) -> list[parameters.Stage]:
+    """One Kratos stage per Styx stage. Raises `stages.StageError` if the tree does not linearise."""
+    steps = stages.transitions(project)
 
     # The reference deck starts at -2.0: its K0 stage and its null step sit at negative
     # time so that real construction starts at 0 and two runs' result files line up
     # stage for stage. Cosmetic to Kratos, and free to reproduce -- the leading run of
-    # phases that are not ordinary plastic steps is exactly what "before construction"
+    # stages that are not ordinary plastic steps is exactly what "before construction"
     # means.
     settling = 0
-    for phase, _, _ in steps:
-        if phase.calculation not in ("K0 procedure", "Null step"):
+    for stage, _, _ in steps:
+        if stage.calculation not in ("K0 procedure", "Null step"):
             break
         settling += 1
 
     out: list[parameters.Stage] = []
     keys = set(project.stageable_keys())
     live = _deck_active(deck, keys)
-    # The water pressure conditions a phase switches, as it does a load.
+    # The water pressure conditions a stage switches, as it does a load.
     water = {c.id for c in project.boundary_conditions if c.kind == "water_pressure"}
-    for index, (phase, switched_on, switched_off) in enumerate(steps):
+    for index, (stage, switched_on, switched_off) in enumerate(steps):
         was = live
         keys = (set(keys) - switched_off) | switched_on
         live = _deck_active(deck, keys)
@@ -723,17 +723,17 @@ def _phased_stages(project: Project, deck: _Deck) -> list[parameters.Stage]:
         # The operations name element-carrying parts only, which is what Activate and
         # Deactivate act on; a node group vanishes from the process lists instead, by
         # way of the filter `Stage.active` drives. Derived from the two states rather
-        # than from the phase's own lists, so the interface that goes with a body needs
+        # than from the stage's own lists, so the interface that goes with a body needs
         # no rule of its own here.
         activate = tuple(name for name in deck.bodies if name in live and name not in was)
         deactivate = tuple(name for name in deck.bodies
                            if name in was and name not in live)
 
-        k0 = phase.calculation == "K0 procedure"
+        k0 = stage.calculation == "K0 procedure"
         # What the first stage holds arrives in it, imported with the mesh rather than
         # activated, and there is no stage before it to carry a stress from: Kratos
         # refuses to look one up (`ApplyFinalStressesOfPreviousStageToInitialState`). A
-        # wall in the model from the start -- default phases switch nothing off -- has
+        # wall in the model from the start -- default stages switch nothing off -- has
         # its interfaces' neighbours found there, and its stresses carried from the
         # second stage on.
         first = index == 0
@@ -747,7 +747,7 @@ def _phased_stages(project: Project, deck: _Deck) -> list[parameters.Stage]:
         beams = tuple(name for name in deck.beams if name in live)
         retained = tuple(name for name in deck.retained if name in live)
 
-        flow = phase.calculation == phases.GROUNDWATER_FLOW
+        flow = stage.calculation == stages.GROUNDWATER_FLOW
         bodies = tuple(name for name in deck.bodies if name in live)
         extrapolate: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = ()
         if flow and bodies:
@@ -767,7 +767,7 @@ def _phased_stages(project: Project, deck: _Deck) -> list[parameters.Stage]:
                             for part, member in deck.faces)
 
         out.append(parameters.Stage(
-            name=parameters.stage_name(index, phase.name),
+            name=parameters.stage_name(index, stage.name),
             activate=activate,
             deactivate=deactivate,
             active=live,
@@ -786,9 +786,9 @@ def _phased_stages(project: Project, deck: _Deck) -> list[parameters.Stage]:
             final_stresses=carried,
             extrapolate=extrapolate,
             json_output=output,
-            reset_displacements=phase.reset_displacements,
-            max_iterations=phase.max_iterations,
-            tolerated_error=phase.tolerated_error,
+            reset_displacements=stage.reset_displacements,
+            max_iterations=stage.max_iterations,
+            tolerated_error=stage.tolerated_error,
             materials_filename=(deck_files.INITIAL_MATERIALS_NAME if k0
                                 else deck_files.MATERIALS_NAME),
             conditions=frozenset(key for key in keys if key in water),
@@ -914,7 +914,7 @@ def _interface_elements(project: Project, dim: int,
                 f"{dim}D. Mesh the section with linear or quadratic triangles."
             )
         # One block per soil body the contact runs against, not one per interface. A
-        # lift is deactivated in its own phase and the contact along it has to go at the
+        # lift is deactivated in its own stage and the contact along it has to go at the
         # same moment: an interface still holding a face whose soil has been dug away
         # would carry shear against nothing. The reference deck splits the same way --
         # `Interface_Excavated_Soil_1` beside `Interface_Soil_Top_Right` -- and a
@@ -1563,7 +1563,7 @@ def _pulling_normal_loads(project: Project,
 
     *   **It pulls.** Inside the model -- a pit floor, a wall face -- the deck keeps the
         drawn side, and drawn the other way round the water in a trench pulls the floor
-        up and the wall towards it. Asked of the first phase the load is on in, because
+        up and the wall towards it. Asked of the first stage the load is on in, because
         that is the soil it is meant to press on: the lift beside it has just been dug.
         A probe a hair to the left of each segment's middle has to land in an element
         of a body that is active then.
@@ -1575,8 +1575,8 @@ def _pulling_normal_loads(project: Project,
     if not loads:
         return []
     try:
-        order = phases.linearise(project)
-    except phases.PhaseError:
+        order = stages.linearise(project)
+    except stages.StageError:
         order = []
     stageable = set(project.stageable_keys())
     triangles = [(key, [coordinates[n][:2] for n in row[:3]])
@@ -1595,8 +1595,8 @@ def _pulling_normal_loads(project: Project,
         load = loads.get(key)
         if load is None:
             continue
-        phase = next((ph for ph in order if key in phases.active_parts(project, ph)), None)
-        live = (phases.active_parts(project, phase) if phase is not None
+        stage = next((ph for ph in order if key in stages.active_parts(project, ph)), None)
+        live = (stages.active_parts(project, stage) if stage is not None
                 else stageable)
         pulling, outward = [], 0
         for row, as_drawn in zip(rows, drawn.get(key, rows)):
@@ -1617,7 +1617,7 @@ def _pulling_normal_loads(project: Project,
             where = ("its whole line" if len(pulling) == len(rows) else
                      f"{len(pulling)} of its {len(rows)} mesh segments, one from "
                      f"({ax:g}, {ay:g}) to ({bx:g}, {by:g})")
-            during = f" in phase {phase.name!r}" if phase is not None else ""
+            during = f" in stage {stage.name!r}" if stage is not None else ""
             out.append(
                 f"normal load {load.name!r} pulls on the soil instead of pressing on it, "
                 f"along {where}: no soil is on its right{during}. A normal load presses "
@@ -1795,19 +1795,19 @@ def _seepage_conditions(project: Project,
 
 def _seepage_iterations(project: Project,
                         conditions: list[tuple[str, str, list[list[int]]]]) -> list[str]:
-    """The phases that may run out of iterations before their seepage faces settle.
+    """The stages that may run out of iterations before their seepage faces settle.
 
-    The seepage strategy opens or closes one node of a face per iteration, so a phase
+    The seepage strategy opens or closes one node of a face per iteration, so a stage
     that allows fewer iterations than its faces have nodes may stop before the faces
     have found where the water leaves them. How many it needs depends on how many nodes
     open: the Muskat column's face of 89 nodes opens 35 of them, in 35 iterations
     (tests/kratos/test_live_flow.py). A warning, then, not a refusal."""
     nodes = len({tag for _, _, rows in conditions for row in rows for tag in row})
-    return [f"phase {phase.name!r} allows {phase.max_iterations} iterations, and its "
+    return [f"stage {stage.name!r} allows {stage.max_iterations} iterations, and its "
             f"seepage faces have {nodes} nodes, which the seepage strategy opens or "
             "closes one per iteration; it may stop before the faces settle. If it does, "
-            "give the phase more iterations."
-            for phase in project.phases if phase.max_iterations < nodes]
+            "give the stage more iterations."
+            for stage in project.stages if stage.max_iterations < nodes]
 
 
 def _number_conditions(
@@ -1891,7 +1891,7 @@ def _segment_boundaries(project: Project, boundaries: list[tuple[str, int, list[
                         ) -> tuple[list[tuple[str, int, list[int]]], dict[str, str]]:
     """Split a domain face wherever an excavation lift meets it.
 
-    A lift is deactivated in its own phase, and its stretch of the domain edge has to
+    A lift is deactivated in its own stage, and its stretch of the domain edge has to
     go with it: a roller still holding the ground that was just dug away would restrain
     soil that is no longer there. So the face the pit reaches becomes one part per lift
     -- the reference deck's `Excavated_Soil_N_Left_Edge` -- plus what is left, which
@@ -2093,17 +2093,17 @@ def _overlapping_water_pressures(
         resolved: list[tuple[WaterPressureCondition, list[str | None], set[int]]],
         warnings: list[str]) -> None:
     """Say so when two fixed conditions on the same kind of target share nodes in a
-    phase that has both on.
+    stage that has both on.
 
     Across kinds the order settles it and is the point of writing the more specific one
     last; between two of one kind -- two parts that meet, two faces at a corner, two
     whole-soil records -- it is only the list order, which the user should know. Two
-    conditions the phases never have on together -- a high level, then a low one -- do
+    conditions the stages never have on together -- a high level, then a low one -- do
     not meet."""
     try:
-        on_together = [phases.active_parts(project, phase)
-                       for phase in phases.linearise(project)]
-    except phases.PhaseError:
+        on_together = [stages.active_parts(project, stage)
+                       for stage in stages.linearise(project)]
+    except stages.StageError:
         on_together = []
     fixed = [(condition, nodes) for condition, _, nodes in resolved if condition.is_fixed]
     for index, (first, first_nodes) in enumerate(fixed):

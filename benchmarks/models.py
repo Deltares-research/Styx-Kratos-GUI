@@ -7,7 +7,7 @@ benchmark runner sends exactly that project through the REST API, the path the G
 
 from __future__ import annotations
 
-from core.model import migration, phases
+from core.model import migration, stages
 from tests.models import excavation
 from core.model.schemas import Project, standard_conditions
 from core.model.templates import blank_project
@@ -61,8 +61,8 @@ def column(layers: list[tuple[float, float, dict]], width: float = 1.0,
     """A soil column `width` wide, its layers as (top, bottom, material) from the top.
 
     Rollers on the sides and a fixed base are the exporter's own boundaries, and the pore
-    pressure is fixed hydrostatically on the whole column; a single K0 phase when
-    `k0_stage`, otherwise the unphased single stage."""
+    pressure is fixed hydrostatically on the whole column; a single K0 stage when
+    `k0_stage`, otherwise the one stage of a project without a sequence."""
     p = blank_project().model_dump(mode="json")
     top, bottom = layers[0][0], layers[-1][1]
     p["name"] = name
@@ -95,7 +95,7 @@ def column(layers: list[tuple[float, float, dict]], width: float = 1.0,
          "on": "domain", "reference_coordinate": water_y if water_y is not None else bottom}]
     p["mesh"] = {"element_size": min(width, (top - bottom) / 10), "order": 2}
     if k0_stage:
-        p["phases"] = [{"id": "initial", "name": "Initial stage", "calculation": "K0 procedure"}]
+        p["stages"] = [{"id": "initial", "name": "Initial stage", "calculation": "K0 procedure"}]
     return Project.model_validate(p)
 
 
@@ -129,7 +129,7 @@ def symmetric_pit(width: float = 80.0, pit: tuple[float, float] = (35.0, 45.0),
     full model: two lifts, the default staged sequence. Plane strain, or its 3D
     extrusion."""
     p = excavation.excavation_project(staged=False).model_dump(mode="json")
-    p.update(beams=[], anchors=[], interfaces=[], loads=[], normal_loads=[], phases=[],
+    p.update(beams=[], anchors=[], interfaces=[], loads=[], normal_loads=[], stages=[],
              water=None, name="Symmetric pit")
     p["domain"] = dict(p["domain"], x0=0.0, x1=width)
     p["excavation"] = {k: v for k, v in p["excavation"].items() if k != "floor_y"}
@@ -137,8 +137,8 @@ def symmetric_pit(width: float = 80.0, pit: tuple[float, float] = (35.0, 45.0),
     p["mesh"] = dict(p["mesh"], body_sizes={}, refinements=[], element_size=2.0)
     project = Project.model_validate(p)
     project = Project.model_validate(
-        project.model_dump() | {"phases": [ph.model_dump()
-                                           for ph in phases.staged_excavation_phases(project)]})
+        project.model_dump() | {"stages": [ph.model_dump()
+                                           for ph in stages.staged_excavation_stages(project)]})
     return project
 
 

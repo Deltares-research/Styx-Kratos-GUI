@@ -35,6 +35,7 @@
      same frozen data.js that the app loads. -->
 <script src="../vendor/three.min.js"></script>
 <script src="../base/js/data.js"></script>
+<script src="../js/vocabulary.js"></script>
 <script src="../js/unit-table.js"></script>
 <script src="../js/units.js"></script>
 <script src="../js/property-sets.js"></script>
@@ -73,7 +74,7 @@
 <script src="../js/interfaces.js"></script>
 <script src="../js/normal-loads.js"></script>
 <script src="../js/boundary-conditions.js"></script>
-<script src="../js/phases.js"></script>
+<script src="../js/stages.js"></script>
 <script src="../js/import-dialog.js"></script>
 <script src="../js/mdpa-import-dialog.js"></script>
 <script src="../js/soil-volume-dialog.js"></script>
@@ -90,7 +91,7 @@
 <script src="test-model.js"></script>
 <script src="test-model-props.js"></script>
 <script src="test-patches.js"></script>
-<script src="test-patches-phases.js"></script>
+<script src="test-patches-stages.js"></script>
 <script src="test-patches-results.js"></script>
 <script src="test-canvas-renderer.js"></script>
 <script src="test-viewport.js"></script>
@@ -116,6 +117,7 @@
 <script src="test-toolbar.js"></script>
 <script src="test-not-yet.js"></script>
 <script src="test-frozen-ui.js"></script>
+<script src="test-vocabulary.js"></script>
 <script src="test-dock.js"></script>
 <script src="test-export.js"></script>
 <script src="test-calculate.js"></script>
@@ -143,10 +145,10 @@
 <script src="test-node-parts.js"></script>
 <script src="test-deck.js"></script>
 <!-- The generated parity fixture, before the suite that reads it. Owned by
-     tests/test_phase_parity.py; see frontend/tests/run_headless.py to run
+     tests/test_stage_parity.py; see frontend/tests/run_headless.py to run
      these particular tests without a browser. -->
-<script src="fixtures/phase-cases.js"></script>
-<script src="test-phases.js"></script>
+<script src="fixtures/stage-cases.js"></script>
+<script src="test-stages.js"></script>
 <!-- Last: it boots the one viewport, whose frame then sizes load glyphs etc. -->
 <script src="fixtures/viewport-payloads.js"></script>
 <script src="test-patches-modes.js"></script>

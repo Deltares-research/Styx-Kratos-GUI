@@ -232,7 +232,7 @@
     "refinements": []
   },
   "custom_parts": [],
-  "phases": [
+  "stages": [
     {
       "id": "initial",
       "name": "Initial stage",

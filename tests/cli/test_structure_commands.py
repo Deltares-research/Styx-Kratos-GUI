@@ -21,7 +21,7 @@ STRUCTURES = ("beam_sections", "panel_sections", "beams", "anchor_sections", "an
 
 @pytest.fixture
 def pit(tmp_path):
-    """The test model's ground, wall, strut and contact, with no phases: something to
+    """The test model's ground, wall, strut and contact, with no stages: something to
     hang structures on and take them off again."""
     return session.save(excavation.excavation_project(staged=False), tmp_path / "pit.json")
 

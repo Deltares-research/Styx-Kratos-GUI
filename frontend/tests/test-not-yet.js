@@ -47,7 +47,7 @@
          'an action that runs, but not what its label says');
     T.eq(implemented({ label: 'Recent projects', sub: true }), false,
          "the mockup's placeholder submenu is not a submenu");
-    T.eq(implemented({ label: 'Phase', sub: [] }), true, 'a submenu a caller fills is');
+    T.eq(implemented({ label: 'Stage', sub: [] }), true, 'a submenu a caller fills is');
     T.eq(implemented('-'), true, 'a separator is not a control');
     T.eq(implemented({ title: 'Standard views' }), true, 'nor is a caption');
     T.eq(App.LivePatches.NOT_YET.slice().sort(),
@@ -81,7 +81,7 @@
      ['Mesh', /^Coarsen mesh$/], ['Mesh', /^Reset local refinement$/],
      ['Flow conditions', /^Create well$/], ['Flow conditions', /^Create drain$/],
      ['Flow conditions', /^Flow functions/], ['Flow conditions', /^Global water level$/],
-     ['Phases', /^Add phase$/], ['Phases', /^Insert phase$/],
+     ['Stages', /^Add stage$/], ['Stages', /^Insert stage$/],
      ['Expert', /^Examine commands/], ['Expert', /^Macro library/],
      ['Expert', /^Configure remote scripting server/], ['Expert', /^Python interpreter/],
      ['Help', /^Reference manual$/], ['Help', /^Tutorial manual$/]
@@ -118,7 +118,7 @@
     T.eq(notYetTips('mesh'), ['Refine mesh', 'Coarsen mesh', 'Reset local refinement']);
     T.eq(notYetTips('flow'), ['Create well', 'Create drain', 'Flow functions']);
     T.eq(notYetTips('staged'), ['Select multiple objects', 'Activate selection',
-         'Deactivate selection', 'Preview phase']);
+         'Deactivate selection', 'Preview stage']);
   });
 
   test('a greyed rail tool says so in its tip, and loses a flyout of nothing', function () {

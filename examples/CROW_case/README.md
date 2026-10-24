@@ -20,7 +20,7 @@ from anywhere else, give the paths to `kratos-cli` and the files.
   strut at -1.5 m.
 - **Loads**: a 20 kN/m surcharge behind the wall, and the water in the pit at each lift.
 - **Excavation**: three lifts, to -2, -5 and -8 m.
-- **Phases**: initial stage (K0 procedure), null step, wall installation, first
+- **Stages**: initial stage (K0 procedure), null step, wall installation, first
   excavation, strut installation, second and third excavation.
 
 ## The project file
@@ -28,7 +28,7 @@ from anywhere else, give the paths to `kratos-cli` and the files.
 ```bash
 kratos-cli.bat check crow.json           # Windows; ./kratos-cli.sh on Linux, macOS, Git Bash
 kratos-cli.bat show crow.json
-kratos-cli.bat phases crow.json list
+kratos-cli.bat stages crow.json list
 kratos-cli.bat export crow.json --out deck/
 kratos-cli.bat run deck/
 kratos-cli.bat results show 1

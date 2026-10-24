@@ -48,7 +48,7 @@ GROUPS: dict[str, tuple[str, ...]] = {
     "Drawn and imported solids": ("custom_parts",),
     "The seeded demo pit": ("wall", "struts", "anchor_rows", "piles", "wells"),
     "The mesh": ("mesh",),
-    "The construction phases": ("phases",),
+    "The construction stages": ("stages",),
 }
 """`Project` fields, under the heading they are written beneath, in this order. A field
 with a record or a list for its value that is in no group goes under "Other"."""

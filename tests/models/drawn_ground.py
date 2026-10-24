@@ -3,7 +3,7 @@
 The smallest model of a dike section built the way a user draws one: the ground below
 y = -2 m comes from a borehole, the 2 m above it is two drawn polygons with a material of
 their own, one each side of the pile, and the pile runs through both. The right-hand fill
-is dug away in the last phase, and the water in the trench presses on the floor and on
+is dug away in the last stage, and the water in the trench presses on the floor and on
 the wall face.
 
 It is the arrangement that once lost the contact along the drawn soil: the exporter
@@ -21,7 +21,7 @@ from __future__ import annotations
 from core import scripting
 from core.model.schemas import (AnchorRows, Beam, BeamSection, Borehole, CustomPart, Domain,
                                 Excavation, Interface, InterfaceSection, Material,
-                                MeshSettings, NormalLoad, Phase, Piles, Project, SoilLayer,
+                                MeshSettings, NormalLoad, Stage, Piles, Project, SoilLayer,
                                 Struts, Wall, Wells, standard_conditions)
 
 NAME = "Drawn ground"
@@ -130,16 +130,16 @@ def drawn_ground_project(staged: bool = True) -> Project:
     )
     if not staged:
         return project
-    phases = [
-        Phase(id="initial", name="Initial", calculation="K0 procedure",
+    stages = [
+        Stage(id="initial", name="Initial", calculation="K0 procedure",
               deactivate=["sheetpile", "wall_contact", "trench_water"]),
-        Phase(id="install", name="Install wall", parent="initial",
+        Stage(id="install", name="Install wall", parent="initial",
               activate=["sheetpile", "wall_contact"]),
-        Phase(id="dig", name="Dig trench", parent="install",
+        Stage(id="dig", name="Dig trench", parent="install",
               activate=["trench_water"], deactivate=["drawn_1"]),
     ]
     return Project.model_validate(
-        project.model_dump() | {"phases": [phase.model_dump() for phase in phases]})
+        project.model_dump() | {"stages": [stage.model_dump() for stage in stages]})
 
 
 HEAD_LOAD = 10_000.0
@@ -152,7 +152,7 @@ def pushed_pile_project(interface: bool = True, variables: dict | None = None,
     """The pile pushed at its head, the ground left as it is: Kratos' own
     `tests/Interface/interface_on_beam` asked of this model.
 
-    The ground settles in a K0 phase without the pile; the second phase installs the pile
+    The ground settles in a K0 stage without the pile; the second stage installs the pile
     -- and its interface, unless `interface` is False -- with the load on its head, and
     starts its displacements from nought, so they are the load's alone. `variables`
     are typed on the interface section (its stiffnesses, say), `law` replaces its law.
@@ -168,10 +168,10 @@ def pushed_pile_project(interface: bool = True, variables: dict | None = None,
     if not interface:
         data["interfaces"] = []
     built = ["sheetpile", "head_load"] + (["wall_contact"] if interface else [])
-    data["phases"] = [
-        Phase(id="initial", name="Initial", calculation="K0 procedure",
+    data["stages"] = [
+        Stage(id="initial", name="Initial", calculation="K0 procedure",
               deactivate=built).model_dump(),
-        Phase(id="push", name="Push", parent="initial", activate=built,
+        Stage(id="push", name="Push", parent="initial", activate=built,
               reset_displacements=True, max_iterations=max_iterations).model_dump(),
     ]
     return scripting.with_solids(Project.model_validate(data))

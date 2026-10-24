@@ -288,7 +288,7 @@ App.Model = (function () {
 
      A staged excavation splits the soil inside the pit into the lifts it is dug in, so
      one layer can be four bodies (core/model/schemas.py, `Project.soil_bodies`). Each
-     is separately meshed, separately deactivated in a phase, and separately shown or
+     is separately meshed, separately deactivated in a stage, and separately shown or
      hidden -- so each needs its own row with its own eye, or the excavated side has no
      representation in the tree at all.
 
@@ -350,7 +350,7 @@ App.Model = (function () {
      and a layered_soil project discards it along with the rest of that tree, so the
      water rows had nowhere to be clicked from. One node, one child, because the
      project has exactly one water level -- `Project.water` is a single object, not a
-     collection, and a per-phase level is explicitly out of scope (plan sec 7.11).
+     collection, and a per-stage level is explicitly out of scope (plan sec 7.11).
 
      Top level, and deliberately not the frozen one: js/data.js:677 puts a "Water
      levels" node *inside* the Attributes library, and that one lists level
@@ -870,9 +870,9 @@ App.Model = (function () {
         ],
         'Conditions': [
           ['Distribution', 'Hydrostatic', '', true],
-          // The honest state of sec 7.11: a per-phase pore-pressure type is not offered,
+          // The honest state of sec 7.11: a per-stage pore-pressure type is not offered,
           // the reference deck never varies it, and inventing one would be guessing.
-          ['Per-phase level', 'Not supported', '', true]
+          ['Per-stage level', 'Not supported', '', true]
         ]
       }
     };

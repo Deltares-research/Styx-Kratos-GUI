@@ -1164,11 +1164,12 @@ def test_the_live_shell_replaces_only_the_viewport_and_the_orbit_controller(clie
                            "toolbars.js", "explorer.js", "command.js", "dialogs.js", "app.js"}
     # Additions rather than substitutions -- they have no frozen counterpart:
     # soil-volume-dialog.js, canvas-renderer.js, ruler.js, mesh-labels.js,
-    # download.js, zip.js, phases.js, results.js, results-render.js, results-view.js,
+    # download.js, zip.js, stages.js, results.js, results-render.js, results-view.js,
     # part-colors.js, water-command.js, script-command.js, node-parts.js, deck.js,
-    # results-plot.js.
+    # results-plot.js, vocabulary.js.
     # The assertion above is the one that guards the portability claim.
     assert set(replaced) == {"api.js", "buffers.js", "model.js", "viewport.js", "patches.js",
+                             "vocabulary.js",
                              "mesh-settings.js", "import-dialog.js", "mdpa-import-dialog.js",
                              "draw-input.js", "soil-volume-dialog.js", "canvas-renderer.js",
                              "export.js", "calculate.js", "history.js", "loads.js",
@@ -1176,7 +1177,7 @@ def test_the_live_shell_replaces_only_the_viewport_and_the_orbit_controller(clie
                              "interfaces.js", "normal-loads.js", "boundary-conditions.js",
                              "material-library.js",
                              "orbit.js", "ruler.js", "mesh-labels.js",
-                             "download.js", "zip.js", "phases.js", "results.js",
+                             "download.js", "zip.js", "stages.js", "results.js",
                              "results-render.js", "results-view.js", "part-colors.js",
                              "water-command.js", "script-command.js", "node-parts.js",
                              "deck.js",
@@ -1582,10 +1583,10 @@ def test_a_staged_excavation_can_be_opened_and_drawn(client):
     assert {"sheetpile", "strut"} <= drawn
 
 
-# ── Phases ──────────────────────────────────────────────────────────────────
-# Milestone D's write path. The phase list is its own endpoint rather than a
+# ── Stages ──────────────────────────────────────────────────────────────────
+# Milestone D's write path. The stage list is its own endpoint rather than a
 # ride-along on `structures`, because it is the one collection that is *about* the
-# others: a phase names part keys, so it has to be validated against a model that is
+# others: a stage names part keys, so it has to be validated against a model that is
 # already settled, and sending both in one request would leave the order ambiguous.
 
 def _staged_project() -> dict:
@@ -1597,8 +1598,8 @@ def _staged_project() -> dict:
     return payload
 
 
-def test_a_reset_project_has_no_phases(client):
-    """Unphased is the compatibility contract (plan sec 7.18), and it is the state a
+def test_a_reset_project_has_no_stages(client):
+    """Unstaged is the compatibility contract (plan sec 7.18), and it is the state a
     project is in until somebody asks for a sequence.
 
     Resets first rather than reading whatever the store happens to hold: this module's
@@ -1606,50 +1607,50 @@ def test_a_reset_project_has_no_phases(client):
     about "the" project is only meaningful about one this test put there itself.
     """
     client.post("/api/project/reset")
-    assert client.get("/api/project").json()["phases"] == []
+    assert client.get("/api/project").json()["stages"] == []
 
 
-def test_patch_phases_stores_a_sequence(client):
+def test_patch_stages_stores_a_sequence(client):
     client.put("/api/project", json=_staged_project())
-    phases = [
+    stages = [
         {"id": "initial", "name": "Initial stage", "calculation": "K0 procedure"},
         {"id": "dig1", "name": "Dig to -3", "parent": "initial",
          "deactivate": ["soil_L1__lift1"]},
     ]
 
-    response = client.patch("/api/project/phases", json={"phases": phases})
+    response = client.patch("/api/project/stages", json={"stages": stages})
     assert response.status_code == 200
     # The stage list changes, so the deck does; the geometry does not.
     assert "project" in response.json()["invalidates"]
 
-    saved = client.get("/api/project").json()["phases"]
+    saved = client.get("/api/project").json()["stages"]
     assert [p["id"] for p in saved] == ["initial", "dig1"]
     assert saved[1]["deactivate"] == ["soil_L1__lift1"]
 
     client.put("/api/project", json=seed_project().model_dump())
 
 
-def test_patch_phases_refuses_a_part_that_does_not_exist(client):
-    """A phase names part keys, and a key nothing answers to would export a stage
+def test_patch_stages_refuses_a_part_that_does_not_exist(client):
+    """A stage names part keys, and a key nothing answers to would export a stage
     switching off a model part Kratos has never heard of."""
     client.put("/api/project", json=_staged_project())
-    response = client.patch("/api/project/phases", json={"phases": [
+    response = client.patch("/api/project/stages", json={"stages": [
         {"id": "initial", "name": "Initial stage"},
         {"id": "oops", "name": "Dig", "parent": "initial",
          "deactivate": ["no_such_part"]},
     ]})
     assert response.status_code == 422
-    assert client.get("/api/project").json()["phases"] == []
+    assert client.get("/api/project").json()["stages"] == []
 
     client.put("/api/project", json=seed_project().model_dump())
 
 
-def test_patch_phases_refuses_a_branch(client):
-    """Two phases starting from the same parent have no single execution order.
+def test_patch_stages_refuses_a_branch(client):
+    """Two stages starting from the same parent have no single execution order.
     Refused at the endpoint, with the names in the message, rather than at export --
     the editor is where it can still be fixed."""
     client.put("/api/project", json=_staged_project())
-    response = client.patch("/api/project/phases", json={"phases": [
+    response = client.patch("/api/project/stages", json={"stages": [
         {"id": "initial", "name": "Initial stage"},
         {"id": "a", "name": "A", "parent": "initial"},
         {"id": "b", "name": "B", "parent": "initial"},
@@ -1661,47 +1662,99 @@ def test_patch_phases_refuses_a_branch(client):
     client.put("/api/project", json=seed_project().model_dump())
 
 
-def test_patch_phases_can_clear_the_sequence(client):
-    """Back to unphased, which must export exactly what it exported before staged
+def test_patch_stages_can_clear_the_sequence(client):
+    """Back to unstaged, which must export exactly what it exported before staged
     construction existed. An empty list is how the user says so."""
     client.put("/api/project", json=_staged_project())
-    client.patch("/api/project/phases", json={"phases": [
+    client.patch("/api/project/stages", json={"stages": [
         {"id": "initial", "name": "Initial stage"}]})
 
-    assert client.patch("/api/project/phases",
-                        json={"phases": []}).status_code == 200
-    assert client.get("/api/project").json()["phases"] == []
+    assert client.patch("/api/project/stages",
+                        json={"stages": []}).status_code == 200
+    assert client.get("/api/project").json()["stages"] == []
 
     client.put("/api/project", json=seed_project().model_dump())
 
 
-def test_post_default_phases_seeds_the_initial_stage_and_the_null_step(client):
-    """What "Create default phases" gives: `phases.default_phases`, the initial stage
+def test_post_default_stages_seeds_the_initial_stage_and_the_null_step(client):
+    """What "Create default stages" gives: `stages.default_stages`, the initial stage
     and the null step, and nothing else -- even for a project with lifts to dig."""
     client.put("/api/project", json=_staged_project())
 
-    response = client.post("/api/project/phases/defaults")
+    response = client.post("/api/project/stages/defaults")
     assert response.status_code == 200
-    seeded = response.json()["project"]["phases"]
+    seeded = response.json()["project"]["stages"]
     assert [p["id"] for p in seeded] == ["initial", "null_step"]
     assert seeded[0]["calculation"] == "K0 procedure"
     assert seeded[0]["parent"] is None
     assert seeded[1]["parent"] == "initial"
 
-    assert client.get("/api/project").json()["phases"] == seeded
+    assert client.get("/api/project").json()["stages"] == seeded
 
     client.put("/api/project", json=seed_project().model_dump())
 
 
-def test_post_default_phases_replaces_what_is_there(client):
+def test_post_default_stages_replaces_what_is_there(client):
     """"Reset to defaults" is the only way back out of a sequence the user has broken,
-    so it overwrites rather than refusing because phases already exist."""
+    so it overwrites rather than refusing because stages already exist."""
     client.put("/api/project", json=_staged_project())
-    client.patch("/api/project/phases", json={"phases": [
+    client.patch("/api/project/stages", json={"stages": [
         {"id": "mine", "name": "Just the one"}]})
 
-    seeded = client.post("/api/project/phases/defaults").json()["project"]["phases"]
+    seeded = client.post("/api/project/stages/defaults").json()["project"]["stages"]
     assert [p["id"] for p in seeded][0] == "initial"
     assert "mine" not in [p["id"] for p in seeded]
+
+    client.put("/api/project", json=seed_project().model_dump())
+
+
+# The routes and the key were "phases" before Styx took Kratos' word; a client written
+# then keeps working.
+
+def test_the_project_says_stages_not_phases(client):
+    project = client.get("/api/project").json()
+    assert "stages" in project and "phases" not in project
+
+
+def test_the_old_patch_phases_route_still_answers(client):
+    client.put("/api/project", json=_staged_project())
+    response = client.patch("/api/project/phases", json={"phases": [
+        {"id": "initial", "name": "Initial stage", "calculation": "K0 procedure"}]})
+    assert response.status_code == 200
+    assert [s["id"] for s in client.get("/api/project").json()["stages"]] == ["initial"]
+
+    client.put("/api/project", json=seed_project().model_dump())
+
+
+def test_the_old_default_phases_route_still_answers(client):
+    client.put("/api/project", json=_staged_project())
+    new = client.post("/api/project/stages/defaults").json()["project"]["stages"]
+    old = client.post("/api/project/phases/defaults").json()["project"]["stages"]
+    assert old == new
+
+    client.put("/api/project", json=seed_project().model_dump())
+
+
+def test_a_branch_sent_as_phases_is_refused_under_stages(client):
+    client.put("/api/project", json=_staged_project())
+    response = client.patch("/api/project/phases", json={"phases": [
+        {"id": "initial", "name": "Initial stage"},
+        {"id": "a", "name": "A", "parent": "initial"},
+        {"id": "b", "name": "B", "parent": "initial"},
+    ]})
+    assert response.status_code == 422
+    assert response.json()["detail"][0]["loc"] == ["body", "stages"]
+
+    client.put("/api/project", json=seed_project().model_dump())
+
+
+def test_a_project_put_with_phases_is_accepted(client):
+    client.put("/api/project", json=_staged_project())
+    client.post("/api/project/stages/defaults")
+    doc = client.get("/api/project").json()
+    doc["phases"] = doc.pop("stages")
+    assert client.put("/api/project", json=doc).status_code == 200
+    assert [s["id"] for s in client.get("/api/project").json()["stages"]] == [
+        "initial", "null_step"]
 
     client.put("/api/project", json=seed_project().model_dump())

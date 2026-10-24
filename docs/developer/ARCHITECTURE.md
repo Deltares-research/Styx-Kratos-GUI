@@ -46,8 +46,8 @@ Module paths are relative to `core/`.
 | 3. Draw | `geometry/tessellation.py` | A fast surface triangulation (about 0.1 s) for the view only. It is not a finite-element mesh. |
 | 4. Mesh | `geometry/meshing.py` | The finite-element mesh, made again from the geometry each time |
 | 5. Split | `kratos/interfaces.py` | Duplicates the nodes along a wall and writes zero-thickness contact elements |
-| 6. Phases | `model/phases.py` | Makes the phase tree into the list of stages that Kratos runs |
-| 7. Export | `kratos/writer.py`, `kratos/materials.py`, `kratos/parameters.py` | Writes the `.mdpa`, `MaterialParameters.json` and `ProjectParameters.json` (one stage for each phase, with GiD and JSON output) |
+| 6. Stages | `model/stages.py` | Makes the stage tree into the list of Kratos stages |
+| 7. Export | `kratos/writer.py`, `kratos/materials.py`, `kratos/parameters.py` | Writes the `.mdpa`, `MaterialParameters.json` and `ProjectParameters.json` (one Kratos stage for each stage, with GiD and JSON output) |
 | 8. Solve | `analysis/calculation.py` → `analysis/kratos_main.py` | Runs the Kratos orchestrator in a subprocess, in a new run folder (`~/KratosGUI/runs/<deck>_<time>/`) |
 | 9. Read | `results/catalog.py` → `results/gid_reader.py`, `results/fields.py`, `results/mesh.py`, `results/parts.py` | Reads the GiD ASCII files (`.post.msh`, `.post.res`) into fields for each stage, and joins them to the parts of the deck |
 | 10. Members | `results/members.py` | Reads the `<stage>__output_<member>.json` files into curves along the wall and its interface |
@@ -59,8 +59,8 @@ read files, so you can open an old run, or a run from a different computer.
 
 | Entry | What it does | Code |
 |---|---|---|
-| The GUI | Draw soil, structures, loads, water and phases; mesh; Calculate (F9) | `frontend/js/*`, `patches.js` |
-| Command box | `mesh`, `calculate`, `water`, `units`, `phases`, `node <id>`, `colour <part>`, `results …`, `results plot …` | `patches.js` (`App.Command.run`) and the `command` or `handleCommand` function of each module |
+| The GUI | Draw soil, structures, loads, water and stages; mesh; Calculate (F9) | `frontend/js/*`, `patches.js` |
+| Command box | `mesh`, `calculate`, `water`, `units`, `stages`, `node <id>`, `colour <part>`, `results …`, `results plot …` | `patches.js` (`App.Command.run`) and the `command` or `handleCommand` function of each module |
 | `run <file.py>` | Runs a Python file that returns a `Project` (for example `run tests/models/excavation.py`) | `core/scripting.py`, `POST /api/project/script` |
 | Existing deck | Shows a Kratos deck that was written somewhere else as its own mesh, and runs its own files. A script names it with `external_deck.deck_project`. | `core/kratos/external_deck.py`, `frontend/js/deck.js` |
 | Import mesh | Reads an `.mdpa` file back into mesh data, for view only | `core/kratos/mdpa_reader.py`, `POST /api/import/mdpa` |
@@ -77,7 +77,7 @@ is one step of the pipeline:
 
 | Package | Modules |
 |---|---|
-| `core/model/` | `schemas.py` (the `Project`), `units.py` (unit systems), `migration.py` (old project files), `templates.py` (empty and demo projects), `drafts.py` (where a new structure goes, as the GUI tools put it), `phases.py` (phase tree → stages), `script_writer.py` (the model as a Python script), `wall_translation.py` and `load_translation.py` (2D ↔ 3D) |
+| `core/model/` | `schemas.py` (the `Project`), `units.py` (unit systems), `migration.py` (old project files), `templates.py` (empty and demo projects), `drafts.py` (where a new structure goes, as the GUI tools put it), `stages.py` (stage tree → Kratos stages), `script_writer.py` (the model as a Python script), `wall_translation.py` and `load_translation.py` (2D ↔ 3D) |
 | `core/geometry/` | `solid_model.py` (OpenCASCADE solids), `tessellation.py` (view), `meshing.py` (finite-element mesh), `cad_import.py` (CAD files), `primitives.py` (recipes for drawn solids) |
 | `core/kratos/` | `writer.py` (the deck), `materials.py` (`MaterialParameters.json`), `parameters.py` (`ProjectParameters.json`: stages, solver, output), `condition_checks.py` (the boundary condition warnings the export and `check` share), `interfaces.py` (split nodes along walls), `deck_files.py` (file names of the deck), `external_deck.py` (existing decks), `mdpa_reader.py`, `node_parts.py` |
 | `core/analysis/` | `calculation.py` (run folder, subprocess, failure messages), `kratos_main.py` (runs inside the Python of Kratos) |
@@ -114,7 +114,7 @@ the HTTP parts.
 
 | Group | Module | Routes |
 |---|---|---|
-| Project | `routes/project.py` | `GET`/`PUT /api/project`; `POST /api/project/new`, `/reset`, `/script`, `/script/save`, `/phases/defaults`, `/boreholes`; `PATCH /api/project/layers`, `/materials`, `/structures`, `/conditions`, `/phases`, `/dimension`, `/units`; `PUT /api/project/water`; `DELETE /api/project/custom_parts` |
+| Project | `routes/project.py` | `GET`/`PUT /api/project`; `POST /api/project/new`, `/reset`, `/script`, `/script/save`, `/stages/defaults`, `/boreholes`; `PATCH /api/project/layers`, `/materials`, `/structures`, `/conditions`, `/stages`, `/dimension`, `/units`; `PUT /api/project/water`; `DELETE /api/project/custom_parts` |
 | Geometry | `routes/geometry.py` | `GET /api/geometry`; `POST /api/geometry/create`, `/import`; `DELETE /api/geometry/parts/{key}` |
 | Mesh | `routes/mesh.py` | `POST /api/mesh`, `/api/mesh/labels`, `/api/mesh/node-parts` |
 | Decks | `routes/decks.py` | `POST /api/export/mdpa`, `/api/import/mdpa`, `/api/calculate` |
@@ -137,7 +137,7 @@ the HTTP parts.
 | `cli/commands/ground.py`, `volumes.py` | `domain`, `borehole`, `material`, `layer`, `excavation`, `parts`; `volume` |
 | `cli/commands/structures.py` | `section`, `beam`, `wall`, `member`, `anchor`, `interface`, `load`, `normal-load` |
 | `cli/commands/conditions.py` | `boundary`, `gravity` |
-| `cli/commands/meshing.py`, `phases.py` | `mesh`, `export`; `phases` |
+| `cli/commands/meshing.py`, `stages.py` | `mesh`, `export`; `stages` |
 | `cli/commands/inspection.py`, `analysis.py`, `results.py` | `node`, `deck show`; `run`, `calculate`; `results` |
 | `cli/commands/interactive.py` | `shell` |
 | `cli/kratos-shell.*`, `cli/kratos-init-powershell.bat` | Helper scripts for the tutorials |
@@ -157,7 +157,7 @@ shell. Only the camera of `base/js/orbit.js` is replaced; all other behaviour is
 | View | `viewport.js` (three.js), `orbit.js` (camera with y up), `canvas-renderer.js`, `ruler.js`, `mesh-labels.js`, `part-colors.js`, `node-parts.js` |
 | Modelling tools | `draw-input.js`, `beams.js`, `anchors.js`, `interfaces.js`, `loads.js`, `normal-loads.js`, `water-command.js`, `soil-volume-dialog.js` |
 | Materials | `material-sets.js`, `material-library.js`, `property-sets.js` |
-| Mesh and phases | `mesh-settings.js`, `phases.js` |
+| Mesh and stages | `mesh-settings.js`, `stages.js` |
 | Files and scripts | `export.js`, `import-dialog.js`, `mdpa-import-dialog.js`, `download.js`, `zip.js`, `deck.js`, `script-command.js` |
 | Calculation and results | `calculate.js`, `results.js` (the `results …` commands), `results-render.js` (colours, legend, CSV), `results-view.js` (the contours on screen), `results-plot.js` (`results plot …` and its SVG figure) |
 
@@ -173,9 +173,9 @@ run folder (~/KratosGUI/runs/<deck>_<time>/)
   /api/results/... routes
         │
         ▼
-  results.js         `results open | phase | field | range | csv …`   (no DOM, tested)
+  results.js         `results open | stage | field | range | csv …`   (no DOM, tested)
   results-render.js  colours, bands, legend ticks, CSV                 (no DOM, tested)
-  results-plot.js    `results plot …`, the SVG figure for each phase   (no DOM, tested)
+  results-plot.js    `results plot …`, the SVG figure for each stage   (no DOM, tested)
   results-view.js    contours and legend in the viewport               (DOM)
   patches.js         Results panel, Choose results window, plot window  (DOM)
 ```
@@ -183,10 +183,10 @@ run folder (~/KratosGUI/runs/<deck>_<time>/)
 - **One source of results:** Styx reads only what the deck writes, the GiD ASCII files and
   the JSON output. The GiD output has no interface elements, so the interface tractions
   come only from the JSON files.
-- **Contours:** one field for each phase, with colour bands or smooth colours, colour maps,
+- **Contours:** one field for each stage, with colour bands or smooth colours, colour maps,
   the deformed mesh, legend limits (`results range`), values at a node, and CSV export.
 - **Plot along the wall:** bending moment, shear force, normal force, displacements and
-  interface tractions against the level y, one panel for each phase. It follows the Kratos
+  interface tractions against the level y, one panel for each stage. It follows the Kratos
   staged-excavation validation figure and its sign convention. The window can save SVG or
   CSV.
 

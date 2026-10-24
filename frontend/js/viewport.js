@@ -896,8 +896,8 @@ App.Viewport = (function () {
                mesh: visibleKeys.concat(['mesh'], memberKeys, conditions),
                flow: visibleKeys.concat(['water'], conditions),
                // Loads too: Staged construction is where a load is switched on and
-               // off, so it has to be on screen there (`phaseHidden` still hides one
-               // the selected phase has switched off).
+               // off, so it has to be on screen there (`stageHidden` still hides one
+               // the selected stage has switched off).
                staged: visibleKeys.concat(loadKeys, memberKeys, ['water'], conditions) };
     }
     return {
@@ -1534,9 +1534,9 @@ App.Viewport = (function () {
   var revealed = [];
 
   /* Whether the eye lets `key` be drawn in `mode`. In Staged construction a water
-     pressure condition has the phase's checkbox in place of its eye, and the stage is
-     what is read there: the conditions the selected phase has on are drawn, the others
-     not (`phaseHidden`). */
+     pressure condition has the stage's checkbox in place of its eye, and the stage is
+     what is read there: the conditions the selected stage has on are drawn, the others
+     not (`stageHidden`). */
   function eyeOpen(key, mode) {
     if (mode === 'staged' && waterIds.indexOf(key) >= 0) return true;
     return visible[key] !== false;
@@ -1545,7 +1545,7 @@ App.Viewport = (function () {
   function shownByMode(key) {
     var mode = App.state && App.state.mode;
     return (modeGroups[mode] || []).indexOf(key) >= 0
-           && eyeOpen(key, mode) && !phaseHidden()[key];
+           && eyeOpen(key, mode) && !stageHidden()[key];
   }
 
   function hideRevealed() {
@@ -1556,7 +1556,7 @@ App.Viewport = (function () {
   function revealConditions(keys) {
     keys.forEach(function (k) {
       if (conditionIds.indexOf(k) < 0 || !groups[k] || groups[k].visible) return;
-      if (phaseHidden()[k]) return;
+      if (stageHidden()[k]) return;
       if (App.state && App.state.mode === 'results') return;
       groups[k].visible = true;
       revealed.push(k);
@@ -1592,35 +1592,35 @@ App.Viewport = (function () {
 
   /* ── Mode / visibility ──────────────────────────────────────── */
 
-  /* Parts the selected phase has switched off, as `{key: true}`.
+  /* Parts the selected stage has switched off, as `{key: true}`.
 
      A third gate on top of the two that already exist -- the mode the user is in, and
      the eye toggle on the row -- rather than a new mechanism: a group is drawn when
      all three agree. Which is why this is a lookup rebuilt on demand rather than
      something written into `visible`: the eye is the user's own state and must
-     survive stepping through the phases, so a phase may not overwrite it.
+     survive stepping through the stages, so a stage may not overwrite it.
 
-     `App.Phases` owns the rule (frontend/js/phases.js), and is held to the server's
-     answers by `tests/test_phase_parity.py`. Empty whenever it cannot say. */
-  function phaseHidden() {
-    if (!App.Phases || !App.Phases.hiddenKeys) return {};
+     `App.Stages` owns the rule (frontend/js/stages.js), and is held to the server's
+     answers by `tests/test_stage_parity.py`. Empty whenever it cannot say. */
+  function stageHidden() {
+    if (!App.Stages || !App.Stages.hiddenKeys) return {};
     var hidden = {};
-    App.Phases.hiddenKeys(App.PROJECT, App.state && App.state.phase,
+    App.Stages.hiddenKeys(App.PROJECT, App.state && App.state.phase,
                           App.state && App.state.mode)
       .forEach(function (key) { hidden[key] = true; });
     return hidden;
   }
 
-  /* Redraw after the selected phase changes. The mode pass is the whole of it --
-     nothing about the geometry changes when a phase is selected, only which of it
+  /* Redraw after the selected stage changes. The mode pass is the whole of it --
+     nothing about the geometry changes when a stage is selected, only which of it
      is in the model at that moment. */
-  function applyPhaseVisibility() {
+  function applyStageVisibility() {
     setMode(App.state && App.state.mode);
   }
 
   function setMode(mode) {
     var wanted = modeGroups[mode] || [];
-    var hidden = phaseHidden();
+    var hidden = stageHidden();
     revealed = [];
     Object.keys(groups).forEach(function (k) {
       groups[k].visible = wanted.indexOf(k) >= 0 && eyeOpen(k, mode)
@@ -1629,7 +1629,7 @@ App.Viewport = (function () {
     if (mode === 'mesh' && !meshBuilt && groups.mesh) groups.mesh.visible = false;
     if (selected && conditionIds.indexOf(selected) >= 0) select(selected);
     else if (selected && !selectedKeys.every(function (k) { return groups[k] && groups[k].visible; })) select(null);
-    // A phase may have switched a part off, and a coloured part follows that.
+    // A stage may have switched a part off, and a coloured part follows that.
     syncPartColors();
     applyImportedVisibility(mode);
     needsRender = true;
@@ -1638,7 +1638,7 @@ App.Viewport = (function () {
   /* An imported deck's sections, drawn or not. Outside `groups`, so the pass above
      never reaches them; this is their pass. Three things decide, and App.Deck (tested
      headlessly) is the one that combines them: the part's eye, the stage selected on
-     the Staged construction tab -- a deck case's phases are its stages -- and Results,
+     the Staged construction tab -- a deck case's stages are its stages -- and Results,
      which draws its own contoured copy of the mesh, so the grey one steps aside. */
   function applyImportedVisibility(mode) {
     if (!importedMeshGroup) return;
@@ -1680,9 +1680,9 @@ App.Viewport = (function () {
     if (!(key in groups)) return;
     visible[key] = on;
     var wanted = modeGroups[App.state.mode] || [];
-    // The phase gate applies here too, or turning an eye back on would draw a part
-    // the selected phase has not built yet.
-    groups[key].visible = on && wanted.indexOf(key) >= 0 && !phaseHidden()[key];
+    // The stage gate applies here too, or turning an eye back on would draw a part
+    // the selected stage has not built yet.
+    groups[key].visible = on && wanted.indexOf(key) >= 0 && !stageHidden()[key];
     if (key === 'mesh' && !meshBuilt && groups.mesh) groups.mesh.visible = false;
     if (!on && selectedKeys.indexOf(key) >= 0) select(null);
     // A hidden mesh has nothing to number: the labels follow the eye, or they float
@@ -2026,7 +2026,7 @@ App.Viewport = (function () {
      inside the mesh group -- so it lives and dies with the mesh, and is only ever on
      screen where the mesh is (Mesh mode, mesh eye on). `App.PartColors` decides which
      are switched on; `syncPartColors` shows exactly those that are also shown by their
-     own eye and built by the selected phase.
+     own eye and built by the selected stage.
 
      A body is a tinted fill over the grey, with its own wireframe on top. A structure
      is its segments plus a dot on every node: a one-pixel line in a dense mesh is easy
@@ -2141,7 +2141,7 @@ App.Viewport = (function () {
 
   function syncPartColors() {
     if (!App.PartColors) return;
-    var hidden = phaseHidden();
+    var hidden = stageHidden();
     var drawn = App.PartColors.drawn(meshPartKeys, App.PartColors.on, function (key) {
       return isVisible(key) && !hidden[key];
     });
@@ -2807,7 +2807,7 @@ App.Viewport = (function () {
     waterLineSpec: waterLineSpec,
     conditionGlyphSpec: conditionGlyphSpec, conditionKeysOf: conditionKeysOf,
     soilFaceOutlines: soilFaceOutlines, forgetConditionEyes: forgetConditionEyes,
-    applyPhaseVisibility: applyPhaseVisibility,
+    applyStageVisibility: applyStageVisibility,
     normalLoadGlyphSpec: normalLoadGlyphSpec,
     getScene: function() { return scene; },
     getCamera: function() { return cam; },

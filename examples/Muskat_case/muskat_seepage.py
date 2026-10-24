@@ -4,7 +4,7 @@ seepage face above the tail water.
 The STEM Muskat geometry (Deltares' FEA-Tools `GeometryGenerator`), built as a Styx
 model: a 1.62 m by 4 m column of a Van Genuchten soil, the water held at a level of 3.0 m
 on the left face, the tail water at 0.48 m on the right face, and above it a seepage
-face where the water leaves the soil. One "Groundwater flow" phase.
+face where the water leaves the soil. One "Groundwater flow" stage.
 muskat_seepage.json beside it is the same model, as the GUI saves it.
 
     python muskat_seepage.py               write the deck into this folder
@@ -55,8 +55,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from core.model.schemas import (AnchorRows, Borehole, BoxRefinement,  # noqa: E402
-                                Domain, Excavation, Material, MeshSettings, Phase, Piles,
-                                Project, SeepageCondition, SoilLayer, Struts, Wall,
+                                Domain, Excavation, Material,                                 MeshSettings, Piles,
+                                                                Project, SeepageCondition, SoilLayer, Stage, Struts, Wall,
                                 WaterPressureCondition, Wells)
 
 # The column: (0, 0) to (1.62, 4).
@@ -150,7 +150,7 @@ def project() -> Project:
                           x_min=WIDTH - 0.12, x_max=WIDTH, y_min=0.0, y_max=HEIGHT,
                           z_min=0.0, z_max=1.0)]),
 
-        phases=[Phase(id="flow", name="Flow", calculation="Groundwater flow",
+        stages=[Stage(id="flow", name="Flow", calculation="Groundwater flow",
                       max_iterations=MAX_ITERATIONS, tolerated_error=TOLERANCE)],
 
         # Required by the schema. A layered model with one excavation level cuts no

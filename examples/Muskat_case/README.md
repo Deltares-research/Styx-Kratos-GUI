@@ -28,7 +28,7 @@ All three models have:
   pressure condition). The top and the bottom have no condition, so no water flows
   through them.
 - **Supports**: none. A groundwater flow calculation solves the water pressure only.
-- **Phases**: one phase, of the type **Groundwater flow**.
+- **Stages**: one stage, of the type **Groundwater flow**.
 
 | | Case A, saturated | Case B, Van Genuchten | Case C, seepage face |
 |---|---|---|---|
@@ -81,8 +81,8 @@ the tail water up to an exit point at about 1.85 m, and keeps it closed above.
 - `flow_rate` (**Nodal water flow rate** in Results) is the water each node takes in
   (negative) or lets out (positive), per metre of the section.
 
-The seepage strategy opens one node per iteration, so the phase needs at least as many
-iterations as nodes open. The export warns when a phase allows fewer iterations than
+The seepage strategy opens one node per iteration, so the stage needs at least as many
+iterations as nodes open. The export warns when a stage allows fewer iterations than
 its seepage faces have nodes.
 
 ## In the GUI
@@ -97,7 +97,7 @@ its seepage faces have nodes.
 
 ```bash
 kratos-cli.bat check muskat_saturated.json        # Windows; ./kratos-cli.sh on Linux, macOS, Git Bash
-kratos-cli.bat phases muskat_saturated.json
+kratos-cli.bat stages muskat_saturated.json
 kratos-cli.bat calculate muskat_saturated.json
 kratos-cli.bat results field 1 pw
 kratos-cli.bat results field 1 fluxx

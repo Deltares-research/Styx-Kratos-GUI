@@ -24,7 +24,7 @@ GUI is the part of Styx that you use in the browser. To install Styx, see
 | Command panel | Bottom | The **Session** log with all messages, the **Model history** tab with the commands that you typed, and the command box |
 | Status bar | Very bottom | The mode, the server status, the cursor coordinates, the unit system, snapping and zoom |
 
-Staged construction mode adds a **Phases explorer**, and Results mode adds a **Results
+Staged construction mode adds a **Stages explorer**, and Results mode adds a **Results
 explorer**, below the Model explorer.
 
 Some menu items and tools come from the first design of the GUI and do nothing yet. They are
@@ -32,7 +32,7 @@ grey, in the menus and on the tool rail, and you cannot select them. The tip of 
 says *not available yet*. These are, for example: **Import soil layers…**, **Create point**,
 **Create plate**, **Create beam**, **Create embedded beam**, **Tunnel designer…**, **Refine
 mesh**, **Coarsen mesh**, the wells, drains and flow functions, **Select multiple objects**,
-**Activate selection**, **Deactivate selection**, **Preview phase**, **Pack project…**,
+**Activate selection**, **Deactivate selection**, **Preview stage**, **Pack project…**,
 **Print…**, the **Expert** menu (except **Command line**), and **Help** → **Reference
 manual** and **Tutorial manual**.
 
@@ -46,7 +46,7 @@ Do the modes from left to right:
 | Structures | Add sheet piles, anchors, interfaces, loads, and drawn or imported solids |
 | Mesh | Set the mesh size and make the mesh |
 | Flow conditions | Set the water level and the water pressure conditions |
-| Staged construction | Make the construction phases, and select the active parts in each phase |
+| Staged construction | Make the construction stages, and select the active parts in each stage |
 | Results | Look at the results of a calculation |
 
 Click **Calculate** between Staged construction and Results.
@@ -241,8 +241,8 @@ components to hold.
 
 A condition acts on the whole soil (water pressure only), a face of the model, a soil part,
 a line or a point. Lines and points are drawn in the 2D section. A water pressure is fixed in
-each phase that has it on, or, with **Initial**, only gives the start values. To change the
-water from one phase to the next, see
+each stage that has it on, or, with **Initial**, only gives the start values. To change the
+water from one stage to the next, see
 [Switch water conditions on and off](#switch-water-conditions-on-and-off).
 
 The viewport does not show the conditions when a model opens. To show a condition, turn on
@@ -267,7 +267,7 @@ whose soil couples the water pressure to the deformation (`GEO_DRAINAGE_TYPE` ot
 warns about it, and about a model that nothing holds.
 
 **Gravity** is on in a new project. Clear it in the window, or select **Model conditions**
-→ **Gravity**, to remove the self weight from every phase. A K0 phase then has zero
+→ **Gravity**, to remove the self weight from every stage. A K0 stage then has zero
 stresses.
 
 A **seepage face** is a part of the soil's outer boundary where the water may leave the
@@ -284,80 +284,84 @@ pressure is zero and the water flows out. Make one in one of these ways:
 
 A seepage line through the soil is refused when you calculate. The viewport shows a seepage
 face as a line with arrows that point out of the soil. Kratos opens or closes one node of
-the face for each iteration, so give the phase enough iterations: the calculation warns
-when the phase allows fewer iterations than the face has nodes. A deformation calculation
+the face for each iteration, so give the stage enough iterations: the calculation warns
+when the stage allows fewer iterations than the face has nodes. A deformation calculation
 leaves a seepage face out, and warns.
 
 ## Staged construction mode
 
-A construction phase is one step of the calculation. In each phase, parts of the model are
-on (active) or off. A phase starts from the result of the phase before it.
+A construction stage is one step of the calculation. In each stage, parts of the model are
+on (active) or off. A stage starts from the result of the stage before it.
 
-### Make the phases
+> Stages were called *phases* before Styx took Kratos' word for them. A project saved with
+> a `phases` list opens unchanged, and the command box still answers `phases`. Styx saves
+> the project with `stages`, which older versions of Styx cannot read.
 
-If the project has no phases, the Phases explorer shows **Create default phases**. Click it.
-Styx then makes two phases: the initial phase (K0 procedure) and a null step. Add the other
-phases yourself, for example one to install the wall and one for each excavation lift.
+### Make the stages
+
+If the project has no stages, the Stages explorer shows **Create default stages**. Click it.
+Styx then makes two stages: the initial stage (K0 procedure) and a null step. Add the other
+stages yourself, for example one to install the wall and one for each excavation lift.
 
 To make the full sequence from the model in one step, use
-`kratos-cli phases P staged-excavation` (see
-[Phase commands](CLI.md#phase-commands)). It installs each wall, digs lift by lift, and puts
+`kratos-cli stages P staged-excavation` (see
+[Stage commands](CLI.md#stage-commands)). It installs each wall, digs lift by lift, and puts
 in each anchor after the lift that uncovers it.
 
-Use the buttons at the top of the Phases explorer to change the sequence:
+Use the buttons at the top of the Stages explorer to change the sequence:
 
 | Button | What it does |
 |---|---|
-| Add phase | Adds a phase at the end |
-| Insert phase | Adds a phase above the selected phase |
-| Duplicate | Makes a copy of the selected phase |
-| Delete | Deletes the selected phase |
-| Phases… | Opens the **Phases** window with the settings of each phase |
+| Add stage | Adds a stage at the end |
+| Insert stage | Adds a stage above the selected stage |
+| Duplicate | Makes a copy of the selected stage |
+| Delete | Deletes the selected stage |
+| Stages… | Opens the **Stages** window with the settings of each stage |
 
 ### Switch parts on and off
 
-1. Select a phase in the Phases explorer.
+1. Select a stage in the Stages explorer.
 2. In the Model explorer, select or clear the check box of a part. You can also click the
    part in the viewport.
 
-The phases after the selected phase keep this change until a later phase changes it again.
+The stages after the selected stage keep this change until a later stage changes it again.
 
 ### Switch water conditions on and off
 
-A water pressure condition is on in every phase until a phase switches it off. In
+A water pressure condition is on in every stage until a stage switches it off. In
 Staged construction mode, each water pressure condition under **Model conditions** →
-**Boundary conditions** has a check box for the selected phase, as a part has. For
-example, to lower the water from a level at -1 m to a level at -6 m in phase 3:
+**Boundary conditions** has a check box for the selected stage, as a part has. For
+example, to lower the water from a level at -1 m to a level at -6 m in stage 3:
 
 1. Add a second hydrostatic condition with its **Reference level** at -6 m.
-2. Select the first phase, and clear the check box of the -6 m condition.
-3. Select phase 3. Select the check box of the -6 m condition, and clear the check box of
+2. Select the first stage, and clear the check box of the -6 m condition.
+3. Select stage 3. Select the check box of the -6 m condition, and clear the check box of
    the -1 m condition.
 
-The viewport shows the water conditions that the selected phase has on. A phase with no
-water condition on keeps the water pressures that the phase before it ended with, for a
+The viewport shows the water conditions that the selected stage has on. A stage with no
+water condition on keeps the water pressures that the stage before it ended with, for a
 **Hydrostatic** or **Phreatic line** condition. A **Uniform** condition does not keep its
-values: after its phase, the water pressure of a soil that couples it to the deformation is
-free, and the export warns about it. You cannot delete a condition that a phase switches;
-clear its check boxes first. The supports are on in every phase.
+values: after its stage, the water pressure of a soil that couples it to the deformation is
+free, and the export warns about it. You cannot delete a condition that a stage switches;
+clear its check boxes first. The supports are on in every stage.
 
-### Phase settings
+### Stage settings
 
-In the **Phases** window, select a phase and set:
+In the **Stages** window, select a stage and set:
 
-- **Name** and **Start from phase**
+- **Name** and **Start from stage**
 - **Calculation type**: **K0 procedure** (calculates the initial stresses), **Plastic**,
   **Null step**, or **Groundwater flow**
 - **Reset displacements to zero**
 - **Max iterations** and **Tolerated error**
 
-A **Groundwater flow** phase calculates a steady-state flow of the water through the soil.
+A **Groundwater flow** stage calculates a steady-state flow of the water through the soil.
 It calculates the water pressure only, so the soil does not move:
 
-- Give every phase the type Groundwater flow. Calculate refuses a project that has both
-  flow phases and deformation phases.
+- Give every stage the type Groundwater flow. Calculate refuses a project that has both
+  flow stages and deformation stages.
 - Use a 2D model, and give every soil material a `PERMEABILITY_XX`.
-- In each phase, switch on at least one fixed water pressure condition on a face or a
+- In each stage, switch on at least one fixed water pressure condition on a face or a
   line, where the head is known. A boundary with no water pressure condition lets no water
   through.
 - The calculation uses the soil only. It leaves out sheet piles, anchors, interfaces and
@@ -366,10 +370,10 @@ It calculates the water pressure only, so the soil does not move:
 - The results are the water pressure, the hydraulic head, the effective saturation and the
   flux `q` (the specific discharge, in m/s).
 
-The window also lists the parts that each phase switches on and off, and the result of the
-last calculation for each phase.
+The window also lists the parts that each stage switches on and off, and the result of the
+last calculation for each stage.
 
-The **Activate selection**, **Deactivate selection** and **Preview phase** tools in the tool
+The **Activate selection**, **Deactivate selection** and **Preview stage** tools in the tool
 rail are not available yet.
 
 ## Calculate
@@ -385,8 +389,8 @@ Click **Calculate** in the toolbar, or press <kbd>F9</kbd> outside Mesh mode. St
 4. opens Results mode when Kratos is done.
 
 While Kratos runs, the log shows *Meshing, writing the deck and running Kratos…*. You can run
-one calculation at a time. If a phase fails, the log shows which phase failed and why, and
-the Phases explorer shows which phases finished.
+one calculation at a time. If a stage fails, the log shows which stage failed and why, and
+the Stages explorer shows which stages finished.
 
 Styx never overwrites or deletes a run folder. See
 [What a calculation writes](KRATOS_SETUP.md#what-a-calculation-writes).
@@ -395,7 +399,7 @@ Styx never overwrites or deletes a run folder. See
 
 - **File** → **Export model…** writes the Kratos input files into one ZIP file: the mesh
   (`.mdpa`), `MaterialParameters.json`, `ProjectParameters.json`, and the other files that
-  the phases need. The log lists each assumption and warning of the export. Use this to run
+  the stages need. The log lists each assumption and warning of the export. Use this to run
   the model in Kratos without Styx.
 - **File** → **Import mesh (.mdpa)…** shows the mesh of an existing Kratos file, with a list
   of its parts. You can look at this mesh, but you cannot change it.
@@ -418,7 +422,7 @@ Use the Results explorer, or click **Choose results** in the tool rail:
 
 | Setting | What it does |
 |---|---|
-| Phase | The construction phase to show |
+| Stage | The construction stage to show |
 | Field | The quantity: displacements, effective stresses, pore pressure, and more |
 | Shading | Smooth colours, or 8 to 48 colour bands |
 | Colours | The colour map, for example Rainbow, Viridis or Greyscale |
@@ -434,7 +438,7 @@ stresses in Pa for SI, or in kPa for kN.
 
 - **Plot along the wall:** click **Plot wall…**, or type `results plot`. The plot shows the
   bending moment (M), the shear force (Q), the normal force (N), the horizontal displacement
-  (ux) and the interface tractions (tn, ts) against depth, with one line for each phase.
+  (ux) and the interface tractions (tn, ts) against depth, with one line for each stage.
   **Save SVG** saves the figure, and **Save CSV** saves the numbers.
 - **Values at a node:** click **Results** → **Value at a node…**, or type
   `results at <node>`.
@@ -453,7 +457,7 @@ Type a command in the command box below the log, and press <kbd>Enter</kbd>. Use
 | `export` | Writes the Kratos input files, as **File** → **Export model…** |
 | `mesh` | Makes the mesh |
 | `calculate` | Calculates the model, as the **Calculate** button |
-| `phases` | Opens the **Phases** window |
+| `stages` | Opens the **Stages** window |
 | `water <level>`, `water off` | Sets or removes the water level |
 | `boundary`, `boundary standard` | Lists the boundary conditions, or puts the standard supports back |
 | `gravity`, `gravity on`, `gravity off` | Shows gravity, or switches it on or off |

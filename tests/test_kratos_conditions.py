@@ -298,7 +298,7 @@ def test_the_hydraulic_head_is_written_only_with_gravity(gmsh_session):
         "CAUCHY_STRESS_TENSOR"]
 
 
-def test_a_k0_phase_with_gravity_off_is_warned_about():
+def test_a_k0_stage_with_gravity_off_is_warned_about():
     from tests.models.excavation import excavation_project
     project = session.set_gravity(excavation_project(), False)
     assert any("is a K0 procedure, whose stresses come from the self weight" in w

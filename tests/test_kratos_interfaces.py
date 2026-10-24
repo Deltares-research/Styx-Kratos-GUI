@@ -363,7 +363,7 @@ def test_the_interface_gets_its_own_sub_model_parts(contacted):
 def test_the_contact_is_split_per_soil_body_it_runs_against(contacted):
     """One part per body, named for it, and every element in exactly one of them.
 
-    A lift is dug away in its own phase and the contact along that lift has to go with
+    A lift is dug away in its own stage and the contact along that lift has to go with
     it -- an interface still holding a face whose soil has been removed would carry
     shear against nothing. The reference deck splits the same way
     (plan/outdated/staged-construction-plan.md sec 0.1).
@@ -708,7 +708,7 @@ def test_a_contact_against_a_drawn_part_takes_that_part_s_soil(drawn):
 
 
 def test_the_contact_along_a_dug_part_goes_with_it(drawn):
-    """The trench is the right-hand fill: from the phase that digs it, its contact is
+    """The trench is the right-hand fill: from the stage that digs it, its contact is
     out of the computation and the left-hand one is still in."""
     _, export = drawn
     doc = json.loads(export["project_parameters"])
