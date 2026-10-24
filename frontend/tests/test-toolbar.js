@@ -324,6 +324,32 @@
     T.eq(App.LivePatches.orderStructuresRail(once), once);
   });
 
+  test('the Soil rail reads Select, material sets, soil layers, borehole', function () {
+    withInstall(function () {});
+    var keys = (App.RAILS.soil || []).map(function (tool) {
+      return tool === '-' ? '-' : tool.action || tool.icon;
+    });
+    T.eq(keys, ['select', '-', 'materials', 'soilLayers', 'createBorehole',
+      '-', 'createSoilVolume']);
+  });
+
+  test('the Soil menu reads as its rail: material sets, soil layers, borehole', function () {
+    withInstall(function () {});
+    var soil = App.MENUS.filter(function (m) { return m.label === 'Soil'; })[0];
+    var keys = soil.items.map(function (item) { return item === '-' ? '-' : item.action; });
+    T.eq(keys, ['materials', 'soilLayers', 'createBorehole', '-', 'importSoilLayers',
+      '-', 'createSoilVolume']);
+  });
+
+  test('ordering the Soil rail keeps a tool it does not recognise', function () {
+    var mine = { icon: 'star', tip: 'Something new', action: 'doSomething' };
+    var keys = App.LivePatches.orderSoilRail([
+      { icon: 'borehole', action: 'createBorehole' }, mine, '-',
+      { icon: 'materials', action: 'materials' }, { icon: 'select', tip: 'Select' }
+    ]).map(function (tool) { return tool === '-' ? '-' : tool.action || tool.icon; });
+    T.eq(keys, ['select', '-', 'materials', 'createBorehole', '-', 'doSomething']);
+  });
+
   /* ── New / open / save ─────────────────────────────────────────── */
 
   test('new project asks the server for an empty site rather than inventing one', function () {

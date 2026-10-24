@@ -1349,13 +1349,36 @@ App.LivePatches = (function () {
      one, and there the icon is the only name it has. */
   function railKey(tool) { return (tool && (tool.action || tool.icon)) || ''; }
 
+  /* The Soil rail opens on what a soil is made of: the material sets, then the
+     layers that use them, then the boreholes that carry the layers. */
+  var SOIL_RAIL_GROUPS = [
+    ['select'],
+    ['materials', 'soilLayers', 'createBorehole'],
+    ['createSoilVolume']
+  ];
+
+  function orderStructuresRail(tools) {
+    return orderRail(tools, STRUCTURES_RAIL_GROUPS, STRUCTURES_RAIL_DROPPED);
+  }
+
+  function orderSoilRail(tools) { return orderRail(tools, SOIL_RAIL_GROUPS, []); }
+
+  /* The Soil menu reads as its rail does; importing layers is a menu-only door. */
+  var SOIL_MENU_GROUPS = [
+    ['materials', 'soilLayers', 'createBorehole'],
+    ['importSoilLayers'],
+    ['createSoilVolume']
+  ];
+
+  function orderSoilMenu(items) { return orderRail(items, SOIL_MENU_GROUPS, []); }
+
   /* Pure, and tolerant of a rail this file has never seen: a tool that matches no
      group keeps its place in a trailing group rather than disappearing. */
-  function orderStructuresRail(tools) {
+  function orderRail(tools, groupKeys, dropped) {
     var rest = (tools || []).filter(function (tool) { return tool && tool !== '-'; });
     var groups = [];
 
-    STRUCTURES_RAIL_GROUPS.forEach(function (keys) {
+    groupKeys.forEach(function (keys) {
       var found = [];
       keys.forEach(function (key) {
         rest = rest.filter(function (tool) {
@@ -1368,7 +1391,7 @@ App.LivePatches = (function () {
     });
 
     var unknown = rest.filter(function (tool) {
-      return STRUCTURES_RAIL_DROPPED.indexOf(railKey(tool)) < 0;
+      return dropped.indexOf(railKey(tool)) < 0;
     });
     if (unknown.length) groups.push(unknown);
 
@@ -3024,11 +3047,13 @@ App.LivePatches = (function () {
       App.RAILS.soil.push('-');
       App.RAILS.soil.push({ icon: 'cube', tip: 'Create soil volume…', action: 'createSoilVolume' });
     }
+    if (App.RAILS.soil) App.RAILS.soil = orderSoilRail(App.RAILS.soil);
     var soilMenu = (App.MENUS || []).filter(function (m) { return m.label === 'Soil'; })[0];
     if (soilMenu && !soilMenu.items.some(function (i) { return i && i.action === 'createSoilVolume'; })) {
       soilMenu.items.push('-');
       soilMenu.items.push({ label: 'Create soil volume…', icon: 'cube', action: 'createSoilVolume' });
     }
+    if (soilMenu) soilMenu.items = orderSoilMenu(soilMenu.items);
 
     // Add Import model to Structures rail
     if (App.RAILS.structures) {
@@ -4420,6 +4445,8 @@ App.LivePatches = (function () {
     withLabelRows: withLabelRows, toggleLabels: toggleLabels,
     extendViewportMenu: extendViewportMenu,
     orderStructuresRail: orderStructuresRail,
+    orderSoilRail: orderSoilRail,
+    orderSoilMenu: orderSoilMenu,
     STRUCTURES_RAIL_GROUPS: STRUCTURES_RAIL_GROUPS,
     nameSoilBodyActions: nameSoilBodyActions,
     addSoilBodySection: addSoilBodySection,
