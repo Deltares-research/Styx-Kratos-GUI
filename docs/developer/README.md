@@ -207,6 +207,11 @@ made from.
 
    On Linux, use `.venv-linux/bin/graphify` in the same command.
 
-This takes a few seconds and needs no API key. `graphify-out/graph.json` also answers
+This takes a few seconds and needs no API key. It reads the code again, but it keeps the
+parts of the map that came from the documents (the Markdown files, the HTML pages and
+`pipeline.svg`) as they were. To read changed documents again, run `/graphify . --update`
+in an AI coding assistant that has the graphify skill, then do steps 3 and 4.
+
+`graphify-out/graph.json` also answers
 questions in the terminal: `graphify explain "Project"` lists all items connected to
 `Project`, and `graphify path "A" "B"` gives the shortest path between two names.
