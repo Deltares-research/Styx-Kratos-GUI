@@ -6,17 +6,16 @@ from core.model.templates import seed_project
 from tests import frozen
 
 
-def test_boreholes_match_frozen_data_js():
-    got = [b.model_dump() for b in seed_project(simple=False).boreholes]
-    assert got == frozen.boreholes()
-
-
 def test_layers_match_frozen_data_js():
-    got = [
-        {k: v for k, v in layer.model_dump().items() if k in {"id", "name", "mat", "tops", "bots"}}
-        for layer in seed_project(simple=False).layers
-    ]
-    assert got == frozen.layers()
+    """The seed's layers are the mockup's at its first borehole, the levels its geometry
+    was built from. The mockup's other boreholes have no counterpart: the project has no
+    boreholes."""
+    first = frozen.boreholes()[0]["id"]
+    expected = [{"id": layer["id"], "name": layer["name"], "mat": layer["mat"],
+                 "top": layer["tops"][first], "bottom": layer["bots"][first]}
+                for layer in frozen.layers()]
+    assert expected, "frozen LAYERS parsed as empty -- the guard would pass vacuously"
+    assert [layer.model_dump() for layer in seed_project(simple=False).layers] == expected
 
 
 def test_materials_match_frozen_data_js():
@@ -43,5 +42,5 @@ def test_materials_match_frozen_data_js():
 
 def test_seed_layers_reach_the_domain_floor():
     project = seed_project(simple=False)
-    deepest = min(layer.bots["bh1"] for layer in project.layers)
+    deepest = min(layer.bottom for layer in project.layers)
     assert deepest == project.domain.y_bottom

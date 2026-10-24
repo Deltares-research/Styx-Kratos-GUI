@@ -143,3 +143,65 @@ def test_an_old_model_copy_with_phases_still_sets_the_stages():
     project = templates.blank_project()
     copied = project.model_copy(update={"phases": stages.default_stages(project)})
     assert [s.id for s in copied.stages] == ["initial", "null_step"]
+
+
+# ── Boreholes, removed on 2026-10-24 ────────────────────────────────────────
+
+@pytest.mark.parametrize("path", SAVED, ids=lambda p: p.stem)
+def test_a_project_saved_with_boreholes_takes_the_first_boreholes_levels(path):
+    """Every saved file here has boreholes. Each layer opens with the levels of the
+    first borehole, the only levels the geometry ever read, so the mesh and the deck stay
+    the same."""
+    old = json.loads(path.read_text(encoding="utf-8"))
+    first = old["boreholes"][0]["id"]
+
+    project = Project.model_validate(old)
+
+    assert [(layer.id, layer.top, layer.bottom) for layer in project.layers] == [
+        (layer["id"], layer["tops"][first], layer["bots"][first]) for layer in old["layers"]]
+    assert "boreholes" not in project.model_dump(mode="json")
+
+
+def _with_boreholes(order: list[str]) -> dict:
+    """The seed in the shape saved between the unit system and 2026-10-24: three
+    boreholes, in `order`, each layer with different levels at each."""
+    from core.model.templates import seed_project
+    doc = seed_project().model_dump(mode="json")
+    levels = {"bh1": [(0.0, -8.0), (-8.0, -25.0)],
+              "bh2": [(-0.4, -9.2), (-9.2, -25.0)],
+              "bh3": [(0.2, -7.2), (-7.2, -25.0)]}
+    doc["boreholes"] = [{"id": bh, "name": bh.upper(), "x": 0.0, "y": 0.0, "head": 0.0,
+                         "water": -1.5} for bh in order]
+    for index, layer in enumerate(doc["layers"]):
+        del layer["top"], layer["bottom"]
+        layer["tops"] = {bh: levels[bh][index][0] for bh in order}
+        layer["bots"] = {bh: levels[bh][index][1] for bh in order}
+    return doc
+
+
+def test_a_layer_with_different_levels_at_two_boreholes_takes_the_first():
+    assert [(layer.top, layer.bottom) for layer in Project.model_validate(
+        _with_boreholes(["bh1", "bh2", "bh3"])).layers] == [(0.0, -8.0), (-8.0, -25.0)]
+    assert [(layer.top, layer.bottom) for layer in Project.model_validate(
+        _with_boreholes(["bh2", "bh1", "bh3"])).layers] == [(-0.4, -9.2), (-9.2, -25.0)]
+
+
+def test_a_current_shape_project_with_boreholes_keeps_its_deck():
+    """Not a legacy file: the migration of boreholes runs on its own, and the deck is
+    the deck of the same model with the first borehole's levels."""
+    from core.model import migration
+    from core.model.templates import seed_project
+    doc = _with_boreholes(["bh1", "bh2", "bh3"])
+    assert not migration.is_legacy(doc)
+
+    deck = writer.export_project(Project.model_validate(doc))
+
+    assert deck["mdpa"] == writer.export_project(seed_project())["mdpa"]
+
+
+def test_a_layer_already_in_the_new_shape_is_left_alone():
+    from core.model import migration
+    doc = {"boreholes": [{"id": "bh1"}],
+           "layers": [{"id": "L1", "name": "L1", "mat": "m", "top": 1.0, "bottom": 0.0}]}
+    assert migration.drop_boreholes(doc) == {
+        "layers": [{"id": "L1", "name": "L1", "mat": "m", "top": 1.0, "bottom": 0.0}]}

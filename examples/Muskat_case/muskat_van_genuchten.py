@@ -54,7 +54,7 @@ ROOT = checkout()
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from core.model.schemas import (Borehole, Domain, Material,  # noqa: E402
+from core.model.schemas import (Domain, Material,  # noqa: E402
                                 MeshSettings, Project, SoilLayer, Stage,
                                 WaterPressureCondition)
 
@@ -100,7 +100,6 @@ BOUNDARY_CONDITIONS = [
 
 
 def project() -> Project:
-    borehole = "bh1"
     # The reference deck's material, value for value. Only the permeability, the
     # viscosity, the water density and the retention law change the flow; the rest is
     # what Kratos' flow element checks it has.
@@ -135,10 +134,9 @@ def project() -> Project:
         dimension=2,
         domain=Domain(x0=0.0, x1=WIDTH, z0=0.0, z1=1.0, y_top=HEIGHT, y_bottom=0.0),
         # No water table: the two heads and the start values are all the water the model has.
-        boreholes=[Borehole(id=borehole, name="BH1", x=0.0, y=0.0, head=HEIGHT, water=0.0)],
         materials=[soil],
         layers=[SoilLayer(id="soil", name="soil", mat=soil.id,
-                          tops={borehole: HEIGHT}, bots={borehole: 0.0})],
+                          top=HEIGHT, bottom=0.0)],
         boundary_conditions=BOUNDARY_CONDITIONS,
 
         mesh=MeshSettings(element_size=ELEMENT_SIZE, order=ELEMENT_ORDER),

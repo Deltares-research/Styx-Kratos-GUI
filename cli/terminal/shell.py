@@ -2,8 +2,8 @@
 project open (plan/active/cli-plan.md, SH).
 
 A line is a `kratos-cli` command without `kratos-cli` and without the project file --
-`water -2`, `borehole add bh4`, `mesh`, `results field 1 uy`. The open project goes where
-the command takes one (`_with_project`): after the command word (`borehole P add`), or
+`water -2`, `layer add L3`, `mesh`, `results field 1 uy`. The open project goes where
+the command takes one (`_with_project`): after the command word (`layer P add`), or
 after the action for a command whose action comes first. A project or a
 deck named on the line is the one used. The line then runs as `cli.terminal.main` runs any
 command line, so the shell has no commands, answers or refusals of its own to drift

@@ -650,7 +650,7 @@ def test_an_interface_drains_as_a_constant_field_whatever_the_soil_does(session)
 
 @pytest.fixture(scope="module")
 def drawn():
-    """A sheet pile through a borehole layer and through two drawn fills on top of it,
+    """A sheet pile through a soil layer and through two drawn fills on top of it,
     one each side (`tests/models/drawn_ground.py`). Built before the module's gmsh
     session: drawing the fills runs gmsh too."""
     project = drawn_ground.project()
@@ -663,9 +663,9 @@ def segments_of(deck: mdpa.Deck) -> list[tuple[int, ...]]:
             for nodes in block.entries.values()]
 
 
-def test_a_contact_holds_drawn_soil_as_well_as_the_borehole_layer(drawn):
+def test_a_contact_holds_drawn_soil_as_well_as_the_soil_layer(drawn):
     """Two contact elements on every pile segment, one per face, also where the pile
-    runs through the drawn fill. Grouped by the `soil_` key prefix, only the borehole
+    runs through the drawn fill. Grouped by the `soil_` key prefix, only the soil
     layer's stretch had any, and the fill above it was split from the wall and held by
     nothing once the wall was installed."""
     _, export = drawn
@@ -778,7 +778,7 @@ def test_the_master_face_is_the_left_of_the_screen_or_the_one_below(path, face):
 
 def test_without_a_pit_each_face_of_the_wall_gets_a_curve_of_its_own(drawn):
     """A pile through a dike holds ground on both faces, and the retained-side group of
-    a pit model then held both faces' copies of the borehole layer and nothing of the
+    a pit model then held both faces' copies of the soil layer and nothing of the
     drawn fill: one curve zig-zagging between two faces, stopping where the fill
     began. Each face is a group of its own now, over every body, read by a json output
     of its own -- `results profile RUN interface_left tn`."""

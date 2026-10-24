@@ -1,6 +1,6 @@
 """How the words of a command line become a command and its values.
 
-The pieces the record commands share: a noun with its actions (`borehole add`,
+The pieces the record commands share: a noun with its actions (`layer add`,
 `beam set`), the options a command was given, the answer an edit gives, `NAME=VALUE`
 variables, and coordinates typed as plain numbers or read from a file.
 """

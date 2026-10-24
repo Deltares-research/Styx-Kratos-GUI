@@ -231,10 +231,9 @@ def _build_layered_soil(project: Project) -> BuildResult:
         gmsh.clear()
         gmsh.model.add("simple-cube")
         d = project.domain
-        borehole = project.borehole_ids()[0]
         owners = {}
         for layer in project.layers:
-            bottom, top = layer.bots[borehole], layer.tops[borehole]
+            bottom, top = layer.bottom, layer.top
             tag = gmsh.model.occ.addBox(d.x0, bottom, d.z0, d.dx, top - bottom, d.dz)
             owners[tag] = {f"soil_{layer.id}"}
 
@@ -318,12 +317,10 @@ def _build_solids(project: Project, log: list[str] | None = None
         """An axis-aligned box in world coordinates: x across, y up, z out of plane."""
         return own(gmsh.model.occ.addBox(x0, y0, z0, x1 - x0, y1 - y0, z1 - z0), key)
 
-    # Soil layers span the domain in plan and are flat-bottomed. The frozen viewport
-    # extrudes from the bh1 column only (js/viewport.js:75,100) and ignores the other
-    # two boreholes; dipping layer surfaces are a later change, made here once.
-    bh = p.borehole_ids()[0]
+    # Soil layers span the domain in plan and are flat; dipping layer surfaces are a
+    # later change, made here once.
     for layer in p.layers:
-        box(d.x0, d.x1, layer.bots[bh], layer.tops[bh], d.z0, d.z1, f"soil_{layer.id}")
+        box(d.x0, d.x1, layer.bottom, layer.top, d.z0, d.z1, f"soil_{layer.id}")
 
     t, w = wall.thickness, wall
     outer = box(e.x0 - t, e.x1 + t, w.toe_y, w.top_y, e.z0 - t, e.z1 + t, "wall")
@@ -422,7 +419,7 @@ def _build_display_only(project: Project, dim: int = 3,
             )]
         elif dim == 3 and load.kind == "surface":
             # `ground_y`, not `d.y_top`: the symbol belongs on top of the model, and a
-            # drawn embankment puts that above the borehole block.
+            # drawn embankment puts that above the layer block.
             loads[load.id] = [gmsh.model.occ.addBox(
                 load.x0, project.elevation_of(load), load.z0,
                 load.x1 - load.x0, load.thickness, load.z1 - load.z0,

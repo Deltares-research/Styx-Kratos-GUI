@@ -375,8 +375,8 @@ def test_a_load_footprint_splits_the_top_face_at_its_own_edges():
     """The whole point of the imprint: the pad's edges become model edges.
 
     On the simple example, whose ground surface is the flat plane the 3D surface-load
-    export requires. The full project interpolates its top from the boreholes, so it has
-    no face at `y_top` for a surface load to sit on in the first place.
+    export requires. The full project has no face at `y_top` for a surface load to sit
+    on in the first place.
     """
     project = seed_project()
     load = project.loads[0]

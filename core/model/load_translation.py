@@ -123,7 +123,7 @@ def _translatable(load: Load, project: Project) -> bool:
     """Whether this 2D load has a surface form at all. See the module docstring.
 
     `ground_y` rather than `domain.y_top`: a load drawn on top of an embankment is on
-    the ground surface even though it is well above the borehole block. Compared within
+    the ground surface even though it is well above the layer block. Compared within
     `GROUND_TOLERANCE`, because neither number is exact.
     """
     return (load.kind == "line"

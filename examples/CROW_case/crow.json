@@ -12,16 +12,6 @@
     "y_top": 0.0,
     "y_bottom": -60.0
   },
-  "boreholes": [
-    {
-      "id": "bh1",
-      "name": "BH1",
-      "x": 0.0,
-      "y": 0.0,
-      "head": 0.0,
-      "water": -1.5
-    }
-  ],
   "materials": [
     {
       "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
@@ -81,34 +71,22 @@
       "id": "L_top",
       "name": "Soil_Top",
       "mat": "m_upper",
-      "tops": {
-        "bh1": 0.0
-      },
-      "bots": {
-        "bh1": -8.0
-      }
+      "top": 0.0,
+      "bottom": -8.0
     },
     {
       "id": "L_mid",
       "name": "Soil_Middle",
       "mat": "m_upper",
-      "tops": {
-        "bh1": -8.0
-      },
-      "bots": {
-        "bh1": -12.0
-      }
+      "top": -8.0,
+      "bottom": -12.0
     },
     {
       "id": "L_bot",
       "name": "Soil_Bottom",
       "mat": "m_lower",
-      "tops": {
-        "bh1": -12.0
-      },
-      "bots": {
-        "bh1": -60.0
-      }
+      "top": -12.0,
+      "bottom": -60.0
     }
   ],
   "excavation": {

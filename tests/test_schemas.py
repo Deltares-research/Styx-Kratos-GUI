@@ -119,36 +119,41 @@ def test_a_material_with_no_friction_angle_has_no_k0():
 
 # ── Soil layers ─────────────────────────────────────────────────────────────
 
-def test_layer_stack_must_be_contiguous_per_borehole():
-    """The invariant js/dialogs.js:320-331 maintains by hand: bots[i] == tops[i+1]."""
+def test_layer_stack_must_be_contiguous():
+    """Each layer's bottom is the next layer's top: no gap, no overlap."""
     good = [
-        schemas.SoilLayer(id="L1", name="Soil_1", mat="m2",
-                          tops={"bh1": 0.0}, bots={"bh1": -8.0}),
-        schemas.SoilLayer(id="L2", name="Soil_2", mat="m4",
-                          tops={"bh1": -8.0}, bots={"bh1": -25.0}),
+        schemas.SoilLayer(id="L1", name="Soil_1", mat="m2", top=0.0, bottom=-8.0),
+        schemas.SoilLayer(id="L2", name="Soil_2", mat="m4", top=-8.0, bottom=-25.0),
     ]
-    schemas.validate_layer_stack(good, ["bh1"])  # does not raise
+    schemas.validate_layer_stack(good)  # does not raise
 
-    gap = [
-        good[0],
-        schemas.SoilLayer(id="L2", name="Soil_2", mat="m4",
-                          tops={"bh1": -9.0}, bots={"bh1": -25.0}),
-    ]
+    gap = [good[0], schemas.SoilLayer(id="L2", name="Soil_2", mat="m4",
+                                      top=-9.0, bottom=-25.0)]
     with pytest.raises(ValueError, match="contiguous"):
-        schemas.validate_layer_stack(gap, ["bh1"])
+        schemas.validate_layer_stack(gap)
+
+    overlap = [good[0], schemas.SoilLayer(id="L2", name="Soil_2", mat="m4",
+                                          top=-7.0, bottom=-25.0)]
+    with pytest.raises(ValueError, match="contiguous"):
+        schemas.validate_layer_stack(overlap)
 
 
-def test_layer_must_cover_every_borehole():
-    layers = [schemas.SoilLayer(id="L1", name="Soil_1", mat="m2",
-                               tops={"bh1": 0.0}, bots={"bh1": -25.0})]
-    with pytest.raises(ValueError, match="bh2"):
-        schemas.validate_layer_stack(layers, ["bh1", "bh2"])
+def test_a_project_refuses_a_gap_in_the_layer_stack():
+    bad = seed_project().model_dump()
+    bad["layers"][1]["top"] = -9.0
+    with pytest.raises(ValidationError, match="contiguous"):
+        schemas.Project.model_validate(bad)
 
 
 def test_layer_rejects_inverted_thickness():
     with pytest.raises(ValidationError):
-        schemas.SoilLayer(id="L1", name="Soil_1", mat="m2",
-                          tops={"bh1": -8.0}, bots={"bh1": 0.0})
+        schemas.SoilLayer(id="L1", name="Soil_1", mat="m2", top=-8.0, bottom=0.0)
+
+
+def test_a_layer_has_no_borehole_levels():
+    with pytest.raises(ValidationError):
+        schemas.SoilLayer(id="L1", name="Soil_1", mat="m2", tops={"bh1": 0.0},
+                          bots={"bh1": -8.0})
 
 
 # ── Project-level cross references ──────────────────────────────────────────
@@ -164,7 +169,7 @@ def test_project_rejects_layer_pointing_at_unknown_material():
 def test_project_rejects_duplicate_ids():
     p = seed_project()
     bad = p.model_dump()
-    bad["boreholes"].append(bad["boreholes"][0])
+    bad["layers"].append(bad["layers"][-1])
     with pytest.raises(ValidationError, match="duplicate"):
         schemas.Project.model_validate(bad)
 
@@ -236,15 +241,13 @@ def _layered_pit() -> schemas.Project:
     """
     p = seed_project(simple=False).model_dump()
     p["domain"] |= {"y_top": 0.0, "y_bottom": -60.0}
-    p["boreholes"] = [p["boreholes"][0]]
-    bh = p["boreholes"][0]["id"]
     p["layers"] = [
         {"id": "L1", "name": "Soil_1", "mat": p["materials"][0]["id"],
-         "tops": {bh: 0.0}, "bots": {bh: -8.0}},
+         "top": 0.0, "bottom": -8.0},
         {"id": "L2", "name": "Soil_2", "mat": p["materials"][0]["id"],
-         "tops": {bh: -8.0}, "bots": {bh: -12.0}},
+         "top": -8.0, "bottom": -12.0},
         {"id": "L3", "name": "Soil_3", "mat": p["materials"][1]["id"],
-         "tops": {bh: -12.0}, "bots": {bh: -60.0}},
+         "top": -12.0, "bottom": -60.0},
     ]
     # `levels` supersedes the seed's `floor_y`, and the two may not disagree.
     p["excavation"] = {k: v for k, v in p["excavation"].items() if k != "floor_y"}
@@ -474,12 +477,8 @@ def test_layered_soil_exposes_only_soil_geometry():
 def test_part_keys_track_the_layers():
     p = seed_project()
     extra = p.model_dump()
-    extra["layers"][1]["bots"] = {bh: -18.0 for bh in extra["layers"][1]["bots"]}
-    extra["layers"].append(
-        dict(id="L3", name="Soil_3", mat="m6",
-             tops={bh: -18.0 for bh in extra["layers"][1]["bots"]},
-             bots={bh: -25.0 for bh in extra["layers"][1]["bots"]})
-    )
+    extra["layers"][1]["bottom"] = -18.0
+    extra["layers"].append(dict(id="L3", name="Soil_3", mat="m6", top=-18.0, bottom=-25.0))
     assert schemas.Project.model_validate(extra).part_keys()[:3] == [
         "soil_L1", "soil_L2", "soil_L3",
     ]
@@ -1349,7 +1348,7 @@ def test_a_project_with_no_ground_in_it_has_no_soil_bodies():
     blank = blank_project()
     assert blank.soil_bodies() == []
     assert blank.soil_body_keys == []
-    stripped = blank.model_dump() | {"boreholes": [], "layers": []}
+    stripped = blank.model_dump() | {"layers": []}
     assert schemas.Project.model_validate(stripped).soil_bodies() == []
 
 

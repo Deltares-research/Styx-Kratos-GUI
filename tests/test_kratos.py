@@ -243,7 +243,7 @@ def test_the_section_has_no_out_of_plane_boundary_groups(section):
 
 
 def test_boundary_groups_follow_a_drawn_body_that_does_not_fill_the_domain():
-    """A drawn soil is not held to the borehole box. Read off `project.domain`, the
+    """A drawn soil is not held to the layer block. Read off `project.domain`, the
     faces it never reaches came out empty and the deck lost `Right_Edge` and
     `Bottom_Fixed` -- the bug this guards."""
     project = seed_project()  # domain x 0..25, y -25..0
@@ -939,15 +939,13 @@ def staged_project(dimension: int = 2):
     if dimension == 2:
         p["section_offset"] = 20.0
     p["domain"] |= {"y_top": 0.0, "y_bottom": -60.0}
-    p["boreholes"] = [p["boreholes"][0]]
-    bh = p["boreholes"][0]["id"]
     p["layers"] = [
         {"id": "L1", "name": "Upper_Sand", "mat": p["materials"][0]["id"],
-         "tops": {bh: 0.0}, "bots": {bh: -8.0}},
+         "top": 0.0, "bottom": -8.0},
         {"id": "L2", "name": "Middle_Clay", "mat": p["materials"][0]["id"],
-         "tops": {bh: -8.0}, "bots": {bh: -12.0}},
+         "top": -8.0, "bottom": -12.0},
         {"id": "L3", "name": "Deep_Sand", "mat": p["materials"][1]["id"],
-         "tops": {bh: -12.0}, "bots": {bh: -60.0}},
+         "top": -12.0, "bottom": -60.0},
     ]
     p["excavation"] = {k: v for k, v in p["excavation"].items() if k != "floor_y"}
     p["excavation"] |= {"x0": 0.0, "x1": 5.0, "levels": [-2.0, -5.0, -8.0]}

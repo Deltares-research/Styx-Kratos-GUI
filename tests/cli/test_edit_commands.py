@@ -13,10 +13,10 @@ from core import session
 
 
 def test_get_prints_a_value_as_json(cli, site):
-    ran = cli("get", site, "layers[L1].tops")
+    ran = cli("get", site, "layers[L1]")
 
     assert ran.code == 0
-    assert json.loads(ran.out) == session.value_at(session.load(site), "layers[L1].tops")
+    assert json.loads(ran.out) == session.value_at(session.load(site), "layers[L1]")
 
 
 def test_get_without_a_path_prints_the_whole_project(cli, site):

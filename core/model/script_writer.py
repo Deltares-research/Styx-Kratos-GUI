@@ -39,7 +39,7 @@ WIDTH = 92
 """A value longer than this, at its indentation, is spread over lines."""
 
 GROUPS: dict[str, tuple[str, ...]] = {
-    "The site": ("domain", "boreholes"),
+    "The site": ("domain",),
     "The soil": ("materials", "layers", "excavation", "water"),
     "The structures": ("beam_sections", "panel_sections", "beams", "anchor_sections",
                        "anchors", "interface_sections", "interfaces"),

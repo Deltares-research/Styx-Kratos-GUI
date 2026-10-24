@@ -17,9 +17,9 @@ from backend import store
 from backend.routes.common import refusals
 from core import session
 from core.model import stages
-from core.model.schemas import (BoreholeCreate, ConditionsUpdate, DimensionUpdate, LayersUpdate,
-                                MaterialsUpdate, StagesUpdate, Project, StructuresUpdate,
-                                UnitsUpdate, WaterUpdate)
+from core.model.schemas import (ConditionsUpdate, DimensionUpdate, LayersUpdate, MaterialsUpdate,
+                                StagesUpdate, Project, StructuresUpdate, UnitsUpdate,
+                                WaterUpdate)
 
 router = APIRouter()
 
@@ -113,21 +113,6 @@ async def new_project() -> dict:
 async def patch_layers(update: LayersUpdate) -> dict:
     with refusals():
         project = session.replace_layers(store.get(), update)
-    store.put(project)
-    return {"project": project, "invalidates": ["project", "tree", "geometry", "mesh"]}
-
-
-@router.post("/api/project/boreholes")
-async def add_borehole(new: BoreholeCreate) -> dict:
-    """Add one borehole, with every layer's levels there copied from the last one.
-
-    `session.add_borehole` makes it, the same function `kratos-cli borehole add` calls,
-    so the GUI's Create borehole and its `borehole` command give the borehole the
-    terminal would: the same id, name, position and levels. The new one is the last in
-    `project.boreholes`.
-    """
-    with refusals():
-        project = session.add_borehole(store.get(), **new.model_dump())
     store.put(project)
     return {"project": project, "invalidates": ["project", "tree", "geometry", "mesh"]}
 

@@ -1,10 +1,10 @@
-"""`domain`, `borehole`, `material`, `layer`, `excavation`, `parts`: the ground of a model.
+"""`domain`, `material`, `layer`, `excavation`, `parts`: the ground of a model.
 
-Each edit is `core.session`'s, made the way the GUI's soil dialogs make it -- a new
-borehole brings levels for every layer, a moved level moves its neighbour's, a deleted
-layer's neighbour closes the gap -- and each new record starts as those dialogs start it
-(`core.model.drafts`). Materials are Kratos property sets: a law and its variables under
-Kratos' names, typed as `NAME=VALUE` in the project's own units.
+Each edit is `core.session`'s, made the way the GUI's soil dialogs make it -- a moved
+level moves its neighbour's, a deleted layer's neighbour closes the gap -- and each new
+record starts as those dialogs start it (`core.model.drafts`). Materials are Kratos
+property sets: a law and its variables under Kratos' names, typed as `NAME=VALUE` in the
+project's own units.
 """
 
 from __future__ import annotations
@@ -14,7 +14,7 @@ import argparse
 from cli.terminal.files import add_project, add_writing, written
 from cli.terminal.output import Answer, CommandError
 from cli.terminal.words import (NAME_HELP, action, assignments, edited, existing, file_of,
-                                given, id_help, named_ids, noun)
+                                id_help, named_ids, noun)
 from core import session
 from core.model import drafts
 from core.model.schemas import Project
@@ -30,18 +30,6 @@ def register(commands, common: argparse.ArgumentParser) -> None:
                         help="out of plane; a 2D model is the section at one z")
     add_writing(domain)
     domain.set_defaults(handler=set_domain)
-
-    borehole = noun(commands, common, "borehole", "list, add, change or remove boreholes")
-    action(borehole, common, "list", list_boreholes, writes=False)
-    add = action(borehole, common, "add", add_borehole,
-                  help="a borehole; what is not given is copied from the last one")
-    add.add_argument("id", nargs="?", help=id_help("the first free bh<n>"))
-    _borehole_fields(add)
-    change = action(borehole, common, "set", update_borehole)
-    existing(change, "borehole")
-    _borehole_fields(change)
-    remove = action(borehole, common, "remove", remove_borehole)
-    existing(remove, "borehole")
 
     material = noun(commands, common, "material",
                      "list, add, change or remove materials (soil property sets)")
@@ -72,7 +60,7 @@ def register(commands, common: argparse.ArgumentParser) -> None:
     add.add_argument("--material", required=True)
     add.add_argument("--name", help=NAME_HELP)
     depth = add.add_mutually_exclusive_group()
-    depth.add_argument("--bottom", type=float, help="its bottom, at every borehole")
+    depth.add_argument("--bottom", type=float, help="its bottom")
     depth.add_argument("--thickness", type=float)
     change = action(layer, common, "set", update_layer,
                      help="change a layer; a moved level moves its neighbour's with it")
@@ -81,8 +69,6 @@ def register(commands, common: argparse.ArgumentParser) -> None:
     change.add_argument("--name", help=NAME_HELP)
     change.add_argument("--top", type=float)
     change.add_argument("--bottom", type=float)
-    change.add_argument("--at", metavar="BOREHOLE",
-                        help="move the level at this borehole only (default: at all)")
     split = action(layer, common, "split", split_layer,
                     help="halve a layer; the lower half becomes a new layer")
     existing(split, "layer")
@@ -108,18 +94,6 @@ def register(commands, common: argparse.ArgumentParser) -> None:
 
 
 
-
-
-def _borehole_fields(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--name", help=NAME_HELP)
-    # Map coordinates, as the GUI's borehole dialog gives them: the map's y is
-    # the model's z. Its height is not a coordinate -- that is --head and --water.
-    parser.add_argument("--x", type=float, help="its position on the map: x, in metres")
-    parser.add_argument("--y", type=float,
-                        help="its position on the map: y, in metres (the model's z, out of "
-                             "the 2D section; not a height)")
-    parser.add_argument("--head", type=float, help="the ground level there")
-    parser.add_argument("--water", type=float, help="the phreatic level there")
 
 
 def _material_fields(parser: argparse.ArgumentParser) -> None:
@@ -172,34 +146,6 @@ def _pit_line(project: Project) -> str:
         return "no excavation"
     return (f"excavation x {pit.x0:g} .. {pit.x1:g}, z {pit.z0:g} .. {pit.z1:g}, dug to "
             + ", ".join(f"{level:g}" for level in pit.levels))
-
-
-# ── boreholes ───────────────────────────────────────────────────────────────
-
-def list_boreholes(args: argparse.Namespace) -> Answer:
-    project = session.load(args.project)
-    rows = [b.model_dump(mode="json") for b in project.boreholes]
-    return Answer(data=rows, lines=[
-        f"{b.id}  {b.name}  at x {b.x:g}, y {b.y:g}; ground {b.head:g}, water {b.water:g}"
-        for b in project.boreholes])
-
-
-@named_ids()
-def add_borehole(args: argparse.Namespace) -> Answer:
-    project = session.add_borehole(session.load(args.project), id=args.id,
-                                   **given(args, "name", "x", "y", "head", "water"))
-    return edited(args, project, f"added borehole {project.boreholes[-1].id}")
-
-
-def update_borehole(args: argparse.Namespace) -> Answer:
-    project = session.update_borehole(session.load(args.project), args.id,
-                                      **given(args, "name", "x", "y", "head", "water"))
-    return edited(args, project, f"changed borehole {args.id}")
-
-
-def remove_borehole(args: argparse.Namespace) -> Answer:
-    project = session.remove_borehole(session.load(args.project), args.id)
-    return edited(args, project, f"removed borehole {args.id}")
 
 
 # ── materials ───────────────────────────────────────────────────────────────
@@ -256,9 +202,8 @@ def list_layers(args: argparse.Namespace) -> Answer:
     project = session.load(args.project)
     lines = []
     for layer in project.layers:
-        levels = ", ".join(f"{bh} {layer.tops[bh]:g} .. {layer.bots[bh]:g}"
-                           for bh in layer.tops)
-        lines.append(f"{layer.id}  {layer.name}  of {layer.mat}: {levels}")
+        lines.append(f"{layer.id}  {layer.name}  of {layer.mat}: "
+                     f"{layer.top:g} .. {layer.bottom:g}")
     return Answer(data=[layer.model_dump(mode="json") for layer in project.layers],
                   lines=lines or ["No layers yet."])
 
@@ -273,7 +218,7 @@ def add_layer(args: argparse.Namespace) -> Answer:
 def update_layer(args: argparse.Namespace) -> Answer:
     project = session.update_layer(session.load(args.project), args.id,
                                    material=args.material, name=args.name, top=args.top,
-                                   bottom=args.bottom, at=args.at)
+                                   bottom=args.bottom)
     return edited(args, project, f"changed layer {args.id}")
 
 

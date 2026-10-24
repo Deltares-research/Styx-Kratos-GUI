@@ -52,7 +52,7 @@ ROOT = checkout()
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from core.model.schemas import (Beam, BeamSection, Borehole,  # noqa: E402
+from core.model.schemas import (Beam, BeamSection,  # noqa: E402
                                 DisplacementCondition, Domain, LineLoad, Material,
                                 MeshSettings, Project, SoilLayer, Stage)
 
@@ -86,7 +86,6 @@ BOUNDARY_CONDITIONS = [
 
 
 def project() -> Project:
-    borehole = "bh1"
     soil = Material(id="m_soil", name="soil", color="#c4a86a",
                     constitutive_law="GeoLinearElasticPlaneStrain2DLaw",
                     variables={
@@ -118,12 +117,10 @@ def project() -> Project:
         dimension=2,
         domain=Domain(x0=DOMAIN_LEFT_X, x1=DOMAIN_RIGHT_X, z0=0.0, z1=10.0,
                       y_top=DOMAIN_TOP_Y, y_bottom=DOMAIN_BOTTOM_Y),
-        # Dry: the phreatic level is the bottom of the block, and there is no water table.
-        boreholes=[Borehole(id=borehole, name="BH1", x=DOMAIN_LEFT_X, y=0.0,
-                            head=DOMAIN_TOP_Y, water=DOMAIN_BOTTOM_Y)],
+        # Dry: there is no water table.
         materials=[soil],
         layers=[SoilLayer(id="soil", name="soil", mat=soil.id,
-                          tops={borehole: DOMAIN_TOP_Y}, bots={borehole: DOMAIN_BOTTOM_Y})],
+                          top=DOMAIN_TOP_Y, bottom=DOMAIN_BOTTOM_Y)],
 
         beam_sections=[sheet_pile],
         beams=[Beam(id="sheetpile_1", name="sheetpile_1", section=sheet_pile.id,

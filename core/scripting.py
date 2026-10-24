@@ -31,6 +31,7 @@ server is ever exposed to a network, this route is the first thing that has to g
 from __future__ import annotations
 
 import contextlib
+import re
 import runpy
 import sys
 from pathlib import Path
@@ -144,7 +145,7 @@ def _run(resolved: Path) -> Project:
     except Exception as failure:                       # noqa: BLE001 - reported, not swallowed
         raise ScriptError(
             f"{resolved.name} failed while running{_line_in(failure, resolved)}: "
-            f"{type(failure).__name__}: {failure}"
+            f"{type(failure).__name__}: {failure}{_boreholes_hint(failure)}"
         ) from failure
 
     project, complaint = _find_project(namespace, resolved)
@@ -203,6 +204,17 @@ def _exited(name: str, failure: SystemExit) -> ScriptError:
         f"parses arguments or calls sys.exit() belongs under "
         f"`if __name__ == \"__main__\":`, which is not run here."
     )
+
+
+def _boreholes_hint(failure: BaseException) -> str:
+    """What to do with a script written before boreholes were removed (2026-10-24): it
+    imports `Borehole`, passes `boreholes=`, or gives a layer `tops` and `bots`. Its saved
+    project file still opens (`migration.drop_boreholes`); a script is not converted."""
+    if not re.search(r"\b(Borehole|boreholes|tops|bots)\b", str(failure)):
+        return ""
+    return (". Boreholes were removed: a soil layer now has one `top` and one `bottom`. "
+            "Open the model's saved .json file, which still loads, and write the script "
+            "again with `kratos-cli script`")
 
 
 def _line_in(failure: BaseException, script: Path) -> str:
@@ -278,6 +290,7 @@ def _find_project(namespace: dict, script: Path) -> tuple[Project | None, str | 
             raise ScriptError(
                 f"{getattr(builder, '__name__', 'the builder')}() failed"
                 f"{_line_in(failure, script)}: {type(failure).__name__}: {failure}"
+                f"{_boreholes_hint(failure)}"
             ) from failure
         if isinstance(built, Project):
             return built, None

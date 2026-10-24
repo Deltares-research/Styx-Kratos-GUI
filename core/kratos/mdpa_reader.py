@@ -13,9 +13,8 @@ an element's normal or a beam's local axis points), and that does not matter for
 re-displaying a mesh that already exists.
 
 Only the mesh is recoverable this way. The parametric model that produced it -- soil
-layers with borehole interpolation, section properties, load definitions, mesh settings
--- is baked into node coordinates and discarded on export; nothing here attempts to
-invert that. What *is* recoverable, from a sub-model part's shape alone: whether it is a
+layers, section properties, load definitions, mesh settings -- is baked into node
+coordinates and discarded on export; nothing here attempts to invert that. What *is* recoverable, from a sub-model part's shape alone: whether it is a
 structural body (has elements), a load (has conditions), a support (its
 SubModelPartData carries a fixity-shaped variable), or a plain boundary/group (nodes
 only).

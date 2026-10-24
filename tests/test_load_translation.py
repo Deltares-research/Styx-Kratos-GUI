@@ -402,7 +402,7 @@ def test_the_default_name_is_renumbered_to_match_its_source():
 # ── The ground a surface load sits on ───────────────────────────────────────
 #
 # A `SurfaceLoad` carries no z: it lies on the top of the model. That used to be
-# `domain.y_top`, which is only the top of the *borehole* block -- so once a drawn
+# `domain.y_top`, which is only the top of the *layer* block -- so once a drawn
 # embankment could stand above it (see `Project.extent`), a load on that embankment sat
 # above the only elevation a surface load was allowed to have, and stopped translating.
 # The ground is the top of the model now, and the two ends agree on where that is.
@@ -419,7 +419,7 @@ def raised(loads: list[dict], dimension: int = 2) -> Project:
     return Project.model_validate(payload)
 
 
-def test_the_ground_is_the_top_of_the_model_not_of_the_borehole_block():
+def test_the_ground_is_the_top_of_the_model_not_of_the_layer_block():
     assert raised([]).ground_y() == 4.0
     assert Project.model_validate(
         seed_project(simple=True).model_dump()).ground_y() == 0.0
@@ -432,7 +432,7 @@ def test_a_line_load_on_a_drawn_embankment_translates():
     assert kinds(load_translation.translate(project, 3)) == ["line", "surface"]
 
 
-def test_a_line_load_at_the_borehole_top_still_translates_when_nothing_is_drawn():
+def test_a_line_load_at_the_layer_top_still_translates_when_nothing_is_drawn():
     project = project_with([LINE], dimension=2)
 
     assert kinds(load_translation.translate(project, 3)) == ["line", "surface"]

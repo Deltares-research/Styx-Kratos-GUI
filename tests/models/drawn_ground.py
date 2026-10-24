@@ -1,13 +1,13 @@
-"""A sheet pile through a borehole layer and through soil drawn on top of it.
+"""A sheet pile through a soil layer and through soil drawn on top of it.
 
 The smallest model of a dike section built the way a user draws one: the ground below
-y = -2 m comes from a borehole, the 2 m above it is two drawn polygons with a material of
+y = -2 m is a soil layer, the 2 m above it is two drawn polygons with a material of
 their own, one each side of the pile, and the pile runs through both. The right-hand fill
 is dug away in the last stage, and the water in the trench presses on the floor and on
 the wall face.
 
 It is the arrangement that once lost the contact along the drawn soil: the exporter
-grouped contact elements by the `soil_` key prefix, which only borehole layers carry, so
+grouped contact elements by the `soil_` key prefix, which only soil layers carry, so
 everything above the layer was split from the wall and tied back to nothing.
 
 The drawn parts carry a recipe and no .brep; `scripting.with_solids` builds them, the way
@@ -19,7 +19,7 @@ a model script does:
 from __future__ import annotations
 
 from core import scripting
-from core.model.schemas import (Beam, BeamSection, Borehole, CustomPart, Domain, Interface,
+from core.model.schemas import (Beam, BeamSection, CustomPart, Domain, Interface,
                                 InterfaceSection, Material, MeshSettings, NormalLoad, Stage,
                                 Project, SoilLayer, standard_conditions)
 
@@ -31,7 +31,7 @@ Z0, Z1 = 0.0, 10.0
 SECTION_Z = 5.0
 
 LAYER_TOP_Y = -2.0
-"""The top of the borehole layer, and the bottom of the drawn fill."""
+"""The top of the soil layer, and the bottom of the drawn fill."""
 WALL_X = 10.0
 WALL_TOE_Y = -8.0
 
@@ -72,7 +72,6 @@ def _drawn(key: str, label: str, material: str, corners: list[tuple[float, float
 
 def drawn_ground_project(staged: bool = True) -> Project:
     """The model, its drawn parts not built yet: `with_solids` builds them."""
-    borehole = "bh1"
     ground = _soil("m_ground", "Ground", "#b08a6a", 2.0e7, 18_000.0, 1_000.0, 30.0)
     fill = _soil("m_fill", "Fill", "#c4a86a", 3.0e7, 19_000.0, 1_500.0, 40.0)
     pile = BeamSection(id="sheetpile", name="Sheet pile", variables={
@@ -89,11 +88,9 @@ def drawn_ground_project(staged: bool = True) -> Project:
         section_offset=SECTION_Z,
         domain=Domain(x0=DOMAIN_LEFT_X, x1=DOMAIN_RIGHT_X, z0=Z0, z1=Z1,
                       y_top=DOMAIN_TOP_Y, y_bottom=DOMAIN_BOTTOM_Y),
-        boreholes=[Borehole(id=borehole, name="BH1", x=DOMAIN_LEFT_X, y=Z0,
-                            head=LAYER_TOP_Y, water=DOMAIN_BOTTOM_Y)],
         materials=[ground, fill],
         layers=[SoilLayer(id="ground", name="Ground", mat=ground.id,
-                          tops={borehole: LAYER_TOP_Y}, bots={borehole: DOMAIN_BOTTOM_Y})],
+                          top=LAYER_TOP_Y, bottom=DOMAIN_BOTTOM_Y)],
         custom_parts=[
             _drawn("drawn_0", "Fill left", fill.id,
                    [(DOMAIN_LEFT_X, DOMAIN_TOP_Y), (DOMAIN_LEFT_X, LAYER_TOP_Y),

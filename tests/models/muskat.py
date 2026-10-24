@@ -28,7 +28,7 @@ It is also a script the GUI can open:
 
 from __future__ import annotations
 
-from core.model.schemas import (Borehole, BoxRefinement, Domain, Material, MeshSettings,
+from core.model.schemas import (BoxRefinement, Domain, Material, MeshSettings,
                                 Stage, Project, SeepageCondition, SoilLayer,
                                 WaterPressureCondition)
 
@@ -125,10 +125,9 @@ def muskat(conditions: list | None = None, stages: list[Stage] | None = None,
         layered_soil=True,
         dimension=2,
         domain=Domain(x0=0.0, x1=WIDTH, z0=0.0, z1=1.0, y_top=HEIGHT, y_bottom=0.0),
-        boreholes=[Borehole(id="bh1", name="BH1", x=0.0, y=0.0, head=HEIGHT, water=0.0)],
         materials=[material],
         layers=[SoilLayer(id="soil", name="soil", mat=material.id,
-                          tops={"bh1": HEIGHT}, bots={"bh1": 0.0})],
+                          top=HEIGHT, bottom=0.0)],
         boundary_conditions=HEADS if conditions is None else conditions,
         stages=[FLOW] if stages is None else stages,
         mesh=MeshSettings(element_size=0.4, order=order),

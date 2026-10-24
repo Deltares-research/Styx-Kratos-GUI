@@ -982,7 +982,7 @@ def _check_every_stretch_is_held(interface, rows: list[list[int]],
     `split_mesh` only writes an element where there is soil on that face, so every one
     of them runs against some body. One left over is a body the grouping does not know
     as soil -- which is how a sheet pile through a drawn levee once lost its contact
-    above the borehole layer with no word said, and the levee slid through the wall.
+    above the layer block with no word said, and the levee slid through the wall.
     """
     kept = {id(row) for _, body_rows in grouped for row in body_rows}
     lost = [row for row in rows if id(row) not in kept]
@@ -1851,7 +1851,7 @@ def _boundary_nodes(project: Project, dim: int,
     constraints below, so both agree on exactly which boundaries exist.
 
     The faces are measured from the meshed soil, not from `project.domain`: a drawn or
-    imported soil body is not held to the borehole box, so a domain plane it does not
+    imported soil body is not held to the layer block, so a domain plane it does not
     reach yields an empty group and the deck silently loses `Right_Edge` or
     `Bottom_Fixed`. Where the soil does fill the domain the two agree exactly.
     Structures are excluded from the measurement -- a sheet pile standing proud of the

@@ -90,9 +90,8 @@ def test_each_layer_sections_to_its_own_rectangle(simple):
     """The simple example is a stack of full-width boxes, so the section of each
     layer is exactly domain width x layer thickness."""
     project, result = simple
-    bh = project.borehole_ids()[0]
     for layer in project.layers:
-        expected = project.domain.dx * (layer.tops[bh] - layer.bots[bh])
+        expected = project.domain.dx * (layer.top - layer.bottom)
         assert result.mass[f"soil_{layer.id}"] == pytest.approx(expected, rel=1e-6)
 
 
@@ -129,15 +128,13 @@ def staged_project() -> Project:
     """
     p = seed_project(simple=False).model_dump() | {"dimension": 2}
     p["domain"] |= {"y_top": 0.0, "y_bottom": -60.0}
-    p["boreholes"] = [p["boreholes"][0]]
-    bh = p["boreholes"][0]["id"]
     p["layers"] = [
         {"id": "L1", "name": "Soil_1", "mat": p["materials"][0]["id"],
-         "tops": {bh: 0.0}, "bots": {bh: -8.0}},
+         "top": 0.0, "bottom": -8.0},
         {"id": "L2", "name": "Soil_2", "mat": p["materials"][0]["id"],
-         "tops": {bh: -8.0}, "bots": {bh: -12.0}},
+         "top": -8.0, "bottom": -12.0},
         {"id": "L3", "name": "Soil_3", "mat": p["materials"][1]["id"],
-         "tops": {bh: -12.0}, "bots": {bh: -60.0}},
+         "top": -12.0, "bottom": -60.0},
     ]
     p["excavation"] = {k: v for k, v in p["excavation"].items() if k != "floor_y"}
     p["excavation"] |= {"x0": 0.0, "x1": 5.0, "levels": [-2.0, -5.0, -8.0]}

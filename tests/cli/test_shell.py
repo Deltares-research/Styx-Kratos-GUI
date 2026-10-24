@@ -2,7 +2,7 @@
 project open (plan/active/cli-plan.md, SH).
 
 A line is a `kratos-cli` command without `kratos-cli` and without the project file:
-`water -2`, `borehole add bh4`, `mesh`. The shell puts the open project where the
+`water -2`, `layer add L3`, `mesh`. The shell puts the open project where the
 command takes one, and runs the command as `cli.terminal.main` runs it -- the same parser, the
 same answers, the same refusals. Its own words: `open`, `close`, `undo`, `redo`, `cd`,
 `pwd`, `source`, `help`, `exit`.
@@ -68,10 +68,10 @@ def test_a_command_is_given_the_open_project(piped, site):
 
 
 def test_an_action_command_is_given_the_project_before_its_action(piped, site):
-    ran = piped("borehole add bh4 --x 40\nborehole list\n", site)
+    ran = piped("layer add L3 --material m1\nlayer list\n", site)
 
     assert ran.code == 0, ran.err
-    assert "bh4" in [b.id for b in session.load(site).boreholes]
+    assert "L3" in [layer.id for layer in session.load(site).layers]
 
 
 def test_a_project_named_on_the_line_is_the_one_used(piped, site, tmp_path):
@@ -195,7 +195,7 @@ def test_help_lists_its_own_words_and_the_commands(typed):
 
     for word in ("open", "undo", "source", "exit"):
         assert word in out
-    assert "borehole" in out and "results" in out
+    assert "layer" in out and "results" in out
 
 
 def test_help_lists_the_commands_under_the_step_of_the_model_they_belong_to(typed):
@@ -204,7 +204,7 @@ def test_help_lists_the_commands_under_the_step_of_the_model_they_belong_to(type
 
     assert {"Shell", "Project", "Ground", "Structures", "Stages", "Results"} <= set(headings)
     after = out.split("\nGround\n", 1)[1].split("\n\n", 1)[0]
-    assert "  borehole" in after and "  layer" in after
+    assert "  material" in after and "  layer" in after
     assert "  shell " not in out                    # it is the shell already
 
 
@@ -331,12 +331,12 @@ def test_the_greeting_names_the_open_project_or_says_how_to_open_one(typed, site
 # ── Completion ──────────────────────────────────────────────────────────────
 
 def test_the_first_word_completes_to_a_command_or_a_word_of_the_shell():
-    assert "borehole" in shell.completions("bore")
+    assert "layer" in shell.completions("lay")
     assert "undo" in shell.completions("un")
 
 
 def test_the_second_word_completes_to_an_action():
-    assert {"add", "list"} <= set(shell.completions("borehole "))
+    assert {"add", "list"} <= set(shell.completions("layer "))
     assert "field" in shell.completions("results fi")
 
 

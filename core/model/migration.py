@@ -257,3 +257,33 @@ def rename_phases(value: dict) -> dict:
     out.pop("stages", None)
     out["stages"] = out.pop("phases")
     return out
+
+def drop_boreholes(value: dict) -> dict:
+    """A document saved before 2026-10-24 hangs each layer's levels on boreholes:
+    `tops` and `bots` map a borehole id to a level. Now a layer has one `top` and one
+    `bottom`. Each layer takes the levels of the first borehole, the only levels the
+    geometry ever read, so the mesh and the deck stay the same. The other boreholes'
+    levels, and every borehole's ground and water level, had no effect and are dropped.
+
+    A layer already in the new shape is left alone."""
+    if "boreholes" not in value:
+        return value
+    out = dict(value)
+    boreholes = out.pop("boreholes")
+    first = (boreholes[0].get("id") if isinstance(boreholes, list) and boreholes
+             and isinstance(boreholes[0], dict) else None)
+    layers = out.get("layers")
+    if isinstance(layers, list):
+        out["layers"] = [_layer_at(layer, first) for layer in layers]
+    return out
+
+
+def _layer_at(layer: object, borehole: str | None) -> object:
+    if not isinstance(layer, dict) or "tops" not in layer or "bots" not in layer:
+        return layer
+    out = {key: v for key, v in layer.items() if key not in ("tops", "bots")}
+    for old, new in (("tops", "top"), ("bots", "bottom")):
+        levels = layer[old]
+        if isinstance(levels, dict) and borehole in levels:
+            out[new] = levels[borehole]
+    return out

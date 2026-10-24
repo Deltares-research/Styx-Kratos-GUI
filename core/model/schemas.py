@@ -110,15 +110,6 @@ class Domain(Base):
 
 # ── Ground model ────────────────────────────────────────────────────────────
 
-class Borehole(Base):
-    id: Ident
-    name: str
-    x: float
-    y: float
-    head: float      # ground surface level, m
-    water: float     # phreatic level, m
-
-
 VariableName = Annotated[str, Field(pattern=r"^[A-Z][A-Z0-9_]*$", max_length=96)]
 VariableValue = float | int | bool | str | list[float] | list[list[float]]
 
@@ -193,35 +184,24 @@ class SoilLayer(Base):
     id: Ident
     name: str
     mat: Ident
-    tops: dict[str, float]    # borehole id -> level (y) of layer top
-    bots: dict[str, float]    # borehole id -> level (y) of layer bottom
+    top: float       # level (y) of the layer's top, m
+    bottom: float    # level (y) of the layer's bottom, m
 
     @model_validator(mode="after")
     def _positive_thickness(self) -> SoilLayer:
-        for bh, top in self.tops.items():
-            bot = self.bots.get(bh)
-            if bot is not None and bot > top:
-                raise ValueError(f"layer {self.id}: bottom above top at borehole {bh}")
+        if self.bottom > self.top:
+            raise ValueError(f"layer {self.id}: bottom {self.bottom} above top {self.top}")
         return self
 
 
-def validate_layer_stack(layers: list[SoilLayer], borehole_ids: list[str]) -> None:
-    """Every layer covers every borehole, and the stack is gap-free.
-
-    This is the invariant js/dialogs.js:320-331 maintains by hand when a depth is edited.
-    """
-    for layer in layers:
-        missing = set(borehole_ids) - layer.tops.keys() | set(borehole_ids) - layer.bots.keys()
-        if missing:
-            raise ValueError(f"layer {layer.id} has no levels for borehole(s) {sorted(missing)}")
-
+def validate_layer_stack(layers: list[SoilLayer]) -> None:
+    """The stack is gap-free: each layer's bottom is the next layer's top."""
     for upper, lower in zip(layers, layers[1:]):
-        for bh in borehole_ids:
-            if abs(upper.bots[bh] - lower.tops[bh]) > 1e-9:
-                raise ValueError(
-                    f"layer stack is not contiguous at borehole {bh}: "
-                    f"{upper.id} bottom {upper.bots[bh]} != {lower.id} top {lower.tops[bh]}"
-                )
+        if abs(upper.bottom - lower.top) > 1e-9:
+            raise ValueError(
+                f"layer stack is not contiguous: "
+                f"{upper.id} bottom {upper.bottom} != {lower.id} top {lower.top}"
+            )
 
 
 # ── Structures ──────────────────────────────────────────────────────────────
@@ -1321,28 +1301,11 @@ class WaterUpdate(Base):
     water: WaterLevel | None
 
 
-class BoreholeCreate(Base):
-    """`POST /api/project/boreholes`: one new borehole (`session.add_borehole`, what
-    `kratos-cli borehole add` calls). A field left out comes from the last borehole,
-    `x` as 10 m past it (`drafts.borehole`)."""
-    id: Ident | None = None
-    name: str | None = None
-    x: float | None = None
-    y: float | None = None
-    head: float | None = None
-    water: float | None = None
-
-
 class LayersUpdate(Base):
     layers: list[SoilLayer]
     materials: list[Material] | None = None
-    # Boreholes ride along because the two cannot move independently: adding a
-    # borehole adds a tops/bots key to every layer and removing one takes it
-    # away, so a stack that validates only does so against the matching
-    # borehole list. Omitted means "leave the boreholes alone".
-    boreholes: list[Borehole] | None = Field(default=None, min_length=1)
-    # The plan extents, edited from the Selection explorer's Geometry rows.
-    # Same reasoning: one request, one validation of the resulting model.
+    # The plan extents, edited from the Selection explorer's Geometry rows. They ride
+    # along so one request gets one validation of the resulting model.
     domain: Domain | None = None
     # The phreatic level and the fluid's specific weight, edited from the same
     # explorer. One object for the whole project, exactly like `domain`, and carried
@@ -1545,7 +1508,6 @@ class Project(Base):
     viewport -- reads one authoritative number instead of each deriving its own."""
 
     domain: Domain
-    boreholes: list[Borehole]
     materials: list[Material]
     layers: list[SoilLayer]
     excavation: Excavation | None = None
@@ -1613,12 +1575,15 @@ class Project(Base):
     def _migrate_legacy_units(cls, value: object) -> object:
         """A project saved before the unit system existed, converted once into the
         current shape in SI, with the numbers the old exporter wrote (`core/model/migration.py`).
-        A project saved before 2026-10 also calls its stages `phases`."""
+        A project saved before 2026-10 also calls its stages `phases`, and one saved
+        before 2026-10-24 has boreholes (`migration.drop_boreholes`)."""
         if isinstance(value, dict):
             value = migration.rename_phases(value)
         if migration.is_legacy(value):
-            return migration.migrate(value)
-        return migration.migrate_records(value) if isinstance(value, dict) else value
+            value = migration.migrate(value)
+        elif isinstance(value, dict):
+            value = migration.migrate_records(value)
+        return migration.drop_boreholes(value) if isinstance(value, dict) else value
 
     @model_serializer(mode="wrap")
     def _leave_out_absent_blocks(self, handler: SerializerFunctionWrapHandler) -> dict:
@@ -1765,7 +1730,6 @@ class Project(Base):
 
     @model_validator(mode="after")
     def _cross_references(self) -> Project:
-        _reject_duplicates([b.id for b in self.boreholes], "borehole")
         _reject_duplicates([m.id for m in self.materials], "material")
         _reject_duplicates([l.id for l in self.layers], "layer")
         _reject_duplicates([p.key for p in self.custom_parts], "custom_part")
@@ -1853,7 +1817,7 @@ class Project(Base):
                 )
         # Structures are placed against the *extent*, not the domain: a load or a pile
         # standing on a drawn embankment above `y_top` is on model geometry, and the
-        # domain is only the block the boreholes describe. See `Project.extent`.
+        # domain is only the layer block. See `Project.extent`.
         extent = self.extent()
         for load in self.loads:
             if load.kind == "point" and not (
@@ -1945,7 +1909,7 @@ class Project(Base):
                         raise ValueError(
                             f"panel {panel.id!r} lies outside the domain at ({x}, {y}, {z})"
                         )
-        validate_layer_stack(self.layers, [b.id for b in self.boreholes])
+        validate_layer_stack(self.layers)
 
         if self.dimension == 2:
             low, high = self.section_bounds()
@@ -1987,7 +1951,7 @@ class Project(Base):
     def extent(self) -> Domain:
         """How far the model reaches: the domain grown to cover every custom part.
 
-        `Domain` is the soil block the boreholes describe, and a drawn or imported part
+        `Domain` is the block the soil layers fill, and a drawn or imported part
         is not held to it -- an embankment stands above `y_top`. Anything asking "may a
         structure be here?" wants this, not the domain: a load on a custom layer above
         ground stands on model geometry, and refusing it as "outside the domain" is the
@@ -2015,7 +1979,7 @@ class Project(Base):
         A `SurfaceLoad` carries no level of its own -- it sits on the ground surface --
         and
         that used to be read as `domain.y_top`. But the domain is only the block the
-        boreholes describe, so once a drawn embankment stands above it, `domain.y_top`
+        layers fill, so once a drawn embankment stands above it, `domain.y_top`
         is buried inside the fill rather than on top of it. `extent` knows where the
         model actually ends; everything that places or reads a surface load asks here,
         so the build, the exporter and `core/model/load_translation.py` agree on one answer.
@@ -2078,9 +2042,6 @@ class Project(Base):
 
     def material(self, mat_id: str) -> Material:
         return next(m for m in self.materials if m.id == mat_id)
-
-    def borehole_ids(self) -> list[str]:
-        return [b.id for b in self.boreholes]
 
     def pit_levels(self) -> list[float]:
         """The levels the pit is dug to, shallowest first; none without an excavation."""
@@ -2293,15 +2254,12 @@ class Project(Base):
         staged never changes name. Ordered outside-first, then by lift, so the key list
         is stable for the viewport and the exporter.
         """
-        boreholes = self.borehole_ids()
-        if not boreholes or not self.layers:
+        if not self.layers:
             # Called from `part_keys`, which runs during validation and on a project
             # that has no ground in it yet -- the site the server opens on. No layers
             # means no bodies, and it must not be an error to ask.
             return []
-        bh = boreholes[0]
-        layers = [(f"soil_{layer.id}", layer.bots[bh], layer.tops[bh])
-                  for layer in self.layers]
+        layers = [(f"soil_{layer.id}", layer.bottom, layer.top) for layer in self.layers]
         outside = [(key, bottom, top, False) for key, bottom, top in layers]
         levels = self.pit_levels()
         if len(levels) < 2:

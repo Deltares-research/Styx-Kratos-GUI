@@ -121,10 +121,43 @@ def test_a_broken_builder_reports_its_own_failure(tmp_path):
     mistake they did not make."""
     path = write(tmp_path, """
     def project():
-        raise KeyError("bh1")
+        raise KeyError("L9")
     """)
     with pytest.raises(scripting.ScriptError, match="project\\(\\) failed"):
         scripting.load_project(path)
+
+
+def test_a_script_written_with_boreholes_says_what_to_do(tmp_path):
+    """Boreholes were removed on 2026-10-24. A script written before imports `Borehole`;
+    its saved .json still opens, and `kratos-cli script` writes the script again."""
+    path = write(tmp_path, """
+    from core.model.schemas import Borehole
+    """)
+    with pytest.raises(scripting.ScriptError, match="Borehole") as failure:
+        scripting.load_project(path)
+    assert "Boreholes were removed" in str(failure.value)
+    assert "kratos-cli script" in str(failure.value)
+
+
+def test_a_layer_with_borehole_levels_says_what_to_do(tmp_path):
+    path = write(tmp_path, """
+    from core.model.schemas import SoilLayer
+
+    def project():
+        return SoilLayer(id="L1", name="L1", mat="m1", tops={"bh1": 0.0},
+                         bots={"bh1": -5.0})
+    """)
+    with pytest.raises(scripting.ScriptError, match="Boreholes were removed"):
+        scripting.load_project(path)
+
+
+def test_an_unrelated_failure_says_nothing_of_boreholes(tmp_path):
+    path = write(tmp_path, """
+    raise ValueError("the process stops here")
+    """)
+    with pytest.raises(scripting.ScriptError) as failure:
+        scripting.load_project(path)
+    assert "Boreholes" not in str(failure.value)
 
 
 def test_a_helper_that_takes_arguments_is_not_mistaken_for_the_entry_point(tmp_path):

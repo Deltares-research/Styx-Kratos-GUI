@@ -1,6 +1,6 @@
 """`core.model.drafts`: what a new record starts as, the way the GUI starts it.
 
-The command line adds boreholes, layers, materials and soil volumes without the GUI's
+The command line adds layers, materials and soil volumes without the GUI's
 dialogs, so what those dialogs fill in for a new one has to exist in Python as well. The
 numbers are the GUI's own -- `frontend/js/property-sets.js` and `material-library.js` --
 and `tests/test_draft_parity.py` holds the two to one document.
@@ -70,42 +70,32 @@ def test_the_library_is_the_gui_s_six_soils_in_si():
     assert drafts.preset("m6")["variables"]["YOUNG_MODULUS"] == 2.0e9
 
 
-def test_a_new_borehole_copies_its_neighbour_as_the_gui_does():
-    """`App.addBorehole`: 10 m past the last one, at its plan y, its ground and water
-    levels -- and every layer's levels there -- copied from it, so the stack stays whole."""
-    project = seed_project()
-    last = project.boreholes[-1]
-
-    borehole = drafts.borehole(project)
-
-    assert (borehole.x, borehole.y) == (last.x + 10, last.y)
-    assert (borehole.head, borehole.water) == (last.head, last.water)
-    assert borehole.id == "bh4" and borehole.name == "BH-4"
-
-
-def test_a_new_borehole_takes_what_it_is_given():
-    borehole = drafts.borehole(seed_project(), id="north", x=5.0, y=7.0, head=1.0)
-
-    assert (borehole.id, borehole.x, borehole.y, borehole.head) == ("north", 5.0, 7.0, 1.0)
-
-
 def test_a_new_layer_goes_below_the_last_one():
     project = seed_project()
 
     layer = drafts.layer(project, "L3", "m1", thickness=5.0)
 
-    assert layer.tops == project.layers[-1].bots
-    assert layer.bots == {bh: top - 5.0 for bh, top in layer.tops.items()}
+    assert layer.top == project.layers[-1].bottom
+    assert layer.bottom == layer.top - 5.0
     assert layer.name == "L3"
 
 
-def test_the_first_layer_starts_at_the_ground():
+def test_the_first_layer_starts_at_the_top_of_the_domain():
     project = blank_project()
 
     layer = drafts.layer(project, "L1", "m1", bottom=-6.0)
 
-    assert layer.tops == {"bh1": project.boreholes[0].head}
-    assert layer.bots == {"bh1": -6.0}
+    assert (layer.top, layer.bottom) == (project.domain.y_top, -6.0)
+
+
+def test_the_first_layer_of_a_raised_domain_starts_at_its_top():
+    project = blank_project()
+    project = project.model_copy(update={"domain": project.domain.model_copy(
+        update={"y_top": 10.0, "y_bottom": 0.0})})
+
+    layer = drafts.layer(project, "L1", "m1")
+
+    assert (layer.top, layer.bottom) == (10.0, 5.0)
 
 
 def test_a_section_outline_is_swept_across_the_whole_model():
@@ -122,7 +112,7 @@ def test_a_section_outline_is_swept_across_the_whole_model():
 
 
 def test_a_free_id_is_the_first_number_not_taken():
-    assert drafts.free_id(["bh1", "bh2", "bh4"], "bh") == "bh3"
+    assert drafts.free_id(["L1", "L2", "L4"], "L") == "L3"
     assert drafts.free_id([], "L") == "L1"
 
 

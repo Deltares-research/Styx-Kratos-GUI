@@ -195,7 +195,7 @@ def test_every_terminal_command_in_the_table_is_one_kratos_cli_has():
                 wrong.append(spelling)
                 continue
             actions = subcommands(commands[words[0]])
-            # The action follows the project (`borehole P add`) or comes first
+            # The action follows the project (`layer P add`) or comes first
             # (`results field RUN`); a placeholder in capitals is neither.
             asked = [word for word in words[1:3] if not word.isupper()
                      and not word.startswith(("-", "<", "["))]

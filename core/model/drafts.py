@@ -1,8 +1,7 @@
 """What a new record starts as, the way the GUI starts it.
 
-The GUI's dialogs fill in a new borehole, layer, soil, soil volume or structure before
-the user types anything: `App.addBorehole` copies its neighbour, the soil dialog's Add puts a
-5 m layer under the stack, a new soil is a loose drained sand, the material library
+The GUI's dialogs fill in a new layer, soil, soil volume or structure before the user
+types anything: the soil dialog's Add puts a 5 m layer under the stack, a new soil is a loose drained sand, the material library
 offers six presets, a 2D soil volume is an outline swept across the model, and a new
 sheet pile, wall, member, anchor, interface or load is put where the Structure mode's
 tools put one, with the section they give it. The
@@ -21,7 +20,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from core.model import units
-from core.model.schemas import (Anchor, AnchorSection, BeamSection, Beam, Borehole, Interface,
+from core.model.schemas import (Anchor, AnchorSection, BeamSection, Beam, Interface,
                                 InterfaceSection, LineLoad, Material, Member, NormalLoad, Panel,
                                 PanelSection, PointLoad, Project, SoilLayer, SpaceAnchor,
                                 SeepageCondition, SurfaceLoad, WaterPressureCondition)
@@ -45,9 +44,6 @@ SOIL_COLOR = "#9aa7b4"
 
 LAYER_THICKNESS = 5.0
 """How thick the soil dialog's Add makes a new layer, in metres."""
-
-BOREHOLE_SPACING = 10.0
-"""How far past the last borehole `App.addBorehole` puts a new one, in metres."""
 
 LIBRARY: list[dict[str, Any]] = [
     {"id": "m1", "name": "Fill", "color": "#d8c48a", "r_inter": 0.70,
@@ -129,37 +125,16 @@ def soil(project: Project, id: str, *, name: str | None = None, preset: str | No
     return material, notes
 
 
-def borehole(project: Project, *, id: str | None = None, name: str | None = None,
-             x: float | None = None, y: float | None = None, head: float | None = None,
-             water: float | None = None) -> Borehole:
-    """A new borehole, starting from its neighbour as `App.addBorehole` does: 10 m past
-    the last one, at its plan y, with its ground and water levels."""
-    last = project.boreholes[-1] if project.boreholes else None
-    taken = [b.id for b in project.boreholes]
-    return Borehole(
-        id=id if id is not None else free_id(taken, "bh"),
-        name=name if name is not None else f"BH-{len(project.boreholes) + 1}",
-        x=x if x is not None else (last.x + BOREHOLE_SPACING if last else 0.0),
-        y=y if y is not None else (last.y if last else 0.0),
-        head=head if head is not None else (last.head if last else project.domain.y_top),
-        water=water if water is not None else (last.water if last else project.domain.y_top),
-    )
-
-
 def layer(project: Project, id: str, material: str, *, name: str | None = None,
           bottom: float | None = None, thickness: float | None = None) -> SoilLayer:
-    """A new layer under the stack: its top is the last layer's bottom -- the ground, at
-    each borehole, for the first -- and its bottom is `bottom` everywhere, or `thickness`
-    below its top (5 m, as the soil dialog's Add makes it)."""
-    last = project.layers[-1] if project.layers else None
-    tops = {b.id: (last.bots[b.id] if last else b.head) for b in project.boreholes}
-    if bottom is not None:
-        bots = {bh: bottom for bh in tops}
-    else:
-        depth = LAYER_THICKNESS if thickness is None else thickness
-        bots = {bh: top - depth for bh, top in tops.items()}
+    """A new layer under the stack: its top is the last layer's bottom -- the top of the
+    domain for the first -- and its bottom is `bottom`, or `thickness` below its top
+    (5 m, as the soil dialog's Add makes it)."""
+    top = project.layers[-1].bottom if project.layers else project.domain.y_top
+    if bottom is None:
+        bottom = top - (LAYER_THICKNESS if thickness is None else thickness)
     return SoilLayer(id=id, name=name if name is not None else id, mat=material,
-                     tops=tops, bots=bots)
+                     top=top, bottom=bottom)
 
 
 def section_prism(project: Project, points: Sequence[tuple[float, ...]]) -> dict:

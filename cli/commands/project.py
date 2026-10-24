@@ -218,7 +218,6 @@ def summary(project: Project) -> dict:
         "unit_system": project.unit_system,
         "section_offset": project.section_offset if project.dimension == 2 else None,
         "domain": project.domain.model_dump(mode="json"),
-        "boreholes": [b.id for b in project.boreholes],
         "materials": [m.id for m in project.materials],
         "layers": [layer.id for layer in project.layers],
         "bodies": project.soil_body_keys,
@@ -265,7 +264,6 @@ def described(data: dict) -> list[str]:
         f"  domain      x {domain['x0']:g} .. {domain['x1']:g}, "
         f"y {domain['y_bottom']:g} .. {domain['y_top']:g}"
         + (f", z {domain['z0']:g} .. {domain['z1']:g}" if data["dimension"] != 2 else ""),
-        f"  boreholes   {names(data['boreholes'])}",
         f"  materials   {names(data['materials'])}",
         f"  layers      {names(data['layers'])}",
         f"  parts       {names(data['parts'])}",

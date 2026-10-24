@@ -24,10 +24,10 @@ ANSWER = [
     "simple_dike  (C:\\work\\simple_dike.json)",
     "  2D plane strain, SI units, section at z = 5",
     "  domain      x 0 .. 20, y 0 .. 10",
-    "  boreholes   bh1",
+    "  layers      soil",
     "1  initial  Initial stage",
     "     calculation: K0 procedure; deactivates sheetpile_1, load",
-    "bh1  BH1  at x 0, y 0; ground 10, water 0",
+    "soil  soil  of m_soil: 10 .. 0",
     "ok: simple_dike (2D section at z = 5, SI)",
     "Water level: 5.00 m (specific weight 10000). wrote C:\\work\\simple_dike.json",
     "no such file: x.json. `kratos-cli new x.json` makes it",
@@ -99,7 +99,7 @@ def test_the_label_of_an_indented_line_and_the_id_of_a_row_stand_out():
 
     assert style.paint("domain", "cyan", True) in painted[2]
     assert style.paint("calculation:", "cyan", True) in painted[5]
-    assert painted[6].startswith(style.paint("bh1", "cyan", True))
+    assert painted[6].startswith(style.paint("soil", "cyan", True))
 
 
 def test_done_is_green_and_a_command_to_type_is_marked():

@@ -1,6 +1,6 @@
-"""Where a structure is allowed to be: the model, not the borehole box.
+"""Where a structure is allowed to be: the model, not the layer block.
 
-`Domain` is the soil block the boreholes describe. A drawn or imported part is not held
+`Domain` is the block the soil layers fill. A drawn or imported part is not held
 to it -- an embankment sits *above* `y_top`, and `solid_model.SECTION_PAD` already says so in
 as many words: "the wall top and any drawn or imported part can legitimately stick out
 of the declared domain".

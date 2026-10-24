@@ -183,14 +183,12 @@ def replace_layers(project: Project, update: LayersUpdate) -> Project:
     """The soil stack, and whatever of its context the update carries.
 
     The layer objects validate individually in the update; validating the project adds
-    material references, borehole coverage and stack continuity.
+    material references and stack continuity.
     """
     payload = project.model_dump()
     payload["layers"] = [layer.model_dump() for layer in update.layers]
     if update.materials is not None:
         payload["materials"] = [material.model_dump() for material in update.materials]
-    if update.boreholes is not None:
-        payload["boreholes"] = [borehole.model_dump() for borehole in update.boreholes]
     if update.domain is not None:
         payload["domain"] = update.domain.model_dump()
     if update.water is not None:
@@ -527,7 +525,7 @@ def require_parametric(project: Project, what: str) -> None:
 # is picked in brackets by its `id` -- `key` for a custom part -- so the path still names
 # the same record after the list is reordered: `layers[L2].mat`. A list without ids takes
 # an index from 0, `mesh.refinements[0].size`, and a mapping takes its key either way:
-# `layers[L1].tops[bh1]` or `layers[L1].tops.bh1`.
+# `materials[m1].variables[YOUNG_MODULUS]` or `materials[m1].variables.YOUNG_MODULUS`.
 
 DEDICATED = {
     "dimension": ("dimension", "switching it translates the loads, walls and soil laws "
@@ -681,15 +679,15 @@ def _joined(where: str, token: tuple[str, str]) -> str:
     return f"{where}.{name}" if where else name
 
 
-# ── The ground: domain, boreholes, layers, materials, excavation ─────────────
+# ── The ground: domain, layers, materials, excavation ───────────────────────
 #
-# The edits the GUI's soil dialogs make in the browser (frontend/base/js/dialogs.js), so
-# the command line makes them the same way: a borehole brings levels for every layer, a
+# The edits the GUI's soil layers dialog makes in the browser
+# (frontend/js/soil-layers-dialog.js), so the command line makes them the same way: a
 # moved level moves its neighbour's, a deleted layer's neighbour closes the gap, and an
 # edit that would cross a neighbour is refused rather than made.
 
 class UnknownRecord(EditRefused):
-    """An edit names a borehole, layer or material the project does not have."""
+    """An edit names a layer or material the project does not have."""
 
 
 def set_domain(project: Project, *, x: tuple[float, float] | None = None,
@@ -717,45 +715,6 @@ def set_domain(project: Project, *, x: tuple[float, float] | None = None,
     return Project.model_validate(payload), notes
 
 
-def add_borehole(project: Project, **fields) -> Project:
-    """A borehole (`drafts.borehole`), with every layer's levels there copied from the
-    last borehole, so the stack stays whole -- what `App.addBorehole` does."""
-    if fields.get("id") is not None:
-        _refuse_taken(fields["id"], [b.id for b in project.boreholes], "borehole")
-    new = drafts.borehole(project, **fields)
-    payload = project.model_dump()
-    payload["boreholes"].append(new.model_dump())
-    if project.boreholes:
-        last = project.boreholes[-1].id
-        for layer in payload["layers"]:
-            layer["tops"][new.id] = layer["tops"][last]
-            layer["bots"][new.id] = layer["bots"][last]
-    return Project.model_validate(payload)
-
-
-def update_borehole(project: Project, id: str, **fields) -> Project:
-    """The borehole `id` with the fields given (`name`, `x`, `y`, `head`, `water`)."""
-    payload = project.model_dump()
-    record = payload["boreholes"][_index(project.boreholes, id, "borehole")]
-    record.update({name: value for name, value in fields.items() if value is not None})
-    return Project.model_validate(payload)
-
-
-def remove_borehole(project: Project, id: str) -> Project:
-    """The project without borehole `id` and its levels in every layer. The last one
-    stays: the layered build reads its levels."""
-    at = _index(project.boreholes, id, "borehole")
-    if len(project.boreholes) == 1:
-        raise EditRefused(f"{id} is the only borehole, and a model keeps at least one "
-                          "borehole: the soil stack is read off it.")
-    payload = project.model_dump()
-    del payload["boreholes"][at]
-    for layer in payload["layers"]:
-        layer["tops"].pop(id, None)
-        layer["bots"].pop(id, None)
-    return Project.model_validate(payload)
-
-
 def add_layer(project: Project, id: str, material: str, *, name: str | None = None,
               bottom: float | None = None, thickness: float | None = None) -> Project:
     """A layer under the stack (`drafts.layer`): from the last layer's bottom -- the
@@ -769,18 +728,14 @@ def add_layer(project: Project, id: str, material: str, *, name: str | None = No
 
 def update_layer(project: Project, id: str, *, material: str | None = None,
                  name: str | None = None, top: float | None = None,
-                 bottom: float | None = None, at: str | None = None) -> Project:
+                 bottom: float | None = None) -> Project:
     """The layer `id` with a new material, name, top or bottom.
 
-    A level is moved at the borehole `at`, or at every borehole, and it moves the
-    neighbour's with it: a top is the bottom of the layer above, a bottom the top of the
-    layer below. A level that would cross a neighbour's other face is refused, as the
-    soil dialog refuses it.
+    A moved level moves the neighbour's with it: a top is the bottom of the layer above,
+    a bottom the top of the layer below. A level that would cross a neighbour's other
+    face is refused, as the soil layers dialog refuses it.
     """
     index = _index(project.layers, id, "layer")
-    boreholes = [b.id for b in project.boreholes]
-    if at is not None and at not in boreholes:
-        raise UnknownRecord(f"there is no borehole {at!r}; there are: {', '.join(boreholes)}")
     payload = project.model_dump()
     layers = payload["layers"]
     layer = layers[index]
@@ -788,59 +743,57 @@ def update_layer(project: Project, id: str, *, material: str | None = None,
         layer["mat"] = material
     if name is not None:
         layer["name"] = name
-    for bh in ([at] if at else boreholes):
-        if top is not None:
-            if top < layer["bots"][bh]:
-                raise EditRefused(f"{id}: the top must be at or above its bottom "
-                                  f"({layer['bots'][bh]:g} at {bh}).")
-            if index > 0 and top > layers[index - 1]["tops"][bh]:
-                raise EditRefused(f"{id}: the top cannot rise above the top of the layer "
-                                  f"above ({layers[index - 1]['tops'][bh]:g} at {bh}).")
-            layer["tops"][bh] = top
-            if index > 0:
-                layers[index - 1]["bots"][bh] = top
-        if bottom is not None:
-            if bottom > layer["tops"][bh]:
-                raise EditRefused(f"{id}: the bottom must be at or below its top "
-                                  f"({layer['tops'][bh]:g} at {bh}).")
-            if index < len(layers) - 1 and bottom < layers[index + 1]["bots"][bh]:
-                raise EditRefused(f"{id}: the bottom cannot drop below the bottom of the "
-                                  f"layer below ({layers[index + 1]['bots'][bh]:g} at {bh}).")
-            layer["bots"][bh] = bottom
-            if index < len(layers) - 1:
-                layers[index + 1]["tops"][bh] = bottom
+    if top is not None:
+        if top < layer["bottom"]:
+            raise EditRefused(f"{id}: the top must be at or above its bottom "
+                              f"({layer['bottom']:g}).")
+        if index > 0 and top > layers[index - 1]["top"]:
+            raise EditRefused(f"{id}: the top cannot rise above the top of the layer "
+                              f"above ({layers[index - 1]['top']:g}).")
+        layer["top"] = top
+        if index > 0:
+            layers[index - 1]["bottom"] = top
+    if bottom is not None:
+        if bottom > layer["top"]:
+            raise EditRefused(f"{id}: the bottom must be at or below its top "
+                              f"({layer['top']:g}).")
+        if index < len(layers) - 1 and bottom < layers[index + 1]["bottom"]:
+            raise EditRefused(f"{id}: the bottom cannot drop below the bottom of the "
+                              f"layer below ({layers[index + 1]['bottom']:g}).")
+        layer["bottom"] = bottom
+        if index < len(layers) - 1:
+            layers[index + 1]["top"] = bottom
     return Project.model_validate(payload)
 
 
 def split_layer(project: Project, id: str, new_id: str | None = None) -> Project:
-    """The soil dialog's Insert: the layer `id` halved at every borehole, the lower half
-    a new layer of the same material."""
+    """The soil layers dialog's Insert: the layer `id` halved, the lower half a new layer
+    of the same material."""
     index = _index(project.layers, id, "layer")
     taken = [layer.id for layer in project.layers]
     new_id = new_id if new_id is not None else drafts.free_id(taken, "L")
     _refuse_taken(new_id, taken, "layer")
     payload = project.model_dump()
     upper = payload["layers"][index]
-    lower = {"id": new_id, "name": new_id, "mat": upper["mat"], "tops": {}, "bots": {}}
-    for bh in upper["tops"]:
-        middle = (upper["tops"][bh] + upper["bots"][bh]) / 2
-        lower["tops"][bh], lower["bots"][bh] = middle, upper["bots"][bh]
-        upper["bots"][bh] = middle
+    middle = (upper["top"] + upper["bottom"]) / 2
+    lower = {"id": new_id, "name": new_id, "mat": upper["mat"], "top": middle,
+             "bottom": upper["bottom"]}
+    upper["bottom"] = middle
     payload["layers"].insert(index + 1, lower)
     return Project.model_validate(payload)
 
 
 def remove_layer(project: Project, id: str) -> Project:
     """The project without layer `id`, the gap closed by the layer above -- or, for the
-    top layer, by the one below -- as the soil dialog's Delete closes it."""
+    top layer, by the one below -- as the soil layers dialog's Delete closes it."""
     index = _index(project.layers, id, "layer")
     payload = project.model_dump()
     layers = payload["layers"]
     removed = layers.pop(index)
     if index > 0:
-        layers[index - 1]["bots"] = removed["bots"]
+        layers[index - 1]["bottom"] = removed["bottom"]
     elif layers:
-        layers[0]["tops"] = removed["tops"]
+        layers[0]["top"] = removed["top"]
     return Project.model_validate(payload)
 
 
