@@ -93,6 +93,9 @@ properties.
 ### Soil layers
 
 A soil layer is a horizontal band across the whole domain, with one top and one bottom.
+The top of the first layer is the ground level. To use NAP levels, type the ground level
+as the top of the first layer, for example 1.7. The bottom of the last layer is the
+bottom of the model.
 
 1. Click **Modify soil layers…**. The window shows the layer table on the right and a column
    of the layers on the left. The column also shows the water level as a dashed blue line.

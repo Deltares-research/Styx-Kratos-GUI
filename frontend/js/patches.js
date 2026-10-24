@@ -764,7 +764,8 @@ App.LivePatches = (function () {
     if (!App.WaterCommand) return false;
     var answer = App.WaterCommand.command(text, {
       water: App.PROJECT ? App.PROJECT.water : null,
-      domain: App.PROJECT ? App.PROJECT.domain : null,
+      // How far the model reaches, drawn soil above the layers included.
+      domain: App.PROJECT ? App.Model.extentOf(App.PROJECT) : null,
       conditions: App.PROJECT ? App.PROJECT.boundary_conditions : null
     });
     if (answer === false) return false;

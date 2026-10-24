@@ -23,7 +23,7 @@ App.SoilLayersDialog = (function () {
 
   var HINT = 'Type a name, a material, a level or a thickness: the column follows. ' +
              'A moved top or bottom moves the level of the next layer with it, so the ' +
-             'stack has no gaps.';
+             'stack has no gaps. The top of the first layer is the ground level.';
 
   function copy(value) { return JSON.parse(JSON.stringify(value)); }
 

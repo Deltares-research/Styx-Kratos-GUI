@@ -68,7 +68,7 @@ Genuchten soil.
 | `dimension P 2d\|3d [--offset Z]` | Switch between the plane-strain section and the solid model |
 | `units P [SI\|kN]` | Show the unit system, or convert the whole project to another |
 | `water P [LEVEL\|off]` | Show, set or remove the water level. It fixes no pressure by itself: a new hydrostatic condition or normal load takes it as its level |
-| `domain P [--x FROM TO] [--y BOTTOM TOP] [--z FROM TO]` | Show or set the model's extents |
+| `domain P [--x FROM TO] [--y BOTTOM TOP] [--z FROM TO]` | Show or set the model's extents. `--y` is the bottom and the ground level; with layers, it moves the top of the first layer and the bottom of the last |
 | `material P list\|presets\|add\|set\|remove ...` | Soils as Kratos property sets: `add ID [--preset m3] [NAME=VALUE ...]`, `set ID NAME=VALUE ... [--unset NAME]` |
 | `layer P list\|add\|set\|split\|remove ...` | The soil stack: `add ID --material M [--bottom Y \| --thickness T]`, `set ID [--top Y] [--bottom Y]` |
 | `excavation P [--x FROM TO] [--z FROM TO] [--levels Y ...]` | The pit, and the levels it is dug to, one lift each |
@@ -132,7 +132,10 @@ kratos-cli parts pit.json                                 # soil_top__lift1, ...
 ```
 
 - **Layers** are stacked from the top. Each layer has one top and one bottom, and spans
-  the whole domain. The first layer starts at the top of the domain. `add` puts a layer
+  the whole domain. The first layer starts at the top of the domain. The domain's height
+  is the stack's: the top of the first layer is the ground level, for example NAP +1.7
+  m, and the bottom of the last layer is the bottom of the model. Move one, and the other
+  moves with it. `add` puts a layer
   under the last one, down to `--bottom` or `--thickness` below it (5 m by default).
   `set --top` or `--bottom` moves a level and the neighbour's with it, and refuses a
   level that would cross the neighbour. `split` halves a layer, and `remove` closes the

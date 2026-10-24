@@ -25,7 +25,9 @@ def register(commands, common: argparse.ArgumentParser) -> None:
                                  help="show or set the model's extents")
     add_project(domain)
     domain.add_argument("--x", type=float, nargs=2, metavar=("FROM", "TO"))
-    domain.add_argument("--y", type=float, nargs=2, metavar=("BOTTOM", "TOP"))
+    domain.add_argument("--y", type=float, nargs=2, metavar=("BOTTOM", "TOP"),
+                        help="the ground level and the bottom; with layers, the top of "
+                             "the first layer and the bottom of the last move with them")
     domain.add_argument("--z", type=float, nargs=2, metavar=("FROM", "TO"),
                         help="out of plane; a 2D model is the section at one z")
     add_writing(domain)

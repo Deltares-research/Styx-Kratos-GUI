@@ -623,6 +623,81 @@ def test_a_removed_top_layer_is_closed_by_the_one_below():
     assert project.layers[0].top == seed_project().layers[0].top
 
 
+# The domain's height is the layer stack's: the top of the first layer is the ground
+# level, NAP +1.7 m or 0 m as the user has it, and the domain follows it.
+
+def heights(project: Project) -> tuple:
+    d = project.domain
+    return (d.y_top, d.y_bottom), (project.layers[0].top, project.layers[-1].bottom)
+
+
+def test_a_ground_level_moved_moves_the_top_of_the_domain():
+    project = session.update_layer(seed_project(), "L1", top=1.7)
+
+    assert heights(project) == ((1.7, -25.0), (1.7, -25.0))
+
+
+def test_a_layer_added_below_the_stack_deepens_the_domain():
+    project = session.add_layer(seed_project(), "L3", "m1", bottom=-30.0)
+
+    assert heights(project) == ((0.0, -30.0), (0.0, -30.0))
+
+
+def test_the_domain_s_height_moves_the_first_and_the_last_layer():
+    project, _ = session.set_domain(seed_project(), y=(-40.0, 1.7))
+
+    assert heights(project) == ((1.7, -40.0), (1.7, -40.0))
+    assert project.layers[0].bottom == seed_project().layers[0].bottom
+
+
+def test_a_domain_height_that_crosses_a_layer_is_refused():
+    with pytest.raises(session.EditRefused, match="below the bottom of the first layer"):
+        session.set_domain(seed_project(), y=(-25.0, -9.0))
+    with pytest.raises(session.EditRefused, match="above the top of the last layer"):
+        session.set_domain(seed_project(), y=(-7.0, 0.0))
+
+
+def test_the_height_is_one_edit_by_path_too():
+    assert heights(session.with_value(seed_project(), "layers[L1].top", 2.0)) == (
+        (2.0, -25.0), (2.0, -25.0))
+    assert heights(session.with_value(seed_project(), "domain.y_bottom", -31.0)) == (
+        (0.0, -31.0), (0.0, -31.0))
+
+
+def test_the_gui_s_layers_set_the_domain_s_height_whatever_domain_comes_with_them():
+    """The Selection explorer sends the domain it holds with every layer edit."""
+    project = seed_project()
+    raised = [project.layers[0].model_copy(update={"top": 1.7}), *project.layers[1:]]
+
+    edited = session.replace_layers(project, LayersUpdate(layers=raised,
+                                                          domain=project.domain))
+
+    assert heights(edited) == ((1.7, -25.0), (1.7, -25.0))
+
+
+def test_a_stack_with_no_height_is_refused():
+    with pytest.raises(session.EditRefused, match="no height"):
+        session.update_layer(session.remove_layer(seed_project(), "L2"), "L1", bottom=0.0)
+
+
+def test_a_model_with_no_layers_keeps_the_height_its_domain_was_given():
+    project, _ = session.set_domain(blank_project(), y=(-30.0, 1.7))
+
+    assert (project.domain.y_bottom, project.domain.y_top) == (-30.0, 1.7)
+
+
+def test_a_water_level_may_stand_in_drawn_soil_above_the_layers():
+    """The domain is the layers' height, so a dike drawn on them reaches above it; the
+    water bounds are the model's reach (`Project.extent`), not the domain."""
+    project, _ = session.with_created_part(seed_project(), box(),
+                                           {"brep_path": "dike.brep",
+                                            "bbox": [0, 0, 0, 10, 3, 10]})
+
+    assert session.set_water_level(project, 2.0).water.y == 2.0
+    with pytest.raises(session.EditRefused, match="between -25.00 and 3.00"):
+        session.set_water_level(project, 4.0)
+
+
 def test_a_material_is_added_and_its_id_must_be_free():
     from core.model import drafts
 

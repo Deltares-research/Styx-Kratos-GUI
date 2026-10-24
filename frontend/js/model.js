@@ -835,7 +835,8 @@ App.Model = (function () {
      a different project altogether.
 
      Bounds mirror the server's rather than inventing any: `gt=0` on the weight, and
-     the domain on the level. See plan sec 7.2. */
+     the model's reach on the level (`extentOf`, the server's `Project.extent`): the
+     layers and any drawn soil above them. See plan sec 7.2. */
 
   function waterLevelEditor() {
     return {
@@ -845,9 +846,10 @@ App.Model = (function () {
         if (!Number.isFinite(value)) return 'The water level must be a number.';
         // A phreatic level outside the model describes nothing: above it every
         // element is submerged whatever the number, below it none is.
-        if (value <= domain.y_bottom || value >= domain.y_top) {
-          return 'The water level must lie between ' + fixed(domain.y_bottom) +
-                 ' and ' + fixed(domain.y_top) + ' m.';
+        var reach = extentOf(App.PROJECT);
+        if (value <= reach.y_bottom || value >= reach.y_top) {
+          return 'The water level must lie between ' + fixed(reach.y_bottom) +
+                 ' and ' + fixed(reach.y_top) + ' m.';
         }
         water.y = value;
         return null;
@@ -891,7 +893,7 @@ App.Model = (function () {
           ['Level', fixed(water.y), 'm', false, waterLevelEditor()],
           // Said here because it is the question the panel invites next, and the
           // answer is not obvious from a level alone.
-          ['Depth below ground', fixed(domain.y_top - water.y), 'm', true]
+          ['Depth below ground', fixed(extentOf(App.PROJECT).y_top - water.y), 'm', true]
         ],
         'Conditions': [
           ['Distribution', 'Hydrostatic', '', true],

@@ -195,6 +195,7 @@ def replace_layers(project: Project, update: LayersUpdate) -> Project:
         payload["water"] = update.water.model_dump()
     if update.custom_parts is not None:
         payload["custom_parts"] = [part.model_dump() for part in update.custom_parts]
+    _domain_from_layers(payload)
     return Project.model_validate(payload)
 
 
@@ -211,15 +212,16 @@ def set_water_level(project: Project, level: float | None) -> Project:
 
     Everything else about an existing level -- its specific weight above all -- is the
     user's and is kept; a new level takes the schema's defaults. A level outside the
-    model describes nothing, so it is refused within the domain's own bounds, as the
-    GUI's `water` command does (frontend/js/water-command.js).
+    model describes nothing, so it is refused outside the model's reach -- the layers
+    and any drawn soil above them (`Project.extent`) -- as the GUI's `water` command
+    refuses it (frontend/js/water-command.js).
     """
     if level is None:
         return set_water(project, WaterUpdate(water=None))
-    domain = project.domain
-    if not domain.y_bottom < level < domain.y_top:
-        raise EditRefused(f"The water level must lie between {domain.y_bottom:.2f} and "
-                          f"{domain.y_top:.2f} m.")
+    reach = project.extent()
+    if not reach.y_bottom < level < reach.y_top:
+        raise EditRefused(f"The water level must lie between {reach.y_bottom:.2f} and "
+                          f"{reach.y_top:.2f} m.")
     water = (project.water.model_copy(update={"y": level}) if project.water is not None
              else WaterLevel(y=level))
     return set_water(project, WaterUpdate(water=water))
@@ -590,9 +592,14 @@ def without_value(project: Project, path: str) -> Project:
 
 def _validated_edit(project: Project, payload: dict, tokens: list[tuple[str, str]]) -> Project:
     """The edited payload as a project. An edit inside the stages is one of the stages,
-    so it has to linearise as well, and a deck's are not edited at all."""
+    so it has to linearise as well, and a deck's are not edited at all. The height of the
+    domain and of the layer stack is one edit, whichever of the two the path names."""
     if tokens[0][1] == "stages":
         return replace_stages(project, StagesUpdate(stages=payload["stages"]))
+    if tokens[0][1] == "layers":
+        _domain_from_layers(payload)
+    elif tokens[0][1] == "domain":
+        _layers_from_domain(payload)
     return Project.model_validate(payload)
 
 
@@ -685,23 +692,58 @@ def _joined(where: str, token: tuple[str, str]) -> str:
 # (frontend/js/soil-layers-dialog.js), so the command line makes them the same way: a
 # moved level moves its neighbour's, a deleted layer's neighbour closes the gap, and an
 # edit that would cross a neighbour is refused rather than made.
+#
+# The domain's height is the layer stack's: its top is the top of the first layer (the
+# ground level, NAP +1.7 m or 0 m as the user has it) and its bottom the bottom of the
+# last. A layer edit moves the domain, and `domain --y` moves the stack. A project with
+# no layers keeps the height its domain was given.
 
 class UnknownRecord(EditRefused):
     """An edit names a layer or material the project does not have."""
+
+
+def _domain_from_layers(payload: dict) -> None:
+    """The domain's top and bottom, set to the layer stack's in `payload`."""
+    layers = payload["layers"]
+    if not layers:
+        return
+    top, bottom = layers[0]["top"], layers[-1]["bottom"]
+    if not top > bottom:
+        raise EditRefused(f"The layers have no height: the top of the first layer ({top:g}) "
+                          f"must be above the bottom of the last ({bottom:g}).")
+    payload["domain"]["y_top"], payload["domain"]["y_bottom"] = top, bottom
+
+
+def _layers_from_domain(payload: dict) -> None:
+    """The top of the first layer and the bottom of the last, moved to the domain's
+    top and bottom in `payload`; refused when one would cross the layer's other face."""
+    layers, domain = payload["layers"], payload["domain"]
+    if not layers:
+        return
+    first, last = layers[0], layers[-1]
+    if domain["y_top"] < first["bottom"]:
+        raise EditRefused(f"The top {domain['y_top']:g} is below the bottom of the first "
+                          f"layer, {first['id']} ({first['bottom']:g}).")
+    if domain["y_bottom"] > last["top"]:
+        raise EditRefused(f"The bottom {domain['y_bottom']:g} is above the top of the last "
+                          f"layer, {last['id']} ({last['top']:g}).")
+    first["top"], last["bottom"] = domain["y_top"], domain["y_bottom"]
 
 
 def set_domain(project: Project, *, x: tuple[float, float] | None = None,
                y: tuple[float, float] | None = None,
                z: tuple[float, float] | None = None) -> tuple[Project, list[str]]:
     """The model's extents, on the axes given: `x` and `z` as (from, to), `y` as
-    (bottom, top). A section cut outside the new extents is moved to their middle, and
-    the notes say so."""
+    (bottom, top). A new `y` moves the top of the first layer and the bottom of the last
+    with it. A section cut outside the new extents is moved to their middle, and the
+    notes say so."""
     payload = project.model_dump()
     domain = payload["domain"]
     if x is not None:
         domain["x0"], domain["x1"] = x
     if y is not None:
         domain["y_bottom"], domain["y_top"] = y
+        _layers_from_domain(payload)
     if z is not None:
         domain["z0"], domain["z1"] = z
     notes: list[str] = []
@@ -723,6 +765,7 @@ def add_layer(project: Project, id: str, material: str, *, name: str | None = No
     new = drafts.layer(project, id, material, name=name, bottom=bottom, thickness=thickness)
     payload = project.model_dump()
     payload["layers"].append(new.model_dump())
+    _domain_from_layers(payload)
     return Project.model_validate(payload)
 
 
@@ -763,6 +806,7 @@ def update_layer(project: Project, id: str, *, material: str | None = None,
         layer["bottom"] = bottom
         if index < len(layers) - 1:
             layers[index + 1]["top"] = bottom
+    _domain_from_layers(payload)
     return Project.model_validate(payload)
 
 
@@ -794,6 +838,7 @@ def remove_layer(project: Project, id: str) -> Project:
         layers[index - 1]["bottom"] = removed["bottom"]
     elif layers:
         layers[0]["top"] = removed["top"]
+    _domain_from_layers(payload)
     return Project.model_validate(payload)
 
 
