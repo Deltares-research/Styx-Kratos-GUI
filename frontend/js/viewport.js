@@ -739,9 +739,10 @@ App.Viewport = (function () {
   }
 
   /* The keys of the conditions, supports and water pressures apart. Both are in every
-     mode but Results, and hidden until the user shows them: by its eye in the Model
-     explorer (off in a new view, `shownByDefault`), or by selecting it
-     (`revealConditions`). */
+     mode but Results, and hidden until the user shows them: by Show in the Model
+     explorer's menu (off in a new view, `shownByDefault`), or by selecting it
+     (`revealConditions`). Their check box there is "active", not the eye
+     (addConditionChecks in frontend/js/patches.js). */
   function conditionKeysOf(project) {
     var supports = [], water = [];
     ((project && project.boundary_conditions) || []).forEach(function (record) {
@@ -874,8 +875,8 @@ App.Viewport = (function () {
   function computeModeGroups(soilKeys, customKeys, layeredSoil, loadKeys, memberKeys,
                              normalLoadKeys, conditionKeys) {
     customKeys = customKeys || [];
-    // The boundary conditions' symbols: in every mode, each one hidden until its eye
-    // is turned on.
+    // The boundary conditions' symbols: in every mode, each one hidden until it is
+    // shown (the explorer's Show) or selected.
     var conditions = ((conditionKeys && conditionKeys.supports) || [])
       .concat((conditionKeys && conditionKeys.water) || []);
     loadKeys = loadKeys || [];
@@ -1706,7 +1707,7 @@ App.Viewport = (function () {
 
   /* Every part is drawn until its eye is turned off, but a boundary condition is not:
      a model opens on its soil, and the supports and water levels of each face would
-     cover its edges. The user turns them on one by one, as a part's colour is. */
+     cover its edges. The user shows them one by one, from the Model explorer's menu. */
   function shownByDefault(key) {
     return !(App.BoundaryConditions && App.BoundaryConditions.isConditionKey(key));
   }

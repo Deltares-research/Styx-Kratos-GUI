@@ -550,6 +550,54 @@ App.LivePatches = (function () {
     else row.insertBefore(check, row.firstChild);
   }
 
+  /* ── The Model explorer's check box on a boundary condition ──────────────
+     A condition row's check box says whether the condition is active (exported), as
+     the Selection explorer's "Active" row and `kratos-cli boundary set --active` do,
+     and a click switches it. It is not the eye: a condition is not drawn until the
+     user selects its row or picks Show on it, so a box meaning "drawn" would be empty
+     on every condition the model uses. The group row switches every condition under
+     it and shows a dash while they differ. In Staged construction a water pressure
+     row keeps its stage check (addStageChecks), which says more: in the model in the
+     selected stage. */
+  function addConditionChecks(mode) {
+    var host = document.getElementById('tree-model');
+    if (!host || !App.BoundaryConditions) return;
+    var rows = host.querySelectorAll('.tree-row');
+    var i = 0;
+    (function walk(nodes) {
+      (nodes || []).forEach(function (node) {
+        var row = rows[i++];
+        var ids = conditionIdsUnder(node);
+        if (row && ids.length && !row.querySelector('.stage-check')) {
+          addConditionCheck(row, ids);
+        }
+        walk(node.children || []);
+      });
+    })((App.TREES && App.TREES[mode]) || []);
+  }
+
+  function conditionIdsUnder(node) {
+    var isCondition = App.BoundaryConditions.isConditionKey;
+    if (isCondition(node.obj)) return [node.obj];
+    if (node.obj !== 'group:conditions') return [];
+    return (node.children || []).map(function (child) { return child.obj; })
+      .filter(isCondition);
+  }
+
+  function addConditionCheck(row, ids) {
+    var state = App.BoundaryConditions.activeState(ids);
+    var check = document.createElement('span');
+    check.className = 'tree-eye condition-check' + (state === 'on' ? '' : ' ' + state);
+    check.title = 'Active: exported to Kratos';
+    check.addEventListener('click', function (event) {
+      event.stopPropagation();
+      App.BoundaryConditions.setActive(ids, state !== 'on').catch(function () {});
+    });
+    var eye = row.querySelector('.tree-eye');
+    if (eye) row.replaceChild(check, eye);
+    else row.insertBefore(check, row.firstChild);
+  }
+
   /* After the stage or the sequence changed. The tree is mounted again only when the
      checkboxes have to appear (the first stages were just created) or go (the last
      stage was deleted, so the eyes come back); otherwise they are repainted in place.
@@ -3281,6 +3329,14 @@ App.LivePatches = (function () {
         tagTreeRowsWithObjKeys(mode);
         addPartColorToggles(mode);
         addStageChecks(mode);
+        addConditionChecks(mode);
+      };
+      // The frozen Expand all and Collapse all mount the tree through their own closure,
+      // which skips everything added above; mounted again here, they keep it.
+      var frozenExpandAll = App.Explorer.expandAll;
+      App.Explorer.expandAll = function (on) {
+        frozenExpandAll(on);
+        App.Explorer.mountTree(App.state.mode);
       };
     }
     if (typeof document !== 'undefined') {

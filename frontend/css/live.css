@@ -394,8 +394,11 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
 
 /* The Model explorer's checkbox in Staged construction mode means "in the model in the
    selected stage" (addStageChecks in frontend/js/patches.js). A group whose parts differ
-   shows a dash; a state this stage inherited rather than set itself is ticked in grey. */
-.tree-eye.stage-check.mixed::after {
+   shows a dash; a state this stage inherited rather than set itself is ticked in grey.
+   A boundary condition's checkbox means "active" in every mode (addConditionChecks), with
+   the same dash on a group whose conditions differ. */
+.tree-eye.stage-check.mixed::after,
+.tree-eye.condition-check.mixed::after {
   opacity: 1; width: 7px; height: 0; transform: none;
   border: 0; border-bottom: 1.6px solid var(--brand-primary);
 }

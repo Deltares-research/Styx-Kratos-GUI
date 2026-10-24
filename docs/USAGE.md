@@ -222,9 +222,15 @@ each stage that has it on, or, with **Initial**, only gives the start values. To
 water from one stage to the next, see
 [Switch water conditions on and off](#switch-water-conditions-on-and-off).
 
-The viewport does not show the conditions when a model opens. To show a condition, turn on
-its eye in the Model explorer, or select it there; the eye of **Boundary conditions** shows
-all of them. A condition that you only selected goes away when you select something else.
+In the Model explorer, the check box of a condition shows if the condition is active. Clear
+it to keep the condition in the project but leave it out of the calculation. The check box
+of **Boundary conditions** switches all of them. In Staged construction mode, the check box
+of a water pressure condition is for the selected stage.
+
+The viewport does not show the conditions when a model opens. To show a condition, select it
+in the Model explorer, or right-click it and select **Show**. **Show** on **Boundary
+conditions** shows all of them. A condition that you only selected goes away when you select
+something else.
 In 2D, a support that holds x and y has the clamp symbol (a stem on hatched ground), and a
 support that holds one of them has a triangle on rollers. A 2D model does not list its
 front and back supports: the section holds z without them. They stay in the project for the

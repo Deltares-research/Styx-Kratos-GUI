@@ -285,6 +285,37 @@
     return BC().setGravity(false).then(function () { T.eq(sent, { gravity: false }); });
   });
 
+  test('the explorer check box shows whether the conditions are active', function () {
+    var project = section([support('fixed_bottom', 'bottom', [true, true, true]),
+                           support('roller_left', 'left', [true, false, false],
+                                   { active: false })]);
+    T.eq(BC().activeState(['fixed_bottom'], project), 'on');
+    T.eq(BC().activeState(['roller_left'], project), 'off');
+    T.eq(BC().activeState(['fixed_bottom', 'roller_left'], project), 'mixed');
+  });
+
+  test('the explorer check box switches the conditions in one conditions patch', function () {
+    var sent = null, said = null;
+    App.PROJECT = section();
+    App.Api = { patch: function (path, body) {
+      sent = body;
+      return Promise.resolve({ project: section() });
+    } };
+    App.Model = { apply: function () {}, load: function () { return Promise.resolve(); } };
+    App.Viewport = { refresh: function () { return Promise.resolve(); } };
+    App.Command = { ok: function (text) { said = text; }, err: function () {},
+                    note: function () {} };
+    App.Explorer = null;
+    return BC().setActive(['roller_left', 'roller_right'], false).then(function () {
+      var active = {};
+      sent.boundary_conditions.forEach(function (record) { active[record.id] = record.active; });
+      T.eq(active, { fixed_bottom: true, roller_left: false, roller_right: false,
+                     roller_front: true, roller_back: true });
+      T.eq(said, 'Boundary conditions roller_left, roller_right are inactive: kept in the '
+                 + 'project, but not exported.');
+    });
+  });
+
   /* ── The explorer and the viewport ────────────────────────────────── */
 
   test('the explorer lists the conditions and gravity under Model conditions', function () {
@@ -399,7 +430,7 @@
     });
   });
 
-  test('a condition is hidden until its eye is turned on', function () {
+  test('a condition is hidden until it is shown', function () {
     App.PROJECT = section(standard().concat([pressure('pore', 'domain')]));
     T.eq(App.Viewport.isVisible('roller_left'), false);
     T.eq(App.Viewport.isVisible('pore'), false);
