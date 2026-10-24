@@ -204,7 +204,7 @@ def material_parameters(
         if took:
             against = f" against {adjacent.name!r}" if adjacent else ""
             interface_notes.setdefault(
-                (f"interface {contact.name!r}{against}", took), []).append(part_name)
+                (f"interface section {contact.name!r}{against}", took), []).append(part_name)
     if elastic:
         warnings.append(
             "The K0 stage runs elastic: "
@@ -253,6 +253,8 @@ def _interface_note(section: InterfaceSection, project: Project, soil: Material 
             else:
                 shown.append(f"friction angle {variables[name]:.3g} deg, tan reduced by "
                              f"{r_inter:g} from {soil.number(name):g} deg")
+        if section.constitutive_law == INTERFACE_LAW:
+            shown.append("read only by a Coulomb law")
         parts.append(", ".join(shown))
     return "; ".join(parts) or None
 

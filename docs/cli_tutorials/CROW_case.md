@@ -373,13 +373,13 @@ wrote the Kratos deck CROW_excavation_wall to deck:
   kratos_gui_units.json
 4299 nodes, 2087 elements (2087 Triangle 6)
 next: kratos-cli run deck
-note: interface 'Wall contact' against 'Upper ground' (Interface_Soil_Top, ...): normal stiffness 3.75e+06 and shear stiffness 3.75e+05 N/m³, 10 G / t and G / t (E = 9e+05 Pa, nu = 0.2, t = 1 m); cohesion 700 Pa = 0.7 x 1000, ...
-note: interface 'Wall contact' against 'Deep sand' (Interface_Soil_Bottom, Interface_Soil_Bottom_pit): ...
+note: interface section 'Wall contact' against 'Upper ground' (Interface_Soil_Top, ...): normal stiffness 3.75e+06 and shear stiffness 3.75e+05 N/m³, 10 G / t and G / t (E = 9e+05 Pa, nu = 0.2, t = 1 m); cohesion 700 Pa = 0.7 x 1000, ...
+note: interface section 'Wall contact' against 'Deep sand' (Interface_Soil_Bottom, Interface_Soil_Bottom_pit): ...
 ```
 
 The notes say what the exporter took from the soil beside the interface, which is what this
 model asks for: one line per soil, with the parts of the interface against it and the
-numbers. Nothing needs to be done about them. The files are named after the project;
+numbers. Nothing needs to be done about them. The cohesion and friction angle are read only by a Coulomb law; this interface uses the default elastic law, which reads the two stiffnesses. The files are named after the project;
 `--name mesh` would write `mesh.mdpa` instead.
 
 #### Step 13. Look into the deck (optional)
@@ -750,7 +750,7 @@ Way 1 writes into the working folder you chose; ways 2 and 3 into the project fo
 | `error: ...`, and nothing changed | The command was refused as a whole, and the project was not written. The message names the field. |
 | `no stage matches 'dig_3'` | `--stage` takes the stage's number or words of its name, not the phase id. |
 | `error: no project is open` | Start with `new FILE` or `open FILE`, or name the project on the line. |
-| `note: interface 'Wall contact' against ...` | What the interface took from the soil: see step 12. |
+| `note: interface section 'Wall contact' against ...` | What the interface took from the soil: see step 12. |
 | `'/c/Users/...' is not a run` | A Git Bash path given to a Windows program. Use `C:/Users/...`, or the run's number. |
 | `nothing to undo` | `undo` steps back only through commands of this shell session that changed the project. |
 | *The term '\kratos-cli.bat' is not recognized* | `$cli` is empty: type the command in the PowerShell from [Before ways 2 and 3](#before-ways-2-and-3). |

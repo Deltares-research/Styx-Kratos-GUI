@@ -315,8 +315,8 @@ def test_what_an_interface_takes_from_its_soil_is_a_note_with_the_numbers():
     assert not [w for w in exported["warnings"] if w.startswith("Derived where")]
     notes = exported["notes"]
     assert [note.partition(" (")[0] for note in notes] == [
-        "interface 'Wall contact' against 'Soft clay'",
-        "interface 'Wall contact' against 'Dense sand'"]
+        "interface section 'Wall contact' against 'Soft clay'",
+        "interface section 'Wall contact' against 'Dense sand'"]
     clay = project.material("m_upper").variables
     shear = clay["YOUNG_MODULUS"] / (2 * (1 + clay["POISSON_RATIO"])
                                      * project.interface_sections[0].virtual_thickness)
