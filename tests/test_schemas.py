@@ -266,7 +266,7 @@ def test_a_staged_excavation_splits_the_soil_inside_the_pit_into_lifts():
         "soil_L1": (-8.0, 0.0),
         "soil_L2": (-12.0, -8.0),
         "soil_L3": (-60.0, -12.0),
-        # Inside it, layer 1 is dug away one lift per phase ...
+        # Inside it, layer 1 is dug away one lift per stage ...
         "soil_L1__lift1": (-2.0, 0.0),
         "soil_L1__lift2": (-5.0, -2.0),
         "soil_L1__lift3": (-8.0, -5.0),
@@ -1379,100 +1379,100 @@ def test_an_unstaged_layer_is_labelled_with_nothing_but_its_name():
     assert p.soil_body_labels == {f"soil_{l.id}": l.name for l in p.layers}
 
 
-# ── Phases ──────────────────────────────────────────────────────────────────
+# ── Stages ──────────────────────────────────────────────────────────────────
 #
-# A construction phase, in the sense the GUI already draws (js/data.js:559) and
+# A construction stage, in the sense the GUI already draws (js/data.js:559) and
 # the sense the reference deck's seven stages have. See
-# plan/outdated/staged-construction-plan.md sec B1 for why a phase stores a *diff* against its
+# plan/outdated/staged-construction-plan.md sec B1 for why a stage stores a *diff* against its
 # parent rather than an absolute state.
 
-def _phased(*phases) -> schemas.Project:
-    return schemas.Project.model_validate(_layered_pit().model_dump() | {"phases": list(phases)})
+def _staged(*stages) -> schemas.Project:
+    return schemas.Project.model_validate(_layered_pit().model_dump() | {"stages": list(stages)})
 
 
-def _phase(id_, parent=None, **kw) -> dict:
+def _stage(id_, parent=None, **kw) -> dict:
     return {"id": id_, "name": id_.replace("_", " ").title(), "parent": parent, **kw}
 
 
-def test_a_project_has_no_phases_until_one_is_made():
-    """The compatibility contract: an unphased project is every project written before
+def test_a_project_has_no_stages_until_one_is_made():
+    """The compatibility contract: an unstaged project is every project written before
     staged construction, and must behave exactly as it did."""
-    assert seed_project(simple=False).phases == []
+    assert seed_project(simple=False).stages == []
 
 
-def test_a_phase_stores_what_it_changes_not_the_whole_model_state():
-    p = _phased(
-        _phase("initial", calculation="K0 procedure"),
-        _phase("dig_1", parent="initial", deactivate=["soil_L1__lift1"]),
+def test_a_stage_stores_what_it_changes_not_the_whole_model_state():
+    p = _staged(
+        _stage("initial", calculation="K0 procedure"),
+        _stage("dig_1", parent="initial", deactivate=["soil_L1__lift1"]),
     )
-    assert p.phases[1].deactivate == ["soil_L1__lift1"]
-    assert p.phases[1].activate == []
-    assert p.phases[0].calculation == "K0 procedure"
+    assert p.stages[1].deactivate == ["soil_L1__lift1"]
+    assert p.stages[1].activate == []
+    assert p.stages[0].calculation == "K0 procedure"
     # The defaults are the reference deck's own initial-stage numbers.
-    assert p.phases[1].max_iterations == 15
-    assert p.phases[1].reset_displacements is False
+    assert p.stages[1].max_iterations == 15
+    assert p.stages[1].reset_displacements is False
 
 
-def test_the_first_phase_starts_from_nothing_and_the_rest_from_a_parent():
+def test_the_first_stage_starts_from_nothing_and_the_rest_from_a_parent():
     with pytest.raises(ValidationError, match="root"):
-        _phased(_phase("a", parent=None), _phase("b", parent=None))
+        _staged(_stage("a", parent=None), _stage("b", parent=None))
     with pytest.raises(ValidationError, match="root"):
-        _phased(_phase("a", parent="a"))
+        _staged(_stage("a", parent="a"))
 
 
-def test_a_phase_must_start_from_a_phase_that_exists():
+def test_a_stage_must_start_from_a_stage_that_exists():
     with pytest.raises(ValidationError, match="nowhere"):
-        _phased(_phase("initial"), _phase("dig", parent="ghost"))
+        _staged(_stage("initial"), _stage("dig", parent="ghost"))
 
 
-def test_phases_may_not_form_a_cycle():
+def test_stages_may_not_form_a_cycle():
     with pytest.raises(ValidationError, match="cycle|nowhere"):
-        _phased(_phase("initial"), _phase("a", parent="b"), _phase("b", parent="a"))
+        _staged(_stage("initial"), _stage("a", parent="b"), _stage("b", parent="a"))
 
 
-def test_phase_ids_are_unique():
+def test_stage_ids_are_unique():
     with pytest.raises(ValidationError, match="duplicate"):
-        _phased(_phase("initial"), _phase("initial", parent="initial"))
+        _staged(_stage("initial"), _stage("initial", parent="initial"))
 
 
-def test_a_phase_may_only_name_parts_the_model_has():
+def test_a_stage_may_only_name_parts_the_model_has():
     with pytest.raises(ValidationError, match="no such part"):
-        _phased(_phase("initial"), _phase("dig", parent="initial",
+        _staged(_stage("initial"), _stage("dig", parent="initial",
                                           deactivate=["soil_does_not_exist"]))
 
 
-def test_a_phase_cannot_both_activate_and_deactivate_the_same_part():
+def test_a_stage_cannot_both_activate_and_deactivate_the_same_part():
     """Two contradictory instructions in one diff have no defined order."""
     with pytest.raises(ValidationError, match="both"):
-        _phased(_phase("initial"),
-                _phase("dig", parent="initial",
+        _staged(_stage("initial"),
+                _stage("dig", parent="initial",
                        activate=["sheetpile"], deactivate=["sheetpile"]))
 
 
-def test_a_phase_carries_the_solver_settings_the_reference_varies():
+def test_a_stage_carries_the_solver_settings_the_reference_varies():
     """The three the reference deck actually changes between stages, and nothing else
     (plan sec 0.2): iterations, tolerance, and resetting displacements."""
-    p = _phased(_phase("initial"),
-                _phase("install", parent="initial", reset_displacements=True,
+    p = _staged(_stage("initial"),
+                _stage("install", parent="initial", reset_displacements=True,
                        max_iterations=150, tolerated_error=1e-3))
-    install = p.phases[1]
+    install = p.stages[1]
     assert (install.reset_displacements, install.max_iterations,
             install.tolerated_error) == (True, 150, 1e-3)
 
 
-def test_phases_survive_a_round_trip():
-    p = _phased(_phase("initial", calculation="K0 procedure"),
-                _phase("dig", parent="initial", deactivate=["soil_L1__lift1"]))
+def test_stages_survive_a_round_trip():
+    p = _staged(_stage("initial", calculation="K0 procedure"),
+                _stage("dig", parent="initial", deactivate=["soil_L1__lift1"]))
     reloaded = schemas.Project.model_validate(p.model_dump())
-    assert [ph.id for ph in reloaded.phases] == ["initial", "dig"]
-    assert reloaded.phases[1].deactivate == ["soil_L1__lift1"]
+    assert [ph.id for ph in reloaded.stages] == ["initial", "dig"]
+    assert reloaded.stages[1].deactivate == ["soil_L1__lift1"]
 
 
-# ── What a phase may name ───────────────────────────────────────────────────
+# ── What a stage may name ───────────────────────────────────────────────────
 # `part_keys` is the *render* namespace, in draw order, and a `layered_soil` project
 # deliberately draws no load pads -- so its line loads are missing from it. They are
 # still real parts of the deck, and the reference stages one (`Load` arrives with the
-# wall and stays), so they have to be nameable in a phase. Hence a second, wider list.
+# wall and stays), so they have to be nameable in a stage. Hence a second, wider list.
 
 def _simple_with_a_load() -> schemas.Project:
     p = _layered_pit().model_dump()
@@ -1497,25 +1497,25 @@ def test_a_load_the_viewport_never_draws_is_still_stageable():
 
 def test_everything_drawn_is_stageable():
     """The wider list is a superset, not a different list: a part that can be seen and
-    not switched off would be a hole in the phase editor."""
+    not switched off would be a hole in the stage editor."""
     for project in (seed_project(simple=False), seed_project(simple=True),
                     _simple_with_a_load()):
         assert set(project.part_keys()) <= set(project.stageable_keys())
     assert len(set(p := _simple_with_a_load().stageable_keys())) == len(p)
 
 
-def test_a_phase_may_switch_a_load_off_and_on_again():
+def test_a_stage_may_switch_a_load_off_and_on_again():
     """This is how the reference stages water: `WaterLoad_Stage2` arrives as
-    `WaterLoad_Stage1` leaves. No separate per-load phase field -- the diff already
+    `WaterLoad_Stage1` leaves. No separate per-load stage field -- the diff already
     says it, and two mechanisms for one question is one authority too many."""
     p = schemas.Project.model_validate(
-        _simple_with_a_load().model_dump() | {"phases": [
-            _phase("initial", deactivate=["surcharge", "water_2"]),
-            _phase("build", parent="initial", activate=["surcharge"]),
-            _phase("dig", parent="build",
+        _simple_with_a_load().model_dump() | {"stages": [
+            _stage("initial", deactivate=["surcharge", "water_2"]),
+            _stage("build", parent="initial", activate=["surcharge"]),
+            _stage("dig", parent="build",
                    activate=["water_2"], deactivate=["water_1"]),
         ]})
-    assert p.phases[2].activate == ["water_2"]
+    assert p.stages[2].activate == ["water_2"]
 
 
 # ── layered_soil (was simple_example) ───────────────────────────────────────
@@ -1569,3 +1569,45 @@ def test_the_two_names_agreeing_is_accepted():
     payload = seed_project().model_dump()
     payload["simple_example"] = payload["layered_soil"]
     assert schemas.Project.model_validate(payload).layered_soil is True
+
+
+# ── The seeded demo's blocks are optional ───────────────────────────────────
+# The excavation, wall, struts, anchor rows, piles and wells: a model that has none of
+# them leaves them out, and only the full build, which raises them, needs them given.
+
+def _without_demo_blocks(payload: dict) -> dict:
+    return {k: v for k, v in payload.items() if k not in schemas.FULL_BUILD_BLOCKS}
+
+
+def test_a_layered_model_needs_none_of_the_demo_blocks():
+    project = schemas.Project.model_validate(_without_demo_blocks(seed_project().model_dump()))
+    assert all(getattr(project, name) is None for name in schemas.FULL_BUILD_BLOCKS)
+    assert project.pit_levels() == []
+    # No pit, so no lifts: one body per layer, as with a pit of one level.
+    assert project.soil_bodies() == seed_project().soil_bodies()
+    with pytest.raises(ValueError, match="no excavation"):
+        project.pit()
+
+
+def test_the_full_build_needs_every_demo_block():
+    payload = seed_project(simple=False).model_dump()
+    del payload["struts"], payload["wells"]
+    with pytest.raises(ValidationError, match="needs struts, wells"):
+        schemas.Project.model_validate(payload)
+
+
+def test_a_model_saved_with_placeholder_blocks_still_opens():
+    """What every project and model script written before the blocks were optional
+    carries: empty demo structures with made-up sizes."""
+    payload = _without_demo_blocks(seed_project().model_dump()) | {
+        "excavation": {"x0": 0.0, "x1": 1.0, "z0": 0.0, "z1": 1.0, "levels": [-1.0]},
+        "wall": {"thickness": 0.5, "top_y": 0.0, "toe_y": -1.0},
+        "struts": {"xs": [], "y": 0.0, "radius": 0.1},
+        "anchor_rows": {"xs": [], "head_y": 0.0, "length": 1.0, "inclination_deg": 45.0,
+                        "radius": 0.1},
+        "piles": {"xs": [], "zs": [], "radius": 0.1, "length": 1.0, "top_y": 0.0},
+        "wells": {"positions": [], "radius": 0.1, "top_y": 0.0, "length": 1.0},
+    }
+    project = schemas.Project.model_validate(payload)
+    assert project.struts is not None and project.struts.xs == []
+    assert project.pit_levels() == [-1.0]

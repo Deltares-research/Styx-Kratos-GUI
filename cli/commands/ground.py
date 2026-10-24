@@ -101,7 +101,7 @@ def register(commands, common: argparse.ArgumentParser) -> None:
     excavation.set_defaults(handler=set_excavation)
 
     parts = commands.add_parser("parts", parents=[common],
-                                help="the parts of the model, and which a phase can switch")
+                                help="the parts of the model, and which a stage can switch")
     add_project(parts)
     parts.set_defaults(handler=list_parts)
 
@@ -146,12 +146,13 @@ def set_domain(args: argparse.Namespace) -> Answer:
 def set_excavation(args: argparse.Namespace) -> Answer:
     project = session.load(args.project)
     if args.x is None and args.z is None and args.levels is None:
-        return Answer(data=project.excavation.model_dump(mode="json"),
+        pit = project.excavation
+        return Answer(data=pit.model_dump(mode="json") if pit is not None else None,
                       lines=[_pit_line(project)])
     project, notes = session.set_excavation(project, x=args.x, z=args.z, levels=args.levels)
     target, where = written(args, project)
     return Answer(data={"file": file_of(target),
-                        "excavation": project.excavation.model_dump(mode="json"),
+                        "excavation": project.pit().model_dump(mode="json"),
                         "notes": notes},
                   lines=[f"{_pit_line(project)}; {where}", *notes])
 
@@ -167,6 +168,8 @@ def _domain_line(project: Project) -> str:
 
 def _pit_line(project: Project) -> str:
     pit = project.excavation
+    if pit is None:
+        return "no excavation"
     return (f"excavation x {pit.x0:g} .. {pit.x1:g}, z {pit.z0:g} .. {pit.z1:g}, dug to "
             + ", ".join(f"{level:g}" for level in pit.levels))
 
@@ -286,8 +289,8 @@ def remove_layer(args: argparse.Namespace) -> Answer:
 # ── parts ───────────────────────────────────────────────────────────────────
 
 def list_parts(args: argparse.Namespace) -> Answer:
-    """Every part of the model by its key -- the names phases activate and deactivate --
-    with what to call it and whether a phase can switch it."""
+    """Every part of the model by its key -- the names stages activate and deactivate --
+    with what to call it and whether a stage can switch it."""
     project = session.load(args.project)
     labels = dict(project.soil_body_labels)
     for part in project.custom_parts:

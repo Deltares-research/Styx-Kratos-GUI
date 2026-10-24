@@ -149,9 +149,9 @@ def build_geometry(project: Project) -> BuildResult:
         notes: list[str] = []
         owners, overlays = _build_solids(project, notes)
         # One excavation level is an unstaged pit: a void, cut away before anything else
-        # touches it. Several means it is dug in lifts, each removed in its own phase,
+        # touches it. Several means it is dug in lifts, each removed in its own stage,
         # so the soil has to stay in the model to be staged (`_stage_bodies`).
-        owners = (_stage_bodies(project, owners) if len(project.excavation.levels) > 1
+        owners = (_stage_bodies(project, owners) if len(project.pit_levels()) > 1
                   else _cut_the_pit(project, owners))
 
         dim = 3
@@ -241,7 +241,7 @@ def _build_layered_soil(project: Project) -> BuildResult:
         # Same gate as the full build: several excavation levels means the soil in the
         # pit is dug lift by lift and has to stay in the model to be staged. This path
         # never cuts a pit at all, so an unstaged project is untouched by it.
-        if len(project.excavation.levels) > 1:
+        if len(project.pit_levels()) > 1:
             owners = _stage_bodies(project, owners)
 
         notes: list[str] = []
@@ -302,7 +302,12 @@ def _build_solids(project: Project, log: list[str] | None = None
     Returns (tag -> owning part keys, part key -> (dim, tag) pairs for custom parts with
     no volume).
     """
-    p, d, e = project, project.domain, project.excavation
+    p, d, e = project, project.domain, project.pit()
+    # The validator refuses a full build without them; this tells the type checker.
+    wall, struts, anchor_rows, piles, wells = p.wall, p.struts, p.anchor_rows, p.piles, p.wells
+    if wall is None or struts is None or anchor_rows is None or piles is None or wells is None:
+        raise ValueError("the full build needs the seeded demo's wall, struts, anchor rows, "
+                         "piles and wells")
     owners: dict[int, set[str]] = {}
 
     def own(tag: int, key: str) -> int:
@@ -320,7 +325,7 @@ def _build_solids(project: Project, log: list[str] | None = None
     for layer in p.layers:
         box(d.x0, d.x1, layer.bots[bh], layer.tops[bh], d.z0, d.z1, f"soil_{layer.id}")
 
-    t, w = p.wall.thickness, p.wall
+    t, w = wall.thickness, wall
     outer = box(e.x0 - t, e.x1 + t, w.toe_y, w.top_y, e.z0 - t, e.z1 + t, "wall")
     inner = gmsh.model.occ.addBox(e.x0, w.toe_y, e.z0,
                                   e.x1 - e.x0, w.top_y - w.toe_y, e.z1 - e.z0)
@@ -329,7 +334,7 @@ def _build_solids(project: Project, log: list[str] | None = None
     for _, tag in ring:
         own(tag, "wall")
 
-    s = p.struts
+    s = struts
     span = (e.z1 + s.overhang) - (e.z0 - s.overhang)
     for x in s.xs:
         own(gmsh.model.occ.addCylinder(x, s.y, e.z0 - s.overhang, 0, 0, span, s.radius),
@@ -339,7 +344,7 @@ def _build_solids(project: Project, log: list[str] | None = None
             s.y - s.waler_height / 2, s.y + s.waler_height / 2,
             z - s.waler_width / 2, z + s.waler_width / 2, "struts")
 
-    a = p.anchor_rows
+    a = anchor_rows
     reach = math.cos(math.radians(a.inclination_deg)) * a.length
     drop = math.sin(math.radians(a.inclination_deg)) * a.length
     for z_head, direction in ((e.z0 - t + a.head_offset, -1.0), (e.z1 + t - a.head_offset, 1.0)):
@@ -347,16 +352,16 @@ def _build_solids(project: Project, log: list[str] | None = None
             own(gmsh.model.occ.addCylinder(
                 x, a.head_y, z_head, 0, -drop, direction * reach, a.radius), "anchors")
 
-    for x in p.piles.xs:
-        for z in p.piles.zs:
+    for x in piles.xs:
+        for z in piles.zs:
             own(gmsh.model.occ.addCylinder(
-                x, p.piles.top_y - p.piles.length, z,
-                0, p.piles.length, 0, p.piles.radius), "piles")
+                x, piles.top_y - piles.length, z,
+                0, piles.length, 0, piles.radius), "piles")
 
-    for x, z in p.wells.positions:
+    for x, z in wells.positions:
         own(gmsh.model.occ.addCylinder(
-            x, p.wells.top_y - p.wells.length, z,
-            0, p.wells.length, 0, p.wells.radius), "wells")
+            x, wells.top_y - wells.length, z,
+            0, wells.length, 0, wells.radius), "wells")
 
     # Import any custom parts
     custom_volumes, overlays = _import_custom_parts(p.custom_parts, log)
@@ -456,7 +461,7 @@ def _cut_the_pit(project: Project, owners: dict[int, set[str]]) -> dict[int, set
     keeps the intent local: only the soil is excavated. The struts hang in the void and
     the wells run through it, and neither needs a special case.
     """
-    e, d = project.excavation, project.domain
+    e, d = project.pit(), project.domain
     soil = [(3, tag) for tag, keys in owners.items() if any(k.startswith("soil_") for k in keys)]
 
     pit = gmsh.model.occ.addBox(e.x0, e.floor_y, e.z0,
@@ -474,7 +479,7 @@ def _stage_bodies(project: Project, owners: dict[int, set[str]]) -> dict[int, se
     """Keep the excavated soil, split into the lifts it is dug in.
 
     The staged counterpart of `_cut_the_pit`, and its opposite: a staged excavation is
-    dug lift by lift, each in its own phase, so the soil that will be removed has to
+    dug lift by lift, each in its own stage, so the soil that will be removed has to
     exist in the mesh in order to be deactivated later. Cutting it away here would leave
     nothing to stage.
 
@@ -486,7 +491,7 @@ def _stage_bodies(project: Project, owners: dict[int, set[str]]) -> dict[int, se
     key from the geometry rather than from the boolean's output map is what keeps the
     two from disagreeing about how many bodies there are.
     """
-    e, d = project.excavation, project.domain
+    e, d = project.pit(), project.domain
     soil = [(3, tag) for tag, keys in owners.items()
             if any(k.startswith("soil_") for k in keys)]
 
@@ -527,7 +532,7 @@ def _key_staged_bodies(project: Project, owners: dict[int, set[str]],
     -- is a question about where it ended up, so it is answered from its centre of mass
     against `Project.soil_bodies` rather than tracked through the boolean.
     """
-    e = project.excavation
+    e = project.pit()
     bodies = project.soil_bodies()
     rebuilt: dict[int, set[str]] = {}
     for tag, keys in owners.items():
