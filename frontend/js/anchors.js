@@ -155,11 +155,12 @@ App.Anchors = (function () {
 
   function insideDomain(project, point) {
     // The extent, not the domain: an anchor may be tied into a drawn embankment that
-    // stands above `y_top`. Mirrors the server's `Project.extent`.
+    // stands above `y_top`. Mirrors the server's `Project.extent`. In a section the top
+    // is free: a strut from the part of a pile above the ground ends at a fixed point
+    // in the air.
     var d = extent(project);
     if (!spatial(project)) {
-      return point[0] >= d.x0 && point[0] <= d.x1
-        && point[1] >= d.y_bottom && point[1] <= d.y_top;
+      return point[0] >= d.x0 && point[0] <= d.x1 && point[1] >= d.y_bottom;
     }
     return point[0] >= d.x0 && point[0] <= d.x1
       && point[1] >= d.y_bottom && point[1] <= d.y_top

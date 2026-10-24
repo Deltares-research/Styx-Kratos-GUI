@@ -214,6 +214,19 @@ def test_a_point_load_above_the_ground_snaps_onto_a_pile_or_is_refused():
         drafts.point_load(project, (20, 5))
 
 
+def test_a_strut_may_hang_from_a_pile_above_the_ground():
+    project = _plane_strain()
+    pile = drafts.sheet_pile(project, [(12, 5), (12, -7.5)])
+    project = project.model_copy(update={
+        "beams": [pile], "beam_sections": [drafts.section_for(project, pile)]})
+
+    strut = drafts.anchor(project, (12.3, 4), (16, 4))
+
+    assert (strut.head, strut.tail) == ((12, 4), (16, 4))
+    with pytest.raises(drafts.DraftError, match="inside the model domain"):
+        drafts.anchor(project, (12, 4), (16, -40))
+
+
 def test_a_new_wall_is_swept_from_the_ground_to_half_the_depth():
     project = seed_project()
 

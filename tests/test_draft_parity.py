@@ -141,6 +141,14 @@ def calls(models: dict) -> list[dict]:
          [[[6.4, -2], [20, -8]]], lambda p: drafts.anchor(p, (6.4, -2), (20, -8)))
     call("an anchor head far from the pile is refused", "Anchors.draftFromPoints", "pile",
          [[[10, -2], [20, -8]]], lambda p: drafts.anchor(p, (10, -2), (20, -8)))
+    call("a strut from the part of a pile above the ground", "Anchors.draftFromPoints",
+         "section_tall_pile", [[[12.3, 4], [16, 4]]],
+         lambda p: drafts.anchor(p, (12.3, 4), (16, 4)))
+    call("an anchor tail below the model is refused", "Anchors.draftFromPoints",
+         "section_tall_pile", [[[12, 4], [16, -40]]],
+         lambda p: drafts.anchor(p, (12, 4), (16, -40)))
+    call("an anchor raking back from a pile above the ground", "Anchors.draft",
+         "section_tall_pile", [], drafts.anchor)
     call("an anchor with nothing to hang from is refused", "Anchors.draft", "section", [],
          drafts.anchor)
     call("an anchor on a wall", "Anchors.draft", "solid_wall", [], drafts.anchor)

@@ -504,8 +504,10 @@ def anchor(project: Project, head=None, tail=None, *, id: str | None = None,
     _finite([head, tail], "Every anchor coordinate must be a number.")
     snapped = anchor_head(project, head)
     span = project.extent()
-    inside = (span.x0 <= tail[0] <= span.x1 and span.y_bottom <= tail[1] <= span.y_top
-              and (width == 2 or span.z0 <= tail[2] <= span.z1))
+    # In a section the top is free (`Project`'s check): a strut from the part of a pile
+    # above the ground ends at a fixed point in the air.
+    inside = (span.x0 <= tail[0] <= span.x1 and span.y_bottom <= tail[1]
+              and (width == 2 or (tail[1] <= span.y_top and span.z0 <= tail[2] <= span.z1)))
     if not inside:
         raise DraftError("The anchor must stay inside the model domain.")
     if all(value == tail[axis] for axis, value in enumerate(snapped)):

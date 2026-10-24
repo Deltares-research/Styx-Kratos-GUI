@@ -3526,6 +3526,79 @@ window.DRAFTS_FIXTURE =
       "error": "The anchor head must be placed on a sheet pile."
     },
     {
+      "title": "a strut from the part of a pile above the ground",
+      "call": "Anchors.draftFromPoints",
+      "project": "section_tall_pile",
+      "args": [
+        [
+          [
+            12.3,
+            4
+          ],
+          [
+            16,
+            4
+          ]
+        ]
+      ],
+      "result": {
+        "id": "anchor_1",
+        "name": "Anchor 1",
+        "kind": "anchor",
+        "section": "tendon_1",
+        "head": [
+          12.0,
+          4.0
+        ],
+        "tail": [
+          16.0,
+          4.0
+        ],
+        "prestress": 0.0,
+        "active": true
+      }
+    },
+    {
+      "title": "an anchor tail below the model is refused",
+      "call": "Anchors.draftFromPoints",
+      "project": "section_tall_pile",
+      "args": [
+        [
+          [
+            12,
+            4
+          ],
+          [
+            16,
+            -40
+          ]
+        ]
+      ],
+      "error": "The anchor must stay inside the model domain."
+    },
+    {
+      "title": "an anchor raking back from a pile above the ground",
+      "call": "Anchors.draft",
+      "project": "section_tall_pile",
+      "args": [],
+      "result": {
+        "id": "anchor_1",
+        "name": "Anchor 1",
+        "kind": "anchor",
+        "section": "tendon_1",
+        "head": [
+          12.0,
+          2.25
+        ],
+        "tail": [
+          20.19152,
+          -3.485764
+        ],
+        "prestress": 0.0,
+        "active": true
+      }
+    },
+    {
       "title": "an anchor with nothing to hang from is refused",
       "call": "Anchors.draft",
       "project": "section",

@@ -1848,9 +1848,10 @@ class Project(Base):
                     f"{anchor.section!r}"
                 )
         for anchor in self.plane_anchors:
+            # Its top is free, as a pile's is: a strut may hang from the part of a pile
+            # above the ground, and its tail is a fixed point that no soil has to hold.
             for x, y in (anchor.head, anchor.tail):
-                if not (extent.x0 <= x <= extent.x1
-                        and extent.y_bottom <= y <= extent.y_top):
+                if not (extent.x0 <= x <= extent.x1 and extent.y_bottom <= y):
                     raise ValueError(
                         f"anchor {anchor.id!r} lies outside the domain at ({x}, {y})"
                     )

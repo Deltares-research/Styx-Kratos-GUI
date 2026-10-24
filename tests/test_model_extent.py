@@ -157,6 +157,42 @@ def test_a_pile_carrying_a_point_load_above_the_ground_cannot_be_removed():
         session.remove_structure(Project.model_validate(payload), "beam_1")
 
 
+STRAND = {"id": "strand", "name": "Strand", "E": 1.95e8, "area": 0.0006,
+          "density": 7850.0}
+
+
+def strut(head, tail) -> dict:
+    return {"id": "anchor_1", "name": "Anchor 1", "kind": "anchor",
+            "section": "strand", "head": list(head), "tail": list(tail)}
+
+
+def test_a_strut_from_a_pile_above_the_ground_is_accepted():
+    top = seed_project(simple=True).domain.y_top
+    payload = pile_along((10.0, top + 5.0), (10.0, top - 7.5))
+    payload.update(anchor_sections=[STRAND],
+                   anchors=[strut((10.0, top + 4.0), (14.0, top + 4.0))])
+    Project.model_validate(payload)
+
+
+def test_a_strut_above_the_ground_still_has_to_hang_from_a_pile():
+    top = seed_project(simple=True).domain.y_top
+    payload = pile_along((10.0, top + 5.0), (10.0, top - 7.5))
+    payload.update(anchor_sections=[STRAND],
+                   anchors=[strut((11.0, top + 4.0), (14.0, top + 4.0))])
+    with pytest.raises(Exception, match="is not on a sheet pile"):
+        Project.model_validate(payload)
+
+
+def test_an_anchor_tail_below_the_model_is_still_refused():
+    domain = seed_project(simple=True).domain
+    payload = pile_along((10.0, domain.y_top + 5.0), (10.0, domain.y_top - 7.5))
+    payload.update(anchor_sections=[STRAND],
+                   anchors=[strut((10.0, domain.y_top - 2.0),
+                                  (14.0, domain.y_bottom - 1.0))])
+    with pytest.raises(Exception, match="outside the domain"):
+        Project.model_validate(payload)
+
+
 def test_an_anchor_in_a_custom_layer_above_ground_is_accepted():
     Project.model_validate(project_with(
         beam_sections=[{"id": "az26", "name": "AZ 26", "E": 2.1e8, "nu": 0.3,
