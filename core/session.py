@@ -1262,10 +1262,34 @@ def switch_parts(project: Project, id: str, keys: list[str], active: bool) -> Pr
     stageable = project.stageable_keys()
     for key in keys:
         if key not in stageable:
-            raise EditRefused(f"there is no part {key!r} to switch; `kratos-cli parts` "
-                              "lists the parts a stage can switch")
+            raise EditRefused(_no_part(project, key, stageable))
     return replace_stages(project, StagesUpdate(
         stages=stages.set_active(project, id, list(keys), active)))
+
+
+def part_names(project: Project) -> dict[str, str]:
+    """What each part is called, keyed by its id: a layer's name for its soil, a drawn
+    solid's label, and the name a structure, load or condition was given with --name."""
+    names = dict(project.soil_body_labels)
+    names.update((part.key, part.label) for part in project.custom_parts)
+    for record in (*project.beams, *project.anchors, *project.interfaces,
+                   *project.normal_loads, *project.loads, *project.boundary_conditions):
+        names.setdefault(record.id, record.name)
+    return names
+
+
+def _no_part(project: Project, word: str, stageable: list[str]) -> str:
+    """Why `word` is not a part a stage can switch. A stage takes a part's id, and the
+    word most often typed instead is the name given with --name, so a part called
+    `word` is named with the id to type."""
+    named = [key for key, name in part_names(project).items()
+             if key in stageable and name.casefold() == word.casefold()]
+    if not named:
+        return (f"there is no part {word!r} to switch; `kratos-cli parts` lists the parts "
+                "a stage can switch")
+    ids = " or ".join(named)
+    return (f"there is no part {word!r} to switch: {word!r} is the name of the part with "
+            f"id {ids}, and a stage switches a part by its id. Use {ids}.")
 
 
 def staged_excavation_stages(project: Project) -> Project:

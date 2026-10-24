@@ -19,7 +19,7 @@ import argparse
 
 from cli.terminal.output import Answer, CommandError
 from cli.terminal.words import (NAME_HELP, action, assignments, coordinates, edited, existing,
-                                given, noun)
+                                given, id_and_name, id_help, named_ids, noun)
 from core import session
 from core.model import drafts
 from core.model.schemas import Project
@@ -57,8 +57,7 @@ def _register_sections(commands, common) -> None:
                       "of its own")
     add.add_argument("kind", choices=KINDS,
                      help="beam (sheet piles and members), panel (walls), anchor, interface")
-    add.add_argument("id", help="its id, which `section set` and the --section of a "
-                                     "structure refer to it by")
+    add.add_argument("id", nargs="?", help=id_help())
     _section_fields(add)
     add.epilog = SECTION_VARIABLES
     change = action(sections, common, "set", update_section, variables=True,
@@ -131,6 +130,7 @@ def _interface_stiffness(section) -> str:
                      for label, value in typed)
 
 
+@named_ids(required=True)
 def add_section(args: argparse.Namespace) -> Answer:
     project = session.load(args.project)
     section = drafts.section(project, args.kind, args.id, name=args.name)
@@ -140,7 +140,7 @@ def add_section(args: argparse.Namespace) -> Answer:
     if fields or variables:
         project = session.update_section(project, args.id, kind=args.kind,
                                          variables=variables, **fields)
-    return edited(args, project, f"added {args.kind} section {args.id} ({section.name})")
+    return edited(args, project, f"added {args.kind} section ({id_and_name(section)})")
 
 
 def update_section(args: argparse.Namespace) -> Answer:
@@ -204,7 +204,7 @@ def _register_beams(commands, common) -> None:
         listed.set_defaults(kinds=(kind,))
         add = action(actions, common, "add", add_structure,
                      help=f"a {NOUNS[kind]}; with no geometry, where the GUI puts a new one")
-        add.add_argument("id", nargs="?", help="its id (default: the first free one)")
+        add.add_argument("id", nargs="?", help=id_help("the first free one"))
         _beam_fields(add, kind)
         add.set_defaults(kinds=(kind,))
         change = action(actions, common, "set", update_structure)
@@ -250,7 +250,7 @@ def _register_anchors(commands, common) -> None:
     add = action(actions, common, "add", add_structure,
                  help="an anchor: the head snapped onto the nearest structure, the tail a "
                       "fixed point (default: 10 m back and down at 35 degrees)")
-    add.add_argument("id", nargs="?", help="its id (default: the first free one)")
+    add.add_argument("id", nargs="?", help=id_help("the first free one"))
     _anchor_fields(add)
     add.set_defaults(kinds=("anchor", "anchor3d"))
     change = action(actions, common, "set", update_structure)
@@ -283,7 +283,7 @@ def _register_interfaces(commands, common) -> None:
     add = action(actions, common, "add", add_structure,
                  help="an interface on a sheet pile (default: the first), or a free line "
                       "with --points")
-    add.add_argument("id", nargs="?", help="its id (default: the first free one)")
+    add.add_argument("id", nargs="?", help=id_help("the first free one"))
     _interface_fields(add)
     add.set_defaults(kinds=("interface",))
     change = action(actions, common, "set", update_structure)
@@ -316,8 +316,9 @@ def _register_loads(commands, common) -> None:
     add = action(actions, common, "add", add_structure,
                  help="a load, down unless --components says otherwise: 20 kN for a "
                       "point, 20 kN/m for a line (2D), 20 kN/m2 for a surface (3D)")
-    add.add_argument("load_kind", choices=("point", "line", "surface"))
-    add.add_argument("id", nargs="?", help="its id (default: the first free load_<n>)")
+    add.add_argument("load_kind", choices=("point", "line", "surface"),
+                     help="the kind of load: point or line in 2D, surface in 3D")
+    add.add_argument("id", nargs="?", help=id_help("the first free load_<n>"))
     _load_fields(add)
     add.set_defaults(kinds=("point", "line", "surface"))
     change = action(actions, common, "set", update_structure)
@@ -335,7 +336,7 @@ def _register_loads(commands, common) -> None:
     listed.set_defaults(kinds=("normal",))
     add = action(actions, common, "add", add_structure,
                  help="a pressure normal to a line: uniform, or hydrostatic from the water")
-    add.add_argument("id", nargs="?", help="its id (default: the first free one)")
+    add.add_argument("id", nargs="?", help=id_help("the first free one"))
     _normal_load_fields(add)
     add.set_defaults(kinds=("normal",))
     change = action(actions, common, "set", update_structure)
@@ -398,6 +399,7 @@ def list_structures(args: argparse.Namespace) -> Answer:
                   or [f"No {NOUNS[args.kinds[0]]}s yet."])
 
 
+@named_ids()
 def add_structure(args: argparse.Namespace) -> Answer:
     project = session.load(args.project)
     record = _drafted(project, args)
@@ -410,11 +412,11 @@ def add_structure(args: argparse.Namespace) -> Answer:
             + (", ".join(s.id for s in library) or "none")
             + f". Add one first: kratos-cli section {args.project} add {kind} {args.section}")
     project = session.add_structure(project, record, section)
-    answer = edited(args, project, f"added {NOUNS[record.kind]} {record.id} ({record.name})")
+    answer = edited(args, project, f"added {NOUNS[record.kind]} ({id_and_name(record)})")
     if section is not None:
         answer.lines.append(
-            f"with a new {drafts.section_kind(record)} section {section.id} "
-            f"({section.name}); change it with `kratos-cli section {args.project} set "
+            f"with a new {drafts.section_kind(record)} section ({id_and_name(section)}); "
+            f"change it with `kratos-cli section {args.project} set "
             f"{section.id} NAME=VALUE ...`")
     return answer
 

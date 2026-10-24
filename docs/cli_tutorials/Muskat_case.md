@@ -72,7 +72,7 @@ One stage, of the type Groundwater flow, and a mesh of quadratic triangles of 0.
 
 ```text
 PS> kratos-cli stages muskat.json add flow --name Flow --calculation flow
-added stage flow (Flow) after nothing: it is the first; wrote muskat.json
+added stage (id flow, name Flow) after nothing: it is the first; wrote muskat.json
 
 PS> kratos-cli set muskat.json mesh.element_size 0.4
 mesh.element_size = 0.4; wrote muskat.json

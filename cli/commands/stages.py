@@ -29,7 +29,7 @@ import argparse
 
 from cli.terminal.files import add_project, add_writing, written
 from cli.terminal.output import Answer, CommandError
-from cli.terminal.words import NAME_HELP, existing, file_of, given
+from cli.terminal.words import NAME_HELP, existing, file_of, given, id_and_name, id_help, named_ids
 from core import session
 from core.model import stages
 from core.model.schemas import Project
@@ -67,7 +67,7 @@ def register(commands, common: argparse.ArgumentParser) -> None:
 
     add = actions.add_parser("add", parents=[common],
                              help="a stage at the end of the sequence, or --before one")
-    add.add_argument("id", nargs="?", help="its id (default: the first free stage_<n>)")
+    add.add_argument("id", nargs="?", help=id_help("the first free stage_<n>"))
     add.add_argument("--before", metavar="STAGE",
                      help="insert it between this stage and the one it starts from")
     _stage_fields(add)
@@ -78,7 +78,7 @@ def register(commands, common: argparse.ArgumentParser) -> None:
     copy = actions.add_parser("copy", parents=[common],
                               help="a stage with the same solver settings, after it")
     copy.add_argument("original")
-    copy.add_argument("--id", help="the copy's id (default: the first free stage_<n>)")
+    copy.add_argument("--id", help=id_help("the first free stage_<n>"))
     _stage_fields(copy)
     _parts(copy)
     add_writing(copy)
@@ -179,6 +179,7 @@ def staged_excavation_stages(args: argparse.Namespace) -> Answer:
     return _replaced(args, session.staged_excavation_stages(session.load(args.project)))
 
 
+@named_ids()
 def add_stage(args: argparse.Namespace) -> Answer:
     project, stage = session.add_stage(session.load(args.project), before=args.before,
                                        id=args.id, **given(args, *FIELDS))
@@ -186,6 +187,7 @@ def add_stage(args: argparse.Namespace) -> Answer:
     return _added(args, project, stage)
 
 
+@named_ids()
 def copy_stage(args: argparse.Namespace) -> Answer:
     project, stage = session.add_stage(session.load(args.project), copy_of=args.original,
                                        id=args.id, **given(args, *FIELDS))
@@ -228,7 +230,7 @@ def _added(args: argparse.Namespace, project: Project, stage) -> Answer:
     for keys, wanted in ((args.activate, True), (args.deactivate, False)):
         if keys:
             project = session.switch_parts(project, stage.id, keys, wanted)
-    return _edited(args, project, f"added stage {stage.id} ({stage.name}) after "
+    return _edited(args, project, f"added stage ({id_and_name(stage)}) after "
                                   f"{stage.parent or 'nothing: it is the first'}")
 
 

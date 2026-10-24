@@ -19,7 +19,7 @@ GUI is the part of Styx that you use in the browser. To install Styx, see
 | Mode tabs | Below the toolbar | One tab for each step of the work, from **Soil** to **Results** |
 | Tool rail | Left | The tools of the mode that is open |
 | Viewport | Centre | The model. Click an object to select it. |
-| Model explorer | Right, top | A tree of all the objects in the model. Clear a check box to hide an object. |
+| Model explorer | Right, top | A tree of all the objects in the model. A group, such as **Sheet piles**, shows when the model has one. Clear a check box to hide an object. |
 | Selection explorer | Right, bottom | The properties of the selected object. You can edit most of them here. |
 | Command panel | Bottom | The **Session** log with all messages, the **Model history** tab with the commands that you typed, and the command box |
 | Status bar | Very bottom | The mode, the server status, the cursor coordinates, the unit system, snapping and zoom |
@@ -197,8 +197,8 @@ conditions** → **Boundary conditions…**. The Model explorer lists the condit
 **Model conditions** → **Boundary conditions**. Select one to change it in the Selection
 explorer.
 
-To add one condition, click **Create boundary condition** in the Structures or Mesh tool
-rail, or select **Create boundary condition…** in the **Structures** or **Mesh** menu. The
+To add one condition, click **Create boundary condition** in the Structures tool rail, or
+select **Create boundary condition…** in the **Structures** menu. The
 window asks for the condition and where it acts. For a line, type the points or click **Pick
 on model…** and click them in the viewport; right-click to end the line.
 
@@ -222,9 +222,15 @@ each stage that has it on, or, with **Initial**, only gives the start values. To
 water from one stage to the next, see
 [Switch water conditions on and off](#switch-water-conditions-on-and-off).
 
-The viewport does not show the conditions when a model opens. To show a condition, turn on
-its eye in the Model explorer, or select it there; the eye of **Boundary conditions** shows
-all of them. A condition that you only selected goes away when you select something else.
+In the Model explorer, the check box of a condition shows if the condition is active. Clear
+it to keep the condition in the project but leave it out of the calculation. The check box
+of **Boundary conditions** switches all of them. In Staged construction mode, the check box
+of a water pressure condition is for the selected stage.
+
+The viewport does not show the conditions when a model opens. To show a condition, select it
+in the Model explorer, or right-click it and select **Show**. **Show** on **Boundary
+conditions** shows all of them. A condition that you only selected goes away when you select
+something else.
 In 2D, a support that holds x and y has the clamp symbol (a stem on hatched ground), and a
 support that holds one of them has a triangle on rollers. A 2D model does not list its
 front and back supports: the section holds z without them. They stay in the project for the

@@ -23,7 +23,8 @@ import argparse
 
 from cli.terminal.files import add_project, add_writing, written
 from cli.terminal.output import Answer, CommandError
-from cli.terminal.words import NAME_HELP, action, coordinates, edited, existing, given, noun
+from cli.terminal.words import (NAME_HELP, action, coordinates, edited, existing, given,
+                                id_help, named_ids, noun)
 from core import session
 from core.kratos import condition_checks
 from core.model import drafts
@@ -47,7 +48,7 @@ def register(commands, common: argparse.ArgumentParser) -> None:
                       "drawn line or a point, a water pressure (--water-pressure) there "
                       "or on the whole soil, or a seepage face (--seepage) on a face or "
                       "a line")
-    add.add_argument("id", nargs="?", help="its id (default: the first free one)")
+    add.add_argument("id", nargs="?", help=id_help("the first free one"))
     _fields(add)
     change = action(actions, common, "set", update_condition,
                     help="change the fields given; a new target replaces the old one")
@@ -144,6 +145,7 @@ def list_conditions(args: argparse.Namespace) -> Answer:
                   lines=listed_lines(project))
 
 
+@named_ids()
 def add_condition(args: argparse.Namespace) -> Answer:
     project = session.load(args.project)
     support = args.roller or args.fix is not None

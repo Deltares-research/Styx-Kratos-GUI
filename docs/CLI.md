@@ -188,8 +188,13 @@ kratos-cli set pit.json mesh.body_sizes.sheet 0.5
 - **Where a new one goes.** A structure given no geometry is put where the GUI's tool
   puts a new one: a sheet pile down the middle of the section to half its depth, a wall
   across the middle of the site, an anchor a quarter of the way down the first pile and
-  raking back 10 m at 35 degrees, an interface on the first pile, a 20 kN load. An id not
-  given is the first free one, as in the GUI (`beam_1`, `anchor_2`, `load_3`).
+  raking back 10 m at 35 degrees, an interface on the first pile, a 20 kN load.
+- **Ids and names.** Other commands and the stages refer to a record by its id. `--name`
+  is what the GUI shows and what the Kratos files call it. With no id typed, the name is
+  the id too: `load add line --name Heavy` makes a load whose id is `Heavy`. This holds
+  for every `add` command. With neither an id nor a name, a structure, load, boundary
+  condition, borehole or stage gets the first free id, as in the GUI (`beam_1`,
+  `anchor_2`, `load_3`), and a material, layer or section is refused.
 - **Sections.** A structure is built with the first section of its kind, or `--section`.
   The first structure of a kind brings the GUI's default section with it (an AZ 26
   profile, a 0.4 m wall, a four-strand tendon, a contact), and the command says so.

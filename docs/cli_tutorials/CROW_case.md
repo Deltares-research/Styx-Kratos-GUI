@@ -221,10 +221,10 @@ A structure is built from a **section**, which holds its Kratos variables, and a
 
 ```text
 crow.json> section add beam sheetpile --name "Sheet pile" --spacing 1 YOUNG_MODULUS=8444900000.0 POISSON_RATIO=0.0 DENSITY=298.36 CROSS_AREA=0.4924 I33=0.009948850085333335 AREA_EFFECTIVE_Y=10.0
-added beam section sheetpile (Sheet pile); wrote ...\crow.json
+added beam section (id sheetpile, name Sheet pile); wrote ...\crow.json
 
 crow.json> beam add sheetpile --name SheetPileWall --section sheetpile --points 5 0 5 -13
-added sheet pile sheetpile (SheetPileWall); wrote ...\crow.json
+added sheet pile (id sheetpile, name SheetPileWall); wrote ...\crow.json
 ```
 
 - Per metre of wall: E = 8.44 GPa, A = 0.4924 m², I = 9.95·10⁻³ m⁴, density 298 kg/m³.
@@ -239,10 +239,10 @@ A strut is an anchor whose free end is a pinned support:
 
 ```text
 crow.json> section add anchor strand --name Strut --spacing 1 --tension-limit none --compression-limit none YOUNG_MODULUS=210000000000.0 CROSS_AREA=4.7619e-05 DENSITY=0.0
-added anchor section strand (Strut); wrote ...\crow.json
+added anchor section (id strand, name Strut); wrote ...\crow.json
 
 crow.json> anchor add strut --name Strut --section strand --head 5 -1.5 --tail 4 -1.5
-added anchor strut (Strut); wrote ...\crow.json
+added anchor (id strut, name Strut); wrote ...\crow.json
 ```
 
 - One strut per metre of wall (`--spacing 1`): E = 210 GPa, A = 4.76·10⁻⁵ m².
@@ -254,10 +254,10 @@ added anchor strut (Strut); wrote ...\crow.json
 
 ```text
 crow.json> section add interface contact --name "Wall contact" --material none --r-inter 0.7 --virtual-thickness 1.0
-added interface section contact (Wall contact); wrote ...\crow.json
+added interface section (id contact, name Wall contact); wrote ...\crow.json
 
 crow.json> interface add wall_contact --name Interface --section contact --structure sheetpile --side both
-added interface wall_contact (Interface); wrote ...\crow.json
+added interface (id wall_contact, name Interface); wrote ...\crow.json
 ```
 
 - `--material none`: each stretch of the interface takes the soil it runs against, reduced
@@ -278,7 +278,7 @@ components are in N/m:
 
 ```text
 crow.json> load add line surcharge --name Load --x 5 80 --y 0 --components 0 -20000
-added line load surcharge (Load); wrote ...\crow.json
+added line load (id surcharge, name Load); wrote ...\crow.json
 ```
 
 One hydrostatic water load per lift. Each runs along that lift's floor from the symmetry plane

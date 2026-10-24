@@ -112,6 +112,13 @@ def test_a_part_the_model_does_not_have_is_refused(cli, pit):
     assert "no part 'stru'" in ran.err and "kratos-cli parts" in ran.err
 
 
+def test_a_part_given_by_its_name_is_refused_with_its_id(cli, pit):
+    ran = cli("stages", pit, "add", "--deactivate", "SheetPileWall")
+
+    assert ran.code == 1
+    assert "'SheetPileWall' is the name of the part with id sheetpile" in ran.err
+
+
 def test_remove_heals_the_chain(cli, pit):
     assert cli("stages", pit, "remove", "install_strut").code == 0
 

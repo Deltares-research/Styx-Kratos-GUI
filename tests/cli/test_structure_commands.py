@@ -220,6 +220,37 @@ def test_a_line_load_and_a_point_load_in_the_section(cli, site):
     assert (kick.kind, kick.x, kick.components) == ("point", 5.0, (1000.0, -5000.0))
 
 
+def test_a_new_load_is_reported_with_its_id_and_its_name_apart(cli, pit):
+    # `load add line load --name Heavy` makes a load whose id is "load".
+    ran = cli("load", pit, "add", "line", "load", "--name", "Heavy", "--x", "10", "20")
+
+    assert ran.code == 0, ran.err
+    assert "added line load (id load, name Heavy)" in ran.out
+
+
+def test_a_load_given_only_a_name_takes_it_as_its_id(cli, pit):
+    ran = cli("load", pit, "add", "line", "--name", "Heavy", "--x", "10", "20")
+
+    assert ran.code == 0, ran.err
+    assert "added line load (id Heavy, name Heavy)" in ran.out
+    assert cli("stages", pit, "add", "--activate", "Heavy").code == 0
+
+
+def test_a_name_another_part_has_as_its_id_is_refused_with_why(cli, pit):
+    ran = cli("load", pit, "add", "line", "--name", "strut", "--x", "10", "20")
+
+    assert ran.code == 1
+    assert "already a part 'strut'" in ran.err and "came from --name" in ran.err
+
+
+def test_a_section_needs_an_id_or_a_name(cli, site):
+    assert cli("section", site, "add", "beam", "--name", "AZ 26").code == 0
+    assert session.load(site).beam_sections[0].id == "AZ 26"
+
+    ran = cli("section", site, "add", "beam")
+    assert ran.code == 1 and "--name" in ran.err
+
+
 def test_load_list_shows_this_dimension_s_loads(cli, site):
     listed = cli("load", site, "list").out
 

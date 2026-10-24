@@ -91,6 +91,9 @@ beam add sheetpile_1 --name sheetpile_1 --section sheet_pile --points 10 10 10 3
 
 # 5. The load: 10 kN/m downward on the ground surface, from x = 10 to x = 20.
 #    In the 2D section the ground surface is a line, so this is a line load.
+#    In `load add line surcharge`, line is the kind of load and surcharge is its id.
+#    The stages in step 7 switch the load by this id. --name Load is what the GUI shows
+#    and what the Kratos files call it. Leave the id out and the name is the id as well.
 #    --components is its x and y force per metre, in N/m: 0 -10000.
 load add line surcharge --name Load --x 10 20 --y 10 --components 0 -10000
 

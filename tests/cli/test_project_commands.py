@@ -68,13 +68,22 @@ def test_show_says_what_the_model_is(cli, site):
         assert word in ran.out
 
 
+def _structures_line(cli, site) -> str:
+    line = next(line for line in cli("show", site).out.splitlines() if "structures" in line)
+    return line.split(None, 1)[1]
+
+
 def test_show_counts_one_structure_in_the_singular(cli, site):
     assert cli("beam", site, "add", "--points", "5", "0", "5", "-10").code == 0
 
-    line = next(line for line in cli("show", site).out.splitlines() if "structures" in line)
+    assert _structures_line(cli, site) == "1 beam, 2 loads"
 
-    assert line.split(None, 1)[1] == ("1 beam, 0 anchors, 0 interfaces, 2 loads, "
-                                      "0 normal loads")
+
+def test_show_leaves_out_the_structures_the_model_has_none_of(cli, site):
+    for load in session.load(site).loads:
+        assert cli("load", site, "remove", load.id).code == 0
+
+    assert _structures_line(cli, site) == "none"
 
 
 def test_show_as_json_is_a_summary_a_script_can_read(cli, site):

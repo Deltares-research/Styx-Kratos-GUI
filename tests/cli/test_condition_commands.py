@@ -81,6 +81,13 @@ def test_a_phreatic_line_is_stored_as_its_coordinates(cli, dry):
     assert "phreatic line (0, -1) -> (25, -3), cut-off 100000, initial" in ran.out
 
 
+def test_a_condition_given_only_a_name_takes_it_as_its_id(cli, dry):
+    ran = cli("boundary", dry, "add", "--name", "base", "--face", "bottom", "--fixed")
+
+    assert ran.code == 0, ran.err
+    assert [record.id for record in conditions(dry)] == ["base"]
+
+
 @pytest.mark.parametrize("argv, message", [
     (["--domain"], "--water-pressure"),
     (["--water-pressure", "Uniform"], "say where it acts"),

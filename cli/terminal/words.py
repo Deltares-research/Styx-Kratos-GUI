@@ -8,6 +8,7 @@ variables, and coordinates typed as plain numbers or read from a file.
 from __future__ import annotations
 
 import argparse
+import functools
 import json
 import re
 from pathlib import Path
@@ -15,6 +16,10 @@ from pathlib import Path
 from cli.terminal.files import add_project, add_writing, written
 from cli.terminal.output import Answer, CommandError
 from core.model.schemas import Project
+from core.session import EditRefused
+
+NEW_ID = "its id, which other commands and the stages refer to it by"
+"""The start of the help of every `add` command's id; `id_help` says the rest."""
 
 
 NAME_HELP = "the name shown in lists and in the GUI's model explorer"
@@ -46,6 +51,46 @@ def action(actions, common, name: str, handler, *, writes: bool = True,
 def existing(parser: argparse.ArgumentParser, noun: str, command: str | None = None) -> None:
     """The `id` of a record that is already there, with where its ids are listed."""
     parser.add_argument("id", help=f"the {noun}'s id, as `{command or noun} list` shows it")
+
+
+def id_help(otherwise: str | None = None) -> str:
+    """The help of a new record's id: its --name when no id is typed, and else
+    `otherwise`, the default its command numbers, if it has one."""
+    return (f"{NEW_ID} (default: its --name"
+            + (f", or else {otherwise})" if otherwise else ")"))
+
+
+def named_ids(required: bool = False):
+    """The handler of a command that adds a record, with the record's --name as its id
+    when no id is typed: then the name the user gave is also the word other commands and
+    the stages take. A `required` id is refused when neither is given; otherwise the
+    command numbers one, as the GUI does."""
+    def wrap(handler):
+        @functools.wraps(handler)
+        def adding(args: argparse.Namespace) -> Answer:
+            if args.id is not None:
+                return handler(args)
+            if args.name is None:
+                if required:
+                    raise CommandError("give it an id, or a --name, which then is its id "
+                                       "too")
+                return handler(args)
+            args.id = args.name
+            try:
+                return handler(args)
+            except EditRefused as refusal:
+                if repr(args.id) not in str(refusal):
+                    raise
+                raise CommandError(f"{refusal} The id came from --name {args.name!r}: give "
+                                   "another name, or an id of its own.") from None
+        return adding
+    return wrap
+
+
+def id_and_name(record) -> str:
+    """Both, labelled: other commands and stages take the id, and an id such as `load`
+    next to a name reads as one word without the labels."""
+    return f"id {record.id}, name {record.name}"
 
 
 def given(args: argparse.Namespace, *names: str) -> dict:

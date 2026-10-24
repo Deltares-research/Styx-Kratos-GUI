@@ -893,6 +893,12 @@ def test_a_part_the_model_does_not_have_is_not_switched():
         session.switch_parts(excavation_project(), "dig_1", ["stru"], True)
 
 
+def test_a_part_switched_by_its_name_is_refused_with_its_id():
+    # The surcharge is called "Load"; a stage takes its id.
+    with pytest.raises(session.EditRefused, match="name of the part with id surcharge"):
+        session.switch_parts(excavation_project(), "dig_1", ["load"], True)
+
+
 def test_the_staged_excavation_sequence_is_derived_from_the_model():
     project = session.staged_excavation_stages(excavation_project(staged=False))
 

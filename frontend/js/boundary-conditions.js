@@ -472,6 +472,30 @@ App.BoundaryConditions = (function () {
                    'Deleted boundary condition ' + record.name + '.');
   }
 
+  /* Whether the conditions `ids` are exported: 'on', 'off', or 'mixed' when they differ.
+     What the Model explorer's check box on a condition row shows (addConditionChecks in
+     frontend/js/patches.js). */
+  function activeState(ids, project) {
+    var on = ids.filter(function (id) {
+      var record = find(id, project);
+      return record && record.active !== false;
+    }).length;
+    return on === ids.length ? 'on' : on === 0 ? 'off' : 'mixed';
+  }
+
+  /* The check box's edit: the conditions `ids` in or out of the export, in one patch.
+     For each, the same edit as `kratos-cli boundary set ID --active` or `--inactive`. */
+  function setActive(ids, on) {
+    var all = copy(records()).map(function (record) {
+      if (ids.indexOf(record.id) >= 0) record.active = on;
+      return record;
+    });
+    var names = ids.map(function (id) { return (find(id) || { name: id }).name; });
+    return saveAll(all, (names.length === 1 ? 'Boundary condition ' + names[0] + ' is'
+                         : 'Boundary conditions ' + names.join(', ') + ' are')
+                   + (on ? ' active.' : ' inactive: kept in the project, but not exported.'));
+  }
+
   function applyStandard() {
     return saveAll(withStandard(App.PROJECT),
                    'The standard supports: the bottom fixed, the sides on rollers.');
@@ -1131,6 +1155,7 @@ App.BoundaryConditions = (function () {
     grid: grid, others: others, applyGrid: applyGrid, parsePoints: parsePoints,
     isConditionKey: isConditionKey, find: find,
     save: save, remove: remove, applyStandard: applyStandard, setGravity: setGravity,
+    activeState: activeState, setActive: setActive,
     open: open, openRecord: openRecord, draw: draw, edit: edit
   };
 })();

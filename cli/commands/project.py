@@ -252,7 +252,9 @@ def described(data: dict) -> list[str]:
         return f"{count} {noun.removesuffix('s') if count == 1 else noun}"
 
     domain = data["domain"]
-    structures = ", ".join(counted(count, kind) for kind, count in data["structures"].items())
+    # Only the kinds the model has, as the GUI's Model explorer lists them.
+    structures = ", ".join(counted(count, kind) for kind, count in data["structures"].items()
+                           if count) or "none"
     water = data["water"]
     lines = [
         f"{data['name']}  ({data['file']})",
