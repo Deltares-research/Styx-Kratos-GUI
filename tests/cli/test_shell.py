@@ -202,7 +202,7 @@ def test_help_lists_the_commands_under_the_step_of_the_model_they_belong_to(type
     code, out, err = typed(["help"])
     headings = [line for line in out.splitlines() if line and not line[0].isspace()]
 
-    assert {"Shell", "Project", "Ground", "Structures", "Phases", "Results"} <= set(headings)
+    assert {"Shell", "Project", "Ground", "Structures", "Stages", "Results"} <= set(headings)
     after = out.split("\nGround\n", 1)[1].split("\n\n", 1)[0]
     assert "  borehole" in after and "  layer" in after
     assert "  shell " not in out                    # it is the shell already

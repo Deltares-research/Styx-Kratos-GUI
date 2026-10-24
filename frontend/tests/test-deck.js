@@ -66,13 +66,13 @@
     T.ok(/3 parts/.test(text) && /Model explorer/.test(text), text);
   });
 
-  /* ── Phases: the Staged construction tab shows a stage's own parts ───────────── */
+  /* ── Stages: the Staged construction tab shows a stage's own parts ───────────── */
 
   var STAGED = {
     deck: { directory: 'C:/cases/dike', parameters: 'dike.json',
             parts: ['soil', 'fill', 'crane'] },
     stageable_parts: ['soil', 'fill', 'crane'],
-    phases: [
+    stages: [
       { id: '1_Initial_stage', name: 'Initial stage', parent: null,
         activate: [], deactivate: ['fill', 'crane'] },
       { id: '3_Fill', name: 'Fill', parent: '1_Initial_stage',
@@ -96,7 +96,7 @@
   });
 
   T.test('a model that is not a deck is left to the viewport as before', function () {
-    var parametric = { stageable_parts: ['soil'], phases: STAGED.phases };
+    var parametric = { stageable_parts: ['soil'], stages: STAGED.stages };
     T.eq(D.activeForView(parametric, '3_Fill', 'staged'), null);
   });
 

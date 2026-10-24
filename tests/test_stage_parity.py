@@ -1,17 +1,17 @@
-"""One phase tree, resolved twice, held to the same answers.
+"""One stage tree, resolved twice, held to the same answers.
 
-Milestone D resolves the phase tree in the browser as well as on the server: the
-viewport has to grey out what a phase switched off, and it cannot ask the server on
-every click. That makes two implementations of one rule -- `core.model.phases.active_parts`
-and `App.Phases.activeParts` -- and two implementations of one rule drift.
+Milestone D resolves the stage tree in the browser as well as on the server: the
+viewport has to grey out what a stage switched off, and it cannot ask the server on
+every click. That makes two implementations of one rule -- `core.model.stages.active_parts`
+and `App.Stages.activeParts` -- and two implementations of one rule drift.
 
-`frontend/tests/fixtures/phase-cases.js` is the document both are held to. This module owns
+`frontend/tests/fixtures/stage-cases.js` is the document both are held to. This module owns
 it: it builds the project, computes the answers with the real Python, and compares them
-to what is on disk. `frontend/tests/test-phases.js` reads the same file in the browser and
+to what is on disk. `frontend/tests/test-stages.js` reads the same file in the browser and
 compares the JavaScript to the same answers. Neither side can move without the fixture
 moving, and the fixture cannot move without this test being run.
 
-    python tests/test_phase_parity.py --write
+    python tests/test_stage_parity.py --write
 
 rewrites it after a deliberate change.
 
@@ -31,33 +31,33 @@ import sys
 # it there already.
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
-from core.model import phases, schemas   # noqa: E402
+from core.model import stages, schemas   # noqa: E402
 from core.model.templates import seed_project                # noqa: E402
 
 FIXTURE = (pathlib.Path(__file__).resolve().parents[1]
-           / "frontend" / "tests" / "fixtures" / "phase-cases.js")
+           / "frontend" / "tests" / "fixtures" / "stage-cases.js")
 
 HEADER = '''/* Generated fixture -- the one document both implementations of `active_parts` are
-   held to. Milestone D asks for the phase tree to be resolved in the browser as well
+   held to. Milestone D asks for the stage tree to be resolved in the browser as well
    as on the server (plan sec D), and two implementations of one rule drift unless
    something says they agree. This is that something.
 
    A .js file assigning a global rather than a .json file, because the browser suite
    runs from `file://` and a fetch there is blocked; Python reads the same file and
    strips this one assignment off the front. One document, two readers -- see
-   `tests/test_phase_parity.py`, which regenerates and compares it.
+   `tests/test_stage_parity.py`, which regenerates and compares it.
 
-   Not hand-edited. `python tests/test_phase_parity.py --write` rebuilds it.
+   Not hand-edited. `python tests/test_stage_parity.py --write` rebuilds it.
 */
-window.PHASE_FIXTURE =
+window.STAGE_FIXTURE =
 '''
 
-# A hand-written sequence rather than `default_phases`, for two reasons. It has to
-# exercise re-activation and a phase that changes nothing, neither of which the default
+# A hand-written sequence rather than `default_stages`, for two reasons. It has to
+# exercise re-activation and a stage that changes nothing, neither of which the default
 # sequence produces. And it must stay still: a fixture built from a function is a
 # fixture that silently changes the day that function is improved, which is the
 # opposite of what a parity fixture is for.
-PHASES = [
+STAGES = [
     {"id": "initial", "name": "Initial stage", "parent": None,
      "calculation": "K0 procedure",
      "deactivate": ["wall", "anchors", "load", "soil_L1__lift1",
@@ -70,11 +70,11 @@ PHASES = [
      "activate": ["soil_L1__lift1"], "deactivate": ["soil_L1"]},
     {"id": "prop", "name": "Strut installation", "parent": "dig_1",
      "activate": ["anchors"]},
-    # Re-activates a part an earlier phase switched off -- the case a "last write wins"
+    # Re-activates a part an earlier stage switched off -- the case a "last write wins"
     # reading of the chain gets wrong.
     {"id": "dig_2", "name": "Dig to -5.0 m", "parent": "prop",
      "activate": ["soil_L1__lift2", "soil_L1"], "deactivate": ["soil_L1__lift1"]},
-    # Changes nothing: `soil_L1__lift1` is already off. Phases accumulate no-ops
+    # Changes nothing: `soil_L1__lift1` is already off. Stages accumulate no-ops
     # through ordinary editing, and both sides have to shrug at them identically.
     {"id": "settle", "name": "Consolidate", "parent": "dig_2",
      "deactivate": ["soil_L1__lift1"]},
@@ -82,7 +82,7 @@ PHASES = [
 
 
 def _project() -> schemas.Project:
-    """A staged soil arrangement -- three layers, three lifts -- with PHASES on it.
+    """A staged soil arrangement -- three layers, three lifts -- with STAGES on it.
 
     The same shape `test_schemas._layered_pit` builds, restated rather than imported so
     that the fixture does not move when that helper is edited for a different reason.
@@ -103,7 +103,7 @@ def _project() -> schemas.Project:
                              if k != "floor_y"}
     payload["excavation"] |= {"x0": 0.0, "x1": 5.0, "levels": [-2.0, -5.0, -8.0]}
     payload["wall"] |= {"top_y": 0.0, "toe_y": -13.0}
-    payload["phases"] = PHASES
+    payload["stages"] = STAGES
     return schemas.Project.model_validate(payload)
 
 
@@ -120,27 +120,27 @@ EDITS = [
     ("setActive", ["settle", ["soil_L1__lift1"], True]),
     ("setActive", ["build_wall", ["wall"], False]),
 ]
-"""The Phases toolbar's edits and the Model explorer's checkbox, each called on the
+"""The Stages toolbar's edits and the Model explorer's checkbox, each called on the
 project by its JavaScript name with these arguments after it. The roots and the last
-phase are in it because that is where healing a chain goes wrong."""
+stage are in it because that is where healing a chain goes wrong."""
 
-PYTHON_EDITS = {"added": phases.added, "inserted": phases.inserted,
-                "removed": phases.removed, "copied": phases.copied,
-                "setActive": phases.set_active}
+PYTHON_EDITS = {"added": stages.added, "inserted": stages.inserted,
+                "removed": stages.removed, "copied": stages.copied,
+                "setActive": stages.set_active}
 
 
 def build() -> dict:
     project = _project()
     return {
         "edits": [{"call": call, "args": args,
-                   "result": [phase.model_dump(mode="json")
-                              for phase in PYTHON_EDITS[call](project, *args)]}
+                   "result": [stage.model_dump(mode="json")
+                              for stage in PYTHON_EDITS[call](project, *args)]}
                   for call, args in EDITS],
         "project": json.loads(project.model_dump_json()),
         "stageable_keys": project.stageable_keys(),
-        "active_parts": {phase.id: sorted(phases.active_parts(project, phase.id))
-                         for phase in project.phases},
-        "order": [phase.id for phase in phases.linearise(project)],
+        "active_parts": {stage.id: sorted(stages.active_parts(project, stage.id))
+                         for stage in project.stages},
+        "order": [stage.id for stage in stages.linearise(project)],
     }
 
 
@@ -150,7 +150,7 @@ def render(document: dict) -> str:
 
 def stored() -> dict:
     text = FIXTURE.read_text(encoding="utf-8")
-    marker = "window.PHASE_FIXTURE ="
+    marker = "window.STAGE_FIXTURE ="
     body = text[text.index(marker) + len(marker):].strip()
     return json.loads(body.rstrip(";"))
 
@@ -166,8 +166,8 @@ def test_the_fixture_on_disk_is_what_the_server_computes():
     -- and a stale fixture would make the JavaScript agree with an answer the server
     no longer gives, which is worse than having no fixture at all."""
     assert stored() == build(), (
-        "frontend/tests/fixtures/phase-cases.js is out of date. Rerun\n"
-        "    python tests/test_phase_parity.py --write\n"
+        "frontend/tests/fixtures/stage-cases.js is out of date. Rerun\n"
+        "    python tests/test_stage_parity.py --write\n"
         "and check what changed before committing it."
     )
 
@@ -176,14 +176,14 @@ def test_the_fixture_is_a_parseable_javascript_assignment():
     """The browser reads it as a script tag; Python reads it by stripping one prefix.
     Both readings have to keep working, and only this one is automated."""
     text = FIXTURE.read_text(encoding="utf-8")
-    assert text.count("window.PHASE_FIXTURE =") == 1
+    assert text.count("window.STAGE_FIXTURE =") == 1
     assert text.rstrip().endswith(";")
 
 
 def test_the_fixture_exercises_the_cases_a_chain_walk_gets_wrong():
     """A fixture both sides pass trivially proves nothing. These are the three shapes
     worth having: a part switched off and later switched back on, an instruction that
-    changes nothing, and a phase that says nothing at all."""
+    changes nothing, and a stage that says nothing at all."""
     document = stored()
     assert document["active_parts"]["dig_1"] != document["active_parts"]["dig_2"]
     # soil_L1 is off from dig_1 and back on at dig_2.
@@ -195,10 +195,10 @@ def test_the_fixture_exercises_the_cases_a_chain_walk_gets_wrong():
     assert document["active_parts"]["null_step"] == document["active_parts"]["initial"]
 
 
-def test_every_phase_has_an_answer_and_the_order_is_the_chain():
+def test_every_stage_has_an_answer_and_the_order_is_the_chain():
     document = stored()
-    assert set(document["active_parts"]) == {p["id"] for p in document["project"]["phases"]}
-    assert document["order"] == [p["id"] for p in document["project"]["phases"]]
+    assert set(document["active_parts"]) == {p["id"] for p in document["project"]["stages"]}
+    assert document["order"] == [p["id"] for p in document["project"]["stages"]]
 
 
 def test_the_active_set_is_always_a_subset_of_what_can_be_staged():
@@ -207,8 +207,8 @@ def test_the_active_set_is_always_a_subset_of_what_can_be_staged():
     two implementations invented it."""
     document = stored()
     keys = set(document["stageable_keys"])
-    for phase, active in document["active_parts"].items():
-        assert set(active) <= keys, phase
+    for stage, active in document["active_parts"].items():
+        assert set(active) <= keys, stage
 
 
 if __name__ == "__main__":

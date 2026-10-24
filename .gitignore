@@ -12,7 +12,10 @@
 /kratos.local.json
 
 plan/
-graphify-out/
+# Code graph build output stays local, except the tree view and its report.
+graphify-out/*
+!graphify-out/GRAPH_TREE.html
+!graphify-out/GRAPH_REPORT.md
 # Local snapshot of the frozen mockup (index.html + css/js/vendor/assets).
 mockup/
 # Old mockup locations; the app uses frontend/base/.

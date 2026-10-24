@@ -1,14 +1,15 @@
 <div align="center">
-  <img src="frontend/assets/logo.png" alt="Styx logo" width="96" height="96">
-
-  <h1>Styx</h1>
+  <h1>
+    <img src="frontend/assets/STYX-wordmark-transparent-dark.png#gh-light-mode-only" alt="Styx" width="400">
+    <img src="frontend/assets/STYX-wordmark-transparent-light.png#gh-dark-mode-only" alt="Styx" width="400">
+  </h1>
 
   <p>
     A browser-based geotechnical modeller for the
     <a href="https://github.com/KratosMultiphysics/Kratos">Kratos Multiphysics</a>
     GeoMechanicsApplication.
     <br>
-    Build a soil and excavation model, mesh it with Gmsh, run it in construction phases, and
+    Build a soil and excavation model, mesh it with Gmsh, run it in construction stages, and
     read the results back.
   </p>
 
@@ -23,6 +24,7 @@
     <a href="#getting-started">Getting started</a> ·
     <a href="docs/KRATOS_SETUP.md">Set up Kratos</a> ·
     <a href="docs/USAGE.md">Usage</a> ·
+    <a href="docs/CLI.md">Command line</a> ·
     <a href="https://github.com/Deltares-research/Styx-Kratos-GUI/issues">Report a bug</a> ·
     <a href="https://github.com/Deltares-research/Styx-Kratos-GUI/issues">Request a feature</a>
   </p>
@@ -45,11 +47,11 @@ browser.
   units. A default library covers sand, clay, fill and bedrock.
 - **Meshing**: Gmsh, with element size, element order, algorithm and optimisation settings,
   and local refinement.
-- **Construction phases**: activate and deactivate parts phase by phase, with a K0 initial
+- **Construction stages**: activate and deactivate parts stage by stage, with a K0 initial
   stage.
 - **Calculate**: one click writes the deck and runs it through Kratos' multistage
   orchestrator.
-- **Results**: contour plots per phase, a deformed mesh, values at a node, plots along the
+- **Results**: contour plots per stage, a deformed mesh, values at a node, plots along the
   wall (bending moment, shear force, normal force and displacements), and CSV, SVG and ZIP
   export.
 - **Scripting**: a command line in the app, plus `run <file.py>` to build a model from a
@@ -69,102 +71,54 @@ See [FEATURES.md](docs/FEATURES.md) for the full list with the status of each fe
 | Frontend | Plain JavaScript and [three.js](https://threejs.org/), with no build step and no npm |
 | Solver | [Kratos Multiphysics](https://github.com/KratosMultiphysics/Kratos) GeoMechanicsApplication (installed separately, see [KRATOS_SETUP.md](docs/KRATOS_SETUP.md)) |
 
-[ARCHITECTURE.md](docs/ARCHITECTURE.md) explains how the pieces fit together.
+The [developer guide](docs/developer/README.md) explains how the pieces fit together.
 
 ## Getting started
 
-You need **Python 3.10 or newer, 64-bit**, and an internet connection for the first run. On
-Linux, a few system libraries for Gmsh are needed too; [INSTALLATION.md](docs/INSTALLATION.md)
-lists them for each platform.
+Do these steps in this order. Each step has its own guide.
 
-```bash
-git clone https://github.com/Deltares-research/Styx-Kratos-GUI.git
-cd Styx-Kratos-GUI
-./run.sh          # Linux and macOS
-.\run.bat         # Windows, or double-click run.bat
-```
-
-The first start installs the dependencies into a private virtual environment and takes a few
-minutes. Then open **<http://127.0.0.1:8000/>** in your browser (on Windows this happens
-automatically). Press <kbd>Ctrl</kbd>+<kbd>C</kbd> in the terminal to stop the server.
-
-[INSTALLATION.md](docs/INSTALLATION.md) covers the details: per-platform prerequisites, what
-the launcher does, and its `--check`, `--port` and `--host` options.
-
-### Kratos, for Calculate
-
-You can build, mesh and export models without Kratos. To run them with **Calculate**, install
-the solver into a Python of its own and point Styx at it with a `kratos.local.json` file in the
-repository root:
-
-```json
-{
-    "python": "C:/Kratos/.venv/Scripts/python.exe"
-}
-```
-
-[KRATOS_SETUP.md](docs/KRATOS_SETUP.md) walks through installing Kratos (PyPI or a source
-build), the configuration options, and troubleshooting.
-
-### The command line
-
-Everything from a new model to its results also works in a terminal, with no browser:
-
-```bash
-./kratos-cli.sh new site.json --demo --dim 2     # Windows: kratos-cli.bat
-./kratos-cli.sh mesh site.json
-./kratos-cli.sh phases site.json defaults
-./kratos-cli.sh export site.json --out deck/      # the .mdpa and the two JSON files
-./kratos-cli.sh run deck/
-./kratos-cli.sh results show 1
-./kratos-cli.sh results field 1 uy                # a field's range; --csv FILE for every value
-./kratos-cli.sh script site.json --out site.py    # the whole model, as a Python file
-./kratos-cli.sh shell site.json                   # or type the commands one after another
-```
-
-New to the command line? [cli_tutorials/README.md](docs/cli_tutorials/README.md) walks through
-a first model, a sheet pile in a soil block, from the first command to its results.
-[CLI.md](docs/CLI.md) lists every command.
+1. Install and start Styx. [INSTALLATION.md](docs/INSTALLATION.md) tells you what to install
+   on Windows, Linux or macOS. Then you get the code and start Styx with `run.bat` (Windows)
+   or `run.sh` (Linux and macOS). Styx opens in your browser, and you can build, mesh and
+   export models.
+2. Connect Kratos. Kratos is the program that solves the model, and the **Calculate** button
+   needs it. `run.bat` and `run.sh` do not install Kratos. [KRATOS_SETUP.md](docs/KRATOS_SETUP.md)
+   shows how to install Kratos and how to tell Styx where it is.
+3. Use the command line (optional). `kratos-cli` does the same work as the browser app, from
+   a new model to its results, in a terminal. [CLI.md](docs/CLI.md) lists every command. The
+   [CLI tutorial](docs/cli_tutorials/README.md) builds a first model, a sheet pile in a soil
+   block, from the first command to its results.
 
 ## Documentation
 
+### For users
+
 | Document | Contents |
 |---|---|
-| [INSTALLATION.md](docs/INSTALLATION.md) | Prerequisites per platform, the launcher and its options |
-| [KRATOS_SETUP.md](docs/KRATOS_SETUP.md) | Installing Kratos and connecting it to Styx, with troubleshooting |
-| [USAGE.md](docs/USAGE.md) | A walk through the modes: building, meshing, calculating, results and scripting |
+| [INSTALLATION.md](docs/INSTALLATION.md) | What to install on each platform, and how to start Styx with `run.bat` or `run.sh` |
+| [KRATOS_SETUP.md](docs/KRATOS_SETUP.md) | How to install Kratos, connect it to Styx, and solve common problems |
+| [USAGE.md](docs/USAGE.md) | How to use the app, mode by mode: build a model, mesh it, calculate it, read the results, and use scripts |
+| [CLI.md](docs/CLI.md) | Every `kratos-cli` command, with examples |
 | [cli_tutorials/README.md](docs/cli_tutorials/README.md) | The `kratos-cli` tutorial: a first model, built, run and read in the terminal |
 | [CROW_case.md](docs/cli_tutorials/CROW_case.md) | A second `kratos-cli` tutorial: the CROW excavation wall, a staged sheet-pile excavation, in three ways |
-| [CLI.md](docs/CLI.md) | `kratos-cli`: every step of a model in the terminal, command by command |
-| [TESTING.md](docs/TESTING.md) | The test tiers and how to run them |
-| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | How a model flows from the browser to Kratos and back |
+| [Muskat_case.md](docs/cli_tutorials/Muskat_case.md) | A groundwater flow tutorial: the Muskat soil column, saturated, with a Van Genuchten soil, and with a seepage face |
 | [FEATURES.md](docs/FEATURES.md) | What works, feature by feature, and where the code is |
-| [PROJECT_OVERVIEW.md](docs/PROJECT_OVERVIEW.md) | Code size per module |
 
-## Project layout
+### For developers
 
-```text
-core/          the engine, one package per stage: model/, geometry/ (Gmsh), kratos/ (the deck), analysis/, results/
-backend/       the FastAPI app, the in-memory project store, and the launcher
-cli/           kratos-cli, the command line beside the GUI, and the tutorial's helper scripts
-               (kratos-shell.bat/.sh, kratos-init-powershell.bat)
-frontend/      the browser app (index.html, js/, css/, three.js), with its own tests in frontend/tests/
-examples/      ready-made models for kratos-cli, one folder per model
-tests/         pytest suites: unit, API, browser, end-to-end, Kratos and performance
-benchmarks/    Kratos benchmark cases and runner
-tools/test.py  the tier runner
-docs/          user guides and design documents; docs/cli_tutorials/ is the command-line tutorial
-run.bat        launcher for Windows
-run.sh         launcher for Linux and macOS
-kratos-cli.bat the command line, for Windows
-kratos-cli.sh  the command line, for Linux and macOS
-```
+| Document | Contents |
+|---|---|
+| [Developer guide](docs/developer/README.md) | Start here. What Styx, Gmsh and Kratos each do, from a drawn model to its results |
+| [ARCHITECTURE.md](docs/developer/ARCHITECTURE.md) | How a model flows from the browser to Kratos and back, module by module |
+| [TESTING.md](docs/developer/TESTING.md) | The test tiers and how to run them |
+| [PROJECT_OVERVIEW.md](docs/developer/PROJECT_OVERVIEW.md) | The size of the code, per module |
+| [Code map](docs/developer/code-map/GRAPH_REPORT.md) | A generated map of the code and a clickable tree of files and functions |
 
 ## Contributing
 
 Contributions are welcome: bug reports, feature requests, documentation fixes and code.
 [CONTRIBUTING.md](CONTRIBUTING.md) explains how to set up, how changes are made (tests
-first), and what CI checks on every pull request. [TESTING.md](docs/TESTING.md) lists the
+first), and what CI checks on every pull request. [TESTING.md](docs/developer/TESTING.md) lists the
 test tiers.
 
 To report a security problem, do not open an issue. Follow [SECURITY.md](SECURITY.md)

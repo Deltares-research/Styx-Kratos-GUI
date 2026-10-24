@@ -1,5 +1,5 @@
 """The same model in two unit systems, through real Kratos (plan/outdated/kratos-native-inputs-plan.md
-phase C). Opt-in: `pytest --run-kratos`.
+stage C). Opt-in: `pytest --run-kratos`.
 
 Kratos has no units: give it a consistent set and every number comes back in it. That is
 the premise the project's unit system rests on -- the deck is written in whatever system

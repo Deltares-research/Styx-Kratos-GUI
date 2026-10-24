@@ -169,7 +169,11 @@ App.Model = (function () {
       // Shown in 3D too, for the same reason an interface is: the polyline is part of
       // the solid model even though the pressure it applies is plane strain only.
       NORMAL_LOADS: (project.normal_loads || [])
-        .map(function (n) { return JSON.parse(JSON.stringify(n)); })
+        .map(function (n) { return JSON.parse(JSON.stringify(n)); }),
+      // Both kinds, in every dimension: a line kept from the section stays in the list
+      // in 3D, as the export keeps it, and says there that it is left out.
+      BOUNDARY_CONDITIONS: (project.boundary_conditions || [])
+        .map(function (c) { return JSON.parse(JSON.stringify(c)); })
     };
   }
 
@@ -250,6 +254,7 @@ App.Model = (function () {
     App.INTERFACES = mapped.INTERFACES;
     App.INTERFACE_SECTIONS = mapped.INTERFACE_SECTIONS;
     App.NORMAL_LOADS = mapped.NORMAL_LOADS;
+    App.BOUNDARY_CONDITIONS = mapped.BOUNDARY_CONDITIONS;
     App.PROJECT = project;
     rebuildDerived();
     syncTitle(project);
@@ -283,7 +288,7 @@ App.Model = (function () {
 
      A staged excavation splits the soil inside the pit into the lifts it is dug in, so
      one layer can be four bodies (core/model/schemas.py, `Project.soil_bodies`). Each
-     is separately meshed, separately deactivated in a phase, and separately shown or
+     is separately meshed, separately deactivated in a stage, and separately shown or
      hidden -- so each needs its own row with its own eye, or the excavated side has no
      representation in the tree at all.
 
@@ -337,12 +342,15 @@ App.Model = (function () {
   var previousInterfaceKeys = [];
   var normalLoadNode = null;
   var previousNormalLoadKeys = [];
+  var modelConditionsNode = null;
+  var boundaryNode = null;
+  var previousConditionKeys = [];
 
   /* The frozen tree's "Water levels" node lists two mockup levels from js/data.js:677
      and a layered_soil project discards it along with the rest of that tree, so the
      water rows had nowhere to be clicked from. One node, one child, because the
      project has exactly one water level -- `Project.water` is a single object, not a
-     collection, and a per-phase level is explicitly out of scope (plan sec 7.11).
+     collection, and a per-stage level is explicitly out of scope (plan sec 7.11).
 
      Top level, and deliberately not the frozen one: js/data.js:677 puts a "Water
      levels" node *inside* the Attributes library, and that one lists level
@@ -451,6 +459,145 @@ App.Model = (function () {
     return interfaceNode;
   }
 
+  /* "Model conditions": the boundary conditions, one row each, and gravity. The frozen
+     tree's own "Model conditions" (js/data.js) lists a demo's rows -- Domain, Water,
+     Climate -- that select nothing, and two rows of one label would be the dead-twin
+     problem `dropFrozenInterfaceRow` solves; it is dropped the same way. */
+  function ensureModelConditionsNode() {
+    if (!boundaryNode) {
+      boundaryNode = { label: 'Boundary conditions', icon: 'prescribed', count: 0,
+                       eye: true, obj: 'group:conditions', children: [] };
+    }
+    if (!modelConditionsNode) {
+      modelConditionsNode = { label: 'Model conditions', icon: 'settings', children: [] };
+    }
+    Object.keys(App.TREES || {}).forEach(function (mode) {
+      var nodes = App.TREES[mode] || [];
+      for (var i = nodes.length - 1; i >= 0; i -= 1) {
+        if (nodes[i] && nodes[i] !== modelConditionsNode
+            && nodes[i].label === 'Model conditions') nodes.splice(i, 1);
+      }
+    });
+    return modelConditionsNode;
+  }
+
+  /* A condition's own row: what it is, in the words `boundary list` uses. */
+  /* A support in a groundwater flow project says it is left out, as an inactive
+     condition says it is inactive (`App.BoundaryConditions.unusedInFlow`). */
+  function conditionChild(record) {
+    var conditions = App.BoundaryConditions;
+    var label = conditions ? conditions.label(record) : record.name;
+    var note = record.active === false ? '  (inactive)'
+      : conditions && conditions.unusedInFlow(record, App.PROJECT)
+        ? '  (unused in flow)' : '';
+    return { label: label + note,
+             icon: record.kind === 'displacement' ? 'prescribed' : 'water',
+             leaf: true, eye: true, obj: record.id };
+  }
+
+  function yesNo(get, set) {
+    return {
+      kind: 'select',
+      options: function () { return [{ value: 'yes', text: 'Yes' }, { value: 'no', text: 'No' }]; },
+      get: function () { return get() ? 'yes' : 'no'; },
+      set: function (value) { return set(value === 'yes'); }
+    };
+  }
+
+  function conditionNumberEditor(record, field, unit, check) {
+    return {
+      kind: 'number', decimals: 3, unit: unit,
+      get: function () { return record[field]; },
+      set: function (value) {
+        if (!Number.isFinite(value)) return 'The value must be a number.';
+        if (check) { var problem = check(value); if (problem) return problem; }
+        record[field] = value;
+        return null;
+      }
+    };
+  }
+
+  /* The Selection explorer's rows for one condition. Each editor changes the copy in
+     App.BOUNDARY_CONDITIONS, and `App.commitSelectionEdit` sends it
+     (App.BoundaryConditions.save); the server refuses what does not validate, and the
+     stored project comes back. */
+  function conditionProps(record) {
+    var support = record.kind === 'displacement';
+    var seepage = record.kind === 'seepage';
+    var where = record.on === 'domain' ? 'Whole soil'
+      : record.on === 'face' ? 'Face: ' + record.face
+      : record.on === 'part' ? 'Part: ' + record.part
+      : (record.on === 'line' ? 'Line: ' : 'Point: ')
+        + (record.points || []).map(function (p) { return fixed(p[0]) + ' ' + fixed(p[1]); })
+          .join(', ');
+    var general = [
+      ['Condition', support ? 'Support' : seepage ? 'Seepage face' : 'Water pressure', '',
+       true],
+      ['Where', where, '', true],
+      ['Active', record.active !== false ? 'Yes' : 'No', '', false,
+       yesNo(function () { return record.active !== false; },
+             function (on) { record.active = on; return null; })],
+      ['Edit', '', '', false, { kind: 'button', text: 'Edit condition…',
+        run: function () { if (App.BoundaryConditions) App.BoundaryConditions.edit(record.id); } }],
+      ['Delete', '', '', false, { kind: 'button', text: 'Delete condition',
+        run: function () { if (App.BoundaryConditions) App.BoundaryConditions.remove(record.id); } }]
+    ];
+    var what = [];
+    if (support) {
+      ['x', 'y', 'z'].forEach(function (axis, i) {
+        what.push(['Fixed ' + axis, record.fixed[i] ? 'Yes' : 'No', '', false,
+                   yesNo(function () { return record.fixed[i]; }, function (on) {
+                     var next = record.fixed.slice();
+                     next[i] = on;
+                     if (!next.some(Boolean)) return 'A support holds x, y or z; delete it to '
+                       + 'hold nothing.';
+                     record.fixed = next;
+                     return null;
+                   })]);
+      });
+    } else if (seepage) {
+      what.push(['', 'Water may leave the soil here, in a groundwater flow calculation.',
+                 '', true]);
+    } else {
+      var stress = App.Units.label('stress');
+      what.push(['Type', record.fluid_pressure_type.replace(/_/g, ' '), '', true]);
+      if (record.fluid_pressure_type === 'Uniform') {
+        what.push(['Value', String(record.value), stress, false,
+                   conditionNumberEditor(record, 'value', stress)]);
+      }
+      if (record.fluid_pressure_type === 'Hydrostatic') {
+        what.push(['Reference level', fixed(record.reference_coordinate), 'm', false,
+                   conditionNumberEditor(record, 'reference_coordinate', 'm')]);
+      }
+      if (record.fluid_pressure_type !== 'Uniform') {
+        what.push(['Tension cut-off', String(record.pressure_tension_cut_off), stress, false,
+                   conditionNumberEditor(record, 'pressure_tension_cut_off', stress,
+                     function (value) {
+                       return value < 0 ? 'The cut-off is 0 or more.' : null;
+                     })]);
+      }
+      what.push(['Fixed', record.is_fixed ? 'Yes' : 'No', '', false,
+                 yesNo(function () { return record.is_fixed; },
+                       function (on) { record.is_fixed = on; return null; })]);
+    }
+    return {
+      title: record.name, icon: support ? 'prescribed' : 'water',
+      groups: { 'General': general, 'Prescribed': what }
+    };
+  }
+
+  function gravityProps() {
+    return {
+      title: 'Gravity', icon: 'settings',
+      groups: { 'General': [
+        ['Gravity acts', App.PROJECT && App.PROJECT.gravity === false ? 'No' : 'Yes', '', false,
+         yesNo(function () { return !(App.PROJECT && App.PROJECT.gravity === false); },
+               function (on) { App.PENDING_GRAVITY = on; return null; })],
+        ['', 'The self weight of every body, in every stage.', '', true]
+      ] }
+    };
+  }
+
   function ensureNormalLoadNode() {
     if (!normalLoadNode) {
       normalLoadNode = { label: 'Normal loads', icon: 'load', count: 0,
@@ -470,7 +617,7 @@ App.Model = (function () {
   var TREE_ORDER = [
     'Attributes library', 'Soil', 'Boreholes', 'Geometry', 'Custom geometry',
     'Imported mesh', 'Structures', 'Sheet piles', 'Anchors', 'Interfaces',
-    'Normal loads', 'Loads', 'Water levels', 'Mesh', 'Flow conditions',
+    'Normal loads', 'Loads', 'Water levels', 'Flow conditions', 'Mesh',
     'Model conditions'
   ];
 
@@ -521,7 +668,7 @@ App.Model = (function () {
   function syncTrees(layeredSoil, soil) {
     var top = layeredSoil ? (soil ? [soil] : []) : topLevelUnion();
     [customGeometryNode, importedMeshNode, sheetPileNode, anchorNode, interfaceNode,
-     normalLoadNode, loadConditionsNode, waterLevelNode]
+     normalLoadNode, loadConditionsNode, waterLevelNode, modelConditionsNode]
       .forEach(function (node) {
         if (node && !containsNode(top, node)) top.push(node);
       });
@@ -653,10 +800,12 @@ App.Model = (function () {
   function pendingWater() { return water; }
 
   /* ── The water line ──────────────────────────────────────────────────────
-     Two numbers, and both of them are the deck's: `y` is the level
-     `core.kratos.parameters._pore_pressure` states the whole ground's water pressure about,
-     and `specific_weight` scales that pressure, every hydrostatic normal load, and
-     DENSITY_WATER in the materials file. Nothing in the GUI could change either until
+     Two numbers. `y` is the level a new hydrostatic water pressure condition or
+     normal load is given, which the record then keeps as its own (`core.model.drafts`);
+     only a normal load saved without a level still reads it at export
+     (`core.kratos.parameters._normal_load`). The level fixes no pressure by itself.
+     `specific_weight` scales the water pressures and DENSITY_WATER in the materials
+     file. Nothing in the GUI could change either until
      now -- the frozen `water` entry in js/data.js:631 lists three borehole levels from
      a different project altogether.
 
@@ -721,9 +870,9 @@ App.Model = (function () {
         ],
         'Conditions': [
           ['Distribution', 'Hydrostatic', '', true],
-          // The honest state of sec 7.11: a per-phase pore-pressure type is not offered,
+          // The honest state of sec 7.11: a per-stage pore-pressure type is not offered,
           // the reference deck never varies it, and inventing one would be guessing.
-          ['Per-phase level', 'Not supported', '', true]
+          ['Per-stage level', 'Not supported', '', true]
         ]
       }
     };
@@ -1220,25 +1369,48 @@ App.Model = (function () {
     geometry.push(['Delete', '', '', false, { kind: 'button', text: 'Delete interface',
       run: function () { if (App.Interfaces) App.Interfaces.remove(record.id); } }]);
 
-    var properties = [
+    function check(s) { return App.Interfaces ? App.Interfaces.validateSection(s) : null; }
+    // The two stiffnesses first, typed in place: what a user comes here to set. Left
+    // out they read "derived" -- the soil's own shear modulus over the virtual thickness
+    // supplies them at export -- and the button puts them back to that.
+    var stiffnesses = ['INTERFACE_NORMAL_STIFFNESS', 'INTERFACE_SHEAR_STIFFNESS'];
+    var properties = stiffnesses.map(function (name) {
+      return App.PropertySets.typedRow('interface', contact, name, check);
+    });
+    var typed = stiffnesses.filter(function (name) {
+      return (contact.variables || {})[name] !== undefined;
+    });
+    if (typed.length) {
+      properties.push(['Stiffness', '', '', false, { kind: 'button',
+        text: 'Derive from the soil', run: function () {
+          typed.forEach(function (name) {
+            App.PropertySets.assign(contact, name, undefined, check);
+          });
+          // The same write a typed value makes: the whole section library with it.
+          if (App.commitSelectionEdit) App.commitSelectionEdit(record.id);
+        } }]);
+    }
+    properties = properties.concat([
       ['Soil', (App.matById && contact.material
                 && (App.matById(contact.material) || {}).name) || contact.material
                || ADJACENT_SOIL.text,
        '', false, contactMaterialEditor(contact)],
+      // Only a Coulomb law reads the strength R_inter reduces; the default elastic one
+      // reads the two stiffnesses alone (`kratos-cli section add --help` says the same).
       contact.r_inter === null || contact.r_inter === undefined
-        ? ['R_inter', 'each soil’s own', '', true]
-        : ['R_inter', String(contact.r_inter), '', false,
+        ? ['R_inter (Coulomb law only)', 'each soil’s own', '', true]
+        : ['R_inter (Coulomb law only)', String(contact.r_inter), '', false,
            contactNumberEditor(contact, 'r_inter', '', 2)],
       ['Virtual thickness', String(contact.virtual_thickness), 'm', false,
        contactNumberEditor(contact, 'virtual_thickness', 'm', 4)],
       ['Permeability', contact.permeability || 'Neutral', '', false,
        contactPermeabilityEditor(contact)]
-    ];
-    // Kratos' own variables. One the contact leaves out reads "derived" rather than
-    // zero: the soil's own E and strength supply it at export.
+    ]);
+    // The rest of Kratos' own variables. One the contact leaves out reads "derived"
+    // rather than zero: the soil's own strength supplies it at export.
     properties = properties.concat(App.PropertySets.rows('interface', contact,
-      App.PROJECT && App.PROJECT.dimension, function (s) {
-        return App.Interfaces ? App.Interfaces.validateSection(s) : null;
+      App.PROJECT && App.PROJECT.dimension, check).filter(function (row) {
+        return stiffnesses.indexOf(row[0]) < 0;
       }));
 
     return {
@@ -1328,8 +1500,24 @@ App.Model = (function () {
        normalLoadPressureEditor(record)]
     ];
     if (hydrostatic) {
-      sizing.push(['Water level', fixed((App.PROJECT && App.PROJECT.water
-                                         && App.PROJECT.water.y) || 0), 'm', true]);
+      // Its own level, or -- a load saved before it had one -- the water level it
+      // reads at export, which an edit here then makes its own.
+      var water = App.PROJECT && App.PROJECT.water;
+      var own = record.reference_coordinate !== null
+        && record.reference_coordinate !== undefined;
+      sizing.push([own ? 'Reference level' : 'Reference level (the water level)',
+                   fixed(own ? record.reference_coordinate : (water ? water.y : 0)), 'm',
+                   false, {
+                     kind: 'number', decimals: 3, unit: 'm',
+                     get: function () {
+                       return own ? record.reference_coordinate : (water ? water.y : 0);
+                     },
+                     set: function (value) {
+                       if (!Number.isFinite(value)) return 'The level must be a number.';
+                       record.reference_coordinate = value;
+                       return null;
+                     }
+                   }]);
     }
 
     return {
@@ -1580,6 +1768,25 @@ App.Model = (function () {
       App.OBJECT_PROPS[record.id] = normalLoadProps(record);
     });
     previousNormalLoadKeys = normalLoads.map(function (record) { return record.id; });
+
+    var conditions = App.BOUNDARY_CONDITIONS || [];
+    var conditionsNode = ensureModelConditionsNode();
+    // A 2D model's front and back supports are kept for the solid model, not listed.
+    var listed = conditions.filter(function (record) {
+      return !(App.BoundaryConditions && App.BoundaryConditions.heldBySection(record, App.PROJECT));
+    });
+    boundaryNode.count = listed.length;
+    boundaryNode.children = listed.map(conditionChild);
+    var gravityOn = !(App.PROJECT && App.PROJECT.gravity === false);
+    conditionsNode.children = [boundaryNode, {
+      label: 'Gravity  ·  ' + (gravityOn ? 'on' : 'off'), icon: 'settings', leaf: true,
+      obj: 'gravity' }];
+    previousConditionKeys.forEach(function (key) { delete App.OBJECT_PROPS[key]; });
+    conditions.forEach(function (record) {
+      App.OBJECT_PROPS[record.id] = conditionProps(record);
+    });
+    App.OBJECT_PROPS.gravity = gravityProps();
+    previousConditionKeys = conditions.map(function (record) { return record.id; });
 
     // Last, so every node it has to place already exists.
     syncTrees(!!(App.PROJECT && App.PROJECT.layered_soil), sharedSoilNodes[0]);

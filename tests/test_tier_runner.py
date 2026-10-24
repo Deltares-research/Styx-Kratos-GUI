@@ -60,8 +60,8 @@ def test_pytest_runs_from_the_root_with_the_server_interpreter(runner):
 
 
 def test_extra_arguments_go_to_pytest_only(runner):
-    steps = runner.plan("quick", ["-k", "phases", "-x"])
-    assert pytest_args(steps)[-3:] == ["-k", "phases", "-x"]
+    steps = runner.plan("quick", ["-k", "stages", "-x"])
+    assert pytest_args(steps)[-3:] == ["-k", "stages", "-x"]
     assert all("-x" not in (s.command or []) for s in steps if s.name != "pytest")
 
 

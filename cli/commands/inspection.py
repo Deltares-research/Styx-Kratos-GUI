@@ -117,7 +117,7 @@ def show_deck(args: argparse.Namespace) -> Answer:
     else:
         directory, parameters = _deck_location(source)
         project = external_deck.deck_project(directory, parameters)
-        stages = project.phases
+        stages = project.stages
         mdpa = _deck_mdpa(directory, parameters)
     try:
         model = mdpa_reader.import_mdpa(mdpa.read_text(encoding="utf-8", errors="replace"))

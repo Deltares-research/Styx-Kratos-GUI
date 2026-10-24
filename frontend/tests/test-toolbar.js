@@ -68,8 +68,12 @@
        is a line one (see NORMAL_LOAD_CONDITIONS in core/kratos/writer.py). */
     /* And the rulers, which measure the two named axes of one section plane: in 3D
        the screen edges are three axes mixed by the orbit. See test-ruler.js. */
+    /* And a boundary condition drawn along a line or at a point, which the section
+       embeds as a normal load's line is. */
     T.eq(App.LivePatches.TWO_D_ONLY,
-         ['interface', 'createNormalLoad', 'toggleRuler']);
+         ['interface', 'createNormalLoad', 'toggleRuler', 'createSupportLine',
+          'createSupportPoint', 'createWaterPressureLine', 'createWaterPressurePoint',
+          'createSeepageLine']);
     T.eq(App.LivePatches.availableIn3D('interface'), false);
     T.eq(App.LivePatches.availableIn3D('createNormalLoad'), false);
     T.eq(App.LivePatches.availableIn3D('createSheetPile'), true);
@@ -292,7 +296,7 @@
       '-', 'drawPoint', 'drawLine', 'drawPolygon', 'drawBox',
       '-', 'plate', 'beam', 'embedded', 'createSheetPile', 'createMember',
       'createAnchor', 'interface',
-      '-', 'createLoad', 'prescribed',
+      '-', 'createLoad', 'createBoundaryCondition',
       '-', 'tunnel',
       '-', 'importModel'
     ]);
@@ -318,6 +322,53 @@
   test('ordering the rail twice changes nothing the second time', function () {
     var once = App.LivePatches.orderStructuresRail(App.RAILS.structures || []);
     T.eq(App.LivePatches.orderStructuresRail(once), once);
+  });
+
+  test('the Soil rail reads Select, material sets, soil layers, borehole', function () {
+    withInstall(function () {});
+    var keys = (App.RAILS.soil || []).map(function (tool) {
+      return tool === '-' ? '-' : tool.action || tool.icon;
+    });
+    T.eq(keys, ['select', '-', 'materials', 'soilLayers', 'createBorehole',
+      '-', 'createSoilVolume']);
+  });
+
+  test('the Soil menu reads as its rail: material sets, soil layers, borehole', function () {
+    withInstall(function () {});
+    var soil = App.MENUS.filter(function (m) { return m.label === 'Soil'; })[0];
+    var keys = soil.items.map(function (item) { return item === '-' ? '-' : item.action; });
+    T.eq(keys, ['materials', 'soilLayers', 'createBorehole', '-', 'importSoilLayers',
+      '-', 'createSoilVolume']);
+  });
+
+  test('Flow conditions comes before Mesh, on the mode tabs and in the menu bar', function () {
+    withInstall(function () {});
+    var modes = App.MODES.map(function (m) { return m.id; });
+    T.eq(modes.slice(0, 5), ['soil', 'structures', 'flow', 'mesh', 'staged']);
+    var menus = App.MENUS.map(function (m) { return m.label; });
+    T.ok(menus.indexOf('Flow conditions') + 1 === menus.indexOf('Mesh'),
+      'Flow conditions sits right before Mesh: ' + menus.join(', '));
+    var groupOf = {};
+    App.MODES.forEach(function (m) { groupOf[m.id] = m.group; });
+    T.eq(groupOf.flow, groupOf.soil, 'Flow conditions is grouped under Geometry with Soil');
+    T.ok(groupOf.mesh !== groupOf.flow, 'Mesh stays under Calculation');
+  });
+
+  test('moving an entry before another leaves a list already in order alone', function () {
+    var keyOf = function (s) { return s; };
+    T.eq(App.LivePatches.moveBefore(['a', 'mesh', 'flow', 'b'], keyOf, 'flow', 'mesh'),
+      ['a', 'flow', 'mesh', 'b']);
+    T.eq(App.LivePatches.moveBefore(['flow', 'mesh'], keyOf, 'flow', 'mesh'), ['flow', 'mesh']);
+    T.eq(App.LivePatches.moveBefore(['mesh'], keyOf, 'flow', 'mesh'), ['mesh']);
+  });
+
+  test('ordering the Soil rail keeps a tool it does not recognise', function () {
+    var mine = { icon: 'star', tip: 'Something new', action: 'doSomething' };
+    var keys = App.LivePatches.orderSoilRail([
+      { icon: 'borehole', action: 'createBorehole' }, mine, '-',
+      { icon: 'materials', action: 'materials' }, { icon: 'select', tip: 'Select' }
+    ]).map(function (tool) { return tool === '-' ? '-' : tool.action || tool.icon; });
+    T.eq(keys, ['select', '-', 'materials', 'createBorehole', '-', 'doSomething']);
   });
 
   /* ── New / open / save ─────────────────────────────────────────── */

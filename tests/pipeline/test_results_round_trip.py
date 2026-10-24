@@ -19,7 +19,7 @@ from __future__ import annotations
 import pytest
 from fastapi.testclient import TestClient
 
-from core.model import phases
+from core.model import stages
 from core.geometry import solid_model
 from core.kratos import writer
 from core.analysis import calculation
@@ -79,20 +79,20 @@ def nodes_in(run, stage_name) -> dict[int, tuple[float, float, float]]:
     return {n: deck.nodes[n] for n in used}
 
 
-def stages(run):
+def run_stages(run):
     return list(run["active"])
 
 
 def test_the_run_is_listed_with_every_stage(client, run):
     described = client.get(f"/api/results/runs/{RUN}").json()
-    assert [s["name"] for s in described["stages"]] == stages(run)
+    assert [s["name"] for s in described["stages"]] == run_stages(run)
     assert described["complete"] is True
 
 
 @pytest.mark.parametrize("index", range(1, 8))
 def test_a_displacement_reads_back_as_the_function_that_wrote_it(client, run, index):
     field = client.get(f"/api/results/runs/{RUN}/stages/{index}/field/uy").json()
-    nodes = nodes_in(run, stages(run)[index - 1])
+    nodes = nodes_in(run, run_stages(run)[index - 1])
     expected = {n: -index * 1e-3 * xyz[1] for n, xyz in nodes.items()}
 
     assert sorted(field["ids"]) == sorted(expected)
@@ -105,14 +105,14 @@ def test_a_displacement_reads_back_as_the_function_that_wrote_it(client, run, in
 def test_the_last_sub_step_is_the_stage_result_not_the_first(client, run):
     """Each field was written at t = 1/3, 2/3 and 1, scaled by the same fraction."""
     field = client.get(f"/api/results/runs/{RUN}/stages/7/field/ux").json()
-    nodes = nodes_in(run, stages(run)[6])
+    nodes = nodes_in(run, run_stages(run)[6])
     x_max = max(xyz[0] for xyz in nodes.values())
     assert field["max"] == pytest.approx(7 * 1e-3 * x_max)
 
 
 def test_the_pore_pressure_is_hydrostatic_in_the_runs_pascals(client, run):
     field = client.get(f"/api/results/runs/{RUN}/stages/1/field/pw").json()
-    nodes = nodes_in(run, stages(run)[0])
+    nodes = nodes_in(run, run_stages(run)[0])
     for n, value in zip(field["ids"], field["values"]):
         y = nodes[n][1]
         assert value == pytest.approx(-9810.0 * max(0.0, WATER - y), abs=1e-6)
@@ -128,7 +128,7 @@ def test_a_gauss_stress_averages_to_its_element_value(client, run):
 
 
 def test_every_field_at_one_node_is_the_function_there(client, run):
-    nodes = nodes_in(run, stages(run)[2])
+    nodes = nodes_in(run, run_stages(run)[2])
     node, (x, y, z) = next(iter(sorted(nodes.items())))
     at = client.get(f"/api/results/runs/{RUN}/stages/3/at/{node}").json()
     by_field = {row["field"]: row["value"] for row in at["values"]}
@@ -138,16 +138,17 @@ def test_every_field_at_one_node_is_the_function_there(client, run):
 
 
 @pytest.mark.parametrize("index", range(1, 8))
-def test_the_parts_alive_in_each_stage_are_the_phase_model_s(client, run, index):
-    """The deck's activations (which the writer applied) and the phase model agree."""
+def test_the_parts_alive_in_each_stage_are_the_stage_model_s(client, run, index):
+    """The deck's activations (which the writer applied) and the stage model agree."""
     project = run["project"]
     names = writer._part_names(project)
     parts = {p["name"]: p for p in
              client.get(f"/api/results/runs/{RUN}/stages/{index}/parts").json()["parts"]}
     with_elements = {name for name, p in parts.items() if p["declared"]}
     interfaces = {name for name in with_elements if name.startswith("Interface_")}
-    expected = ({names[key] for key in phases.active_parts(project, project.phases[index - 1])}
-                & with_elements) - interfaces
+    # A water pressure condition is switched by a stage too, and has no part of its own.
+    expected = ({names[key] for key in stages.active_parts(project, project.stages[index - 1])
+                 if key in names} & with_elements) - interfaces
     alive = {name for name, p in parts.items() if p["alive"]} - interfaces
     assert alive == expected
 

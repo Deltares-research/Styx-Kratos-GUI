@@ -130,6 +130,15 @@ def test_every_old_fixture_opens(name):
     assert Project.model_validate(fixture(name)).unit_system == "SI"
 
 
+def test_a_legacy_phases_file_still_opens():
+    """Before the rename the sequence was saved as "phases"; it opens as stages, ids kept."""
+    doc = fixture("staged_v1")
+    assert "phases" in doc and "stages" not in doc
+    project = Project.model_validate(doc)
+    assert [s.id for s in project.stages] == [p["id"] for p in doc["phases"]]
+    assert "phases" not in project.model_dump(mode="json")
+
+
 def test_a_converted_project_is_stable(new):
     """Converted once: saving and opening it again changes nothing."""
     assert Project.model_validate(new.model_dump(mode="json")) == new

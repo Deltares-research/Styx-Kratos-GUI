@@ -16,6 +16,14 @@ You need **Python 3.10 or newer, 64-bit**, and an internet connection for the fi
    launcher, which `run.bat` uses.
 2. Optional: install [Git](https://git-scm.com/download/win) to clone the repository.
 
+Check the version (3.10 or newer):
+
+```powershell
+py --version
+# Or:
+python --version
+```
+
 ### Linux (Ubuntu/Debian, Fedora, and others)
 
 Python, the `venv` module, and the system libraries the Gmsh wheel loads:
@@ -102,3 +110,11 @@ Pass these to `run.bat` or `run.sh` in the same way:
 > permissions. Keep the default `127.0.0.1` unless you trust everyone on the network. If you
 > do bind to another address, list the host names the server may answer to in
 > `KRATOS_GUI_ALLOWED_HOSTS`, separated by commas.
+
+## Next steps
+
+- To run models with **Calculate**, install Kratos and connect it to Styx:
+  [KRATOS_SETUP.md](KRATOS_SETUP.md).
+- To learn how to build a model and read its results in the app: [USAGE.md](USAGE.md).
+- To use Styx in a terminal, without the browser: [CLI.md](CLI.md) lists the commands, and
+  the [CLI tutorial](cli_tutorials/README.md) builds a full model.

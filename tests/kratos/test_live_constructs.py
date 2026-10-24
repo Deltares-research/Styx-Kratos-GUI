@@ -62,15 +62,15 @@ def run(project: Project, order: int = 2, size: float = 4.0, ok: bool = True):
 
 
 def without(project: Project, **emptied) -> Project:
-    """`project` with some collections emptied, and its phases told about it."""
+    """`project` with some collections emptied, and its stages told about it."""
     data = project.model_dump(mode="json")
     gone = set()
     for key in emptied:
         gone |= {item.get("id") or item.get("key") for item in data.get(key, [])}
         data[key] = []
-    data["phases"] = [dict(p, activate=[k for k in p.get("activate", []) if k not in gone],
+    data["stages"] = [dict(p, activate=[k for k in p.get("activate", []) if k not in gone],
                            deactivate=[k for k in p.get("deactivate", []) if k not in gone])
-                      for p in data.get("phases", [])]
+                      for p in data.get("stages", [])]
     return Project.model_validate(data)
 
 
@@ -78,7 +78,7 @@ def without(project: Project, **emptied) -> Project:
 
 def soil_block(load_points=None, pressure: float = 50_000.0) -> Project:
     p = excavation.excavation_project(staged=False).model_dump(mode="json")
-    p.update(beams=[], anchors=[], interfaces=[], loads=[], normal_loads=[], phases=[],
+    p.update(beams=[], anchors=[], interfaces=[], loads=[], normal_loads=[], stages=[],
              water=None)
     if load_points:
         p["normal_loads"] = [{"id": "surcharge", "name": "Surcharge", "points": load_points,

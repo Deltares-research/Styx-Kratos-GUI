@@ -23,7 +23,9 @@
 
   function fixed(value) { return Number(value).toFixed(2); }
 
-  /* `ctx` is `{water, domain}`: the project's current level (or null) and its extents.
+  /* `ctx` is `{water, domain, conditions}`: the project's current level (or null), its
+     extents and, when given, its boundary conditions -- with no water pressure among
+     them, setting a level says that it fixes no pressure by itself.
      Returns `false` for anything that is not this command; otherwise `{ok, message,
      body}`, where `body` is what to PUT, or null when there is nothing to send. */
   function command(text, ctx) {
@@ -63,8 +65,14 @@
     // Everything else about an existing level -- its specific weight above all -- is
     // the user's and is kept. A new level takes the server's defaults.
     var next = water ? Object.assign({}, water, { y: level }) : { y: level };
-    return { ok: true, body: { water: next },
-             message: 'Water level set to ' + fixed(level) + ' m.' };
+    var message = 'Water level set to ' + fixed(level) + ' m.';
+    if (ctx.conditions && !ctx.conditions.some(function (c) {
+      return c.kind === 'water_pressure';
+    })) {
+      message += ' It fixes no pressure by itself: add a water pressure condition in '
+        + 'Model conditions > Boundary conditions for pore pressures about it.';
+    }
+    return { ok: true, body: { water: next }, message: message };
   }
 
   App.WaterCommand = { command: command };

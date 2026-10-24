@@ -21,7 +21,7 @@ STRUCTURES = ("beam_sections", "panel_sections", "beams", "anchor_sections", "an
 
 @pytest.fixture
 def pit(tmp_path):
-    """The test model's ground, wall, strut and contact, with no phases: something to
+    """The test model's ground, wall, strut and contact, with no stages: something to
     hang structures on and take them off again."""
     return session.save(excavation.excavation_project(staged=False), tmp_path / "pit.json")
 
@@ -299,7 +299,7 @@ def test_the_structures_of_the_test_model_are_built_with_commands_alone(cli, tmp
     for index, level in enumerate(excavation.LIFTS, start=1):
         run("normal-load", path, "add", f"water_{index}", "--name",
             f"WaterLoad_Stage{index}", "--hydrostatic", "--points",
-            "6", "-1", "6", repr(level), "0", repr(level))
+            "0", repr(level), "6", repr(level), "6", "-1")
 
     built = session.load(path)
     for field in STRUCTURES:

@@ -1,7 +1,7 @@
 """Features one at a time, and the pairs that interact (plan alpha 2.3).
 
 The base is the test model stripped to its soil. Each case adds features back -- a
-pile, its interfaces, the strut, the loads, the water, the phases -- in the form the
+pile, its interfaces, the strut, the loads, the water, the stages -- in the form the
 test model carries them, so every combination is one a valid project can hold. Each deck must pass
 `check_deck` (conftest runs it on every export) and show the feature in the file: the
 element or condition it should have written, on the parts it should be on.
@@ -20,14 +20,14 @@ from core.model.schemas import MeshRequest, Project
 from tests import mdpa
 from tests.pipeline.deck_invariants import check_deck
 
-FEATURES = ("pile", "interfaces", "strut", "loads", "normal_loads", "water", "phases")
+FEATURES = ("pile", "interfaces", "strut", "loads", "normal_loads", "water", "stages")
 
 
 def project_with(*features) -> Project:
     full = excavation.excavation_project(staged=True).model_dump(mode="json")
     base = dict(full)
     base.update(beams=[], anchors=[], interfaces=[], loads=[], normal_loads=[],
-                phases=[], water=None)
+                stages=[], water=None)
     if "pile" in features:
         base["beams"] = full["beams"]
     if "interfaces" in features:
@@ -40,14 +40,14 @@ def project_with(*features) -> Project:
         base["water"] = full["water"]
     if "normal_loads" in features:
         base["normal_loads"] = full["normal_loads"]
-    if "phases" in features:
-        # The phases name the test model's parts; a part left out is taken out of them too, the
+    if "stages" in features:
+        # The stages name the test model's parts; a part left out is taken out of them too, the
         # edit a user makes before deleting it (finding F3 refuses the delete otherwise).
         present = set(Project.model_validate(base).stageable_keys())
-        base["phases"] = [dict(phase,
-                               activate=[k for k in phase.get("activate", []) if k in present],
-                               deactivate=[k for k in phase.get("deactivate", []) if k in present])
-                          for phase in full["phases"]]
+        base["stages"] = [dict(stage,
+                               activate=[k for k in stage.get("activate", []) if k in present],
+                               deactivate=[k for k in stage.get("deactivate", []) if k in present])
+                          for stage in full["stages"]]
     return Project.model_validate(base)
 
 
@@ -98,9 +98,9 @@ def test_a_line_load_lands_on_the_ground_surface():
     assert all(abs(deck.nodes[n][1] - top) < 1e-9 for n in loaded)
 
 
-def test_a_hydrostatic_normal_load_needs_and_uses_the_water_level():
-    with pytest.raises(Exception):
-        project_with("pile", "normal_loads")       # hydrostatic, no water: refused
+def test_a_hydrostatic_normal_load_carries_its_own_water_level():
+    # The test model's water loads name their level, so they need no project water.
+    project_with("pile", "normal_loads")
     _, deck = export_of("pile", "water", "normal_loads")
     assert any("NormalLoad" in name for name in classes(deck))
 
@@ -113,12 +113,12 @@ def test_water_writes_the_pore_pressure_field():
     assert "apply_scalar_constraint_table_process" in processes
 
 
-def test_phases_become_one_stage_each():
+def test_stages_become_one_stage_each():
     export, _ = export_of("pile", "interfaces", "strut", "loads", "water", "normal_loads",
-                          "phases")
+                          "stages")
     params = json.loads(export["project_parameters"])
     assert len(params["orchestrator"]["settings"]["execution_list"]) == \
-        len(excavation.excavation_project(staged=True).phases)
+        len(excavation.excavation_project(staged=True).stages)
 
 
 @pytest.mark.parametrize("features", [(), ("pile",), ("pile", "interfaces"),

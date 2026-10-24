@@ -13,11 +13,11 @@ import argparse
 import sys
 
 from cli.terminal import output, style
-from cli.commands import (analysis, edit, ground, inspection, interactive, meshing, phases,
-                          project, results, structures, volumes)
+from cli.commands import (analysis, conditions, edit, ground, inspection, interactive,
+                          meshing, stages, project, results, structures, volumes)
 
-GROUPS = (project, edit, ground, volumes, structures, meshing, phases, inspection, analysis,
-          results, interactive)
+GROUPS = (project, edit, ground, volumes, structures, conditions, meshing, stages, inspection,
+          analysis, results, interactive)
 """The command modules, in the order a model is worked through; `--help` lists them so."""
 
 
@@ -93,12 +93,12 @@ def refusals() -> tuple[type[Exception], ...]:
     from core.kratos.external_deck import DeckError
     from core.kratos.writer import ExportError
     from core.model.drafts import DraftError
-    from core.model.phases import PhaseError
+    from core.model.stages import StageError
     from core.results.catalog import ResultsError
     from core.results.fields import UnknownField
     from core.results.members import UnknownQuantity
 
     return (output.CommandError, session.ProjectFileError, session.EditRefused,
-            ValidationError, PhaseError, scripting.ScriptError, DeckError,
+            ValidationError, StageError, scripting.ScriptError, DeckError,
             calculation.CalculationError, ResultsError, GeometryError, MeshingError,
             ExportError, ImportRefused, DraftError, UnknownField, UnknownQuantity)

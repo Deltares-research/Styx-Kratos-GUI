@@ -29,7 +29,7 @@ import json
 
 import pytest
 
-from core.model import phases
+from core.model import stages
 from core.kratos import writer
 from core.results import catalog
 from tests import mdpa, results_run
@@ -138,7 +138,7 @@ def test_every_block_in_the_gid_mesh_belongs_to_a_named_part(run, deck):
     assert sum(part["elements"] for part in parts) >= len(in_blocks)
 
 
-# ── The parts: what the phase did ───────────────────────────────────────────
+# ── The parts: what the stage did ───────────────────────────────────────────
 
 SOIL = {"Soil_Top", "Soil_Middle", "Soil_Bottom", "Soil_Middle_pit", "Soil_Bottom_pit"}
 LIFTS = {"Soil_Top_lift1", "Soil_Top_lift2", "Soil_Top_lift3"}
@@ -166,7 +166,7 @@ def test_stage_seven_has_dug_away_three_bodies_and_built_two(run):
 
 def test_interfaces_are_reported_as_unwritten_rather_than_as_demolished(run):
     """The interfaces are solved, and GiD writes them in no stage, so `elements == 0`
-    says nothing about whether a phase removed them."""
+    says nothing about whether a stage removed them."""
     for index in (1, 7):
         # By elements, not by name: `Interface_Master` and `Interface_Slave` are node
         # groups and own no elements.
@@ -187,20 +187,21 @@ def test_supports_and_boundaries_are_not_answered_with_a_yes_or_no(run):
         assert parts[name]["written"] is None
 
 
-def test_every_stage_agrees_with_the_phase_model_about_what_exists(run, project):
-    """`phases.active_parts` resolves the phase tree on the input side -- it is what greys
+def test_every_stage_agrees_with_the_stage_model_about_what_exists(run, project):
+    """`stages.active_parts` resolves the stage tree on the input side -- it is what greys
     out a part before anything is calculated -- and the run has to agree with it in every
-    stage. Interfaces, loads and supports carry no written elements and are outside the
-    comparison."""
+    stage. Interfaces, loads, supports and water conditions carry no written elements and
+    are outside the comparison."""
     names = writer._part_names(project)
-    for index, phase in enumerate(project.phases, start=1):
+    for index, stage in enumerate(project.stages, start=1):
         parts = {part["name"]: part for part in catalog.stage_parts(run, index)["parts"]}
         with_elements = {name for name, part in parts.items() if part["declared"]}
         interfaces = {name for name in with_elements if name.startswith("Interface_")}
-        expected = ({names[key] for key in phases.active_parts(project, phase)}
+        # A water pressure condition is switched by a stage too, and has no part of its own.
+        expected = ({names[key] for key in stages.active_parts(project, stage) if key in names}
                     & with_elements) - interfaces
         alive = {name for name, part in parts.items() if part["alive"]} - interfaces
-        assert alive == expected, f"stage {index} ({phase.name})"
+        assert alive == expected, f"stage {index} ({stage.name})"
 
 
 # ── The fields: what a user may ask for ─────────────────────────────────────
@@ -213,10 +214,10 @@ def test_the_field_menu_is_exactly_what_this_deck_writes(run):
 
     assert offered == {
         "Deformations": ["u", "ux", "uy", "uz"],
-        "Phase deformations": ["du", "dux", "duy", "duz"],
+        "Stage deformations": ["du", "dux", "duy", "duz"],
         "Effective stresses": ["sxx", "syy", "szz", "sxy", "syz", "sxz",
                                "p", "q", "s1", "s2", "s3", "tau_max"],
-        "Groundwater": ["pw"],
+        "Groundwater": ["pw", "head"],
     }
 
 
@@ -226,7 +227,7 @@ def test_the_units_offered_are_the_runs_own(run):
              for group in catalog.stage_fields(run, 7)["groups"]
              for field in group["fields"]}
 
-    assert units["u"] == "m"
+    assert units["u"] == units["head"] == "m"
     assert units["p"] == units["q"] == units["pw"] == "Pa"
 
 
@@ -323,7 +324,7 @@ def test_a_plot_has_one_panel_per_stage_with_the_wall_in_it(run):
     assert (plot["member"], plot["quantity"], plot["unit"]) == ("wall", "M", "N·m/m")
     assert [s["index"] for s in plot["stages"]] == [3, 4, 5, 6, 7]
     assert [s["name"] for s in plot["stages"]] == MEMBER_STAGES
-    assert plot["stages"][0]["phase"] == "SheetPileWall installation"
+    assert plot["stages"][0]["stage"] == "SheetPileWall installation"
 
 
 def test_the_wall_runs_from_its_toe_to_its_top(run):

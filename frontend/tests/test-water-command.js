@@ -78,3 +78,12 @@
   });
 
 })();
+
+(function () {
+  T.test('a level set with no water pressure condition says it fixes no pressure', function () {
+    var ctx = { water: null, domain: { y_bottom: -20, y_top: 0 }, conditions: [] };
+    T.ok(/fixes no pressure by itself/.test(App.WaterCommand.command('water -2', ctx).message));
+    ctx.conditions = [{ kind: 'water_pressure' }];
+    T.eq(App.WaterCommand.command('water -2', ctx).message, 'Water level set to -2.00 m.');
+  });
+})();

@@ -34,13 +34,17 @@ SKIP_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".ico", ".gz", ".zip", ".woff"
                  ".ttf", ".brep", ".pdf"}
 
 EXAMPLES = "exam" + "ples/"
-ALLOWED = ("README.md", "docs/CLI.md",
+ALLOWED = ("README.md", "docs/CLI.md", "docs/developer/README.md",
            "docs/cli_tutorials/README.md",
            "docs/cli_tutorials/1_build_from_scratch.md",
            "docs/cli_tutorials/2_open_in_the_shell.md",
            "docs/cli_tutorials/3_run_the_python_script.md",
-           "docs/cli_tutorials/" + _CASES[0].upper() + "_case.md")
-"""Besides the files under `EXAMPLES`, what may name them: the pages that point at them."""
+           "docs/cli_tutorials/" + _CASES[0].upper() + "_case.md",
+           "docs/cli_tutorials/Muskat_case.md",
+           "docs/developer/code-map/GRAPH_REPORT.md",
+           "docs/developer/code-map/GRAPH_TREE.html")
+"""Besides the files under `EXAMPLES`, what may name them: the pages that point at them,
+and the generated code map, which lists every tracked file and so names them too."""
 
 
 def allowed(name: str) -> bool:

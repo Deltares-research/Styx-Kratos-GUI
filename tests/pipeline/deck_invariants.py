@@ -267,7 +267,11 @@ def _rotations(face: tuple[int, ...]) -> set[tuple[int, ...]]:
 
 
 def _condition_order(deck) -> list[str]:
-    soil = [b for b in deck.elements if "SmallStrain" in b.name and "Interface" not in b.name]
+    # The water pressure elements of a groundwater flow deck are soil too: a seepage
+    # face is found by its element the same way.
+    soil = [b for b in deck.elements
+            if ("SmallStrain" in b.name or "SteadyStatePw" in b.name)
+            and "Interface" not in b.name]
     dimension = deck_dimension(deck)
     allowed: set[tuple[int, ...]] = set()
     for block in soil:
@@ -282,6 +286,19 @@ def _condition_order(deck) -> list[str]:
     for block in deck.elements:
         if "Beam" in block.name:
             allowed |= {tuple(row) for row in block.entries.values()}
+    # A line interface element has two edges, its two sides: the first half of its nodes
+    # as written, the second half reversed (Kratos' interface_geometry.hpp,
+    # GenerateTwoSides). A load drawn down a wall that was drawn up finds the contact
+    # on the face it was drawn along.
+    if dimension == 2:
+        for block in deck.elements:
+            if "LineInterface" not in block.name:
+                continue
+            for row in block.entries.values():
+                half = len(row) // 2
+                first, second = tuple(row[:half]), row[half:]
+                allowed.add(first)
+                allowed.add((second[1], second[0], *second[2:]))
     out = []
     for block in deck.conditions:
         rows = [r for r in block.entries.values() if len(r) > 1]
@@ -297,7 +314,7 @@ def _condition_order(deck) -> list[str]:
 # A stage reads the .mdpa through its preprocess modeler or through its solver's
 # `input_type: "mdpa"`. Twice in one stage adds every element a second time ("an element
 # with the same Id already exists"); again in a later stage replaces the model and
-# everything the stages before it did. A one-phase deck once did the first.
+# everything the stages before it did. A one-stage deck once did the first.
 def _mesh_read_once(params) -> list[str]:
     order = ((params.get("orchestrator") or {}).get("settings") or {}).get("execution_list")
     if not order:

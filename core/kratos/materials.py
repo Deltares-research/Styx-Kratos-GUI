@@ -16,7 +16,8 @@ stands. It does three things on top, and no others:
 
 *   **Fills what is missing and can be derived** -- the fluid constants, the water's
     density, the symmetric permeabilities, a beam's shear areas, an interface's
-    stiffness and strength from its soil, K0 from Jaky. A value the user gave is never
+    stiffness and strength from its soil, K0 from Jaky, and in a groundwater flow deck
+    the Biot coefficient. A value the user gave is never
     replaced, and every filled-in name is listed in the export's warnings.
 *   **Smears** a 2D pile or anchor over its out-of-plane `spacing` -- plane strain models
     a metre run of wall. Geometry, not units.
@@ -127,6 +128,8 @@ def material_parameters(
     panel_properties: list[tuple[str, PanelSection]] | None = None,
     interface_properties: list[tuple[str, InterfaceSection, Material | None]] | None = None,
     k0: bool = False,
+    flow: bool = False,
+    notes: list[str] | None = None,
 ) -> tuple[str, list[str]]:
     """Render MaterialParameters.json for the exported parts.
 
@@ -143,6 +146,14 @@ def material_parameters(
     initial stage runs. That stage is elastic whatever the model: a soil or contact with
     another law gets the elastic one in this file, exactly as Kratos' own Mohr-Coulomb
     staged-excavation reference runs its stage 1 on an elastic materials file.
+
+    `flow` is a groundwater flow deck's file: its water pressure elements will not run
+    without a `BIOT_COEFFICIENT` (`Pw_element.cpp`'s `Check`), which the coupled ones
+    derive by themselves, so it is filled in the same way (`biot`).
+
+    What an interface's property set derived from its soil goes into `notes`, one line
+    per interface part, with the soil and the numbers: it is the model working as asked,
+    not something to fix, so it is not a warning.
     """
     warnings: list[str] = []
     derived: list[str] = []
@@ -160,6 +171,7 @@ def material_parameters(
         })
 
     elastic: list[str] = []
+    interface_notes: dict[tuple[str, str], list[str]] = {}
     for part_name, material_id in part_materials:
         material = project.material(material_id)
         _check(material, f"material {material.name!r}")
@@ -167,7 +179,7 @@ def material_parameters(
         if k0 and law not in LINEAR_ELASTIC:
             elastic.append(f"material {material.name!r}")
             law = LINEAR_ELASTIC[0] if dim == 2 else LINEAR_ELASTIC[1]
-        add(part_name, law, _variables(material, dim, k0, project, derived),
+        add(part_name, law, _variables(material, dim, k0, project, derived, flow),
             material.tables)
     for part_name, section, beam_dim in beam_properties or []:
         _check(section, f"section {section.name!r}")
@@ -185,9 +197,14 @@ def material_parameters(
         if k0 and law != INTERFACE_LAW:
             elastic.append(f"interface section {contact.name!r}")
             law = INTERFACE_LAW
-        add(part_name, law,
-            _interface_variables(contact, project, warnings, adjacent, derived),
-            contact.tables)
+        own: list[str] = []
+        variables = _interface_variables(contact, project, warnings, adjacent, own)
+        add(part_name, law, variables, contact.tables)
+        took = _interface_note(contact, project, adjacent, variables, own)
+        if took:
+            against = f" against {adjacent.name!r}" if adjacent else ""
+            interface_notes.setdefault(
+                (f"interface section {contact.name!r}{against}", took), []).append(part_name)
     if elastic:
         warnings.append(
             "The K0 stage runs elastic: "
@@ -197,7 +214,49 @@ def material_parameters(
         warnings.append(
             "Derived where a property set left them out (type a value to replace it): "
             + "; ".join(dict.fromkeys(derived)))
+    if notes is not None:
+        # One line per soil an interface runs against, not per part: a contact along a
+        # wall dug in lifts is many parts against the same ground.
+        notes.extend(f"{who} ({', '.join(parts)}): {took}. Type a value on the section "
+                     "to replace one." for (who, took), parts in interface_notes.items())
     return json.dumps({"properties": properties}, indent=4), warnings
+
+
+def _interface_note(section: InterfaceSection, project: Project, soil: Material | None,
+                    variables: dict, derived: list[str]) -> str | None:
+    """What one interface part's property set took from its soil, in numbers.
+
+    `GEO_DRAINAGE_TYPE` and the dilatancy are left out: they are fixed, whatever the soil
+    is, and say nothing about it."""
+    taken = {entry.rpartition(": ")[2] for entry in derived}
+    system = project.unit_system
+    stiffness = units.label(units.STIFFNESS_PER_AREA, system)
+    stress = units.label(units.STRESS, system)
+    parts = []
+    if {"INTERFACE_NORMAL_STIFFNESS", "INTERFACE_SHEAR_STIFFNESS"} & taken and soil:
+        parts.append(
+            f"normal stiffness {variables['INTERFACE_NORMAL_STIFFNESS']:.4g} and shear "
+            f"stiffness {variables['INTERFACE_SHEAR_STIFFNESS']:.4g} {stiffness}, 10 G / t "
+            f"and G / t (E = {soil.number('YOUNG_MODULUS'):.4g} {stress}, "
+            f"nu = {soil.number('POISSON_RATIO') or 0.0:g}, "
+            f"t = {section.virtual_thickness:g} m)")
+    strength = [(name, label) for name, label in
+                (("GEO_COHESION", "cohesion"), ("GEO_FRICTION_ANGLE", "friction angle"))
+                if name in taken]
+    if strength and soil:
+        r_inter = section.r_inter if section.r_inter is not None else soil.r_inter
+        shown = []
+        for name, label in strength:
+            if name == "GEO_COHESION":
+                shown.append(f"cohesion {variables[name]:.4g} {stress} = {r_inter:g} x "
+                             f"{soil.number(name):.4g}")
+            else:
+                shown.append(f"friction angle {variables[name]:.3g} deg, tan reduced by "
+                             f"{r_inter:g} from {soil.number(name):g} deg")
+        if section.constitutive_law == INTERFACE_LAW:
+            shown.append("read only by a Coulomb law")
+        parts.append(", ".join(shown))
+    return "; ".join(parts) or None
 
 
 def dimension_law(law: str, dim: int) -> str:
@@ -249,7 +308,7 @@ def _fill(variables: dict, name: str, value, derived: list[str], label: str) -> 
 
 
 def _variables(material: Material, dim: int, k0: bool, project: Project,
-               derived: list[str] | None = None) -> dict:
+               derived: list[str] | None = None, flow: bool = False) -> dict:
     """A soil's `Variables`: as given, plus what is missing and derivable."""
     derived = [] if derived is None else derived
     system = project.unit_system
@@ -276,6 +335,8 @@ def _variables(material: Material, dim: int, k0: bool, project: Project,
             _fill(v, "PERMEABILITY_ZZ", permeability, derived, label)
             _fill(v, "PERMEABILITY_YZ", 0.0, derived, label)
             _fill(v, "PERMEABILITY_ZX", 0.0, derived, label)
+    if flow:
+        _fill(v, "BIOT_COEFFICIENT", biot(v), derived, label)
     v = _ordered(v, SOIL_ORDER)
 
     if k0:
@@ -286,6 +347,21 @@ def _variables(material: Material, dim: int, k0: bool, project: Project,
         _fill(k0_v, "K0_NC", jaky(material), derived, label)
         v.update(_ordered(k0_v, K0_ORDER))
     return v
+
+
+def biot(variables: dict) -> float:
+    """The Biot coefficient 1 - K / K_s, as Kratos' coupled elements derive it when it
+    is not given (`GeoTransportEquationUtilities::CalculateBiotCoefficient`): K the
+    drained bulk modulus of the elastic soil, E / (3 (1 - 2 nu)), and K_s the grains'.
+    1, incompressible grains, when the soil does not say enough to derive it. A steady
+    flow does not read it; a transient one does."""
+    young = variables.get("YOUNG_MODULUS")
+    poisson = variables.get("POISSON_RATIO")
+    grains = variables.get("BULK_MODULUS_SOLID")
+    if not (isinstance(young, (int, float)) and isinstance(poisson, (int, float))
+            and isinstance(grains, (int, float))) or not grains or poisson >= 0.5:
+        return 1.0
+    return 1.0 - young / (3.0 * (1.0 - 2.0 * poisson)) / grains
 
 
 def jaky(material: Material) -> float | None:

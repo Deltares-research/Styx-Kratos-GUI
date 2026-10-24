@@ -13,7 +13,7 @@ import argparse
 
 from cli.terminal.files import add_project, add_writing, written
 from cli.terminal.output import Answer, CommandError
-from cli.terminal.words import action, assignments, edited, existing, file_of, given, noun
+from cli.terminal.words import NAME_HELP, action, assignments, edited, existing, file_of, given, noun
 from core import session
 from core.model import drafts
 from core.model.schemas import Project
@@ -70,7 +70,7 @@ def register(commands, common: argparse.ArgumentParser) -> None:
                        "the last one (default 5 m)")
     add.add_argument("id", help="its id, which `layer set` refers to it by")
     add.add_argument("--material", required=True)
-    add.add_argument("--name")
+    add.add_argument("--name", help=NAME_HELP)
     depth = add.add_mutually_exclusive_group()
     depth.add_argument("--bottom", type=float, help="its bottom, at every borehole")
     depth.add_argument("--thickness", type=float)
@@ -78,7 +78,7 @@ def register(commands, common: argparse.ArgumentParser) -> None:
                      help="change a layer; a moved level moves its neighbour's with it")
     existing(change, "layer")
     change.add_argument("--material")
-    change.add_argument("--name")
+    change.add_argument("--name", help=NAME_HELP)
     change.add_argument("--top", type=float)
     change.add_argument("--bottom", type=float)
     change.add_argument("--at", metavar="BOREHOLE",
@@ -101,7 +101,7 @@ def register(commands, common: argparse.ArgumentParser) -> None:
     excavation.set_defaults(handler=set_excavation)
 
     parts = commands.add_parser("parts", parents=[common],
-                                help="the parts of the model, and which a phase can switch")
+                                help="the parts of the model, and which a stage can switch")
     add_project(parts)
     parts.set_defaults(handler=list_parts)
 
@@ -111,7 +111,7 @@ def register(commands, common: argparse.ArgumentParser) -> None:
 
 
 def _borehole_fields(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--name")
+    parser.add_argument("--name", help=NAME_HELP)
     # Map coordinates, as the GUI's borehole dialog gives them: the map's y is
     # the model's z. Its height is not a coordinate -- that is --head and --water.
     parser.add_argument("--x", type=float, help="its position on the map: x, in metres")
@@ -123,7 +123,7 @@ def _borehole_fields(parser: argparse.ArgumentParser) -> None:
 
 
 def _material_fields(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--name")
+    parser.add_argument("--name", help=NAME_HELP)
     parser.add_argument("--color", help="a #rrggbb colour")
     parser.add_argument("--law", help="the Kratos constitutive law (default: linear "
                                       "elastic for the model's dimension)")
@@ -146,12 +146,13 @@ def set_domain(args: argparse.Namespace) -> Answer:
 def set_excavation(args: argparse.Namespace) -> Answer:
     project = session.load(args.project)
     if args.x is None and args.z is None and args.levels is None:
-        return Answer(data=project.excavation.model_dump(mode="json"),
+        pit = project.excavation
+        return Answer(data=pit.model_dump(mode="json") if pit is not None else None,
                       lines=[_pit_line(project)])
     project, notes = session.set_excavation(project, x=args.x, z=args.z, levels=args.levels)
     target, where = written(args, project)
     return Answer(data={"file": file_of(target),
-                        "excavation": project.excavation.model_dump(mode="json"),
+                        "excavation": project.pit().model_dump(mode="json"),
                         "notes": notes},
                   lines=[f"{_pit_line(project)}; {where}", *notes])
 
@@ -167,6 +168,8 @@ def _domain_line(project: Project) -> str:
 
 def _pit_line(project: Project) -> str:
     pit = project.excavation
+    if pit is None:
+        return "no excavation"
     return (f"excavation x {pit.x0:g} .. {pit.x1:g}, z {pit.z0:g} .. {pit.z1:g}, dug to "
             + ", ".join(f"{level:g}" for level in pit.levels))
 
@@ -286,14 +289,14 @@ def remove_layer(args: argparse.Namespace) -> Answer:
 # ── parts ───────────────────────────────────────────────────────────────────
 
 def list_parts(args: argparse.Namespace) -> Answer:
-    """Every part of the model by its key -- the names phases activate and deactivate --
-    with what to call it and whether a phase can switch it."""
+    """Every part of the model by its key -- the names stages activate and deactivate --
+    with what to call it and whether a stage can switch it."""
     project = session.load(args.project)
     labels = dict(project.soil_body_labels)
     for part in project.custom_parts:
         labels[part.key] = part.label + (f" (soil of {part.mat})" if part.mat else "")
     for record in (*project.beams, *project.anchors, *project.interfaces,
-                   *project.normal_loads, *project.loads):
+                   *project.normal_loads, *project.loads, *project.boundary_conditions):
         labels.setdefault(record.id, record.name)
     stageable = project.stageable_keys()
     keys = list(dict.fromkeys([*project.part_keys(), *stageable]))

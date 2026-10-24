@@ -53,15 +53,23 @@ one the script imported first: a script kept at the repository root sits above b
 folders, so where a module's file is cannot be what decides it."""
 
 
-def with_solids(project: Project) -> Project:
+def with_solids(project: Project, strict: bool = True) -> Project:
     """`project` with every drawn and imported solid on disk: what a model script asks
-    for (`core.model.script_writer`), whose parts point at .brep files outside it.
+    for (`core.model.script_writer`), whose parts point at .brep files outside it, and
+    what a project file opened on another computer needs -- its .brep paths are the
+    author's own.
 
     A part whose .brep is there is left as it is. One whose .brep is gone is built again
     -- a drawn one from its recipe, an imported one from the file it was read from
     (`CustomPart.imported_from`) -- and points at the new .brep. An imported part with
-    no file to read again is refused by name.
+    no file to read again is refused by name; with `strict` off it is left as it is, for
+    the mesher to say it is missing, so a file can still be opened and the part
+    imported again.
+
+    A drawn part is built once per recipe: the .brep is named after the recipe, so
+    reading the same file again -- every `kratos-cli` command reads it -- reuses it.
     """
+    import hashlib
     import json
 
     gone = [part.key for part in project.custom_parts
@@ -69,6 +77,7 @@ def with_solids(project: Project) -> Project:
     if not gone:
         return project
     from core import gmsh_worker
+    from core.geometry import primitives
 
     payload = project.model_dump()
     for part in payload["custom_parts"]:
@@ -76,10 +85,20 @@ def with_solids(project: Project) -> Project:
             continue
         source = part.get("imported_from")
         if part.get("recipe"):
-            built = gmsh_worker.run_blocking(gmsh_worker.create_job, json.dumps(part["recipe"]))
+            recipe = json.dumps(part["recipe"], sort_keys=True)
+            kept = primitives.DATA_DIR / (
+                f"recipe-{hashlib.sha1(recipe.encode('utf-8')).hexdigest()}.brep")
+            if kept.is_file() and part.get("bbox"):
+                part["source_file"] = str(kept)
+                continue
+            built = gmsh_worker.run_blocking(gmsh_worker.create_job, recipe)
+            Path(built["brep_path"]).replace(kept)
+            built["brep_path"] = str(kept)
         elif source and Path(source).is_file():
             built = gmsh_worker.run_blocking(gmsh_worker.import_job, source,
                                              Path(source).suffix.lower())
+        elif not strict:
+            continue
         else:
             raise ScriptError(
                 f"the solid {part['label']!r} ({part['key']}) is gone from "

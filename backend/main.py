@@ -1,11 +1,11 @@
 """The FastAPI app, assembled from its parts.
 
 The routes of the HTTP API live in `backend/routes/`, one module per group of the API
-table in `docs/ARCHITECTURE.md` (project, geometry, mesh, decks, results), and what they
-share in `backend/routes/common.py`. The Host/Origin check and the no-cache headers are
-`backend/middleware.py`. This module puts them together: the gmsh worker's lifespan, the
-handler for a crashed worker, the middleware in the order it runs, the routers, the
-health check, and the frontend.
+table in `docs/developer/ARCHITECTURE.md` (project, geometry, mesh, decks, results), and
+what they share in `backend/routes/common.py`. The Host/Origin check and the no-cache
+headers are `backend/middleware.py`. This module puts them together: the gmsh worker's
+lifespan, the handler for a crashed worker, the middleware in the order it runs, the
+routers, the health check, and the frontend.
 
 The frontend lives in `frontend/`, and everything the browser loads is served from there.
 Its base UI -- menus, toolbars, explorer, dialogs and command box -- is in
@@ -63,7 +63,7 @@ app.middleware("http")(only_this_browser_tab)
 
 
 # ── API ─────────────────────────────────────────────────────────────────────
-# One router per group of the HTTP API (docs/ARCHITECTURE.md), in `backend/routes/`.
+# One router per group of the HTTP API (docs/developer/ARCHITECTURE.md), in `backend/routes/`.
 # Only the app's own health check is declared here.
 
 app.include_router(project.router)

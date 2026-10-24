@@ -24,6 +24,14 @@ documented reference analysis, and the parts of them the project really does det
 the export rather than defaulted. When those fields do grow a home in `Project`, this
 is where they replace `SOLVER`.
 
+A groundwater flow stage (a "Groundwater flow" stage) is solved by a second reference
+analysis, `FLOW_SOLVER`, read off Kratos' own `tests/Muskat` decks, with the strategy the
+project calls for (`FLOW_STRATEGIES`). It writes its own results (`FLOW_NODAL_RESULTS`):
+its elements carry the water pressure alone, so there is no displacement or stress to
+write. A stage with a seepage face adds one `ApplySeepageBoundaryProcess` per face to its
+`loads_process_list`, as Kratos' `tests/seepage_tests` decks do, and writes the nodal
+water flow rate the seepage strategy computes.
+
 `stage_settings.processes.constraints_process_list` and `.loads_process_list` are
 filled in, because both are fully determined by the project already exported to the
 .mdpa: the domain boundaries and their sub-model parts, and each load's own components
@@ -92,7 +100,22 @@ ECHO_LEVEL = 1
 and the only account of a failure a user ever sees."""
 
 NODAL_RESULTS = ("DISPLACEMENT", "TOTAL_DISPLACEMENT", "WATER_PRESSURE")
-GAUSS_POINT_RESULTS = ("CAUCHY_STRESS_TENSOR",)
+GAUSS_POINT_RESULTS = ("CAUCHY_STRESS_TENSOR", "HYDRAULIC_HEAD")
+"""`HYDRAULIC_HEAD` is the soil element's own: at each integration point, the head of
+its nodes -- the height against gravity minus the water pressure over the water weight
+(`DENSITY_WATER` times g) -- interpolated. With no gravity there is no water weight and
+Kratos writes 0, so a deck with gravity off does not ask for it (`_gid_output`)."""
+
+FLOW_NODAL_RESULTS = ("WATER_PRESSURE", "EFFECTIVE_SATURATION", "FLUID_FLUX_VECTOR")
+FLOW_GAUSS_POINT_RESULTS = ("HYDRAULIC_HEAD",)
+SEEPAGE_NODAL_RESULTS = ("NODAL_WATER_FLOW_RATE",)
+"""What a groundwater flow stage writes: the reference decks' nodal list, the saturation
+and the flux made nodal by the extrapolation process the stage carries
+(`core.kratos.writer.FLOW_EXTRAPOLATED`), and the head as a deformation stage writes
+it, which the water pressure elements compute too (`Pw_element.cpp`). A stage with a
+seepage face also writes `SEEPAGE_NODAL_RESULTS`: the water each node takes in or lets
+out, which the seepage strategy works out to decide where the face is open (as Kratos'
+`tests/seepage_tests` decks write it)."""
 
 SOLVER = {
     "solver_type": "U_Pw",
@@ -129,6 +152,61 @@ it is slower on a large mesh but cannot fail to converge on a small or ill-condi
 one, which is the wrong first impression for a button that either works or does not.
 Everything a project genuinely decides -- dimension, sub-model parts, rotations --
 is filled in around this by `_solver_settings` rather than being listed here."""
+
+FLOW_SOLVER = {
+    "solver_type": "Pw",
+    "model_part_name": "PorousDomain",
+    "solution_type": "Steady_State_Groundwater_Flow",
+    "time_stepping": {"time_step": TIME_STEP, "max_delta_time_factor": 1000.0},
+    "buffer_size": 2,
+    "echo_level": ECHO_LEVEL,
+    "clear_storage": False,
+    "compute_reactions": True,
+    "move_mesh_flag": False,
+    "reform_dofs_at_each_step": True,
+    "block_builder": True,
+    "linear_solver_settings": {"solver_type": "LinearSolversApplication.sparse_lu",
+                               "scaling": True},
+}
+"""The groundwater flow analysis: a steady state of the water pressure alone, copied
+field for field from Kratos' `tests/Muskat/saturated_hydrostatic/ProjectParameters.json`
+and `van_genuchten_hydrostatic`, whose solver blocks differ in the strategy only. What
+the project decides is filled in by `_solver_settings`, as for `SOLVER`."""
+
+FLOW_STRATEGIES: dict[str, dict[str, Any]] = {
+    "linear": {"strategy_type": "linear"},
+    "newton_raphson": {
+        "strategy_type": "newton_raphson",
+        "convergence_criterion": "residual_criterion",
+        "residual_relative_tolerance": 1e-3,
+        "residual_absolute_tolerance": 1e-15,
+        "min_iterations": 6,
+        "max_iterations": 100,
+        "number_cycles": 1,
+        "reduction_factor": 1.0,
+        "increase_factor": 1.0,
+    },
+    "newton_raphson_with_seepage": {
+        "strategy_type": "newton_raphson_with_seepage",
+        "convergence_criterion": "residual_criterion",
+        "residual_relative_tolerance": 1e-4,
+        "residual_absolute_tolerance": 1e-9,
+        "min_iterations": 6,
+        "max_iterations": 50,
+        "number_cycles": 1,
+        "reduction_factor": 1.0,
+        "increase_factor": 1.0,
+    },
+}
+"""A flow stage's strategy, by name, with the Newton settings of the reference deck that
+uses it: `linear` for a saturated soil, whose flow is linear in the water pressure
+(`saturated_hydrostatic`), `newton_raphson` for one whose retention law makes the
+permeability depend on it (`van_genuchten_hydrostatic`), `newton_raphson_with_seepage`
+for a stage with a seepage face (`seepage_tests`), which opens and closes the face node
+by node as it iterates. Kratos refuses more than one cycle for that one. Which one a
+stage gets is derived from its soil and its conditions (`core.kratos.writer`), not
+chosen. A stage's own iterations and
+tolerance replace the deck's, as in a deformation stage; a linear stage has none."""
 
 # Metres, and a *step*, not a tolerance. The master and slave nodes of a tie are copies
 # of the same source node -- `core.kratos.writer` gives each duplicate its original's exact
@@ -174,18 +252,26 @@ class Stage:
 
     This module renders; it does not derive. Which parts are active in a stage, which
     processes a stage wants and what it solves with are all questions about the
-    *project* -- they need the phase tree and the mapping from model keys to deck part
+    *project* -- they need the stage tree and the mapping from model keys to deck part
     names, and both live in `core.kratos.writer`. So a `Stage` arrives with the answers.
 
     `active` is the deck part names live during this stage, and it drives the process
     filter: a process is emitted only where every part it names is active (plan sec
-    C3). `None` means "no opinion" -- the unphased deck says nothing about what a stage
+    C3). `None` means "no opinion" -- the unstaged deck says nothing about what a stage
     contains, so nothing is filtered out of it, which is exactly how it exported before
     staged construction existed.
 
+    `conditions` is the water pressure conditions on in this stage, by id: a condition
+    a stage switched off is not written in it. `None` writes every one, as an unstaged
+    deck does.
+
     `max_iterations` and `tolerated_error` are `None` for "whatever `SOLVER` says",
     rather than being defaulted to its values here, so that the deck of a project with
-    no phases cannot drift from `SOLVER` by way of a copy made in this file.
+    no stages cannot drift from `SOLVER` by way of a copy made in this file.
+
+    `flow_strategy` is `None` for a deformation stage, and for a groundwater flow stage
+    the `FLOW_STRATEGIES` entry it is solved with. `seepage` is the parts of the seepage
+    faces it has, each with its own `ApplySeepageBoundaryProcess`.
     """
     name: str
     activate: tuple[str, ...] = ()
@@ -204,17 +290,42 @@ class Stage:
     max_iterations: int | None = None
     tolerated_error: float | None = None
     materials_filename: str = MATERIALS_NAME
+    conditions: frozenset[str] | None = None
+    flow_strategy: str | None = None
+    seepage: tuple[str, ...] = ()
 
 
-def stage_name(index: int, phase_name: str) -> str:
-    """`1_Initial_stage`: the position in the sequence, then the phase's own name.
+@dataclass(frozen=True)
+class WaterPressure:
+    """One `WaterPressureCondition` (core/model/schemas.py) on one deck part, resolved.
+
+    `part` is the sub-model part it acts on, or `None` for the whole porous domain. A
+    condition on a face the excavation splits arrives as one entry per segment, so each
+    one goes with its lift (`Stage.active`), and so does one on a staged part, one entry
+    per body. `reference_coordinate` is the record's own level, and `condition` the
+    record's id, which a stage switches (`Stage.conditions`)."""
+    part: str | None
+    fluid_pressure_type: str
+    is_fixed: bool
+    value: float
+    reference_coordinate: float
+    x_coordinates: tuple[float, ...]
+    y_coordinates: tuple[float, ...]
+    z_coordinates: tuple[float, ...]
+    pressure_tension_cut_off: float
+    specific_weight: float
+    condition: str = ""
+
+
+def stage_name(index: int, label: str) -> str:
+    """`1_Initial_stage`: the position in the sequence, then the stage's own name.
 
     The reference deck's own shape, and not only cosmetic -- every result file a stage
     writes is named after it, so the name has to survive being part of a filename on
     any platform. Anything that is not a letter, a digit or an underscore becomes one,
-    runs collapse, and a phase named entirely in punctuation still gets a stage.
+    runs collapse, and a stage named entirely in punctuation still gets a stage.
     """
-    cleaned = re.sub(r"_+", "_", re.sub(r"[^A-Za-z0-9]+", "_", phase_name)).strip("_")
+    cleaned = re.sub(r"_+", "_", re.sub(r"[^A-Za-z0-9]+", "_", label)).strip("_")
     return f"{index + 1}_{cleaned or 'Stage'}"
 
 
@@ -224,11 +335,12 @@ def project_parameters(
     stages: list[Stage],
     normal_loads: Sequence[tuple[str, str, float, float, float]] = (),
     *,
-    water: tuple[float, float] = (0.0, 10.0),
+    water_pressures: Sequence[WaterPressure] = (),
     deck_name: str = "model",
     domain_size: int = 2,
     body_parts: Sequence[str] = (),
     rotation_dofs: bool = False,
+    gravity: bool = True,
 ) -> str:
     """`constraints` is (sub-model part name, DISPLACEMENT is_fixed per axis).
     `loads` is (sub-model part name, Kratos variable, active per axis, value).
@@ -237,25 +349,25 @@ def project_parameters(
     `normal_loads` is (sub-model part name, fluid_pressure_type, pressure, water level,
     water specific weight) -- one per active `NormalLoad`; the last three are read only
     for the mode `fluid_pressure_type` names (see `_normal_load`).
-    `water` is (phreatic level, specific weight) from `Project.water`, which every stage
-    fixes the pore pressure about (see `_pore_pressure`). The same two numbers a
-    hydrostatic entry of `normal_loads` carries, passed once because the field exists
-    whether or not any load stands in it.
+    `water_pressures` is the user's water pressure conditions, in the order they are
+    written: start values first, so that where a fixed value acts on the same node it is
+    the one that stays (see `_water_pressure`). Nothing else fixes a water pressure.
 
     The keyword arguments are what the analysis block needs and the process lists do
     not: `deck_name` is the .mdpa's name without its extension (Kratos appends it) and
     the stem every result file is named after, `domain_size` is 2 or 3, `body_parts`
     names every element-carrying sub-model part, and `rotation_dofs` says whether
-    anything in the deck has rotations -- a beam or a shell does, soil does not."""
+    anything in the deck has rotations -- a beam or a shell does, soil does not.
+    `gravity` is `Project.gravity`: off, no stage has the self weight process."""
     rendered: dict[str, dict] = {}
     for index, stage in enumerate(stages):
         live = stage.active
         keep = (lambda name: True) if live is None else (lambda name: name in live)
 
-        # Gravity first, and in every stage of every deck: it is what gives the
+        # Gravity first, and in every stage of a deck that has it: it is what gives the
         # continuum elements their self weight, and it is not filtered because the part
         # it names is the one the solver assembles out of whatever is active.
-        loads_processes = [_gravity()]
+        loads_processes = [_gravity()] if gravity else []
         # In the project's units, which are the deck's: written as they stand.
         loads_processes += [_load(name, variable, active, list(value))
                             for name, variable, active, value in loads if keep(name)]
@@ -264,11 +376,16 @@ def project_parameters(
             for name, fluid_pressure_type, pressure, water_y, specific_weight
             in normal_loads if keep(name)
         ]
+        loads_processes += [_seepage(name) for name in stage.seepage]
         constraint_processes = [_constraint(name, is_fixed)
                                 for name, is_fixed in constraints if keep(name)]
-        # The water table, in every stage of every deck and filtered by nothing: it is a
-        # property of the ground rather than of anything a phase switches on and off.
-        constraint_processes.append(_pore_pressure(*water))
+        # On the whole soil a condition is filtered by nothing, as the soil is the porous
+        # domain itself; on a face or a part it goes with the stretch or body it names.
+        # And it is in the stages whose stage has it switched on.
+        constraint_processes += [_water_pressure(pressure) for pressure in water_pressures
+                                 if (pressure.part is None or keep(pressure.part))
+                                 and (stage.conditions is None
+                                      or pressure.condition in stage.conditions)]
         constraint_processes += [_master_slave_constraint(master, slave)
                                  for master, slave in stage.ties]
         auxiliary = _auxiliary(stage)
@@ -280,7 +397,9 @@ def project_parameters(
                                   rotation_dofs, imported=stage.modeler or index > 0,
                                   stage=stage)
         rendered[stage.name] = _stage(stage, index, constraint_processes,
-                                      loads_processes, auxiliary, solver, deck_name)
+                                      loads_processes, auxiliary, solver, deck_name,
+                                      gravity=gravity,
+                                      flow=stage.flow_strategy is not None)
 
     return json.dumps({
         "orchestrator": {
@@ -356,7 +475,8 @@ def _auxiliary(stage: Stage) -> list[dict]:
 
 def _stage(stage: Stage, index: int, constraint_processes: list[dict],
            loads_processes: list[dict], auxiliary: list[dict],
-           solver: dict, deck_name: str) -> dict:
+           solver: dict, deck_name: str, gravity: bool = True,
+           flow: bool = False) -> dict:
     """One entry of `stages`. Each stage occupies its own unit interval of time --
     stage *n* runs from `start_time` to `start_time + 1` -- because the orchestrator
     runs them one after another over a single model: a second stage starting where the
@@ -386,7 +506,8 @@ def _stage(stage: Stage, index: int, constraint_processes: list[dict],
             "solver_settings": dict(solver),
             "processes": processes,
             "output_processes": {
-                "gid_output": [_gid_output(f"{deck_name}_{stage.name}")]},
+                "gid_output": [_gid_output(f"{deck_name}_{stage.name}", gravity,
+                                           flow, seepage=bool(stage.seepage))]},
         },
     }
     preprocess = _preprocess(stage, deck_name)
@@ -422,7 +543,7 @@ def _process_parts(processes: list[dict],
 def _k0_procedure(parts: tuple[str, ...]) -> dict:
     """Set the initial stress state from K0 rather than by solving for it.
 
-    Runs in the K0 phase only, over the soil bodies active in it -- it reads `K0_NC`
+    Runs in the K0 stage only, over the soil bodies active in it -- it reads `K0_NC`
     and `K0_MAIN_DIRECTION` off each body's material, which is why the initial stage
     reads a materials file of its own (`core.kratos.materials`, plan sec C4).
     """
@@ -541,11 +662,15 @@ def _solver_settings(deck_name: str, domain_size: int, body_parts: list[str],
 
     `stage` overrides the three numbers the reference deck actually varies between its
     stages -- iterations, tolerance and whether displacements start again from zero
-    (plan sec C5). They come off the phase record; a stage that says nothing about them
+    (plan sec C5). They come off the stage record; a stage that says nothing about them
     solves the way `SOLVER` does.
+
+    A groundwater flow stage starts from `FLOW_SOLVER` and its strategy instead. It has
+    no displacements to reset, and a linear one no iterations to count.
     """
+    strategy = stage.flow_strategy if stage is not None else None
     settings = {
-        **SOLVER,
+        **(SOLVER if strategy is None else {**FLOW_SOLVER, **FLOW_STRATEGIES[strategy]}),
         "domain_size": domain_size,
         "rotation_dofs": rotation_dofs,
         "model_import_settings": ({"input_type": "use_input_model_part"} if imported else
@@ -559,7 +684,10 @@ def _solver_settings(deck_name: str, domain_size: int, body_parts: list[str],
         return settings
     settings["material_import_settings"] = {
         "materials_filename": stage.materials_filename}
-    settings["reset_totals"] = stage.reset_displacements
+    if strategy is None:
+        settings["reset_totals"] = stage.reset_displacements
+    elif strategy == "linear":
+        return settings
     if stage.max_iterations is not None:
         settings["max_iterations"] = stage.max_iterations
     if stage.tolerated_error is not None:
@@ -567,13 +695,20 @@ def _solver_settings(deck_name: str, domain_size: int, body_parts: list[str],
     return settings
 
 
-def _gid_output(output_name: str) -> dict:
+def _gid_output(output_name: str, gravity: bool = True, flow: bool = False,
+                seepage: bool = False) -> dict:
     """GiD ASCII results beside the deck, one file per stage.
 
     The same writer, flags and result list as the reference decks in `test/`, which is
     also what Kratos' own GeoMechanicsApplication test helpers read back when they
-    compare two runs.
+    compare two runs. Without gravity the hydraulic head is left out: it would be 0.
+    A groundwater flow stage writes the flow results (`FLOW_NODAL_RESULTS`), and the
+    nodal water flow rate when it has a seepage face (`SEEPAGE_NODAL_RESULTS`).
     """
+    nodal = (FLOW_NODAL_RESULTS + (SEEPAGE_NODAL_RESULTS if seepage else ())) if flow \
+        else NODAL_RESULTS
+    gauss = [name for name in (FLOW_GAUSS_POINT_RESULTS if flow else GAUSS_POINT_RESULTS)
+             if gravity or name != "HYDRAULIC_HEAD"]
     return {
         "python_module": "gid_output_process",
         "kratos_module": "KratosMultiphysics",
@@ -595,8 +730,8 @@ def _gid_output(output_name: str) -> dict:
                     "node_output": False,
                     "skin_output": False,
                     "plane_output": [],
-                    "nodal_results": list(NODAL_RESULTS),
-                    "gauss_point_results": list(GAUSS_POINT_RESULTS),
+                    "nodal_results": list(nodal),
+                    "gauss_point_results": gauss,
                 },
                 "point_data_configuration": [],
             },
@@ -635,44 +770,67 @@ def _constraint(part_name: str, is_fixed: list[bool]) -> dict:
     }
 
 
-def _pore_pressure(water_y: float, specific_weight: float) -> dict:
-    """Fix `WATER_PRESSURE` hydrostatically about the phreatic level, over the whole
-    porous domain.
+def _water_pressure(pressure: WaterPressure) -> dict:
+    """Prescribe `WATER_PRESSURE` on one part, or on the whole porous domain.
 
-    Copied field for field from `staged_construction_for_generated_mesh.json`, where it
-    appears unchanged in all seven stages, and from ten of the eleven stage files under
-    `test/`. Without it the `U_Pw` solver's pressure degrees of freedom are unconstrained
-    everywhere.
+    The three shapes are each copied field for field from a working deck:
 
-    Three things worth pointing at:
+    *   `"Hydrostatic"` on the whole domain from `staged_construction_for_generated_mesh.json`,
+        where it appears unchanged in all seven stages, and on a boundary part from
+        Kratos' `tests/Muskat/saturated_hydrostatic`, which adds
+        `pressure_tension_cut_off`. The key is written only when it is not Kratos'
+        default 0, so the staged reference is matched exactly.
+    *   `"Uniform"` from Kratos' `tests/seepage_tests/fixed_bottom_boundary`: `value` and
+        no `fluid_pressure_type` at all, which is how the process is told to apply one
+        value everywhere.
+    *   `"Phreatic_Multi_Line"` from Kratos' `tests/Muskat/van_genuchten_hydrostatic`,
+        with one `table` entry per point of the line.
 
-    *   **`PorousDomain`, not the computational model part.** Gravity acts on what the
-        solver assembles, because only elements have weight; the water table is a
-        property of the ground itself and is stated over the whole model.
-    *   **`table` is a bare `0`, not `[0, 0, 0]`.** This is the *scalar* constraint
-        process, and it rejects a list -- the sort of thing only a reference deck
-        tells you.
-    *   **Both numbers come from `Project.water`**, which is also where a hydrostatic
-        `NormalLoad` gets them (`_normal_load`). One source, so a deck cannot carry a
-        water load referenced to one level inside ground pressurised about another.
+    Two things worth pointing at:
 
-    Kept in step with the GUI note in plan sec 7.2: the eventual water-line tool edits
-    `Project.water`, and this process follows it without further work.
+    *   **`PorousDomain`, not the computational model part**, for the whole soil.
+        Gravity acts on what the solver assembles, because only elements have weight;
+        the water table is a property of the ground itself and is stated over the whole
+        model.
+    *   **`table` is a bare `0`, not `[0, 0, 0]`**, except for the multi-line. This is
+        the *scalar* constraint process, and it rejects a list -- the sort of thing only
+        a reference deck tells you.
     """
+    parameters: dict[str, Any] = {
+        "model_part_name": ("PorousDomain" if pressure.part is None
+                            else f"PorousDomain.{pressure.part}"),
+        "variable_name": "WATER_PRESSURE",
+        "is_fixed": pressure.is_fixed,
+    }
+    if pressure.fluid_pressure_type == "Uniform":
+        parameters.update({"value": pressure.value, "table": 0})
+    elif pressure.fluid_pressure_type == "Hydrostatic":
+        parameters.update({
+            "table": 0,
+            "fluid_pressure_type": "Hydrostatic",
+            "gravity_direction": 1,
+            "reference_coordinate": pressure.reference_coordinate,
+            "specific_weight": pressure.specific_weight,
+        })
+    else:
+        points = len(pressure.x_coordinates)
+        parameters.update({
+            "table": [0] * points,
+            "fluid_pressure_type": pressure.fluid_pressure_type,
+            "gravity_direction": 1,
+            "out_of_plane_direction": 2,
+            "x_coordinates": list(pressure.x_coordinates),
+            "y_coordinates": list(pressure.y_coordinates),
+            "z_coordinates": list(pressure.z_coordinates),
+            "specific_weight": pressure.specific_weight,
+        })
+    if pressure.fluid_pressure_type != "Uniform" and pressure.pressure_tension_cut_off:
+        parameters["pressure_tension_cut_off"] = pressure.pressure_tension_cut_off
     return {
         "python_module": "apply_scalar_constraint_table_process",
         "kratos_module": "KratosMultiphysics.GeoMechanicsApplication",
         "process_name": "ApplyScalarConstraintTableProcess",
-        "Parameters": {
-            "model_part_name": "PorousDomain",
-            "variable_name": "WATER_PRESSURE",
-            "is_fixed": True,
-            "table": 0,
-            "fluid_pressure_type": "Hydrostatic",
-            "gravity_direction": 1,
-            "reference_coordinate": water_y,
-            "specific_weight": specific_weight,
-        },
+        "Parameters": parameters,
     }
 
 
@@ -745,6 +903,18 @@ def _normal_load(part_name: str, fluid_pressure_type: str, pressure: float,
     }
 
 
+def _seepage(part_name: str) -> dict:
+    """A seepage face: Kratos' `ApplySeepageBoundaryProcess`, which names the part of
+    `GeoSeepageCondition`s and nothing else. The strategy does the work
+    (`FLOW_STRATEGIES`); copied from Kratos' `tests/seepage_tests` decks."""
+    return {
+        "python_module": "apply_seepage_boundary_process",
+        "kratos_module": "KratosMultiphysics.GeoMechanicsApplication",
+        "process_name": "ApplySeepageBoundaryProcess",
+        "Parameters": {"model_part_name": f"PorousDomain.{part_name}"},
+    }
+
+
 def _gravity() -> dict:
     """Self weight, as a body load on the computational model part.
 
@@ -754,13 +924,14 @@ def _gravity() -> dict:
 
     *   **The computational model part, not the bodies one by one.** That part is what
         the solver assembles out of the bodies a stage has active, so a body switched
-        off in a phase drops out of it without gravity having to be restated -- which is
+        off in a stage drops out of it without gravity having to be restated -- which is
         why the reference never varies this process between stages.
     *   **Axis 1, always.** Y is up in both dimensions this exporter writes, and it is
         the same axis the constraint and normal-load processes already name as
         `gravity_direction` and the materials file as `K0_MAIN_DIRECTION`.
-    *   **Every stage, filtered by nothing.** There is no project in which the ground
-        has no weight, so there is no condition to put this behind.
+    *   **Every stage, filtered by nothing.** The ground has its weight in every stage
+        or in none: `Project.gravity` is one switch for the whole sequence, on unless the
+        user turns it off.
     """
     return _load(COMPUTATIONAL_MODEL_PART, "VOLUME_ACCELERATION",
                  [False, True, False], [0.0, -GRAVITY, 0.0])

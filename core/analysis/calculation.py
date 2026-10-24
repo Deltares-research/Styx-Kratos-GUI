@@ -82,7 +82,7 @@ _STAGE_LINE = re.compile(
     re.escape(STAGE_MARKER) + r" (begin|end) (\d+)/(\d+) (.*?)\s*$", re.MULTILINE)
 """One stage marker.
 
-The name runs to the end of the line because `Stage.name` comes from `Phase.name`,
+The name runs to the end of the line because a Kratos stage's name comes from `Stage.name`,
 which the user types and may well put a space in. Not anchored at the start,
 because Kratos writes from C++ and from Python into the same pipe and the two
 interleave -- a marker can arrive with someone else's half-line in front of it."""

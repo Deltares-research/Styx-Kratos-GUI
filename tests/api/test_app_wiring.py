@@ -1,9 +1,9 @@
 """How the app is put together: which module declares each route, and the middleware order.
 
 `backend/main.py` only assembles the app. Every route of the HTTP API lives in the router
-of its group (`backend/routes/`), the groups `docs/ARCHITECTURE.md` lists, so a reader can
-go from a URL to its file. The table below is that mapping; a route outside it fails here,
-which is what keeps the next route from landing in `main.py` again.
+of its group (`backend/routes/`), the groups `docs/developer/ARCHITECTURE.md` lists, so a
+reader can go from a URL to its file. The table below is that mapping; a route outside it
+fails here, which is what keeps the next route from landing in `main.py` again.
 """
 
 from __future__ import annotations
@@ -103,7 +103,7 @@ def test_refusals_turns_a_validation_error_into_a_request_error_field_by_field()
 
 
 @pytest.mark.parametrize(("failure", "status"), [
-    (session.EditRefused("a phase still uses it"), 422),
+    (session.EditRefused("a stage still uses it"), 422),
     (session.DeckReadOnly("Edit the deck"), 422),
     (session.UnknownPart("no custom part with key 'x'"), 404),
 ], ids=["refused", "deck", "unknown"])
@@ -122,8 +122,8 @@ EDITS = {
     "put_water": "set_water",
     "patch_materials": "replace_materials",
     "patch_structures": "replace_structures",
-    "patch_phases": "replace_phases",
-    "seed_default_phases": "default_phases",
+    "patch_stages": "replace_stages",
+    "seed_default_stages": "default_stages",
     "patch_dimension": "set_dimension",
     "patch_units": "set_units",
     "clear_custom_parts": "without_custom_parts",

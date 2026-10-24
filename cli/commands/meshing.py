@@ -68,12 +68,13 @@ def export_deck(args: argparse.Namespace) -> Answer:
     files = calculation.write_deck(export, args.out)
     return Answer(
         data={"directory": str(args.out), "deck_name": export["deck_name"],
-              "files": files, "stats": export["stats"], "warnings": export["warnings"]},
+              "files": files, "stats": export["stats"], "warnings": export["warnings"],
+              "notes": export.get("notes", [])},
         lines=[f"wrote the Kratos deck {export['deck_name']} to {args.out}:",
                *(f"  {name}" for name in files),
                _stats_line(export["stats"]),
                f"next: kratos-cli run {args.out}"],
-        warnings=export["warnings"])
+        warnings=export["warnings"], notes=export.get("notes", []))
 
 
 def mesh_settings(project: Project) -> MeshRequest:
@@ -98,12 +99,10 @@ def exported(project: Project) -> dict:
 
 
 def nothing_to_mesh(project: Project) -> str | None:
-    """Why `project` would mesh to nothing, or None: a model with no soil body and no
-    solid of its own has nothing for gmsh to fill, and its deck would hold no nodes."""
-    if project.soil_bodies() or project.custom_parts:
-        return None
-    return ("the model has nothing to mesh: no soil layer and no solid. "
-            "`layer add` adds a soil layer.")
+    """Why `project` would mesh to nothing, or None (`session.nothing_to_mesh`), with
+    the command that fixes it."""
+    empty = session.nothing_to_mesh(project)
+    return f"{empty} `layer add` adds a soil layer." if empty else None
 
 
 def _refuse_empty(project: Project, stats: dict) -> None:

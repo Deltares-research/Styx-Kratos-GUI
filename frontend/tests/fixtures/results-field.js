@@ -6,7 +6,7 @@
    mesh: see the generator.
 
    A .js file assigning a global rather than a .json one, because the browser suite is
-   opened from file://, where a fetch is blocked. Same convention as phase-cases.js.
+   opened from file://, where a fetch is blocked. Same convention as stage-cases.js.
 */
 window.RESULTS_FIELD =
 {

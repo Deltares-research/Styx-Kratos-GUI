@@ -300,7 +300,7 @@ def _gid_output_name(stage: Any) -> str | None:
 def _stages_from_files(directory: Path) -> list[tuple[str, str | None]]:
     """The fallback: every `*.post.res` in the directory, ordered by stage number.
 
-    A stage's output is named `<deck>_<index>_<phase>`, and the deck name is the one
+    A stage's output is named `<deck>_<index>_<stage>`, and the deck name is the one
     thing here that is not recoverable from the file alone -- so the stage name is
     taken to start at the first `<digits>_` group, which is what `stage_name` writes
     and no deck name produced by `calculation.new_run_directory` can contain.
@@ -325,10 +325,10 @@ def _stage(directory: Path, index: int, name: str, base: str | None) -> dict:
     return {
         "index": index,
         "name": name,
-        # The phase as the user typed it, as far as `stage_name` left it recoverable:
+        # The stage as the user typed it, as far as `stage_name` left it recoverable:
         # it replaced every run of non-alphanumerics with one underscore, so the
         # spaces come back and nothing else does.
-        "phase": STAGE_NUMBER.sub("", name).replace("_", " "),
+        "stage": STAGE_NUMBER.sub("", name).replace("_", " "),
         "base": base,
         "mesh_file": mesh.name if mesh and mesh.is_file() else None,
         "results_file": res.name if res and res.is_file() else None,
@@ -391,7 +391,7 @@ but a user copying files in might -- is re-read rather than served stale.
 The working set is a whole run, not one stage: `stage_parts` reads every stage's mesh
 (see there), so a 20-stage run is the deck, twenty meshes and whichever results files are
 being looked at. It used to be capped at 8 entries and cleared whole, which a 7-stage run
-overflowed on every phase switch. Now it is bounded by the size of what it parsed
+overflowed on every stage switch. Now it is bounded by the size of what it parsed
 (`CACHE_BYTES`), dropping the least recently used first.
 """
 
@@ -516,7 +516,7 @@ def stage_parts(run: Run, index: int) -> dict:
     """The named parts of the deck as this stage saw them.
 
     `written` is filled in, which costs reading every stage's mesh once -- the only way
-    to tell a part this phase removed from one the GiD writer never emits at all (see
+    to tell a part this stage removed from one the GiD writer never emits at all (see
     `core.results.parts`). They are cached, and the alternative is the postprocessor
     reporting the interfaces as having been demolished seven times.
     """
@@ -614,7 +614,7 @@ def member_profiles(run: Run, member: str, quantity: str) -> dict:
         "label": entry.label,
         "unit": entry.unit(run_unit_system(run)),
         "stages": [{"index": stage["index"], "name": stage["name"],
-                    "phase": stage["phase"]}
+                    "stage": stage["stage"]}
                    | members.profile(output, coordinates, entry)
                    for stage, output in outputs],
     }

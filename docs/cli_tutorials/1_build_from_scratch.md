@@ -47,7 +47,8 @@ new simple_dike.json --dim 2 --name simple_dike
 # 2. The soil block, 20 m wide and 10 m high, and a borehole.
 #    The ground is at y = 10 and the water at y = 0, so the soil is dry.
 #    A 2D model is a vertical cut through the site at one z (z = 0 in a new project).
-#    The site's z extent matters only when the model is switched to 3D.
+#    The site's z extent matters only when the model is switched to 3D, so `domain`
+#    is given no --z here.
 #    A borehole is placed on the map, as in the GUI: its --x and --y are map coordinates
 #    (map y is the model's z). Its levels are --head (ground) and --water.
 #    A new project already has one borehole, with the id bh1: `borehole set bh1` changes
@@ -56,6 +57,11 @@ domain --x 0 20 --y 0 10
 borehole set bh1 --name BH1 --x 0 --y 0 --head 10 --water 0
 
 # 3. The soil: one linear elastic material, and one layer of it down to y = 0.
+#    --color is the colour the GUI draws the soil in, as #rrggbb. Colour names such
+#    as brown are refused.
+#    A new material starts with the values of the GUI's default loose sand. The lines
+#    below replace them. The variables have Kratos' own names, in the project's units
+#    (SI here). `get materials[m_soil].variables` lists the values a material has.
 material add m_soil --name soil --color "#c4a86a" --law GeoLinearElasticPlaneStrain2DLaw
 #    Stiffness: E = 20 MPa
 material set m_soil YOUNG_MODULUS=2.0e7 POISSON_RATIO=0.3
@@ -64,9 +70,13 @@ material set m_soil DENSITY_SOLID=1834.8623853211009 DENSITY_WATER=1019.36799184
 #    Water: a fixed pore pressure field, and the soil's permeability (m2)
 material set m_soil GEO_DRAINAGE_TYPE=CONSTANT_PW_FIELD BULK_MODULUS_SOLID=1e10 BULK_MODULUS_FLUID=2.2e9 DYNAMIC_VISCOSITY=1e-3
 material set m_soil PERMEABILITY_XX=1e-5 PERMEABILITY_YY=1e-5 PERMEABILITY_XY=0.0
-#    Strength (c = 1 kPa, phi = 30 degrees) and the K0 for the initial stresses
+#    Strength (c = 1 kPa, phi = 30 degrees) and the K0 for the initial stresses.
+#    K0_NC can be left out: the export then writes 1 - sin(phi), which is 0.5 here too.
 material set m_soil GEO_COHESION=1000.0 GEO_FRICTION_ANGLE=30.0 K0_NC=0.5
 layer add soil --name soil --material m_soil --bottom 0
+#    The block stands on the supports a new project has: the bottom fixed and the sides
+#    on rollers. It is dry, so it needs no water pressure condition.
+boundary list
 
 # 4. The sheet pile: define its steel and cross-section properties, then place a 2D beam
 #    from the ground surface at (10, 10) down to its toe at (10, 3).
@@ -88,16 +98,28 @@ load add line surcharge --name Load --x 10 20 --y 10 --components 0 -10000
 #    2-node beam elements along the sheet pile, which share the soil's nodes.
 #    --order 2 would give 6-node triangles. The settings are kept in the project, and
 #    the model is meshed once as a check: 278 nodes, 492 elements (the soil triangles).
+#    The two settings are the fields mesh.element_size and mesh.order, which
+#    `set mesh.element_size 0.5` also changes, but `set` does not mesh or count.
+#    A finer mesh makes a longer run: 0.4 m at order 2 on a 20 m x 20 m block gave
+#    11,860 nodes and a run of about two minutes on a laptop.
 mesh --size 1 --order 1
 
 # 7. The stages: K0 on the soil alone, then the sheet pile, then the load.
 #    Every part starts in the model, so the first stage switches off what is not built yet:
 #    the sheet pile and the load. The later stages switch them back on, one at a time.
-phases add initial --name "Initial stage" --calculation k0 --deactivate sheetpile_1 surcharge
-phases add sheet_pile --name "Sheet pile" --activate sheetpile_1 --reset-displacements --max-iterations 150 --tolerance 1e-3
-phases add loading --name Load --activate surcharge --max-iterations 150 --tolerance 1e-3
+#    An option left out takes its default: --calculation plastic, --max-iterations 15,
+#    --tolerance 1e-4, and the displacements of the stage before are kept.
+#    `stages show initial` prints a stage's settings. The solver is the same for every
+#    stage; "The stages, command by command" in docs/CLI.md says what it is.
+stages add initial --name "Initial stage" --calculation k0 --deactivate sheetpile_1 surcharge
+stages add sheet_pile --name "Sheet pile" --activate sheetpile_1 --reset-displacements --max-iterations 150 --tolerance 1e-3
+stages add loading --name Load --activate surcharge --max-iterations 150 --tolerance 1e-3
 
 # 8. Check the model, write the input files, run Kratos and read the results.
+#    `run .` prints nothing until Kratos has finished. Its run folder, with a copy of
+#    the input files, is made in your folder at the start; kratos.log is added at the end.
+#    In `results show 1`, 1 is the run's number in `results runs` (1 is the newest),
+#    not a stage. The stages it lists are picked with --stage, e.g. --stage 2.
 show
 check
 export --out .
@@ -114,10 +136,22 @@ exit
 
 > [!TIP]
 > - `undo` and `redo` step back and forward through the edits.
-> - `help COMMAND` lists what a command takes.
+> - `help COMMAND` lists what a command takes. Its usage line shows the project file as
+>   `project`, which the shell fills in: leave it out.
+> - A hint such as `next: kratos-cli results show ...` can be pasted as it is: the shell
+>   ignores a leading `kratos-cli`.
 > - `source FILE` runs the lines of a file from inside the shell.
 > - To open the model again later, run `cli\kratos-shell.bat` on the same folder, then
 >   `open simple_dike.json`.
+
+The shell reads the results as numbers and CSV files; it draws no pictures. To see a
+field drawn on the mesh, start the GUI on the same runs folder and open the run in its
+Results mode. In PowerShell:
+
+```powershell
+$env:KRATOS_GUI_RUNS = "C:\Users\you\simple_dike"
+<repo>\run.bat
+```
 
 ## All in one go
 

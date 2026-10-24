@@ -82,7 +82,7 @@ def test_it_is_python_and_grouped_as_a_model_script_is(text):
     headings = [line for line in text.splitlines() if line.startswith("# ── ")]
     order = [heading.split("── ", 1)[1].split(" ─")[0] for heading in headings]
     assert order[:4] == ["The site", "The soil", "The structures", "The loads"]
-    assert "The mesh" in order and order[-1] == "The construction phases"
+    assert "The mesh" in order and order[-1] == "The construction stages"
 
 
 def test_one_constructor_per_record_with_kratos_names_as_keys(text):
@@ -90,7 +90,7 @@ def test_one_constructor_per_record_with_kratos_names_as_keys(text):
 
     assert text.count("Material(") == len(project.materials)
     assert text.count("SoilLayer(") == len(project.layers)
-    assert text.count("Phase(") == len(project.phases)
+    assert text.count("Stage(") == len(project.stages)
     assert '"YOUNG_MODULUS":' in text and '"POISSON_RATIO":' in text
 
 
@@ -101,12 +101,62 @@ def test_the_values_are_literal_and_defaults_are_left_out(text):
     assert "active=True" not in text            # every record's default
 
 
+def test_a_model_without_the_demo_blocks_writes_none_of_them():
+    """A new model has no pit and none of the seeded demo's structures, and its script
+    does not mention them; the full build's script still has them all."""
+    text = script_writer.script(templates.blank_project())
+
+    for name in ("Excavation", "Wall", "Struts", "AnchorRows", "Piles", "Wells",
+                 "seeded demo pit"):
+        assert name not in text
+    assert "The seeded demo pit" in script_writer.script(templates.seed_project(simple=False))
+
+
 def test_it_names_how_it_is_used(text):
     docstring = ast.get_docstring(ast.parse(text))
 
     assert "run " in docstring and "--out" in docstring and "kratos-cli" in docstring
     assert "def project() -> Project:" in text
     assert 'if __name__ == "__main__":' in text
+
+
+# ── Where the file finds the checkout ───────────────────────────────────────
+
+def run_as(text: str, file: Path) -> dict:
+    """The file's module-level code, run as if it were saved at `file`."""
+    namespace = {"__file__": str(file), "__name__": "model"}
+    exec(compile(text, str(file), "exec"), namespace)
+    return namespace
+
+
+def test_a_file_in_the_checkout_finds_it_from_the_folders_above():
+    """A model script kept in the repository works in every clone of it, so it holds no
+    path of the computer it was written on."""
+    root = script_writer.ROOT
+    text = script_writer.script(templates.blank_project(), folder=root / "models")
+
+    assert root.as_posix() not in text
+    assert run_as(text, root / "models" / "pit" / "model.py")["ROOT"] == root
+
+
+def test_a_file_outside_the_checkout_also_keeps_the_one_it_was_written_from(tmp_path):
+    """Run by a Python outside the checkout, from a folder outside it, the folders above
+    and the environment find nothing: the checkout it was written from is the last
+    place to look."""
+    text = script_writer.script(templates.blank_project(), folder=tmp_path)
+
+    assert f'Path("{script_writer.ROOT.as_posix()}")' in text
+    assert run_as(text, tmp_path / "model.py")["ROOT"] == script_writer.ROOT
+
+
+def test_writing_a_file_into_the_checkout_leaves_its_path_out(monkeypatch, tmp_path):
+    monkeypatch.setattr(script_writer, "ROOT", tmp_path)
+
+    written = session.write_script(templates.blank_project(), tmp_path / "pit.py")
+
+    text = written.read_text(encoding="utf-8")
+    assert tmp_path.as_posix() not in text
+    assert "Path(sys.prefix).resolve().parent]:" in text
 
 
 def test_a_field_the_writer_has_no_heading_for_is_still_written(monkeypatch, tmp_path):

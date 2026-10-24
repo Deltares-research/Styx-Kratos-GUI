@@ -9,7 +9,7 @@
     python tools/test.py all        everything this machine can run; prints what was skipped
 
 Arguments after the tier go to pytest (or to the benchmark runner), e.g.
-`python tools/test.py quick -k phases -x`. pytest always runs in the server's own venv,
+`python tools/test.py quick -k stages -x`. pytest always runs in the server's own venv,
 whichever Python started this script. A step whose prerequisite is missing is reported as
 skipped with the reason, never as a failure; the exit code is non-zero only when a step
 that ran failed.

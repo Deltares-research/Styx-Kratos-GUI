@@ -65,10 +65,10 @@ def registered(root: Path) -> set[str]:
 def exporter_names() -> dict[str, str]:
     """name -> where in the exporter it comes from."""
     out = {}
-    for table in ("ELEMENTS", "BEAMS", "SHELLS", "CONDITIONS"):
+    for table in ("ELEMENTS", "FLOW_ELEMENTS", "BEAMS", "SHELLS", "CONDITIONS"):
         for key, (name, _) in getattr(writer, table).items():
             out[name] = f"writer.{table}[{key}]"
-    for table in ("INTERFACES", "NORMAL_LOAD_CONDITIONS", "TRUSSES"):
+    for table in ("INTERFACES", "NORMAL_LOAD_CONDITIONS", "SEEPAGE_CONDITIONS", "TRUSSES"):
         for key, name in getattr(writer, table).items():
             out[name] = f"writer.{table}[{key}]"
     for law in (*materials.LINEAR_ELASTIC, materials.ANCHOR_LAW,

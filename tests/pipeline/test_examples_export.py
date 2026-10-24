@@ -43,6 +43,19 @@ ALLOWED_3D_WARNINGS = [
     r"^the wall panels are written as linear shells inside a quadratic soil mesh",
 ]
 
+ALLOWED_SAVED_WARNINGS = [
+    # A project saved before water pressure conditions existed opens with none
+    # (`Project.boundary_conditions`), so the water level it carries fixes nothing.
+    r"^the water level \(.*\) fixes no pressure by itself",
+    # ... and a coupled soil in it is said to need one.
+    r"^no water pressure condition is set, so nothing fixes the water pressure, and .* "
+    r"couples it",
+    # A water load saved when the deck pressed to the left of the drawn line, as the
+    # staged excavation's loads were drawn then; it presses to the right now, as its
+    # arrows always showed, and the export says the line is the wrong way round.
+    r"^normal load 'WaterLoad_Stage\d' pulls on the soil instead of pressing on it",
+]
+
 
 def _solid_excavation() -> Project:
     from fastapi.testclient import TestClient
@@ -82,7 +95,8 @@ def test_every_model_exports_a_sound_deck(name, order):
         export = writer.export_project(project, settings)
 
     assert check_deck(export) == []
-    allowed = ALLOWED_WARNINGS + (ALLOWED_3D_WARNINGS if project.dimension == 3 else [])
+    allowed = (ALLOWED_WARNINGS + (ALLOWED_3D_WARNINGS if project.dimension == 3 else [])
+               + (ALLOWED_SAVED_WARNINGS if name.startswith("saved:") else []))
     unexpected = [w for w in export["warnings"]
                   if not any(re.search(pattern, w) for pattern in allowed)]
     assert unexpected == []

@@ -375,10 +375,10 @@ def test_calculate_runs_the_deck_rather_than_exporting(client, project, monkeypa
     assert body["warnings"] == []
 
 
-# ── The stages, as phases ───────────────────────────────────────────────────
+# ── The stages, as stages ───────────────────────────────────────────────────
 # A deck says which parts each stage computes on (`problem_domain_sub_model_part_list`)
 # and which it loads (`loads_process_list`). The difference between one stage and the
-# next is exactly what a `Phase` stores, so the Phase explorer can list the deck's own
+# next is exactly what a `Stage` stores, so the Stage explorer can list the deck's own
 # sequence -- and draw, for each, the parts it has.
 
 STAGED_MDPA = """\
@@ -479,29 +479,29 @@ def staged(tmp_path):
     return external_deck.deck_project(directory, "dike.json", name="Staged dike")
 
 
-def test_every_stage_becomes_a_phase_in_run_order(staged):
-    assert [phase.id for phase in staged.phases] == [
+def test_every_stage_becomes_a_stage_in_run_order(staged):
+    assert [stage.id for stage in staged.stages] == [
         "1_Initial_stage", "2_Null_step", "3_Fill", "4_Crane", "5_Crane_off", "6_Dig"]
-    assert [phase.parent for phase in staged.phases] == [
+    assert [stage.parent for stage in staged.stages] == [
         None, "1_Initial_stage", "2_Null_step", "3_Fill", "4_Crane", "5_Crane_off"]
 
 
-def test_a_phase_is_named_the_way_results_name_its_stage(staged):
+def test_a_stage_is_named_the_way_results_name_its_stage(staged):
     """`results` calls a stage by its name without the number in front, spaces for
-    underscores -- the Phase explorer numbers its rows itself."""
-    assert [phase.name for phase in staged.phases] == [
+    underscores -- the Stage explorer numbers its rows itself."""
+    assert [stage.name for stage in staged.stages] == [
         "Initial stage", "Null step", "Fill", "Crane", "Crane off", "Dig"]
 
 
-def test_what_a_phase_may_switch_is_what_the_stages_compute_on_or_load(staged):
+def test_what_a_stage_may_switch_is_what_the_stages_compute_on_or_load(staged):
     """Not every part of the mdpa: `Bottom` is a boundary every stage constrains,
     never something a stage builds or removes."""
     assert staged.deck.parts == ["soil", "fill", "crane"]
     assert staged.stageable_keys() == ["soil", "fill", "crane"]
 
 
-def test_each_phase_stores_what_its_stage_changes(staged):
-    by_id = {phase.id: phase for phase in staged.phases}
+def test_each_stage_stores_what_its_stage_changes(staged):
+    by_id = {stage.id: stage for stage in staged.stages}
     # The first starts from "everything is there", so it removes what it lacks.
     assert by_id["1_Initial_stage"].deactivate == ["fill", "crane"]
     assert by_id["1_Initial_stage"].activate == []
@@ -512,14 +512,14 @@ def test_each_phase_stores_what_its_stage_changes(staged):
     assert by_id["6_Dig"].deactivate == ["fill"]
 
 
-def test_the_resolved_phases_are_the_stages_own_part_lists(staged):
-    from core.model import phases
-    assert phases.active_parts(staged, "4_Crane") == {"soil", "fill", "crane"}
-    assert phases.active_parts(staged, "6_Dig") == {"soil"}
+def test_the_resolved_stages_are_the_stages_own_part_lists(staged):
+    from core.model import stages
+    assert stages.active_parts(staged, "4_Crane") == {"soil", "fill", "crane"}
+    assert stages.active_parts(staged, "6_Dig") == {"soil"}
 
 
-def test_a_phase_carries_its_stage_settings(staged):
-    by_id = {phase.id: phase for phase in staged.phases}
+def test_a_stage_carries_its_stage_settings(staged):
+    by_id = {stage.id: stage for stage in staged.stages}
     assert by_id["1_Initial_stage"].calculation == "K0 procedure"
     assert by_id["2_Null_step"].calculation == "Null step"
     assert by_id["3_Fill"].calculation == "Plastic"
@@ -531,22 +531,22 @@ def test_a_phase_carries_its_stage_settings(staged):
     assert by_id["1_Initial_stage"].time_interval == 0.0
 
 
-def test_a_deck_without_part_lists_has_phases_that_change_nothing(project):
-    """The two-stage stand-in above names no parts per stage: its phases still list,
+def test_a_deck_without_part_lists_has_stages_that_change_nothing(project):
+    """The two-stage stand-in above names no parts per stage: its stages still list,
     and switch nothing on or off."""
-    assert [phase.id for phase in project.phases] == ["1_Initial", "2_Load"]
-    assert all(not phase.activate and not phase.deactivate for phase in project.phases)
+    assert [stage.id for stage in project.stages] == ["1_Initial", "2_Load"]
+    assert all(not stage.activate and not stage.deactivate for stage in project.stages)
 
 
-def test_a_decks_phases_are_not_edited_here(client, staged):
+def test_a_decks_stages_are_not_edited_here(client, staged):
     """They are read from the deck, and the deck is what runs: an edit made here would
     change nothing that is calculated."""
     client.put("/api/project", json=staged.model_dump(mode="json"))
-    response = client.patch("/api/project/phases",
-                            json={"phases": [p.model_dump() for p in staged.phases[:2]]})
+    response = client.patch("/api/project/stages",
+                            json={"stages": [p.model_dump() for p in staged.stages[:2]]})
     assert response.status_code == 422
     assert "deck" in response.json()["detail"]
-    assert client.post("/api/project/phases/defaults").status_code == 422
+    assert client.post("/api/project/stages/defaults").status_code == 422
 
 
 def test_staging_brings_the_units_record_when_the_deck_has_one(project, deck_dir, tmp_path):

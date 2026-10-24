@@ -55,7 +55,7 @@ Then type these lines. `.` is the model's folder, and `1` is the newest run.
 # The model
 show
 parts
-phases list
+stages list
 
 # Write the input files, then run them
 export --out .
@@ -92,7 +92,7 @@ command name. In the model's folder:
 ```powershell
 & $cli show   simple_dike.py                 # what the model holds
 & $cli parts  simple_dike.py                 # its parts
-& $cli phases simple_dike.py list            # its stages
+& $cli stages simple_dike.py list            # its stages
 & $cli export simple_dike.py --out .         # write the input files
 & $cli run    . --runs-dir .                 # run Kratos
 & $cli results field 1 uy --runs-dir .       # read a result

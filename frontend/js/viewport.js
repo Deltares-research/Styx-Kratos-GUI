@@ -73,7 +73,7 @@ App.Viewport = (function () {
   /* Pure, for the same reason computeModeGroups is: this is the map the Model
      explorer's checkboxes are wired through. */
   function computeGroupKeys(soils, customs, loads, beams, anchors, contacts,
-                            normalLoads) {
+                            normalLoads, conditions) {
     return {
       soil: (soils || []).slice(),
       'group:custom': (customs || []).slice(),
@@ -86,7 +86,8 @@ App.Viewport = (function () {
       'group:interfaces': (contacts || []).slice(),
       // Its own row rather than a share of 'group:loads': the Model explorer lists
       // normal loads separately, and an eye has to toggle what its own row names.
-      'group:normal_loads': (normalLoads || []).slice()
+      'group:normal_loads': (normalLoads || []).slice(),
+      'group:conditions': (conditions || []).slice()
     };
   }
 
@@ -264,8 +265,10 @@ App.Viewport = (function () {
      Walking the line in the order its points are stored, a positive pressure pushes to
      the right of the walking direction -- so a line drawn left to right along the top
      of the ground pushes down into it, which is the reading anyone expects. A negative
-     pressure flips the arrows. This is the symbol's convention; the sign Kratos itself
-     applies comes from the condition's own node order (core/kratos/writer.py). */
+     pressure flips the arrows. The deck presses the same way: the exporter writes each
+     segment against the drawn line, because Kratos presses to the left of a
+     condition's own node order (core/kratos/writer.py, `_normal_load_conditions`), and
+     warns where the arrows point out of the soil. */
   function normalLoadGlyphSpec(load, project) {
     var points = load.points || [];
     var span = modelSpan(project, frame && frame.size);
@@ -401,6 +404,352 @@ App.Viewport = (function () {
     return group;
   }
 
+  /* ── The boundary conditions ─────────────────────────────────────────────
+     Each condition drawn from its own record, client side, like the water line.
+
+     2D: a support is a row of symbols along its face or line, or one at its point --
+     the clamp of a fixed support (a stem on hatched ground) when it holds x and y, a
+     triangle on rollers when it holds one of them, pointing along the one it holds --
+     and a water pressure is its own level or phreatic line, dashed, with "h = ..."
+     beside it (a uniform one: its target outlined, "p = ..."). 3D: the face outline in
+     the condition's colour, and a level as the outline of its plane.
+
+     Pure, for the same reason `loadGlyphSpec` is: the arithmetic is the half a test
+     can reach. `lines` are polylines of [x, y, z]; `symbols` are where a support
+     symbol stands, the outward direction it points from, and whether it is a roller. */
+  var SUPPORT_COLOR = 0x2e7d32;
+  var WATER_COLOR = 0x1f6fb0;
+  var SYMBOL_SPACING = 4;          // between two symbols on a face, in symbol sizes
+
+  /* Where the symbols stand on a line of [x, y] points: at each corner, and evenly
+     between, about `spacing` apart. A line with no length (a face the soil only touches
+     at a corner) has the one symbol. */
+  function alongLine(points, spacing) {
+    if (!points.length) return [];
+    var out = [[points[0][0], points[0][1]]];
+    for (var i = 1; i < points.length; i += 1) {
+      var a = points[i - 1], b = points[i];
+      var length = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      if (length < 1e-9) continue;
+      var count = Math.max(1, Math.min(24, Math.round(length / spacing)));
+      for (var step = 1; step <= count; step += 1) {
+        var t = step / count;
+        out.push([a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t]);
+      }
+    }
+    return out;
+  }
+
+  /* Where a roller points: out of the face when the face's normal is the component it
+     holds, else along that component, toward -x or -y. */
+  function rollerOutward(held, face) {
+    var faceOut = face && OUTWARD[face];
+    if (faceOut && faceOut[held] !== 0) return faceOut;
+    return held === 0 ? [-1, 0] : [0, -1];
+  }
+
+  /* The faces of the soil as the build drew it. The export finds a face on the meshed
+     soil (core/kratos/writer.py `_boundary_nodes`), not on `project.domain`: a borehole
+     stack shallower than the domain, or a drawn body beyond it, moves the face. This
+     takes the same rule to the drawn sections -- the soil's lowest and highest plane
+     on each axis, across the soil points that lie on it. Null with no soil drawn.
+
+     Pure: `sections` are the build payload's, `keys` the soil bodies among them. */
+  function soilFaceOutlines(sections, keys, project) {
+    var wanted = {};
+    (keys || []).forEach(function (key) { wanted[key] = true; });
+    var points = [];
+    (sections || []).forEach(function (section) {
+      if (!wanted[section.key]) return;
+      var p = section.positions || [];
+      for (var i = 0; i + 2 < p.length; i += 3) points.push([p[i], p[i + 1], p[i + 2]]);
+    });
+    if (!points.length) return null;
+    var lo = [Infinity, Infinity, Infinity], hi = [-Infinity, -Infinity, -Infinity];
+    points.forEach(function (q) {
+      for (var k = 0; k < 3; k += 1) {
+        lo[k] = Math.min(lo[k], q[k]);
+        hi[k] = Math.max(hi[k], q[k]);
+      }
+    });
+    var tol = 1e-6 * Math.max(hi[0] - lo[0], hi[1] - lo[1], hi[2] - lo[2], 1);
+    // The span along `other` of the soil points on the plane `axis` = `value`.
+    function range(axis, value, other) {
+      var a = Infinity, b = -Infinity;
+      points.forEach(function (q) {
+        if (Math.abs(q[axis] - value) > tol) return;
+        a = Math.min(a, q[other]);
+        b = Math.max(b, q[other]);
+      });
+      return [a, b];
+    }
+    if (project.dimension === 2) {
+      var z = sectionOffset(project);
+      var bottom = range(1, lo[1], 0), top = range(1, hi[1], 0);
+      var left = range(0, lo[0], 1), right = range(0, hi[0], 1);
+      return {
+        bottom: [[bottom[0], lo[1], z], [bottom[1], lo[1], z]],
+        top: [[top[0], hi[1], z], [top[1], hi[1], z]],
+        left: [[lo[0], left[0], z], [lo[0], left[1], z]],
+        right: [[hi[0], right[0], z], [hi[0], right[1], z]]
+      };
+    }
+    function rectangle(axis, value) {
+      var u = axis === 0 ? 1 : 0, v = axis === 2 ? 1 : 2;
+      var ru = range(axis, value, u), rv = range(axis, value, v);
+      return [[ru[0], rv[0]], [ru[1], rv[0]], [ru[1], rv[1]], [ru[0], rv[1]], [ru[0], rv[0]]]
+        .map(function (c) {
+          var q = [0, 0, 0];
+          q[axis] = value; q[u] = c[0]; q[v] = c[1];
+          return q;
+        });
+    }
+    return {
+      bottom: rectangle(1, lo[1]), top: rectangle(1, hi[1]),
+      left: rectangle(0, lo[0]), right: rectangle(0, hi[0]),
+      front: rectangle(2, lo[2]), back: rectangle(2, hi[2])
+    };
+  }
+
+  /* A face of the model: the soil's own when it was measured (none when there is no
+     soil, `outlines` empty), else the domain's. */
+  function faceOutline(project, face, outlines) {
+    if (outlines) return outlines[face] || null;
+    var d = project.domain;
+    if (project.dimension === 2) {
+      var z = sectionOffset(project);
+      return {
+        bottom: [[d.x0, d.y_bottom, z], [d.x1, d.y_bottom, z]],
+        top: [[d.x0, d.y_top, z], [d.x1, d.y_top, z]],
+        left: [[d.x0, d.y_bottom, z], [d.x0, d.y_top, z]],
+        right: [[d.x1, d.y_bottom, z], [d.x1, d.y_top, z]]
+      }[face] || null;
+    }
+    var yb = d.y_bottom, yt = d.y_top;
+    return {
+      bottom: [[d.x0, yb, d.z0], [d.x1, yb, d.z0], [d.x1, yb, d.z1], [d.x0, yb, d.z1], [d.x0, yb, d.z0]],
+      top: [[d.x0, yt, d.z0], [d.x1, yt, d.z0], [d.x1, yt, d.z1], [d.x0, yt, d.z1], [d.x0, yt, d.z0]],
+      left: [[d.x0, yb, d.z0], [d.x0, yt, d.z0], [d.x0, yt, d.z1], [d.x0, yb, d.z1], [d.x0, yb, d.z0]],
+      right: [[d.x1, yb, d.z0], [d.x1, yt, d.z0], [d.x1, yt, d.z1], [d.x1, yb, d.z1], [d.x1, yb, d.z0]],
+      front: [[d.x0, yb, d.z0], [d.x1, yb, d.z0], [d.x1, yt, d.z0], [d.x0, yt, d.z0], [d.x0, yb, d.z0]],
+      back: [[d.x0, yb, d.z1], [d.x1, yb, d.z1], [d.x1, yt, d.z1], [d.x0, yt, d.z1], [d.x0, yb, d.z1]]
+    }[face] || null;
+  }
+
+  var OUTWARD = { bottom: [0, -1], top: [0, 1], left: [-1, 0], right: [1, 0] };
+
+  function conditionGlyphSpec(record, project, outlines) {
+    var spec = { kind: record.kind, lines: [], symbols: [], dashed: false, label: null,
+                 active: record.active !== false };
+    var d = project.domain;
+    var two = project.dimension === 2;
+    var z = two ? sectionOffset(project) : (d.z0 + d.z1) / 2;
+    var span = modelSpan(project, frame && frame.size);
+    spec.size = span > 0 ? span * 0.022 : 0.5;
+    if (!two && (record.on === 'line' || record.on === 'point')) return spec;
+
+    if (record.kind === 'displacement') {
+      if (record.on === 'face' && !two) {
+        var box = faceOutline(project, record.face, outlines);
+        if (box) spec.lines.push(box);
+        return spec;
+      }
+      // The section holds z by itself: a 2D symbol says what is held in x and y.
+      var heldX = !!record.fixed[0], heldY = !!record.fixed[1];
+      if (!heldX && !heldY) return spec;
+      var roller = heldX !== heldY;
+      var face = record.on === 'face' ? record.face : null;
+      var outward = roller ? rollerOutward(heldX ? 0 : 1, face)
+        : (face ? OUTWARD[face] : [0, -1]);
+      if (record.on === 'face') {
+        var outline = faceOutline(project, record.face, outlines);
+        if (!outline) return spec;
+        alongLine([outline[0], outline[1]], SYMBOL_SPACING * spec.size).forEach(function (at) {
+          spec.symbols.push({ at: [at[0], at[1], z], outward: outward, roller: roller });
+        });
+      } else if (record.on === 'line') {
+        var points = record.points || [];
+        spec.lines.push(points.map(function (p) { return [p[0], p[1], z]; }));
+        alongLine(points, SYMBOL_SPACING * spec.size).forEach(function (at) {
+          spec.symbols.push({ at: [at[0], at[1], z], outward: outward, roller: roller });
+        });
+      } else if (record.on === 'point') {
+        var p = (record.points || [[0, 0]])[0];
+        spec.symbols.push({ at: [p[0], p[1], z], outward: outward, roller: roller });
+      }
+      return spec;
+    }
+
+    // A seepage face: its edge or line, with arrows out of the soil, and the word.
+    if (record.kind === 'seepage') {
+      var path = record.on === 'face'
+        ? faceOutline(project, record.face, outlines)
+        : (record.points || []).map(function (q) { return [q[0], q[1], z]; });
+      if (!path || path.length < 2 || !two) {
+        if (path) spec.lines.push(path);
+        return spec;
+      }
+      spec.lines.push(path);
+      var centre = [(d.x0 + d.x1) / 2, (d.y_bottom + d.y_top) / 2];
+      for (var k = 0; k + 1 < path.length; k += 1) {
+        var a = path[k], b = path[k + 1];
+        var length = Math.hypot(b[0] - a[0], b[1] - a[1]);
+        if (!(length > 0)) continue;
+        var normalOut = [(b[1] - a[1]) / length, -(b[0] - a[0]) / length];
+        var middle = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2];
+        if ((middle[0] - centre[0]) * normalOut[0] + (middle[1] - centre[1]) * normalOut[1] < 0) {
+          normalOut = [-normalOut[0], -normalOut[1]];
+        }
+        alongLine([a, b], SYMBOL_SPACING * spec.size).forEach(function (at) {
+          spec.symbols.push({ at: [at[0], at[1], z], outward: normalOut, arrow: true });
+        });
+      }
+      var mid = path[Math.floor(path.length / 2)];
+      spec.label = { text: 'seepage', at: [mid[0], mid[1], z] };
+      return spec;
+    }
+
+    // A water pressure: its level or line, dashed, and what it is.
+    spec.dashed = true;
+    var type = record.fluid_pressure_type;
+    if (type === 'Hydrostatic' && typeof record.reference_coordinate === 'number') {
+      var y = record.reference_coordinate;
+      spec.lines.push(two ? [[d.x0, y, z], [d.x1, y, z]]
+        : [[d.x0, y, d.z0], [d.x1, y, d.z0], [d.x1, y, d.z1], [d.x0, y, d.z1], [d.x0, y, d.z0]]);
+      spec.label = { text: 'h = ' + y.toFixed(2) + ' m', at: [d.x1, y, z] };
+    } else if (type === 'Phreatic_Multi_Line' && record.x_coordinates) {
+      var zs = record.z_coordinates;
+      spec.lines.push(record.x_coordinates.map(function (x, k) {
+        return [x, record.y_coordinates[k], two ? z : (zs ? zs[k] : z)];
+      }));
+      var last = record.x_coordinates.length - 1;
+      spec.label = { text: 'h = ' + record.y_coordinates[last].toFixed(2) + ' m',
+                     at: [record.x_coordinates[last], record.y_coordinates[last], z] };
+    } else if (type === 'Uniform') {
+      var where = record.on === 'face' ? faceOutline(project, record.face, outlines)
+        : (record.on === 'line' || record.on === 'point')
+          ? (record.points || []).map(function (q) { return [q[0], q[1], z]; })
+          : null;
+      if (where) spec.lines.push(where);
+      var at = where ? where[0] : [(d.x0 + d.x1) / 2, (d.y_bottom + d.y_top) / 2, z];
+      spec.label = { text: 'p = ' + record.value, at: at };
+    }
+    return spec;
+  }
+
+  function conditionGlyphGroup(record, project, outlines) {
+    var spec = conditionGlyphSpec(record, project, outlines);
+    var group = new THREE.Group();
+    group.name = record.id + '-condition';
+    var color = !spec.active ? 0x777777
+      : record.kind === 'displacement' ? SUPPORT_COLOR : WATER_COLOR;
+
+    spec.lines.forEach(function (points) {
+      if (points.length < 1) return;
+      var vectors = points.map(function (p) { return new THREE.Vector3(p[0], p[1], p[2]); });
+      if (vectors.length === 1) {
+        var dot = new THREE.Mesh(new THREE.SphereGeometry(spec.size * 0.25, 10, 8),
+                                 new THREE.MeshBasicMaterial({ color: color }));
+        dot.position.copy(vectors[0]);
+        group.add(dot);
+        return;
+      }
+      var material = spec.dashed
+        ? new THREE.LineDashedMaterial({ color: color, dashSize: spec.size,
+                                         gapSize: spec.size * 0.6 })
+        : new THREE.LineBasicMaterial({ color: color });
+      var line = new THREE.Line(new THREE.BufferGeometry().setFromPoints(vectors), material);
+      if (spec.dashed) line.computeLineDistances();
+      group.add(line);
+    });
+
+    spec.symbols.forEach(function (symbol) {
+      var s = spec.size;
+      var o = symbol.outward, side = [-o[1], o[0]];
+      var at = symbol.at;
+      function p(along, out) {
+        return new THREE.Vector3(at[0] + side[0] * along + o[0] * out,
+                                 at[1] + side[1] * along + o[1] * out, at[2]);
+      }
+      function stroke(points, segments) {
+        var geometry = new THREE.BufferGeometry().setFromPoints(points);
+        var material = new THREE.LineBasicMaterial({ color: color });
+        group.add(segments ? new THREE.LineSegments(geometry, material)
+                           : new THREE.Line(geometry, material));
+      }
+      if (symbol.arrow) {
+        // Water leaving the soil: a short arrow pointing out of it.
+        stroke([p(0, 0.15 * s), p(0, 1.0 * s), p(-0.25 * s, 0.7 * s), p(0, 1.0 * s),
+                p(0.25 * s, 0.7 * s)]);
+      } else if (symbol.roller) {
+        // A triangle on three rollers.
+        stroke([p(0, 0), p(-0.5 * s, 0.8 * s), p(0.5 * s, 0.8 * s), p(0, 0)]);
+        [-0.34, 0, 0.34].forEach(function (along) {
+          var ring = [];
+          for (var k = 0; k <= 16; k += 1) {
+            var angle = (k / 16) * Math.PI * 2;
+            ring.push(p((along + Math.cos(angle) * 0.14) * s,
+                        (0.94 + Math.sin(angle) * 0.14) * s));
+          }
+          stroke(ring);
+        });
+      } else {
+        // The clamp: a stem out to hatched ground.
+        var clamp = [p(0, 0), p(0, 0.7 * s), p(-0.6 * s, 0.7 * s), p(0.6 * s, 0.7 * s)];
+        for (var h = -0.6; h <= 0.31; h += 0.3) {
+          clamp.push(p(h * s, 0.7 * s), p((h + 0.3) * s, 1.05 * s));
+        }
+        stroke(clamp, true);
+      }
+    });
+
+    if (spec.label) {
+      group.add(makeLabel(spec.label.text, spec.label.at[0], spec.label.at[1],
+                          spec.label.at[2], spec.size * 0.8));
+    }
+    group.traverse(function (child) {
+      child.userData.key = record.id;
+      if (child.material) {
+        child.material.depthTest = false;
+        child.material.transparent = true;
+        child.material.opacity = spec.active ? 1 : 0.45;
+      }
+      child.renderOrder = 18;
+    });
+    return group;
+  }
+
+  function addConditionGlyphs(sections) {
+    var soil = soilKeysOf(App.PROJECT, App.LAYERS).concat(
+      ((App.PROJECT && App.PROJECT.custom_parts) || []).filter(function (part) {
+        return part.mat;
+      }).map(function (part) { return part.key; }));
+    // No soil, no face: the export has none either, and a support drawn round an
+    // empty site would hold nothing.
+    var outlines = App.PROJECT ? soilFaceOutlines(sections, soil, App.PROJECT) || {} : null;
+    ((App.PROJECT && App.PROJECT.boundary_conditions) || []).forEach(function (record) {
+      var group = groups[record.id];
+      if (!group) {
+        group = groups[record.id] = new THREE.Group();
+        group.name = record.id;
+        scene.add(group);
+      }
+      group.add(conditionGlyphGroup(record, App.PROJECT, outlines));
+    });
+  }
+
+  /* The keys of the conditions, supports and water pressures apart. Both are in every
+     mode but Results, and hidden until the user shows them: by its eye in the Model
+     explorer (off in a new view, `shownByDefault`), or by selecting it
+     (`revealConditions`). */
+  function conditionKeysOf(project) {
+    var supports = [], water = [];
+    ((project && project.boundary_conditions) || []).forEach(function (record) {
+      (record.kind === 'displacement' ? supports : water).push(record.id);
+    });
+    return { supports: supports, water: water };
+  }
+
   /* ── The water line ──────────────────────────────────────────────────────
      The phreatic level, drawn by the client rather than tessellated by the server.
 
@@ -502,6 +851,7 @@ App.Viewport = (function () {
     });
 
     addLoadGlyphs();
+    addConditionGlyphs(payload.sections);
 
     // Before the visibility sweep below, so the group it creates is given its
     // `visible` entry like every other one.
@@ -513,7 +863,7 @@ App.Viewport = (function () {
 
     Object.keys(groups).forEach(function (k) {
       groups[k].visible = false;
-      if (!(k in visible)) visible[k] = true;
+      if (!(k in visible)) visible[k] = shownByDefault(k);
     });
   }
 
@@ -522,8 +872,12 @@ App.Viewport = (function () {
      every section its own THREE.Group) and then invisible forever, in every mode,
      no matter what the eye toggle says. */
   function computeModeGroups(soilKeys, customKeys, layeredSoil, loadKeys, memberKeys,
-                             normalLoadKeys) {
+                             normalLoadKeys, conditionKeys) {
     customKeys = customKeys || [];
+    // The boundary conditions' symbols: in every mode, each one hidden until its eye
+    // is turned on.
+    var conditions = ((conditionKeys && conditionKeys.supports) || [])
+      .concat((conditionKeys && conditionKeys.water) || []);
     loadKeys = loadKeys || [];
     // Sheet piles and anchors are sections of their own (core/geometry/tessellation.py
     // :112-126). Leaving them out of every mode is what kept them invisible.
@@ -537,22 +891,23 @@ App.Viewport = (function () {
       // "water" in the same two modes the full build shows it in -- the level is what
       // Flow conditions mode is for, and a staged excavation is read against it. Left
       // out of soil/structures/mesh so those keep reading as they did.
-      return { soil: visibleKeys, structures: visibleKeys.concat(loadKeys, memberKeys),
-               mesh: visibleKeys.concat(['mesh'], memberKeys),
-               flow: visibleKeys.concat(['water']),
+      return { soil: visibleKeys.concat(conditions),
+               structures: visibleKeys.concat(loadKeys, memberKeys, conditions),
+               mesh: visibleKeys.concat(['mesh'], memberKeys, conditions),
+               flow: visibleKeys.concat(['water'], conditions),
                // Loads too: Staged construction is where a load is switched on and
-               // off, so it has to be on screen there (`phaseHidden` still hides one
-               // the selected phase has switched off).
-               staged: visibleKeys.concat(loadKeys, memberKeys, ['water']) };
+               // off, so it has to be on screen there (`stageHidden` still hides one
+               // the selected stage has switched off).
+               staged: visibleKeys.concat(loadKeys, memberKeys, ['water'], conditions) };
     }
     return {
-      soil:       soilKeys.slice(),
+      soil:       soilKeys.concat(conditions),
       structures: soilKeys.concat(['wall', 'struts', 'anchors', 'piles'],
-                                  loadKeys, memberKeys, customKeys),
-      mesh:       ['mesh', 'wall'].concat(memberKeys, customKeys),
-      flow:       soilKeys.concat(['water', 'wells', 'wall'], customKeys),
+                                  loadKeys, memberKeys, customKeys, conditions),
+      mesh:       ['mesh', 'wall'].concat(memberKeys, customKeys, conditions),
+      flow:       soilKeys.concat(['water', 'wells', 'wall'], customKeys, conditions),
       staged:     ['excavation', 'wall', 'struts', 'anchors', 'water']
-                    .concat(loadKeys, memberKeys, customKeys)
+                    .concat(loadKeys, memberKeys, customKeys, conditions)
     };
   }
 
@@ -589,14 +944,18 @@ App.Viewport = (function () {
     var normalLoadKeys = (App.PROJECT && App.PROJECT.dimension === 2)
       ? (App.NORMAL_LOADS || []).map(function (item) { return item.id; })
       : [];
+    var conditionKeys = conditionKeysOf(App.PROJECT);
+    conditionIds = conditionKeys.supports.concat(conditionKeys.water);
+    waterIds = conditionKeys.water.slice();
     modeGroups = computeModeGroups(
       soilKeys, customKeys, !!(App.PROJECT && App.PROJECT.layered_soil), loadKeys,
-      beamKeys.concat(anchorKeys), normalLoadKeys);
+      beamKeys.concat(anchorKeys), normalLoadKeys, conditionKeys);
     var contactKeys = (App.INTERFACES || []).filter(function (item) {
       return !item.structure;
     }).map(function (item) { return item.id; });
     groupKeys = computeGroupKeys(soilKeys, customKeys, loadKeys, beamKeys, anchorKeys,
-                                 contactKeys, normalLoadKeys);
+                                 contactKeys, normalLoadKeys,
+                                 conditionKeys.supports.concat(conditionKeys.water));
   }
 
   /* ══════════════════════════════════════════════════════════════
@@ -1166,10 +1525,50 @@ App.Viewport = (function () {
   }
 
   /* ── Selection ──────────────────────────────────────────────── */
+
+  /* A boundary condition whose eye is off is drawn while it is selected, so picking
+     "Roller left" in the explorer shows its rollers. The next selection or mode change
+     takes it away again. */
+  var conditionIds = [];
+  var waterIds = [];
+  var revealed = [];
+
+  /* Whether the eye lets `key` be drawn in `mode`. In Staged construction a water
+     pressure condition has the stage's checkbox in place of its eye, and the stage is
+     what is read there: the conditions the selected stage has on are drawn, the others
+     not (`stageHidden`). */
+  function eyeOpen(key, mode) {
+    if (mode === 'staged' && waterIds.indexOf(key) >= 0) return true;
+    return visible[key] !== false;
+  }
+
+  function shownByMode(key) {
+    var mode = App.state && App.state.mode;
+    return (modeGroups[mode] || []).indexOf(key) >= 0
+           && eyeOpen(key, mode) && !stageHidden()[key];
+  }
+
+  function hideRevealed() {
+    revealed.forEach(function (k) { if (groups[k]) groups[k].visible = shownByMode(k); });
+    revealed = [];
+  }
+
+  function revealConditions(keys) {
+    keys.forEach(function (k) {
+      if (conditionIds.indexOf(k) < 0 || !groups[k] || groups[k].visible) return;
+      if (stageHidden()[k]) return;
+      if (App.state && App.state.mode === 'results') return;
+      groups[k].visible = true;
+      revealed.push(k);
+    });
+  }
+
   function select(key) {
     if (!scene) return;
     selectedKeys.forEach(function (k) { restoreEmissive(k); });
-    var keys = keysFor(key).filter(function (k) { return groups[k] && groups[k].visible; });
+    hideRevealed();
+    revealConditions(keysFor(key));
+    var keys =keysFor(key).filter(function (k) { return groups[k] && groups[k].visible; });
     selectedKeys = keys;
     selected = keys.length ? key : null;
 
@@ -1193,42 +1592,44 @@ App.Viewport = (function () {
 
   /* ── Mode / visibility ──────────────────────────────────────── */
 
-  /* Parts the selected phase has switched off, as `{key: true}`.
+  /* Parts the selected stage has switched off, as `{key: true}`.
 
      A third gate on top of the two that already exist -- the mode the user is in, and
      the eye toggle on the row -- rather than a new mechanism: a group is drawn when
      all three agree. Which is why this is a lookup rebuilt on demand rather than
      something written into `visible`: the eye is the user's own state and must
-     survive stepping through the phases, so a phase may not overwrite it.
+     survive stepping through the stages, so a stage may not overwrite it.
 
-     `App.Phases` owns the rule (frontend/js/phases.js), and is held to the server's
-     answers by `tests/test_phase_parity.py`. Empty whenever it cannot say. */
-  function phaseHidden() {
-    if (!App.Phases || !App.Phases.hiddenKeys) return {};
+     `App.Stages` owns the rule (frontend/js/stages.js), and is held to the server's
+     answers by `tests/test_stage_parity.py`. Empty whenever it cannot say. */
+  function stageHidden() {
+    if (!App.Stages || !App.Stages.hiddenKeys) return {};
     var hidden = {};
-    App.Phases.hiddenKeys(App.PROJECT, App.state && App.state.phase,
+    App.Stages.hiddenKeys(App.PROJECT, App.state && App.state.phase,
                           App.state && App.state.mode)
       .forEach(function (key) { hidden[key] = true; });
     return hidden;
   }
 
-  /* Redraw after the selected phase changes. The mode pass is the whole of it --
-     nothing about the geometry changes when a phase is selected, only which of it
+  /* Redraw after the selected stage changes. The mode pass is the whole of it --
+     nothing about the geometry changes when a stage is selected, only which of it
      is in the model at that moment. */
-  function applyPhaseVisibility() {
+  function applyStageVisibility() {
     setMode(App.state && App.state.mode);
   }
 
   function setMode(mode) {
     var wanted = modeGroups[mode] || [];
-    var hidden = phaseHidden();
+    var hidden = stageHidden();
+    revealed = [];
     Object.keys(groups).forEach(function (k) {
-      groups[k].visible = wanted.indexOf(k) >= 0 && visible[k] !== false
+      groups[k].visible = wanted.indexOf(k) >= 0 && eyeOpen(k, mode)
                           && !hidden[k];
     });
     if (mode === 'mesh' && !meshBuilt && groups.mesh) groups.mesh.visible = false;
-    if (selected && !selectedKeys.every(function (k) { return groups[k] && groups[k].visible; })) select(null);
-    // A phase may have switched a part off, and a coloured part follows that.
+    if (selected && conditionIds.indexOf(selected) >= 0) select(selected);
+    else if (selected && !selectedKeys.every(function (k) { return groups[k] && groups[k].visible; })) select(null);
+    // A stage may have switched a part off, and a coloured part follows that.
     syncPartColors();
     applyImportedVisibility(mode);
     needsRender = true;
@@ -1237,7 +1638,7 @@ App.Viewport = (function () {
   /* An imported deck's sections, drawn or not. Outside `groups`, so the pass above
      never reaches them; this is their pass. Three things decide, and App.Deck (tested
      headlessly) is the one that combines them: the part's eye, the stage selected on
-     the Staged construction tab -- a deck case's phases are its stages -- and Results,
+     the Staged construction tab -- a deck case's stages are its stages -- and Results,
      which draws its own contoured copy of the mesh, so the grey one steps aside. */
   function applyImportedVisibility(mode) {
     if (!importedMeshGroup) return;
@@ -1279,9 +1680,9 @@ App.Viewport = (function () {
     if (!(key in groups)) return;
     visible[key] = on;
     var wanted = modeGroups[App.state.mode] || [];
-    // The phase gate applies here too, or turning an eye back on would draw a part
-    // the selected phase has not built yet.
-    groups[key].visible = on && wanted.indexOf(key) >= 0 && !phaseHidden()[key];
+    // The stage gate applies here too, or turning an eye back on would draw a part
+    // the selected stage has not built yet.
+    groups[key].visible = on && wanted.indexOf(key) >= 0 && !stageHidden()[key];
     if (key === 'mesh' && !meshBuilt && groups.mesh) groups.mesh.visible = false;
     if (!on && selectedKeys.indexOf(key) >= 0) select(null);
     // A hidden mesh has nothing to number: the labels follow the eye, or they float
@@ -1299,7 +1700,24 @@ App.Viewport = (function () {
       return groupKeys[key].every(function (k) { return isVisible(k); });
     }
     if (importedSectionGroups[key]) return importedEyes[key] !== false;
+    if (!(key in visible)) return shownByDefault(key);
     return visible[key] !== false;
+  }
+
+  /* Every part is drawn until its eye is turned off, but a boundary condition is not:
+     a model opens on its soil, and the supports and water levels of each face would
+     cover its edges. The user turns them on one by one, as a part's colour is. */
+  function shownByDefault(key) {
+    return !(App.BoundaryConditions && App.BoundaryConditions.isConditionKey(key));
+  }
+
+  /* When another project is opened. The standard conditions of every project have the
+     same ids, so an eye turned on in the last one would otherwise show the new one's. */
+  function forgetConditionEyes() {
+    Object.keys(visible).forEach(function (key) {
+      if (conditionIds.indexOf(key) >= 0 || !shownByDefault(key)) delete visible[key];
+    });
+    revealed = [];
   }
 
   /* ── ID labels (nodes, elements) ────────────────────────────── */
@@ -1608,7 +2026,7 @@ App.Viewport = (function () {
      inside the mesh group -- so it lives and dies with the mesh, and is only ever on
      screen where the mesh is (Mesh mode, mesh eye on). `App.PartColors` decides which
      are switched on; `syncPartColors` shows exactly those that are also shown by their
-     own eye and built by the selected phase.
+     own eye and built by the selected stage.
 
      A body is a tinted fill over the grey, with its own wireframe on top. A structure
      is its segments plus a dot on every node: a one-pixel line in a dense mesh is easy
@@ -1723,7 +2141,7 @@ App.Viewport = (function () {
 
   function syncPartColors() {
     if (!App.PartColors) return;
-    var hidden = phaseHidden();
+    var hidden = stageHidden();
     var drawn = App.PartColors.drawn(meshPartKeys, App.PartColors.on, function (key) {
       return isVisible(key) && !hidden[key];
     });
@@ -2083,10 +2501,11 @@ App.Viewport = (function () {
      and the frozen resize() pairs that with a fixed half-height of 30. Both numbers
      were chosen for the 3D demo seen through the perspective camera; a flat section
      viewed through them sits at a fraction of the viewport. ORTHO_MARGIN is the
-     breathing room around a fitted section. */
+     breathing room around a fitted section: enough that the support symbols under the
+     bottom face stay clear of the rulers drawn over the viewport's edges. */
   var ORTHO_BASE = 46;
   var ORTHO_HALF_HEIGHT = 30;
-  var ORTHO_MARGIN = 1.12;
+  var ORTHO_MARGIN = 1.2;
 
   /* How far the wheel may dolly, as multiples of the fitted view rather than as
      metres. The frozen pair (8, and 6x the demo frame's 116) is a floor above the
@@ -2386,7 +2805,9 @@ App.Viewport = (function () {
     computeGroupKeys: computeGroupKeys,
     loadGlyphSpec: loadGlyphSpec, loadGlyphGroup: loadGlyphGroup,
     waterLineSpec: waterLineSpec,
-    applyPhaseVisibility: applyPhaseVisibility,
+    conditionGlyphSpec: conditionGlyphSpec, conditionKeysOf: conditionKeysOf,
+    soilFaceOutlines: soilFaceOutlines, forgetConditionEyes: forgetConditionEyes,
+    applyStageVisibility: applyStageVisibility,
     normalLoadGlyphSpec: normalLoadGlyphSpec,
     getScene: function() { return scene; },
     getCamera: function() { return cam; },

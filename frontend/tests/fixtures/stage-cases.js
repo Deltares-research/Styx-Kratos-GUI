@@ -1,16 +1,16 @@
 /* Generated fixture -- the one document both implementations of `active_parts` are
-   held to. Milestone D asks for the phase tree to be resolved in the browser as well
+   held to. Milestone D asks for the stage tree to be resolved in the browser as well
    as on the server (plan sec D), and two implementations of one rule drift unless
    something says they agree. This is that something.
 
    A .js file assigning a global rather than a .json file, because the browser suite
    runs from `file://` and a fetch there is blocked; Python reads the same file and
    strips this one assignment off the front. One document, two readers -- see
-   `tests/test_phase_parity.py`, which regenerates and compares it.
+   `tests/test_stage_parity.py`, which regenerates and compares it.
 
-   Not hand-edited. `python tests/test_phase_parity.py --write` rebuilds it.
+   Not hand-edited. `python tests/test_stage_parity.py --write` rebuilds it.
 */
-window.PHASE_FIXTURE =
+window.STAGE_FIXTURE =
 {
   "edits": [
     {
@@ -132,8 +132,8 @@ window.PHASE_FIXTURE =
           "time_interval": 0.0
         },
         {
-          "id": "phase_1",
-          "name": "Phase 8",
+          "id": "stage_1",
+          "name": "Stage 8",
           "parent": "settle",
           "calculation": "Plastic",
           "loading": "Staged construction",
@@ -202,8 +202,8 @@ window.PHASE_FIXTURE =
           "time_interval": 0.0
         },
         {
-          "id": "phase_1",
-          "name": "New phase",
+          "id": "stage_1",
+          "name": "New stage",
           "parent": "build_wall",
           "calculation": "Plastic",
           "loading": "Staged construction",
@@ -217,7 +217,7 @@ window.PHASE_FIXTURE =
         {
           "id": "dig_1",
           "name": "Dig to -2.0 m",
-          "parent": "phase_1",
+          "parent": "stage_1",
           "calculation": "Plastic",
           "loading": "Staged construction",
           "activate": [
@@ -288,8 +288,8 @@ window.PHASE_FIXTURE =
       ],
       "result": [
         {
-          "id": "phase_1",
-          "name": "New phase",
+          "id": "stage_1",
+          "name": "New stage",
           "parent": null,
           "calculation": "Plastic",
           "loading": "Staged construction",
@@ -303,7 +303,7 @@ window.PHASE_FIXTURE =
         {
           "id": "initial",
           "name": "Initial stage",
-          "parent": "phase_1",
+          "parent": "stage_1",
           "calculation": "K0 procedure",
           "loading": "Staged construction",
           "activate": [],
@@ -681,7 +681,7 @@ window.PHASE_FIXTURE =
           "time_interval": 0.0
         },
         {
-          "id": "phase_1",
+          "id": "stage_1",
           "name": "Wall installation (copy)",
           "parent": "build_wall",
           "calculation": "Plastic",
@@ -696,7 +696,7 @@ window.PHASE_FIXTURE =
         {
           "id": "dig_1",
           "name": "Dig to -2.0 m",
-          "parent": "phase_1",
+          "parent": "stage_1",
           "calculation": "Plastic",
           "loading": "Staged construction",
           "activate": [
@@ -881,7 +881,7 @@ window.PHASE_FIXTURE =
           "time_interval": 0.0
         },
         {
-          "id": "phase_1",
+          "id": "stage_1",
           "name": "Consolidate (copy)",
           "parent": "settle",
           "calculation": "Plastic",
@@ -1736,6 +1736,102 @@ window.PHASE_FIXTURE =
       "thickness": 0.06,
       "specific_weight": null
     },
+    "boundary_conditions": [
+      {
+        "id": "fixed_bottom",
+        "name": "Fixed bottom",
+        "kind": "displacement",
+        "on": "face",
+        "face": "bottom",
+        "part": null,
+        "points": null,
+        "fixed": [
+          true,
+          true,
+          true
+        ],
+        "active": true
+      },
+      {
+        "id": "roller_left",
+        "name": "Roller left",
+        "kind": "displacement",
+        "on": "face",
+        "face": "left",
+        "part": null,
+        "points": null,
+        "fixed": [
+          true,
+          false,
+          false
+        ],
+        "active": true
+      },
+      {
+        "id": "roller_right",
+        "name": "Roller right",
+        "kind": "displacement",
+        "on": "face",
+        "face": "right",
+        "part": null,
+        "points": null,
+        "fixed": [
+          true,
+          false,
+          false
+        ],
+        "active": true
+      },
+      {
+        "id": "roller_front",
+        "name": "Roller front",
+        "kind": "displacement",
+        "on": "face",
+        "face": "front",
+        "part": null,
+        "points": null,
+        "fixed": [
+          false,
+          false,
+          true
+        ],
+        "active": true
+      },
+      {
+        "id": "roller_back",
+        "name": "Roller back",
+        "kind": "displacement",
+        "on": "face",
+        "face": "back",
+        "part": null,
+        "points": null,
+        "fixed": [
+          false,
+          false,
+          true
+        ],
+        "active": true
+      },
+      {
+        "id": "pore_pressure",
+        "name": "Pore pressure",
+        "kind": "water_pressure",
+        "on": "domain",
+        "face": null,
+        "part": null,
+        "points": null,
+        "fluid_pressure_type": "Hydrostatic",
+        "is_fixed": true,
+        "value": 0.0,
+        "reference_coordinate": -1.5,
+        "x_coordinates": null,
+        "y_coordinates": null,
+        "z_coordinates": null,
+        "pressure_tension_cut_off": 0.0,
+        "active": true
+      }
+    ],
+    "gravity": true,
     "mesh": {
       "element_size": 2.5,
       "order": 2,
@@ -1750,7 +1846,7 @@ window.PHASE_FIXTURE =
       "refinements": []
     },
     "custom_parts": [],
-    "phases": [
+    "stages": [
       {
         "id": "initial",
         "name": "Initial stage",
@@ -1903,7 +1999,8 @@ window.PHASE_FIXTURE =
       "piles",
       "load",
       "water",
-      "wells"
+      "wells",
+      "pore_pressure"
     ]
   },
   "stageable_keys": [
@@ -1922,12 +2019,14 @@ window.PHASE_FIXTURE =
     "piles",
     "load",
     "water",
-    "wells"
+    "wells",
+    "pore_pressure"
   ],
   "active_parts": {
     "initial": [
       "excavation",
       "piles",
+      "pore_pressure",
       "soil_L1",
       "soil_L2",
       "soil_L2__pit",
@@ -1940,6 +2039,7 @@ window.PHASE_FIXTURE =
     "null_step": [
       "excavation",
       "piles",
+      "pore_pressure",
       "soil_L1",
       "soil_L2",
       "soil_L2__pit",
@@ -1953,6 +2053,7 @@ window.PHASE_FIXTURE =
       "excavation",
       "load",
       "piles",
+      "pore_pressure",
       "soil_L1",
       "soil_L2",
       "soil_L2__pit",
@@ -1967,6 +2068,7 @@ window.PHASE_FIXTURE =
       "excavation",
       "load",
       "piles",
+      "pore_pressure",
       "soil_L1__lift1",
       "soil_L2",
       "soil_L2__pit",
@@ -1982,6 +2084,7 @@ window.PHASE_FIXTURE =
       "excavation",
       "load",
       "piles",
+      "pore_pressure",
       "soil_L1__lift1",
       "soil_L2",
       "soil_L2__pit",
@@ -1997,6 +2100,7 @@ window.PHASE_FIXTURE =
       "excavation",
       "load",
       "piles",
+      "pore_pressure",
       "soil_L1",
       "soil_L1__lift2",
       "soil_L2",
@@ -2013,6 +2117,7 @@ window.PHASE_FIXTURE =
       "excavation",
       "load",
       "piles",
+      "pore_pressure",
       "soil_L1",
       "soil_L1__lift2",
       "soil_L2",

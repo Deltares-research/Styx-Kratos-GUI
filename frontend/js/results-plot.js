@@ -3,14 +3,14 @@
 
    The plot every retaining-wall calculation is read from: bending moment, shear
    force, normal force and displacement down the wall, and the earth pressure on it,
-   one panel per construction phase. Modelled on Kratos' own staged-excavation
+   one panel per construction stage. Modelled on Kratos' own staged-excavation
    comparison figure -- the quantity along the horizontal axis, the
    level y up the vertical one, a line with a dot at every node -- with the one
    addition of the largest value, written beside the point it occurs at.
 
    ── The command line is the feature ──────────────────────────────────────
 
-       results plot                     the wall's bending moment, every phase
+       results plot                     the wall's bending moment, every stage
        results plot <quantity>          M, Q, N, ux, uy, tn, ts -- or a word of the
                                         label: moment, shear, normal, traction...
        results plot <member> [<q>]      wall, interface
@@ -164,7 +164,7 @@ App.ResultsPlot = (function () {
   /* ── The figure ───────────────────────────────────────────────────────── */
 
   function title(stage) {
-    return stage.index + ' ' + (stage.phase || stage.name || '');
+    return stage.index + ' ' + (stage.stage || stage.name || '');
   }
 
   function axisLabel(plot) {
@@ -202,7 +202,7 @@ App.ResultsPlot = (function () {
       out.push('<rect x="' + left + '" y="' + top + '" width="' + (right - left)
                + '" height="' + (bottom - top) + '" fill="none" stroke="' + FRAME + '"/>');
       out.push('<text x="' + fixed(middle) + '" y="' + fixed((top + bottom) / 2)
-               + '" text-anchor="middle" fill="#888">no values in this phase</text>');
+               + '" text-anchor="middle" fill="#888">no values in this stage</text>');
       out.push('</g>');
       return out.join('');
     }
@@ -391,9 +391,9 @@ App.ResultsPlot = (function () {
 
   function report(plot) {
     log('ok', plot.label + ' (' + plot.unit + ') along the ' + plot.member + ', '
-              + plural(plot.stages.length, 'phase') + ':');
+              + plural(plot.stages.length, 'stage') + ':');
     plot.stages.forEach(function (stage) {
-      log('note', '  ' + pad(stage.index, 4) + pad(stage.phase || stage.name, 30)
+      log('note', '  ' + pad(stage.index, 4) + pad(stage.stage || stage.name, 30)
                   + pad(extreme('max', stage.max), 28) + extreme('min', stage.min));
     });
     log('note', '`results plot csv` saves the numbers, `results plot svg` the figure.');
@@ -420,10 +420,10 @@ App.ResultsPlot = (function () {
   }
 
   function csv(plot) {
-    var lines = ['stage,phase,node,y [m],' + plot.quantity + ' [' + plot.unit + ']'];
+    var lines = ['stage,name,node,y [m],' + plot.quantity + ' [' + plot.unit + ']'];
     plot.stages.forEach(function (stage) {
       stage.points.forEach(function (point, i) {
-        lines.push([stage.index, cell(stage.phase || stage.name),
+        lines.push([stage.index, cell(stage.stage || stage.name),
                     (stage.nodes || [])[i], point[1], point[0]].join(','));
       });
     });
@@ -455,7 +455,7 @@ App.ResultsPlot = (function () {
       if (verb === 'members' || verb === 'list') return listMembers(list);
       if (!list.length) {
         log('note', run + ' wrote no member output — there is no wall in it, '
-                    + 'or no phase with one.');
+                    + 'or no stage with one.');
         return null;
       }
       if (verb === 'csv' || verb === 'svg') {

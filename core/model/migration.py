@@ -241,3 +241,19 @@ def _load(load: object) -> object:
     if not isinstance(load, dict) or "components" not in load:
         return load
     return {**load, "components": [c * KILO for c in load["components"]]}
+
+
+def rename_phases(value: dict) -> dict:
+    """A document saved before 2026-10 calls its stages `phases`; Kratos, and Styx since,
+    calls them `stages`. Only the key changes: stage ids such as `phase_1` are user data,
+    referenced by `parent`, and stay as they are.
+
+    Both keys at once is what old code makes of a new dump --
+    `{**project.model_dump(), "phases": [...]}` -- and Styx itself never writes
+    `phases`, so the `phases` there is the one deliberately set, and it wins."""
+    if "phases" not in value:
+        return value
+    out = dict(value)
+    out.pop("stages", None)
+    out["stages"] = out.pop("phases")
+    return out

@@ -97,3 +97,49 @@ def test_an_old_project_still_meshes_and_exports(path):
 
     assert len(export["nodes"]) > 0 and len(export["elements"]) > 0
     assert "Begin Nodes" in export["mdpa"] and "Begin Elements" in export["mdpa"]
+
+# -- "phases" became "stages" (2026-10): Kratos' word for the construction sequence --
+
+def test_rename_phases_moves_the_key():
+    from core.model import migration
+    old = {"name": "x", "phases": [{"id": "phase_1", "name": "Initial"}]}
+    assert migration.rename_phases(old) == {
+        "name": "x", "stages": [{"id": "phase_1", "name": "Initial"}]}
+
+
+def test_rename_phases_leaves_a_current_document_alone():
+    from core.model import migration
+    new = {"stages": []}
+    assert migration.rename_phases(new) is new
+
+
+def test_old_code_overriding_a_new_dump_keeps_working():
+    from core.model import migration
+    merged = {"stages": [{"id": "b"}]} | {"phases": [{"id": "a"}]}
+    assert migration.rename_phases(merged) == {"stages": [{"id": "a"}]}
+
+
+def test_a_project_saved_with_phases_opens_with_stages():
+    from core.model import stages, templates
+    project = templates.blank_project()
+    project = project.model_copy(update={"stages": stages.default_stages(project)})
+    doc = project.model_dump(mode="json")
+    doc["phases"] = doc.pop("stages")
+    opened = Project.model_validate(doc)
+    assert [s.id for s in opened.stages] == ["initial", "null_step"]
+    assert "phases" not in opened.model_dump(mode="json")
+
+
+def test_the_old_names_still_resolve():
+    from core.model import templates
+    from core.model.schemas import Phase, Stage
+    assert Phase is Stage
+    project = templates.blank_project()
+    assert project.phases is project.stages
+
+
+def test_an_old_model_copy_with_phases_still_sets_the_stages():
+    from core.model import stages, templates
+    project = templates.blank_project()
+    copied = project.model_copy(update={"phases": stages.default_stages(project)})
+    assert [s.id for s in copied.stages] == ["initial", "null_step"]

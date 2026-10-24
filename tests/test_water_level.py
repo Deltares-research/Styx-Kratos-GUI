@@ -5,15 +5,11 @@ project gives -- carried `WaterLevel(y=-1.5)`: a phreatic level nobody asked for
 every model. Now `Project.water` is optional. A model that has one (the test model, a
 file saved with one) keeps it; a new one has none until the user sets it (`PUT /api/project/water`, or `water <level>` on the command line).
 
-A dry model still has to say something about pore pressure: the `U_Pw` elements' pressure
-degrees of freedom are unconstrained without it, which is one of the defects only a run
-found (memory: run-the-deck-reading-it-is-not-enough). It keeps the very same process
-the validated decks use, referenced to the bottom of the model. That is zero everywhere
-and still fixed, because Kratos' `ApplyConstantHydrostaticPressureProcess` writes
-`min(-gamma * (ref - y), pressure_tension_cut_off)` and the cut-off defaults to 0 --
-read from applications/GeoMechanicsApplication/custom_processes/
-apply_constant_hydrostatic_pressure_process.cpp, and borne out by a real run in
-`test_results_regression.py::test_pore_pressure_is_hydrostatic_below_the_water_table_and_zero_above_it`.
+The level fixes no pressure by itself, and no water pressure condition reads it: a
+condition carries its own level (`WaterPressureCondition.reference_coordinate`), which a
+new one is given from the project's (`core.model.drafts`). Moving or removing the level
+afterwards leaves the condition where it is. A dry model of the seed's soil needs no
+condition at all, because that soil's pressure stays as it starts (`CONSTANT_PW_FIELD`).
 """
 
 from __future__ import annotations
@@ -68,10 +64,12 @@ def test_a_project_saved_with_a_water_level_still_opens_with_it():
     assert Project.model_validate(payload).water.y == payload["water"]["y"]
 
 
-def test_a_hydrostatic_water_load_needs_a_water_level():
+def test_a_hydrostatic_water_load_saved_without_a_level_needs_a_water_level():
     """Its pressure is derived from `Project.water`; with none there is nothing to derive
     it from, and a silent zero would be a wall with no water on it."""
     payload = excavation_project().model_dump()
+    for load in payload["normal_loads"]:
+        load["reference_coordinate"] = None
     payload["water"] = None
     with pytest.raises(ValueError, match="water level"):
         Project.model_validate(payload)
@@ -79,23 +77,21 @@ def test_a_hydrostatic_water_load_needs_a_water_level():
 
 # ── The deck ────────────────────────────────────────────────────────────────
 
-def test_a_dry_model_still_fixes_its_pore_pressure_at_zero(session):
+def test_removing_the_water_level_leaves_the_condition_s_own_level(session):
     project = dry(seed_project())
     exported = writer.export_project(project, MeshRequest(element_size=6.0, order=1))
     parameters = pressure_process(exported)
     assert parameters["fluid_pressure_type"] == "Hydrostatic"
     assert parameters["is_fixed"] is True
-    # The bottom of the model: every node is at or above it, so every pressure is
-    # clamped to the zero cut-off.
-    assert parameters["reference_coordinate"] == project.domain.y_bottom
+    assert parameters["reference_coordinate"] == -1.5
     assert parameters["specific_weight"] == 10_000.0
 
 
-def test_a_wet_model_is_unchanged(session):
+def test_moving_the_water_level_does_not_move_the_condition(session):
     project = seed_project()
     project.water.y = -4.25
     exported = writer.export_project(project, MeshRequest(element_size=6.0, order=1))
-    assert pressure_process(exported)["reference_coordinate"] == -4.25
+    assert pressure_process(exported)["reference_coordinate"] == -1.5
 
 
 def test_a_dry_model_builds_no_water_slab(session):
@@ -125,7 +121,7 @@ def test_a_dry_model_has_no_water_part(session):
     payload = excavation_project().model_dump()
     payload["water"] = None
     payload["normal_loads"] = []
-    payload["phases"] = []
+    payload["stages"] = []
     mesh = meshing.mesh_project(Project.model_validate(payload))
     assert "water" not in {part.key for part in mesh.parts}
 
@@ -155,7 +151,11 @@ def test_the_water_level_can_be_set_and_removed(client):
 
 
 def test_a_water_level_cannot_be_removed_from_under_a_hydrostatic_load(client):
-    store.put(excavation_project())
+    """One saved without a level of its own, which reads the project's."""
+    payload = excavation_project().model_dump()
+    for load in payload["normal_loads"]:
+        load["reference_coordinate"] = None
+    store.put(Project.model_validate(payload))
     response = client.put("/api/project/water", json={"water": None})
     assert response.status_code == 422
     assert "water level" in response.text

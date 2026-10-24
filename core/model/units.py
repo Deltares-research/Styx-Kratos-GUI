@@ -70,13 +70,15 @@ AREA = _q("area", (0, 2, 0), "m²", "m²")
 INERTIA = _q("second moment of area", (0, 4, 0), "m⁴", "m⁴")
 LENGTH = _q("length", (0, 1, 0), "m", "m")
 ACCELERATION = _q("acceleration", (0, 1, -2), "m/s²", "m/s²")
+VELOCITY = _q("velocity", (0, 1, -1), "m/s", "m/s")
+FLOW_RATE = _q("flow rate per metre", (0, 2, -1), "m³/s/m", "m³/s/m")
 DIMENSIONLESS = _q("dimensionless", (0, 0, 0), "", "")
 ANGLE = _q("angle", (0, 0, 0), "°", "°")
 
 QUANTITIES = {q.name: q for q in (STRESS, FORCE, LINE_FORCE, MOMENT_PER_LENGTH, DENSITY,
                                   SPECIFIC_WEIGHT, STIFFNESS_PER_AREA, VISCOSITY,
                                   PERMEABILITY, AREA, INERTIA, LENGTH, ACCELERATION,
-                                  DIMENSIONLESS, ANGLE)}
+                                  VELOCITY, FLOW_RATE, DIMENSIONLESS, ANGLE)}
 
 VARIABLES: dict[str, Quantity] = {
     # Soil
@@ -214,6 +216,11 @@ def convert_project(payload: dict, target: str) -> tuple[dict, list[str]]:
                     for load in payload.get("loads", [])]
     out["normal_loads"] = [{**n, "pressure": value(n.get("pressure", 0.0), STRESS)}
                            for n in payload.get("normal_loads", [])]
+    out["boundary_conditions"] = [
+        {**c, "value": value(c.get("value", 0.0), STRESS),
+         "pressure_tension_cut_off": value(c.get("pressure_tension_cut_off", 0.0), STRESS)}
+        if c.get("kind") == "water_pressure" else c
+        for c in payload.get("boundary_conditions", [])]
     water = payload.get("water")
     if isinstance(water, dict):
         out["water"] = {**water,

@@ -336,17 +336,17 @@
     });
   });
 
-  test('viewport: a phase hides what it has not built yet', function () {
+  test('viewport: a stage hides what it has not built yet', function () {
     return boot().then(function () {
-      var phases = App.PROJECT.phases || [];
-      T.ok(phases.length > 1, 'the test model is staged');
+      var stages = App.PROJECT.stages || [];
+      T.ok(stages.length > 1, 'the test model is staged');
       App.state.mode = 'staged';
-      App.state.phase = phases[0].id;
-      App.Viewport.applyPhaseVisibility();
-      var hidden = App.Phases.hiddenKeys(App.PROJECT, phases[0].id, 'staged');
+      App.state.phase = stages[0].id;
+      App.Viewport.applyStageVisibility();
+      var hidden = App.Stages.hiddenKeys(App.PROJECT, stages[0].id, 'staged');
       var groups = sceneGroups();
       hidden.filter(function (key) { return groups[key]; }).forEach(function (key) {
-        T.eq(groups[key].visible, false, key + ' is not built in the first phase');
+        T.eq(groups[key].visible, false, key + ' is not built in the first stage');
       });
       App.state.phase = null;
       App.state.mode = 'soil';
