@@ -223,6 +223,28 @@
     T.eq(BC().waterIn(project, 'p3'), 'None');
   });
 
+  /* The rail's draw tools hand DrawInput a line or a one-click point. A point keeps
+     the height it was clicked at (`atPointer`): without it DrawInput puts a 'load'
+     on the ground surface, and a water pressure point deep in the soil with it.
+     Where the clicks land is test-draw-pointer.js's. */
+  test('the rail tools draw a line, or a point where it was clicked', function () {
+    var savedDraw = App.DrawInput, savedProject = App.PROJECT;
+    var started = [];
+    App.DrawInput = { start: function (mode, options) { started.push([mode, options]); } };
+    App.PROJECT = section();
+    try {
+      BC().draw('water_pressure', 'line');
+      BC().draw('seepage', 'line');
+      BC().draw('water_pressure', 'point');
+      BC().draw('displacement', 'point');
+    } finally { App.DrawInput = savedDraw; App.PROJECT = savedProject; }
+    T.eq(started.map(function (s) { return s[0]; }), ['line', 'line', 'load', 'load']);
+    started.forEach(function (s) {
+      T.ok(s[1].atPointer, s[0] + ': where the pointer is, not on the ground');
+      T.eq(typeof s[1].onComplete, 'function');
+    });
+  });
+
   test('points are typed as x y pairs', function () {
     T.eq(BC().parsePoints('0 -5, 5 -5'), [[0, -5], [5, -5]]);
     T.eq(BC().parsePoints('0 -5, 5'), null);

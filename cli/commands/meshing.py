@@ -98,12 +98,10 @@ def exported(project: Project) -> dict:
 
 
 def nothing_to_mesh(project: Project) -> str | None:
-    """Why `project` would mesh to nothing, or None: a model with no soil body and no
-    solid of its own has nothing for gmsh to fill, and its deck would hold no nodes."""
-    if project.soil_bodies() or project.custom_parts:
-        return None
-    return ("the model has nothing to mesh: no soil layer and no solid. "
-            "`layer add` adds a soil layer.")
+    """Why `project` would mesh to nothing, or None (`session.nothing_to_mesh`), with
+    the command that fixes it."""
+    empty = session.nothing_to_mesh(project)
+    return f"{empty} `layer add` adds a soil layer." if empty else None
 
 
 def _refuse_empty(project: Project, stats: dict) -> None:

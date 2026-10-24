@@ -56,16 +56,6 @@
     App.LAYERS = saved;
   });
 
-  test('pit refinement maps project extents to the mesh API schema', function () {
-    var refinement = App.LivePatches.pitRefinement({
-      domain: { y_bottom: -25, y_top: 0 },
-      excavation: { x0: 12, x1: 38, z0: 10, z1: 30 },
-      mesh: { element_size: 2.5 }
-    }, 0.5);
-    T.eq(refinement, { kind: 'box', size: 1.25, x_min: 12, x_max: 38,
-      z_min: 10, z_max: 30, y_min: -25, y_max: 0 });
-  });
-
   /* ── Model explorer: Delete for drawn/imported geometry ──────────
 
      js/explorer.js:91 hard-codes Delete disabled on every tree row -- the frozen

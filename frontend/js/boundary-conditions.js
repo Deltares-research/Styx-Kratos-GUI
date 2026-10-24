@@ -917,7 +917,7 @@ App.BoundaryConditions = (function () {
       var on = c.on.value;
       shell.close();
       App.DrawInput.start(on === 'point' ? 'load' : 'line', {
-        count: 1,
+        count: 1, atPointer: true,
         onComplete: function (points) {
           var next = record ? copy(record) : { kind: c.kind.value };
           next.on = on;
@@ -1092,7 +1092,8 @@ App.BoundaryConditions = (function () {
     }
     if (!App.DrawInput || !App.DrawInput.start) return;
     App.DrawInput.start(on === 'point' ? 'load' : 'line', {
-      count: 1,
+      // A point is where it was clicked, not on the ground surface as a load is.
+      count: 1, atPointer: true,
       onComplete: function (points) {
         var drawn = points.map(function (p) { return [p[0], p[1]]; });
         var record;

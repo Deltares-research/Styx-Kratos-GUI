@@ -158,15 +158,17 @@ App.DrawInput = (function () {
     var p = new THREE.Vector3();
     var plane = groundPlane;
     var project = App.PROJECT;
-    if (activeMode === 'load' && project) {
-      var top = project.domain.y_top;
-      if (project.dimension === 2) {
-        // The section is the x-y plane at z = 0, so that is what a pick lands on.
-        plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
-      } else {
-        // The ground surface, which with Y up is a plane of constant y.
-        plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -top);
-      }
+    if (project && project.dimension === 2) {
+      // The section is the x-y plane at z = 0, so that is what a pick lands on -- for
+      // every tool, not only a load. The ground plane below is y = 0, which the 2D
+      // camera looks along (it faces -z): every ray runs parallel to it and hits
+      // nothing, so a line, a point or a surface drawn in the section -- the
+      // boundary condition tools of Flow conditions and Structures among them --
+      // placed no vertex at all and ended in "Not enough vertices".
+      plane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0);
+    } else if (activeMode === 'load' && project) {
+      // The ground surface, which with Y up is a plane of constant y.
+      plane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -project.domain.y_top);
     }
     if (raycaster.ray.intersectPlane(plane, p)) {
       if (App.state && App.state.snap) {
@@ -175,9 +177,13 @@ App.DrawInput = (function () {
         p.y = Math.round(p.y);
         p.z = Math.round(p.z);
       }
-      if (activeMode === 'load' && project && !(activeOptions && activeOptions.pointLoad)) {
+      if (activeMode === 'load' && project
+          && !(activeOptions && (activeOptions.pointLoad || activeOptions.atPointer))) {
         // Loads authored in a section belong to its ground boundary. The pointer's
-        // vertical position chooses no extra degree of freedom.
+        // vertical position chooses no extra degree of freedom. A point load, and a
+        // boundary condition at a point (`atPointer`, js/boundary-conditions.js), is
+        // wherever it was clicked: a water pressure or a support deep in the soil
+        // would otherwise land on the ground surface whatever the click said.
         p.y = project.domain.y_top;
       }
       return [p.x, p.y, p.z];

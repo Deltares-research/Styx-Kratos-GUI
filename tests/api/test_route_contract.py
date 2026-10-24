@@ -108,6 +108,11 @@ CONTRACTS = [
              bad=lambda c: c.patch("/api/project/layers", json={"layers": [
                  {**_project(c)["layers"][0], "mat": "no_such_material"}]}),
              bad_status=422),
+    Contract("POST", "/api/project/boreholes",
+             lambda c: c.post("/api/project/boreholes", json={"x": 50.0}), PROJECT_KEYS,
+             bad=lambda c: c.post("/api/project/boreholes", json={
+                 "id": _project(c)["boreholes"][0]["id"]}),
+             bad_status=422),
     Contract("PUT", "/api/project/water",
              lambda c: c.put("/api/project/water", json={"water": None}), PROJECT_KEYS,
              bad=lambda c: c.put("/api/project/water", json={}), bad_status=422),

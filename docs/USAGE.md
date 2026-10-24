@@ -27,12 +27,14 @@ GUI is the part of Styx that you use in the browser. To install Styx, see
 Staged construction mode adds a **Phases explorer**, and Results mode adds a **Results
 explorer**, below the Model explorer.
 
-Some menu items and tools come from the first design of the GUI and do nothing yet. When you
-click one, the log shows *"…" is not available in Styx yet*. These are, for example:
-**Import soil layers…**, **Create plate**, **Create beam**, **Create embedded beam**,
-**Tunnel designer…**, the wells, drains and flow
-functions, **Pack project…**, **Print…**, the **Expert** menu (except **Command line**), and
-**Help** → **Reference manual** and **Tutorial manual**.
+Some menu items and tools come from the first design of the GUI and do nothing yet. They are
+grey, in the menus and on the tool rail, and you cannot select them. The tip of a grey tool
+says *not available yet*. These are, for example: **Import soil layers…**, **Create point**,
+**Create plate**, **Create beam**, **Create embedded beam**, **Tunnel designer…**, **Refine
+mesh**, **Coarsen mesh**, the wells, drains and flow functions, **Select multiple objects**,
+**Activate selection**, **Deactivate selection**, **Preview phase**, **Pack project…**,
+**Print…**, the **Expert** menu (except **Command line**), and **Help** → **Reference
+manual** and **Tutorial manual**.
 
 ## The order of work
 
@@ -91,9 +93,10 @@ properties.
 ### Boreholes and soil layers
 
 1. Add boreholes with the **Create borehole** tool, or type `borehole <x> <y>`. `x` and `y`
-   are map coordinates.
+   are map coordinates. A borehole gets the levels of the last borehole. Without `x` and `y`,
+   it goes 10 m past the last borehole. This is the same as `kratos-cli borehole add`.
 2. Click **Modify soil layers…**. The window shows the boreholes on the left and the layers of
-   one borehole on the right.
+   one borehole on the right. You can also add a borehole there with **Add borehole**.
 3. Use **Add**, **Insert** and **Delete** to change the layers. Type the top, the bottom or
    the thickness, and select a material for each layer.
 4. Click **OK** to save the layers and make the geometry again. Click **Cancel** to go back to
@@ -188,10 +191,6 @@ When you open Mesh mode, the **Mesh properties** window opens:
 
 Click **Apply and generate** to make the mesh, or **Apply** to only keep the settings.
 <kbd>F9</kbd> in Mesh mode makes the mesh again with the saved settings.
-
-**Refine mesh** and **Coarsen mesh** make the elements in the excavation two times smaller or
-two times larger. **Reset local refinement** removes this setting. Make the mesh again to
-see the change.
 
 To see the numbers of the nodes or the elements, right-click in the viewport and select
 **Show labels**. To show a part of the mesh in its own colour, type `colour <part>`. To see
@@ -459,7 +458,7 @@ Type a command in the command box below the log, and press <kbd>Enter</kbd>. Use
 | `boundary`, `boundary standard` | Lists the boundary conditions, or puts the standard supports back |
 | `gravity`, `gravity on`, `gravity off` | Shows gravity, or switches it on or off |
 | `units`, `units SI`, `units kN` | Shows or changes the unit system |
-| `borehole <x> <y>` | Adds a borehole |
+| `borehole`, `borehole <x> <y>` | Adds a borehole, 10 m past the last one or at map `x`, `y` |
 | `soillayers`, `materials` | Opens the **Modify soil layers** or **Material sets** window |
 | `cleargeometry` | Removes all drawn and imported solids |
 | `colour <part>`, `colour all`, `colour off` | Shows parts of the mesh in their own colour |

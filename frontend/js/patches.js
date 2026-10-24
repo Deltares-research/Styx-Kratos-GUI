@@ -45,15 +45,6 @@ App.LivePatches = (function () {
       + integer(stats.nodes) + ' nodes (' + stats.seconds.toFixed(1) + ' s).';
   }
 
-  function pitRefinement(project, factor) {
-    return {
-      kind: 'box', size: project.mesh.element_size * factor,
-      x_min: project.excavation.x0, x_max: project.excavation.x1,
-      z_min: project.excavation.z0, z_max: project.excavation.z1,
-      y_min: project.domain.y_bottom, y_max: project.domain.y_top
-    };
-  }
-
   function requestMesh(selectAfter, echo) {
     if (inFlight) {
       if (App.Command && App.Command.note) App.Command.note('Mesh generation is already running.');
@@ -774,6 +765,46 @@ App.LivePatches = (function () {
     return true;
   }
 
+  /* ── Boreholes ─────────────────────────────────────────────────────────
+     Soil > Create borehole, its rail tool and `borehole [x] [y]` all add one through
+     `POST /api/project/boreholes`, which is `session.add_borehole` -- what `kratos-cli
+     borehole add` calls -- so the GUI and the terminal make the same borehole: its id,
+     its name, 10 m past the last one unless told, and every layer's levels copied
+     from the last borehole. The frozen `App.addBorehole` did the same to the
+     browser's copy only, which the next Model.apply threw away. */
+  function addBorehole(fields) {
+    return App.Api.post('/api/project/boreholes', fields || {})
+      .then(function (result) {
+        App.Model.apply(result.project);
+        var boreholes = result.project.boreholes || [];
+        var added = boreholes[boreholes.length - 1];
+        return App.Viewport.refresh().then(function () {
+          if (App.Explorer && App.state) App.Explorer.mountTree(App.state.mode);
+          App.Command.ok('Added borehole ' + added.id + ' (' + added.name + ') at x = '
+                         + Number(added.x).toFixed(2) + ' m, y = '
+                         + Number(added.y).toFixed(2) + ' m.');
+          return added;
+        });
+      })
+      .catch(function (error) { App.Command.err(error.message); });
+  }
+
+  /* `borehole [x] [y]`: map coordinates, as `kratos-cli borehole add --x --y` takes
+     them -- y is the map's, the model's z, not a height. Either may be left out. */
+  function runBoreholeCommand(text) {
+    var words = String(text || '').trim().split(/\s+/).slice(1);
+    var numbers = words.map(Number);
+    if (words.length > 2 || numbers.some(function (n) { return !isFinite(n); })) {
+      App.Command.err('"' + words.join(' ') + '" is not a position. Use `borehole`, '
+                      + '`borehole <x>` or `borehole <x> <y>`, e.g. borehole 40 0.');
+      return null;
+    }
+    var fields = {};
+    if (words.length > 0) fields.x = numbers[0];
+    if (words.length > 1) fields.y = numbers[1];
+    return addBorehole(fields);
+  }
+
   /* `units` / `units <system>`, typed: show the project's unit system, or convert the
      whole project to another one. What to send is `App.Units`'s (tested headless); this
      sends it, redraws from the project the server stored, and prints what the server
@@ -1004,7 +1035,12 @@ App.LivePatches = (function () {
     var row = event.target.closest && event.target.closest('.tree-row');
     var key = row && row.dataset.obj;
     var kind = objectKind(key);
-    if (!kind) return; // not ours -- let the frozen menu handle it (soil layers, groups, …)
+    if (!kind) {
+      // Not ours -- the frozen menu handles it (soil layers, groups, …), with its dead
+      // "Properties…" greyed on the way. See greyFrozenTreeProperties.
+      if (row) greyFrozenTreeProperties();
+      return;
+    }
 
     event.preventDefault();
     event.stopImmediatePropagation(); // the frozen row listener must not also open a menu
@@ -1087,14 +1123,205 @@ App.LivePatches = (function () {
     button.disabled = !!off;
   }
 
+  /* Every menu row carrying `action`, submenus included: the Results menu keeps
+     whole lists of its entries one level down, and a twin that hides in a submenu
+     is still a twin the gating has to reach. */
   function menuItemsFor(action) {
     var found = [];
-    (App.MENUS || []).forEach(function (menu) {
-      (menu.items || []).forEach(function (item) {
-        if (item && item.action === action) found.push(item);
+    function walk(items) {
+      (items || []).forEach(function (item) {
+        if (!item || typeof item !== 'object') return;
+        if (item.action === action) found.push(item);
+        if (Array.isArray(item.sub)) walk(item.sub);
+      });
+    }
+    (App.MENUS || []).forEach(function (menu) { walk(menu.items); });
+    return found;
+  }
+
+  /* ── What Styx does not do yet ───────────────────────────────────────────
+     js/data.js draws the whole of the program the mockup imitates: wells and drains,
+     plates and embedded beams, a tunnel designer, a Python interpreter, a macro
+     library. Most of it has nothing behind it, and a button that looks ready and
+     then answers "not available" in the log is a button the user learns to distrust
+     -- along with every button beside it. So a control with no live behaviour is
+     drawn greyed, in every place it appears, by one rule:
+
+       a control works when it carries an action that is not on NOT_YET. A row with
+       no action works only when it opens a real submenu -- an array the caller
+       filled, not the mockup's placeholder `sub: true`.
+
+     One predicate, asked by the menus, the rail, its flyouts and App.runAction alike,
+     so a menu row and the button for the same tool cannot disagree about whether it
+     exists. NOT_YET holds the actions that do run, but not what their label says:
+
+       importSoilLayers   the mockup's import dialog, which imports nothing.
+       refineMesh,        one box over the excavation whatever is selected, so a
+       coarsenMesh,       refinement nobody placed. Mesh properties… is where the
+       resetMeshRefinement  element size is set.
+       drawPoint          draws a point, which the server then refuses: the creation
+                          recipes (core/geometry/primitives.py) have no `point` kind. */
+  var NOT_YET = ['importSoilLayers', 'refineMesh', 'coarsenMesh', 'resetMeshRefinement',
+                 'drawPoint'];
+
+  /* Appended to a greyed rail tool's tip, the tip being the only words a rail button
+     has. Menus need no such suffix: a grey row in a list of black ones says it. */
+  var NOT_YET_TIP = ' — not available yet';
+
+  /* Separators ('-') and section captions are not controls, so they always pass. */
+  function implemented(item) {
+    if (!item || typeof item !== 'object' || item.title) return true;
+    if (item.action) return NOT_YET.indexOf(item.action) < 0;
+    return Array.isArray(item.sub);
+  }
+
+  /* The name a control goes by in the log, without the suffix its tip was given. */
+  function controlName(item) {
+    return String(item.label || item.tip || item.action || '').replace(NOT_YET_TIP, '');
+  }
+
+  /* Greys every row of a menu or flyout that does nothing, descending into real
+     submenus. It only ever greys: rows that are greyed for another reason (2D or 3D,
+     an empty undo history) are owned by the code that greys them. A tick on a row
+     that does nothing -- "Global water level" -- is a state nobody can change, so it
+     goes too. */
+  function greyNotYet(items) {
+    (items || []).forEach(function (item) {
+      if (!item || typeof item !== 'object') return;
+      if (!implemented(item)) { item.disabled = true; item.checked = false; }
+      if (Array.isArray(item.sub)) greyNotYet(item.sub);
+    });
+  }
+
+  /* The rail's half of it, on the data js/toolbars.js mounts from, so a remount on a
+     mode change draws the tool greyed with no second pass.
+
+     "Select" is the exception that is not one: the frozen rail gives it no action,
+     but it is the pointer every mode starts with and picking works. Without an action
+     it printed "drawing input is not implemented" on every click, so it is given
+     `select`, which App.runAction answers by ending whatever draw or pick tool is
+     running.
+
+     A greyed tool loses its flyout: a corner triangle on a tool that does nothing
+     offers variants of nothing, and the tip would say "click the corner for more".
+
+     It runs once, at the end of install(), when every live action has been hung on
+     the frozen tools -- run earlier, it would grey Create point for still having
+     none. The verdict is kept on the tool as `notYet`, which is what gateRail reads
+     after each mount. */
+  function greyRailTools() {
+    Object.keys(App.RAILS || {}).forEach(function (mode) {
+      (App.RAILS[mode] || []).forEach(function (tool) {
+        if (!tool || typeof tool !== 'object') return;
+        if (tool.icon === 'select' && !tool.action) tool.action = 'select';
+        if (implemented(tool)) return;
+        tool.notYet = true;
+        delete tool.flyout;
+        // "Tunnel designer… — not available yet" reads as two pauses; the ellipsis
+        // promises a window that is not there, so it goes.
+        if (tool.tip && tool.tip.indexOf(NOT_YET_TIP) < 0) {
+          tool.tip = tool.tip.replace(/…$/, '') + NOT_YET_TIP;
+        }
       });
     });
-    return found;
+  }
+
+  function greyEverythingNotYet() {
+    (App.MENUS || []).forEach(function (menu) { greyNotYet(menu.items); });
+    greyRailTools();
+  }
+
+  /* The ticks in the menus, read from the state they describe rather than left at
+     what js/data.js was written with. The frozen dispatcher flips the state and the
+     toolbar button, never the menu row, so "Show axes triad" kept its ✓ over a
+     hidden triad -- and in 2D "Perspective projection" was ticked over a section
+     that is always drawn orthographic. */
+  function syncCheckMarks() {
+    var state = App.state || {};
+    var marks = {
+      toggleProjection: !in2D() && state.projection !== false,
+      toggleGrid: state.grid !== false,
+      toggleTriad: shownById('vp-triad'),
+      toggleCmd: shownById('cmdpanel')
+    };
+    Object.keys(marks).forEach(function (action) {
+      menuItemsFor(action).forEach(function (item) { item.checked = marks[action]; });
+    });
+    return marks;
+  }
+
+  /* The triad and the command panel are hidden by an inline `display: none`
+     (js/app.js:180, :273) and by nothing else. Absent markup -- the test page --
+     counts as shown, which is what js/data.js starts them as. */
+  function shownById(id) {
+    var node = typeof document !== 'undefined' && document.getElementById(id);
+    return !node || node.style.display !== 'none';
+  }
+
+  /* The viewport's right-click menu is built fresh on every open (js/app.js:73), from
+     a list that knows nothing of the dimension: it offered "Isometric view" and a
+     ticked "Perspective projection" over a 2D section, both greyed on the toolbar. */
+  function gateViewportItems(items) {
+    (items || []).forEach(function (item) {
+      if (!item || typeof item !== 'object' || !item.action) return;
+      if (!availableNow(item.action)) item.disabled = true;
+      if (item.action === 'toggleProjection') {
+        item.checked = !in2D() && (App.state || {}).projection !== false;
+      }
+    });
+    return items;
+  }
+
+  /* The frozen tree menu (js/explorer.js:102) ends in a "Properties…" that its
+     callback lets fall off the end for every row. The live rows get a menu of their
+     own with a working one (onTreeContextMenu); for the rest, the frozen row
+     listener runs right after this, inside the same event, and calls App.Menu.openAt
+     -- so a one-shot openAt is lent for that call and greys the row on the way
+     through. The timer puts the real one back should the frozen listener not run. */
+  function greyFrozenTreeProperties() {
+    if (!App.Menu || typeof App.Menu.openAt !== 'function' || App.Menu.openAt.__tree) return;
+    var menu = App.Menu;
+    var openAt = menu.openAt;
+    var lent = function (items, x, y, onPick) {
+      menu.openAt = openAt;
+      (items || []).forEach(function (item) {
+        if (item && /^Properties/.test(item.label || '') && !item.action) item.disabled = true;
+      });
+      return openAt(items, x, y, onPick);
+    };
+    lent.__tree = true;
+    menu.openAt = lent;
+    setTimeout(function () { if (menu.openAt === lent) menu.openAt = openAt; }, 0);
+  }
+
+  /* "Modify soil layers…" (js/dialogs.js:216) draws a toolbar whose last two buttons,
+     Water levels and Field data, only log that they are a mockup. They carry no
+     attribute to find them by except their glyph, so they are matched by it: the
+     same App.UI.icon markup the dialog drew them with. */
+  var SOIL_DIALOG_NOT_YET = ['waterlevel', 'flowfn'];
+
+  function greySoilDialogTools(dialog) {
+    if (!dialog || !App.UI || !App.UI.icon) return;
+    var glyphs = SOIL_DIALOG_NOT_YET.map(function (name) { return App.UI.icon(name).innerHTML; });
+    Array.prototype.forEach.call(dialog.querySelectorAll('.dlg-toolbar .tbtn'), function (b) {
+      var svg = b.querySelector('svg');
+      if (!svg || glyphs.indexOf(svg.innerHTML) < 0) return;
+      b.disabled = true;
+      b.classList.add('disabled');
+    });
+  }
+
+  /* The title bar's minimise, maximise and close (frontend/index.html) are drawn like a
+     desktop window's and have no listener: a page cannot minimise the browser it is
+     in. Greyed, and their tooltips say so. */
+  function greyWindowControls() {
+    if (typeof document === 'undefined') return;
+    Array.prototype.forEach.call(document.querySelectorAll('#titlebar .wc'), function (b) {
+      if (b.disabled) return;
+      b.disabled = true;
+      b.classList.add('disabled');
+      b.title = (b.title || 'Window control') + ' — not available in Styx';
+    });
   }
 
   /* ── Structures rail order ──────────────────────────────────────────────
@@ -1153,21 +1380,49 @@ App.LivePatches = (function () {
 
   /* The left rail is remounted whole on every mode change and its buttons carry no
      action attribute, so the tools are matched positionally against App.RAILS -- the
-     same order js/toolbars.js:86-92 renders them in. */
-  function gateRail() {
+     same order js/toolbars.js:86-92 renders them in -- for the mode that was mounted,
+     when the mount says which, since that is the list the buttons were drawn from. */
+  function gateRail(mode) {
     var rail = document.getElementById('toolrail');
-    var tools = (App.RAILS || {})[(App.state || {}).mode] || [];
+    var tools = (App.RAILS || {})[mode || (App.state || {}).mode] || [];
     if (!rail) return;
+    guardNotYet(rail);
     var buttons = rail.querySelectorAll('.rail-btn');
     var i = 0;
     tools.forEach(function (tool) {
       if (tool === '-') return;
       var button = buttons[i++];
       if (!button) return;
-      var off = !availableNow(tool.action);
+      // A tool on NOT_YET is greyed but not `disabled`: Chrome sends no mouseenter
+      // to a disabled button, and that is the event its tip waits for. `not-yet`
+      // keeps its pointer events (css/live.css) and guardNotYet eats the click.
+      var missing = !!tool.notYet;
+      var off = missing || !availableNow(tool.action) || calculateOff(tool);
+      if (tool.action === 'calculate') paintCalculating(button);
       button.classList.toggle('disabled', off);
-      button.disabled = off;
+      button.classList.toggle('not-yet', missing);
+      button.disabled = off && !missing;
+      if (missing) button.setAttribute('aria-disabled', 'true');
+      else button.removeAttribute('aria-disabled');
     });
+  }
+
+  /* One capturing listener on the rail itself, which runs before the listeners
+     js/toolbars.js puts on each button: a press on a not-yet tool goes no further,
+     so neither the tool nor its "not implemented" note nor the active highlight
+     happens -- and the tip, which a press would otherwise hide, stays up to say why.
+     The rail element outlives every remount (App.UI.clear only empties it). */
+  function guardNotYet(rail) {
+    if (rail.__notYetGuard) return;
+    rail.__notYetGuard = true;
+    function guard(event) {
+      var button = event.target.closest && event.target.closest('.rail-btn.not-yet');
+      if (!button) return;
+      event.preventDefault();
+      event.stopPropagation();
+    }
+    rail.addEventListener('click', guard, true);
+    rail.addEventListener('mousedown', guard, true);
   }
 
   /* One place decides what is available, so the toolbar, the menus, the rail and the
@@ -1198,6 +1453,15 @@ App.LivePatches = (function () {
         item.disabled = TWO_D_ONLY.indexOf(item.action) >= 0 ? !is2d : false;
       });
     });
+    // The sheet-pile flyout names a kind for each dimension. The one the open model
+    // cannot hold is greyed like every other tool of the wrong dimension, rather than
+    // offered and then refused by App.Beams.start.
+    var sheetPile = (((App.RAILS || {}).structures || []).filter(function (tool) {
+      return tool && tool.action === 'createSheetPile';
+    })[0] || {}).flyout || [];
+    sheetPile.forEach(function (item) {
+      item.disabled = item.beamKind === 'beam' ? !is2d : !!is2d;
+    });
 
     // Neither structure tool is gated by dimension any more: each dimension has its
     // own kind of them. What changes is which one the tool makes, so the tool says so.
@@ -1214,6 +1478,8 @@ App.LivePatches = (function () {
         !is2d && (!App.state || App.state.projection !== false));
     }
 
+    // A section is never perspective, so the menu's tick goes with the toolbar's.
+    syncCheckMarks();
     gateRail();
 
     if (typeof document === 'undefined') return;
@@ -1234,6 +1500,160 @@ App.LivePatches = (function () {
       setToolbarDisabled(action, !can[action]);
       menuItemsFor(action).forEach(function (item) { item.disabled = !can[action]; });
     });
+  }
+
+  /* ── Calculate: when it can run, and while it runs ─────────────────────────
+     Five ways in -- the toolbar's green button, the Phases menu, the Staged
+     construction rail, F9 and `calculate` in the command box -- and one answer for
+     all of them, `App.Calculate.state` (js/calculate.js). A button that cannot do
+     anything yet is greyed out with its reason as its tip, rather than pressed and
+     then explained in the log; and one that is already doing it says so, spins, and
+     cannot be pressed again for the hour the solver may take.
+
+     Greying is not the guard. A menu opened before the project changed, F9 and the
+     command box have no button to grey, so App.runAction and the command box ask the
+     same question again and refuse with the same reason.
+
+     The toolbar button is greyed with the class and `aria-disabled`, not the native
+     `disabled`: a disabled button gets no mouse events, so it could not show the tip
+     that says why it is grey, and css/live.css gives this one its pointer back. Its
+     click still reaches App.runAction, which refuses it. Playwright and screen
+     readers both read `aria-disabled` as disabled.
+
+     The tip is live. js/ui.js attachTip reads its text when the tip is shown, through
+     `textContent`, so an object whose toString asks the state now is the tip for
+     every state the button will go through, without remounting the toolbar. The
+     entry's own `tip` stays the string it was, for everything else that reads it.
+
+     The rail button is mounted afresh on every mode change and its tip is joined into
+     a string at mount, so it is greyed (gateRail) but keeps its plain tip. */
+
+  var CALCULATE_TIP = 'Calculate (F9): mesh the model and run it in Kratos.';
+
+  /* When js/calculate.js is not there -- the tests replace it with a stub that only
+     runs -- nothing is greyed: the refusal is not this file's to invent. */
+  function calculateNow() {
+    var calc = App.Calculate;
+    if (!calc || typeof calc.state !== 'function') {
+      return { ok: true, running: false, reason: '' };
+    }
+    return calc.state(App.PROJECT, typeof calc.running === 'function' && calc.running());
+  }
+
+  function calculateOff(tool) {
+    return !!tool && tool.action === 'calculate' && !calculateNow().ok;
+  }
+
+  function paintCalculating(button) {
+    var busy = !!calculateNow().running;
+    button.classList.toggle('calculating', busy);
+    if (busy) button.setAttribute('aria-busy', 'true');
+    else button.removeAttribute('aria-busy');
+  }
+
+  var calculateTip = {
+    toString: function () {
+      var now = calculateNow();
+      return now.ok ? CALCULATE_TIP : now.reason;
+    }
+  };
+
+  function calculateEntry() {
+    return (App.TOOLBAR || []).filter(function (t) {
+      return t && typeof t === 'object' && t.action === 'calculate';
+    })[0] || null;
+  }
+
+  /* Said once, in the log, where a press was refused. */
+  function refuseCalculate() {
+    var now = calculateNow();
+    if (now.ok) return false;
+    if (App.Command && App.Command.note) App.Command.note(now.reason);
+    return true;
+  }
+
+  function syncCalculate() {
+    var now = calculateNow();
+    var entry = calculateEntry();
+    // On the data as well as the button, so a remount of the toolbar keeps it.
+    if (entry) entry.disabled = !now.ok;
+
+    var button = typeof document !== 'undefined'
+      && document.querySelector('#maintoolbar .tbtn[data-action="calculate"]');
+    if (button) {
+      button.classList.toggle('disabled', !now.ok);
+      button.setAttribute('aria-disabled', now.ok ? 'false' : 'true');
+      paintCalculating(button);
+      var label = button.querySelector('span');
+      if (label) {
+        label.textContent = now.running ? 'Calculating…' : ((entry && entry.wide) || 'Calculate');
+      }
+    }
+
+    menuItemsFor('calculate').forEach(function (item) {
+      if (item.calculateLabel === undefined) item.calculateLabel = item.label;
+      item.disabled = !now.ok;
+      item.label = now.running ? 'Calculating…' : item.calculateLabel;
+    });
+
+    gateRail();
+    return now;
+  }
+
+  /* Re-asked whenever the answer can change: a project arrives or changes (every
+     change goes through App.Model.apply; the first load does not, js/model.js:266
+     calls its own `apply`, so App.Model.load is hooked too), a run starts or ends,
+     and the toolbar or the rail is mounted again. And once now, so the button is
+     drawn greyed before the project has arrived rather than live for a moment.
+
+     Each hook is marked where it is made, because install() runs more than once in
+     the tests: the model hooks on the function, which the tests swap for stubs, and
+     the toolbar's on App.Toolbars, so the tip is attached once whoever else wraps
+     mountMain. */
+  function installCalculateState() {
+    var model = App.Model;
+    if (model && typeof model.apply === 'function' && !model.apply.__calculate) {
+      var appliedBefore = model.apply;
+      model.apply = function () {
+        var result = appliedBefore.apply(this, arguments);
+        syncCalculate();
+        return result;
+      };
+      model.apply.__calculate = true;
+    }
+    if (model && typeof model.load === 'function' && !model.load.__calculate) {
+      var loadedBefore = model.load;
+      model.load = function () {
+        var out = loadedBefore.apply(this, arguments);
+        if (out && typeof out.then === 'function') {
+          out.then(function () { syncCalculate(); }, function () { syncCalculate(); });
+        }
+        return out;
+      };
+      model.load.__calculate = true;
+    }
+
+    var bars = App.Toolbars;
+    if (bars && typeof bars.mountMain === 'function' && !bars.__calculateTip) {
+      bars.__calculateTip = true;
+      var mountedBefore = bars.mountMain;
+      bars.mountMain = function () {
+        // Mounted without its static tip, then given the live one.
+        var entry = calculateEntry();
+        var tip = entry ? entry.tip : null;
+        if (entry) entry.tip = null;
+        try { mountedBefore.apply(this, arguments); }
+        finally { if (entry) entry.tip = tip; }
+        var button = document.querySelector('#maintoolbar .tbtn[data-action="calculate"]');
+        if (button && App.UI && App.UI.attachTip) App.UI.attachTip(button, calculateTip);
+        syncCalculate();
+      };
+    }
+
+    if (App.Calculate && typeof App.Calculate.onChange === 'function') {
+      App.Calculate.onChange(syncCalculate);
+    }
+    syncCalculate();
   }
 
   /* ── New, open, save ─────────────────────────────────────────────────────── */
@@ -1480,7 +1900,7 @@ App.LivePatches = (function () {
       var openAt = App.Menu.openAt;
       App.Menu.openAt = function (items, x, y, onPick) {
         App.Menu.openAt = openAt;
-        openAt(withLabelRows(items), x, y, function (item) {
+        openAt(gateViewportItems(withLabelRows(items)), x, y, function (item) {
           if (item && item.action === 'toggleNodeLabels') return toggleLabels('nodes');
           if (item && item.action === 'toggleElementLabels') return toggleLabels('elements');
           if (onPick) onPick(item);
@@ -2111,7 +2531,7 @@ App.LivePatches = (function () {
     ['boundary [list|standard]', 'the boundary conditions, or put the standard supports back'],
     ['gravity [on|off]', 'show, or switch on or off, the self weight'],
     ['units [SI|kN]', 'show the unit system, or convert the project to another'],
-    ['borehole <x> <y>', 'add a borehole'],
+    ['borehole [x] [y]', 'add a borehole at map x, y (default: 10 m past the last one)'],
     ['soillayers', 'open the Modify soil layers window'],
     ['materials', 'open the Material sets window'],
     ['cleargeometry', 'remove the drawn and imported solids'],
@@ -2139,7 +2559,7 @@ App.LivePatches = (function () {
      the canned answers. Anything else it would call a demo command it does not know. */
   var SHELL_WORDS = ['gotosoil', 'gotostructures', 'gotomesh', 'gotoflow', 'gotostaged',
                      'gotoflowconditions', 'clear', 'view', 'zoomfit', 'soillayers',
-                     'materials', 'mesh', 'borehole'];
+                     'materials', 'mesh'];
 
   function helpLines() {
     return [['note', 'Commands:']].concat(COMMANDS.map(function (row) {
@@ -2240,11 +2660,24 @@ App.LivePatches = (function () {
 
     var frozenAction = App.runAction;
     App.runAction = function (item) {
-      // A menu item or tool from the mockup that nothing implements yet.
-      if (item && !item.action) {
-        if (item.label && App.Command) {
-          App.Command.note('"' + item.label + '" is not available in Styx yet.');
+      // A menu item or tool from the mockup that nothing implements yet, or one on
+      // NOT_YET. Both are greyed wherever they are drawn, so this is a stale menu or a
+      // caller that did not ask `implemented` -- and it gets the same answer.
+      if (item && (!item.action || NOT_YET.indexOf(item.action) >= 0)) {
+        if (controlName(item) && App.Command) {
+          App.Command.note('"' + controlName(item) + '" is not available in Styx yet.');
         }
+        return;
+      }
+      // "Select": the pointer every mode starts with. Choosing it puts down whatever
+      // draw or pick tool was running; with none running there is nothing to say.
+      if (item && item.action === 'select') {
+        if (App.DrawInput && App.DrawInput.cancel) App.DrawInput.cancel();
+        return;
+      }
+      // Edit > Deselect all: what Esc already does (js/app.js:323).
+      if (item && item.action === 'deselectAll') {
+        if (App.selectObject) App.selectObject(null);
         return;
       }
       // Refused rather than quietly ignored: the button is greyed out, so anything
@@ -2316,6 +2749,7 @@ App.LivePatches = (function () {
       if (item && item.action === 'toggleNodeLabels') { toggleLabels('nodes'); return; }
       if (item && item.action === 'toggleElementLabels') { toggleLabels('elements'); return; }
 
+      if (item && item.action === 'createBorehole') return addBorehole({});
       if (item && item.action === 'importModel') {
         if (App.ImportDialog) App.ImportDialog.open();
         return;
@@ -2398,6 +2832,8 @@ App.LivePatches = (function () {
         return;
       }
       if (item && item.action === 'calculate') {
+        // The button is greyed for the same reason; F9 and a menu left open are not.
+        if (refuseCalculate()) return;
         if (App.Calculate) App.Calculate.run();
         return;
       }
@@ -2416,20 +2852,12 @@ App.LivePatches = (function () {
         App.MeshSettings.open();
         return;
       }
-      if (item && /^(refineMesh|coarsenMesh|resetMeshRefinement)$/.test(item.action)) {
-        if (item.action === 'resetMeshRefinement') {
-          App.MESH_REFINEMENTS = null;
-          App.Command.note(
-            "Local mesh refinement reset; the model's own is used again.");
-        } else {
-          var factor = item.action === 'refineMesh' ? 0.5 : 2;
-          App.MESH_REFINEMENTS = [pitRefinement(App.PROJECT, factor)];
-          App.Command.note((factor < 1 ? 'Refinement' : 'Coarsening')
-                           + ' region set inside the excavation. Generate the mesh to apply it.');
-        }
-        return;
-      }
-      return frozenAction(item);
+      // Refine, coarsen and reset are on NOT_YET and refused at the top: they set one
+      // box over the excavation whatever was selected.
+      var result = frozenAction(item);
+      // The frozen toggles flip the state and the toolbar button, never the menu tick.
+      syncCheckMarks();
+      return result;
     };
 
     /* The six frozen buttons that were drawn without an action, given one. Matched by
@@ -2453,16 +2881,29 @@ App.LivePatches = (function () {
       if (t.action === 'navRotate') t.tip = 'Rotate — left-drag orbits the model (3D only)';
     });
 
+    /* The menu twins of tools that work, given the tool's action -- a row that does
+       nothing beside a button that does the same thing is the disagreement this
+       file exists to stop. Refine, coarsen and reset get theirs so that NOT_YET greys
+       the rows and the rail buttons together. */
     var MENU_ACTIONS = {
       File: { 'New project…': 'newProject', 'Open project…': 'openProject',
               'Save': 'saveProject', 'Save as…': 'saveProject' },
-      Edit: { 'Undo': 'undo', 'Redo': 'redo' }
+      Edit: { 'Undo': 'undo', 'Redo': 'redo', 'Deselect all': 'deselectAll' },
+      Structures: { 'Create point': 'drawPoint', 'Create line': 'drawLine',
+                    'Create surface': 'drawPolygon', 'Create anchor': 'createAnchor' },
+      Mesh: { 'Refine mesh': 'refineMesh', 'Coarsen mesh': 'coarsenMesh',
+              'Reset local refinement': 'resetMeshRefinement', 'View mesh': 'viewMesh' },
+      'Flow conditions': { 'Create water level': 'createWaterPressureLine' }
     };
     (App.MENUS || []).forEach(function (menu) {
       var wanted = MENU_ACTIONS[menu.label];
       if (!wanted) return;
       (menu.items || []).forEach(function (item) {
         if (item && !item.action && wanted[item.label]) item.action = wanted[item.label];
+        // Named as the rail button is, since that is what it makes.
+        if (item && item.action === 'createWaterPressureLine') {
+          item.label = 'Create water pressure line';
+        }
       });
     });
 
@@ -2475,9 +2916,11 @@ App.LivePatches = (function () {
       var frozenMountRail = App.Toolbars.mountRail;
       App.Toolbars.mountRail = function (mode) {
         frozenMountRail(mode);
-        gateRail();
+        gateRail(mode);
       };
     }
+
+    installCalculateState();
 
     // js/data.js is frozen -- it is served as the same bytes from file:// and from
     // the server -- so the 2D switch is spliced into its arrays here instead.
@@ -2528,11 +2971,12 @@ App.LivePatches = (function () {
     }
     applyRulers();
 
+    // Named so that NOT_YET can grey them, here and in the Mesh menu alike. By icon,
+    // not by tip: greyRailTools appends to the tip.
+    var MESH_TOOL_ACTIONS = { refine: 'refineMesh', coarsen: 'coarsenMesh',
+                              resetmesh: 'resetMeshRefinement' };
     (App.RAILS.mesh || []).forEach(function (tool) {
-      if (!tool || !tool.tip) return;
-      if (tool.tip === 'Refine mesh') tool.action = 'refineMesh';
-      else if (tool.tip === 'Coarsen mesh') tool.action = 'coarsenMesh';
-      else if (tool.tip === 'Reset local refinement') tool.action = 'resetMeshRefinement';
+      if (tool && MESH_TOOL_ACTIONS[tool.icon]) tool.action = MESH_TOOL_ACTIONS[tool.icon];
     });
     if (!(App.RAILS.mesh || []).some(function (tool) { return tool && tool.action === 'meshSettings'; })) {
       App.RAILS.mesh.splice(2, 0, { icon: 'settings', tip: 'Mesh properties…', action: 'meshSettings' }, '-');
@@ -2630,8 +3074,9 @@ App.LivePatches = (function () {
       })) {
         // One button for the wall of whichever dimension is open, with the corner
         // flyout naming both kinds outright: `beamKind` is what the click carries
-        // through to App.Beams.start, and a kind the model cannot hold refuses
-        // itself with a reason rather than being hidden.
+        // through to App.Beams.start. The kind the open model cannot hold is greyed
+        // by syncDimensionAvailability, and refuses itself with a reason should it
+        // still be asked for.
         App.RAILS.structures.push({ icon: 'wall', tip: 'Create sheet pile…',
                                     action: 'createSheetPile', flyout: [
           { icon: 'wall', label: 'Sheet pile (2D section)',
@@ -2713,6 +3158,16 @@ App.LivePatches = (function () {
     installBoundaryConditionTools();
     installResultsMode();
     installPhasesOverview();
+
+    /* Every live action is on its tool and its menu row by now, so whatever is still
+       without one is what Styx does not do: grey it, in the menus and on the rail.
+       See NOT_YET. The rest is the menus starting out in step with the toolbar:
+       Undo was enabled in the Edit menu and greyed on the toolbar until the first
+       edit, and the ticks were js/data.js's, not the state's. */
+    greyEverythingNotYet();
+    greyWindowControls();
+    syncHistoryButtons();
+    syncCheckMarks();
 
     /* The phases panel, on the project's own phases. `App.setMode` calls
        `mountPhases` whenever staged mode is entered (js/app.js:33), and the frozen
@@ -3537,12 +3992,20 @@ App.LivePatches = (function () {
       var cmd = (text || '').trim().split(/\s+/)[0].toLowerCase();
       if (cmd === 'calculate') {
         if (App.Command.write) App.Command.write('echo', '> ' + text.trim());
+        if (refuseCalculate()) return;
         if (App.Calculate) return App.Calculate.run();
         return;
       }
       if (cmd === 'phases') {
         if (App.Command.write) App.Command.write('echo', '> ' + text.trim());
         phasesDialog();
+        return;
+      }
+      // js/command.js answers `borehole` in its own switch, adding one to the
+      // browser's copy only, so it is taken here and sent to the server instead.
+      if (cmd.replace(/^_/, '') === 'borehole') {
+        if (App.Command.write) App.Command.write('echo', '> ' + text.trim());
+        runBoreholeCommand(text);
         return;
       }
       if (cmd === 'cleargeometry') {
@@ -3619,6 +4082,7 @@ App.LivePatches = (function () {
         if (!dialog) return;
         activeLayerEdit = { snapshot: snapshot, dialog: dialog, committed: false };
         addSoilBodySection(dialog);
+        greySoilDialogTools(dialog);
 
         dialog.addEventListener('click', function (event) {
           if (event.target.closest('.dlg-x') && activeLayerEdit && !activeLayerEdit.committed) {
@@ -3935,7 +4399,7 @@ App.LivePatches = (function () {
     COMMANDS: COMMANDS, helpLines: helpLines, shellAnswers: shellAnswers,
     replaceMockupText: replaceMockupText,
     snapshotLayers: snapshotLayers, restoreLayers: restoreLayers,
-    snapshotSoil: snapshotSoil, restoreSoil: restoreSoil, pitRefinement: pitRefinement,
+    snapshotSoil: snapshotSoil, restoreSoil: restoreSoil,
     isDeletableCustomPart: isDeletableCustomPart, tagTreeRowsWithObjKeys: tagTreeRowsWithObjKeys,
     MODES: MODES, patchFor: patchFor, sectionLabel: sectionLabel,
     DEFAULT_MODEL_MODE: DEFAULT_MODEL_MODE,
@@ -3945,6 +4409,9 @@ App.LivePatches = (function () {
     THREE_D_ONLY: THREE_D_ONLY, availableIn2D: availableIn2D,
     TWO_D_ONLY: TWO_D_ONLY, availableIn3D: availableIn3D,
     syncDimensionAvailability: syncDimensionAvailability, syncHistoryButtons: syncHistoryButtons,
+    NOT_YET: NOT_YET, NOT_YET_TIP: NOT_YET_TIP, implemented: implemented,
+    greyEverythingNotYet: greyEverythingNotYet, syncCheckMarks: syncCheckMarks,
+    gateViewportItems: gateViewportItems, greySoilDialogTools: greySoilDialogTools,
     newProject: newProject, openProject: openProject, saveProject: saveProject,
     projectFileName: projectFileName, projectFromFileText: projectFromFileText,
     projectNameFromFile: projectNameFromFile,
@@ -3958,6 +4425,7 @@ App.LivePatches = (function () {
     addSoilBodySection: addSoilBodySection,
     deleteCustomPart: deleteCustomPart, onTreeContextMenu: onTreeContextMenu,
     objectKind: objectKind, renameObject: renameObject, deleteObject: deleteObject,
+    syncCalculate: syncCalculate, calculateTip: calculateTip, CALCULATE_TIP: CALCULATE_TIP,
     resetForTests: resetForTests
   };
 })();

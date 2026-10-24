@@ -492,7 +492,7 @@ viewport's. A command can also be typed with a leading `_` in the box (`_mesh`).
 | `units`, `units <system>` | `kratos-cli units P`, `kratos-cli units P kN` |
 | `node <id>` | `kratos-cli node P NODE` |
 | `cleargeometry` | `kratos-cli volume P clear` |
-| `borehole <x> <y>` | `kratos-cli borehole P add --x X --y Y` |
+| `borehole [x] [y]` | `kratos-cli borehole P add --x X --y Y` |
 | `soillayers` | `kratos-cli layer P`, `kratos-cli borehole P` (the window, as commands) |
 | `materials` | `kratos-cli material P` (the window, as commands) |
 | `calculate` | `kratos-cli calculate P` (the box only says to press Calculate) |

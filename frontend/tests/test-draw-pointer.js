@@ -14,11 +14,15 @@
     canvas.style.cssText = 'position:fixed;left:0;top:0;width:200px;height:200px;';
     document.body.appendChild(canvas);
     var scene = new THREE.Scene();
-    var camera = new THREE.PerspectiveCamera(50, 1, 0.1, 1000);
-    camera.position.set(cameraAt[0], cameraAt[1], cameraAt[2]);
-    // Looking straight down +Y would leave lookAt() without a basis; up is -Z then.
-    camera.up.set(0, cameraAt[1] && !cameraAt[2] ? 0 : 1, cameraAt[1] && !cameraAt[2] ? -1 : 0);
-    camera.lookAt(0, 0, 0);
+    // A camera of the test's own (the section view's, below), or a perspective one at
+    // `cameraAt` looking at the origin.
+    var camera = cameraAt.isCamera ? cameraAt : new THREE.PerspectiveCamera(50, 1, 0.1, 1000);
+    if (!cameraAt.isCamera) {
+      camera.position.set(cameraAt[0], cameraAt[1], cameraAt[2]);
+      // Looking straight down +Y would leave lookAt() without a basis; up is -Z then.
+      camera.up.set(0, cameraAt[1] && !cameraAt[2] ? 0 : 1, cameraAt[1] && !cameraAt[2] ? -1 : 0);
+      camera.lookAt(0, 0, 0);
+    }
     camera.updateMatrixWorld(true);
     var ctx = { posted: [], notes: [], errors: [], scene: scene, canvas: canvas };
     App.Viewport = {
@@ -64,11 +68,26 @@
 
   var SECTION = { dimension: 2,
                   domain: { x0: 0, x1: 20, z0: 0, z1: 20, y_top: 3, y_bottom: -15 } };
+  // The plan view, looking down on the ground plane y = 0, is the solid model's: a 2D
+  // model is always seen face on, and every pick in it lands on the section.
+  var SOLID = { dimension: 3, domain: SECTION.domain };
   var TOP_DOWN = [0, 10, 0];
   var FACE_ON = [0, 0, 10];
 
+  /* What the viewport draws a 2D model with (js/viewport.js `camOrtho`, SECTION_VIEW):
+     an orthographic camera facing -z, centred on the section rather than on the
+     origin. Every ray it casts runs along z, so it meets the plane y = 0 nowhere --
+     unlike FACE_ON's, which all start on that plane. 40 m across the 200 px canvas,
+     centred on x = 10, y = -6: a pixel is 0.2 m. */
+  function sectionCamera() {
+    var camera = new THREE.OrthographicCamera(-20, 20, 20, -20, 0.1, 1000);
+    camera.position.set(10, -6, 50);
+    camera.lookAt(10, -6, 0);
+    return camera;
+  }
+
   test('draw: a click lands on the ground plane under the pointer', function () {
-    var ctx = rig(SECTION, TOP_DOWN);
+    var ctx = rig(SOLID, TOP_DOWN);
     try {
       App.DrawInput.start('box');
       at(ctx, 'click');
@@ -83,7 +102,7 @@
   });
 
   test('draw: with snapping on, a click lands on whole metres', function () {
-    var ctx = rig(SECTION, TOP_DOWN);
+    var ctx = rig(SOLID, TOP_DOWN);
     try {
       App.state.snap = true;
       App.DrawInput.start('line');
@@ -98,7 +117,7 @@
   });
 
   test('draw: a keyboard "click" (detail 0) places nothing', function () {
-    var ctx = rig(SECTION, TOP_DOWN);
+    var ctx = rig(SOLID, TOP_DOWN);
     try {
       App.DrawInput.start('box');
       ctx.canvas.dispatchEvent(new MouseEvent('click', { bubbles: true, detail: 0 }));
@@ -108,7 +127,7 @@
   });
 
   test('draw: moving the pointer previews the shape being drawn', function () {
-    var ctx = rig(SECTION, TOP_DOWN);
+    var ctx = rig(SOLID, TOP_DOWN);
     try {
       App.DrawInput.start('polygon');
       at(ctx, 'click');
@@ -139,6 +158,64 @@
       });
       T.ok(completed[0][0] < completed[1][0]);
       T.eq(ctx.posted.length, 0, 'a load is handed back, not created as geometry');
+    } finally { ctx.restore(); }
+  });
+
+  /* The Flow conditions tools "Water pressure line" and "Seepage line", and the
+     Structures ones for a support line, start a 'line' that hands its points back
+     (js/boundary-conditions.js `draw`). A line used to be picked on the ground plane
+     y = 0 in 2D as well, which the section camera looks along: no click placed a
+     vertex, and the right-click said "Not enough vertices for line". */
+  test('draw: in the section a line is picked where the 2D camera points', function () {
+    var ctx = rig(SECTION, sectionCamera());
+    var completed = null;
+    try {
+      App.DrawInput.start('line', { count: 1,
+                                    onComplete: function (points) { completed = points; } });
+      at(ctx, 'click', -50, 0);
+      at(ctx, 'click', 50, 25);
+      at(ctx, 'mousemove', 60, 30);
+      T.ok(preview(ctx).children.some(function (c) { return c.isLine; }),
+           'the line is previewed from its clicks to the pointer');
+      at(ctx, 'contextmenu', 60, 30);
+      T.eq(ctx.errors, [], 'no "Not enough vertices for line"');
+      T.ok(completed, 'two clicks and a right-click complete the line');
+      T.eq(completed.length, 2);
+      T.near(completed[0][0], 0, 1e-6, 'x under the first click');
+      T.near(completed[0][1], -6, 1e-6, 'y under the first click: not the ground');
+      T.near(completed[1][0], 20, 1e-6, 'x under the second click');
+      T.near(completed[1][1], -11, 1e-6, 'y under the second click');
+      completed.forEach(function (p) { T.near(p[2], 0, 1e-6, 'on the section plane'); });
+      T.eq(ctx.posted.length, 0, 'handed back to the tool, not created as geometry');
+    } finally { ctx.restore(); }
+  });
+
+  test('draw: in the section a drawn line is created where it was clicked', function () {
+    var ctx = rig(SECTION, sectionCamera());
+    try {
+      App.DrawInput.start('line');
+      at(ctx, 'click', -50, 0);
+      at(ctx, 'click', 50, 25);
+      at(ctx, 'contextmenu');
+      T.eq(ctx.posted.length, 1, 'Structures > Create line sends its recipe');
+      T.eq(ctx.posted[0].vertices.map(function (p) {
+        return p.map(function (c) { return Math.round(c * 1e6) / 1e6; });
+      }), [[0, -6, 0], [20, -11, 0]]);
+    } finally { ctx.restore(); }
+  });
+
+  /* "Water pressure point" and "Point prescribed displacement": one click, and the
+     condition is there -- not moved up to the ground surface, as a line load is. */
+  test('draw: a boundary condition point is where it was clicked', function () {
+    var ctx = rig(SECTION, sectionCamera());
+    var completed = null;
+    try {
+      App.DrawInput.start('load', { count: 1, atPointer: true,
+                                    onComplete: function (points) { completed = points; } });
+      at(ctx, 'click', 25, 50);
+      T.ok(completed, 'one click places the point');
+      T.near(completed[0][0], 15, 1e-6);
+      T.near(completed[0][1], -16, 1e-6, 'at the click, below the ground at y = 3');
     } finally { ctx.restore(); }
   });
 

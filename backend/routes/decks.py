@@ -9,7 +9,7 @@ from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from backend import store
 from backend.routes.common import check_mesh_keys, not_for_a_deck, read_upload, run_mesh_job
-from core import gmsh_worker
+from core import gmsh_worker, session
 from core.analysis import calculation
 from core.geometry.solid_model import GeometryError
 from core.kratos.writer import ExportError
@@ -50,10 +50,19 @@ async def calculate_project(settings: ExportRequest) -> dict:
 
     A project that is a deck already (`core.kratos.external_deck`) skips the export: its own files are
     copied into the run directory and run as they are.
+
+    A project with nothing to mesh is refused, as a 422, before gmsh is started: its
+    deck would hold no nodes, and Kratos runs a deck of no nodes without complaint and
+    computes nothing. The reason is `session.nothing_to_mesh`'s, the one `kratos-cli
+    check` and `calculate` give. The GUI greys its Calculate button out on the same
+    test, so this is for a stale page or a script.
     """
     project = store.get()
     if project.deck is not None:
         return await _calculate_deck(project.deck)
+    empty = session.nothing_to_mesh(project)
+    if empty:
+        raise HTTPException(status_code=422, detail=empty)
     check_mesh_keys(project, settings)
     export = await run_mesh_job(gmsh_worker.export_job, project,
                                 settings.model_copy(update={"include_materials": True}),

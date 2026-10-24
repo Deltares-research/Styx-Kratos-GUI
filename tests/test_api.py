@@ -872,6 +872,38 @@ def test_patch_layers_leaves_the_water_alone_when_it_is_not_sent(client):
     client.put("/api/project", json=seed_project().model_dump())
 
 
+def test_post_borehole_adds_the_borehole_the_cli_would(client):
+    """The GUI's Create borehole and `borehole` command go through this route, and the
+    route through `session.add_borehole` -- what `kratos-cli borehole add` calls -- so
+    the two give the same borehole, and every layer gets its levels there."""
+    from core import session
+
+    client.put("/api/project", json=seed_project().model_dump())
+    try:
+        response = client.post("/api/project/boreholes", json={"x": 55.0, "y": 2.0})
+        stored = Project.model_validate(client.get("/api/project").json())
+    finally:
+        client.put("/api/project", json=seed_project().model_dump())
+
+    assert response.status_code == 200
+    expected = session.add_borehole(seed_project(), x=55.0, y=2.0)
+    assert stored.boreholes == expected.boreholes
+    assert stored.layers == expected.layers
+    new = stored.boreholes[-1].id
+    assert all(new in layer.tops and new in layer.bots for layer in stored.layers)
+
+
+def test_post_borehole_refuses_an_id_that_is_taken(client):
+    client.put("/api/project", json=seed_project().model_dump())
+    taken = seed_project().boreholes[0].id
+
+    response = client.post("/api/project/boreholes", json={"id": taken})
+
+    assert response.status_code == 422
+    assert taken in response.json()["detail"]
+    assert len(client.get("/api/project").json()["boreholes"]) == len(seed_project().boreholes)
+
+
 def test_patch_layers_rejects_an_inverted_domain(client):
     project = seed_project()
     domain = project.domain.model_dump()
@@ -1315,6 +1347,29 @@ def test_calculate_refuses_a_second_run_while_one_is_going(client, monkeypatch):
     monkeypatch.setattr(calculation, "_running", True)
 
     assert client.post("/api/calculate", json={"element_size": 8.0}).status_code == 409
+
+
+def test_calculate_refuses_a_model_with_nothing_to_mesh(client, monkeypatch):
+    """A blank project meshes to no elements, and Kratos would run that deck without
+    complaint. It is refused before gmsh or Kratos is started, in the words
+    `kratos-cli check` uses (`session.nothing_to_mesh`)."""
+    from core import session
+    from core.analysis import calculation
+    from core.model.templates import blank_project
+
+    def never(*_):
+        raise AssertionError("Kratos must not be started for an empty model")
+
+    monkeypatch.setattr(calculation, "run", never)
+    client.post("/api/project/new")
+    try:
+        response = client.post("/api/calculate", json={"element_size": 8.0})
+    finally:
+        client.post("/api/project/reset")
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == session.nothing_to_mesh(blank_project())
+    assert "nothing to mesh" in response.json()["detail"]
 
 
 def test_export_rejects_an_unknown_body_key(client):

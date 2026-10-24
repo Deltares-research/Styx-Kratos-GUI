@@ -1315,6 +1315,18 @@ class WaterUpdate(Base):
     water: WaterLevel | None
 
 
+class BoreholeCreate(Base):
+    """`POST /api/project/boreholes`: one new borehole (`session.add_borehole`, what
+    `kratos-cli borehole add` calls). A field left out comes from the last borehole,
+    `x` as 10 m past it (`drafts.borehole`)."""
+    id: Ident | None = None
+    name: str | None = None
+    x: float | None = None
+    y: float | None = None
+    head: float | None = None
+    water: float | None = None
+
+
 class LayersUpdate(Base):
     layers: list[SoilLayer]
     materials: list[Material] | None = None

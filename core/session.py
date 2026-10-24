@@ -490,6 +490,20 @@ def unknown_mesh_keys(project: Project, settings: MeshRequest) -> list[str]:
     return sorted(named - set(project.part_keys()))
 
 
+def nothing_to_mesh(project: Project) -> str | None:
+    """Why `project` would mesh to nothing, or None: a model with no soil body and no
+    solid of its own has nothing for gmsh to fill, and its deck would hold no nodes.
+
+    One rule for every way in -- `POST /api/calculate`, `kratos-cli check`, `mesh`,
+    `export` and `calculate`, and the GUI's Calculate button, which applies the same
+    test to the project it was sent (`App.Calculate.state`). Each adds its own hint on
+    what to do about it, because the fix is a different command in each place.
+    """
+    if project.soil_bodies() or project.custom_parts:
+        return None
+    return "the model has nothing to mesh: no soil layer and no solid."
+
+
 def require_parametric(project: Project, what: str) -> None:
     """Refuse to mesh or export a project that is a deck already (`core.kratos.external_deck`).
 
