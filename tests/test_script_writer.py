@@ -101,6 +101,17 @@ def test_the_values_are_literal_and_defaults_are_left_out(text):
     assert "active=True" not in text            # every record's default
 
 
+def test_a_model_without_the_demo_blocks_writes_none_of_them():
+    """A new model has no pit and none of the seeded demo's structures, and its script
+    does not mention them; the full build's script still has them all."""
+    text = script_writer.script(templates.blank_project())
+
+    for name in ("Excavation", "Wall", "Struts", "AnchorRows", "Piles", "Wells",
+                 "seeded demo pit"):
+        assert name not in text
+    assert "The seeded demo pit" in script_writer.script(templates.seed_project(simple=False))
+
+
 def test_it_names_how_it_is_used(text):
     docstring = ast.get_docstring(ast.parse(text))
 

@@ -54,9 +54,9 @@ GROUPS: dict[str, tuple[str, ...]] = {
 with a record or a list for its value that is in no group goes under "Other"."""
 
 NOTES = {
-    "The seeded demo pit": "The demo's own wall ring, struts, anchors, piles and wells. A "
-                           "layered model builds\n# none of them; the schema requires them "
-                           "all the same.",
+    "The seeded demo pit": "The demo's own wall ring, struts, anchors, piles and wells, "
+                           "which the full build\n# (layered_soil=False) raises. A layered "
+                           "model leaves them out.",
     "Drawn and imported solids": "Each a .brep under .data/; `scripting.with_solids` builds "
                                  "one again from its recipe or\n# its source file when it "
                                  "is not there.",

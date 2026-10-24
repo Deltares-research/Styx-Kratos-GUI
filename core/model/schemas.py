@@ -20,7 +20,8 @@ import math
 from collections.abc import Mapping, Sequence
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field, computed_field, field_validator, model_validator
+from pydantic import (BaseModel, Field, SerializerFunctionWrapHandler, computed_field,
+                      field_validator, model_serializer, model_validator)
 
 from core.model import migration, units
 
@@ -1618,6 +1619,15 @@ class Project(Base):
         if migration.is_legacy(value):
             return migration.migrate(value)
         return migration.migrate_records(value) if isinstance(value, dict) else value
+
+    @model_serializer(mode="wrap")
+    def _leave_out_absent_blocks(self, handler: SerializerFunctionWrapHandler) -> dict:
+        """A model without a pit or the demo's structures says nothing about them: the
+        saved file, the API's project and `model_dump` leave the `None` blocks out,
+        so the GUI's Save and `kratos-cli save` write the same file."""
+        data = handler(self)
+        return {key: value for key, value in data.items()
+                if value is not None or key not in FULL_BUILD_BLOCKS}
 
     @model_validator(mode="before")
     @classmethod

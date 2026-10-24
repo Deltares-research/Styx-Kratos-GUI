@@ -891,7 +891,7 @@ def set_excavation(project: Project, *, x: tuple[float, float] | None = None,
     model is one cut through z, so its pit spans the domain's z range unless `z` says
     otherwise."""
     payload = project.model_dump()
-    pit = payload["excavation"]
+    pit = payload.get("excavation")
     if pit is None:
         if z is None and project.dimension == 2:
             z = (project.domain.z0, project.domain.z1)

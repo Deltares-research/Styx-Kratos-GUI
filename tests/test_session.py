@@ -16,8 +16,8 @@ from pydantic import ValidationError
 
 from core import session
 from core.model import stages
-from core.model.schemas import (Deck, DimensionUpdate, LayersUpdate, MaterialsUpdate, Stage,
-                                StagesUpdate, Project, StructuresUpdate, UnitsUpdate,
+from core.model.schemas import (FULL_BUILD_BLOCKS, Deck, DimensionUpdate, LayersUpdate,
+                                MaterialsUpdate, Stage, StagesUpdate, Project, StructuresUpdate, UnitsUpdate,
                                 WaterLevel, WaterUpdate)
 from core.model.templates import blank_project, seed_project
 from tests.models.excavation import excavation_project
@@ -71,6 +71,14 @@ def test_a_saved_file_is_the_json_the_gui_saves(tmp_path):
     text = path.read_text(encoding="utf-8")
     assert json.loads(text) == seed_project().model_dump(mode="json")
     assert "\n  \"name\": \"Deep excavation — Rotterdam Zuid\"" in text
+
+
+def test_a_saved_file_leaves_out_the_blocks_a_model_does_not_have(tmp_path):
+    path = session.save(blank_project(), tmp_path / "new.json")
+
+    saved = json.loads(path.read_text(encoding="utf-8"))
+    assert not set(saved) & set(FULL_BUILD_BLOCKS)
+    assert session.load(path) == blank_project()
 
 
 def test_a_file_in_the_old_shape_is_migrated_on_load():
