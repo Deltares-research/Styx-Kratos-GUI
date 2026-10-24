@@ -7,7 +7,8 @@ soil, the water held at a level of 3.0 m on the left face and 1.6 m on the right
 value. No support: a flow calculation leaves them out.
 
 The head is linear in x between the faces, so the answer is known exactly
-(`exact_water_pressure`, `EXACT_FLUX`), on any mesh.
+(`exact_water_pressure`, `EXACT_FLUX`), on any mesh. `KRATOS_A` holds Kratos' own
+regression values.
 
 `van_genuchten` is case B, Kratos' `tests/Muskat/van_genuchten_hydrostatic`: the same
 column of a Van Genuchten soil, the right face at 1.62 m, started from a phreatic line.
@@ -95,6 +96,21 @@ def head(id: str, face: str, level: float, **fields) -> WaterPressureCondition:
 
 
 HEADS = [head("left_head", "left", LEFT_LEVEL), head("right_head", "right", RIGHT_LEVEL)]
+
+KRATOS_A = {
+    198: ((0.8304801232729199, 3.716939567583279), {"WATER_PRESSURE": 14346.4}),
+    244: ((0.9434537187649228, 2.180925085276376), {"WATER_PRESSURE": -37.4452}),
+    183: ((0.8117444171098307, 0.2649876821528811), {"WATER_PRESSURE": -20335.1}),
+    273: ((1.522244011956799, 1.513952935239066),
+          {"EFFECTIVE_SATURATION": 1.0, "FLUID_FLUX_VECTOR": (6.00133e-06, -1.34793e-11)}),
+    890: ((1.522173923948319, 3.89326785097679),
+          {"EFFECTIVE_SATURATION": 1.0, "FLUID_FLUX_VECTOR": (6.00131e-06, -8.38038e-12)}),
+    1440: ((1.518261045603592, 2.068026372947416),
+           {"EFFECTIVE_SATURATION": 1.0, "FLUID_FLUX_VECTOR": (6.00133e-06, -1.35382e-11)}),
+}
+"""Kratos' regression values of case A (`test_Muskat.py`), by its node number: the node's
+(x, y) in its `common/column.mdpa`, and the values it asserts there. They are the exact
+answer, to the digits Kratos keeps."""
 
 
 def muskat(conditions: list | None = None, phases: list[Phase] | None = None,
@@ -237,6 +253,35 @@ def seepage(order: int = 1, max_iterations: int = 100) -> Project:
             kind="box", size=FACE_SIZE, thickness=0.5, x_min=WIDTH - 0.12, x_max=WIDTH,
             y_min=0.0, y_max=HEIGHT, z_min=0.0, z_max=1.0)]),
         name="Muskat, seepage face")
+
+
+def seepage_outcome(mesh, results) -> tuple[list, float, float]:
+    """What a run of case C did at the faces: the seepage face's nodes, bottom to top, as
+    (y, water pressure, nodal flow rate); the flow rate through the left face (negative:
+    taken in); and through the right face (positive: let out). `mesh` is
+    `catalog.stage_mesh`, `results` `catalog.stage_results`."""
+    pressure = results.field("WATER_PRESSURE").values
+    rate = results.field("NODAL_WATER_FLOW_RATE").values
+    face = sorted((mesh.nodes[n][1], pressure[n][0], rate[n][0]) for n in rate
+                  if abs(mesh.nodes[n][0] - WIDTH) < 1e-9
+                  and mesh.nodes[n][1] >= TAIL_LEVEL - 1e-9)
+    inflow = sum(rate[n][0] for n in rate if abs(mesh.nodes[n][0]) < 1e-9)
+    outflow = sum(rate[n][0] for n in rate if abs(mesh.nodes[n][0] - WIDTH) < 1e-9)
+    return face, inflow, outflow
+
+
+def exit_point(face: list) -> float:
+    """The highest node of the face the strategy opened: fixed at zero, letting water
+    out."""
+    return max(y for y, pressure, rate in face if pressure == 0.0 and rate > 0.0)
+
+
+def at_kratos_nodes(mesh, results, kratos: dict) -> dict:
+    """A run's values at the places of Kratos' nodes: by node, by each variable `kratos`
+    (`KRATOS_A`, `KRATOS_B`) holds there, the value's components."""
+    return {node: {variable: at_point(mesh, results.field(variable).values, x, y)
+                   for variable in values}
+            for node, ((x, y), values) in kratos.items()}
 
 
 def project() -> Project:

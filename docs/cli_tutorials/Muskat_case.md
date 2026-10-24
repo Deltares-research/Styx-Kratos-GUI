@@ -1,5 +1,8 @@
 # Groundwater flow: the Muskat column with `kratos-cli`
 
+<!-- tests/cli/test_muskat_tutorial.py runs every command on this page and compares what
+it prints with the output shown here: change both together. -->
+
 Three steady-state groundwater flow models of one soil column, built and run from
 PowerShell. Each one changes the model before it:
 
@@ -38,10 +41,13 @@ The column is 1.62 m wide and 4 m high. The borehole puts the ground surface at 
 
 The soil is the reference deck's, value for value. The flow uses the intrinsic permeability
 (`PERMEABILITY_XX`, m²), the viscosity, the water density and the retention law. Kratos'
-flow element also checks that the other values are there.
+flow element also checks that the other values are there. A new soil starts from the
+default sand, which has a cohesion and a friction angle. The reference soil has neither,
+so `--unset` removes them:
 
 ```powershell
 kratos-cli material muskat.json add sand --name Sand --color "#c4a86a" --law GeoLinearElasticPlaneStrain2DLaw GEO_DRAINAGE_TYPE=FULLY_COUPLED YOUNG_MODULUS=1e4 POISSON_RATIO=0.4 DENSITY_SOLID=2290 DENSITY_WATER=1019.37 POROSITY=0.3333 BULK_MODULUS_SOLID=6.7e19 BULK_MODULUS_FLUID=1e20 PERMEABILITY_XX=6.9444e-13 PERMEABILITY_YY=6.9444e-13 PERMEABILITY_XY=0 DYNAMIC_VISCOSITY=1e-3 BIOT_COEFFICIENT=1 RETENTION_LAW=SaturatedLaw SATURATED_SATURATION=0.403
+kratos-cli material muskat.json set sand --unset GEO_COHESION --unset GEO_FRICTION_ANGLE
 kratos-cli layer muskat.json add soil --name Soil --material sand --bottom 0
 ```
 
@@ -69,7 +75,10 @@ PS> kratos-cli phases muskat.json add flow --name Flow --calculation flow
 added phase flow (Flow) after nothing: it is the first; wrote muskat.json
 
 PS> kratos-cli set muskat.json mesh.element_size 0.4
+mesh.element_size = 0.4; wrote muskat.json
+
 PS> kratos-cli set muskat.json mesh.order 2
+mesh.order = 2; wrote muskat.json
 ```
 
 A new project has the standard supports. A groundwater flow calculation calculates the
@@ -91,12 +100,19 @@ A groundwater flow calculation leaves the supports out: it solves the water pres
 ```text
 PS> kratos-cli calculate muskat.json
 run Semi_Muskat_2026-10-24_01-22 finished in 0.3 s: 3 files in ...\Semi_Muskat_2026-10-24_01-22
+next: kratos-cli results show Semi_Muskat_2026-10-24_01-22
 
 PS> kratos-cli results field 1 pw
 Pore pressure (Pa), stage 1 (Flow): -30000 to 24000 over 263 nodes
+  min -30000 at node 1
+  max 24000 at node 3
+`--csv` writes every value.
 
 PS> kratos-cli results field 1 fluxx
 q_x (m/s), stage 1 (Flow): 6.00e-6 to 6.00e-6 over 263 nodes
+  min 6.00e-6 at node 1
+  max 6.00e-6 at node 2
+`--csv` writes every value.
 ```
 
 These are the exact values. The head falls linearly from 3.0 m on the left to 1.6 m on
@@ -144,9 +160,13 @@ kratos-cli set muskat_vg.json mesh.element_size 0.1
 ```text
 PS> kratos-cli calculate muskat_vg.json
 run Semi_Muskat_2026-10-24_01-22_2 finished in 0.7 s: 3 files in ...\Semi_Muskat_2026-10-24_01-22_2
+next: kratos-cli results show Semi_Muskat_2026-10-24_01-22_2
 
 PS> kratos-cli results field 1 effective_saturation
 Effective saturation (-), stage 1 (Flow): 0.4309 to 1.02 over 3207 nodes
+  min 0.4309 at node 3
+  max 1.02 at node 901
+`--csv` writes every value.
 ```
 
 The soil is saturated below the phreatic line and less so above it. Kratos calculates the
@@ -202,9 +222,13 @@ may stop too soon.
 ```text
 PS> kratos-cli calculate muskat_seepage.json
 run Semi_Muskat_2026-10-24_01-22_3 finished in 0.6 s: 3 files in ...\Semi_Muskat_2026-10-24_01-22_3
+next: kratos-cli results show Semi_Muskat_2026-10-24_01-22_3
 
 PS> kratos-cli results field 1 flow_rate
 Nodal water flow rate (m³/s/m), stage 1 (Flow): -3.67e-6 to 8.63e-7 over 669 nodes
+  min -3.67e-6 at node 104
+  max 8.63e-7 at node 2
+`--csv` writes every value.
 ```
 
 `flow_rate` is the water each node takes in (negative) or lets out (positive), per metre of

@@ -3,7 +3,8 @@ and C of plan/active/groundwater-flow-plan.md). Opt-in: `pytest --run-kratos`.
 
 Case A: the head falls linearly from the left face to the right one, a field the
 elements hold exactly, so the water pressure at every node and the flux everywhere are
-checked to within what the result files print, on any mesh.
+checked to within what the result files print, on any mesh. Kratos' own regression
+values of the case are the same exact answer.
 
 Case B, a Van Genuchten soil, has no exact answer. It is checked against Kratos' own
 regression values, read off the Styx run at the coordinates of Kratos' nodes, since the
@@ -76,6 +77,13 @@ def worst_pressure(deck: dict, run_id: str, stage: int, right: float) -> float:
     return worst
 
 
+def at_node(case, kratos: dict, variable: str, node: int) -> list[float]:
+    """A run's `variable` at the place of Kratos' `node`, whose (x, y) `kratos` holds."""
+    mesh, results = case
+    (x, y), _ = kratos[node]
+    return muskat.at_point(mesh, results.field(variable).values, x, y)
+
+
 @pytest.mark.parametrize("order", [1, 2])
 def test_the_water_pressure_is_the_exact_one_at_every_node(order):
     deck, run_id = run(muskat.muskat(order=order))
@@ -94,6 +102,29 @@ def test_the_flux_is_darcy_s_horizontal_flow_and_the_soil_is_saturated():
     assert all(abs(s[0] - 1.0) <= 1e-9 for s in saturation)
     head = catalog.stage_field(run_id, 1, "head", "elements")["values"]
     assert muskat.RIGHT_LEVEL - 1e-6 <= min(head) and max(head) <= muskat.LEFT_LEVEL + 1e-6
+
+
+KRATOS_A_TOLERANCE = {"WATER_PRESSURE": 1.0, "EFFECTIVE_SATURATION": 1e-9}
+"""Pa, and a fraction of full saturation: both runs give the exact answer, which Kratos'
+values keep to about six digits."""
+
+
+@pytest.fixture(scope="module")
+def case_a():
+    _, run_id = run(muskat.muskat(order=2))
+    return catalog.stage_mesh(run_id, 1), catalog.stage_results(run_id, 1)
+
+
+@pytest.mark.parametrize("node, variable", [
+    (node, variable) for node, (_, values) in muskat.KRATOS_A.items() for variable in values])
+def test_case_a_is_kratos_own_answer(case_a, node, variable):
+    _, expected = muskat.KRATOS_A[node]
+    got = at_node(case_a, muskat.KRATOS_A, variable, node)
+    if variable == "FLUID_FLUX_VECTOR":
+        assert got[0] == pytest.approx(expected[variable][0], rel=1e-4)
+        assert abs(got[1]) <= 1e-9
+    else:
+        assert got[0] == pytest.approx(expected[variable], abs=KRATOS_A_TOLERANCE[variable])
 
 
 def test_each_phase_is_solved_with_its_own_heads():
@@ -134,9 +165,7 @@ def case_b():
 
 
 def at(case, variable: str, node: int) -> list[float]:
-    mesh, results = case
-    (x, y), _ = muskat.KRATOS_B[node]
-    return muskat.at_point(mesh, results.field(variable).values, x, y)
+    return at_node(case, muskat.KRATOS_B, variable, node)
 
 
 @pytest.mark.parametrize("node, variable", [
@@ -164,24 +193,9 @@ def test_case_b_dry_soil_carries_no_flux(case_b):
 
 @pytest.fixture(scope="module", params=[1, 2], ids=["linear", "quadratic"])
 def case_c(request):
-    """The face's nodes, bottom to top: (y, water pressure, nodal flow rate); and the
-    flow rate into the left face (negative, taken in)."""
-    deck, run_id = run(muskat.seepage(order=request.param, max_iterations=200))
-    results = catalog.stage_results(run_id, 1)
-    mesh = catalog.stage_mesh(run_id, 1)
-    pressure = results.field("WATER_PRESSURE").values
-    rate = results.field("NODAL_WATER_FLOW_RATE").values
-    face = sorted((mesh.nodes[n][1], pressure[n][0], rate[n][0]) for n in rate
-                  if abs(mesh.nodes[n][0] - muskat.WIDTH) < 1e-9
-                  and mesh.nodes[n][1] >= muskat.TAIL_LEVEL - 1e-9)
-    inflow = sum(rate[n][0] for n in rate if abs(mesh.nodes[n][0]) < 1e-9)
-    outflow = sum(rate[n][0] for n in rate if abs(mesh.nodes[n][0] - muskat.WIDTH) < 1e-9)
-    return face, inflow, outflow
-
-
-def exit_point(face) -> float:
-    """The highest node the strategy opened: fixed at zero, letting water out."""
-    return max(y for y, pressure, rate in face if pressure == 0.0 and rate > 0.0)
+    _, run_id = run(muskat.seepage(order=request.param, max_iterations=200))
+    return muskat.seepage_outcome(catalog.stage_mesh(run_id, 1),
+                                  catalog.stage_results(run_id, 1))
 
 
 def test_case_c_lets_out_what_comes_in(case_c):
@@ -201,7 +215,7 @@ def test_case_c_water_leaves_the_face_above_the_tail_water(case_c):
     closed above it: no water flows in, and no node keeps a pressure above the
     atmosphere."""
     face, _, _ = case_c
-    top = exit_point(face)
+    top = muskat.exit_point(face)
     assert 1.7 <= top <= 2.0
     assert all(rate > 0.0 for y, pressure, rate in face if pressure == 0.0)
     assert all(pressure == 0.0 for y, pressure, _ in face if y <= top)
