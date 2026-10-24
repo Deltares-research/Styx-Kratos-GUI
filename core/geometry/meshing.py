@@ -523,6 +523,7 @@ def loaded_elements(project: Project, dim: int,
     much as one element.
     """
     out: list[tuple[str, int, list[list[int]]]] = []
+    carried: set[int] | None = None
     # `loads_for` rather than a kind test: a translated pair holds a surface record and
     # a line record for one load, and taking both would apply it twice. What it hands
     # back for a 3D model is the surface loads plus the 2D ones nothing was translated
@@ -535,8 +536,14 @@ def loaded_elements(project: Project, dim: int,
         if load.kind == "point":
             target = ((load.x, load.y, 0.0) if dim == 2
                       else (load.x, load.y, project.cut_at()))
+            # Only a node an element of the model holds: the fragment keeps each pile's
+            # own drawn line beside the pieces it cut, and the line's end vertex is a
+            # node of its own at the pile head, in no element. A load put there loaded
+            # nothing, and Kratos stopped at the stage it arrived in.
+            if carried is None:
+                carried = _carried_nodes(dim)
             nearest = min(
-                world,
+                (tag for tag in world if tag in carried),
                 key=lambda tag: sum((world[tag][axis] - target[axis]) ** 2 for axis in range(3)),
             )
             out.append((load.id, POINT, [[nearest]]))
@@ -558,6 +565,22 @@ def loaded_elements(project: Project, dim: int,
         out.extend((load.id, element_type, rows)
                    for element_type, rows in rows_by_type.items() if rows)
     return out
+
+
+def _carried_nodes(dim: int) -> set[int]:
+    """The nodes of the model's own elements: its soil and every line in a physical
+    group (the structures). A curve the fragment left behind and no group names is meshed
+    too, and its nodes are in no element of the deck."""
+    nodes: set[int] = set()
+    entities = [(dim, tag) for _, tag in gmsh.model.getEntities(dim)]
+    for group_dim, group in gmsh.model.getPhysicalGroups():
+        if group_dim < dim:
+            entities.extend((group_dim, int(tag)) for tag in
+                            gmsh.model.getEntitiesForPhysicalGroup(group_dim, group))
+    for entity_dim, tag in entities:
+        for flat in gmsh.model.mesh.getElements(entity_dim, tag)[2]:
+            nodes.update(int(node) for node in flat)
+    return nodes
 
 
 def _under_load(corners: list[int], world: dict[int, tuple[float, float, float]],

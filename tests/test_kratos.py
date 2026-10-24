@@ -616,6 +616,20 @@ def test_the_sheet_pile_is_written_as_the_quadratic_timoshenko_beam(piled):
     assert "SmallStrainUPwDiffOrderElement2D6N" in names, "the soil is still there"
 
 
+def test_a_point_load_on_a_pile_head_loads_the_pile(session):
+    """The fragment keeps each pile's own drawn line beside the pieces it cut, and that
+    line's end vertex is a node of its own at the pile head that no element holds. The
+    nearest node to a load there was that one: the deck loaded nothing, and Kratos
+    stopped at the stage the load arrived in."""
+    project = piled_project().model_copy(update={"loads": [PointLoad(
+        id="head", name="Head", x=12.0, y=0.0, components=(10_000.0, 0.0))]})
+    deck = deck_of(writer.export_project(project, MeshRequest(element_size=3.0, order=2)))
+    (block,) = [b for b in deck.conditions if b.name == "PointLoadCondition2D1N"]
+    ((node,),) = block.entries.values()
+    beams = [b for b in deck.elements if "Timoshenko" in b.name]
+    assert any(node in nodes for b in beams for nodes in b.entries.values())
+
+
 def test_a_first_order_deck_writes_the_two_node_beam(session):
     export = writer.export_project(piled_project(order=1),
                                    MeshRequest(element_size=3.0, order=1))
