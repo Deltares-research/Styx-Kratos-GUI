@@ -1023,7 +1023,7 @@
 
   var ORDER = ['Attributes library', 'Soil', 'Boreholes', 'Geometry', 'Custom geometry',
                'Structures', 'Sheet piles', 'Anchors', 'Interfaces', 'Loads',
-               'Mesh', 'Flow conditions', 'Model conditions'];
+               'Flow conditions', 'Mesh', 'Model conditions'];
 
   test('real mesh statistics replace the frozen tree and property literals', function () {
     withProject(project(TWO), function () {

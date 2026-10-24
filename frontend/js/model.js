@@ -617,7 +617,7 @@ App.Model = (function () {
   var TREE_ORDER = [
     'Attributes library', 'Soil', 'Boreholes', 'Geometry', 'Custom geometry',
     'Imported mesh', 'Structures', 'Sheet piles', 'Anchors', 'Interfaces',
-    'Normal loads', 'Loads', 'Water levels', 'Mesh', 'Flow conditions',
+    'Normal loads', 'Loads', 'Water levels', 'Flow conditions', 'Mesh',
     'Model conditions'
   ];
 

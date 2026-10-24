@@ -44,8 +44,8 @@ Do the modes from left to right:
 |---|---|
 | Soil | Add boreholes, make the soil layers, and select the soil materials |
 | Structures | Add sheet piles, anchors, interfaces, loads, and drawn or imported solids |
-| Mesh | Set the mesh size and make the mesh |
 | Flow conditions | Set the water level and the water pressure conditions |
+| Mesh | Set the mesh size and make the mesh. Make it after the water conditions: a condition is meshed into the model that Kratos reads. |
 | Staged construction | Make the construction stages, and select the active parts in each stage |
 | Results | Look at the results of a calculation |
 
@@ -173,29 +173,6 @@ wall slide along the soil.
 
 Interfaces work only in plane strain, so the tool is not available in 3D.
 
-## Mesh mode
-
-When you open Mesh mode, the **Mesh properties** window opens:
-
-| Setting | What it does |
-|---|---|
-| Layer mesh sizes | Select the layers to mesh, and give each one its own target size. Styx meshes the selected layers together, so their shared faces have common nodes. |
-| Global element size | The maximum length of an element edge, in metres |
-| Element order | Linear elements, or quadratic elements with a midside node on each edge |
-| 2D algorithm, 3D algorithm | The Gmsh algorithm that makes the elements |
-| Optimization | A step that makes the shape of the elements better |
-| Smoothing steps | The number of smoothing steps on the surface mesh |
-| Curvature points | The minimum number of points along a curved edge. 0 switches this off. |
-| Minimum-size factor | The smallest element size, as a fraction of the global size |
-| Straight quadratic edges | Keeps the midside nodes on straight lines, so that elements do not turn inside out |
-
-Click **Apply and generate** to make the mesh, or **Apply** to only keep the settings.
-<kbd>F9</kbd> in Mesh mode makes the mesh again with the saved settings.
-
-To see the numbers of the nodes or the elements, right-click in the viewport and select
-**Show labels**. To show a part of the mesh in its own colour, type `colour <part>`. To see
-the parts that contain a node, type `node <id>`.
-
 ## Flow conditions mode
 
 The water pressures in the soil come from the water pressure conditions only. A model with
@@ -287,6 +264,29 @@ face as a line with arrows that point out of the soil. Kratos opens or closes on
 the face for each iteration, so give the stage enough iterations: the calculation warns
 when the stage allows fewer iterations than the face has nodes. A deformation calculation
 leaves a seepage face out, and warns.
+
+## Mesh mode
+
+When you open Mesh mode, the **Mesh properties** window opens:
+
+| Setting | What it does |
+|---|---|
+| Layer mesh sizes | Select the layers to mesh, and give each one its own target size. Styx meshes the selected layers together, so their shared faces have common nodes. |
+| Global element size | The maximum length of an element edge, in metres |
+| Element order | Linear elements, or quadratic elements with a midside node on each edge |
+| 2D algorithm, 3D algorithm | The Gmsh algorithm that makes the elements |
+| Optimization | A step that makes the shape of the elements better |
+| Smoothing steps | The number of smoothing steps on the surface mesh |
+| Curvature points | The minimum number of points along a curved edge. 0 switches this off. |
+| Minimum-size factor | The smallest element size, as a fraction of the global size |
+| Straight quadratic edges | Keeps the midside nodes on straight lines, so that elements do not turn inside out |
+
+Click **Apply and generate** to make the mesh, or **Apply** to only keep the settings.
+<kbd>F9</kbd> in Mesh mode makes the mesh again with the saved settings.
+
+To see the numbers of the nodes or the elements, right-click in the viewport and select
+**Show labels**. To show a part of the mesh in its own colour, type `colour <part>`. To see
+the parts that contain a node, type `node <id>`.
 
 ## Staged construction mode
 

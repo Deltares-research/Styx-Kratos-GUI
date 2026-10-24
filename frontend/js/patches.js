@@ -1372,6 +1372,32 @@ App.LivePatches = (function () {
 
   function orderSoilMenu(items) { return orderRail(items, SOIL_MENU_GROUPS, []); }
 
+  /* Moves the entry whose key is `moving` to just before the one whose key is
+     `anchor`, in place: the frozen tabs and menu bar read these very arrays. Leaves
+     the list alone if either entry is missing or the order is already right. */
+  function moveBefore(list, keyOf, moving, anchor) {
+    var keys = (list || []).map(function (item) { return item && keyOf(item); });
+    var from = keys.indexOf(moving);
+    var to = keys.indexOf(anchor);
+    if (from < 0 || to < 0 || from < to) return list;
+    list.splice(to, 0, list.splice(from, 1)[0]);
+    return list;
+  }
+
+  /* A water condition is meshed into the model Kratos reads, so the water is set
+     before the mesh is made: Flow conditions comes before Mesh, on the mode tabs
+     (and so on Ctrl+1..5, which follow App.MODES) and in the menu bar. Water
+     conditions are model input, so the tab sits with Soil and Structures under
+     Geometry rather than under Calculation. */
+  function orderFlowBeforeMesh() {
+    moveBefore(App.MODES, function (m) { return m.id; }, 'flow', 'mesh');
+    var soil = App.MODES.filter(function (m) { return m.id === 'soil'; })[0];
+    App.MODES.forEach(function (m) {
+      if (m.id === 'flow' && soil) m.group = soil.group;
+    });
+    moveBefore(App.MENUS, function (m) { return m.label; }, 'Flow conditions', 'Mesh');
+  }
+
   /* Pure, and tolerant of a rail this file has never seen: a tool that matches no
      group keeps its place in a trailing group rather than disappearing. */
   function orderRail(tools, groupKeys, dropped) {
@@ -3181,8 +3207,15 @@ App.LivePatches = (function () {
     }
 
     installBoundaryConditionTools();
+    orderFlowBeforeMesh();
     installResultsMode();
     installStagesOverview();
+    // The tabs and the bar were drawn at boot, before the reorder above.
+    if (App.Toolbars && App.Toolbars.mountModes && document.getElementById('modetabs')) {
+      App.Toolbars.mountModes();
+      if (App.state && App.Toolbars.highlightMode) App.Toolbars.highlightMode(App.state.mode);
+    }
+    if (App.Menu && App.Menu.mountBar && document.getElementById('menubar')) App.Menu.mountBar();
 
     /* Every live action is on its tool and its menu row by now, so whatever is still
        without one is what Styx does not do: grey it, in the menus and on the rail.
@@ -4447,6 +4480,7 @@ App.LivePatches = (function () {
     orderStructuresRail: orderStructuresRail,
     orderSoilRail: orderSoilRail,
     orderSoilMenu: orderSoilMenu,
+    moveBefore: moveBefore,
     STRUCTURES_RAIL_GROUPS: STRUCTURES_RAIL_GROUPS,
     nameSoilBodyActions: nameSoilBodyActions,
     addSoilBodySection: addSoilBodySection,

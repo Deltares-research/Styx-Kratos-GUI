@@ -341,6 +341,27 @@
       '-', 'createSoilVolume']);
   });
 
+  test('Flow conditions comes before Mesh, on the mode tabs and in the menu bar', function () {
+    withInstall(function () {});
+    var modes = App.MODES.map(function (m) { return m.id; });
+    T.eq(modes.slice(0, 5), ['soil', 'structures', 'flow', 'mesh', 'staged']);
+    var menus = App.MENUS.map(function (m) { return m.label; });
+    T.ok(menus.indexOf('Flow conditions') + 1 === menus.indexOf('Mesh'),
+      'Flow conditions sits right before Mesh: ' + menus.join(', '));
+    var groupOf = {};
+    App.MODES.forEach(function (m) { groupOf[m.id] = m.group; });
+    T.eq(groupOf.flow, groupOf.soil, 'Flow conditions is grouped under Geometry with Soil');
+    T.ok(groupOf.mesh !== groupOf.flow, 'Mesh stays under Calculation');
+  });
+
+  test('moving an entry before another leaves a list already in order alone', function () {
+    var keyOf = function (s) { return s; };
+    T.eq(App.LivePatches.moveBefore(['a', 'mesh', 'flow', 'b'], keyOf, 'flow', 'mesh'),
+      ['a', 'flow', 'mesh', 'b']);
+    T.eq(App.LivePatches.moveBefore(['flow', 'mesh'], keyOf, 'flow', 'mesh'), ['flow', 'mesh']);
+    T.eq(App.LivePatches.moveBefore(['mesh'], keyOf, 'flow', 'mesh'), ['mesh']);
+  });
+
   test('ordering the Soil rail keeps a tool it does not recognise', function () {
     var mine = { icon: 'star', tip: 'Something new', action: 'doSomething' };
     var keys = App.LivePatches.orderSoilRail([
