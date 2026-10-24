@@ -122,14 +122,10 @@ crow.json>
 crow.json> domain --x 0 80 --y -60 0 --z 0 10
 domain x 0 .. 80, y -60 .. 0 (2D section at z = 5); wrote ...\crow.json
 The section at z = 0 is outside the new domain, so it is cut through its middle, at z = 5.
-
-crow.json> borehole set bh1 --name BH1 --x 0 --y 0 --head 0 --water -1.5
-changed borehole bh1; wrote ...\crow.json
 ```
 
 - The `--z` extent has no effect in plane strain: the section is taken through its middle.
-- A new project already has one borehole, `bh1`. It goes at the symmetry plane, with the
-  ground at 0 and the phreatic level at −1.5.
+- The first soil layer starts at the top of the domain, so the ground is at 0.
 
 #### Step 3. The soils
 

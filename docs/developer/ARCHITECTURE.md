@@ -114,7 +114,7 @@ the HTTP parts.
 
 | Group | Module | Routes |
 |---|---|---|
-| Project | `routes/project.py` | `GET`/`PUT /api/project`; `POST /api/project/new`, `/reset`, `/script`, `/script/save`, `/stages/defaults`, `/boreholes`; `PATCH /api/project/layers`, `/materials`, `/structures`, `/conditions`, `/stages`, `/dimension`, `/units`; `PUT /api/project/water`; `DELETE /api/project/custom_parts` |
+| Project | `routes/project.py` | `GET`/`PUT /api/project`; `POST /api/project/new`, `/reset`, `/script`, `/script/save`, `/stages/defaults`; `PATCH /api/project/layers`, `/materials`, `/structures`, `/conditions`, `/stages`, `/dimension`, `/units`; `PUT /api/project/water`; `DELETE /api/project/custom_parts` |
 | Geometry | `routes/geometry.py` | `GET /api/geometry`; `POST /api/geometry/create`, `/import`; `DELETE /api/geometry/parts/{key}` |
 | Mesh | `routes/mesh.py` | `POST /api/mesh`, `/api/mesh/labels`, `/api/mesh/node-parts` |
 | Decks | `routes/decks.py` | `POST /api/export/mdpa`, `/api/import/mdpa`, `/api/calculate` |
@@ -134,7 +134,7 @@ the HTTP parts.
 | `cli/terminal/words.py` | How the words of a command line become a command and its values |
 | `cli/commands/project.py` | `new`, `show`, `check`, `build`, `script`, `dimension`, `units`, `water` |
 | `cli/commands/edit.py` | `get`, `set`, `add`, `remove` |
-| `cli/commands/ground.py`, `volumes.py` | `domain`, `borehole`, `material`, `layer`, `excavation`, `parts`; `volume` |
+| `cli/commands/ground.py`, `volumes.py` | `domain`, `material`, `layer`, `excavation`, `parts`; `volume` |
 | `cli/commands/structures.py` | `section`, `beam`, `wall`, `member`, `anchor`, `interface`, `load`, `normal-load` |
 | `cli/commands/conditions.py` | `boundary`, `gravity` |
 | `cli/commands/meshing.py`, `stages.py` | `mesh`, `export`; `stages` |
@@ -155,7 +155,7 @@ shell. Only the camera of `base/js/orbit.js` is replaced; all other behaviour is
 | Connection to the shell | `patches.js`: menu actions, tool rails, panels, windows, the command box |
 | Data | `api.js`, `model.js` (server project → shape that the shell needs), `buffers.js`, `history.js` (undo and redo), `units.js`, `unit-table.js` |
 | View | `viewport.js` (three.js), `orbit.js` (camera with y up), `canvas-renderer.js`, `ruler.js`, `mesh-labels.js`, `part-colors.js`, `node-parts.js` |
-| Modelling tools | `draw-input.js`, `beams.js`, `anchors.js`, `interfaces.js`, `loads.js`, `normal-loads.js`, `water-command.js`, `soil-volume-dialog.js` |
+| Modelling tools | `draw-input.js`, `beams.js`, `anchors.js`, `interfaces.js`, `loads.js`, `normal-loads.js`, `water-command.js`, `soil-volume-dialog.js`, `soil-layers-dialog.js` (the **Modify soil layers** window, in place of the shell's own) |
 | Materials | `material-sets.js`, `material-library.js`, `property-sets.js` |
 | Mesh and stages | `mesh-settings.js`, `stages.js` |
 | Files and scripts | `export.js`, `import-dialog.js`, `mdpa-import-dialog.js`, `download.js`, `zip.js`, `deck.js`, `script-command.js` |

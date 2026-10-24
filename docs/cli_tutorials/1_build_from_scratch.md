@@ -44,17 +44,12 @@ them all at once. Lines starting with `#` are comments, and `.` is the folder yo
 #    Axes: x runs across the section, y points up, z runs out of the section.
 new simple_dike.json --dim 2 --name simple_dike
 
-# 2. The soil block, 20 m wide and 10 m high, and a borehole.
-#    The ground is at y = 10 and the water at y = 0, so the soil is dry.
+# 2. The soil block, 20 m wide and 10 m high.
+#    The ground is at y = 10, the top of the domain: the first layer starts there.
 #    A 2D model is a vertical cut through the site at one z (z = 0 in a new project).
 #    The site's z extent matters only when the model is switched to 3D, so `domain`
 #    is given no --z here.
-#    A borehole is placed on the map, as in the GUI: its --x and --y are map coordinates
-#    (map y is the model's z). Its levels are --head (ground) and --water.
-#    A new project already has one borehole, with the id bh1: `borehole set bh1` changes
-#    it, and `borehole add` would make a second one. `borehole list` shows the ids.
 domain --x 0 20 --y 0 10
-borehole set bh1 --name BH1 --x 0 --y 0 --head 10 --water 0
 
 # 3. The soil: one linear elastic material, and one layer of it down to y = 0.
 #    --color is the colour the GUI draws the soil in, as #rrggbb. Colour names such

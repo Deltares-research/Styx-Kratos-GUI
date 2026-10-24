@@ -42,7 +42,7 @@ Do the modes from left to right:
 
 | Mode | What you do there |
 |---|---|
-| Soil | Add boreholes, make the soil layers, and select the soil materials |
+| Soil | Make the soil layers and select the soil materials |
 | Structures | Add sheet piles, anchors, interfaces, loads, and drawn or imported solids |
 | Flow conditions | Set the water level and the water pressure conditions |
 | Mesh | Set the mesh size and make the mesh. Make it after the water conditions: a condition is meshed into the model that Kratos reads. |
@@ -90,25 +90,27 @@ properties.
 
 ## Soil mode
 
-### Boreholes and soil layers
+### Soil layers
 
-1. Add boreholes with the **Create borehole** tool, or type `borehole <x> <y>`. `x` and `y`
-   are map coordinates. A borehole gets the levels of the last borehole. Without `x` and `y`,
-   it goes 10 m past the last borehole. This is the same as `kratos-cli borehole add`.
-2. Click **Modify soil layers…**. The window shows the boreholes on the left and the layers of
-   one borehole on the right. You can also add a borehole there with **Add borehole**.
-3. Use **Add**, **Insert** and **Delete** to change the layers. Type the top, the bottom or
-   the thickness, and select a material for each layer.
+A soil layer is a horizontal band across the whole domain, with one top and one bottom.
+
+1. Click **Modify soil layers…**. The window shows the layer table on the right and a column
+   of the layers on the left. The column also shows the water level as a dashed blue line.
+2. Use **Add**, **Insert** and **Delete** to change the layers. **Add** puts a 5 m layer under
+   the last one. The first layer starts at the top of the domain. **Insert** splits the
+   selected layer in two.
+3. Type the name, the top, the bottom or the thickness, and select a material for each layer.
 4. Click **OK** to save the layers and make the geometry again. Click **Cancel** to go back to
    the layers that you had before.
 
 Styx keeps the layers without gaps. When you change the bottom or the thickness of a layer,
-the top of the layer below it moves too.
+the top of the layer below it moves too. When you change the top of a layer, the bottom of
+the layer above it moves too. A level that goes past the other level of the next layer is
+refused, and the line under the table tells you why. You can also type the top (**y max**)
+and the bottom (**y min**) of a layer in the Selection explorer. This is the same as
+`kratos-cli layer set`.
 
-> [!NOTE]
-> Each borehole has a **Water level** field. Styx keeps this value, but does not send it to
-> Kratos. The water pressures come from the water pressure conditions of
-> [Flow conditions mode](#flow-conditions-mode).
+For a layer that is not horizontal, draw a soil surface or a soil volume (see below).
 
 ### Material sets
 
@@ -468,7 +470,6 @@ Type a command in the command box below the log, and press <kbd>Enter</kbd>. Use
 | `boundary`, `boundary standard` | Lists the boundary conditions, or puts the standard supports back |
 | `gravity`, `gravity on`, `gravity off` | Shows gravity, or switches it on or off |
 | `units`, `units SI`, `units kN` | Shows or changes the unit system |
-| `borehole`, `borehole <x> <y>` | Adds a borehole, 10 m past the last one or at map `x`, `y` |
 | `soillayers`, `materials` | Opens the **Modify soil layers** or **Material sets** window |
 | `cleargeometry` | Removes all drawn and imported solids |
 | `colour <part>`, `colour all`, `colour off` | Shows parts of the mesh in their own colour |

@@ -87,10 +87,15 @@ def gui_commands() -> set[str]:
         words |= not_mine_words(module_defining("Results"))
 
     mockup = block(read(BASE / "command.js"), "function run(text)")
-    words |= set(re.findall(r"(\w+):\s*'\w+'", block(mockup, "var modeJump")))
-    words |= set(re.findall(r"case '(\w+)':", mockup))
-    words |= set(re.findall(r"^\s*'(\w+)':", block(read(BASE / "data.js"),
+    canned = set(re.findall(r"^\s*'(\w+)':", block(read(BASE / "data.js"),
                                                      "App.CMD_RESPONSES = "), re.M))
+    # The live box passes the mockup only the words `shellAnswers` names: its
+    # SHELL_WORDS and the canned answers. Any other `case` (`borehole`) is refused.
+    shell = re.search(r"var SHELL_WORDS = \[(.*?)\];", read(JS / "patches.js"), re.S)
+    passed = set(re.findall(r"'(\w+)'", shell.group(1))) | canned
+    words |= set(re.findall(r"(\w+):\s*'\w+'", block(mockup, "var modeJump")))
+    words |= set(re.findall(r"case '(\w+)':", mockup)) & passed
+    words |= canned
     return words
 
 
