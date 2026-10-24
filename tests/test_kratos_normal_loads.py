@@ -20,6 +20,7 @@ from core.kratos import writer
 from core.model.schemas import MeshRequest, Project
 from core.model.templates import seed_project
 from tests import mdpa
+from tests.models import drawn_ground, excavation
 
 
 @pytest.fixture(scope="module")
@@ -227,3 +228,58 @@ def test_a_staged_project_applies_the_normal_load_in_every_stage(session):
                   if p["process_name"] == "ApplyNormalLoadTableProcess"]
         assert len(applied) == 1, f"exactly one normal load in {stage}"
         assert applied[0]["Parameters"]["model_part_name"] == "PorousDomain.River_load"
+
+
+# ── Which way it presses ────────────────────────────────────────────────────
+
+def pulling_warnings(project: Project) -> list[str]:
+    with solid_model.session():
+        export = writer.export_project(project)
+    return [w for w in export["warnings"] if "pulls on the soil" in w]
+
+
+def test_trench_water_drawn_with_the_soil_on_its_right_is_not_warned_about():
+    assert pulling_warnings(drawn_ground.project()) == []
+
+
+def test_trench_water_drawn_the_other_way_round_is_warned_about():
+    """Inside the model the pressure follows the drawn order, so drawn the other way the
+    water in the trench pulls the floor up and the wall towards it."""
+    data = drawn_ground.project().model_dump()
+    data["normal_loads"][0]["points"] = data["normal_loads"][0]["points"][::-1]
+    (warning,) = pulling_warnings(Project.model_validate(data))
+    assert warning.startswith("normal load 'Trench water' pulls on the soil instead of "
+                              "pressing on it, along its whole line: no soil is on its "
+                              "right in phase 'Dig trench'.")
+
+
+def test_the_staged_excavation_s_water_loads_press_on_the_soil():
+    assert pulling_warnings(excavation.excavation_project()) == []
+
+
+def direction_warnings(project: Project) -> list[str]:
+    with solid_model.session():
+        export = writer.export_project(project)
+    return [w for w in export["warnings"] if w.startswith("normal load")]
+
+
+def ground_surface_load(points) -> Project:
+    data = normal_load_project().model_dump()
+    data["normal_loads"][0]["points"] = points
+    return Project.model_validate(data)
+
+
+def test_a_load_on_the_ground_drawn_left_to_right_presses_and_says_nothing():
+    """Its arrows point down into the ground, and so does the deck."""
+    project = ground_surface_load([[2.0, 0.0], [14.0, 0.0]])
+    assert direction_warnings(project) == []
+
+
+def test_a_load_on_the_ground_drawn_right_to_left_still_presses_but_says_so():
+    """On the outside of the model the condition takes its one element's own order, so
+    the deck presses in either way -- and the arrows, which follow the drawing, point
+    up out of the ground. That is the disagreement the user is told about."""
+    project = ground_surface_load([[14.0, 0.0], [2.0, 0.0]])
+    (warning,) = direction_warnings(project)
+    assert "arrows pointing out of the soil" in warning
+    assert not pulling_warnings(project)

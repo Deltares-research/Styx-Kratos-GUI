@@ -99,6 +99,30 @@ def column(layers: list[tuple[float, float, dict]], width: float = 1.0,
     return Project.model_validate(p)
 
 
+def column_under_drawn_fill(fill: tuple[float, float, dict],
+                            layer: tuple[float, float, dict], width: float = 1.0,
+                            name: str = "Soil column under drawn fill") -> Project:
+    """`column` with its top part drawn rather than read from the borehole: `layer` is
+    the borehole's, `fill` a polygon over the full width with a material of its own,
+    both as (top, bottom, material). The fill is built from its recipe, as a model
+    script builds it, so the runner sends a project whose .brep exists."""
+    from core import scripting
+
+    fill_top, fill_bottom, fill_material = fill
+    p = column([layer], width=width, name=name).model_dump(mode="json")
+    p["domain"]["y_top"] = fill_top
+    p["materials"].append(fill_material["kratos"] if "kratos" in fill_material
+                          else migration.material(fill_material, 2))
+    corners = [(0.0, fill_top), (0.0, fill_bottom), (width, fill_bottom), (width, fill_top)]
+    p["custom_parts"] = [{
+        "key": "drawn_0", "label": "Fill", "source": "gui", "mat": fill_material["id"],
+        "recipe": {"kind": "polygon_extrude", "material": fill_material["id"],
+                   "vertices": [[x, y, 0.0] for x, y in corners],
+                   "extrusion": [0.0, 0.0, 1.0]}}]
+    p["mesh"]["element_size"] = min(width, (fill_top - layer[1]) / 10)
+    return scripting.with_solids(Project.model_validate(p))
+
+
 def symmetric_pit(width: float = 80.0, pit: tuple[float, float] = (35.0, 45.0),
                   levels: tuple[float, ...] = (-2.0, -5.0), dimension: int = 2) -> Project:
     """The test model's ground with no structures, dug symmetrically in the middle of a

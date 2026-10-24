@@ -302,8 +302,8 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
     # the soil from the structures already harvested, so it needs their connectivity in
     # hand -- and the nodes it adds have to be in `world` before the boundary groups and
     # the node table are read off it.
-    interface_blocks, interface_ties = ([], []) if flow else _interface_elements(
-        project, dim, soil_blocks, beam_blocks, conditions, world, coordinates, warnings)
+    interface_blocks, interface_ties, interface_faces = ([], [], []) if flow else         _interface_elements(project, dim, soil_blocks, beam_blocks, conditions, world,
+                            coordinates, warnings)
     blocks.extend(interface_blocks)
     # Named here rather than in `_part_names`: which bodies a contact actually runs
     # against is a fact about the mesh, not about the project, and is not known until
@@ -314,7 +314,13 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
         names.setdefault(key, f"{names[stem]}_{names[body]}" if body else names[stem])
     # After the interface split, so each condition is aligned to the copy of the soil it
     # ended up on rather than to the element it left behind.
+    # The normal loads' rows as drawn, before the alignment can turn one round: what the
+    # GUI's arrows show, which the warning below holds the deck to.
+    drawn_loads = {key: [list(row) for row in rows] for key, _, rows in conditions}
     _align_conditions(conditions, soil_blocks)
+    if dim == 2:
+        warnings.extend(_pulling_normal_loads(project, conditions, drawn_loads,
+                                              soil_blocks, coordinates))
 
     used = sorted({tag for _, _, rows in blocks for row in rows for tag in row}
                   | {tag for _, _, rows in conditions for row in rows for tag in row})
@@ -373,17 +379,34 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
     # (`_interface_by_body`), so the group is those halves, for the contacts that run
     # against soil outside the pit. Written only for a staged deck, which is the only
     # thing that reads it (plan sec C7).
+    #
+    # Without a pit there is no retained side to speak of -- a sheet pile through a dike
+    # holds ground on both faces -- and one group would mix the two faces into one
+    # curve. Each face of each wall interface gets a group and a curve of its own
+    # instead, over every body it runs against.
     outside = {key for key, _, _, inside in project.soil_bodies() if not inside}
+    pit = len(outside) < len(project.soil_bodies())
     retained_blocks = [(key, rows) for key, _, rows in interface_blocks
-                       if key.partition("__")[2] in outside]
+                       if not pit or key.partition("__")[2] in outside]
     right_side_part = None
-    if project.phases and retained_blocks:
+    face_parts: list[tuple[str, str]] = []
+    if project.phases and retained_blocks and pit:
         retained_nodes = sorted({node_id[tag] for _, rows in retained_blocks
                                  for row in rows for tag in row[len(row) // 2:]
                                  if tag in node_id})
         if retained_nodes:
             right_side_part = RIGHT_SIDE_PART
             parts.append((right_side_part, retained_nodes, [], []))
+    elif project.phases and retained_blocks:
+        several = len({key for key, _, _ in interface_faces}) > 1
+        for key, face, tags in interface_faces:
+            nodes = sorted({node_id[tag] for tag in tags if tag in node_id})
+            if not nodes:
+                continue
+            part = f"{names[key]}_{face}_face"
+            parts.append((part, nodes, [], []))
+            face_parts.append((part, f"{key}_{face.lower()}" if several
+                               else f"interface_{face.lower()}"))
 
     condition_keys = {key for key, _, rows in conditions if rows}
     active_loads = [(names[load.id], *_load_variable(load, dim))
@@ -417,11 +440,14 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
         (names[key], project.interface_section(_interface_of(project, key).section),
          _adjacent_material(project, key, names, material_by_part))
         for key, _, _ in interface_blocks]
+    # What the export worked out for the user rather than warns them about: the numbers
+    # an interface took from its soil.
+    notes: list[str] = []
     try:
         material_file, material_warnings = (
             material_parameters(project, part_materials, dim, beam_properties,
                                 anchor_properties, panel_properties, interface_properties,
-                                flow=flow)
+                                flow=flow, notes=notes)
             if include_materials else (None, [])
         )
     except materials.MaterialError as failure:
@@ -493,8 +519,9 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
         name=deck_name(project),
         owners=owners,
         bodies=tuple(body_parts),
-        soils=tuple(names[key] for key, _, _ in soil_blocks
-                    if key.startswith("soil_")),
+        # Every soil body the K0 procedure sets up: a drawn or imported part with a
+        # material is ground like a layer is, and gets the same initial stresses.
+        soils=tuple(names[key] for key, _, _ in soil_blocks if key in soil_keys),
         interfaces=interface_parts,
         retained=tuple(names[key] for key, _ in retained_blocks),
         beams=tuple(names[key] for key, _, _ in beam_blocks),
@@ -502,6 +529,7 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
         ties=tuple((master, slave, key) for key, (master, slave) in ties.items())
              if dim == 2 else (),
         right_side=right_side_part,
+        faces=tuple(face_parts),
         unsaturated=tuple(name for name, material in part_materials
                           if project.material(material).variables.get(
                               "RETENTION_LAW", SATURATED) != SATURATED),
@@ -558,6 +586,7 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
         "stats": mesh.stats.to_dict(),
         "meshed_keys": mesh.meshed_keys,
         "warnings": warnings,
+        "notes": notes,
         "log": mesh.log,
     }
 
@@ -618,6 +647,9 @@ class _Deck:
     structures: tuple[str, ...]
     ties: tuple[tuple[str, str, str], ...] = ()
     right_side: str | None = None
+    faces: tuple[tuple[str, str], ...] = ()
+    """(node part, member name) per face of each wall interface, in a deck without a pit:
+    one curve per face (`_export`)."""
     unsaturated: tuple[str, ...] = ()
     """The soil parts whose retention law makes the permeability depend on the water
     pressure, so that a flow stage with any of them in it is solved by Newton-Raphson."""
@@ -730,6 +762,9 @@ def _phased_stages(project: Project, deck: _Deck) -> list[parameters.Stage]:
             output += ((beams[0], "output_wall", WALL_OUTPUT_VARIABLES),)
         if retained and deck.right_side:
             output += ((deck.right_side, "output_interface", INTERFACE_VARIABLES),)
+        if retained:
+            output += tuple((part, f"output_{member}", INTERFACE_VARIABLES)
+                            for part, member in deck.faces)
 
         out.append(parameters.Stage(
             name=parameters.stage_name(index, phase.name),
@@ -784,7 +819,8 @@ def _interface_elements(project: Project, dim: int,
                         coordinates: dict[int, tuple[float, float, float]],
                         warnings: list[str]
                         ) -> tuple[list[tuple[str, str, list[list[int]]]],
-                                   list[tuple[str, list[int], list[int]]]]:
+                                   list[tuple[str, list[int], list[int]]],
+                                   list[tuple[str, str, list[int]]]]:
     """Unglue the soil along every active interface and write the contact elements.
 
     The topology is `core.kratos.interfaces`' job and is done on connectivity alone; what
@@ -798,7 +834,8 @@ def _interface_elements(project: Project, dim: int,
 
     Also returns, per interface that follows a staged structure, the raw node tags to
     tie together with a master/slave constraint while that structure is not installed
-    yet -- see `_split_ties`.
+    yet -- see `_split_ties` -- and the soil-side node tags of each of its faces
+    (`_faces`).
     """
     active = project.active_interfaces
     if not active:
@@ -807,16 +844,21 @@ def _interface_elements(project: Project, dim: int,
                 "interfaces are plane-strain only and none was written into this 3D "
                 "deck; the structures are meshed bonded to the soil."
             )
-        return [], []
+        return [], [], []
 
     beam_rows = {key: rows for key, _, rows in beam_blocks}
+    # The edges soil lies against. The piece of a pile that stands out of the ground
+    # (`solid_model._standing_out`) has none, and no contact to hold.
+    held = {frozenset((row[a], row[b])) for _, _, rows in soil_blocks for row in rows
+            for a, b, *_ in interfaces.EDGES.get(len(row), ())}
     specs = []
     for interface in active:
         if interface.structure is None:
             segments = _segments(_tagged(1).get(interface.id, []))
             path = [(x, y) for x, y in interface.points or []]
         else:
-            segments = beam_rows.get(interface.structure, [])
+            segments = [row for row in beam_rows.get(interface.structure, [])
+                        if frozenset(row[:2]) in held]
             # A sheet pile: an interface follows nothing else, so (x, y).
             path = [(point[0], point[1]) for point in
                     _beam_of(project, interface.structure).points]
@@ -830,6 +872,10 @@ def _interface_elements(project: Project, dim: int,
                                      structural=interface.structure is not None,
                                      sides=interface.side))
 
+    # The soil a contact can hold: every layer body, every body dug out of one, and every
+    # drawn or imported part with a material -- the same list a condition on a soil part
+    # picks from. `soil_blocks` holds the 3D wall ring and struts besides, which are not.
+    soil_keys = frozenset(project.soil_part_keys())
     flat: list[list[int]] = []
     spans = []
     for _, _, rows in soil_blocks:
@@ -855,6 +901,7 @@ def _interface_elements(project: Project, dim: int,
 
     out = []
     ties = []
+    faces: list[tuple[str, str, list[int]]] = []
     for interface in active:
         rows = split.elements.get(interface.id) or []
         if not rows:
@@ -872,20 +919,26 @@ def _interface_elements(project: Project, dim: int,
         # would carry shear against nothing. The reference deck splits the same way --
         # `Interface_Excavated_Soil_1` beside `Interface_Soil_Top_Right` -- and a
         # `side="both"` contact contributes to two bodies at once, one per face.
-        for body_key, body_rows in _interface_by_body(rows, per_side, soil_blocks):
+        grouped = _interface_by_body(rows, per_side, soil_blocks, soil_keys)
+        _check_every_stretch_is_held(interface, rows, grouped, per_side, coordinates)
+        for body_key, body_rows in grouped:
             out.append((f"{interface.id}__{body_key}", name, body_rows))
         # Ties stay per interface. They hold the two copies of a split node together
         # while the structure is not installed, which is one question about the whole
         # line, not one per body it happens to pass.
         if interface.structure is not None:
-            master, slave = _split_ties(rows, per_side, split.duplicates)
+            drawn = _beam_of(project, interface.structure).points
+            master_face = _master_face(drawn)
+            master, slave = _split_ties(rows, per_side, split, interface.id, master_face)
             if master and slave:
                 ties.append((interface.id, master, slave))
-    return out, ties
+            faces.extend(_faces(interface.id, rows, per_side, split, master_face, drawn))
+    return out, ties, faces
 
 
 def _interface_by_body(rows: list[list[int]], per_side: int,
-                       soil_blocks: list[tuple[str, str, list[list[int]]]]
+                       soil_blocks: list[tuple[str, str, list[list[int]]]],
+                       soil_keys: frozenset[str]
                        ) -> list[tuple[str, list[list[int]]]]:
     """Group contact elements by the soil body each one runs against.
 
@@ -899,7 +952,7 @@ def _interface_by_body(rows: list[list[int]], per_side: int,
     """
     bodies: dict[int, list[str]] = {}
     for key, _, body_rows in soil_blocks:
-        if not key.startswith("soil_"):
+        if key not in soil_keys:
             continue
         for row in body_rows:
             for node in row:
@@ -913,15 +966,69 @@ def _interface_by_body(rows: list[list[int]], per_side: int,
             owners = bodies.get(node, [])
             shared = owners if shared is None else [k for k in shared if k in owners]
         if not shared:
-            # No soil on this side at all: the contact runs against the structure only,
-            # which nothing in the deck can name a body for.
+            # No soil body owns this face: left out here, and refused by
+            # `_check_every_stretch_is_held` with the stretch it is on.
             continue
         grouped.setdefault(shared[0], []).append(row)
     return list(grouped.items())
 
 
-def _split_ties(rows: list[list[int]], per_side: int, duplicates: dict[int, int]
-                ) -> tuple[list[int], list[int]]:
+def _check_every_stretch_is_held(interface, rows: list[list[int]],
+                                 grouped: list[tuple[str, list[list[int]]]],
+                                 per_side: int,
+                                 coordinates: dict[int, tuple[float, float, float]]) -> None:
+    """Refuse a contact element that no soil body took.
+
+    `split_mesh` only writes an element where there is soil on that face, so every one
+    of them runs against some body. One left over is a body the grouping does not know
+    as soil -- which is how a sheet pile through a drawn levee once lost its contact
+    above the borehole layer with no word said, and the levee slid through the wall.
+    """
+    kept = {id(row) for _, body_rows in grouped for row in body_rows}
+    lost = [row for row in rows if id(row) not in kept]
+    if not lost:
+        return
+    ys = [coordinates[node][1] for row in lost for node in row[:per_side]]
+    raise ExportError(
+        f"interface {interface.name!r}: {len(lost)} contact element(s) between "
+        f"y = {min(ys):g} and {max(ys):g} run against soil that is not a soil body of "
+        "the model; give that part a material, or report this as a bug."
+    )
+
+
+def _faces(key: str, rows: list[list[int]], per_side: int, split: interfaces.Split,
+           master_face: str, path) -> list[tuple[str, str, list[int]]]:
+    """(interface key, face name, soil-side node tags) for both faces of a wall's
+    contact: "Left" and "Right" for a line steeper than 45 degrees, "Below" and "Above"
+    for a flatter one, the first being the masters' face (`_master_face`). The toe's
+    one copy is on both."""
+    dx, dy = path[-1][0] - path[0][0], path[-1][1] - path[0][1]
+    first, second = ("Left", "Right") if abs(dy) >= abs(dx) else ("Below", "Above")
+    named = {master_face: first, ("right" if master_face == "left" else "left"): second}
+    out: dict[str, set[int]] = {first: set(), second: set()}
+    for row in rows:
+        for node in row[per_side:]:
+            face = split.faces.get(node, {}).get(key, "")
+            for name in ((first, second) if face == "both" else
+                         (named[face],) if face in named else ()):
+                out[name].add(node)
+    return [(key, name, sorted(nodes)) for name, nodes in out.items() if nodes]
+
+
+def _master_face(path) -> str:
+    """The face of a line whose copies are the masters of its tie: the one on the left of
+    the screen for a line steeper than 45 degrees, the one below for a flatter one --
+    as Kratos' own master/slave test ties the left body to the right one. Faces are
+    named walking the line as drawn (`core.kratos.interfaces`), so which name that is
+    depends on the direction it was drawn in."""
+    dx, dy = path[-1][0] - path[0][0], path[-1][1] - path[0][1]
+    if abs(dy) >= abs(dx):
+        return "left" if dy > 0 else "right"
+    return "right" if dx > 0 else "left"
+
+
+def _split_ties(rows: list[list[int]], per_side: int, split: interfaces.Split, key: str,
+                master_face: str) -> tuple[list[int], list[int]]:
     """Pair up the soil-side copies of every node the interface split into two.
 
     A node in the middle of the line gets exactly two copies, one per face (see
@@ -936,11 +1043,15 @@ def _split_ties(rows: list[list[int]], per_side: int, duplicates: dict[int, int]
     `minimum_number_of_neighbouring_nodes` 1 here for a while, and running the deck
     showed why it cannot be -- see `parameters.MASTER_SLAVE_NEIGHBOURS`. The
     geometry below is unchanged by that; only what Kratos is asked to do with it.
+
+    The copy on `master_face` is the master, so every master is on the same face of the
+    line. Taking the lower node id instead put them on whichever face gmsh happened to
+    number first around each node, so they changed sides along the wall.
     """
     by_original: dict[int, set[int]] = {}
     for row in rows:
         for node in row[per_side:]:
-            original = duplicates.get(node)
+            original = split.duplicates.get(node)
             if original is not None:
                 by_original.setdefault(original, set()).add(node)
 
@@ -948,7 +1059,8 @@ def _split_ties(rows: list[list[int]], per_side: int, duplicates: dict[int, int]
     for copies in by_original.values():
         if len(copies) != 2:
             continue
-        first, second = sorted(copies)
+        first, second = sorted(
+            copies, key=lambda c: (split.faces.get(c, {}).get(key) != master_face, c))
         master.append(first)
         slave.append(second)
     return master, slave
@@ -1333,11 +1445,14 @@ def _normal_load_conditions(project: Project, dim: int, warnings: list[str],
                 f"nodes a segment in {dim}D. Mesh the section with linear or "
                 "quadratic elements."
             )
-        # Along the drawn line, so the whole loaded surface carries one outward
-        # normal; `_align_conditions` then keeps that direction when it puts each
-        # segment onto an element edge.
+        # Against the drawn line. A normal load presses on what is on the right of
+        # its line as drawn -- the side the GUI's arrows point to -- and Kratos presses
+        # to the left of a condition's own node order, so each segment runs the other
+        # way. `_align_conditions` keeps that order on an edge inside the model, where
+        # both are possible; on the outside it takes the one element's own.
         if world is not None:
-            rows = _drawn_order(rows, [tuple(point) for point in load.points], world)
+            rows = [[row[1], row[0], *row[2:]] for row in
+                    _drawn_order(rows, [tuple(point) for point in load.points], world)]
         out.append((load.id, name, rows))
     return out
 
@@ -1352,8 +1467,9 @@ def _drawn_order(rows: list[list[int]], path: Sequence[tuple[float, ...]],
 
     *   a beam's order is its local axis, so reversing it flips the sign of the axial
         force, bending moment and shear that come back out of the run;
-    *   a normal load's order is its normal -- the pressure acts along the 90-degree
-        rotation of the tangent -- so a reversed segment pushes the wrong way.
+    *   a normal load's order is its normal -- Kratos presses along the +90-degree
+        rotation of the tangent -- so a reversed segment pushes the wrong way
+        (`_normal_load_conditions` turns each one round after this).
 
     The drawn polyline is the one statement of intent there is, so each segment is
     ordered by how far along it its two ends lie. Measuring along the whole polyline
@@ -1401,9 +1517,9 @@ def _align_conditions(conditions: list[tuple[str, str, list[list[int]]]],
     traverse it in opposite directions -- the floor of an excavation is the case that
     matters, shared between the lift being dug out and the ground that stays. Taking
     whichever was seen first put the water load on the pit floor the wrong way up, so
-    where both exist the one already agreeing with the condition is kept. That is the
-    direction the line was drawn in (`_drawn_order`), which is the only statement of
-    which side of an internal face the load acts on.
+    where both exist the one already agreeing with the condition is kept. For a normal
+    load that is the order `_normal_load_conditions` gave it from the drawn line, which
+    is the only statement of which side of an internal face the load acts on.
 
     A 3D face is aligned the same way, to the face as its element generates it
     (`FACES`). Kratos *rotates* a face to match, which once read as reason enough to
@@ -1432,6 +1548,89 @@ def _align_conditions(conditions: list[tuple[str, str, list[list[int]]]],
             if found:
                 rows[index] = list(next((edge for edge in found if list(edge) == row),
                                         found[0]))
+
+
+def _pulling_normal_loads(project: Project,
+                          conditions: list[tuple[str, str, list[list[int]]]],
+                          drawn: dict[str, list[list[int]]],
+                          soil_blocks: list[tuple[str, str, list[list[int]]]],
+                          coordinates: dict[int, tuple[float, float, float]]) -> list[str]:
+    """A warning per normal load whose deck and drawing disagree with the soil.
+
+    Kratos turns a line condition's tangent +90 degrees for its normal and presses
+    along it, so the load acts on what is on the left of its nodes' order -- the right
+    of the line as drawn (`_normal_load_conditions`). Two ways that goes wrong:
+
+    *   **It pulls.** Inside the model -- a pit floor, a wall face -- the deck keeps the
+        drawn side, and drawn the other way round the water in a trench pulls the floor
+        up and the wall towards it. Asked of the first phase the load is on in, because
+        that is the soil it is meant to press on: the lift beside it has just been dug.
+        A probe a hair to the left of each segment's middle has to land in an element
+        of a body that is active then.
+    *   **Its arrows point out.** On the outside of the model `_align_conditions` takes
+        the one element's own order, so the deck presses in whichever way the line was
+        drawn -- and the GUI's arrows, which follow the drawing, point out of the soil.
+    """
+    loads = {load.id: load for load in project.active_normal_loads}
+    if not loads:
+        return []
+    try:
+        order = phases.linearise(project)
+    except phases.PhaseError:
+        order = []
+    stageable = set(project.stageable_keys())
+    triangles = [(key, [coordinates[n][:2] for n in row[:3]])
+                 for key, _, rows in soil_blocks for row in rows]
+
+    def inside(point, corners) -> bool:
+        (ax, ay), (bx, by), (cx, cy) = corners
+        px, py = point
+        d1 = (bx - ax) * (py - ay) - (by - ay) * (px - ax)
+        d2 = (cx - bx) * (py - by) - (cy - by) * (px - bx)
+        d3 = (ax - cx) * (py - cy) - (ay - cy) * (px - cx)
+        return (d1 >= 0 and d2 >= 0 and d3 >= 0) or (d1 <= 0 and d2 <= 0 and d3 <= 0)
+
+    out = []
+    for key, _, rows in conditions:
+        load = loads.get(key)
+        if load is None:
+            continue
+        phase = next((ph for ph in order if key in phases.active_parts(project, ph)), None)
+        live = (phases.active_parts(project, phase) if phase is not None
+                else stageable)
+        pulling, outward = [], 0
+        for row, as_drawn in zip(rows, drawn.get(key, rows)):
+            if row[:2] != as_drawn[:2]:
+                outward += 1
+            (ax, ay), (bx, by) = coordinates[row[0]][:2], coordinates[row[1]][:2]
+            length = math.hypot(bx - ax, by - ay)
+            if not length:
+                continue
+            reach = 1e-3 * length
+            probe = ((ax + bx) / 2 - (by - ay) / length * reach,
+                     (ay + by) / 2 + (bx - ax) / length * reach)
+            if not any((body not in stageable or body in live) and inside(probe, corners)
+                       for body, corners in triangles):
+                pulling.append(((ax, ay), (bx, by)))
+        if pulling:
+            (ax, ay), (bx, by) = pulling[0]
+            where = ("its whole line" if len(pulling) == len(rows) else
+                     f"{len(pulling)} of its {len(rows)} mesh segments, one from "
+                     f"({ax:g}, {ay:g}) to ({bx:g}, {by:g})")
+            during = f" in phase {phase.name!r}" if phase is not None else ""
+            out.append(
+                f"normal load {load.name!r} pulls on the soil instead of pressing on it, "
+                f"along {where}: no soil is on its right{during}. A normal load presses "
+                "on the soil on the right of its line as drawn, where its arrows point; "
+                "give its points in the other order.")
+        elif outward:
+            out.append(
+                f"normal load {load.name!r} is drawn with its arrows pointing out of the "
+                f"soil along {outward} of its {len(rows)} mesh segments. On the outside "
+                "of the model a normal load presses in whichever way it is drawn, so the "
+                "deck presses in; give its points in the other order to make the arrows "
+                "agree.")
+    return out
 
 
 def _rotated(face: tuple[int, ...], row: list[int]) -> bool:

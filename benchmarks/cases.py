@@ -31,6 +31,8 @@ def element_material(ctx: Context) -> dict[int, dict]:
     names = writer._part_names(ctx.project)
     material_of_key = {key: ctx.project.material(mat) for key, _, mat in
                        _soil_bodies(ctx.project)}
+    material_of_key.update({part.key: ctx.project.material(part.mat)
+                            for part in ctx.project.custom_parts if part.mat})
     out = {}
     for key, material in material_of_key.items():
         part = deck.parts.get(names.get(key, ""))
@@ -317,6 +319,9 @@ SAND = models.material("sand", "Sand", 18.0, k0=0.6)
 CLAY = models.material("clay", "Clay", 20.0, k0=0.8)
 ONE_LAYER = [(0.0, -10.0, SAND)]
 TWO_LAYERS = [(0.0, -5.0, SAND), (-5.0, -10.0, CLAY)]
+DRAWN_ON_LAYER = [(0.0, -5.0, CLAY), (-5.0, -10.0, SAND)]
+"""The clay drawn on top, the sand from the borehole: the order reversed from
+`TWO_LAYERS`, so the drawn part is the one whose K0 differs from the elastic ratio."""
 WET = models.material("wet", "Saturated", 20.0, k0=0.5)
 POROUS = models.weighing(models.material("porous", "Sand, porosity 0.3", 18.0, k0=0.6,
                                           porosity=0.3))
@@ -332,6 +337,11 @@ CASES = [
          "test_k0_procedure_process.py::test_k0_procedure_k0_nc_layers",
          build=lambda: models.column(TWO_LAYERS, name="BM-K0-02"),
          checks=[k0_ratio(), no_shear(), vertical_stress_is_overburden(TWO_LAYERS)]),
+    Case("BM-K0-03", "K0 procedure, a drawn fill on a borehole layer, K0 = 0.8 / 0.6",
+         "BM-K0-02 with its top layer drawn as a polygon: a drawn soil is set up by the "
+         "K0 procedure like a layer",
+         build=lambda: models.column_under_drawn_fill(*DRAWN_ON_LAYER, name="BM-K0-03"),
+         checks=[k0_ratio(), no_shear(), vertical_stress_is_overburden(DRAWN_ON_LAYER)]),
     Case("BM-WT-01", "A soil with pores, above the water, weighs its g_unsat",
          "analytical: σ'yy = γ_unsat·depth (Kratos' own variables: DENSITY_SOLID, "
          "POROSITY 0.3, SaturatedBelowPhreaticLevelLaw)",

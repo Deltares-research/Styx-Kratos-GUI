@@ -129,6 +129,7 @@ def material_parameters(
     interface_properties: list[tuple[str, InterfaceSection, Material | None]] | None = None,
     k0: bool = False,
     flow: bool = False,
+    notes: list[str] | None = None,
 ) -> tuple[str, list[str]]:
     """Render MaterialParameters.json for the exported parts.
 
@@ -149,6 +150,10 @@ def material_parameters(
     `flow` is a groundwater flow deck's file: its water pressure elements will not run
     without a `BIOT_COEFFICIENT` (`Pw_element.cpp`'s `Check`), which the coupled ones
     derive by themselves, so it is filled in the same way (`biot`).
+
+    What an interface's property set derived from its soil goes into `notes`, one line
+    per interface part, with the soil and the numbers: it is the model working as asked,
+    not something to fix, so it is not a warning.
     """
     warnings: list[str] = []
     derived: list[str] = []
@@ -166,6 +171,7 @@ def material_parameters(
         })
 
     elastic: list[str] = []
+    interface_notes: dict[tuple[str, str], list[str]] = {}
     for part_name, material_id in part_materials:
         material = project.material(material_id)
         _check(material, f"material {material.name!r}")
@@ -191,9 +197,14 @@ def material_parameters(
         if k0 and law != INTERFACE_LAW:
             elastic.append(f"interface section {contact.name!r}")
             law = INTERFACE_LAW
-        add(part_name, law,
-            _interface_variables(contact, project, warnings, adjacent, derived),
-            contact.tables)
+        own: list[str] = []
+        variables = _interface_variables(contact, project, warnings, adjacent, own)
+        add(part_name, law, variables, contact.tables)
+        took = _interface_note(contact, project, adjacent, variables, own)
+        if took:
+            against = f" against {adjacent.name!r}" if adjacent else ""
+            interface_notes.setdefault(
+                (f"interface {contact.name!r}{against}", took), []).append(part_name)
     if elastic:
         warnings.append(
             "The K0 stage runs elastic: "
@@ -203,7 +214,47 @@ def material_parameters(
         warnings.append(
             "Derived where a property set left them out (type a value to replace it): "
             + "; ".join(dict.fromkeys(derived)))
+    if notes is not None:
+        # One line per soil an interface runs against, not per part: a contact along a
+        # wall dug in lifts is many parts against the same ground.
+        notes.extend(f"{who} ({', '.join(parts)}): {took}. Type a value on the section "
+                     "to replace one." for (who, took), parts in interface_notes.items())
     return json.dumps({"properties": properties}, indent=4), warnings
+
+
+def _interface_note(section: InterfaceSection, project: Project, soil: Material | None,
+                    variables: dict, derived: list[str]) -> str | None:
+    """What one interface part's property set took from its soil, in numbers.
+
+    `GEO_DRAINAGE_TYPE` and the dilatancy are left out: they are fixed, whatever the soil
+    is, and say nothing about it."""
+    taken = {entry.rpartition(": ")[2] for entry in derived}
+    system = project.unit_system
+    stiffness = units.label(units.STIFFNESS_PER_AREA, system)
+    stress = units.label(units.STRESS, system)
+    parts = []
+    if {"INTERFACE_NORMAL_STIFFNESS", "INTERFACE_SHEAR_STIFFNESS"} & taken and soil:
+        parts.append(
+            f"normal stiffness {variables['INTERFACE_NORMAL_STIFFNESS']:.4g} and shear "
+            f"stiffness {variables['INTERFACE_SHEAR_STIFFNESS']:.4g} {stiffness}, 10 G / t "
+            f"and G / t (E = {soil.number('YOUNG_MODULUS'):.4g} {stress}, "
+            f"nu = {soil.number('POISSON_RATIO') or 0.0:g}, "
+            f"t = {section.virtual_thickness:g} m)")
+    strength = [(name, label) for name, label in
+                (("GEO_COHESION", "cohesion"), ("GEO_FRICTION_ANGLE", "friction angle"))
+                if name in taken]
+    if strength and soil:
+        r_inter = section.r_inter if section.r_inter is not None else soil.r_inter
+        shown = []
+        for name, label in strength:
+            if name == "GEO_COHESION":
+                shown.append(f"cohesion {variables[name]:.4g} {stress} = {r_inter:g} x "
+                             f"{soil.number(name):.4g}")
+            else:
+                shown.append(f"friction angle {variables[name]:.3g} deg, tan reduced by "
+                             f"{r_inter:g} from {soil.number(name):g} deg")
+        parts.append(", ".join(shown))
+    return "; ".join(parts) or None
 
 
 def dimension_law(law: str, dim: int) -> str:

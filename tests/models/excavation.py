@@ -155,12 +155,13 @@ def excavation_project(staged: bool = True) -> Project:
                               structure="sheetpile", side="both")],
         loads=[LineLoad(id="surcharge", name="Load", x0=WALL_X, x1=DOMAIN_RIGHT_X,
                         y=DOMAIN_TOP_Y, components=(0.0, SURCHARGE))],
-        # One water load per lift: the exposed wall face from the water table down to
-        # that level, then that level's floor back to the symmetry plane.
+        # One water load per lift: that level's floor from the symmetry plane to the
+        # wall, then up the exposed wall face to the water table -- the soil that stays
+        # on the right of the line, where a normal load presses.
         normal_loads=[
             NormalLoad(id=f"water_{index}", name=f"WaterLoad_Stage{index}",
                        fluid_pressure_type="Hydrostatic", reference_coordinate=WATER_Y,
-                       points=[(WALL_X, WATER_Y), (WALL_X, level), (DOMAIN_LEFT_X, level)])
+                       points=[(DOMAIN_LEFT_X, level), (WALL_X, level), (WALL_X, WATER_Y)])
             for index, level in enumerate(LIFTS, start=1)
         ],
     )

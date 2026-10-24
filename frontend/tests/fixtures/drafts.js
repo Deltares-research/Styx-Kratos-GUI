@@ -1565,16 +1565,16 @@ window.DRAFTS_FIXTURE =
           "kind": "normal",
           "points": [
             [
-              6.0,
-              -1.0
-            ],
-            [
-              6.0,
-              -2.0
-            ],
-            [
               0.0,
               -2.0
+            ],
+            [
+              6.0,
+              -2.0
+            ],
+            [
+              6.0,
+              -1.0
             ]
           ],
           "fluid_pressure_type": "Hydrostatic",
@@ -1588,16 +1588,16 @@ window.DRAFTS_FIXTURE =
           "kind": "normal",
           "points": [
             [
-              6.0,
-              -1.0
-            ],
-            [
-              6.0,
-              -4.5
-            ],
-            [
               0.0,
               -4.5
+            ],
+            [
+              6.0,
+              -4.5
+            ],
+            [
+              6.0,
+              -1.0
             ]
           ],
           "fluid_pressure_type": "Hydrostatic",
@@ -1611,16 +1611,16 @@ window.DRAFTS_FIXTURE =
           "kind": "normal",
           "points": [
             [
-              6.0,
-              -1.0
-            ],
-            [
-              6.0,
-              -7.0
-            ],
-            [
               0.0,
               -7.0
+            ],
+            [
+              6.0,
+              -7.0
+            ],
+            [
+              6.0,
+              -1.0
             ]
           ],
           "fluid_pressure_type": "Hydrostatic",

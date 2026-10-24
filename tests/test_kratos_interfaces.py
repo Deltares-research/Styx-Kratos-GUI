@@ -26,6 +26,8 @@ KILO = 1000.0  # kN -> N: these tests write old-style projects, converted on loa
 from core.model.schemas import MeshRequest, Project
 from core.model.templates import seed_project
 from tests import mdpa
+from tests.pipeline.deck_invariants import check_deck
+from tests.models import drawn_ground
 from tests.test_kratos import BEAM_SECTION, deck_of
 
 SECTION = {"id": "steel_soil", "name": "Steel against sand", "material": "mat_sand",
@@ -96,7 +98,8 @@ def interface_material(export: dict) -> dict:
 def interface_parts(deck: mdpa.Deck) -> dict[str, mdpa.Part]:
     """The contact's sub-model parts, one per soil body it holds."""
     return {name: part for name, part in deck.parts.items()
-            if name.startswith("Wall_contact") and not name.endswith(("_Master", "_Slave"))}
+            if name.startswith("Wall_contact")
+            and not name.endswith(("_Master", "_Slave", "_face"))}
 
 
 def soil_nodes(deck: mdpa.Deck) -> set[int]:
@@ -641,3 +644,201 @@ def test_an_interface_drains_as_a_constant_field_whatever_the_soil_does(session)
              if e["model_part_name"].startswith("PorousDomain.Soil")]
     assert set(soils) == {"FULLY_COUPLED"}, "the soil follows its own drainage type"
     assert interface_material(export)["GEO_DRAINAGE_TYPE"] == "CONSTANT_PW_FIELD"
+
+
+# ── Drawn soil ──────────────────────────────────────────────────────────────
+
+@pytest.fixture(scope="module")
+def drawn():
+    """A sheet pile through a borehole layer and through two drawn fills on top of it,
+    one each side (`tests/models/drawn_ground.py`). Built before the module's gmsh
+    session: drawing the fills runs gmsh too."""
+    project = drawn_ground.project()
+    with solid_model.session():
+        return project, writer.export_project(project)
+
+
+def segments_of(deck: mdpa.Deck) -> list[tuple[int, ...]]:
+    return [tuple(nodes) for block in deck.elements if "Timoshenko" in block.name
+            for nodes in block.entries.values()]
+
+
+def test_a_contact_holds_drawn_soil_as_well_as_the_borehole_layer(drawn):
+    """Two contact elements on every pile segment, one per face, also where the pile
+    runs through the drawn fill. Grouped by the `soil_` key prefix, only the borehole
+    layer's stretch had any, and the fill above it was split from the wall and held by
+    nothing once the wall was installed."""
+    _, export = drawn
+    deck = deck_of(export)
+    contacts = interface_block(deck)
+    on_segment: dict[frozenset[int], int] = {}
+    for nodes in contacts.entries.values():
+        key = frozenset(nodes[:2])
+        on_segment[key] = on_segment.get(key, 0) + 1
+    segments = segments_of(deck)
+    assert len(segments) == 4
+    assert {frozenset(s[:2]): on_segment.get(frozenset(s[:2]), 0) for s in segments} == \
+        {frozenset(s[:2]): 2 for s in segments}
+
+
+def test_each_drawn_part_gets_its_own_contact_part(drawn):
+    _, export = drawn
+    assert set(interface_parts(deck_of(export))) == {
+        "Wall_contact_Ground", "Wall_contact_Fill_left", "Wall_contact_Fill_right"}
+
+
+def test_a_contact_against_a_drawn_part_takes_that_part_s_soil(drawn):
+    project, export = drawn
+    variables = {e["model_part_name"]: e["Material"]["Variables"]
+                 for e in entries_of(export)
+                 if e["model_part_name"].startswith("PorousDomain.Wall_contact")}
+    section = project.interface_sections[0]
+
+    def shear_of(material_id):
+        soil = project.material(material_id).variables
+        return soil["YOUNG_MODULUS"] / (2 * (1 + soil["POISSON_RATIO"])
+                                        * section.virtual_thickness)
+
+    for part, material in (("Ground", "m_ground"), ("Fill_left", "m_fill"),
+                           ("Fill_right", "m_fill")):
+        got = variables[f"PorousDomain.Wall_contact_{part}"]
+        assert got["INTERFACE_SHEAR_STIFFNESS"] == pytest.approx(shear_of(material)), part
+        cohesion = project.material(material).variables["GEO_COHESION"]
+        assert got["GEO_COHESION"] == pytest.approx(section.r_inter * cohesion), part
+
+
+def test_the_contact_along_a_dug_part_goes_with_it(drawn):
+    """The trench is the right-hand fill: from the phase that digs it, its contact is
+    out of the computation and the left-hand one is still in."""
+    _, export = drawn
+    doc = json.loads(export["project_parameters"])
+    domains = {name: set(stage["stage_settings"]["solver_settings"]
+                         ["problem_domain_sub_model_part_list"])
+               for name, stage in doc["stages"].items()}
+    install, dig = domains["2_Install_wall"], domains["3_Dig_trench"]
+    assert {"Wall_contact_Fill_left", "Wall_contact_Fill_right"} <= install
+    assert "Wall_contact_Fill_left" in dig and "Wall_contact_Fill_right" not in dig
+
+
+def test_a_contact_element_no_soil_body_takes_is_refused():
+    """The guard behind the bug above: a contact element is only written where there is
+    soil on that face, so one that no body takes is an export error, not a silent gap."""
+    interface = Project.model_validate(interfaced_project().model_dump()).interfaces[0]
+    held, lost = [1, 2, 3, 11, 12, 13], [2, 4, 5, 12, 14, 15]
+    coordinates = {n: (0.0, -float(n % 10), 0.0) for n in held + lost}
+    with pytest.raises(writer.ExportError, match=r"Wall contact.*y = -5 and -2"):
+        writer._check_every_stretch_is_held(interface, [held, lost],
+                                            [("soil_a", [held])], 3, coordinates)
+
+
+# ── Which face holds the masters ────────────────────────────────────────────
+
+def soil_side_of_ties(deck: mdpa.Deck, wall_x: float) -> dict[str, set[str]]:
+    """Tie part -> the sides of the wall ("-x", "+x") its nodes' soil elements are on."""
+    centroids: dict[int, list[float]] = {}
+    for block in deck.elements:
+        if not block.name.startswith("SmallStrainUPw"):
+            continue
+        for nodes in block.entries.values():
+            x = sum(deck.nodes[n][0] for n in nodes[:3]) / 3
+            for node in nodes:
+                centroids.setdefault(node, []).append(x)
+    return {name: {"-x" if x < wall_x else "+x"
+                   for node in deck.parts[name].nodes for x in centroids[node]}
+            for name in deck.parts if name.endswith(("_Master", "_Slave"))}
+
+
+def test_every_master_is_on_the_left_face_of_a_pile_drawn_up(drawn):
+    """Kratos' own master/slave test ties the left body to the right one; the masters
+    here follow it. Taking the lower node id put them on whichever face gmsh numbered
+    first, so they changed sides along the wall."""
+    _, export = drawn
+    sides = soil_side_of_ties(deck_of(export), drawn_ground.WALL_X)
+    assert sides == {"Wall_contact_Master": {"-x"}, "Wall_contact_Slave": {"+x"}}
+
+
+def test_every_master_is_on_the_left_face_of_a_pile_drawn_down(contacted):
+    """The fixture's pile runs from its head down to its toe, so its own left face is
+    the +x one; the masters still go on the left of the screen."""
+    sides = soil_side_of_ties(deck_of(contacted), 12.0)
+    assert sides == {"Wall_contact_Master": {"-x"}, "Wall_contact_Slave": {"+x"}}
+
+
+@pytest.mark.parametrize("path, face", [
+    ([(0, -8), (0, 3)], "left"),       # up: its left is -x
+    ([(0, 3), (0, -8)], "right"),      # down: its right is -x
+    ([(0, 0), (10, 1)], "right"),      # flat, towards +x: its right is below
+    ([(10, 1), (0, 0)], "left"),       # flat, towards -x: its left is below
+])
+def test_the_master_face_is_the_left_of_the_screen_or_the_one_below(path, face):
+    assert writer._master_face(path) == face
+
+
+# ── A curve per face ────────────────────────────────────────────────────────
+
+def test_without_a_pit_each_face_of_the_wall_gets_a_curve_of_its_own(drawn):
+    """A pile through a dike holds ground on both faces, and the retained-side group of
+    a pit model then held both faces' copies of the borehole layer and nothing of the
+    drawn fill: one curve zig-zagging between two faces, stopping where the fill
+    began. Each face is a group of its own now, over every body, read by a json output
+    of its own -- `results profile RUN interface_left tn`."""
+    _, export = drawn
+    deck = deck_of(export)
+    centroids: dict[int, list[float]] = {}
+    for block in deck.elements:
+        if block.name.startswith("SmallStrainUPw"):
+            for nodes in block.entries.values():
+                x = sum(deck.nodes[n][0] for n in nodes[:3]) / 3
+                for node in nodes:
+                    centroids.setdefault(node, []).append(x)
+    left = set(deck.parts["Wall_contact_Left_face"].nodes)
+    right = set(deck.parts["Wall_contact_Right_face"].nodes)
+    toe = left & right
+    assert len(toe) == 1, "the toe's one copy is on both faces"
+    assert all(x < drawn_ground.WALL_X for n in left - toe for x in centroids[n])
+    assert all(x > drawn_ground.WALL_X for n in right - toe for x in centroids[n])
+    for nodes in (left, right):
+        assert max(deck.nodes[n][1] for n in nodes) == 0.0, "up through the drawn fill"
+    assert writer.RIGHT_SIDE_PART not in deck.parts
+
+    doc = json.loads(export["project_parameters"])
+    written = [p["Parameters"]["output_file_name"]
+               for p in doc["stages"]["3_Dig_trench"]["stage_settings"]["processes"]
+               ["json_output"]]
+    assert written == ["3_Dig_trench__output_wall.json",
+                       "3_Dig_trench__output_interface_left.json",
+                       "3_Dig_trench__output_interface_right.json"]
+
+
+@pytest.fixture(scope="module")
+def standing():
+    """The drawn-ground pile standing 1 m out of the fill (`standing_pile_project`)."""
+    project = drawn_ground.standing_pile_project()
+    with solid_model.session():
+        return project, writer.export_project(project)
+
+
+def test_a_pile_keeps_the_piece_that_stands_out_of_the_ground(standing):
+    """A dike's sheet pile stands above the crest, and that piece was cut off at the
+    ground: the deck's pile ended there, and a load at its head had no pile to act on.
+    The piece is kept, and its nodes are the pile's alone."""
+    _, export = standing
+    deck = deck_of(export)
+    pile = beam_nodes(deck)
+    head = [n for n in pile if deck.nodes[n][1] > 0.0]
+    assert max(deck.nodes[n][1] for n in pile) == pytest.approx(drawn_ground.PILE_HEAD_Y)
+    assert head and not set(head) & soil_nodes(deck)
+    assert check_deck(export) == []
+
+
+def test_the_contact_stops_where_the_ground_does(standing, drawn):
+    """No soil lies against the piece above the ground, so no contact element is
+    written there: the contact is the one of the same pile ending at the ground."""
+    def contacts(export: dict) -> list[list[int]]:
+        deck = deck_of(export)
+        return [[deck.nodes[n][1] for n in nodes] for block in deck.elements
+                if "Interface" in block.name for nodes in block.entries.values()]
+
+    standing_out, flush = contacts(standing[1]), contacts(drawn[1])
+    assert standing_out and max(y for ys in standing_out for y in ys) == 0.0
+    assert len(standing_out) == len(flush)

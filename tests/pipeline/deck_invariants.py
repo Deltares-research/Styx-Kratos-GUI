@@ -286,6 +286,19 @@ def _condition_order(deck) -> list[str]:
     for block in deck.elements:
         if "Beam" in block.name:
             allowed |= {tuple(row) for row in block.entries.values()}
+    # A line interface element has two edges, its two sides: the first half of its nodes
+    # as written, the second half reversed (Kratos' interface_geometry.hpp,
+    # GenerateTwoSides). A load drawn down a wall that was drawn up finds the contact
+    # on the face it was drawn along.
+    if dimension == 2:
+        for block in deck.elements:
+            if "LineInterface" not in block.name:
+                continue
+            for row in block.entries.values():
+                half = len(row) // 2
+                first, second = tuple(row[:half]), row[half:]
+                allowed.add(first)
+                allowed.add((second[1], second[0], *second[2:]))
     out = []
     for block in deck.conditions:
         rows = [r for r in block.entries.values() if len(r) > 1]

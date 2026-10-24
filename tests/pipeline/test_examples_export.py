@@ -50,6 +50,10 @@ ALLOWED_SAVED_WARNINGS = [
     # ... and a coupled soil in it is said to need one.
     r"^no water pressure condition is set, so nothing fixes the water pressure, and .* "
     r"couples it",
+    # A water load saved when the deck pressed to the left of the drawn line, as the
+    # staged excavation's loads were drawn then; it presses to the right now, as its
+    # arrows always showed, and the export says the line is the wrong way round.
+    r"^normal load 'WaterLoad_Stage\d' pulls on the soil instead of pressing on it",
 ]
 
 

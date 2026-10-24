@@ -86,6 +86,10 @@ class Split:
     same nodes -- a boundary condition sitting on the soil, a node group -- follows the
     element it belongs to through this."""
 
+    faces: dict[int, dict[str, str]] = field(default_factory=dict)
+    """New node id -> interface key -> the face of that interface the copy's soil is on:
+    "left", "right", or "both" at the toe. What puts every master of a tie on one face."""
+
 
 def wanted_sides(sides: str) -> tuple[str, ...]:
     return ("left", "right") if sides == "both" else (sides,)
@@ -299,6 +303,7 @@ def _duplicate(specs: list[Spec], components: dict[int, list[dict]],
             tag = next_tag
             next_tag += 1
             result.duplicates[tag] = node
+            result.faces[tag] = dict(group["specs"])
             for index in group["elements"]:
                 rows[index] = [tag if n == node else n for n in rows[index]]
                 result.renamed[index][node] = tag

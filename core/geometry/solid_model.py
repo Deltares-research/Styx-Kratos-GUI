@@ -146,7 +146,8 @@ def build_geometry(project: Project) -> BuildResult:
         gmsh.clear()
         gmsh.model.add("model")
 
-        owners, overlays = _build_solids(project)
+        notes: list[str] = []
+        owners, overlays = _build_solids(project, notes)
         # One excavation level is an unstaged pit: a void, cut away before anything else
         # touches it. Several means it is dug in lifts, each removed in its own phase,
         # so the soil has to stay in the model to be staged (`_stage_bodies`).
@@ -154,7 +155,6 @@ def build_geometry(project: Project) -> BuildResult:
                   else _cut_the_pit(project, owners))
 
         dim = 3
-        notes: list[str] = []
         if project.dimension == 2:
             # Section before fragmenting: the faces are what has to be made conformal,
             # and fragmenting the solids first would only be work thrown away.
@@ -244,12 +244,12 @@ def _build_layered_soil(project: Project) -> BuildResult:
         if len(project.excavation.levels) > 1:
             owners = _stage_bodies(project, owners)
 
-        custom_volumes, overlays = _import_custom_parts(project.custom_parts)
+        notes: list[str] = []
+        custom_volumes, overlays = _import_custom_parts(project.custom_parts, notes)
         for tag, key in custom_volumes.items():
             owners[tag] = {key}
 
         dim = 3
-        notes: list[str] = []
         if project.dimension == 2:
             dim = 2
             owners = _section(owners, project.cut_at(), notes)
@@ -295,7 +295,8 @@ def _build_layered_soil(project: Project) -> BuildResult:
 
 # ── Primitives ──────────────────────────────────────────────────────────────
 
-def _build_solids(project: Project) -> tuple[dict[int, set[str]], dict[str, list[tuple[int, int]]]]:
+def _build_solids(project: Project, log: list[str] | None = None
+                  ) -> tuple[dict[int, set[str]], dict[str, list[tuple[int, int]]]]:
     """Every solid that takes part in the booleans, plus any display-only overlays.
 
     Returns (tag -> owning part keys, part key -> (dim, tag) pairs for custom parts with
@@ -358,7 +359,7 @@ def _build_solids(project: Project) -> tuple[dict[int, set[str]], dict[str, list
             0, p.wells.length, 0, p.wells.radius), "wells")
 
     # Import any custom parts
-    custom_volumes, overlays = _import_custom_parts(p.custom_parts)
+    custom_volumes, overlays = _import_custom_parts(p.custom_parts, log)
     for tag, key in custom_volumes.items():
         own(tag, key)
 
@@ -366,7 +367,7 @@ def _build_solids(project: Project) -> tuple[dict[int, set[str]], dict[str, list
 
 
 def _import_custom_parts(
-    custom_parts: list,
+    custom_parts: list, log: list[str] | None = None,
 ) -> tuple[dict[int, str], dict[str, list[tuple[int, int]]]]:
     """Import each custom part's brep exactly once, split by whether it has a volume.
 
@@ -379,6 +380,10 @@ def _import_custom_parts(
     overlays: dict[str, list[tuple[int, int]]] = {}
     for custom in custom_parts:
         if not (custom.source_file and os.path.exists(custom.source_file)):
+            if log is not None:
+                log.append(f"Info    : {custom.label} ({custom.key}) is not in the model: "
+                           f"its solid {custom.source_file} is not there, and nothing says "
+                           "how to build it again; import it again")
             continue
         for dim, tag in gmsh.model.occ.importShapes(custom.source_file):
             if dim == 3:
@@ -708,12 +713,14 @@ def _embed_beams(project: Project, owners: dict[int, set[str]], dim: int,
     result kept: a load only needs the boundary split, while a beam *is* the tool
     pieces. Because the fragment makes the soil and the curve share their edges, the
     mesher puts one node where both meet -- which is what a Kratos sheet-pile deck
-    shows: every sheet-pile node is also a soil node.
+    shows: every sheet-pile node in the ground is also a soil node.
 
     A pile that stops inside the soil does not separate the surface into two regions,
     so nothing is cut away; the curve simply becomes an internal edge of the face. The
-    tools are clipped to the model first, so a pile drawn past the domain edge or over
-    the excavated void contributes only the part that has soil around it.
+    tools are clipped to the model afterwards, so a free interface, a load or a condition
+    line drawn past the soil contributes only the part that has soil around it. A pile
+    also keeps what stands out of the soil inside the model's box, above the ground or
+    over an excavated void, as long as some of it is in the soil.
 
     A boundary condition at a point is a tool too, a vertex: the fragment makes it a
     vertex of the face it lies in, so the mesh has a node exactly there.
@@ -824,13 +831,22 @@ def _embed_beams(project: Project, owners: dict[int, set[str]], dim: int,
 
     # The tool half of the map: a curve the fragment split becomes several curves, and
     # every one of them still belongs to the beam it was drawn for.
-    beam_curves: dict[str, list[int]] = {}
+    pieces_of: dict[str, list[int]] = {}
     for key, pieces in zip(owner_of_tool, mapping[len(inputs):]):
-        beam_curves.setdefault(key, []).extend(
-            tag for piece_dim, tag in pieces
-            if piece_dim == 1 and in_the_model(tag)
-        )
-    beam_curves = {key: sorted(set(tags)) for key, tags in beam_curves.items() if tags}
+        pieces_of.setdefault(key, []).extend(
+            tag for piece_dim, tag in pieces if piece_dim == 1)
+    # A pile keeps the pieces that stand out of the soil, above the ground or over an
+    # excavated void: a load at its head is carried down it into the ground. The project
+    # holds a pile to the model's box (`Project.extent`), and its pieces join end to end,
+    # so one piece in the soil keeps them all. Their nodes are the pile's own.
+    piles = {beam.id for beam in active}
+    beam_curves: dict[str, list[int]] = {}
+    for key, tags in pieces_of.items():
+        inside = [tag for tag in tags if in_the_model(tag)]
+        if key in piles and inside:
+            inside = tags
+        if inside:
+            beam_curves[key] = sorted(set(inside))
     if not beam_curves and log is not None:
         for beam in active:
             log.append(f"Info    : {beam.id} lies outside the soil in this section "

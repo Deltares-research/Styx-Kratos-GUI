@@ -305,13 +305,20 @@ def test_a_tendon_may_be_massless(exported):
 
 # ── The derived-variables notice ─────────────────────────────────────────
 
-def test_the_notice_names_what_was_derived_and_nothing_else():
-    """A property set that gives everything gets no notice; one that leaves a value out
-    is named with it, so the user can see what the deck decided."""
+def test_what_an_interface_takes_from_its_soil_is_a_note_with_the_numbers():
+    """The model working as asked, so not a warning: one note per soil the interface runs
+    against, naming its parts, the soil and the numbers the deck took from it. A
+    property set that gives everything -- the test model's soils -- gets no notice."""
     project = excavation.excavation_project(staged=False)
     with session():
         exported = writer.export_project(project, MeshRequest(element_size=8.0, order=2))
-    notices = [w for w in exported["warnings"] if w.startswith("Derived where")]
-    assert len(notices) == 1
-    assert "material" not in notices[0], "the test model's soils give every variable"
-    assert "interface section 'Wall contact': INTERFACE_SHEAR_STIFFNESS" in notices[0]
+    assert not [w for w in exported["warnings"] if w.startswith("Derived where")]
+    notes = exported["notes"]
+    assert [note.partition(" (")[0] for note in notes] == [
+        "interface 'Wall contact' against 'Soft clay'",
+        "interface 'Wall contact' against 'Dense sand'"]
+    clay = project.material("m_upper").variables
+    shear = clay["YOUNG_MODULUS"] / (2 * (1 + clay["POISSON_RATIO"])
+                                     * project.interface_sections[0].virtual_thickness)
+    assert f"shear stiffness {shear:.4g} N/m³" in notes[0]
+    assert "GEO_DRAINAGE_TYPE" not in " ".join(notes)

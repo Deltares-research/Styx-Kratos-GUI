@@ -15,7 +15,7 @@ import pytest
 
 from core.kratos import writer, materials
 from core.model import phases
-from tests.models import excavation
+from tests.models import drawn_ground, excavation
 from core.geometry.solid_model import session
 from core.model.schemas import MeshRequest
 
@@ -127,6 +127,18 @@ def test_the_k0_procedure_names_the_soil_and_only_the_soil(doc):
     assert len(parts) == 8
     assert not [name for name in parts if "Interface" in name]
     assert "SheetPileWall" not in parts
+
+
+def test_the_k0_procedure_also_sets_up_drawn_soil():
+    """A drawn part with a material is ground like a borehole layer is. Named by the
+    `soil_` key prefix, the K0 stage set up the layer and left the fill on top of it with
+    whatever the elastic gravity step gave it."""
+    project = drawn_ground.project()
+    with session():
+        export = writer.export_project(project)
+    parts = carrying(json.loads(export["project_parameters"]), "1_Initial",
+                     "auxiliary_process_list", "apply_k0_procedure_process")
+    assert parts == ["Ground", "Fill_left", "Fill_right"]
 
 
 # -- C3: interfaces ----------------------------------------------------------
