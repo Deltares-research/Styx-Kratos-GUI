@@ -22,7 +22,7 @@
 - _layered_pit
 - load
 - MeshRequest
-- PhasesUpdate
+- StagesUpdate
 - schemas.py
 - writer.py
 - catalog.py
@@ -57,7 +57,7 @@
 - test_kratos_3d.py
 - test_kratos_normal_loads.py
 - test_meshing_2d.py
-- commands/phases.py
+- commands/stages.py
 - test_results_commands.py
 - test_kratos_units.py
 - test_script_writer.py
@@ -90,7 +90,7 @@
 - Answer
 - test_gui_commands.py
 - test_calculate.py
-- phases.js
+- stages.js
 - test_tessellate.py
 - save
 - repository_files
@@ -99,7 +99,7 @@
 - routes/results.py
 - test_kratos_runner.py
 - test_github_config.py
-- test_phases.py
+- test_stages.py
 - backend/main.py
 - fields.py
 - with_box
@@ -132,7 +132,7 @@
 - _index
 - python
 - cad_import.py
-- model/phases.py
+- model/stages.py
 - script_writer.py
 - test_mdpa_import.py
 - history.js
@@ -148,7 +148,7 @@
 - test_meshing.py
 - ui.js
 - part-colors.js
-- mountLivePhases
+- mountLiveStages
 - buildGroups
 - bindPointer
 - Orchestrator
@@ -163,7 +163,7 @@
 - test-model.js
 - test_parity.py
 - processes
-- test_phase_parity.py
+- test_stage_parity.py
 - _with_interfaces
 - deck_project
 - project_parameters
@@ -242,14 +242,14 @@
 - material-library.js
 - frontend/js/orbit.js
 - harness.js
-- test-patches-phases.js
+- test-patches-stages.js
 - test-water.js
 - platform_venv_name
 - FakeOrchestrator
 - raised
 - geometry.py
 - syntax_check.py
-- _phased_stages
+- _staged_stages
 - units.py
 - command.js
 - build
@@ -291,7 +291,7 @@
 - test_the_server_s_own_packages_stay_imported_when_a_script_sits_above_them
 - kratos-cli.sh
 - run.sh script
-- test_the_parts_alive_in_each_stage_are_the_phase_model_s
+- test_the_parts_alive_in_each_stage_are_the_stage_model_s
 - kratos-shell.sh
 - _element_labels
 - test_a_relative_path_is_read_from_the_repository_root
@@ -350,7 +350,7 @@ Nodes (42): build_geometry(), session(), test_post_geometry_import_adds_custom_p
 
 ### Community 3 - "_layered_pit"
 Cohesion: 0.07
-Nodes (24): _layered_pit(), _phase(), _phased(), _simple_with_a_load(), test_a_lift_crossing_a_layer_boundary_yields_one_body_per_layer(), test_a_load_cannot_take_a_staged_body_s_name(), test_a_load_the_viewport_never_draws_is_still_stageable(), test_a_phase_cannot_both_activate_and_deactivate_the_same_part() (+16 more)
+Nodes (24): _layered_pit(), _stage(), _staged(), _simple_with_a_load(), test_a_lift_crossing_a_layer_boundary_yields_one_body_per_layer(), test_a_load_cannot_take_a_staged_body_s_name(), test_a_load_the_viewport_never_draws_is_still_stageable(), test_a_stage_cannot_both_activate_and_deactivate_the_same_part() (+16 more)
 
 ### Community 4 - "load"
 Cohesion: 0.03
@@ -360,9 +360,9 @@ Nodes (61): section_prism(), load(), test_a_field_with_a_command_of_its_own_poin
 Cohesion: 0.04
 Nodes (65): mesh_labels_job(), node_parts_job(), export_project(), MeshRequest, test_the_kn_deck_is_the_si_deck_in_kilonewtons(), empty(), solids_in_this_test_s_folder(), solid() (+57 more)
 
-### Community 6 - "PhasesUpdate"
+### Community 6 - "StagesUpdate"
 Cohesion: 0.09
-Nodes (21): PhasesUpdate, DeckReadOnly, default_phases(), _phases_of_a_deck_are_read_only(), remove_phase(), replace_phases(), staged_excavation_phases(), switch_parts() (+13 more)
+Nodes (21): StagesUpdate, DeckReadOnly, default_stages(), _stages_of_a_deck_are_read_only(), remove_stage(), replace_stages(), staged_excavation_stages(), switch_parts() (+13 more)
 
 ### Community 7 - "schemas.py"
 Cohesion: 0.07
@@ -430,7 +430,7 @@ Nodes (36): anchor(), anchor_head(), _default_head(), DraftError, _finite(), _fi
 
 ### Community 23 - "test_session.py"
 Cohesion: 0.05
-Nodes (47): add_borehole(), add_layer(), add_material(), add_phase(), add_section(), add_structure(), _collection(), EditRefused (+39 more)
+Nodes (47): add_borehole(), add_layer(), add_material(), add_stage(), add_section(), add_structure(), _collection(), EditRefused (+39 more)
 
 ### Community 24 - "get"
 Cohesion: 0.08
@@ -474,7 +474,7 @@ Nodes (32): read_mesh(), read_results(), dedent(), reference_stage(), test_a_blo
 
 ### Community 34 - "test_pipeline_commands.py"
 Cohesion: 0.09
-Nodes (7): test_a_model_with_nothing_to_mesh_is_not_exported(), test_export_names_the_mesh_as_asked(), test_export_writes_the_kratos_deck(), test_mesh_order_is_kept_in_the_project(), test_mesh_settings_given_on_the_command_line_are_kept_in_the_project(), test_phases_defaults_gives_the_initial_stage_and_the_null_step(), test_the_deck_is_the_one_the_gui_exports()
+Nodes (7): test_a_model_with_nothing_to_mesh_is_not_exported(), test_export_names_the_mesh_as_asked(), test_export_writes_the_kratos_deck(), test_mesh_order_is_kept_in_the_project(), test_mesh_settings_given_on_the_command_line_are_kept_in_the_project(), test_stages_defaults_gives_the_initial_stage_and_the_null_step(), test_the_deck_is_the_one_the_gui_exports()
 
 ### Community 35 - "structures.py"
 Cohesion: 0.09
@@ -490,7 +490,7 @@ Nodes (31): _add_edges(), _colors_by_volume(), DisplayModel, _first_facet(), _gr
 
 ### Community 38 - "test_kratos_3d.py"
 Cohesion: 0.07
-Nodes (40): beams_of(), deck_of(), loaded(), _phased(), sectioned(), session(), shells_of(), _stage_settings() (+32 more)
+Nodes (40): beams_of(), deck_of(), loaded(), _staged(), sectioned(), session(), shells_of(), _stage_settings() (+32 more)
 
 ### Community 39 - "test_kratos_normal_loads.py"
 Cohesion: 0.07
@@ -500,9 +500,9 @@ Nodes (31): Block, _connectivity(), Deck, _nodes(), parse(), Part, _part_data(),
 Cohesion: 0.07
 Nodes (29): mesh_project(), a_box(), anchored_section(), beam_mesh(), edge_lengths_by_band(), excavation_like(), mesh_nodes_at(), piled_section() (+21 more)
 
-### Community 41 - "commands/phases.py"
+### Community 41 - "commands/stages.py"
 Cohesion: 0.21
-Nodes (20): add_phase(), _added(), _calculation(), copy_phase(), default_phases(), _edited(), list_phases(), _listed() (+12 more)
+Nodes (20): add_stage(), _added(), _calculation(), copy_stage(), default_stages(), _edited(), list_stages(), _listed() (+12 more)
 
 ### Community 42 - "test_results_commands.py"
 Cohesion: 0.05
@@ -614,7 +614,7 @@ Nodes (20): bounding_box(), test_every_staged_body_occupies_the_band_and_side_it
 
 ### Community 69 - "test_results_round_trip.py"
 Cohesion: 0.06
-Nodes (28): test_first_results_on_screen_and_a_phase_switch(), _du(), fake_run(), _member_outputs(), _pw(), _stress(), _u(), active_elements() (+20 more)
+Nodes (28): test_first_results_on_screen_and_a_stage_switch(), _du(), fake_run(), _member_outputs(), _pw(), _stress(), _u(), active_elements() (+20 more)
 
 ### Community 70 - "test_live_constructs.py"
 Cohesion: 0.05
@@ -632,7 +632,7 @@ Nodes (18): block(), documented(), gui_commands(), module_defining(), not_mine_w
 Cohesion: 0.10
 Nodes (19): run(), stand_in(), test_a_deck_that_cannot_be_written_frees_the_button(), test_a_failed_run_comes_back_with_what_kratos_said(), test_a_kratos_the_interpreter_cannot_load_is_explained_too(), test_a_missing_kratos_is_explained_rather_than_left_as_a_traceback(), test_a_run_past_the_timeout_is_given_up_on_and_says_where(), test_a_run_that_works_reports_no_failed_stage() (+11 more)
 
-### Community 74 - "phases.js"
+### Community 74 - "stages.js"
 Cohesion: 0.17
 Nodes (29): activeParts(), added(), blank(), branchProblem(), chainTo(), copied(), copy(), days() (+21 more)
 
@@ -642,7 +642,7 @@ Nodes (18): project(), project_with_line_and_surface(), sections_of(), signed_vo
 
 ### Community 76 - "save"
 Cohesion: 0.10
-Nodes (14): save(), test_a_deck_is_not_exported(), test_a_deck_is_not_meshed(), test_a_model_with_nothing_to_mesh_is_not_meshed(), test_calculate_runs_a_deck_project_as_the_files_it_is(), test_an_edit_of_a_deck_s_phases_is_refused(), test_check_refuses_a_model_with_nothing_to_mesh(), pit() (+6 more)
+Nodes (14): save(), test_a_deck_is_not_exported(), test_a_deck_is_not_meshed(), test_a_model_with_nothing_to_mesh_is_not_meshed(), test_calculate_runs_a_deck_project_as_the_files_it_is(), test_an_edit_of_a_deck_s_stages_is_refused(), test_check_refuses_a_model_with_nothing_to_mesh(), pit() (+6 more)
 
 ### Community 77 - "repository_files"
 Cohesion: 0.10
@@ -668,9 +668,9 @@ Nodes (17): deck(), markers(), run_runner(), stub_on_path(), test_a_real_export_
 Cohesion: 0.13
 Nodes (18): codeql(), commands(), launcher(), lint(), load(), pinned_ruff(), test_codeql_covers_both_languages_of_the_app(), test_codeql_leaves_the_vendored_library_alone() (+10 more)
 
-### Community 83 - "test_phases.py"
+### Community 83 - "test_stages.py"
 Cohesion: 0.07
-Nodes (40): active_parts(), default_phases(), linearise(), _ordinal(), staged_excavation_phases(), transitions(), build(), _model() (+32 more)
+Nodes (40): active_parts(), default_stages(), linearise(), _ordinal(), staged_excavation_stages(), transitions(), build(), _model() (+32 more)
 
 ### Community 84 - "backend/main.py"
 Cohesion: 0.11
@@ -686,7 +686,7 @@ Nodes (22): assign_part_material(), check_recipe(), _shape(), UnknownPart, with_
 
 ### Community 87 - "test_kratos_stages.py"
 Cohesion: 0.11
-Nodes (15): operation(), preprocess(), solver(), stage_names(), test_a_phased_project_exports_one_stage_per_phase(), test_a_project_with_no_phases_exports_the_two_stage_deck_it_always_did(), test_a_stage_that_changes_nothing_writes_no_operations(), test_an_unphased_deck_still_starts_at_zero() (+7 more)
+Nodes (15): operation(), preprocess(), solver(), stage_names(), test_a_staged_project_exports_one_stage_per_stage(), test_a_project_with_no_stages_exports_the_two_stage_deck_it_always_did(), test_a_stage_that_changes_nothing_writes_no_operations(), test_an_unstaged_deck_still_starts_at_zero() (+7 more)
 
 ### Community 88 - "json"
 Cohesion: 0.04
@@ -706,7 +706,7 @@ Nodes (24): available(), collection(), copy(), defaultSection(), draft(), edit()
 
 ### Community 92 - "test_stage_commands.py"
 Cohesion: 0.10
-Nodes (11): deck(), _phase(), test_activate_and_deactivate_switch_parts_from_a_phase_on(), test_add_before_inserts_a_phase_into_the_chain(), test_add_puts_a_phase_at_the_end_with_its_settings_and_parts(), test_copy_repeats_a_phase_s_solver_settings(), test_remove_heals_the_chain(), test_set_changes_a_phase_s_fields() (+3 more)
+Nodes (11): deck(), _stage(), test_activate_and_deactivate_switch_parts_from_a_stage_on(), test_add_before_inserts_a_stage_into_the_chain(), test_add_puts_a_stage_at_the_end_with_its_settings_and_parts(), test_copy_repeats_a_stage_s_solver_settings(), test_remove_heals_the_chain(), test_set_changes_a_stage_s_fields() (+3 more)
 
 ### Community 93 - "test_kratos_solver.py"
 Cohesion: 0.11
@@ -790,7 +790,7 @@ Nodes (18): clear(), css(), deformFactor(), describeAt(), displacementOf(), draw
 
 ### Community 113 - "_index"
 Cohesion: 0.08
-Nodes (17): find_phase(), _index(), remove_borehole(), remove_layer(), remove_material(), split_layer(), update_borehole(), update_material() (+9 more)
+Nodes (17): find_stage(), _index(), remove_borehole(), remove_layer(), remove_material(), split_layer(), update_borehole(), update_material() (+9 more)
 
 ### Community 114 - "python"
 Cohesion: 0.09
@@ -800,9 +800,9 @@ Nodes (19): The model as a script, Environment variables, Option A: Install from
 Cohesion: 0.14
 Nodes (10): _bodies(), _checked(), ImportRefused, _merge_cad(), _Points, _read_obj(), _read_stl(), _solid_from_triangles() (+2 more)
 
-### Community 116 - "model/phases.py"
+### Community 116 - "model/stages.py"
 Cohesion: 0.10
-Nodes (20): added(), _chain_to(), copied(), _copies(), _fresh_id(), inserted(), _last(), PhaseError (+12 more)
+Nodes (20): added(), _chain_to(), copied(), _copies(), _fresh_id(), inserted(), _last(), StageError (+12 more)
 
 ### Community 117 - "script_writer.py"
 Cohesion: 0.20
@@ -834,7 +834,7 @@ Nodes (9): commands(), job(), test_a_quickjs_that_does_not_build_does_not_fail_t
 
 ### Community 124 - "test_kratos_stage_processes.py"
 Cohesion: 0.13
-Nodes (9): stages_with(), test_neighbours_are_found_in_the_stage_the_interfaces_arrive(), test_nothing_is_extrapolated_before_the_wall_exists(), test_only_the_soil_carries_the_k0_variables(), test_stresses_carry_over_from_the_stage_after_the_wall_goes_in(), test_the_initial_file_is_the_main_one_plus_the_two_k0_variables(), test_the_initial_stage_reads_a_materials_file_of_its_own(), test_the_k0_procedure_runs_in_the_k0_phase_only() (+1 more)
+Nodes (9): stages_with(), test_neighbours_are_found_in_the_stage_the_interfaces_arrive(), test_nothing_is_extrapolated_before_the_wall_exists(), test_only_the_soil_carries_the_k0_variables(), test_stresses_carry_over_from_the_stage_after_the_wall_goes_in(), test_the_initial_file_is_the_main_one_plus_the_two_k0_variables(), test_the_initial_stage_reads_a_materials_file_of_its_own(), test_the_k0_procedure_runs_in_the_k0_stage_only() (+1 more)
 
 ### Community 125 - "test_load_translation.py"
 Cohesion: 0.14
@@ -864,9 +864,9 @@ Nodes (11): attachTip(), collapsibleDock(), dockSections(), el(), hideTip(), men
 Cohesion: 0.25
 Nodes (15): baseOf(), candidates(), command(), create(), isOn(), stateOf(), drawn(), keysUnder() (+7 more)
 
-### Community 132 - "mountLivePhases"
+### Community 132 - "mountLiveStages"
 Cohesion: 0.23
-Nodes (18): addPhaseCheck(), addPhaseChecks(), emptyPhaseState(), mountLivePhases(), paintPhaseChecks(), phaseById(), phaseLog(), phasePropRow() (+10 more)
+Nodes (18): addStageCheck(), addStageChecks(), emptyStageState(), mountLiveStages(), paintStageChecks(), stageById(), stageLog(), stagePropRow() (+10 more)
 
 ### Community 133 - "buildGroups"
 Cohesion: 0.14
@@ -874,7 +874,7 @@ Nodes (15): addLoadGlyphs(), addWaterLine(), buildGroups(), edgeMaterial(), load
 
 ### Community 134 - "bindPointer"
 Cohesion: 0.15
-Nodes (18): applyImportedVisibility(), applyPhaseVisibility(), bindPointer(), boundsOf(), hoverImportedNode(), keysFor(), phaseHidden(), pickables() (+10 more)
+Nodes (18): applyImportedVisibility(), applyStageVisibility(), bindPointer(), boundsOf(), hoverImportedNode(), keysFor(), stageHidden(), pickables() (+10 more)
 
 ### Community 135 - "Orchestrator"
 Cohesion: 0.20
@@ -924,9 +924,9 @@ Nodes (9): boreholes(), _fields(), layers(), materials(), _object_literals(), te
 Cohesion: 0.19
 Nodes (11): doc(), named(), processes(), test_a_process_is_written_only_while_the_part_it_names_is_active(), holds(), test_each_stage_writes_its_own_json_output_files(), test_only_the_retained_side_interfaces_are_extrapolated(), test_results_are_extrapolated_from_the_wall_and_the_retained_interfaces() (+3 more)
 
-### Community 147 - "test_phase_parity.py"
+### Community 147 - "test_stage_parity.py"
 Cohesion: 0.19
-Nodes (6): stored(), test_every_phase_has_an_answer_and_the_order_is_the_chain(), test_the_active_set_is_always_a_subset_of_what_can_be_staged(), test_the_fixture_exercises_the_cases_a_chain_walk_gets_wrong(), test_the_fixture_is_a_parseable_javascript_assignment(), test_the_fixture_on_disk_is_what_the_server_computes()
+Nodes (6): stored(), test_every_stage_has_an_answer_and_the_order_is_the_chain(), test_the_active_set_is_always_a_subset_of_what_can_be_staged(), test_the_fixture_exercises_the_cases_a_chain_walk_gets_wrong(), test_the_fixture_is_a_parseable_javascript_assignment(), test_the_fixture_on_disk_is_what_the_server_computes()
 
 ### Community 148 - "_with_interfaces"
 Cohesion: 0.15
@@ -934,7 +934,7 @@ Nodes (14): _contact(), _interface(), test_a_free_interface_must_detach_one_side
 
 ### Community 149 - "deck_project"
 Cohesion: 0.15
-Nodes (12): deck_project(), phases(), stage_parts(), stageable_parts(), The GUI's command box, in the terminal, Ways in, project(), staged() (+4 more)
+Nodes (12): deck_project(), stages(), stage_parts(), stageable_parts(), The GUI's command box, in the terminal, Ways in, project(), staged() (+4 more)
 
 ### Community 150 - "project_parameters"
 Cohesion: 0.13
@@ -990,7 +990,7 @@ Nodes (8): with_(), choose(), drop(), files(), ok(), rig(), ctx, wrap()
 
 ### Community 163 - "test_custom_part_routes.py"
 Cohesion: 0.25
-Nodes (11): _box(), client(), _layers_patch_still_works(), _phase_naming(), test_a_part_freed_from_its_phases_can_then_be_deleted(), test_a_recipe_that_cannot_be_built_is_refused_with_its_reason(), test_clearing_custom_parts_a_phase_names_is_refused_naming_the_phase(), test_clearing_custom_parts_drops_their_mesh_sizes_only() (+3 more)
+Nodes (11): _box(), client(), _layers_patch_still_works(), _stage_naming(), test_a_part_freed_from_its_stages_can_then_be_deleted(), test_a_recipe_that_cannot_be_built_is_refused_with_its_reason(), test_clearing_custom_parts_a_stage_names_is_refused_naming_the_stage(), test_clearing_custom_parts_drops_their_mesh_sizes_only() (+3 more)
 
 ### Community 164 - "test_units_routes.py"
 Cohesion: 0.30
@@ -1220,7 +1220,7 @@ Nodes (5): down(), fire(), move(), up(), wheel()
 Cohesion: 0.38
 Nodes (4): codeOf(), isolate(), restoreLeaks(), same()
 
-### Community 226 - "test-patches-phases.js"
+### Community 226 - "test-patches-stages.js"
 Cohesion: 0.38
 Nodes (3): done(), rig(), ctx
 
@@ -1240,9 +1240,9 @@ Nodes (5): raised(), test_a_line_load_buried_in_the_embankment_still_gets_no_cou
 Cohesion: 0.31
 Nodes (4): brackets(), main(), parsed(), scan()
 
-### Community 234 - "_phased_stages"
+### Community 234 - "_staged_stages"
 Cohesion: 0.32
-Nodes (4): _Deck, _deck_active(), _phased_stages(), _stages()
+Nodes (4): _Deck, _deck_active(), _staged_stages(), _stages()
 
 ### Community 235 - "units.py"
 Cohesion: 0.06
@@ -1334,7 +1334,7 @@ Nodes (3): loadNumberEditor(), loadProps(), loadUnit()
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `Project` connect `Project` to `seed_project`, `test_kratos.py`, `session`, `load`, `MeshRequest`, `PhasesUpdate`, `schemas.py`, `writer.py`, `json`, `materials.py`, `geometry/meshing.py`, `test_kratos_interfaces.py`, `test_app_wiring.py`, `deck_project`, `drafts.py`, `get`, `load_translation.py`, `solid_model.py`, `test_session.py`, `model_validator`, `test_app_wiring.py`, `test_build_2d.py`, `structures.py`, `test_custom_part_routes.py`, `test_tessellate_2d.py`, `announcing`, `test_units_routes.py`, `test_meshing_2d.py`, `commands/phases.py`, `test_kratos_3d.py`, `test_kratos_normal_loads.py`, `test_script_writer.py`, `gmsh_worker.py`, `test_kratos_units.py`, `test_drafts.py`, `test_the_test_model_runs_as_a_script`, `test_wall_translation.py`, `Panel`, `WaterUpdate`, `units.py`, `test_result_members.py`, `load_project`, `pathlib`, `padded`, `test_deck.py`, `test_build.py`, `test_live_constructs.py`, `Answer`, `test_tessellate.py`, `save`, `PointLoad`, `write_script`, `test_export_golden.py`, `test_phases.py`, `with_box`, `json`, `deck_project`, `test_kratos_solver.py`, `test_section_structures_3d.py`, `translate`, `set_excavation`, `commands/project.py`, `geometry.py`, `raised`, `_phased_stages`, `scripting.py`, `_index`, `model/phases.py`, `script_writer.py`, `test_mdpa_import.py`, `session.py`, `test_draft_parity.py`, `test_load_translation.py`?**
+- **Why does `Project` connect `Project` to `seed_project`, `test_kratos.py`, `session`, `load`, `MeshRequest`, `StagesUpdate`, `schemas.py`, `writer.py`, `json`, `materials.py`, `geometry/meshing.py`, `test_kratos_interfaces.py`, `test_app_wiring.py`, `deck_project`, `drafts.py`, `get`, `load_translation.py`, `solid_model.py`, `test_session.py`, `model_validator`, `test_app_wiring.py`, `test_build_2d.py`, `structures.py`, `test_custom_part_routes.py`, `test_tessellate_2d.py`, `announcing`, `test_units_routes.py`, `test_meshing_2d.py`, `commands/stages.py`, `test_kratos_3d.py`, `test_kratos_normal_loads.py`, `test_script_writer.py`, `gmsh_worker.py`, `test_kratos_units.py`, `test_drafts.py`, `test_the_test_model_runs_as_a_script`, `test_wall_translation.py`, `Panel`, `WaterUpdate`, `units.py`, `test_result_members.py`, `load_project`, `pathlib`, `padded`, `test_deck.py`, `test_build.py`, `test_live_constructs.py`, `Answer`, `test_tessellate.py`, `save`, `PointLoad`, `write_script`, `test_export_golden.py`, `test_stages.py`, `with_box`, `json`, `deck_project`, `test_kratos_solver.py`, `test_section_structures_3d.py`, `translate`, `set_excavation`, `commands/project.py`, `geometry.py`, `raised`, `_staged_stages`, `scripting.py`, `_index`, `model/stages.py`, `script_writer.py`, `test_mdpa_import.py`, `session.py`, `test_draft_parity.py`, `test_load_translation.py`?**
   _High betweenness centrality (0.146) - this node is a cross-community bridge._
 - **Are the 316 inferred relationships involving `Project` (e.g. with `check_mesh_keys()` and `not_for_a_deck()`) actually correct?**
   _`Project` has 316 INFERRED edges - model-reasoned connections that need verification._
