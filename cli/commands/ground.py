@@ -4,7 +4,8 @@ Each edit is `core.session`'s, made the way the GUI's soil dialogs make it -- a 
 level moves its neighbour's, a deleted layer's neighbour closes the gap -- and each new
 record starts as those dialogs start it (`core.model.drafts`). Materials are Kratos
 property sets: a law and its variables under Kratos' names, typed as `NAME=VALUE` in the
-project's own units.
+project's own units. A soil model (`--model mohr-coulomb`) picks the law and fills in
+the defaults the material window fills in (`core.model.soil_models`).
 """
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ from cli.terminal.output import Answer, CommandError
 from cli.terminal.words import (NAME_HELP, action, assignments, edited, existing, file_of,
                                 id_help, named_ids, noun)
 from core import session
-from core.model import drafts
+from core.model import drafts, soil_models, units
 from core.model.schemas import Project
 
 
@@ -38,14 +39,18 @@ def register(commands, common: argparse.ArgumentParser) -> None:
     action(material, common, "list", list_materials, writes=False)
     action(material, common, "presets", list_presets, writes=False,
             help="the material library a new soil can start from")
+    action(material, common, "models", list_models, writes=False,
+            help="the soil models (--model), each with its parameters and defaults in "
+                 "the project's units")
     add = action(material, common, "add", add_material, variables=True,
-                  help="a soil: the default sand, or a library preset, then NAME=VALUE "
-                       "variables of its own")
+                  help="a soil: the default sand, or a library preset, of a soil model, "
+                       "then NAME=VALUE variables of its own")
     add.add_argument("id", nargs="?", help=id_help())
     add.add_argument("--preset", help="the library preset to start from (see `presets`)")
     _material_fields(add)
     change = action(material, common, "set", update_material, variables=True,
-                     help="change NAME=VALUE variables, the law, the name or the colour")
+                     help="change NAME=VALUE variables, the soil model or law, the name or "
+                          "the colour")
     existing(change, "material")
     _material_fields(change)
     change.add_argument("--unset", action="append", default=[], metavar="NAME",
@@ -98,11 +103,22 @@ def register(commands, common: argparse.ArgumentParser) -> None:
 
 
 
+MODEL_WORDS = {model.replace("_", "-"): model for model in soil_models.MODELS}
+"""`--model`'s words: the soil models' ids, with a dash."""
+
+
 def _material_fields(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--name", help=NAME_HELP)
     parser.add_argument("--color", help="a #rrggbb colour")
-    parser.add_argument("--law", help="the Kratos constitutive law (default: linear "
-                                      "elastic for the model's dimension)")
+    parser.add_argument("--model", choices=sorted(MODEL_WORDS),
+                        help="the soil model: its law for the model's dimension, and its "
+                             "defaults for what the soil lacks (see `models`)")
+    parser.add_argument("--law", help="any other Kratos constitutive law, written as typed "
+                                      "(default: linear elastic for the model's dimension)")
+
+
+def _model(args: argparse.Namespace) -> str | None:
+    return MODEL_WORDS[args.model] if args.model is not None else None
 
 
 # ── domain, excavation ──────────────────────────────────────────────────────
@@ -155,9 +171,51 @@ def _pit_line(project: Project) -> str:
 def list_materials(args: argparse.Namespace) -> Answer:
     project = session.load(args.project)
     return Answer(data=[m.model_dump(mode="json") for m in project.materials],
-                  lines=[f"{m.id}  {m.name}  {m.constitutive_law}, "
-                         f"{len(m.variables)} variables" for m in project.materials]
+                  lines=[f"{m.id}  {m.name}  "
+                         f"{soil_models.label(soil_models.model_of(m.constitutive_law))} "
+                         f"({m.constitutive_law}), {len(m.variables)} variables"
+                         for m in project.materials]
                   or ["No materials yet."])
+
+
+def list_models(args: argparse.Namespace) -> Answer:
+    system = session.load(args.project).unit_system
+    lines = []
+    for word, model in MODEL_WORDS.items():
+        found = soil_models.MODELS[model]
+        lines.append(f"{word}  {found.label}  " + ", ".join(
+            f"{law} ({dim}D)" for dim, law in found.laws.items()))
+        lines += [f"  {title}: " + "; ".join(_parameter_line(p, system) for p in group)
+                  for title, group in found.groups]
+    table = soil_models.table()["models"]
+    return Answer(data=[{"model": word, **table[model]} for word, model in MODEL_WORDS.items()],
+                  lines=lines)
+
+
+def _shown(value) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    return f"{value:g}" if isinstance(value, float) else str(value)
+
+
+def _parameter_line(p: soil_models.Parameter, system: str) -> str:
+    """One parameter as `material models` lists it: its default in the project's units
+    (or "derived"), the values it can take, and when it is listed at all."""
+    value = soil_models.default_in(p, system)
+    if value is None:
+        text = (f"{p.name} derived" if p.absent is None
+                else f"{p.name} = {_shown(p.absent)} when left out")
+    else:
+        quantity = units.VARIABLES.get(p.name)
+        unit = units.label(quantity, system) if quantity is not None else ""
+        text = f"{p.name} = {_shown(value)}" + (f" {unit}" if unit else "")
+    if p.required:
+        text += " (required)"
+    if p.choices:
+        text += f" [{' | '.join(p.choices)}]"
+    if p.when is not None:
+        text += f", when {p.when[0]} is " + " or ".join(_shown(v) for v in p.when[1])
+    return text
 
 
 def list_presets(args: argparse.Namespace) -> Answer:
@@ -171,7 +229,7 @@ def add_material(args: argparse.Namespace) -> Answer:
     project = session.load(args.project)
     try:
         material, notes = drafts.soil(project, args.id, name=args.name, preset=args.preset,
-                                      color=args.color, law=args.law)
+                                      color=args.color, law=args.law, model=_model(args))
     except drafts.DraftError as failure:
         raise CommandError(str(failure)) from None
     project = session.add_material(project, material)
@@ -184,11 +242,15 @@ def add_material(args: argparse.Namespace) -> Answer:
 
 
 def update_material(args: argparse.Namespace) -> Answer:
+    notes: list[str] = []
     project = session.update_material(session.load(args.project), args.id,
                                       name=args.name, color=args.color, law=args.law,
+                                      model=_model(args),
                                       variables=assignments(args.variables),
-                                      unset=args.unset)
-    return edited(args, project, f"changed material {args.id}")
+                                      unset=args.unset, notes=notes)
+    answer = edited(args, project, f"changed material {args.id}")
+    answer.lines += notes
+    return answer
 
 
 def remove_material(args: argparse.Namespace) -> Answer:

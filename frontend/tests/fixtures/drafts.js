@@ -22,6 +22,705 @@ window.DRAFTS_FIXTURE =
     "GEO_COHESION": 0.0,
     "GEO_FRICTION_ANGLE": 30.0
   },
+  "soil_models": {
+    "defaults": {
+      "linear_elastic": {
+        "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+        "YOUNG_MODULUS": 10000000.0,
+        "POISSON_RATIO": 0.3,
+        "DENSITY_SOLID": 1732.9255861365953,
+        "POROSITY": 0.0,
+        "PERMEABILITY_XX": 1.1574074074074073e-05,
+        "GEO_COHESION": 0.0,
+        "GEO_FRICTION_ANGLE": 30.0
+      },
+      "mohr_coulomb": {
+        "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+        "YOUNG_MODULUS": 10000000.0,
+        "POISSON_RATIO": 0.3,
+        "DENSITY_SOLID": 1732.9255861365953,
+        "POROSITY": 0.0,
+        "PERMEABILITY_XX": 1.1574074074074073e-05,
+        "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+        "SATURATED_SATURATION": 1.0,
+        "RESIDUAL_SATURATION": 1e-10,
+        "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
+        "GEO_COHESION": 1000.0,
+        "GEO_FRICTION_ANGLE": 30.0,
+        "GEO_DILATANCY_ANGLE": 0.0,
+        "GEO_ENABLE_TENSION_CUT_OFF": false
+      }
+    },
+    "fill": [
+      {
+        "title": "a new Mohr-Coulomb soil",
+        "before_law": null,
+        "before": {},
+        "after_law": "GeoMohrCoulombLawPlaneStrain",
+        "changes": {},
+        "system": "SI",
+        "skip": [],
+        "filled": [
+          "GEO_DRAINAGE_TYPE",
+          "YOUNG_MODULUS",
+          "POISSON_RATIO",
+          "DENSITY_SOLID",
+          "POROSITY",
+          "PERMEABILITY_XX",
+          "RETENTION_LAW",
+          "SATURATED_SATURATION",
+          "RESIDUAL_SATURATION",
+          "MINIMUM_RELATIVE_PERMEABILITY",
+          "GEO_COHESION",
+          "GEO_FRICTION_ANGLE",
+          "GEO_DILATANCY_ANGLE",
+          "GEO_ENABLE_TENSION_CUT_OFF"
+        ],
+        "after": {
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "YOUNG_MODULUS": 10000000.0,
+          "POISSON_RATIO": 0.3,
+          "DENSITY_SOLID": 1732.9255861365953,
+          "POROSITY": 0.0,
+          "PERMEABILITY_XX": 1.1574074074074073e-05,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10,
+          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
+          "GEO_COHESION": 1000.0,
+          "GEO_FRICTION_ANGLE": 30.0,
+          "GEO_DILATANCY_ANGLE": 0.0,
+          "GEO_ENABLE_TENSION_CUT_OFF": false
+        },
+        "note": "Filled in from the Mohr-Coulomb defaults: GEO_DRAINAGE_TYPE, YOUNG_MODULUS, POISSON_RATIO, DENSITY_SOLID, POROSITY, PERMEABILITY_XX, RETENTION_LAW, SATURATED_SATURATION, RESIDUAL_SATURATION, MINIMUM_RELATIVE_PERMEABILITY, GEO_COHESION, GEO_FRICTION_ANGLE, GEO_DILATANCY_ANGLE, GEO_ENABLE_TENSION_CUT_OFF."
+      },
+      {
+        "title": "an elastic soil made Mohr-Coulomb keeps its cohesion",
+        "before_law": "GeoLinearElasticPlaneStrain2DLaw",
+        "before": {
+          "GEO_COHESION": 5.0,
+          "YOUNG_MODULUS": 20000.0
+        },
+        "after_law": "GeoMohrCoulombLawPlaneStrain",
+        "changes": {},
+        "system": "kN",
+        "skip": [],
+        "filled": [
+          "GEO_DRAINAGE_TYPE",
+          "POISSON_RATIO",
+          "DENSITY_SOLID",
+          "POROSITY",
+          "PERMEABILITY_XX",
+          "RETENTION_LAW",
+          "SATURATED_SATURATION",
+          "RESIDUAL_SATURATION",
+          "MINIMUM_RELATIVE_PERMEABILITY",
+          "GEO_FRICTION_ANGLE",
+          "GEO_DILATANCY_ANGLE",
+          "GEO_ENABLE_TENSION_CUT_OFF"
+        ],
+        "after": {
+          "GEO_COHESION": 5.0,
+          "YOUNG_MODULUS": 20000.0,
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "POISSON_RATIO": 0.3,
+          "DENSITY_SOLID": 1.7329255861365953,
+          "POROSITY": 0.0,
+          "PERMEABILITY_XX": 1.1574074074074073e-05,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10,
+          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
+          "GEO_FRICTION_ANGLE": 30.0,
+          "GEO_DILATANCY_ANGLE": 0.0,
+          "GEO_ENABLE_TENSION_CUT_OFF": false
+        },
+        "note": "Filled in from the Mohr-Coulomb defaults: GEO_DRAINAGE_TYPE, POISSON_RATIO, DENSITY_SOLID, POROSITY, PERMEABILITY_XX, RETENTION_LAW, SATURATED_SATURATION, RESIDUAL_SATURATION, MINIMUM_RELATIVE_PERMEABILITY, GEO_FRICTION_ANGLE, GEO_DILATANCY_ANGLE, GEO_ENABLE_TENSION_CUT_OFF."
+      },
+      {
+        "title": "a Van Genuchten law brings its parameters",
+        "before_law": "GeoMohrCoulombLawPlaneStrain",
+        "before": {
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "YOUNG_MODULUS": 10000.0,
+          "POISSON_RATIO": 0.3,
+          "DENSITY_SOLID": 1.7329255861365953,
+          "POROSITY": 0.0,
+          "PERMEABILITY_XX": 1.1574074074074073e-05,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10,
+          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
+          "GEO_COHESION": 1.0,
+          "GEO_FRICTION_ANGLE": 30.0,
+          "GEO_DILATANCY_ANGLE": 0.0,
+          "GEO_ENABLE_TENSION_CUT_OFF": false
+        },
+        "after_law": "GeoMohrCoulombLawPlaneStrain",
+        "changes": {
+          "RETENTION_LAW": "VanGenuchtenLaw"
+        },
+        "system": "kN",
+        "skip": [],
+        "filled": [
+          "VAN_GENUCHTEN_AIR_ENTRY_PRESSURE",
+          "VAN_GENUCHTEN_GN",
+          "VAN_GENUCHTEN_GL"
+        ],
+        "after": {
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "YOUNG_MODULUS": 10000.0,
+          "POISSON_RATIO": 0.3,
+          "DENSITY_SOLID": 1.7329255861365953,
+          "POROSITY": 0.0,
+          "PERMEABILITY_XX": 1.1574074074074073e-05,
+          "RETENTION_LAW": "VanGenuchtenLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10,
+          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
+          "GEO_COHESION": 1.0,
+          "GEO_FRICTION_ANGLE": 30.0,
+          "GEO_DILATANCY_ANGLE": 0.0,
+          "GEO_ENABLE_TENSION_CUT_OFF": false,
+          "VAN_GENUCHTEN_AIR_ENTRY_PRESSURE": 2.611,
+          "VAN_GENUCHTEN_GN": 1.377,
+          "VAN_GENUCHTEN_GL": 1.25
+        },
+        "note": "Filled in from the Mohr-Coulomb defaults: VAN_GENUCHTEN_AIR_ENTRY_PRESSURE, VAN_GENUCHTEN_GN, VAN_GENUCHTEN_GL."
+      },
+      {
+        "title": "a Van Genuchten parameter left out on purpose",
+        "before_law": "GeoMohrCoulombLawPlaneStrain",
+        "before": {
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "YOUNG_MODULUS": 10000.0,
+          "POISSON_RATIO": 0.3,
+          "DENSITY_SOLID": 1.7329255861365953,
+          "POROSITY": 0.0,
+          "PERMEABILITY_XX": 1.1574074074074073e-05,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10,
+          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
+          "GEO_COHESION": 1.0,
+          "GEO_FRICTION_ANGLE": 30.0,
+          "GEO_DILATANCY_ANGLE": 0.0,
+          "GEO_ENABLE_TENSION_CUT_OFF": false
+        },
+        "after_law": "GeoMohrCoulombLawPlaneStrain",
+        "changes": {
+          "RETENTION_LAW": "VanGenuchtenLaw"
+        },
+        "system": "kN",
+        "skip": [
+          "VAN_GENUCHTEN_GN"
+        ],
+        "filled": [
+          "VAN_GENUCHTEN_AIR_ENTRY_PRESSURE",
+          "VAN_GENUCHTEN_GL"
+        ],
+        "after": {
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "YOUNG_MODULUS": 10000.0,
+          "POISSON_RATIO": 0.3,
+          "DENSITY_SOLID": 1.7329255861365953,
+          "POROSITY": 0.0,
+          "PERMEABILITY_XX": 1.1574074074074073e-05,
+          "RETENTION_LAW": "VanGenuchtenLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10,
+          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
+          "GEO_COHESION": 1.0,
+          "GEO_FRICTION_ANGLE": 30.0,
+          "GEO_DILATANCY_ANGLE": 0.0,
+          "GEO_ENABLE_TENSION_CUT_OFF": false,
+          "VAN_GENUCHTEN_AIR_ENTRY_PRESSURE": 2.611,
+          "VAN_GENUCHTEN_GL": 1.25
+        },
+        "note": "Filled in from the Mohr-Coulomb defaults: VAN_GENUCHTEN_AIR_ENTRY_PRESSURE, VAN_GENUCHTEN_GL."
+      },
+      {
+        "title": "the tension cut-off brings its tensile strength",
+        "before_law": "GeoMohrCoulombLawPlaneStrain",
+        "before": {
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "YOUNG_MODULUS": 10000.0,
+          "POISSON_RATIO": 0.3,
+          "DENSITY_SOLID": 1.7329255861365953,
+          "POROSITY": 0.0,
+          "PERMEABILITY_XX": 1.1574074074074073e-05,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10,
+          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
+          "GEO_COHESION": 1.0,
+          "GEO_FRICTION_ANGLE": 30.0,
+          "GEO_DILATANCY_ANGLE": 0.0,
+          "GEO_ENABLE_TENSION_CUT_OFF": false
+        },
+        "after_law": "GeoMohrCoulombLawPlaneStrain",
+        "changes": {
+          "GEO_ENABLE_TENSION_CUT_OFF": true
+        },
+        "system": "kN",
+        "skip": [],
+        "filled": [
+          "GEO_TENSILE_STRENGTH"
+        ],
+        "after": {
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "YOUNG_MODULUS": 10000.0,
+          "POISSON_RATIO": 0.3,
+          "DENSITY_SOLID": 1.7329255861365953,
+          "POROSITY": 0.0,
+          "PERMEABILITY_XX": 1.1574074074074073e-05,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10,
+          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
+          "GEO_COHESION": 1.0,
+          "GEO_FRICTION_ANGLE": 30.0,
+          "GEO_DILATANCY_ANGLE": 0.0,
+          "GEO_ENABLE_TENSION_CUT_OFF": true,
+          "GEO_TENSILE_STRENGTH": 0.0
+        },
+        "note": "Filled in from the Mohr-Coulomb defaults: GEO_TENSILE_STRENGTH."
+      },
+      {
+        "title": "a listed variable left out stays out",
+        "before_law": "GeoMohrCoulombLawPlaneStrain",
+        "before": {
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "YOUNG_MODULUS": 10000.0,
+          "POISSON_RATIO": 0.3,
+          "DENSITY_SOLID": 1.7329255861365953,
+          "PERMEABILITY_XX": 1.1574074074074073e-05,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10,
+          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
+          "GEO_COHESION": 1.0,
+          "GEO_FRICTION_ANGLE": 30.0,
+          "GEO_DILATANCY_ANGLE": 0.0,
+          "GEO_ENABLE_TENSION_CUT_OFF": false
+        },
+        "after_law": "GeoMohrCoulombLawPlaneStrain",
+        "changes": {
+          "YOUNG_MODULUS": 30000.0
+        },
+        "system": "kN",
+        "skip": [],
+        "filled": [],
+        "after": {
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "YOUNG_MODULUS": 30000.0,
+          "POISSON_RATIO": 0.3,
+          "DENSITY_SOLID": 1.7329255861365953,
+          "PERMEABILITY_XX": 1.1574074074074073e-05,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10,
+          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
+          "GEO_COHESION": 1.0,
+          "GEO_FRICTION_ANGLE": 30.0,
+          "GEO_DILATANCY_ANGLE": 0.0,
+          "GEO_ENABLE_TENSION_CUT_OFF": false
+        },
+        "note": null
+      },
+      {
+        "title": "a required variable left out comes back",
+        "before_law": "GeoMohrCoulombLawPlaneStrain",
+        "before": {
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "YOUNG_MODULUS": 10000.0,
+          "POISSON_RATIO": 0.3,
+          "DENSITY_SOLID": 1.7329255861365953,
+          "POROSITY": 0.0,
+          "PERMEABILITY_XX": 1.1574074074074073e-05,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10,
+          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
+          "GEO_COHESION": 1.0,
+          "GEO_FRICTION_ANGLE": 30.0,
+          "GEO_ENABLE_TENSION_CUT_OFF": false
+        },
+        "after_law": "GeoMohrCoulombLawPlaneStrain",
+        "changes": {},
+        "system": "kN",
+        "skip": [],
+        "filled": [
+          "GEO_DILATANCY_ANGLE"
+        ],
+        "after": {
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "YOUNG_MODULUS": 10000.0,
+          "POISSON_RATIO": 0.3,
+          "DENSITY_SOLID": 1.7329255861365953,
+          "POROSITY": 0.0,
+          "PERMEABILITY_XX": 1.1574074074074073e-05,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10,
+          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
+          "GEO_COHESION": 1.0,
+          "GEO_FRICTION_ANGLE": 30.0,
+          "GEO_ENABLE_TENSION_CUT_OFF": false,
+          "GEO_DILATANCY_ANGLE": 0.0
+        },
+        "note": "Filled in from the Mohr-Coulomb defaults: GEO_DILATANCY_ANGLE."
+      },
+      {
+        "title": "another law fills nothing",
+        "before_law": "GeoLinearElasticPlaneStrain2DLaw",
+        "before": {
+          "YOUNG_MODULUS": 1.0
+        },
+        "after_law": "SmallStrainUDSM2DPlaneStrainLaw",
+        "changes": {},
+        "system": "SI",
+        "skip": [],
+        "filled": [],
+        "after": {
+          "YOUNG_MODULUS": 1.0
+        },
+        "note": null
+      },
+      {
+        "title": "an old Mohr-Coulomb name is Mohr-Coulomb",
+        "before_law": null,
+        "before": {},
+        "after_law": "GeoMohrCoulombWithTensionCutOff2D",
+        "changes": {},
+        "system": "SI",
+        "skip": [],
+        "filled": [
+          "GEO_DRAINAGE_TYPE",
+          "YOUNG_MODULUS",
+          "POISSON_RATIO",
+          "DENSITY_SOLID",
+          "POROSITY",
+          "PERMEABILITY_XX",
+          "RETENTION_LAW",
+          "SATURATED_SATURATION",
+          "RESIDUAL_SATURATION",
+          "MINIMUM_RELATIVE_PERMEABILITY",
+          "GEO_COHESION",
+          "GEO_FRICTION_ANGLE",
+          "GEO_DILATANCY_ANGLE",
+          "GEO_ENABLE_TENSION_CUT_OFF"
+        ],
+        "after": {
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "YOUNG_MODULUS": 10000000.0,
+          "POISSON_RATIO": 0.3,
+          "DENSITY_SOLID": 1732.9255861365953,
+          "POROSITY": 0.0,
+          "PERMEABILITY_XX": 1.1574074074074073e-05,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10,
+          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
+          "GEO_COHESION": 1000.0,
+          "GEO_FRICTION_ANGLE": 30.0,
+          "GEO_DILATANCY_ANGLE": 0.0,
+          "GEO_ENABLE_TENSION_CUT_OFF": false
+        },
+        "note": "Filled in from the Mohr-Coulomb defaults: GEO_DRAINAGE_TYPE, YOUNG_MODULUS, POISSON_RATIO, DENSITY_SOLID, POROSITY, PERMEABILITY_XX, RETENTION_LAW, SATURATED_SATURATION, RESIDUAL_SATURATION, MINIMUM_RELATIVE_PERMEABILITY, GEO_COHESION, GEO_FRICTION_ANGLE, GEO_DILATANCY_ANGLE, GEO_ENABLE_TENSION_CUT_OFF."
+      }
+    ],
+    "problem": [
+      {
+        "title": "a default Mohr-Coulomb soil",
+        "law": "GeoMohrCoulombLawPlaneStrain",
+        "variables": {
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "YOUNG_MODULUS": 10000000.0,
+          "POISSON_RATIO": 0.3,
+          "DENSITY_SOLID": 1732.9255861365953,
+          "POROSITY": 0.0,
+          "PERMEABILITY_XX": 1.1574074074074073e-05,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10,
+          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
+          "GEO_COHESION": 1000.0,
+          "GEO_FRICTION_ANGLE": 30.0,
+          "GEO_DILATANCY_ANGLE": 0.0,
+          "GEO_ENABLE_TENSION_CUT_OFF": false
+        },
+        "problem": null
+      },
+      {
+        "title": "dilatancy above friction",
+        "law": "GeoMohrCoulombLawPlaneStrain",
+        "variables": {
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "YOUNG_MODULUS": 10000000.0,
+          "POISSON_RATIO": 0.3,
+          "DENSITY_SOLID": 1732.9255861365953,
+          "POROSITY": 0.0,
+          "PERMEABILITY_XX": 1.1574074074074073e-05,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10,
+          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
+          "GEO_COHESION": 1000.0,
+          "GEO_FRICTION_ANGLE": 30.0,
+          "GEO_DILATANCY_ANGLE": 35.0,
+          "GEO_ENABLE_TENSION_CUT_OFF": false
+        },
+        "problem": "GEO_DILATANCY_ANGLE cannot be larger than GEO_FRICTION_ANGLE."
+      },
+      {
+        "title": "friction at 90 degrees",
+        "law": "GeoMohrCoulombLawPlaneStrain",
+        "variables": {
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "YOUNG_MODULUS": 10000000.0,
+          "POISSON_RATIO": 0.3,
+          "DENSITY_SOLID": 1732.9255861365953,
+          "POROSITY": 0.0,
+          "PERMEABILITY_XX": 1.1574074074074073e-05,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10,
+          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
+          "GEO_COHESION": 1000.0,
+          "GEO_FRICTION_ANGLE": 90.0,
+          "GEO_DILATANCY_ANGLE": 0.0,
+          "GEO_ENABLE_TENSION_CUT_OFF": false
+        },
+        "problem": "GEO_FRICTION_ANGLE must be below 90 degrees."
+      },
+      {
+        "title": "tensile strength above the apex",
+        "law": "GeoMohrCoulombLawPlaneStrain",
+        "variables": {
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "YOUNG_MODULUS": 10000000.0,
+          "POISSON_RATIO": 0.3,
+          "DENSITY_SOLID": 1732.9255861365953,
+          "POROSITY": 0.0,
+          "PERMEABILITY_XX": 1.1574074074074073e-05,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10,
+          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
+          "GEO_COHESION": 1000.0,
+          "GEO_FRICTION_ANGLE": 30.0,
+          "GEO_DILATANCY_ANGLE": 0.0,
+          "GEO_ENABLE_TENSION_CUT_OFF": true,
+          "GEO_TENSILE_STRENGTH": 5000.0
+        },
+        "problem": "GEO_TENSILE_STRENGTH cannot be larger than GEO_COHESION / tan(GEO_FRICTION_ANGLE) = 1732.05."
+      },
+      {
+        "title": "tensile strength above the apex, a large one",
+        "law": "GeoMohrCoulombLawPlaneStrain",
+        "variables": {
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "YOUNG_MODULUS": 10000000.0,
+          "POISSON_RATIO": 0.3,
+          "DENSITY_SOLID": 1732.9255861365953,
+          "POROSITY": 0.0,
+          "PERMEABILITY_XX": 1.1574074074074073e-05,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10,
+          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
+          "GEO_COHESION": 2000000.0,
+          "GEO_FRICTION_ANGLE": 25.0,
+          "GEO_DILATANCY_ANGLE": 0.0,
+          "GEO_ENABLE_TENSION_CUT_OFF": true,
+          "GEO_TENSILE_STRENGTH": 10000000.0
+        },
+        "problem": "GEO_TENSILE_STRENGTH cannot be larger than GEO_COHESION / tan(GEO_FRICTION_ANGLE) = 4.28901e+06."
+      },
+      {
+        "title": "tensile strength above the apex, a small one",
+        "law": "GeoMohrCoulombLawPlaneStrain",
+        "variables": {
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "YOUNG_MODULUS": 10000000.0,
+          "POISSON_RATIO": 0.3,
+          "DENSITY_SOLID": 1732.9255861365953,
+          "POROSITY": 0.0,
+          "PERMEABILITY_XX": 1.1574074074074073e-05,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10,
+          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
+          "GEO_COHESION": 2e-05,
+          "GEO_FRICTION_ANGLE": 30.0,
+          "GEO_DILATANCY_ANGLE": 0.0,
+          "GEO_ENABLE_TENSION_CUT_OFF": true,
+          "GEO_TENSILE_STRENGTH": 1.0
+        },
+        "problem": "GEO_TENSILE_STRENGTH cannot be larger than GEO_COHESION / tan(GEO_FRICTION_ANGLE) = 3.4641e-05."
+      },
+      {
+        "title": "a tensile strength with the cut-off off is not read",
+        "law": "GeoMohrCoulombLawPlaneStrain",
+        "variables": {
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "YOUNG_MODULUS": 10000000.0,
+          "POISSON_RATIO": 0.3,
+          "DENSITY_SOLID": 1732.9255861365953,
+          "POROSITY": 0.0,
+          "PERMEABILITY_XX": 1.1574074074074073e-05,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10,
+          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
+          "GEO_COHESION": 1000.0,
+          "GEO_FRICTION_ANGLE": 30.0,
+          "GEO_DILATANCY_ANGLE": 0.0,
+          "GEO_ENABLE_TENSION_CUT_OFF": false,
+          "GEO_TENSILE_STRENGTH": 5000.0
+        },
+        "problem": null
+      },
+      {
+        "title": "a tensile strength with no cut-off flag switches it on",
+        "law": "GeoMohrCoulombLawPlaneStrain",
+        "variables": {
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "YOUNG_MODULUS": 10000000.0,
+          "POISSON_RATIO": 0.3,
+          "DENSITY_SOLID": 1732.9255861365953,
+          "POROSITY": 0.0,
+          "PERMEABILITY_XX": 1.1574074074074073e-05,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10,
+          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
+          "GEO_COHESION": 1000.0,
+          "GEO_FRICTION_ANGLE": 30.0,
+          "GEO_DILATANCY_ANGLE": 0.0,
+          "GEO_TENSILE_STRENGTH": 5000.0
+        },
+        "problem": "GEO_TENSILE_STRENGTH cannot be larger than GEO_COHESION / tan(GEO_FRICTION_ANGLE) = 1732.05."
+      },
+      {
+        "title": "an elastic soil is not held to it",
+        "law": "GeoLinearElasticPlaneStrain2DLaw",
+        "variables": {
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "YOUNG_MODULUS": 10000000.0,
+          "POISSON_RATIO": 0.3,
+          "DENSITY_SOLID": 1732.9255861365953,
+          "POROSITY": 0.0,
+          "PERMEABILITY_XX": 1.1574074074074073e-05,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10,
+          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
+          "GEO_COHESION": 1000.0,
+          "GEO_FRICTION_ANGLE": 30.0,
+          "GEO_DILATANCY_ANGLE": 35.0,
+          "GEO_ENABLE_TENSION_CUT_OFF": false
+        },
+        "problem": null
+      }
+    ],
+    "required": [
+      {
+        "law": "GeoLinearElasticPlaneStrain2DLaw",
+        "variables": {},
+        "required": [
+          "YOUNG_MODULUS",
+          "POISSON_RATIO",
+          "DENSITY_SOLID"
+        ]
+      },
+      {
+        "law": "GeoMohrCoulombLawPlaneStrain",
+        "variables": {},
+        "required": [
+          "YOUNG_MODULUS",
+          "POISSON_RATIO",
+          "DENSITY_SOLID",
+          "GEO_COHESION",
+          "GEO_FRICTION_ANGLE",
+          "GEO_DILATANCY_ANGLE"
+        ]
+      },
+      {
+        "law": "GeoMohrCoulombLawPlaneStrain",
+        "variables": {
+          "GEO_ENABLE_TENSION_CUT_OFF": true
+        },
+        "required": [
+          "YOUNG_MODULUS",
+          "POISSON_RATIO",
+          "DENSITY_SOLID",
+          "GEO_COHESION",
+          "GEO_FRICTION_ANGLE",
+          "GEO_DILATANCY_ANGLE",
+          "GEO_TENSILE_STRENGTH"
+        ]
+      },
+      {
+        "law": "SmallStrainUDSM2DPlaneStrainLaw",
+        "variables": {},
+        "required": []
+      }
+    ],
+    "law_in": [
+      {
+        "law": "GeoLinearElasticPlaneStrain2DLaw",
+        "dimension": 2,
+        "result": "GeoLinearElasticPlaneStrain2DLaw"
+      },
+      {
+        "law": "GeoLinearElasticPlaneStrain2DLaw",
+        "dimension": 3,
+        "result": "GeoIncrementalLinearElastic3DLaw"
+      },
+      {
+        "law": "GeoMohrCoulombLawPlaneStrain",
+        "dimension": 2,
+        "result": "GeoMohrCoulombLawPlaneStrain"
+      },
+      {
+        "law": "GeoMohrCoulombLawPlaneStrain",
+        "dimension": 3,
+        "result": "GeoMohrCoulombLaw3D"
+      },
+      {
+        "law": "GeoMohrCoulombWithTensionCutOff2D",
+        "dimension": 2,
+        "result": "GeoMohrCoulombLawPlaneStrain"
+      },
+      {
+        "law": "GeoMohrCoulombWithTensionCutOff2D",
+        "dimension": 3,
+        "result": "GeoMohrCoulombLaw3D"
+      },
+      {
+        "law": "GeoMohrCoulombWithTensionCutOff3D",
+        "dimension": 2,
+        "result": "GeoMohrCoulombLawPlaneStrain"
+      },
+      {
+        "law": "GeoMohrCoulombWithTensionCutOff3D",
+        "dimension": 3,
+        "result": "GeoMohrCoulombLaw3D"
+      },
+      {
+        "law": "SmallStrainUDSM2DPlaneStrainLaw",
+        "dimension": 2,
+        "result": "SmallStrainUDSM2DPlaneStrainLaw"
+      },
+      {
+        "law": "SmallStrainUDSM2DPlaneStrainLaw",
+        "dimension": 3,
+        "result": "SmallStrainUDSM2DPlaneStrainLaw"
+      }
+    ]
+  },
   "library": [
     {
       "id": "m1",

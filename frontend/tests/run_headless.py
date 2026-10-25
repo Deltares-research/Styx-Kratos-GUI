@@ -106,7 +106,8 @@ SUITES = {
     ),
     # Drafting, validating and saving interfaces, with the API stood in.
     "interfaces": (
-        [JS / "unit-table.js", JS / "units.js", JS / "property-sets.js",
+        [JS / "unit-table.js", JS / "units.js", JS / "soil-model-table.js",
+         JS / "soil-models.js", JS / "property-sets.js",
          JS / "interfaces.js"],
         TESTS / "test-interfaces.js",
     ),
@@ -126,14 +127,22 @@ SUITES = {
     # Property sets: the law a new soil, profile, tendon or contact starts with, what
     # its law needs, what the server derives, and how a typed value becomes Kratos'.
     "property-sets": (
-        [JS / "unit-table.js", JS / "units.js", JS / "property-sets.js"],
+        [JS / "unit-table.js", JS / "units.js", JS / "soil-model-table.js",
+         JS / "soil-models.js", JS / "property-sets.js"],
         TESTS / "test-property-sets.js",
+    ),
+    # The soil models: their laws, what the material window lists for each, and when.
+    "soil-models": (
+        [JS / "unit-table.js", JS / "units.js", JS / "soil-model-table.js",
+         JS / "soil-models.js", JS / "property-sets.js"],
+        TESTS / "test-soil-models.js",
     ),
     # What a new soil or structure starts as, held to the command line's
     # (core/model/drafts.py) through the fixture tests/test_draft_parity.py writes.
     "drafts": (
         [TESTS / "fixtures" / "drafts.js", JS / "unit-table.js", JS / "units.js",
-         JS / "property-sets.js", JS / "material-library.js", JS / "beams.js",
+         JS / "soil-model-table.js", JS / "soil-models.js", JS / "property-sets.js",
+         JS / "material-library.js", JS / "beams.js",
          JS / "anchors.js", JS / "interfaces.js", JS / "loads.js", JS / "normal-loads.js"],
         TESTS / "test-drafts.js",
     ),

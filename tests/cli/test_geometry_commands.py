@@ -135,6 +135,52 @@ def test_material_list_and_remove(cli, site):
     assert ran.code == 1
 
 
+def test_material_models_lists_each_model_as_the_window_does(cli, site):
+    ran = cli("material", site, "models")
+
+    assert ran.code == 0, ran.err
+    assert "mohr-coulomb  Mohr-Coulomb  GeoMohrCoulombLawPlaneStrain (2D)" in ran.out
+    assert "GEO_COHESION = 1000 Pa (required)" in ran.out
+    assert ("GEO_TENSILE_STRENGTH = 0 Pa (required), when GEO_ENABLE_TENSION_CUT_OFF is "
+            "true") in ran.out
+    assert "[CONSTANT_PW_FIELD | FULLY_COUPLED | DRAINED | UNDRAINED]" in ran.out
+    assert "RETENTION_LAW = SaturatedLaw when left out" in ran.out
+
+
+def test_material_models_states_the_defaults_in_the_project_s_units(cli, site):
+    assert cli("units", site, "kN").code == 0
+
+    assert "GEO_COHESION = 1 kPa (required)" in cli("material", site, "models").out
+
+
+def test_material_add_of_a_soil_model(cli, site):
+    ran = cli("material", site, "add", "clay", "--model", "mohr-coulomb",
+              "GEO_FRICTION_ANGLE=25")
+
+    assert ran.code == 0, ran.err
+    clay = session.load(site).materials[-1]
+    assert clay.constitutive_law == "GeoMohrCoulombLawPlaneStrain"
+    assert (clay.variables["GEO_FRICTION_ANGLE"], clay.variables["GEO_DILATANCY_ANGLE"]) == \
+        (25, 0.0)
+    assert "Mohr-Coulomb (GeoMohrCoulombLawPlaneStrain)" in cli("material", site, "list").out
+
+
+def test_material_set_model_fills_and_says_what_it_filled(cli, site):
+    ran = cli("material", site, "set", "m1", "--model", "mohr-coulomb")
+
+    assert ran.code == 0, ran.err
+    assert "Filled in from the Mohr-Coulomb defaults: " in ran.out
+    m1 = session.load(site).materials[0]
+    assert m1.constitutive_law == "GeoMohrCoulombLawPlaneStrain"
+    assert m1.variables["GEO_COHESION"] == drafts.preset("m1")["variables"]["GEO_COHESION"]
+
+
+def test_a_soil_model_and_a_law_together_are_refused(cli, site):
+    ran = cli("material", site, "set", "m1", "--model", "mohr-coulomb", "--law", "MyLaw")
+
+    assert ran.code == 1 and "not both" in ran.err
+
+
 # ── layer ───────────────────────────────────────────────────────────────────
 
 def test_layer_add_list_set_split_and_remove(cli, site):

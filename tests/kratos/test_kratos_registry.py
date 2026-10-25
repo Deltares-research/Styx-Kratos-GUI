@@ -75,6 +75,11 @@ def exporter_names() -> dict[str, str]:
                 materials.PANEL_LAW, materials.INTERFACE_LAW,
                 materials.BEAM_LAW):
         out[law] = "materials law"
+    # Every soil model's law, under its current and its old names.
+    from core.model import soil_models
+    for model in soil_models.MODELS.values():
+        for law in [*model.laws.values(), *model.old_laws]:
+            out[law] = f"soil_models.MODELS[{model.id}]"
     # Laws are typed into property sets now; the ones the test model's Mohr-Coulomb
     # variant types are held to the registry the same way.
     from tests.models import excavation

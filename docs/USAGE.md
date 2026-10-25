@@ -124,6 +124,20 @@ law and its parameters.
   soft, Clay stiff or Bedrock) and click **Add to project**. Styx adds a copy that you can
   change.
 - To change a material, click **Properties…** in its row.
+- To make a material Mohr-Coulomb, open **Properties…** and select **Mohr-Coulomb** in
+  **Soil model**. Styx sets the Kratos law for the dimension of the model, keeps the values
+  the material has, and fills in defaults for the others. The line at the bottom of the
+  window lists the values it filled in. The material is then ready for a calculation.
+- In the **Properties…** window, the parameters are in groups (Drainage, Stiffness,
+  Weight, Flow, Strength, Pore fluid, Initial stresses). A text value, such as
+  `GEO_DRAINAGE_TYPE` or `RETENTION_LAW`, is a list of the values Kratos accepts. A
+  true/false value, such as `GEO_ENABLE_TENSION_CUT_OFF`, is a check box. Some
+  parameters show only when they are used: `GEO_TENSILE_STRENGTH` when the tension
+  cut-off is on, the saturations for a retention law other than `SaturatedLaw`, and the
+  Van Genuchten parameters for `VanGenuchtenLaw`. When a choice brings in new parameters,
+  Styx fills in their defaults.
+- For any other Kratos law, for example a UDSM, select **Other** in **Soil model** and type
+  the law name. Styx writes it as you type it, with the variables you give it.
 - To give a material the strength and permeability of an interface, select the material, then
   select an interface preset and click **Apply to selected**.
 - Click **OK** to save the materials, or **Cancel** to forget your changes.

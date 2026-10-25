@@ -68,6 +68,9 @@ material set m_soil PERMEABILITY_XX=1e-5 PERMEABILITY_YY=1e-5 PERMEABILITY_XY=0.
 #    Strength (c = 1 kPa, phi = 30 degrees) and the K0 for the initial stresses.
 #    K0_NC can be left out: the export then writes 1 - sin(phi), which is 0.5 here too.
 material set m_soil GEO_COHESION=1000.0 GEO_FRICTION_ANGLE=30.0 K0_NC=0.5
+#    For a Mohr-Coulomb soil, add `--model mohr-coulomb` to `material add` (or run
+#    `material set m_soil --model mohr-coulomb`). The soil then also gets a dilatancy
+#    angle of 0, no tension cut-off and a retention law; `material models` lists them.
 layer add soil --name soil --material m_soil --bottom 0
 #    The block stands on the supports a new project has: the bottom fixed and the sides
 #    on rollers. It is dry, so it needs no water pressure condition.

@@ -94,9 +94,12 @@ and adds only the values that are missing
 
 | Feature | Detail | Status |
 |---|---|---|
+| Soil model | A **Soil model** list in the Material set window (`--model` in the CLI): Linear elastic, Mohr-Coulomb or Other. The model sets the law and the parameters shown, in groups, with defaults ([model/soil_models.py](../core/model/soil_models.py)). | Tested |
 | Linear elastic soil | `GeoLinearElasticPlaneStrain2DLaw` (2D), `GeoIncrementalLinearElastic3DLaw` (3D). The law follows the dimension of the model. | Tested in 2D. Limited in 3D. |
-| Other laws | Any law name, for example a Mohr-Coulomb law or a UDSM, with its own variables. Styx writes it as typed. | Limited: no test runs it in Kratos |
-| Required variables | `YOUNG_MODULUS`, `POISSON_RATIO`, `DENSITY_SOLID` for a linear elastic soil. The export refuses a soil without them. | Tested |
+| Mohr-Coulomb soil | `GeoMohrCoulombLawPlaneStrain` (2D), `GeoMohrCoulombLaw3D` (3D), with `GEO_COHESION`, `GEO_FRICTION_ANGLE`, `GEO_DILATANCY_ANGLE`, `GEO_ENABLE_TENSION_CUT_OFF` and `GEO_TENSILE_STRENGTH`. A new soil has c = 1 kPa, φ = 30°, ψ = 0°, no tension cut-off and `SaturatedBelowPhreaticLevelLaw`. The old names `GeoMohrCoulombWithTensionCutOff2D/3D` become the current ones when a project loads. Hardening (`GEO_COULOMB_HARDENING_TYPE`) is not in the window; add it with **Add variable**. | Tested in 2D, in Kratos too |
+| Other laws | Any law name, for example a UDSM, with its own variables. Styx writes it as typed. | Limited: no test runs it in Kratos |
+| Choices | `GEO_DRAINAGE_TYPE` (`CONSTANT_PW_FIELD`, `FULLY_COUPLED`, `DRAINED`, `UNDRAINED`) and `RETENTION_LAW` (`SaturatedLaw`, `SaturatedBelowPhreaticLevelLaw`, `VanGenuchtenLaw`) are lists of the values Kratos accepts. `GEO_ENABLE_TENSION_CUT_OFF` is a check box. | Tested |
+| Required variables | `YOUNG_MODULUS`, `POISSON_RATIO`, `DENSITY_SOLID` for every soil model; for Mohr-Coulomb also c, φ and ψ, and the tensile strength when the cut-off is on. The export refuses a soil without them, and a Mohr-Coulomb soil with ψ > φ, φ ≥ 90° or a tensile strength above c / tan φ. | Tested |
 | Calculated variables | If they are missing: `GEO_DRAINAGE_TYPE` = `CONSTANT_PW_FIELD`, `DENSITY_WATER` from the specific weight of the water, `POROSITY` = 0.3, the bulk moduli of solid (10 GPa) and fluid (2.2 GPa), the viscosity of water (1 mPa·s), and the symmetric permeabilities. The export lists each calculated value in a warning. | Tested |
 | K0 | `K0_NC`, or else Jaky's 1 − sin φ from `GEO_FRICTION_ANGLE`, in `initial_materials.json`. Without both, Kratos uses its own default. | Tested |
 | K0 stage | The K0 stage runs elastic. A soil with a different law uses the linear elastic law in `initial_materials.json`, and its own law from the next stage on. | Tested |
@@ -259,9 +262,11 @@ REST API: `/api/project`, `/api/mesh`, `/api/calculate`, `/api/results/…`.
 
 ## Main gaps
 
-1. **No Mohr-Coulomb run.** A Mohr-Coulomb law can be typed, but no test runs it in Kratos
-   (`mohr_coulomb_project` in `tests/models/excavation.py` is ready for it).
-   User-defined models (UDSM, UMAT) are written as typed, also without a test.
+1. **A plastic stage applies its load in one step.** A Mohr-Coulomb soil runs in Kratos
+   (the staged excavation of `tests/models/excavation.py` runs all its stages), but a
+   stage that makes much of the soil yield can stop without converging, because the
+   stage has no load steps. More iterations and a larger tolerance per stage can help.
+   User-defined models (UDSM, UMAT) are written as typed, without a test.
 2. **No factor of safety.** Styx has no φ–c reduction stage.
 3. **Groundwater flow is steady-state and 2D only.** A project cannot mix flow stages
    with deformation stages, and a drawn condition line has no element size of its own

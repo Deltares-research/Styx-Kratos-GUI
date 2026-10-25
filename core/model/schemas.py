@@ -23,7 +23,7 @@ from typing import Annotated, Any, Literal
 from pydantic import (BaseModel, Field, SerializerFunctionWrapHandler, computed_field,
                       field_validator, model_serializer, model_validator)
 
-from core.model import migration, units
+from core.model import migration, soil_models, units
 
 Hex = Annotated[str, Field(pattern=r"^#[0-9a-fA-F]{6}$")]
 Ident = Annotated[str, Field(min_length=1, max_length=64)]
@@ -124,11 +124,13 @@ def _finite(value: object) -> bool:
     return True
 
 
-SOIL_LAW_PAIRS = {"GeoLinearElasticPlaneStrain2DLaw": (2, "GeoIncrementalLinearElastic3DLaw"),
-                  "GeoIncrementalLinearElastic3DLaw": (3, "GeoLinearElasticPlaneStrain2DLaw")}
-"""Soil laws that exist in one dimension only: law -> (its dimension, its counterpart).
-GeoMechanics registers no 3D `GeoLinearElastic` law; its one 3D linear elastic soil law
-is the incremental one. A project keeps such a law in step with its own dimension
+SOIL_LAW_PAIRS = {law: (dim, model.laws[5 - dim])
+                  for model in soil_models.MODELS.values()
+                  for dim, law in model.laws.items()}
+"""Soil laws that exist in one dimension only: law -> (its dimension, its counterpart),
+one pair per soil model (`core/model/soil_models.py`). GeoMechanics registers no 3D
+`GeoLinearElastic` law; its one 3D linear elastic soil law is the incremental one. A
+project keeps such a law in step with its own dimension
 (`Project._soil_laws_follow_the_dimension`), so what it shows is what it writes."""
 
 
@@ -1710,13 +1712,14 @@ class Project(Base):
 
     @model_validator(mode="after")
     def _soil_laws_follow_the_dimension(self) -> Project:
-        """A soil law that exists in one dimension only, swapped for its counterpart
-        when the project is the other dimension -- however the dimension came to change.
-        Any other law is the user's, and is left exactly as typed."""
+        """A soil model's law in the project's dimension: its counterpart when the
+        project is the other dimension -- however the dimension came to change -- and
+        its current name when it carries an old one (`GeoMohrCoulombWithTensionCutOff2D`,
+        which Kratos still registers but will remove). Any other law is the user's, and
+        is left exactly as typed."""
         for material in self.materials:
-            pair = SOIL_LAW_PAIRS.get(material.constitutive_law)
-            if pair is not None and pair[0] != self.dimension:
-                material.constitutive_law = pair[1]
+            material.constitutive_law = soil_models.law_in(material.constitutive_law,
+                                                           self.dimension)
         return self
 
     @property

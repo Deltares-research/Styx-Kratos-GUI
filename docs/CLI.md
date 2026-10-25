@@ -69,7 +69,7 @@ Genuchten soil.
 | `units P [SI\|kN]` | Show the unit system, or convert the whole project to another |
 | `water P [LEVEL\|off]` | Show, set or remove the water level. It fixes no pressure by itself: a new hydrostatic condition or normal load takes it as its level |
 | `domain P [--x FROM TO] [--y BOTTOM TOP] [--z FROM TO]` | Show or set the model's extents. `--y` is the bottom and the ground level; with layers, it moves the top of the first layer and the bottom of the last |
-| `material P list\|presets\|add\|set\|remove ...` | Soils as Kratos property sets: `add ID [--preset m3] [NAME=VALUE ...]`, `set ID NAME=VALUE ... [--unset NAME]` |
+| `material P list\|presets\|models\|add\|set\|remove ...` | Soils as Kratos property sets: `add ID [--preset m3] [--model mohr-coulomb] [NAME=VALUE ...]`, `set ID [--model M] NAME=VALUE ... [--unset NAME]`; `models` lists each soil model with its parameters and defaults |
 | `layer P list\|add\|set\|split\|remove ...` | The soil stack: `add ID --material M [--bottom Y \| --thickness T]`, `set ID [--top Y] [--bottom Y]` |
 | `excavation P [--x FROM TO] [--z FROM TO] [--levels Y ...]` | The pit, and the levels it is dug to, one lift each |
 | `volume P list\|add\|import\|remove\|clear ...` | Solids drawn or imported into the model; with `--material` they are soil |
@@ -121,7 +121,7 @@ kratos-cli new pit.json --name "Pit B"
 kratos-cli domain pit.json --x 0 60 --y -40 0 --z 0 10
 kratos-cli material pit.json presets                      # the library a soil can start from
 kratos-cli material pit.json add clay --preset m3 YOUNG_MODULUS=2e6 K0_NC=0.58
-kratos-cli material pit.json add sand --preset m5
+kratos-cli material pit.json add sand --preset m5 --model mohr-coulomb
 kratos-cli layer pit.json add top --material clay --bottom -7
 kratos-cli layer pit.json add mid --material clay --bottom -10
 kratos-cli layer pit.json add bottom --material sand --bottom -40
@@ -147,6 +147,16 @@ kratos-cli parts pit.json                                 # soil_top__lift1, ...
   `#rrggbb` colour, such as `#c4a86a`. The export derives some variables that are left
   out, and its warning lists them. It also derives `K0_NC` as 1 − sin φ from
   `GEO_FRICTION_ANGLE`, into `initial_materials.json`, but that warning does not list it.
+- **Soil models**: `--model linear-elastic` or `--model mohr-coulomb` sets the law for the
+  model's dimension, as the **Soil model** list of the Material set window does. The
+  values the soil already has stay. The values the model needs and the soil does not
+  have get the model's defaults, and the command prints their names. Setting a choice
+  such as `RETENTION_LAW=VanGenuchtenLaw` or `GEO_ENABLE_TENSION_CUT_OFF=true` fills in
+  the defaults of the values it brings in the same way. `material P models` lists each
+  model: its laws, its parameters in groups, each default in the project's units, the
+  values a choice can take and when a parameter is used. `--law` is for any other law,
+  for example a UDSM. It is written as you type it. `--model` and `--law` cannot be
+  given together.
 - **The excavation** is dug in its `--levels`, shallowest first. Each lift is a body of
   its own, deactivated in its own stage. In a layered model, a pit with one level is not
   dug at all, and the command says so. A new project has no pit. The first `excavation`

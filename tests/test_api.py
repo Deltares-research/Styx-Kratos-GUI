@@ -1137,7 +1137,10 @@ def test_the_live_shell_replaces_only_the_viewport_and_the_orbit_controller(clie
                              # show, and the Material sets dialog that replaces the frozen
                              # one's old sheet (plan/outdated/kratos-native-inputs-plan.md).
                              "unit-table.js", "units.js", "property-sets.js",
-                             "material-sets.js"}
+                             "material-sets.js",
+                             # The soil models the Material set window offers
+                             # (core/model/soil_models.py).
+                             "soil-model-table.js", "soil-models.js"}
     assert body.index('/js/orbit.js') < body.index('/live/js/orbit.js'), (
         "the Y-up controller has to be loaded after the frozen one it overrides")
 

@@ -109,11 +109,12 @@
     T.eq(set.variables.YOUNG_MODULUS, 1e7);
   });
 
-  T.test('the drainage type is a choice between Kratos\' two', function () {
+  T.test('the drainage type is a choice between the four Kratos accepts', function () {
     var set = soil({ GEO_DRAINAGE_TYPE: 'CONSTANT_PW_FIELD' });
     var row = P.rows('soil', set, 2).filter(function (r) { return r[0] === 'GEO_DRAINAGE_TYPE'; })[0];
     T.eq(row[4].kind, 'select');
-    T.eq(row[4].options().map(function (o) { return o.value; }), ['CONSTANT_PW_FIELD', 'FULLY_COUPLED']);
+    T.eq(row[4].options().map(function (o) { return o.value; }),
+         ['CONSTANT_PW_FIELD', 'FULLY_COUPLED', 'DRAINED', 'UNDRAINED']);
     T.eq(row[4].set('FULLY_COUPLED'), null);
     T.eq(set.variables.GEO_DRAINAGE_TYPE, 'FULLY_COUPLED');
   });

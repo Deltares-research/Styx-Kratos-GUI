@@ -22,6 +22,47 @@
     T.eq(App.PropertySets.KINDS.soil.defaults, F.soil_defaults);
   });
 
+  /* The soil models: the same table is generated for both sides (soil-model-table.js);
+     these hold the functions that read it to the Python's answers. */
+  var M = F.soil_models;
+
+  T.test('each soil model starts a new soil from the same variables as on the command line', function () {
+    Object.keys(M.defaults).forEach(function (model) {
+      T.eq(App.SoilModels.defaultsSI(model), M.defaults[model], model);
+      T.eq(Object.keys(App.SoilModels.defaultsSI(model)), Object.keys(M.defaults[model]),
+           model + ': in the same order');
+    });
+  });
+
+  M.fill.forEach(function (c) {
+    T.test('a soil filled in as on the command line: ' + c.title, function () {
+      var after = Object.assign(JSON.parse(JSON.stringify(c.before)), c.changes);
+      var filled = App.SoilModels.fill(c.before_law, JSON.parse(JSON.stringify(c.before)),
+                                       c.after_law, after, c.system, c.skip);
+      T.eq(filled, c.filled);
+      T.eq(after, c.after);
+      T.eq(App.SoilModels.filledNote(App.SoilModels.modelOf(c.after_law), filled), c.note);
+    });
+  });
+
+  M.problem.forEach(function (c) {
+    T.test('a soil refused as on the command line: ' + c.title, function () {
+      T.eq(App.SoilModels.problem(c.law, c.variables), c.problem);
+    });
+  });
+
+  T.test('a soil law needs what it needs on the command line', function () {
+    M.required.forEach(function (c) {
+      T.eq(App.SoilModels.required(c.law, c.variables), c.required, c.law);
+    });
+  });
+
+  T.test('a soil law has the same name in each dimension as on the command line', function () {
+    M.law_in.forEach(function (c) {
+      T.eq(App.SoilModels.lawIn(c.law, c.dimension), c.result, c.law + ' in ' + c.dimension + 'D');
+    });
+  });
+
   T.test('the material library offers the same six presets as the command line', function () {
     var soils = App.MaterialLibrary.soils().map(function (s) {
       return { id: s.id, name: s.name, color: s.color, r_inter: s.rInter,
