@@ -521,10 +521,11 @@ def test_an_interface_traction_is_normal_then_shear_and_compression_is_negative(
     python, environment = calculation.interpreter()
     done = subprocess.run([python, "-c", TRACTIONS], cwd=tmp_path / "case", env=environment,
                           capture_output=True, text=True, timeout=300)
-    line = next((line for line in done.stdout.splitlines() if line.startswith("TRACTIONS")),
-                None)
+    # Kratos' C++ log and Python's print share stdout without a common buffer, so a log
+    # line that is not yet ended can come right before the marker on the same line.
+    line = next((line for line in done.stdout.splitlines() if "TRACTIONS" in line), None)
     assert line, done.stdout[-600:] + done.stderr[-600:]
-    tractions = json.loads(line[len("TRACTIONS"):])
+    tractions = json.loads(line.partition("TRACTIONS")[2])
     # The values Kratos' test asserts: a normal traction of 333 Pa pressing the contact
     # shut and a shear of 667 Pa, at every integration point of both elements.
     for element in tractions:
