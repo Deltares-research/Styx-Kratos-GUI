@@ -9,6 +9,7 @@ import time
 import gmsh
 
 from core.geometry import solid_model
+from core.model import polylines
 from core.model.schemas import BoxRefinement, CylinderRefinement, Project, WaterLevel
 from core.geometry.tessellation import DECIMALS, Section
 
@@ -427,8 +428,14 @@ def _water_section(project: Project, water: WaterLevel, dim: int) -> Section:
     return section
 
 
-INTERFACE_SIDES = {"both": ("L", "R"), "left": ("L",), "right": ("R",)}
-"""The faces an interface unglues, by `Interface.side`, as the suffix of their key."""
+INTERFACE_SIDES = {"both": ("L", "R"), "left": ("L",), "right": ("R",), "below": ("L",),
+                   "above": ("R",)}
+"""The faces an interface unglues, by `Interface.side`, as the suffix of their key: L for
+the face on the left of the screen (below, on a flat line), R for the other."""
+
+PIECE_TOLERANCE = 1e-6
+"""Metres. How near the line between From and To a piece of the pile's curve has to be
+to be drawn as part of the interface."""
 
 SIDE_OFFSET = 0.15
 """How far each face of an interface is drawn off its line, as a fraction of the
@@ -445,27 +452,27 @@ def _interface_sections(interface, project: Project, built: solid_model.BuildRes
     The deck has a contact element per face (`core.kratos.interfaces`), and which face a user is
     looking at matters -- one holds the retained soil, the other the excavated side. An
     interface on a structure owns no curve of its own, so its segments are the
-    structure's. Left is a +90 degree turn from walking the line in its stored order
-    (`schemas.Interface`), so each segment is pushed toward its side using the
-    direction of the leg of that line it lies along, not the direction gmsh happened to
-    build the curve in. The drawn segments are therefore *not* node positions: they are
+    structure's, between From and To when it holds only a part of it. Each face is
+    pushed toward its own side of the screen (`schemas.Interface`) using the direction
+    of the leg of the line it lies along, not the direction gmsh happened to build the
+    curve in. The drawn segments are therefore *not* node positions: they are
     `SIDE_OFFSET` of a segment away from them.
     """
-    if interface.structure is not None:
-        curves = built.curves.get(interface.structure, [])
-        path = next(beam.points for beam in project.sheet_piles
-                    if beam.id == interface.structure)
-    else:
-        curves = built.curves.get(interface.id, [])
-        path = interface.points or []
-    pieces = _line_segments(curves, coordinates)
+    path = project.interface_path(interface)
+    curves = built.curves.get(interface.structure or interface.id, [])
+    pieces = [(start, end) for start, end in _line_segments(curves, coordinates)
+              if polylines.nearest(path, ((start[0] + end[0]) / 2,
+                                          (start[1] + end[1]) / 2))[1] <= PIECE_TOLERANCE]
     if not pieces:
         return []
     lengths = [math.dist(start, end) for start, end in pieces]
     offset = SIDE_OFFSET * min(length for length in lengths if length > 0)
+    faces = polylines.faces(path)
     sections = []
     for side in INTERFACE_SIDES[interface.side]:
-        sign = 1.0 if side == "L" else -1.0
+        # `_left_of` is the left walking the line, and L is the screen's left.
+        walking = polylines.walking_side(path, faces[0] if side == "L" else faces[1])
+        sign = 1.0 if walking == "left" else -1.0
         section = Section(key=f"{interface.id}:{side}", color=MESH_COLOR)
         for start, end in pieces:
             nx, ny = _left_of(path, start, end)

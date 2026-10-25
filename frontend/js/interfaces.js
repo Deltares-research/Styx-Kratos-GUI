@@ -16,8 +16,14 @@
        a slip surface. There is no structure between the two soils then, so one
        of them has to keep the original nodes and `side` says which is detached.
 
-   Left and right are relative to walking the line in the order its points are
-   stored, the same convention the exported element's node order carries.
+   On a pile the interface runs the whole pile, or the part of it between From
+   and To (`stretch`). A typed From or To is moved onto the pile (`snap`), and
+   one more than STRETCH_SNAP away is refused.
+
+   `side` names a face as the screen shows it, whichever way the line was drawn:
+   on a line steeper than 45 degrees "left" is the face toward -x and "right" the
+   face toward +x; on a flatter line the faces are "below" and "above"
+   (core/model/polylines.py, which this mirrors).
 
    Plane strain only. Every reference deck is a section, and a 3D
    interface is a different element with a different node layout and no fixture
@@ -37,7 +43,9 @@ App.Interfaces = (function () {
                            permeability: 'Neutral' }, App.PropertySets.defaults('interface'));
   }
 
-  var SIDES = ['both', 'left', 'right'];
+  var SIDES = ['both', 'left', 'right', 'below', 'above'];
+
+  var STRETCH_SNAP = 0.5;   // metres a typed From or To may be off the pile
 
   function copy(value) { return JSON.parse(JSON.stringify(value)); }
 
@@ -88,10 +96,102 @@ App.Interfaces = (function () {
     return nextId(((project && project.interface_sections) || []), 'interfacesection_');
   }
 
+  /* ── Points along a polyline (core/model/polylines.py) ── */
+
+  /* The point on the polyline nearest `point`, its distance, and how far along the
+     polyline it is. */
+  function nearest(points, point) {
+    var best = null;
+    var walked = 0;
+    for (var i = 1; i < points.length; i += 1) {
+      var a = points[i - 1], b = points[i];
+      var dx = b[0] - a[0], dy = b[1] - a[1];
+      var size = Math.sqrt(dx * dx + dy * dy);
+      if (!size) continue;
+      var t = ((point[0] - a[0]) * dx + (point[1] - a[1]) * dy) / (size * size);
+      t = Math.max(0, Math.min(1, t));
+      var on = [a[0] + t * dx, a[1] + t * dy];
+      var away = Math.sqrt((point[0] - on[0]) * (point[0] - on[0])
+                           + (point[1] - on[1]) * (point[1] - on[1]));
+      if (!best || away < best.distance) {
+        best = { point: on, distance: away, along: walked + t * size };
+      }
+      walked += size;
+    }
+    return best;
+  }
+
+  /* The part of the polyline from `start` to `end` metres along it, in the
+     polyline's own order, following every bend. */
+  function between(points, start, end) {
+    var low0 = Math.min(start, end), high0 = Math.max(start, end);
+    var out = [];
+    var walked = 0;
+    for (var i = 1; i < points.length; i += 1) {
+      var a = points[i - 1], b = points[i];
+      var size = Math.sqrt((b[0] - a[0]) * (b[0] - a[0]) + (b[1] - a[1]) * (b[1] - a[1]));
+      if (!size) continue;
+      var low = Math.max(low0, walked), high = Math.min(high0, walked + size);
+      if (low <= high) {
+        [low, high].forEach(function (at) {
+          var t = (at - walked) / size;
+          var point = [a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])];
+          var last = out[out.length - 1];
+          if (!last || last[0] !== point[0] || last[1] !== point[1]) out.push(point);
+        });
+      }
+      walked += size;
+    }
+    return out;
+  }
+
+  /* The two faces of a line as the screen shows them: left and right for a line
+     steeper than 45 degrees, below and above for a flatter one. */
+  function faces(points) {
+    if (!points || points.length < 2) return ['left', 'right'];
+    var first = points[0], last = points[points.length - 1];
+    return Math.abs(last[1] - first[1]) >= Math.abs(last[0] - first[0])
+      ? ['left', 'right'] : ['below', 'above'];
+  }
+
+  /* Micrometre precision, as the anchors' snapped head: the server matches the pile
+     to 1e-6 m. */
+  function round(value) { return Math.round(value * 1e6) / 1e6; }
+
+  /* `point` moved onto `pile`, or a refusal when it is more than STRETCH_SNAP away
+     (core/model/drafts.py `stretch_point`, word for word). */
+  function snap(pile, point, label) {
+    if (!point || point.length !== 2 || !point.every(Number.isFinite)) {
+      throw new Error(label + ' must be two numbers.');
+    }
+    var found = nearest(pile.points, point);
+    if (!found || found.distance > STRETCH_SNAP) {
+      throw new Error(label + ' is ' + (found ? found.distance.toFixed(1) : '?') + ' m from '
+                      + pile.name + '; From and To are points on the pile.');
+    }
+    return found.point.map(round);
+  }
+
+  /* From and To on `pile`, snapped; null when they are the pile's two ends, which
+     is the whole pile (drafts.py `stretch`). */
+  function stretchOn(pile, start, end) {
+    var points = [snap(pile, start, 'From'), snap(pile, end, 'To')];
+    function same(a, b) { return a[0] === b[0] && a[1] === b[1]; }
+    if (same(points[0], points[1])) {
+      throw new Error('From and To are the same point on ' + pile.name
+                      + '; the part of the pile needs length.');
+    }
+    var ends = [pile.points[0], pile.points[pile.points.length - 1]];
+    var whole = (same(points[0], ends[0]) && same(points[1], ends[1]))
+      || (same(points[0], ends[1]) && same(points[1], ends[0]));
+    return whole ? null : points;
+  }
+
   /* The coordinate-first path, like every other structure here: an interface on
-     the first live sheet pile if there is one, and a free line down the middle of
-     the section if there is not. The user then edits it in the explorer. */
-  function draft(project, structure) {
+     the first live sheet pile if there is one -- the whole pile, or the part
+     between the two points of `stretch` -- and a free line down the middle of the
+     section if there is not. The window opens on it. */
+  function draft(project, structure, stretch) {
     if (!available(project)) throw new Error(unavailableMessage(project));
     var piles = livePiles(project);
     var pile = structure
@@ -110,10 +210,16 @@ App.Interfaces = (function () {
       structure: null,
       points: null,
       side: 'both',
+      stretch: null,
       active: true
     };
+    if (stretch && !pile) {
+      throw new Error('From and To are points on a sheet pile; an interface on its '
+                      + 'own points runs its whole line.');
+    }
     if (pile) {
       record.structure = pile.id;
+      if (stretch) record.stretch = stretchOn(pile, stretch[0], stretch[1]);
       return record;
     }
     // No wall to wrap: a free line splits soil from soil, so one side has to keep
@@ -266,14 +372,23 @@ App.Interfaces = (function () {
       || Object.assign({ id: record.section }, defaultSection());
   }
 
-  /* What the interface runs along, for the explorer and the viewport: the pile's
-     own polyline when it follows one, its own points when it does not. */
+  function pileOf(record, project) {
+    return ((project || App.PROJECT || {}).beams || [])
+      .filter(function (beam) { return beam.id === record.structure; })[0];
+  }
+
+  /* What the interface runs along, for the explorer and the viewport: its own
+     points, the pile's polyline, or the part of it between From and To, in the
+     pile's own order (`Project.interface_path`). */
   function pathOf(record, project) {
     if (!record) return [];
     if (!record.structure) return record.points || [];
-    var pile = ((project || App.PROJECT || {}).beams || [])
-      .filter(function (beam) { return beam.id === record.structure; })[0];
-    return (pile && pile.points) || [];
+    var pile = pileOf(record, project);
+    if (!pile || !pile.points) return [];
+    if (!record.stretch) return pile.points;
+    var start = nearest(pile.points, record.stretch[0]);
+    var end = nearest(pile.points, record.stretch[1]);
+    return start && end ? between(pile.points, start.along, end.along) : pile.points;
   }
 
   function length(record, project) {
@@ -314,7 +429,9 @@ App.Interfaces = (function () {
   }
 
   return {
-    SIDES: SIDES, defaultSection: defaultSection,
+    SIDES: SIDES, STRETCH_SNAP: STRETCH_SNAP, defaultSection: defaultSection,
+    nearest: nearest, between: between, faces: faces, snap: snap, stretchOn: stretchOn,
+    pileOf: pileOf,
     available: available, unavailableMessage: unavailableMessage,
     livePiles: livePiles, draft: draft, sectionsFor: sectionsFor, sectionOf: sectionOf,
     pathOf: pathOf, length: length,

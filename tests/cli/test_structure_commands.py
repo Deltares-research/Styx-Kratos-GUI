@@ -189,6 +189,8 @@ def test_an_anchor_hangs_from_a_wall_in_3d(cli, solid):
 # ── interface ───────────────────────────────────────────────────────────────
 
 def test_an_interface_follows_a_pile_or_runs_its_own_line(cli, pit):
+    # The pit's own contact holds both faces; one face is left for a second one.
+    assert cli("interface", pit, "set", "wall_contact", "--side", "left").code == 0
     assert cli("interface", pit, "add", "back", "--structure", "sheetpile",
                "--side", "right").code == 0
     assert cli("interface", pit, "add", "slip", "--points", "10", "0", "20", "-10").code == 0

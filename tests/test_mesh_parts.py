@@ -106,20 +106,19 @@ def test_an_interface_on_a_structure_has_one_section_per_side(model):
 
 def test_each_side_is_drawn_just_off_the_line_on_its_own_side(model):
     """Both faces sit exactly on the pile, so drawn there they would hide each other.
-    Each is moved a little toward its own side -- left being a +90 degree turn from
-    walking the line in its stored order, `schemas.Interface`'s convention -- by much
+    Each is moved a little toward its own side of the screen -- L toward -x, R toward
+    +x, `schemas.Interface`'s convention, whichever way the pile was drawn -- by much
     less than a segment, so it still reads as the pile."""
     project, mesh, _ = model
     (beam,) = project.beams
-    (x0, y0), (x1, y1) = beam.points
-    length = ((x1 - x0) ** 2 + (y1 - y0) ** 2) ** 0.5
-    left = (-(y1 - y0) / length, (x1 - x0) / length)
+    (x0, _), (x1, _) = beam.points
+    assert x0 == x1, "the model's pile is vertical"
     parts = by_key(mesh)
     shortest = min(((b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2) ** 0.5
                    for a, b in segments(parts["sheetpile"]))
-    for key, sign in (("wall_contact:L", 1), ("wall_contact:R", -1)):
+    for key, sign in (("wall_contact:L", -1), ("wall_contact:R", 1)):
         for x, y, _ in points(parts[key].edges):
-            off = (x - x0) * left[0] + (y - y0) * left[1]
+            off = x - x0
             assert sign * off > 0, (key, x, y)
             assert abs(off) < shortest / 4, (key, off)
 

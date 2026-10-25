@@ -2617,6 +2617,7 @@ window.DRAFTS_FIXTURE =
           "structure": "sheetpile",
           "points": null,
           "side": "both",
+          "stretch": null,
           "active": true
         }
       ],
@@ -4426,6 +4427,7 @@ window.DRAFTS_FIXTURE =
         "structure": "sheetpile",
         "points": null,
         "side": "both",
+        "stretch": null,
         "active": true
       }
     },
@@ -4451,8 +4453,114 @@ window.DRAFTS_FIXTURE =
           ]
         ],
         "side": "left",
+        "stretch": null,
         "active": true
       }
+    },
+    {
+      "title": "an interface on a part of the pile, snapped onto it",
+      "call": "Interfaces.draft",
+      "project": "pile",
+      "args": [
+        null,
+        [
+          [
+            6.3,
+            -2
+          ],
+          [
+            6,
+            -5
+          ]
+        ]
+      ],
+      "result": {
+        "id": "interface_1",
+        "name": "Interface 1",
+        "kind": "interface",
+        "section": "contact",
+        "structure": "sheetpile",
+        "points": null,
+        "side": "both",
+        "stretch": [
+          [
+            6.0,
+            -2.0
+          ],
+          [
+            6.0,
+            -5.0
+          ]
+        ],
+        "active": true
+      }
+    },
+    {
+      "title": "an interface from one end of the pile to the other is the whole pile",
+      "call": "Interfaces.draft",
+      "project": "pile",
+      "args": [
+        null,
+        [
+          [
+            6,
+            -12
+          ],
+          [
+            6,
+            0
+          ]
+        ]
+      ],
+      "result": {
+        "id": "interface_1",
+        "name": "Interface 1",
+        "kind": "interface",
+        "section": "contact",
+        "structure": "sheetpile",
+        "points": null,
+        "side": "both",
+        "stretch": null,
+        "active": true
+      }
+    },
+    {
+      "title": "a From far from the pile is refused",
+      "call": "Interfaces.draft",
+      "project": "pile",
+      "args": [
+        null,
+        [
+          [
+            7.2,
+            -2
+          ],
+          [
+            6,
+            -5
+          ]
+        ]
+      ],
+      "error": "From is 1.2 m from SheetPileWall; From and To are points on the pile."
+    },
+    {
+      "title": "From and To at one point are refused",
+      "call": "Interfaces.draft",
+      "project": "pile",
+      "args": [
+        null,
+        [
+          [
+            6.2,
+            -3
+          ],
+          [
+            6,
+            -3
+          ]
+        ]
+      ],
+      "error": "From and To are the same point on SheetPileWall; the part of the pile needs length."
     },
     {
       "title": "the contact a first interface brings",
@@ -4476,6 +4584,7 @@ window.DRAFTS_FIXTURE =
             ]
           ],
           "side": "left",
+          "stretch": null,
           "active": true
         }
       ],

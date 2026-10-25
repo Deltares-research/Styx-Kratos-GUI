@@ -19,7 +19,7 @@ import math
 from collections.abc import Sequence
 from typing import Any
 
-from core.model import soil_models, units
+from core.model import polylines, soil_models, units
 from core.model.schemas import (Anchor, AnchorSection, BeamSection, Beam, Interface,
                                 InterfaceSection, LineLoad, Material, Member, NormalLoad, Panel,
                                 PanelSection, PointLoad, Project, SoilLayer, SpaceAnchor,
@@ -546,12 +546,42 @@ def anchor(project: Project, head=None, tail=None, *, id: str | None = None,
 
 # Interfaces and normal loads -- plane strain only
 
+STRETCH_SNAP = 0.5
+"""How far, in metres, a typed From or To may be off the pile: it is moved onto the
+pile, and refused further away (`App.Interfaces.snap`)."""
+
+
+def stretch_point(pile: Beam, point, label: str) -> tuple[float, float]:
+    """`point` moved onto `pile`, to the micrometre, refused when it is more than
+    `STRETCH_SNAP` away. `label` is From or To, which the refusal names."""
+    _finite([point], f"{label} must be two numbers.")
+    on, away, _ = polylines.nearest(pile.points, point)
+    if away > STRETCH_SNAP:
+        raise DraftError(f"{label} is {away:.1f} m from {pile.name}; From and To are "
+                         "points on the pile.")
+    return (_round(on[0]), _round(on[1]))
+
+
+def stretch(pile: Beam, start, end) -> tuple[tuple[float, float], tuple[float, float]] | None:
+    """From and To on `pile`, snapped (`stretch_point`); None when they are the pile's
+    two ends, which is the whole pile."""
+    points = (stretch_point(pile, start, "From"), stretch_point(pile, end, "To"))
+    if points[0] == points[1]:
+        raise DraftError(f"From and To are the same point on {pile.name}; the part of "
+                         "the pile needs length.")
+    ends = {tuple(pile.points[0]), tuple(pile.points[-1])}
+    return None if set(points) == ends else points
+
+
 def interface(project: Project, structure: str | None = None, points=None, *,
               side: str | None = None, id: str | None = None, name: str | None = None,
-              section: str | None = None) -> Interface:
+              section: str | None = None, stretch_from=None,
+              stretch_to=None) -> Interface:
     """A new interface: along the sheet pile `structure`, or the first live one, on both
-    sides; or, with `points` or no pile to follow, a free line -- down the middle of the
-    section by default -- that detaches the soil on its left (`App.Interfaces.draft`)."""
+    sides -- the whole pile, or the part from `stretch_from` to `stretch_to`, snapped
+    onto it; or, with `points` or no pile to follow, a free line -- down the middle of
+    the section by default -- that detaches the soil on the left of the screen
+    (`App.Interfaces.draft`)."""
     if project.dimension != 2:
         raise DraftError("An interface is a plane-strain object; switch to 2D to create one.")
     piles = [b for b in project.beams if b.active and b.kind == "beam"]
@@ -561,19 +591,26 @@ def interface(project: Project, structure: str | None = None, points=None, *,
             piles[0] if piles else None)
         if structure and pile is None:
             raise DraftError("An interface can only follow a live sheet pile.")
+    part = None
+    if stretch_from is not None or stretch_to is not None:
+        if not isinstance(pile, Beam):
+            raise DraftError("From and To are points on a sheet pile; an interface on its "
+                             "own points runs its whole line.")
+        part = stretch(pile, stretch_from if stretch_from is not None else pile.points[0],
+                       stretch_to if stretch_to is not None else pile.points[-1])
     id, default_name = _named(id, [i.id for i in project.interfaces], "interface_",
                               "Interface")
     # `side` rides in the fields as a plain string: the record checks it is one of
-    # its three.
+    # its five.
     fields: dict[str, Any] = dict(id=id, name=name or default_name, kind="interface",
                                   section=section or _first_section(project, "interface"),
                                   active=True)
     if pile is not None:
         fields["side"] = side or "both"
-        return Interface(**fields, structure=pile.id, points=None)
+        return Interface(**fields, structure=pile.id, points=None, stretch=part)
     fields["side"] = side or "left"
     line = _middle(project) if points is None else [(p[0], p[1]) for p in points]
-    return Interface(**fields, structure=None, points=line)
+    return Interface(**fields, structure=None, points=line, stretch=None)
 
 
 def normal_load(project: Project, points=None, *, id: str | None = None,

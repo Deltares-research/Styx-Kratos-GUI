@@ -1216,6 +1216,116 @@ def test_only_live_interfaces_on_live_piles_are_built():
     assert schemas.Project.model_validate(payload).active_interfaces == []
 
 
+# ── An interface on a part of a pile, and its faces on the screen ───────────
+
+def test_a_stretch_needs_a_pile_and_two_distinct_points():
+    with pytest.raises(ValidationError, match="follows no sheet pile"):
+        schemas.Interface(**_interface(structure=None, points=[[8.0, 0.0], [8.0, -10.0]],
+                                       side="left", stretch=[[8.0, 0.0], [8.0, -4.0]]))
+    with pytest.raises(ValidationError, match="same point"):
+        schemas.Interface(**_interface(stretch=[[12.0, -2.0], [12.0, -2.0]]))
+    with pytest.raises(ValidationError, match="non-finite"):
+        schemas.Interface(**_interface(stretch=[[12.0, -2.0], [12.0, float("nan")]]))
+
+
+def test_a_stretch_must_lie_on_its_pile():
+    with pytest.raises(ValidationError, match=r"To \(12.2, -6\) is 0.2 m from Sheet pile"):
+        schemas.Project.model_validate(_with_interfaces(
+            [_interface(stretch=[[12.0, -2.0], [12.2, -6.0]])]))
+
+
+def test_an_interface_runs_along_the_part_of_its_pile_between_from_and_to():
+    project = schemas.Project.model_validate(_with_interfaces(
+        [_interface(stretch=[[12.0, -6.0], [12.0, -2.0]])]))
+    interface = project.interfaces[0]
+
+    assert interface.stretch == ((12.0, -6.0), (12.0, -2.0))
+    assert project.interface_path(interface) == [(12.0, -2.0), (12.0, -6.0)], \
+        "in the pile's own order, whichever way From and To are given"
+
+
+def test_a_stretch_over_the_whole_pile_is_saved_as_the_whole_pile():
+    """So a whole pile has one form, and the records of today load as they are."""
+    project = schemas.Project.model_validate(_with_interfaces(
+        [_interface(stretch=[[12.0, -14.0], [12.0, 0.0]])]))
+    assert project.interfaces[0].stretch is None
+    assert project.interface_path(project.interfaces[0]) == [(12.0, 0.0), (12.0, -14.0)]
+
+
+def test_a_whole_pile_record_of_today_loads_unchanged():
+    payload = _with_interfaces([_interface(side="left")])
+    project = schemas.Project.model_validate(payload)
+    assert project.model_dump()["interfaces"][0] == {**_interface(side="left"),
+                                                     "kind": "interface", "stretch": None}
+
+
+def test_the_faces_of_a_flat_line_are_below_and_above():
+    """A record follows its line: left on a line flatter than 45 degrees is below."""
+    beams = [_beam(points=[[2.0, -3.0], [20.0, -5.0]])]
+    project = schemas.Project.model_validate(_with_interfaces(
+        [_interface(side="left")], beams=beams))
+    assert project.interfaces[0].side == "below"
+
+    steep = [_beam(points=[[12.0, 0.0], [12.0, -14.0]])]
+    project = schemas.Project.model_validate(_with_interfaces(
+        [_interface(side="above")], beams=steep))
+    assert project.interfaces[0].side == "right"
+
+
+def test_an_old_one_side_record_drawn_downward_loads_with_its_side_swapped():
+    """Before 2026-10-25 left was left walking the line. Walking down a pile, that is
+    the soil toward +x: the screen's right. The pile's soil stays the soil it was."""
+    payload = _with_interfaces([_interface(side="left"),
+                                _interface(id="interface_2", name="Slip", structure=None,
+                                           points=[[4.0, -1.0], [4.0, -9.0]],
+                                           side="right")])
+    del payload["interface_sides"]
+    project = schemas.Project.model_validate(payload)
+
+    assert [i.side for i in project.interfaces] == ["right", "left"]
+    assert project.interface_sides == "screen"
+    again = schemas.Project.model_validate(project.model_dump())
+    assert [i.side for i in again.interfaces] == ["right", "left"], "converted once only"
+
+
+def test_an_old_record_drawn_upward_keeps_its_side():
+    beams = [_beam(points=[[12.0, -14.0], [12.0, 0.0]])]
+    payload = _with_interfaces([_interface(side="left")], beams=beams)
+    del payload["interface_sides"]
+    assert schemas.Project.model_validate(payload).interfaces[0].side == "left"
+
+
+def test_two_interfaces_may_not_hold_the_same_face_over_the_same_length():
+    with pytest.raises(ValidationError, match=(
+            "Bottom and Wall contact both hold the left face of Sheet pile 1 between "
+            "y -4 and y -6")):
+        schemas.Project.model_validate(_with_interfaces([
+            _interface(side="left", stretch=[[12.0, 0.0], [12.0, -6.0]]),
+            _interface(id="interface_2", name="Bottom", side="both",
+                       stretch=[[12.0, -4.0], [12.0, -14.0]])]))
+
+
+def test_two_interfaces_may_hold_the_two_faces_or_two_parts_of_one_face():
+    project = schemas.Project.model_validate(_with_interfaces([
+        _interface(side="left", stretch=[[12.0, 0.0], [12.0, -6.0]]),
+        _interface(id="interface_2", name="Right", side="right"),
+        _interface(id="interface_3", name="Bottom", side="left",
+                   stretch=[[12.0, -6.0], [12.0, -14.0]])]))
+    assert len(project.active_interfaces) == 3
+
+
+def test_a_free_line_along_a_live_pile_is_refused():
+    with pytest.raises(ValidationError, match=(
+            "Slip runs along Sheet pile 1. Put it on Sheet pile 1 instead")):
+        schemas.Project.model_validate(_with_interfaces([
+            _interface(id="interface_2", name="Slip", structure=None,
+                       points=[[12.0, -2.0], [12.0, -20.0]], side="left")]))
+    # Crossing the pile, or along a switched-off one, is a free line like any other.
+    schemas.Project.model_validate(_with_interfaces([
+        _interface(id="interface_2", name="Slip", structure=None,
+                   points=[[4.0, -2.0], [20.0, -6.0]], side="left")]))
+
+
 def test_interfaces_are_plane_strain_only():
     payload = _with_interfaces([_interface()])
     payload["dimension"] = 3

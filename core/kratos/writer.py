@@ -34,7 +34,7 @@ from dataclasses import dataclass
 
 import gmsh
 
-from core.model import stages
+from core.model import polylines, stages
 from core.geometry import solid_model, meshing
 from core.kratos import condition_checks
 from core.kratos import deck_files, interfaces
@@ -853,24 +853,24 @@ def _interface_elements(project: Project, dim: int,
             for a, b, *_ in interfaces.EDGES.get(len(row), ())}
     specs = []
     for interface in active:
+        path = project.interface_path(interface)
         if interface.structure is None:
             segments = _segments(_tagged(1).get(interface.id, []))
-            path = [(x, y) for x, y in interface.points or []]
         else:
             segments = [row for row in beam_rows.get(interface.structure, [])
                         if frozenset(row[:2]) in held]
-            # A sheet pile: an interface follows nothing else, so (x, y).
-            path = [(point[0], point[1]) for point in
-                    _beam_of(project, interface.structure).points]
         if not segments:
             raise ExportError(
                 f"interface {interface.name!r} has no mesh along its line -- the line "
                 "it follows lies outside the soil in this section, so there is nothing "
                 "for the contact to hold."
             )
+        # The record names a face on the screen; the split counts sides walking the line.
+        sides = (interface.side if interface.side == "both"
+                 else polylines.walking_side(path, interface.side))
         specs.append(interfaces.Spec(key=interface.id, path=path, segments=segments,
                                      structural=interface.structure is not None,
-                                     sides=interface.side))
+                                     sides=sides))
 
     # The soil a contact can hold: every layer body, every body dug out of one, and every
     # drawn or imported part with a material -- the same list a condition on a soil part

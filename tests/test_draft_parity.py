@@ -163,6 +163,18 @@ def calls(models: dict) -> list[dict]:
          drafts.interface)
     call("an interface with no pile is a free line", "Interfaces.draft", "section", [],
          drafts.interface)
+    call("an interface on a part of the pile, snapped onto it", "Interfaces.draft", "pile",
+         [None, [[6.3, -2], [6, -5]]],
+         lambda p: drafts.interface(p, stretch_from=(6.3, -2), stretch_to=(6, -5)))
+    call("an interface from one end of the pile to the other is the whole pile",
+         "Interfaces.draft", "pile", [None, [[6, -12], [6, 0]]],
+         lambda p: drafts.interface(p, stretch_from=(6, -12), stretch_to=(6, 0)))
+    call("a From far from the pile is refused", "Interfaces.draft", "pile",
+         [None, [[7.2, -2], [6, -5]]],
+         lambda p: drafts.interface(p, stretch_from=(7.2, -2), stretch_to=(6, -5)))
+    call("From and To at one point are refused", "Interfaces.draft", "pile",
+         [None, [[6.2, -3], [6, -3]]],
+         lambda p: drafts.interface(p, stretch_from=(6.2, -3), stretch_to=(6, -3)))
     call("the contact a first interface brings", "Interfaces.sectionsFor", "section",
          [_record(drafts.interface(models["section"]))], library(drafts.interface))
     call("a normal load down the middle", "NormalLoads.draft", "section", [],

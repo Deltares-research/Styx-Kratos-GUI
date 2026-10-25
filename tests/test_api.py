@@ -644,7 +644,7 @@ INTERFACE_SECTION = {"id": "contact_1", "name": "Steel against sand",
                      "shear_stiffness": None, "permeability": "Neutral"}
 INTERFACE = {"id": "interface_1", "name": "Wall contact", "kind": "interface",
              "section": "contact_1", "structure": "sheetpile_1", "points": None,
-             "side": "both", "active": True}
+             "side": "both", "stretch": None, "active": True}
 
 
 def interface_section(client) -> dict:
