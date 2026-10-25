@@ -286,21 +286,40 @@ App.Viewport = (function () {
      pressure flips the arrows. The deck presses the same way: the exporter writes each
      segment against the drawn line, because Kratos presses to the left of a
      condition's own node order (core/kratos/writer.py, `_normal_load_conditions`), and
-     warns where the arrows point out of the soil. */
+     warns where the arrows point out of the soil.
+
+     The arrows show the size of the load along its line. A uniform load has arrows of
+     one length. A hydrostatic one is nought at its water level and grows with depth
+     below it, so its arrows grow from nought at the level to the full length at the
+     deepest point, and the line through their tails is slanted: the triangle or
+     trapezoid of a water pressure. Above the level there is no load and nothing is
+     drawn. A hydrostatic load that is dry all along draws its line alone, so it still
+     shows where it is. */
   function normalLoadGlyphSpec(load, project) {
     var points = load.points || [];
     var span = modelSpan(project, frame && frame.size);
     var length = span > 0 ? span * 0.08 : 1;
     var sign = load.pressure < 0 ? -1 : 1;
     var offset = sectionOffset(project);
-    // The two modes are drawn identically: what a load is sized by is a property of
-    // the load, not of how it looks, and a symbol that came and went with the mode
-    // read as the load itself coming and going. A load in the model is a load on
-    // screen, hydrostatic or uniform, whatever its magnitude.
     var spec = { arrows: [], tails: [], length: length, active: load.active !== false };
+
+    var hydrostatic = load.fluid_pressure_type === 'Hydrostatic';
+    var level = hydrostatic ? normalLoadLevel(load, project) : null;
+    var deepest = 0;
+    if (hydrostatic && level !== null) {
+      points.forEach(function (q) { deepest = Math.max(deepest, level - q[1]); });
+    }
+    if (hydrostatic && !(deepest > 0)) {
+      spec.tails.push(points.map(function (q) { return [q[0], q[1], offset]; }));
+      return spec;
+    }
+    function size(y) {
+      return hydrostatic ? length * Math.max(0, level - y) / deepest : length;
+    }
+
     // No line along the loaded face: it reads as a bar laid on top of the model. The
     // line is through the tails of the arrows instead, one straight line per segment,
-    // parallel to it, so a load on a slope or down a wall reads as a spread load too.
+    // so a load on a slope or down a wall reads as a spread load too.
     var previous = null, tails = null;
     for (var i = 1; i < points.length; i += 1) {
       var start = points[i - 1], end = points[i];
@@ -308,24 +327,57 @@ App.Viewport = (function () {
       var len = Math.sqrt(dx * dx + dy * dy);
       if (!len) continue;
       var direction = [sign * dy / len, -sign * dx / len, 0];
-      // Three to a segment. A vertex shared with a segment in line with this one has
-      // one arrow; at a bend each segment has its own, so both tail lines end on one.
-      var straight = previous && Math.abs(previous[0] - direction[0]) < 1e-9
-                     && Math.abs(previous[1] - direction[1]) < 1e-9;
-      for (var step = straight ? 1 : 0; step <= 2; step += 1) {
-        var t = step / 2;
-        spec.arrows.push({
-          tip: [start[0] + dx * t, start[1] + dy * t, offset],
-          direction: direction
-        });
+      // The part of the segment under the water, as fractions of it: all of it for a
+      // uniform load.
+      var from = 0, to = 1;
+      if (hydrostatic) {
+        var wetStart = start[1] < level, wetEnd = end[1] < level;
+        if (!wetStart && !wetEnd) { previous = null; continue; }
+        var crossing = dy ? (level - start[1]) / dy : 0;
+        if (!wetStart) from = crossing;
+        if (!wetEnd) to = crossing;
       }
-      var bx = -direction[0] * length, by = -direction[1] * length;
-      var endTail = [end[0] + bx, end[1] + by, offset];
+      // A vertex shared with a segment in line with this one has one arrow; at a bend
+      // each segment has its own, so both tail lines end on one.
+      var straight = from === 0 && previous && Math.abs(previous[0] - direction[0]) < 1e-9
+                     && Math.abs(previous[1] - direction[1]) < 1e-9;
+      // Three to a uniform segment. A hydrostatic one has them closer, about a third
+      // of the full length apart, so the growth with depth reads.
+      var steps = hydrostatic
+        ? Math.max(2, Math.ceil(len * (to - from) / (length / 3))) : 2;
+      for (var step = straight ? 1 : 0; step <= steps; step += 1) {
+        var t = from + (to - from) * step / steps;
+        var tip = [start[0] + dx * t, start[1] + dy * t, offset];
+        var arrowLength = size(tip[1]);
+        // The arrow at the water level has no length, and three.js cannot draw one.
+        if (arrowLength > length * 1e-6) {
+          spec.arrows.push({ tip: tip, direction: direction, length: arrowLength });
+        }
+      }
+      var first = [start[0] + dx * from, start[1] + dy * from];
+      var last = [start[0] + dx * to, start[1] + dy * to];
+      var endTail = tailPoint(last, direction, size(last[1]), offset);
       if (straight) tails.push(endTail);
-      else spec.tails.push(tails = [[start[0] + bx, start[1] + by, offset], endTail]);
-      previous = direction;
+      else {
+        spec.tails.push(tails = [tailPoint(first, direction, size(first[1]), offset),
+                                 endTail]);
+      }
+      previous = to === 1 ? direction : null;
     }
+
     return spec;
+  }
+
+  function tailPoint(point, direction, length, offset) {
+    return [point[0] - direction[0] * length, point[1] - direction[1] * length, offset];
+  }
+
+  /* The water level of a hydrostatic load: its own, or the project's for a load saved
+     before it had one (schemas.NormalLoad.reference_coordinate). */
+  function normalLoadLevel(load, project) {
+    if (typeof load.reference_coordinate === 'number') return load.reference_coordinate;
+    var water = project && project.water;
+    return water && typeof water.y === 'number' ? water.y : null;
   }
 
   function normalLoadGlyphGroup(load, project) {
@@ -355,9 +407,11 @@ App.Viewport = (function () {
       var direction = new THREE.Vector3(
         entry.direction[0], entry.direction[1], entry.direction[2]);
       var tip = new THREE.Vector3(entry.tip[0], entry.tip[1], entry.tip[2]);
+      // The head keeps the size of a full arrow's, and a short arrow is all head.
+      var head = Math.min(spec.length * 0.16, entry.length);
       var arrow = new THREE.ArrowHelper(
-        direction, tip.clone().addScaledVector(direction, -spec.length),
-        spec.length, color, spec.length * 0.16, spec.length * 0.09);
+        direction, tip.clone().addScaledVector(direction, -entry.length),
+        entry.length, color, head, spec.length * 0.09 * head / (spec.length * 0.16));
       mark(arrow);
       group.add(arrow);
     });

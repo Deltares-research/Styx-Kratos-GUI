@@ -325,22 +325,67 @@
     T.eq(straight.arrows.length, 5, 'and one arrow where they meet');
   });
 
-  test('hydrostatic and uniform loads are drawn exactly alike', function () {
-    /* What a load is sized by is a property of the load, not of how it looks. The
-       uniform one used to vanish when its pressure was nought while the hydrostatic
-       one stayed, so the symbol read as the load itself coming and going. */
-    function specFor(type, pressure) {
-      return App.Viewport.normalLoadGlyphSpec(
-        { id: 'normalload_1', points: [[10, 0], [10, -5], [16, -5]],
-          pressure: pressure, fluid_pressure_type: type, active: true }, section());
-    }
+  test('a uniform load is drawn whatever its magnitude, with arrows of one length',
+       function () {
+    /* The uniform one used to vanish when its pressure was nought, so the symbol read
+       as the load itself coming and going. */
     [0, 20].forEach(function (pressure) {
-      var hydrostatic = specFor('Hydrostatic', pressure);
-      var uniform = specFor('Uniform', pressure);
-      T.ok(hydrostatic.arrows.length > 0, 'drawn at ' + pressure + ' kN/m²');
-      T.eq(uniform.arrows, hydrostatic.arrows, 'same arrows at ' + pressure + ' kN/m²');
-      T.eq(uniform.length, hydrostatic.length);
+      var spec = App.Viewport.normalLoadGlyphSpec(
+        { id: 'normalload_1', points: [[10, 0], [10, -5], [16, -5]],
+          pressure: pressure, fluid_pressure_type: 'Uniform', active: true }, section());
+      T.ok(spec.arrows.length > 0, 'drawn at ' + pressure + ' kN/m²');
+      spec.arrows.forEach(function (arrow) { T.near(arrow.length, spec.length, 1e-9); });
     });
+  });
+
+  /* A hydrostatic load is nought at its water level and grows with depth, and the
+     symbol shows it: the arrows grow from nought at the level to the full length at
+     the deepest point, so the line through their tails is slanted. */
+  function wall(level) {
+    return App.Viewport.normalLoadGlyphSpec(
+      { id: 'water_1', points: [[10, 0], [10, -10]], pressure: 0,
+        fluid_pressure_type: 'Hydrostatic', reference_coordinate: level,
+        active: true }, section());
+  }
+
+  test('the arrows of a hydrostatic load grow with depth below its water level',
+       function () {
+    var spec = wall(0);
+    T.ok(spec.arrows.length >= 5, 'enough arrows to show the growth');
+    spec.arrows.forEach(function (arrow) {
+      T.near(arrow.length, spec.length * -arrow.tip[1] / 10, 1e-9,
+             'in proportion to the depth at y = ' + arrow.tip[1]);
+    });
+    var deepest = spec.arrows[spec.arrows.length - 1];
+    T.near(deepest.length, spec.length, 1e-9, 'the full length at the deepest point');
+    T.eq(spec.tails.length, 1);
+    T.near(spec.tails[0][0][0], 10, 1e-9, 'the tail line starts on the wall, at the level');
+    T.near(spec.tails[0][0][1], 0, 1e-9);
+    T.near(Math.abs(spec.tails[0][1][0] - 10), spec.length, 1e-9,
+           'and ends one full arrow off the wall at the bottom: a triangle');
+  });
+
+  test('a hydrostatic load is drawn under its water level only', function () {
+    var spec = wall(-4);
+    spec.arrows.forEach(function (arrow) {
+      T.ok(arrow.tip[1] < -4, 'no arrow above the level: ' + arrow.tip[1]);
+    });
+    T.near(spec.tails[0][0][1], -4, 1e-9, 'the tail line starts at the level');
+  });
+
+  test('a hydrostatic load that is dry all along draws its line and no arrows',
+       function () {
+    var spec = wall(-20);
+    T.eq(spec.arrows.length, 0);
+    T.eq(spec.tails, [[[10, 0, 20], [10, -10, 20]]], 'so it still shows where it is');
+  });
+
+  test('a hydrostatic load with no level of its own reads the project water', function () {
+    var spec = App.Viewport.normalLoadGlyphSpec(
+      { id: 'water_1', points: [[10, 0], [10, -10]], pressure: 0,
+        fluid_pressure_type: 'Hydrostatic', reference_coordinate: null, active: true },
+      section());
+    T.near(spec.tails[0][0][1], -3.5, 1e-9, 'the level of the section, y = -3.5');
   });
 
   test('a negative pressure turns the arrows round', function () {
