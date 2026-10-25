@@ -285,6 +285,46 @@
          'the floor is pushed downwards');
   });
 
+  /* The usual symbol of a spread load: the tails of the arrows joined by one straight
+     line, parallel to the loaded segment, on a slope as well as on flat ground. */
+  test('the tails of the arrows are joined by a straight line along each segment',
+       function () {
+    var slope = App.Viewport.normalLoadGlyphSpec(
+      { id: 'normalload_1', points: [[0, 0], [8, -6]], pressure: 20,
+        fluid_pressure_type: 'Uniform', active: true }, section());
+    T.eq(slope.tails.length, 1, 'one line for one segment');
+    var line = slope.tails[0];
+    T.eq(line.length, 2, 'a straight line');
+    [0, 2].forEach(function (k) {
+      var arrow = slope.arrows[k];
+      var tail = [arrow.tip[0] - arrow.direction[0] * slope.length,
+                  arrow.tip[1] - arrow.direction[1] * slope.length];
+      var end = line[k / 2];
+      T.near(end[0], tail[0], 1e-9, 'the line starts and ends on an arrow tail');
+      T.near(end[1], tail[1], 1e-9);
+    });
+    var middle = slope.arrows[1];
+    var mx = middle.tip[0] - middle.direction[0] * slope.length;
+    var my = middle.tip[1] - middle.direction[1] * slope.length;
+    var cross = (line[1][0] - line[0][0]) * (my - line[0][1])
+              - (line[1][1] - line[0][1]) * (mx - line[0][0]);
+    T.near(cross, 0, 1e-9, 'the middle tail is on the line too');
+  });
+
+  test('a bent line has one tail line per segment, each ending on an arrow', function () {
+    var spec = App.Viewport.normalLoadGlyphSpec(
+      { id: 'normalload_1', points: [[10, 0], [10, -5], [16, -5]], pressure: 20,
+        fluid_pressure_type: 'Uniform', active: true }, section());
+    T.eq(spec.tails.length, 2);
+    T.eq(spec.arrows.length, 6, 'the bend has an arrow for each segment');
+    var straight = App.Viewport.normalLoadGlyphSpec(
+      { id: 'normalload_1', points: [[0, 0], [5, 0], [10, 0]], pressure: 20,
+        fluid_pressure_type: 'Uniform', active: true }, section());
+    T.eq(straight.tails.length, 1, 'segments in line share one tail line');
+    T.eq(straight.tails[0].length, 3);
+    T.eq(straight.arrows.length, 5, 'and one arrow where they meet');
+  });
+
   test('hydrostatic and uniform loads are drawn exactly alike', function () {
     /* What a load is sized by is a property of the load, not of how it looks. The
        uniform one used to vanish when its pressure was nought while the hydrostatic

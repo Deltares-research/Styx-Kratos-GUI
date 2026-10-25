@@ -412,6 +412,22 @@
     T.eq(spec.anchors[4], [14, 0, 20]);
   });
 
+  test('a 2D line load joins the tails of its arrows with a straight line', function () {
+    /* The usual symbol: the line stands where the arrows start, off the loaded face,
+       and stays straight when the load pushes at an angle. */
+    var load = App.Loads.draftFromPoints(SECTION, [[4, 0, 20], [14, 0, 20]]);
+    load.components = [3, -4];
+    var spec = App.Viewport.loadGlyphSpec(load, SECTION);
+    T.eq(spec.tails.length, 1);
+    var line = spec.tails[0];
+    T.eq(line.length, 2);
+    [[0, 0], [1, 4]].forEach(function (pair) {
+      var anchor = spec.anchors[pair[1]];
+      T.near(line[pair[0]][0], anchor[0] - 0.6 * spec.length, 1e-9);
+      T.near(line[pair[0]][1], anchor[1] + 0.8 * spec.length, 1e-9);
+    });
+  });
+
   test('a 3D surface load is indicated by an arrow grid over its footprint', function () {
     var load = App.Loads.draftFromPoints(SOLID, [[3, 7, 0], [12, 25, 0]]);
     var spec = App.Viewport.loadGlyphSpec(load, SOLID);
@@ -576,9 +592,11 @@
     T.eq(spec.anchors.every(function (a) { return a[1] === 0; }), true);
   });
 
-  test('the surface load outline is drawn at the same elevation as its arrows', function () {
+  test('the surface load outline joins the tails of the arrows on its pad', function () {
     /* The pad outline had its own copy of `domain.y_top`, so fixing only the arrows
-       would have left the rectangle behind on the layer soil. */
+       would have left the rectangle behind on the layer soil. It is drawn through the
+       arrows' tails: one arrow length above the pad, for a load pushing down. */
+    var length = App.Viewport.loadGlyphSpec(surfaceLoad(4), RAISED_SOLID).length;
     var group = App.Viewport.loadGlyphGroup(surfaceLoad(4), RAISED_SOLID);
     var outline = null;
     group.traverse(function (object) {
@@ -589,7 +607,7 @@
     var xyz = outline.geometry.attributes.position.array;
     var levels = [];
     for (var i = 1; i < xyz.length; i += 3) levels.push(xyz[i]);
-    T.eq(levels.every(function (v) { return v === 4; }), true,
+    T.eq(levels.every(function (v) { return Math.abs(v - (4 + length)) < 1e-6; }), true,
          'outline levels: ' + JSON.stringify(levels));
   });
 

@@ -229,6 +229,7 @@ App.Viewport = (function () {
       length: span > 0 ? span * 0.08 : 1,
       anchors: [], active: load.active !== false, zero: magnitude === 0
     };
+    spec.tails = [];
     if (load.kind === 'point') {
       spec.anchors.push([load.x, load.y, sectionOffset(project)]);
       return spec;
@@ -243,6 +244,7 @@ App.Viewport = (function () {
       samples(load.x0, load.x1, 5).forEach(function (x) {
         spec.anchors.push([x, load.y, offset]);
       });
+      spec.tails.push(tailsOf(spec, [spec.anchors[0], spec.anchors[4]]));
       return spec;
     }
     // The load's own elevation, not `d.y_top`: the domain is only the layer block,
@@ -255,7 +257,23 @@ App.Viewport = (function () {
         spec.anchors.push([x, y, z]);
       });
     });
+    spec.tails.push(tailsOf(spec, [
+      [load.x0, y, load.z0], [load.x1, y, load.z0], [load.x1, y, load.z1],
+      [load.x0, y, load.z1], [load.x0, y, load.z0]]));
     return spec;
+  }
+
+  /* The usual symbol of a distributed load: one straight line through the tails of
+     its arrows, so it reads as a load spread over the line and stands off the face
+     it presses on. `points` are on the loaded face; the line is where the arrows
+     start. A load of nought has no arrows, so its line stays on the face and still
+     shows where it is. */
+  function tailsOf(spec, points) {
+    var back = spec.zero ? 0 : spec.length;
+    return points.map(function (point) {
+      return [point[0] - spec.direction[0] * back, point[1] - spec.direction[1] * back,
+              point[2] - spec.direction[2] * back];
+    });
   }
 
   /* A normal load pushes perpendicular to its own line, so unlike the three vector
@@ -279,24 +297,33 @@ App.Viewport = (function () {
     // the load, not of how it looks, and a symbol that came and went with the mode
     // read as the load itself coming and going. A load in the model is a load on
     // screen, hydrostatic or uniform, whatever its magnitude.
-    var spec = { arrows: [], length: length, active: load.active !== false };
-    // Arrows and nothing else. A line along the loaded face -- the outline a line
-    // load's glyph draws, or the strip the build used to make -- reads as a bar laid
-    // on top of the model rather than as a load applied to it.
+    var spec = { arrows: [], tails: [], length: length, active: load.active !== false };
+    // No line along the loaded face: it reads as a bar laid on top of the model. The
+    // line is through the tails of the arrows instead, one straight line per segment,
+    // parallel to it, so a load on a slope or down a wall reads as a spread load too.
+    var previous = null, tails = null;
     for (var i = 1; i < points.length; i += 1) {
       var start = points[i - 1], end = points[i];
       var dx = end[0] - start[0], dy = end[1] - start[1];
       var len = Math.sqrt(dx * dx + dy * dy);
       if (!len) continue;
       var direction = [sign * dy / len, -sign * dx / len, 0];
-      // Three to a segment, and the shared vertex is not given two arrows.
-      for (var step = i === 1 ? 0 : 1; step <= 2; step += 1) {
+      // Three to a segment. A vertex shared with a segment in line with this one has
+      // one arrow; at a bend each segment has its own, so both tail lines end on one.
+      var straight = previous && Math.abs(previous[0] - direction[0]) < 1e-9
+                     && Math.abs(previous[1] - direction[1]) < 1e-9;
+      for (var step = straight ? 1 : 0; step <= 2; step += 1) {
         var t = step / 2;
         spec.arrows.push({
           tip: [start[0] + dx * t, start[1] + dy * t, offset],
           direction: direction
         });
       }
+      var bx = -direction[0] * length, by = -direction[1] * length;
+      var endTail = [end[0] + bx, end[1] + by, offset];
+      if (straight) tails.push(endTail);
+      else spec.tails.push(tails = [[start[0] + bx, start[1] + by, offset], endTail]);
+      previous = direction;
     }
     return spec;
   }
@@ -333,6 +360,17 @@ App.Viewport = (function () {
         spec.length, color, spec.length * 0.16, spec.length * 0.09);
       mark(arrow);
       group.add(arrow);
+    });
+
+    spec.tails.forEach(function (points) {
+      var line = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints(points.map(function (point) {
+          return new THREE.Vector3(point[0], point[1], point[2]);
+        })),
+        new THREE.LineBasicMaterial({ color: color }));
+      mark(line);
+      line.userData.noPick = true;
+      group.add(line);
     });
 
     return group;
@@ -377,30 +415,21 @@ App.Viewport = (function () {
       marker.userData.loadGlyph = true;
       marker.renderOrder = 19;
       group.add(marker);
-    } else {
-      var outlinePoints;
-      if (spec.kind === 'line') {
-        outlinePoints = [spec.anchors[0], spec.anchors[spec.anchors.length - 1]];
-      } else {
-        // The same elevation the arrows use, or the outline stays behind on the
-        // layer soil while the arrows move up onto the embankment.
-        var pad = loadElevation(load, project);
-        outlinePoints = [
-          [load.x0, pad, load.z0], [load.x1, pad, load.z0],
-          [load.x1, pad, load.z1], [load.x0, pad, load.z1],
-          [load.x0, pad, load.z0]
-        ];
-      }
+    }
+    // Through the tails of the arrows (`tailsOf`), at the elevation the arrows use.
+    spec.tails.forEach(function (points) {
       var outline = new THREE.Line(
-        new THREE.BufferGeometry().setFromPoints(outlinePoints.map(function (point) {
+        new THREE.BufferGeometry().setFromPoints(points.map(function (point) {
           return new THREE.Vector3(point[0], point[1], point[2]);
         })),
-        new THREE.LineBasicMaterial({ color: color, depthTest: false }));
+        new THREE.LineBasicMaterial({ color: color, depthTest: false,
+                                      transparent: true,
+                                      opacity: spec.active ? 1 : 0.45 }));
       outline.userData.noPick = true;
       outline.userData.loadGlyph = true;
       outline.renderOrder = 18;
       group.add(outline);
-    }
+    });
     return group;
   }
 
