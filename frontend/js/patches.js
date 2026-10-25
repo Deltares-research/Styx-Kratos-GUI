@@ -157,7 +157,8 @@ App.LivePatches = (function () {
     var labels = {
       createSheetPile: is2d ? 'Create sheet pile…' : 'Create wall panel…',
       createMember: 'Create member…',
-      createAnchor: is2d ? 'Create anchor…' : 'Create anchor in space…'
+      createAnchor: is2d ? 'Create anchor…' : 'Create anchor in space…',
+      interface: 'Create interface…'
     };
     Object.keys(labels).forEach(function (action) {
       ((App.RAILS && App.RAILS.structures) || []).forEach(function (tool) {

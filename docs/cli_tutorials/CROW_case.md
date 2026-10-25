@@ -258,7 +258,11 @@ added interface (id wall_contact, name Interface); wrote ...\crow.json
 
 - `--material none`: each stretch of the interface takes the soil it runs against, reduced
   by `R_inter` = 0.7.
-- `--side both` puts the interface on both faces of the wall.
+- `--side both` puts the interface on both faces of the wall. `left` is the face toward
+  -x and `right` the face toward +x, as the GUI shows them.
+- The interface holds the whole pile. To hold a part of it only, give `--from X Y` and
+  `--to X Y`, two points on the pile: for example `--from 5 -1.5 --to 5 -13` for the part
+  below the strut head.
 - The stiffnesses are derived from that soil: shear = G / virtual thickness, normal =
   10 x shear. To use your own, type them on the section, in N/m³:
   `section set contact INTERFACE_NORMAL_STIFFNESS=1e9 INTERFACE_SHEAR_STIFFNESS=1e8`.

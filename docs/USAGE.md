@@ -164,7 +164,7 @@ lift of the pit as its own soil body, for example *Soil_Top · lift 1*.
 | Wall panel (3D) | Click **Create wall panel…**. Type the corners of the footprint, the **Top level** and the **Toe level**. |
 | Member (3D): a bored pile, a king post or a strut | Click **Create member…**. |
 | Anchor | Click **Create anchor…** (in 3D: **Create anchor in space…**). Styx puts the head of the anchor on a sheet pile, a wall panel or a member. Then change the head, the tail and the prestress in the Selection explorer. |
-| Interface (2D only) | Click **Create interface**. See [Interfaces](#interfaces). |
+| Interface (2D only) | Click **Create interface…**. Select the sheet pile in **Along**, or **Own coordinates**, then click **Save**. See [Interfaces](#interfaces). |
 | Point or line load (2D), surface load (3D) | Click **Create load**. Type the position and the load components, or click **Pick on model…** and click in the viewport. |
 | Normal load (2D only) | Click **Create normal load**. Type the two end points. Select **Uniform** and type the pressure, or select **Hydrostatic** and type the **Reference level**, where the pressure is zero. An empty level takes the water level. The arrows of a hydrostatic load grow with depth below its level. |
 | Support (2D only, along a line or at a point) | Click **Create boundary condition** and select **Line prescribed displacement** or **Point prescribed displacement**. Click the points in the viewport, then select the components to fix. See [Boundary conditions](#boundary-conditions). |
@@ -183,12 +183,34 @@ values are for each metre of wall, divided by the **Spacing**.
 An interface is a contact with zero thickness between a sheet pile and the soil. It lets the
 wall slide along the soil.
 
-- **Create interface** adds an interface to the first sheet pile. If the model has no sheet
-  pile, the tool draws a free interface line through the soil.
-- The **Side** row selects the faces that get the interface: both, left or right. For a
-  retaining wall, you usually select both.
-- The **Contact** rows set the soil whose strength `R_inter` reduces, the virtual thickness,
-  and the permeability.
+**Create interface…** opens the interface window. Nothing is saved until you click
+**Save**, so **Cancel** leaves the model as it was. **Edit interface…** in the Selection
+explorer, and **Properties…** on the Model explorer row, open the same window.
+
+1. In **Along**, select a sheet pile by its name, or **Own coordinates** for a line through
+   the soil.
+2. On a sheet pile, **From** and **To** start at the two ends of the pile, so **Save**
+   puts the interface on the whole pile. To put it on a part of the pile only, for example
+   the part below an anchor, type other points. Styx moves a point onto the pile. A point
+   more than 0.5 m from the pile is refused.
+3. With **Own coordinates**, type the points of the line, or click **Pick on model…** and
+   click two points in the viewport. **Add point** gives the line a bend.
+4. In **Side**, select the faces that get the interface: **Both sides**, **Left (toward
+   -x)** or **Right (toward +x)**, as you see them on the screen. For a line flatter than
+   45 degrees, the faces are **Below** and **Above**. **Both sides** is only for a sheet
+   pile. For a retaining wall, you usually select both.
+5. In **Contact**, select the contact properties, or **New contact**. You change their
+   numbers in the Selection explorer: the soil whose strength `R_inter` reduces, the
+   virtual thickness, and the permeability.
+
+You can make as many interfaces as you need, for example one on each face of a pile, or
+two on parts of one face. Two interfaces on the same face of a pile over the same length
+are refused. A line of its own coordinates that runs along a sheet pile is refused too:
+select the pile in **Along** and set **From** and **To**.
+
+At an end where the pile goes on, the soil beyond the end stays fixed to the pile. An
+interface along the grout body of a ground anchor is not possible, because the grout body
+is a point in the model.
 
 Interfaces work only in plane strain, so the tool is not available in 3D.
 

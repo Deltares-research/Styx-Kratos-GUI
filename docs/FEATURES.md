@@ -78,7 +78,10 @@ export divides the section values (not the density) by the `spacing`.
 |---|---|---|
 | Element | `Geo_UPwLineInterfacePlaneStrainElement2Plus2N` / `Geo_UPwLineInterfacePlaneStrainDiffOrderElement3Plus3N` | Tested for quadratic, from a Kratos reference deck. Limited for linear: the name is inferred. |
 | Law | The law of the interface section. The default is `GeoIncrementalLinearElasticInterfaceLaw`. The K0 stage always uses this law. | Tested |
-| Placement | Along a sheet pile (side: both, left or right), or along a free line through the soil (soil against soil, a slip surface, a lining) | Tested |
+| Placement | Along a whole sheet pile or the part between two points on it (From, To), or along a free line through the soil (soil against soil, a slip surface, a lining). Side: both, left or right on the screen (below or above for a flat line). Many interfaces per pile, but only one on each face over a length. | Tested |
+| Ends of an interface | At the toe, one node copy for the soil around it (for one face only: the soil on that side of the pile line). Where the pile goes on, the soil beyond the end stays on the pile node, as the Kratos-side InterfaceInserter does. | Tested, also in Kratos |
+| Ties before installation | A master/slave tie for each split node, also for an interface on one face only | Tested |
+| Along an anchor's grout body | Not possible: the grout body is a point in the model | Not available |
 | Node splitting | Styx duplicates the nodes after it makes the mesh, so the contact has zero thickness | Tested, [kratos/interfaces.py](../core/kratos/interfaces.py) |
 | Stiffness | `INTERFACE_SHEAR_STIFFNESS` and `INTERFACE_NORMAL_STIFFNESS` as you type them. If you leave them out: shear = G / t of the adjacent soil (t is the virtual thickness), normal = 10 × shear. | Tested |
 | Strength | If you leave them out: c × R and atan(R × tan φ) of the adjacent soil. R is the `R_inter` of the section, or else the `R_inter` of the soil (default 0.7). | Tested against the Kratos reference |
@@ -185,7 +188,7 @@ and adds only the values that are missing
 |---|---|
 | Sheet piles, wall panels, members | Sections are shared, so many piles can use one profile. You edit them in the Selection explorer. |
 | Anchors | The head moves onto a pile, a panel or a member. The prestress is set for each anchor. |
-| Interfaces | A **Side** row selects the faces that get the interface. Contact properties are shared. Without a pile, the tool draws a free line. |
+| Interfaces | The interface window: a sheet pile by name with **From** and **To**, or own coordinates; the faces as on the screen; the contact. Contact properties are shared. |
 | Loads | Point, line and surface loads by their components. You can switch each one off. |
 | Normal loads | A line with uniform or hydrostatic pressure |
 | Water | One water level for the full model. A new hydrostatic condition or normal load takes it as its own level. You can change the specific weight of the water. |
