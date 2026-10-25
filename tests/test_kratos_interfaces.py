@@ -771,7 +771,7 @@ def test_an_interface_on_a_part_of_a_pile_holds_only_that_part(part_of_a_pile):
 
 
 def test_where_the_pile_goes_on_past_the_part_the_soil_stays_welded_to_it(part_of_a_pile):
-    """Rule E: at From and To the pile goes on. The soil past the end keeps the pile's
+    """At From and To the pile goes on. The soil past the end keeps the pile's
     own node; the soil the contact holds has a copy per face there, as along the line."""
     deck = deck_of(part_of_a_pile)
     piles, soils = beam_nodes(deck), soil_nodes(deck)

@@ -288,7 +288,7 @@ def _register_interfaces(commands, common) -> None:
     add.set_defaults(kinds=("interface",))
     change = action(actions, common, "set", update_structure)
     existing(change, "interface")
-    _interface_fields(change)
+    _interface_fields(change, whole=True)
     _active(change)
     change.set_defaults(kinds=("interface",))
     remove = action(actions, common, "remove", remove_structure)
@@ -296,15 +296,29 @@ def _register_interfaces(commands, common) -> None:
     remove.set_defaults(kinds=("interface",))
 
 
-def _interface_fields(parser: argparse.ArgumentParser) -> None:
+def _interface_fields(parser: argparse.ArgumentParser, whole: bool = False) -> None:
     parser.add_argument("--name", help=NAME_HELP)
     parser.add_argument("--section", help="its contact properties (default: the first)")
     place = parser.add_mutually_exclusive_group()
     place.add_argument("--structure", help="the sheet pile it follows")
     place.add_argument("--points", nargs="+", metavar="N",
                        help="a free line x y ..., splitting soil from soil")
-    parser.add_argument("--side", choices=("both", "left", "right"),
-                        help="which soil is detached; left is to the left walking the line")
+    parser.add_argument("--from", dest="stretch_from", nargs=2, type=float,
+                      metavar=("X", "Y"),
+                      help="on a sheet pile: where the interface starts (default: the "
+                           "pile's first point); moved onto the pile, at most "
+                           f"{drafts.STRETCH_SNAP:g} m away")
+    parser.add_argument("--to", dest="stretch_to", nargs=2, type=float,
+                        metavar=("X", "Y"),
+                        help="on a sheet pile: where the interface ends (default: the "
+                             "pile's last point)")
+    if whole:
+        parser.add_argument("--whole-pile", action="store_true",
+                          help="hold the whole pile again, not the part between From "
+                               "and To")
+    parser.add_argument("--side", choices=("both", "left", "right", "below", "above"),
+                        help="which soil is detached, as on the screen: left (-x) or "
+                             "right (+x) of a steep line, below or above a flat one")
 
 
 # ── load, normal-load ───────────────────────────────────────────────────────
@@ -467,7 +481,9 @@ def _drafted(project: Project, args: argparse.Namespace):
                              prestress=args.prestress or 0.0, **named)
     if kind == "interface":
         return drafts.interface(project, args.structure, _points(args.points, 2),
-                                side=args.side, section=args.section, **named)
+                                side=args.side, section=args.section,
+                                stretch_from=args.stretch_from,
+                                stretch_to=args.stretch_to, **named)
     if kind == "normal":
         return drafts.normal_load(project, _points(args.points, 2),
                                   hydrostatic=bool(args.hydrostatic),
@@ -503,9 +519,18 @@ def _fields(project: Project, record, args: argparse.Namespace) -> dict:
         fields.update(given(args, "prestress"))
     if kind == "interface":
         if args.structure is not None:
-            fields.update(structure=args.structure, points=None)
+            fields.update(structure=args.structure, points=None, stretch=None)
         if args.points is not None:
-            fields.update(structure=None, points=coordinates(args.points, 2))
+            fields.update(structure=None, points=coordinates(args.points, 2),
+                          stretch=None)
+        part = args.stretch_from is not None or args.stretch_to is not None
+        if args.whole_pile and part:
+            raise CommandError("--whole-pile holds the whole pile; leave out --from and "
+                               "--to, or leave out --whole-pile")
+        if args.whole_pile:
+            fields["stretch"] = None
+        if part:
+            fields["stretch"] = _stretch(project, record, args)
         fields.update(given(args, "side"))
     if kind == "normal":
         if args.points is not None:
@@ -531,6 +556,19 @@ def _fields(project: Project, record, args: argparse.Namespace) -> dict:
             fields["components"] = _components(project, args.components,
                                                3 if kind == "surface" else 2)
     return fields
+
+
+def _stretch(project: Project, record, args: argparse.Namespace):
+    """From and To of `interface set`, snapped onto the pile: the one not given stays
+    where it was, or at the pile's end."""
+    structure = args.structure or record.structure
+    pile = next((b for b in project.sheet_piles if b.id == structure), None)
+    if pile is None:
+        raise CommandError("--from and --to are points on a sheet pile; this interface "
+                           "follows its own points. Give --structure too.")
+    now = (record.stretch if record.structure == pile.id and record.stretch
+           else (pile.points[0], pile.points[-1]))
+    return drafts.stretch(pile, args.stretch_from or now[0], args.stretch_to or now[1])
 
 
 def _width(project: Project) -> int:
@@ -572,7 +610,10 @@ def _line(record) -> str:
     elif kind in ("anchor", "anchor3d"):
         where = f"{_xy(record.head)} -> {_xy(record.tail)}"
     elif kind == "interface":
-        where = f"along {record.structure}, {record.side}"
+        where = f"along {record.structure}"
+        if record.stretch is not None:
+            where += f" from {_xy(record.stretch[0])} to {_xy(record.stretch[1])}"
+        where += f", {record.side}"
     elif kind == "point":
         where = f"at {_xy((record.x, record.y))}"
     elif kind == "line":

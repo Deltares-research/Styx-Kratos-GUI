@@ -78,7 +78,7 @@ Genuchten soil.
 | `wall P list\|add\|set\|remove ...` | Walls, in 3D: `add [ID] [--footprint x z ...] [--top Y] [--toe Y]` |
 | `member P list\|add\|set\|remove ...` | Piles, king posts and struts in 3D: `add [ID] [--points x y z ...]` |
 | `anchor P list\|add\|set\|remove ...` | Anchors and struts: `add [ID] [--head ...] [--tail ...] [--prestress S]`, the head snapped onto a structure |
-| `interface P list\|add\|set\|remove ...` | Interfaces, in 2D: `add [ID] [--structure PILE \| --points ...] [--side both\|left\|right]` |
+| `interface P list\|add\|set\|remove ...` | Interfaces, in 2D: `add [ID] [--structure PILE [--from X Y] [--to X Y] \| --points ...] [--side both\|left\|right\|below\|above]`; `set ID --whole-pile` |
 | `load P list\|add\|set\|remove ...` | Loads: `add point [--at X Y]`, `add line [--x FROM TO]` (2D), `add surface [--x ...] [--z ...]` (3D), `--components ...` |
 | `normal-load P list\|add\|set\|remove ...` | Pressures normal to a line, in 2D: `add [ID] --points ... [--hydrostatic [--reference-coordinate Y] \| --pressure S]` |
 | `boundary P list\|add\|set\|remove\|standard ...` | The boundary conditions: `add [ID] --face F\|--part KEY\|--line ...\|--point X Y --fixed\|--roller\|--fix AXIS ...` for a support, `add [ID] --domain\|... --water-pressure TYPE ...` for a water pressure, `add [ID] --face F\|--line ... --seepage` for a seepage face; `standard` puts back the standard supports |
@@ -183,7 +183,8 @@ kratos-cli section pit.json add beam az26 --name "AZ 26" CROSS_AREA=0.015 I33=3e
 kratos-cli beam pit.json add sheet --points 6 0 6 -12        # on az26, the first profile
 kratos-cli anchor pit.json add strut --head 6 -1 --tail 5 -1
 kratos-cli anchor pit.json add tie --head 6.3 -3.5 --prestress 1e5
-kratos-cli interface pit.json add contact --structure sheet
+kratos-cli interface pit.json add contact --structure sheet --side right
+kratos-cli interface pit.json add upper --structure sheet --side left --from 6 0 --to 6 -1
 kratos-cli load pit.json add line surcharge --x 6 60 --components 0 -10000
 kratos-cli normal-load pit.json add water_1 --hydrostatic --points 0 -2 6 -2 6 -1
 kratos-cli set pit.json mesh.body_sizes.sheet 0.5
@@ -220,6 +221,15 @@ kratos-cli set pit.json mesh.body_sizes.sheet 0.5
 - **Dimensions.** A sheet pile, an interface, a normal load and point and line loads are
   2D; a wall, a member and a surface load are 3D. Switching the dimension carries walls
   and loads across, as the GUI does (`dimension`).
+- **Interfaces.** An interface on a sheet pile holds the whole pile, or the part from
+  `--from` to `--to`. Each point is moved onto the pile; a point more than 0.5 m away is
+  refused. `interface set ID --whole-pile` holds the whole pile again, and `interface
+  list` shows the part (`along sheet from (6, 0) to (6, -1), left`). `--side` names a
+  face as the GUI shows it, whichever way the pile was drawn: `left` is the face toward
+  -x and `right` the face toward +x; on a line flatter than 45 degrees the faces are
+  `below` and `above`. `both` is for a pile only. Two interfaces may hold the two faces
+  of one pile, or two parts of one face, but not the same face over the same length.
+  An interface on its own points may not run along a sheet pile: put it on the pile.
 - **Anchors.** The head is snapped onto the nearest pile, wall or member within a metre,
   because it becomes one of its nodes; a head further away is refused. With no `--tail`,
   the anchor rakes back from its head. A strut is an anchor whose tail is a pinned support.
@@ -495,8 +505,8 @@ kratos-cli results field D:/copied/Pit_A_2026-10-12_09-14 uy   # a run anywhere
   is the bending moment. `--stage` narrows it to one stage.
 - **Which interface members a run has.** In a model with an excavation, `interface` is the
   face of the wall on the retained side. In a model without one, such as a dike with a
-  sheet pile, each face has its own member: `interface_left` and `interface_right`, left
-  and right of the pile as drawn (`results profile 1 interface_left tn`). An interface
+  sheet pile, each face has its own member: `interface_left` and `interface_right`, the
+  faces toward -x and +x (`results profile 1 interface_left tn`). An interface
   flatter than 45 degrees has `interface_below` and `interface_above` instead. With more
   than one interface, the member names start with the interface's id: `contact_left`.
   `results members` lists them.

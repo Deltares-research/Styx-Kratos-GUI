@@ -27,19 +27,17 @@ the line stops and the ground closes underneath, it gives one -- the soil there 
 continuous, and a real deck writes exactly one node for it. No geometric side test
 could tell those two cases apart.
 
-The ends of a line on a structure follow three rules (rule E of
-plan/done/interface-window-plan.md):
+The ends of a line on a structure follow three rules:
 
 *   At a free end of the pile -- its toe, or a top under the ground -- a contact on both
     faces gives the soil around it one copy, detached from the pile, as above.
 *   Where the pile goes on past the end of the contact (an interface on a part of a
     pile), the soil past the end stays welded to the pile: it keeps the original node.
     The soil the contact holds gets a copy per face, as along the line. This is the
-    Kratos-side InterfaceInserter's rule. Keeping the original node for the held soil
-    too, so that both faces meet the pile in one node, is what the plan first chose;
-    Kratos refuses it: `UPwInterfaceElement::Initialize` takes the side its neighbour
-    is on from the element's first node alone, and a first node on both sides sends it
-    to the wrong one ("Bad optional access", U_Pw_interface_element.cpp).
+    Kratos-side InterfaceInserter's rule. The held soil cannot keep the pile's node
+    as well: `UPwInterfaceElement::Initialize` (U_Pw_interface_element.cpp) takes the
+    side its neighbour is on from the element's first node alone, and with that node
+    on both sides it reads the wrong side and stops ("Bad optional access").
     A group of soil that touches the pile along an edge no interface holds on its face
     is welded to it, and keeps the original node.
 *   A contact on one face only, at a free end, gives one copy to the soil on that face's

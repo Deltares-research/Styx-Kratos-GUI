@@ -201,6 +201,38 @@ def test_an_interface_follows_a_pile_or_runs_its_own_line(cli, pit):
                                                         "left")
 
 
+def test_an_interface_holds_a_part_of_its_pile_between_from_and_to(cli, pit):
+    assert cli("interface", pit, "set", "wall_contact", "--side", "right").code == 0
+    added = cli("interface", pit, "add", "upper", "--structure", "sheetpile", "--side",
+                "left", "--from", "6.2", "0", "--to", "6", "-4")
+    assert added.code == 0, added.err
+
+    upper = session.load(pit).interfaces[-1]
+    assert upper.stretch == ((6.0, 0.0), (6.0, -4.0)), "From is moved onto the pile"
+    listed = cli("interface", pit, "list").out
+    assert "upper  upper  along sheetpile from (6, 0) to (6, -4), left" in listed
+
+    assert cli("interface", pit, "set", "upper", "--to", "6", "-8").code == 0
+    assert session.load(pit).interfaces[-1].stretch == ((6.0, 0.0), (6.0, -8.0))
+    assert cli("interface", pit, "set", "upper", "--whole-pile").code == 0
+    assert session.load(pit).interfaces[-1].stretch is None
+
+
+def test_an_interface_part_is_refused_as_in_the_window(cli, pit):
+    far = cli("interface", pit, "add", "--structure", "sheetpile", "--from", "7.2", "-2")
+    assert far.code != 0 and "From is 1.2 m from SheetPileWall" in far.err
+
+    twice = cli("interface", pit, "add", "--structure", "sheetpile", "--side", "left",
+                "--from", "6", "-2", "--to", "6", "-6")
+    assert twice.code != 0
+    assert "both hold the left face of SheetPileWall between y -2 and y -6" in twice.err
+
+    free = cli("interface", pit, "add", "slip", "--points", "10", "0", "20", "-10")
+    assert free.code == 0
+    assert "Give --structure too" in cli("interface", pit, "set", "slip", "--from", "6",
+                                          "-2").err
+
+
 def test_an_interface_is_set_and_removed(cli, pit):
     assert cli("interface", pit, "set", "wall_contact", "--side", "left").code == 0
     assert session.load(pit).interfaces[0].side == "left"

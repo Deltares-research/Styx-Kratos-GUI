@@ -148,7 +148,7 @@ def test_an_interface_element_at_the_toe_uses_the_shared_copy_on_both_sides():
     assert all(toe_copy in element for element in both)
 
 
-# ── Rule E: the ends of a contact on a pile ─────────────────────────────────
+# ── The ends of a contact on a pile ─────────────────────────────────────────
 #
 # The toe mesh again, with the pile drawn from node 8 up to node 5. An interface on its
 # top part, nodes 2 to 5, ends where the pile goes on: at node 2.

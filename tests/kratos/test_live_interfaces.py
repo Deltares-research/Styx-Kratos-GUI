@@ -71,14 +71,14 @@ def test_a_pile_standing_out_of_the_ground_runs():
 def test_a_contact_on_one_face_of_a_part_of_a_pile_runs():
     """The staged excavation with its contact on the retained face only, from the strut
     head down to the toe. Above the head the pile goes on: the soil there stays on the
-    pile's own node at the head, and the soil the contact holds has a copy (rule E). At
+    pile's own node at the head, and the soil the contact holds has a copy. At
     the toe the retained soil has its own copy, tied to the other soil until the wall
     is installed. Every stage runs.
 
-    The first form of rule E kept the pile's node for the held soil at the head as
-    well, so the last contact element had it on both sides. Kratos stopped in the
-    installation stage with "Bad optional access": `UPwInterfaceElement::Initialize`
-    takes the side its neighbour is on from the element's first node alone."""
+    With the pile's node kept for the held soil at the head as well, the last contact
+    element has it on both sides, and Kratos stops in the installation stage with "Bad
+    optional access": `UPwInterfaceElement::Initialize` takes the side its neighbour
+    is on from the element's first node alone."""
     project = excavation.excavation_project()
     contact = project.interfaces[0].model_copy(update={
         "side": "right", "stretch": ((excavation.WALL_X, excavation.STRUT_Y),
