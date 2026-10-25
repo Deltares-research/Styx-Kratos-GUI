@@ -1,6 +1,12 @@
 /* Live-only controls; the file:// mockup styles remain frozen. */
 .mesh-settings-body { padding: 14px 18px; overflow: auto; }
+/* `.dlg-body` is a flex row, so the form would be stretched to the body's height.
+   A grid with a fixed height shrinks the layer table's row (the table clips its
+   overflow, so its minimum height is zero) and the rows below run over it. Keep
+   the form at its content height: a long layer list pushes the other settings
+   down and the body scrolls. */
 .mesh-settings-form {
+  align-self: flex-start;
   display: grid;
   grid-template-columns: 165px minmax(170px, 220px) 1fr;
   gap: 10px 12px;
