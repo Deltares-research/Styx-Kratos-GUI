@@ -551,6 +551,10 @@ one face may overlap before they are refused. The window and `drafts.interface` 
 typed point onto the pile first (`drafts.STRETCH_SNAP`), so a stored one is on it."""
 
 
+FACE_ORDER = ("left", "right", "below", "above")
+"""The faces in the order a refusal names the first of two (`App.Interfaces`, too)."""
+
+
 def _xy(point: Sequence[float]) -> str:
     return "(" + ", ".join(f"{value:g}" for value in point) + ")"
 
@@ -2201,12 +2205,12 @@ class Project(Base):
             path = self.interface_path(interface)
             start, end = sorted(polylines.nearest(line, point)[2]
                                 for point in (path[0], path[-1]))
-            names = polylines.faces(line)
-            faces: set[str] = set(names) if interface.side == "both" else {interface.side}
+            faces: set[str] = (set(polylines.faces(path)) if interface.side == "both"
+                               else {interface.side})
             for other, other_faces, low, high in held:
                 if other.structure != interface.structure:
                     continue
-                common = sorted(faces & other_faces, key=names.index)
+                common = sorted(faces & other_faces, key=FACE_ORDER.index)
                 over = (max(start, low), min(end, high))
                 if not common or over[1] - over[0] <= STRETCH_TOLERANCE:
                     continue

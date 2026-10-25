@@ -162,6 +162,15 @@
     T.near(App.Interfaces.length(record, project), 14, 1e-9);
   });
 
+  test('an interface on a part of a pile reports that part', function () {
+    var project = section();
+    var record = App.Interfaces.draft(project, 'beam_1', [[12, -9], [12.2, -3]]);
+    T.eq(record.stretch, [[12, -9], [12, -3]], 'moved onto the pile');
+    T.eq(App.Interfaces.pathOf(record, project), [[12, -3], [12, -9]],
+         'in the pile\u2019s own order');
+    T.near(App.Interfaces.length(record, project), 6, 1e-9);
+  });
+
   test('a free interface reports its own polyline and length', function () {
     var record = { structure: null, points: [[8, 0], [8, -3], [12, -3]] };
     T.eq(App.Interfaces.pathOf(record, section()), record.points);
@@ -301,14 +310,168 @@
     return ctx;
   }
 
-  test('start: in the section a new interface is drafted on the pile and saved', function () {
+  /* The window, built against the real App.UI so its rows are the ones it renders. */
+  function opened(ctx, open) {
+    var saved = App.Dialogs;
+    var spec = null, closed = false;
+    App.Dialogs = { open: function (s) {
+      spec = s; return { close: function () { closed = true; } };
+    } };
+    try { open(); } finally { App.Dialogs = saved; }
+    var body = document.createElement('div');
+    if (spec) spec.build(body);
+    function control(label) {
+      var labels = body.querySelectorAll('.mesh-setting-label');
+      for (var i = 0; i < labels.length; i += 1) {
+        if (labels[i].textContent === label) return labels[i].nextElementSibling;
+      }
+      return null;
+    }
+    function labels() {
+      return Array.prototype.map.call(body.querySelectorAll('.mesh-setting-label'),
+                                      function (node) { return node.textContent; });
+    }
+    function choices(label) {
+      return Array.prototype.map.call(control(label).options, function (o) { return o.value; });
+    }
+    function set(label, value) {
+      var input = control(label);
+      input.value = String(value);
+      input.dispatchEvent(new Event('change'));
+    }
+    function message() { return body.querySelector('.mesh-settings-message').textContent; }
+    function save() {
+      var button = spec.buttons.filter(function (b) { return b.label === 'Save'; })[0];
+      return Promise.resolve(button.onClick());
+    }
+    return { spec: spec, body: body, control: control, labels: labels, choices: choices,
+             set: set, message: message, save: save,
+             closed: function () { return closed; } };
+  }
+
+  test('start: the tool opens the window and saves nothing yet', function () {
     var ctx = rig(2);
-    return ctx.done(App.Interfaces.start('beam_1').then(function (record) {
-      T.eq(ctx.sent.length, 1);
-      T.eq(ctx.sent[0].path, '/api/project/structures');
-      T.eq(ctx.sent[0].body.interfaces.length, 2, 'added beside the existing one');
-      T.eq(record.structure, 'beam_1');
-      T.eq(ctx.selected, record.id, 'and selected, ready to edit');
+    return ctx.done(Promise.resolve().then(function () {
+      var w = opened(ctx, function () { App.Interfaces.start('beam_1'); });
+      T.ok(w.spec, 'the window opened');
+      T.eq(w.spec.title, 'Create interface');
+      T.eq(w.spec.buttons.map(function (b) { return b.label; }),
+           ['Pick on model…', 'Save', 'Cancel']);
+      T.eq(ctx.sent.length, 0, 'nothing is saved until Save');
+      ['Name', 'Along', 'From x', 'From y', 'To x', 'To y', 'Side', 'Contact',
+       'Active'].forEach(function (label) {
+        T.ok(w.labels().indexOf(label) >= 0, label + ' is on the window');
+      });
+      T.eq(w.choices('Along'), ['', 'beam_1'], 'own coordinates, then each live pile');
+      T.eq(w.control('Along').value, 'beam_1');
+      T.eq([w.control('From y').value, w.control('To y').value], ['0', '-14'],
+           'From and To start at the pile\u2019s two ends');
+      T.eq(w.choices('Side'), ['both', 'left', 'right']);
+      T.eq(w.choices('Contact'), ['interfacesection_1', '']);
+    }));
+  });
+
+  test('a plain Save holds the whole pile', function () {
+    var ctx = rig(2);
+    return ctx.done(Promise.resolve().then(function () {
+      App.PROJECT.interfaces[0].side = 'left';
+      var w = opened(ctx, function () { App.Interfaces.start('beam_1'); });
+      w.set('Side', 'right');
+      return w.save().then(function () {
+        T.eq(ctx.sent.length, 1);
+        var added = ctx.sent[0].body.interfaces[1];
+        T.eq(added.structure, 'beam_1');
+        T.eq(added.stretch, null, 'the whole pile is saved as no stretch');
+        T.eq(added.side, 'right');
+        T.ok(w.closed(), 'and the window closes');
+        T.eq(ctx.selected, added.id, 'and the new interface is selected');
+      });
+    }));
+  });
+
+  test('From and To are moved onto the pile, and a point far from it is refused', function () {
+    var ctx = rig(2);
+    return ctx.done(Promise.resolve().then(function () {
+      App.PROJECT.interfaces[0].side = 'left';
+      var w = opened(ctx, function () { App.Interfaces.start('beam_1'); });
+      w.set('Side', 'right');
+      w.set('From x', 12.3); w.set('From y', -2);
+      w.set('To x', 12); w.set('To y', -6);
+      return w.save().then(function () {
+        T.eq(ctx.sent[0].body.interfaces[1].stretch, [[12, -2], [12, -6]]);
+        T.eq(w.control('From x').value, '12', 'the window shows the moved point');
+      }).then(function () {
+        var far = opened(ctx, function () { App.Interfaces.start('beam_1'); });
+        far.set('Side', 'right');
+        far.set('To x', 13.2);
+        return far.save().then(function () {
+          T.eq(far.message(), 'To is 1.2 m from Sheet pile 1; From and To are points on the pile.');
+          T.eq(ctx.sent.length, 1, 'nothing more was sent');
+        });
+      });
+    }));
+  });
+
+  test('two interfaces on one face over the same length are refused, as by the project', function () {
+    var ctx = rig(2);
+    return ctx.done(Promise.resolve().then(function () {
+      var w = opened(ctx, function () { App.Interfaces.start('beam_1'); });
+      w.set('Side', 'left');
+      w.set('From y', -2); w.set('To y', -6);
+      return w.save().then(function () {
+        T.eq(w.message(), 'Interface 2 and Wall contact both hold the left face of '
+             + 'Sheet pile 1 between y -2 and y -6');
+        T.eq(ctx.sent.length, 0);
+      });
+    }));
+  });
+
+  test('own coordinates along a pile are refused with what to do instead', function () {
+    var ctx = rig(2);
+    return ctx.done(Promise.resolve().then(function () {
+      var w = opened(ctx, function () { App.Interfaces.start('beam_1'); });
+      w.set('Along', '');
+      T.eq(w.choices('Side'), ['left', 'right'], 'no both sides without a pile');
+      T.ok(w.labels().indexOf('x2') >= 0 && w.labels().indexOf('From x') < 0);
+      w.set('x1', 12); w.set('y1', -1); w.set('x2', 12); w.set('y2', -5);
+      return w.save().then(function () {
+        T.eq(w.message(), 'Interface 2 runs along Sheet pile 1. Put it on Sheet pile 1 '
+             + 'instead (Along in the window, --structure on the command line) and set '
+             + 'From and To');
+        T.eq(ctx.sent.length, 0);
+      });
+    }));
+  });
+
+  test('own coordinates take more points, and save as a free line', function () {
+    var ctx = rig(2);
+    return ctx.done(Promise.resolve().then(function () {
+      var w = opened(ctx, function () { App.Interfaces.start('beam_1'); });
+      w.set('Along', '');
+      var add = Array.prototype.filter.call(w.body.querySelectorAll('button'), function (b) {
+        return b.textContent === 'Add point';
+      })[0];
+      add.click();
+      T.ok(w.labels().indexOf('x3') >= 0, 'a third point');
+      w.set('x1', 20); w.set('y1', 0); w.set('x2', 20); w.set('y2', -4);
+      w.set('x3', 24); w.set('y3', -6);
+      return w.save().then(function () {
+        var added = ctx.sent[0].body.interfaces[1];
+        T.eq(added.structure, null);
+        T.eq(added.points, [[20, 0], [20, -4], [24, -6]]);
+        T.eq(added.stretch, null);
+        T.eq(added.side, 'left');
+      });
+    }));
+  });
+
+  test('a flat pile offers below and above', function () {
+    var ctx = rig(2);
+    return ctx.done(Promise.resolve().then(function () {
+      App.PROJECT.beams[0].points = [[2, -3], [20, -5]];
+      var w = opened(ctx, function () { App.Interfaces.edit('interface_1'); });
+      T.eq(w.spec.title, 'Edit interface');
+      T.eq(w.choices('Side'), ['both', 'below', 'above']);
     }));
   });
 
@@ -329,12 +492,18 @@
     }));
   });
 
-  test('edit: saves the interface as it stands, and an unknown id does nothing', function () {
+  test('edit: opens the window on the interface, and an unknown id does nothing', function () {
     var ctx = rig(2);
     T.eq(App.Interfaces.edit('interface_9'), undefined);
-    return ctx.done(App.Interfaces.edit('interface_1').then(function (record) {
-      T.eq(record.id, 'interface_1');
-      T.eq(ctx.sent[0].body.interfaces.map(function (i) { return i.id; }), ['interface_1']);
+    return ctx.done(Promise.resolve().then(function () {
+      var w = opened(ctx, function () { App.Interfaces.edit('interface_1'); });
+      T.eq(w.control('Name').value, 'Wall contact');
+      T.eq(ctx.sent.length, 0, 'opening saves nothing');
+      w.set('To y', -7);
+      return w.save().then(function () {
+        T.eq(ctx.sent[0].body.interfaces.map(function (i) { return i.id; }), ['interface_1']);
+        T.eq(ctx.sent[0].body.interfaces[0].stretch, [[12, 0], [12, -7]]);
+      });
     }));
   });
 

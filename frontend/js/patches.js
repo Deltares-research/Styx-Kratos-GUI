@@ -867,9 +867,10 @@ App.LivePatches = (function () {
     var owner = kind === 'load' ? App.Loads
       : kind === 'normal_load' ? App.NormalLoads
       : kind === 'condition' ? App.BoundaryConditions
-      : kind === 'beam' ? App.Beams : null;
-    // Anchors and interfaces are deliberately not here: their `edit` saves the record
-    // rather than opening anything, so calling it would write, not show.
+      : kind === 'beam' ? App.Beams
+      : kind === 'interface' ? App.Interfaces : null;
+    // Anchors are not here: their `edit` saves the record rather than opening
+    // anything, so calling it would write, not show.
     if (owner && owner.edit) return owner.edit(key);
     if (App.selectObject) App.selectObject(key, 'tree');
   }

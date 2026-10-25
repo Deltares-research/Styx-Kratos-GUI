@@ -246,22 +246,29 @@ App.Interfaces = (function () {
   }
 
   function validate(record, project) {
+    project = project || App.PROJECT;
     if (!record.name || !record.name.trim()) return 'Name cannot be empty.';
     if (!record.section) return 'An interface needs a section.';
-    if (SIDES.indexOf(record.side) < 0) return 'An interface side must be both, left or right.';
+    if (SIDES.indexOf(record.side) < 0) {
+      return 'An interface side must be both, left, right, below or above.';
+    }
     var free = !record.structure;
     if (free === !record.points) {
       return 'An interface follows either a sheet pile or its own points, not both.';
     }
     if (!free) {
-      var piles = livePiles(project || App.PROJECT);
+      var piles = livePiles(project);
       if (!piles.some(function (b) { return b.id === record.structure; })) {
         return 'An interface can only follow a live sheet pile.';
       }
-      return null;
+      return stretchProblem(record, project) || doubleContact(record, project);
     }
     if (record.side === 'both') {
       return 'A free interface has no structure between its sides; detach the left or the right.';
+    }
+    if (record.stretch) {
+      return 'From and To are points on a sheet pile; an interface on its own points '
+        + 'runs its whole line.';
     }
     var points = record.points || [];
     if (points.length < 2) return 'An interface needs at least two points.';
@@ -271,6 +278,120 @@ App.Interfaces = (function () {
       }
       if (i && points[i][0] === points[i - 1][0] && points[i][1] === points[i - 1][1]) {
         return 'An interface cannot repeat the same point twice.';
+      }
+    }
+    return alongAPile(record, project);
+  }
+
+  /* ── The project's own checks (core/model/schemas.py `_check_interface_lines`),
+     word for word, so the window refuses before the server does. ── */
+
+  var STRETCH_TOLERANCE = 1e-6;
+  var FACE_ORDER = ['left', 'right', 'below', 'above'];
+
+  /* Python's `:g`, for the numbers a refusal names. */
+  function g(value) { return String(Number(value.toPrecision(6))); }
+
+  function xy(point) { return '(' + point.map(g).join(', ') + ')'; }
+
+  function stretchProblem(record, project) {
+    if (!record.stretch) return null;
+    var pile = pileOf(record, project);
+    var labels = ['From', 'To'];
+    for (var i = 0; i < 2; i += 1) {
+      var point = record.stretch[i];
+      if (!point || point.length !== 2 || !point.every(Number.isFinite)) {
+        return labels[i] + ' must be two numbers.';
+      }
+      var away = nearest(pile.points, point).distance;
+      if (away > STRETCH_TOLERANCE) {
+        return record.name + ': ' + labels[i] + ' ' + xy(point) + ' is '
+          + g(Number(away.toPrecision(3))) + ' m from ' + pile.name
+          + '; From and To are points on the pile';
+      }
+    }
+    if (record.stretch[0][0] === record.stretch[1][0]
+        && record.stretch[0][1] === record.stretch[1][1]) {
+      return 'From and To are the same point on ' + pile.name
+        + '; the part of the pile needs length.';
+    }
+    return null;
+  }
+
+  /* `side` in the words of the line it runs along, as the project stores it. */
+  function sideOn(record, project) {
+    if (record.side === 'both') return 'both';
+    var words = faces(pathOf(record, project));
+    return record.side === 'left' || record.side === 'below' ? words[0] : words[1];
+  }
+
+  function doubleContact(record, project) {
+    var all = copy((project && project.interfaces) || []);
+    var at = all.findIndex(function (item) { return item.id === record.id; });
+    if (at < 0) all.push(copy(record)); else all[at] = copy(record);
+    var held = [];
+    for (var i = 0; i < all.length; i += 1) {
+      var item = all[i];
+      if (!item.structure || item.active === false) continue;
+      var pile = pileOf(item, project);
+      if (!pile) continue;
+      var path = pathOf(item, project);
+      var ends = [nearest(pile.points, path[0]).along,
+                  nearest(pile.points, path[path.length - 1]).along].sort(function (a, b) {
+        return a - b;
+      });
+      var mine = item.side === 'both' ? faces(path) : [sideOn(item, project)];
+      for (var j = 0; j < held.length; j += 1) {
+        var other = held[j];
+        if (other.item.structure !== item.structure) continue;
+        var common = mine.filter(function (face) { return other.faces.indexOf(face) >= 0; })
+          .sort(function (a, b) { return FACE_ORDER.indexOf(a) - FACE_ORDER.indexOf(b); });
+        var low = Math.max(ends[0], other.ends[0]), high = Math.min(ends[1], other.ends[1]);
+        if (!common.length || high - low <= STRETCH_TOLERANCE) continue;
+        var part = between(pile.points, low, high);
+        var first = pile.points[0], last = pile.points[pile.points.length - 1];
+        var steep = Math.abs(last[1] - first[1]) >= Math.abs(last[0] - first[0]);
+        var axis = steep ? 'y' : 'x', index = steep ? 1 : 0;
+        return item.name + ' and ' + other.item.name + ' both hold the ' + common[0]
+          + ' face of ' + pile.name + ' between ' + axis + ' ' + g(part[0][index])
+          + ' and ' + axis + ' ' + g(part[part.length - 1][index]);
+      }
+      held.push({ item: item, faces: mine, ends: ends });
+    }
+    return null;
+  }
+
+  /* A free line on a live pile (schemas.py `_runs_along`). */
+  function runsAlong(line, pile) {
+    for (var i = 1; i < line.length; i += 1) {
+      for (var j = 1; j < pile.length; j += 1) {
+        var c = pile[j - 1], d = pile[j];
+        var dx = d[0] - c[0], dy = d[1] - c[1];
+        var size = Math.sqrt(dx * dx + dy * dy);
+        if (!size) continue;
+        var ends = [line[i - 1], line[i]];
+        var off = ends.map(function (p) {
+          return Math.abs(dx * (p[1] - c[1]) - dy * (p[0] - c[0])) / size;
+        });
+        if (Math.max(off[0], off[1]) > STRETCH_TOLERANCE) continue;
+        var along = ends.map(function (p) {
+          return ((p[0] - c[0]) * dx + (p[1] - c[1]) * dy) / size;
+        }).sort(function (a, b) { return a - b; });
+        if (Math.min(along[1], size) - Math.max(along[0], 0) > STRETCH_TOLERANCE) return true;
+      }
+    }
+    return false;
+  }
+
+  function alongAPile(record, project) {
+    var piles = ((project && project.beams) || []).filter(function (beam) {
+      return (beam.kind || 'beam') === 'beam' && beam.active !== false;
+    });
+    for (var i = 0; i < piles.length; i += 1) {
+      if (runsAlong(record.points || [], piles[i].points || [])) {
+        return record.name + ' runs along ' + piles[i].name + '. Put it on '
+          + piles[i].name + ' instead (Along in the window, --structure on the command '
+          + 'line) and set From and To';
       }
     }
     return null;
@@ -402,6 +523,254 @@ App.Interfaces = (function () {
     return total;
   }
 
+  /* ── The window: where the interface goes, which face, which contact ── */
+
+  var OWN = '';             // the Along choice for a line of the interface's own
+  var NEW_CONTACT = '';     // the Contact choice for a new property set
+
+  var SIDE_LABELS = { both: 'Both sides', left: 'Left (toward -x)',
+                      right: 'Right (toward +x)', below: 'Below', above: 'Above' };
+
+  /* Two points down the middle of the section, where a free line is drafted. */
+  function middleLine(project) {
+    var d = project.domain;
+    var x = d.x0 + (d.x1 - d.x0) * 0.5;
+    return [[x, d.y_top], [x, d.y_top - (d.y_top - d.y_bottom) * 0.5]];
+  }
+
+  function numberInput(value) {
+    return App.UI.el('input.mesh-setting-control', {
+      type: 'number', step: '0.1', value: Number.isFinite(value) ? String(value) : ''
+    });
+  }
+
+  function pick(record) {
+    if (!App.DrawInput || !App.DrawInput.start) return;
+    App.DrawInput.start('load', {
+      count: 2,
+      onComplete: function (points) {
+        var picked = points.map(function (point) { return [point[0], point[1]]; });
+        if (record.structure) record.stretch = picked;
+        else record.points = picked;
+        open(record);
+      }
+    });
+  }
+
+  /* Create and Edit open the same window. Along picks a sheet pile by name, or the
+     interface's own coordinates; on a pile From and To start at its two ends, so a
+     plain Save holds the whole pile. Nothing is saved until Save, and Save runs the
+     project's own checks first (`validate`). */
+  function open(source, note) {
+    if (!App.Dialogs || !App.Dialogs.open) return;
+    var project = App.PROJECT;
+    var record = copy(source);
+    var editing = collection().some(function (item) { return item.id === record.id; });
+    var piles = livePiles(project);
+    var sections = storedSections();
+    var state = {
+      name: record.name, along: record.structure || OWN,
+      stretch: record.stretch, points: record.points || middleLine(project),
+      side: record.side, active: record.active !== false,
+      section: sections.some(function (s) { return s.id === record.section; })
+        ? record.section : NEW_CONTACT
+    };
+    var el = App.UI.el, controls = {}, form, message, shell;
+
+    function pileNamed(id) {
+      return piles.filter(function (beam) { return beam.id === id; })[0];
+    }
+
+    function fromTo() {
+      var pile = pileNamed(state.along);
+      return state.stretch || [pile.points[0], pile.points[pile.points.length - 1]];
+    }
+
+    /* The window's values as a record, unchecked. */
+    function current() {
+      read();
+      var out = copy(record);
+      out.name = state.name.trim();
+      out.side = state.side;
+      out.active = state.active;
+      out.section = state.section === NEW_CONTACT
+        ? (sections.some(function (s) { return s.id === record.section; })
+          ? nextSectionId(project) : record.section)
+        : state.section;
+      if (state.along === OWN) {
+        out.structure = null;
+        out.points = copy(state.points);
+        out.stretch = null;
+      } else {
+        out.structure = state.along;
+        out.points = null;
+        out.stretch = copy(fromTo());
+      }
+      return out;
+    }
+
+    function read() {
+      if (!controls.name) return;
+      state.name = controls.name.value;
+      state.side = controls.side.value;
+      state.active = controls.active.checked;
+      state.section = controls.section.value;
+      if (state.along === OWN) {
+        state.points = controls.points.map(function (pair) {
+          return [Number(pair[0].value), Number(pair[1].value)];
+        });
+      } else {
+        state.stretch = [[Number(controls.from[0].value), Number(controls.from[1].value)],
+                         [Number(controls.to[0].value), Number(controls.to[1].value)]];
+      }
+    }
+
+    function row(label, control, help) {
+      form.appendChild(el('label.mesh-setting-label', { text: label }));
+      form.appendChild(control);
+      form.appendChild(el('div.mesh-setting-help', { text: help || '' }));
+    }
+
+    function render() {
+      form.textContent = '';
+      controls = {};
+      controls.name = el('input.mesh-setting-control', { type: 'text', value: state.name });
+      row('Name', controls.name, 'Shown in the Model explorer and Kratos submodel part.');
+
+      controls.along = el('select.mesh-setting-control');
+      controls.along.appendChild(el('option', { value: OWN, text: 'Own coordinates' }));
+      piles.forEach(function (beam) {
+        controls.along.appendChild(el('option', { value: beam.id, text: beam.name }));
+      });
+      controls.along.value = state.along;
+      controls.along.addEventListener('change', function () {
+        read();
+        state.along = controls.along.value;
+        state.stretch = null;
+        if (state.along === OWN) {
+          state.points = middleLine(project);
+          if (state.side === 'both') state.side = 'left';
+        }
+        render();
+      });
+      row('Along', controls.along,
+          'A sheet pile the interface follows, or a line of its own through the soil.');
+
+      var path;
+      if (state.along === OWN) {
+        controls.points = state.points.map(function (point, index) {
+          var pair = [numberInput(point[0]), numberInput(point[1])];
+          row('x' + (index + 1), pair[0], 'Point ' + (index + 1) + ' of the line [m].');
+          row('y' + (index + 1), pair[1], 'Elevation of point ' + (index + 1) + ' [m].');
+          return pair;
+        });
+        var buttons = el('div');
+        var add = el('button.btn.btn-sm', { type: 'button', text: 'Add point' });
+        var drop = el('button.btn.btn-sm', { type: 'button', text: 'Remove last point' });
+        add.addEventListener('click', function () {
+          read();
+          var last = state.points[state.points.length - 1];
+          state.points.push([last[0], last[1] - 1]);
+          render();
+        });
+        drop.addEventListener('click', function () {
+          read();
+          if (state.points.length > 2) state.points.pop();
+          render();
+        });
+        drop.disabled = state.points.length <= 2;
+        buttons.appendChild(add);
+        buttons.appendChild(drop);
+        row('', buttons, 'A bent line has more than two points.');
+        path = state.points;
+      } else {
+        var ends = fromTo();
+        controls.from = [numberInput(ends[0][0]), numberInput(ends[0][1])];
+        controls.to = [numberInput(ends[1][0]), numberInput(ends[1][1])];
+        row('From x', controls.from[0], 'Where the interface starts on the pile [m]. '
+            + 'A point off the pile is moved onto it, up to ' + STRETCH_SNAP + ' m away.');
+        row('From y', controls.from[1], '[m]');
+        row('To x', controls.to[0], 'Where it ends [m]. At the two ends of the pile it '
+            + 'holds the whole pile.');
+        row('To y', controls.to[1], '[m]');
+        path = pileNamed(state.along).points;
+      }
+
+      var words = faces(path);
+      var offered = (state.along === OWN ? [] : ['both']).concat(words);
+      if (offered.indexOf(state.side) < 0) {
+        state.side = state.side === 'right' || state.side === 'above' ? words[1] : words[0];
+      }
+      controls.side = el('select.mesh-setting-control');
+      offered.forEach(function (side) {
+        controls.side.appendChild(el('option', { value: side, text: SIDE_LABELS[side] }));
+      });
+      controls.side.value = state.side;
+      row('Side', controls.side, words[0] === 'left'
+        ? 'Which soil slides on it, as on the screen: left is the soil toward -x, '
+          + 'whichever way the line was drawn.'
+        : 'Which soil slides on it, as on the screen: below or above the line.');
+
+      controls.section = el('select.mesh-setting-control');
+      sections.forEach(function (s) {
+        controls.section.appendChild(el('option', { value: s.id, text: s.name || s.id }));
+      });
+      controls.section.appendChild(el('option', { value: NEW_CONTACT, text: 'New contact' }));
+      controls.section.value = state.section;
+      row('Contact', controls.section,
+          'The contact properties; change their numbers in the Selection explorer.');
+
+      controls.active = el('input.mesh-setting-control', { type: 'checkbox' });
+      controls.active.checked = state.active;
+      row('Active', controls.active,
+          'Inactive interfaces remain in the project but are not exported.');
+
+      message = el('div.mesh-settings-message', { text: note || '' });
+      row('', message, '');
+    }
+
+    function submit() {
+      var out = current();
+      if (out.structure) {
+        var pile = pileNamed(out.structure);
+        try {
+          out.stretch = stretchOn(pile, out.stretch[0], out.stretch[1]);
+        } catch (error) {
+          message.textContent = error.message;
+          return null;
+        }
+        // The moved points, as they are saved.
+        state.stretch = out.stretch;
+        var shown = fromTo();
+        controls.from[0].value = String(shown[0][0]);
+        controls.from[1].value = String(shown[0][1]);
+        controls.to[0].value = String(shown[1][0]);
+        controls.to[1].value = String(shown[1][1]);
+      }
+      var problem = validate(out, project);
+      if (problem) { message.textContent = problem; return null; }
+      return save(out, sectionsFor(project, out)).then(function () { shell.close(); },
+        function (error) { message.textContent = error.message; });
+    }
+
+    shell = App.Dialogs.open({
+      title: (editing ? 'Edit' : 'Create') + ' interface',
+      width: 560, height: 660,
+      buttons: [
+        { label: 'Pick on model…', onClick: function () { pick(current()); } },
+        { label: 'Save', primary: true, keepOpen: true, onClick: submit },
+        { label: 'Cancel' }
+      ],
+      build: function (body) {
+        body.classList.add('mesh-settings-body');
+        form = el('div.mesh-settings-form');
+        body.appendChild(form);
+        render();
+      }
+    });
+    return shell;
+  }
+
   function start(structure) {
     if (!App.PROJECT) return;
     if (!available(App.PROJECT)) {
@@ -415,13 +784,13 @@ App.Interfaces = (function () {
       if (App.Command) App.Command.note(error.message);
       return;
     }
-    return save(record, sectionsFor(App.PROJECT, record));
+    return open(record);
   }
 
   function edit(id) {
     var record = collection().filter(function (item) { return item.id === id; })[0];
     if (!record) return;
-    return save(copy(record), copy(storedSections()));
+    return open(record);
   }
 
   function isInterfaceKey(key) {
@@ -435,8 +804,9 @@ App.Interfaces = (function () {
     available: available, unavailableMessage: unavailableMessage,
     livePiles: livePiles, draft: draft, sectionsFor: sectionsFor, sectionOf: sectionOf,
     pathOf: pathOf, length: length,
-    validate: validate, validateSection: validateSection,
-    save: save, remove: remove, start: start, edit: edit,
+    validate: validate, validateSection: validateSection, sideOn: sideOn,
+    middleLine: middleLine,
+    save: save, remove: remove, start: start, edit: edit, open: open,
     isInterfaceKey: isInterfaceKey
   };
 })();

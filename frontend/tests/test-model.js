@@ -273,11 +273,35 @@
 
       var props = App.OBJECT_PROPS.interface_1;
       T.eq(props.title, 'Wall contact');
-      T.eq(props.groups.General[1][1], 'Sheet pile');
+      T.eq(props.groups.General[1][1], 'Sheet pile 1', 'Along names the pile');
       T.eq(props.groups.Geometry.map(function (row) { return row[0]; }),
-           ['Follows', 'Length', 'Delete']);
-      T.eq(props.groups.Geometry[1][1], '14.000',
+           ['From x', 'From y', 'To x', 'To y', 'Length', 'Edit', 'Delete']);
+      T.eq(props.groups.Geometry[4][1], '14.000',
            'the length is the pile the interface runs along');
+    });
+  });
+
+  test('From and To in the explorer hold a part of the pile, moved onto it', function () {
+    withProject(contactedProject(), function () {
+      var rows = App.OBJECT_PROPS.interface_1.groups.Geometry;
+      var toY = rows.filter(function (row) { return row[0] === 'To y'; })[0];
+      T.eq(toY[4].set(-6), null);
+      T.eq(App.INTERFACES[0].stretch, [[12, 0], [12, -6]]);
+      var fromX = rows.filter(function (row) { return row[0] === 'From x'; })[0];
+      T.eq(fromX[4].set(13.5), 'From is 1.5 m from Sheet pile 1; From and To are points on the pile.');
+      T.eq(App.INTERFACES[0].stretch, [[12, 0], [12, -6]], 'a refused value changes nothing');
+    });
+  });
+
+  test('Along switches an interface between a pile and its own coordinates', function () {
+    withProject(contactedProject(), function () {
+      var along = App.OBJECT_PROPS.interface_1.groups.General
+        .filter(function (row) { return row[0] === 'Along'; })[0];
+      T.eq(along[4].options().map(function (o) { return o.value; }), ['', 'beam_1']);
+      T.eq(along[4].set(''), null);
+      T.eq(App.INTERFACES[0].structure, null);
+      T.eq(App.INTERFACES[0].points.length, 2);
+      T.eq(App.INTERFACES[0].side, 'left', 'a free line holds one side');
     });
   });
 
@@ -359,9 +383,9 @@
     p.interfaces[0].side = 'left';
     withProject(p, function () {
       var props = App.OBJECT_PROPS.interface_1;
-      T.eq(props.groups.General[1][1], 'Own line');
+      T.eq(props.groups.General[1][1], 'Own coordinates');
       T.eq(props.groups.Geometry.map(function (row) { return row[0]; }),
-           ['x1', 'y1', 'x2', 'y2', 'Length', 'Delete']);
+           ['x1', 'y1', 'x2', 'y2', 'Length', 'Edit', 'Delete']);
     });
   });
 

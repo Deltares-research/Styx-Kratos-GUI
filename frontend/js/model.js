@@ -1265,13 +1265,21 @@ App.Model = (function () {
      live on that set, because r_inter reduces a particular soil's strength and
      several interfaces normally share one contact. */
 
+  /* The faces as the screen shows them, in the words of the line: left and right on a
+     steep one, below and above on a flat one (core/model/polylines.py). */
+  var INTERFACE_SIDES = { both: 'Both sides', left: 'Left (toward -x)',
+                          right: 'Right (toward +x)', below: 'Below', above: 'Above' };
+
   function interfaceSideEditor(record) {
     return {
       kind: 'select',
       options: function () {
-        return [{ value: 'both', text: 'Both sides' },
-                { value: 'left', text: 'Left of the line' },
-                { value: 'right', text: 'Right of the line' }];
+        var words = App.Interfaces
+          ? App.Interfaces.faces(App.Interfaces.pathOf(record, App.PROJECT))
+          : ['left', 'right'];
+        return (record.structure ? ['both'] : []).concat(words).map(function (side) {
+          return { value: side, text: INTERFACE_SIDES[side] };
+        });
       },
       get: function () { return record.side; },
       set: function (value) {
@@ -1285,22 +1293,63 @@ App.Model = (function () {
     };
   }
 
-  function interfaceStructureEditor(record) {
+  /* Along: a live sheet pile, or the interface's own coordinates, as in the window
+     (App.Interfaces.open). A new pile is held whole; own coordinates start down the
+     middle of the section. */
+  function interfaceAlongEditor(record) {
     return {
       kind: 'select',
       options: function () {
         var piles = App.Interfaces ? App.Interfaces.livePiles(App.PROJECT) : [];
-        return piles.map(function (beam) {
+        return [{ value: '', text: 'Own coordinates' }].concat(piles.map(function (beam) {
           return { value: beam.id, text: beam.name };
-        });
+        }));
       },
-      get: function () { return record.structure; },
+      get: function () { return record.structure || ''; },
       set: function (value) {
-        var was = record.structure;
-        record.structure = value;
+        var was = { structure: record.structure, points: record.points,
+                    stretch: record.stretch, side: record.side };
+        record.stretch = null;
+        if (value) {
+          record.structure = value;
+          record.points = null;
+        } else {
+          record.structure = null;
+          record.points = App.Interfaces.middleLine(App.PROJECT);
+          if (record.side === 'both') record.side = 'left';
+        }
         var problem = App.Interfaces
           ? App.Interfaces.validate(record, App.PROJECT) : null;
-        if (problem) { record.structure = was; return problem; }
+        if (problem) { Object.assign(record, was); return problem; }
+        return null;
+      }
+    };
+  }
+
+  /* From and To of an interface on a pile: its stretch, or the pile's two ends. */
+  function interfaceEnds(record) {
+    var pile = App.Interfaces ? App.Interfaces.pileOf(record, App.PROJECT) : null;
+    if (record.stretch) return record.stretch;
+    return pile ? [pile.points[0], pile.points[pile.points.length - 1]] : [[0, 0], [0, 0]];
+  }
+
+  function interfaceStretchEditor(record, end, axis) {
+    return {
+      kind: 'number', decimals: 3, unit: 'm',
+      get: function () { return interfaceEnds(record)[end][axis]; },
+      set: function (value) {
+        if (!Number.isFinite(value)) return 'Every interface coordinate must be a number.';
+        var points = JSON.parse(JSON.stringify(interfaceEnds(record)));
+        points[end][axis] = value;
+        var was = record.stretch;
+        try {
+          record.stretch = App.Interfaces.stretchOn(
+            App.Interfaces.pileOf(record, App.PROJECT), points[0], points[1]);
+        } catch (error) {
+          return error.message;
+        }
+        var problem = App.Interfaces.validate(record, App.PROJECT);
+        if (problem) { record.stretch = was; return problem; }
         return null;
       }
     };
@@ -1381,8 +1430,13 @@ App.Model = (function () {
       : null;
     var geometry = [];
     if (follows) {
-      geometry.push(['Follows', (pile && pile.name) || record.structure, '', false,
-                     interfaceStructureEditor(record)]);
+      var ends = interfaceEnds(record);
+      [['From', 0], ['To', 1]].forEach(function (end) {
+        geometry.push([end[0] + ' x', fixed(ends[end[1]][0]), 'm', false,
+                       interfaceStretchEditor(record, end[1], 0)]);
+        geometry.push([end[0] + ' y', fixed(ends[end[1]][1]), 'm', false,
+                       interfaceStretchEditor(record, end[1], 1)]);
+      });
     } else {
       (record.points || []).forEach(function (point, index) {
         geometry.push(['x' + (index + 1), fixed(point[0]), 'm', false,
@@ -1393,6 +1447,8 @@ App.Model = (function () {
     }
     geometry.push(['Length',
                    fixed(App.Interfaces ? App.Interfaces.length(record) : 0), 'm', true]);
+    geometry.push(['Edit', '', '', false, { kind: 'button', text: 'Edit interface…',
+      run: function () { if (App.Interfaces) App.Interfaces.edit(record.id); } }]);
     geometry.push(['Delete', '', '', false, { kind: 'button', text: 'Delete interface',
       run: function () { if (App.Interfaces) App.Interfaces.remove(record.id); } }]);
 
@@ -1445,8 +1501,10 @@ App.Model = (function () {
       groups: {
         'General': [
           ['Contact', contact.name || record.section, '', true],
-          ['Along', follows ? 'Sheet pile' : 'Own line', '', true],
-          ['Side', record.side, '', false, interfaceSideEditor(record)],
+          ['Along', follows ? ((pile && pile.name) || record.structure) : 'Own coordinates',
+           '', false, interfaceAlongEditor(record)],
+          ['Side', INTERFACE_SIDES[record.side] || record.side, '', false,
+           interfaceSideEditor(record)],
           ['Active', record.active !== false, '', true]
         ],
         'Contact': properties,
