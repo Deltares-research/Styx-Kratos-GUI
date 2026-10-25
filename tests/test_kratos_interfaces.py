@@ -42,7 +42,8 @@ def session():
 
 def interfaced_project(side: str = "both", active: bool = True, dimension: int = 2,
                        structure: str | None = "sheetpile_1", points=None,
-                       section: dict | None = None) -> Project:
+                       section: dict | None = None, stretch=None,
+                       more: list[dict] | None = None) -> Project:
     payload = seed_project().model_dump()
     payload.update(dimension=dimension, section_offset=20.0)
     payload["beam_sections"] = [BEAM_SECTION]
@@ -54,7 +55,10 @@ def interfaced_project(side: str = "both", active: bool = True, dimension: int =
     payload["interface_sections"] = [{**SECTION, "material": material, **(section or {})}]
     payload["interfaces"] = [{"id": "interface_1", "name": "Wall contact",
                               "section": SECTION["id"], "structure": structure,
-                              "points": points, "side": side, "active": active}]
+                              "points": points, "side": side, "stretch": stretch,
+                              "active": active}] + [
+        {"section": SECTION["id"], "structure": "sheetpile_1", "points": None,
+         "active": True, **record} for record in more or []]
     return Project.model_validate(payload)
 
 
@@ -271,19 +275,24 @@ def test_the_tie_searches_over_a_radius_it_can_reach_a_neighbour_in(contacted):
     assert tie_of(contacted)["search_radius"] == 0.01
 
 
-def test_a_single_sided_interface_needs_no_tie(session):
-    """Soil only exists on one face, so there is nothing on the other to reconnect."""
-    export = writer.export_project(interfaced_project(side="left"),
-                                   MeshRequest(element_size=3.0, order=2))
-    deck = deck_of(export)
-    assert "Wall_contact_Master" not in deck.parts
-    assert "Wall_contact_Slave" not in deck.parts
+def test_a_one_side_interface_ties_its_copies_to_the_soil_on_the_other_face(session):
+    """Before the pile is installed the contact's copies would hang free beside soil
+    that is still on the pile's own nodes. Each copy is tied to that original, the copy
+    on the left of the screen being the master, as the Kratos-side tool ties a one-side
+    contact."""
+    for side in ("left", "right"):
+        export = writer.export_project(interfaced_project(side=side),
+                                       MeshRequest(element_size=3.0, order=2))
+        deck = deck_of(export)
+        master, slave = deck.parts["Wall_contact_Master"], deck.parts["Wall_contact_Slave"]
 
-    doc = json.loads(export["project_parameters"])
-    initial = (doc["stages"]["1_Initial_stage"]["stage_settings"]["processes"]
-              ["constraints_process_list"])
-    assert not any(p["process_name"] == "AssignMasterSlaveConstraintsToNeighboursUtility"
-                  for p in initial)
+        copies = {n for nodes in interface_block(deck).entries.values()
+                  for n in nodes[len(nodes) // 2:]}
+        assert set(master.nodes if side == "left" else slave.nodes) == copies
+        assert {deck.nodes[n] for n in master.nodes} == {deck.nodes[n] for n in slave.nodes}
+        sides = soil_side_of_ties(deck, 12.0)
+        assert sides == {"Wall_contact_Master": {"-x"}, "Wall_contact_Slave": {"+x"}}, side
+        assert tie_of(export)["master_model_part_name"] == "PorousDomain.Wall_contact_Master"
 
 
 def test_a_soil_to_soil_interface_needs_no_tie(session):
@@ -432,6 +441,9 @@ def test_detaching_one_side_leaves_the_other_bonded(session):
     deck = deck_of(export)
 
     assert beam_nodes(deck) & soil_nodes(deck), "the bonded face still shares its nodes"
+    copies = {n for nodes in interface_block(deck).entries.values() for n in nodes[3:]}
+    assert soil_side_of(deck, copies, 12.0) == {"-x"}, \
+        "left is the face toward -x, though the pile was drawn from the top down"
     block = interface_block(deck)
     per_segment: dict[frozenset[int], int] = {}
     for nodes in block.entries.values():
@@ -729,6 +741,105 @@ def test_a_contact_element_no_soil_body_takes_is_refused():
     with pytest.raises(writer.ExportError, match=r"Wall contact.*y = -5 and -2"):
         writer._check_every_stretch_is_held(interface, [held, lost],
                                             [("soil_a", [held])], 3, coordinates)
+
+
+# ── A part of a pile, and two interfaces on one pile ────────────────────────
+
+FROM_TO = ((12.0, -3.0), (12.0, -9.0))
+
+
+def pile_ys(deck: mdpa.Deck, block: mdpa.Block) -> list[float]:
+    return sorted({deck.nodes[n][1] for nodes in block.entries.values()
+                   for n in nodes[:len(nodes) // 2]})
+
+
+@pytest.fixture(scope="module")
+def part_of_a_pile(session):
+    return writer.export_project(interfaced_project(stretch=FROM_TO),
+                                 MeshRequest(element_size=3.0, order=2))
+
+
+def test_an_interface_on_a_part_of_a_pile_holds_only_that_part(part_of_a_pile):
+    deck = deck_of(part_of_a_pile)
+    ys = pile_ys(deck, interface_block(deck))
+
+    assert (ys[0], ys[-1]) == (-9.0, -3.0), "the mesh has a node at From and at To"
+    per_segment: dict[frozenset[int], int] = {}
+    for nodes in interface_block(deck).entries.values():
+        per_segment[frozenset(nodes[:3])] = per_segment.get(frozenset(nodes[:3]), 0) + 1
+    assert set(per_segment.values()) == {2}, "both faces, on every segment of the part"
+
+
+def test_where_the_pile_goes_on_past_the_part_the_soil_stays_welded_to_it(part_of_a_pile):
+    """Rule E: at From and To the pile goes on. The soil past the end keeps the pile's
+    own node; the soil the contact holds has a copy per face there, as along the line."""
+    deck = deck_of(part_of_a_pile)
+    piles, soils = beam_nodes(deck), soil_nodes(deck)
+    for end in FROM_TO:
+        here = {n for n in deck.nodes if deck.nodes[n][:2] == end}
+        (pile,) = here & piles
+        assert pile in soils, "the soil past the end is on the pile's node"
+        assert len(here - {pile}) == 2, "one copy per face for the soil that is held"
+        held = {n for nodes in interface_block(deck).entries.values()
+                for n in nodes[len(nodes) // 2:]}
+        assert here - {pile} <= held
+
+
+def test_the_ties_cover_the_part_of_the_pile_only(part_of_a_pile):
+    deck = deck_of(part_of_a_pile)
+    tied = deck.parts["Wall_contact_Master"].nodes + deck.parts["Wall_contact_Slave"].nodes
+    ys = {deck.nodes[n][1] for n in tied}
+    assert (min(ys), max(ys)) == (-9.0, -3.0)
+
+
+def test_the_faces_of_a_part_of_a_pile_are_curves_over_that_part(session):
+    project = drawn_ground.project()
+    contact = project.interfaces[0].model_copy(update={
+        "stretch": ((drawn_ground.WALL_X, -6.0), (drawn_ground.WALL_X, -1.0))})
+    project = project.model_copy(update={"interfaces": [contact]})
+    deck = deck_of(writer.export_project(project))
+
+    for face in ("Left", "Right"):
+        ys = {deck.nodes[n][1] for n in deck.parts[f"Wall_contact_{face}_face"].nodes}
+        assert (min(ys), max(ys)) == (-6.0, -1.0), face
+
+
+def test_two_interfaces_on_the_two_faces_of_one_pile(session):
+    project = interfaced_project(side="left", more=[
+        {"id": "interface_2", "name": "Back", "side": "right"}])
+    deck = deck_of(writer.export_project(project, MeshRequest(element_size=3.0, order=2)))
+
+    block = interface_block(deck)
+    by_interface: dict[str, set[int]] = {}
+    for name, part in deck.parts.items():
+        if part.elements and set(part.elements) <= set(block.entries):
+            by_interface.setdefault(name.partition("_")[0], set()).update(part.elements)
+    assert set(by_interface) == {"Wall", "Back"}
+    assert not by_interface["Wall"] & by_interface["Back"]
+    copies = {stem: {n for e in elements for n in block.entries[e][3:]}
+              for stem, elements in by_interface.items()}
+    assert soil_side_of(deck, copies["Wall"], 12.0) == {"-x"}
+    assert soil_side_of(deck, copies["Back"], 12.0) == {"+x"}
+    assert not beam_nodes(deck) & soil_nodes(deck) - {
+        n for n in beam_nodes(deck) if deck.nodes[n][1] > -1e-9}, \
+        "both faces are detached along the pile"
+
+    slaves = [n for name, part in deck.parts.items() if name.endswith("_Slave")
+              for n in part.nodes]
+    assert slaves and len(slaves) == len(set(slaves)), "each pair is tied once"
+
+
+def soil_side_of(deck: mdpa.Deck, nodes: set[int], wall_x: float) -> set[str]:
+    """The sides of the wall ("-x", "+x") of the soil elements that use `nodes`."""
+    out = set()
+    for block in deck.elements:
+        if not block.name.startswith("SmallStrainUPw"):
+            continue
+        for element in block.entries.values():
+            if set(element) & nodes:
+                x = sum(deck.nodes[n][0] for n in element[:3]) / 3
+                out.add("-x" if x < wall_x else "+x")
+    return out
 
 
 # ── Which face holds the masters ────────────────────────────────────────────

@@ -857,8 +857,11 @@ def _interface_elements(project: Project, dim: int,
         if interface.structure is None:
             segments = _segments(_tagged(1).get(interface.id, []))
         else:
+            # Only the rows between From and To: the mesh has a node at each
+            # (`solid_model._embed_beams`), so a row is wholly on the part or off it.
             segments = [row for row in beam_rows.get(interface.structure, [])
-                        if frozenset(row[:2]) in held]
+                        if frozenset(row[:2]) in held
+                        and _on_path(row, path, coordinates)]
         if not segments:
             raise ExportError(
                 f"interface {interface.name!r} has no mesh along its line -- the line "
@@ -884,7 +887,8 @@ def _interface_elements(project: Project, dim: int,
     before = [list(row) for row in flat]
 
     try:
-        split = interfaces.split_mesh(specs, flat, coordinates)
+        split = interfaces.split_mesh(specs, flat, coordinates,
+                                      [row for _, _, rows in beam_blocks for row in rows])
     except interfaces.InterfaceError as failure:
         raise ExportError(str(failure)) from None
 
@@ -902,6 +906,10 @@ def _interface_elements(project: Project, dim: int,
     out = []
     ties = []
     faces: list[tuple[str, str, list[int]]] = []
+    # The soil nodes after the split: an original node still in here is held by soil
+    # that no interface detached, which a tie may have to hold to a copy.
+    in_soil = {node for row in flat for node in row}
+    tied: set[int] = set()
     for interface in active:
         rows = split.elements.get(interface.id) or []
         if not rows:
@@ -927,13 +935,22 @@ def _interface_elements(project: Project, dim: int,
         # while the structure is not installed, which is one question about the whole
         # line, not one per body it happens to pass.
         if interface.structure is not None:
-            drawn = _beam_of(project, interface.structure).points
-            master_face = _master_face(drawn)
-            master, slave = _split_ties(rows, per_side, split, interface.id, master_face)
+            path = project.interface_path(interface)
+            master_face = _master_face(path)
+            master, slave = _split_ties(rows, per_side, split, interface.id, master_face,
+                                        in_soil, tied)
             if master and slave:
                 ties.append((interface.id, master, slave))
-            faces.extend(_faces(interface.id, rows, per_side, split, master_face, drawn))
+            faces.extend(_faces(interface.id, rows, per_side, split, master_face, path))
     return out, ties, faces
+
+
+def _on_path(row: list[int], path, coordinates: dict[int, tuple[float, float, float]]
+             ) -> bool:
+    """Whether a beam row lies on `path`, the part of the pile an interface holds."""
+    a, b = coordinates[row[0]], coordinates[row[1]]
+    middle = ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)
+    return polylines.nearest(path, middle)[1] <= ON_PATH
 
 
 def _interface_by_body(rows: list[list[int]], per_side: int,
@@ -1015,6 +1032,11 @@ def _faces(key: str, rows: list[list[int]], per_side: int, split: interfaces.Spl
     return [(key, name, sorted(nodes)) for name, nodes in out.items() if nodes]
 
 
+ON_PATH = 1e-6
+"""Metres. How near the part of a pile an interface holds the middle of a beam row has to
+be to be on it."""
+
+
 def _master_face(path) -> str:
     """The face of a line whose copies are the masters of its tie: the one on the left of
     the screen for a line steeper than 45 degrees, the one below for a flatter one --
@@ -1028,8 +1050,9 @@ def _master_face(path) -> str:
 
 
 def _split_ties(rows: list[list[int]], per_side: int, split: interfaces.Split, key: str,
-                master_face: str) -> tuple[list[int], list[int]]:
-    """Pair up the soil-side copies of every node the interface split into two.
+                master_face: str, in_soil: set[int] | None = None,
+                tied: set[int] | None = None) -> tuple[list[int], list[int]]:
+    """Pair up the two soil nodes of every pile node the split gave two of.
 
     A node in the middle of the line gets exactly two copies, one per face (see
     `core.kratos.interfaces`'s module docstring) -- while the structure that owns the line is
@@ -1037,6 +1060,12 @@ def _split_ties(rows: list[list[int]], per_side: int, split: interfaces.Split, k
     nothing else holds those two copies together, so they need a master/slave tie for
     the stage(s) before installation. A node with only one copy is the toe, where the
     ground closes under the structure and is already continuous; it needs no tie.
+
+    Under a contact on one face only, a node has one copy, and the soil on the other
+    face is still on the original (`in_soil`): the copy is tied to that original, as
+    the Kratos-side InterfaceInserter ties a one-side contact. The two copies may also
+    come from two interfaces, one on each face; `tied` holds the slaves already tied by
+    another interface of the same pile, so each pair is tied once.
 
     The pairing is exact, not discovered by search: each node in one list has exactly one
     true partner, at zero distance, in the other. That made
@@ -1048,21 +1077,30 @@ def _split_ties(rows: list[list[int]], per_side: int, split: interfaces.Split, k
     line. Taking the lower node id instead put them on whichever face gmsh happened to
     number first around each node, so they changed sides along the wall.
     """
-    by_original: dict[int, set[int]] = {}
-    for row in rows:
-        for node in row[per_side:]:
-            original = split.duplicates.get(node)
-            if original is not None:
-                by_original.setdefault(original, set()).add(node)
+    every_copy: dict[int, set[int]] = {}
+    for new, original in split.duplicates.items():
+        every_copy.setdefault(original, set()).add(new)
+    on_line = {node for row in rows for node in row[:per_side]}
+    tied = set() if tied is None else tied
 
     master, slave = [], []
-    for copies in by_original.values():
-        if len(copies) != 2:
+    for original in sorted(on_line):
+        copies = every_copy.get(original, set())
+        if len(copies) == 1 and in_soil is not None and original in in_soil:
+            (copy,) = copies
+            face = split.faces.get(copy, {}).get(key)
+            pair = (copy, original) if face == master_face else (original, copy)
+        elif len(copies) == 2:
+            first, second = sorted(
+                copies, key=lambda c: (split.faces.get(c, {}).get(key) != master_face, c))
+            pair = (first, second)
+        else:
             continue
-        first, second = sorted(
-            copies, key=lambda c: (split.faces.get(c, {}).get(key) != master_face, c))
-        master.append(first)
-        slave.append(second)
+        if pair[1] in tied:
+            continue
+        tied.add(pair[1])
+        master.append(pair[0])
+        slave.append(pair[1])
     return master, slave
 
 

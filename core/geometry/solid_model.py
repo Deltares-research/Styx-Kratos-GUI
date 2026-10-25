@@ -673,7 +673,8 @@ def _imprint_load_footprints(project: Project, owners: dict[int, set[str]],
 
 def _split_at(points: Sequence[tuple[float, ...]],
               heads: Sequence[tuple[float, ...]]) -> list[tuple[float, ...]]:
-    """The polyline with every anchor head that lies on it inserted as a vertex.
+    """The polyline with every anchor head that lies on it inserted as a vertex (and,
+    in a section, every From and To of an interface on a part of it).
 
     The head has to be a vertex of the beam for the mesh to put one node there and for
     the anchor to hang off it -- the reference deck shows exactly that, a head node
@@ -700,7 +701,10 @@ def _split_at(points: Sequence[tuple[float, ...]],
             closest = [a + t * d for a, d in zip(start, delta)]
             if math.dist(head, closest) <= TOLERANCE:
                 on_segment.append((t, tuple(head)))
-        out.extend(head for _, head in sorted(on_segment))
+        for _, head in sorted(on_segment):
+            # An anchor head at an interface's From is one vertex, not two.
+            if math.dist(head, out[-1]) > TOLERANCE:
+                out.append(head)
         out.append(end)
     return out
 
@@ -756,10 +760,17 @@ def _embed_beams(project: Project, owners: dict[int, set[str]], dim: int,
         return gmsh.model.occ.addPoint(x, y, 0.0)
 
     heads = [anchor.head for anchor in project.plane_anchors if anchor.active]
+    # From and To of an interface on a part of a pile are vertices of the pile too, so
+    # the mesh has a node at each and the contact can stop there.
+    ends: dict[str, list[tuple[float, float]]] = {}
+    for interface in project.active_interfaces:
+        if interface.structure is not None and interface.stretch is not None:
+            ends.setdefault(interface.structure, []).extend(interface.stretch)
     tools: list[tuple[int, int]] = []
     owner_of_tool: list[str] = []
     for beam in active:
-        vertices = [point(x, y) for x, y in _split_at(beam.points, heads)]
+        vertices = [point(x, y)
+                    for x, y in _split_at(beam.points, heads + ends.get(beam.id, []))]
         for start, end in zip(vertices, vertices[1:]):
             tools.append((1, gmsh.model.occ.addLine(start, end)))
             owner_of_tool.append(beam.id)
