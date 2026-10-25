@@ -78,7 +78,10 @@ export divides the section values (not the density) by the `spacing`.
 |---|---|---|
 | Element | `Geo_UPwLineInterfacePlaneStrainElement2Plus2N` / `Geo_UPwLineInterfacePlaneStrainDiffOrderElement3Plus3N` | Tested for quadratic, from a Kratos reference deck. Limited for linear: the name is inferred. |
 | Law | The law of the interface section. The default is `GeoIncrementalLinearElasticInterfaceLaw`. The K0 stage always uses this law. | Tested |
-| Placement | Along a sheet pile (side: both, left or right), or along a free line through the soil (soil against soil, a slip surface, a lining) | Tested |
+| Placement | Along a whole sheet pile or the part between two points on it (From, To), or along a free line through the soil (soil against soil, a slip surface, a lining). Side: both, left or right on the screen (below or above for a flat line). Many interfaces per pile, but only one on each face over a length. | Tested |
+| Ends of an interface | At the toe, one node copy for the soil around it (for one face only: the soil on that side of the pile line). Where the pile goes on, the soil beyond the end stays on the pile node, as the Kratos-side InterfaceInserter does. | Tested, also in Kratos |
+| Ties before installation | A master/slave tie for each split node, also for an interface on one face only | Tested |
+| Along an anchor's grout body | Not possible: the grout body is a point in the model | Not available |
 | Node splitting | Styx duplicates the nodes after it makes the mesh, so the contact has zero thickness | Tested, [kratos/interfaces.py](../core/kratos/interfaces.py) |
 | Stiffness | `INTERFACE_SHEAR_STIFFNESS` and `INTERFACE_NORMAL_STIFFNESS` as you type them. If you leave them out: shear = G / t of the adjacent soil (t is the virtual thickness), normal = 10 × shear. | Tested |
 | Strength | If you leave them out: c × R and atan(R × tan φ) of the adjacent soil. R is the `R_inter` of the section, or else the `R_inter` of the soil (default 0.7). | Tested against the Kratos reference |
@@ -94,9 +97,12 @@ and adds only the values that are missing
 
 | Feature | Detail | Status |
 |---|---|---|
+| Soil model | A **Soil model** list in the Material set window (`--model` in the CLI): Linear elastic, Mohr-Coulomb or Other. The model sets the law and the parameters shown, in groups, with defaults ([model/soil_models.py](../core/model/soil_models.py)). | Tested |
 | Linear elastic soil | `GeoLinearElasticPlaneStrain2DLaw` (2D), `GeoIncrementalLinearElastic3DLaw` (3D). The law follows the dimension of the model. | Tested in 2D. Limited in 3D. |
-| Other laws | Any law name, for example a Mohr-Coulomb law or a UDSM, with its own variables. Styx writes it as typed. | Limited: no test runs it in Kratos |
-| Required variables | `YOUNG_MODULUS`, `POISSON_RATIO`, `DENSITY_SOLID` for a linear elastic soil. The export refuses a soil without them. | Tested |
+| Mohr-Coulomb soil | `GeoMohrCoulombLawPlaneStrain` (2D), `GeoMohrCoulombLaw3D` (3D), with `GEO_COHESION`, `GEO_FRICTION_ANGLE`, `GEO_DILATANCY_ANGLE`, `GEO_ENABLE_TENSION_CUT_OFF` and `GEO_TENSILE_STRENGTH`. A new soil has c = 1 kPa, φ = 30°, ψ = 0°, no tension cut-off and `SaturatedBelowPhreaticLevelLaw`. The old names `GeoMohrCoulombWithTensionCutOff2D/3D` become the current ones when a project loads. Hardening (`GEO_COULOMB_HARDENING_TYPE`) is not in the window; add it with **Add variable**. | Tested in 2D, in Kratos too |
+| Other laws | Any law name, for example a UDSM, with its own variables. Styx writes it as typed. | Limited: no test runs it in Kratos |
+| Choices | `GEO_DRAINAGE_TYPE` (`CONSTANT_PW_FIELD`, `FULLY_COUPLED`, `DRAINED`, `UNDRAINED`) and `RETENTION_LAW` (`SaturatedLaw`, `SaturatedBelowPhreaticLevelLaw`, `VanGenuchtenLaw`) are lists of the values Kratos accepts. `GEO_ENABLE_TENSION_CUT_OFF` is a check box. | Tested |
+| Required variables | `YOUNG_MODULUS`, `POISSON_RATIO`, `DENSITY_SOLID` for every soil model; for Mohr-Coulomb also c, φ and ψ, and the tensile strength when the cut-off is on. The export refuses a soil without them, and a Mohr-Coulomb soil with ψ > φ, φ ≥ 90° or a tensile strength above c / tan φ. | Tested |
 | Calculated variables | If they are missing: `GEO_DRAINAGE_TYPE` = `CONSTANT_PW_FIELD`, `DENSITY_WATER` from the specific weight of the water, `POROSITY` = 0.3, the bulk moduli of solid (10 GPa) and fluid (2.2 GPa), the viscosity of water (1 mPa·s), and the symmetric permeabilities. The export lists each calculated value in a warning. | Tested |
 | K0 | `K0_NC`, or else Jaky's 1 − sin φ from `GEO_FRICTION_ANGLE`, in `initial_materials.json`. Without both, Kratos uses its own default. | Tested |
 | K0 stage | The K0 stage runs elastic. A soil with a different law uses the linear elastic law in `initial_materials.json`, and its own law from the next stage on. | Tested |
@@ -182,7 +188,7 @@ and adds only the values that are missing
 |---|---|
 | Sheet piles, wall panels, members | Sections are shared, so many piles can use one profile. You edit them in the Selection explorer. |
 | Anchors | The head moves onto a pile, a panel or a member. The prestress is set for each anchor. |
-| Interfaces | A **Side** row selects the faces that get the interface. Contact properties are shared. Without a pile, the tool draws a free line. |
+| Interfaces | The interface window: a sheet pile by name with **From** and **To**, or own coordinates; the faces as on the screen; the contact. Contact properties are shared. |
 | Loads | Point, line and surface loads by their components. You can switch each one off. |
 | Normal loads | A line with uniform or hydrostatic pressure |
 | Water | One water level for the full model. A new hydrostatic condition or normal load takes it as its own level. You can change the specific weight of the water. |
@@ -216,6 +222,7 @@ and adds only the values that are missing
 | Quantities | \|u\|, u_x, u_y, u_z, total and for each stage; σ'xx, σ'yy, σ'zz, σ'xy, σ'yz, σ'xz; p', q, σ1, σ2, σ3, τ_max; pore pressure; hydraulic head (with gravity on); effective saturation, the flux q, q_x, q_y, q_z and, with a seepage face, the nodal water flow rate of a groundwater flow run. Total stresses and saturation if Kratos wrote them. | Tested |
 | Signs and units | Compression is negative, as Kratos writes it. All quantities are in the unit system of the run (Pa for SI, kPa for kN); lengths in m. | Tested |
 | Display | Colour bands or smooth shading, colour map, reversed scale, automatic or fixed range, deformed mesh with a selected or automatic scale | Tested |
+| Loads and water | The loads and the water level of the stage on screen over the colours, when the run is of the open project (`results loads on\|off`) | Tested |
 | Values at a node | All quantities at one node (`results at <node>`) | Tested |
 | Plots along the wall | Bending moment M, shear force Q, normal force N, displacements ux and uy along the wall, and the tractions tn and ts along the interface, with one line for each stage. Save as SVG or CSV. | Tested |
 | Export | The field on screen as CSV; one file of a run, or the full run as a ZIP file | Tested |
@@ -233,7 +240,7 @@ and adds only the values that are missing
 | `boundary`, `gravity` | Lists the boundary conditions or puts the standard supports back; shows gravity or switches it on or off |
 | `soillayers`, `materials` | Opens the soil windows |
 | `colour`, `node` | Shows parts of the mesh in colour, or the parts that contain a node |
-| `results …` | `runs`, `open`, `stage`, `fields`, `field`, `at`, `bands`, `smooth`, `map`, `deform`, `range`, `reverse`, `mesh`, `plot`, `csv`, `files`, `get`, `zip` |
+| `results …` | `runs`, `open`, `stage`, `fields`, `field`, `at`, `bands`, `smooth`, `map`, `deform`, `range`, `reverse`, `mesh`, `loads`, `plot`, `csv`, `files`, `get`, `zip` |
 | `view`, `zoomfit`, `goto<mode>`, `clear`, `help` | Changes the view or the mode, clears the log, lists the commands |
 
 The `Project` is a pydantic model that a script can build directly. The server also has a
@@ -259,9 +266,11 @@ REST API: `/api/project`, `/api/mesh`, `/api/calculate`, `/api/results/…`.
 
 ## Main gaps
 
-1. **No Mohr-Coulomb run.** A Mohr-Coulomb law can be typed, but no test runs it in Kratos
-   (`mohr_coulomb_project` in `tests/models/excavation.py` is ready for it).
-   User-defined models (UDSM, UMAT) are written as typed, also without a test.
+1. **A plastic stage applies its load in one step.** A Mohr-Coulomb soil runs in Kratos
+   (the staged excavation of `tests/models/excavation.py` runs all its stages), but a
+   stage that makes much of the soil yield can stop without converging, because the
+   stage has no load steps. More iterations and a larger tolerance per stage can help.
+   User-defined models (UDSM, UMAT) are written as typed, without a test.
 2. **No factor of safety.** Styx has no φ–c reduction stage.
 3. **Groundwater flow is steady-state and 2D only.** A project cannot mix flow stages
    with deformation stages, and a drawn condition line has no element size of its own

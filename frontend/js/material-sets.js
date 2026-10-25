@@ -20,6 +20,7 @@ App.MaterialSets = (function () {
   'use strict';
 
   var P = App.PropertySets;
+  var S = App.SoilModels;
 
   function el() { return App.UI.el.apply(null, arguments); }
   function copy(value) { return JSON.parse(JSON.stringify(value)); }
@@ -93,7 +94,8 @@ App.MaterialSets = (function () {
         var swatch = el('span.tree-swatch');
         swatch.style.background = m.color;
         var cells = [el('td', null, swatch), el('td', { text: m.name }),
-                     el('td', { text: m.constitutive_law })];
+                     el('td', { text: S.label(S.modelOf(m.constitutive_law)),
+                                title: m.constitutive_law })];
         COLUMNS.forEach(function (name) {
           cells.push(el('td' + (name === 'GEO_DRAINAGE_TYPE' ? '' : '.num'), { text: shown(m, name) }));
         });
@@ -158,7 +160,7 @@ App.MaterialSets = (function () {
         wrap.appendChild(el('h3', { text: 'Soil and interfaces — ' + App.Units.title() }));
         table = el('table.mat-table.selectable.material-sets');
         var head = el('tr');
-        ['', 'Identification', 'Constitutive law'].concat(COLUMNS.map(heading), ['']).forEach(function (h) {
+        ['', 'Identification', 'Soil model'].concat(COLUMNS.map(heading), ['']).forEach(function (h) {
           head.appendChild(el('th', { text: h }));
         });
         table.appendChild(el('thead', null, head));
@@ -209,16 +211,24 @@ App.MaterialSets = (function () {
   /* ── One material's property set ─────────────────────────────────── */
 
   /* Every edit is checked as a whole set (App.PropertySets.validate) and undone when it
-     would not save -- the same bounds the server holds, so OK cannot come back a 422. */
+     would not save -- the same bounds the server holds, so OK cannot come back a 422.
+
+     The soil model comes first (App.SoilModels): it sets the law for the project's
+     dimension and the parameters listed, in groups. A choice is a drop-down of the
+     values Kratos accepts, a flag a check box, a number a text box in the project's
+     units. A model chosen, a choice changed or a flag switched fills in the defaults of
+     what the soil now lists and lacks, and the hint says which. "Other" is any law,
+     typed by name, with only the variables the soil carries. */
   function editor(m, changed) {
     var hint, grid, title;
+    var other = S.modelOf(m.constitutive_law) === S.OTHER;
     var DEFAULT = 'Kratos\' names, in ' + App.Units.title() + '. A blank variable the ' +
                   'export can derive is left to it; an invalid entry is refused and put back.';
 
-    function say(message) {
+    function say(message, notice) {
       if (!hint) return;
       hint.textContent = message || DEFAULT;
-      hint.classList.toggle('invalid', !!message);
+      hint.classList.toggle('invalid', !!message && !notice);
     }
 
     function attempt(apply) {
@@ -238,6 +248,20 @@ App.MaterialSets = (function () {
       return true;
     }
 
+    /* An edit that can list more -- a model, a choice, a flag -- with the defaults of
+       what it lists anew filled in. */
+    function choose(apply) {
+      var beforeLaw = m.constitutive_law, before = copy(m.variables);
+      var filled = [];
+      var ok = attempt(function () {
+        apply();
+        filled = S.fill(beforeLaw, before, m.constitutive_law, m.variables, App.Units.current());
+      });
+      if (ok && filled.length) say(S.filledNote(S.modelOf(m.constitutive_law), filled), true);
+      draw();
+      return ok;
+    }
+
     function field(label, control, unit) {
       var value = el('div.pgrid-val.editable.field', null, [control]);
       if (unit) value.appendChild(el('span.unit', { text: unit }));
@@ -253,6 +277,60 @@ App.MaterialSets = (function () {
       return input;
     }
 
+    function select(options, value, attrs, onChange) {
+      var box = el('select', attrs);
+      options.forEach(function (o) { box.appendChild(el('option', { value: o.value, text: o.text })); });
+      box.value = value;
+      box.addEventListener('change', function () { onChange(box.value); });
+      return box;
+    }
+
+    function held(name) { return Object.prototype.hasOwnProperty.call(m.variables, name); }
+
+    /* A number, list or text variable, typed; blank leaves it out. */
+    function typedRow(name) {
+      var input = textInput(P.format(m.variables[name]), function (text) {
+        attempt(function () {
+          var parsed = P.parse(text);
+          if (parsed === undefined) delete m.variables[name]; else m.variables[name] = parsed;
+        });
+        draw();
+      }, { 'data-variable': name, placeholder: P.derivable('soil', name) ? 'derived' : '' });
+      var row = field(name, input, App.Units.variableLabel(name));
+      if (held(name)) {
+        // In the value's cell: a third child of the two-column row would wrap below it.
+        row.lastChild.appendChild(el('button.btn.btn-sm', { text: '×', type: 'button', title: 'Leave out',
+          'data-remove': name, onclick: function () {
+            attempt(function () { delete m.variables[name]; });
+            draw();
+          } }));
+      }
+      return row;
+    }
+
+    function parameterRow(p) {
+      var name = p.name;
+      if (p.choices) {
+        var value = held(name) ? m.variables[name] : p.absent;
+        var options = p.choices.slice();
+        if (value !== undefined && options.indexOf(value) < 0) options.unshift(value);
+        return field(name, select(options.map(function (c) { return { value: c, text: c }; }),
+          value, { 'data-variable': name }, function (chosen) {
+            choose(function () { m.variables[name] = chosen; });
+          }));
+      }
+      if (p.flag) {
+        var box = el('input', { type: 'checkbox', 'data-variable': name });
+        box.checked = (held(name) ? m.variables[name] : p.absent) === true;
+        box.addEventListener('change', function () {
+          var on = box.checked;
+          choose(function () { m.variables[name] = on; });
+        });
+        return field(name, box);
+      }
+      return typedRow(name);
+    }
+
     function draw() {
       App.UI.clear(grid);
       grid.appendChild(el('h4', { text: 'General' }));
@@ -263,38 +341,52 @@ App.MaterialSets = (function () {
       var colour = el('input', { type: 'color', value: m.color, 'data-field': 'color' });
       colour.addEventListener('input', function () { attempt(function () { m.color = colour.value; }); });
       grid.appendChild(field('Colour', colour));
-      var laws = el('datalist', { id: 'material-laws' });
-      [P.lawFor('soil', 2), P.lawFor('soil', 3)].forEach(function (law) {
-        laws.appendChild(el('option', { value: law }));
-      });
-      grid.appendChild(laws);
-      grid.appendChild(field('Constitutive law', textInput(m.constitutive_law, function (v) {
-        attempt(function () { m.constitutive_law = v.trim(); });
-      }, { list: 'material-laws', 'data-field': 'constitutive_law' })));
 
-      grid.appendChild(el('h4', { text: 'Variables' }));
-      P.names('soil', m, dimension()).forEach(function (name) {
-        var value = (m.variables || {})[name];
-        var input = textInput(P.format(value), function (text) {
-          attempt(function () {
-            var parsed = P.parse(text);
-            if (parsed === undefined) delete m.variables[name]; else m.variables[name] = parsed;
+      var model = other ? S.OTHER : S.modelOf(m.constitutive_law);
+      var models = S.order().map(function (id) { return { value: id, text: S.label(id) }; })
+        .concat([{ value: S.OTHER, text: 'Other (type a law name)' }]);
+      grid.appendChild(field('Soil model', select(models, model, { 'data-field': 'soil-model' },
+        function (chosen) {
+          other = chosen === S.OTHER;
+          if (other) { say('Type the name of the Kratos law below.', true); draw(); return; }
+          choose(function () { m.constitutive_law = S.law(chosen, dimension()); });
+        })));
+      if (other) {
+        var laws = el('datalist', { id: 'material-laws' });
+        S.order().forEach(function (id) {
+          [S.law(id, 2), S.law(id, 3)].forEach(function (law) {
+            laws.appendChild(el('option', { value: law }));
           });
-          draw();
-        }, { 'data-variable': name,
-             placeholder: P.derivable('soil', name) ? 'derived' : '' });
-        var row = field(name, input, App.Units.variableLabel(name));
-        if ((m.variables || {})[name] !== undefined) {
-          row.appendChild(el('button.btn.btn-sm', { text: '×', type: 'button', title: 'Leave out',
-            'data-remove': name, onclick: function () {
-              attempt(function () { delete m.variables[name]; });
-              draw();
-            } }));
-        }
-        grid.appendChild(row);
+        });
+        grid.appendChild(laws);
+        grid.appendChild(field('Constitutive law', textInput(m.constitutive_law, function (v) {
+          var law = v.trim();
+          if (choose(function () { m.constitutive_law = law; })) {
+            other = S.modelOf(m.constitutive_law) === S.OTHER;
+            draw();
+          }
+        }, { list: 'material-laws', 'data-field': 'constitutive_law' })));
+      } else {
+        grid.appendChild(field('Constitutive law', el('input.cell-input', {
+          value: m.constitutive_law, readonly: 'readonly', 'data-field': 'constitutive_law',
+          title: 'The Kratos law of the soil model in a ' + dimension() + 'D model' })));
+      }
+
+      var listed = [];
+      S.groups(model, m.variables).forEach(function (group) {
+        grid.appendChild(el('h4', { text: group.title }));
+        group.parameters.forEach(function (p) {
+          listed.push(p.name);
+          grid.appendChild(parameterRow(p));
+        });
       });
 
-      // Any other variable Kratos reads -- a UDSM's parameters, OCR, a retention law.
+      // Any other Kratos variable the soil carries -- a UDSM's parameters, OCR, a value
+      // the model does not read -- typed in place.
+      var rest = Object.keys(m.variables).filter(function (n) { return listed.indexOf(n) < 0; });
+      grid.appendChild(el('h4', { text: other ? 'Variables' : 'Other variables' }));
+      rest.forEach(function (name) { grid.appendChild(typedRow(name)); });
+
       var names = el('datalist', { id: 'kratos-variables' });
       Object.keys(App.UNIT_TABLE.variables).forEach(function (n) {
         names.appendChild(el('option', { value: n }));
@@ -332,7 +424,7 @@ App.MaterialSets = (function () {
 
     m.variables = m.variables || {};
     return App.Dialogs.open({
-      title: 'Material set — ' + m.name, width: 560, height: 560,
+      title: 'Material set — ' + m.name, width: 600, height: 620,
       buttons: [{ label: 'Close', primary: true }],
       build: function (root, ctx) {
         title = ctx && ctx.dialog ? ctx.dialog.querySelector('.dlg-title') : null;

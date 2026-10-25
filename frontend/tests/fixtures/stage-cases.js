@@ -1692,6 +1692,7 @@ window.STAGE_FIXTURE =
     "anchors": [],
     "interface_sections": [],
     "interfaces": [],
+    "interface_sides": "screen",
     "normal_loads": [],
     "wells": {
       "positions": [

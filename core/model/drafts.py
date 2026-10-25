@@ -19,7 +19,7 @@ import math
 from collections.abc import Sequence
 from typing import Any
 
-from core.model import units
+from core.model import polylines, soil_models, units
 from core.model.schemas import (Anchor, AnchorSection, BeamSection, Beam, Interface,
                                 InterfaceSection, LineLoad, Material, Member, NormalLoad, Panel,
                                 PanelSection, PointLoad, Project, SoilLayer, SpaceAnchor,
@@ -27,17 +27,14 @@ from core.model.schemas import (Anchor, AnchorSection, BeamSection, Beam, Interf
 from core.model.schemas import (FACE_NORMALS, ConditionTarget, DisplacementCondition, Face,
                                 PressureType, standard_conditions as standard_set)
 
-SOIL_LAWS = {2: "GeoLinearElasticPlaneStrain2DLaw", 3: "GeoIncrementalLinearElastic3DLaw"}
+SOIL_LAWS = dict(soil_models.MODELS[soil_models.LINEAR_ELASTIC].laws)
 """The law a new soil starts with, by the project's dimension (`App.PropertySets.lawFor`)."""
 
-SOIL_DEFAULTS_SI = {
-    "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD", "YOUNG_MODULUS": 1.0e7,
-    "POISSON_RATIO": 0.3, "DENSITY_SOLID": 17000 / 9.81, "POROSITY": 0.0,
-    "PERMEABILITY_XX": 1 / 86400, "GEO_COHESION": 0.0, "GEO_FRICTION_ANGLE": 30.0,
-}
-"""A new soil: a loose drained sand, in SI (`App.PropertySets.KINDS.soil.defaults`).
-Porosity 0, as in Kratos' reference, so the soil weighs DENSITY_SOLID g -- 17 kN/m3 --
-above and below the water alike."""
+SOIL_DEFAULTS_SI = soil_models.defaults_si(soil_models.LINEAR_ELASTIC)
+"""A new soil: a loose drained sand, in SI (`App.PropertySets.KINDS.soil.defaults`), the
+linear elastic model's defaults (`core/model/soil_models.py`). Porosity 0, as in Kratos'
+reference, so the soil weighs DENSITY_SOLID g -- 17 kN/m3 -- above and below the water
+alike."""
 
 SOIL_COLOR = "#9aa7b4"
 """The colour a new material gets (`App.newMaterialDefaults`)."""
@@ -104,20 +101,44 @@ def _library_preset(preset_id: str) -> dict:
 
 
 def soil(project: Project, id: str, *, name: str | None = None, preset: str | None = None,
-         color: str | None = None, law: str | None = None) -> tuple[Material, list[str]]:
+         color: str | None = None, law: str | None = None,
+         model: str | None = None) -> tuple[Material, list[str]]:
     """A new soil for `project`: the default sand, or the library preset `preset`, with
     the law of the project's dimension and its variables in the project's units.
 
-    Returns the material and what the unit conversion had to say about it.
+    `model` (`core/model/soil_models.py`) makes it that soil model instead of linear
+    elastic: its law, and its defaults for what the sand or the preset lacks. `law` names
+    any other law, written as typed.
+
+    Returns the material and what the unit conversion and the model had to say about it.
     """
+    if model is not None and law is not None:
+        raise DraftError("give a soil model or a law, not both")
+    if model is not None and model not in soil_models.MODELS:
+        raise DraftError(f"there is no soil model {model!r}; there are: "
+                         + ", ".join(soil_models.MODELS))
     start = _library_preset(preset) if preset is not None else None
-    variables_si = start["variables"] if start else dict(SOIL_DEFAULTS_SI)
+    elastic = SOIL_LAWS[project.dimension]
+    chosen = soil_models.law(model, project.dimension) if model is not None else (
+        law or elastic)
+    filled: list[str] = []
+    if start is not None:
+        variables_si = start["variables"]
+        if model is not None:
+            # A preset is an elastic soil; what the model needs on top of it, it fills.
+            filled = soil_models.fill(elastic, dict(variables_si), chosen, variables_si,
+                                      "SI")
+    else:
+        variables_si = soil_models.defaults_si(model or soil_models.LINEAR_ELASTIC)
     variables, notes = units.convert_variables(variables_si, "SI", project.unit_system)
+    note = soil_models.filled_note(model, filled) if model is not None else None
+    if note:
+        notes.append(note)
     material = Material(
         id=id,
         name=name if name is not None else (start["name"] if start else id),
         color=color if color is not None else (start["color"] if start else SOIL_COLOR),
-        constitutive_law=law or SOIL_LAWS[project.dimension],
+        constitutive_law=chosen,
         variables=variables,
         **({"r_inter": start["r_inter"],
             "interface_permeability": start["interface_permeability"]} if start else {}),
@@ -525,12 +546,42 @@ def anchor(project: Project, head=None, tail=None, *, id: str | None = None,
 
 # Interfaces and normal loads -- plane strain only
 
+STRETCH_SNAP = 0.5
+"""How far, in metres, a typed From or To may be off the pile: it is moved onto the
+pile, and refused further away (`App.Interfaces.snap`)."""
+
+
+def stretch_point(pile: Beam, point, label: str) -> tuple[float, float]:
+    """`point` moved onto `pile`, to the micrometre, refused when it is more than
+    `STRETCH_SNAP` away. `label` is From or To, which the refusal names."""
+    _finite([point], f"{label} must be two numbers.")
+    on, away, _ = polylines.nearest(pile.points, point)
+    if away > STRETCH_SNAP:
+        raise DraftError(f"{label} is {away:.1f} m from {pile.name}; From and To are "
+                         "points on the pile.")
+    return (_round(on[0]), _round(on[1]))
+
+
+def stretch(pile: Beam, start, end) -> tuple[tuple[float, float], tuple[float, float]] | None:
+    """From and To on `pile`, snapped (`stretch_point`); None when they are the pile's
+    two ends, which is the whole pile."""
+    points = (stretch_point(pile, start, "From"), stretch_point(pile, end, "To"))
+    if points[0] == points[1]:
+        raise DraftError(f"From and To are the same point on {pile.name}; the part of "
+                         "the pile needs length.")
+    ends = {tuple(pile.points[0]), tuple(pile.points[-1])}
+    return None if set(points) == ends else points
+
+
 def interface(project: Project, structure: str | None = None, points=None, *,
               side: str | None = None, id: str | None = None, name: str | None = None,
-              section: str | None = None) -> Interface:
+              section: str | None = None, stretch_from=None,
+              stretch_to=None) -> Interface:
     """A new interface: along the sheet pile `structure`, or the first live one, on both
-    sides; or, with `points` or no pile to follow, a free line -- down the middle of the
-    section by default -- that detaches the soil on its left (`App.Interfaces.draft`)."""
+    sides -- the whole pile, or the part from `stretch_from` to `stretch_to`, snapped
+    onto it; or, with `points` or no pile to follow, a free line -- down the middle of
+    the section by default -- that detaches the soil on the left of the screen
+    (`App.Interfaces.draft`)."""
     if project.dimension != 2:
         raise DraftError("An interface is a plane-strain object; switch to 2D to create one.")
     piles = [b for b in project.beams if b.active and b.kind == "beam"]
@@ -540,19 +591,26 @@ def interface(project: Project, structure: str | None = None, points=None, *,
             piles[0] if piles else None)
         if structure and pile is None:
             raise DraftError("An interface can only follow a live sheet pile.")
+    part = None
+    if stretch_from is not None or stretch_to is not None:
+        if not isinstance(pile, Beam):
+            raise DraftError("From and To are points on a sheet pile; an interface on its "
+                             "own points runs its whole line.")
+        part = stretch(pile, stretch_from if stretch_from is not None else pile.points[0],
+                       stretch_to if stretch_to is not None else pile.points[-1])
     id, default_name = _named(id, [i.id for i in project.interfaces], "interface_",
                               "Interface")
     # `side` rides in the fields as a plain string: the record checks it is one of
-    # its three.
+    # its five.
     fields: dict[str, Any] = dict(id=id, name=name or default_name, kind="interface",
                                   section=section or _first_section(project, "interface"),
                                   active=True)
     if pile is not None:
         fields["side"] = side or "both"
-        return Interface(**fields, structure=pile.id, points=None)
+        return Interface(**fields, structure=pile.id, points=None, stretch=part)
     fields["side"] = side or "left"
     line = _middle(project) if points is None else [(p[0], p[1]) for p in points]
-    return Interface(**fields, structure=None, points=line)
+    return Interface(**fields, structure=None, points=line, stretch=None)
 
 
 def normal_load(project: Project, points=None, *, id: str | None = None,

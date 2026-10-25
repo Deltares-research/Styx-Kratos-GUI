@@ -34,8 +34,8 @@ from __future__ import annotations
 import json
 import math
 
-from core.model import units
-from core.model.schemas import (SOIL_LAW_PAIRS, AnchorSection, BeamSection, InterfaceSection,
+from core.model import soil_models, units
+from core.model.schemas import (AnchorSection, BeamSection, InterfaceSection,
                          KratosPropertySet, Material, PanelSection, Project)
 
 
@@ -43,14 +43,15 @@ class MaterialError(RuntimeError):
     """A property set cannot be written. Surfaced to the command log, never guessed at."""
 
 
-LINEAR_ELASTIC = ("GeoLinearElasticPlaneStrain2DLaw", "GeoIncrementalLinearElastic3DLaw")
+LINEAR_ELASTIC = tuple(soil_models.MODELS[soil_models.LINEAR_ELASTIC].laws[dim]
+                       for dim in (2, 3))
 """The linear-elastic soil law per dimension. GeoMechanics registers no
 `GeoLinearElastic3DLaw` -- the name this wrote until tests/kratos/test_kratos_registry.py
 looked -- and its one 3D linear elastic soil law is the incremental one."""
 
-LAW_IN_OTHER_DIMENSION = {law: other for law, (_, other) in SOIL_LAW_PAIRS.items()}
-LAW_DIMENSION = {law: dim for law, (dim, _) in SOIL_LAW_PAIRS.items()}
-"""Soil laws that exist in one dimension only (`schemas.SOIL_LAW_PAIRS`)."""
+MOHR_COULOMB = tuple(soil_models.MODELS[soil_models.MOHR_COULOMB].laws[dim]
+                     for dim in (2, 3))
+"""The Mohr-Coulomb soil law per dimension (`core/model/soil_models.py`)."""
 
 ANCHOR_LAW = "TrussConstitutiveLaw"
 """The law paired with `LinearTrussElement2D2N`."""
@@ -65,15 +66,14 @@ BEAM_LAW = "TimoshenkoBeamElasticConstitutiveLaw"
 """The law paired with `LinearTimoshenkoCurvedBeamElement2D*N`."""
 
 REQUIRED = {
-    LINEAR_ELASTIC[0]: ("YOUNG_MODULUS", "POISSON_RATIO", "DENSITY_SOLID"),
-    LINEAR_ELASTIC[1]: ("YOUNG_MODULUS", "POISSON_RATIO", "DENSITY_SOLID"),
     BEAM_LAW: ("YOUNG_MODULUS", "POISSON_RATIO", "DENSITY", "CROSS_AREA", "I33"),
     PANEL_LAW: ("YOUNG_MODULUS", "POISSON_RATIO", "DENSITY", "THICKNESS"),
     ANCHOR_LAW: ("YOUNG_MODULUS", "CROSS_AREA", "DENSITY"),
 }
-"""What each known law cannot run without and nothing here can derive. A property set
-missing one is refused at export, naming it, rather than left for Kratos to stop on. A law
-not listed here is the user's own business: it is written as given."""
+"""What each known structural law cannot run without and nothing here can derive. A
+property set missing one is refused at export, naming it, rather than left for Kratos to
+stop on. A soil model's law says what it needs in `core/model/soil_models.py`. A law known
+to neither is the user's own business: it is written as given."""
 
 # The constants a soil gets when it says nothing about them, in SI and expressed in the
 # project's system when used -- the one place a unit conversion remains, and it converts
@@ -260,13 +260,11 @@ def _interface_note(section: InterfaceSection, project: Project, soil: Material 
 
 
 def dimension_law(law: str, dim: int) -> str:
-    """`law` in a model of dimension `dim`: its counterpart when it is a one-dimension
-    soil law of the other dimension, itself otherwise. A validated project is already in
-    step (`Project._soil_laws_follow_the_dimension`); this covers one whose dimension
-    was set by assignment, which validates nothing."""
-    if LAW_DIMENSION.get(law, dim) == dim:
-        return law
-    return LAW_IN_OTHER_DIMENSION[law]
+    """`law` in a model of dimension `dim`: its soil model's law there when it is one,
+    itself otherwise. A validated project is already in step
+    (`Project._soil_laws_follow_the_dimension`); this covers one whose dimension was set
+    by assignment, which validates nothing."""
+    return soil_models.law_in(law, dim)
 
 
 def translate_laws(materials: list[dict], dim: int, notes: list[str]) -> list[dict]:
@@ -275,7 +273,7 @@ def translate_laws(materials: list[dict], dim: int, notes: list[str]) -> list[di
     out = []
     for material in materials:
         law = material.get("constitutive_law", "")
-        if law not in LAW_DIMENSION:
+        if soil_models.model_of(law) == soil_models.OTHER:
             notes.append(f"material {material.get('name')!r} keeps {law}: whether it is "
                          f"a {dim}D law is not known here -- check it")
             out.append(material)
@@ -286,11 +284,17 @@ def translate_laws(materials: list[dict], dim: int, notes: list[str]) -> list[di
 
 def _check(prop: KratosPropertySet, label: str) -> None:
     law = prop.constitutive_law
-    missing = [name for name in REQUIRED.get(law, ()) if prop.number(name) is None]
+    soil = isinstance(prop, Material)
+    needed = (soil_models.required(law, prop.variables) if soil
+              else REQUIRED.get(law, ()))
+    missing = [name for name in needed if prop.number(name) is None]
     if missing:
         raise MaterialError(
             f"{label} ({law}) has no {', '.join(missing)}; Kratos cannot run it without "
             f"{'it' if len(missing) == 1 else 'them'}")
+    problem = soil_models.problem(law, prop.variables) if soil else None
+    if problem:
+        raise MaterialError(f"{label} ({law}): {problem}")
 
 
 def _ordered(variables: dict, order: tuple[str, ...]) -> dict:

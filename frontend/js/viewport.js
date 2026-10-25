@@ -59,6 +59,7 @@ App.Viewport = (function () {
   var needsRender = true, meshBuilt = false;
 
   var frame = null;              // camera framing derived from the server bbox
+  var home = null;               // the frame grown to take in loads, piles and the like
   var soilKeys = [];
   var groupKeys = {};            // Model-explorer group row -> the part keys under it
 
@@ -229,6 +230,7 @@ App.Viewport = (function () {
       length: span > 0 ? span * 0.08 : 1,
       anchors: [], active: load.active !== false, zero: magnitude === 0
     };
+    spec.tails = [];
     if (load.kind === 'point') {
       spec.anchors.push([load.x, load.y, sectionOffset(project)]);
       return spec;
@@ -243,6 +245,7 @@ App.Viewport = (function () {
       samples(load.x0, load.x1, 5).forEach(function (x) {
         spec.anchors.push([x, load.y, offset]);
       });
+      spec.tails.push(tailsOf(spec, [spec.anchors[0], spec.anchors[4]]));
       return spec;
     }
     // The load's own elevation, not `d.y_top`: the domain is only the layer block,
@@ -255,7 +258,23 @@ App.Viewport = (function () {
         spec.anchors.push([x, y, z]);
       });
     });
+    spec.tails.push(tailsOf(spec, [
+      [load.x0, y, load.z0], [load.x1, y, load.z0], [load.x1, y, load.z1],
+      [load.x0, y, load.z1], [load.x0, y, load.z0]]));
     return spec;
+  }
+
+  /* The usual symbol of a distributed load: one straight line through the tails of
+     its arrows, so it reads as a load spread over the line and stands off the face
+     it presses on. `points` are on the loaded face; the line is where the arrows
+     start. A load of nought has no arrows, so its line stays on the face and still
+     shows where it is. */
+  function tailsOf(spec, points) {
+    var back = spec.zero ? 0 : spec.length;
+    return points.map(function (point) {
+      return [point[0] - spec.direction[0] * back, point[1] - spec.direction[1] * back,
+              point[2] - spec.direction[2] * back];
+    });
   }
 
   /* A normal load pushes perpendicular to its own line, so unlike the three vector
@@ -268,37 +287,98 @@ App.Viewport = (function () {
      pressure flips the arrows. The deck presses the same way: the exporter writes each
      segment against the drawn line, because Kratos presses to the left of a
      condition's own node order (core/kratos/writer.py, `_normal_load_conditions`), and
-     warns where the arrows point out of the soil. */
+     warns where the arrows point out of the soil.
+
+     The arrows show the size of the load along its line. A uniform load has arrows of
+     one length. A hydrostatic one is nought at its water level and grows with depth
+     below it, so its arrows grow from nought at the level to the full length at the
+     deepest point, and the line through their tails is slanted: the triangle or
+     trapezoid of a water pressure. Above the level there is no load and nothing is
+     drawn. A hydrostatic load that is dry all along draws its line alone, so it still
+     shows where it is. */
   function normalLoadGlyphSpec(load, project) {
     var points = load.points || [];
     var span = modelSpan(project, frame && frame.size);
     var length = span > 0 ? span * 0.08 : 1;
     var sign = load.pressure < 0 ? -1 : 1;
     var offset = sectionOffset(project);
-    // The two modes are drawn identically: what a load is sized by is a property of
-    // the load, not of how it looks, and a symbol that came and went with the mode
-    // read as the load itself coming and going. A load in the model is a load on
-    // screen, hydrostatic or uniform, whatever its magnitude.
-    var spec = { arrows: [], length: length, active: load.active !== false };
-    // Arrows and nothing else. A line along the loaded face -- the outline a line
-    // load's glyph draws, or the strip the build used to make -- reads as a bar laid
-    // on top of the model rather than as a load applied to it.
+    var spec = { arrows: [], tails: [], length: length, active: load.active !== false };
+
+    var hydrostatic = load.fluid_pressure_type === 'Hydrostatic';
+    var level = hydrostatic ? normalLoadLevel(load, project) : null;
+    var deepest = 0;
+    if (hydrostatic && level !== null) {
+      points.forEach(function (q) { deepest = Math.max(deepest, level - q[1]); });
+    }
+    if (hydrostatic && !(deepest > 0)) {
+      spec.tails.push(points.map(function (q) { return [q[0], q[1], offset]; }));
+      return spec;
+    }
+    function size(y) {
+      return hydrostatic ? length * Math.max(0, level - y) / deepest : length;
+    }
+
+    // No line along the loaded face: it reads as a bar laid on top of the model. The
+    // line is through the tails of the arrows instead, one straight line per segment,
+    // so a load on a slope or down a wall reads as a spread load too.
+    var previous = null, tails = null;
     for (var i = 1; i < points.length; i += 1) {
       var start = points[i - 1], end = points[i];
       var dx = end[0] - start[0], dy = end[1] - start[1];
       var len = Math.sqrt(dx * dx + dy * dy);
       if (!len) continue;
       var direction = [sign * dy / len, -sign * dx / len, 0];
-      // Three to a segment, and the shared vertex is not given two arrows.
-      for (var step = i === 1 ? 0 : 1; step <= 2; step += 1) {
-        var t = step / 2;
-        spec.arrows.push({
-          tip: [start[0] + dx * t, start[1] + dy * t, offset],
-          direction: direction
-        });
+      // The part of the segment under the water, as fractions of it: all of it for a
+      // uniform load.
+      var from = 0, to = 1;
+      if (hydrostatic) {
+        var wetStart = start[1] < level, wetEnd = end[1] < level;
+        if (!wetStart && !wetEnd) { previous = null; continue; }
+        var crossing = dy ? (level - start[1]) / dy : 0;
+        if (!wetStart) from = crossing;
+        if (!wetEnd) to = crossing;
       }
+      // A vertex shared with a segment in line with this one has one arrow; at a bend
+      // each segment has its own, so both tail lines end on one.
+      var straight = from === 0 && previous && Math.abs(previous[0] - direction[0]) < 1e-9
+                     && Math.abs(previous[1] - direction[1]) < 1e-9;
+      // Three to a uniform segment. A hydrostatic one has them closer, about a third
+      // of the full length apart, so the growth with depth reads.
+      var steps = hydrostatic
+        ? Math.max(2, Math.ceil(len * (to - from) / (length / 3))) : 2;
+      for (var step = straight ? 1 : 0; step <= steps; step += 1) {
+        var t = from + (to - from) * step / steps;
+        var tip = [start[0] + dx * t, start[1] + dy * t, offset];
+        var arrowLength = size(tip[1]);
+        // The arrow at the water level has no length, and three.js cannot draw one.
+        if (arrowLength > length * 1e-6) {
+          spec.arrows.push({ tip: tip, direction: direction, length: arrowLength });
+        }
+      }
+      var first = [start[0] + dx * from, start[1] + dy * from];
+      var last = [start[0] + dx * to, start[1] + dy * to];
+      var endTail = tailPoint(last, direction, size(last[1]), offset);
+      if (straight) tails.push(endTail);
+      else {
+        spec.tails.push(tails = [tailPoint(first, direction, size(first[1]), offset),
+                                 endTail]);
+      }
+      previous = to === 1 ? direction : null;
     }
+
     return spec;
+  }
+
+  function tailPoint(point, direction, length, offset) {
+    return [point[0] - direction[0] * length, point[1] - direction[1] * length, offset];
+  }
+
+  /* The water level of a hydrostatic load: its own, or the project's for a load saved
+     before it had one (schemas.NormalLoad.reference_coordinate). */
+  function normalLoadLevel(load, project) {
+    if (typeof load.reference_coordinate === 'number') return load.reference_coordinate;
+    var water = project && project.water;
+    return water && typeof water.y === 'number' ? water.y : null;
   }
 
   function normalLoadGlyphGroup(load, project) {
@@ -328,11 +408,24 @@ App.Viewport = (function () {
       var direction = new THREE.Vector3(
         entry.direction[0], entry.direction[1], entry.direction[2]);
       var tip = new THREE.Vector3(entry.tip[0], entry.tip[1], entry.tip[2]);
+      // The head keeps the size of a full arrow's, and a short arrow is all head.
+      var head = Math.min(spec.length * 0.16, entry.length);
       var arrow = new THREE.ArrowHelper(
-        direction, tip.clone().addScaledVector(direction, -spec.length),
-        spec.length, color, spec.length * 0.16, spec.length * 0.09);
+        direction, tip.clone().addScaledVector(direction, -entry.length),
+        entry.length, color, head, spec.length * 0.09 * head / (spec.length * 0.16));
       mark(arrow);
       group.add(arrow);
+    });
+
+    spec.tails.forEach(function (points) {
+      var line = new THREE.Line(
+        new THREE.BufferGeometry().setFromPoints(points.map(function (point) {
+          return new THREE.Vector3(point[0], point[1], point[2]);
+        })),
+        new THREE.LineBasicMaterial({ color: color }));
+      mark(line);
+      line.userData.noPick = true;
+      group.add(line);
     });
 
     return group;
@@ -377,30 +470,21 @@ App.Viewport = (function () {
       marker.userData.loadGlyph = true;
       marker.renderOrder = 19;
       group.add(marker);
-    } else {
-      var outlinePoints;
-      if (spec.kind === 'line') {
-        outlinePoints = [spec.anchors[0], spec.anchors[spec.anchors.length - 1]];
-      } else {
-        // The same elevation the arrows use, or the outline stays behind on the
-        // layer soil while the arrows move up onto the embankment.
-        var pad = loadElevation(load, project);
-        outlinePoints = [
-          [load.x0, pad, load.z0], [load.x1, pad, load.z0],
-          [load.x1, pad, load.z1], [load.x0, pad, load.z1],
-          [load.x0, pad, load.z0]
-        ];
-      }
+    }
+    // Through the tails of the arrows (`tailsOf`), at the elevation the arrows use.
+    spec.tails.forEach(function (points) {
       var outline = new THREE.Line(
-        new THREE.BufferGeometry().setFromPoints(outlinePoints.map(function (point) {
+        new THREE.BufferGeometry().setFromPoints(points.map(function (point) {
           return new THREE.Vector3(point[0], point[1], point[2]);
         })),
-        new THREE.LineBasicMaterial({ color: color, depthTest: false }));
+        new THREE.LineBasicMaterial({ color: color, depthTest: false,
+                                      transparent: true,
+                                      opacity: spec.active ? 1 : 0.45 }));
       outline.userData.noPick = true;
       outline.userData.loadGlyph = true;
       outline.renderOrder = 18;
       group.add(outline);
-    }
+    });
     return group;
   }
 
@@ -887,6 +971,10 @@ App.Viewport = (function () {
     // along its line -- so it needs naming here for the same reason, in the modes a
     // load belongs to.
     loadKeys = loadKeys.concat(normalLoadKeys || []);
+    // Results draws its own contoured mesh (frontend/js/results-view.js); over it go
+    // the loads and the water, so the user sees where the load is and where the water
+    // stands. Not the supports: they would hide the edges of the contour.
+    var results = loadKeys.concat(['water'], (conditionKeys && conditionKeys.water) || []);
     if (layeredSoil) {
       var visibleKeys = soilKeys.concat(customKeys);
       // "water" in the same two modes the full build shows it in -- the level is what
@@ -899,7 +987,8 @@ App.Viewport = (function () {
                // Loads too: Staged construction is where a load is switched on and
                // off, so it has to be on screen there (`stageHidden` still hides one
                // the selected stage has switched off).
-               staged: visibleKeys.concat(loadKeys, memberKeys, ['water'], conditions) };
+               staged: visibleKeys.concat(loadKeys, memberKeys, ['water'], conditions),
+               results: results };
     }
     return {
       soil:       soilKeys.concat(conditions),
@@ -908,7 +997,8 @@ App.Viewport = (function () {
       mesh:       ['mesh', 'wall'].concat(memberKeys, customKeys, conditions),
       flow:       soilKeys.concat(['water', 'wells', 'wall'], customKeys, conditions),
       staged:     ['excavation', 'wall', 'struts', 'anchors', 'water']
-                    .concat(loadKeys, memberKeys, customKeys, conditions)
+                    .concat(loadKeys, memberKeys, customKeys, conditions),
+      results:    results
     };
   }
 
@@ -1079,7 +1169,7 @@ App.Viewport = (function () {
   }
 
   function rebuildFrame(bbox) {
-    frame = App.Buffers.bounds(bbox);
+    frame = home = App.Buffers.bounds(bbox);
 
     disposeGroup(gridGroup);
     disposeGroup(boundsGroup);
@@ -1106,6 +1196,44 @@ App.Viewport = (function () {
     gridGroup.visible = boundsGroup.visible = showGrid;
     scene.add(gridGroup);
     scene.add(boundsGroup);
+    applyRadiusLimits();
+  }
+
+  /* `bbox` grown to take in `box`, a [min, max] pair of points. In 2D the depth is
+     kept: it is edge-on to the camera, and a load glyph drawn at the section offset
+     would otherwise stretch it. Pure, so it is testable. */
+  function growBBox(bbox, box, section) {
+    var out = bbox.slice();
+    for (var i = 0; i < 3; i++) {
+      if (section && i === 2) continue;
+      out[i] = Math.min(out[i], box[0][i]);
+      out[i + 3] = Math.max(out[i + 3], box[1][i]);
+    }
+    return out;
+  }
+
+  /* The view the camera comes home to: the soil, and everything drawn around it in
+     any mode -- a load's arrows above the ground, a pile above it, the water level's
+     overhang. The soil box alone left the CROW surcharge under the top ruler. Every
+     mode's parts are counted, shown or not, so the home view is the same on every
+     tab. `frame` itself stays the soil box: the grid and the glyph sizes are read
+     from it, and the glyphs are what this measures. */
+  function rebuildHome(bbox) {
+    var drawn = {};
+    Object.keys(modeGroups).forEach(function (mode) {
+      modeGroups[mode].forEach(function (key) { drawn[key] = true; });
+    });
+    var grown = bbox.slice();
+    Object.keys(drawn).forEach(function (key) {
+      if (!groups[key]) return;
+      // The group is hidden until setMode() runs; what it holds is measured anyway.
+      groups[key].children.forEach(function (child) {
+        var box = boundsOf(child);
+        if (box.isEmpty()) return;
+        grown = growBBox(grown, [box.min.toArray(), box.max.toArray()], dimension === 2);
+      });
+    });
+    home = App.Buffers.bounds(grown);
     applyRadiusLimits();
   }
 
@@ -1196,6 +1324,7 @@ App.Viewport = (function () {
         // frame, and would otherwise carry the previous model's scale for a frame.
         rebuildFrame(payload.bbox);
         buildGroups(payload);
+        rebuildHome(payload.bbox);
         meshBuilt = false;
         // The geometry moved, so the mesh that was numbered is gone with it.
         generatedLabels = null;
@@ -1537,15 +1666,15 @@ App.Viewport = (function () {
   /* Whether the eye lets `key` be drawn in `mode`. In Staged construction a water
      pressure condition has the stage's checkbox in place of its eye, and the stage is
      what is read there: the conditions the selected stage has on are drawn, the others
-     not (`stageHidden`). */
+     not (`stageHidden`). Results reads the stage on screen the same way. */
   function eyeOpen(key, mode) {
-    if (mode === 'staged' && waterIds.indexOf(key) >= 0) return true;
+    if ((mode === 'staged' || mode === 'results') && waterIds.indexOf(key) >= 0) return true;
     return visible[key] !== false;
   }
 
   function shownByMode(key) {
     var mode = App.state && App.state.mode;
-    return (modeGroups[mode] || []).indexOf(key) >= 0
+    return modeKeys(mode).indexOf(key) >= 0
            && eyeOpen(key, mode) && !stageHidden()[key];
   }
 
@@ -1606,10 +1735,40 @@ App.Viewport = (function () {
   function stageHidden() {
     if (!App.Stages || !App.Stages.hiddenKeys) return {};
     var hidden = {};
-    App.Stages.hiddenKeys(App.PROJECT, App.state && App.state.phase,
-                          App.state && App.state.mode)
+    var mode = App.state && App.state.mode;
+    var stage = App.state && App.state.phase;
+    if (mode === 'results') {
+      // The project's stage the result on screen is of, read as Staged construction
+      // reads its own; and what the export left out (the check box off) was never in
+      // the run, so it is not drawn over its result either.
+      var shown = resultsStage();
+      stage = shown && shown.stage;
+      mode = 'staged';
+      var project = App.PROJECT || {};
+      [].concat(project.loads || [], project.normal_loads || [],
+                project.boundary_conditions || []).forEach(function (record) {
+        if (record.active === false) hidden[record.id] = true;
+      });
+    }
+    App.Stages.hiddenKeys(App.PROJECT, stage, mode)
       .forEach(function (key) { hidden[key] = true; });
     return hidden;
+  }
+
+  function resultsStage() {
+    return App.Results && App.Results.projectStage
+      ? App.Results.projectStage(App.PROJECT) : null;
+  }
+
+  /* The keys `mode` draws. In Results, none when `results loads off` took them away,
+     and none when the run on screen is not of the open project: its loads and water
+     would be drawn over a result they had no part in. */
+  function modeKeys(mode) {
+    if (mode === 'results') {
+      var options = App.Results && App.Results.options && App.Results.options();
+      if ((options && options.loads === false) || !resultsStage()) return [];
+    }
+    return modeGroups[mode] || [];
   }
 
   /* Redraw after the selected stage changes. The mode pass is the whole of it --
@@ -1620,7 +1779,7 @@ App.Viewport = (function () {
   }
 
   function setMode(mode) {
-    var wanted = modeGroups[mode] || [];
+    var wanted = modeKeys(mode);
     var hidden = stageHidden();
     revealed = [];
     Object.keys(groups).forEach(function (k) {
@@ -1680,7 +1839,7 @@ App.Viewport = (function () {
     }
     if (!(key in groups)) return;
     visible[key] = on;
-    var wanted = modeGroups[App.state.mode] || [];
+    var wanted = modeKeys(App.state.mode);
     // The stage gate applies here too, or turning an eye back on would draw a part
     // the selected stage has not built yet.
     groups[key].visible = on && wanted.indexOf(key) >= 0 && !stageHidden()[key];
@@ -2503,10 +2662,11 @@ App.Viewport = (function () {
      were chosen for the 3D demo seen through the perspective camera; a flat section
      viewed through them sits at a fraction of the viewport. ORTHO_MARGIN is the
      breathing room around a fitted section: enough that the support symbols under the
-     bottom face stay clear of the rulers drawn over the viewport's edges. */
+     bottom face stay clear of the rulers drawn over the viewport's edges, with room
+     to spare so nothing at the edge of the model is missed. */
   var ORTHO_BASE = 46;
   var ORTHO_HALF_HEIGHT = 30;
-  var ORTHO_MARGIN = 1.2;
+  var ORTHO_MARGIN = 1.3;
 
   /* How far the wheel may dolly, as multiples of the fitted view rather than as
      metres. The frozen pair (8, and 6x the demo frame's 116) is a floor above the
@@ -2531,8 +2691,8 @@ App.Viewport = (function () {
   }
 
   function applyRadiusLimits() {
-    if (!orbit || !frame) return;
-    var limits = radiusLimits(frame, dimension);
+    if (!orbit || !home) return;
+    var limits = radiusLimits(home, dimension);
     orbit.minRadius = limits.min;
     orbit.maxRadius = limits.max;
     orbit.radius = Math.max(limits.min, Math.min(limits.max, orbit.radius));
@@ -2620,11 +2780,11 @@ App.Viewport = (function () {
 
   function setView(name) {
     activeView = VIEWS[name] ? name : 'iso';
-    if (!orbit || !frame) return;          // no WebGL: nothing to aim
+    if (!orbit || !home) return;           // no WebGL: nothing to aim
     var v = cameraAngles(name, dimension);
     orientReferenceGrid(activeView, frameBBox());
-    orbit.animateTo({ theta: v.theta, phi: v.phi, radius: frame.homeRadius,
-                      tx: frame.center[0], ty: frame.center[1], tz: targetZ() });
+    orbit.animateTo({ theta: v.theta, phi: v.phi, radius: home.homeRadius,
+                      tx: home.center[0], ty: home.center[1], tz: targetZ() });
     needsRender = true;
   }
 
@@ -2632,13 +2792,13 @@ App.Viewport = (function () {
      is -- so panning slides along it instead of drifting the camera off to one side
      of the model. */
   function targetZ() {
-    return dimension === 2 ? 0 : frame.center[2];
+    return dimension === 2 ? 0 : home.center[2];
   }
 
   function zoomFit() {
-    if (!orbit || !frame) return;
-    orbit.animateTo({ tx: frame.center[0], ty: frame.center[1], tz: targetZ(),
-                      radius: frame.homeRadius });
+    if (!orbit || !home) return;
+    orbit.animateTo({ tx: home.center[0], ty: home.center[1], tz: targetZ(),
+                      radius: home.homeRadius });
     needsRender = true;
   }
 
@@ -2730,7 +2890,7 @@ App.Viewport = (function () {
     camPersp.aspect = w / h;
     camPersp.updateProjectionMatrix();
     var a = w / h;
-    var s = dimension === 2 ? orthoHalfHeight(frame, a) : ORTHO_HALF_HEIGHT;
+    var s = dimension === 2 ? orthoHalfHeight(home, a) : ORTHO_HALF_HEIGHT;
     camOrtho.left = -s * a; camOrtho.right = s * a;
     camOrtho.top = s; camOrtho.bottom = -s;
     camOrtho.updateProjectionMatrix();
@@ -2758,7 +2918,7 @@ App.Viewport = (function () {
       triadRenderer.render(triadScene, triadCam);
     }
 
-    App.setZoom(Math.round(frame.homeRadius / orbit.radius * 100));
+    App.setZoom(Math.round(home.homeRadius / orbit.radius * 100));
   }
 
   return {
@@ -2786,7 +2946,7 @@ App.Viewport = (function () {
     projectToScreen: projectToScreen,
     showImportedMesh: showImportedMesh, clearImportedMesh: clearImportedMesh,
     syncPartColors: syncPartColors, coloredPartKeys: coloredPartKeys, partColor: partColor,
-    boundsOf: boundsOf,
+    boundsOf: boundsOf, growBBox: growBBox,
     nodeParts: nodeParts, nodePartsLoaded: nodePartsLoaded, markNodes: markNodes,
     showNode: showNode, importedNodes: importedNodes,
     clearNodeMark: clearNodeMark,

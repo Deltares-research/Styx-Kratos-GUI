@@ -216,6 +216,7 @@ App.UNIT_TABLE =
   "variables": {
     "YOUNG_MODULUS": "stress",
     "POISSON_RATIO": "dimensionless",
+    "GEO_POISSON_UNDRAINED": "dimensionless",
     "DENSITY_SOLID": "density",
     "DENSITY_WATER": "density",
     "POROSITY": "dimensionless",

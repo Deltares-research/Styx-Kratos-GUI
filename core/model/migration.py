@@ -287,3 +287,42 @@ def _layer_at(layer: object, borehole: str | None) -> object:
         if isinstance(levels, dict) and borehole in levels:
             out[new] = levels[borehole]
     return out
+
+
+def screen_sides(value: dict) -> dict:
+    """A document saved before 2026-10-25 reads an interface's left and right walking its
+    line in the order the points are stored. Now they are the faces on the screen
+    (`Interface.side`). A one-side interface whose walking left is the screen's right --
+    a pile drawn from the top down, say -- gets the other word, so it holds the same soil
+    as before. A flat line's faces are named below and above.
+
+    The document says which way it reads them by `interface_sides`, which every document
+    saved since carries. One without it is converted; a record built in Python (a
+    script's `Interface(...)`) is already in the new reading and is left alone."""
+    if "interface_sides" in value:
+        return value
+    out = dict(value)
+    out["interface_sides"] = "screen"
+    interfaces = out.get("interfaces")
+    if not isinstance(interfaces, list):
+        return out
+    piles = {b.get("id"): b.get("points") for b in out.get("beams") or []
+             if isinstance(b, dict)}
+    out["interfaces"] = [_on_screen(i, piles) for i in interfaces]
+    return out
+
+
+def _on_screen(interface: object, piles: dict) -> object:
+    from core.model import polylines
+
+    if not isinstance(interface, dict) or interface.get("side") not in ("left", "right"):
+        return interface
+    line = (piles.get(interface.get("structure")) if interface.get("structure")
+            else interface.get("points"))
+    if not line:
+        return interface        # no line to read it on: the schema says why
+    try:
+        face = polylines.screen_face(line, interface["side"])
+    except (TypeError, IndexError, KeyError, ValueError):
+        return interface        # not a usable line: the schema says why
+    return {**interface, "side": face}

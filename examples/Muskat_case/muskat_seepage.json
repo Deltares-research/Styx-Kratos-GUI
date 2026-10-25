@@ -62,6 +62,7 @@
   "anchors": [],
   "interface_sections": [],
   "interfaces": [],
+  "interface_sides": "screen",
   "normal_loads": [],
   "water": null,
   "boundary_conditions": [

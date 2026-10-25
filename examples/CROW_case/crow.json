@@ -213,9 +213,11 @@
       "structure": "sheetpile",
       "points": null,
       "side": "both",
+      "stretch": null,
       "active": true
     }
   ],
+  "interface_sides": "screen",
   "normal_loads": [
     {
       "id": "water_1",

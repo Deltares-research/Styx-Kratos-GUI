@@ -1,7 +1,8 @@
 """What a new record starts as, said twice and held to one document.
 
 The GUI starts a new soil from `App.PropertySets.KINDS.soil` and offers the six presets
-of `App.MaterialLibrary`; it starts a new sheet pile, wall, member, anchor, interface or
+of `App.MaterialLibrary`; its material window fills in a soil model's defaults with
+`App.SoilModels.fill` and refuses what `App.SoilModels.problem` refuses; it starts a new sheet pile, wall, member, anchor, interface or
 load from the Structure mode's own `draft` functions. The command line starts each from
 `core.model.drafts`. Two copies of one table drift, so `frontend/tests/fixtures/drafts.js`
 is the document both are held to: this module writes it from the Python, and
@@ -28,7 +29,7 @@ import sys
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 from core import session   # noqa: E402
-from core.model import drafts   # noqa: E402
+from core.model import drafts, soil_models, units   # noqa: E402
 from core.model.schemas import DimensionUpdate, UnitsUpdate   # noqa: E402
 from core.model.templates import seed_project   # noqa: E402
 from tests.models.excavation import excavation_project   # noqa: E402
@@ -162,6 +163,18 @@ def calls(models: dict) -> list[dict]:
          drafts.interface)
     call("an interface with no pile is a free line", "Interfaces.draft", "section", [],
          drafts.interface)
+    call("an interface on a part of the pile, snapped onto it", "Interfaces.draft", "pile",
+         [None, [[6.3, -2], [6, -5]]],
+         lambda p: drafts.interface(p, stretch_from=(6.3, -2), stretch_to=(6, -5)))
+    call("an interface from one end of the pile to the other is the whole pile",
+         "Interfaces.draft", "pile", [None, [[6, -12], [6, 0]]],
+         lambda p: drafts.interface(p, stretch_from=(6, -12), stretch_to=(6, 0)))
+    call("a From far from the pile is refused", "Interfaces.draft", "pile",
+         [None, [[7.2, -2], [6, -5]]],
+         lambda p: drafts.interface(p, stretch_from=(7.2, -2), stretch_to=(6, -5)))
+    call("From and To at one point are refused", "Interfaces.draft", "pile",
+         [None, [[6.2, -3], [6, -3]]],
+         lambda p: drafts.interface(p, stretch_from=(6.2, -3), stretch_to=(6, -3)))
     call("the contact a first interface brings", "Interfaces.sectionsFor", "section",
          [_record(drafts.interface(models["section"]))], library(drafts.interface))
     call("a normal load down the middle", "NormalLoads.draft", "section", [],
@@ -251,11 +264,103 @@ def calls(models: dict) -> list[dict]:
     return out
 
 
+ELASTIC_2D = soil_models.law(soil_models.LINEAR_ELASTIC, 2)
+MOHR_COULOMB_2D = soil_models.law(soil_models.MOHR_COULOMB, 2)
+
+
+def soil_model_cases() -> dict:
+    """What `soil_models` answers, for the JavaScript twin to answer the same: the
+    defaults it fills, the soils it refuses and why, what a law needs, a law's name in a
+    dimension."""
+    mohr_coulomb = soil_models.defaults_si(soil_models.MOHR_COULOMB)
+    in_kn, _ = units.convert_variables(mohr_coulomb, "SI", "kN")
+
+    def fill(title, before_law, before, after_law, changes, system, skip=()):
+        after = {**before, **changes}
+        filled = soil_models.fill(before_law, dict(before), after_law, after, system,
+                                  tuple(skip))
+        return {"title": title, "before_law": before_law, "before": before,
+                "after_law": after_law, "changes": changes, "system": system,
+                "skip": list(skip), "filled": filled, "after": after,
+                "note": soil_models.filled_note(soil_models.model_of(after_law), filled)}
+
+    def problem(title, law, variables):
+        return {"title": title, "law": law, "variables": variables,
+                "problem": soil_models.problem(law, variables)}
+
+    def required(law, variables):
+        return {"law": law, "variables": variables,
+                "required": soil_models.required(law, variables)}
+
+    return {
+        "defaults": {model: soil_models.defaults_si(model) for model in soil_models.MODELS},
+        "fill": [
+            fill("a new Mohr-Coulomb soil", None, {}, MOHR_COULOMB_2D, {}, "SI"),
+            fill("an elastic soil made Mohr-Coulomb keeps its cohesion", ELASTIC_2D,
+                 {"GEO_COHESION": 5.0, "YOUNG_MODULUS": 2.0e4}, MOHR_COULOMB_2D, {}, "kN"),
+            fill("a Van Genuchten law brings its parameters", MOHR_COULOMB_2D, in_kn,
+                 MOHR_COULOMB_2D, {"RETENTION_LAW": "VanGenuchtenLaw"}, "kN"),
+            fill("a Van Genuchten parameter left out on purpose", MOHR_COULOMB_2D, in_kn,
+                 MOHR_COULOMB_2D, {"RETENTION_LAW": "VanGenuchtenLaw"}, "kN",
+                 skip=["VAN_GENUCHTEN_GN"]),
+            fill("the tension cut-off brings its tensile strength", MOHR_COULOMB_2D, in_kn,
+                 MOHR_COULOMB_2D, {"GEO_ENABLE_TENSION_CUT_OFF": True}, "kN"),
+            fill("a listed variable left out stays out", MOHR_COULOMB_2D,
+                 {k: v for k, v in in_kn.items() if k != "POROSITY"}, MOHR_COULOMB_2D,
+                 {"YOUNG_MODULUS": 3.0e4}, "kN"),
+            fill("a required variable left out comes back", MOHR_COULOMB_2D,
+                 {k: v for k, v in in_kn.items() if k != "GEO_DILATANCY_ANGLE"},
+                 MOHR_COULOMB_2D, {}, "kN"),
+            fill("another law fills nothing", ELASTIC_2D, {"YOUNG_MODULUS": 1.0},
+                 "SmallStrainUDSM2DPlaneStrainLaw", {}, "SI"),
+            fill("an old Mohr-Coulomb name is Mohr-Coulomb", None, {},
+                 "GeoMohrCoulombWithTensionCutOff2D", {}, "SI"),
+        ],
+        "problem": [
+            problem("a default Mohr-Coulomb soil", MOHR_COULOMB_2D, mohr_coulomb),
+            problem("dilatancy above friction", MOHR_COULOMB_2D,
+                    {**mohr_coulomb, "GEO_DILATANCY_ANGLE": 35.0}),
+            problem("friction at 90 degrees", MOHR_COULOMB_2D,
+                    {**mohr_coulomb, "GEO_FRICTION_ANGLE": 90.0}),
+            problem("tensile strength above the apex", MOHR_COULOMB_2D,
+                    {**mohr_coulomb, "GEO_ENABLE_TENSION_CUT_OFF": True,
+                     "GEO_TENSILE_STRENGTH": 5000.0}),
+            problem("tensile strength above the apex, a large one", MOHR_COULOMB_2D,
+                    {**mohr_coulomb, "GEO_COHESION": 2.0e6, "GEO_FRICTION_ANGLE": 25.0,
+                     "GEO_ENABLE_TENSION_CUT_OFF": True, "GEO_TENSILE_STRENGTH": 1.0e7}),
+            problem("tensile strength above the apex, a small one", MOHR_COULOMB_2D,
+                    {**mohr_coulomb, "GEO_COHESION": 0.00002,
+                     "GEO_ENABLE_TENSION_CUT_OFF": True, "GEO_TENSILE_STRENGTH": 1.0}),
+            problem("a tensile strength with the cut-off off is not read", MOHR_COULOMB_2D,
+                    {**mohr_coulomb, "GEO_TENSILE_STRENGTH": 5000.0}),
+            problem("a tensile strength with no cut-off flag switches it on",
+                    MOHR_COULOMB_2D,
+                    {k: v for k, v in {**mohr_coulomb, "GEO_TENSILE_STRENGTH": 5000.0}.items()
+                     if k != "GEO_ENABLE_TENSION_CUT_OFF"}),
+            problem("an elastic soil is not held to it", ELASTIC_2D,
+                    {**mohr_coulomb, "GEO_DILATANCY_ANGLE": 35.0}),
+        ],
+        "required": [
+            required(ELASTIC_2D, {}),
+            required(MOHR_COULOMB_2D, {}),
+            required(MOHR_COULOMB_2D, {"GEO_ENABLE_TENSION_CUT_OFF": True}),
+            required("SmallStrainUDSM2DPlaneStrainLaw", {}),
+        ],
+        "law_in": [{"law": law, "dimension": dim, "result": soil_models.law_in(law, dim)}
+                   for law in (ELASTIC_2D, MOHR_COULOMB_2D,
+                               "GeoMohrCoulombWithTensionCutOff2D",
+                               "GeoMohrCoulombWithTensionCutOff3D",
+                               "SmallStrainUDSM2DPlaneStrainLaw")
+                   for dim in (2, 3)],
+    }
+
+
 def document() -> dict:
     models = projects()
     return {
         "soil_laws": {str(dimension): law for dimension, law in drafts.SOIL_LAWS.items()},
         "soil_defaults": drafts.SOIL_DEFAULTS_SI,
+        "soil_models": soil_model_cases(),
         "library": drafts.LIBRARY,
         "projects": {name: project.model_dump(mode="json", include=PROJECT_FIELDS)
                      for name, project in models.items()},

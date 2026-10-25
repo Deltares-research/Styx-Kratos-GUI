@@ -4,7 +4,9 @@
    A soil is what Kratos reads: a constitutive law and its Variables, under Kratos'
    names, in the project's units (core/model/schemas.py). The dialog shows exactly that,
    labels each number in the project's system, edits it in place on App.MATERIALS (the
-   contract patches.js saves through), and refuses what the server would refuse.
+   contract patches.js saves through), and refuses what the server would refuse. Its
+   first choice is the soil model (App.SoilModels), which sets the law and the
+   parameters listed, with their defaults.
    ══════════════════════════════════════════════════════════════════ */
 
 (function () {
@@ -47,15 +49,29 @@
     host.querySelector('[data-action="material-properties"]').click();
   }
 
-  T.test('the table shows the law and Kratos variables, headed in the project units', function () {
+  function field(host, name) {
+    return host.querySelector('.material-variables [data-field="' + name + '"]');
+  }
+
+  function choose(control, value) {
+    control.value = value;
+    control.dispatchEvent(new Event('change'));
+  }
+
+  function hint(host) {
+    return host.querySelector('.material-variables').parentNode.querySelector('.lay-hint');
+  }
+
+  T.test('the table shows the soil model and Kratos variables, headed in the project units', function () {
     withDialog(function (host) {
       var heads = Array.prototype.map.call(host.querySelectorAll('.material-sets th'),
                                            function (th) { return th.textContent; });
-      T.ok(heads.indexOf('Constitutive law') >= 0, heads.join(' | '));
+      T.ok(heads.indexOf('Soil model') >= 0, heads.join(' | '));
       T.ok(heads.indexOf('YOUNG_MODULUS [kPa]') >= 0, heads.join(' | '));
       T.ok(heads.indexOf('DENSITY_SOLID [t/m³]') >= 0, heads.join(' | '));
       var row = host.querySelector('.material-sets tbody tr');
-      T.ok(/GeoLinearElasticPlaneStrain2DLaw/.test(row.textContent), row.textContent);
+      T.ok(/Linear elastic/.test(row.textContent), row.textContent);
+      T.eq(row.children[2].title, 'GeoLinearElasticPlaneStrain2DLaw');
       T.ok(/25000/.test(row.textContent), row.textContent);
     });
   });
@@ -110,12 +126,136 @@
     });
   });
 
-  T.test('the law is the user\'s to type', function () {
+  T.test('the law of a soil model is shown, not typed', function () {
     withDialog(function (host) {
       openProperties(host);
-      var law = host.querySelector('[data-field="constitutive_law"]');
+      T.eq(field(host, 'soil-model').value, 'linear_elastic');
+      T.ok(field(host, 'constitutive_law').readOnly, 'read-only');
+      T.eq(field(host, 'constitutive_law').value, 'GeoLinearElasticPlaneStrain2DLaw');
+    });
+  });
+
+  T.test('any other law is the user\'s to type, under Other', function () {
+    withDialog(function (host) {
+      openProperties(host);
+      choose(field(host, 'soil-model'), 'other');
+      var law = field(host, 'constitutive_law');
+      T.ok(!law.readOnly, 'typed');
       type(law, 'SmallStrainUDSM2DPlaneStrainLaw');
       T.eq(App.MATERIALS[0].constitutive_law, 'SmallStrainUDSM2DPlaneStrainLaw');
+      T.eq(field(host, 'soil-model').value, 'other');
+      T.ok(variableInput(host, 'YOUNG_MODULUS'), 'what the soil carries is still listed');
+      T.ok(!variableInput(host, 'K0_NC'), 'no model\'s list for a law of no model');
+    });
+  });
+
+  T.test('a Mohr-Coulomb law typed under Other is Mohr-Coulomb', function () {
+    withDialog(function (host) {
+      openProperties(host);
+      choose(field(host, 'soil-model'), 'other');
+      type(field(host, 'constitutive_law'), 'GeoMohrCoulombLawPlaneStrain');
+      T.eq(field(host, 'soil-model').value, 'mohr_coulomb');
+      T.eq(App.MATERIALS[0].variables.GEO_DILATANCY_ANGLE, 0);
+    });
+  });
+
+  T.test('choosing Mohr-Coulomb sets its law and fills in its defaults, keeping typed values', function () {
+    withDialog(function (host) {
+      openProperties(host);
+      choose(field(host, 'soil-model'), 'mohr_coulomb');
+      var m = App.MATERIALS[0];
+      T.eq(m.constitutive_law, 'GeoMohrCoulombLawPlaneStrain');
+      T.eq(m.variables.YOUNG_MODULUS, 2.5e4, 'the typed stiffness is kept');
+      T.eq(m.variables.POROSITY, 0.3, 'the typed porosity is kept');
+      T.near(m.variables.GEO_COHESION, 1.0, 1e-12, '1 kPa in a kN project');
+      T.eq(m.variables.GEO_FRICTION_ANGLE, 30);
+      T.eq(m.variables.GEO_DILATANCY_ANGLE, 0);
+      T.eq(m.variables.GEO_ENABLE_TENSION_CUT_OFF, false);
+      T.eq(m.variables.RETENTION_LAW, 'SaturatedBelowPhreaticLevelLaw');
+      T.eq(App.PropertySets.validate('soil', m), null);
+      T.ok(/Filled in from the Mohr-Coulomb defaults: .*GEO_DILATANCY_ANGLE/.test(hint(host).textContent),
+           hint(host).textContent);
+      T.ok(!hint(host).classList.contains('invalid'), 'a notice, not an error');
+      var titles = Array.prototype.map.call(host.querySelectorAll('.material-variables h4'),
+                                            function (h) { return h.textContent; });
+      T.ok(titles.indexOf('Strength') >= 0 && titles.indexOf('Flow') >= 0, titles.join(' | '));
+    });
+  });
+
+  T.test('the soil model follows the project\'s dimension', function () {
+    withDialog(function (host) {
+      App.PROJECT.dimension = 3;
+      openProperties(host);
+      choose(field(host, 'soil-model'), 'mohr_coulomb');
+      T.eq(App.MATERIALS[0].constitutive_law, 'GeoMohrCoulombLaw3D');
+    });
+  });
+
+  T.test('a text value is a drop-down of every value Kratos accepts', function () {
+    withDialog(function (host) {
+      openProperties(host);
+      var drainage = variableInput(host, 'GEO_DRAINAGE_TYPE');
+      T.eq(drainage.tagName, 'SELECT');
+      T.eq(Array.prototype.map.call(drainage.options, function (o) { return o.value; }),
+           ['CONSTANT_PW_FIELD', 'FULLY_COUPLED', 'DRAINED', 'UNDRAINED']);
+      choose(drainage, 'UNDRAINED');
+      T.eq(App.MATERIALS[0].variables.GEO_DRAINAGE_TYPE, 'UNDRAINED');
+      T.ok(variableInput(host, 'GEO_POISSON_UNDRAINED'), 'an undrained soil lists its Poisson ratio');
+      var retention = variableInput(host, 'RETENTION_LAW');
+      T.eq(retention.value, 'SaturatedLaw', 'left out, the retention law is SaturatedLaw');
+      T.ok(!('RETENTION_LAW' in App.MATERIALS[0].variables), 'and stays left out');
+    });
+  });
+
+  T.test('a retention law chosen lists its parameters, with their defaults', function () {
+    withDialog(function (host) {
+      openProperties(host);
+      choose(field(host, 'soil-model'), 'mohr_coulomb');
+      T.ok(!variableInput(host, 'VAN_GENUCHTEN_GN'));
+      choose(variableInput(host, 'RETENTION_LAW'), 'VanGenuchtenLaw');
+      var m = App.MATERIALS[0];
+      T.eq(m.variables.RETENTION_LAW, 'VanGenuchtenLaw');
+      T.eq(m.variables.VAN_GENUCHTEN_GN, 1.377);
+      T.near(m.variables.VAN_GENUCHTEN_AIR_ENTRY_PRESSURE, 2.611, 1e-12, 'kPa');
+      T.ok(variableInput(host, 'VAN_GENUCHTEN_GN'), 'listed');
+    });
+  });
+
+  T.test('the tension cut-off is a check box, and on it lists the tensile strength', function () {
+    withDialog(function (host) {
+      openProperties(host);
+      choose(field(host, 'soil-model'), 'mohr_coulomb');
+      var box = variableInput(host, 'GEO_ENABLE_TENSION_CUT_OFF');
+      T.eq(box.type, 'checkbox');
+      T.ok(!box.checked);
+      T.ok(!variableInput(host, 'GEO_TENSILE_STRENGTH'));
+      box.checked = true;
+      box.dispatchEvent(new Event('change'));
+      T.eq(App.MATERIALS[0].variables.GEO_ENABLE_TENSION_CUT_OFF, true);
+      T.eq(App.MATERIALS[0].variables.GEO_TENSILE_STRENGTH, 0);
+      T.ok(variableInput(host, 'GEO_TENSILE_STRENGTH'), 'listed');
+    });
+  });
+
+  T.test('a dilatancy above the friction angle is refused and put back, and said', function () {
+    withDialog(function (host) {
+      openProperties(host);
+      choose(field(host, 'soil-model'), 'mohr_coulomb');
+      type(variableInput(host, 'GEO_DILATANCY_ANGLE'), '40');
+      T.eq(App.MATERIALS[0].variables.GEO_DILATANCY_ANGLE, 0);
+      T.ok(/GEO_DILATANCY_ANGLE cannot be larger/.test(hint(host).textContent), hint(host).textContent);
+      T.ok(hint(host).classList.contains('invalid'));
+    });
+  });
+
+  T.test('a value the model does not read is kept, under Other variables', function () {
+    withDialog(function (host) {
+      App.MATERIALS[0].variables.OCR = 1.5;
+      openProperties(host);
+      var titles = Array.prototype.map.call(host.querySelectorAll('.material-variables h4'),
+                                            function (h) { return h.textContent; });
+      T.ok(titles.indexOf('Other variables') >= 0, titles.join(' | '));
+      T.ok(variableInput(host, 'OCR'));
     });
   });
 

@@ -53,6 +53,19 @@ def test_a_project_in_kn_comes_back_in_kn(tmp_path):
     assert round_trip(project, tmp_path) == project
 
 
+def test_an_interface_on_a_part_of_a_pile_comes_back_on_that_part(tmp_path):
+    project = excavation.excavation_project(staged=False)
+    contact = project.interfaces[0].model_copy(update={
+        "side": "left", "stretch": ((6.0, -2.0), (6.0, -5.0))})
+    project = Project.model_validate({**project.model_dump(), "interfaces": [
+        contact.model_dump()]})
+
+    again = round_trip(project, tmp_path)
+
+    assert again == project
+    assert again.interfaces[0].stretch == ((6.0, -2.0), (6.0, -5.0))
+
+
 def test_a_section_of_the_seed_comes_back_as_the_section(tmp_path):
     project, _ = session.set_dimension(templates.seed_project(),
                                        DimensionUpdate(dimension=2))

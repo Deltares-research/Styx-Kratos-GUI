@@ -148,6 +148,105 @@ def test_an_interface_element_at_the_toe_uses_the_shared_copy_on_both_sides():
     assert all(toe_copy in element for element in both)
 
 
+# ── The ends of a contact on a pile ─────────────────────────────────────────
+#
+# The toe mesh again, with the pile drawn from node 8 up to node 5. An interface on its
+# top part, nodes 2 to 5, ends where the pile goes on: at node 2.
+PILE = [[5, 2], [2, 8]]
+
+
+def copies(result, node):
+    return [new for new, old in result.duplicates.items() if old == node]
+
+
+def test_where_the_pile_goes_on_the_soil_past_the_end_stays_on_the_pile():
+    """The soil past the end of the contact is bonded to the pile, on both faces, so it
+    and the pile keep one node there. The soil the contact holds gets a copy per face,
+    as the Kratos-side tool gives it: Kratos cannot start a contact element that has the
+    pile's node on both of its sides (`core.kratos.interfaces`)."""
+    rows = rows_of(LEFT, RIGHT, BELOW)
+    result = interfaces.split_mesh([spec("both")], rows, dict(TOE_NODES), PILE)
+
+    assert len(copies(result, 2)) == 2
+    assert [i for i, row in enumerate(rows) if 2 in row] == [4, 5, 7], \
+        "the soil below y = 0, past the end: [7,8,2], [7,2,1], [8,3,2]"
+    for element in result.elements["iface_1"]:
+        assert 2 in element[:2] and 2 not in element[2:]
+
+
+def test_where_the_pile_goes_on_a_one_face_contact_copies_its_own_face_only():
+    rows = rows_of(LEFT, RIGHT, BELOW)
+    result = interfaces.split_mesh([spec("left")], rows, dict(TOE_NODES), PILE)
+
+    (end,) = copies(result, 2)
+    assert [i for i, row in enumerate(rows) if end in row] == [0], "[1,2,5] only"
+    assert len(copies(result, 5)) == 1
+
+
+def test_a_one_face_contact_at_the_toe_detaches_only_the_soil_on_its_side():
+    """Around the toe the soil is one group. The face the contact holds is the soil on
+    its side of the pile line, extended down past the toe; the other face and the soil
+    on the other side stay on the original node."""
+    rows = rows_of(LEFT, RIGHT, BELOW)
+    result = interfaces.split_mesh([spec("left")], rows, dict(TOE_NODES), [[5, 2]])
+
+    (toe,) = copies(result, 2)
+    on_copy = [i for i, row in enumerate(rows) if toe in row]
+    on_original = [i for i, row in enumerate(rows) if 2 in row]
+    assert on_copy == [0, 4, 5], "[1,2,5], [7,8,2] and [7,2,1]: left of x = 0"
+    assert on_original == [2, 3, 7], "[2,3,6], [2,6,5] and [8,3,2]"
+    assert result.faces[toe] == {"iface_1": "left"}
+
+
+def test_a_contact_on_both_faces_at_the_toe_still_gives_one_copy():
+    rows = rows_of(LEFT, RIGHT, BELOW)
+    result = interfaces.split_mesh([spec("both")], rows, dict(TOE_NODES), [[5, 2]])
+
+    assert len(copies(result, 2)) == 1
+    assert all(2 not in row for row in rows)
+
+
+def test_two_contacts_on_the_two_faces_of_one_pile():
+    left = spec("left")
+    right = interfaces.Spec(key="iface_2", path=UP, segments=[[2, 5]], structural=True,
+                            sides="right")
+    rows = rows_of(LEFT, RIGHT)
+
+    result = interfaces.split_mesh([left, right], rows, dict(SQUARE_NODES), [[5, 2]])
+
+    assert len(copies(result, 2)) == 2 and len(copies(result, 5)) == 2
+    assert all(2 not in row and 5 not in row for row in rows)
+    assert len(result.elements["iface_1"]) == len(result.elements["iface_2"]) == 1
+
+
+def test_two_contacts_on_one_face_are_still_refused():
+    twin = interfaces.Spec(key="iface_2", path=UP, segments=[[2, 5]], structural=True,
+                           sides="both")
+    with pytest.raises(interfaces.InterfaceError, match="share a line"):
+        interfaces.split_mesh([spec("left"), twin], rows_of(LEFT, RIGHT),
+                              dict(SQUARE_NODES))
+
+
+def test_the_end_of_a_one_face_part_on_a_pile_with_a_contact_on_the_other_face():
+    """The left face held on the top part only, the right face over the whole pile. At
+    node 2 the right soil is still on a contact and gets its copy, and so does the left
+    soil the top contact holds; the left soil past the end is bonded to the pile and
+    keeps the original."""
+    top = spec("left")
+    whole = interfaces.Spec(key="iface_2", path=[(0.0, -1.0), (0.0, 1.0)],
+                            segments=[[2, 5], [8, 2]], structural=True, sides="right")
+    rows = rows_of(LEFT, RIGHT, BELOW)
+
+    result = interfaces.split_mesh([top, whole], rows, dict(TOE_NODES), PILE)
+
+    assert len(copies(result, 2)) == 2
+    right = next(c for c in copies(result, 2) if result.faces[c]["iface_2"] == "right")
+    assert [i for i, row in enumerate(rows) if right in row] == [2, 3, 7], \
+        "the whole right face is on the contact on that face: [2,3,6], [2,6,5], [8,3,2]"
+    assert [i for i, row in enumerate(rows) if 2 in row] == [4, 5], \
+        "the left soil past the end keeps the original: [7,8,2], [7,2,1]"
+
+
 # ── How the element is written ──────────────────────────────────────────────
 
 def test_one_interface_element_per_segment_per_detached_side():

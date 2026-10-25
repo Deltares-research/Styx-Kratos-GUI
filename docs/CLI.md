@@ -69,7 +69,7 @@ Genuchten soil.
 | `units P [SI\|kN]` | Show the unit system, or convert the whole project to another |
 | `water P [LEVEL\|off]` | Show, set or remove the water level. It fixes no pressure by itself: a new hydrostatic condition or normal load takes it as its level |
 | `domain P [--x FROM TO] [--y BOTTOM TOP] [--z FROM TO]` | Show or set the model's extents. `--y` is the bottom and the ground level; with layers, it moves the top of the first layer and the bottom of the last |
-| `material P list\|presets\|add\|set\|remove ...` | Soils as Kratos property sets: `add ID [--preset m3] [NAME=VALUE ...]`, `set ID NAME=VALUE ... [--unset NAME]` |
+| `material P list\|presets\|models\|add\|set\|remove ...` | Soils as Kratos property sets: `add ID [--preset m3] [--model mohr-coulomb] [NAME=VALUE ...]`, `set ID [--model M] NAME=VALUE ... [--unset NAME]`; `models` lists each soil model with its parameters and defaults |
 | `layer P list\|add\|set\|split\|remove ...` | The soil stack: `add ID --material M [--bottom Y \| --thickness T]`, `set ID [--top Y] [--bottom Y]` |
 | `excavation P [--x FROM TO] [--z FROM TO] [--levels Y ...]` | The pit, and the levels it is dug to, one lift each |
 | `volume P list\|add\|import\|remove\|clear ...` | Solids drawn or imported into the model; with `--material` they are soil |
@@ -78,7 +78,7 @@ Genuchten soil.
 | `wall P list\|add\|set\|remove ...` | Walls, in 3D: `add [ID] [--footprint x z ...] [--top Y] [--toe Y]` |
 | `member P list\|add\|set\|remove ...` | Piles, king posts and struts in 3D: `add [ID] [--points x y z ...]` |
 | `anchor P list\|add\|set\|remove ...` | Anchors and struts: `add [ID] [--head ...] [--tail ...] [--prestress S]`, the head snapped onto a structure |
-| `interface P list\|add\|set\|remove ...` | Interfaces, in 2D: `add [ID] [--structure PILE \| --points ...] [--side both\|left\|right]` |
+| `interface P list\|add\|set\|remove ...` | Interfaces, in 2D: `add [ID] [--structure PILE [--from X Y] [--to X Y] \| --points ...] [--side both\|left\|right\|below\|above]`; `set ID --whole-pile` |
 | `load P list\|add\|set\|remove ...` | Loads: `add point [--at X Y]`, `add line [--x FROM TO]` (2D), `add surface [--x ...] [--z ...]` (3D), `--components ...` |
 | `normal-load P list\|add\|set\|remove ...` | Pressures normal to a line, in 2D: `add [ID] --points ... [--hydrostatic [--reference-coordinate Y] \| --pressure S]` |
 | `boundary P list\|add\|set\|remove\|standard ...` | The boundary conditions: `add [ID] --face F\|--part KEY\|--line ...\|--point X Y --fixed\|--roller\|--fix AXIS ...` for a support, `add [ID] --domain\|... --water-pressure TYPE ...` for a water pressure, `add [ID] --face F\|--line ... --seepage` for a seepage face; `standard` puts back the standard supports |
@@ -121,7 +121,7 @@ kratos-cli new pit.json --name "Pit B"
 kratos-cli domain pit.json --x 0 60 --y -40 0 --z 0 10
 kratos-cli material pit.json presets                      # the library a soil can start from
 kratos-cli material pit.json add clay --preset m3 YOUNG_MODULUS=2e6 K0_NC=0.58
-kratos-cli material pit.json add sand --preset m5
+kratos-cli material pit.json add sand --preset m5 --model mohr-coulomb
 kratos-cli layer pit.json add top --material clay --bottom -7
 kratos-cli layer pit.json add mid --material clay --bottom -10
 kratos-cli layer pit.json add bottom --material sand --bottom -40
@@ -147,6 +147,16 @@ kratos-cli parts pit.json                                 # soil_top__lift1, ...
   `#rrggbb` colour, such as `#c4a86a`. The export derives some variables that are left
   out, and its warning lists them. It also derives `K0_NC` as 1 − sin φ from
   `GEO_FRICTION_ANGLE`, into `initial_materials.json`, but that warning does not list it.
+- **Soil models**: `--model linear-elastic` or `--model mohr-coulomb` sets the law for the
+  model's dimension, as the **Soil model** list of the Material set window does. The
+  values the soil already has stay. The values the model needs and the soil does not
+  have get the model's defaults, and the command prints their names. Setting a choice
+  such as `RETENTION_LAW=VanGenuchtenLaw` or `GEO_ENABLE_TENSION_CUT_OFF=true` fills in
+  the defaults of the values it brings in the same way. `material P models` lists each
+  model: its laws, its parameters in groups, each default in the project's units, the
+  values a choice can take and when a parameter is used. `--law` is for any other law,
+  for example a UDSM. It is written as you type it. `--model` and `--law` cannot be
+  given together.
 - **The excavation** is dug in its `--levels`, shallowest first. Each lift is a body of
   its own, deactivated in its own stage. In a layered model, a pit with one level is not
   dug at all, and the command says so. A new project has no pit. The first `excavation`
@@ -173,7 +183,8 @@ kratos-cli section pit.json add beam az26 --name "AZ 26" CROSS_AREA=0.015 I33=3e
 kratos-cli beam pit.json add sheet --points 6 0 6 -12        # on az26, the first profile
 kratos-cli anchor pit.json add strut --head 6 -1 --tail 5 -1
 kratos-cli anchor pit.json add tie --head 6.3 -3.5 --prestress 1e5
-kratos-cli interface pit.json add contact --structure sheet
+kratos-cli interface pit.json add contact --structure sheet --side right
+kratos-cli interface pit.json add upper --structure sheet --side left --from 6 0 --to 6 -1
 kratos-cli load pit.json add line surcharge --x 6 60 --components 0 -10000
 kratos-cli normal-load pit.json add water_1 --hydrostatic --points 0 -2 6 -2 6 -1
 kratos-cli set pit.json mesh.body_sizes.sheet 0.5
@@ -210,6 +221,15 @@ kratos-cli set pit.json mesh.body_sizes.sheet 0.5
 - **Dimensions.** A sheet pile, an interface, a normal load and point and line loads are
   2D; a wall, a member and a surface load are 3D. Switching the dimension carries walls
   and loads across, as the GUI does (`dimension`).
+- **Interfaces.** An interface on a sheet pile holds the whole pile, or the part from
+  `--from` to `--to`. Each point is moved onto the pile; a point more than 0.5 m away is
+  refused. `interface set ID --whole-pile` holds the whole pile again, and `interface
+  list` shows the part (`along sheet from (6, 0) to (6, -1), left`). `--side` names a
+  face as the GUI shows it, whichever way the pile was drawn: `left` is the face toward
+  -x and `right` the face toward +x; on a line flatter than 45 degrees the faces are
+  `below` and `above`. `both` is for a pile only. Two interfaces may hold the two faces
+  of one pile, or two parts of one face, but not the same face over the same length.
+  An interface on its own points may not run along a sheet pile: put it on the pile.
 - **Anchors.** The head is snapped onto the nearest pile, wall or member within a metre,
   because it becomes one of its nodes; a head further away is refused. With no `--tail`,
   the anchor rakes back from its head. A strut is an anchor whose tail is a pinned support.
@@ -485,8 +505,8 @@ kratos-cli results field D:/copied/Pit_A_2026-10-12_09-14 uy   # a run anywhere
   is the bending moment. `--stage` narrows it to one stage.
 - **Which interface members a run has.** In a model with an excavation, `interface` is the
   face of the wall on the retained side. In a model without one, such as a dike with a
-  sheet pile, each face has its own member: `interface_left` and `interface_right`, left
-  and right of the pile as drawn (`results profile 1 interface_left tn`). An interface
+  sheet pile, each face has its own member: `interface_left` and `interface_right`, the
+  faces toward -x and +x (`results profile 1 interface_left tn`). An interface
   flatter than 45 degrees has `interface_below` and `interface_above` instead. With more
   than one interface, the member names start with the interface's id: `contact_left`.
   `results members` lists them.
@@ -540,7 +560,7 @@ viewport's. A command can also be typed with a leading `_` in the box (`_mesh`).
 | `results files` | `kratos-cli results files RUN` |
 | `results get <file>` | `kratos-cli results get RUN FILE` |
 | `results zip`, `results archive` | `kratos-cli results archive RUN` |
-| `results deform`, `results bands`, `results smooth`, `results map`, `results range`, `results mesh`, `results reverse`, `results reversed` | — the viewport's: how a field is drawn |
+| `results deform`, `results bands`, `results smooth`, `results map`, `results range`, `results mesh`, `results loads`, `results reverse`, `results reversed` | — the viewport's: how a field is drawn |
 
 While a drawing tool is placing points, typing `x y` or `x y z` places the next one. In the
 terminal, the points are the command's own: `--points`, `--head`, `--at`.

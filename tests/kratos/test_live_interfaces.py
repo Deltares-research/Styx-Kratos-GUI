@@ -24,7 +24,7 @@ from core.model.schemas import InterfaceSection, Material, Stage, Project
 from core.model.templates import seed_project
 from core.results import catalog, members
 from tests import mdpa
-from tests.models import drawn_ground
+from tests.models import drawn_ground, excavation
 from tests.results_run import require_kratos
 
 pytestmark = pytest.mark.kratos
@@ -66,6 +66,40 @@ def test_a_pile_standing_out_of_the_ground_runs():
     above its crest. The piece above the ground has nodes no soil element holds; before
     the pile is installed no element holds them at all, and every stage still runs."""
     run(drawn_ground.standing_pile_project())
+
+
+def test_a_contact_on_one_face_of_a_part_of_a_pile_runs():
+    """The staged excavation with its contact on the retained face only, from the strut
+    head down to the toe. Above the head the pile goes on: the soil there stays on the
+    pile's own node at the head, and the soil the contact holds has a copy. At
+    the toe the retained soil has its own copy, tied to the other soil until the wall
+    is installed. Every stage runs.
+
+    With the pile's node kept for the held soil at the head as well, the last contact
+    element has it on both sides, and Kratos stops in the installation stage with "Bad
+    optional access": `UPwInterfaceElement::Initialize` takes the side its neighbour
+    is on from the element's first node alone."""
+    project = excavation.excavation_project()
+    contact = project.interfaces[0].model_copy(update={
+        "side": "right", "stretch": ((excavation.WALL_X, excavation.STRUT_Y),
+                                     (excavation.WALL_X, excavation.WALL_TOE_Y))})
+    project = project.model_copy(update={"interfaces": [contact]})
+
+    export, _ = run(project)
+
+    deck = mdpa.parse(export["mdpa"])
+    held = [deck.nodes[n][1] for block in deck.elements if "Interface" in block.name
+            for nodes in block.entries.values() for n in nodes[:len(nodes) // 2]]
+    assert max(held) == excavation.STRUT_Y, "no contact above the strut head"
+    assert min(held) == excavation.WALL_TOE_Y
+
+
+def test_a_contact_on_one_face_of_a_whole_pile_runs():
+    """The drawn ground with its contact on the left face only: at the toe the left
+    soil has a copy and the rest keeps the pile's node. Every stage runs."""
+    project = drawn_ground.project()
+    contact = project.interfaces[0].model_copy(update={"side": "left"})
+    run(project.model_copy(update={"interfaces": [contact]}))
 
 
 CONTACTS = r"""
@@ -487,10 +521,11 @@ def test_an_interface_traction_is_normal_then_shear_and_compression_is_negative(
     python, environment = calculation.interpreter()
     done = subprocess.run([python, "-c", TRACTIONS], cwd=tmp_path / "case", env=environment,
                           capture_output=True, text=True, timeout=300)
-    line = next((line for line in done.stdout.splitlines() if line.startswith("TRACTIONS")),
-                None)
+    # Kratos' C++ log and Python's print share stdout without a common buffer, so a log
+    # line that is not yet ended can come right before the marker on the same line.
+    line = next((line for line in done.stdout.splitlines() if "TRACTIONS" in line), None)
     assert line, done.stdout[-600:] + done.stderr[-600:]
-    tractions = json.loads(line[len("TRACTIONS"):])
+    tractions = json.loads(line.partition("TRACTIONS")[2])
     # The values Kratos' test asserts: a normal traction of 333 Pa pressing the contact
     # shut and a shear of 667 Pa, at every integration point of both elements.
     for element in tractions:

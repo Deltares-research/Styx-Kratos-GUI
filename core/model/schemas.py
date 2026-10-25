@@ -23,7 +23,7 @@ from typing import Annotated, Any, Literal
 from pydantic import (BaseModel, Field, SerializerFunctionWrapHandler, computed_field,
                       field_validator, model_serializer, model_validator)
 
-from core.model import migration, units
+from core.model import migration, polylines, soil_models, units
 
 Hex = Annotated[str, Field(pattern=r"^#[0-9a-fA-F]{6}$")]
 Ident = Annotated[str, Field(min_length=1, max_length=64)]
@@ -124,11 +124,13 @@ def _finite(value: object) -> bool:
     return True
 
 
-SOIL_LAW_PAIRS = {"GeoLinearElasticPlaneStrain2DLaw": (2, "GeoIncrementalLinearElastic3DLaw"),
-                  "GeoIncrementalLinearElastic3DLaw": (3, "GeoLinearElasticPlaneStrain2DLaw")}
-"""Soil laws that exist in one dimension only: law -> (its dimension, its counterpart).
-GeoMechanics registers no 3D `GeoLinearElastic` law; its one 3D linear elastic soil law
-is the incremental one. A project keeps such a law in step with its own dimension
+SOIL_LAW_PAIRS = {law: (dim, model.laws[5 - dim])
+                  for model in soil_models.MODELS.values()
+                  for dim, law in model.laws.items()}
+"""Soil laws that exist in one dimension only: law -> (its dimension, its counterpart),
+one pair per soil model (`core/model/soil_models.py`). GeoMechanics registers no 3D
+`GeoLinearElastic` law; its one 3D linear elastic soil law is the incremental one. A
+project keeps such a law in step with its own dimension
 (`Project._soil_laws_follow_the_dimension`), so what it shows is what it writes."""
 
 
@@ -543,6 +545,37 @@ class Anchor(Base):
 
 
 
+STRETCH_TOLERANCE = 1e-6
+"""Metres. How close From and To must be to the pile, and how much two interfaces on
+one face may overlap before they are refused. The window and `drafts.interface` snap a
+typed point onto the pile first (`drafts.STRETCH_SNAP`), so a stored one is on it."""
+
+
+FACE_ORDER = ("left", "right", "below", "above")
+"""The faces in the order a refusal names the first of two (`App.Interfaces`, too)."""
+
+
+def _xy(point: Sequence[float]) -> str:
+    return "(" + ", ".join(f"{value:g}" for value in point) + ")"
+
+
+def _runs_along(line: Sequence[Sequence[float]], pile: Sequence[Sequence[float]]) -> bool:
+    """Whether some segment of `line` lies on a segment of `pile` over a length."""
+    for a, b in zip(line, line[1:]):
+        for c, d in zip(pile, pile[1:]):
+            dx, dy = d[0] - c[0], d[1] - c[1]
+            size = math.hypot(dx, dy)
+            if size == 0.0:
+                continue
+            off = [abs(dx * (p[1] - c[1]) - dy * (p[0] - c[0])) / size for p in (a, b)]
+            if max(off) > STRETCH_TOLERANCE:
+                continue
+            along = sorted(((p[0] - c[0]) * dx + (p[1] - c[1]) * dy) / size for p in (a, b))
+            if min(along[1], size) - max(along[0], 0.0) > STRETCH_TOLERANCE:
+                return True
+    return False
+
+
 # ── Interfaces ──────────────────────────────────────────────────────────────
 #
 # An interface is the sliding, opening contact between a structure and the ground it
@@ -601,17 +634,21 @@ class Interface(Base):
 
     Two ways to place one, and exactly one of them per record:
 
-    *   `structure` names a sheet pile. The interface runs the whole pile, and `side`
-        says which of the two soils is unglued from it. This is the usual
-        arrangement -- a wall slides against the ground on both faces.
+    *   `structure` names a sheet pile. The interface runs the whole pile, or the part
+        of it between the two points of `stretch`, and `side` says which of the two
+        soils is unglued from it. This is the usual arrangement -- a wall slides
+        against the ground on both faces.
     *   `points` is a free polyline in the section, which splits soil from soil: an
         excavation face, a slip surface, a lining. There is no structure in the middle,
         so one soil keeps the original nodes and the other is detached; `side` says
         which, and `both` is meaningless without a structure to sit between them.
 
-    Left and right are relative to walking the line in the order its points are stored:
-    left is the side a +90 degree turn from the walking direction points at, the same
-    convention the exported element's node order carries.
+    `side` names a face as the screen shows it, whichever way the line was drawn: for a
+    line steeper than 45 degrees "left" is the face toward -x and "right" the face toward
+    +x; for a flatter line the faces are "below" and "above" (`core.model.polylines`).
+    The deck's `_Left_face` and `_Right_face` parts and the Kratos-side
+    InterfaceInserter use the same words. `Project` turns a "left" on a flat line into
+    "below", and back, so a record follows its line when the line is changed.
 
     Dimension-native `(x, y)`, like every other 2D record. Interfaces are plane strain
     only -- see core/kratos/writer.py's `INTERFACES` table for why.
@@ -622,7 +659,11 @@ class Interface(Base):
     section: Ident
     structure: Ident | None = None
     points: list[tuple[float, float]] | None = None
-    side: Literal["both", "left", "right"] = "both"
+    side: Literal["both", "left", "right", "below", "above"] = "both"
+    stretch: tuple[tuple[float, float], tuple[float, float]] | None = None
+    """From and To: the two points on the pile between which the interface runs, or
+    None for the whole pile. Only with `structure`. `Project` checks that both are on
+    the pile and saves a stretch from one end of the pile to the other as None."""
     active: bool = True
 
     @model_validator(mode="after")
@@ -632,6 +673,20 @@ class Interface(Base):
                 f"interface {self.id!r} needs either a structure to follow or its own "
                 "points, and not both"
             )
+        if self.stretch is not None:
+            if self.structure is None:
+                raise ValueError(
+                    f"interface {self.id!r} has From and To but follows no sheet pile; "
+                    "From and To are points on the pile it follows"
+                )
+            start, end = self.stretch
+            if not all(math.isfinite(v) for v in start + end):
+                raise ValueError(f"interface {self.id!r} has a non-finite From or To")
+            if start == end:
+                raise ValueError(
+                    f"interface {self.id!r} has From and To at the same point; the part "
+                    "of the pile it holds needs length"
+                )
         if self.structure is None:
             if self.side == "both":
                 raise ValueError(
@@ -1536,6 +1591,10 @@ class Project(Base):
     # viewport and the exporter name it the same way they name a pile.
     interface_sections: list[InterfaceSection] = Field(default_factory=list)
     interfaces: list[Interface] = Field(default_factory=list)
+    interface_sides: Literal["screen"] = "screen"
+    """How the document reads an interface's `side`: as the face on the screen. A
+    document without it was saved before 2026-10-25 and read it walking the line; its
+    one-side interfaces are converted when it loads (`migration.screen_sides`)."""
     # Its own collection, not folded into `loads[]`: a normal load is dimension-native
     # like a free interface (an arbitrary polyline, no 3D translation), not a
     # translated x/y vector like the three kinds `loads[]` already holds.
@@ -1576,14 +1635,18 @@ class Project(Base):
         """A project saved before the unit system existed, converted once into the
         current shape in SI, with the numbers the old exporter wrote (`core/model/migration.py`).
         A project saved before 2026-10 also calls its stages `phases`, and one saved
-        before 2026-10-24 has boreholes (`migration.drop_boreholes`)."""
+        before 2026-10-24 has boreholes (`migration.drop_boreholes`), and one saved
+        before 2026-10-25 reads an interface's side walking its line
+        (`migration.screen_sides`)."""
         if isinstance(value, dict):
             value = migration.rename_phases(value)
         if migration.is_legacy(value):
             value = migration.migrate(value)
         elif isinstance(value, dict):
             value = migration.migrate_records(value)
-        return migration.drop_boreholes(value) if isinstance(value, dict) else value
+        if not isinstance(value, dict):
+            return value
+        return migration.screen_sides(migration.drop_boreholes(value))
 
     @model_serializer(mode="wrap")
     def _leave_out_absent_blocks(self, handler: SerializerFunctionWrapHandler) -> dict:
@@ -1710,13 +1773,14 @@ class Project(Base):
 
     @model_validator(mode="after")
     def _soil_laws_follow_the_dimension(self) -> Project:
-        """A soil law that exists in one dimension only, swapped for its counterpart
-        when the project is the other dimension -- however the dimension came to change.
-        Any other law is the user's, and is left exactly as typed."""
+        """A soil model's law in the project's dimension: its counterpart when the
+        project is the other dimension -- however the dimension came to change -- and
+        its current name when it carries an old one (`GeoMohrCoulombWithTensionCutOff2D`,
+        which Kratos still registers but will remove). Any other law is the user's, and
+        is left exactly as typed."""
         for material in self.materials:
-            pair = SOIL_LAW_PAIRS.get(material.constitutive_law)
-            if pair is not None and pair[0] != self.dimension:
-                material.constitutive_law = pair[1]
+            material.constitutive_law = soil_models.law_in(material.constitutive_law,
+                                                           self.dimension)
         return self
 
     @property
@@ -1771,6 +1835,7 @@ class Project(Base):
                     f"interface {interface.id!r} follows {interface.structure!r}, which "
                     "is not a sheet pile in this project"
                 )
+        self._check_interface_lines()
         _reject_duplicates([s.id for s in self.beam_sections], "beam section")
         _reject_duplicates([s.id for s in self.panel_sections], "panel section")
         # One id namespace across all three pile kinds: they share a collection, a
@@ -2083,6 +2148,95 @@ class Project(Base):
 
     def interface_section(self, section_id: str) -> InterfaceSection:
         return next(s for s in self.interface_sections if s.id == section_id)
+
+    def interface_path(self, interface: Interface) -> list[tuple[float, float]]:
+        """The polyline `interface` runs along: its own points, the whole of its pile,
+        or the part of the pile between From and To. In the pile's own order, so the
+        walking sides of the part are the pile's."""
+        if interface.structure is None:
+            return [(x, y) for x, y in interface.points or []]
+        pile = next(b for b in self.sheet_piles if b.id == interface.structure)
+        line = [(x, y) for x, y in pile.points]
+        if interface.stretch is None:
+            return line
+        start, end = (polylines.nearest(line, point)[2] for point in interface.stretch)
+        return polylines.between(line, start, end)
+
+    def _check_interface_lines(self) -> None:
+        """Each interface fits the line it runs along, and no two hold the same face.
+
+        Called from `_cross_references`, once each interface's pile is known to exist.
+        Also brings `side` to the words of its line (left and right on a steep line,
+        below and above on a flat one) and saves a stretch that reaches from one end of
+        the pile to the other as None, the whole pile, so the record keeps one form.
+        """
+        piles = {beam.id: beam for beam in self.sheet_piles}
+        for interface in self.interfaces:
+            if interface.stretch is not None:
+                pile = piles[interface.structure or ""]
+                line = [(x, y) for x, y in pile.points]
+                for label, point in zip(("From", "To"), interface.stretch):
+                    away = polylines.nearest(line, point)[1]
+                    if away > STRETCH_TOLERANCE:
+                        raise ValueError(
+                            f"{interface.name}: {label} {_xy(point)} is {away:.3g} m from "
+                            f"{pile.name}; From and To are points on the pile"
+                        )
+                if all(min(math.dist(point, end) for end in (line[0], line[-1]))
+                       <= STRETCH_TOLERANCE for point in interface.stretch):
+                    interface.stretch = None
+            if interface.side != "both":
+                first, second = polylines.faces(self.interface_path(interface))
+                interface.side = (first if interface.side in ("left", "below")
+                                  else second)
+        self._no_double_contact(piles)
+        self._no_free_line_along_a_pile()
+
+    def _no_double_contact(self, piles: dict[str, Beam]) -> None:
+        """Two interfaces may not hold the same face of one pile over the same length:
+        the soil there would be split twice, with two contacts between one pair of
+        faces. A switched-off interface holds nothing, so it may stand in for another
+        until it is switched on."""
+        held: list[tuple[Interface, set[str], float, float]] = []
+        for interface in self.interfaces:
+            if interface.structure is None or not interface.active:
+                continue
+            line = [(x, y) for x, y in piles[interface.structure].points]
+            path = self.interface_path(interface)
+            start, end = sorted(polylines.nearest(line, point)[2]
+                                for point in (path[0], path[-1]))
+            faces: set[str] = (set(polylines.faces(path)) if interface.side == "both"
+                               else {interface.side})
+            for other, other_faces, low, high in held:
+                if other.structure != interface.structure:
+                    continue
+                common = sorted(faces & other_faces, key=FACE_ORDER.index)
+                over = (max(start, low), min(end, high))
+                if not common or over[1] - over[0] <= STRETCH_TOLERANCE:
+                    continue
+                part = polylines.between(line, *over)
+                axis, index = ("y", 1) if polylines.is_steep(line) else ("x", 0)
+                raise ValueError(
+                    f"{interface.name} and {other.name} both hold the {common[0]} face of "
+                    f"{piles[interface.structure].name} between {axis} {part[0][index]:g} "
+                    f"and {axis} {part[-1][index]:g}"
+                )
+            held.append((interface, faces, start, end))
+
+    def _no_free_line_along_a_pile(self) -> None:
+        """A free line that runs along a live pile would split the soil from the soil
+        there, with the pile still welded to one of them and no ties while it is not
+        installed: an interface on the pile is what is meant."""
+        for interface in self.interfaces:
+            if interface.structure is not None:
+                continue
+            for pile in self.sheet_piles:
+                if pile.active and _runs_along(interface.points or [], pile.points):
+                    raise ValueError(
+                        f"{interface.name} runs along {pile.name}. Put it on {pile.name} "
+                        "instead (Along in the window, --structure on the command line) "
+                        "and set From and To"
+                    )
 
     @property
     def active_interfaces(self) -> list[Interface]:

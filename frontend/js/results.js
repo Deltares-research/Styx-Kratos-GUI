@@ -16,6 +16,7 @@
        results at <node id>    every field at one node
        results bands <n> | smooth | map <name> | deform <f|auto|off>
        results mesh [on|off]   the element outlines over the shading
+       results loads [on|off]  the loads and the water level over the shading
        results range auto | <min> <max>
        results csv             the field on screen, as a file
        results files | get <file> | zip     the run directory itself
@@ -68,9 +69,11 @@ App.Results = (function () {
      are what values get read off, and that is worth more here than the gradient being
      easier on the eye. 32 bands is fine enough to read as a contour and coarse enough
      that the steps mean something. All three are changeable per run, and `results map
-     viridis` / `results smooth` are a keystroke away. */
+     viridis` / `results smooth` are a keystroke away. The loads and the water level
+     are drawn over the shading, so a result is read against where the load is and
+     where the water stands. */
   var DEFAULTS = { map: 'rainbow', bands: 32, deform: 0, reversed: false,
-                   mesh: false, min: null, max: null };
+                   mesh: false, loads: true, min: null, max: null };
 
   /* The field to draw when a stage is opened and nothing has been asked for, most
      wanted first. Vertical stage displacement is what settles after an excavation
@@ -81,7 +84,7 @@ App.Results = (function () {
 
   var options = {
     map: DEFAULTS.map, bands: DEFAULTS.bands, deform: DEFAULTS.deform,
-    reversed: DEFAULTS.reversed, mesh: DEFAULTS.mesh,
+    reversed: DEFAULTS.reversed, mesh: DEFAULTS.mesh, loads: DEFAULTS.loads,
     /* null means "follow the field". A typed range is kept across a change of stage
        on purpose: a range that re-fits itself every stage makes every stage look
        identical, which is the opposite of what stepping through them is for. */
@@ -187,7 +190,7 @@ App.Results = (function () {
     view = { stage: null, mesh: null, catalogue: null, field: null,
              location: 'nodes', displacement: null };
     options = { map: DEFAULTS.map, bands: DEFAULTS.bands, deform: DEFAULTS.deform,
-                reversed: DEFAULTS.reversed, mesh: DEFAULTS.mesh,
+                reversed: DEFAULTS.reversed, mesh: DEFAULTS.mesh, loads: DEFAULTS.loads,
                 min: DEFAULTS.min, max: DEFAULTS.max };
     if (App.ResultsPlot) App.ResultsPlot.forget();
     changed();
@@ -353,6 +356,7 @@ App.Results = (function () {
     '                        spectral, blues or greyscale',
     'results reverse         flip the colour ramp end for end',
     'results mesh [on|off]   draw the element outlines over the shading',
+    'results loads [on|off]  draw the loads and the water level over the shading',
     'results csv             the field on screen, as a file',
     'results plot [member] [quantity]   M, Q, N, ux, tn, ts along the wall, per stage;',
     '                        `results plot members` lists them, `plot csv`/`svg` saves',
@@ -443,6 +447,43 @@ App.Results = (function () {
                   + (run.log ? 'see ' + run.log + ' in the run directory.'
                              : 'there is no log in the run directory.'));
     }
+  }
+
+  /* ── The project behind the run ──────────────────────────────────────── */
+
+  /* Whether the open run was calculated from `project`, and which of the project's
+     stages the stage on screen is. The Results view draws the project's loads and
+     water level over the contour, and they only belong there for a run of this
+     project: the deck is named after the project (core/kratos/writer.py `deck_name`)
+     and each Kratos stage after its place and name (core/kratos/parameters.py
+     `stage_name`), so both have to agree.
+
+     `{stage: id}`, with `stage` null for a project with no stages (everything is on
+     in the stage the deck makes for it), or null when the run is not of this
+     project or no stage is on screen. */
+  function projectStage(project) {
+    if (!project || !openRun || !openRun.stages || view.stage === null) return null;
+    if (openRun.deck !== deckName(project)) return null;
+    if (!(project.stages || []).length) return { stage: null };
+    var own = App.Stages && App.Stages.order(project);
+    if (!own) return null;
+    var run = openRun.stages;
+    if (run.length !== own.length) return null;
+    for (var i = 0; i < own.length; i++) {
+      if (run[i].name !== kratosStageName(i, own[i].name)) return null;
+    }
+    return { stage: own[view.stage - 1] ? own[view.stage - 1].id : null };
+  }
+
+  function deckName(project) {
+    return String(project.name || '').replace(/[^A-Za-z0-9]+/g, '_')
+      .replace(/^_+|_+$/g, '') || 'model';
+  }
+
+  function kratosStageName(index, label) {
+    var cleaned = String(label || '').replace(/[^A-Za-z0-9]+/g, '_')
+      .replace(/_+/g, '_').replace(/^_+|_+$/g, '');
+    return (index + 1) + '_' + (cleaned || 'Stage');
   }
 
   /* `1_First_excavation` back to `First excavation`, the same way the server does it
@@ -749,6 +790,11 @@ App.Results = (function () {
       // The element outlines over the shading. Toggled and set exactly like `reverse`.
       options.mesh = token === '' ? !options.mesh
                    : !(token === 'off' || token === 'no' || token === 'false');
+    } else if (verb === 'loads') {
+      // The loads and the water level over the shading (the viewport draws them from
+      // the project, App.Viewport's `modeKeys`). Toggled and set like `mesh`.
+      options.loads = token === '' ? !options.loads
+                    : !(token === 'off' || token === 'no' || token === 'false');
     } else if (verb === 'range') {
       if (token === 'auto' || token === '') { options.min = options.max = null; }
       else {
@@ -775,6 +821,7 @@ App.Results = (function () {
          + ', deformation ' + (options.deform === 'auto' ? 'auto'
                                : options.deform ? '×' + options.deform : 'off')
          + ', mesh ' + (options.mesh ? 'on' : 'off')
+         + ', loads ' + (options.loads ? 'on' : 'off')
          + ', range ' + (options.min === null ? 'auto' : options.min + ' to ' + options.max)
          + '.';
   }
@@ -912,7 +959,7 @@ App.Results = (function () {
     // The wall and interface curves, stage by stage: frontend/js/results-plot.js.
     if (verb === 'plot' && App.ResultsPlot) return App.ResultsPlot.command(rest);
     if (verb === 'bands' || verb === 'smooth' || verb === 'map'
-        || verb === 'deform' || verb === 'range' || verb === 'mesh'
+        || verb === 'deform' || verb === 'range' || verb === 'mesh' || verb === 'loads'
         || verb === 'reverse' || verb === 'reversed') {
       return setOption(verb, rest);
     }
@@ -930,7 +977,7 @@ App.Results = (function () {
     fileUrl: fileUrl, archiveUrl: archiveUrl, download: download,
     draw: draw, present: present, redraw: redraw,
     options: function () { return options; },
-    limitsCommand: limitsCommand,
+    limitsCommand: limitsCommand, projectStage: projectStage,
     size: size, when: when, runLine: runLine
   };
 })();
