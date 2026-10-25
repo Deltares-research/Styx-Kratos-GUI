@@ -1085,6 +1085,25 @@
     });
   });
 
+  test('results loads takes the loads and the water off the shading, and puts them back',
+       function () {
+    /* On by default: the user reads a result against where the load is and where the
+       water stands. Set and toggled like `mesh`. */
+    return showing().then(function () {
+      T.eq(App.Results.options().loads, true, 'shown by default');
+      return App.Results.handleCommand('results loads off');
+    }).then(function () {
+      T.eq(App.Results.options().loads, false);
+      T.ok(log.some(function (line) { return /loads off/.test(line[1]); }),
+           'the settings line says so');
+      return App.Results.handleCommand('results loads');
+    }).then(function () {
+      T.eq(App.Results.options().loads, true, 'a bare `results loads` toggles');
+      App.Results.forget();
+      T.eq(App.Results.options().loads, true, 'back on for the next project');
+    });
+  });
+
   test('the mesh setting is kept from one stage to the next', function () {
     return showing().then(function () {
       return App.Results.handleCommand('results mesh on');
@@ -1181,6 +1200,57 @@
       T.eq(saved.length, 0);
       T.ok(said('results field'), 'got: ' + lines().join(' | '));
     });
+  });
+
+  /* ── The project behind the run ──────────────────────────────────────── */
+
+  /* The Results view draws the open project's loads and water level over the contour,
+     read in the stage on screen. Only for a run of that project: the deck is named
+     after it and every stage after its place and name. */
+  function excavation() {
+    return {
+      name: 'Staged excavation',
+      stages: [{ id: 'initial', name: 'Initial stage', parent: null },
+               { id: 'dig', name: 'First excavation', parent: 'initial' }]
+    };
+  }
+
+  test('the stage on screen is matched to the project stage it was calculated from',
+       function () {
+    return showing().then(function () {
+      T.eq(App.Results.projectStage(excavation()), { stage: 'dig' });
+      return App.Results.handleCommand('results stage 1');
+    }).then(function () {
+      T.eq(App.Results.projectStage(excavation()), { stage: 'initial' });
+    });
+  });
+
+  test('a run of another project, or of other stages, matches no project stage',
+       function () {
+    return showing().then(function () {
+      var other = excavation();
+      other.name = 'Dike';
+      T.eq(App.Results.projectStage(other), null, 'another deck name');
+      var renamed = excavation();
+      renamed.stages[1].name = 'Second excavation';
+      T.eq(App.Results.projectStage(renamed), null, 'a stage renamed since the run');
+      var longer = excavation();
+      longer.stages.push({ id: 'load', name: 'Load', parent: 'dig' });
+      T.eq(App.Results.projectStage(longer), null, 'a stage added since the run');
+      T.eq(App.Results.projectStage(null), null);
+    });
+  });
+
+  test('a project with no stages matches its run, with every part on', function () {
+    return showing().then(function () {
+      T.eq(App.Results.projectStage({ name: 'Staged excavation', stages: [] }),
+           { stage: null });
+    });
+  });
+
+  test('with no run open there is no project stage', function () {
+    setup();
+    T.eq(App.Results.projectStage(excavation()), null);
   });
 
   /* ── Formatting ───────────────────────────────────────────────────────── */

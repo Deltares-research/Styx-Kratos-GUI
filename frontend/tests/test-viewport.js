@@ -667,4 +667,17 @@
     T.ok(groups.staged.indexOf('sheetpile') >= 0);
     T.ok(groups.staged.indexOf('water') >= 0);
   });
+
+  /* Results draws its own contoured mesh; over it go the loads and the water, so the
+     user sees where the load is and where the water stands -- and nothing else. */
+  test('Results draws the loads and the water over the contour, not the model',
+       function () {
+    [true, false].forEach(function (layered) {
+      var groups = App.Viewport.computeModeGroups(
+        ['soil_L1'], ['drawn_0'], layered, ['surcharge'], ['sheetpile'], ['water_1'],
+        { supports: ['fixed_bottom'], water: ['phreatic'] });
+      T.eq(groups.results, ['surcharge', 'water_1', 'water', 'phreatic'],
+           layered ? 'layered' : 'full build');
+    });
+  });
 })();

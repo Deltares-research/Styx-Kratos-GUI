@@ -887,6 +887,10 @@ App.Viewport = (function () {
     // along its line -- so it needs naming here for the same reason, in the modes a
     // load belongs to.
     loadKeys = loadKeys.concat(normalLoadKeys || []);
+    // Results draws its own contoured mesh (frontend/js/results-view.js); over it go
+    // the loads and the water, so the user sees where the load is and where the water
+    // stands. Not the supports: they would hide the edges of the contour.
+    var results = loadKeys.concat(['water'], (conditionKeys && conditionKeys.water) || []);
     if (layeredSoil) {
       var visibleKeys = soilKeys.concat(customKeys);
       // "water" in the same two modes the full build shows it in -- the level is what
@@ -899,7 +903,8 @@ App.Viewport = (function () {
                // Loads too: Staged construction is where a load is switched on and
                // off, so it has to be on screen there (`stageHidden` still hides one
                // the selected stage has switched off).
-               staged: visibleKeys.concat(loadKeys, memberKeys, ['water'], conditions) };
+               staged: visibleKeys.concat(loadKeys, memberKeys, ['water'], conditions),
+               results: results };
     }
     return {
       soil:       soilKeys.concat(conditions),
@@ -908,7 +913,8 @@ App.Viewport = (function () {
       mesh:       ['mesh', 'wall'].concat(memberKeys, customKeys, conditions),
       flow:       soilKeys.concat(['water', 'wells', 'wall'], customKeys, conditions),
       staged:     ['excavation', 'wall', 'struts', 'anchors', 'water']
-                    .concat(loadKeys, memberKeys, customKeys, conditions)
+                    .concat(loadKeys, memberKeys, customKeys, conditions),
+      results:    results
     };
   }
 
@@ -1537,15 +1543,15 @@ App.Viewport = (function () {
   /* Whether the eye lets `key` be drawn in `mode`. In Staged construction a water
      pressure condition has the stage's checkbox in place of its eye, and the stage is
      what is read there: the conditions the selected stage has on are drawn, the others
-     not (`stageHidden`). */
+     not (`stageHidden`). Results reads the stage on screen the same way. */
   function eyeOpen(key, mode) {
-    if (mode === 'staged' && waterIds.indexOf(key) >= 0) return true;
+    if ((mode === 'staged' || mode === 'results') && waterIds.indexOf(key) >= 0) return true;
     return visible[key] !== false;
   }
 
   function shownByMode(key) {
     var mode = App.state && App.state.mode;
-    return (modeGroups[mode] || []).indexOf(key) >= 0
+    return modeKeys(mode).indexOf(key) >= 0
            && eyeOpen(key, mode) && !stageHidden()[key];
   }
 
@@ -1606,10 +1612,40 @@ App.Viewport = (function () {
   function stageHidden() {
     if (!App.Stages || !App.Stages.hiddenKeys) return {};
     var hidden = {};
-    App.Stages.hiddenKeys(App.PROJECT, App.state && App.state.phase,
-                          App.state && App.state.mode)
+    var mode = App.state && App.state.mode;
+    var stage = App.state && App.state.phase;
+    if (mode === 'results') {
+      // The project's stage the result on screen is of, read as Staged construction
+      // reads its own; and what the export left out (the check box off) was never in
+      // the run, so it is not drawn over its result either.
+      var shown = resultsStage();
+      stage = shown && shown.stage;
+      mode = 'staged';
+      var project = App.PROJECT || {};
+      [].concat(project.loads || [], project.normal_loads || [],
+                project.boundary_conditions || []).forEach(function (record) {
+        if (record.active === false) hidden[record.id] = true;
+      });
+    }
+    App.Stages.hiddenKeys(App.PROJECT, stage, mode)
       .forEach(function (key) { hidden[key] = true; });
     return hidden;
+  }
+
+  function resultsStage() {
+    return App.Results && App.Results.projectStage
+      ? App.Results.projectStage(App.PROJECT) : null;
+  }
+
+  /* The keys `mode` draws. In Results, none when `results loads off` took them away,
+     and none when the run on screen is not of the open project: its loads and water
+     would be drawn over a result they had no part in. */
+  function modeKeys(mode) {
+    if (mode === 'results') {
+      var options = App.Results && App.Results.options && App.Results.options();
+      if ((options && options.loads === false) || !resultsStage()) return [];
+    }
+    return modeGroups[mode] || [];
   }
 
   /* Redraw after the selected stage changes. The mode pass is the whole of it --
@@ -1620,7 +1656,7 @@ App.Viewport = (function () {
   }
 
   function setMode(mode) {
-    var wanted = modeGroups[mode] || [];
+    var wanted = modeKeys(mode);
     var hidden = stageHidden();
     revealed = [];
     Object.keys(groups).forEach(function (k) {
@@ -1680,7 +1716,7 @@ App.Viewport = (function () {
     }
     if (!(key in groups)) return;
     visible[key] = on;
-    var wanted = modeGroups[App.state.mode] || [];
+    var wanted = modeKeys(App.state.mode);
     // The stage gate applies here too, or turning an eye back on would draw a part
     // the selected stage has not built yet.
     groups[key].visible = on && wanted.indexOf(key) >= 0 && !stageHidden()[key];

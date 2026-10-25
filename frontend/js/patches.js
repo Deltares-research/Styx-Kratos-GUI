@@ -3209,6 +3209,11 @@ App.LivePatches = (function () {
           mountResultsPanel();
           refreshResultsMenu();
           followRunInPlot();
+          // The loads and the water over the contour follow the stage on screen.
+          if (App.state && App.state.mode === 'results' && App.Viewport
+              && App.Viewport.applyStageVisibility) {
+            App.Viewport.applyStageVisibility();
+          }
         });
       }
 
@@ -3408,6 +3413,11 @@ App.LivePatches = (function () {
         colours.sub.push({
           label: 'Show mesh', checked: !!options.mesh, action: 'resultsRun',
           cmd: 'results mesh ' + (options.mesh ? 'off' : 'on')
+        });
+        colours.sub.push({
+          label: 'Show loads and water', checked: options.loads !== false,
+          action: 'resultsRun',
+          cmd: 'results loads ' + (options.loads === false ? 'on' : 'off')
         });
       }
     }
@@ -3732,6 +3742,10 @@ App.LivePatches = (function () {
                                + (options.reversed ? ' checked' : '') + '>'));
       rows.push(row('Mesh', '<input type="checkbox" data-res="mesh"'
                             + (options.mesh ? ' checked' : '') + '>'));
+      rows.push(row('Loads, water', '<input type="checkbox" data-res="loads"'
+                                    + (options.loads !== false ? ' checked' : '')
+                                    + ' title="The loads and the water level over the'
+                                    + ' colours">'));
       rows.push(row('Deformed', select('deform', [
         { value: 'off', label: 'off', selected: !options.deform },
         { value: 'auto', label: 'auto', selected: options.deform === 'auto' },
@@ -3769,6 +3783,12 @@ App.LivePatches = (function () {
         meshBox.addEventListener('change', function () {
           // on/off, like Reverse: the box already carries the state.
           resultsCommand('results mesh ' + (meshBox.checked ? 'on' : 'off'));
+        });
+      }
+      var loadsBox = body.querySelector('[data-res="loads"]');
+      if (loadsBox) {
+        loadsBox.addEventListener('change', function () {
+          resultsCommand('results loads ' + (loadsBox.checked ? 'on' : 'off'));
         });
       }
       bind(body, 'deform', function (value) { return 'results deform ' + value; });

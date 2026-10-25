@@ -454,10 +454,16 @@ Use the Results explorer, or click **Choose results** in the tool rail:
 | Limits | The minimum and maximum of the legend. **Auto** uses the range of the field. |
 | Reverse | Turns the colour map around |
 | Mesh | Shows the element edges over the colours |
+| Loads, water | Shows the loads and the water level over the colours (on by default) |
 | Deformed | Shows the deformed mesh: off, automatic scale, true scale, ×10 or ×100 |
 
 Compression is negative, as Kratos writes it. Each value is in the unit system of the run:
 stresses in Pa for SI, or in kPa for kN.
+
+The loads and the water level are those of the open project, as they are in the stage on
+screen: a load that the stage switched off is not shown. They are shown only when the run
+was calculated from the open project, with the same stages. They stay where they are in the
+model, also when the mesh is shown deformed. Type `results loads off` to hide them.
 
 ### Other results
 

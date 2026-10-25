@@ -418,7 +418,8 @@
     T.eq(phreatic.lines[0], [[0, -1, 5], [20, -3, 5]]);
   });
 
-  test('the conditions may be shown in every mode but Results', function () {
+  test('the conditions may be shown in every mode; Results shows only the water',
+       function () {
     [true, false].forEach(function (layered) {
       var groups = App.Viewport.computeModeGroups(['soil_L1'], [], layered, [], [], [],
                                                   { supports: ['fixed_bottom'], water: ['pore'] });
@@ -426,7 +427,8 @@
         T.ok(groups[mode].indexOf('fixed_bottom') >= 0 && groups[mode].indexOf('pore') >= 0,
              mode);
       });
-      T.eq(groups.results, undefined);
+      T.eq(groups.results.indexOf('fixed_bottom'), -1, 'no supports over the contour');
+      T.ok(groups.results.indexOf('pore') >= 0, 'the water pressure over the contour');
     });
   });
 
