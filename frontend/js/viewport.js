@@ -59,6 +59,7 @@ App.Viewport = (function () {
   var needsRender = true, meshBuilt = false;
 
   var frame = null;              // camera framing derived from the server bbox
+  var home = null;               // the frame grown to take in loads, piles and the like
   var soilKeys = [];
   var groupKeys = {};            // Model-explorer group row -> the part keys under it
 
@@ -1168,7 +1169,7 @@ App.Viewport = (function () {
   }
 
   function rebuildFrame(bbox) {
-    frame = App.Buffers.bounds(bbox);
+    frame = home = App.Buffers.bounds(bbox);
 
     disposeGroup(gridGroup);
     disposeGroup(boundsGroup);
@@ -1195,6 +1196,44 @@ App.Viewport = (function () {
     gridGroup.visible = boundsGroup.visible = showGrid;
     scene.add(gridGroup);
     scene.add(boundsGroup);
+    applyRadiusLimits();
+  }
+
+  /* `bbox` grown to take in `box`, a [min, max] pair of points. In 2D the depth is
+     kept: it is edge-on to the camera, and a load glyph drawn at the section offset
+     would otherwise stretch it. Pure, so it is testable. */
+  function growBBox(bbox, box, section) {
+    var out = bbox.slice();
+    for (var i = 0; i < 3; i++) {
+      if (section && i === 2) continue;
+      out[i] = Math.min(out[i], box[0][i]);
+      out[i + 3] = Math.max(out[i + 3], box[1][i]);
+    }
+    return out;
+  }
+
+  /* The view the camera comes home to: the soil, and everything drawn around it in
+     any mode -- a load's arrows above the ground, a pile above it, the water level's
+     overhang. The soil box alone left the CROW surcharge under the top ruler. Every
+     mode's parts are counted, shown or not, so the home view is the same on every
+     tab. `frame` itself stays the soil box: the grid and the glyph sizes are read
+     from it, and the glyphs are what this measures. */
+  function rebuildHome(bbox) {
+    var drawn = {};
+    Object.keys(modeGroups).forEach(function (mode) {
+      modeGroups[mode].forEach(function (key) { drawn[key] = true; });
+    });
+    var grown = bbox.slice();
+    Object.keys(drawn).forEach(function (key) {
+      if (!groups[key]) return;
+      // The group is hidden until setMode() runs; what it holds is measured anyway.
+      groups[key].children.forEach(function (child) {
+        var box = boundsOf(child);
+        if (box.isEmpty()) return;
+        grown = growBBox(grown, [box.min.toArray(), box.max.toArray()], dimension === 2);
+      });
+    });
+    home = App.Buffers.bounds(grown);
     applyRadiusLimits();
   }
 
@@ -1285,6 +1324,7 @@ App.Viewport = (function () {
         // frame, and would otherwise carry the previous model's scale for a frame.
         rebuildFrame(payload.bbox);
         buildGroups(payload);
+        rebuildHome(payload.bbox);
         meshBuilt = false;
         // The geometry moved, so the mesh that was numbered is gone with it.
         generatedLabels = null;
@@ -2622,10 +2662,11 @@ App.Viewport = (function () {
      were chosen for the 3D demo seen through the perspective camera; a flat section
      viewed through them sits at a fraction of the viewport. ORTHO_MARGIN is the
      breathing room around a fitted section: enough that the support symbols under the
-     bottom face stay clear of the rulers drawn over the viewport's edges. */
+     bottom face stay clear of the rulers drawn over the viewport's edges, with room
+     to spare so nothing at the edge of the model is missed. */
   var ORTHO_BASE = 46;
   var ORTHO_HALF_HEIGHT = 30;
-  var ORTHO_MARGIN = 1.2;
+  var ORTHO_MARGIN = 1.3;
 
   /* How far the wheel may dolly, as multiples of the fitted view rather than as
      metres. The frozen pair (8, and 6x the demo frame's 116) is a floor above the
@@ -2650,8 +2691,8 @@ App.Viewport = (function () {
   }
 
   function applyRadiusLimits() {
-    if (!orbit || !frame) return;
-    var limits = radiusLimits(frame, dimension);
+    if (!orbit || !home) return;
+    var limits = radiusLimits(home, dimension);
     orbit.minRadius = limits.min;
     orbit.maxRadius = limits.max;
     orbit.radius = Math.max(limits.min, Math.min(limits.max, orbit.radius));
@@ -2739,11 +2780,11 @@ App.Viewport = (function () {
 
   function setView(name) {
     activeView = VIEWS[name] ? name : 'iso';
-    if (!orbit || !frame) return;          // no WebGL: nothing to aim
+    if (!orbit || !home) return;           // no WebGL: nothing to aim
     var v = cameraAngles(name, dimension);
     orientReferenceGrid(activeView, frameBBox());
-    orbit.animateTo({ theta: v.theta, phi: v.phi, radius: frame.homeRadius,
-                      tx: frame.center[0], ty: frame.center[1], tz: targetZ() });
+    orbit.animateTo({ theta: v.theta, phi: v.phi, radius: home.homeRadius,
+                      tx: home.center[0], ty: home.center[1], tz: targetZ() });
     needsRender = true;
   }
 
@@ -2751,13 +2792,13 @@ App.Viewport = (function () {
      is -- so panning slides along it instead of drifting the camera off to one side
      of the model. */
   function targetZ() {
-    return dimension === 2 ? 0 : frame.center[2];
+    return dimension === 2 ? 0 : home.center[2];
   }
 
   function zoomFit() {
-    if (!orbit || !frame) return;
-    orbit.animateTo({ tx: frame.center[0], ty: frame.center[1], tz: targetZ(),
-                      radius: frame.homeRadius });
+    if (!orbit || !home) return;
+    orbit.animateTo({ tx: home.center[0], ty: home.center[1], tz: targetZ(),
+                      radius: home.homeRadius });
     needsRender = true;
   }
 
@@ -2849,7 +2890,7 @@ App.Viewport = (function () {
     camPersp.aspect = w / h;
     camPersp.updateProjectionMatrix();
     var a = w / h;
-    var s = dimension === 2 ? orthoHalfHeight(frame, a) : ORTHO_HALF_HEIGHT;
+    var s = dimension === 2 ? orthoHalfHeight(home, a) : ORTHO_HALF_HEIGHT;
     camOrtho.left = -s * a; camOrtho.right = s * a;
     camOrtho.top = s; camOrtho.bottom = -s;
     camOrtho.updateProjectionMatrix();
@@ -2877,7 +2918,7 @@ App.Viewport = (function () {
       triadRenderer.render(triadScene, triadCam);
     }
 
-    App.setZoom(Math.round(frame.homeRadius / orbit.radius * 100));
+    App.setZoom(Math.round(home.homeRadius / orbit.radius * 100));
   }
 
   return {
@@ -2905,7 +2946,7 @@ App.Viewport = (function () {
     projectToScreen: projectToScreen,
     showImportedMesh: showImportedMesh, clearImportedMesh: clearImportedMesh,
     syncPartColors: syncPartColors, coloredPartKeys: coloredPartKeys, partColor: partColor,
-    boundsOf: boundsOf,
+    boundsOf: boundsOf, growBBox: growBBox,
     nodeParts: nodeParts, nodePartsLoaded: nodePartsLoaded, markNodes: markNodes,
     showNode: showNode, importedNodes: importedNodes,
     clearNodeMark: clearNodeMark,

@@ -228,6 +228,32 @@
   });
 })();
 
+/* The home view takes in what is drawn around the soil: the CROW surcharge's arrows
+   stand 6.4 m above the ground, and a view of the soil box alone hid them under the
+   top ruler. */
+
+(function () {
+  var SOIL = [0, -60, 0, 80, 0, 0];
+
+  test('the home box grows to take in a load above the ground', function () {
+    var grown = App.Viewport.growBBox(SOIL, [[5, 0, 5], [80, 6.4, 5]], true);
+    T.eq(grown[4], 6.4, 'up to the tails of the arrows');
+    T.eq(grown[0], 0); T.eq(grown[1], -60); T.eq(grown[3], 80);
+  });
+
+  test('...but in 2D not along the depth, which is edge-on', function () {
+    var grown = App.Viewport.growBBox(SOIL, [[5, 0, 5], [80, 6.4, 5]], true);
+    T.eq(grown[2], 0); T.eq(grown[5], 0);
+    var solid = App.Viewport.growBBox(SOIL, [[5, 0, 5], [80, 6.4, 5]], false);
+    T.eq(solid[5], 5, 'in 3D the depth counts');
+  });
+
+  test('a part inside the soil leaves the box as it was', function () {
+    T.eq(App.Viewport.growBBox(SOIL, [[5, -13, 0], [5, 0, 0]], true).join(),
+         SOIL.join());
+  });
+})();
+
 /* ── How far the wheel may go ──────────────────────────────────────────────────
    js/orbit.js clamps the dolly between minRadius and maxRadius, and the live
    viewport used to hand it 8 and 6x the *provisional* demo frame. On a 0.1 x 1 m
