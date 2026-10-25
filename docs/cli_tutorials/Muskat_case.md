@@ -34,10 +34,10 @@ paths are shortened to `...\`). The ready-made models are in
 ```powershell
 kratos-cli new muskat.json --force --dim 2 --name "Semi-Muskat"
 kratos-cli domain muskat.json --x 0 1.62 --y 0 4 --z 0 1
-kratos-cli borehole muskat.json set bh1 --x 0 --y 0 --head 4 --water 0
 ```
 
-The column is 1.62 m wide and 4 m high. The borehole puts the ground surface at 4 m.
+The column is 1.62 m wide and 4 m high. The soil layer starts at the top of the domain, so
+the ground surface is at 4 m.
 
 The soil is the reference deck's, value for value. The flow uses the intrinsic permeability
 (`PERMEABILITY_XX`, m²), the viscosity, the water density and the retention law. Kratos'

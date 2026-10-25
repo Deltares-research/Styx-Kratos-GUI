@@ -37,7 +37,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from core.model.schemas import (  # noqa: E402
-    Anchor, AnchorSection, Beam, BeamSection, Borehole, BoxRefinement, DisplacementCondition,
+    Anchor, AnchorSection, Beam, BeamSection, BoxRefinement, DisplacementCondition,
     Domain, Excavation, Interface, InterfaceSection, LineLoad, Material, MeshSettings,
     NormalLoad, Project, SoilLayer, Stage, WaterPressureCondition)
 
@@ -45,8 +45,6 @@ from core.model.schemas import (  # noqa: E402
 # ── The site ──────────────────────────────────────────────────────────────────────────────
 
 DOMAIN = Domain(x0=0.0, x1=80.0, z0=0.0, z1=10.0, y_top=0.0, y_bottom=-60.0)
-
-BOREHOLES = [Borehole(id="bh1", name="BH1", x=0.0, y=0.0, head=0.0, water=-1.5)]
 
 
 # ── The soil ──────────────────────────────────────────────────────────────────────────────
@@ -105,22 +103,22 @@ LAYERS = [
         id="L_top",
         name="Soil_Top",
         mat="m_upper",
-        tops={"bh1": 0.0},
-        bots={"bh1": -8.0},
+        top=0.0,
+        bottom=-8.0,
     ),
     SoilLayer(
         id="L_mid",
         name="Soil_Middle",
         mat="m_upper",
-        tops={"bh1": -8.0},
-        bots={"bh1": -12.0},
+        top=-8.0,
+        bottom=-12.0,
     ),
     SoilLayer(
         id="L_bot",
         name="Soil_Bottom",
         mat="m_lower",
-        tops={"bh1": -12.0},
-        bots={"bh1": -60.0},
+        top=-12.0,
+        bottom=-60.0,
     ),
 ]
 
@@ -341,7 +339,6 @@ def project() -> Project:
         dimension=2,
         section_offset=5.0,
         domain=DOMAIN,
-        boreholes=BOREHOLES,
         materials=MATERIALS,
         layers=LAYERS,
         excavation=EXCAVATION,

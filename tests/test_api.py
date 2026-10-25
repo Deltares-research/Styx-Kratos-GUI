@@ -18,6 +18,8 @@ from core.geometry import solid_model
 from core.model.schemas import Project
 from core.model.templates import seed_project
 
+FIXTURES = Path(__file__).resolve().parent / "fixtures" / "projects"
+
 
 @pytest.fixture(scope="module")
 def client():
@@ -37,7 +39,7 @@ def test_empty_project_can_save_first_layer_and_delete_last_layer(client):
         client.put('/api/project', json=blank_project().model_dump())
         material = seed_project().materials[0].model_dump()
         layer = dict(id='L1', name='Soil_1', mat=material['id'],
-                     tops={'bh1': 0}, bots={'bh1': -5})
+                     top=0, bottom=-5)
         response = client.patch('/api/project/layers', json={
             'layers': [layer], 'materials': [material],
         })
@@ -143,13 +145,13 @@ def test_put_project_rejects_a_model_that_breaks_the_layer_stack(client):
     """js/dialogs.js edits layer depths with no validation at all, so this is the first
     place a gap in the stack can be caught rather than silently rendered."""
     broken = seed_project().model_dump()
-    broken["layers"][0]["bots"]["bh1"] = -9.0        # L2 still starts at -8.0
+    broken["layers"][0]["bottom"] = -9.0        # L2 still starts at -8.0
 
     response = client.put("/api/project", json=broken)
     assert response.status_code == 422
     assert "contiguous" in json.dumps(response.json())
 
-    assert client.get("/api/project").json()["layers"][0]["bots"]["bh1"] == -8.0
+    assert client.get("/api/project").json()["layers"][0]["bottom"] == -8.0
 
 
 def test_put_project_rejects_unknown_fields(client):
@@ -189,8 +191,8 @@ def test_geometry_follows_the_project(client):
     before = client.get("/api/geometry").json()
 
     deeper = seed_project().model_dump()
-    deeper["layers"][0]["bots"]["bh1"] = -9.0
-    deeper["layers"][1]["tops"]["bh1"] = -9.0
+    deeper["layers"][0]["bottom"] = -9.0
+    deeper["layers"][1]["top"] = -9.0
     assert client.put("/api/project", json=deeper).status_code == 200
 
     after = client.get("/api/geometry").json()
@@ -448,26 +450,25 @@ def test_mesh_endpoint_reports_the_bodies_that_were_meshed(client):
 
 def test_patch_layers_updates_the_project_and_declares_invalidations(client):
     layers = [layer.model_dump() for layer in seed_project().layers]
-    for borehole in seed_project().borehole_ids():
-        layers[0]["bots"][borehole] = -9.0
-        layers[1]["tops"][borehole] = -9.0
+    layers[0]["bottom"] = -9.0
+    layers[1]["top"] = -9.0
 
     response = client.patch("/api/project/layers", json={"layers": layers})
     assert response.status_code == 200
     body = response.json()
-    assert body["project"]["layers"][0]["bots"]["bh1"] == -9.0
+    assert body["project"]["layers"][0]["bottom"] == -9.0
     assert body["invalidates"] == ["project", "tree", "geometry", "mesh"]
-    assert client.get("/api/project").json()["layers"][1]["tops"]["bh2"] == -9.0
+    assert client.get("/api/project").json()["layers"][1]["top"] == -9.0
 
     client.put("/api/project", json=seed_project().model_dump())
 
 
 def test_patch_layers_rejects_invalid_stack_without_mutating_the_project(client):
     layers = [layer.model_dump() for layer in seed_project().layers]
-    layers[0]["bots"]["bh1"] = -9.0
+    layers[0]["bottom"] = -9.0
 
     assert client.patch("/api/project/layers", json={"layers": layers}).status_code == 422
-    assert client.get("/api/project").json()["layers"][0]["bots"]["bh1"] == -8.0
+    assert client.get("/api/project").json()["layers"][0]["bottom"] == -8.0
 
 
 # ── Structure write path ───────────────────────────────────────────────────
@@ -725,59 +726,37 @@ def test_patch_structures_deletes_an_interface_with_an_explicit_empty_list(clien
     client.put("/api/project", json=seed_project().model_dump())
 
 
-# ── Borehole write path (rides on the layer update) ─────────────────────────
+# ── No boreholes ────────────────────────────────────────────────────────────
 
-def test_patch_layers_can_move_and_rename_a_borehole(client):
+def test_put_project_opens_a_file_saved_with_boreholes(client):
+    """A file saved before boreholes were removed opens: each layer takes its levels at
+    the first borehole (`migration.drop_boreholes`)."""
+    old = json.loads((FIXTURES / "seed_3d_v1.json").read_text(encoding="utf-8"))
+    assert "boreholes" in old
+    try:
+        response = client.put("/api/project", json=old)
+        assert response.status_code == 200
+        body = response.json()
+    finally:
+        client.put("/api/project", json=seed_project().model_dump())
+    assert "boreholes" not in body
+    assert [(layer["top"], layer["bottom"]) for layer in body["layers"]] == [
+        (0.0, -8.0), (-8.0, -25.0)]
+
+
+def test_patch_layers_refuses_boreholes(client):
+    """The layer update has no boreholes to carry any more; one sent is an error, not
+    something quietly dropped."""
     project = seed_project()
-    boreholes = [b.model_dump() for b in project.boreholes]
-    boreholes[0].update(name="BH-North", x=5.0, y=7.0, head=-0.6, water=-2.4)
-
     response = client.patch("/api/project/layers", json={
         "layers": [layer.model_dump() for layer in project.layers],
-        "boreholes": boreholes,
-    })
-    assert response.status_code == 200
-
-    saved = client.get("/api/project").json()["boreholes"][0]
-    assert (saved["name"], saved["x"], saved["y"]) == ("BH-North", 5.0, 7.0)
-    assert (saved["head"], saved["water"]) == (-0.6, -2.4)
-
-    client.put("/api/project", json=seed_project().model_dump())
-
-
-def test_patch_layers_adds_a_borehole_together_with_its_layer_levels(client):
-    project = seed_project()
-    boreholes = [b.model_dump() for b in project.boreholes]
-    boreholes.append({"id": "bh4", "name": "BH-4", "x": 40.0, "y": 20.0,
-                      "head": 0.0, "water": -1.5})
-
-    layers = [layer.model_dump() for layer in project.layers]
-    for layer in layers:
-        layer["tops"]["bh4"] = layer["tops"]["bh1"]
-        layer["bots"]["bh4"] = layer["bots"]["bh1"]
-
-    response = client.patch("/api/project/layers",
-                            json={"layers": layers, "boreholes": boreholes})
-    assert response.status_code == 200
-    assert client.get("/api/project").json()["boreholes"][-1]["id"] == "bh4"
-
-    client.put("/api/project", json=seed_project().model_dump())
-
-
-def test_patch_layers_rejects_a_borehole_the_layers_do_not_cover(client):
-    """A borehole with no levels in the stack is exactly what validate_layer_stack
-    is there to catch — the pair has to arrive consistent."""
-    project = seed_project()
-    boreholes = [b.model_dump() for b in project.boreholes]
-    boreholes.append({"id": "bh4", "name": "BH-4", "x": 40.0, "y": 20.0,
-                      "head": 0.0, "water": -1.5})
-
-    response = client.patch("/api/project/layers", json={
-        "layers": [layer.model_dump() for layer in project.layers],
-        "boreholes": boreholes,
+        "boreholes": [{"id": "bh1", "name": "BH-1", "x": 0, "y": 0, "head": 0, "water": 0}],
     })
     assert response.status_code == 422
-    assert len(client.get("/api/project").json()["boreholes"]) == 3
+
+
+def test_there_is_no_borehole_route(client):
+    assert client.post("/api/project/boreholes", json={"x": 55.0}).status_code in (404, 405)
 
 
 # ── Domain write path (rides on the layer update too) ───────────────────────
@@ -871,38 +850,6 @@ def test_patch_layers_leaves_the_water_alone_when_it_is_not_sent(client):
     assert client.get("/api/project").json()["water"]["y"] == -6.5
 
     client.put("/api/project", json=seed_project().model_dump())
-
-
-def test_post_borehole_adds_the_borehole_the_cli_would(client):
-    """The GUI's Create borehole and `borehole` command go through this route, and the
-    route through `session.add_borehole` -- what `kratos-cli borehole add` calls -- so
-    the two give the same borehole, and every layer gets its levels there."""
-    from core import session
-
-    client.put("/api/project", json=seed_project().model_dump())
-    try:
-        response = client.post("/api/project/boreholes", json={"x": 55.0, "y": 2.0})
-        stored = Project.model_validate(client.get("/api/project").json())
-    finally:
-        client.put("/api/project", json=seed_project().model_dump())
-
-    assert response.status_code == 200
-    expected = session.add_borehole(seed_project(), x=55.0, y=2.0)
-    assert stored.boreholes == expected.boreholes
-    assert stored.layers == expected.layers
-    new = stored.boreholes[-1].id
-    assert all(new in layer.tops and new in layer.bots for layer in stored.layers)
-
-
-def test_post_borehole_refuses_an_id_that_is_taken(client):
-    client.put("/api/project", json=seed_project().model_dump())
-    taken = seed_project().boreholes[0].id
-
-    response = client.post("/api/project/boreholes", json={"id": taken})
-
-    assert response.status_code == 422
-    assert taken in response.json()["detail"]
-    assert len(client.get("/api/project").json()["boreholes"]) == len(seed_project().boreholes)
 
 
 def test_patch_layers_rejects_an_inverted_domain(client):
@@ -1173,6 +1120,9 @@ def test_the_live_shell_replaces_only_the_viewport_and_the_orbit_controller(clie
                              "vocabulary.js",
                              "mesh-settings.js", "import-dialog.js", "mdpa-import-dialog.js",
                              "draw-input.js", "soil-volume-dialog.js", "canvas-renderer.js",
+                             # The Modify soil layers window, in place of the frozen one in
+                             # js/dialogs.js, which drew the stack once per borehole.
+                             "soil-layers-dialog.js",
                              "export.js", "calculate.js", "history.js", "loads.js",
                              "beams.js", "anchors.js",
                              "interfaces.js", "normal-loads.js", "boundary-conditions.js",

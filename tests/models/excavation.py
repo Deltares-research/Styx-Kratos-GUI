@@ -19,7 +19,7 @@ It is also a script the GUI can open, through the same path a user's own model t
 from __future__ import annotations
 
 from core.model import stages
-from core.model.schemas import (Anchor, AnchorSection, Beam, BeamSection, Borehole,
+from core.model.schemas import (Anchor, AnchorSection, Beam, BeamSection,
                          BoxRefinement, Domain, Excavation, Interface, InterfaceSection,
                          LineLoad, Material, MeshSettings, NormalLoad, Project,
                          SoilLayer, WaterLevel, WaterPressureCondition, standard_conditions)
@@ -82,18 +82,17 @@ def _soil(id_, name, color, modulus, poisson, weight, cohesion, phi, permeabilit
 def excavation_project(staged: bool = True) -> Project:
     """The model. `staged=False` is the same geometry with no construction sequence, for
     a test about the mesh or the deck that should not depend on the stages."""
-    borehole = "bh1"
     upper = _soil("m_upper", "Soft clay", "#c4a86a", 2.0e6, 0.3, 17_000.0, 2_000.0,
                   25.0, 1.0e-8, 0.58)
     lower = _soil("m_lower", "Dense sand", "#b08a6a", 3.0e7, 0.3, 19_000.0, 0.0,
                   32.0, 1.0e-5, 0.47)
     layers = [
         SoilLayer(id="L_top", name="Soil_Top", mat=upper.id,
-                  tops={borehole: DOMAIN_TOP_Y}, bots={borehole: LIFTS[-1]}),
+                  top=DOMAIN_TOP_Y, bottom=LIFTS[-1]),
         SoilLayer(id="L_mid", name="Soil_Middle", mat=upper.id,
-                  tops={borehole: LIFTS[-1]}, bots={borehole: BOTTOM_LAYER_TOP_Y}),
+                  top=LIFTS[-1], bottom=BOTTOM_LAYER_TOP_Y),
         SoilLayer(id="L_bot", name="Soil_Bottom", mat=lower.id,
-                  tops={borehole: BOTTOM_LAYER_TOP_Y}, bots={borehole: DOMAIN_BOTTOM_Y}),
+                  top=BOTTOM_LAYER_TOP_Y, bottom=DOMAIN_BOTTOM_Y),
     ]
     # A steel sheet pile, per metre of wall.
     sheet_pile = BeamSection(id="sheetpile", name="Sheet pile", variables={
@@ -120,8 +119,6 @@ def excavation_project(staged: bool = True) -> Project:
         section_offset=SECTION_Z,
         domain=Domain(x0=DOMAIN_LEFT_X, x1=DOMAIN_RIGHT_X, z0=Z0, z1=Z1,
                       y_top=DOMAIN_TOP_Y, y_bottom=DOMAIN_BOTTOM_Y),
-        boreholes=[Borehole(id=borehole, name="BH1", x=DOMAIN_LEFT_X, y=Z0,
-                            head=DOMAIN_TOP_Y, water=WATER_Y)],
         materials=[upper, lower],
         layers=layers,
         # Against the left edge, the model's symmetry plane, dug in three lifts.

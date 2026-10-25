@@ -1413,16 +1413,6 @@ window.STAGE_FIXTURE =
       "y_top": 0.0,
       "y_bottom": -60.0
     },
-    "boreholes": [
-      {
-        "id": "bh1",
-        "name": "BH-1",
-        "x": 0.0,
-        "y": 0.0,
-        "head": 0.0,
-        "water": -1.5
-      }
-    ],
     "materials": [
       {
         "constitutive_law": "GeoIncrementalLinearElastic3DLaw",
@@ -1596,34 +1586,22 @@ window.STAGE_FIXTURE =
         "id": "L1",
         "name": "Soil_1",
         "mat": "m1",
-        "tops": {
-          "bh1": 0.0
-        },
-        "bots": {
-          "bh1": -8.0
-        }
+        "top": 0.0,
+        "bottom": -8.0
       },
       {
         "id": "L2",
         "name": "Soil_2",
         "mat": "m1",
-        "tops": {
-          "bh1": -8.0
-        },
-        "bots": {
-          "bh1": -12.0
-        }
+        "top": -8.0,
+        "bottom": -12.0
       },
       {
         "id": "L3",
         "name": "Soil_3",
         "mat": "m2",
-        "tops": {
-          "bh1": -12.0
-        },
-        "bots": {
-          "bh1": -60.0
-        }
+        "top": -12.0,
+        "bottom": -60.0
       }
     ],
     "excavation": {

@@ -68,10 +68,9 @@ Genuchten soil.
 | `dimension P 2d\|3d [--offset Z]` | Switch between the plane-strain section and the solid model |
 | `units P [SI\|kN]` | Show the unit system, or convert the whole project to another |
 | `water P [LEVEL\|off]` | Show, set or remove the water level. It fixes no pressure by itself: a new hydrostatic condition or normal load takes it as its level |
-| `domain P [--x FROM TO] [--y BOTTOM TOP] [--z FROM TO]` | Show or set the model's extents |
-| `borehole P list\|add\|set\|remove ...` | Boreholes: a new one copies the last one's levels, and every layer gets levels there |
+| `domain P [--x FROM TO] [--y BOTTOM TOP] [--z FROM TO]` | Show or set the model's extents. `--y` is the bottom and the ground level; with layers, it moves the top of the first layer and the bottom of the last |
 | `material P list\|presets\|add\|set\|remove ...` | Soils as Kratos property sets: `add ID [--preset m3] [NAME=VALUE ...]`, `set ID NAME=VALUE ... [--unset NAME]` |
-| `layer P list\|add\|set\|split\|remove ...` | The soil stack: `add ID --material M [--bottom Y \| --thickness T]`, `set ID --bottom Y [--at BH]` |
+| `layer P list\|add\|set\|split\|remove ...` | The soil stack: `add ID --material M [--bottom Y \| --thickness T]`, `set ID [--top Y] [--bottom Y]` |
 | `excavation P [--x FROM TO] [--z FROM TO] [--levels Y ...]` | The pit, and the levels it is dug to, one lift each |
 | `volume P list\|add\|import\|remove\|clear ...` | Solids drawn or imported into the model; with `--material` they are soil |
 | `section P list\|add\|set\|remove ...` | The sections structures are built with: `add beam\|panel\|anchor\|interface ID [NAME=VALUE ...]` |
@@ -112,9 +111,6 @@ A 2D model is the vertical cut through the site at one z, in the middle of the z
 z = 0 in a new project. `dimension P 2d --offset Z` cuts it at another z. In 2D,
 `domain --z` only bounds where that cut may be, so a 2D model can leave it out.
 
-A borehole is placed on the map, as in the GUI: its `--x` is the model's x and its `--y`
-is the model's z. Its levels are `--head` (the ground) and `--water`.
-
 ## The ground, command by command
 
 An empty site, built up to a staged excavation. The numbers are in the project's units
@@ -123,7 +119,6 @@ An empty site, built up to a staged excavation. The numbers are in the project's
 ```bash
 kratos-cli new pit.json --name "Pit B"
 kratos-cli domain pit.json --x 0 60 --y -40 0 --z 0 10
-kratos-cli borehole pit.json set bh1 --water -1
 kratos-cli material pit.json presets                      # the library a soil can start from
 kratos-cli material pit.json add clay --preset m3 YOUNG_MODULUS=2e6 K0_NC=0.58
 kratos-cli material pit.json add sand --preset m5
@@ -136,12 +131,13 @@ kratos-cli boundary pit.json add pore --domain --water-pressure Hydrostatic   # 
 kratos-cli parts pit.json                                 # soil_top__lift1, ... for the stages
 ```
 
-- **Boreholes** carry the soil stack. A new borehole is put 10 m past the last one and
-  copies its levels, unless you give `--x`, `--y`, `--head` and `--water`. A model keeps at
-  least one.
-- **Layers** are stacked from the top. `add` puts a layer under the last one, down to
-  `--bottom` or `--thickness` below it (5 m by default). `set --top` or `--bottom` moves a
-  level and the neighbour's with it, at every borehole or only `--at` one, and refuses a
+- **Layers** are stacked from the top. Each layer has one top and one bottom, and spans
+  the whole domain. The first layer starts at the top of the domain. The domain's height
+  is the stack's: the top of the first layer is the ground level, for example NAP +1.7
+  m, and the bottom of the last layer is the bottom of the model. Move one, and the other
+  moves with it. `add` puts a layer
+  under the last one, down to `--bottom` or `--thickness` below it (5 m by default).
+  `set --top` or `--bottom` moves a level and the neighbour's with it, and refuses a
   level that would cross the neighbour. `split` halves a layer, and `remove` closes the
   gap with the layer above.
 - **Materials** start as the GUI starts them: the default loose sand, or a library preset
@@ -164,8 +160,6 @@ kratos-cli parts pit.json                                 # soil_top__lift1, ...
 - **The water level** fixes no pressure by itself. A water pressure condition does
   (`boundary`, below): `boundary add --domain --water-pressure Hydrostatic` gives the
   soil hydrostatic pore pressures about the water level, and keeps that level as its own.
-  The borehole's `--water` is where the water stands in that borehole; the export does
-  not read it.
 - **Coordinates are plain numbers**, `--points 0 0 6 0 3 2`, because a word starting with
   a minus, like `-3,2`, would be read as an option. A long outline can come from a file:
   `--points @outline.csv`, one point per line.
@@ -193,7 +187,7 @@ kratos-cli set pit.json mesh.body_sizes.sheet 0.5
   is what the GUI shows and what the Kratos files call it. With no id typed, the name is
   the id too: `load add line --name Heavy` makes a load whose id is `Heavy`. This holds
   for every `add` command. With neither an id nor a name, a structure, load, boundary
-  condition, borehole or stage gets the first free id, as in the GUI (`beam_1`,
+  condition or stage gets the first free id, as in the GUI (`beam_1`,
   `anchor_2`, `load_3`), and a material, layer or section is refused.
 - **Sections.** A structure is built with the first section of its kind, or `--section`.
   The first structure of a kind brings the GUI's default section with it (an AZ 26
@@ -377,7 +371,7 @@ kratos-cli stages pit.json list
 ```text
 > kratos-cli shell pit.json
 pit.json> water -2
-pit.json> borehole add bh2 --x 30
+pit.json> layer add L4 --material sand --thickness 10
 pit.json> undo
 pit.json> stages staged-excavation
 pit.json> calculate
@@ -387,7 +381,7 @@ pit.json> exit
 
 `kratos-cli shell P` opens the project and reads commands one after another. A line is a
 `kratos-cli` command without `kratos-cli` and without the project file; the shell puts
-the open project where the command takes one (`borehole P add`, `node P 30`). A project
+the open project where the command takes one (`layer P add`, `node P 30`). A project
 named on the line is the one used (`water other.json -3`), and a command that takes no
 project, `results` or `run`, is given none. Everything else is the command as it is in the
 terminal: the same options, answers, `--json`, refusals and exit codes. A line that starts
@@ -522,8 +516,7 @@ viewport's. A command can also be typed with a leading `_` in the box (`_mesh`).
 | `units`, `units <system>` | `kratos-cli units P`, `kratos-cli units P kN` |
 | `node <id>` | `kratos-cli node P NODE` |
 | `cleargeometry` | `kratos-cli volume P clear` |
-| `borehole [x] [y]` | `kratos-cli borehole P add --x X --y Y` |
-| `soillayers` | `kratos-cli layer P`, `kratos-cli borehole P` (the window, as commands) |
+| `soillayers` | `kratos-cli layer P` (the window, as commands) |
 | `materials` | `kratos-cli material P` (the window, as commands) |
 | `calculate` | `kratos-cli calculate P` (the box only says to press Calculate) |
 | `help` | `kratos-cli --help` |
@@ -558,7 +551,7 @@ terminal, the points are the command's own: `--points`, `--head`, `--at`.
 record in a list by its id in brackets:
 
 ```bash
-kratos-cli get site.json layers[L1].tops
+kratos-cli get site.json layers[L1].top
 kratos-cli set site.json materials[m1].variables.YOUNG_MODULUS 2.5e7
 kratos-cli add site.json stages '{"id": "dig_1", "name": "Dig", "parent": "null_step", "deactivate": ["soil_L1"]}'
 kratos-cli add site.json materials @clay.json
@@ -567,7 +560,7 @@ kratos-cli remove site.json materials[clay2]
 
 - A record is picked by its `id` (a custom part by its `key`). A list without ids takes a
   position from 0: `mesh.refinements[0].size`. A mapping takes its key either way:
-  `layers[L1].tops[bh1]` or `layers[L1].tops.bh1`.
+  `materials[m1].variables[YOUNG_MODULUS]` or `materials[m1].variables.YOUNG_MODULUS`.
 - A value is read as JSON when it is JSON (`1.5`, `true`, `null`, `[1, 2]`, `{"y": -2}`) and as
   text otherwise, so `set site.json name Pit A` needs no quotes. A number meant as text does:
   `'"12"'`. `@file.json` reads the value from a file.

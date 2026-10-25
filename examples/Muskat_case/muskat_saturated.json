@@ -12,16 +12,6 @@
     "y_top": 4.0,
     "y_bottom": 0.0
   },
-  "boreholes": [
-    {
-      "id": "bh1",
-      "name": "BH1",
-      "x": 0.0,
-      "y": 0.0,
-      "head": 4.0,
-      "water": 0.0
-    }
-  ],
   "materials": [
     {
       "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
@@ -55,12 +45,8 @@
       "id": "soil",
       "name": "soil",
       "mat": "m_soil",
-      "tops": {
-        "bh1": 4.0
-      },
-      "bots": {
-        "bh1": 0.0
-      }
+      "top": 4.0,
+      "bottom": 0.0
     }
   ],
   "loads": [],

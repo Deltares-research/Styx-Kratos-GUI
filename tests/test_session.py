@@ -188,7 +188,7 @@ def test_replacing_layers_leaves_what_the_update_omits():
 
     assert edited.layers[0].name == "Top"
     assert edited.materials == project.materials
-    assert edited.boreholes == project.boreholes
+    assert edited.domain == project.domain
 
 
 def test_an_edit_never_changes_the_project_it_was_given():
@@ -397,7 +397,10 @@ def test_a_value_is_read_by_its_path():
     assert session.value_at(project, "domain.y_bottom") == -25.0
     assert session.value_at(project, "layers[L2].mat") == project.layers[1].mat
     assert session.value_at(project, "layers[1].id") == "L2"
-    assert session.value_at(project, "layers[L1].tops[bh1]") == project.layers[0].tops["bh1"]
+    assert session.value_at(project, "layers[L1].top") == project.layers[0].top
+    young = project.materials[0].variables["YOUNG_MODULUS"]
+    assert session.value_at(project, "materials[m1].variables[YOUNG_MODULUS]") == young
+    assert session.value_at(project, "materials[m1].variables.YOUNG_MODULUS") == young
     assert session.value_at(project, "") == project.model_dump(mode="json")
 
 
@@ -513,11 +516,11 @@ def test_a_deck_is_not_meshed_here():
         session.require_parametric(a_deck(), "meshed")
 
 
-# ── The ground: domain, boreholes, layers, materials, excavation ─────────────
+# ── The ground: domain, layers, materials, excavation ───────────────────────
 #
-# The edits the GUI's soil dialogs make in the browser (frontend/base/js/dialogs.js),
-# made here so the command line makes them the same way: the stack stays gap-free, a
-# borehole brings levels for every layer, a deleted layer's neighbour closes the gap.
+# The edits the GUI's soil layers dialog makes in the browser, made here so the command
+# line makes them the same way: the stack stays gap-free, a moved level moves its
+# neighbour's, a deleted layer's neighbour closes the gap.
 
 def test_the_domain_is_set_on_the_axes_given():
     project, notes = session.set_domain(seed_project(), x=(0.0, 40.0), y=(-30.0, 0.0))
@@ -539,45 +542,21 @@ def test_a_section_left_outside_a_new_domain_is_cut_through_its_middle():
     assert any("section" in note for note in notes)
 
 
-def test_a_borehole_brings_levels_for_every_layer():
-    project = session.add_borehole(seed_project(), id="bh4", x=40.0)
-
-    for layer in project.layers:
-        assert layer.tops["bh4"] == layer.tops["bh3"]
-        assert layer.bots["bh4"] == layer.bots["bh3"]
-
-
-def test_a_borehole_id_that_is_taken_is_refused():
-    with pytest.raises(session.EditRefused, match="already a borehole 'bh1'"):
-        session.add_borehole(seed_project(), id="bh1")
-
-
-def test_a_borehole_is_changed_by_field():
-    project = session.update_borehole(seed_project(), "bh1", name="North", water=-3.0)
-
-    assert (project.boreholes[0].name, project.boreholes[0].water) == ("North", -3.0)
-
-
-def test_a_removed_borehole_takes_its_levels_with_it():
-    project = session.remove_borehole(seed_project(), "bh2")
-
-    assert [b.id for b in project.boreholes] == ["bh1", "bh3"]
-    assert all("bh2" not in layer.tops for layer in project.layers)
-
-
-def test_the_last_borehole_stays():
-    project = blank_project()
-
-    with pytest.raises(session.EditRefused, match="at least one borehole"):
-        session.remove_borehole(project, "bh1")
-
-
 def test_a_layer_is_added_below_the_stack():
     project = session.add_layer(seed_project(), "L3", "m1", bottom=-30.0)
 
     # The seed's stack ends at the domain's floor; a layer below it is still a layer.
     assert [layer.id for layer in project.layers] == ["L1", "L2", "L3"]
-    assert project.layers[2].tops == project.layers[1].bots
+    assert project.layers[2].top == project.layers[1].bottom == -25.0
+    assert project.layers[2].bottom == -30.0
+
+
+def test_the_first_layer_starts_at_the_top_of_the_domain():
+    project = session.add_material(blank_project(), seed_project().materials[0])
+    project = session.add_layer(project, "L1", project.materials[0].id)
+
+    assert (project.layers[0].top, project.layers[0].bottom) == (
+        project.domain.y_top, project.domain.y_top - 5.0)
 
 
 def test_a_layer_needs_a_material_the_model_has():
@@ -593,17 +572,13 @@ def test_a_layer_id_that_is_taken_is_refused():
 def test_a_bottom_moved_moves_the_top_of_the_layer_below():
     project = session.update_layer(seed_project(), "L1", bottom=-10.0)
 
-    assert all(level == -10.0 for level in project.layers[0].bots.values())
-    assert project.layers[1].tops == project.layers[0].bots
+    assert project.layers[0].bottom == project.layers[1].top == -10.0
 
 
-def test_a_level_moved_at_one_borehole_leaves_the_others():
-    before = seed_project()
+def test_a_top_moved_moves_the_bottom_of_the_layer_above():
+    project = session.update_layer(seed_project(), "L2", top=-6.0)
 
-    project = session.update_layer(before, "L1", bottom=-10.0, at="bh2")
-
-    assert project.layers[0].bots["bh2"] == -10.0
-    assert project.layers[0].bots["bh1"] == before.layers[0].bots["bh1"]
+    assert project.layers[0].bottom == project.layers[1].top == -6.0
 
 
 def test_a_bottom_cannot_cross_the_layer_below():
@@ -630,23 +605,97 @@ def test_a_split_layer_is_two_layers_meeting_halfway():
 
     upper, lower = project.layers[0], project.layers[1]
     assert lower.id == "L1b" and lower.mat == upper.mat
-    for bh in upper.tops:
-        middle = (before.layers[0].tops[bh] + before.layers[0].bots[bh]) / 2
-        assert upper.bots[bh] == lower.tops[bh] == middle
-        assert lower.bots[bh] == before.layers[0].bots[bh]
+    middle = (before.layers[0].top + before.layers[0].bottom) / 2
+    assert upper.bottom == lower.top == middle
+    assert lower.bottom == before.layers[0].bottom
 
 
 def test_a_removed_layer_is_closed_by_the_one_above():
     project = session.remove_layer(seed_project(), "L2")
 
     assert [layer.id for layer in project.layers] == ["L1"]
-    assert project.layers[0].bots == seed_project().layers[1].bots
+    assert project.layers[0].bottom == seed_project().layers[1].bottom
 
 
 def test_a_removed_top_layer_is_closed_by_the_one_below():
     project = session.remove_layer(seed_project(), "L1")
 
-    assert project.layers[0].tops == seed_project().layers[0].tops
+    assert project.layers[0].top == seed_project().layers[0].top
+
+
+# The domain's height is the layer stack's: the top of the first layer is the ground
+# level, NAP +1.7 m or 0 m as the user has it, and the domain follows it.
+
+def heights(project: Project) -> tuple:
+    d = project.domain
+    return (d.y_top, d.y_bottom), (project.layers[0].top, project.layers[-1].bottom)
+
+
+def test_a_ground_level_moved_moves_the_top_of_the_domain():
+    project = session.update_layer(seed_project(), "L1", top=1.7)
+
+    assert heights(project) == ((1.7, -25.0), (1.7, -25.0))
+
+
+def test_a_layer_added_below_the_stack_deepens_the_domain():
+    project = session.add_layer(seed_project(), "L3", "m1", bottom=-30.0)
+
+    assert heights(project) == ((0.0, -30.0), (0.0, -30.0))
+
+
+def test_the_domain_s_height_moves_the_first_and_the_last_layer():
+    project, _ = session.set_domain(seed_project(), y=(-40.0, 1.7))
+
+    assert heights(project) == ((1.7, -40.0), (1.7, -40.0))
+    assert project.layers[0].bottom == seed_project().layers[0].bottom
+
+
+def test_a_domain_height_that_crosses_a_layer_is_refused():
+    with pytest.raises(session.EditRefused, match="below the bottom of the first layer"):
+        session.set_domain(seed_project(), y=(-25.0, -9.0))
+    with pytest.raises(session.EditRefused, match="above the top of the last layer"):
+        session.set_domain(seed_project(), y=(-7.0, 0.0))
+
+
+def test_the_height_is_one_edit_by_path_too():
+    assert heights(session.with_value(seed_project(), "layers[L1].top", 2.0)) == (
+        (2.0, -25.0), (2.0, -25.0))
+    assert heights(session.with_value(seed_project(), "domain.y_bottom", -31.0)) == (
+        (0.0, -31.0), (0.0, -31.0))
+
+
+def test_the_gui_s_layers_set_the_domain_s_height_whatever_domain_comes_with_them():
+    """The Selection explorer sends the domain it holds with every layer edit."""
+    project = seed_project()
+    raised = [project.layers[0].model_copy(update={"top": 1.7}), *project.layers[1:]]
+
+    edited = session.replace_layers(project, LayersUpdate(layers=raised,
+                                                          domain=project.domain))
+
+    assert heights(edited) == ((1.7, -25.0), (1.7, -25.0))
+
+
+def test_a_stack_with_no_height_is_refused():
+    with pytest.raises(session.EditRefused, match="no height"):
+        session.update_layer(session.remove_layer(seed_project(), "L2"), "L1", bottom=0.0)
+
+
+def test_a_model_with_no_layers_keeps_the_height_its_domain_was_given():
+    project, _ = session.set_domain(blank_project(), y=(-30.0, 1.7))
+
+    assert (project.domain.y_bottom, project.domain.y_top) == (-30.0, 1.7)
+
+
+def test_a_water_level_may_stand_in_drawn_soil_above_the_layers():
+    """The domain is the layers' height, so a dike drawn on them reaches above it; the
+    water bounds are the model's reach (`Project.extent`), not the domain."""
+    project, _ = session.with_created_part(seed_project(), box(),
+                                           {"brep_path": "dike.brep",
+                                            "bbox": [0, 0, 0, 10, 3, 10]})
+
+    assert session.set_water_level(project, 2.0).water.y == 2.0
+    with pytest.raises(session.EditRefused, match="between -25.00 and 3.00"):
+        session.set_water_level(project, 4.0)
 
 
 def test_a_material_is_added_and_its_id_must_be_free():

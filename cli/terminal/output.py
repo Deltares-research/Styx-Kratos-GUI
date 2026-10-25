@@ -112,7 +112,7 @@ def refused(failure: BaseException, as_json: bool) -> int:
 
 def describe(failure: BaseException) -> str:
     """The reason, as a person reads it. A model that does not validate is said field
-    by field, each by its path in the project (`layers[0].tops`), which is the path
+    by field, each by its path in the project (`layers[0].top`), which is the path
     `kratos-cli get` and `set` take."""
     if isinstance(failure, ValidationError):
         fields = [f"{_where(error['loc'])}: {error['msg']}" for error in failure.errors()]

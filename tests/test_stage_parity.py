@@ -89,15 +89,13 @@ def _project() -> schemas.Project:
     """
     payload = seed_project(simple=False).model_dump()
     payload["domain"] |= {"y_top": 0.0, "y_bottom": -60.0}
-    payload["boreholes"] = [payload["boreholes"][0]]
-    borehole = payload["boreholes"][0]["id"]
     payload["layers"] = [
         {"id": "L1", "name": "Soil_1", "mat": payload["materials"][0]["id"],
-         "tops": {borehole: 0.0}, "bots": {borehole: -8.0}},
+         "top": 0.0, "bottom": -8.0},
         {"id": "L2", "name": "Soil_2", "mat": payload["materials"][0]["id"],
-         "tops": {borehole: -8.0}, "bots": {borehole: -12.0}},
+         "top": -8.0, "bottom": -12.0},
         {"id": "L3", "name": "Soil_3", "mat": payload["materials"][1]["id"],
-         "tops": {borehole: -12.0}, "bots": {borehole: -60.0}},
+         "top": -12.0, "bottom": -60.0},
     ]
     payload["excavation"] = {k: v for k, v in payload["excavation"].items()
                              if k != "floor_y"}

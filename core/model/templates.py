@@ -8,14 +8,13 @@ same. Sources:
   domain, excavation, wall, strut, water levels   js/viewport.js:12-16
   wall thickness                                  js/viewport.js:109
   strut / anchor / pile / load / well geometry    js/viewport.js:118-229
-  boreholes, layers, materials                    js/data.js:313-355
+  layers (the BH-1 levels), materials             js/data.js:313-355
   surface load magnitude                          js/data.js:426
 """
 
 from core.model import migration
 from core.model.schemas import (
     AnchorRows,
-    Borehole,
     Domain,
     Excavation,
     Material,
@@ -61,20 +60,11 @@ def _materials(dim: int) -> list[Material]:
     return [Material.model_validate(migration.material(m, dim)) for m in _DEMO_MATERIALS]
 
 
-_BOREHOLES = [
-    Borehole(id="bh1", name="BH-1", x=0.0, y=0.0, head=0.00, water=-1.50),
-    Borehole(id="bh2", name="BH-2", x=28.0, y=4.0, head=-0.40, water=-1.80),
-    Borehole(id="bh3", name="BH-3", x=12.0, y=30.0, head=0.20, water=-1.20),
-]
-
 _LAYERS = [
-    SoilLayer(id="L1", name="Soil_1", mat="m2",
-              tops={"bh1": 0.00, "bh2": -0.40, "bh3": 0.20},
-              bots={"bh1": -8.00, "bh2": -9.20, "bh3": -7.20}),
-    SoilLayer(id="L2", name="Soil_2", mat="m4",
-              tops={"bh1": -8.00, "bh2": -9.20, "bh3": -7.20},
-              bots={"bh1": -25.00, "bh2": -25.00, "bh3": -25.00}),
+    SoilLayer(id="L1", name="Soil_1", mat="m2", top=0.00, bottom=-8.00),
+    SoilLayer(id="L2", name="Soil_2", mat="m4", top=-8.00, bottom=-25.00),
 ]
+"""The demo's layers at its first borehole, BH-1: the levels its geometry was built from."""
 
 
 def blank_project() -> Project:
@@ -85,9 +75,7 @@ def blank_project() -> Project:
     first and replacing it once the project arrives.
 
     No excavation and none of the seeded demo's structures: a model has them when its
-    author adds them. `boreholes` needs exactly the one entry `_build_layered_soil`
-    indexes for its reference column, even though `layers` being empty means it never
-    reads a depth off it.
+    author adds them.
     """
     return Project(
         name="Untitled project",
@@ -96,7 +84,6 @@ def blank_project() -> Project:
         # Centred on z = 0, so the 2D section is cut there: a section has to lie strictly
         # inside the z extent, and the middle is where a new one goes.
         domain=Domain(x0=0.0, x1=20.0, z0=-10.0, z1=10.0, y_top=0.0, y_bottom=-15.0),
-        boreholes=[Borehole(id="bh1", name="BH-1", x=0.0, y=0.0, head=0.0, water=-1.5)],
         materials=[],
         layers=[],
         # No water level: a new model has none until its author sets one.
@@ -118,7 +105,6 @@ def seed_project(simple: bool = True) -> Project:
         domain=(Domain(x0=0.0, x1=25.0, z0=0.0, z1=25.0, y_top=0.0, y_bottom=-25.0)
                 if simple else
                 Domain(x0=0.0, x1=50.0, z0=0.0, z1=40.0, y_top=0.0, y_bottom=-25.0)),
-        boreholes=[b.model_copy(deep=True) for b in _BOREHOLES],
         materials=_materials(3),
         layers=[l.model_copy(deep=True) for l in _LAYERS],
         excavation=Excavation(x0=12.0, x1=38.0, z0=10.0, z1=30.0, floor_y=-7.0),

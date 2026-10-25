@@ -183,20 +183,19 @@ def replace_layers(project: Project, update: LayersUpdate) -> Project:
     """The soil stack, and whatever of its context the update carries.
 
     The layer objects validate individually in the update; validating the project adds
-    material references, borehole coverage and stack continuity.
+    material references and stack continuity.
     """
     payload = project.model_dump()
     payload["layers"] = [layer.model_dump() for layer in update.layers]
     if update.materials is not None:
         payload["materials"] = [material.model_dump() for material in update.materials]
-    if update.boreholes is not None:
-        payload["boreholes"] = [borehole.model_dump() for borehole in update.boreholes]
     if update.domain is not None:
         payload["domain"] = update.domain.model_dump()
     if update.water is not None:
         payload["water"] = update.water.model_dump()
     if update.custom_parts is not None:
         payload["custom_parts"] = [part.model_dump() for part in update.custom_parts]
+    _domain_from_layers(payload)
     return Project.model_validate(payload)
 
 
@@ -213,15 +212,16 @@ def set_water_level(project: Project, level: float | None) -> Project:
 
     Everything else about an existing level -- its specific weight above all -- is the
     user's and is kept; a new level takes the schema's defaults. A level outside the
-    model describes nothing, so it is refused within the domain's own bounds, as the
-    GUI's `water` command does (frontend/js/water-command.js).
+    model describes nothing, so it is refused outside the model's reach -- the layers
+    and any drawn soil above them (`Project.extent`) -- as the GUI's `water` command
+    refuses it (frontend/js/water-command.js).
     """
     if level is None:
         return set_water(project, WaterUpdate(water=None))
-    domain = project.domain
-    if not domain.y_bottom < level < domain.y_top:
-        raise EditRefused(f"The water level must lie between {domain.y_bottom:.2f} and "
-                          f"{domain.y_top:.2f} m.")
+    reach = project.extent()
+    if not reach.y_bottom < level < reach.y_top:
+        raise EditRefused(f"The water level must lie between {reach.y_bottom:.2f} and "
+                          f"{reach.y_top:.2f} m.")
     water = (project.water.model_copy(update={"y": level}) if project.water is not None
              else WaterLevel(y=level))
     return set_water(project, WaterUpdate(water=water))
@@ -527,7 +527,7 @@ def require_parametric(project: Project, what: str) -> None:
 # is picked in brackets by its `id` -- `key` for a custom part -- so the path still names
 # the same record after the list is reordered: `layers[L2].mat`. A list without ids takes
 # an index from 0, `mesh.refinements[0].size`, and a mapping takes its key either way:
-# `layers[L1].tops[bh1]` or `layers[L1].tops.bh1`.
+# `materials[m1].variables[YOUNG_MODULUS]` or `materials[m1].variables.YOUNG_MODULUS`.
 
 DEDICATED = {
     "dimension": ("dimension", "switching it translates the loads, walls and soil laws "
@@ -592,9 +592,14 @@ def without_value(project: Project, path: str) -> Project:
 
 def _validated_edit(project: Project, payload: dict, tokens: list[tuple[str, str]]) -> Project:
     """The edited payload as a project. An edit inside the stages is one of the stages,
-    so it has to linearise as well, and a deck's are not edited at all."""
+    so it has to linearise as well, and a deck's are not edited at all. The height of the
+    domain and of the layer stack is one edit, whichever of the two the path names."""
     if tokens[0][1] == "stages":
         return replace_stages(project, StagesUpdate(stages=payload["stages"]))
+    if tokens[0][1] == "layers":
+        _domain_from_layers(payload)
+    elif tokens[0][1] == "domain":
+        _layers_from_domain(payload)
     return Project.model_validate(payload)
 
 
@@ -681,29 +686,64 @@ def _joined(where: str, token: tuple[str, str]) -> str:
     return f"{where}.{name}" if where else name
 
 
-# ── The ground: domain, boreholes, layers, materials, excavation ─────────────
+# ── The ground: domain, layers, materials, excavation ───────────────────────
 #
-# The edits the GUI's soil dialogs make in the browser (frontend/base/js/dialogs.js), so
-# the command line makes them the same way: a borehole brings levels for every layer, a
+# The edits the GUI's soil layers dialog makes in the browser
+# (frontend/js/soil-layers-dialog.js), so the command line makes them the same way: a
 # moved level moves its neighbour's, a deleted layer's neighbour closes the gap, and an
 # edit that would cross a neighbour is refused rather than made.
+#
+# The domain's height is the layer stack's: its top is the top of the first layer (the
+# ground level, NAP +1.7 m or 0 m as the user has it) and its bottom the bottom of the
+# last. A layer edit moves the domain, and `domain --y` moves the stack. A project with
+# no layers keeps the height its domain was given.
 
 class UnknownRecord(EditRefused):
-    """An edit names a borehole, layer or material the project does not have."""
+    """An edit names a layer or material the project does not have."""
+
+
+def _domain_from_layers(payload: dict) -> None:
+    """The domain's top and bottom, set to the layer stack's in `payload`."""
+    layers = payload["layers"]
+    if not layers:
+        return
+    top, bottom = layers[0]["top"], layers[-1]["bottom"]
+    if not top > bottom:
+        raise EditRefused(f"The layers have no height: the top of the first layer ({top:g}) "
+                          f"must be above the bottom of the last ({bottom:g}).")
+    payload["domain"]["y_top"], payload["domain"]["y_bottom"] = top, bottom
+
+
+def _layers_from_domain(payload: dict) -> None:
+    """The top of the first layer and the bottom of the last, moved to the domain's
+    top and bottom in `payload`; refused when one would cross the layer's other face."""
+    layers, domain = payload["layers"], payload["domain"]
+    if not layers:
+        return
+    first, last = layers[0], layers[-1]
+    if domain["y_top"] < first["bottom"]:
+        raise EditRefused(f"The top {domain['y_top']:g} is below the bottom of the first "
+                          f"layer, {first['id']} ({first['bottom']:g}).")
+    if domain["y_bottom"] > last["top"]:
+        raise EditRefused(f"The bottom {domain['y_bottom']:g} is above the top of the last "
+                          f"layer, {last['id']} ({last['top']:g}).")
+    first["top"], last["bottom"] = domain["y_top"], domain["y_bottom"]
 
 
 def set_domain(project: Project, *, x: tuple[float, float] | None = None,
                y: tuple[float, float] | None = None,
                z: tuple[float, float] | None = None) -> tuple[Project, list[str]]:
     """The model's extents, on the axes given: `x` and `z` as (from, to), `y` as
-    (bottom, top). A section cut outside the new extents is moved to their middle, and
-    the notes say so."""
+    (bottom, top). A new `y` moves the top of the first layer and the bottom of the last
+    with it. A section cut outside the new extents is moved to their middle, and the
+    notes say so."""
     payload = project.model_dump()
     domain = payload["domain"]
     if x is not None:
         domain["x0"], domain["x1"] = x
     if y is not None:
         domain["y_bottom"], domain["y_top"] = y
+        _layers_from_domain(payload)
     if z is not None:
         domain["z0"], domain["z1"] = z
     notes: list[str] = []
@@ -717,45 +757,6 @@ def set_domain(project: Project, *, x: tuple[float, float] | None = None,
     return Project.model_validate(payload), notes
 
 
-def add_borehole(project: Project, **fields) -> Project:
-    """A borehole (`drafts.borehole`), with every layer's levels there copied from the
-    last borehole, so the stack stays whole -- what `App.addBorehole` does."""
-    if fields.get("id") is not None:
-        _refuse_taken(fields["id"], [b.id for b in project.boreholes], "borehole")
-    new = drafts.borehole(project, **fields)
-    payload = project.model_dump()
-    payload["boreholes"].append(new.model_dump())
-    if project.boreholes:
-        last = project.boreholes[-1].id
-        for layer in payload["layers"]:
-            layer["tops"][new.id] = layer["tops"][last]
-            layer["bots"][new.id] = layer["bots"][last]
-    return Project.model_validate(payload)
-
-
-def update_borehole(project: Project, id: str, **fields) -> Project:
-    """The borehole `id` with the fields given (`name`, `x`, `y`, `head`, `water`)."""
-    payload = project.model_dump()
-    record = payload["boreholes"][_index(project.boreholes, id, "borehole")]
-    record.update({name: value for name, value in fields.items() if value is not None})
-    return Project.model_validate(payload)
-
-
-def remove_borehole(project: Project, id: str) -> Project:
-    """The project without borehole `id` and its levels in every layer. The last one
-    stays: the layered build reads its levels."""
-    at = _index(project.boreholes, id, "borehole")
-    if len(project.boreholes) == 1:
-        raise EditRefused(f"{id} is the only borehole, and a model keeps at least one "
-                          "borehole: the soil stack is read off it.")
-    payload = project.model_dump()
-    del payload["boreholes"][at]
-    for layer in payload["layers"]:
-        layer["tops"].pop(id, None)
-        layer["bots"].pop(id, None)
-    return Project.model_validate(payload)
-
-
 def add_layer(project: Project, id: str, material: str, *, name: str | None = None,
               bottom: float | None = None, thickness: float | None = None) -> Project:
     """A layer under the stack (`drafts.layer`): from the last layer's bottom -- the
@@ -764,23 +765,20 @@ def add_layer(project: Project, id: str, material: str, *, name: str | None = No
     new = drafts.layer(project, id, material, name=name, bottom=bottom, thickness=thickness)
     payload = project.model_dump()
     payload["layers"].append(new.model_dump())
+    _domain_from_layers(payload)
     return Project.model_validate(payload)
 
 
 def update_layer(project: Project, id: str, *, material: str | None = None,
                  name: str | None = None, top: float | None = None,
-                 bottom: float | None = None, at: str | None = None) -> Project:
+                 bottom: float | None = None) -> Project:
     """The layer `id` with a new material, name, top or bottom.
 
-    A level is moved at the borehole `at`, or at every borehole, and it moves the
-    neighbour's with it: a top is the bottom of the layer above, a bottom the top of the
-    layer below. A level that would cross a neighbour's other face is refused, as the
-    soil dialog refuses it.
+    A moved level moves the neighbour's with it: a top is the bottom of the layer above,
+    a bottom the top of the layer below. A level that would cross a neighbour's other
+    face is refused, as the soil layers dialog refuses it.
     """
     index = _index(project.layers, id, "layer")
-    boreholes = [b.id for b in project.boreholes]
-    if at is not None and at not in boreholes:
-        raise UnknownRecord(f"there is no borehole {at!r}; there are: {', '.join(boreholes)}")
     payload = project.model_dump()
     layers = payload["layers"]
     layer = layers[index]
@@ -788,59 +786,59 @@ def update_layer(project: Project, id: str, *, material: str | None = None,
         layer["mat"] = material
     if name is not None:
         layer["name"] = name
-    for bh in ([at] if at else boreholes):
-        if top is not None:
-            if top < layer["bots"][bh]:
-                raise EditRefused(f"{id}: the top must be at or above its bottom "
-                                  f"({layer['bots'][bh]:g} at {bh}).")
-            if index > 0 and top > layers[index - 1]["tops"][bh]:
-                raise EditRefused(f"{id}: the top cannot rise above the top of the layer "
-                                  f"above ({layers[index - 1]['tops'][bh]:g} at {bh}).")
-            layer["tops"][bh] = top
-            if index > 0:
-                layers[index - 1]["bots"][bh] = top
-        if bottom is not None:
-            if bottom > layer["tops"][bh]:
-                raise EditRefused(f"{id}: the bottom must be at or below its top "
-                                  f"({layer['tops'][bh]:g} at {bh}).")
-            if index < len(layers) - 1 and bottom < layers[index + 1]["bots"][bh]:
-                raise EditRefused(f"{id}: the bottom cannot drop below the bottom of the "
-                                  f"layer below ({layers[index + 1]['bots'][bh]:g} at {bh}).")
-            layer["bots"][bh] = bottom
-            if index < len(layers) - 1:
-                layers[index + 1]["tops"][bh] = bottom
+    if top is not None:
+        if top < layer["bottom"]:
+            raise EditRefused(f"{id}: the top must be at or above its bottom "
+                              f"({layer['bottom']:g}).")
+        if index > 0 and top > layers[index - 1]["top"]:
+            raise EditRefused(f"{id}: the top cannot rise above the top of the layer "
+                              f"above ({layers[index - 1]['top']:g}).")
+        layer["top"] = top
+        if index > 0:
+            layers[index - 1]["bottom"] = top
+    if bottom is not None:
+        if bottom > layer["top"]:
+            raise EditRefused(f"{id}: the bottom must be at or below its top "
+                              f"({layer['top']:g}).")
+        if index < len(layers) - 1 and bottom < layers[index + 1]["bottom"]:
+            raise EditRefused(f"{id}: the bottom cannot drop below the bottom of the "
+                              f"layer below ({layers[index + 1]['bottom']:g}).")
+        layer["bottom"] = bottom
+        if index < len(layers) - 1:
+            layers[index + 1]["top"] = bottom
+    _domain_from_layers(payload)
     return Project.model_validate(payload)
 
 
 def split_layer(project: Project, id: str, new_id: str | None = None) -> Project:
-    """The soil dialog's Insert: the layer `id` halved at every borehole, the lower half
-    a new layer of the same material."""
+    """The soil layers dialog's Insert: the layer `id` halved, the lower half a new layer
+    of the same material."""
     index = _index(project.layers, id, "layer")
     taken = [layer.id for layer in project.layers]
     new_id = new_id if new_id is not None else drafts.free_id(taken, "L")
     _refuse_taken(new_id, taken, "layer")
     payload = project.model_dump()
     upper = payload["layers"][index]
-    lower = {"id": new_id, "name": new_id, "mat": upper["mat"], "tops": {}, "bots": {}}
-    for bh in upper["tops"]:
-        middle = (upper["tops"][bh] + upper["bots"][bh]) / 2
-        lower["tops"][bh], lower["bots"][bh] = middle, upper["bots"][bh]
-        upper["bots"][bh] = middle
+    middle = (upper["top"] + upper["bottom"]) / 2
+    lower = {"id": new_id, "name": new_id, "mat": upper["mat"], "top": middle,
+             "bottom": upper["bottom"]}
+    upper["bottom"] = middle
     payload["layers"].insert(index + 1, lower)
     return Project.model_validate(payload)
 
 
 def remove_layer(project: Project, id: str) -> Project:
     """The project without layer `id`, the gap closed by the layer above -- or, for the
-    top layer, by the one below -- as the soil dialog's Delete closes it."""
+    top layer, by the one below -- as the soil layers dialog's Delete closes it."""
     index = _index(project.layers, id, "layer")
     payload = project.model_dump()
     layers = payload["layers"]
     removed = layers.pop(index)
     if index > 0:
-        layers[index - 1]["bots"] = removed["bots"]
+        layers[index - 1]["bottom"] = removed["bottom"]
     elif layers:
-        layers[0]["tops"] = removed["tops"]
+        layers[0]["top"] = removed["top"]
+    _domain_from_layers(payload)
     return Project.model_validate(payload)
 
 
@@ -1027,6 +1025,7 @@ def remove_structure(project: Project, id: str) -> Project:
     if _collection(record) == "beams":
         hanging = [a.id for a in project.anchors if _hangs_from(a, record)]
         hanging += [i.id for i in project.interfaces if i.structure == id]
+        hanging += [load.id for load in project.loads if _stands_on(load, record, project)]
         if hanging:
             raise EditRefused(f"{id} carries {', '.join(hanging)}; remove or move them "
                               "first")
@@ -1045,6 +1044,18 @@ def _hangs_from(anchor, structure) -> bool:
     if points is None or len(points[0]) != len(anchor.head):
         return False
     return point_on_polyline(anchor.head, points)
+
+
+def _stands_on(load, structure, project: Project) -> bool:
+    """Whether `load` is a point load above the ground that only `structure` holds up:
+    off the model, on the pile (the test `Project` holds it to)."""
+    points = getattr(structure, "points", None)
+    if load.kind != "point" or points is None or len(points[0]) != 2:
+        return False
+    extent = project.extent()
+    inside = (extent.x0 <= load.x <= extent.x1
+              and extent.y_bottom <= load.y <= extent.y_top)
+    return not inside and point_on_polyline((load.x, load.y), points)
 
 
 def find_section(project: Project, id: str, kind: str | None = None) -> tuple[str, object]:

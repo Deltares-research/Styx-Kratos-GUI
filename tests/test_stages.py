@@ -19,13 +19,11 @@ def _project(*stage_records) -> schemas.Project:
     """A staged project -- layers crossed with three lifts -- and a stage list."""
     p = seed_project(simple=False).model_dump()
     p["domain"] |= {"y_top": 0.0, "y_bottom": -60.0}
-    p["boreholes"] = [p["boreholes"][0]]
-    bh = p["boreholes"][0]["id"]
     p["layers"] = [
         {"id": "L1", "name": "Soil_1", "mat": p["materials"][0]["id"],
-         "tops": {bh: 0.0}, "bots": {bh: -8.0}},
+         "top": 0.0, "bottom": -8.0},
         {"id": "L2", "name": "Soil_2", "mat": p["materials"][1]["id"],
-         "tops": {bh: -8.0}, "bots": {bh: -60.0}},
+         "top": -8.0, "bottom": -60.0},
     ]
     p["excavation"] = {k: v for k, v in p["excavation"].items() if k != "floor_y"}
     p["excavation"] |= {"x0": 0.0, "x1": 5.0, "levels": [-2.0, -5.0, -8.0]}

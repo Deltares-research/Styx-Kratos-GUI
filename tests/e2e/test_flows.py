@@ -173,7 +173,8 @@ def test_a_model_built_by_hand_from_a_new_project_meshes(app_page):
     dialog = app_page.locator("#modal-layer .dialog").filter(has_text="soil layers").first
     dialog.wait_for(state="visible")
     dialog.locator(".lay-toolbar button", has_text="Add").first.click()
-    app_page.wait_for_function("App.LAYERS.length === 1", timeout=LONG)
+    # The window edits a copy of the stack: the new layer is a row until OK.
+    dialog.locator(".lay-table-wrap tbody tr").first.wait_for(state="visible")
     dialog.locator(".dlg-foot .btn-primary").click()
     app_page.wait_for_function("App.PROJECT.layers.length === 1", timeout=LONG)
 

@@ -101,7 +101,25 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
 .soil-volume-summary { font-size: var(--fs-sm); color: var(--c-ink-soft); }
 .soil-volume-summary.invalid { color: #a3341f; }
 
-/* Custom soil volumes, listed inside the frozen Modify soil layers window. */
+/* The Modify soil layers window (js/soil-layers-dialog.js): the stack as one column
+   beside the layer table. */
+.soil-column-pane {
+  flex: 0 0 auto; width: 240px;
+  border-right: 1px solid var(--c-border);
+  background: var(--c-panel-2);
+  display: flex; flex-direction: column; min-height: 0;
+}
+.soil-column-head {
+  padding: 5px 8px; background: var(--c-toolbar);
+  border-bottom: 1px solid var(--c-border); font-weight: 600; font-size: var(--fs-sm);
+}
+.soil-column-wrap { flex: 1; overflow: auto; padding: 10px 6px; }
+.soil-column-svg { display: block; margin: 0 auto; }
+.soil-column-band { cursor: pointer; }
+.soil-column-band.sel { stroke: var(--c-focus); stroke-width: 2.2; }
+.soil-column-empty { padding: 8px; color: var(--c-ink-faint); font-size: var(--fs-sm); }
+
+/* Custom soil volumes, listed under the layer table of the same window. */
 .soil-body-section { border-top: 1px solid var(--c-border); background: var(--c-panel); }
 .soil-body-section-head {
   padding: 5px 10px; font-weight: 600; font-size: var(--fs-sm); color: var(--c-ink-soft);

@@ -68,8 +68,6 @@ def column(layers: list[tuple[float, float, dict]], width: float = 1.0,
     p["name"] = name
     p["domain"] = {"x0": 0.0, "x1": width, "z0": 0.0, "z1": 1.0,
                    "y_top": top, "y_bottom": bottom}
-    p["boreholes"] = [{"id": "bh1", "name": "BH-1", "x": 0.0, "y": 0.0, "head": top,
-                       "water": water_y if water_y is not None else bottom}]
     seen, materials = set(), []
     for _, _, mat in layers:
         if mat["id"] not in seen:
@@ -81,7 +79,7 @@ def column(layers: list[tuple[float, float, dict]], width: float = 1.0,
     p["materials"] = [mat["kratos"] if "kratos" in mat else migration.material(mat, 2)
                       for mat in materials]
     p["layers"] = [{"id": f"L{i}", "name": f"Layer_{i}", "mat": mat["id"],
-                    "tops": {"bh1": t}, "bots": {"bh1": b}}
+                    "top": t, "bottom": b}
                    for i, (t, b, mat) in enumerate(layers, start=1)]
     p["excavation"] = {"x0": 0.0, "x1": width / 2, "z0": 0.0, "z1": 0.5,
                        "floor_y": bottom + 0.5 * (top - bottom)}
@@ -102,8 +100,8 @@ def column(layers: list[tuple[float, float, dict]], width: float = 1.0,
 def column_under_drawn_fill(fill: tuple[float, float, dict],
                             layer: tuple[float, float, dict], width: float = 1.0,
                             name: str = "Soil column under drawn fill") -> Project:
-    """`column` with its top part drawn rather than read from the borehole: `layer` is
-    the borehole's, `fill` a polygon over the full width with a material of its own,
+    """`column` with its top part drawn rather than made as a layer: `layer` is the
+    soil layer, `fill` a polygon over the full width with a material of its own,
     both as (top, bottom, material). The fill is built from its recipe, as a model
     script builds it, so the runner sends a project whose .brep exists."""
     from core import scripting

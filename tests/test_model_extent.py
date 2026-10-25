@@ -1,6 +1,6 @@
-"""Where a structure is allowed to be: the model, not the borehole box.
+"""Where a structure is allowed to be: the model, not the layer block.
 
-`Domain` is the soil block the boreholes describe. A drawn or imported part is not held
+`Domain` is the block the soil layers fill. A drawn or imported part is not held
 to it -- an embankment sits *above* `y_top`, and `solid_model.SECTION_PAD` already says so in
 as many words: "the wall top and any drawn or imported part can legitimately stick out
 of the declared domain".
@@ -81,6 +81,116 @@ def test_a_sheet_pile_reaching_up_into_a_custom_layer_is_accepted():
         beams=[{"id": "beam_1", "name": "Sheet pile 1", "kind": "beam",
                 "section": "az26", "points": [[10.0, 3.0], [10.0, -8.0]]}],
     ))
+
+
+AZ26 = {"id": "az26", "name": "AZ 26", "E": 2.1e8, "nu": 0.3,
+        "area": 0.02, "inertia": 5e-4, "density": 7850.0}
+
+
+def pile_along(*points) -> dict:
+    payload = seed_project(simple=True).model_dump()
+    payload.update(beam_sections=[AZ26],
+                   beams=[{"id": "beam_1", "name": "Sheet pile 1", "kind": "beam",
+                           "section": "az26", "points": [list(p) for p in points]}])
+    return payload
+
+
+def test_a_sheet_pile_standing_out_above_the_ground_is_accepted():
+    """The bug as reported: a pile 5 m above the top layer was "outside the domain"."""
+    top = seed_project(simple=True).domain.y_top
+    Project.model_validate(pile_along((10.0, top + 5.0), (10.0, top - 7.5)))
+
+
+def test_a_sheet_pile_wholly_above_the_ground_is_refused():
+    top = seed_project(simple=True).domain.y_top
+    with pytest.raises(Exception, match="wholly above the ground"):
+        Project.model_validate(pile_along((10.0, top + 5.0), (10.0, top)))
+
+
+def test_a_sheet_pile_past_the_side_or_the_bottom_is_still_refused():
+    domain = seed_project(simple=True).domain
+    with pytest.raises(Exception, match="outside the domain"):
+        Project.model_validate(pile_along((domain.x1 + 1.0, domain.y_top),
+                                          (domain.x1 + 1.0, domain.y_top - 5.0)))
+    with pytest.raises(Exception, match="outside the domain"):
+        Project.model_validate(pile_along((10.0, domain.y_top),
+                                          (10.0, domain.y_bottom - 1.0)))
+
+
+def point_load_at(x: float, y: float) -> dict:
+    return {"id": "load_1", "name": "PointLoad_1", "kind": "point",
+            "x": x, "y": y, "components": [0.0, -30.0]}
+
+
+def test_a_point_load_on_the_head_of_a_pile_above_the_ground_is_accepted():
+    top = seed_project(simple=True).domain.y_top
+    payload = pile_along((10.0, top + 5.0), (10.0, top - 7.5))
+    payload["loads"] = [point_load_at(10.0, top + 5.0)]
+    Project.model_validate(payload)
+
+
+def test_a_point_load_in_the_air_off_any_pile_is_refused():
+    top = seed_project(simple=True).domain.y_top
+    payload = pile_along((10.0, top + 5.0), (10.0, top - 7.5))
+    payload["loads"] = [point_load_at(12.0, top + 5.0)]
+    with pytest.raises(Exception, match="has to be on a sheet pile"):
+        Project.model_validate(payload)
+
+
+def test_a_point_load_on_an_inactive_pile_above_the_ground_is_refused():
+    """An inactive pile is not meshed, so nothing would carry the load."""
+    top = seed_project(simple=True).domain.y_top
+    payload = pile_along((10.0, top + 5.0), (10.0, top - 7.5))
+    payload["beams"][0]["active"] = False
+    payload["loads"] = [point_load_at(10.0, top + 5.0)]
+    with pytest.raises(Exception, match="has to be on a sheet pile"):
+        Project.model_validate(payload)
+
+
+def test_a_pile_carrying_a_point_load_above_the_ground_cannot_be_removed():
+    from core import session
+
+    top = seed_project(simple=True).domain.y_top
+    payload = pile_along((10.0, top + 5.0), (10.0, top - 7.5))
+    payload["loads"] = [point_load_at(10.0, top + 5.0)]
+    with pytest.raises(session.EditRefused, match="carries load_1"):
+        session.remove_structure(Project.model_validate(payload), "beam_1")
+
+
+STRAND = {"id": "strand", "name": "Strand", "E": 1.95e8, "area": 0.0006,
+          "density": 7850.0}
+
+
+def strut(head, tail) -> dict:
+    return {"id": "anchor_1", "name": "Anchor 1", "kind": "anchor",
+            "section": "strand", "head": list(head), "tail": list(tail)}
+
+
+def test_a_strut_from_a_pile_above_the_ground_is_accepted():
+    top = seed_project(simple=True).domain.y_top
+    payload = pile_along((10.0, top + 5.0), (10.0, top - 7.5))
+    payload.update(anchor_sections=[STRAND],
+                   anchors=[strut((10.0, top + 4.0), (14.0, top + 4.0))])
+    Project.model_validate(payload)
+
+
+def test_a_strut_above_the_ground_still_has_to_hang_from_a_pile():
+    top = seed_project(simple=True).domain.y_top
+    payload = pile_along((10.0, top + 5.0), (10.0, top - 7.5))
+    payload.update(anchor_sections=[STRAND],
+                   anchors=[strut((11.0, top + 4.0), (14.0, top + 4.0))])
+    with pytest.raises(Exception, match="is not on a sheet pile"):
+        Project.model_validate(payload)
+
+
+def test_an_anchor_tail_below_the_model_is_still_refused():
+    domain = seed_project(simple=True).domain
+    payload = pile_along((10.0, domain.y_top + 5.0), (10.0, domain.y_top - 7.5))
+    payload.update(anchor_sections=[STRAND],
+                   anchors=[strut((10.0, domain.y_top - 2.0),
+                                  (14.0, domain.y_bottom - 1.0))])
+    with pytest.raises(Exception, match="outside the domain"):
+        Project.model_validate(payload)
 
 
 def test_an_anchor_in_a_custom_layer_above_ground_is_accepted():

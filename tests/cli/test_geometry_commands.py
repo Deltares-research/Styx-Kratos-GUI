@@ -1,4 +1,4 @@
-"""`domain`, `borehole`, `layer`, `material`, `excavation`, `volume`, `parts`: the full
+"""`domain`, `layer`, `material`, `excavation`, `volume`, `parts`: the full
 geometry of a model, built in the terminal (plan/active/cli-plan.md M2).
 
 Each command makes its edit through `core.session`, the way the GUI's soil dialogs make
@@ -66,24 +66,13 @@ def test_domain_says_when_it_moves_the_section(cli, empty):
     assert session.load(empty).section_offset == 2.0
 
 
-# ── borehole ────────────────────────────────────────────────────────────────
+# ── no borehole ─────────────────────────────────────────────────────────────
 
-def test_borehole_add_list_set_and_remove(cli, site):
-    assert cli("borehole", site, "add", "bh4", "--x", "40").code == 0
-    assert "bh4" in cli("borehole", site, "list").out
+def test_there_is_no_borehole_command(cli, site):
+    ran = cli("borehole", site, "list")
 
-    assert cli("borehole", site, "set", "bh4", "--water", "-3").code == 0
-    assert session.load(site).boreholes[-1].water == -3.0
-
-    assert cli("borehole", site, "remove", "bh4").code == 0
-    assert "bh4" not in [b.id for b in session.load(site).boreholes]
-
-
-def test_a_borehole_that_is_not_there_is_named(cli, site):
-    ran = cli("borehole", site, "set", "bh9", "--x", "1")
-
-    assert ran.code == 1
-    assert "no borehole 'bh9'" in ran.err and "bh1" in ran.err
+    assert ran.code != 0
+    assert "borehole" not in cli("--help").out
 
 
 # ── material ────────────────────────────────────────────────────────────────
@@ -150,11 +139,11 @@ def test_material_list_and_remove(cli, site):
 
 def test_layer_add_list_set_split_and_remove(cli, site):
     assert cli("layer", site, "add", "L3", "--material", "m1", "--thickness", "4").code == 0
-    assert "L3" in cli("layer", site, "list").out
+    assert "L3  L3  of m1: -25 .. -29" in cli("layer", site, "list").out
 
     assert cli("layer", site, "set", "L1", "--bottom", "-10").code == 0
     layers = session.load(site).layers
-    assert layers[1].tops["bh1"] == -10.0
+    assert layers[1].top == -10.0
 
     assert cli("layer", site, "split", "L2", "L2b").code == 0
     assert [layer.id for layer in session.load(site).layers] == ["L1", "L2", "L2b", "L3"]
@@ -177,7 +166,7 @@ def test_a_layer_needs_a_bottom_or_a_thickness_or_takes_five_metres(cli, site):
     assert cli("layer", site, "add", "L3", "--material", "m1").code == 0
 
     layer = session.load(site).layers[-1]
-    assert all(layer.tops[bh] - layer.bots[bh] == 5.0 for bh in layer.tops)
+    assert layer.top - layer.bottom == 5.0
 
 
 # ── excavation ──────────────────────────────────────────────────────────────
@@ -299,7 +288,7 @@ def test_volume_list_remove_and_clear(cli, site):
 # ── The ground of the test model, from commands alone ───────────────────────
 
 def test_the_ground_of_the_test_model_is_built_with_commands_alone(cli, tmp_path):
-    """Domain, borehole, both soils, three layers, the pit in three lifts, the water:
+    """Domain, both soils, three layers, the pit in three lifts, the water:
     everything about the ground `tests/models/excavation.py` builds, typed instead."""
     target = excavation.excavation_project()
     path = tmp_path / "pit.json"
@@ -310,7 +299,6 @@ def test_the_ground_of_the_test_model_is_built_with_commands_alone(cli, tmp_path
 
     run("new", path, "--name", target.name)
     run("domain", path, "--x", "0", "60", "--y", "-40", "0", "--z", "0", "10")
-    run("borehole", path, "set", "bh1", "--name", "BH1", "--water", "-1")
     for material in target.materials:
         run("material", path, "add", material.id, "--name", material.name,
             "--color", material.color, "--law", material.constitutive_law,
@@ -318,12 +306,12 @@ def test_the_ground_of_the_test_model_is_built_with_commands_alone(cli, tmp_path
               for name, value in material.variables.items()))
     for layer in target.layers:
         run("layer", path, "add", layer.id, "--material", layer.mat, "--name", layer.name,
-            "--bottom", repr(layer.bots["bh1"]))
+            "--bottom", repr(layer.bottom))
     run("excavation", path, "--x", "0", "6", "--z", "0", "10", "--levels", "-2", "-4.5", "-7")
     run("water", path, "-1")
 
     built = session.load(path)
-    for field in ("name", "dimension", "section_offset", "domain", "boreholes",
-                  "materials", "layers", "excavation", "water"):
+    for field in ("name", "dimension", "section_offset", "domain", "materials", "layers",
+                  "excavation", "water"):
         assert getattr(built, field) == getattr(target, field), field
     assert built.soil_body_keys == target.soil_body_keys

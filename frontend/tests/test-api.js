@@ -93,7 +93,7 @@
     // pydantic's detail is a list of objects; flattening it is the difference
     // between a usable command-log line and "[object Object]".
     var client = api([json(422, { detail: [
-      { loc: ['body', 'layers', 0, 'bots'], msg: 'layer stack must be contiguous' }
+      { loc: ['body', 'layers', 0, 'bottom'], msg: 'layer stack must be contiguous' }
     ] })]);
     return T.rejects(function () { return client.put('/api/project', {}); }).then(function (err) {
       T.ok(/contiguous/.test(err.message), err.message);

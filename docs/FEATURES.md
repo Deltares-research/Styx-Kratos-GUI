@@ -117,7 +117,6 @@ and adds only the values that are missing
 | Water pressure conditions | `ApplyScalarConstraintTableProcess`: `Uniform`, `Hydrostatic` (about the level of the condition) or `Phreatic_Multi_Line`, fixed or as start values only, on the whole soil, a soil part, a face, a drawn line or a point. Without a condition, Styx fixes no water pressure. | 2D, 3D (lines and points 2D) | Tested |
 | Water conditions for each stage | A stage switches a water pressure condition on or off, as it does a load. The Kratos stage writes the conditions that its stage has on. | 2D, 3D | Tested |
 | Seepage face | `GeoSeepageCondition2D2N` / `2D3N` on the mesh edges of a face or of a line along the soil's outer boundary, one `ApplySeepageBoundaryProcess`, and the `newton_raphson_with_seepage` strategy. Groundwater flow only, in every stage. A line through the soil is refused. | 2D | Tested: the deck against Kratos' `tests/seepage_tests` and the STEM Muskat geometry, and a Kratos run against the water balance and the Dupuit-Charny discharge |
-| Water level of a borehole | Styx keeps the water level of a borehole, but does not export it. | — | Not exported |
 | Displacement conditions | `ApplyVectorConstraintTableProcess` on a face, a soil part, a drawn line or a point, in the components x, y, z that you select. A new project has the bottom fixed and the sides on rollers. | 2D, 3D (lines and points 2D) | Tested |
 | Anchor tail support | The tail node is fixed | 2D, 3D | Tested |
 
@@ -169,8 +168,7 @@ and adds only the values that are missing
 
 | Feature | Detail | Status |
 |---|---|---|
-| Boreholes | Add with the tool, with `borehole x y`, or in **Modify soil layers** | Tested |
-| Soil layers | A stack of layers with a top and a bottom at each borehole, interpolated between them. The stack is checked for gaps. | Tested |
+| Soil layers | A stack of horizontal layers across the whole domain, each with one top and one bottom. Made in **Modify soil layers** or with `kratos-cli layer`. The stack is checked for gaps. | Tested |
 | Free soil polygons in the stack | Not supported. Layers are always a stack. | Not available |
 | Soil surface (2D) or soil volume (3D) | Type the corners of an outline and select a material (embankment, cutting, fill, lens) | Tested |
 | Excavation | A pit with several lifts. Each lift in each layer is its own soil body. Make it with `kratos-cli excavation` or a model script: the GUI shows it but cannot make it. | Tested |
@@ -231,7 +229,7 @@ and adds only the values that are missing
 | `script <file.py>` | Writes the model as a model script |
 | `mesh`, `calculate`, `export` | Makes the mesh, calculates, or writes the Kratos files |
 | `stages` | Opens the **Stages** window |
-| `water`, `units`, `borehole`, `cleargeometry` | Changes the water level, the unit system, the boreholes, or removes drawn and imported solids |
+| `water`, `units`, `cleargeometry` | Changes the water level or the unit system, or removes drawn and imported solids |
 | `boundary`, `gravity` | Lists the boundary conditions or puts the standard supports back; shows gravity or switches it on or off |
 | `soillayers`, `materials` | Opens the soil windows |
 | `colour`, `node` | Shows parts of the mesh in colour, or the parts that contain a node |

@@ -47,11 +47,11 @@
 
   test('layer snapshots are deep and can restore cancelled edits', function () {
     var saved = App.LAYERS;
-    App.LAYERS = [{ id: 'L1', tops: { bh1: 0 }, bots: { bh1: -8 } }];
+    App.LAYERS = [{ id: 'L1', top: 0, bottom: -8 }];
     var snapshot = App.LivePatches.snapshotLayers();
-    App.LAYERS[0].bots.bh1 = -12;
+    App.LAYERS[0].bottom = -12;
     App.LivePatches.restoreLayers(snapshot);
-    T.eq(App.LAYERS[0].bots.bh1, -8);
+    T.eq(App.LAYERS[0].bottom, -8);
     T.ok(App.LAYERS !== snapshot, 'restore must not reuse the mutable snapshot array');
     App.LAYERS = saved;
   });

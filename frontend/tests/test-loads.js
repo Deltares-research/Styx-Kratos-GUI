@@ -496,7 +496,7 @@
          'nothing on the glyph is wider than the glyph is long: ' + sizes.join(', '));
   });
   /* ── Standing on a drawn layer ────────────────────────────────────
-     `Domain` is the block the boreholes describe; an embankment drawn on top of it
+     `Domain` is the block the layers fill; an embankment drawn on top of it
      reaches above `y_top`. A load placed there is on model geometry, and refusing it
      as "outside the model domain" is the bug App.Model.extentOf fixes -- it mirrors
      the server's `Project.extent`. */
@@ -541,8 +541,8 @@
 
   /* ── Where the arrows are drawn ───────────────────────────────────
      The glyph is the load, as far as the user is concerned. Its 3D branch anchored
-     every arrow at `domain.y_top` -- the top of the *borehole* block -- so a load put
-     on an embankment in 2D jumped down onto the borehole soil on the switch to 3D,
+     every arrow at `domain.y_top` -- the top of the *layer* block -- so a load put
+     on an embankment in 2D jumped down onto the layer soil on the switch to 3D,
      while the 2D branch had used `load.y` all along. Mirrors the server's
      `Project.elevation_of`. */
 
@@ -560,7 +560,7 @@
     var spec = App.Viewport.loadGlyphSpec(surfaceLoad(4), RAISED_SOLID);
     T.ok(spec.anchors.length, 'the glyph has anchors');
     T.eq(spec.anchors.every(function (a) { return a[1] === 4; }), true,
-         'every arrow sits on the embankment, not on the borehole soil: '
+         'every arrow sits on the embankment, not on the layer soil: '
          + JSON.stringify(spec.anchors.map(function (a) { return a[1]; })));
   });
 
@@ -578,7 +578,7 @@
 
   test('the surface load outline is drawn at the same elevation as its arrows', function () {
     /* The pad outline had its own copy of `domain.y_top`, so fixing only the arrows
-       would have left the rectangle behind on the borehole soil. */
+       would have left the rectangle behind on the layer soil. */
     var group = App.Viewport.loadGlyphGroup(surfaceLoad(4), RAISED_SOLID);
     var outline = null;
     group.traverse(function (object) {

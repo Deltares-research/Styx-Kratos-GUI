@@ -64,8 +64,9 @@ def test_show_says_what_the_model_is(cli, site):
     ran = cli("show", site)
 
     assert ran.code == 0
-    for word in ("Deep excavation", "2D", "SI", "L1", "L2", "bh1", "soil_L1"):
+    for word in ("Deep excavation", "2D", "SI", "L1", "L2", "soil_L1"):
         assert word in ran.out
+    assert "borehole" not in ran.out
 
 
 def _structures_line(cli, site) -> str:

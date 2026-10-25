@@ -1376,6 +1376,369 @@ window.DRAFTS_FIXTURE =
       ],
       "custom_parts": []
     },
+    "section_tall_pile": {
+      "name": "Deep excavation — Rotterdam Zuid",
+      "dimension": 2,
+      "unit_system": "SI",
+      "section_offset": 12.5,
+      "domain": {
+        "x0": 0.0,
+        "x1": 25.0,
+        "z0": 0.0,
+        "z1": 25.0,
+        "y_top": 0.0,
+        "y_bottom": -25.0
+      },
+      "materials": [
+        {
+          "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+            "YOUNG_MODULUS": 15000000.0,
+            "POISSON_RATIO": 0.3,
+            "DENSITY_SOLID": 1732.9255861365953,
+            "DENSITY_WATER": 1019.367991845056,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000000.0,
+            "BULK_MODULUS_FLUID": 2200000000.0,
+            "DYNAMIC_VISCOSITY": 0.001,
+            "PERMEABILITY_XX": 1.1574074074074073e-05,
+            "PERMEABILITY_YY": 1.1574074074074073e-05,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 1.1574074074074073e-05,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0,
+            "GEO_COHESION": 1000.0,
+            "GEO_FRICTION_ANGLE": 30.0
+          },
+          "tables": {},
+          "id": "m1",
+          "name": "Fill",
+          "color": "#d8c48a",
+          "r_inter": 0.7,
+          "interface_permeability": "Neutral"
+        },
+        {
+          "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+            "YOUNG_MODULUS": 25000000.0,
+            "POISSON_RATIO": 0.28,
+            "DENSITY_SOLID": 1834.8623853211009,
+            "DENSITY_WATER": 1019.367991845056,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000000.0,
+            "BULK_MODULUS_FLUID": 2200000000.0,
+            "DYNAMIC_VISCOSITY": 0.001,
+            "PERMEABILITY_XX": 1.736111111111111e-05,
+            "PERMEABILITY_YY": 1.736111111111111e-05,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 1.736111111111111e-05,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0,
+            "GEO_COHESION": 500.0,
+            "GEO_FRICTION_ANGLE": 32.0
+          },
+          "tables": {},
+          "id": "m2",
+          "name": "Sand, loose",
+          "color": "#c4a86a",
+          "r_inter": 0.7,
+          "interface_permeability": "Neutral"
+        },
+        {
+          "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
+            "YOUNG_MODULUS": 4000000.0,
+            "POISSON_RATIO": 0.35,
+            "DENSITY_SOLID": 1529.051987767584,
+            "DENSITY_WATER": 1019.367991845056,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000000.0,
+            "BULK_MODULUS_FLUID": 2200000000.0,
+            "DYNAMIC_VISCOSITY": 0.001,
+            "PERMEABILITY_XX": 1.1574074074074074e-09,
+            "PERMEABILITY_YY": 1.1574074074074074e-09,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 1.1574074074074074e-09,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0,
+            "GEO_COHESION": 5000.0,
+            "GEO_FRICTION_ANGLE": 22.0
+          },
+          "tables": {},
+          "id": "m3",
+          "name": "Clay, soft",
+          "color": "#8fa86b",
+          "r_inter": 0.5,
+          "interface_permeability": "Impermeable"
+        },
+        {
+          "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
+            "YOUNG_MODULUS": 12000000.0,
+            "POISSON_RATIO": 0.33,
+            "DENSITY_SOLID": 1783.893985728848,
+            "DENSITY_WATER": 1019.367991845056,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000000.0,
+            "BULK_MODULUS_FLUID": 2200000000.0,
+            "DYNAMIC_VISCOSITY": 0.001,
+            "PERMEABILITY_XX": 5.787037037037037e-09,
+            "PERMEABILITY_YY": 5.787037037037037e-09,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 5.787037037037037e-09,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0,
+            "GEO_COHESION": 15000.0,
+            "GEO_FRICTION_ANGLE": 25.0
+          },
+          "tables": {},
+          "id": "m4",
+          "name": "Clay, stiff",
+          "color": "#6f8fa8",
+          "r_inter": 0.55,
+          "interface_permeability": "Impermeable"
+        },
+        {
+          "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+            "YOUNG_MODULUS": 45000000.0,
+            "POISSON_RATIO": 0.25,
+            "DENSITY_SOLID": 1936.7991845056065,
+            "DENSITY_WATER": 1019.367991845056,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000000.0,
+            "BULK_MODULUS_FLUID": 2200000000.0,
+            "DYNAMIC_VISCOSITY": 0.001,
+            "PERMEABILITY_XX": 5.787037037037037e-05,
+            "PERMEABILITY_YY": 5.787037037037037e-05,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 5.787037037037037e-05,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0,
+            "GEO_COHESION": 0.0,
+            "GEO_FRICTION_ANGLE": 36.0
+          },
+          "tables": {},
+          "id": "m5",
+          "name": "Sand, dense",
+          "color": "#b08a6a",
+          "r_inter": 0.75,
+          "interface_permeability": "Neutral"
+        },
+        {
+          "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
+          "variables": {
+            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+            "YOUNG_MODULUS": 2000000000.0,
+            "POISSON_RATIO": 0.2,
+            "DENSITY_SOLID": 2446.4831804281343,
+            "DENSITY_WATER": 1019.367991845056,
+            "POROSITY": 0.3,
+            "BULK_MODULUS_SOLID": 10000000000.0,
+            "BULK_MODULUS_FLUID": 2200000000.0,
+            "DYNAMIC_VISCOSITY": 0.001,
+            "PERMEABILITY_XX": 0.0,
+            "PERMEABILITY_YY": 0.0,
+            "PERMEABILITY_XY": 0.0,
+            "PERMEABILITY_ZZ": 0.0,
+            "PERMEABILITY_YZ": 0.0,
+            "PERMEABILITY_ZX": 0.0
+          },
+          "tables": {},
+          "id": "m6",
+          "name": "Bedrock",
+          "color": "#8d8d99",
+          "r_inter": 1.0,
+          "interface_permeability": "Impermeable"
+        }
+      ],
+      "loads": [
+        {
+          "id": "load",
+          "name": "SurfaceLoad_1",
+          "kind": "surface",
+          "x0": 1.0,
+          "x1": 10.0,
+          "z0": 14.0,
+          "z1": 26.0,
+          "y": null,
+          "thickness": 0.25,
+          "components": [
+            0.0,
+            -20000.0,
+            0.0
+          ],
+          "distribution": "Uniform",
+          "active": true,
+          "derived_from": null
+        },
+        {
+          "id": "load_2d",
+          "name": "LineLoad_1",
+          "kind": "line",
+          "x0": 1.0,
+          "x1": 10.0,
+          "y": 0.0,
+          "thickness": 0.25,
+          "components": [
+            0.0,
+            -20000.0
+          ],
+          "distribution": "Uniform",
+          "active": true,
+          "derived_from": "load"
+        }
+      ],
+      "beam_sections": [
+        {
+          "constitutive_law": "TimoshenkoBeamElasticConstitutiveLaw",
+          "variables": {
+            "YOUNG_MODULUS": 210000000000.0,
+            "POISSON_RATIO": 0.3,
+            "DENSITY": 7850.0,
+            "CROSS_AREA": 0.0198,
+            "I33": 0.000552
+          },
+          "tables": {},
+          "id": "beamsection_1",
+          "name": "Sheet pile section",
+          "spacing": 1.0
+        }
+      ],
+      "panel_sections": [],
+      "beams": [
+        {
+          "id": "beam_1",
+          "name": "Sheet pile 1",
+          "kind": "beam",
+          "section": "beamsection_1",
+          "points": [
+            [
+              12.0,
+              5.0
+            ],
+            [
+              12.0,
+              -6.0
+            ]
+          ],
+          "active": true,
+          "derived_from": null
+        }
+      ],
+      "anchor_sections": [],
+      "anchors": [],
+      "interface_sections": [],
+      "interfaces": [],
+      "normal_loads": [],
+      "water": {
+        "y": -1.5,
+        "margin": 3.0,
+        "thickness": 0.06,
+        "specific_weight": null
+      },
+      "boundary_conditions": [
+        {
+          "id": "fixed_bottom",
+          "name": "Fixed bottom",
+          "kind": "displacement",
+          "on": "face",
+          "face": "bottom",
+          "part": null,
+          "points": null,
+          "fixed": [
+            true,
+            true,
+            true
+          ],
+          "active": true
+        },
+        {
+          "id": "roller_left",
+          "name": "Roller left",
+          "kind": "displacement",
+          "on": "face",
+          "face": "left",
+          "part": null,
+          "points": null,
+          "fixed": [
+            true,
+            false,
+            false
+          ],
+          "active": true
+        },
+        {
+          "id": "roller_right",
+          "name": "Roller right",
+          "kind": "displacement",
+          "on": "face",
+          "face": "right",
+          "part": null,
+          "points": null,
+          "fixed": [
+            true,
+            false,
+            false
+          ],
+          "active": true
+        },
+        {
+          "id": "roller_front",
+          "name": "Roller front",
+          "kind": "displacement",
+          "on": "face",
+          "face": "front",
+          "part": null,
+          "points": null,
+          "fixed": [
+            false,
+            false,
+            true
+          ],
+          "active": true
+        },
+        {
+          "id": "roller_back",
+          "name": "Roller back",
+          "kind": "displacement",
+          "on": "face",
+          "face": "back",
+          "part": null,
+          "points": null,
+          "fixed": [
+            false,
+            false,
+            true
+          ],
+          "active": true
+        },
+        {
+          "id": "pore_pressure",
+          "name": "Pore pressure",
+          "kind": "water_pressure",
+          "on": "domain",
+          "face": null,
+          "part": null,
+          "points": null,
+          "fluid_pressure_type": "Hydrostatic",
+          "is_fixed": true,
+          "value": 0.0,
+          "reference_coordinate": -1.5,
+          "x_coordinates": null,
+          "y_coordinates": null,
+          "z_coordinates": null,
+          "pressure_tension_cut_off": 0.0,
+          "active": true
+        }
+      ],
+      "custom_parts": []
+    },
     "pile": {
       "name": "Staged excavation",
       "dimension": 2,
@@ -2821,6 +3184,58 @@ window.DRAFTS_FIXTURE =
       "error": "The sheet pile must stay inside the model domain."
     },
     {
+      "title": "a sheet pile standing out above the ground",
+      "call": "Beams.draftFromPoints",
+      "project": "section",
+      "args": [
+        [
+          [
+            12,
+            5
+          ],
+          [
+            12,
+            -6
+          ]
+        ]
+      ],
+      "result": {
+        "id": "beam_1",
+        "name": "Sheet pile 1",
+        "kind": "beam",
+        "section": "beamsection_1",
+        "points": [
+          [
+            12.0,
+            5.0
+          ],
+          [
+            12.0,
+            -6.0
+          ]
+        ],
+        "active": true
+      }
+    },
+    {
+      "title": "a sheet pile wholly above the ground is refused",
+      "call": "Beams.draftFromPoints",
+      "project": "section",
+      "args": [
+        [
+          [
+            12,
+            5
+          ],
+          [
+            12,
+            1
+          ]
+        ]
+      ],
+      "error": "A sheet pile may stand out above the ground, but part of it has to be in the soil."
+    },
+    {
       "title": "a sheet pile in the solid model is refused",
       "call": "Beams.draft",
       "project": "solid",
@@ -3109,6 +3524,79 @@ window.DRAFTS_FIXTURE =
         ]
       ],
       "error": "The anchor head must be placed on a sheet pile."
+    },
+    {
+      "title": "a strut from the part of a pile above the ground",
+      "call": "Anchors.draftFromPoints",
+      "project": "section_tall_pile",
+      "args": [
+        [
+          [
+            12.3,
+            4
+          ],
+          [
+            16,
+            4
+          ]
+        ]
+      ],
+      "result": {
+        "id": "anchor_1",
+        "name": "Anchor 1",
+        "kind": "anchor",
+        "section": "tendon_1",
+        "head": [
+          12.0,
+          4.0
+        ],
+        "tail": [
+          16.0,
+          4.0
+        ],
+        "prestress": 0.0,
+        "active": true
+      }
+    },
+    {
+      "title": "an anchor tail below the model is refused",
+      "call": "Anchors.draftFromPoints",
+      "project": "section_tall_pile",
+      "args": [
+        [
+          [
+            12,
+            4
+          ],
+          [
+            16,
+            -40
+          ]
+        ]
+      ],
+      "error": "The anchor must stay inside the model domain."
+    },
+    {
+      "title": "an anchor raking back from a pile above the ground",
+      "call": "Anchors.draft",
+      "project": "section_tall_pile",
+      "args": [],
+      "result": {
+        "id": "anchor_1",
+        "name": "Anchor 1",
+        "kind": "anchor",
+        "section": "tendon_1",
+        "head": [
+          12.0,
+          2.25
+        ],
+        "tail": [
+          20.19152,
+          -3.485764
+        ],
+        "prestress": 0.0,
+        "active": true
+      }
     },
     {
       "title": "an anchor with nothing to hang from is refused",
@@ -4018,6 +4506,68 @@ window.DRAFTS_FIXTURE =
         "distribution": "Uniform",
         "active": true
       }
+    },
+    {
+      "title": "a point load on the head of a pile above the ground",
+      "call": "Loads.draftPoint",
+      "project": "section_tall_pile",
+      "args": [
+        [
+          12,
+          5
+        ]
+      ],
+      "result": {
+        "id": "load_1",
+        "name": "PointLoad_1",
+        "kind": "point",
+        "x": 12.0,
+        "y": 5.0,
+        "thickness": 0.25,
+        "components": [
+          0.0,
+          -20000.0
+        ],
+        "distribution": "Uniform",
+        "active": true
+      }
+    },
+    {
+      "title": "a point load picked beside a pile above the ground snaps onto it",
+      "call": "Loads.draftPoint",
+      "project": "section_tall_pile",
+      "args": [
+        [
+          12.4,
+          4.8
+        ]
+      ],
+      "result": {
+        "id": "load_1",
+        "name": "PointLoad_1",
+        "kind": "point",
+        "x": 12.0,
+        "y": 4.8,
+        "thickness": 0.25,
+        "components": [
+          0.0,
+          -20000.0
+        ],
+        "distribution": "Uniform",
+        "active": true
+      }
+    },
+    {
+      "title": "a point load in the air, off any pile, is refused",
+      "call": "Loads.draftPoint",
+      "project": "section_tall_pile",
+      "args": [
+        [
+          20,
+          5
+        ]
+      ],
+      "error": "The point-load coordinate must stay inside the model domain, or be on a sheet pile."
     },
     {
       "title": "a point load in the solid model is refused",

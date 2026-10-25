@@ -324,21 +324,21 @@
     T.eq(App.LivePatches.orderStructuresRail(once), once);
   });
 
-  test('the Soil rail reads Select, material sets, soil layers, borehole', function () {
+  test('the Soil rail reads Select, material sets, soil layers; no borehole', function () {
     withInstall(function () {});
     var keys = (App.RAILS.soil || []).map(function (tool) {
       return tool === '-' ? '-' : tool.action || tool.icon;
     });
-    T.eq(keys, ['select', '-', 'materials', 'soilLayers', 'createBorehole',
-      '-', 'createSoilVolume']);
+    T.eq(keys, ['select', '-', 'materials', 'soilLayers', '-', 'createSoilVolume']);
   });
 
-  test('the Soil menu reads as its rail: material sets, soil layers, borehole', function () {
+  test('the Soil menu reads as its rail: material sets, soil layers; no borehole',
+       function () {
     withInstall(function () {});
     var soil = App.MENUS.filter(function (m) { return m.label === 'Soil'; })[0];
     var keys = soil.items.map(function (item) { return item === '-' ? '-' : item.action; });
-    T.eq(keys, ['materials', 'soilLayers', 'createBorehole', '-', 'importSoilLayers',
-      '-', 'createSoilVolume']);
+    T.eq(keys, ['materials', 'soilLayers', '-', 'importSoilLayers', '-',
+      'createSoilVolume']);
   });
 
   test('Flow conditions comes before Mesh, on the mode tabs and in the menu bar', function () {
@@ -365,10 +365,10 @@
   test('ordering the Soil rail keeps a tool it does not recognise', function () {
     var mine = { icon: 'star', tip: 'Something new', action: 'doSomething' };
     var keys = App.LivePatches.orderSoilRail([
-      { icon: 'borehole', action: 'createBorehole' }, mine, '-',
+      { icon: 'soillayers', action: 'soilLayers' }, mine, '-',
       { icon: 'materials', action: 'materials' }, { icon: 'select', tip: 'Select' }
     ]).map(function (tool) { return tool === '-' ? '-' : tool.action || tool.icon; });
-    T.eq(keys, ['select', '-', 'materials', 'createBorehole', '-', 'doSomething']);
+    T.eq(keys, ['select', '-', 'materials', 'soilLayers', '-', 'doSomething']);
   });
 
   /* ── New / open / save ─────────────────────────────────────────── */

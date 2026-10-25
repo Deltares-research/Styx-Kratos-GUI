@@ -130,7 +130,7 @@ def test_the_k0_procedure_names_the_soil_and_only_the_soil(doc):
 
 
 def test_the_k0_procedure_also_sets_up_drawn_soil():
-    """A drawn part with a material is ground like a borehole layer is. Named by the
+    """A drawn part with a material is ground like a soil layer is. Named by the
     `soil_` key prefix, the K0 stage set up the layer and left the fill on top of it with
     whatever the elastic gravity step gave it."""
     project = drawn_ground.project()

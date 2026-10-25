@@ -365,7 +365,7 @@
   });
 
   test('a face is where the soil is, not where the domain is', function () {
-    // The domain goes down to -15; the borehole's layers stop at -10.
+    // The domain goes down to -15; the layers stop at -10.
     var project = section();
     var soil = { key: 'soil_L1', positions: [0, 0, 5, 20, 0, 5, 20, -10, 5, 0, -10, 5,
                                              0, -4, 5, 20, -4, 5] };

@@ -21,7 +21,7 @@ var App = window.App || {};
 
 App.Beams = (function () {
 
-  /* How far the model reaches, which is not the same as the borehole domain: a drawn
+  /* How far the model reaches, which is not the same as the domain: a drawn
      or imported part may stand above `y_top`, and a structure placed on one is on
      model geometry. `App.Model.extentOf` mirrors the server's `Project.extent`; the
      fallback keeps this module usable in a page that has no App.Model. */
@@ -182,10 +182,10 @@ App.Beams = (function () {
     var d = project.domain;
     var span = extent(project);
     var flat = points.map(function (p) { return [p[0], p[1]]; });
+    // Only the top is free: a pile may stand out above the ground (schemas.Project).
     flat.forEach(function (p) {
       if (!p.every(Number.isFinite)) throw new Error('Every pile coordinate must be a number.');
-      if (p[0] < span.x0 || p[0] > span.x1
-          || p[1] < span.y_bottom || p[1] > span.y_top) {
+      if (p[0] < span.x0 || p[0] > span.x1 || p[1] < span.y_bottom) {
         throw new Error('The sheet pile must stay inside the model domain.');
       }
     });
@@ -193,6 +193,9 @@ App.Beams = (function () {
       if (flat[i][0] === flat[i - 1][0] && flat[i][1] === flat[i - 1][1]) {
         throw new Error('A sheet pile cannot repeat the same point twice.');
       }
+    }
+    if (Math.min.apply(null, flat.map(function (p) { return p[1]; })) >= span.y_top) {
+      throw new Error('A sheet pile may stand out above the ground, but part of it has to be in the soil.');
     }
     var beams = (project.beams || []);
     var id = nextId(beams, 'beam_');

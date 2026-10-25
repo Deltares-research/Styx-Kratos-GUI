@@ -5,7 +5,9 @@ var App = window.App || {};
 
 App.Loads = (function () {
 
-  /* How far the model reaches, which is not the same as the borehole domain: a drawn
+  var SNAP_DISTANCE = 1.0;   // metres a point load above the ground may be off a pile
+
+  /* How far the model reaches, which is not the same as the domain: a drawn
      or imported part may stand above `y_top`, and a structure placed on one is on
      model geometry. `App.Model.extentOf` mirrors the server's `Project.extent`; the
      fallback keeps this module usable in a page that has no App.Model. */
@@ -53,7 +55,7 @@ App.Loads = (function () {
       var lineNumber = nextNumber(project);
       return {
         id: 'load_' + lineNumber, name: 'LineLoad_' + lineNumber, kind: 'line',
-        // The top of the model, not of the borehole block: a load drawn on a raised
+        // The top of the model, not of the layer block: a load drawn on a raised
         // embankment belongs on it, and one left at `domain.y_top` would sit buried
         // inside the fill and would not translate to a surface load (core/
         // loads.py compares against `Project.ground_y`).
@@ -90,11 +92,16 @@ App.Loads = (function () {
         coordinate.length !== 2 || !coordinate.every(Number.isFinite)) {
       throw new Error('A 2D point load needs one finite x-y coordinate.');
     }
-    var d = project.domain;
     var span = extent(project);
     if (coordinate[0] < span.x0 || coordinate[0] > span.x1 ||
         coordinate[1] < span.y_bottom || coordinate[1] > span.y_top) {
-      throw new Error('The point-load coordinate must stay inside the model domain.');
+      // Outside the model it may still be on a pile standing out above the ground,
+      // snapped onto it the way an anchor head is (core/model/drafts.py: point_load).
+      var snapped = App.Anchors && App.Anchors.nearestOnPile(project, coordinate);
+      if (!snapped || snapped.distance > SNAP_DISTANCE) {
+        throw new Error('The point-load coordinate must stay inside the model domain, or be on a sheet pile.');
+      }
+      coordinate = snapped.point.map(function (value) { return Math.round(value * 1e6) / 1e6; });
     }
     var number = nextNumber(project);
     return {

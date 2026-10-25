@@ -4,7 +4,7 @@ A model script usually builds its case out of the parametric `Project`, which is
 exported. That is the right way round for a model the schema can say, and the wrong
 one for a case like a long-running dike analysis: twenty stages, three material sets swapped between them, phreatic multi-lines,
 a crane load that comes and goes, and a constitutive-law switch -- written, run and
-validated as a deck, and nothing the layers-and-boreholes schema can express. Rebuilding
+validated as a deck, and nothing the soil-layers schema can express. Rebuilding
 it would be a second model of the same dike, checked against nothing.
 
 So a deck case script hands back a project that *points at* the deck::

@@ -88,7 +88,7 @@ App.MeshSettings = (function () {
     return out;
   }
 
-  /* Every body that can be meshed: the borehole stack, plus any custom part that
+  /* Every body that can be meshed: the layer stack, plus any custom part that
      has been given a material (those are soil too). */
   function meshBodies(project) {
     var bodies = ((project && project.layers) || []).map(function (layer) {

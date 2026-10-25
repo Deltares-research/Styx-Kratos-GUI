@@ -17,7 +17,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 COMMANDS = ["new", "show", "check", "build", "script", "get", "set", "add", "remove",
-            "dimension", "units", "water", "domain", "borehole", "material", "layer", "excavation",
+            "dimension", "units", "water", "domain", "material", "layer", "excavation",
             "volume", "section", "beam", "wall", "member", "anchor", "interface", "load",
             "normal-load", "parts", "mesh", "stages", "node", "deck", "export", "run",
             "calculate", "results", "shell"]
@@ -39,8 +39,8 @@ def test_help_lists_every_command(cli):
 
 
 def test_every_id_a_command_takes_says_what_it_is():
-    """`borehole set bh1`: the help of each action says what its id is and where the ids
-    are listed, so `help borehole set` answers what `bh1` is."""
+    """`layer set L1`: the help of each action says what its id is and where the ids
+    are listed, so `help layer set` answers what `L1` is."""
     import argparse
 
     from cli.terminal.main import parser

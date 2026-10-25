@@ -21,7 +21,7 @@ var App = window.App || {};
 
 App.Anchors = (function () {
 
-  /* How far the model reaches, which is not the same as the borehole domain: a drawn
+  /* How far the model reaches, which is not the same as the domain: a drawn
      or imported part may stand above `y_top`, and a structure placed on one is on
      model geometry. `App.Model.extentOf` mirrors the server's `Project.extent`; the
      fallback keeps this module usable in a page that has no App.Model. */
@@ -155,11 +155,12 @@ App.Anchors = (function () {
 
   function insideDomain(project, point) {
     // The extent, not the domain: an anchor may be tied into a drawn embankment that
-    // stands above `y_top`. Mirrors the server's `Project.extent`.
+    // stands above `y_top`. Mirrors the server's `Project.extent`. In a section the top
+    // is free: a strut from the part of a pile above the ground ends at a fixed point
+    // in the air.
     var d = extent(project);
     if (!spatial(project)) {
-      return point[0] >= d.x0 && point[0] <= d.x1
-        && point[1] >= d.y_bottom && point[1] <= d.y_top;
+      return point[0] >= d.x0 && point[0] <= d.x1 && point[1] >= d.y_bottom;
     }
     return point[0] >= d.x0 && point[0] <= d.x1
       && point[1] >= d.y_bottom && point[1] <= d.y_top
