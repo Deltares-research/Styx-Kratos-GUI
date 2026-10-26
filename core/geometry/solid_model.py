@@ -23,6 +23,7 @@ from __future__ import annotations
 import math
 import os
 import signal
+import sys
 from collections.abc import Callable, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -99,11 +100,13 @@ def initialize() -> None:
     a crashed gmsh worker's, a client that went away -- then ends it without a word:
     pytest died that way on the Ubuntu runner (exit -13), in the worker-crash tests.
     """
-    pipe = getattr(signal, "SIGPIPE", None)
-    previous = signal.getsignal(pipe) if pipe is not None else None
+    if sys.platform == "win32":     # no SIGPIPE there
+        gmsh.initialize()
+        return
+    previous = signal.getsignal(signal.SIGPIPE)
     gmsh.initialize()
     if previous is not None:
-        signal.signal(pipe, previous)
+        signal.signal(signal.SIGPIPE, previous)
 
 
 @contextmanager
