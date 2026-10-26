@@ -3,9 +3,9 @@
 
 What running them found, 2026-10-23:
 
-* The CROW case and every project that names its conditions write the deck they wrote
-  before the conditions existed (compared in tests/test_export_golden.py); the CROW case
-  runs all its stages.
+* Every project that names its conditions writes the deck it wrote before the
+  conditions existed (compared in tests/test_export_golden.py); the staged test model
+  (tests/models/excavation.py) runs all its stages.
 * The standard supports typed by hand are the deck a project with no conditions key
   gets, and it runs.
 * Gravity off and no load: no displacement at all.
@@ -28,7 +28,6 @@ from pathlib import Path
 
 import pytest
 
-from core import scripting
 from core.analysis import calculation
 from core.geometry import solid_model
 from core.kratos import writer
@@ -39,7 +38,6 @@ from tests.results_run import require_kratos
 
 pytestmark = pytest.mark.kratos
 
-ROOT = Path(__file__).resolve().parents[2]
 MESH = MeshRequest(element_size=4.0, order=2)
 
 
@@ -103,9 +101,9 @@ def water_pressure(outcome: dict) -> float:
                for value in field.values.values())
 
 
-def test_the_crow_case_runs_every_stage():
-    crow = scripting.load_project(str(ROOT / "examples" / "CROW_case" / "crow.py"))
-    _, outcome = run(crow, MeshRequest(**crow.mesh.model_dump()))
+def test_the_staged_test_model_runs_every_stage():
+    staged = excavation.excavation_project()
+    _, outcome = run(staged, MeshRequest(**staged.mesh.model_dump()))
     assert outcome["ok"], (outcome["stage"], (outcome["error"] or "")[-600:])
 
 
