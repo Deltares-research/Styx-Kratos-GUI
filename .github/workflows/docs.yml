@@ -24,13 +24,23 @@ jobs:
     name: links
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    env:
+      LYCHEE_VERSION: "0.24.2"
+      # From the release's lychee-x86_64-unknown-linux-gnu.tar.gz.sha256; update with the version.
+      LYCHEE_SHA256: 1f4e0ef7f6554a6ed33dd7ac144fb2e1bbed98598e7af973042fc5cd43951c9a
     steps:
       - uses: actions/checkout@v4
 
-      - uses: lycheeverse/lychee-action@v2
-        with:
-          args: --config .github/lychee.toml --no-progress './**/*.md'
-          fail: true
+      # The binary itself, not lychee-action: the organisation allows only the actions
+      # on its list, and a workflow that uses another one fails before any job starts.
+      - name: lychee
+        run: |
+          name="lychee-x86_64-unknown-linux-gnu"
+          curl -sSfL -o "${name}.tar.gz" \
+            "https://github.com/lycheeverse/lychee/releases/download/lychee-v${LYCHEE_VERSION}/${name}.tar.gz"
+          echo "${LYCHEE_SHA256}  ${name}.tar.gz" | sha256sum --check
+          tar -xzf "${name}.tar.gz" "${name}/lychee"
+          "./${name}/lychee" --config .github/lychee.toml --no-progress './**/*.md'
         env:
           # Links to github.com count against a much higher limit with a token.
           GITHUB_TOKEN: ${{ github.token }}
