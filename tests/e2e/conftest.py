@@ -52,8 +52,12 @@ def live_server(request, tmp_path_factory):
     port = _free_port()
     # ws="none": the app has no websockets, and importing uvicorn's websocket protocol
     # pulls in a deprecated websockets module that pyproject.toml's pytest settings turn into an error.
+    # timeout_keep_alive: `page.request` keeps its socket from the reset at the test's start,
+    # and a test drives the GUI for longer than uvicorn's 5 s default. The server then closes
+    # that idle socket just as the next `page.request` call reuses it: ECONNRESET on Windows.
     server = uvicorn.Server(uvicorn.Config(app, host="127.0.0.1", port=port,
-                                           log_level="warning", ws="none"))
+                                           log_level="warning", ws="none",
+                                           timeout_keep_alive=600))
     failure: list[BaseException] = []
 
     def serve():
