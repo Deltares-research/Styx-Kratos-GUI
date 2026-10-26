@@ -41,8 +41,10 @@ class WorkerCrashed(RuntimeError):
 def _init_worker() -> None:
     import gmsh
 
+    from core.geometry import solid_model
+
     if not gmsh.isInitialized():
-        gmsh.initialize()
+        solid_model.initialize()
     # Diagnostics are captured per job and returned in the response, so nothing should
     # be written to a stdout no one is reading.
     gmsh.option.setNumber("General.Terminal", 0)

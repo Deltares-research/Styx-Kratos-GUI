@@ -134,12 +134,32 @@ def test_a_job_can_run_in_this_process_with_gmsh_owned_for_it():
 def test_a_job_run_here_leaves_a_gmsh_it_did_not_start_alone():
     import gmsh
 
-    gmsh.initialize()
+    from core.geometry import solid_model
+
+    solid_model.initialize()
     try:
         gmsh_worker.run_here(gmsh_worker.version_job)
         assert gmsh.isInitialized()
     finally:
         gmsh.finalize()
+
+
+@pytest.mark.skipif(not __import__("sys").platform.startswith("linux"),
+                    reason="reads /proc; Windows has no SIGPIPE")
+def test_gmsh_in_this_process_leaves_sigpipe_ignored():
+    """gmsh sets SIGPIPE back to the default on Linux. Left so, the next write to a closed
+    pipe -- the crashed worker's, in the tests above -- killed pytest itself (exit -13).
+    Read from the kernel: Python's own `getsignal` keeps answering what it last set."""
+    import signal
+
+    def ignored() -> bool:
+        with open("/proc/self/status") as status:
+            mask = next(line for line in status if line.startswith("SigIgn:")).split()[1]
+        return bool(int(mask, 16) >> (signal.SIGPIPE - 1) & 1)
+
+    assert ignored()
+    gmsh_worker.run_here(gmsh_worker.version_job)
+    assert ignored()
 
 
 def test_a_job_that_fails_here_raises_and_still_finalizes():

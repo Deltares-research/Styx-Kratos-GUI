@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import math
 import os
+import signal
 from collections.abc import Callable, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -90,6 +91,21 @@ class BuildResult:
     already have."""
 
 
+def initialize() -> None:
+    """`gmsh.initialize()`, without the SIGPIPE it takes over.
+
+    On Linux gmsh sets SIGPIPE back to the default, which kills the process, where Python
+    ignores it and raises `BrokenPipeError` instead. A pipe closing under this process --
+    a crashed gmsh worker's, a client that went away -- then ends it without a word:
+    pytest died that way on the Ubuntu runner (exit -13), in the worker-crash tests.
+    """
+    pipe = getattr(signal, "SIGPIPE", None)
+    previous = signal.getsignal(pipe) if pipe is not None else None
+    gmsh.initialize()
+    if previous is not None:
+        signal.signal(pipe, previous)
+
+
 @contextmanager
 def session():
     """Own a gmsh instance for the duration of a block.
@@ -104,7 +120,7 @@ def session():
     """
     owned = not gmsh.isInitialized()
     if owned:
-        gmsh.initialize()
+        initialize()
         gmsh.option.setNumber("General.Terminal", 0)
     try:
         yield

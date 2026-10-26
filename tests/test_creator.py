@@ -1,6 +1,6 @@
 import pytest
 import os
-from core.geometry import primitives
+from core.geometry import primitives, solid_model
 
 def test_creator_creates_box(tmp_path, monkeypatch):
     monkeypatch.setattr(primitives, "DATA_DIR", tmp_path)
@@ -12,7 +12,7 @@ def test_creator_creates_box(tmp_path, monkeypatch):
     }
     
     import gmsh
-    gmsh.initialize()
+    solid_model.initialize()
     try:
         res = primitives.process_creation(recipe)
         assert res["volumes"] == 1
@@ -41,7 +41,7 @@ def test_creator_creates_cylinder(tmp_path, monkeypatch):
     }
     
     import gmsh
-    gmsh.initialize()
+    solid_model.initialize()
     try:
         res = primitives.process_creation(recipe)
         assert res["volumes"] == 1
@@ -60,7 +60,7 @@ def test_creator_creates_polygon_extrude(tmp_path, monkeypatch):
     }
 
     import gmsh
-    gmsh.initialize()
+    solid_model.initialize()
     try:
         res = primitives.process_creation(recipe)
         assert res["volumes"] == 1
@@ -86,7 +86,7 @@ def test_creator_creates_line(tmp_path, monkeypatch):
     }
 
     import gmsh
-    gmsh.initialize()
+    solid_model.initialize()
     try:
         res = primitives.process_creation(recipe)
         assert res["dim"] == 1
@@ -111,7 +111,7 @@ def test_creator_creates_polyline_with_more_than_two_vertices(tmp_path, monkeypa
     }
 
     import gmsh
-    gmsh.initialize()
+    solid_model.initialize()
     try:
         res = primitives.process_creation(recipe)
         assert res["dim"] == 1
@@ -126,7 +126,7 @@ def test_creator_line_requires_at_least_two_vertices(tmp_path, monkeypatch):
     monkeypatch.setattr(primitives, "DATA_DIR", tmp_path)
 
     import gmsh
-    gmsh.initialize()
+    solid_model.initialize()
     try:
         with pytest.raises(ValueError):
             primitives.process_creation({"kind": "line", "vertices": [[0, 0, 0]]})
@@ -145,7 +145,7 @@ def test_creator_creates_polygon_surface(tmp_path, monkeypatch):
     }
 
     import gmsh
-    gmsh.initialize()
+    solid_model.initialize()
     try:
         res = primitives.process_creation(recipe)
         assert res["dim"] == 2
@@ -167,7 +167,7 @@ def test_creator_polygon_requires_at_least_three_vertices(tmp_path, monkeypatch)
     monkeypatch.setattr(primitives, "DATA_DIR", tmp_path)
 
     import gmsh
-    gmsh.initialize()
+    solid_model.initialize()
     try:
         with pytest.raises(ValueError):
             primitives.process_creation({"kind": "polygon", "vertices": [[0, 0, 0], [1, 0, 0]]})
@@ -179,7 +179,7 @@ def test_creator_rejects_unknown_kind(tmp_path, monkeypatch):
     monkeypatch.setattr(primitives, "DATA_DIR", tmp_path)
 
     import gmsh
-    gmsh.initialize()
+    solid_model.initialize()
     try:
         with pytest.raises(ValueError):
             primitives.process_creation({"kind": "sphere"})
