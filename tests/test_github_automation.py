@@ -315,20 +315,37 @@ def test_shell_scripts_keep_lf_on_every_checkout():
 
 # ── Documentation links ─────────────────────────────────────────────────────
 
-def test_the_links_in_the_documentation_are_checked():
+def test_the_links_in_the_documentation_are_checked_with_a_verified_binary():
     found = workflow("docs.yml")
     assert {"push", "pull_request", "schedule"} <= set(triggers(found))
     (job,) = found["jobs"].values()
-    (lychee,) = [step for step in job["steps"]
-                 if str(step.get("uses", "")).startswith("lycheeverse/lychee-action@")]
-    assert "--config .github/lychee.toml" in lychee["with"]["args"]
-    assert "*.md" in lychee["with"]["args"]
+    assert re.fullmatch(SEMVER, job["env"]["LYCHEE_VERSION"])
+    assert re.fullmatch(r"[0-9a-f]{64}", job["env"]["LYCHEE_SHA256"])
+    run = commands(job)
+    assert "lychee/releases/download/lychee-v${LYCHEE_VERSION}/" in run
+    assert "sha256sum --check" in run
+    assert "--config .github/lychee.toml" in run
+    assert "*.md" in run
     assert (GITHUB / "lychee.toml").is_file()
 
 
+ALLOWED_OWNERS = {"actions", "github"}
+"""Whose actions a workflow may use. The organisation allows GitHub's own and a list of
+others, and a workflow naming an action outside it fails at startup, before any job runs
+(`lycheeverse/lychee-action` did, on every run). A tool from elsewhere is downloaded as
+a release binary and checked against its checksum, as gitleaks and lychee are."""
+
+
+def test_every_action_a_workflow_uses_is_one_the_organisation_allows():
+    found = [f"{name}: {use}" for name, flow in all_workflows().items()
+             for job in flow["jobs"].values() for use in uses(job)
+             if use and use.split("/")[0] not in ALLOWED_OWNERS]
+    assert not found, "actions outside the organisation's list:\n" + "\n".join(found)
+
+
 def test_the_link_check_settings_are_ones_lychee_accepts():
-    """`lychee-action@v2` runs the newest lychee, and lychee 0.24 refused the old boolean
-    `include_fragments = false` ("wanted string or table"): the whole check failed to start."""
+    """lychee 0.24 refused the old boolean `include_fragments = false` ("wanted string
+    or table"): the whole check failed to start."""
     settings = tomllib.loads((GITHUB / "lychee.toml").read_text(encoding="utf-8"))
     assert settings["include_fragments"] in ("none", "anchor-only", "text-only", "full")
 

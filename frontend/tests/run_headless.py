@@ -115,7 +115,8 @@ SUITES = {
         # calculate.js comes along because the handoff between the two is the whole of
         # task P0.4: what Calculate just wrote has to become the run `results` opens.
         # It touches no DOM either, so it loads here as cleanly as results.js does.
-        [JS / "results-render.js", JS / "results.js", JS / "calculate.js"],
+        # stages.js gives `projectStage` the project's stage order to match a run to.
+        [JS / "stages.js", JS / "results-render.js", JS / "results.js", JS / "calculate.js"],
         TESTS / "test-results.js",
     ),
     # The project's unit system: labels, conversions of library presets, and the
@@ -143,7 +144,8 @@ SUITES = {
         [TESTS / "fixtures" / "drafts.js", JS / "unit-table.js", JS / "units.js",
          JS / "soil-model-table.js", JS / "soil-models.js", JS / "property-sets.js",
          JS / "material-library.js", JS / "beams.js",
-         JS / "anchors.js", JS / "interfaces.js", JS / "loads.js", JS / "normal-loads.js"],
+         JS / "anchors.js", JS / "interfaces.js", JS / "loads.js", JS / "normal-loads.js",
+         JS / "boundary-conditions.js"],
         TESTS / "test-drafts.js",
     ),
 }

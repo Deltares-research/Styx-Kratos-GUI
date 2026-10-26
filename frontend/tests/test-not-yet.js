@@ -83,7 +83,7 @@
      ['Flow conditions', /^Flow functions/], ['Flow conditions', /^Global water level$/],
      ['Stages', /^Add stage$/], ['Stages', /^Insert stage$/],
      ['Expert', /^Examine commands/], ['Expert', /^Macro library/],
-     ['Expert', /^Configure remote scripting server/], ['Expert', /^Python interpreter/],
+     ['Expert', /^Configure remote scripting/], ['Expert', /^Python interpreter/],
      ['Help', /^Reference manual$/], ['Help', /^Tutorial manual$/]
     ].forEach(function (pair) {
       var found = row(pair[0], pair[1]);

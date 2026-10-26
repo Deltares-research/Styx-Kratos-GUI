@@ -228,7 +228,7 @@
   });
 })();
 
-/* The home view takes in what is drawn around the soil: the CROW surcharge's arrows
+/* The home view takes in what is drawn around the soil: a surcharge's arrows can
    stand 6.4 m above the ground, and a view of the soil box alone hid them under the
    top ruler. */
 

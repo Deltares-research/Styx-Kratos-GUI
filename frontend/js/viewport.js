@@ -1214,7 +1214,7 @@ App.Viewport = (function () {
 
   /* The view the camera comes home to: the soil, and everything drawn around it in
      any mode -- a load's arrows above the ground, a pile above it, the water level's
-     overhang. The soil box alone left the CROW surcharge under the top ruler. Every
+     overhang. The soil box alone left a surcharge's arrows under the top ruler. Every
      mode's parts are counted, shown or not, so the home view is the same on every
      tab. `frame` itself stays the soil box: the grid and the glyph sizes are read
      from it, and the glyphs are what this measures. */
