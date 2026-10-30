@@ -179,6 +179,21 @@ def _replace(temporary: str, path: Path) -> None:
 
 # ── Soil, water, materials, structures ──────────────────────────────────────
 
+def _without_sizes_of_lost_bodies(before: Project, after: Project) -> Project:
+    """`after` without the element sizes of the bodies `before` had and `after` has not.
+
+    A size belongs to its body, so an edit that takes a body away takes its size too,
+    whichever front end made the edit and however it was sent. A size for a body the
+    model never had is kept: `unknown_mesh_keys` names it as the mistake it is.
+    """
+    lost = set(before.part_keys()) - set(after.part_keys())
+    sizes = after.mesh.body_sizes
+    if not lost & set(sizes):
+        return after
+    kept = {key: size for key, size in sizes.items() if key not in lost}
+    return after.model_copy(update={"mesh": after.mesh.model_copy(update={"body_sizes": kept})})
+
+
 def replace_layers(project: Project, update: LayersUpdate) -> Project:
     """The soil stack, and whatever of its context the update carries.
 
@@ -196,7 +211,7 @@ def replace_layers(project: Project, update: LayersUpdate) -> Project:
     if update.custom_parts is not None:
         payload["custom_parts"] = [part.model_dump() for part in update.custom_parts]
     _domain_from_layers(payload)
-    return Project.model_validate(payload)
+    return _without_sizes_of_lost_bodies(project, Project.model_validate(payload))
 
 
 def set_water(project: Project, update: WaterUpdate) -> Project:
@@ -250,7 +265,7 @@ def replace_structures(project: Project, update: StructuresUpdate) -> Project:
         records = getattr(update, kind)
         if records is not None:
             payload[kind] = [record.model_dump() for record in records]
-    return Project.model_validate(payload)
+    return _without_sizes_of_lost_bodies(project, Project.model_validate(payload))
 
 
 # ── Stages ──────────────────────────────────────────────────────────────────
@@ -839,7 +854,7 @@ def remove_layer(project: Project, id: str) -> Project:
     elif layers:
         layers[0]["top"] = removed["top"]
     _domain_from_layers(payload)
-    return Project.model_validate(payload)
+    return _without_sizes_of_lost_bodies(project, Project.model_validate(payload))
 
 
 def add_material(project: Project, material) -> Project:
@@ -923,7 +938,7 @@ def set_excavation(project: Project, *, x: tuple[float, float] | None = None,
         pit["z0"], pit["z1"] = z
     if levels is not None:
         pit["levels"], pit["floor_y"] = list(levels), levels[-1]
-    edited = Project.model_validate(payload)
+    edited = _without_sizes_of_lost_bodies(project, Project.model_validate(payload))
     notes = []
     if edited.layered_soil and len(edited.pit_levels()) < 2:
         notes.append("With one level a layered model digs nothing: its pit is cut only "
