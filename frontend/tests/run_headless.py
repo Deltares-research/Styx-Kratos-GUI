@@ -148,6 +148,16 @@ SUITES = {
          JS / "boundary-conditions.js"],
         TESTS / "test-drafts.js",
     ),
+    # What each Delete the GUI offers sends, held to the edit kratos-cli makes through
+    # the fixture tests/cli/test_edit_parity.py writes. The request is stood in.
+    "edits": (
+        [TESTS / "fixtures" / "edits.js", JS / "unit-table.js", JS / "units.js",
+         JS / "soil-model-table.js", JS / "soil-models.js", JS / "property-sets.js",
+         JS / "material-library.js", JS / "beams.js",
+         JS / "anchors.js", JS / "interfaces.js", JS / "loads.js", JS / "normal-loads.js",
+         JS / "boundary-conditions.js", JS / "soil-layers-dialog.js"],
+        TESTS / "test-edits.js",
+    ),
 }
 
 
