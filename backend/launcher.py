@@ -14,6 +14,7 @@ from pathlib import Path
 import socket
 import subprocess
 import sys
+import sysconfig
 import threading
 import venv
 import webbrowser
@@ -60,15 +61,57 @@ def _ensure_supported_python() -> None:
         raise RuntimeError(f"Python {required} or newer is required; found {sys.version.split()[0]}")
 
 
+def _python_is_free_threaded(python: Path) -> bool | None:
+    probe = "import sysconfig; print(int(bool(sysconfig.get_config_var('Py_GIL_DISABLED'))))"
+    try:
+        result = subprocess.run([str(python), "-c", probe], capture_output=True,
+                                text=True, check=False)
+    except OSError:
+        return None
+    if result.returncode != 0 or result.stdout.strip() not in ("0", "1"):
+        return None
+    return result.stdout.strip() == "1"
+
+
+def _regular_windows_python() -> Path:
+    version = f"{sys.version_info.major}.{sys.version_info.minor}"
+    probe = "import sys, sysconfig; print(sys.executable); " \
+        "print(int(bool(sysconfig.get_config_var('Py_GIL_DISABLED'))))"
+    try:
+        result = subprocess.run(["py", f"-{version}", "-c", probe],
+                                capture_output=True, text=True, check=False)
+    except OSError as error:
+        raise RuntimeError(
+            f"Python {version} is free-threaded; install regular Python {version} "
+            "to run Styx on Windows"
+        ) from error
+    lines = result.stdout.splitlines()
+    if result.returncode != 0 or len(lines) != 2 or not lines[0].strip() or lines[-1] != "0":
+        raise RuntimeError(
+            f"Python {version} is free-threaded; install regular Python {version} "
+            "to run Styx on Windows"
+        )
+    return Path(lines[0])
+
+
 def ensure_environment() -> Path:
     _ensure_supported_python()
     environment = ROOT / platform_venv_name()
     python = venv_python(environment)
 
-    if not python.is_file():
-        print(f"Creating {platform_venv_name()} virtual environment...", flush=True)
+    recreate = not python.is_file()
+    if not recreate and sys.platform == "win32":
+        environment_is_free_threaded = _python_is_free_threaded(python)
+        host_is_free_threaded = bool(sysconfig.get_config_var("Py_GIL_DISABLED"))
+        recreate = environment_is_free_threaded is None or \
+            environment_is_free_threaded != host_is_free_threaded
+
+    if recreate:
+        action = "Recreating" if environment.exists() else "Creating"
+        print(f"{action} {platform_venv_name()} virtual environment...", flush=True)
         # A directory without its platform's interpreter is an interrupted/generated
-        # environment. EnvBuilder(clear=True) safely reconstructs that exact cache.
+        # environment, or one created by an incompatible Python ABI. EnvBuilder
+        # safely reconstructs that exact cache.
         venv.EnvBuilder(with_pip=True, clear=environment.exists()).create(environment)
 
     stamp = environment / ".requirements.sha256"
@@ -141,6 +184,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     try:
+        if sys.platform == "win32" and sys.version_info < (3, 14) and \
+                sysconfig.get_config_var("Py_GIL_DISABLED"):
+            regular_python = _regular_windows_python()
+            forwarded = sys.argv[1:] if argv is None else argv
+            os.execv(str(regular_python),
+                     [str(regular_python), "-m", "backend.launcher", *forwarded])
+
         python = ensure_environment()
         if args.check:
             check_environment(python)
