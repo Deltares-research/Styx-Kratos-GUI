@@ -192,7 +192,8 @@ added pore_pressure  Pore pressure  water pressure on the whole soil; hydrostati
 - `boundary list` shows the conditions. A new project already has the displacement
   conditions: the bottom fixed, and the left and right sides on rollers.
 
-**Check your progress.** `parts` lists the part keys the stages switch on and off:
+**Check your progress.** `parts` lists the part keys a stage can switch on and off: the
+soil parts, and the pore pressure condition:
 
 ```text
 crow.json> parts
@@ -204,6 +205,7 @@ soil_L_top__lift2  Soil_Top · lift 2
 soil_L_top__lift3  Soil_Top · lift 3
 soil_L_mid__pit  Soil_Middle · below the pit
 soil_L_bot__pit  Soil_Bottom · below the pit
+pore_pressure  Pore pressure
 ```
 
 `show` summarises the whole model at any time.
@@ -338,6 +340,7 @@ crow.json> stages staged-excavation
      calculation: Plastic; activates water_2; deactivates soil_L_top__lift2, water_1
 7  dig_3  Third excavation  (after dig_2)
      calculation: Plastic; activates water_3; deactivates soil_L_top__lift3, water_2
+wrote ...\crow.json
 ```
 
 In words: settle the ground with K0, take a null step, install the wall with its interface
