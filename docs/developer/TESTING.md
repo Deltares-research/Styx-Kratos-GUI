@@ -50,6 +50,26 @@ failed, when something that it needs is missing: quickjs, Kratos or a browser.
   a tier that runs the browser tests. The Python report goes to `htmlcov/`, and the
   JavaScript function coverage to `htmlcov-js/summary.json`.
 
+## Tests that keep the GUI and the command line together
+
+The GUI and `kratos-cli` save the same project file, but each makes an edit in its own
+way. These tests fail when the two drift apart. After a deliberate change, rebuild the
+generated file or snapshot with the command in the last column, and review the diff.
+
+| Test | What it checks | After a deliberate change |
+|---|---|---|
+| `tests/cli/test_edit_parity.py`, `frontend/tests/test-edits.js` | A Delete in the GUI and the same `kratos-cli ... remove` make the same project | `python tests/cli/test_edit_parity.py --write` |
+| `tests/test_draft_parity.py`, `frontend/tests/test-drafts.js` | A new record starts the same in both | `python tests/test_draft_parity.py --write` |
+| `tests/test_stage_parity.py` | The stages read the same in both | `python tests/test_stage_parity.py --write` |
+| `tests/cli/test_gui_commands.py` | The GUI's command box knows the words of `kratos-cli` | Add or remove the row in "The GUI's command box, in the terminal" in `docs/CLI.md` |
+| `tests/cli/test_documented_commands.py` | Every `kratos-cli` line in the docs is valid, and the shell tutorials run as written | Fix the page, or the command |
+| `tests/cli/test_handover.py`, `tests/e2e/test_handover_flows.py` | A project file goes from one front end to the other unchanged | — |
+| `tests/cli/test_json_contract.py` | The keys of the `--json` answers | `pytest tests/cli/test_json_contract.py --update-snapshots` |
+
+`tests/e2e/test_handover_flows.py` runs only with `--run-e2e`, as in the `e2e` tier.
+`frontend/tests/test-edits.js` and `frontend/tests/test-drafts.js` run in the JavaScript
+tests without a browser, so they need the `quickjs` package: see [Options](#options).
+
 ## What CI runs
 
 For each pull request and each push to `main`, CI runs the `e2e` tier on Windows and
