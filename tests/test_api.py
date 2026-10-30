@@ -161,6 +161,13 @@ def test_put_project_rejects_unknown_fields(client):
     assert client.put("/api/project", json=payload).status_code == 422
 
 
+def test_run_script_requires_a_path(client):
+    response = client.post("/api/project/script", json={})
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "run needs a path to a .py file"
+
+
 # ── Geometry ────────────────────────────────────────────────────────────────
 
 def test_geometry_returns_drawable_sections_for_every_part(client):
@@ -224,6 +231,28 @@ def test_post_geometry_import_rejects_unsupported_extensions(client):
     response = client.post("/api/geometry/import", files={"file": ("test.txt", b"foo")})
     assert response.status_code == 422
     assert "extension" in response.json()["detail"]
+
+
+@pytest.mark.parametrize(("failure", "status"), [
+    ("refused", 422),
+    ("unexpected", 500),
+])
+def test_post_geometry_import_reports_worker_failures(client, monkeypatch, failure, status):
+    from backend.routes import geometry
+    from core.geometry.cad_import import ImportRefused
+
+    async def fail(*_args):
+        if failure == "refused":
+            raise ImportRefused("the file has no solid")
+        raise RuntimeError("worker unavailable")
+
+    monkeypatch.setattr(geometry.gmsh_worker, "run", fail)
+
+    response = client.post("/api/geometry/import", files={"file": ("broken.step", b"not CAD")})
+
+    assert response.status_code == status
+    assert response.json()["detail"] == (
+        "the file has no solid" if failure == "refused" else "worker unavailable")
 
 
 def test_post_geometry_import_adds_custom_part_and_invalidates(client):

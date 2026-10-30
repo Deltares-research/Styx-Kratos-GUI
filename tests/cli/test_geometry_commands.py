@@ -288,6 +288,24 @@ def test_points_that_do_not_pair_up_are_refused(cli, site):
     assert "pairs" in ran.err
 
 
+def test_polygon_volume_requires_the_dimension_specific_extrusion(cli, site):
+    section = cli("volume", site, "add", "polygon", "--points", "0", "0", "6", "0", "3", "2",
+                  "--extrude", "0", "0", "1")
+    assert section.code == 1 and "takes no --extrude" in section.err
+
+    assert cli("dimension", site, "3d").code == 0
+    solid = cli("volume", site, "add", "polygon", "--points", "0", "0", "0", "4", "0", "0",
+                "4", "0", "4")
+    assert solid.code == 1 and "needs --extrude" in solid.err
+
+
+def test_volume_import_refuses_a_missing_cad_file(cli, site, tmp_path):
+    ran = cli("volume", site, "import", tmp_path / "missing.step")
+
+    assert ran.code == 1
+    assert "no such file" in ran.err and "missing.step" in ran.err
+
+
 def test_points_can_come_from_a_file(cli, site, tmp_path):
     outline = tmp_path / "outline.csv"
     outline.write_text("x,y\n0,0\n6,0\n3,2\n", encoding="utf-8")

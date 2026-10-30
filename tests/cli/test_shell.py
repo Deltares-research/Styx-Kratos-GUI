@@ -145,6 +145,24 @@ def test_open_refuses_a_file_that_is_not_there(piped, tmp_path):
     assert ran.code == 1 and "nope.json" in ran.err
 
 
+def test_shell_refuses_a_project_that_is_not_there(cli, tmp_path):
+    ran = cli("shell", tmp_path / "missing.json")
+
+    assert ran.code == 1
+    assert "no such file" in ran.err and "missing.json" in ran.err
+    assert "`kratos-cli new " in ran.err
+
+
+def test_open_refuses_a_file_with_an_unsupported_suffix(typed, tmp_path):
+    file = tmp_path / "notes.txt"
+    file.write_text("not a project", encoding="utf-8")
+
+    code, out, err = typed([f"open {file}", "exit"])
+
+    assert code == 0
+    assert "not a project (.json) or a model script (.py)" in err
+
+
 def test_undo_and_redo_step_through_the_edits_of_the_open_project(typed, site):
     before = site.read_bytes()
 
@@ -188,6 +206,15 @@ def test_source_runs_a_file_of_lines_and_stops_at_the_first_that_fails(typed, si
 
     assert session.load(site).water.y == -2.0
     assert "line 3" in err
+
+
+def test_source_reports_a_missing_file_and_keeps_the_shell_open(typed, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    code, out, err = typed([f"source {tmp_path / 'missing.txt'}", "pwd"])
+
+    assert code == 0
+    assert "missing.txt" in err
+    assert str(tmp_path) in out
 
 
 def test_help_lists_its_own_words_and_the_commands(typed):

@@ -67,6 +67,14 @@ def test_a_section_field_its_kind_does_not_have_is_refused(cli, site):
     assert "--spacing" in ran.err and "panel" in ran.err
 
 
+def test_a_section_number_must_be_a_number_or_none(cli, site):
+    ran = cli("section", site, "add", "beam", "az26", "--spacing", "often")
+
+    assert ran.code == 1
+    assert "--spacing takes a number, or none" in ran.err
+    assert session.load(site).beam_sections == []
+
+
 def test_none_clears_an_optional_section_field(cli, pit):
     assert cli("section", pit, "set", "contact", "--r-inter", "none").code == 0
 
@@ -120,6 +128,13 @@ def test_beam_set_list_and_remove(cli, pit):
     assert cli("beam", pit, "remove", "kingpost").code == 0
     ran = cli("beam", pit, "remove", "sheetpile")     # the strut hangs from it
     assert ran.code == 1 and "strut" in ran.err
+
+
+def test_a_structure_command_names_the_command_for_the_record_kind(cli, pit):
+    ran = cli("beam", pit, "set", "strut", "--name", "Not a pile")
+
+    assert ran.code == 1
+    assert "strut is a anchor" in ran.err and "kratos-cli anchor" in ran.err
 
 
 def test_a_wall_is_a_3d_structure(cli, site, solid):

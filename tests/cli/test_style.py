@@ -41,6 +41,13 @@ def test_a_pipe_or_a_file_gets_no_colour():
     assert not style.enabled(io.StringIO())
 
 
+def test_a_closed_stream_gets_no_colour():
+    stream = io.StringIO()
+    stream.close()
+
+    assert not style.enabled(stream)
+
+
 def test_force_color_gives_colour_to_a_pipe(monkeypatch):
     monkeypatch.setenv("FORCE_COLOR", "1")
 
