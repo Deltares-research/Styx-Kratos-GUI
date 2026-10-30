@@ -340,6 +340,154 @@ def test_a_normal_load_is_uniform_unless_it_is_hydrostatic(cli, pit):
     assert cli("normal-load", pit, "remove", "push").code == 0
 
 
+def test_section_set_renames_a_section_and_accepts_a_constitutive_law(cli, pit):
+    original = session.load(pit).beam_sections[0]
+    ran = cli("section", pit, "set", original.id, "--name", "Renamed profile",
+              "--law", original.constitutive_law)
+
+    assert ran.code == 0, ran.err
+    changed = session.load(pit).beam_sections[0]
+    assert changed.name == "Renamed profile"
+    assert changed.constitutive_law == original.constitutive_law
+
+
+def test_beam_set_changes_the_section_reference(cli, pit):
+    made = cli("section", pit, "add", "beam", "replacement")
+    assert made.code == 0, made.err
+
+    changed = cli("beam", pit, "set", "sheetpile", "--section", "replacement")
+
+    assert changed.code == 0, changed.err
+    assert session.load(pit).sheet_piles[0].section == "replacement"
+
+
+def test_wall_set_updates_footprint_and_levels_and_lists_them(cli, solid):
+    made = cli("wall", solid, "add", "panel1", "--footprint", "5", "5", "5", "20",
+               "--top", "0", "--toe", "-10")
+    assert made.code == 0, made.err
+
+    ran = cli("wall", solid, "set", "panel1", "--footprint", "6", "5", "6", "18",
+              "--top", "-1", "--toe", "-12")
+
+    assert ran.code == 0, ran.err
+    panel = session.load(solid).panels[0]
+    assert panel.footprint == [(6, 5), (6, 18)]
+    assert (panel.y_top, panel.y_toe) == (-1, -12)
+    listed = cli("wall", solid, "list")
+    assert listed.code == 0, listed.err
+    assert "(6, 5) -> (6, 18), -1 .. -12" in listed.out
+
+
+def test_anchor_set_updates_tail_and_prestress(cli, pit):
+    ran = cli("anchor", pit, "set", "strut", "--tail", "4", "-2", "--prestress", "5000")
+
+    assert ran.code == 0, ran.err
+    anchor = session.load(pit).anchors[0]
+    assert anchor.tail == (4, -2)
+    assert anchor.prestress == 5000
+
+
+@pytest.mark.parametrize("option", ["--head", "--tail"])
+def test_anchor_endpoint_options_refuse_more_than_one_point_without_saving(cli, pit, option):
+    before = pit.read_bytes()
+
+    ran = cli("anchor", pit, "set", "strut", option, "6", "-1", "6", "-2")
+
+    assert ran.code == 1
+    assert f"{option} takes one point, 2 numbers" in ran.err
+    assert pit.read_bytes() == before
+
+
+def test_interface_set_switches_between_a_free_line_and_a_structure(cli, pit):
+    ran = cli("interface", pit, "set", "wall_contact", "--points", "10", "0", "10", "-5",
+              "--side", "left")
+    assert ran.code == 0, ran.err
+    free = session.load(pit).interfaces[0]
+    assert free.structure is None
+    assert free.points == [(10, 0), (10, -5)]
+    assert free.stretch is None
+    listed = cli("interface", pit, "list")
+    assert listed.code == 0, listed.err
+    assert "(10, 0) -> (10, -5)" in listed.out
+
+    ran = cli("interface", pit, "set", "wall_contact", "--structure", "sheetpile",
+              "--from", "6", "-2", "--to", "6", "-6")
+
+    assert ran.code == 0, ran.err
+    attached = session.load(pit).interfaces[0]
+    assert attached.structure == "sheetpile"
+    assert attached.points is None
+    assert attached.stretch == ((6, -2), (6, -6))
+
+
+def test_whole_pile_and_partial_stretch_are_mutually_refused_without_saving(cli, pit):
+    before = pit.read_bytes()
+
+    ran = cli("interface", pit, "set", "wall_contact", "--whole-pile", "--from", "6", "-2")
+
+    assert ran.code == 1
+    assert "leave out --from and --to" in ran.err
+    assert pit.read_bytes() == before
+
+
+def test_normal_load_set_changes_geometry_and_hydraulic_type(cli, pit):
+    made = cli("normal-load", pit, "add", "push", "--points", "6", "-1", "6", "-3",
+               "--pressure", "5000")
+    assert made.code == 0, made.err
+    level = session.load(pit).water.y
+
+    ran = cli("normal-load", pit, "set", "push", "--points", "6", "-2", "6", "-4",
+              "--hydrostatic")
+
+    assert ran.code == 0, ran.err
+    load = session.load(pit).normal_loads[-1]
+    assert load.points == [(6, -2), (6, -4)]
+    assert load.fluid_pressure_type == "Hydrostatic"
+    assert load.reference_coordinate == level
+
+
+def test_point_and_line_load_edits_persist_and_are_listed(cli, site):
+    made = cli("load", site, "add", "point", "kick", "--at", "5", "0")
+    assert made.code == 0, made.err
+    ran = cli("load", site, "set", "kick", "--at", "6", "-1",
+              "--components", "100", "-200")
+    assert ran.code == 0, ran.err
+    point = next(load for load in session.load(site).loads if load.id == "kick")
+    assert (point.x, point.y, point.components) == (6, -1, (100, -200))
+    ran = cli("load", site, "set", "load_2d", "--y", "-1")
+    assert ran.code == 0, ran.err
+    line = next(load for load in session.load(site).loads if load.id == "load_2d")
+    assert line.y == -1
+    listed = cli("load", site, "list")
+    assert listed.code == 0, listed.err
+    assert "at (6, -1)" in listed.out
+    assert "at y -1" in listed.out
+
+
+def test_surface_load_set_updates_the_plan_extent_and_lists_it(cli, solid):
+    made = cli("load", solid, "add", "surface", "pad", "--x", "2", "6", "--z", "2", "6")
+    assert made.code == 0, made.err
+
+    ran = cli("load", solid, "set", "pad", "--z", "8", "3")
+
+    assert ran.code == 0, ran.err
+    pad = next(load for load in session.load(solid).loads if load.id == "pad")
+    assert (pad.z0, pad.z1) == (3, 8)
+    listed = cli("load", solid, "list")
+    assert listed.code == 0, listed.err
+    assert "x 2 .. 6, z 3 .. 8" in listed.out
+
+
+def test_load_components_require_the_dimension_of_the_load(cli, site):
+    before = site.read_bytes()
+
+    ran = cli("load", site, "set", "load_2d", "--components", "1", "2", "3")
+
+    assert ran.code == 1
+    assert "--components takes 2 numbers here: x y" in ran.err
+    assert site.read_bytes() == before
+
+
 # ── The structures of the test model, from commands alone ───────────────────
 
 def test_the_structures_of_the_test_model_are_built_with_commands_alone(cli, tmp_path):

@@ -315,3 +315,114 @@ def test_overlay_surface_is_visible_from_both_sides(monkeypatch):
     assert section.positions == [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0]
     assert section.indices == [0, 1, 2, 0, 2, 1]
     assert len(section.edges) == 18
+
+
+@pytest.mark.parametrize("previous", [None, "python-handler"])
+def test_posix_initialization_restores_pythons_sigpipe_handler(monkeypatch, previous):
+    from unittest.mock import Mock
+
+    events = []
+    signal = SimpleNamespace(
+        SIGPIPE=13,
+        getsignal=Mock(side_effect=lambda sig: events.append(("get", sig)) or previous),
+        signal=Mock(side_effect=lambda sig, handler: events.append(("restore", sig, handler))),
+    )
+    monkeypatch.setattr(solid_model, "sys", SimpleNamespace(platform="linux"))
+    monkeypatch.setattr(solid_model, "signal", signal)
+    monkeypatch.setattr(solid_model, "gmsh", SimpleNamespace(
+        initialize=lambda: events.append(("initialize",))))
+
+    solid_model.initialize()
+
+    expected = [("get", 13), ("initialize",)]
+    if previous is not None:
+        expected.append(("restore", 13, previous))
+    assert events == expected
+
+
+@pytest.mark.parametrize("swept_faces", [[], [(2, 20)]])
+def test_section_sweeps_report_failed_piles_and_imprint_free_interfaces(
+        monkeypatch, swept_faces):
+    from unittest.mock import Mock
+    from tests.test_kratos_interfaces import interfaced_project
+
+    project = interfaced_project(
+        side="left", structure=None, points=[(5, 0), (5, -2)])
+    occ = SimpleNamespace(
+        addPoint=Mock(side_effect=range(1, 20)),
+        addLine=Mock(side_effect=range(30, 50)),
+        extrude=Mock(side_effect=[[], swept_faces]),
+    )
+    monkeypatch.setattr(solid_model, "gmsh", SimpleNamespace(
+        model=SimpleNamespace(occ=occ)))
+    log = []
+
+    result = solid_model._section_sweeps(project, log)
+
+    assert result == ([("interface_1", [20])] if swept_faces else [])
+    assert any("sheetpile_1 could not be swept" in note for note in log)
+    assert any("export no interface elements" in note for note in log)
+    assert occ.extrude.call_count == 2
+    assert occ.extrude.call_args.args[1:] == (0.0, 0.0, solid_model.INTERFACE_SWEEP)
+
+
+@pytest.mark.parametrize("scenario", ["embedded", "boundary", "outside", "failure"])
+def test_volume_curve_embedding_preserves_topology_and_reports_unbonded_members(
+        monkeypatch, scenario):
+    from unittest.mock import Mock
+
+    occ = SimpleNamespace(synchronize=Mock(), getCenterOfMass=Mock(
+        return_value=(2, 2, 2) if scenario == "outside" else (0.5, 0.5, 0.5)))
+    embed = Mock(side_effect=RuntimeError("mesher refused") if scenario == "failure" else None)
+    model = SimpleNamespace(
+        occ=occ, mesh=SimpleNamespace(embed=embed),
+        getBoundingBox=Mock(return_value=(0, 0, 0, 1, 1, 1)),
+        getAdjacencies=Mock(return_value=(SimpleNamespace(
+            size=1 if scenario == "boundary" else 0), [])),
+    )
+    monkeypatch.setattr(solid_model, "gmsh", SimpleNamespace(model=model))
+    log = []
+
+    solid_model._embed_curves_in_volumes({"member": [7]}, [10], log)
+
+    occ.synchronize.assert_called_once_with()
+    if scenario in ("boundary", "outside"):
+        embed.assert_not_called()
+    else:
+        embed.assert_called_once_with(1, [7], 3, 10)
+    if scenario in ("outside", "failure"):
+        assert len(log) == 1
+        assert "member" in log[0]
+        assert "meshed unbonded from the soil" in log[0]
+        assert ("lies in no soil volume" if scenario == "outside"
+                else "could not be embedded in volume 10 (mesher refused)") in log[0]
+    else:
+        assert log == []
+
+
+def test_a_spatial_structure_outside_the_soil_is_not_returned_as_embedded(monkeypatch):
+    from unittest.mock import Mock
+    from core.model.schemas import Member
+    from core.model.templates import blank_project
+
+    member = Member(id="member", name="Member", section="steel",
+                    points=[(1, 0, 0), (1, -2, 0)])
+    project = blank_project().model_copy(update={"dimension": 3, "beams": [member]})
+    occ = SimpleNamespace(
+        addPoint=Mock(side_effect=[1, 2]), addLine=Mock(return_value=7),
+        intersect=Mock(return_value=([], [])), fragment=Mock())
+    monkeypatch.setattr(solid_model, "gmsh", SimpleNamespace(model=SimpleNamespace(occ=occ)))
+    owners = {10: {"soil"}}
+    log = []
+
+    assert solid_model._embed_3d_structures(project, owners, log) == (owners, {}, {})
+    assert log == ["Info    : member lies outside the soil and is not part of the model"]
+    occ.intersect.assert_called_once_with(
+        [(1, 7)], [(3, 10)], removeObject=True, removeTool=False)
+    occ.fragment.assert_not_called()
+
+
+def test_anchor_head_insertion_skips_a_zero_length_polyline_leg():
+    assert solid_model._split_at(
+        [(0, 0), (0, 0), (2, 0)], [(1, 0)]) == [
+            (0, 0), (0, 0), (1, 0), (2, 0)]
