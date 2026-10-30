@@ -366,13 +366,20 @@ def deck_client(client, tmp_path):
 
 
 def test_calculate_reports_a_missing_external_deck_file_as_a_client_error(
-        deck_client, tmp_path):
+        deck_client, tmp_path, monkeypatch):
+    from core.analysis import calculation
+    from unittest.mock import Mock
+
+    run = Mock()
+    monkeypatch.setattr(calculation, "run_deck", run)
     (tmp_path / "deck" / "site.mdpa").unlink()
 
     response = deck_client.post("/api/calculate", json=COARSE)
 
     assert response.status_code == 400, response.text
     assert _readable(response.json().get("detail"))
+    assert "site.mdpa could not be read" in response.json()["detail"]
+    run.assert_not_called()
 
 
 REFUSED_FOR_A_DECK = [

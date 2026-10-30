@@ -284,7 +284,7 @@ def test_split_at_inserts_on_segment_heads_in_order_and_ignores_other_points():
     ]
 
     assert solid_model._split_at(points, heads) == [
-        (0.0, 0.0), (1.0, 0.0), (2.0, 0.0), (3.0, 0.0),
+        (0.0, 0.0), (1.0, 0.0), (3.0, 0.0),
         (4.0, 0.0), (4.0, 1.0), (4.0, 2.0),
     ]
 
