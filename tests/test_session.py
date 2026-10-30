@@ -445,6 +445,18 @@ def test_a_path_that_names_nothing_says_what_is_there():
         session.value_at(seed_project(), "layers[L1")
 
 
+def test_a_path_cannot_descend_into_a_scalar():
+    with pytest.raises(session.PathError, match="which has no fields"):
+        session.value_at(seed_project(), "mesh.element_size.depth")
+
+
+def test_a_material_is_not_a_structure():
+    material = seed_project().materials[0].model_copy(update={"id": "not_a_structure"})
+
+    with pytest.raises(session.EditRefused, match="Material is not a structure"):
+        session.add_structure(blank_project(), material)
+
+
 def test_setting_a_value_requires_a_nonempty_path():
     with pytest.raises(session.PathError, match="give a path"):
         session.with_value(seed_project(), "", {})

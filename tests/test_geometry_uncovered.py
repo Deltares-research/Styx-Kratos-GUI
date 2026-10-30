@@ -59,6 +59,17 @@ def test_obj_face_with_an_unavailable_vertex_is_refused(tmp_path):
         cad_import._read_obj(obj)
 
 
+def test_import_refuses_unsupported_formats(tmp_path, monkeypatch):
+    import gmsh
+
+    monkeypatch.setattr(cad_import, "DATA_DIR", tmp_path / "data")
+    monkeypatch.setattr(gmsh, "clear", lambda: None)
+    monkeypatch.setattr(gmsh.model, "add", lambda *_args: None)
+
+    with pytest.raises(cad_import.ImportRefused, match="\\.xyz is not a format"):
+        cad_import.process_import(str(tmp_path / "model.xyz"), ".xyz")
+
+
 def test_cad_healing_options_are_restored_even_when_gmsh_cannot_read_the_file(
     tmp_path, monkeypatch,
 ):
@@ -154,6 +165,26 @@ def test_mesh_project_names_unknown_body_keys_before_starting_gmsh(monkeypatch, 
         meshing.mesh_project(seed_project(), **kwargs)
 
 
+def test_finite_element_volumes_omit_display_aliases_and_deduplicate_tags():
+    project = seed_project()
+    soil_keys = [f"soil_{layer.id}" for layer in project.layers]
+    volumes = {key: [index] for index, key in enumerate(soil_keys, start=1)}
+    first_structure_tag = len(soil_keys) + 1
+    volumes.update({
+        "wall": [first_structure_tag], "struts": [first_structure_tag + 1],
+        "anchors": [first_structure_tag + 2], "piles": [first_structure_tag + 3],
+        "wells": [first_structure_tag + 4], "excavation": [1, first_structure_tag + 5],
+        "load": [first_structure_tag + 6], "water": [first_structure_tag + 7],
+    })
+    built = solid_model.BuildResult(
+        volumes=volumes, mass={}, bbox=(0.0, 0.0, 0.0, 1.0, 1.0, 1.0),
+    )
+
+    assert meshing._finite_element_volumes(project, built) == list(
+        range(1, first_structure_tag + 5),
+    )
+
+
 def test_refinement_fields_are_restricted_to_requested_entity_dimensions():
     import gmsh
 
@@ -215,3 +246,72 @@ def test_load_footprint_containment_distinguishes_line_and_surface_loads():
     assert meshing._under_load([1, 2], coordinates, line)
     assert meshing._under_load([1, 2], coordinates, surface)
     assert not meshing._under_load([1, 4], coordinates, surface)
+
+
+def test_ascii_stl_reader_preserves_facet_vertices(tmp_path):
+    stl = tmp_path / "triangle.stl"
+    stl.write_text(
+        "solid triangle\nfacet normal 0 0 1\nouter loop\n"
+        "vertex 0 0 0\nvertex 2 0 0\nvertex 0 1 0\n"
+        "endloop\nendfacet\nendsolid triangle\n",
+        encoding="ascii",
+    )
+
+    assert cad_import._read_stl(stl) == (
+        [(0.0, 0.0, 0.0), (2.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+        [(0, 1, 2)],
+    )
+
+
+def test_obj_reader_accepts_texture_index_face_syntax(tmp_path):
+    obj = tmp_path / "textured.obj"
+    obj.write_text(
+        "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1/1 2/2 3/3\n",
+        encoding="ascii",
+    )
+
+    assert cad_import._read_obj(obj) == (
+        [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+        [(0, 1, 2)],
+    )
+
+
+def test_split_at_inserts_on_segment_heads_in_order_and_ignores_other_points():
+    points = [(0.0, 0.0), (4.0, 0.0), (4.0, 2.0)]
+    heads = [
+        (3.0, 0.0), (1.0, 0.0), (4.0, 1.0), (1.0, 0.0000005),
+        (0.0, 0.0), (4.0, 0.0), (2.0, 1.0),
+    ]
+
+    assert solid_model._split_at(points, heads) == [
+        (0.0, 0.0), (1.0, 0.0), (2.0, 0.0), (3.0, 0.0),
+        (4.0, 0.0), (4.0, 1.0), (4.0, 2.0),
+    ]
+
+
+def test_overlay_surface_is_visible_from_both_sides(monkeypatch):
+    import gmsh
+
+    edge_nodes = {10: [1, 2], 11: [2, 3], 12: [3, 1]}
+
+    def elements(dim, tag):
+        if dim == 2:
+            return [tessellation.TRIANGLE], [], [[1, 2, 3]]
+        return [tessellation.LINE], [], [edge_nodes[tag]]
+
+    monkeypatch.setattr(gmsh.model.mesh, "getElements", elements)
+    monkeypatch.setattr(
+        gmsh.model, "getBoundary",
+        lambda *_args, **_kwargs: [(1, tag) for tag in edge_nodes],
+    )
+    coordinates = {
+        1: (0.0, 0.0, 0.0), 2: (1.0, 0.0, 0.0), 3: (0.0, 1.0, 0.0),
+    }
+
+    section = tessellation._overlay_section(
+        "panel", "#fff", [(2, 9)], coordinates,
+    )
+
+    assert section.positions == [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0]
+    assert section.indices == [0, 1, 2, 0, 2, 1]
+    assert len(section.edges) == 18

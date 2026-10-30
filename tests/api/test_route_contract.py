@@ -322,6 +322,15 @@ def test_a_refused_request_says_why(client, contract):
     assert _readable(response.json().get("detail")), response.text[:500]
 
 
+def test_geometry_import_reports_an_unreadable_obj_as_a_client_error(client):
+    response = client.post("/api/geometry/import", files={
+        "file": ("bad.obj", io.BytesIO(b"f 1 2 3\n")),
+    })
+
+    assert response.status_code == 422, response.text
+    assert _readable(response.json().get("detail"))
+
+
 # ── (d) a project that is a Kratos deck ──────────────────────────────────────
 
 DECK_MDPA = ("Begin Properties 1\nEnd Properties\nBegin Nodes\n1 0 0 0\n2 1 0 0\n3 0 1 0\n"
@@ -354,6 +363,16 @@ def deck_client(client, tmp_path):
     project = external_deck.deck_project(directory, "site.json", name="Site")
     assert client.put("/api/project", json=project.model_dump()).status_code == 200
     return client
+
+
+def test_calculate_reports_a_missing_external_deck_file_as_a_client_error(
+        deck_client, tmp_path):
+    (tmp_path / "deck" / "site.mdpa").unlink()
+
+    response = deck_client.post("/api/calculate", json=COARSE)
+
+    assert response.status_code == 400, response.text
+    assert _readable(response.json().get("detail"))
 
 
 REFUSED_FOR_A_DECK = [

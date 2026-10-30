@@ -509,3 +509,34 @@ def test_a_3d_skin_offers_no_per_element_colouring():
 
     (soil,) = [s for s in sections if s["part"] == "Soil"]
     assert not soil.get("triangle_elements")
+
+
+def test_a_mixed_3d_mesh_keeps_beam_edges_without_adding_them_to_the_soil_skin():
+    model = mdpa_reader.import_mdpa(MDPA_3D + dedent("""
+    Begin Elements SmallDisplacementBeamElement3D2N
+    3 1 1 4
+    End Elements
+    Begin SubModelPart Beam
+     Begin SubModelPartNodes
+     1
+     4
+     End SubModelPartNodes
+     Begin SubModelPartElements
+     3
+     End SubModelPartElements
+    End SubModelPart
+    """))
+    stage = gid_reader.read_mesh(MESH_3D + dedent("""
+    MESH "Beam" dimension 3 ElemType Linear Nnode 2
+    Elements
+    3 1 4 1
+    End Elements
+    """))
+
+    payload = mesh.stage_sections(model, stage)
+
+    assert len(section_of(payload, "Soil")["indices"]) == 6 * 3
+    beam = section_of(payload, "Beam")
+    assert beam["indices"] == []
+    assert len(beam["edges"]) == 2 * 3
+    assert {beam["node_ids"][index] for index in beam["edge_indices"]} == {1, 4}

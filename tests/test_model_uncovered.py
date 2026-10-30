@@ -11,6 +11,141 @@ from core.model.templates import blank_project, seed_project
 from tests.models.excavation import excavation_project
 
 
+@pytest.mark.parametrize("record, changes, message", [
+    ("PointLoad", {"components": [float("nan"), 0]}, "components must be finite"),
+    ("LineLoad", {"x0": 2, "x1": 1}, "extents must be strictly increasing"),
+    ("LineLoad", {"y": float("inf")}, "coordinates must be finite"),
+    ("LineLoad", {"components": [0, float("inf")]}, "components must be finite"),
+    ("Anchor", {"prestress": float("nan")}, "non-finite prestress"),
+    ("SpaceAnchor", {"head": [0, 0, float("inf")]}, "non-finite coordinate"),
+    ("SpaceAnchor", {"tail": [0, 0, 0]}, "non-zero length"),
+    ("SpaceAnchor", {"prestress": float("inf")}, "non-finite prestress"),
+    ("Panel", {"footprint": [[0, 0]]}, "at least two points"),
+    ("Panel", {"y_toe": float("-inf")}, "non-finite level"),
+    ("NormalLoad", {"points": [[0, 0]]}, "at least two points"),
+    ("NormalLoad", {"reference_coordinate": float("inf")}, "non-finite water level"),
+    ("WaterPressureCondition", {"value": float("nan")}, "non-finite value"),
+    ("WaterPressureCondition", {"z_coordinates": [0, 0]}, "z_coordinates but no"),
+    ("WaterPressureCondition", {"x_coordinates": [0, 1], "y_coordinates": [0, 0],
+                                "z_coordinates": [0]}, "as many x as y"),
+    ("WaterPressureCondition", {"on": "point", "points": [[float("inf"), 0]]},
+     "non-finite coordinate"),
+])
+def test_schema_refuses_invalid_structural_and_hydraulic_inputs(record, changes, message):
+    from core.model import schemas
+
+    fields = {
+        "PointLoad": {"x": 0, "y": 0, "components": [0, -1]},
+        "LineLoad": {"x0": 0, "x1": 1, "y": 0, "components": [0, -1]},
+        "Anchor": {"section": "section", "head": [0, 0], "tail": [1, -1]},
+        "SpaceAnchor": {"section": "section", "head": [0, 0, 0], "tail": [1, -1, 0]},
+        "Panel": {"section": "section", "footprint": [[0, 0], [1, 0]],
+                  "y_top": 0, "y_toe": -5},
+        "NormalLoad": {"points": [[0, 0], [0, -1]]},
+        "WaterPressureCondition": {"on": "domain", "fluid_pressure_type": "Uniform"},
+    }
+
+    schema = getattr(schemas, record)
+    valid = {"id": "test", "name": "Test"} | fields[record]
+    schema.model_validate(valid)
+    with pytest.raises(ValidationError, match=message):
+        schema.model_validate(valid | changes)
+
+
+def test_an_excavation_requires_increasing_plan_extents():
+    with pytest.raises(ValidationError, match="extents must be strictly increasing"):
+        Excavation(x0=1, x1=1, z0=0, z1=2, levels=[-1])
+
+
+def test_a_demo_wall_requires_its_top_above_its_toe():
+    from core.model.schemas import Wall
+
+    with pytest.raises(ValidationError, match="wall top must be above its toe"):
+        Wall(thickness=0.5, top_y=-2, toe_y=-1)
+
+
+def test_unit_conversion_preserves_tables_and_warns_that_they_need_checking():
+    from core.model import units
+
+    project = blank_project().model_dump()
+    tables = {"1": {"input_variable": "TIME", "output_variable": "YOUNG_MODULUS",
+                    "data": [[0, 1000000]]}}
+    project["materials"] = [{"id": "soil", "name": "Soil",
+                             "variables": {"YOUNG_MODULUS": 1000000}, "tables": tables}]
+    project["unit_system"] = "SI"
+
+    converted, notes = units.convert_project(project, "kN")
+
+    assert converted["materials"][0]["variables"]["YOUNG_MODULUS"] == 1000
+    assert converted["materials"][0]["tables"] == tables
+    assert any("Soil: its Tables were kept as typed; check their units" in note
+               for note in notes)
+    assert project["materials"][0]["variables"]["YOUNG_MODULUS"] == 1000000
+
+
+def test_a_wall_translation_reuses_a_previously_created_section():
+    from core.model import wall_translation
+
+    section = BeamSection(id="profile", name="Profile",
+                           variables={"CROSS_AREA": 0.02})
+    panel_section = PanelSection(id="profile_wall", name="User-edited wall",
+                                  variables={"THICKNESS": 0.05})
+
+    assert wall_translation.wall_section_for(
+        section, {"profile_wall": panel_section}) is panel_section
+
+
+def test_polyline_distances_and_clipping_ignore_zero_length_legs():
+    from core.model import polylines
+    from core.model.schemas import point_on_polyline
+
+    points = [(0, 0), (0, 0), (3, 0), (3, 0), (3, 4)]
+
+    assert polylines.length(points) == 7
+    on, distance, along = polylines.nearest(points, (4, 2))
+    assert on == pytest.approx((3, 2))
+    assert distance == pytest.approx(1)
+    assert along == pytest.approx(5)
+    assert polylines.between(points, 6, 1) == [(1, 0), (3, 0), (3, 3)]
+    assert point_on_polyline((3, 2), points)
+    assert not point_on_polyline((4, 2), points)
+
+
+@pytest.mark.parametrize("points", [[], [(1, 2)], [(1, 2), (1, 2)]])
+def test_a_degenerate_polyline_cannot_supply_a_nearest_point(points):
+    from core.model import polylines
+
+    with pytest.raises(ValueError, match="two distinct points"):
+        polylines.nearest(points, (0, 0))
+
+
+def test_a_load_draft_uses_the_first_available_number_without_reusing_an_existing_id():
+    project = blank_project()
+    first = drafts.point_load(project, id="load_1")
+    third = drafts.point_load(project, id="load_3")
+    project = project.model_copy(update={"dimension": 2, "loads": [first, third]})
+
+    made = drafts.point_load(project)
+
+    assert made.id == "load_2"
+    assert made.name == "PointLoad_2"
+    assert [load.id for load in project.loads] == ["load_1", "load_3"]
+
+
+def test_drawn_conditions_are_retained_but_not_embedded_in_a_3d_project():
+    payload = blank_project().model_dump()
+    payload["boundary_conditions"] = [{
+        "id": "point_pressure", "name": "Point pressure", "kind": "water_pressure",
+        "on": "point", "points": [[0, 0]], "fluid_pressure_type": "Uniform",
+    }]
+    section = Project.model_validate(payload)
+    spatial = Project.model_validate(payload | {"dimension": 3})
+
+    assert [condition.id for condition in section.drawn_conditions] == ["point_pressure"]
+    assert [condition.id for condition in spatial.boundary_conditions] == ["point_pressure"]
+    assert spatial.drawn_conditions == []
+
+
 @pytest.mark.parametrize("kind, coordinates, dimension", [
     ("sheet_pile", [(5, 0)], 2),
     ("wall", [(5, 0)], 3),

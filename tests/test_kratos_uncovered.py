@@ -1,5 +1,6 @@
 """Focused tests for Kratos deck helpers and their refusal/reporting paths."""
 
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -221,3 +222,38 @@ def test_solid_model_reentrant_session_does_not_finalize_a_caller_owned_gmsh():
         with solid_model.session():
             assert gmsh.isInitialized()
         assert gmsh.isInitialized()
+
+
+def test_kratos_main_runs_the_requested_parameter_file(monkeypatch):
+    seen = []
+    monkeypatch.setattr(kratos_main, "run", seen.append)
+
+    assert kratos_main.main(["kratos_main.py", "project.json"]) == 0
+    assert seen == [Path("project.json")]
+
+
+def test_external_deck_rejects_json_without_a_stages_object(tmp_path):
+    (tmp_path / "parameters.json").write_text('{"problem_data": {}}', encoding="utf-8")
+    deck = SimpleNamespace(directory=str(tmp_path), parameters="parameters.json")
+
+    with pytest.raises(external_deck.DeckError, match='no "stages" to run'):
+        external_deck._parameters(deck)
+
+
+def test_external_deck_reports_unreadable_parameter_json(tmp_path):
+    (tmp_path / "parameters.json").write_text("{", encoding="utf-8")
+    deck = SimpleNamespace(directory=str(tmp_path), parameters="parameters.json")
+
+    with pytest.raises(external_deck.DeckError, match="could not be read"):
+        external_deck._parameters(deck)
+
+
+def test_structural_materials_refuse_missing_required_properties():
+    prop = SimpleNamespace(
+        constitutive_law=materials.BEAM_LAW,
+        variables={},
+        number=lambda _name: None,
+    )
+
+    with pytest.raises(materials.MaterialError, match="YOUNG_MODULUS.*I33"):
+        materials._check(prop, "section 'missing'")

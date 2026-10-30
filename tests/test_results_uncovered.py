@@ -5,7 +5,7 @@ import json
 import pytest
 
 from core.kratos import deck_files
-from core.results import catalog, fields, gid_reader
+from core.results import catalog, fields, gid_reader, members
 
 
 @pytest.mark.parametrize("text", [
@@ -112,3 +112,59 @@ def test_a_run_path_that_was_removed_reports_the_missing_directory(tmp_path):
 
     with pytest.raises(catalog.UnknownRun, match="no run directory"):
         catalog.describe(missing)
+
+
+@pytest.mark.parametrize("parameters", [
+    [],
+    {"orchestrator": {"settings": {"execution_list": "not-a-list"}}},
+])
+def test_unusable_deck_metadata_does_not_hide_existing_stage_output(tmp_path, parameters):
+    (tmp_path / deck_files.PARAMETERS_NAME).write_text(
+        json.dumps(parameters), encoding="utf-8")
+    (tmp_path / "model_1_Initial.post.res").write_text("", encoding="utf-8")
+
+    stages = catalog.stage_list(tmp_path)
+
+    assert len(stages) == 1
+    assert stages[0]["name"] == "1_Initial"
+    assert stages[0]["results_file"] == "model_1_Initial.post.res"
+
+
+def test_nonstring_execution_entries_do_not_create_spurious_stages(tmp_path):
+    (tmp_path / deck_files.PARAMETERS_NAME).write_text(json.dumps({
+        "orchestrator": {"settings": {"execution_list": [None, 42, "1_Initial"]}},
+        "stages": {},
+    }), encoding="utf-8")
+
+    assert [stage["name"] for stage in catalog.stage_list(tmp_path)] == ["1_Initial"]
+
+
+def test_member_output_without_an_mdpa_explains_why_it_cannot_be_placed(tmp_path):
+    (tmp_path / deck_files.PARAMETERS_NAME).write_text(json.dumps({
+        "orchestrator": {"settings": {"execution_list": ["1_Initial"]}},
+        "stages": {},
+    }), encoding="utf-8")
+    (tmp_path / "1_Initial__output_wall.json").write_text(json.dumps({
+        "NODE_1": {"BENDING_MOMENT": [1000]},
+    }), encoding="utf-8")
+
+    with pytest.raises(catalog.UnknownRun, match="has no .mdpa.*members cannot be placed"):
+        catalog.member_profiles(tmp_path, "wall", "M")
+
+
+@pytest.mark.parametrize("raw", [None, "bad", True, [], [1], [1, False], [1, "bad"]])
+def test_invalid_member_values_leave_a_gap_in_the_profile_instead_of_zero(raw):
+    output = {1: {"GEO_EFFECTIVE_TRACTION_VECTOR": raw},
+              2: {"GEO_EFFECTIVE_TRACTION_VECTOR": [-10, 5]}}
+    coordinates = {1: (0, 0, 0), 2: (0, -1, 0)}
+
+    profile = members.profile(output, coordinates, members.quantity("ts"))
+
+    assert profile["nodes"] == [2]
+    assert profile["points"] == [[5.0, -1]]
+
+
+def test_a_point_element_is_not_drawn_as_a_line():
+    from core.results.mesh import edges_of
+
+    assert edges_of([7], 1, "Point") == []
