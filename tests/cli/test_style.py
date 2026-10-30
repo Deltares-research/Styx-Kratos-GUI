@@ -67,6 +67,98 @@ def test_a_dumb_terminal_gets_no_colour(monkeypatch):
     assert not style.enabled(Terminal())
 
 
+def test_a_terminal_uses_the_console_capability_check(monkeypatch):
+    from unittest.mock import Mock
+
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.delenv("FORCE_COLOR", raising=False)
+    monkeypatch.delenv("TERM", raising=False)
+    check = Mock(return_value=True)
+    monkeypatch.setattr(style, "_reads_escape_codes", check)
+    stream = Terminal()
+
+    assert style.enabled(stream)
+    check.assert_called_once_with(stream)
+
+
+def test_non_windows_terminals_need_no_console_mode_setup(monkeypatch):
+    from types import SimpleNamespace
+
+    monkeypatch.setattr(style, "sys", SimpleNamespace(platform="linux"))
+
+    assert style._reads_escape_codes(Terminal())
+
+
+@pytest.fixture
+def windows_console(monkeypatch):
+    import ctypes
+    import sys
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    kernel = SimpleNamespace(GetConsoleMode=Mock(), SetConsoleMode=Mock(return_value=1))
+    runtime = SimpleNamespace(get_osfhandle=Mock(return_value=123))
+    stream = SimpleNamespace(fileno=Mock(return_value=7))
+    monkeypatch.setattr(style, "sys", SimpleNamespace(platform="win32"))
+    monkeypatch.setattr(ctypes, "windll", SimpleNamespace(kernel32=kernel), raising=False)
+    monkeypatch.setitem(sys.modules, "msvcrt", runtime)
+    return kernel, runtime, stream
+
+
+@pytest.mark.parametrize("initial_mode, set_result, expected", [
+    (0x0001, 1, True),
+    (0x0001, 0, False),
+    (0x0005, 1, True),
+])
+def test_windows_console_enables_virtual_terminal_processing_only_when_needed(
+        windows_console, initial_mode, set_result, expected):
+    kernel, runtime, stream = windows_console
+
+    def get_mode(handle, mode):
+        assert handle == 123
+        mode._obj.value = initial_mode
+        return 1
+
+    kernel.GetConsoleMode.side_effect = get_mode
+    kernel.SetConsoleMode.return_value = set_result
+
+    assert style._reads_escape_codes(stream) is expected
+    stream.fileno.assert_called_once_with()
+    runtime.get_osfhandle.assert_called_once_with(7)
+    if initial_mode & 0x0004:
+        kernel.SetConsoleMode.assert_not_called()
+    else:
+        kernel.SetConsoleMode.assert_called_once_with(123, initial_mode | 0x0004)
+
+
+def test_windows_stream_without_a_console_gets_no_escape_codes(windows_console):
+    kernel, _, stream = windows_console
+    kernel.GetConsoleMode.return_value = 0
+
+    assert not style._reads_escape_codes(stream)
+    kernel.SetConsoleMode.assert_not_called()
+
+
+@pytest.mark.parametrize("failure_at, error", [
+    ("fileno", ValueError("closed stream")),
+    ("handle", OSError("invalid handle")),
+    ("get_mode", AttributeError("console API unavailable")),
+    ("set_mode", OSError("cannot set console mode")),
+])
+def test_windows_console_setup_failures_disable_colour(windows_console, failure_at, error):
+    kernel, runtime, stream = windows_console
+    kernel.GetConsoleMode.return_value = 1
+    operation = {
+        "fileno": stream.fileno,
+        "handle": runtime.get_osfhandle,
+        "get_mode": kernel.GetConsoleMode,
+        "set_mode": kernel.SetConsoleMode,
+    }[failure_at]
+    operation.side_effect = error
+
+    assert not style._reads_escape_codes(stream)
+
+
 # ── What colour does to the text ────────────────────────────────────────────
 
 def test_without_colour_paint_is_the_text_itself():
