@@ -75,11 +75,13 @@ def _python_is_free_threaded(python: Path) -> bool | None:
 
 def _regular_windows_python() -> Path:
     version = f"{sys.version_info.major}.{sys.version_info.minor}"
-    probe = "import sys, sysconfig; print(sys.executable); " \
+    probe = "import sys, sysconfig; sys.stdout.reconfigure(encoding='utf-8'); " \
+        "print(sys.executable); " \
         "print(int(bool(sysconfig.get_config_var('Py_GIL_DISABLED'))))"
     try:
         result = subprocess.run(["py", f"-{version}", "-c", probe],
-                                capture_output=True, text=True, check=False)
+                                capture_output=True, text=True, encoding="utf-8",
+                                errors="replace", check=False)
     except OSError as error:
         raise RuntimeError(
             f"Python {version} is free-threaded; install regular Python {version} "
@@ -188,6 +190,7 @@ def main(argv: list[str] | None = None) -> int:
                 sysconfig.get_config_var("Py_GIL_DISABLED"):
             regular_python = _regular_windows_python()
             forwarded = sys.argv[1:] if argv is None else argv
+            os.chdir(ROOT)
             os.execv(str(regular_python),
                      [str(regular_python), "-m", "backend.launcher", *forwarded])
 

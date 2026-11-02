@@ -184,6 +184,34 @@ def test_launcher_explains_a_missing_windows_python_launcher(monkeypatch):
         _launcher._regular_windows_python()
 
 
+def test_windows_python_probe_preserves_unicode_paths_and_tolerates_launcher_diagnostics(
+        monkeypatch):
+    import os
+    import subprocess
+    import sys
+
+    executable = "C:\\Users\\" + chr(0x0416) + "\\Python313\\python.exe"
+    run = subprocess.run
+
+    def launch_probe(command, **kwargs):
+        assert command[:2] == [
+            "py", f"-{sys.version_info.major}.{sys.version_info.minor}"]
+        assert kwargs["encoding"] == "utf-8"
+        assert kwargs["errors"] == "replace"
+        environment = dict(os.environ, PYTHONIOENCODING="ascii:strict")
+        prefix = (
+            f"import sys, os, sysconfig; sys.executable = {ascii(executable)}; "
+            "sysconfig.get_config_var = lambda name: 0; "
+            "os.write(2, bytes([255])); "
+        )
+        return run([sys.executable, "-c", prefix + command[-1]],
+                   env=environment, **kwargs)
+
+    monkeypatch.setattr(_launcher.subprocess, "run", launch_probe)
+
+    assert _launcher._regular_windows_python() == Path(executable)
+
+
 def test_launcher_refuses_an_unsupported_python_before_setup(monkeypatch):
     from types import SimpleNamespace
     from unittest.mock import Mock
@@ -243,7 +271,7 @@ def test_launcher_leaves_other_interpreters_on_the_normal_startup_path(
 
 @_pytest.mark.parametrize("explicit_arguments", [True, False])
 def test_launcher_reexecutes_older_free_threaded_windows_python(
-        monkeypatch, explicit_arguments):
+        monkeypatch, tmp_path, explicit_arguments):
     from types import SimpleNamespace
     from unittest.mock import Mock
 
@@ -252,13 +280,20 @@ def test_launcher_reexecutes_older_free_threaded_windows_python(
 
     forwarded = ["--check"]
     regular = Path("regular-python.exe")
+    monkeypatch.chdir(tmp_path)
     monkeypatch.setattr(_launcher, "sys", SimpleNamespace(
-        platform="win32", version_info=(3, 13), argv=["launcher", *forwarded]))
+        platform="win32", version_info=(3, 13),
+        argv=[str(ROOT / "backend" / "launcher.py"), *forwarded]))
     monkeypatch.setattr(_launcher, "sysconfig", SimpleNamespace(get_config_var=lambda _: 1))
     monkeypatch.setattr(_launcher, "_regular_windows_python", lambda: regular)
     monkeypatch.setattr(_launcher, "parse_args", lambda _: SimpleNamespace(check=True))
     setup = Mock()
-    execute = Mock(side_effect=Reexecuted)
+
+    def reexecute(*_args):
+        assert Path.cwd() == ROOT
+        raise Reexecuted
+
+    execute = Mock(side_effect=reexecute)
     monkeypatch.setattr(_launcher, "ensure_environment", setup)
     monkeypatch.setattr(_launcher.os, "execv", execute)
 
