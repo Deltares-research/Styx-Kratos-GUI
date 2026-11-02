@@ -190,8 +190,9 @@ it:
 - **Tests that check something.** A test asserts real values, not only that a call did
   not raise. It does not mock the code that it tests. It covers the edge cases of check
   B. Where the feature exists in 2D and 3D, both have a case.
-- **Shared models.** Tests use the models in `tests/models/`, never the files in
-  `examples/` (`tests/test_no_examples.py` checks this).
+- **Shared models.** Tests use the models in `tests/models/`, never an example model.
+  Outside the examples folder, no code, test or document names an example case or a
+  path into that folder, except the pages that `tests/test_no_examples.py` allows.
 - **Kratos.** If `core/kratos/`, `core/analysis/` or `core/results/` changed, the author
   ran `python tools/test.py kratos` and `python tools/test.py bench` on a computer with
   Kratos, and the pull request says so. GitHub's runners cannot run these tiers.
