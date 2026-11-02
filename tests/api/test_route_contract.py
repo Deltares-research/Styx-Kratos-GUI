@@ -331,6 +331,30 @@ def test_geometry_import_reports_an_unreadable_obj_as_a_client_error(client):
     assert _readable(response.json().get("detail"))
 
 
+@pytest.mark.parametrize("error_name, status", [
+    ("Busy", 409), ("CalculationError", 500),
+])
+def test_calculate_project_reports_runner_errors(client, monkeypatch, error_name, status):
+    from unittest.mock import AsyncMock, Mock
+
+    from backend.routes import decks
+    from core.analysis import calculation
+
+    export = {"stats": {}, "warnings": []}
+    mesh = AsyncMock(return_value=export)
+    monkeypatch.setattr(decks, "run_mesh_job", mesh)
+    message = "A calculation is already running." if status == 409 else "Cannot start solver."
+    run = Mock(side_effect=getattr(calculation, error_name)(message))
+    monkeypatch.setattr(calculation, "run", run)
+
+    response = client.post("/api/calculate", json=COARSE)
+
+    assert response.status_code == status, response.text
+    assert response.json() == {"detail": message}
+    mesh.assert_awaited_once()
+    run.assert_called_once_with(export)
+
+
 # ── (d) a project that is a Kratos deck ──────────────────────────────────────
 
 DECK_MDPA = ("Begin Properties 1\nEnd Properties\nBegin Nodes\n1 0 0 0\n2 1 0 0\n3 0 1 0\n"
@@ -363,6 +387,28 @@ def deck_client(client, tmp_path):
     project = external_deck.deck_project(directory, "site.json", name="Site")
     assert client.put("/api/project", json=project.model_dump()).status_code == 200
     return client
+
+
+@pytest.mark.parametrize("error_name, status", [
+    ("Busy", 409), ("CalculationError", 500),
+])
+def test_calculate_deck_reports_runner_errors(
+        deck_client, monkeypatch, error_name, status):
+    from unittest.mock import Mock
+
+    from backend import store
+    from core.analysis import calculation
+
+    deck = store.get().deck
+    message = "A calculation is already running." if status == 409 else "Cannot start solver."
+    run = Mock(side_effect=getattr(calculation, error_name)(message))
+    monkeypatch.setattr(calculation, "run_deck", run)
+
+    response = deck_client.post("/api/calculate", json=COARSE)
+
+    assert response.status_code == status, response.text
+    assert response.json() == {"detail": message}
+    run.assert_called_once_with(deck)
 
 
 def test_calculate_reports_a_missing_external_deck_file_as_a_client_error(
