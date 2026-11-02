@@ -280,6 +280,23 @@ def test_a_name_that_leaves_the_run_directory_is_refused(runs_root, name):
         catalog.file_path("Test_model_2026-09-22_00-49", name)
 
 
+def test_a_symlink_to_a_file_outside_the_run_directory_is_refused(runs_root):
+    run = "Test_model_2026-09-22_00-49"
+    directory = make_run(runs_root, run)
+    outside = runs_root / "outside.txt"
+    outside.write_text("Not a run file\n", encoding="utf-8")
+    link = directory / "linked.txt"
+    try:
+        link.symlink_to(outside)
+    except (OSError, NotImplementedError) as error:
+        pytest.skip(f"Cannot create symbolic links on this system: {error}")
+
+    assert link.is_file()
+    assert link.resolve().parent != directory.resolve()
+    with pytest.raises(catalog.UnsafeName, match="is not a file in this run"):
+        catalog.file_path(run, link.name)
+
+
 def test_an_unknown_run_is_refused(runs_root):
     with pytest.raises(catalog.UnknownRun):
         catalog.describe("Test_model_1999-01-01_00-00")
