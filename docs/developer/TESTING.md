@@ -58,7 +58,7 @@ generated file or snapshot with the command in the last column, and review the d
 
 | Test | What it checks | After a deliberate change |
 |---|---|---|
-| `tests/cli/test_edit_parity.py`, `frontend/tests/test-edits.js` | A Delete in the GUI and the same `kratos-cli ... remove` make the same project | `python tests/cli/test_edit_parity.py --write` |
+| `tests/cli/test_edit_parity.py`, `frontend/tests/test-edits.js` | Each Delete the GUI offers, found in its code, sends a request that makes the same project as `kratos-cli ... remove` | `python tests/cli/test_edit_parity.py --write` |
 | `tests/test_draft_parity.py`, `frontend/tests/test-drafts.js` | A new record starts the same in both | `python tests/test_draft_parity.py --write` |
 | `tests/test_stage_parity.py` | The stages read the same in both | `python tests/test_stage_parity.py --write` |
 | `tests/cli/test_gui_commands.py` | The GUI's command box knows the words of `kratos-cli` | Add or remove the row in "The GUI's command box, in the terminal" in `docs/CLI.md` |
@@ -67,8 +67,11 @@ generated file or snapshot with the command in the last column, and review the d
 | `tests/cli/test_json_contract.py` | The keys of the `--json` answers | `pytest tests/cli/test_json_contract.py --update-snapshots` |
 
 `tests/e2e/test_handover_flows.py` runs only with `--run-e2e`, as in the `e2e` tier.
-`frontend/tests/test-edits.js` and `frontend/tests/test-drafts.js` run in the JavaScript
-tests without a browser, so they need the `quickjs` package: see [Options](#options).
+`frontend/tests/test-drafts.js` and the Structure-mode cases of
+`frontend/tests/test-edits.js` run in the JavaScript tests without a browser, so they need
+the `quickjs` package: see [Options](#options). The other cases of `test-edits.js` drive
+a window, the stage list, the model tree or the command box, so they run in the browser
+suite only (the `browser` tier and up).
 
 ## What CI runs
 

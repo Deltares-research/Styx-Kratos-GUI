@@ -21,6 +21,7 @@ from core.model.schemas import (FULL_BUILD_BLOCKS, Deck, DimensionUpdate, Layers
                                 MaterialsUpdate, MeshRequest, Stage, StagesUpdate, Project, StructuresUpdate, UnitsUpdate,
                                 WaterLevel, WaterUpdate)
 from core.model.templates import blank_project, seed_project
+from tests.models import edits
 from tests.models.excavation import excavation_project
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "projects"
@@ -859,38 +860,18 @@ def test_a_removed_structure_takes_its_mesh_size_with_it():
 
 # ── A size goes with its body ───────────────────────────────────────────────
 
-SIZED = {"sheetpile": 0.5, "strut": 0.5, "wall_contact": 0.5, "water_1": 0.5,
-         "soil_L_mid": 1.0, "soil_L_mid__pit": 1.0, "soil_L_top__lift3": 1.0}
-"""An element size on each body an edit below takes away."""
-
-
-def _sized(project: Project, **extra: float) -> Project:
-    sizes = {key: size for key, size in SIZED.items() if key in project.part_keys()}
-    mesh = project.mesh.model_copy(update={"body_sizes": {**sizes, **extra}})
-    return project.model_copy(update={"mesh": mesh})
-
-
 def _structures(project: Project, **lists) -> StructuresUpdate:
-    """What the GUI's Structure mode sends: the loads, and the lists it changed."""
     return StructuresUpdate.model_validate(
-        {"loads": project.model_dump(mode="json")["loads"], **lists})
+        edits.structures_sent(project.model_dump(mode="json"), **lists))
 
 
 def _without(project: Project, field: str, id: str) -> list[dict]:
-    return [r for r in project.model_dump(mode="json")[field] if r["id"] != id]
+    return edits.without(project.model_dump(mode="json")[field], id)
 
 
 def _stack_without(project: Project, id: str) -> LayersUpdate:
-    """What the soil layers window sends after its Delete (`SoilLayersDialog.remove`)."""
-    payload = project.model_dump(mode="json")
-    layers = payload["layers"]
-    index = [layer["id"] for layer in layers].index(id)
-    gone = layers.pop(index)
-    if index > 0:
-        layers[index - 1]["bottom"] = gone["bottom"]
-    else:
-        layers[0]["top"] = gone["top"]
-    return LayersUpdate.model_validate({"layers": layers, "materials": payload["materials"]})
+    return LayersUpdate.model_validate(
+        edits.layers_window_sent(project.model_dump(mode="json"), id))
 
 
 EDITS_THAT_TAKE_A_BODY = {
@@ -918,7 +899,7 @@ not call `remove_structure`: it sends the whole list."""
 def test_a_body_an_edit_takes_away_takes_its_mesh_size_with_it(edit):
     """Or `kratos-cli check` and `mesh` refuse the saved project: "the mesh settings
     name bodies this model does not have"."""
-    project = _sized(excavation_project(staged=False))
+    project = edits.sized(excavation_project(staged=False))
 
     edited = EDITS_THAT_TAKE_A_BODY[edit](project)
 
@@ -929,7 +910,7 @@ def test_a_body_an_edit_takes_away_takes_its_mesh_size_with_it(edit):
 
 
 def test_a_size_for_a_body_the_model_never_had_is_left_for_check_to_name():
-    project = _sized(excavation_project(staged=False), soil_typo=1.0)
+    project = edits.sized(excavation_project(staged=False), soil_typo=1.0)
 
     edited = session.remove_layer(project, "L_mid")
 
@@ -940,7 +921,7 @@ def test_a_size_for_a_body_the_model_never_had_is_left_for_check_to_name():
 
 def test_the_user_is_told_which_sizes_an_edit_took_away():
     """A body can come back -- a level moved back -- but its size does not."""
-    project = _sized(excavation_project(staged=False))
+    project = edits.sized(excavation_project(staged=False))
 
     notes = session.removed_sizes(project, session.split_layer(project, "L_top"))
 
@@ -953,7 +934,7 @@ def test_the_user_is_told_which_sizes_an_edit_took_away():
 
 
 def test_a_size_removed_on_purpose_or_never_valid_is_not_noted():
-    project = _sized(excavation_project(staged=False), soil_typo=1.0)
+    project = edits.sized(excavation_project(staged=False), soil_typo=1.0)
 
     on_purpose = session.without_value(project, "mesh.body_sizes[soil_L_mid]")
     typo_kept = session.remove_layer(project, "L_mid")
