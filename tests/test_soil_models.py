@@ -336,11 +336,34 @@ def test_a_drained_or_undrained_soil_is_written_with_its_fixed_permeability(drai
 
     assert (variables["PERMEABILITY_XX"], variables["PERMEABILITY_YY"],
             variables["PERMEABILITY_XY"]) == (fixed, fixed, 0.0)
-    assert "PERMEABILITY" not in " ".join(warnings)
+    assert "PERMEABILITY_" not in " ".join(warnings)
     assert "PERMEABILITY_XX" not in [p.name for p in soil_models.shown(
         soil_models.MOHR_COULOMB, project.material("m2").variables)]
     assert "PERMEABILITY_XX" not in soil_models.derived(
         MC_2D, project.material("m2").variables, WATER_SI, "SI")
+
+
+@pytest.mark.parametrize("drainage", soil_models.DRAINAGE_TYPES)
+def test_a_soil_not_saturated_everywhere_is_written_with_a_minimum_relative_permeability(
+        drainage):
+    """Kratos' U-Pw elements check it for such a soil whatever its drainage type, also
+    where the window does not list it: the new soil (`blank_si`) would not run."""
+    for retention in soil_models.UNSATURATED:
+        project = mohr_coulomb_site(GEO_DRAINAGE_TYPE=drainage, RETENTION_LAW=retention)
+        project.material("m2").variables.pop("MINIMUM_RELATIVE_PERMEABILITY", None)
+
+        variables = deck(project)["Variables"]
+        _, warnings = materials.material_parameters(project, [("Soil_1", "m2")], 2)
+
+        assert variables["MINIMUM_RELATIVE_PERMEABILITY"] == \
+            soil_models.MINIMUM_RELATIVE_PERMEABILITY
+        assert "MINIMUM_RELATIVE_PERMEABILITY" in " ".join(warnings)
+    for saturated in ({}, {"RETENTION_LAW": "SaturatedLaw"}):
+        assert "MINIMUM_RELATIVE_PERMEABILITY" not in soil_models.derived(
+            ELASTIC_2D, {"GEO_DRAINAGE_TYPE": drainage, **saturated}, WATER_SI, "SI")
+    assert "MINIMUM_RELATIVE_PERMEABILITY" not in soil_models.derived(
+        ELASTIC_2D, {"RETENTION_LAW": "VanGenuchtenLaw",
+                     "MINIMUM_RELATIVE_PERMEABILITY": 1e-3}, WATER_SI, "SI")
 
 
 def test_a_drained_soil_in_a_flow_project_keeps_the_permeability_it_lists():

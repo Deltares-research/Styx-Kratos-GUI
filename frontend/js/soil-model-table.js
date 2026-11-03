@@ -17,6 +17,10 @@ App.SOIL_MODEL_TABLE =
   "flowing": [
     "FULLY_COUPLED"
   ],
+  "unsaturated": [
+    "SaturatedBelowPhreaticLevelLaw",
+    "VanGenuchtenLaw"
+  ],
   "blank": {
     "GEO_DRAINAGE_TYPE": "DRAINED",
     "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
@@ -38,6 +42,7 @@ App.SOIL_MODEL_TABLE =
     "WATER_VISCOSITY": 0.001,
     "BULK_MODULUS_SOLID": 10000000000.0,
     "PERMEABILITY": 1.1574074074074074e-12,
+    "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
     "UNDRAINED_POISSON_LIMIT": 0.495
   },
   "computed": {

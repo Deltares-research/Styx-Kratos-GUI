@@ -254,6 +254,10 @@ App.SoilModels = (function () {
       var kappa = given('PERMEABILITY_XX');
       put('PERMEABILITY_YY', typeof kappa === 'number' && isFinite(kappa) ? kappa : null);
     }
+    if (has(variables, 'RETENTION_LAW') &&
+        table().unsaturated.indexOf(variables.RETENTION_LAW) >= 0) {
+      put('MINIMUM_RELATIVE_PERMEABILITY', constant('MINIMUM_RELATIVE_PERMEABILITY'));
+    }
     if (drainage === 'FULLY_COUPLED' || drainage === 'UNDRAINED' || flow) {
       put('BIOT_COEFFICIENT', biot(both()));
     }

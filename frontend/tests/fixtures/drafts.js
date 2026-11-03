@@ -46,6 +46,7 @@ window.DRAFTS_FIXTURE =
         },
         "derived": {
           "BULK_MODULUS_SOLID": 10000000000.0,
+          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
           "K0_NC": 0.4285714285714286
         },
         "computed": {
@@ -79,6 +80,7 @@ window.DRAFTS_FIXTURE =
         },
         "derived": {
           "BULK_MODULUS_SOLID": 10000000.0,
+          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
           "K0_NC": 0.5
         },
         "computed": {
@@ -114,6 +116,7 @@ window.DRAFTS_FIXTURE =
         "derived": {
           "BULK_MODULUS_SOLID": 10000000000.0,
           "PERMEABILITY_YY": 3e-12,
+          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
           "BIOT_COEFFICIENT": 0.9991666666666666,
           "K0_NC": 0.5
         },
@@ -229,7 +232,8 @@ window.DRAFTS_FIXTURE =
           "DYNAMIC_VISCOSITY": 0.001
         },
         "derived": {
-          "BULK_MODULUS_SOLID": 10000000000.0
+          "BULK_MODULUS_SOLID": 10000000000.0,
+          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001
         },
         "computed": {}
       }

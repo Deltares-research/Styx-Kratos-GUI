@@ -86,6 +86,10 @@ k mu / gamma_w. `PERMEABILITY_XX` is intrinsic -- Kratos divides it by the visco
 (`GeoTransportEquationUtilities::CalculatePermeabilityMatrix`) -- not a Darcy
 conductivity: the 1/86400 a new soil started with until 2026-11-02 was ten million
 times too permeable."""
+MINIMUM_RELATIVE_PERMEABILITY = 1.0e-4
+"""`MINIMUM_RELATIVE_PERMEABILITY` when a soil gives none. Only a soil whose water flows
+reads it, but Kratos' U-Pw elements check it for every soil whose retention law is one of
+`UNSATURATED`, whatever its drainage type: the export derives it for those."""
 HARDENING_TYPES = ("None", "Linear")
 """Every `GEO_COULOMB_HARDENING_TYPE` Kratos builds (`CoulombYieldSurface`, which reads
 it in any case). Left out, it is "None"."""
@@ -183,7 +187,7 @@ def _flow() -> tuple[Parameter, ...]:
                       flow=True),
             Parameter("PERMEABILITY_YY", "Intrinsic permeability yy", flow=True),
             Parameter("MINIMUM_RELATIVE_PERMEABILITY", "Minimum relative permeability",
-                      1.0e-4, when=unsaturated, flow=True),
+                      MINIMUM_RELATIVE_PERMEABILITY, when=unsaturated, flow=True),
             Parameter("VAN_GENUCHTEN_GL", "Relative permeability exponent g_l", 1.25,
                       when=van_genuchten, flow=True))
 
@@ -533,6 +537,8 @@ def derived(law: str, variables: dict, water_variables: dict, system: str,
         if drainage == "FULLY_COUPLED" or flow:
             put("PERMEABILITY_XX", units.from_si(PERMEABILITY_SI, units.PERMEABILITY, system))
         put("PERMEABILITY_YY", _number(given("PERMEABILITY_XX")))
+    if variables.get("RETENTION_LAW") in UNSATURATED:
+        put("MINIMUM_RELATIVE_PERMEABILITY", MINIMUM_RELATIVE_PERMEABILITY)
     if drainage in ("FULLY_COUPLED", "UNDRAINED") or flow:
         put("BIOT_COEFFICIENT", biot({**variables, **out}))
     if drainage == "UNDRAINED":
@@ -641,6 +647,7 @@ def table() -> dict:
         return out
 
     return {"order": list(MODELS), "other": OTHER, "flowing": list(FLOWING),
+            "unsaturated": list(UNSATURATED),
             "blank": blank_si(), "fixed_permeability": dict(FIXED_PERMEABILITY_SI),
             "vectors": list(VECTORS),
             "constants": {"WATER_SPECIFIC_WEIGHT": WATER_SPECIFIC_WEIGHT_SI,
@@ -648,6 +655,7 @@ def table() -> dict:
                           "WATER_VISCOSITY": WATER_VISCOSITY_SI,
                           "BULK_MODULUS_SOLID": BULK_MODULUS_SOLID_SI,
                           "PERMEABILITY": PERMEABILITY_SI,
+                          "MINIMUM_RELATIVE_PERMEABILITY": MINIMUM_RELATIVE_PERMEABILITY,
                           "UNDRAINED_POISSON_LIMIT": UNDRAINED_POISSON_LIMIT},
             "computed": {name: {"label": label, "quantity": quantity.name, "group": group}
                          for name, (label, quantity, group) in COMPUTED.items()},

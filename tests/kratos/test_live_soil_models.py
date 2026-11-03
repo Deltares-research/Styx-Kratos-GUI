@@ -1,4 +1,4 @@
-"""A Mohr-Coulomb soil, run in Kratos. Opt-in: `pytest --run-kratos`.
+"""A new soil and a Mohr-Coulomb soil, run in Kratos. Opt-in: `pytest --run-kratos`.
 
 Each soil here is made Mohr-Coulomb the way the material window makes it: the soil model
 chosen, its defaults filled in for what the soil lacks (`core.model.soil_models`), the
@@ -68,6 +68,25 @@ def test_the_test_model_s_mohr_coulomb_variant_runs_every_stage():
     project = excavation.mohr_coulomb_project()
     deck = live.export(project, MeshRequest(**project.mesh.model_dump()))
     assert ran(calculation.run(deck))
+
+
+def test_a_new_soil_given_what_it_still_needs_runs_under_its_own_weight():
+    """The soil **Create soil** and `kratos-cli material add` make (`blank_si`), given the
+    values the window lists as still needed and nothing else: Kratos checks more than
+    that, and the export derives the rest."""
+    p = live.block().model_dump(mode="json")
+    law = soil_models.law(soil_models.LINEAR_ELASTIC, 2)
+    for material in p["materials"]:
+        typed = material["variables"]
+        soil = soil_models.blank_si()
+        needed = soil_models.missing(law, soil)
+        soil.update({name: typed[name] for name in needed})
+        material.update(constitutive_law=law, variables=soil)
+    project = Project.model_validate(p)
+
+    assert needed and not soil_models.missing(law, project.materials[0].variables)
+    _, outcome = live.run(project)
+    assert ran(outcome)
 
 
 def test_a_mohr_coulomb_soil_that_cannot_yield_settles_as_the_elastic_one():
