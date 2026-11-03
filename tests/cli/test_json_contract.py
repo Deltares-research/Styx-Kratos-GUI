@@ -77,9 +77,12 @@ def test_the_json_answers_keep_their_shape(cli, tmp_path, request):
         assert ran.code == 0, (title, ran.err)
         current[title] = shape(ran.json())
 
-    if request.config.getoption("--update-snapshots") or not SNAPSHOT.exists():
+    if request.config.getoption("--update-snapshots"):
         SNAPSHOT.write_text(json.dumps(current, indent=1, sort_keys=True) + "\n",
                             encoding="utf-8")
+    assert SNAPSHOT.exists(), (
+        f"{SNAPSHOT.name} is missing; it is committed with this test. Write it with "
+        "--update-snapshots and review it")
     committed = json.loads(SNAPSHOT.read_text(encoding="utf-8"))
 
     assert current == committed, (
