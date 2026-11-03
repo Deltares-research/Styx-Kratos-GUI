@@ -121,6 +121,40 @@ App.MeshSettings = (function () {
     });
   }
 
+  /* The sizes the window saves. It has rows for the layers only, so a size it has no row
+     for -- a structure's, a lift's, set in `kratos-cli` or a script -- stays as it is. A
+     row shows the global size when its body has none, and that asks for nothing: it adds
+     no size, so the body goes on following the global size. */
+  function savedBodySizes(project, rows) {
+    var mesh = (project && project.mesh) || {};
+    var fallback = Number(mesh.element_size || defaults.element_size);
+    var sizes = Object.assign({}, mesh.body_sizes);
+    rows.forEach(function (row) {
+      if (!(row.size > 0)) delete sizes[row.key];
+      else if (row.size !== fallback || Object.prototype.hasOwnProperty.call(sizes, row.key)) {
+        sizes[row.key] = row.size;
+      }
+    });
+    return sizes;
+  }
+
+  /* The bodies of `project` that this window's check boxes leave out. */
+  function leftOutBodies(project, selectedKeys) {
+    return meshBodies(project).map(function (body) { return body.key; })
+      .filter(function (key) { return selectedKeys.indexOf(key) < 0; });
+  }
+
+  /* The bodies to mesh after a choice in this window, or null when it made none or left
+     nothing. It is kept as what was left out (`App.MESH_BODIES_LEFT_OUT`) because the
+     model changes under it: a body added later is meshed, as `kratos-cli` meshes it, and
+     a deleted body is not asked for, which the server would refuse. */
+  function chosenBodies(project, leftOut) {
+    if (!Array.isArray(leftOut)) return null;
+    var kept = meshBodies(project).map(function (body) { return body.key; })
+      .filter(function (key) { return leftOut.indexOf(key) < 0; });
+    return kept.length ? kept : null;
+  }
+
   function open() {
     if (!App.PROJECT || document.getElementById('mesh-settings-dialog')) return;
     var el = App.UI.el, settings = fromProject(App.PROJECT);
@@ -156,9 +190,8 @@ App.MeshSettings = (function () {
       node.value = settings[name]; return node;
     }
 
-    var targets = Array.isArray(App.MESH_BODY_SELECTION)
-      ? App.MESH_BODY_SELECTION.slice()
-      : meshTargets(App.PROJECT, App.state.selection, App.Viewport.isVisible);
+    var targets = chosenBodies(App.PROJECT, App.MESH_BODIES_LEFT_OUT)
+      || meshTargets(App.PROJECT, App.state.selection, App.Viewport.isVisible);
     var bodyTable = el('div.mesh-body-table');
     // The checkbox column carries no caption: "Mesh" does not fit a 16px box, and
     // the help text beside the table already explains what ticking one does.
@@ -225,7 +258,7 @@ App.MeshSettings = (function () {
       form.querySelectorAll('[name]').forEach(function (control) {
         value[control.name] = control.type === 'checkbox' ? control.checked : control.value;
       });
-      var selectedKeys = [], bodySizes = {};
+      var selectedKeys = [], rows = [];
       form.querySelectorAll('.mesh-body-enabled').forEach(function (control) {
         var key = control.getAttribute('data-body-key');
         if (control.checked) selectedKeys.push(key);
@@ -240,9 +273,9 @@ App.MeshSettings = (function () {
         }
         // Keep a size typed for a layer that is currently unchecked, so ticking it
         // again does not silently fall back to the global size.
-        if (size > 0) bodySizes[key] = size;
+        rows.push({ key: key, size: size });
       });
-      value.body_sizes = bodySizes;
+      value.body_sizes = savedBodySizes(App.PROJECT, rows);
       value.volume_keys = selectedKeys;
       return validate(merge(App.PROJECT, value));
     }
@@ -254,7 +287,7 @@ App.MeshSettings = (function () {
       var savedSettings = Object.assign({}, settings); delete savedSettings.volume_keys;
       var project = JSON.parse(JSON.stringify(App.PROJECT)); project.mesh = savedSettings;
       App.Api.put('/api/project', project).then(function (saved) {
-        App.MESH_BODY_SELECTION = selectedKeys;
+        App.MESH_BODIES_LEFT_OUT = leftOutBodies(App.PROJECT, selectedKeys);
         App.Model.apply(saved); close();
         App.Command.ok('Mesh properties updated.');
         if (andGenerate) App.runAction({ action: 'generateMesh' });
@@ -277,7 +310,8 @@ App.MeshSettings = (function () {
   }
   return {
     fromProject: fromProject, validate: validate, meshTargets: meshTargets,
-    bodyControls: bodyControls, algorithmRow: algorithmRow, merge: merge, open: open,
+    bodyControls: bodyControls, savedBodySizes: savedBodySizes, leftOutBodies: leftOutBodies,
+    chosenBodies: chosenBodies, algorithmRow: algorithmRow, merge: merge, open: open,
     TITLE: TITLE, optimizationChoices: optimizationChoices, optimizationHelp: optimizationHelp,
     opensOnModeTab: opensOnModeTab
   };

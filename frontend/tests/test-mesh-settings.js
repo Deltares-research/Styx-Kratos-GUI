@@ -37,6 +37,53 @@
       { key: 'soil_L2', label: 'Lower', enabled: true, size: 4.0 }
     ]);
   });
+
+  test('the window keeps a size it has no row for', function () {
+    var project = { mesh: { element_size: 5, body_sizes: {
+      sheetpile: 0.5, soil_L1__lift3: 1.0, soil_L1: 2.0 } } };
+    T.eq(App.MeshSettings.savedBodySizes(project, [{ key: 'soil_L1', size: 3 }]),
+         { sheetpile: 0.5, soil_L1__lift3: 1.0, soil_L1: 3 });
+  });
+
+  test('a row still at the global size adds no size of its own', function () {
+    var project = { mesh: { element_size: 5, body_sizes: { soil_L2: 5 } } };
+    T.eq(App.MeshSettings.savedBodySizes(project, [
+      { key: 'soil_L1', size: 5 }, { key: 'soil_L2', size: 5 }, { key: 'soil_L3', size: 2 }
+    ]), { soil_L2: 5, soil_L3: 2 }, 'only a size the project has, or one typed');
+  });
+
+  test('a row left empty takes its size away', function () {
+    var project = { mesh: { element_size: 5, body_sizes: { soil_L1: 2 } } };
+    T.eq(App.MeshSettings.savedBodySizes(project, [{ key: 'soil_L1', size: 0 }]), {});
+  });
+
+  test('a choice is what was left out of it', function () {
+    var project = { layers: [{ id: 'L1' }, { id: 'L2' }],
+                    custom_parts: [{ key: 'drawn_0', mat: 'm1' }, { key: 'shown_only' }] };
+    T.eq(App.MeshSettings.leftOutBodies(project, ['soil_L1', 'drawn_0']), ['soil_L2']);
+    T.eq(App.MeshSettings.leftOutBodies(project, ['soil_L1', 'soil_L2', 'drawn_0']), []);
+  });
+
+  test('a choice names only the bodies the project still has', function () {
+    var project = { layers: [{ id: 'L1' }, { id: 'L3' }],
+                    custom_parts: [{ key: 'drawn_0', mat: 'm1' }] };
+    T.eq(App.MeshSettings.chosenBodies(project, ['soil_L3', 'soil_L_deleted']),
+         ['soil_L1', 'drawn_0']);
+  });
+
+  test('a body added after a choice is meshed, as kratos-cli meshes it', function () {
+    var before = { layers: [{ id: 'L1' }, { id: 'L2' }] };
+    var leftOut = App.MeshSettings.leftOutBodies(before, ['soil_L1']);
+    var after = { layers: [{ id: 'L1' }, { id: 'L2' }, { id: 'L_new' }] };
+    T.eq(App.MeshSettings.chosenBodies(after, leftOut), ['soil_L1', 'soil_L_new']);
+  });
+
+  test('no choice, or a choice with nothing left, is no choice', function () {
+    var project = { layers: [{ id: 'L1' }] };
+    T.eq(App.MeshSettings.chosenBodies(project, null), null);
+    T.eq(App.MeshSettings.chosenBodies(project, undefined), null);
+    T.eq(App.MeshSettings.chosenBodies(project, ['soil_L1']), null);
+  });
 })();
 
 /* The mesh dialog has to ask for the algorithm that will actually be used: gmsh

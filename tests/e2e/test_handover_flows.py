@@ -56,6 +56,56 @@ def test_a_sized_strut_and_interface_deleted_in_the_gui_leave_a_project_both_mes
     assert app_page.errors == []
 
 
+def test_a_project_stays_meshable_after_mesh_properties_and_a_deleted_layer(
+        app_page, live_server, tmp_path):
+    """Its Apply leaves alone the sizes it shows no row for, and its choice of layers
+    asks neither for a layer deleted later nor leaves out one added later."""
+    project = excavation_project(staged=False)
+    sizes = {"sheetpile": 0.5, "strut": 0.5, "soil_L_mid": 1.0}
+    project = project.model_copy(update={"mesh": project.mesh.model_copy(
+        update={"body_sizes": sizes})})
+    assert app_page.request.put(live_server["url"] + "/api/project",
+                                data=project.model_dump(mode="json")).ok
+    app_page.reload()
+    app_page.wait_for_function(
+        f"App.PROJECT && App.PROJECT.name === '{project.name}' && App.LAYERS"
+        " && App.LAYERS.length === 3", timeout=LONG)
+
+    app_page.evaluate("App.MeshSettings.open()")
+    app_page.locator("#mesh-settings-dialog").get_by_role(
+        "button", name="Apply", exact=True).click()
+    app_page.wait_for_selector("#mesh-settings-dialog", state="detached", timeout=LONG)
+    saved = app_page.request.get(live_server["url"] + "/api/project").json()
+    assert saved["mesh"]["body_sizes"] == sizes
+
+    app_page.evaluate("""() => {
+        var refused = App.deleteLayerById('L_mid');
+        if (refused) throw new Error(refused);
+        return App.commitSelectionEdit(null);
+    }""")
+    command(app_page, "mesh")
+    app_page.wait_for_function(
+        "App.Viewport.hasMesh() || document.querySelector('#cmd-log').innerText"
+        ".includes('unknown mesh body')", timeout=LONG)
+    assert "unknown mesh body" not in log_text(app_page)
+    wait_meshed(app_page)
+
+    project = app_page.request.get(live_server["url"] + "/api/project").json()
+    assert project["mesh"]["body_sizes"] == {"sheetpile": 0.5, "strut": 0.5}
+    saved = tmp_path / "saved.json"
+    saved.write_text(json.dumps(project, indent=2), encoding="utf-8")
+    assert kratos_cli("check", saved) == 0
+
+    stack = [*project["layers"], {**project["layers"][-1], "id": "L_new", "name": "New",
+                                  "top": project["layers"][-1]["bottom"],
+                                  "bottom": project["layers"][-1]["bottom"] - 5}]
+    app_page.evaluate("""stack => App.Api.patch('/api/project/layers', {layers: stack})
+        .then(function (answer) { App.Model.apply(answer.project); })""", stack)
+    asked = app_page.evaluate("App.Export.meshRequest().volume_keys")
+    assert asked == ["soil_L_top", "soil_L_bot", "soil_L_new"]
+    assert app_page.errors == []
+
+
 def test_a_project_made_on_the_command_line_opens_in_the_gui_and_saves_back(
         app_page, tmp_path):
     made = tmp_path / "pit.json"

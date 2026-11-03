@@ -1558,6 +1558,8 @@ App.LivePatches = (function () {
   function adoptProject(project, message) {
     App.Model.apply(project);
     App.History.reset();
+    // The Mesh properties window's choice of layers is about the document left behind.
+    App.MESH_BODIES_LEFT_OUT = null;
     syncHistoryButtons();
     // A previewed or accepted .mdpa belongs to the document that was open when it was
     // loaded -- swapping to a different one (new or opened) leaves all of it behind:
