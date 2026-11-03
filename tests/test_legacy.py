@@ -61,7 +61,7 @@ def test_a_soil_becomes_the_property_set_the_old_deck_carried(old, new):
 
 def test_what_the_old_soil_left_empty(old, new):
     """No cohesion stays no cohesion; no porosity is the 0.3 the old deck wrote; no K0 is
-    left to Jaky, as before."""
+    left for the export to derive."""
     o, v = old["materials"][1], new.materials[1].variables
     assert o["c"] is None and "GEO_COHESION" not in v
     assert migration.material({**o, "porosity": None, "k0_nc": None}, 2)["variables"]["POROSITY"] == 0.3

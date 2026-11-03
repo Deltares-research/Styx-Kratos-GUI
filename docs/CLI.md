@@ -152,8 +152,11 @@ kratos-cli parts pit.json                                 # soil_top__lift1, ...
 - **Soil models**: `--model linear-elastic` or `--model mohr-coulomb` sets the law for the
   model's dimension, as the **Soil model** list of the Material set window does. The
   values the soil already has stay. The values the model needs and the soil does not
-  have get the model's defaults, and the command prints their names. Setting a choice
-  such as `RETENTION_LAW=VanGenuchtenLaw` or `GEO_ENABLE_TENSION_CUT_OFF=true` fills in
+  have get the model's defaults, and the command prints their names; a soil that still
+  has empty values, such as a new one, gets none of the values the law needs, as in the
+  GUI. Setting a choice
+  such as `RETENTION_LAW=VanGenuchtenLaw`, `GEO_ENABLE_TENSION_CUT_OFF=true` or
+  `GEO_COULOMB_HARDENING_TYPE=Linear` fills in
   the defaults of the values it brings in the same way. `material P models` lists each
   model: its laws, its parameters in groups, each default in the project's units, the
   values a choice can take and when a parameter is used. `--law` is for any other law,

@@ -8,14 +8,21 @@ accepts for each choice, and when a variable is shown at all (a tensile strength
 with the tension cut-off on). A law this table does not know is the user's own ("Other")
 and is written as typed.
 
+The window lists what the choices make relevant and nothing else: a linear elastic soil
+has no strength, a soil that is not `FULLY_COUPLED` no flow parameters (unless the whole
+project is a groundwater flow calculation), and the water -- its weight, bulk modulus
+and viscosity -- is the project's, one for every soil (`schemas.Fluid`), not a soil's.
+What the export derives when a soil leaves it out (`derived`) and what follows from the
+soil's numbers (`computed`: its unit weights, its Darcy conductivity) are shown beside
+what is typed, with their values.
+
 The browser reads the same table, generated into `frontend/js/soil-model-table.js`
 (`python tests/test_soil_model_table.py --write`), and `frontend/js/soil-models.js`
-repeats the few functions below; `tests/test_draft_parity.py` holds the two to the same
+repeats the functions below; `tests/test_draft_parity.py` holds the two to the same
 answers.
 
 Defaults are in SI and expressed in the project's system when used. A parameter without
-a default is left out of a new soil: the export derives it (`core/kratos/materials.py`),
-or Kratos does.
+a default is left out of a new soil: the export derives it (`derived`), or Kratos does.
 
 What Kratos reads was checked in its GeoMechanicsApplication source: the laws registered
 in `geo_mechanics_application.cpp`, `MohrCoulombLaw::Check`,
@@ -39,6 +46,21 @@ OTHER = "other"
 DRAINAGE_TYPES = ("CONSTANT_PW_FIELD", "FULLY_COUPLED", "DRAINED", "UNDRAINED")
 """Every `GEO_DRAINAGE_TYPE` Kratos accepts (`StringToDrainageType`)."""
 
+FLOWING = ("FULLY_COUPLED",)
+"""The drainage types the window lists flow parameters for.
+
+Kratos' U-Pw elements leave the flow terms out for `CONSTANT_PW_FIELD` only: a `DRAINED`
+or an `UNDRAINED` soil is assembled, and checked, with its permeability, viscosity and
+fluid bulk modulus as a `FULLY_COUPLED` one is (`UPwSmallStrainElement::Check`). For
+those two the drainage type is the physics, not a permeability: the export gives them a
+fixed one (`FIXED_PERMEABILITY_SI`), which the window does not list."""
+
+FIXED_PERMEABILITY_SI = {"DRAINED": 1.0, "UNDRAINED": 1.0e-30}
+"""m2: the intrinsic permeability the export writes for a `DRAINED` and an `UNDRAINED`
+soil, whatever the soil carries: so permeable that the pore water drains at once, and so
+tight that none flows. Neither shown nor typed: the drainage type is the user's choice
+(`fixed_permeability`)."""
+
 RETENTION_LAWS = ("SaturatedLaw", "SaturatedBelowPhreaticLevelLaw", "VanGenuchtenLaw")
 """Every `RETENTION_LAW` Kratos builds (`RetentionLawFactory`). Its fourth name,
 `PressureFilterLaw`, builds a `SaturatedLaw` and is left out."""
@@ -56,17 +78,32 @@ WATER = ("DENSITY_WATER", "BULK_MODULUS_FLUID", "DYNAMIC_VISCOSITY")
 """The water's variables. They are the project's (`schemas.Fluid`), one for every soil,
 written into each soil by the export and refused on a soil of its own."""
 
+BULK_MODULUS_SOLID_SI = 1.0e10
+"""Pa, the reference deck's own value: `BULK_MODULUS_SOLID` when a soil gives none."""
 PERMEABILITY_SI = 1.0 / 86400 * WATER_VISCOSITY_SI / WATER_SPECIFIC_WEIGHT_SI
 """m2: the intrinsic permeability of a soil that conducts water at 1 m/day,
 k mu / gamma_w. `PERMEABILITY_XX` is intrinsic -- Kratos divides it by the viscosity
 (`GeoTransportEquationUtilities::CalculatePermeabilityMatrix`) -- not a Darcy
 conductivity: the 1/86400 a new soil started with until 2026-11-02 was ten million
 times too permeable."""
+HARDENING_TYPES = ("None", "Linear")
+"""Every `GEO_COULOMB_HARDENING_TYPE` Kratos builds (`CoulombYieldSurface`, which reads
+it in any case). Left out, it is "None"."""
+VECTORS = ("GEO_COHESION_FUNCTION_COEFFICIENTS", "GEO_FRICTION_ANGLE_FUNCTION_COEFFICIENTS",
+           "GEO_DILATANCY_ANGLE_FUNCTION_COEFFICIENTS")
+"""Variables Kratos reads as a `Vector` and the project holds as their one entry, the
+slope of a linear hardening: the export writes a number given as `[number]`."""
+UNDRAINED_POISSON_LIMIT = 0.495
+"""Kratos clamps an undrained Poisson ratio to this
+(`ConstitutiveLawUtilities::GetOrCalculateUndrainedPoissonsRatio`)."""
+
 
 @dataclass(frozen=True)
 class Parameter:
     """One variable the material window lists for a model."""
     name: str
+    label: str
+    """What the window calls it. The Kratos name is its tooltip, and what is written."""
     default: Any = None
     """The value a new soil starts with, in SI. None: left out, for the export or Kratos
     to derive."""
@@ -81,6 +118,9 @@ class Parameter:
     parameter: `SaturatedLaw` for a retention law, say."""
     when: tuple[str, tuple] | None = None
     """(variable, values): listed only while that variable is one of these values."""
+    flow: bool = False
+    """Read for the water flowing through the soil: listed only for a soil whose
+    drainage is one of `FLOWING`, or in a groundwater flow project."""
 
 
 @dataclass(frozen=True)
@@ -96,44 +136,85 @@ class SoilModel:
 
 
 def _drainage() -> tuple[Parameter, ...]:
-    return (Parameter("GEO_DRAINAGE_TYPE", "CONSTANT_PW_FIELD", choices=DRAINAGE_TYPES,
-                      absent="CONSTANT_PW_FIELD"),
-            Parameter("GEO_POISSON_UNDRAINED", when=("GEO_DRAINAGE_TYPE", ("UNDRAINED",))))
+    return (Parameter("GEO_DRAINAGE_TYPE", "Drainage type", "CONSTANT_PW_FIELD",
+                      choices=DRAINAGE_TYPES, absent="CONSTANT_PW_FIELD"),
+            Parameter("GEO_POISSON_UNDRAINED", "Undrained Poisson's ratio",
+                      when=("GEO_DRAINAGE_TYPE", ("UNDRAINED",))))
 
 
 def _stiffness() -> tuple[Parameter, ...]:
-    return (Parameter("YOUNG_MODULUS", 1.0e7, required=True),
-            Parameter("POISSON_RATIO", 0.3, required=True))
+    return (Parameter("YOUNG_MODULUS", "Young's modulus", 1.0e7, required=True),
+            Parameter("POISSON_RATIO", "Poisson's ratio", 0.3, required=True))
 
 
 def _weight() -> tuple[Parameter, ...]:
     # Porosity 0, as in Kratos' reference: Kratos weighs a point at
     # (1 - n) DENSITY_SOLID g + n S gamma_w, so the soil weighs DENSITY_SOLID g --
-    # 17 kN/m3 here -- above and below the water alike.
-    return (Parameter("DENSITY_SOLID", 17000 / 9.81, required=True),
-            Parameter("DENSITY_WATER"),
-            Parameter("POROSITY", 0.0))
+    # 17 kN/m3 here -- above and below the water alike. Nothing derives a porosity: it
+    # is the soil's, and Kratos' U-Pw elements check it.
+    return (Parameter("DENSITY_SOLID", "Density of the solid", 17000 / 9.81,
+                      required=True),
+            Parameter("POROSITY", "Porosity", 0.0, required=True))
 
 
-def _flow(retention: str | None) -> tuple[Parameter, ...]:
-    saturated = ("RETENTION_LAW", UNSATURATED)
+def _saturation() -> tuple[Parameter, ...]:
+    """The retention law: how full of water the pores are, which weighs the soil whatever
+    its drainage. Saturated below the phreatic level and residual above it, unless the
+    user says otherwise."""
+    unsaturated = ("RETENTION_LAW", UNSATURATED)
     van_genuchten = ("RETENTION_LAW", ("VanGenuchtenLaw",))
-    return (Parameter("PERMEABILITY_XX", 1 / 86400),
-            Parameter("PERMEABILITY_YY"),
-            Parameter("RETENTION_LAW", retention, choices=RETENTION_LAWS,
-                      absent="SaturatedLaw"),
-            Parameter("SATURATED_SATURATION", 1.0, when=saturated),
-            Parameter("RESIDUAL_SATURATION", 1.0e-10, when=saturated),
-            Parameter("MINIMUM_RELATIVE_PERMEABILITY", 1.0e-4, when=saturated),
+    return (Parameter("RETENTION_LAW", "Retention law", "SaturatedBelowPhreaticLevelLaw",
+                      choices=RETENTION_LAWS, absent="SaturatedLaw"),
+            Parameter("SATURATED_SATURATION", "Saturated saturation", 1.0,
+                      when=unsaturated),
+            Parameter("RESIDUAL_SATURATION", "Residual saturation", 1.0e-10,
+                      when=unsaturated),
             # Kratos' tests/Muskat/van_genuchten_hydrostatic.
-            Parameter("VAN_GENUCHTEN_AIR_ENTRY_PRESSURE", 2611.0, when=van_genuchten),
-            Parameter("VAN_GENUCHTEN_GN", 1.377, when=van_genuchten),
-            Parameter("VAN_GENUCHTEN_GL", 1.25, when=van_genuchten))
+            Parameter("VAN_GENUCHTEN_AIR_ENTRY_PRESSURE", "Air entry pressure", 2611.0,
+                      when=van_genuchten),
+            Parameter("VAN_GENUCHTEN_GN", "Pore size distribution index g_n", 1.377,
+                      when=van_genuchten))
 
 
-def _pore_fluid() -> tuple[Parameter, ...]:
-    return (Parameter("BULK_MODULUS_SOLID"), Parameter("BULK_MODULUS_FLUID"),
-            Parameter("BIOT_COEFFICIENT"))
+def _flow() -> tuple[Parameter, ...]:
+    unsaturated = ("RETENTION_LAW", UNSATURATED)
+    van_genuchten = ("RETENTION_LAW", ("VanGenuchtenLaw",))
+    return (Parameter("PERMEABILITY_XX", "Intrinsic permeability xx", PERMEABILITY_SI,
+                      flow=True),
+            Parameter("PERMEABILITY_YY", "Intrinsic permeability yy", flow=True),
+            Parameter("MINIMUM_RELATIVE_PERMEABILITY", "Minimum relative permeability",
+                      1.0e-4, when=unsaturated, flow=True),
+            Parameter("VAN_GENUCHTEN_GL", "Relative permeability exponent g_l", 1.25,
+                      when=van_genuchten, flow=True))
+
+
+def _grain_water() -> tuple[Parameter, ...]:
+    """Read where the pore water carries load: a coupled soil's storage and an undrained
+    one's Skempton B (`ConstitutiveLawUtilities::GetOrCalculateSkemptonB`)."""
+    loaded = ("GEO_DRAINAGE_TYPE", ("FULLY_COUPLED", "UNDRAINED"))
+    return (Parameter("BULK_MODULUS_SOLID", "Bulk modulus of the grains", when=loaded),
+            Parameter("BIOT_COEFFICIENT", "Biot coefficient", when=loaded))
+
+
+def _hardening() -> tuple[Parameter, ...]:
+    """Kratos' linear Coulomb hardening (`CoulombYieldSurface`): each strength grows with
+    the equivalent plastic strain kappa, as c + a_c kappa, phi + a_phi kappa and
+    psi + a_psi kappa, the angles' slopes in radians. Once it is on, Kratos wants all
+    three slopes, none negative: each starts at 0, a strength that does not grow, and
+    one left out is written as 0 (`derived`). Off -- left out -- unless the user asks."""
+    linear = ("GEO_COULOMB_HARDENING_TYPE", ("Linear",))
+    return (Parameter("GEO_COULOMB_HARDENING_TYPE", "Hardening", choices=HARDENING_TYPES,
+                      absent="None"),
+            Parameter("GEO_COHESION_FUNCTION_COEFFICIENTS", "Cohesion slope", 0.0,
+                      when=linear),
+            Parameter("GEO_FRICTION_ANGLE_FUNCTION_COEFFICIENTS", "Friction angle slope",
+                      0.0, when=linear),
+            Parameter("GEO_DILATANCY_ANGLE_FUNCTION_COEFFICIENTS", "Dilatancy angle slope",
+                      0.0, when=linear))
+
+
+def _initial_stresses() -> tuple[Parameter, ...]:
+    return (Parameter("K0_NC", "K0, normally consolidated"),)
 
 
 MODELS: dict[str, SoilModel] = {
@@ -147,13 +228,12 @@ MODELS: dict[str, SoilModel] = {
             ("Drainage", _drainage()),
             ("Stiffness", _stiffness()),
             ("Weight", _weight()),
-            ("Flow", _flow(None)),
-            # Not read by the elastic law: an interface along the soil takes them, and
-            # K0 follows from the friction angle.
-            ("Strength", (Parameter("GEO_COHESION", 0.0),
-                          Parameter("GEO_FRICTION_ANGLE", 30.0))),
-            ("Pore fluid", _pore_fluid()),
-            ("Initial stresses", (Parameter("K0_NC"),)),
+            ("Saturation", _saturation()),
+            ("Flow", _flow()),
+            ("Grain-water interaction", _grain_water()),
+            # No strength: the elastic law reads none, and its K0 follows from the
+            # Poisson ratio (`derived`).
+            ("Initial stresses", _initial_stresses()),
         )),
     MOHR_COULOMB: SoilModel(
         id=MOHR_COULOMB, label="Mohr-Coulomb",
@@ -165,20 +245,23 @@ MODELS: dict[str, SoilModel] = {
             ("Drainage", _drainage()),
             ("Stiffness", _stiffness()),
             ("Weight", _weight()),
-            ("Flow", _flow("SaturatedBelowPhreaticLevelLaw")),
+            ("Saturation", _saturation()),
+            ("Flow", _flow()),
+            ("Grain-water interaction", _grain_water()),
             # A cohesion of 1 kPa, not 0: with none the yield surface has its apex at
             # zero stress, and the ground surface, where the stress is near zero, keeps
             # a Newton-Raphson run from converging.
             ("Strength", (
-                Parameter("GEO_COHESION", 1000.0, required=True),
-                Parameter("GEO_FRICTION_ANGLE", 30.0, required=True),
-                Parameter("GEO_DILATANCY_ANGLE", 0.0, required=True),
-                Parameter("GEO_ENABLE_TENSION_CUT_OFF", False, flag=True, absent=False),
-                Parameter("GEO_TENSILE_STRENGTH", 0.0, required=True,
+                Parameter("GEO_COHESION", "Cohesion", 1000.0, required=True),
+                Parameter("GEO_FRICTION_ANGLE", "Friction angle", 30.0, required=True),
+                Parameter("GEO_DILATANCY_ANGLE", "Dilatancy angle", 0.0, required=True),
+                Parameter("GEO_ENABLE_TENSION_CUT_OFF", "Tension cut-off", False,
+                          flag=True, absent=False),
+                Parameter("GEO_TENSILE_STRENGTH", "Tensile strength", 0.0, required=True,
                           when=("GEO_ENABLE_TENSION_CUT_OFF", (True,))),
             )),
-            ("Pore fluid", _pore_fluid()),
-            ("Initial stresses", (Parameter("K0_NC"),)),
+            ("Hardening", _hardening()),
+            ("Initial stresses", _initial_stresses()),
         )),
 }
 
@@ -228,18 +311,30 @@ def parameters(model: str) -> list[Parameter]:
     return [] if found is None else [p for _, group in found.groups for p in group]
 
 
-def _holds(parameter: Parameter, variables: dict, model: str) -> bool:
+def _value(name: str, variables: dict, model: str) -> Any:
+    """`name` as the deck reads it: the soil's, or what Kratos takes when it is left
+    out."""
+    if name in variables:
+        return variables[name]
+    other = next((p for p in parameters(model) if p.name == name), None)
+    return other.absent if other is not None else None
+
+
+def _holds(parameter: Parameter, variables: dict, model: str, flow: bool) -> bool:
+    if parameter.flow and not flow and \
+            _value("GEO_DRAINAGE_TYPE", variables, model) not in FLOWING:
+        return False
     if parameter.when is None:
         return True
     name, values = parameter.when
-    other = next((p for p in parameters(model) if p.name == name), None)
-    value = variables.get(name, other.absent if other is not None else None)
+    value = _value(name, variables, model)
     return value in values and isinstance(value, bool) == isinstance(values[0], bool)
 
 
-def shown(model: str, variables: dict) -> list[Parameter]:
-    """The parameters the window lists for a soil of `model` holding `variables`."""
-    return [p for p in parameters(model) if _holds(p, variables, model)]
+def shown(model: str, variables: dict, flow: bool = False) -> list[Parameter]:
+    """The parameters the window lists for a soil of `model` holding `variables`; `flow`
+    in a groundwater flow project, which reads every soil's flow parameters."""
+    return [p for p in parameters(model) if _holds(p, variables, model, flow)]
 
 
 def required(name: str, variables: dict) -> list[str]:
@@ -248,7 +343,7 @@ def required(name: str, variables: dict) -> list[str]:
 
 
 def fill(before_law: str | None, before: dict, after_law: str, after: dict,
-         system: str, skip: tuple[str, ...] = ()) -> list[str]:
+         system: str, skip: tuple[str, ...] = (), flow: bool = False) -> list[str]:
     """Fill into `after` the defaults of what a soil now lists and lacks.
 
     The soil was `before_law` holding `before` (None and {}: a new soil) and is now
@@ -258,20 +353,21 @@ def fill(before_law: str | None, before: dict, after_law: str, after: dict,
     *   the soil is new or changed model: every one, so a soil switched to Mohr-Coulomb
         is ready to run;
     *   the model stayed and the parameter was not listed before: a retention law chosen
-        brings its saturations, a cut-off switched on its tensile strength. One that was
-        listed and is left out stays out, for the export to derive;
+        brings its saturations, a cut-off switched on its tensile strength, a soil made
+        `FULLY_COUPLED` its permeability. One that was listed and is left out stays
+        out, for the export to derive;
     *   the law cannot run without it.
 
-    Nothing the soil holds is replaced, nor is a name in `skip` filled. Returns the names
-    filled, in the order filled."""
+    Nothing the soil holds is replaced, nor is a name in `skip` filled. `flow` is
+    `shown`'s. Returns the names filled, in the order filled."""
     model = model_of(after_law)
     old: set[str] = set()
     if before_law is not None and model_of(before_law) == model:
-        old = {p.name for p in shown(model, before)}
+        old = {p.name for p in shown(model, before, flow)}
     filled: list[str] = []
     while True:
         # Listed anew after each fill: a retention law filled lists its saturations.
-        for p in shown(model, after):
+        for p in shown(model, after, flow):
             if (p.name not in after and p.name not in skip and p.default is not None
                     and (p.name not in old or p.required)):
                 after[p.name] = default_in(p, system)
@@ -322,21 +418,153 @@ def water(system: str, specific_weight: float | None = None,
     }
 
 
+def _number(value: Any) -> float | None:
+    return None if isinstance(value, bool) or not isinstance(value, (int, float)) \
+        else float(value)
+
+
+def biot(variables: dict) -> float:
+    """The Biot coefficient 1 - K / K_s, as Kratos' coupled elements derive it when it
+    is not given (`GeoTransportEquationUtilities::CalculateBiotCoefficient`): K the
+    drained bulk modulus of the elastic soil, E / (3 (1 - 2 nu)), and K_s the grains'.
+    1, incompressible grains, when the soil does not say enough to derive it."""
+    young = _number(variables.get("YOUNG_MODULUS"))
+    poisson = _number(variables.get("POISSON_RATIO"))
+    grains = _number(variables.get("BULK_MODULUS_SOLID"))
+    if young is None or poisson is None or not grains or poisson >= 0.5:
+        return 1.0
+    return 1.0 - young / (3.0 * (1.0 - 2.0 * poisson)) / grains
+
+
+def undrained_poisson(variables: dict, fluid_bulk_modulus: float) -> float | None:
+    """The undrained Poisson ratio Kratos derives when it is not given, from Skempton's
+    B (`ConstitutiveLawUtilities::CalculateUndrainedPoissonsRatio`), clamped as Kratos
+    clamps it. None when the soil does not say enough, or Kratos would refuse the
+    numbers (a Skempton B outside [0, 1])."""
+    poisson = _number(variables.get("POISSON_RATIO"))
+    alpha = _number(variables.get("BIOT_COEFFICIENT"))
+    porosity = _number(variables.get("POROSITY"))
+    grains = _number(variables.get("BULK_MODULUS_SOLID"))
+    if poisson is None or alpha is None or porosity is None or grains is None \
+            or not fluid_bulk_modulus:
+        return None
+    denominator = alpha + porosity * (grains / fluid_bulk_modulus + alpha - 1.0)
+    if denominator <= 0:
+        return None
+    b = alpha / denominator
+    if not 0.0 <= b <= 1.0 + 1e-12:     # Kratos refuses it: "out of range [0,1]"
+        return None
+    b = min(b, 1.0)
+    denominator = 3.0 - alpha * b * (1.0 - 2.0 * poisson)
+    if denominator <= 0:
+        return None
+    result = (3.0 * poisson + alpha * b * (1.0 - 2.0 * poisson)) / denominator
+    return min(result, UNDRAINED_POISSON_LIMIT)
+
+
+def derived(law: str, variables: dict, water_variables: dict, system: str,
+            flow: bool = False) -> dict:
+    """What the export writes for a soil of `law` holding `variables` where the soil
+    leaves it out, in `system`, in the order it derives them. The window shows each in
+    place of the value it lacks.
+
+    `water_variables` is `water`'s, for the undrained Poisson ratio; `flow` is a
+    groundwater flow deck's, whose water pressure elements read the permeability and
+    the Biot coefficient of every soil. The water itself, the permeabilities a
+    dimension adds (`PERMEABILITY_XY`, the 3D ones) and a drained or an undrained soil's
+    fixed permeability (`fixed_permeability`), the export writes on top."""
+    out: dict = {}
+
+    def given(name: str) -> Any:
+        return variables[name] if name in variables else out.get(name)
+
+    def put(name: str, value: Any) -> None:
+        if name not in variables and value is not None:
+            out[name] = value
+
+    put("GEO_DRAINAGE_TYPE", "CONSTANT_PW_FIELD")
+    put("BULK_MODULUS_SOLID", units.from_si(BULK_MODULUS_SOLID_SI, units.STRESS, system))
+    drainage = given("GEO_DRAINAGE_TYPE")
+    # A drained or an undrained soil's permeability is not derived but fixed.
+    if fixed_permeability(variables, system, flow) is None:
+        if drainage == "FULLY_COUPLED" or flow:
+            put("PERMEABILITY_XX", units.from_si(PERMEABILITY_SI, units.PERMEABILITY, system))
+        put("PERMEABILITY_YY", _number(given("PERMEABILITY_XX")))
+    if drainage in ("FULLY_COUPLED", "UNDRAINED") or flow:
+        put("BIOT_COEFFICIENT", biot({**variables, **out}))
+    if drainage == "UNDRAINED":
+        put("GEO_POISSON_UNDRAINED", undrained_poisson(
+            {**variables, **out}, water_variables["BULK_MODULUS_FLUID"]))
+    if model_of(law) == MOHR_COULOMB and \
+            str(variables.get("GEO_COULOMB_HARDENING_TYPE", "None")).lower() == "linear":
+        for name in VECTORS:
+            put(name, 0.0)
+    put("K0_NC", k0(law, variables))
+    return out
+
+
+def fixed_permeability(variables: dict, system: str, flow: bool = False) -> float | None:
+    """The intrinsic permeability, in every direction, the export writes for a soil
+    holding `variables` in place of any it carries, in `system`: `FIXED_PERMEABILITY_SI`
+    for a `DRAINED` or an `UNDRAINED` soil. None for any other, and in a groundwater flow
+    project (`flow`), which lists every soil's permeability for the user to set."""
+    fixed = FIXED_PERMEABILITY_SI.get(str(variables.get("GEO_DRAINAGE_TYPE")))
+    if fixed is None or flow:
+        return None
+    return units.from_si(fixed, units.PERMEABILITY, system)
+
+
+COMPUTED = {
+    "UNIT_WEIGHT_DRY": ("Unit weight, dry", units.SPECIFIC_WEIGHT, "Weight"),
+    "UNIT_WEIGHT_SATURATED": ("Unit weight, saturated", units.SPECIFIC_WEIGHT, "Weight"),
+    "HYDRAULIC_CONDUCTIVITY_XX": ("Darcy permeability xx", units.VELOCITY, "Flow"),
+    "HYDRAULIC_CONDUCTIVITY_YY": ("Darcy permeability yy", units.VELOCITY, "Flow"),
+}
+"""What `computed` gives: name -> (label, quantity, the window's group it is shown in).
+Not Kratos variables: nothing of these is written."""
+
+
+def computed(law: str, variables: dict, water_variables: dict, system: str,
+             flow: bool = False) -> dict:
+    """What follows from a soil's numbers, for the window to show beside them, in
+    `system`: its unit weight dry, (1 - n) rho_s g, and saturated, with n gamma_w on
+    top -- what Kratos weighs it at above and below the phreatic level -- and, where its
+    permeability is listed, the Darcy conductivity that is: k = kappa gamma_w / mu."""
+    every = {**derived(law, variables, water_variables, system, flow), **variables}
+    g = units.gravity(system)
+    gamma_w = water_variables["DENSITY_WATER"] * g
+    out: dict = {}
+    density, porosity = _number(every.get("DENSITY_SOLID")), _number(every.get("POROSITY"))
+    if density is not None and porosity is not None:
+        out["UNIT_WEIGHT_DRY"] = (1.0 - porosity) * density * g
+        out["UNIT_WEIGHT_SATURATED"] = out["UNIT_WEIGHT_DRY"] + porosity * gamma_w
+    listed = {p.name for p in shown(model_of(law), variables, flow)}
+    for axis in ("XX", "YY"):
+        kappa = _number(every.get(f"PERMEABILITY_{axis}"))
+        if f"PERMEABILITY_{axis}" in listed and kappa is not None:
+            out[f"HYDRAULIC_CONDUCTIVITY_{axis}"] = \
+                kappa * gamma_w / water_variables["DYNAMIC_VISCOSITY"]
+    return out
+
+
 def problem(name: str, variables: dict) -> str | None:
     """Why Kratos would refuse the soil, beyond a missing variable: the bounds
-    `MohrCoulombLaw::Check` and `CoulombYieldSurface` hold between its variables."""
+    `MohrCoulombLaw::Check` and `CoulombYieldSurface` hold between its variables, and
+    on a hardening's slopes."""
     if model_of(name) != MOHR_COULOMB:
         return None
 
-    def number(key: str) -> float | None:
-        value = variables.get(key)
-        return None if isinstance(value, bool) or not isinstance(value, (int, float)) \
-            else float(value)
-
-    phi, psi = number("GEO_FRICTION_ANGLE"), number("GEO_DILATANCY_ANGLE")
-    cohesion, tension = number("GEO_COHESION"), number("GEO_TENSILE_STRENGTH")
+    phi, psi = _number(variables.get("GEO_FRICTION_ANGLE")), \
+        _number(variables.get("GEO_DILATANCY_ANGLE"))
+    cohesion, tension = _number(variables.get("GEO_COHESION")), \
+        _number(variables.get("GEO_TENSILE_STRENGTH"))
     if phi is not None and not phi < 90:
         return "GEO_FRICTION_ANGLE must be below 90 degrees."
+    if str(variables.get("GEO_COULOMB_HARDENING_TYPE", "None")).lower() != "none":
+        for slope_name in VECTORS:
+            slope = _number(variables.get(slope_name))
+            if slope is not None and slope < 0:
+                return f"{slope_name} cannot be negative."
     if phi is not None and psi is not None and psi > phi:
         return "GEO_DILATANCY_ANGLE cannot be larger than GEO_FRICTION_ANGLE."
     cut_off = variables.get("GEO_ENABLE_TENSION_CUT_OFF")
@@ -352,7 +580,7 @@ def problem(name: str, variables: dict) -> str | None:
 def table() -> dict:
     """The catalogue as the browser reads it (`App.SOIL_MODEL_TABLE`)."""
     def parameter(p: Parameter) -> dict:
-        out: dict = {"name": p.name}
+        out: dict = {"name": p.name, "label": p.label}
         if p.default is not None:
             out["default"] = p.default
         if p.required:
@@ -365,12 +593,26 @@ def table() -> dict:
             out["absent"] = p.absent
         if p.when is not None:
             out["when"] = {"name": p.when[0], "values": list(p.when[1])}
+        if p.flow:
+            out["flow"] = True
         return out
 
-    return {"order": list(MODELS), "other": OTHER, "models": {
-        model.id: {"label": model.label,
-                   "laws": {str(dim): name for dim, name in model.laws.items()},
-                   "old_laws": dict(model.old_laws),
-                   "groups": [{"title": title, "parameters": [parameter(p) for p in group]}
-                              for title, group in model.groups]}
-        for model in MODELS.values()}}
+    return {"order": list(MODELS), "other": OTHER, "flowing": list(FLOWING),
+            "blank": blank_si(), "fixed_permeability": dict(FIXED_PERMEABILITY_SI),
+            "vectors": list(VECTORS),
+            "constants": {"WATER_SPECIFIC_WEIGHT": WATER_SPECIFIC_WEIGHT_SI,
+                          "WATER_BULK_MODULUS": WATER_BULK_MODULUS_SI,
+                          "WATER_VISCOSITY": WATER_VISCOSITY_SI,
+                          "BULK_MODULUS_SOLID": BULK_MODULUS_SOLID_SI,
+                          "PERMEABILITY": PERMEABILITY_SI,
+                          "UNDRAINED_POISSON_LIMIT": UNDRAINED_POISSON_LIMIT},
+            "computed": {name: {"label": label, "quantity": quantity.name, "group": group}
+                         for name, (label, quantity, group) in COMPUTED.items()},
+            "models": {
+                model.id: {"label": model.label,
+                           "laws": {str(dim): name for dim, name in model.laws.items()},
+                           "old_laws": dict(model.old_laws),
+                           "groups": [{"title": title,
+                                       "parameters": [parameter(p) for p in group]}
+                                      for title, group in model.groups]}
+                for model in MODELS.values()}}

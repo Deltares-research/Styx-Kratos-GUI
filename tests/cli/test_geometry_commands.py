@@ -144,7 +144,10 @@ def test_material_models_lists_each_model_as_the_window_does(cli, site):
     assert ("GEO_TENSILE_STRENGTH = 0 Pa (required), when GEO_ENABLE_TENSION_CUT_OFF is "
             "true") in ran.out
     assert "[CONSTANT_PW_FIELD | FULLY_COUPLED | DRAINED | UNDRAINED]" in ran.out
-    assert "RETENTION_LAW = SaturatedLaw when left out" in ran.out
+    assert ("RETENTION_LAW = SaturatedBelowPhreaticLevelLaw [SaturatedLaw | "
+            "SaturatedBelowPhreaticLevelLaw | VanGenuchtenLaw]") in ran.out
+    assert ("PERMEABILITY_XX = 1.15741e-12 m², when GEO_DRAINAGE_TYPE is FULLY_COUPLED or "
+            "the project a groundwater flow calculation") in ran.out
 
 
 def test_material_models_states_the_defaults_in_the_project_s_units(cli, site):

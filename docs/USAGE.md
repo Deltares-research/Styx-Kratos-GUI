@@ -129,13 +129,27 @@ law and its parameters.
   the material has, and fills in defaults for the others. The line at the bottom of the
   window lists the values it filled in. The material is then ready for a calculation.
 - In the **Properties…** window, the parameters are in groups (Drainage, Stiffness,
-  Weight, Flow, Strength, Pore fluid, Initial stresses). A text value, such as
-  `GEO_DRAINAGE_TYPE` or `RETENTION_LAW`, is a list of the values Kratos accepts. A
-  true/false value, such as `GEO_ENABLE_TENSION_CUT_OFF`, is a check box. Some
-  parameters show only when they are used: `GEO_TENSILE_STRENGTH` when the tension
-  cut-off is on, the saturations for a retention law other than `SaturatedLaw`, and the
-  Van Genuchten parameters for `VanGenuchtenLaw`. When a choice brings in new parameters,
-  Styx fills in their defaults.
+  Weight, Saturation, Flow, Grain-water interaction, Strength, Hardening, Initial
+  stresses). Each has
+  a name, with its Kratos variable when you hover it, and its unit beside the field. A text value, such
+  as the drainage type or the retention law, is a list of the values Kratos accepts. A
+  true/false value, such as the tension cut-off, is a check box.
+- The window shows only what the soil model and its choices use. A linear elastic soil has
+  no cohesion or friction angle. The flow parameters (the intrinsic permeabilities, the
+  minimum relative permeability) show for a `FULLY_COUPLED` soil only, or in a groundwater
+  flow project. The tensile strength shows when the tension cut-off is on, the saturations
+  for a retention law other than `SaturatedLaw`, and the Van Genuchten parameters for
+  `VanGenuchtenLaw`, and the three hardening slopes when **Hardening** is Linear (the
+  angles' in radians per unit of plastic strain; each starts at 0). When a choice brings in new
+  parameters, Styx fills in their defaults. A `DRAINED` or `UNDRAINED` soil shows no
+  permeability: the export gives it a fixed one, 1 m² and 1e-30 m².
+  A new soil is saturated below the phreatic level (`SaturatedBelowPhreaticLevelLaw`).
+- A value you leave empty shows, in grey, the value the export writes for it: the
+  permeability in y is the one in x, K0 is ν / (1 − ν) for a linear elastic soil and
+  1 − sin φ for a Mohr-Coulomb one, and so on. Type a value to replace it.
+- The window also shows what follows from the soil's values: its unit weight dry and
+  saturated, and for a coupled soil the Darcy permeability (in m/s and m/day) that its
+  intrinsic permeability gives with the project's water.
 - The water is the same in every soil. Its bulk modulus and viscosity are under **Water**
   in the Soil materials window; its unit weight is that of the water level. Empty, each is
   the value of water at 20 °C.

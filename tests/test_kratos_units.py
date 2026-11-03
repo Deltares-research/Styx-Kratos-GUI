@@ -259,13 +259,15 @@ def _bare(**variables) -> schemas.Material:
                                        "DENSITY_SOLID": 1800.0, **variables})
 
 
-def test_a_material_that_says_nothing_about_porosity_still_gets_a_number():
-    """Derived when empty, and said: the export lists every name it filled in."""
+def test_a_material_that_says_nothing_about_porosity_is_refused_not_given_one():
+    """Porosity is the soil's: nothing derives it, and the export names it missing."""
     project = seed_project()
     derived: list[str] = []
+    with pytest.raises(materials.MaterialError, match="has no POROSITY"):
+        materials._check(_bare(), "material 'M'")
     written = materials._variables(_bare(), 2, False, project, derived)
-    assert written["POROSITY"] == materials.DEFAULT_POROSITY
-    assert "material 'M': POROSITY" in derived
+    assert "POROSITY" not in written
+    assert "material 'M': POROSITY" not in derived
     typed = materials._variables(_bare(POROSITY=0.0), 2, False, project, [])
     assert typed["POROSITY"] == 0.0
 

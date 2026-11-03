@@ -215,6 +215,9 @@ def _parameter_line(p: soil_models.Parameter, system: str) -> str:
         text += f" [{' | '.join(p.choices)}]"
     if p.when is not None:
         text += f", when {p.when[0]} is " + " or ".join(_shown(v) for v in p.when[1])
+    if p.flow:
+        text += (", when GEO_DRAINAGE_TYPE is " + " or ".join(soil_models.FLOWING)
+                 + " or the project a groundwater flow calculation")
     return text
 
 

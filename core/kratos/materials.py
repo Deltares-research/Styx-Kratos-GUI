@@ -15,13 +15,19 @@ ProjectParameters.json process against the load's sub-model part instead.
 **The project already holds what Kratos reads.** Every property set is a constitutive law
 and a `Variables` block under Kratos' names, in the project's unit system
 (`core/model/schemas.py:KratosPropertySet`, `core/model/units.py`), and this module writes it as it
-stands. It does three things on top, and no others:
+stands. It does these things on top, and no others:
 
-*   **Fills what is missing and can be derived** -- the fluid constants, the water's
-    density, the symmetric permeabilities, a beam's shear areas, an interface's
-    stiffness and strength from its soil, K0 from Jaky, and in a groundwater flow deck
-    the Biot coefficient. A value the user gave is never
-    replaced, and every filled-in name is listed in the export's warnings.
+*   **Fills what is missing and can be derived** -- a soil's what
+    `soil_models.derived` says (the grains' bulk modulus, the symmetric
+    permeabilities, a coupled soil's permeability, the Biot coefficient and undrained
+    Poisson ratio where they are read, K0), a beam's shear areas, an interface's
+    stiffness and strength from its soil. A value the user gave is never replaced, and
+    every filled-in name is listed in the export's warnings.
+*   **Fixes a drained or an undrained soil's permeability** -- 1 m2 and 1e-30 m2
+    (`soil_models.fixed_permeability`), over any the soil carries: the drainage type is
+    the user's choice, and Kratos still checks that a permeability is there.
+*   **Writes a hardening slope as Kratos' vector** -- the one number the project holds
+    for each of `soil_models.VECTORS`, as `[number]`.
 *   **Smears** a 2D pile or anchor over its out-of-plane `spacing` -- plane strain models
     a metre run of wall. Geometry, not units.
 *   **Orders** each block canonically (`_ordered`), so the same project always writes the
@@ -77,14 +83,6 @@ REQUIRED = {
 property set missing one is refused at export, naming it, rather than left for Kratos to
 stop on. A soil model's law says what it needs in `core/model/soil_models.py`. A law known
 to neither is the user's own business: it is written as given."""
-
-# The constants a soil gets when it says nothing about them, in SI and expressed in the
-# project's system when used -- the one place a unit conversion remains, and it converts
-# a constant of nature, not anything the user typed.
-DEFAULT_POROSITY = 0.3
-BULK_MODULUS_SOLID_SI = 1.0e10     # Pa, the reference deck's own value
-BULK_MODULUS_FLUID_SI = 2.2e9      # Pa, water at 20 C
-DYNAMIC_VISCOSITY_SI = 1.0e-3      # Pa s, water at 20 C
 
 NORMAL_TO_SHEAR_STIFFNESS = 10.0
 """How much stiffer a contact is across the joint than along it, when neither stiffness
@@ -316,35 +314,35 @@ def _fill(variables: dict, name: str, value, derived: list[str], label: str) -> 
 
 def _variables(material: Material, dim: int, k0: bool, project: Project,
                derived: list[str] | None = None, flow: bool = False) -> dict:
-    """A soil's `Variables`: as given, plus what is missing and derivable."""
+    """A soil's `Variables`: as given, plus the project's water, plus what is missing
+    and derivable (`soil_models.derived`, the values the material window shows)."""
     derived = [] if derived is None else derived
-    system = project.unit_system
     label = f"material {material.name!r}"
     given = dict(material.variables)
     k0_given = {name: given.pop(name) for name in list(given) if name.startswith("K0_")}
     # The project's, one water for every soil: not derived, so not listed as such.
     v = {**given, **project.water_variables}
 
-    _fill(v, "GEO_DRAINAGE_TYPE", "CONSTANT_PW_FIELD", derived, label)
-    _fill(v, "DENSITY_WATER", project.water_specific_weight / units.gravity(system),
-          derived, label)
-    _fill(v, "POROSITY", DEFAULT_POROSITY, derived, label)
-    _fill(v, "BULK_MODULUS_SOLID",
-          units.from_si(BULK_MODULUS_SOLID_SI, units.STRESS, system), derived, label)
-    _fill(v, "BULK_MODULUS_FLUID",
-          units.from_si(BULK_MODULUS_FLUID_SI, units.STRESS, system), derived, label)
-    _fill(v, "DYNAMIC_VISCOSITY",
-          units.from_si(DYNAMIC_VISCOSITY_SI, units.VISCOSITY, system), derived, label)
-    permeability = material.number("PERMEABILITY_XX")
-    if permeability is not None:
-        _fill(v, "PERMEABILITY_YY", permeability, derived, label)
+    found = soil_models.derived(material.constitutive_law, material.variables,
+                                project.water_variables, project.unit_system, flow)
+    k0_derived = found.pop("K0_NC", None)
+    for name, value in found.items():
+        _fill(v, name, value, derived, label)
+    fixed = soil_models.fixed_permeability(material.variables, project.unit_system, flow)
+    if fixed is not None:
+        # The drainage type's, over any the soil carries: not derived, so not listed.
+        v.update(_permeabilities(fixed, dim))
+    permeability = v.get("PERMEABILITY_XX")
+    if isinstance(permeability, (int, float)) and not isinstance(permeability, bool):
         _fill(v, "PERMEABILITY_XY", 0.0, derived, label)
         if dim == 3:
             _fill(v, "PERMEABILITY_ZZ", permeability, derived, label)
             _fill(v, "PERMEABILITY_YZ", 0.0, derived, label)
             _fill(v, "PERMEABILITY_ZX", 0.0, derived, label)
-    if flow:
-        _fill(v, "BIOT_COEFFICIENT", biot(v), derived, label)
+    for name in soil_models.VECTORS:
+        value = v.get(name)
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            v[name] = [value]
     v = _ordered(v, SOIL_ORDER)
 
     if k0:
@@ -352,24 +350,17 @@ def _variables(material: Material, dim: int, k0: bool, project: Project,
         # constraint and normal-load processes write as `gravity_direction`.
         k0_v = dict(k0_given)
         _fill(k0_v, "K0_MAIN_DIRECTION", 1, derived, label)
-        _fill(k0_v, "K0_NC", jaky(material), derived, label)
+        _fill(k0_v, "K0_NC", k0_derived, derived, label)
         v.update(_ordered(k0_v, K0_ORDER))
     return v
 
 
-def biot(variables: dict) -> float:
-    """The Biot coefficient 1 - K / K_s, as Kratos' coupled elements derive it when it
-    is not given (`GeoTransportEquationUtilities::CalculateBiotCoefficient`): K the
-    drained bulk modulus of the elastic soil, E / (3 (1 - 2 nu)), and K_s the grains'.
-    1, incompressible grains, when the soil does not say enough to derive it. A steady
-    flow does not read it; a transient one does."""
-    young = variables.get("YOUNG_MODULUS")
-    poisson = variables.get("POISSON_RATIO")
-    grains = variables.get("BULK_MODULUS_SOLID")
-    if not (isinstance(young, (int, float)) and isinstance(poisson, (int, float))
-            and isinstance(grains, (int, float))) or not grains or poisson >= 0.5:
-        return 1.0
-    return 1.0 - young / (3.0 * (1.0 - 2.0 * poisson)) / grains
+def _permeabilities(value: float, dim: int) -> dict:
+    """An isotropic intrinsic permeability `value` as the dimension `dim` writes it."""
+    out = {"PERMEABILITY_XX": value, "PERMEABILITY_YY": value, "PERMEABILITY_XY": 0.0}
+    if dim == 3:
+        out.update(PERMEABILITY_ZZ=value, PERMEABILITY_YZ=0.0, PERMEABILITY_ZX=0.0)
+    return out
 
 
 def jaky(material: Material) -> float | None:

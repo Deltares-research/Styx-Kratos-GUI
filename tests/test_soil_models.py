@@ -9,18 +9,24 @@ soil now lists; the export refuses a soil its law cannot run, naming why.
 from __future__ import annotations
 
 import json
+import math
 
 import pytest
 
 from core import session
 from core.kratos import materials
 from core.kratos.materials import MaterialError
-from core.model import drafts, soil_models
+from core.model import drafts, migration, soil_models, units
 from core.model.schemas import DimensionUpdate, Material, Project
 from core.model.templates import blank_project, seed_project
 
 MC_2D, MC_3D = soil_models.law(soil_models.MOHR_COULOMB, 2), soil_models.law(
     soil_models.MOHR_COULOMB, 3)
+ELASTIC_2D = soil_models.law(soil_models.LINEAR_ELASTIC, 2)
+
+
+def names(parameters: list[soil_models.Parameter]) -> list[str]:
+    return [p.name for p in parameters]
 
 
 def mohr_coulomb_site(**variables) -> Project:
@@ -54,23 +60,46 @@ def test_a_new_mohr_coulomb_soil_holds_what_its_law_reads():
     assert defaults["GEO_DILATANCY_ANGLE"] == 0.0
     assert defaults["GEO_ENABLE_TENSION_CUT_OFF"] is False
     assert defaults["RETENTION_LAW"] == "SaturatedBelowPhreaticLevelLaw"
-    assert (defaults["SATURATED_SATURATION"], defaults["RESIDUAL_SATURATION"],
-            defaults["MINIMUM_RELATIVE_PERMEABILITY"]) == (1.0, 1.0e-10, 1.0e-4)
+    assert (defaults["SATURATED_SATURATION"], defaults["RESIDUAL_SATURATION"]) ==         (1.0, 1.0e-10)
     assert "GEO_TENSILE_STRENGTH" not in defaults, "the cut-off is off"
+    assert "MINIMUM_RELATIVE_PERMEABILITY" not in defaults, "a drained soil has no flow"
     assert soil_models.required(MC_2D, defaults) == [
-        "YOUNG_MODULUS", "POISSON_RATIO", "DENSITY_SOLID", "GEO_COHESION",
+        "YOUNG_MODULUS", "POISSON_RATIO", "DENSITY_SOLID", "POROSITY", "GEO_COHESION",
         "GEO_FRICTION_ANGLE", "GEO_DILATANCY_ANGLE"]
     assert soil_models.problem(MC_2D, defaults) is None
 
 
-def test_the_linear_elastic_defaults_are_the_sand_a_new_soil_always_was():
+def test_a_new_linear_elastic_soil_is_the_sand_saturated_below_the_phreatic_level():
     assert soil_models.defaults_si(soil_models.LINEAR_ELASTIC) == {
         "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD", "YOUNG_MODULUS": 1.0e7,
         "POISSON_RATIO": 0.3, "DENSITY_SOLID": 17000 / 9.81, "POROSITY": 0.0,
-        "PERMEABILITY_XX": 1 / 86400, "GEO_COHESION": 0.0, "GEO_FRICTION_ANGLE": 30.0}
+        "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw", "SATURATED_SATURATION": 1.0,
+        "RESIDUAL_SATURATION": 1.0e-10}
+
+
+def test_a_linear_elastic_soil_lists_no_strength_and_a_mohr_coulomb_one_does():
+    elastic = names(soil_models.shown(soil_models.LINEAR_ELASTIC, {}))
+    plastic = names(soil_models.shown(soil_models.MOHR_COULOMB, {}))
+
+    assert not {"GEO_COHESION", "GEO_FRICTION_ANGLE"} & set(elastic)
+    assert {"GEO_COHESION", "GEO_FRICTION_ANGLE"} <= set(plastic)
+
+
 def test_no_soil_lists_the_water_which_is_the_project_s():
     for model in soil_models.MODELS:
         assert not set(soil_models.WATER) & set(names(soil_models.parameters(model)))
+
+
+@pytest.mark.parametrize("drainage, listed", [
+    ("CONSTANT_PW_FIELD", False), ("DRAINED", False), ("UNDRAINED", False),
+    ("FULLY_COUPLED", True)])
+def test_the_flow_parameters_are_listed_for_a_coupled_soil_only(drainage, listed):
+    soil = {"GEO_DRAINAGE_TYPE": drainage, "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw"}
+    shown = names(soil_models.shown(soil_models.MOHR_COULOMB, soil))
+    assert ("PERMEABILITY_XX" in shown) is listed
+    assert ("MINIMUM_RELATIVE_PERMEABILITY" in shown) is listed
+    in_a_flow_project = names(soil_models.shown(soil_models.MOHR_COULOMB, soil, flow=True))
+    assert "PERMEABILITY_XX" in in_a_flow_project
 
 
 def test_the_permeabilities_are_called_intrinsic():
@@ -132,15 +161,23 @@ def test_a_new_soil_of_a_model_takes_its_law_and_defaults_in_the_project_s_units
     assert notes == []
 
 
-def test_a_preset_made_mohr_coulomb_keeps_its_values_and_says_what_it_took():
-    material, notes = drafts.soil(blank_project(), "clay", preset="m3",
-                                  model=soil_models.MOHR_COULOMB)
+def test_a_preset_with_a_strength_is_a_mohr_coulomb_soil_ready_to_run():
+    material, notes = drafts.soil(blank_project(), "clay", preset="m3")
 
+    assert material.constitutive_law == MC_2D
     assert material.variables["GEO_COHESION"] == drafts.preset("m3")["variables"]["GEO_COHESION"]
     assert material.variables["GEO_DILATANCY_ANGLE"] == 0.0
+    assert notes == [], "a preset filled from its own model's defaults says nothing"
+
+
+def test_a_preset_made_another_model_says_what_it_took():
+    material, notes = drafts.soil(blank_project(), "rock", preset="m6",
+                                  model=soil_models.MOHR_COULOMB)
+
+    assert material.constitutive_law == MC_2D
     assert notes == ["Filled in from the Mohr-Coulomb defaults: RETENTION_LAW, "
-                     "SATURATED_SATURATION, RESIDUAL_SATURATION, MINIMUM_RELATIVE_PERMEABILITY, "
-                     "GEO_DILATANCY_ANGLE, GEO_ENABLE_TENSION_CUT_OFF."]
+                     "SATURATED_SATURATION, RESIDUAL_SATURATION, GEO_COHESION, "
+                     "GEO_FRICTION_ANGLE, GEO_DILATANCY_ANGLE, GEO_ENABLE_TENSION_CUT_OFF."]
 
 
 def test_a_soil_model_and_a_law_together_are_refused():
@@ -167,7 +204,7 @@ def test_a_model_change_keeps_what_was_typed_and_fills_the_rest():
 
 def test_a_choice_changed_fills_what_it_lists_and_a_left_out_value_stays_out():
     project = mohr_coulomb_site()
-    project = session.update_material(project, "m2", unset=["POROSITY"])
+    project = session.update_material(project, "m2", unset=["RESIDUAL_SATURATION"])
     notes: list[str] = []
 
     project = session.update_material(project, "m2",
@@ -176,9 +213,9 @@ def test_a_choice_changed_fills_what_it_lists_and_a_left_out_value_stays_out():
 
     soil = project.material("m2").variables
     assert soil["VAN_GENUCHTEN_GN"] == 1.377
-    assert "POROSITY" not in soil
+    assert "RESIDUAL_SATURATION" not in soil
     assert notes == ["Filled in from the Mohr-Coulomb defaults: "
-                     "VAN_GENUCHTEN_AIR_ENTRY_PRESSURE, VAN_GENUCHTEN_GN, VAN_GENUCHTEN_GL."]
+                     "VAN_GENUCHTEN_AIR_ENTRY_PRESSURE, VAN_GENUCHTEN_GN."],         "a drained soil's flow exponent is not listed"
 
 
 def test_a_value_unset_with_a_choice_is_not_filled_back():
@@ -254,6 +291,158 @@ def test_a_law_of_no_model_is_written_as_typed():
         variables={"UDSM_NAME": "mc.dll"}).model_dump(mode="json")
     assert deck(Project.model_validate(payload))["constitutive_law"]["name"] == \
         "SmallStrainUDSM2DPlaneStrainLaw"
+
+
+# ── What is derived, and what follows from a soil's numbers ────────────────
+
+WATER_SI = soil_models.water("SI")
+
+
+def test_a_permeability_left_out_in_y_is_the_one_in_x():
+    found = soil_models.derived(ELASTIC_2D, {"GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
+                                             "PERMEABILITY_XX": 2.0e-12}, WATER_SI, "SI")
+    assert found["PERMEABILITY_YY"] == 2.0e-12
+
+
+def test_a_coupled_soil_derives_its_permeability_and_a_constant_one_none():
+    coupled = soil_models.derived(ELASTIC_2D, {"GEO_DRAINAGE_TYPE": "FULLY_COUPLED"},
+                                  WATER_SI, "SI")
+    constant = soil_models.derived(ELASTIC_2D, {}, WATER_SI, "SI")
+
+    assert coupled["PERMEABILITY_XX"] == soil_models.PERMEABILITY_SI
+    assert "PERMEABILITY_XX" not in constant
+
+
+@pytest.mark.parametrize("drainage, fixed", [("DRAINED", 1.0), ("UNDRAINED", 1.0e-30)])
+def test_a_drained_or_undrained_soil_is_written_with_its_fixed_permeability(drainage, fixed):
+    """Kratos' U-Pw element checks a permeability for every drainage type but
+    CONSTANT_PW_FIELD. For these two the drainage type is the physics: the permeability
+    is fixed, over any the soil carries, neither listed nor derived."""
+    project = mohr_coulomb_site(GEO_DRAINAGE_TYPE=drainage, PERMEABILITY_XX=3.0e-12)
+
+    variables = deck(project)["Variables"]
+    _, warnings = materials.material_parameters(project, [("Soil_1", "m2")], 2)
+
+    assert (variables["PERMEABILITY_XX"], variables["PERMEABILITY_YY"],
+            variables["PERMEABILITY_XY"]) == (fixed, fixed, 0.0)
+    assert "PERMEABILITY" not in " ".join(warnings)
+    assert "PERMEABILITY_XX" not in [p.name for p in soil_models.shown(
+        soil_models.MOHR_COULOMB, project.material("m2").variables)]
+    assert "PERMEABILITY_XX" not in soil_models.derived(
+        MC_2D, project.material("m2").variables, WATER_SI, "SI")
+
+
+def test_a_drained_soil_in_a_flow_project_keeps_the_permeability_it_lists():
+    assert soil_models.fixed_permeability({"GEO_DRAINAGE_TYPE": "DRAINED"}, "SI",
+                                          flow=True) is None
+    assert soil_models.derived(ELASTIC_2D, {"GEO_DRAINAGE_TYPE": "DRAINED"}, WATER_SI, "SI",
+                               flow=True)["PERMEABILITY_XX"] == soil_models.PERMEABILITY_SI
+
+
+# ── Hardening ───────────────────────────────────────────────────────────────
+
+def test_a_mohr_coulomb_soil_offers_linear_hardening_and_lists_its_slopes_once_on():
+    off = [p.name for p in soil_models.shown(soil_models.MOHR_COULOMB, {})]
+    on = soil_models.shown(soil_models.MOHR_COULOMB, {"GEO_COULOMB_HARDENING_TYPE": "Linear"})
+
+    assert "GEO_COULOMB_HARDENING_TYPE" in off
+    assert not set(soil_models.VECTORS) & set(off)
+    assert [p.name for p in on if p.name in soil_models.VECTORS] == list(soil_models.VECTORS)
+    assert all(p.default == 0.0 and not p.required for p in on
+               if p.name in soil_models.VECTORS), "each starts at 0, a flat strength"
+    assert "GEO_COULOMB_HARDENING_TYPE" not in soil_models.defaults_si(soil_models.MOHR_COULOMB)
+
+
+def test_a_linear_hardening_is_written_with_its_slopes_as_kratos_vectors():
+    project = mohr_coulomb_site(GEO_COULOMB_HARDENING_TYPE="Linear",
+                                GEO_COHESION_FUNCTION_COEFFICIENTS=1.0e5,
+                                GEO_FRICTION_ANGLE_FUNCTION_COEFFICIENTS=0.1,
+                                GEO_DILATANCY_ANGLE_FUNCTION_COEFFICIENTS=0.0)
+
+    variables = deck(project)["Variables"]
+
+    assert variables["GEO_COULOMB_HARDENING_TYPE"] == "Linear"
+    assert variables["GEO_COHESION_FUNCTION_COEFFICIENTS"] == [1.0e5]
+    assert variables["GEO_FRICTION_ANGLE_FUNCTION_COEFFICIENTS"] == [0.1]
+    assert variables["GEO_DILATANCY_ANGLE_FUNCTION_COEFFICIENTS"] == [0.0]
+    assert units.label(units.VARIABLES["GEO_FRICTION_ANGLE_FUNCTION_COEFFICIENTS"],
+                       "SI") == "rad"
+
+
+def test_linear_hardening_chosen_starts_every_slope_at_0():
+    choosing = session.update_material(mohr_coulomb_site(), "m2",
+                                       variables={"GEO_COULOMB_HARDENING_TYPE": "Linear"})
+    blank = {**soil_models.blank_si(), "GEO_COULOMB_HARDENING_TYPE": "Linear"}
+    filled = soil_models.fill_choice(MC_2D, soil_models.blank_si(), MC_2D, blank, "SI")
+
+    for name in soil_models.VECTORS:
+        assert choosing.material("m2").variables[name] == 0.0, name
+        assert blank[name] == 0.0, f"{name}: a soil still being filled in gets it too"
+    assert set(soil_models.VECTORS) <= set(filled)
+
+
+def test_a_linear_hardening_slope_left_out_is_written_as_0_and_a_negative_one_refused():
+    choosing = session.update_material(mohr_coulomb_site(), "m2",
+                                       variables={"GEO_COULOMB_HARDENING_TYPE": "Linear"})
+    lacking = session.update_material(choosing, "m2",
+                                      unset=["GEO_COHESION_FUNCTION_COEFFICIENTS"])
+
+    assert deck(lacking)["Variables"]["GEO_COHESION_FUNCTION_COEFFICIENTS"] == [0.0]
+    assert soil_models.derived(MC_2D, lacking.material("m2").variables, WATER_SI, "SI")[
+        "GEO_COHESION_FUNCTION_COEFFICIENTS"] == 0.0
+    assert "GEO_COHESION_FUNCTION_COEFFICIENTS" not in soil_models.derived(
+        MC_2D, mohr_coulomb_site().material("m2").variables, WATER_SI, "SI"), \
+        "not with the hardening off"
+    softening = session.update_material(choosing, "m2", variables={
+        "GEO_FRICTION_ANGLE_FUNCTION_COEFFICIENTS": -0.1})
+    with pytest.raises(MaterialError, match="cannot be negative"):
+        deck(softening)
+
+
+def test_an_undrained_soil_s_poisson_ratio_is_skempton_s_clamped_as_kratos_clamps_it():
+    soil = {"GEO_DRAINAGE_TYPE": "UNDRAINED", "YOUNG_MODULUS": 1.0e7, "POISSON_RATIO": 0.3,
+            "POROSITY": 0.3}
+    found = soil_models.derived(ELASTIC_2D, soil, WATER_SI, "SI")
+
+    alpha = found["BIOT_COEFFICIENT"]
+    b = alpha / (alpha + 0.3 * (1.0e10 / 2.2e9 + alpha - 1))
+    expected = (0.9 + alpha * b * 0.4) / (3 - alpha * b * 0.4)
+    assert found["GEO_POISSON_UNDRAINED"] == pytest.approx(min(expected, 0.495))
+    soft_grains = {**soil, "BULK_MODULUS_SOLID": 5.0e8}
+    assert soil_models.derived(ELASTIC_2D, soft_grains, WATER_SI, "SI")[
+        "GEO_POISSON_UNDRAINED"] == pytest.approx(0.4827, abs=1e-4)
+    refused = {**soil, "BULK_MODULUS_SOLID": 1.0e7}     # Skempton B < 0: Kratos stops
+    assert "GEO_POISSON_UNDRAINED" not in soil_models.derived(ELASTIC_2D, refused,
+                                                              WATER_SI, "SI")
+
+
+def test_a_value_the_soil_gives_is_not_derived():
+    found = soil_models.derived(ELASTIC_2D, {"POROSITY": 0.4, "K0_NC": 0.6}, WATER_SI, "SI")
+    assert "POROSITY" not in found and "K0_NC" not in found
+
+
+def test_the_unit_weights_follow_the_density_the_porosity_and_the_water():
+    soil = {"DENSITY_SOLID": 2650.0, "POROSITY": 0.4}
+    weights = soil_models.computed(ELASTIC_2D, soil, WATER_SI, "SI")
+
+    assert weights["UNIT_WEIGHT_DRY"] == pytest.approx(0.6 * 2650.0 * 9.81)
+    assert weights["UNIT_WEIGHT_SATURATED"] == pytest.approx(0.6 * 2650.0 * 9.81 + 0.4 * 1e4)
+    in_kn = soil_models.computed(ELASTIC_2D, {"DENSITY_SOLID": 2.65, "POROSITY": 0.4},
+                                 soil_models.water("kN"), "kN")
+    assert in_kn["UNIT_WEIGHT_SATURATED"] == pytest.approx(
+        weights["UNIT_WEIGHT_SATURATED"] / 1000)
+
+
+def test_the_darcy_permeability_is_shown_only_where_the_intrinsic_one_is():
+    drained = soil_models.computed(ELASTIC_2D, {"PERMEABILITY_XX": 1e-12}, WATER_SI, "SI")
+    coupled = soil_models.computed(ELASTIC_2D, {"GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
+                                                "PERMEABILITY_XX": 1e-12}, WATER_SI, "SI")
+
+    assert "HYDRAULIC_CONDUCTIVITY_XX" not in drained
+    assert coupled["HYDRAULIC_CONDUCTIVITY_XX"] == pytest.approx(1e-12 * 1e4 / 1e-3)
+    assert coupled["HYDRAULIC_CONDUCTIVITY_YY"] == coupled["HYDRAULIC_CONDUCTIVITY_XX"]
+
+
 # ── The water: the project's ────────────────────────────────────────────────
 
 def test_a_soil_with_water_of_its_own_is_refused():
@@ -312,6 +501,23 @@ def test_soils_that_agree_lose_nothing_and_say_nothing():
 
     assert migration.notes(payload) == []
     assert migration.notes(seed_project().model_dump(mode="json")) == []
+
+
+def test_an_older_document_s_soil_without_a_porosity_gets_the_0_3_its_deck_had():
+    """Until 2026-11-02 the export filled POROSITY = 0.3 into a soil without one; now a
+    porosity is the soil's, and the export refuses a soil of a model without it."""
+    payload = older_document()
+    del payload["materials"][1]["variables"]["POROSITY"]
+    payload["materials"][2]["variables"]["POROSITY"] = 0.45
+
+    project = Project.model_validate(payload)
+
+    assert project.material("m2").variables["POROSITY"] == migration.DEFAULT_POROSITY
+    assert project.material("m3").variables["POROSITY"] == 0.45
+    deck(project)                          # not refused for want of a porosity
+    current = seed_project().model_dump(mode="json")
+    del current["materials"][1]["variables"]["POROSITY"]
+    assert "POROSITY" not in Project.model_validate(current).material("m2").variables
 
 
 def test_every_soil_is_written_with_the_project_s_water():

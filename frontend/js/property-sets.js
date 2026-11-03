@@ -37,11 +37,11 @@ App.PropertySets = (function () {
       derived: ['GEO_DRAINAGE_TYPE', 'BULK_MODULUS_SOLID', 'PERMEABILITY_XX',
                 'PERMEABILITY_YY', 'PERMEABILITY_XY', 'PERMEABILITY_ZZ', 'PERMEABILITY_YZ',
                 'PERMEABILITY_ZX', 'K0_NC', 'BIOT_COEFFICIENT', 'GEO_POISSON_UNDRAINED'],
-      // A new soil: a loose drained sand, in SI (core/model/soil_models.py). Porosity 0,
-      // as in Kratos' reference: Kratos weighs a point at (1 - n) DENSITY_SOLID g +
-      // n S gamma_w, so at n = 0 the soil weighs DENSITY_SOLID g -- 17 kN/m3 here --
-      // whatever its saturation. A soil that should weigh more below the water than
-      // above it needs a porosity and a RETENTION_LAW (SaturatedBelowPhreaticLevelLaw).
+      // A new soil: a loose drained sand, in SI (core/model/soil_models.py), saturated
+      // below the phreatic level. Porosity 0, as in Kratos' reference: Kratos weighs a
+      // point at (1 - n) DENSITY_SOLID g + n S gamma_w, so at n = 0 the soil weighs
+      // DENSITY_SOLID g -- 17 kN/m3 here -- whatever its saturation. A soil that should
+      // weigh more below the water than above it needs a porosity.
       defaults: S.defaultsSI(ELASTIC)
     },
     beam: {

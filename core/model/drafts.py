@@ -46,44 +46,47 @@ PER_M_PER_DAY = soil_models.PERMEABILITY_SI
 """The intrinsic permeability, m2, of a soil that conducts water at 1 m/day."""
 
 LIBRARY: list[dict[str, Any]] = [
-    {"id": "m1", "name": "Fill", "color": "#d8c48a", "r_inter": 0.70,
+    {"id": "m1", "model": "mohr_coulomb", "name": "Fill", "color": "#d8c48a", "r_inter": 0.70,
      "interface_permeability": "Neutral",
      "variables": {"GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD", "YOUNG_MODULUS": 1.5e7,
                    "POISSON_RATIO": 0.30, "DENSITY_SOLID": 17000 / 9.81,
                    "PERMEABILITY_XX": 1.0 * PER_M_PER_DAY, "POROSITY": 0.0, "GEO_COHESION": 1000,
                    "GEO_FRICTION_ANGLE": 30.0}},
-    {"id": "m2", "name": "Sand, loose", "color": "#c4a86a", "r_inter": 0.70,
+    {"id": "m2", "model": "mohr_coulomb", "name": "Sand, loose", "color": "#c4a86a", "r_inter": 0.70,
      "interface_permeability": "Neutral",
      "variables": {"GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD", "YOUNG_MODULUS": 2.5e7,
                    "POISSON_RATIO": 0.28, "DENSITY_SOLID": 18000 / 9.81,
                    "PERMEABILITY_XX": 1.5 * PER_M_PER_DAY, "POROSITY": 0.0, "GEO_COHESION": 500,
                    "GEO_FRICTION_ANGLE": 32.0}},
-    {"id": "m3", "name": "Clay, soft", "color": "#8fa86b", "r_inter": 0.50,
+    {"id": "m3", "model": "mohr_coulomb", "name": "Clay, soft", "color": "#8fa86b", "r_inter": 0.50,
      "interface_permeability": "Impermeable",
      "variables": {"GEO_DRAINAGE_TYPE": "FULLY_COUPLED", "YOUNG_MODULUS": 4.0e6,
                    "POISSON_RATIO": 0.35, "DENSITY_SOLID": 15000 / 9.81,
                    "PERMEABILITY_XX": 0.0001 * PER_M_PER_DAY, "POROSITY": 0.0,
                    "GEO_COHESION": 5000, "GEO_FRICTION_ANGLE": 22.0}},
-    {"id": "m4", "name": "Clay, stiff", "color": "#6f8fa8", "r_inter": 0.55,
+    {"id": "m4", "model": "mohr_coulomb", "name": "Clay, stiff", "color": "#6f8fa8", "r_inter": 0.55,
      "interface_permeability": "Impermeable",
      "variables": {"GEO_DRAINAGE_TYPE": "FULLY_COUPLED", "YOUNG_MODULUS": 1.2e7,
                    "POISSON_RATIO": 0.33, "DENSITY_SOLID": 17500 / 9.81,
                    "PERMEABILITY_XX": 0.0005 * PER_M_PER_DAY, "POROSITY": 0.0,
                    "GEO_COHESION": 15000, "GEO_FRICTION_ANGLE": 25.0}},
-    {"id": "m5", "name": "Sand, dense", "color": "#b08a6a", "r_inter": 0.75,
+    {"id": "m5", "model": "mohr_coulomb", "name": "Sand, dense", "color": "#b08a6a", "r_inter": 0.75,
      "interface_permeability": "Neutral",
      "variables": {"GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD", "YOUNG_MODULUS": 4.5e7,
                    "POISSON_RATIO": 0.25, "DENSITY_SOLID": 19000 / 9.81,
                    "PERMEABILITY_XX": 5.0 * PER_M_PER_DAY, "POROSITY": 0.0, "GEO_COHESION": 0,
                    "GEO_FRICTION_ANGLE": 36.0}},
-    {"id": "m6", "name": "Bedrock", "color": "#8d8d99", "r_inter": 1.00,
+    {"id": "m6", "model": "linear_elastic", "name": "Bedrock", "color": "#8d8d99", "r_inter": 1.00,
      "interface_permeability": "Impermeable",
      "variables": {"GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD", "YOUNG_MODULUS": 2.0e9,
                    "POISSON_RATIO": 0.20, "DENSITY_SOLID": 24000 / 9.81,
                    "PERMEABILITY_XX": 0.0, "POROSITY": 0.0}},
 ]
 """The material library's soils (`App.MaterialLibrary`), in SI. A preset is added in the
-project's own unit system."""
+project's own unit system, as its soil model with that model's defaults for what it does
+not give. A soil with a strength is a Mohr-Coulomb one: a linear elastic soil has none.
+The permeabilities are intrinsic, the frozen demo's m/day conductivities times
+`PER_M_PER_DAY`."""
 
 
 class DraftError(ValueError):
@@ -121,16 +124,20 @@ def soil(project: Project, id: str, *, name: str | None = None, preset: str | No
         raise DraftError(f"there is no soil model {model!r}; there are: "
                          + ", ".join(soil_models.MODELS))
     start = _library_preset(preset) if preset is not None else None
-    elastic = SOIL_LAWS[project.dimension]
+    if start is not None and model is None and law is None:
+        model = start["model"]
     chosen = soil_models.law(model, project.dimension) if model is not None else (
-        law or elastic)
+        law or SOIL_LAWS[project.dimension])
     filled: list[str] = []
     if start is not None:
         variables_si = start["variables"]
         if model is not None:
-            # A preset is an elastic soil; what the model needs on top of it, it fills.
-            filled = soil_models.fill(elastic, dict(variables_si), chosen, variables_si,
-                                      "SI")
+            # What the model lists that the preset does not give, it fills -- quietly
+            # for the preset's own model, which is how a preset is made.
+            filled = soil_models.fill(None, {}, chosen, variables_si, "SI",
+                                      flow=reads_flow(project))
+            if model == start["model"]:
+                filled = []
     else:
         variables_si = soil_models.defaults_si(model or soil_models.LINEAR_ELASTIC)
     variables, notes = units.convert_variables(variables_si, "SI", project.unit_system)
@@ -147,6 +154,17 @@ def soil(project: Project, id: str, *, name: str | None = None, preset: str | No
             "interface_permeability": start["interface_permeability"]} if start else {}),
     )
     return material, notes
+
+
+def reads_flow(project: Project) -> bool:
+    """Whether every soil's flow parameters are read: the project is a groundwater flow
+    calculation. A mix of flow and deformation stages, which the export refuses, is not
+    one."""
+    from core.model import stages
+    try:
+        return stages.groundwater_flow(project)
+    except stages.StageError:
+        return False
 
 
 def layer(project: Project, id: str, material: str, *, name: str | None = None,

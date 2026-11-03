@@ -45,9 +45,69 @@
     });
   });
 
+  T.test('a blank soil is the one the command line\'s material add starts from', function () {
+    T.eq(App.SoilModels.blankSI(), M.blank);
+    T.eq(Object.keys(App.SoilModels.blankSI()), Object.keys(M.blank), 'in the same order');
+  });
+
+  M.fill_choice.forEach(function (c) {
+    T.test('a choice fills as on the command line: ' + c.title, function () {
+      var after = Object.assign(JSON.parse(JSON.stringify(c.before)), c.changes);
+      var filled = App.SoilModels.fillChoice(c.before_law, JSON.parse(JSON.stringify(c.before)),
+                                             c.after_law, after, c.system);
+      T.eq(filled, c.filled);
+      T.eq(after, c.after);
+    });
+  });
+
+  T.test('a drained or undrained soil has the permeability it has on the command line', function () {
+    M.fixed.forEach(function (c) {
+      T.eq(App.SoilModels.fixedPermeability(c.variables, c.system, c.flow), c.fixed,
+           JSON.stringify(c.variables) + ' in ' + c.system + (c.flow ? ', a flow project' : ''));
+    });
+  });
+
   M.problem.forEach(function (c) {
     T.test('a soil refused as on the command line: ' + c.title, function () {
       T.eq(App.SoilModels.problem(c.law, c.variables), c.problem);
+    });
+  });
+
+  /* The same number, but for the last bits of a sum taken in another order. */
+  function close(a, b, name) { T.near(a, b, 1e-12 * Math.max(1, Math.abs(b)), name); }
+
+  T.test('the project\'s water is written as on the command line', function () {
+    M.water.forEach(function (c) {
+      var water = App.SoilModels.water(c.system, c.specific_weight, c.bulk_modulus, c.viscosity);
+      var what = JSON.stringify([c.system, c.specific_weight, c.bulk_modulus, c.viscosity]);
+      T.eq(Object.keys(water), Object.keys(c.water), what + ', the same variables');
+      Object.keys(c.water).forEach(function (name) { close(water[name], c.water[name], what + ' ' + name); });
+    });
+  });
+
+  M.derived.forEach(function (c) {
+    T.test('a soil derives and computes as on the command line: ' + c.title, function () {
+      var water = App.SoilModels.water(c.system, c.water.DENSITY_WATER * App.Units.gravity(c.system),
+                                       c.water.BULK_MODULUS_FLUID, c.water.DYNAMIC_VISCOSITY);
+      close(water.DENSITY_WATER, c.water.DENSITY_WATER, 'the water');
+      var derived = App.SoilModels.derived(c.law, c.variables, c.water, c.system, c.flow);
+      T.eq(Object.keys(derived), Object.keys(c.derived), 'derived, in the same order');
+      Object.keys(c.derived).forEach(function (name) {
+        if (typeof c.derived[name] === 'number') close(derived[name], c.derived[name], name);
+        else T.eq(derived[name], c.derived[name], name);
+      });
+      var computed = App.SoilModels.computed(c.law, c.variables, c.water, c.system, c.flow);
+      T.eq(Object.keys(computed), Object.keys(c.computed), 'computed, in the same order');
+      Object.keys(c.computed).forEach(function (name) {
+        close(computed[name], c.computed[name], name);
+      });
+    });
+  });
+
+  T.test('a soil lists what it lists on the command line', function () {
+    M.shown.forEach(function (c) {
+      T.eq(App.SoilModels.shown(c.model, c.variables, c.flow).map(function (p) { return p.name; }),
+           c.shown, c.model + ' ' + JSON.stringify(c.variables) + (c.flow ? ' in a flow project' : ''));
     });
   });
 
@@ -65,7 +125,7 @@
 
   T.test('the material library offers the same six presets as the command line', function () {
     var soils = App.MaterialLibrary.soils().map(function (s) {
-      return { id: s.id, name: s.name, color: s.color, r_inter: s.rInter,
+      return { id: s.id, model: s.model, name: s.name, color: s.color, r_inter: s.rInter,
                interface_permeability: s.interfacePerm, variables: s.variables };
     });
     T.eq(soils, F.library);

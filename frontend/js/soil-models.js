@@ -7,6 +7,12 @@
    listed at all (a tensile strength only with the tension cut-off on). A law no model
    is, is "Other": the user's own, written as typed.
 
+   It lists what the choices make relevant and nothing else: no strength for a linear
+   elastic soil, no flow parameters unless the soil is FULLY_COUPLED (or the project a
+   groundwater flow calculation), and no water -- that is the project's, one for every
+   soil. What the export derives where a soil leaves it out (`derived`) and what follows
+   from its numbers (`computed`) are shown with their values.
+
    The table is the server's (core/model/soil_models.py), generated into
    soil-model-table.js. These are the server's functions over it, in the same words;
    tests/test_draft_parity.py holds the two to the same answers. No DOM: runs headless.
@@ -52,26 +58,34 @@ App.SoilModels = (function () {
     return m.groups.reduce(function (all, g) { return all.concat(g.parameters); }, []);
   }
 
-  function holds(p, variables, model) {
+  /* `name` as the deck reads it: the soil's, or what Kratos takes when it is left out. */
+  function valueOf(name, variables, model) {
+    if (Object.prototype.hasOwnProperty.call(variables, name)) return variables[name];
+    var other = parameters(model).filter(function (q) { return q.name === name; })[0];
+    return other && other.absent !== undefined ? other.absent : null;
+  }
+
+  function holds(p, variables, model, flow) {
+    if (p.flow && !flow &&
+        table().flowing.indexOf(valueOf('GEO_DRAINAGE_TYPE', variables, model)) < 0) return false;
     if (!p.when) return true;
-    var other = parameters(model).filter(function (q) { return q.name === p.when.name; })[0];
-    var value = Object.prototype.hasOwnProperty.call(variables, p.when.name)
-      ? variables[p.when.name] : (other && other.absent !== undefined ? other.absent : null);
+    var value = valueOf(p.when.name, variables, model);
     return p.when.values.some(function (v) { return v === value; });
   }
 
-  /* The parameters the window lists for a soil of `model` holding `variables`. */
-  function shown(model, variables) {
-    return parameters(model).filter(function (p) { return holds(p, variables || {}, model); });
+  /* The parameters the window lists for a soil of `model` holding `variables`; `flow` in
+     a groundwater flow project, which reads every soil's flow parameters. */
+  function shown(model, variables, flow) {
+    return parameters(model).filter(function (p) { return holds(p, variables || {}, model, flow); });
   }
 
   /* Its groups, each with the parameters shown in it; an empty group is left out. */
-  function groups(model, variables) {
+  function groups(model, variables, flow) {
     var m = models()[model];
     if (!m) return [];
     return m.groups.map(function (g) {
       return { title: g.title, parameters: g.parameters.filter(function (p) {
-        return holds(p, variables || {}, model);
+        return holds(p, variables || {}, model, flow);
       }) };
     }).filter(function (g) { return g.parameters.length; });
   }
@@ -100,16 +114,16 @@ App.SoilModels = (function () {
      retention law chosen brings its saturations) and the ones its law cannot run
      without. Nothing held is replaced; a name in `skip` is never filled. Returns the
      names filled, in the order filled. */
-  function fill(beforeLaw, before, afterLaw, after, system, skip) {
+  function fill(beforeLaw, before, afterLaw, after, system, skip, flow) {
     var model = modelOf(afterLaw);
     var old = [];
     if (beforeLaw && modelOf(beforeLaw) === model) {
-      old = shown(model, before).map(function (p) { return p.name; });
+      old = shown(model, before, flow).map(function (p) { return p.name; });
     }
     skip = skip || [];
     var filled = [];
     for (;;) {
-      var next = shown(model, after).filter(function (p) {
+      var next = shown(model, after, flow).filter(function (p) {
         return !has(after, p.name) && skip.indexOf(p.name) < 0 && p.default !== undefined &&
                (old.indexOf(p.name) < 0 || p.required);
       })[0];
@@ -132,6 +146,7 @@ App.SoilModels = (function () {
   }
 
   function number(variables, name) {
+    variables = variables || {};
     var v = variables[name];
     return typeof v === 'number' && isFinite(v) ? v : null;
   }
@@ -155,6 +170,104 @@ App.SoilModels = (function () {
     };
   }
 
+  /* The Biot coefficient 1 - K / K_s Kratos' coupled elements derive; 1 when the soil
+     does not say enough. */
+  function biot(variables) {
+    var young = number(variables, 'YOUNG_MODULUS'), poisson = number(variables, 'POISSON_RATIO');
+    var grains = number(variables, 'BULK_MODULUS_SOLID');
+    if (young === null || poisson === null || !grains || poisson >= 0.5) return 1.0;
+    return 1.0 - young / (3.0 * (1.0 - 2.0 * poisson)) / grains;
+  }
+
+  /* The undrained Poisson ratio Kratos derives from Skempton's B, clamped as it clamps
+     it; null when the soil does not say enough or Kratos would refuse the numbers. */
+  function undrainedPoisson(variables, fluidBulkModulus) {
+    var poisson = number(variables, 'POISSON_RATIO'), alpha = number(variables, 'BIOT_COEFFICIENT');
+    var porosity = number(variables, 'POROSITY'), grains = number(variables, 'BULK_MODULUS_SOLID');
+    if (poisson === null || alpha === null || porosity === null || grains === null ||
+        !fluidBulkModulus) return null;
+    var denominator = alpha + porosity * (grains / fluidBulkModulus + alpha - 1.0);
+    if (denominator <= 0) return null;
+    var b = alpha / denominator;
+    if (!(b >= 0 && b <= 1.0 + 1e-12)) return null;
+    b = Math.min(b, 1.0);
+    denominator = 3.0 - alpha * b * (1.0 - 2.0 * poisson);
+    if (denominator <= 0) return null;
+    return Math.min((3.0 * poisson + alpha * b * (1.0 - 2.0 * poisson)) / denominator,
+                    constant('UNDRAINED_POISSON_LIMIT'));
+  }
+
+  /* What the export writes where a soil leaves it out, in `system`, in the order it
+     derives them (core/model/soil_models.py `derived`). */
+  function derived(law, variables, waterVariables, system, flow) {
+    variables = variables || {};
+    var out = {};
+    function given(name) { return has(variables, name) ? variables[name] : out[name]; }
+    function put(name, value) {
+      if (!has(variables, name) && value !== null && value !== undefined) out[name] = value;
+    }
+    function both() { return Object.assign({}, variables, out); }
+    put('GEO_DRAINAGE_TYPE', 'CONSTANT_PW_FIELD');
+    put('BULK_MODULUS_SOLID', App.Units.fromSI(constant('BULK_MODULUS_SOLID'), 'stress', system));
+    var drainage = given('GEO_DRAINAGE_TYPE');
+    // A drained or an undrained soil's permeability is not derived but fixed.
+    if (fixedPermeability(variables, system, flow) === null) {
+      if (drainage === 'FULLY_COUPLED' || flow) {
+        put('PERMEABILITY_XX', App.Units.fromSI(constant('PERMEABILITY'), 'permeability', system));
+      }
+      var kappa = given('PERMEABILITY_XX');
+      put('PERMEABILITY_YY', typeof kappa === 'number' && isFinite(kappa) ? kappa : null);
+    }
+    if (drainage === 'FULLY_COUPLED' || drainage === 'UNDRAINED' || flow) {
+      put('BIOT_COEFFICIENT', biot(both()));
+    }
+    if (drainage === 'UNDRAINED') {
+      put('GEO_POISSON_UNDRAINED', undrainedPoisson(both(), waterVariables.BULK_MODULUS_FLUID));
+    }
+    var hardening = has(variables, 'GEO_COULOMB_HARDENING_TYPE')
+      ? String(variables.GEO_COULOMB_HARDENING_TYPE) : 'None';
+    if (modelOf(law) === 'mohr_coulomb' && hardening.toLowerCase() === 'linear') {
+      table().vectors.forEach(function (name) { put(name, 0.0); });
+    }
+    put('K0_NC', k0(law, variables));
+    return out;
+  }
+
+  /* The intrinsic permeability the export writes for a DRAINED or an UNDRAINED soil in
+     place of any it carries, in `system`; null for another, and in a flow project. Not
+     shown: the drainage type is the user's choice (core/model/soil_models.py). */
+  function fixedPermeability(variables, system, flow) {
+    var fixed = table().fixed_permeability[(variables || {}).GEO_DRAINAGE_TYPE];
+    if (fixed === undefined || flow) return null;
+    return App.Units.fromSI(fixed, 'permeability', system);
+  }
+
+  /* What follows from a soil's numbers, in `system`: its unit weight dry and saturated
+     and, where its permeability is listed, the Darcy conductivity it makes
+     (core/model/soil_models.py `computed`). Nothing of these is written. */
+  function computed(law, variables, waterVariables, system, flow) {
+    variables = variables || {};
+    var every = Object.assign({}, derived(law, variables, waterVariables, system, flow), variables);
+    var g = App.Units.gravity(system);
+    var gammaW = waterVariables.DENSITY_WATER * g;
+    var out = {};
+    var density = number(every, 'DENSITY_SOLID'), porosity = number(every, 'POROSITY');
+    if (density !== null && porosity !== null) {
+      out.UNIT_WEIGHT_DRY = (1.0 - porosity) * density * g;
+      out.UNIT_WEIGHT_SATURATED = out.UNIT_WEIGHT_DRY + porosity * gammaW;
+    }
+    var listed = shown(modelOf(law), variables, flow).map(function (p) { return p.name; });
+    ['XX', 'YY'].forEach(function (axis) {
+      var kappa = number(every, 'PERMEABILITY_' + axis);
+      if (listed.indexOf('PERMEABILITY_' + axis) >= 0 && kappa !== null) {
+        out['HYDRAULIC_CONDUCTIVITY_' + axis] = kappa * gammaW / waterVariables.DYNAMIC_VISCOSITY;
+      }
+    });
+    return out;
+  }
+
+  /* name -> { label, quantity, group } of what `computed` gives. */
+  function computedInfo() { return table().computed; }
 
   /* `value` as Python's `{:.6g}` writes it, so both sides refuse in the same words. */
   function significant(value) {
@@ -178,6 +291,14 @@ App.SoilModels = (function () {
     var phi = number(variables, 'GEO_FRICTION_ANGLE'), psi = number(variables, 'GEO_DILATANCY_ANGLE');
     var cohesion = number(variables, 'GEO_COHESION'), tension = number(variables, 'GEO_TENSILE_STRENGTH');
     if (phi !== null && !(phi < 90)) return 'GEO_FRICTION_ANGLE must be below 90 degrees.';
+    var hardening = variables.GEO_COULOMB_HARDENING_TYPE;
+    if (String(hardening === undefined ? 'None' : hardening).toLowerCase() !== 'none') {
+      var negative = table().vectors.filter(function (n) {
+        var slope = number(variables, n);
+        return slope !== null && slope < 0;
+      })[0];
+      if (negative) return negative + ' cannot be negative.';
+    }
     if (phi !== null && psi !== null && psi > phi) {
       return 'GEO_DILATANCY_ANGLE cannot be larger than GEO_FRICTION_ANGLE.';
     }
@@ -197,5 +318,9 @@ App.SoilModels = (function () {
            modelOf: modelOf, label: label, law: law, lawIn: lawIn, parameters: parameters,
            find: find, shown: shown, groups: groups, required: required, fill: fill,
            defaultIn: defaultIn, defaultsSI: defaultsSI, filledNote: filledNote,
-           problem: problem };
+           missing: missing, fillChoice: fillChoice, blankSI: blankSI,
+           fixedPermeability: fixedPermeability,
+           problem: problem, water: water, biot: biot, undrainedPoisson: undrainedPoisson,
+           k0: k0, derived: derived, computed: computed, computedInfo: computedInfo,
+           WATER: ['DENSITY_WATER', 'BULK_MODULUS_FLUID', 'DYNAMIC_VISCOSITY'] };
 })();

@@ -415,6 +415,13 @@ def water_notes(value: object) -> list[str]:
     return notes
 
 
+def _with_porosity(material: object) -> object:
+    if not isinstance(material, dict) or not isinstance(material.get("variables"), dict) \
+            or "POROSITY" in material["variables"]:
+        return material
+    return {**material, "variables": {**material["variables"], "POROSITY": DEFAULT_POROSITY}}
+
+
 def upgraded(value: object) -> object:
     """`value`, a project document of any age, in the current shape: every conversion
     above, in the order the shapes came (`Project`'s validator)."""
