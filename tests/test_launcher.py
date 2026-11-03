@@ -9,12 +9,9 @@ from tempfile import TemporaryDirectory
 import unittest
 
 from backend import launcher as _launcher
+from backend.launcher import platform_venv_name, requirements_changed, venv_python
 
 ROOT = Path(__file__).resolve().parents[1]
-
-platform_venv_name = _launcher.platform_venv_name
-requirements_changed = _launcher.requirements_changed
-venv_python = _launcher.venv_python
 
 
 class PlatformEnvironmentTests(unittest.TestCase):
