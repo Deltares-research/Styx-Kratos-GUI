@@ -79,6 +79,12 @@ Add pure-logic cases to the existing `frontend/tests/test-*.js` suites. Browser-
 form and event tests belong in the browser suite; register new test files in
 `frontend/tests/index.html`. Do not add DOM-dependent files to the headless runner.
 
+When reviewing missed functions, test observable behavior rather than calling callbacks
+only to increase the percentage. Cover accepted and refused edits, retry after server
+errors, cancellation without writes, and cleanup of temporary UI. Await asynchronous
+work before restoring mocks, and check that the harness reports no uncaught errors as
+well as no failed assertions. Function coverage alone does not prove those paths work.
+
 ## What CI runs
 
 For each pull request and each push to `main`, CI runs the `e2e` tier on Windows and

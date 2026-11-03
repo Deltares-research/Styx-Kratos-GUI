@@ -8,6 +8,7 @@
 
 (function () {
 
+  var directDownload = App.Results.download;
   var RUN = 'Deck_2026-01-01_00-00';
   var BASE = '/api/results/runs/' + RUN;
 
@@ -143,6 +144,24 @@
       return b.textContent === label;
     })[0];
   }
+
+  test('results: server downloads click a temporary anchor with the supplied URL and filename', function () {
+    var click = HTMLAnchorElement.prototype.click, link;
+    HTMLAnchorElement.prototype.click = function () {
+      link = this;
+      T.ok(this.isConnected, 'the link is attached before clicking');
+      T.eq(this.getAttribute('href'), '/api/results/runs/run-1/archive');
+      T.eq(this.download, 'run-1.zip');
+    };
+    try {
+      directDownload('/api/results/runs/run-1/archive', 'run-1.zip');
+      T.ok(link);
+      T.eq(link.isConnected, false, 'the download leaves no link in the page');
+    } finally {
+      HTMLAnchorElement.prototype.click = click;
+      if (link) link.remove();
+    }
+  });
 
   test('results: "View results" with nothing open opens the newest run on the machine', function () {
     var ctx = rig();

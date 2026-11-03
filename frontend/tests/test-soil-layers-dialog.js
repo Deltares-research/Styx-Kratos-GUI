@@ -377,6 +377,56 @@
             function (error) { App.SoilVolumeDialog = soil; throw error; });
   });
 
+  test('deleting a custom soil body saves the stack, deletes the selected body, then reloads and redraws', function () {
+    var deleted = [], order = [];
+    var parts = [{ key: 'fill one', label: 'Fill', mat: 'm2' }];
+    return withWindow(stack(), function (ui) {
+      var patches = App.LivePatches;
+      App.LivePatches = Object.assign({}, patches, {
+        deleteRequest: function (path) {
+          T.eq(ui.sent.length, 1, 'the stack is saved before deleting geometry');
+          deleted.push(path); order.push('delete');
+          App.PROJECT.custom_parts = [];
+          return Promise.resolve();
+        }
+      });
+      App.Model.load = function () { order.push('load'); return Promise.resolve(); };
+      App.Viewport.refresh = function () { order.push('refresh'); return Promise.resolve(); };
+      var button = ui.host.querySelectorAll('.soil-body-section .lay-toolbar button')[2];
+      button.click();
+      T.ok(button.disabled, 'a pending delete cannot be submitted twice');
+      function restore() { App.LivePatches = patches; }
+      return new Promise(function (resolve) { setTimeout(resolve, 0); }).then(function () {
+        T.eq(deleted, ['/api/geometry/parts/fill%20one']);
+        T.eq(order, ['delete', 'load', 'refresh']);
+        T.eq(ui.host.querySelectorAll('.soil-body-section tbody tr').length, 0);
+        T.ok(ui.host.querySelectorAll('.soil-body-section .lay-toolbar button')[2].disabled);
+        ui.click('Cancel');
+      }).then(restore, function (error) { restore(); throw error; });
+    }, parts);
+  });
+
+  test('a refused custom-soil deletion preserves its row and allows a retry', function () {
+    var parts = [{ key: 'fill', label: 'Fill', mat: 'm2' }];
+    return withWindow(stack(), function (ui) {
+      var patches = App.LivePatches, loaded = 0;
+      App.LivePatches = Object.assign({}, patches, {
+        deleteRequest: function () { return Promise.reject(new Error('A stage still uses Fill')); }
+      });
+      App.Model.load = function () { loaded += 1; return Promise.resolve(); };
+      var button = ui.host.querySelectorAll('.soil-body-section .lay-toolbar button')[2];
+      button.click();
+      function restore() { App.LivePatches = patches; }
+      return new Promise(function (resolve) { setTimeout(resolve, 0); }).then(function () {
+        T.eq(loaded, 0);
+        T.eq(ui.host.querySelectorAll('.soil-body-section tbody tr').length, 1);
+        T.eq(button.disabled, false);
+        T.ok(ui.said.some(function (text) { return /A stage still uses Fill/.test(text); }));
+        ui.click('Cancel');
+      }).then(restore, function (error) { restore(); throw error; });
+    }, parts);
+  });
+
   test('the soil dialog and the Model explorer’s layer Delete are the live ones',
        function () {
     var command = App.Command, action = App.runAction;

@@ -407,6 +407,121 @@
     });
   });
 
+  ['project', 'geometry'].forEach(function (endpoint) {
+    test('viewport: a failed ' + endpoint + ' refresh rejects, reports its cause and removes the progress overlay', function () {
+      var timeout = window.setTimeout, clear = window.clearTimeout;
+      var stalled, rejectRequest, refresh, rejected, originalGroups, cleared = 0;
+      function restore() {
+        window.setTimeout = timeout;
+        window.clearTimeout = clear;
+        standIns();
+      }
+      return boot().then(function () {
+        originalGroups = sceneGroups();
+        var get = App.Api.get;
+        App.Api.get = function (path) {
+          if (path === '/api/' + endpoint) {
+            return new Promise(function (resolve, reject) { rejectRequest = reject; });
+          }
+          return get(path);
+        };
+        window.setTimeout = function (callback, delay) {
+          if (delay === 8000) { stalled = callback; return -1; }
+          return timeout.apply(window, arguments);
+        };
+        window.clearTimeout = function (id) {
+          if (id === -1) cleared += 1;
+          else clear(id);
+        };
+        try { refresh = App.Viewport.refresh(); }
+        finally { window.setTimeout = timeout; }
+        rejected = T.rejects(function () { return refresh; });
+        return until(function () { return rejectRequest; }).then(function () {
+          T.ok(rejectRequest);
+          T.eq(document.getElementById('vp-loading').hidden, false);
+          T.ok(stalled);
+          stalled();
+          T.ok(notes.some(function (line) { return /Still waiting for the model server after 8 s/.test(line); }));
+          rejectRequest(new Error('Cannot build ' + endpoint));
+          return rejected;
+        });
+      }).then(function (error) {
+        T.eq(error.message, 'Cannot build ' + endpoint);
+        T.eq(cleared, 1, 'the stalled-request timer is cleared');
+        T.eq(document.getElementById('vp-loading').hidden, true);
+        T.ok(notes.some(function (line) { return line === 'err:Cannot build ' + endpoint; }));
+        Object.keys(originalGroups).forEach(function (key) {
+          T.ok(sceneGroups()[key] === originalGroups[key], key + ' retains its last valid geometry');
+        });
+      }).then(restore, function (error) {
+        if (rejectRequest) rejectRequest(error);
+        restore(); throw error;
+      });
+    });
+  });
+
+  test('viewport: custom soil and free contacts join the mode groups and hidden selections lose their box', function () {
+    function restore() {
+      App.Viewport.select(null);
+      standIns();
+      App.state.mode = 'soil';
+      return App.Viewport.refresh();
+    }
+    return boot().then(function () {
+      var project = JSON.parse(JSON.stringify(P.project));
+      var key = 'viewport_fill';
+      project.custom_parts = [{ key: key, label: 'Fill', mat: project.materials[0].id,
+        recipe: { kind: 'polygon_extrude', vertices: [[0, 0, 0], [4, 0, 0], [0, -3, 0]],
+                  extrusion: [0, 0, 1] } }];
+      var freeProject = Object.assign({}, project, { beams: [], interfaces: [] });
+      var contact = App.Interfaces.draft(freeProject);
+      project.interfaces = [contact];
+      project.interface_sections = App.Interfaces.sectionsFor(project, contact);
+      var geometry = Object.assign({}, P.geometry, {
+        sections: P.geometry.sections.concat([
+          Object.assign({}, P.geometry.sections[0], { key: key }),
+          { key: contact.id, positions: [0, 0, 0, 0, -3, 0],
+            indices: [], edges: [0, 0, 0, 0, -3, 0], color: '#123456' }
+        ])
+      });
+      App.Api.get = function (path) {
+        return Promise.resolve(path === '/api/project' ? project : geometry);
+      };
+      return App.Viewport.refresh().then(function () {
+        App.state.mode = 'soil'; App.Viewport.setMode('soil');
+        T.ok(sceneGroups()[key].visible, 'material-bearing drawn soil is visible with the stack');
+        App.Viewport.select(key);
+        T.ok(App.Viewport.getScene().children.some(function (child) { return child.type === 'Box3Helper'; }));
+        App.Viewport.select(null);
+        App.state.mode = 'structures'; App.Viewport.setMode('structures');
+        T.ok(sceneGroups()[contact.id], 'the free contact has its own drawable group');
+        App.Viewport.setVisible('group:interfaces', false);
+        T.eq(App.Viewport.isVisible(contact.id), false, 'the contact group controls its free lines');
+        App.Viewport.setVisible('group:interfaces', true);
+        App.Viewport.select(App.BEAMS[0].id);
+        T.ok(App.Viewport.getScene().children.some(function (child) { return child.type === 'Box3Helper'; }));
+        App.state.mode = 'soil'; App.Viewport.setMode('soil');
+        T.eq(sceneGroups()[App.BEAMS[0].id].visible, false);
+        T.eq(App.Viewport.getScene().children.some(function (child) { return child.type === 'Box3Helper'; }), false);
+      });
+    }).then(restore, function (error) {
+      return restore().then(function () { throw error; });
+    });
+  });
+
+  test('viewport: a 2D drag rewrites rotate into pan before the orbit controller sees it', function () {
+    return boot().then(function () {
+      var canvas = App.Viewport.getCanvas(), rect = canvas.getBoundingClientRect();
+      var event = new MouseEvent('mousedown', { button: 0, buttons: 1,
+        clientX: rect.left + 100, clientY: rect.top + 100, bubbles: true });
+      App.Viewport.setNavMode('rotate');
+      canvas.dispatchEvent(event);
+      T.ok(event.shiftKey, 'a section always pans rather than attempting an orbit');
+      document.dispatchEvent(new MouseEvent('mouseup', { bubbles: true }));
+      App.Viewport.setNavMode('select');
+    });
+  });
+
   test('viewport: mesh and label request failures report their cause and hide the progress overlay', function () {
     return boot().then(function () {
       return new Promise(function (resolve) { App.Viewport.generateMesh(resolve); });

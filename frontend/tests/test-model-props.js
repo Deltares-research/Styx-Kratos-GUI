@@ -71,9 +71,86 @@
     return project;
   }
 
+  function spatialStructures() {
+    var project = JSON.parse(JSON.stringify(window.VIEWPORT_PAYLOADS.project3d));
+    var d = project.domain;
+    var x = (d.x0 + d.x1) / 2, z = (d.z0 + d.z1) / 2;
+    var member = App.Beams.draftMember(project, [[x, d.y_top, z], [x, d.y_bottom, z]]);
+    project.beams = [member];
+    project.interfaces = [];
+    project.beam_sections = App.Beams.sectionsFor(project, member);
+    var anchor = App.Anchors.draft(project);
+    project.anchors = [anchor];
+    project.anchor_sections = App.Anchors.sectionsFor(project, anchor);
+    return project;
+  }
+
+  function freeInterface() {
+    var project = JSON.parse(JSON.stringify(window.VIEWPORT_PAYLOADS.project));
+    project.beams = []; project.anchors = []; project.interfaces = [];
+    var contact = App.Interfaces.draft(project);
+    project.interfaces = [contact];
+    project.interface_sections = App.Interfaces.sectionsFor(project, contact);
+    return project;
+  }
+
   var MODELS = [['2D', function () { return window.VIEWPORT_PAYLOADS.project; }],
                 ['3D', function () { return window.VIEWPORT_PAYLOADS.project3d; }],
-                ['conditions and custom soil', conditionsAndBodies]];
+                ['conditions and custom soil', conditionsAndBodies],
+                ['space member and anchor', spatialStructures],
+                ['free soil interface', freeInterface]];
+
+  test('member property edits change coordinates and roll back a zero-length member', function () {
+    withProject(spatialStructures(), function () {
+      var member = App.BEAMS[0];
+      var geometry = App.OBJECT_PROPS[member.id].groups.Geometry;
+      function coordinate(label) {
+        return geometry.filter(function (row) { return row[0] === label; })[0][4];
+      }
+      var y2 = coordinate('y2'), old = y2.get();
+      var changed = (member.points[0][1] + old) / 2;
+      T.eq(y2.set(changed), null);
+      T.eq(y2.get(), changed);
+      T.eq(member.points[1][1], changed);
+      T.ok(y2.set(member.points[0][1]), 'coincident endpoints are refused');
+      T.eq(y2.get(), changed, 'the refused coordinate is rolled back');
+    });
+  });
+
+  test('free-interface property edits move its line and refuse coincident endpoints', function () {
+    withProject(freeInterface(), function () {
+      var contact = App.INTERFACES[0];
+      var geometry = App.OBJECT_PROPS[contact.id].groups.Geometry;
+      var row = geometry.filter(function (entry) { return entry[0] === 'y2'; })[0];
+      T.ok(row, 'the endpoint elevation is editable');
+      var editor = row[4], changed = (contact.points[0][1] + contact.points[1][1]) / 2;
+      T.eq(editor.set(changed), null);
+      T.eq(editor.get(), changed);
+      T.ok(editor.set(contact.points[0][1]));
+      T.eq(editor.get(), changed);
+    });
+  });
+
+  test('the status-bar unit switch requests conversion once and follows the current project', function () {
+    var item = document.createElement('span'), command = App.Command, commands = [];
+    item.id = 'sb-units';
+    document.body.appendChild(item);
+    App.Command = { run: function (text) { commands.push(text); } };
+    try {
+      withProject(window.VIEWPORT_PAYLOADS.project, function () {
+        App.Model.apply(App.PROJECT);
+        var current = App.Units.current();
+        var other = App.Units.systems().filter(function (system) { return system.name !== current; })[0];
+        item.click();
+        T.eq(commands, ['units ' + other.name], 'reapplying does not duplicate the listener');
+        T.eq(item.textContent, App.Units.statusText(App.PROJECT));
+        App.Model.apply(Object.assign({}, App.PROJECT, { unit_system: other.name }));
+        item.click();
+        T.eq(commands, ['units ' + other.name, 'units ' + current]);
+        T.eq(item.textContent, App.Units.statusText(App.PROJECT));
+      });
+    } finally { item.remove(); App.Command = command; }
+  });
 
   test('model exposes the edited domain separately from the stored project', function () {
     withProject(window.VIEWPORT_PAYLOADS.project3d, function () {

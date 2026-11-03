@@ -166,6 +166,35 @@
     }));
   });
 
+  test('an overlapping both-sided interface reports the first conflicting face deterministically', function () {
+    var ctx = rig(2);
+    return ctx.done(Promise.resolve().then(function () {
+      var w = opened(ctx, function () { App.Interfaces.start('beam_1'); });
+      return w.save().then(function () {
+        T.ok(/both hold the left face/.test(w.message()), w.message());
+        T.eq(ctx.sent, []);
+      });
+    }));
+  });
+
+  test('editing an interface can create an independent contact without mutating its shared section', function () {
+    var ctx = rig(2);
+    return ctx.done(Promise.resolve().then(function () {
+      var original = JSON.stringify(App.PROJECT.interface_sections);
+      var w = opened(ctx, function () { App.Interfaces.edit('interface_1'); });
+      w.set('Contact', '');
+      return w.save().then(function () {
+        T.eq(ctx.sent.length, 1);
+        var body = ctx.sent[0].body;
+        T.ok(body.interfaces[0].section !== 'interfacesection_1');
+        T.eq(body.interface_sections.length, 2);
+        T.eq(body.interface_sections[1].id, body.interfaces[0].section);
+        T.eq(JSON.stringify(App.PROJECT.interface_sections), original);
+        T.ok(w.closed());
+      });
+    }));
+  });
+
   test('own coordinates along a pile are refused with what to do instead', function () {
     var ctx = rig(2);
     return ctx.done(Promise.resolve().then(function () {

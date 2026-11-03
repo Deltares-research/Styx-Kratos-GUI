@@ -467,6 +467,232 @@
     });
   });
 
+  ['Beams', 'Anchors', 'NormalLoads', 'Loads'].forEach(function (owner) {
+    ['stored', 'reload', 'refresh'].forEach(function (failureAt) {
+      test(owner + ': rollback preserves the original save refusal (' + failureAt + ')', function () {
+        var initial = project();
+        initial.beams = [{ id: 'pile', name: 'Pile', kind: 'beam', section: 'beamsection_1',
+          points: [[12, 0], [12, -20]], active: true }];
+        initial.beam_sections = App.Beams.sectionsFor(initial, initial.beams[0]);
+        return withEnvironment(initial, function (ctx) {
+          var record = owner === 'Beams' ? App.Beams.draft(initial)
+            : owner === 'Anchors' ? App.Anchors.draft(initial)
+            : owner === 'NormalLoads' ? App.NormalLoads.draft(initial)
+            : App.Loads.draftPoint(initial, [5, 0]);
+          if (owner === 'NormalLoads') record.pressure = 120;
+          var library = owner === 'Beams' ? App.Beams.sectionsFor(initial, record)
+            : owner === 'Anchors' ? App.Anchors.sectionsFor(initial, record) : undefined;
+          ctx.failure = new Error('Original structure refusal');
+          var rollbackError = new Error('Rollback connection lost');
+          App.Model.load = function () {
+            ctx.loaded += 1;
+            return failureAt === 'reload' ? Promise.reject(rollbackError) : Promise.resolve();
+          };
+          App.Viewport.refresh = function () {
+            ctx.refreshed += 1;
+            return failureAt === 'stored' ? Promise.resolve() : Promise.reject(rollbackError);
+          };
+          return T.rejects(function () { return App[owner].save(record, library); }).then(function (error) {
+            T.eq(error, ctx.failure, 'the rollback failure does not hide the original refusal');
+            T.eq(ctx.loaded, 1);
+            T.eq(ctx.refreshed, failureAt === 'reload' ? 0 : 1);
+            T.eq(ctx.applied, []);
+            T.eq(ctx.selected, []);
+            T.ok(ctx.logs.some(function (line) {
+              return line[0] === 'err' && /Original structure refusal/.test(line[1]);
+            }), 'a rejected write is explicitly reported');
+            T.ok(!ctx.logs.some(function (line) { return line[0] === 'ok'; }));
+          });
+        });
+      });
+    });
+  });
+
+  test('the load form preserves a refused draft and retries it without a second selection', function () {
+    return withEnvironment(project(), function (ctx) {
+      App.Loads.open(App.Loads.draftPoint(App.PROJECT, [5, 0]));
+      var dialog = latest(ctx);
+      change(field(dialog, 'Name'), 'Crane point load');
+      ctx.failure = new Error('Load save refused');
+      button(dialog, 'Save');
+      return drain().then(function () {
+        T.eq(dialog.closed, false);
+        T.eq(dialog.form.querySelector('.mesh-settings-message').textContent, 'Load save refused');
+        T.eq(App.PROJECT.loads, []);
+        T.eq(ctx.selected, []);
+        T.eq(field(dialog, 'Name').value, 'Crane point load');
+        ctx.failure = null;
+        button(dialog, 'Save');
+        return drain();
+      }).then(function () {
+        T.eq(dialog.closed, true);
+        T.eq(App.PROJECT.loads.length, 1);
+        T.eq(App.PROJECT.loads[0].name, 'Crane point load');
+        T.eq(ctx.selected, [App.PROJECT.loads[0].id]);
+        T.eq(ctx.requests.length, 2);
+      });
+    });
+  });
+
+  test('saving a normal load adds then replaces a copied record without dropping ordinary loads', function () {
+    var initial = project();
+    initial.loads = [App.Loads.draftFromPoints(initial, [[0, 0], [5, 0]])];
+    return withEnvironment(initial, function (ctx) {
+      var record = App.NormalLoads.draft(initial);
+      record.pressure = 120;
+      return App.NormalLoads.save(record).then(function (saved) {
+        T.eq(saved, record);
+        T.eq(ctx.requests[0].path, '/api/project/structures');
+        T.eq(ctx.requests[0].body.loads, initial.loads);
+        T.eq(App.NORMAL_LOADS.length, 1);
+        T.eq(App.NORMAL_LOADS[0], record);
+        T.ok(App.NORMAL_LOADS[0] !== record, 'the saved project does not alias the draft');
+        T.eq(ctx.selected, [record.id]);
+        record.pressure = 250;
+        T.eq(App.NORMAL_LOADS[0].pressure, 120);
+        return App.NormalLoads.save(record);
+      }).then(function () {
+        T.eq(App.NORMAL_LOADS.length, 1, 'editing replaces rather than duplicates');
+        T.eq(App.NORMAL_LOADS[0].pressure, 250);
+        T.eq(App.LOADS, initial.loads);
+        T.eq(ctx.refreshed, 2);
+      });
+    });
+  });
+
+  test('anchor drafts reuse a stored tendon without duplicating or mutating the library', function () {
+    var initial = project();
+    initial.beams = [{ id: 'pile', name: 'Pile', kind: 'beam',
+      points: [[12, 0], [12, -20]], active: true }];
+    var first = App.Anchors.draft(initial);
+    initial.anchor_sections = App.Anchors.sectionsFor(initial, first);
+    var before = JSON.stringify(initial.anchor_sections);
+    var next = App.Anchors.draft(initial), library = App.Anchors.sectionsFor(initial, next);
+    T.eq(next.section, initial.anchor_sections[0].id);
+    T.eq(library.length, 1);
+    library[0].name = 'Draft-only tendon';
+    T.eq(JSON.stringify(initial.anchor_sections), before);
+  });
+
+  test('soil volume Escape and Cancel discard edits without sending geometry', function () {
+    return withEnvironment(project(3), function (ctx) {
+      App.SoilVolumeDialog.open();
+      var dialog = document.getElementById('soil-volume-dialog');
+      change(dialog.querySelector('.soil-volume-row input'), '7');
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'a' }));
+      T.ok(document.getElementById('soil-volume-dialog'), 'other keys do not dismiss the form');
+      document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+      T.eq(document.getElementById('soil-volume-dialog'), null);
+      App.SoilVolumeDialog.open();
+      realButton(document.getElementById('soil-volume-dialog'), 'Cancel').click();
+      T.eq(document.getElementById('soil-volume-dialog'), null);
+      T.eq(ctx.requests, []);
+    });
+  });
+
+  test('removing all volume corners shows validation instead of crashing and adding corners recovers', function () {
+    return withEnvironment(project(3), function (ctx) {
+      App.SoilVolumeDialog.open();
+      var dialog = document.getElementById('soil-volume-dialog');
+      while (dialog.querySelectorAll('.soil-volume-row').length) {
+        dialog.querySelector('.soil-volume-row button').click();
+      }
+      T.ok(/three corners/.test(dialog.querySelector('.soil-volume-summary').textContent));
+      T.ok(realButton(dialog, 'Create').disabled);
+      realButton(dialog, 'Add corner').click();
+      var values = Array.prototype.map.call(dialog.querySelectorAll('.soil-volume-row input'),
+        function (control) { return control.value; });
+      T.eq(values, ['0', '0', '0']);
+      realButton(dialog, 'Add corner').click();
+      realButton(dialog, 'Add corner').click();
+      var rows = dialog.querySelectorAll('.soil-volume-row');
+      change(rows[1].querySelectorAll('input')[0], '4');
+      change(rows[2].querySelectorAll('input')[2], '3');
+      T.ok(!realButton(dialog, 'Create').disabled, 'a repaired polygon can be submitted');
+      T.ok(/volume/.test(dialog.querySelector('.soil-volume-summary').textContent));
+      T.eq(ctx.requests, [], 'validation never writes geometry');
+    });
+  });
+
+  test('boundary roller aligns with a picked line and rejects a line with no normal', function () {
+    return withEnvironment(project(), function (ctx) {
+      App.BoundaryConditions.openRecord();
+      var dialog = latest(ctx);
+      change(field(dialog, 'Where'), 'line');
+      field(dialog, 'Points').value = '0 -2, 0 -12';
+      realButton(dialog.form, 'Roller').click();
+      var boxes = field(dialog, 'Fixed').querySelectorAll('input');
+      T.eq(Array.prototype.map.call(boxes, function (box) { return box.checked; }), [true, false, false]);
+      field(dialog, 'Points').value = '0 0, 5 -5';
+      realButton(dialog.form, 'Roller').click();
+      T.ok(dialog.form.querySelector('.mesh-settings-message').textContent);
+      T.eq(ctx.requests, []);
+      field(dialog, 'Points').value = '0 -2, 0 -12';
+      realButton(dialog.form, 'Roller').click();
+      T.eq(dialog.form.querySelector('.mesh-settings-message').textContent, '');
+      return button(dialog, 'Save').then(function () {
+        T.eq(ctx.requests[0].body.boundary_conditions[0].fixed, [true, false, false]);
+      });
+    });
+  });
+
+  test('phreatic condition edits validate the polyline, report failed saves and preserve the original', function () {
+    return withEnvironment(project(), function (ctx) {
+      var record = App.BoundaryConditions.draftWaterPressure(App.PROJECT, 'domain', {
+        fluid_pressure_type: 'Phreatic_Multi_Line',
+        x_coordinates: [0, 50], y_coordinates: [-2, -4]
+      });
+      App.PROJECT.boundary_conditions = [record];
+      App.BoundaryConditions.edit(record.id);
+      var dialog = latest(ctx), before = JSON.stringify(record);
+      T.eq(field(dialog, 'Phreatic line').value, '0 -2, 50 -4');
+      T.ok(/\(0, -2\) -> \(50, -4\)/.test(App.BoundaryConditions.line(record)));
+      field(dialog, 'Phreatic line').value = '0 -3';
+      T.eq(button(dialog, 'Save'), null);
+      T.ok(/two points/.test(dialog.form.querySelector('.mesh-settings-message').textContent));
+      T.eq(ctx.requests, []);
+      field(dialog, 'Phreatic line').value = '0 -3, 25 -4, 50 -6';
+      field(dialog, 'Initial only').checked = true;
+      ctx.failure = new Error('Phreatic save refused');
+      return button(dialog, 'Save').then(function () {
+        T.eq(dialog.closed, false);
+        T.eq(JSON.stringify(record), before, 'failed form edits do not mutate the stored record');
+        T.ok(/Phreatic save refused/.test(dialog.form.querySelector('.mesh-settings-message').textContent));
+        ctx.failure = null;
+        return button(dialog, 'Save');
+      }).then(function () {
+        var saved = ctx.requests[1].body.boundary_conditions[0];
+        T.eq(saved.x_coordinates, [0, 25, 50]);
+        T.eq(saved.y_coordinates, [-3, -4, -6]);
+        T.eq(saved.is_fixed, false);
+        T.eq(saved.id, record.id);
+        T.ok(dialog.closed);
+      });
+    });
+  });
+
+  test('boundary grid lists, edits and deletes a condition on an individually drawn point', function () {
+    return withEnvironment(project(), function (ctx) {
+      var record = App.BoundaryConditions.draftWaterPressure(App.PROJECT, 'point', {
+        points: [[8, -4]], fluid_pressure_type: 'Uniform', value: -10
+      });
+      App.PROJECT.boundary_conditions = [record];
+      App.BoundaryConditions.open();
+      var dialog = latest(ctx);
+      T.ok(dialog.form.querySelector('.bc-other').textContent.indexOf(record.name) >= 0);
+      realButton(dialog.form.querySelector('.bc-other'), 'Edit\u2026').click();
+      T.ok(dialog.closed);
+      T.eq(field(latest(ctx), 'Points').value, '8 -4');
+      App.BoundaryConditions.open();
+      dialog = latest(ctx);
+      realButton(dialog.form.querySelector('.bc-other'), 'Delete').click();
+      return drain().then(function () {
+        T.ok(dialog.closed);
+        T.eq(ctx.requests[0].body.boundary_conditions, []);
+      });
+    });
+  });
+
   test('boundary grid applies standard supports, clears them, and saves changed water and gravity', function () {
     return withEnvironment(project(), function (ctx) {
       App.BoundaryConditions.open();

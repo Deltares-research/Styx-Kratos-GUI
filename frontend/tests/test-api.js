@@ -51,6 +51,19 @@
 
   /* ── Requests ────────────────────────────────────────────────── */
 
+  test('the live client forwards requests to the current window fetch', function () {
+    var original = window.fetch;
+    var transport = stub([json(200, { status: 'ready' })]);
+    window.fetch = transport;
+    function restore() { window.fetch = original; }
+    return App.Api.get('/api/health').then(function (body) {
+      T.eq(body, { status: 'ready' });
+      T.eq(transport.calls.length, 1);
+      T.eq(transport.calls[0].url, App.Api.base + '/api/health');
+      T.eq(transport.calls[0].opts.method, 'GET');
+    }).then(restore, function (error) { restore(); throw error; });
+  });
+
   test('get parses the body and sends no payload', function () {
     var client = api([json(200, { name: 'Site' })]);
     return client.get('/api/project').then(function (body) {

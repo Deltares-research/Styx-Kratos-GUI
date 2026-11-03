@@ -1,6 +1,7 @@
 /* Live shell editing, with real model/explorer code and recorded server writes. */
 (function () {
   var explorer = Object.assign({}, App.Explorer);
+  var materialsDialog = App.Dialogs.materials;
   function copy(value) { return JSON.parse(JSON.stringify(value)); }
   function settle() { return new Promise(function (resolve) { setTimeout(resolve, 0); }); }
 
@@ -16,6 +17,7 @@
       App[key] = Object.assign({}, App[key]);
     });
     App.Explorer = Object.assign({}, explorer);
+    App.Dialogs.materials = materialsDialog;
     App.TREES = Object.assign({}, App.TREES);
     App.OBJECT_PROPS = Object.assign({}, App.OBJECT_PROPS);
     App.state = { mode: 'soil', modelMode: '2d', selection: null };
@@ -322,6 +324,183 @@
       }).then(function () {
         T.ok(ctx.lines.indexOf('err:Node index refused') >= 0);
       });
+    });
+  });
+
+  test('material save refusal preserves edits for retry and re-enables every footer button', function () {
+    return withShell(function (ctx, host) {
+      App.Dialogs.materials();
+      var dialog = host.querySelector('.dialog'), original = App.MATERIALS[0].name;
+      function footer(label) {
+        return Array.prototype.filter.call(dialog.querySelectorAll('.dlg-foot .btn'),
+          function (button) { return button.textContent.trim() === label; })[0];
+      }
+      App.MATERIALS[0].name = 'Edited soil';
+      ctx.failure = new Error('Material library refused');
+      footer('OK').click();
+      T.ok(footer('OK').disabled);
+      return settle().then(function () {
+        T.eq(ctx.requests[0].path, '/api/project/materials');
+        T.eq(App.MATERIALS[0].name, 'Edited soil', 'the user can correct the refused draft');
+        T.ok(original !== App.MATERIALS[0].name);
+        T.ok(dialog.isConnected);
+        Array.prototype.forEach.call(dialog.querySelectorAll('.dlg-foot .btn'), function (button) {
+          T.eq(button.disabled, false);
+        });
+        T.ok(ctx.lines.indexOf('err:Material library refused') >= 0);
+        ctx.failure = null;
+        footer('OK').click();
+        return settle();
+      }).then(function () {
+        T.eq(ctx.requests.length, 2);
+        T.eq(dialog.isConnected, false);
+        T.eq(App.MATERIALS[0].name, 'Edited soil');
+        T.ok(ctx.refreshed > 0);
+      });
+    });
+  });
+
+  test('material Cancel restores the library and sends no request', function () {
+    return withShell(function (ctx, host) {
+      var original = copy(App.MATERIALS);
+      App.Dialogs.materials();
+      App.MATERIALS[0].name = 'Unsaved material';
+      var cancel = Array.prototype.filter.call(host.querySelectorAll('.dlg-foot .btn'),
+        function (button) { return button.textContent.trim() === 'Cancel'; })[0];
+      cancel.click();
+      T.eq(App.MATERIALS, original);
+      T.eq(ctx.requests, []);
+      T.eq(host.querySelector('.dialog'), null);
+    });
+  });
+
+  test('stage numerical controls reject invalid values and persist valid numbers and reset flags', function () {
+    return withShell(function (ctx, host) {
+      var id = App.PROJECT.stages[1].id;
+      App.state.mode = 'staged'; App.state.phase = id;
+      App.Explorer.mountPhases();
+      function control(label) {
+        var rows = Array.prototype.slice.call(host.querySelectorAll('#list-phases .pgrid-row'));
+        var row = rows.filter(function (node) {
+          return node.querySelector('.pgrid-key').textContent === label;
+        })[0];
+        T.ok(row, label);
+        return row.querySelector('input');
+      }
+      function change(label, text) {
+        var input = control(label);
+        input.value = text;
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      [
+        ['Max iterations', 'abc', 'must be a number'],
+        ['Max iterations', '1.5', 'must be a whole number'],
+        ['Max iterations', '0', 'must be at least 1'],
+        ['Time interval', '-1', 'must be at least 0'],
+        ['Tolerated error', '0', 'must be greater than 0']
+      ].forEach(function (entry) {
+        var original = control(entry[0]).value;
+        change(entry[0], entry[1]);
+        T.eq(control(entry[0]).value, original, 'the invalid field is restored');
+        T.ok(ctx.lines[ctx.lines.length - 1].indexOf(entry[2]) >= 0);
+      });
+      T.eq(ctx.requests, [], 'invalid numerical settings never reach the server');
+      change('Max iterations', '30');
+      return settle().then(function () {
+        T.eq(App.PROJECT.stages[1].max_iterations, 30);
+        change('Time interval', '0,25');
+        return settle();
+      }).then(function () {
+        T.eq(App.PROJECT.stages[1].time_interval, 0.25);
+        var reset = control('Reset displacements to zero');
+        var desired = !reset.checked;
+        reset.checked = desired; reset.dispatchEvent(new Event('change', { bubbles: true }));
+        return settle().then(function () {
+          T.eq(App.PROJECT.stages[1].reset_displacements, desired);
+          T.eq(ctx.requests.length, 3);
+          ctx.requests.forEach(function (request) {
+            T.eq(request.path, '/api/project/stages');
+            T.eq(request.body.stages[1].id, id);
+          });
+        });
+      });
+    });
+  });
+
+  test('stage insert and duplicate use the selected parent and refuse failed sequence writes', function () {
+    return withShell(function (ctx, host) {
+      App.state.mode = 'staged'; App.state.phase = App.PROJECT.stages[1].id;
+      App.Explorer.mountPhases();
+      var before = App.PROJECT.stages.length;
+      host.querySelectorAll('.stage-toolbar button')[1].click();
+      return settle().then(function () {
+        T.eq(App.PROJECT.stages.length, before + 1);
+        T.eq(ctx.requests[0].path, '/api/project/stages');
+        host.querySelectorAll('.stage-toolbar button')[2].click();
+        return settle();
+      }).then(function () {
+        T.eq(App.PROJECT.stages.length, before + 2);
+        var stored = copy(App.PROJECT.stages);
+        ctx.failure = new Error('Stage sequence refused');
+        host.querySelectorAll('.stage-toolbar button')[0].click();
+        return settle().then(function () {
+          T.eq(App.PROJECT.stages, stored);
+          T.eq(ctx.loaded, 1, 'a refusal reloads the stored sequence');
+          T.ok(ctx.lines.indexOf('err:Stage sequence refused') >= 0);
+        });
+      });
+    });
+  });
+
+  test('failed default-stage creation is reported without replacing the open project', function () {
+    return withShell(function (ctx, host) {
+      App.PROJECT.stages = []; ctx.server.stages = [];
+      App.Explorer.mountPhases();
+      var button = Array.prototype.filter.call(host.querySelectorAll('#list-phases button'),
+        function (node) { return node.textContent === 'Create default stages'; })[0];
+      ctx.failure = new Error('No stage defaults available');
+      button.click();
+      return settle().then(function () {
+        T.eq(ctx.requests[0].path, '/api/project/stages/defaults');
+        T.eq(App.PROJECT.stages, []);
+        T.ok(ctx.lines.indexOf('err:No stage defaults available') >= 0);
+      });
+    });
+  });
+
+  test('condition checkboxes report refused activation writes without changing the saved condition', function () {
+    return withShell(function (ctx, host) {
+      var record = App.BoundaryConditions.draftDisplacement(App.PROJECT, 'face', { face: 'bottom' });
+      App.Model.apply(Object.assign({}, App.PROJECT, { boundary_conditions: [record] }));
+      ctx.server = copy(App.PROJECT);
+      App.Explorer.mountTree('soil');
+      var check = host.querySelector('.condition-check');
+      T.ok(check);
+      ctx.failure = new Error('Condition activation refused');
+      check.click();
+      return settle().then(function () {
+        T.eq(App.PROJECT.boundary_conditions[0].active, true);
+        T.ok(ctx.lines.some(function (line) { return /err:.*Condition activation refused/.test(line); }));
+      });
+    });
+  });
+
+  test('successful clear-geometry command reloads and redraws only after the server accepts it', function () {
+    return withShell(function (ctx) {
+      var fetch = window.fetch, order = [];
+      window.fetch = function (url, options) {
+        T.eq(url, '/api/project/custom_parts');
+        T.eq(options.method, 'DELETE');
+        order.push('delete');
+        return Promise.resolve({ ok: true, json: function () { return Promise.resolve({}); } });
+      };
+      function restore() { window.fetch = fetch; }
+      return Promise.resolve().then(function () { return App.Command.run('cleargeometry'); }).then(function () {
+        T.eq(order, ['delete']);
+        T.eq(ctx.loaded, 1);
+        T.eq(ctx.refreshed, 1);
+        T.ok(ctx.lines.indexOf('ok:Custom geometry cleared.') >= 0);
+      }).then(restore, function (error) { restore(); throw error; });
     });
   });
 
