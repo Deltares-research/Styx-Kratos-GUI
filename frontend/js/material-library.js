@@ -6,8 +6,8 @@
    weight over g, PERMEABILITY_XX the m/day value per second. POROSITY is 0, as in
    Kratos' staged-excavation reference, so each soil weighs exactly DENSITY_SOLID g -- its unit weight -- above
    and below the water alike (add a porosity and a RETENTION_LAW to tell the two apart).
-   What a preset leaves out -- the water's density, the fluid constants -- the export
-   derives, and says so.
+   What a preset leaves out, its model fills with its defaults; the water is the
+   project's.
    The interface presets belong to a soil set: they are its Rinter and permeability. */
 App.MaterialLibrary = (function () {
   var soils = [

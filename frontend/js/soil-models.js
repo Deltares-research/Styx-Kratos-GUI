@@ -136,6 +136,26 @@ App.SoilModels = (function () {
     return typeof v === 'number' && isFinite(v) ? v : null;
   }
 
+  /* ── The water, and what follows from a soil's numbers ─────────────── */
+
+  function constant(name) { return table().constants[name]; }
+
+  /* The water every soil shares as Kratos reads it, in `system`: the project's values,
+     water's where it gives none (null or undefined). */
+  function water(system, specificWeight, bulkModulus, viscosity) {
+    var given = function (v) { return v !== null && v !== undefined; };
+    var weight = given(specificWeight) ? specificWeight
+      : App.Units.fromSI(constant('WATER_SPECIFIC_WEIGHT'), 'specific weight', system);
+    return {
+      DENSITY_WATER: weight / App.Units.gravity(system),
+      BULK_MODULUS_FLUID: given(bulkModulus) ? bulkModulus
+        : App.Units.fromSI(constant('WATER_BULK_MODULUS'), 'stress', system),
+      DYNAMIC_VISCOSITY: given(viscosity) ? viscosity
+        : App.Units.fromSI(constant('WATER_VISCOSITY'), 'viscosity', system)
+    };
+  }
+
+
   /* `value` as Python's `{:.6g}` writes it, so both sides refuse in the same words. */
   function significant(value) {
     if (value === 0) return '0';

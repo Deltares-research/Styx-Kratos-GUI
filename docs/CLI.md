@@ -68,6 +68,7 @@ Genuchten soil.
 | `dimension P 2d\|3d [--offset Z]` | Switch between the plane-strain section and the solid model |
 | `units P [SI\|kN]` | Show the unit system, or convert the whole project to another |
 | `water P [LEVEL\|off]` | Show, set or remove the water level. It fixes no pressure by itself: a new hydrostatic condition or normal load takes it as its level |
+| `fluid P [--bulk-modulus K] [--viscosity MU] [--unset FIELD ...]` | Show or set the water in every soil's pores, one for the whole project: `BULK_MODULUS_FLUID` and `DYNAMIC_VISCOSITY`. Unset, each is water's at 20 °C |
 | `domain P [--x FROM TO] [--y BOTTOM TOP] [--z FROM TO]` | Show or set the model's extents. `--y` is the bottom and the ground level; with layers, it moves the top of the first layer and the bottom of the last |
 | `material P list\|presets\|models\|add\|set\|remove ...` | Soils as Kratos property sets: `add ID [--preset m3] [--model mohr-coulomb] [NAME=VALUE ...]`, `set ID [--model M] NAME=VALUE ... [--unset NAME]`; `models` lists each soil model with its parameters and defaults |
 | `layer P list\|add\|set\|split\|remove ...` | The soil stack: `add ID --material M [--bottom Y \| --thickness T]`, `set ID [--top Y] [--bottom Y]` |
@@ -127,6 +128,7 @@ kratos-cli layer pit.json add mid --material clay --bottom -10
 kratos-cli layer pit.json add bottom --material sand --bottom -40
 kratos-cli excavation pit.json --x 0 6 --z 0 10 --levels -2 -4.5 -7
 kratos-cli water pit.json -1
+kratos-cli fluid pit.json                                 # the water every soil is written with
 kratos-cli boundary pit.json add pore --domain --water-pressure Hydrostatic   # about -1 m
 kratos-cli parts pit.json                                 # soil_top__lift1, ... for the stages
 ```
@@ -170,6 +172,14 @@ kratos-cli parts pit.json                                 # soil_top__lift1, ...
 - **The water level** fixes no pressure by itself. A water pressure condition does
   (`boundary`, below): `boundary add --domain --water-pressure Hydrostatic` gives the
   soil hydrostatic pore pressures about the water level, and keeps that level as its own.
+- **The water in the pores** is the project's, not each soil's: every soil is written
+  with the same `DENSITY_WATER`, `BULK_MODULUS_FLUID` and `DYNAMIC_VISCOSITY`. `fluid`
+  without a value says what they are. `--bulk-modulus` (a stress) and `--viscosity` set
+  them in the project's units (Pa and Pa·s in SI, kPa and kPa·s in kN), and `--unset
+  bulk_modulus dynamic_viscosity` gives them back to water's at 20 °C: 2.2 GPa and
+  1 mPa·s. `DENSITY_WATER` is not set here: it is the water level's specific weight over
+  g. A soil that sets one of the three itself is refused; a file saved when each soil
+  had its own water is read with the first soil's, and says which soils changed.
 - **Coordinates are plain numbers**, `--points 0 0 6 0 3 2`, because a word starting with
   a minus, like `-3,2`, would be read as an option. A long outline can come from a file:
   `--points @outline.csv`, one point per line.

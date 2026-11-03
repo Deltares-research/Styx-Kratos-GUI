@@ -34,7 +34,7 @@ from pathlib import Path
 
 from core import scripting
 from core.kratos import materials
-from core.model import drafts, soil_models, stages, units
+from core.model import drafts, migration, soil_models, stages, units
 from core.model.load_translation import translate as translate_loads
 from core.model.schemas import (ConditionsUpdate, CustomPart, DimensionUpdate, LayersUpdate,
                                 MaterialsUpdate, MeshRequest, Panel, StagesUpdate, Project,
@@ -99,6 +99,20 @@ def load(path: str | Path) -> Project:
     # A drawn part's .brep is a path on the computer it was drawn on: built again from
     # its recipe here, so the file is the same model wherever it is opened.
     return scripting.with_solids(Project.model_validate(value), strict=False)
+
+
+def migration_notes(path: str | Path) -> list[str]:
+    """What opening the project file `path` changes in its deck (`migration.notes`):
+    said before a command reads it, as the first save writes the new shape and the old
+    values are gone. A file that is not a readable project says nothing here; `load`
+    says why."""
+    path = Path(path)
+    if path.suffix.lower() != ".json":
+        return []
+    try:
+        return migration.notes(json.loads(path.read_text(encoding="utf-8")))
+    except (OSError, ValueError, TypeError, KeyError, AttributeError):
+        return []
 
 
 def save(project: Project, path: str | Path) -> Path:
@@ -227,11 +241,31 @@ def set_water_level(project: Project, level: float | None) -> Project:
     return set_water(project, WaterUpdate(water=water))
 
 
+def set_fluid(project: Project, *, bulk_modulus: float | None = None,
+              dynamic_viscosity: float | None = None,
+              unset: Sequence[str] = ()) -> Project:
+    """The water in every soil's pores: its bulk modulus and viscosity, in the project's
+    units. `unset` names fields to give back to water's own (`soil_models.water`)."""
+    payload = project.model_dump()
+    fluid = payload["fluid"]
+    for name in unset:
+        if name not in fluid:
+            raise EditRefused(f"the water has no {name}; it has: " + ", ".join(fluid))
+        fluid[name] = None
+    if bulk_modulus is not None:
+        fluid["bulk_modulus"] = bulk_modulus
+    if dynamic_viscosity is not None:
+        fluid["dynamic_viscosity"] = dynamic_viscosity
+    return Project.model_validate(payload)
+
+
 def replace_materials(project: Project, update: MaterialsUpdate) -> Project:
     """The material library. Validating the whole project is the point: it is what
     refuses a material a layer still points at."""
     payload = project.model_dump()
     payload["materials"] = [material.model_dump() for material in update.materials]
+    if update.fluid is not None:
+        payload["fluid"] = update.fluid.model_dump()
     return Project.model_validate(payload)
 
 

@@ -1645,6 +1645,17 @@ App.LivePatches = (function () {
         return App.Api.put('/api/project', opened)
           .then(function (project) {
             return adoptProject(project, 'Opened project: ' + file.name);
+          })
+          // A file saved in an older shape may have lost values on the way in: the
+          // server says which, as the first Save writes them away.
+          .then(function () {
+            return App.Api.post('/api/project/migration-notes', opened);
+          })
+          .then(function (result) {
+            if (!App.Command) return;
+            (result.notes || []).forEach(function (note) {
+              if (App.Command.warn) App.Command.warn(note); else App.Command.note(note);
+            });
           });
       }).catch(function (error) {
         if (App.Command) App.Command.err('Could not open ' + file.name + ': ' + error.message);
@@ -4089,6 +4100,7 @@ App.LivePatches = (function () {
       var frozenMaterials = App.Dialogs.materials;
       App.Dialogs.materials = function (onClose) {
         var snapshot = copy(App.MATERIALS || []);
+        var fluidSnapshot = copy(App.FLUID || {});
         frozenMaterials(onClose);
         var dialogs = document.querySelectorAll('#modal-layer .dialog');
         var dialog = dialogs[dialogs.length - 1];
@@ -4097,6 +4109,7 @@ App.LivePatches = (function () {
         var committed = false;
         function discard() {
           App.MATERIALS = copy(snapshot);
+          App.FLUID = copy(fluidSnapshot);
           if (App.Model && App.Model.rebuildDerived) App.Model.rebuildDerived();
           if (App.Explorer && App.state) App.Explorer.mountTree(App.state.mode);
         }
@@ -4125,7 +4138,8 @@ App.LivePatches = (function () {
             });
 
             App.Api.patch('/api/project/materials',
-                          { materials: App.Model.materialsToServer(App.MATERIALS) })
+                          { materials: App.Model.materialsToServer(App.MATERIALS),
+                            fluid: App.FLUID || null })
               .then(function (response) {
                 App.Model.apply(response.project);
                 return App.Viewport.refresh();

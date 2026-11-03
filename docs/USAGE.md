@@ -136,6 +136,9 @@ law and its parameters.
   cut-off is on, the saturations for a retention law other than `SaturatedLaw`, and the
   Van Genuchten parameters for `VanGenuchtenLaw`. When a choice brings in new parameters,
   Styx fills in their defaults.
+- The water is the same in every soil. Its bulk modulus and viscosity are under **Water**
+  in the Soil materials window; its unit weight is that of the water level. Empty, each is
+  the value of water at 20 °C.
 - For any other Kratos law, for example a UDSM, select **Other** in **Soil model** and type
   the law name. Styx writes it as you type it, with the variables you give it.
 - To give a material the strength and permeability of an interface, select the material, then

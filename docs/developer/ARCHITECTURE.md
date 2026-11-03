@@ -114,7 +114,7 @@ the HTTP parts.
 
 | Group | Module | Routes |
 |---|---|---|
-| Project | `routes/project.py` | `GET`/`PUT /api/project`; `POST /api/project/new`, `/reset`, `/script`, `/script/save`, `/stages/defaults`; `PATCH /api/project/layers`, `/materials`, `/structures`, `/conditions`, `/stages`, `/dimension`, `/units`; `PUT /api/project/water`; `DELETE /api/project/custom_parts` |
+| Project | `routes/project.py` | `GET`/`PUT /api/project`; `POST /api/project/new`, `/reset`, `/script`, `/script/save`, `/stages/defaults`; `PATCH /api/project/layers`, `/materials` (the soils and `fluid`), `/structures`, `/conditions`, `/stages`, `/dimension`, `/units`; `PUT /api/project/water`; `DELETE /api/project/custom_parts` |
 | Geometry | `routes/geometry.py` | `GET /api/geometry`; `POST /api/geometry/create`, `/import`; `DELETE /api/geometry/parts/{key}` |
 | Mesh | `routes/mesh.py` | `POST /api/mesh`, `/api/mesh/labels`, `/api/mesh/node-parts` |
 | Decks | `routes/decks.py` | `POST /api/export/mdpa`, `/api/import/mdpa`, `/api/calculate` |
@@ -132,7 +132,7 @@ the HTTP parts.
 | `cli/terminal/files.py` | The project file that a command reads, and where an edit is written |
 | `cli/terminal/output.py`, `style.py`, `tables.py` | The answer of a command: text, JSON, colour, CSV |
 | `cli/terminal/words.py` | How the words of a command line become a command and its values |
-| `cli/commands/project.py` | `new`, `show`, `check`, `build`, `script`, `dimension`, `units`, `water` |
+| `cli/commands/project.py` | `new`, `show`, `check`, `build`, `script`, `dimension`, `units`, `water`, `fluid` |
 | `cli/commands/edit.py` | `get`, `set`, `add`, `remove` |
 | `cli/commands/ground.py`, `volumes.py` | `domain`, `material`, `layer`, `excavation`, `parts`; `volume` |
 | `cli/commands/structures.py` | `section`, `beam`, `wall`, `member`, `anchor`, `interface`, `load`, `normal-load` |
@@ -210,4 +210,5 @@ tests:
 | Frozen `frontend/base/` and live `frontend/js/` | The first design stays as it is. The live code wraps it, so the two never mix. |
 | Part keys | One string is the Gmsh physical group, the `userData.key` in the view, the `obj:` of the tree, and the `OBJECT_PROPS` key |
 | Logic without DOM, thin DOM code | Logic that needs no page goes into a module without `document`, so the tests can run it without a browser. `patches.js` and `results-view.js` only connect it to the page. |
+| The pore water is the project's (`Project.fluid`) | Every soil holds the same water, so it is one record and not a copy in each soil, which could disagree. A soil that sets `DENSITY_WATER`, `BULK_MODULUS_FLUID` or `DYNAMIC_VISCOSITY` itself is refused. The export writes the water into each soil: the bulk modulus and the viscosity from `fluid` (water's at 20 °C where unset), `DENSITY_WATER` from the water level's specific weight. `migration.lift_water` moves the soils' water of an older file into `fluid`, and names each soil whose deck that changes. |
 | Runs are folders, results are files | A run never changes after it ends, and Styx reads it from disk. So results survive a restart of the server, and you can share a run as a ZIP file. |

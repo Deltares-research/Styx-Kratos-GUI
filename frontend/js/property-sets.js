@@ -32,10 +32,10 @@ App.PropertySets = (function () {
       // (App.SoilModels.required).
       required: S.required(S.law(ELASTIC, 2), {}),
       shown: S.shown(ELASTIC, {}).map(function (p) { return p.name; }),
-      // Left out, the export derives these (core/kratos/materials.py), or Kratos does.
-      derived: ['GEO_DRAINAGE_TYPE', 'DENSITY_WATER', 'POROSITY', 'BULK_MODULUS_SOLID',
-                'BULK_MODULUS_FLUID', 'DYNAMIC_VISCOSITY', 'PERMEABILITY_YY',
-                'PERMEABILITY_XY', 'PERMEABILITY_ZZ', 'PERMEABILITY_YZ',
+      // Left out, the export derives these (App.SoilModels.derived), or Kratos does. The
+      // water is not a soil's at all: it is the project's (App.SoilModels.WATER).
+      derived: ['GEO_DRAINAGE_TYPE', 'BULK_MODULUS_SOLID', 'PERMEABILITY_XX',
+                'PERMEABILITY_YY', 'PERMEABILITY_XY', 'PERMEABILITY_ZZ', 'PERMEABILITY_YZ',
                 'PERMEABILITY_ZX', 'K0_NC', 'BIOT_COEFFICIENT', 'GEO_POISSON_UNDRAINED'],
       // A new soil: a loose drained sand, in SI (core/model/soil_models.py). Porosity 0,
       // as in Kratos' reference: Kratos weighs a point at (1 - n) DENSITY_SOLID g +
@@ -154,6 +154,12 @@ App.PropertySets = (function () {
     if (isNumber(variables.POROSITY) && !(variables.POROSITY < 1)) return 'POROSITY must be below 1.';
     var needed = null;
     if (kindName === 'soil') {
+      // The server's Material refuses them too (core/model/schemas.py).
+      var own = S.WATER.filter(function (n) { return names.indexOf(n) >= 0; });
+      if (own.length) {
+        return own.join(', ') + (own.length === 1 ? ' belongs' : ' belong') +
+               ' to the project\'s water, not to a soil: set it under Water.';
+      }
       // A choice Kratos reads by name has to be one of its names, a flag a flag.
       for (var c = 0; c < names.length; c += 1) {
         var choice = CHOICES[names[c]];

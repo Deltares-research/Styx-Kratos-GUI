@@ -227,4 +227,10 @@ def convert_project(payload: dict, target: str) -> tuple[dict, list[str]]:
         out["water"] = {**water,
                         "specific_weight": value(water.get("specific_weight"),
                                                  SPECIFIC_WEIGHT)}
+    fluid = payload.get("fluid")
+    if isinstance(fluid, dict):
+        out["fluid"] = {**fluid,
+                        "bulk_modulus": value(fluid.get("bulk_modulus"), STRESS),
+                        "dynamic_viscosity": value(fluid.get("dynamic_viscosity"),
+                                                   VISCOSITY)}
     return out, notes

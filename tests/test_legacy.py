@@ -47,7 +47,9 @@ def test_a_soil_becomes_the_property_set_the_old_deck_carried(old, new):
     assert v["YOUNG_MODULUS"] == o["E"] * 1000
     assert v["POISSON_RATIO"] == o["nu"]
     assert v["DENSITY_SOLID"] == o["g_unsat"] * 1000 / 9.81
-    assert v["DENSITY_WATER"] == old["water"]["specific_weight"] * 1000 / 9.81
+    assert "DENSITY_WATER" not in v, "the water is the project's"
+    assert new.water_variables["DENSITY_WATER"] == pytest.approx(
+        old["water"]["specific_weight"] * 1000 / 9.81)
     assert v["POROSITY"] == o["porosity"] == 0.25
     assert v["PERMEABILITY_XX"] == v["PERMEABILITY_YY"] == o["k"] / 86_400
     assert v["GEO_COHESION"] == o["c"] * 1000
@@ -174,7 +176,8 @@ def test_an_old_shaped_material_takes_the_projects_water():
     old = fixture("staged_v1")["materials"][0]
     data["materials"][0] = old
     project = Project.model_validate(data)
-    assert project.materials[0].variables["DENSITY_WATER"] == pytest.approx(1000.0)
+    assert "DENSITY_WATER" not in project.materials[0].variables, "the project's water"
+    assert project.water_variables["DENSITY_WATER"] == pytest.approx(1000.0)
     # Only the record: the project's loads are its own already, not kN to be multiplied
     # (it used to read the whole document as an old file and crash on the new soil).
     assert project.loads[0].components == tuple(data["loads"][0]["components"])

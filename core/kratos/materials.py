@@ -4,6 +4,9 @@ Continuum elements keep property id 0, exactly as GiD writes them. Kratos' mater
 import process assigns their material properties by sub-model part name, and the names
 here must be the ones the mdpa writes.
 
+Every soil is written with the project's water (`Project.water_variables`): one water,
+in every soil's pores, not a soil's own.
+
 Load conditions never appear here. A line/point/surface load is not a constitutive
 material, and no real Kratos GeoMechanics deck defines LINE_LOAD, POINT_LOAD or
 SURFACE_LOAD in a MaterialParameters.json -- its magnitude is applied by a
@@ -319,7 +322,8 @@ def _variables(material: Material, dim: int, k0: bool, project: Project,
     label = f"material {material.name!r}"
     given = dict(material.variables)
     k0_given = {name: given.pop(name) for name in list(given) if name.startswith("K0_")}
-    v = dict(given)
+    # The project's, one water for every soil: not derived, so not listed as such.
+    v = {**given, **project.water_variables}
 
     _fill(v, "GEO_DRAINAGE_TYPE", "CONSTANT_PW_FIELD", derived, label)
     _fill(v, "DENSITY_WATER", project.water_specific_weight / units.gravity(system),

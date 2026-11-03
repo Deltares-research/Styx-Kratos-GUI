@@ -26,6 +26,19 @@ App.MaterialSets = (function () {
   function copy(value) { return JSON.parse(JSON.stringify(value)); }
   function dimension() { return App.PROJECT && App.PROJECT.dimension === 3 ? 3 : 2; }
 
+  /* The water every soil holds, as Kratos reads it: the water level's specific weight,
+     and the bulk modulus and viscosity edited under Water in this window (App.FLUID). */
+  function waterWeight() {
+    var level = App.PROJECT && App.PROJECT.water;
+    return level && level.specific_weight !== null && level.specific_weight !== undefined
+      ? level.specific_weight : null;
+  }
+
+  function waterVariables() {
+    var fluid = App.FLUID || {};
+    return S.water(App.Units.current(), waterWeight(), fluid.bulk_modulus, fluid.dynamic_viscosity);
+  }
+
   var sequence = 0;
 
   /* A brand new soil: a loose drained sand in the project's units, valid as it stands
@@ -167,6 +180,7 @@ App.MaterialSets = (function () {
         body = el('tbody');
         table.appendChild(body);
         wrap.appendChild(table);
+        wrap.appendChild(water(function (message, invalid) { say(message, invalid); }));
         hint = el('div.lay-hint', { style: 'border-top:0;background:none;padding:6px 0' });
         wrap.appendChild(hint);
         root.appendChild(wrap);
@@ -174,6 +188,56 @@ App.MaterialSets = (function () {
         say(null);
       }
     });
+  }
+
+  /* The water in every soil's pores: one for the project, as every soil holds the same
+     water (core/model/schemas.py `Fluid`). Its weight is the water level's, shown here;
+     its bulk modulus and viscosity are edited here, on App.FLUID, and saved with the
+     soils. Left blank, each is water's at 20 C. */
+  function water(say) {
+    var box = el('div.pgrid.material-water');
+    box.appendChild(el('h3', { text: 'Water' }));
+    var weight = waterWeight();
+    var shownWeight = weight !== null ? weight
+      : App.Units.fromSI(App.SOIL_MODEL_TABLE.constants.WATER_SPECIFIC_WEIGHT, 'specific weight');
+    box.appendChild(el('div.pgrid-row', { title: 'DENSITY_WATER is this over g' }, [
+      el('div.pgrid-key', { text: 'Unit weight' }),
+      el('div.pgrid-val.readonly.field', { 'data-water': 'specific_weight' }, [
+        el('span.computed-value', { text: number(shownWeight) }),
+        el('span.unit', { text: App.Units.label('specific weight') })])]));
+    [['bulk_modulus', 'Bulk modulus', 'BULK_MODULUS_FLUID', 'stress',
+      App.SOIL_MODEL_TABLE.constants.WATER_BULK_MODULUS],
+     ['dynamic_viscosity', 'Dynamic viscosity', 'DYNAMIC_VISCOSITY', 'viscosity',
+      App.SOIL_MODEL_TABLE.constants.WATER_VISCOSITY]].forEach(function (spec) {
+      App.FLUID = App.FLUID || {};
+      var value = App.FLUID[spec[0]];
+      var input = el('input.cell-input', {
+        value: value === null || value === undefined ? '' : number(value), 'data-water': spec[0],
+        placeholder: number(App.Units.fromSI(spec[4], spec[3])) + ' (water)' });
+      input.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+      });
+      input.addEventListener('change', function () {
+        var parsed = P.parse(input.value);
+        if (parsed === undefined) {
+          App.FLUID[spec[0]] = null;
+          say(spec[1] + ' of the water left blank: water\'s own.');
+        } else if (typeof parsed !== 'number' || !(parsed > 0)) {
+          input.value = value === null || value === undefined ? '' : number(value);
+          say('The water\'s ' + spec[1].toLowerCase() + ' must be a number greater than zero.', true);
+          return;
+        } else {
+          App.FLUID[spec[0]] = parsed;
+          say(null);
+        }
+        value = App.FLUID[spec[0]];
+      });
+      box.appendChild(el('div.pgrid-row', { title: spec[2] + ', written into every soil' }, [
+        el('div.pgrid-key', { text: spec[1] }),
+        el('div.pgrid-val.editable.field', null, [
+          input, el('span.unit', { text: App.Units.label(spec[3]) })])]));
+    });
+    return box;
   }
 
   function library(onAdded, current, say) {

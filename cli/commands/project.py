@@ -1,6 +1,7 @@
-"""`new`, `show`, `check`, `build`, `dimension`, `units`, `water`: the project file, and
-the edits that have a command of their own because they carry the rest of the model
-with them (`core.session.set_dimension`, `set_units`, `set_water_level`)."""
+"""`new`, `show`, `check`, `build`, `dimension`, `units`, `water`, `fluid`: the project
+file, and the edits that have a command of their own because they carry the rest of the
+model with them (`core.session.set_dimension`, `set_units`, `set_water_level`,
+`set_fluid`)."""
 
 from __future__ import annotations
 
@@ -13,7 +14,7 @@ from cli.terminal.files import add_project, add_writing, written
 from cli.terminal.output import Answer, CommandError
 from core import session
 from core.kratos import condition_checks
-from core.model import stages
+from core.model import stages, units
 from core.model.schemas import DimensionUpdate, MeshRequest, Project, UnitsUpdate
 from core.model.templates import blank_project, seed_project
 
@@ -89,6 +90,21 @@ def register(commands, common: argparse.ArgumentParser) -> None:
                        help="the phreatic level y in metres, or off to remove it")
     add_writing(water)
     water.set_defaults(handler=set_water)
+
+    fluid = commands.add_parser(
+        "fluid", parents=[common],
+        help="show or set the water in every soil's pores: its bulk modulus and viscosity",
+        description="The water every soil holds, one for the whole project. Its weight is "
+                    "the water level's specific weight; its bulk modulus and viscosity "
+                    "are set here, in the project's units. Unset, each is water's at 20 C.")
+    add_project(fluid)
+    fluid.add_argument("--bulk-modulus", type=float, help="BULK_MODULUS_FLUID, a stress")
+    fluid.add_argument("--viscosity", type=float, help="DYNAMIC_VISCOSITY")
+    fluid.add_argument("--unset", nargs="+", default=[], metavar="FIELD",
+                       choices=("bulk_modulus", "dynamic_viscosity"),
+                       help="give these back to water's own")
+    add_writing(fluid)
+    fluid.set_defaults(handler=set_fluid)
 
 
 # ── The project file ────────────────────────────────────────────────────────
@@ -206,6 +222,40 @@ def set_water(args: argparse.Namespace) -> Answer:
                      "about it: kratos-cli boundary P add --domain --water-pressure "
                      "Hydrostatic")
     return Answer(data={"file": _file(target), "water": _water(project)}, lines=lines)
+
+
+def set_fluid(args: argparse.Namespace) -> Answer:
+    project = session.load(args.project)
+    if args.bulk_modulus is None and args.viscosity is None and not args.unset:
+        return Answer(data={"fluid": _fluid(project)}, lines=[_fluid_line(project)])
+    try:
+        project = session.set_fluid(project, bulk_modulus=args.bulk_modulus,
+                                    dynamic_viscosity=args.viscosity, unset=args.unset)
+    except ValueError as failure:
+        raise CommandError(str(failure)) from None
+    target, where = written(args, project)
+    return Answer(data={"file": _file(target), "fluid": _fluid(project)},
+                  lines=[f"{_fluid_line(project)} {where}"])
+
+
+def _fluid(project: Project) -> dict:
+    """The water every soil is written with, as the export writes it."""
+    return {**project.fluid.model_dump(mode="json"), "written": project.water_variables}
+
+
+def _fluid_line(project: Project) -> str:
+    written = project.water_variables
+    system = project.unit_system
+
+    def given(value: float | None) -> str:
+        return "" if value is not None else " (water's)"
+
+    return (f"Water in every soil: bulk modulus {written['BULK_MODULUS_FLUID']:g} "
+            f"{units.label(units.STRESS, system)}{given(project.fluid.bulk_modulus)}, "
+            f"viscosity {written['DYNAMIC_VISCOSITY']:g} "
+            f"{units.label(units.VISCOSITY, system)}{given(project.fluid.dynamic_viscosity)}, "
+            f"density {written['DENSITY_WATER']:g} {units.label(units.DENSITY, system)} "
+            "(the water level's specific weight over g).")
 
 
 # ── Saying what a model is ──────────────────────────────────────────────────

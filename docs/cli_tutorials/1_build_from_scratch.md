@@ -60,10 +60,12 @@ domain --x 0 20 --y 0 10
 material add m_soil --name soil --color "#c4a86a" --law GeoLinearElasticPlaneStrain2DLaw
 #    Stiffness: E = 20 MPa
 material set m_soil YOUNG_MODULUS=2.0e7 POISSON_RATIO=0.3
-#    Weight: 18 kN/m3 soil and 10 kN/m3 water, as densities (kg/m3)
-material set m_soil DENSITY_SOLID=1834.8623853211009 DENSITY_WATER=1019.367991845056 POROSITY=0.0
-#    Water: a fixed pore pressure field, and the soil's permeability (m2)
-material set m_soil GEO_DRAINAGE_TYPE=CONSTANT_PW_FIELD BULK_MODULUS_SOLID=1e10 BULK_MODULUS_FLUID=2.2e9 DYNAMIC_VISCOSITY=1e-3
+#    Weight: 18 kN/m3 soil, as a density (kg/m3). The water is the project's, the
+#    same in every soil: 10 kN/m3 unless the water level says otherwise, and its bulk
+#    modulus and viscosity water's unless `fluid` sets them.
+material set m_soil DENSITY_SOLID=1834.8623853211009 POROSITY=0.0
+#    Water: a fixed pore pressure field, and the soil's intrinsic permeability (m2)
+material set m_soil GEO_DRAINAGE_TYPE=CONSTANT_PW_FIELD BULK_MODULUS_SOLID=1e10
 material set m_soil PERMEABILITY_XX=1e-5 PERMEABILITY_YY=1e-5 PERMEABILITY_XY=0.0
 #    Strength (c = 1 kPa, phi = 30 degrees) and the K0 for the initial stresses.
 #    K0_NC can be left out: the export then writes 1 - sin(phi), which is 0.5 here too.

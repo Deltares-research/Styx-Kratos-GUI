@@ -68,6 +68,11 @@ def test_the_linear_elastic_defaults_are_the_sand_a_new_soil_always_was():
         "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD", "YOUNG_MODULUS": 1.0e7,
         "POISSON_RATIO": 0.3, "DENSITY_SOLID": 17000 / 9.81, "POROSITY": 0.0,
         "PERMEABILITY_XX": 1 / 86400, "GEO_COHESION": 0.0, "GEO_FRICTION_ANGLE": 30.0}
+def test_no_soil_lists_the_water_which_is_the_project_s():
+    for model in soil_models.MODELS:
+        assert not set(soil_models.WATER) & set(names(soil_models.parameters(model)))
+
+
 
 
 def test_every_choice_lists_every_value_kratos_accepts():
@@ -235,3 +240,81 @@ def test_a_law_of_no_model_is_written_as_typed():
         variables={"UDSM_NAME": "mc.dll"}).model_dump(mode="json")
     assert deck(Project.model_validate(payload))["constitutive_law"]["name"] == \
         "SmallStrainUDSM2DPlaneStrainLaw"
+# ── The water: the project's ────────────────────────────────────────────────
+
+def test_a_soil_with_water_of_its_own_is_refused():
+    with pytest.raises(ValueError,
+                       match="belongs to the project's water"):
+        session.update_material(seed_project(), "m2", variables={"DYNAMIC_VISCOSITY": 2e-3})
+
+
+def test_an_older_document_s_soil_water_becomes_the_project_s():
+    payload = seed_project().model_dump(mode="json")
+    del payload["fluid"]
+    for material in payload["materials"]:
+        material["variables"].update({"DENSITY_WATER": 1000.0, "BULK_MODULUS_FLUID": 2.0e9,
+                                      "DYNAMIC_VISCOSITY": 1.3e-3})
+
+    project = Project.model_validate(payload)
+
+    assert (project.fluid.bulk_modulus, project.fluid.dynamic_viscosity) == (2.0e9, 1.3e-3)
+    assert not any(set(soil_models.WATER) & set(m.variables) for m in project.materials)
+
+
+def older_document(**water_of: dict) -> dict:
+    """The seed as saved before 2026-11-02: no `fluid`, and the soils named in
+    `water_of` (by id) carrying the water variables given."""
+    payload = seed_project().model_dump(mode="json")
+    del payload["fluid"]
+    for material in payload["materials"]:
+        material["variables"].update(water_of.get(material["id"], {}))
+    return payload
+
+
+def test_a_soil_whose_water_the_project_s_overrides_is_named():
+    payload = older_document(m1={"DYNAMIC_VISCOSITY": 1e-3},
+                             m2={"DYNAMIC_VISCOSITY": 5e-3, "DENSITY_WATER": 1100.0})
+
+    notes = migration.notes(payload)
+
+    assert Project.model_validate(payload).fluid.dynamic_viscosity == 1e-3
+    assert len(notes) == 1
+    assert notes[0].startswith("Sand, loose:")
+    assert "DYNAMIC_VISCOSITY 0.001 Pa·s instead of 0.005" in notes[0]
+    assert "DENSITY_WATER 1019.37 kg/m³ instead of 1100" in notes[0]
+
+
+def test_a_soil_that_gave_no_water_is_named_when_the_first_soil_s_is_not_water_s():
+    notes = migration.notes(older_document(m1={"BULK_MODULUS_FLUID": 1e9}))
+
+    assert [note.split(":")[0] for note in notes] == [
+        "Sand, loose", "Clay, soft", "Clay, stiff", "Sand, dense", "Bedrock"]
+    assert all("BULK_MODULUS_FLUID 1e+09 Pa instead of 2.2e+09" in note for note in notes)
+
+
+def test_soils_that_agree_lose_nothing_and_say_nothing():
+    water = {"DENSITY_WATER": 1019.37, "BULK_MODULUS_FLUID": 2.2e9, "DYNAMIC_VISCOSITY": 1e-3}
+    payload = older_document(**{f"m{i}": water for i in range(1, 7)})
+
+    assert migration.notes(payload) == []
+    assert migration.notes(seed_project().model_dump(mode="json")) == []
+
+
+def test_every_soil_is_written_with_the_project_s_water():
+    project = mohr_coulomb_site()
+    project = session.set_fluid(project, bulk_modulus=2.0e9, dynamic_viscosity=1.3e-3)
+
+    variables = deck(project)["Variables"]
+
+    assert variables["BULK_MODULUS_FLUID"] == 2.0e9
+    assert variables["DYNAMIC_VISCOSITY"] == 1.3e-3
+    assert variables["DENSITY_WATER"] == pytest.approx(
+        project.water_specific_weight / 9.81)
+    back = session.set_fluid(project, unset=["bulk_modulus"])
+    assert deck(back)["Variables"]["BULK_MODULUS_FLUID"] == soil_models.WATER_BULK_MODULUS_SI
+
+
+def test_the_water_converts_with_the_unit_system():
+    project = session.set_fluid(seed_project(), bulk_modulus=2.0e9)
+    payload, _ = units.convert_project(project.model_dump(mode="json"), "kN")
+    assert payload["fluid"]["bulk_modulus"] == pytest.approx(2.0e6)

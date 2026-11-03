@@ -41,13 +41,17 @@ the ground surface is at 4 m.
 
 The soil is the reference deck's, value for value. The flow uses the intrinsic permeability
 (`PERMEABILITY_XX`, m²), the viscosity, the water density and the retention law. Kratos'
-flow element also checks that the other values are there. A new soil starts from the
-default sand, which has a cohesion and a friction angle. The reference soil has neither,
-so `--unset` removes them:
+flow element also checks that the other values are there. The water is the project's, the
+same in every soil: `fluid` sets its bulk modulus (the reference's water is
+incompressible), and its density follows from the water's specific weight, 10 kN/m³. A new
+soil starts from the default sand, which is saturated below the phreatic level and has a
+residual saturation above it. The reference soil is saturated everywhere, so `--unset`
+removes the residual saturation:
 
 ```powershell
-kratos-cli material muskat.json add sand --name Sand --color "#c4a86a" --law GeoLinearElasticPlaneStrain2DLaw GEO_DRAINAGE_TYPE=FULLY_COUPLED YOUNG_MODULUS=1e4 POISSON_RATIO=0.4 DENSITY_SOLID=2290 DENSITY_WATER=1019.37 POROSITY=0.3333 BULK_MODULUS_SOLID=6.7e19 BULK_MODULUS_FLUID=1e20 PERMEABILITY_XX=6.9444e-13 PERMEABILITY_YY=6.9444e-13 PERMEABILITY_XY=0 DYNAMIC_VISCOSITY=1e-3 BIOT_COEFFICIENT=1 RETENTION_LAW=SaturatedLaw SATURATED_SATURATION=0.403
-kratos-cli material muskat.json set sand --unset GEO_COHESION --unset GEO_FRICTION_ANGLE
+kratos-cli material muskat.json add sand --name Sand --color "#c4a86a" --law GeoLinearElasticPlaneStrain2DLaw GEO_DRAINAGE_TYPE=FULLY_COUPLED YOUNG_MODULUS=1e4 POISSON_RATIO=0.4 DENSITY_SOLID=2290 POROSITY=0.3333 BULK_MODULUS_SOLID=6.7e19 PERMEABILITY_XX=6.9444e-13 PERMEABILITY_YY=6.9444e-13 PERMEABILITY_XY=0 BIOT_COEFFICIENT=1 RETENTION_LAW=SaturatedLaw SATURATED_SATURATION=0.403
+kratos-cli material muskat.json set sand --unset RESIDUAL_SATURATION
+kratos-cli fluid muskat.json --bulk-modulus 1e20
 kratos-cli layer muskat.json add soil --name Soil --material sand --bottom 0
 ```
 

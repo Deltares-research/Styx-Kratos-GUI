@@ -20,6 +20,7 @@ the file may or may not carry.
 
 from __future__ import annotations
 
+import math
 from typing import TypeGuard
 
 KILO = 1000.0                   # kN -> N
@@ -130,7 +131,8 @@ def migrate_records(value: dict) -> dict:
         if not isinstance(entries, list) or not any(
                 is_old_record(collection, e) for e in entries):
             continue
-        convert = (lambda m: material(m, dim, water_weight)) if collection == "materials"             else CONVERTERS[collection]
+        convert = (lambda m: without_water(material(m, dim, water_weight))) \
+            if collection == "materials" else CONVERTERS[collection]
         out[collection] = [converted(convert(e)) if is_old_record(collection, e) else e
                            for e in entries]
     return out
@@ -310,6 +312,136 @@ def screen_sides(value: dict) -> dict:
              if isinstance(b, dict)}
     out["interfaces"] = [_on_screen(i, piles) for i in interfaces]
     return out
+
+
+WATER = ("DENSITY_WATER", "BULK_MODULUS_FLUID", "DYNAMIC_VISCOSITY")
+"""A soil's water variables until 2026-11-02 (`soil_models.WATER`)."""
+
+
+def without_water(material: dict) -> dict:
+    """A soil record without the water's variables, which are the project's now."""
+    variables = material.get("variables")
+    if not isinstance(variables, dict) or not any(name in variables for name in WATER):
+        return material
+    return {**material, "variables": {name: value for name, value in variables.items()
+                                      if name not in WATER}}
+
+
+def lift_water(value: dict) -> dict:
+    """A document saved before 2026-11-02 has no `fluid`: each soil carried the water in
+    its pores as its own `DENSITY_WATER`, `BULK_MODULUS_FLUID` and `DYNAMIC_VISCOSITY`.
+    Now the water is the project's, one for every soil (`Fluid`). Its bulk modulus and
+    viscosity are the first soil's that gives them -- every soil the application made
+    gives the same -- and the soils' `DENSITY_WATER` goes: the export writes the water
+    level's specific weight over g, the value the application filled it with. A soil
+    whose deck that changes -- water of its own the others do not share -- is named
+    when the file is opened (`water_notes`).
+
+    The document says it is in the new shape by carrying `fluid`, which every document
+    saved since does; one that does is left alone, so a soil given water of its own is
+    refused, not quietly emptied."""
+    if "fluid" in value:
+        return value
+    out = dict(value)
+    materials = out.get("materials")
+    out["fluid"] = _fluid(materials)
+    if isinstance(materials, list):
+        out["materials"] = [without_water(m) if isinstance(m, dict) else m
+                            for m in materials]
+    return out
+
+
+FLUID_FIELDS = {"BULK_MODULUS_FLUID": "bulk_modulus", "DYNAMIC_VISCOSITY": "dynamic_viscosity"}
+
+
+def _fluid(materials: object) -> dict:
+    """The project's `Fluid` from its soils' water: each value the first soil's that
+    gives it."""
+    fluid: dict = {}
+    for variables in _soil_variables(materials).values():
+        for name, key in FLUID_FIELDS.items():
+            given = _given(variables.get(name))
+            if given is not None:
+                fluid.setdefault(key, given)
+    return fluid
+
+
+def _soil_variables(materials: object) -> dict[str, dict]:
+    """Each soil's `variables`, by its name."""
+    if not isinstance(materials, list):
+        return {}
+    return {str(m.get("name") or m.get("id")): m["variables"] for m in materials
+            if isinstance(m, dict) and isinstance(m.get("variables"), dict)}
+
+
+def _given(value: object) -> float | None:
+    return (float(value) if isinstance(value, (int, float)) and not isinstance(value, bool)
+            and value > 0 else None)
+
+
+def water_notes(value: object) -> list[str]:
+    """What `lift_water` changes in the deck, one line per soil: every water value a
+    soil was written with that the project's water now overrides. A soil that gave none
+    was written with water's own, so it is named when the project's water is not that.
+    Values within a rounding (0.1 %) of each other are the same water."""
+    from core.model import soil_models, units
+
+    if not isinstance(value, dict) or "fluid" in value:
+        return []
+    soils = _soil_variables(value.get("materials"))
+    system = value.get("unit_system", units.DEFAULT)
+    if not soils or system not in units.SYSTEMS:
+        return []
+    level = value.get("water")
+    weight = _given(level.get("specific_weight")) if isinstance(level, dict) else None
+    fluid = _fluid(value.get("materials"))
+    before = soil_models.water(system, weight)
+    after = soil_models.water(system, weight, fluid.get("bulk_modulus"),
+                              fluid.get("dynamic_viscosity"))
+    notes = []
+    for soil, variables in soils.items():
+        changed = []
+        for name in WATER:
+            was = _given(variables.get(name))
+            was = before[name] if was is None else was
+            if not math.isclose(was, after[name], rel_tol=1e-3):
+                unit = units.label(units.VARIABLES[name], system)
+                changed.append(f"{name} {after[name]:g} {unit} instead of {was:g}")
+        if changed:
+            notes.append(f"{soil}: the pore water is the project's now, one for every "
+                         f"soil, so this soil is written with {', '.join(changed)}. "
+                         "Set the water with `fluid` and the water level's specific "
+                         "weight, or under Water in the material window.")
+    return notes
+
+
+def upgraded(value: object) -> object:
+    """`value`, a project document of any age, in the current shape: every conversion
+    above, in the order the shapes came (`Project`'s validator)."""
+    value = _before_water(value)
+    return lift_water(keep_old_deck(value)) if isinstance(value, dict) else value
+
+
+def notes(value: object) -> list[str]:
+    """What opening `value` changes in its deck that the user has to know, one line
+    each: the soils' own water it replaces (`water_notes`) and the contacts that lose
+    their soil's strength (`contact_notes`). Empty for a current document. Said when a
+    file is opened (`core.session.migration_notes`, the GUI's Open), as the first save
+    of it writes the new shape and the old values are gone."""
+    value = _before_water(value)
+    return water_notes(value) + contact_notes(value)
+
+
+def _before_water(value: object) -> object:
+    if isinstance(value, dict):
+        value = rename_phases(value)
+    if is_legacy(value):
+        value = migrate(value)
+    elif isinstance(value, dict):
+        value = migrate_records(value)
+    if not isinstance(value, dict):
+        return value
+    return screen_sides(drop_boreholes(value))
 
 
 def _on_screen(interface: object, piles: dict) -> object:

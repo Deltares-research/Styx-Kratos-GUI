@@ -45,6 +45,17 @@ RETENTION_LAWS = ("SaturatedLaw", "SaturatedBelowPhreaticLevelLaw", "VanGenuchte
 
 UNSATURATED = ("SaturatedBelowPhreaticLevelLaw", "VanGenuchtenLaw")
 
+WATER_SPECIFIC_WEIGHT_SI = 10_000.0
+"""N/m3: the water's specific weight when the project gives none
+(`schemas.WATER_SPECIFIC_WEIGHT_SI`)."""
+WATER_BULK_MODULUS_SI = 2.2e9
+"""Pa, water at 20 C: `BULK_MODULUS_FLUID` when the project gives none."""
+WATER_VISCOSITY_SI = 1.0e-3
+"""Pa s, water at 20 C: `DYNAMIC_VISCOSITY` when the project gives none."""
+WATER = ("DENSITY_WATER", "BULK_MODULUS_FLUID", "DYNAMIC_VISCOSITY")
+"""The water's variables. They are the project's (`schemas.Fluid`), one for every soil,
+written into each soil by the export and refused on a soil of its own."""
+
 
 @dataclass(frozen=True)
 class Parameter:
@@ -285,6 +296,24 @@ def filled_note(model: str, names: list[str]) -> str | None:
     if not names:
         return None
     return f"Filled in from the {label(model)} defaults: {', '.join(names)}."
+
+
+# ── The water, and what follows from a soil's numbers ───────────────────────
+
+def water(system: str, specific_weight: float | None = None,
+          bulk_modulus: float | None = None, viscosity: float | None = None) -> dict:
+    """The water every soil shares as Kratos reads it, in `system`: the project's
+    values (`schemas.Fluid`, `WaterLevel.specific_weight`), water's where it gives
+    none."""
+    weight = (specific_weight if specific_weight is not None else
+              units.from_si(WATER_SPECIFIC_WEIGHT_SI, units.SPECIFIC_WEIGHT, system))
+    return {
+        "DENSITY_WATER": weight / units.gravity(system),
+        "BULK_MODULUS_FLUID": (bulk_modulus if bulk_modulus is not None else
+                               units.from_si(WATER_BULK_MODULUS_SI, units.STRESS, system)),
+        "DYNAMIC_VISCOSITY": (viscosity if viscosity is not None else
+                              units.from_si(WATER_VISCOSITY_SI, units.VISCOSITY, system)),
+    }
 
 
 def problem(name: str, variables: dict) -> str | None:
