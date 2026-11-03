@@ -277,18 +277,6 @@ def replace_stages(project: Project, update: StagesUpdate) -> Project:
     return edited
 
 
-def default_stages(project: Project) -> Project:
-    """The initial stage, then the null step (`stages.default_stages` is the authority).
-
-    It replaces whatever is there rather than refusing when stages already exist: it is
-    the way back out of a sequence that has been broken.
-    """
-    _stages_of_a_deck_are_read_only(project)
-    payload = project.model_dump()
-    payload["stages"] = [stage.model_dump() for stage in stages.default_stages(project)]
-    return Project.model_validate(payload)
-
-
 def _stages_of_a_deck_are_read_only(project: Project) -> None:
     """A deck's stages are its stages, read from it (`core.kratos.external_deck`); the
     deck is what is calculated, so an edit made here would change nothing that is."""

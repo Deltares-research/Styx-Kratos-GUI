@@ -49,16 +49,47 @@ App.Stages = (function () {
 
   function copy(value) { return JSON.parse(JSON.stringify(value)); }
 
-  var GROUNDWATER_FLOW = 'Groundwater flow';
+  var FLOW = 'flow';
+
+  /* The three choices of a stage (`schemas.Stage`), as [value, label]: what the stage
+     solves for, how a mechanical one initialises its stresses, and whether it solves
+     statically or in time. A new calculation type is a new row here and in the
+     schema. */
+  var CALCULATION_TYPES = [['mechanical', 'Mechanical (U-Pw)'], [FLOW, 'Flow (Pw)']];
+  var STRESS_INITIALISATIONS = [['K0', 'K0 procedure'], ['gravity', 'Gravity loading'],
+                                ['none', 'None']];
+  var TIME_INTEGRATIONS = [['static', 'Static'], ['dynamic', 'Dynamic']];
 
   /* Whether the project is a groundwater flow calculation: it has stages, and every one
-     is a "Groundwater flow" stage (`core.model.stages.groundwater_flow`). A mix of flow
-     and deformation stages is not one; the export refuses it. */
+     is a flow stage (`core.model.stages.groundwater_flow`). A mix of flow and
+     mechanical stages is not one; the export refuses it. */
   function groundwaterFlow(project) {
     var list = stagesOf(project);
     return list.length > 0 && list.every(function (stage) {
-      return stage.calculation === GROUNDWATER_FLOW;
+      return stage.calculation === FLOW;
     });
+  }
+
+  /* What the stage list says a stage is: "Mechanical, K0", "Flow, dynamic". */
+  function kindOf(stage) {
+    var calculation = stage.calculation || 'mechanical';
+    var words = [calculation.charAt(0).toUpperCase() + calculation.slice(1)];
+    var stresses = stage.stress_initialisation || 'none';
+    if (calculation === 'mechanical' && stresses !== 'none') words.push(stresses);
+    if (stage.time_integration === 'dynamic') words.push('dynamic');
+    return words.join(', ');
+  }
+
+  /* `stage` with `field` set to `value`, and whatever that implies: a stage that is not
+     mechanical has no stresses to initialise, so it goes back to none -- which the
+     server would otherwise refuse (`schemas.Stage`). */
+  function withField(stage, field, value) {
+    var edited = copy(stage);
+    edited[field] = value;
+    if (field === 'calculation' && value !== 'mechanical') {
+      edited.stress_initialisation = 'none';
+    }
+    return edited;
   }
 
   /* Both lists are optional on the wire -- pydantic defaults them and a stage that
@@ -209,7 +240,7 @@ App.Stages = (function () {
       return {
         id: stage.id,
         name: stage.name,
-        kind: stage.calculation || 'Plastic',
+        kind: kindOf(stage),
         // The three the stylesheet defines (css/components.css:222-224).
         state: position === 0 ? 'initial'
              : (position < completed ? 'done' : 'pending'),
@@ -270,7 +301,8 @@ App.Stages = (function () {
       // The server's own defaults, restated so that a stage made here and one made by
       // `Stage()` are the same stage. A mismatch would show up as a field changing by
       // itself the first time the project was reloaded.
-      calculation: 'Plastic', loading: 'Staged construction',
+      calculation: 'mechanical', stress_initialisation: 'none',
+      time_integration: 'static', loading: 'Staged construction',
       activate: [], deactivate: [],
       reset_displacements: false, max_iterations: 15,
       tolerated_error: 1e-4, time_interval: 0.0
@@ -348,7 +380,9 @@ App.Stages = (function () {
 
     var made = blank(project, freshId(project, 'stage'),
                      original.name + ' (copy)', original.id);
-    made.calculation = original.calculation || 'Plastic';
+    made.calculation = original.calculation || 'mechanical';
+    made.stress_initialisation = original.stress_initialisation || 'none';
+    made.time_integration = original.time_integration || 'static';
     made.reset_displacements = !!original.reset_displacements;
     if (original.max_iterations != null) made.max_iterations = original.max_iterations;
     if (original.tolerated_error != null) made.tolerated_error = original.tolerated_error;
@@ -471,7 +505,9 @@ App.Stages = (function () {
   }
 
   return {
-    GROUNDWATER_FLOW: GROUNDWATER_FLOW, groundwaterFlow: groundwaterFlow,
+    FLOW: FLOW, CALCULATION_TYPES: CALCULATION_TYPES,
+    STRESS_INITIALISATIONS: STRESS_INITIALISATIONS, TIME_INTEGRATIONS: TIME_INTEGRATIONS,
+    groundwaterFlow: groundwaterFlow, kindOf: kindOf, withField: withField,
     chainTo: chainTo, activeParts: activeParts, stageableKeys: stageableKeys,
     hiddenKeys: hiddenKeys,
     order: order, branchProblem: branchProblem, rows: rows, overview: overview,

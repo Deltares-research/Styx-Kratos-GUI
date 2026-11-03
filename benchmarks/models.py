@@ -93,7 +93,7 @@ def column(layers: list[tuple[float, float, dict]], width: float = 1.0,
          "on": "domain", "reference_coordinate": water_y if water_y is not None else bottom}]
     p["mesh"] = {"element_size": min(width, (top - bottom) / 10), "order": 2}
     if k0_stage:
-        p["stages"] = [{"id": "initial", "name": "Initial stage", "calculation": "K0 procedure"}]
+        p["stages"] = [{"id": "initial", "name": "Initial stage", "stress_initialisation": "K0"}]
     return Project.model_validate(p)
 
 

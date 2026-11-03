@@ -351,11 +351,11 @@ def test_gravity_shows_and_switches_the_self_weight(cli, dry):
 
 
 def test_check_warns_about_a_k0_stage_without_gravity(cli, dry):
-    assert cli("stages", dry, "defaults").code == 0
+    assert cli("stages", dry, "add", "--stress-initialisation", "k0").code == 0
     assert cli("gravity", dry, "off").code == 0
 
-    assert "is a K0 procedure, whose stresses come from the self weight" \
-        in cli("check", dry).err
+    assert "initialises its stresses by a K0 procedure, whose stresses come from the " \
+        "self weight" in cli("check", dry).err
 
 
 # ── Seepage faces ───────────────────────────────────────────────────────────

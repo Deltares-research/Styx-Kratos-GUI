@@ -1913,34 +1913,14 @@ App.LivePatches = (function () {
     return bar;
   }
 
-  /* The empty state, which is the one every project starts in.
-
-     A panel with nothing in it and no way out of it would be the commonest thing
-     anybody sees, so it carries the button that fills it. `default_stages` on the
-     server makes the initial stage and the null step; every later stage is the
-     user's to add (`core/model/stages.py`). */
+  /* The empty state, which is the one every project starts in. Every stage is the
+     user's to add, with the toolbar's Add above it. */
   function emptyStageState() {
     var el = App.UI.el;
     var wrap = el('div.lay-hint', { style: 'padding:10px' });
     wrap.appendChild(el('div', { text:
       'This project has no construction sequence: it exports as a single stage, ' +
-      'the way it always has.' }));
-    var button = el('button.btn.btn-sm', {
-      text: 'Create default stages', type: 'button',
-      style: 'margin-top:8px'
-    });
-    button.addEventListener('click', function () {
-      App.Api.post('/api/project/stages/defaults', {})
-        .then(function (response) {
-          App.Model.apply(response.project);
-          App.Command.ok('Created ' + response.project.stages.length +
-                         ' stages from the model. Edit them in the Stages panel.');
-          mountLiveStages();
-          return App.Viewport.refresh();
-        })
-        .catch(function (error) { App.Command.err(error.message); });
-    });
-    wrap.appendChild(button);
+      'the way it always has. Use "Add stage" above to start one.' }));
     return wrap;
   }
 
@@ -2050,23 +2030,33 @@ App.LivePatches = (function () {
      "Water conditions" is read-only: the water pressure conditions the stage has on,
      which the Model explorer's check boxes switch (App.BoundaryConditions.waterIn).
 
-     A "Groundwater flow" stage solves the water pressure alone, so its "Reset
-     displacements to zero" box is greyed out, with the reason as its tooltip; the CLI
-     refuses the option on such a stage. */
+     The calculation type is mechanical or flow (App.Stages.CALCULATION_TYPES). Only a
+     mechanical stage has stresses, so only it has a "Stress initialisation" row; making
+     a stage a flow stage sets that back to none (App.Stages.withField). A flow stage
+     solves the water pressure alone, so its "Reset displacements to zero" box is
+     greyed out, with the reason as its tooltip; the CLI refuses the option on such a
+     stage. */
   function stageProps(stage) {
     var parent = stage.parent == null ? null : stageById(stage.parent);
-    var flow = stage.calculation === App.Stages.GROUNDWATER_FLOW;
+    var flow = stage.calculation === App.Stages.FLOW;
+    var general = [
+      ['Name', 'text', 'name'],
+      ['Start from stage', 'static', parent ? parent.name : 'the model as built'],
+      ['Calculation type', 'select', 'calculation', App.Stages.CALCULATION_TYPES]
+    ];
+    if (stage.calculation === 'mechanical' || stage.calculation == null) {
+      general.push(['Stress initialisation', 'select', 'stress_initialisation',
+                    App.Stages.STRESS_INITIALISATIONS]);
+    }
+    general.push(['Time integration', 'select', 'time_integration',
+                  App.Stages.TIME_INTEGRATIONS]);
     return {
-      'General': [
-        ['Name', 'text', 'name'],
-        ['Start from stage', 'static', parent ? parent.name : 'the model as built'],
-        ['Calculation type', 'select', 'calculation',
-         ['K0 procedure', 'Plastic', 'Null step', App.Stages.GROUNDWATER_FLOW]],
+      'General': general.concat([
         ['Loading type', 'static', stage.loading || 'Staged construction'],
         ['Water conditions', 'static', App.BoundaryConditions
           ? App.BoundaryConditions.waterIn(App.PROJECT, stage.id) : ''],
         ['Time interval', 'number', 'time_interval', { min: 0 }, 'day']
-      ],
+      ]),
       'Deformation control': [
         ['Reset displacements to zero', 'check', 'reset_displacements',
          flow ? { greyed: 'A groundwater flow stage has no displacements.' } : null]
@@ -2091,9 +2081,8 @@ App.LivePatches = (function () {
 
     function commit(value) {
       var list = ((App.PROJECT && App.PROJECT.stages) || []).map(function (each) {
-        var edited = copy(each);
-        if (each.id === stage.id) edited[spec[2]] = value;
-        return edited;
+        return each.id === stage.id ? App.Stages.withField(each, spec[2], value)
+                                    : copy(each);
       });
       saveStages(list);
     }
@@ -2107,6 +2096,11 @@ App.LivePatches = (function () {
     if (App.PROJECT && App.PROJECT.deck) {
       var shown = stage[spec[2]];
       if (kind === 'check') shown = shown ? 'Yes' : 'No';
+      if (kind === 'select') {
+        spec[3].forEach(function (option) {
+          if (Array.isArray(option) && option[0] === shown) shown = option[1];
+        });
+      }
       return el('div.pgrid-row', null, [key, el('div.pgrid-val.readonly', {
         text: (shown == null ? '' : String(shown)) + (spec[4] ? ' ' + spec[4] : '')
       })]);
@@ -2126,9 +2120,12 @@ App.LivePatches = (function () {
       });
     } else if (kind === 'select') {
       control = el('select');
+      // Each option is a value, or [value, label] where the two differ.
       spec[3].forEach(function (option) {
-        var node = el('option', { value: option, text: option });
-        if (option === stage[spec[2]]) node.selected = true;
+        var value = Array.isArray(option) ? option[0] : option;
+        var node = el('option', { value: value,
+                                  text: Array.isArray(option) ? option[1] : option });
+        if (value === stage[spec[2]]) node.selected = true;
         control.appendChild(node);
       });
       control.addEventListener('change', function () { commit(control.value); });
@@ -2220,7 +2217,7 @@ App.LivePatches = (function () {
           if (!stages.length) {
             right.appendChild(el('p', { text:
               'This project has no stages yet. Close this and use ' +
-              '"Create default stages" in the Stages panel.' }));
+              '"Add stage" in the Stages panel.' }));
             return;
           }
 

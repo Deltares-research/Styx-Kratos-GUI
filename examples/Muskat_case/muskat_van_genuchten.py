@@ -4,7 +4,7 @@ heads, with an unsaturated zone above the phreatic line.
 Kratos' GeoMechanicsApplication test `tests/Muskat/van_genuchten_hydrostatic`, built as a
 Styx model: a 1.62 m by 4 m column of a Van Genuchten soil, the water held at a level of
 3.0 m on the left face and 1.62 m on the right, started from a phreatic line, and one
-"Groundwater flow" stage. muskat_van_genuchten.json beside it is the same model, as the
+flow stage. muskat_van_genuchten.json beside it is the same model, as the
 GUI saves it.
 
     python muskat_van_genuchten.py               write the deck into this folder
@@ -141,7 +141,7 @@ def project() -> Project:
 
         mesh=MeshSettings(element_size=ELEMENT_SIZE, order=ELEMENT_ORDER),
 
-        stages=[Stage(id="flow", name="Flow", calculation="Groundwater flow",
+        stages=[Stage(id="flow", name="Flow", calculation="flow",
                       max_iterations=MAX_ITERATIONS, tolerated_error=TOLERANCE)],
     )
 

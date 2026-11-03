@@ -1254,6 +1254,11 @@ BoundaryCondition = Annotated[DisplacementCondition | WaterPressureCondition
 """One record of `Project.boundary_conditions`, told apart by its `kind`."""
 
 
+CalculationType = Literal["mechanical", "flow"]
+StressInitialisation = Literal["K0", "gravity", "none"]
+TimeIntegration = Literal["static", "dynamic"]
+
+
 class Stage(Base):
     """One construction stage: what changes about the model, and how it is solved.
 
@@ -1285,12 +1290,21 @@ class Stage(Base):
     """The stage this one starts from. `None` only for the first, which starts from the
     model as built."""
 
-    calculation: Literal["K0 procedure", "Plastic", "Null step",
-                         "Groundwater flow"] = "Plastic"
-    """"Groundwater flow" is a steady-state flow of the water alone (Kratos' `Pw` solver,
-    `Steady_State_Groundwater_Flow`). It needs water pressure elements, and the mesh is
-    one for all the stages, so a project mixes it with no other type: the export refuses
-    the mix (`core.model.stages.groundwater_flow`)."""
+    calculation: CalculationType = "mechanical"
+    """What the stage solves for. "mechanical" is the deformation of the soil and the
+    water pressure in it (Kratos' `U_Pw` solver); "flow" is the flow of the water alone
+    (the `Pw` solver). A flow stage needs water pressure elements, and the mesh is one
+    for all the stages, so a project mixes it with no other type: the export refuses the
+    mix (`core.model.stages.groundwater_flow`). A new type is a new value here, and its
+    Kratos solver in `core.kratos.parameters.SOLVERS`."""
+    stress_initialisation: StressInitialisation = "none"
+    """How a mechanical stage sets up its initial stresses. "K0" derives them from the
+    self weight and each soil's K0 (Kratos' `ApplyK0ProcedureProcess`); "gravity" solves
+    for them under the self weight; "none" continues from the stage before. A flow stage
+    has no stresses, so it has none."""
+    time_integration: TimeIntegration = "static"
+    """"static" solves for equilibrium; "dynamic" integrates in time -- inertia in a
+    mechanical stage, a transient flow in a flow stage."""
     loading: Literal["Staged construction"] = "Staged construction"
 
     activate: list[Ident] = Field(default_factory=list)
@@ -1311,6 +1325,22 @@ class Stage(Base):
     time_interval: float = Field(default=0.0, ge=0)
     """Days. Zero for the static stages this exporter writes; carried because the stage
     panel has it and a consolidation stage would need it."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _old_calculation(cls, value: object) -> object:
+        """A stage saved before 2026-11 names one of four calculations
+        (`migration.stage_calculation`)."""
+        return migration.stage_calculation(value) if isinstance(value, dict) else value
+
+    @model_validator(mode="after")
+    def _stresses_are_mechanical(self) -> Stage:
+        if self.calculation != "mechanical" and self.stress_initialisation != "none":
+            raise ValueError(
+                f"stage {self.id!r} is a {self.calculation} stage, which has no stresses "
+                f"to initialise: set its stress initialisation to none, or make it a "
+                "mechanical stage")
+        return self
 
     @model_validator(mode="after")
     def _one_instruction_per_part(self) -> Stage:

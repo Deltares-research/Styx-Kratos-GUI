@@ -130,7 +130,7 @@
        class is one of three the stylesheet defines (css/components.css:222-224). */
     T.eq(row.id, 'initial');
     T.eq(row.name, 'Initial stage');
-    T.eq(row.kind, 'K0 procedure');
+    T.eq(row.kind, 'Mechanical, K0');
     T.ok(['initial', 'done', 'pending'].indexOf(row.state) >= 0, row.state);
     T.eq(typeof row.depth, 'number');
   });
@@ -171,7 +171,40 @@
     T.eq(list.length, p.stages.length + 1);
     T.eq(list[list.length - 1].parent, 'settle',
          'the new stage does not start from the last one');
-    T.eq(list[list.length - 1].calculation, 'Plastic');
+    T.eq(list[list.length - 1].calculation, 'mechanical');
+    T.eq(list[list.length - 1].stress_initialisation, 'none');
+    T.eq(list[list.length - 1].time_integration, 'static');
+  });
+
+  /* ── The three choices of a stage ────────────────────────────────────── */
+
+  test('a row says what a stage solves for, and how', function () {
+    var kind = App.Stages.kindOf;
+    T.eq(kind({ calculation: 'mechanical', stress_initialisation: 'none' }), 'Mechanical');
+    T.eq(kind({ calculation: 'mechanical', stress_initialisation: 'gravity' }),
+         'Mechanical, gravity');
+    T.eq(kind({ calculation: 'flow', time_integration: 'dynamic' }), 'Flow, dynamic');
+  });
+
+  test('the calculation types are mechanical and flow', function () {
+    T.eq(App.Stages.CALCULATION_TYPES.map(function (o) { return o[0]; }),
+         ['mechanical', 'flow']);
+    T.eq(App.Stages.STRESS_INITIALISATIONS.map(function (o) { return o[0]; }),
+         ['K0', 'gravity', 'none']);
+    T.eq(App.Stages.TIME_INTEGRATIONS.map(function (o) { return o[0]; }),
+         ['static', 'dynamic']);
+  });
+
+  /* The server refuses a flow stage with a stress initialisation (`schemas.Stage`). */
+  test('making a stage a flow stage drops its stress initialisation', function () {
+    var stage = { id: 's', calculation: 'mechanical', stress_initialisation: 'K0' };
+    var flow = App.Stages.withField(stage, 'calculation', 'flow');
+    T.eq(flow.stress_initialisation, 'none');
+    T.eq(stage.stress_initialisation, 'K0', 'the original was changed');
+    var back = App.Stages.withField(flow, 'calculation', 'mechanical');
+    T.eq(back.stress_initialisation, 'none');
+    T.eq(App.Stages.withField(stage, 'time_integration', 'dynamic').stress_initialisation,
+         'K0');
   });
 
   test('add gives the new stage an id nothing else has', function () {
@@ -253,7 +286,8 @@
     var list = App.Stages.copied(p, 'build_wall');
     var made = list.filter(function (ph) { return was.indexOf(ph.id) < 0; })[0];
     T.ok(made, 'copy added no stage');
-    T.eq(made.calculation, 'Plastic');
+    T.eq(made.calculation, 'mechanical');
+    T.eq(made.stress_initialisation, 'none');
     T.eq(made.reset_displacements, true, 'the solver settings were not carried over');
     T.eq(made.activate, []);
     T.eq(made.deactivate, []);
@@ -475,16 +509,17 @@
      of it. The window is DOM (patches.js `stagesDialog`); what it says is here. */
 
   function dike() {
-    function stage(id, name, parent, calculation, days) {
-      return { id: id, name: name, parent: parent, calculation: calculation,
+    function stage(id, name, parent, stresses, days) {
+      return { id: id, name: name, parent: parent, calculation: 'mechanical',
+               stress_initialisation: stresses, time_integration: 'static',
                activate: [], deactivate: [], time_interval: days };
     }
     return { stageable_parts: [], stages: [
-      stage('1_Initial_stage', 'Initial stage', null, 'K0 procedure', 0),
-      stage('2_Null_step', 'Null step', '1_Initial_stage', 'Null step', 0),
-      stage('3_Slag_1', 'Slag 1', '2_Null_step', 'Plastic', 17),
-      stage('4_Slag_2', 'Slag 2', '3_Slag_1', 'Plastic', 22),
-      stage('5_Kraan', 'Kraan load', '4_Slag_2', 'Plastic', 0.5)
+      stage('1_Initial_stage', 'Initial stage', null, 'K0', 0),
+      stage('2_Null_step', 'Null step', '1_Initial_stage', 'none', 0),
+      stage('3_Slag_1', 'Slag 1', '2_Null_step', 'none', 17),
+      stage('4_Slag_2', 'Slag 2', '3_Slag_1', 'none', 22),
+      stage('5_Kraan', 'Kraan load', '4_Slag_2', 'none', 0.5)
     ] };
   }
 
@@ -493,7 +528,7 @@
     T.eq(rows.map(function (r) { return r.number; }), [1, 2, 3, 4, 5]);
     T.eq(rows.map(function (r) { return r.id; }),
          ['1_Initial_stage', '2_Null_step', '3_Slag_1', '4_Slag_2', '5_Kraan']);
-    T.eq(rows[0].kind, 'K0 procedure');
+    T.eq(rows[0].kind, 'Mechanical, K0');
   });
 
   test('T is the time reached at the end of a stage, summed along its chain', function () {

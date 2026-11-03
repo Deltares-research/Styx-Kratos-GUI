@@ -41,7 +41,7 @@ Part A lists what Styx sends to Kratos. Part B lists what the GUI and `kratos-cl
 | Tolerances | Relative 1e-4, absolute 1e-9, 6 to 15 iterations, reduction factor 0.5, increase factor 2.0. You can change the maximum number of iterations and the relative tolerance for each stage. | Tested | same |
 | Time steps | One step for each stage (Δt = 1). The settling stages are at negative time, as in the reference deck. | Tested | [kratos/writer.py](../core/kratos/writer.py) |
 | Units | One unit system for each project: SI (N, m, kg, s) or kN (kN, m, t, s). You type all values in it, the input files contain them without conversion, and the results come back in it. | Tested in both systems | [model/units.py](../core/model/units.py) |
-| Groundwater flow | A project whose stages are all "Groundwater flow": solver type `Pw`, `Steady_State_Groundwater_Flow`, `sparse_lu` linear solver. One linear solve for a saturated soil, Newton-Raphson for a soil with another retention law. The deck holds the soil only. 2D only. A project that mixes flow and deformation stages is refused. | Tested: the decks against the Kratos references `tests/Muskat/saturated_hydrostatic` and `van_genuchten_hydrostatic`; Kratos runs against the exact solution and the Kratos regression values (saturated), and against the Kratos regression values (Van Genuchten). The Muskat tutorial is run as a test, command by command, and cases A and C are built in the GUI: both give the decks of the model scripts and, in Kratos, the same answers | [kratos/parameters.py](../core/kratos/parameters.py) `FLOW_SOLVER` |
+| Groundwater flow | A project whose stages are all flow stages: solver type `Pw`, `Steady_State_Groundwater_Flow` (static) or `Transient_Groundwater_Flow` (dynamic), `sparse_lu` linear solver. One linear solve for a saturated soil, Newton-Raphson for a soil with another retention law. The deck holds the soil only. 2D only. A project that mixes flow and mechanical stages is refused. | Tested: the decks against the Kratos references `tests/Muskat/saturated_hydrostatic` and `van_genuchten_hydrostatic`; Kratos runs against the exact solution and the Kratos regression values (saturated), and against the Kratos regression values (Van Genuchten). The Muskat tutorial is run as a test, command by command, and cases A and C are built in the GUI: both give the decks of the model scripts and, in Kratos, the same answers | [kratos/parameters.py](../core/kratos/parameters.py) `FLOW_SOLVER` |
 | Dynamics, consolidation, arc-length control, updated mesh | Not supported. The `time_interval` of a stage is not exported. | Not available | [model/schemas.py](../core/model/schemas.py) `Stage` |
 
 ### A2. Soil elements
@@ -130,9 +130,8 @@ and adds only the values that are missing
 
 | Feature | Detail | Status |
 |---|---|---|
-| Stage types | K0 procedure, plastic, null step, groundwater flow. Every stage of a groundwater flow project is a flow stage. | Tested |
+| Stage settings | Calculation type: mechanical (`U_Pw`) or flow (`Pw`). Stress initialisation of a mechanical stage: K0 procedure, gravity loading or none. Time integration: static or dynamic (`Dynamic` for a mechanical stage, `Transient_Groundwater_Flow` for a flow stage). Every stage of a groundwater flow project is a flow stage. A new calculation type is one entry in `schemas.Stage` and `parameters.SOLVERS`. | Tested: the decks; no dynamic stage has run in Kratos in a test |
 | Stage tree | Each stage has a parent, and keeps only what it switches on and off. Kratos needs one sequence, so Styx makes the tree into a list. A tree that branches is refused. | Tested |
-| Default stages | **Create default stages** (GUI) and `stages P defaults` (CLI) make the initial stage (K0) and a null step | Tested |
 | Staged excavation sequence | `stages P staged-excavation` (CLI) and model scripts make the full sequence: K0, null step, wall installation, then one stage for each lift with its water load, and each anchor after the lift that uncovers it. It reproduces the 7 stages of the Kratos staged-excavation reference. The GUI has no button for it. | Tested |
 | Switch parts on and off | `ActivateModelPartOperation` / `DeactivateModelPartOperation` for soil bodies, lifts, beams, anchors, interfaces and loads | Tested |
 | Settings for each stage | Reset displacements (`reset_totals`), maximum iterations, tolerance | Tested |
@@ -272,14 +271,17 @@ REST API: `/api/project`, `/api/mesh`, `/api/calculate`, `/api/results/…`.
    stage has no load steps. More iterations and a larger tolerance per stage can help.
    User-defined models (UDSM, UMAT) are written as typed, without a test.
 2. **No factor of safety.** Styx has no φ–c reduction stage.
-3. **Groundwater flow is steady-state and 2D only.** A project cannot mix flow stages
-   with deformation stages, and a drawn condition line has no element size of its own
+3. **Groundwater flow is 2D only.** A project cannot mix flow stages
+   with mechanical stages, and a drawn condition line has no element size of its own
    (a box refinement gives a seepage face its fine mesh). With a Van Genuchten soil, the
    Newton-Raphson iterations can fall into a cycle on some meshes and stop without
    converging; another element size then helps.
 4. **3D is not proven.** No 3D element, law or interface has run in Kratos in a test.
 5. **Fixed solver settings.** The calculation type of the stages chooses the analysis
-   (deformation or groundwater flow). You cannot change the linear solver.
+   (mechanical or groundwater flow), and the time integration static or dynamic. You
+   cannot change the linear solver, and a dynamic stage runs one time step of the length
+   of a static one: the time step and the Newmark and damping parameters are Kratos'
+   defaults.
 6. **No excavation tool in the GUI.** A pit with lifts needs `kratos-cli excavation` or a
    model script.
 7. **No single-element test** to check a soil model on its own.

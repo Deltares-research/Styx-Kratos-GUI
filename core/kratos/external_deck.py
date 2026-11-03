@@ -183,9 +183,9 @@ def styx_stages(parameters: dict) -> list[Stage]:
 
     Stages resolve from "everything is there" (`core.model.stages.active_parts`), so the first
     one deactivates what its Kratos stage does not have; every later one stores only what
-    changed. The calculation type is read where the deck says it: a K0 stage runs the
-    K0 procedure process, and a null step is named as one -- the deck has no other
-    marker for it.
+    changed. The calculation is read where the deck says it: a flow stage by its
+    solution type, a K0 stage by the K0 procedure process it runs, a dynamic stage by
+    its solution type.
     """
     order = ((parameters.get("orchestrator") or {}).get("settings") or {})         .get("execution_list") or list(parameters.get("stages") or {})
     stages = parameters.get("stages") or {}
@@ -214,7 +214,7 @@ def _styx_stage(name: str, stage: dict, parent: str | None, *, activate: list[st
     title = STAGE_NUMBER.sub("", name).replace("_", " ") or name
     fields: dict = {"id": name, "name": title, "parent": parent,
                     "activate": activate, "deactivate": deactivate,
-                    "calculation": _calculation(stage, title),
+                    **_calculation(stage),
                     "reset_displacements": bool(solver.get("reset_displacements", False))}
     if isinstance(solver.get("max_iterations"), int) and solver["max_iterations"] > 0:
         fields["max_iterations"] = solver["max_iterations"]
@@ -229,16 +229,21 @@ def _styx_stage(name: str, stage: dict, parent: str | None, *, activate: list[st
     return Stage(**fields)
 
 
-def _calculation(stage: dict, title: str) -> str:
+def _calculation(stage: dict) -> dict:
+    """The stage's calculation type, stress initialisation and time integration."""
     solver = (stage.get("stage_settings") or {}).get("solver_settings") or {}
-    if "groundwater_flow" in str(solver.get("solution_type", "")).lower():
-        return "Groundwater flow"
+    solution = str(solver.get("solution_type", "")).lower()
+    if "groundwater_flow" in solution:
+        return {"calculation": "flow",
+                "time_integration": "dynamic" if "transient" in solution else "static"}
+    fields = {"calculation": "mechanical",
+              "time_integration": "dynamic" if solution == "dynamic" else "static"}
     processes = (stage.get("stage_settings") or {}).get("processes") or {}
     for group in processes.values():
         for process in group if isinstance(group, list) else []:
             if K0_PROCESS in str(process.get("python_module", "")):
-                return "K0 procedure"
-    return "Null step" if "null step" in title.lower() else "Plastic"
+                fields["stress_initialisation"] = "K0"
+    return fields
 
 
 # ── Running it ──────────────────────────────────────────────────────────────

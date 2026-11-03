@@ -702,11 +702,13 @@ def _sequenced_stages(project: Project, deck: _Deck) -> list[parameters.Stage]:
     # The reference deck starts at -2.0: its K0 stage and its null step sit at negative
     # time so that real construction starts at 0 and two runs' result files line up
     # stage for stage. Cosmetic to Kratos, and free to reproduce -- the leading run of
-    # stages that are not ordinary plastic steps is exactly what "before construction"
-    # means.
+    # stages that initialise the stresses, or that solve again without changing the
+    # model (a null step), is exactly what "before construction" means.
     settling = 0
-    for stage, _, _ in steps:
-        if stage.calculation not in ("K0 procedure", "Null step"):
+    for index, (stage, switched_on, switched_off) in enumerate(steps):
+        null_step = (index > 0 and stage.calculation == "mechanical"
+                     and not switched_on and not switched_off)
+        if stage.stress_initialisation == "none" and not null_step:
             break
         settling += 1
 
@@ -729,11 +731,11 @@ def _sequenced_stages(project: Project, deck: _Deck) -> list[parameters.Stage]:
         deactivate = tuple(name for name in deck.bodies
                            if name in was and name not in live)
 
-        k0 = stage.calculation == "K0 procedure"
+        k0 = stage.stress_initialisation == "K0"
         # What the first stage holds arrives in it, imported with the mesh rather than
         # activated, and there is no stage before it to carry a stress from: Kratos
         # refuses to look one up (`ApplyFinalStressesOfPreviousStageToInitialState`). A
-        # wall in the model from the start -- default stages switch nothing off -- has
+        # wall in the model from the start -- a first stage that switches nothing off -- has
         # its interfaces' neighbours found there, and its stresses carried from the
         # second stage on.
         first = index == 0
@@ -747,7 +749,7 @@ def _sequenced_stages(project: Project, deck: _Deck) -> list[parameters.Stage]:
         beams = tuple(name for name in deck.beams if name in live)
         retained = tuple(name for name in deck.retained if name in live)
 
-        flow = stage.calculation == stages.GROUNDWATER_FLOW
+        flow = stage.calculation == stages.FLOW
         bodies = tuple(name for name in deck.bodies if name in live)
         extrapolate: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = ()
         if flow and bodies:
@@ -794,6 +796,7 @@ def _sequenced_stages(project: Project, deck: _Deck) -> list[parameters.Stage]:
             conditions=frozenset(key for key in keys if key in water),
             flow_strategy=_flow_strategy(deck, live) if flow else None,
             seepage=deck.seepage if flow else (),
+            time_integration=stage.time_integration,
         ))
     return out
 

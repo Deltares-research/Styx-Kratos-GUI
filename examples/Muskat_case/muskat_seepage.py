@@ -4,7 +4,7 @@ seepage face above the tail water.
 The STEM Muskat geometry (Deltares' FEA-Tools `GeometryGenerator`), built as a Styx
 model: a 1.62 m by 4 m column of a Van Genuchten soil, the water held at a level of 3.0 m
 on the left face, the tail water at 0.48 m on the right face, and above it a seepage
-face where the water leaves the soil. One "Groundwater flow" stage.
+face where the water leaves the soil. One flow stage.
 muskat_seepage.json beside it is the same model, as the GUI saves it.
 
     python muskat_seepage.py               write the deck into this folder
@@ -147,7 +147,7 @@ def project() -> Project:
                           x_min=WIDTH - 0.12, x_max=WIDTH, y_min=0.0, y_max=HEIGHT,
                           z_min=0.0, z_max=1.0)]),
 
-        stages=[Stage(id="flow", name="Flow", calculation="Groundwater flow",
+        stages=[Stage(id="flow", name="Flow", calculation="flow",
                       max_iterations=MAX_ITERATIONS, tolerated_error=TOLERANCE)],
     )
 

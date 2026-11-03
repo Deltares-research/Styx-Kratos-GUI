@@ -118,7 +118,7 @@ def drawn_ground_project(staged: bool = True) -> Project:
     if not staged:
         return project
     stages = [
-        Stage(id="initial", name="Initial", calculation="K0 procedure",
+        Stage(id="initial", name="Initial", stress_initialisation="K0",
               deactivate=["sheetpile", "wall_contact", "trench_water"]),
         Stage(id="install", name="Install wall", parent="initial",
               activate=["sheetpile", "wall_contact"]),
@@ -156,7 +156,7 @@ def pushed_pile_project(interface: bool = True, variables: dict | None = None,
         data["interfaces"] = []
     built = ["sheetpile", "head_load"] + (["wall_contact"] if interface else [])
     data["stages"] = [
-        Stage(id="initial", name="Initial", calculation="K0 procedure",
+        Stage(id="initial", name="Initial", stress_initialisation="K0",
               deactivate=built).model_dump(),
         Stage(id="push", name="Push", parent="initial", activate=built,
               reset_displacements=True, max_iterations=max_iterations).model_dump(),

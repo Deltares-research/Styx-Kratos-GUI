@@ -346,9 +346,10 @@ on (active) or off. A stage starts from the result of the stage before it.
 
 ### Make the stages
 
-If the project has no stages, the Stages explorer shows **Create default stages**. Click it.
-Styx then makes two stages: the initial stage (K0 procedure) and a null step. Add the other
-stages yourself, for example one to install the wall and one for each excavation lift.
+A new project has no stages. Click **Add stage** at the top of the Stages explorer to add
+the first one, for example an initial stage with the stress initialisation **K0
+procedure**. Add the other stages yourself, for example one to install the wall and one for
+each excavation lift.
 
 To make the full sequence from the model in one step, use
 `kratos-cli stages P staged-excavation` (see
@@ -397,16 +398,26 @@ clear its check boxes first. The supports are on in every stage.
 In the **Stages** window, select a stage and set:
 
 - **Name** and **Start from stage**
-- **Calculation type**: **K0 procedure** (calculates the initial stresses), **Plastic**,
-  **Null step**, or **Groundwater flow**
+- **Calculation type**: **Mechanical (U-Pw)** (the deformation of the soil, with the
+  water pressure in it) or **Flow (Pw)** (the flow of the water alone)
+- **Stress initialisation**, for a mechanical stage only: **K0 procedure** (the initial
+  stresses from the self weight and each soil's K0), **Gravity loading** (the initial
+  stresses calculated under the self weight), or **None** (the stresses of the stage
+  before)
+- **Time integration**: **Static** or **Dynamic**. A dynamic mechanical stage includes
+  inertia; a dynamic flow stage is a transient flow.
 - **Reset displacements to zero**
 - **Max iterations** and **Tolerated error**
 
-A **Groundwater flow** stage calculates a steady-state flow of the water through the soil.
-It calculates the water pressure only, so the soil does not move:
+A stage that repeats the stage before it without changes, a *null step*, is a mechanical
+stage with the stress initialisation None that switches nothing on or off.
 
-- Give every stage the type Groundwater flow. Calculate refuses a project that has both
-  flow stages and deformation stages.
+A **Flow** stage calculates a flow of the water through the soil, a steady state when it
+is static. It calculates the water pressure only, so the soil does not move and it has no
+stress initialisation:
+
+- Give every stage the type Flow. Calculate refuses a project that has both
+  flow stages and mechanical stages.
 - Use a 2D model, and give every soil material a `PERMEABILITY_XX`.
 - In each stage, switch on at least one fixed water pressure condition on a face or a
   line, where the head is known. A boundary with no water pressure condition lets no water

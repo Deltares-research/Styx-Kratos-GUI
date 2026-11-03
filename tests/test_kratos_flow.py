@@ -1,4 +1,4 @@
-"""Groundwater flow: a project whose stages are all "Groundwater flow" exports Kratos'
+"""Groundwater flow: a project whose stages are all flow stages exports Kratos'
 steady-state flow of the water alone.
 
 The deck is held to Kratos' own `tests/Muskat/saturated_hydrostatic` (case A of
@@ -254,9 +254,9 @@ def test_each_stage_is_a_steady_state_with_its_own_heads(gmsh_session):
     low = head("low_right", "right", 1.0)
     export = writer.export_project(muskat(
         conditions=[*HEADS, low],
-        stages=[Stage(id="high", name="High", calculation="Groundwater flow",
+        stages=[Stage(id="high", name="High", calculation="flow",
                       deactivate=["low_right"]),
-                Stage(id="low", name="Low", parent="high", calculation="Groundwater flow",
+                Stage(id="low", name="Low", parent="high", calculation="flow",
                       activate=["low_right"], deactivate=["right_head"])]))
     deck = deck_stages(export)
     assert list(deck) == ["1_High", "2_Low"]
@@ -304,10 +304,16 @@ def test_the_van_genuchten_soil_is_the_reference_one(case_b):
 def test_a_stage_s_iterations_are_its_own(gmsh_session):
     soil = {**REFERENCE_SOIL, **VAN_GENUCHTEN}
     export = writer.export_project(muskat(soil=soil, stages=[
-        Stage(id="flow", name="Flow", calculation="Groundwater flow",
+        Stage(id="flow", name="Flow", calculation="flow",
               max_iterations=40, tolerated_error=1e-5)]))
     solver = settings(export)["solver_settings"]
     assert (solver["max_iterations"], solver["residual_relative_tolerance"]) == (40, 1e-5)
+
+
+def test_a_dynamic_flow_stage_is_a_transient_flow(gmsh_session):
+    export = writer.export_project(muskat(stages=[
+        Stage(id="flow", name="Flow", calculation="flow", time_integration="dynamic")]))
+    assert settings(export)["solver_settings"]["solution_type"] ==         "Transient_Groundwater_Flow"
 
 
 def test_a_missing_biot_coefficient_is_derived(gmsh_session):
@@ -455,9 +461,9 @@ def test_a_seepage_condition_takes_a_face_or_a_line_only():
 
 def test_flow_and_deformation_stages_cannot_be_mixed():
     project = muskat(stages=[FLOW, Stage(id="load", name="Load", parent="flow")])
-    with pytest.raises(stages.StageError, match="cannot mix groundwater flow stages"):
+    with pytest.raises(stages.StageError, match="cannot mix flow stages"):
         stages.groundwater_flow(project)
-    with pytest.raises(writer.ExportError, match=r"\('Flow'\) with deformation stages "
+    with pytest.raises(writer.ExportError, match=r"\('Flow'\) with mechanical stages "
                                                  r"\('Load'\)"):
         writer.export_project(project)
 
@@ -489,7 +495,7 @@ def test_a_stage_with_no_fixed_head_is_refused():
 def test_a_head_kept_from_an_earlier_stage_holds_the_next():
     project = muskat(stages=[
         FLOW, Stage(id="after", name="After", parent="flow",
-                    calculation="Groundwater flow",
+                    calculation="flow",
                     deactivate=["left_head", "right_head"])])
     assert condition_checks.flow_refusal(project) is None
 
@@ -497,4 +503,8 @@ def test_a_head_kept_from_an_earlier_stage_holds_the_next():
 def test_an_imported_flow_deck_s_stage_is_a_groundwater_flow_stage():
     stage = {"stage_settings": {"solver_settings": {
         "solution_type": "Steady_State_Groundwater_Flow"}}}
-    assert external_deck._calculation(stage, "stage 1") == stages.GROUNDWATER_FLOW
+    assert external_deck._calculation(stage) == {"calculation": stages.FLOW,
+                                                 "time_integration": "static"}
+    stage["stage_settings"]["solver_settings"]["solution_type"] = \
+        "Transient_Groundwater_Flow"
+    assert external_deck._calculation(stage)["time_integration"] == "dynamic"

@@ -24,7 +24,7 @@ documented reference analysis, and the parts of them the project really does det
 the export rather than defaulted. When those fields do grow a home in `Project`, this
 is where they replace `SOLVER`.
 
-A groundwater flow stage (a "Groundwater flow" stage) is solved by a second reference
+A flow stage (calculation type "flow") is solved by a second reference
 analysis, `FLOW_SOLVER`, read off Kratos' own `tests/Muskat` decks, with the strategy the
 project calls for (`FLOW_STRATEGIES`). It writes its own results (`FLOW_NODAL_RESULTS`):
 its elements carry the water pressure alone, so there is no displacement or stress to
@@ -111,7 +111,7 @@ FLOW_GAUSS_POINT_RESULTS = ("HYDRAULIC_HEAD",)
 SEEPAGE_NODAL_RESULTS = ("NODAL_WATER_FLOW_RATE",)
 """What a groundwater flow stage writes: the reference decks' nodal list, the saturation
 and the flux made nodal by the extrapolation process the stage carries
-(`core.kratos.writer.FLOW_EXTRAPOLATED`), and the head as a deformation stage writes
+(`core.kratos.writer.FLOW_EXTRAPOLATED`), and the head as a mechanical stage writes
 it, which the water pressure elements compute too (`Pw_element.cpp`). A stage with a
 seepage face also writes `SEEPAGE_NODAL_RESULTS`: the water each node takes in or lets
 out, which the seepage strategy works out to decide where the face is open (as Kratos'
@@ -206,7 +206,28 @@ for a stage with a seepage face (`seepage_tests`), which opens and closes the fa
 by node as it iterates. Kratos refuses more than one cycle for that one. Which one a
 stage gets is derived from its soil and its conditions (`core.kratos.writer`), not
 chosen. A stage's own iterations and
-tolerance replace the deck's, as in a deformation stage; a linear stage has none."""
+tolerance replace the deck's, as in a mechanical stage; a linear stage has none."""
+
+SOLVERS = {"mechanical": SOLVER, "flow": FLOW_SOLVER}
+"""The reference analysis of each calculation type (`schemas.Stage.calculation`): the
+coupled `U_Pw` solver for a mechanical stage, the `Pw` solver for a flow stage. A new
+calculation type is a new entry here and in `SOLUTION_TYPES`."""
+
+SOLUTION_TYPES = {
+    "mechanical": {"static": SOLVER["solution_type"], "dynamic": "Dynamic"},
+    "flow": {"static": FLOW_SOLVER["solution_type"],
+             "dynamic": "Transient_Groundwater_Flow"},
+}
+"""Kratos' `solution_type` for each calculation type and time integration
+(`schemas.Stage.time_integration`).
+
+A static mechanical stage is the reference's `static`, which Kratos solves with its
+`GeoStaticScheme`; a dynamic one is `Dynamic`, the Newmark scheme with inertia
+(`geomechanics_U_Pw_solver.py`). Spelt with the capital: the solver lower-cases the name
+to choose the scheme, but adds the velocity and acceleration degrees of freedom only
+when it reads exactly `Dynamic`. A static flow stage is the steady state of the Muskat
+decks; a dynamic one a transient flow, which the `Pw` solver solves with the same
+Newmark scheme (`geomechanics_Pw_solver.py`)."""
 
 # Metres, and a *step*, not a tolerance. The master and slave nodes of a tie are copies
 # of the same source node -- `core.kratos.writer` gives each duplicate its original's exact
@@ -269,8 +290,9 @@ class Stage:
     rather than being defaulted to its values here, so that the deck of a project with
     no stages cannot drift from `SOLVER` by way of a copy made in this file.
 
-    `flow_strategy` is `None` for a deformation stage, and for a groundwater flow stage
-    the `FLOW_STRATEGIES` entry it is solved with. `seepage` is the parts of the seepage
+    `flow_strategy` is `None` for a mechanical stage, and for a flow stage the
+    `FLOW_STRATEGIES` entry it is solved with. `time_integration` picks the stage's
+    `SOLUTION_TYPES` entry. `seepage` is the parts of the seepage
     faces it has, each with its own `ApplySeepageBoundaryProcess`.
     """
     name: str
@@ -293,6 +315,7 @@ class Stage:
     conditions: frozenset[str] | None = None
     flow_strategy: str | None = None
     seepage: tuple[str, ...] = ()
+    time_integration: str = "static"
 
 
 @dataclass(frozen=True)
@@ -665,12 +688,15 @@ def _solver_settings(deck_name: str, domain_size: int, body_parts: list[str],
     (plan sec C5). They come off the stage record; a stage that says nothing about them
     solves the way `SOLVER` does.
 
-    A groundwater flow stage starts from `FLOW_SOLVER` and its strategy instead. It has
-    no displacements to reset, and a linear one no iterations to count.
+    A flow stage starts from `FLOW_SOLVER` and its strategy instead. It has no
+    displacements to reset, and a linear one no iterations to count. Either solves
+    statically or in time, as the stage says (`SOLUTION_TYPES`).
     """
     strategy = stage.flow_strategy if stage is not None else None
+    calculation = "mechanical" if strategy is None else "flow"
     settings = {
-        **(SOLVER if strategy is None else {**FLOW_SOLVER, **FLOW_STRATEGIES[strategy]}),
+        **SOLVERS[calculation],
+        **(FLOW_STRATEGIES[strategy] if strategy is not None else {}),
         "domain_size": domain_size,
         "rotation_dofs": rotation_dofs,
         "model_import_settings": ({"input_type": "use_input_model_part"} if imported else
@@ -684,6 +710,7 @@ def _solver_settings(deck_name: str, domain_size: int, body_parts: list[str],
         return settings
     settings["material_import_settings"] = {
         "materials_filename": stage.materials_filename}
+    settings["solution_type"] = SOLUTION_TYPES[calculation][stage.time_integration]
     if strategy is None:
         settings["reset_totals"] = stage.reset_displacements
     elif strategy == "linear":

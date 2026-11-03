@@ -120,9 +120,11 @@ def test_old_code_overriding_a_new_dump_keeps_working():
 
 
 def test_a_project_saved_with_phases_opens_with_stages():
-    from core.model import stages, templates
+    from core.model import templates
+    from core.model.schemas import Stage
     project = templates.blank_project()
-    project = project.model_copy(update={"stages": stages.default_stages(project)})
+    project = project.model_copy(update={"stages": [Stage(id="initial", name="Initial stage", stress_initialisation="K0"),
+                  Stage(id="null_step", name="Null step", parent="initial")]})
     doc = project.model_dump(mode="json")
     doc["phases"] = doc.pop("stages")
     opened = Project.model_validate(doc)
@@ -139,9 +141,11 @@ def test_the_old_names_still_resolve():
 
 
 def test_an_old_model_copy_with_phases_still_sets_the_stages():
-    from core.model import stages, templates
+    from core.model import templates
+    from core.model.schemas import Stage
     project = templates.blank_project()
-    copied = project.model_copy(update={"phases": stages.default_stages(project)})
+    copied = project.model_copy(update={"phases": [Stage(id="initial", name="Initial stage", stress_initialisation="K0"),
+                  Stage(id="null_step", name="Null step", parent="initial")]})
     assert [s.id for s in copied.stages] == ["initial", "null_step"]
 
 

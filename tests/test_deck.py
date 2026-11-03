@@ -520,9 +520,11 @@ def test_the_resolved_stages_are_the_stages_own_part_lists(staged):
 
 def test_a_stage_carries_its_stage_settings(staged):
     by_id = {stage.id: stage for stage in staged.stages}
-    assert by_id["1_Initial_stage"].calculation == "K0 procedure"
-    assert by_id["2_Null_step"].calculation == "Null step"
-    assert by_id["3_Fill"].calculation == "Plastic"
+    assert by_id["1_Initial_stage"].stress_initialisation == "K0"
+    assert by_id["2_Null_step"].stress_initialisation == "none"
+    assert all(stage.calculation == "mechanical" for stage in staged.stages)
+    assert all(stage.time_integration == "static" for stage in staged.stages)
+    assert by_id["3_Fill"].stress_initialisation == "none"
     assert by_id["3_Fill"].reset_displacements is True
     assert by_id["4_Crane"].reset_displacements is False
     assert by_id["3_Fill"].max_iterations == 50
@@ -546,7 +548,6 @@ def test_a_decks_stages_are_not_edited_here(client, staged):
                             json={"stages": [p.model_dump() for p in staged.stages[:2]]})
     assert response.status_code == 422
     assert "deck" in response.json()["detail"]
-    assert client.post("/api/project/stages/defaults").status_code == 422
 
 
 def test_staging_brings_the_units_record_when_the_deck_has_one(project, deck_dir, tmp_path):

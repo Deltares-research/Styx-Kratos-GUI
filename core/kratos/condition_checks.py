@@ -117,7 +117,7 @@ def _seepage_outside_flow(project: Project) -> list[str]:
     faces = [c for c in project.boundary_conditions
              if isinstance(c, SeepageCondition) and written(project, c)]
     return [f"{noun(c)} is left out: a seepage face belongs to a groundwater flow "
-            "calculation, and this project's stages are not \"Groundwater flow\"."
+            "calculation, and this project's stages are not flow stages."
             for c in faces]
 
 
@@ -231,20 +231,23 @@ def _unused_water_level(project: Project) -> list[str]:
 
 
 def _weightless_k0(project: Project) -> list[str]:
-    """A K0 procedure derives its stresses from the self weight, which gravity off
-    leaves out: the stresses it starts the next stage with are zero."""
+    """A K0 procedure, and gravity loading, derive their stresses from the self weight,
+    which gravity off leaves out: the stresses they start the next stage with are
+    zero."""
     if project.gravity:
         return []
-    return [f"stage {stage.name!r} is a K0 procedure, whose stresses come from the self "
+    named = {"K0": "a K0 procedure", "gravity": "gravity loading"}
+    return [f"stage {stage.name!r} initialises its stresses by "
+            f"{named[stage.stress_initialisation]}, whose stresses come from the self "
             "weight; with gravity off they are zero."
-            for stage in project.stages if stage.calculation == "K0 procedure"]
+            for stage in project.stages if stage.stress_initialisation in named]
 
 
 # ── Groundwater flow ────────────────────────────────────────────────────────
 
 def _flow(project: Project) -> bool:
     """Whether the project is a groundwater flow calculation. A mix of flow and
-    deformation stages is not one: `flow_refusal` says why it cannot be exported."""
+    mechanical stages is not one: `flow_refusal` says why it cannot be exported."""
     try:
         return stages.groundwater_flow(project)
     except stages.StageError:
@@ -253,7 +256,7 @@ def _flow(project: Project) -> bool:
 
 def flow_refusal(project: Project) -> str | None:
     """Why the export refuses this groundwater flow project, or None. None too for a
-    project that is not one, except a mix of flow and deformation stages."""
+    project that is not one, except a mix of flow and mechanical stages."""
     try:
         if not stages.groundwater_flow(project):
             return None

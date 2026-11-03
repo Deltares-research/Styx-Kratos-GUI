@@ -148,8 +148,7 @@ def test_a_transition_reports_only_what_actually_changes():
 
 # -- staged_excavation_stages ----------------------------------------------------------
 # The staged excavation sequence (`tests/models/excavation.py` builds its stages
-# with it). Not what
-# "Create default stages" gives any more -- that is `default_stages`, below.
+# with it).
 #
 # The reference deck's seven stages:
 #
@@ -207,9 +206,8 @@ def test_staged_excavation_stages_reset_displacements_when_the_wall_goes_in():
 
 def test_the_first_staged_stage_is_the_only_k0_one():
     made = stages.staged_excavation_stages(_model())
-    assert made[0].calculation == "K0 procedure"
-    assert made[1].calculation == "Null step"
-    assert all(ph.calculation == "Plastic" for ph in made[2:])
+    assert all(ph.calculation == "mechanical" for ph in made)
+    assert [ph.stress_initialisation for ph in made] == ["K0"] + ["none"] * (len(made) - 1)
 
 
 def test_staged_excavation_stages_make_a_project_that_validates():
@@ -227,51 +225,68 @@ def test_an_anchor_is_installed_after_the_lift_that_exposes_it():
     assert order.index("dig_1") < order.index("install_strut") < order.index("dig_2")
 
 
-# -- default_stages ----------------------------------------------------------
-# What "Create default stages" gives: Initial stage, then Null step, and nothing else.
-# Every further stage is the user's to add. The staged sequence above used to be
-# the default, and on a new model it produced a "First excavation" that dug nothing --
-# the blank project's placeholder excavation has a level but no soil to remove.
+# -- the three choices of a stage ------------------------------------------------
+# A calculation type, mechanical or flow; a stress initialisation, of a mechanical
+# stage only; and a time integration. There are no default stages: every stage is the
+# user's to add.
 
-def test_the_default_is_the_initial_stage_then_the_null_step():
-    made = stages.default_stages(_model())
-    assert [(ph.id, ph.name, ph.parent) for ph in made] == [
-        ("initial", "Initial stage", None),
-        ("null_step", "Null step", "initial"),
-    ]
-    assert made[0].calculation == "K0 procedure"
-    assert made[1].calculation == "Null step"
-    assert made[1].max_iterations == 150
+def test_a_stage_is_a_static_mechanical_stage_with_no_stress_initialisation():
+    made = schemas.Stage(id="s", name="S")
+    assert (made.calculation, made.stress_initialisation, made.time_integration) == \
+        ("mechanical", "none", "static")
 
 
-def test_a_new_model_gets_no_excavation_stage():
-    from core.model.templates import blank_project
-
-    assert [ph.id for ph in stages.default_stages(blank_project())] ==         ["initial", "null_step"]
-
-
-def test_the_default_switches_nothing_off():
-    """With no stage after them to switch anything back on, every part has to be active
-    from the start: a part that is off in every stage is missing from the deck."""
-    for ph in stages.default_stages(_model()):
-        assert not ph.activate and not ph.deactivate, ph.id
+@pytest.mark.parametrize("calculation", ["mechanical", "flow"])
+@pytest.mark.parametrize("time_integration", ["static", "dynamic"])
+def test_either_calculation_type_solves_statically_or_in_time(calculation,
+                                                              time_integration):
+    made = schemas.Stage(id="s", name="S", calculation=calculation,
+                         time_integration=time_integration)
+    assert made.time_integration == time_integration
 
 
-def test_the_default_makes_a_project_that_validates_and_linearises():
-    staged = schemas.Project.model_validate(
-        _model().model_dump()
-        | {"stages": [ph.model_dump() for ph in stages.default_stages(_model())]})
-    assert [ph.id for ph in stages.linearise(staged)] == ["initial", "null_step"]
+@pytest.mark.parametrize("stresses", ["K0", "gravity", "none"])
+def test_a_mechanical_stage_initialises_its_stresses_three_ways(stresses):
+    assert schemas.Stage(id="s", name="S",
+                         stress_initialisation=stresses).stress_initialisation == stresses
 
 
-def test_an_unexcavated_project_still_gets_a_sequence():
-    """Opening staged mode on a project with nothing dug must not produce an empty or
-    invalid list -- the stage editor has to have something to show."""
-    p = seed_project(simple=False)
-    made = stages.default_stages(p)
-    assert [ph.id for ph in made] == ["initial", "null_step"]
-    schemas.Project.model_validate(
-        p.model_dump() | {"stages": [ph.model_dump() for ph in made]})
+@pytest.mark.parametrize("stresses", ["K0", "gravity"])
+def test_a_flow_stage_has_no_stresses_to_initialise(stresses):
+    with pytest.raises(ValueError, match="no stresses to initialise"):
+        schemas.Stage(id="s", name="S", calculation="flow", stress_initialisation=stresses)
+
+
+@pytest.mark.parametrize("field,value", [
+    ("calculation", "Plastic2"), ("stress_initialisation", "k0"),
+    ("time_integration", "quasi_static")])
+def test_a_choice_that_is_not_one_is_refused(field, value):
+    with pytest.raises(ValueError):
+        schemas.Stage(id="s", name="S", **{field: value})
+
+
+@pytest.mark.parametrize("old,new", [
+    ("K0 procedure", ("mechanical", "K0")),
+    ("Plastic", ("mechanical", "none")),
+    ("Null step", ("mechanical", "none")),
+    ("Groundwater flow", ("flow", "none")),
+])
+def test_a_stage_saved_with_an_old_calculation_opens_in_the_new_shape(old, new):
+    made = schemas.Stage.model_validate({"id": "s", "name": "S", "calculation": old})
+    assert (made.calculation, made.stress_initialisation) == new
+    assert made.time_integration == "static"
+
+
+def test_there_is_no_default_sequence():
+    assert not hasattr(stages, "default_stages")
+
+
+def test_a_copy_keeps_the_three_choices():
+    p = _project(schemas.Stage(id="initial", name="Initial", stress_initialisation="K0",
+                               time_integration="dynamic"))
+    made = stages.copied(p, "initial")[1]
+    assert (made.calculation, made.stress_initialisation, made.time_integration) == \
+        ("mechanical", "K0", "dynamic")
 
 
 # -- structure refusals and long chains (alpha 1.7) -------------------------
@@ -402,5 +417,4 @@ def test_the_phases_module_still_imports():
     from core.model import phases, stages
     assert phases.PhaseError is stages.StageError
     assert phases.linearise is stages.linearise
-    assert phases.default_phases is stages.default_stages
     assert phases.staged_excavation_phases is stages.staged_excavation_stages

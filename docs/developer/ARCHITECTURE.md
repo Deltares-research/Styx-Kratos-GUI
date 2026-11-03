@@ -114,7 +114,7 @@ the HTTP parts.
 
 | Group | Module | Routes |
 |---|---|---|
-| Project | `routes/project.py` | `GET`/`PUT /api/project`; `POST /api/project/new`, `/reset`, `/script`, `/script/save`, `/stages/defaults`; `PATCH /api/project/layers`, `/materials`, `/structures`, `/conditions`, `/stages`, `/dimension`, `/units`; `PUT /api/project/water`; `DELETE /api/project/custom_parts` |
+| Project | `routes/project.py` | `GET`/`PUT /api/project`; `POST /api/project/new`, `/reset`, `/script`, `/script/save`; `PATCH /api/project/layers`, `/materials`, `/structures`, `/conditions`, `/stages`, `/dimension`, `/units`; `PUT /api/project/water`; `DELETE /api/project/custom_parts` |
 | Geometry | `routes/geometry.py` | `GET /api/geometry`; `POST /api/geometry/create`, `/import`; `DELETE /api/geometry/parts/{key}` |
 | Mesh | `routes/mesh.py` | `POST /api/mesh`, `/api/mesh/labels`, `/api/mesh/node-parts` |
 | Decks | `routes/decks.py` | `POST /api/export/mdpa`, `/api/import/mdpa`, `/api/calculate` |

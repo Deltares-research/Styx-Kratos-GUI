@@ -325,19 +325,19 @@ One command derives the whole sequence from the model:
 ```text
 crow.json> stages staged-excavation
 1  initial  Initial stage
-     calculation: K0 procedure; deactivates sheetpile, strut, wall_contact, surcharge, water_1, water_2, water_3
+     calculation: mechanical, K0 stresses, static; deactivates sheetpile, strut, wall_contact, surcharge, water_1, water_2, water_3
 2  null_step  Null step  (after initial)
-     calculation: Null step
+     calculation: mechanical, static
 3  install_sheetpile  SheetPileWall installation  (after null_step)
-     calculation: Plastic; activates sheetpile, wall_contact, surcharge
+     calculation: mechanical, static; activates sheetpile, wall_contact, surcharge
 4  dig_1  First excavation  (after install_sheetpile)
-     calculation: Plastic; activates water_1; deactivates soil_L_top__lift1
+     calculation: mechanical, static; activates water_1; deactivates soil_L_top__lift1
 5  install_strut  Strut installation  (after dig_1)
-     calculation: Plastic; activates strut
+     calculation: mechanical, static; activates strut
 6  dig_2  Second excavation  (after install_strut)
-     calculation: Plastic; activates water_2; deactivates soil_L_top__lift2, water_1
+     calculation: mechanical, static; activates water_2; deactivates soil_L_top__lift2, water_1
 7  dig_3  Third excavation  (after dig_2)
-     calculation: Plastic; activates water_3; deactivates soil_L_top__lift3, water_2
+     calculation: mechanical, static; activates water_3; deactivates soil_L_top__lift3, water_2
 ```
 
 In words: settle the ground with K0, take a null step, install the wall with its interface

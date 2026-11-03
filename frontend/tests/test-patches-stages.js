@@ -141,39 +141,73 @@
     }));
   });
 
-  /* The calculation type select of the selected stage, and its Reset displacements box. */
+  /* The selects of the selected stage -- calculation type, stress initialisation (a
+     mechanical stage only) and time integration -- and its Reset displacements box. */
   function stageControls(ctx) {
     var grid = ctx.layer.querySelector('.stages-overview .pgrid');
-    return { select: grid.querySelector('select'),
+    var selects = grid.querySelectorAll('select');
+    return { select: selects[0], selects: selects,
              reset: grid.querySelector('input.pgrid-check') };
   }
 
-  test('stages window: Groundwater flow is a calculation type, and choosing it is one PATCH',
-       function () {
+  function values(select) {
+    return Array.prototype.map.call(select.options, function (o) { return o.value; });
+  }
+
+  test('stages window: a stage chooses its calculation type, stress initialisation and ' +
+       'time integration', function () {
+    var ctx = rig(model());
+    try {
+      App.runAction({ action: 'stages' });
+      var selects = stageControls(ctx).selects;
+      T.eq(selects.length, 3);
+      T.eq(values(selects[0]), ['mechanical', 'flow']);
+      T.eq(values(selects[1]), ['K0', 'gravity', 'none']);
+      T.eq(values(selects[2]), ['static', 'dynamic']);
+      T.eq(selects[1].value, model().stages[0].stress_initialisation);
+    } finally { ctx.restore(); }
+  });
+
+  test('stages window: flow is a calculation type, and choosing it is one PATCH that ' +
+       'drops the stress initialisation', function () {
     var ctx = rig(model());
     App.runAction({ action: 'stages' });
     var select = stageControls(ctx).select;
-    T.ok(Array.prototype.some.call(select.options, function (o) {
-      return o.value === 'Groundwater flow';
-    }), 'the select offers Groundwater flow');
-    T.ok(!stageControls(ctx).reset.disabled, 'a deformation stage can reset displacements');
-    select.value = 'Groundwater flow';
+    T.ok(values(select).indexOf('flow') >= 0, 'the select offers flow');
+    T.ok(!stageControls(ctx).reset.disabled, 'a mechanical stage can reset displacements');
+    select.value = 'flow';
     select.dispatchEvent(new Event('change'));
     return done(ctx, new Promise(function (r) { setTimeout(r, 20); }).then(function () {
       T.eq(ctx.patches.length, 1);
-      T.eq(ctx.patches[0].body.stages[0].calculation, 'Groundwater flow');
+      T.eq(ctx.patches[0].body.stages[0].calculation, 'flow');
+      T.eq(ctx.patches[0].body.stages[0].stress_initialisation, 'none');
     }));
   });
 
-  test('stages window: a groundwater flow stage greys out Reset displacements', function () {
+  test('stages window: choosing dynamic time integration is one PATCH', function () {
+    var ctx = rig(model());
+    App.runAction({ action: 'stages' });
+    var select = stageControls(ctx).selects[2];
+    select.value = 'dynamic';
+    select.dispatchEvent(new Event('change'));
+    return done(ctx, new Promise(function (r) { setTimeout(r, 20); }).then(function () {
+      T.eq(ctx.patches.length, 1);
+      T.eq(ctx.patches[0].body.stages[0].time_integration, 'dynamic');
+    }));
+  });
+
+  test('stages window: a flow stage has no stress initialisation and greys out Reset ' +
+       'displacements', function () {
     var flow = JSON.parse(JSON.stringify(model()));
     flow.stages.forEach(function (stage) {
-      stage.calculation = 'Groundwater flow';
+      stage.calculation = 'flow';
+      stage.stress_initialisation = 'none';
       stage.reset_displacements = true;
     });
     var ctx = rig(flow);
     try {
       App.runAction({ action: 'stages' });
+      T.eq(stageControls(ctx).selects.length, 2, 'no stress initialisation row');
       var reset = stageControls(ctx).reset;
       T.ok(reset.disabled, 'the box cannot be changed');
       T.ok(/no displacements/.test(reset.title), 'its tooltip says why');
@@ -239,19 +273,18 @@
     } finally { ctx.restore(); }
   });
 
-  test('stage list: with no stages the dock offers to create the defaults', function () {
+  test('stage list: with no stages there are no defaults to create, only Add stage',
+       function () {
     var bare = JSON.parse(JSON.stringify(model()));
     bare.stages = [];
     var ctx = rig(bare);
-    App.Explorer.mountPhases();
-    var button = Array.prototype.filter.call(ctx.dock.querySelectorAll('button'), function (b) {
-      return /default/i.test(b.textContent);
-    })[0];
-    T.ok(button, 'a button to create the default stages');
-    button.click();
-    return done(ctx, new Promise(function (r) { setTimeout(r, 20); }).then(function () {
-      T.eq(ctx.posts[0].path, '/api/project/stages/defaults');
-    }));
+    try {
+      App.Explorer.mountPhases();
+      T.ok(!Array.prototype.some.call(ctx.dock.querySelectorAll('button'), function (b) {
+        return /default/i.test(b.textContent);
+      }), 'no button to create default stages');
+      T.ok(/Add stage/.test(ctx.dock.textContent), 'the hint says how to start');
+    } finally { ctx.restore(); }
   });
 
   test('staged mode: clicking a part switches it for the selected stage', function () {

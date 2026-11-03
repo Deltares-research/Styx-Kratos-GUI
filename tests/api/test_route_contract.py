@@ -135,13 +135,9 @@ CONTRACTS = [
                  {"id": "a", "name": "A"}, {"id": "b", "name": "B", "parent": "a",
                                             "deactivate": ["no_such_part"]}]}),
              bad_status=422),
-    Contract("POST", "/api/project/stages/defaults",
-             lambda c: c.post("/api/project/stages/defaults"), PROJECT_KEYS),
     # The pre-rename routes, kept so old clients keep working.
     Contract("PATCH", "/api/project/phases",
              lambda c: c.patch("/api/project/phases", json={"phases": []}), PROJECT_KEYS),
-    Contract("POST", "/api/project/phases/defaults",
-             lambda c: c.post("/api/project/phases/defaults"), PROJECT_KEYS),
     Contract("PATCH", "/api/project/dimension",
              lambda c: c.patch("/api/project/dimension",
                                json={"dimension": _project(c)["dimension"]}),
@@ -360,7 +356,6 @@ REFUSED_FOR_A_DECK = [
     ("POST", "/api/mesh", COARSE), ("POST", "/api/mesh/labels", COARSE),
     ("POST", "/api/mesh/node-parts", COARSE), ("POST", "/api/export/mdpa", COARSE),
     ("PATCH", "/api/project/stages", {"stages": []}),
-    ("POST", "/api/project/stages/defaults", None),
 ]
 
 

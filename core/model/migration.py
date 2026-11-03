@@ -258,6 +258,27 @@ def rename_phases(value: dict) -> dict:
     out["stages"] = out.pop("phases")
     return out
 
+
+OLD_CALCULATIONS = {
+    "K0 procedure": ("mechanical", "K0"),
+    "Plastic": ("mechanical", "none"),
+    "Null step": ("mechanical", "none"),
+    "Groundwater flow": ("flow", "none"),
+}
+
+
+def stage_calculation(value: dict) -> dict:
+    """A stage saved before 2026-11 names one of four calculations. Now a stage has a
+    calculation type and, if it is mechanical, a stress initialisation. A null step was
+    a plastic stage that changes nothing, and it still is one. A stage in the new shape,
+    or with a value that is neither, is left alone for the schema to judge."""
+    old = OLD_CALCULATIONS.get(str(value.get("calculation")))
+    if old is None:
+        return value
+    calculation, stresses = old
+    return {**value, "calculation": calculation, "stress_initialisation": stresses}
+
+
 def drop_boreholes(value: dict) -> dict:
     """A document saved before 2026-10-24 hangs each layer's levels on boreholes:
     `tops` and `bots` map a borehole id to a level. Now a layer has one `top` and one

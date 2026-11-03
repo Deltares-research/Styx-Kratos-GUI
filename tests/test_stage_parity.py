@@ -52,18 +52,16 @@ HEADER = '''/* Generated fixture -- the one document both implementations of `ac
 window.STAGE_FIXTURE =
 '''
 
-# A hand-written sequence rather than `default_stages`, for two reasons. It has to
-# exercise re-activation and a stage that changes nothing, neither of which the default
-# sequence produces. And it must stay still: a fixture built from a function is a
+# A hand-written sequence rather than one a function builds, for two reasons. It has to
+# exercise re-activation and a stage that changes nothing. And it must stay still: a fixture built from a function is a
 # fixture that silently changes the day that function is improved, which is the
 # opposite of what a parity fixture is for.
 STAGES = [
     {"id": "initial", "name": "Initial stage", "parent": None,
-     "calculation": "K0 procedure",
+     "stress_initialisation": "K0",
      "deactivate": ["wall", "anchors", "load", "soil_L1__lift1",
                     "soil_L1__lift2", "soil_L1__lift3"]},
-    {"id": "null_step", "name": "Null step", "parent": "initial",
-     "calculation": "Null step"},
+    {"id": "null_step", "name": "Null step", "parent": "initial"},
     {"id": "build_wall", "name": "Wall installation", "parent": "null_step",
      "activate": ["wall", "load"], "reset_displacements": True},
     {"id": "dig_1", "name": "Dig to -2.0 m", "parent": "build_wall",

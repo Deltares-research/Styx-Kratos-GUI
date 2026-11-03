@@ -136,22 +136,22 @@ def test_check_refuses_flow_and_deformation_stages_mixed(cli, site):
     said before meshing, in the export's words."""
     payload = json.loads(site.read_text(encoding="utf-8"))
     payload["stages"] = [
-        {"id": "initial", "name": "Initial stage", "calculation": "K0 procedure"},
+        {"id": "initial", "name": "Initial stage", "stress_initialisation": "K0"},
         {"id": "flow", "name": "Flow", "parent": "initial",
-         "calculation": "Groundwater flow"},
+         "calculation": "flow"},
     ]
     site.write_text(json.dumps(payload), encoding="utf-8")
 
     ran = cli("check", site)
 
     assert ran.code == 1
-    assert ("cannot mix groundwater flow stages ('Flow') with deformation stages "
+    assert ("cannot mix flow stages ('Flow') with mechanical stages "
             "('Initial stage')") in ran.err
 
 
 def test_check_refuses_a_flow_stage_with_no_fixed_head(cli, site):
     payload = json.loads(site.read_text(encoding="utf-8"))
-    payload["stages"] = [{"id": "flow", "name": "Flow", "calculation": "Groundwater flow"}]
+    payload["stages"] = [{"id": "flow", "name": "Flow", "calculation": "flow"}]
     payload["boundary_conditions"] = []
     for material in payload["materials"]:
         material["variables"]["PERMEABILITY_XX"] = 1e-12
@@ -257,7 +257,7 @@ def test_an_edit_of_a_deck_s_stages_is_refused(cli, tmp_path):
         "deck": Deck(directory=str(tmp_path))}), tmp_path / "deck.json")
     before = path.read_bytes()
 
-    ran = cli("stages", path, "defaults")
+    ran = cli("stages", path, "add")
 
     assert ran.code == 1
     assert "Edit the deck" in ran.err

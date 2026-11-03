@@ -55,9 +55,12 @@ def test_a_deck_is_not_meshed(cli, tmp_path):
 
 # ── stages ──────────────────────────────────────────────────────────────────
 
-def test_stages_defaults_gives_the_initial_stage_and_the_null_step(cli, site):
-    assert cli("stages", site, "defaults").code == 0
+def test_there_are_no_default_stages(cli, site):
+    """Every stage is the user's to add."""
+    assert cli("stages", site, "defaults").code == 2
 
+    assert cli("stages", site, "add").code == 0
+    assert cli("stages", site, "add").code == 0
     stages = session.load(site).stages
     assert len(stages) == 2 and stages[1].parent == stages[0].id
     listed = cli("stages", site, "list").out

@@ -14,8 +14,7 @@ and it turns that tree into the three things the exporter needs:
 
 and two that are not about export at all:
 
-*   `default_stages` and `staged_excavation_stages` -- the sequences a project can be
-    given whole.
+*   `staged_excavation_stages` -- a whole sequence a model script can give a project.
 *   `added`, `inserted`, `removed`, `copied`, `set_active` -- the edits the GUI's
     Stages toolbar and Model explorer make to a list, for the command line to make
     the same way.
@@ -80,31 +79,30 @@ def linearise(project: Project) -> list[Stage]:
     return order
 
 
-GROUNDWATER_FLOW = "Groundwater flow"
-"""The calculation type of a flow stage (`schemas.Stage.calculation`)."""
+FLOW = "flow"
+"""The calculation type of a groundwater flow stage (`schemas.Stage.calculation`)."""
 
 
 def groundwater_flow(project: Project) -> bool:
     """Whether the project is a groundwater flow calculation: it has stages, and every
-    one of them is a "Groundwater flow". Raises `StageError` when some are and some are
-    not.
+    one of them is a flow stage. Raises `StageError` when some are and some are not.
 
     One type for the whole sequence, because the element type is in the .mdpa and every
-    stage reads that one file: a flow stage needs water pressure elements, a K0, Plastic
-    or Null step stage the coupled ones. A project without stages is one deformation
-    stage, as it always was.
+    stage reads that one file: a flow stage needs water pressure elements, a mechanical
+    stage the coupled ones. A project without stages is one mechanical stage, as it
+    always was.
     """
-    flow = [stage for stage in project.stages if stage.calculation == GROUNDWATER_FLOW]
+    flow = [stage for stage in project.stages if stage.calculation == FLOW]
     if not flow:
         return False
-    other = [stage for stage in project.stages if stage.calculation != GROUNDWATER_FLOW]
+    other = [stage for stage in project.stages if stage.calculation != FLOW]
     if other:
         def named(stages: list[Stage]) -> str:
             return ", ".join(repr(stage.name) for stage in stages)
         raise StageError(
-            f"one calculation cannot mix groundwater flow stages ({named(flow)}) with "
-            f"deformation stages ({named(other)}): a flow stage solves the water "
-            "pressure alone, on elements a deformation stage cannot use. Give every "
+            f"one calculation cannot mix flow stages ({named(flow)}) with "
+            f"mechanical stages ({named(other)}): a flow stage solves the water "
+            "pressure alone, on elements a mechanical stage cannot use. Give every "
             "stage the same calculation type.")
     return True
 
@@ -159,7 +157,7 @@ def transitions(project: Project) -> list[tuple[Stage, set[str], set[str]]]:
     return result
 
 
-# -- the default sequence ----------------------------------------------------
+# -- a whole sequence ----------------------------------------------------
 
 _ORDINALS = ("First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh",
              "Eighth", "Ninth", "Tenth")
@@ -169,36 +167,16 @@ def _ordinal(n: int) -> str:
     return _ORDINALS[n - 1] if n <= len(_ORDINALS) else f"#{n}"
 
 
-def default_stages(project: Project) -> list[Stage]:
-    """What "Create default stages" gives: the initial stage, then the null step.
-
-    Nothing more. Every further stage -- installing a wall, digging a lift -- is the
-    user's to add, so a new project starts from its initial stage alone. This used to
-    be the whole reference-shaped sequence (`staged_excavation_stages`), and on a new
-    model that produced a "First excavation" which dug nothing: the blank project's
-    placeholder excavation has a level but no soil to remove.
-
-    Nothing is switched off. There is no later stage to switch it back on, and a part
-    that is off in every stage is missing from the deck altogether. `project` is taken
-    for symmetry with `staged_excavation_stages`; the two stages do not depend on it.
-    """
-    return [
-        Stage(id="initial", name="Initial stage", calculation="K0 procedure"),
-        Stage(id="null_step", name="Null step", parent="initial",
-              calculation="Null step", max_iterations=150),
-    ]
-
-
 def staged_excavation_stages(project: Project) -> list[Stage]:
     """A whole staged-excavation sequence, built from the model.
 
-    What a staged model script gives its model, and what `default_stages` used to
-    give every model. Shaped like the reference deck, because the reference deck is a normal excavation
+    What a staged model script gives its model. Shaped like the reference deck,
+    because the reference deck is a normal excavation
     and the shape generalises: settle the ground, build the wall, then alternate digging
     with propping. For the reference deck it reproduces all seven
     stages exactly (`tests/test_stages.py`).
 
-        1  initial            K0 procedure; everything not yet built is switched off
+        1  initial            K0 stresses; everything not yet built is switched off
         2  null_step          the same model, solved again, to settle the K0 stresses
         3  install_<beam>     one per drawn beam: the beam and its interfaces, plus the
                               surface loads, which the reference brings in here too
@@ -234,9 +212,9 @@ def staged_excavation_stages(project: Project) -> list[Stage]:
              if load.fluid_pressure_type == "Hydrostatic"][:len(levels)]
 
     not_yet_built = structures + interfaces + surface_loads + water
-    add("initial", "Initial stage", calculation="K0 procedure",
+    add("initial", "Initial stage", stress_initialisation="K0",
         deactivate=not_yet_built)
-    add("null_step", "Null step", calculation="Null step", max_iterations=150)
+    add("null_step", "Null step", max_iterations=150)
 
     # The beams, each with the interfaces drawn against it. The first one carries the
     # surface loads and the displacement reset: the reference resets at the wall so the
@@ -353,6 +331,8 @@ def copied(project: Project, id: str) -> list[Stage]:
     original = listed[at]
     made = Stage(id=_fresh_id(project, "stage"), name=f"{original.name} (copy)",
                  parent=original.id, calculation=original.calculation,
+                 stress_initialisation=original.stress_initialisation,
+                 time_integration=original.time_integration,
                  reset_displacements=original.reset_displacements,
                  max_iterations=original.max_iterations,
                  tolerated_error=original.tolerated_error,

@@ -1511,12 +1511,12 @@ def test_a_project_has_no_stages_until_one_is_made():
 
 def test_a_stage_stores_what_it_changes_not_the_whole_model_state():
     p = _staged(
-        _stage("initial", calculation="K0 procedure"),
+        _stage("initial", stress_initialisation="K0"),
         _stage("dig_1", parent="initial", deactivate=["soil_L1__lift1"]),
     )
     assert p.stages[1].deactivate == ["soil_L1__lift1"]
     assert p.stages[1].activate == []
-    assert p.stages[0].calculation == "K0 procedure"
+    assert p.stages[0].stress_initialisation == "K0"
     # The defaults are the reference deck's own initial-stage numbers.
     assert p.stages[1].max_iterations == 15
     assert p.stages[1].reset_displacements is False

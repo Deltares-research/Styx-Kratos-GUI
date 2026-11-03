@@ -179,7 +179,9 @@
       "id": "initial",
       "name": "Initial stage",
       "parent": null,
-      "calculation": "K0 procedure",
+      "calculation": "mechanical",
+      "stress_initialisation": "K0",
+      "time_integration": "static",
       "loading": "Staged construction",
       "activate": [],
       "deactivate": [
@@ -195,7 +197,9 @@
       "id": "sheet_pile",
       "name": "Sheet pile",
       "parent": "initial",
-      "calculation": "Plastic",
+      "calculation": "mechanical",
+      "stress_initialisation": "none",
+      "time_integration": "static",
       "loading": "Staged construction",
       "activate": [
         "sheetpile_1"
@@ -210,7 +214,9 @@
       "id": "loading",
       "name": "Load",
       "parent": "sheet_pile",
-      "calculation": "Plastic",
+      "calculation": "mechanical",
+      "stress_initialisation": "none",
+      "time_integration": "static",
       "loading": "Staged construction",
       "activate": [
         "surcharge"

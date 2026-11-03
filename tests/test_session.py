@@ -246,16 +246,16 @@ def test_stages_that_branch_are_refused_naming_the_branches():
         session.replace_stages(staged(), StagesUpdate(stages=sequence))
 
 
-def test_the_default_stages_are_the_model_s_own():
-    project = staged()
-
-    assert session.default_stages(project).stages == stages.default_stages(project)
+def test_there_are_no_default_stages():
+    """A project starts with no stages, and every one is the user's to add."""
+    assert not hasattr(session, "default_stages")
+    assert not hasattr(stages, "default_stages")
 
 
 @pytest.mark.parametrize("edit", [
     lambda p: session.replace_stages(p, StagesUpdate(stages=[])),
-    session.default_stages,
-], ids=["replace", "defaults"])
+    lambda p: session.add_stage(p)[0],
+], ids=["replace", "add"])
 def test_the_stages_of_a_deck_are_read_only(edit):
     with pytest.raises(session.DeckReadOnly, match="Edit the deck"):
         edit(a_deck())
@@ -405,7 +405,7 @@ def test_a_value_is_read_by_its_path():
 
 
 def test_a_path_may_still_say_phases():
-    project = session.default_stages(seed_project())
+    project, _ = session.add_stage(seed_project())
 
     assert session.value_at(project, "phases") == session.value_at(project, "stages")
     renamed = session.with_value(project, f"phases[{project.stages[0].id}].name", "First")

@@ -192,20 +192,6 @@ async def patch_stages(update: StagesUpdate) -> dict:
     return {"project": project, "invalidates": ["project"]}
 
 
-@router.post("/api/project/stages/defaults")
-@router.post("/api/project/phases/defaults", include_in_schema=False, deprecated=True)
-async def seed_default_stages() -> dict:
-    """What "Create default stages" gives: the initial stage, then the null step.
-
-    `session.default_stages` makes it; this endpoint is only the way the GUI reaches it.
-    It replaces whatever is there: it is the way back out of a broken sequence.
-    """
-    with refusals():
-        project = session.default_stages(store.get())
-    store.put(project)
-    return {"project": project, "invalidates": ["project"]}
-
-
 @router.patch("/api/project/dimension")
 async def patch_dimension(update: DimensionUpdate) -> dict:
     """Switch between the solid model and the plane-strain x-y section.

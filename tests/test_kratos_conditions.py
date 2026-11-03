@@ -301,10 +301,20 @@ def test_the_hydraulic_head_is_written_only_with_gravity(gmsh_session):
 def test_a_k0_stage_with_gravity_off_is_warned_about():
     from tests.models.excavation import excavation_project
     project = session.set_gravity(excavation_project(), False)
-    assert any("is a K0 procedure, whose stresses come from the self weight" in w
-               for w in condition_checks.warnings(project))
+    assert any("initialises its stresses by a K0 procedure, whose stresses come from "
+               "the self weight" in w for w in condition_checks.warnings(project))
     assert not any("K0 procedure" in w
                    for w in condition_checks.warnings(excavation_project()))
+
+
+def test_a_gravity_loading_stage_with_gravity_off_is_warned_about():
+    from tests.models.excavation import excavation_project
+    project = excavation_project()
+    first = project.stages[0].model_copy(update={"stress_initialisation": "gravity"})
+    project = session.set_gravity(
+        project.model_copy(update={"stages": [first, *project.stages[1:]]}), False)
+    assert any("initialises its stresses by gravity loading" in w
+               for w in condition_checks.warnings(project))
 
 
 def test_the_conditions_update_changes_only_what_it_names():

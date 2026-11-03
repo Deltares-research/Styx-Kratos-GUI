@@ -334,7 +334,8 @@ Styx cannot read.
 ```bash
 kratos-cli stages pit.json staged-excavation       # derived from the model, all at once
 # or one by one:
-kratos-cli stages pit.json defaults                # the initial stage and the null step
+kratos-cli stages pit.json add initial --name "Initial stage" --stress-initialisation k0
+kratos-cli stages pit.json add null_step --name "Null step" --max-iterations 150
 kratos-cli stages pit.json deactivate initial sheet strut tie contact surcharge water_1
 kratos-cli stages pit.json add wall --name Wall --activate sheet contact surcharge --reset-displacements
 kratos-cli stages pit.json add dig_1 --name "Dig 1" --activate water_1 --deactivate soil_top__lift1 --max-iterations 150 --tolerance 1e-3
@@ -351,8 +352,8 @@ kratos-cli stages pit.json list
 - **`staged-excavation`** derives the whole sequence from the model, as a model script's
   `stages.staged_excavation_stages` does: settle the ground, install each wall with its
   interfaces and the loads, then dig lift by lift with its water load, each anchor after
-  the lift that exposes its head. **`defaults`** makes only the initial stage and the
-  null step, as the GUI's Create default stages does. Both replace the sequence there is.
+  the lift that exposes its head. It replaces the sequence there is. There are no
+  default stages: a project starts with none, and every stage is yours to add.
 - **`add [ID]`** puts a stage at the end of the sequence (the toolbar's Add); with
   `--before STAGE` it goes between that stage and the one it starts from (Insert).
   **`copy STAGE`** puts a stage with the same solver settings right after `STAGE` (Copy),
@@ -362,17 +363,30 @@ kratos-cli stages pit.json list
   stage on, as the Model explorer's checkbox does, with the smallest instruction that
   does it: switching a part back to what the stage inherits drops the instruction.
   `add` and `copy` take `--activate` and `--deactivate` the same way.
-- **`set STAGE`** changes `--name`, `--calculation k0|plastic|null|flow`,
+- **`set STAGE`** changes `--name`, `--calculation mechanical|flow`,
+  `--stress-initialisation k0|gravity|none`, `--time-integration static|dynamic`,
   `--reset-displacements` / `--keep-displacements`, `--max-iterations`, `--tolerance`
-  (the residual relative tolerance), `--time-interval` (days) and `--parent`.
-- **`flow`** (also `groundwater-flow`) is the Groundwater flow calculation: a
-  steady-state flow of the water alone, on the soil. Every stage of a project must then
-  be a flow stage, and `check` and `export` refuse a project that mixes flow and
-  deformation stages. A flow stage has no displacements, so it refuses
-  `--reset-displacements` and `--keep-displacements`.
-- **Defaults.** A stage that is not given these options is a plastic calculation with
-  at most 15 iterations, a tolerance of 1e-4, the displacements of the stage before kept,
-  and a time interval of 0 days. `stages show ID` prints a stage's settings.
+  (the residual relative tolerance), `--time-interval` (days) and `--parent`. `add` and
+  `copy` take the same options.
+- **`--calculation`** is what the stage solves for. **`mechanical`** (also `upw`) is
+  the deformation of the soil with the water pressure in it, Kratos' `U_Pw` solver.
+  **`flow`** (also `pw` and `groundwater-flow`) is the flow of the water alone, on the
+  soil, Kratos' `Pw` solver. Every stage of a project must then be a flow stage, and
+  `check` and `export` refuse a project that mixes flow and mechanical stages. A flow
+  stage has no displacements, so it refuses `--reset-displacements` and
+  `--keep-displacements`.
+- **`--stress-initialisation`** is how a mechanical stage sets up its stresses: **`k0`**
+  derives them from the self weight and each soil's K0 (the K0 procedure), **`gravity`**
+  solves for them under the self weight (gravity loading), and **`none`** continues from
+  the stage before. A flow stage has no stresses: it refuses `k0` and `gravity`, and
+  `--calculation flow` sets the stress initialisation to `none`.
+- **`--time-integration`** is **`static`** (equilibrium; a steady state for a flow stage)
+  or **`dynamic`** (in time: Kratos' `Dynamic` solution type with inertia for a
+  mechanical stage, `Transient_Groundwater_Flow` for a flow stage).
+- **Defaults.** A stage that is not given these options is a static mechanical
+  calculation with no stress initialisation, at most 15 iterations, a tolerance of 1e-4,
+  the displacements of the stage before kept, and a time interval of 0 days.
+  `stages show ID` prints a stage's settings.
 - **A seepage face** (`boundary add --seepage`, above) makes a flow stage use Kratos'
   seepage strategy, `newton_raphson_with_seepage`.
 - **The solver** of a deformation stage is the same for every stage and no option

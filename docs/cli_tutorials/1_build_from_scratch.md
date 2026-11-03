@@ -108,11 +108,12 @@ mesh --size 1 --order 1
 # 7. The stages: K0 on the soil alone, then the sheet pile, then the load.
 #    Every part starts in the model, so the first stage switches off what is not built yet:
 #    the sheet pile and the load. The later stages switch them back on, one at a time.
-#    An option left out takes its default: --calculation plastic, --max-iterations 15,
+#    An option left out takes its default: --calculation mechanical,
+#    --stress-initialisation none, --time-integration static, --max-iterations 15,
 #    --tolerance 1e-4, and the displacements of the stage before are kept.
 #    `stages show initial` prints a stage's settings. The solver is the same for every
 #    stage; "The stages, command by command" in docs/CLI.md says what it is.
-stages add initial --name "Initial stage" --calculation k0 --deactivate sheetpile_1 surcharge
+stages add initial --name "Initial stage" --stress-initialisation k0 --deactivate sheetpile_1 surcharge
 stages add sheet_pile --name "Sheet pile" --activate sheetpile_1 --reset-displacements --max-iterations 150 --tolerance 1e-3
 stages add loading --name Load --activate surcharge --max-iterations 150 --tolerance 1e-3
 

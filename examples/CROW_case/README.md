@@ -20,7 +20,7 @@ from anywhere else, give the paths to `kratos-cli` and the files.
   strut at -1.5 m.
 - **Loads**: a 20 kN/m surcharge behind the wall, and the water in the pit at each lift.
 - **Excavation**: three lifts, to -2, -5 and -8 m.
-- **Stages**: initial stage (K0 procedure), null step, wall installation, first
+- **Stages**: initial stage (K0 stress initialisation), null step, wall installation, first
   excavation, strut installation, second and third excavation.
 
 ## The project file

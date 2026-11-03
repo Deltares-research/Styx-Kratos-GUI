@@ -64,7 +64,7 @@ def test_the_help_says_phases_still_works(cli):
 
 def test_add_puts_a_stage_at_the_end_with_its_settings_and_parts(cli, pit):
     ran = cli("stages", pit, "add", "unload", "--name", "Unload", "--calculation",
-              "plastic", "--deactivate", "surcharge", "--max-iterations", "60",
+              "mechanical", "--deactivate", "surcharge", "--max-iterations", "60",
               "--tolerance", "1e-3")
 
     assert ran.code == 0, ran.err
@@ -142,20 +142,49 @@ def test_a_stage_that_is_not_there_is_named(cli, pit):
     assert "no stage 'dig_9'" in ran.err
 
 
-def test_a_calculation_type_that_is_not_one_is_refused(cli, pit):
-    ran = cli("stages", pit, "set", "dig_1", "--calculation", "elastic")
+@pytest.mark.parametrize("option,word,use", [
+    ("--calculation", "plastic", "use mechanical or flow"),
+    ("--stress-initialisation", "elastic", "use k0, gravity or none"),
+    ("--time-integration", "quasi-static", "use static or dynamic")])
+def test_a_choice_that_is_not_one_is_refused(cli, pit, option, word, use):
+    ran = cli("stages", pit, "set", "dig_1", option, word)
 
     assert ran.code == 2
-    assert "use k0, plastic, null or flow" in ran.err
+    assert use in ran.err
 
 
-@pytest.mark.parametrize("word", ["flow", "Groundwater flow", "groundwater-flow"])
+@pytest.mark.parametrize("word", ["flow", "Pw", "groundwater-flow"])
 def test_flow_is_the_groundwater_flow_calculation(cli, pit, word):
-    """The GUI's "Groundwater flow" in the Calculation type select."""
+    """The GUI's "Flow (Pw)" in the Calculation type select."""
     assert cli("stages", pit, "add", "seep", "--calculation", word).code == 0
 
-    assert _stage(pit, "seep").calculation == "Groundwater flow"
-    assert "calculation: Groundwater flow" in cli("stages", pit).out
+    assert _stage(pit, "seep").calculation == "flow"
+    assert "calculation: flow, static" in cli("stages", pit).out
+
+
+def test_a_stage_takes_its_stress_initialisation_and_time_integration(cli, pit):
+    assert cli("stages", pit, "add", "shake", "--stress-initialisation", "gravity",
+               "--time-integration", "dynamic").code == 0
+
+    shake = _stage(pit, "shake")
+    assert (shake.calculation, shake.stress_initialisation, shake.time_integration) == \
+        ("mechanical", "gravity", "dynamic")
+    assert "calculation: mechanical, gravity stresses, dynamic" in cli("stages", pit).out
+
+
+def test_making_a_stage_a_flow_stage_drops_its_stress_initialisation(cli, pit):
+    """As the GUI does: a flow stage has no stresses to initialise."""
+    assert cli("stages", pit, "set", "initial", "--calculation", "flow").code == 0
+
+    assert _stage(pit, "initial").stress_initialisation == "none"
+
+
+def test_a_flow_stage_refuses_a_stress_initialisation(cli, pit):
+    ran = cli("stages", pit, "set", "dig_1", "--calculation", "flow",
+              "--stress-initialisation", "k0")
+
+    assert ran.code == 1
+    assert "no stresses to initialise" in ran.err
 
 
 def test_a_flow_stage_lists_no_displacement_reset(cli, pit):
@@ -174,7 +203,7 @@ def test_a_flow_stage_refuses_the_displacement_options(cli, pit, option):
     ran = cli("stages", pit, "set", "dig_1", "--calculation", "flow", option)
 
     assert ran.code == 1
-    assert "groundwater flow stage" in ran.err and option in ran.err
+    assert "is a flow stage" in ran.err and option in ran.err
     assert pit.read_text(encoding="utf-8") == before
     assert cli("stages", pit, "add", "seep", "--calculation", "flow", option).code == 1
 
@@ -249,7 +278,9 @@ def test_the_stages_of_the_test_model_are_built_with_commands_alone(cli, unstage
         assert ran.code == 0, (argv, ran.err)
 
     p = unstaged
-    run("stages", p, "defaults")
+    run("stages", p, "add", "initial", "--name", "Initial stage",
+        "--stress-initialisation", "k0")
+    run("stages", p, "add", "null_step", "--name", "Null step", "--max-iterations", "150")
     run("stages", p, "deactivate", "initial", "sheetpile", "strut", "wall_contact",
         "surcharge", "water_1", "water_2", "water_3")
     solver = ("--max-iterations", "150", "--tolerance", "1e-3")

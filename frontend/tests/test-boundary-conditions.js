@@ -58,13 +58,13 @@
   test('a groundwater flow project notes that its supports are left out, as the CLI does',
        function () {
     var flow = section(standard().concat([pressure('pore', 'domain')]), {
-      stages: [{ id: 'flow', name: 'Flow', calculation: 'Groundwater flow' }] });
+      stages: [{ id: 'flow', name: 'Flow', calculation: 'flow' }] });
     var lines = BC().command('boundary list', flow).message.split('\n');
     T.eq(lines[lines.length - 1], 'A groundwater flow calculation leaves the supports out: '
          + 'it solves the water pressure alone.');
     var mixed = section(standard(), { stages: [
-      { id: 'a', name: 'A', calculation: 'Plastic' },
-      { id: 'flow', name: 'Flow', calculation: 'Groundwater flow', parent: 'a' }] });
+      { id: 'a', name: 'A', calculation: 'mechanical' },
+      { id: 'flow', name: 'Flow', calculation: 'flow', parent: 'a' }] });
     T.ok(!/groundwater flow/.test(BC().command('boundary list', mixed).message),
          'a mix is not a flow project: the export refuses it');
     var water = section([pressure('pore', 'domain')], { stages: flow.stages });
@@ -338,7 +338,7 @@
   test('the explorer marks the supports of a groundwater flow project as left out',
        function () {
     var project = section(standard().concat([pressure('pore', 'domain')]), {
-      stages: [{ id: 'flow', name: 'Flow', calculation: 'Groundwater flow' }] });
+      stages: [{ id: 'flow', name: 'Flow', calculation: 'flow' }] });
     App.BOUNDARY_CONDITIONS = JSON.parse(JSON.stringify(project.boundary_conditions));
     App.PROJECT = project;
     App.Model.rebuildDerived();

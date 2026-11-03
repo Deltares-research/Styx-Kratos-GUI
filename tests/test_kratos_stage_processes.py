@@ -13,8 +13,8 @@ import json
 
 import pytest
 
-from core.kratos import writer, materials
-from core.model import stages
+from core.kratos import deck_files, writer, materials
+from core.model.schemas import Stage
 from tests.models import drawn_ground, excavation
 from core.geometry.solid_model import session
 from core.model.schemas import MeshRequest
@@ -338,15 +338,16 @@ def test_material_parameters_writes_the_k0_variables_on_request():
 
 # -- What is built from the start ----------------------------------------------
 #
-# "Create default stages" switches nothing off (`stages.default_stages`), so a wall and
-# its interfaces drawn before that are in the model from the first stage. There is no
-# stage before the first for them to carry a stress from, and the first stage is where
-# they arrive.
+# A first stage that switches nothing off has a wall and its interfaces in the model
+# from the start. There is no stage before the first for them to carry a stress from,
+# and the first stage is where they arrive.
 
 @pytest.fixture(scope="module")
 def from_the_start() -> dict:
     project = excavation.excavation_project(staged=False)
-    project = project.model_copy(update={"stages": stages.default_stages(project)})
+    project = project.model_copy(update={"stages": [
+        Stage(id="initial", name="Initial stage", stress_initialisation="K0"),
+        Stage(id="null_step", name="Null step", parent="initial", max_iterations=150)]})
     with session():
         exported = writer.export_project(project, MeshRequest(**project.mesh.model_dump()))
     return json.loads(exported["project_parameters"])
@@ -365,3 +366,49 @@ def test_interfaces_built_from_the_start_find_their_neighbours_in_the_first_stag
     assert len(carrying(from_the_start, "1_Initial_stage", "auxiliary_process_list",
                         module)) == 8
     assert module not in modules(from_the_start, "2_Null_step", "auxiliary_process_list")
+
+
+# -- Stress initialisation and time integration ----------------------------------
+#
+# Gravity loading is an ordinary solve under the self weight: no K0 process, the
+# materials file every other stage reads, and -- like a K0 stage -- before construction,
+# at negative time. A dynamic stage is Kratos' `Dynamic` solution type.
+
+@pytest.fixture(scope="module")
+def gravity_then_dynamic() -> dict:
+    project = excavation.excavation_project(staged=False)
+    project = project.model_copy(update={"stages": [
+        Stage(id="initial", name="Initial stage", stress_initialisation="gravity"),
+        Stage(id="null_step", name="Null step", parent="initial"),
+        Stage(id="shake", name="Shake", parent="null_step", time_integration="dynamic",
+              deactivate=["surcharge"])]})
+    with session():
+        exported = writer.export_project(project, MeshRequest(**project.mesh.model_dump()))
+    return json.loads(exported["project_parameters"])
+
+
+def _solver(doc: dict, stage: str) -> dict:
+    return doc["stages"][stage]["stage_settings"]["solver_settings"]
+
+
+def test_gravity_loading_runs_no_k0_procedure(gravity_then_dynamic):
+    for stage in gravity_then_dynamic["stages"]:
+        assert "apply_k0_procedure_process" not in modules(
+            gravity_then_dynamic, stage, "auxiliary_process_list")
+    assert _solver(gravity_then_dynamic, "1_Initial_stage")[
+        "material_import_settings"]["materials_filename"] == deck_files.MATERIALS_NAME
+
+
+def test_gravity_loading_and_its_null_step_come_before_construction(gravity_then_dynamic):
+    starts = [gravity_then_dynamic["stages"][name]["stage_settings"]["problem_data"]
+              ["start_time"] for name in ("1_Initial_stage", "2_Null_step", "3_Shake")]
+    assert starts == [-2.0, -1.0, 0.0]
+
+
+def test_a_static_stage_is_static_and_a_dynamic_one_dynamic(gravity_then_dynamic):
+    assert _solver(gravity_then_dynamic, "1_Initial_stage")["solution_type"] == "static"
+    assert _solver(gravity_then_dynamic, "2_Null_step")["solution_type"] == "static"
+    # With the capital: Kratos adds the velocity and acceleration degrees of freedom only
+    # for exactly "Dynamic" (geomechanics_U_Pw_solver.py).
+    assert _solver(gravity_then_dynamic, "3_Shake")["solution_type"] == "Dynamic"
+

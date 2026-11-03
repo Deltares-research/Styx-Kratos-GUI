@@ -68,7 +68,7 @@ top and the bottom have no water pressure condition, so no water flows through t
 
 ### The calculation
 
-One stage, of the type Groundwater flow, and a mesh of quadratic triangles of 0.4 m:
+One stage, of the calculation type flow, and a mesh of quadratic triangles of 0.4 m:
 
 ```text
 PS> kratos-cli stages muskat.json add flow --name Flow --calculation flow
