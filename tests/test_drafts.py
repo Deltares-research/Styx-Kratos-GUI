@@ -13,7 +13,7 @@ import math
 import pytest
 
 from core import session
-from core.model import drafts, units
+from core.model import drafts, soil_models, units
 from core.model.schemas import (SOIL_LAW_PAIRS, Anchor, AnchorSection, Beam, BeamSection,
                                 DimensionUpdate, Interface, InterfaceSection, LineLoad,
                                 Material, Member, NormalLoad, Panel, PanelSection, PointLoad,
@@ -28,26 +28,29 @@ def test_a_new_soil_takes_the_linear_elastic_law_of_the_dimension():
         assert SOIL_LAW_PAIRS[law][0] == dimension
 
 
-def test_a_new_soil_is_a_loose_drained_sand_in_the_project_s_units():
+def test_a_new_soil_is_the_blank_one_the_gui_s_create_soil_makes():
+    """`App.MaterialSets.blankSoil`: drained, saturated below the phreatic level, its
+    stiffness and weight left for the user to type."""
     project = blank_project()
 
     material, notes = drafts.soil(project, "sand")
 
     assert isinstance(material, Material)
     assert material.constitutive_law == drafts.SOIL_LAWS[2]
-    assert material.variables == drafts.SOIL_DEFAULTS_SI
+    assert material.variables == soil_models.blank_si()
     assert (material.id, material.name, material.color) == ("sand", "sand", drafts.SOIL_COLOR)
     assert notes == []
 
 
-def test_a_new_soil_in_a_kn_project_is_stated_in_kn():
+def test_a_preset_in_a_kn_project_is_stated_in_kn():
     project = blank_project().model_copy(update={"unit_system": "kN"})
 
-    material, _ = drafts.soil(project, "sand")
+    material, _ = drafts.soil(project, "sand", preset="m2")
 
-    expected, _ = units.convert_variables(drafts.SOIL_DEFAULTS_SI, "SI", "kN")
-    assert material.variables == expected
-    assert material.variables["YOUNG_MODULUS"] == pytest.approx(1.0e4)
+    expected, _ = units.convert_variables(drafts.preset("m2")["variables"], "SI", "kN")
+    assert {name: material.variables[name] for name in expected} == expected
+    assert material.variables["YOUNG_MODULUS"] == pytest.approx(
+        drafts.preset("m2")["variables"]["YOUNG_MODULUS"] / 1000)
 
 
 def test_a_soil_can_start_from_a_library_preset():
@@ -56,7 +59,11 @@ def test_a_soil_can_start_from_a_library_preset():
     preset = drafts.preset("m3")
     assert material.name == preset["name"]
     assert material.color == preset["color"]
-    assert material.variables == preset["variables"]
+    assert {name: material.variables[name] for name in preset["variables"]} ==         preset["variables"]
+    assert material.constitutive_law == soil_models.law(preset["model"], 2)
+    assert all(name in material.variables for name in
+               soil_models.required(material.constitutive_law, material.variables)), \
+        "ready to run"
     assert (material.r_inter, material.interface_permeability) == (0.5, "Impermeable")
 
 

@@ -893,7 +893,9 @@ def update_material(project: Project, id: str, *, name: str | None = None,
 
     `model` makes it that soil model (`core/model/soil_models.py`): its law in the
     project's dimension. What the soil then lists and lacks gets the model's default, as
-    the material window fills it (`soil_models.fill`), and `notes` says which."""
+    the material window fills it (`soil_models.fill_choice`), and `notes` says which: a
+    soil still being filled in by hand, as `material add` makes one, gets no number its
+    law must have."""
     if model is not None and law is not None:
         raise EditRefused("give a soil model or a law, not both")
     if model is not None:
@@ -913,8 +915,9 @@ def update_material(project: Project, id: str, *, name: str | None = None,
             raise EditRefused(f"{id} has no variable {variable}; it has: "
                               + ", ".join(record["variables"]))
         del record["variables"][variable]
-    filled = soil_models.fill(before_law, before, record["constitutive_law"],
-                              record["variables"], project.unit_system, skip=tuple(unset))
+    filled = soil_models.fill_choice(before_law, before, record["constitutive_law"],
+                                     record["variables"], project.unit_system,
+                                     flow=drafts.reads_flow(project), skip=tuple(unset))
     note = soil_models.filled_note(soil_models.model_of(record["constitutive_law"]), filled)
     if note and notes is not None:
         notes.append(note)

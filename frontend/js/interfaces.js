@@ -711,7 +711,16 @@ App.Interfaces = (function () {
       form.appendChild(el('div.mesh-setting-help', { text: help || '' }));
     }
 
+    /* The form is rebuilt whole; where it was scrolled to is kept, so a choice does
+       not throw the window back to the top. */
     function render() {
+      var scrolled = form.scrollTop, outer = form.parentNode, outerScrolled = outer ? outer.scrollTop : 0;
+      fill();
+      form.scrollTop = scrolled;
+      if (outer) outer.scrollTop = outerScrolled;
+    }
+
+    function fill() {
       form.textContent = '';
       controls = {};
       controls.name = el('input.mesh-setting-control', { type: 'text', value: state.name });

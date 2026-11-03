@@ -150,15 +150,18 @@ def test_a_mohr_coulomb_soil_follows_the_dimension():
 
 # ── A new soil and a changed one ───────────────────────────────────────────
 
-def test_a_new_soil_of_a_model_takes_its_law_and_defaults_in_the_project_s_units():
+def test_a_new_soil_of_a_model_is_the_blank_soil_made_that_model_in_the_window():
+    """Create soil, then Mohr-Coulomb from the Soil model list: the law, and nothing it
+    must have -- the strength stays the user's to type, as the stiffness does."""
     project = blank_project().model_copy(update={"unit_system": "kN"})
 
     material, notes = drafts.soil(project, "clay", model=soil_models.MOHR_COULOMB)
 
     assert material.constitutive_law == MC_2D
-    assert material.variables["GEO_COHESION"] == pytest.approx(1.0)        # kPa
-    assert material.variables["YOUNG_MODULUS"] == pytest.approx(1.0e4)
-    assert notes == []
+    assert material.variables == {**soil_models.blank_si(),
+                                  "GEO_ENABLE_TENSION_CUT_OFF": False}
+    assert "GEO_COHESION" in soil_models.missing(MC_2D, material.variables)
+    assert notes == ["Filled in from the Mohr-Coulomb defaults: GEO_ENABLE_TENSION_CUT_OFF."]
 
 
 def test_a_preset_with_a_strength_is_a_mohr_coulomb_soil_ready_to_run():
@@ -405,6 +408,29 @@ def test_a_linear_hardening_slope_left_out_is_written_as_0_and_a_negative_one_re
         "GEO_FRICTION_ANGLE_FUNCTION_COEFFICIENTS": -0.1})
     with pytest.raises(MaterialError, match="cannot be negative"):
         deck(softening)
+
+
+# ── A new soil, as the window and the command line make it ─────────────────
+
+def test_a_new_soil_is_the_blank_one_the_window_creates():
+    project = blank_project().model_copy(update={"unit_system": "kN"})
+
+    material, notes = drafts.soil(project, "peat")
+
+    assert material.constitutive_law == ELASTIC_2D
+    assert material.variables == soil_models.blank_si()
+    assert material.variables["GEO_DRAINAGE_TYPE"] == "DRAINED"
+    assert soil_models.missing(ELASTIC_2D, material.variables) == [
+        "YOUNG_MODULUS", "POISSON_RATIO", "DENSITY_SOLID", "POROSITY"]
+    assert notes == []
+
+
+def test_a_value_typed_on_a_blank_soil_fills_nothing_else_in():
+    project = session.add_material(blank_project(), drafts.soil(blank_project(), "peat")[0])
+
+    project = session.update_material(project, "peat", variables={"YOUNG_MODULUS": 2.0e6})
+
+    assert set(project.material("peat").variables) == {*soil_models.blank_si(), "YOUNG_MODULUS"}
 
 
 def test_an_undrained_soil_s_poisson_ratio_is_skempton_s_clamped_as_kratos_clamps_it():

@@ -241,6 +241,12 @@ def add_material(args: argparse.Namespace) -> Answer:
         project = session.update_material(project, args.id, variables=variables)
     answer = edited(args, project, f"added material {args.id}")
     answer.lines += notes
+    # A new soil is blank, as the GUI's Create soil makes it: said, as its window says it.
+    added = project.material(args.id)
+    lacks = soil_models.missing(added.constitutive_law, added.variables)
+    if lacks:
+        answer.lines.append(f"Still to fill in before a calculation: {', '.join(lacks)} "
+                            f"(`material set {args.id} NAME=VALUE`).")
     return answer
 
 

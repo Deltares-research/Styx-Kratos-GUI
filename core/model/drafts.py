@@ -31,10 +31,11 @@ SOIL_LAWS = dict(soil_models.MODELS[soil_models.LINEAR_ELASTIC].laws)
 """The law a new soil starts with, by the project's dimension (`App.PropertySets.lawFor`)."""
 
 SOIL_DEFAULTS_SI = soil_models.defaults_si(soil_models.LINEAR_ELASTIC)
-"""A new soil: a loose drained sand, in SI (`App.PropertySets.KINDS.soil.defaults`), the
-linear elastic model's defaults (`core/model/soil_models.py`). Porosity 0, as in Kratos'
-reference, so the soil weighs DENSITY_SOLID g -- 17 kN/m3 -- above and below the water
-alike."""
+"""A complete soil: a loose drained sand, in SI (`App.PropertySets.KINDS.soil.defaults`),
+the linear elastic model's defaults (`core/model/soil_models.py`). Porosity 0, as in
+Kratos' reference, so the soil weighs DENSITY_SOLID g -- 17 kN/m3 -- above and below the
+water alike. What the GUI gives a layer that has no soil to be of; a soil the user
+creates starts blank (`soil`)."""
 
 SOIL_COLOR = "#9aa7b4"
 """The colour a new material gets (`App.newMaterialDefaults`)."""
@@ -109,12 +110,15 @@ def _library_preset(preset_id: str) -> dict:
 def soil(project: Project, id: str, *, name: str | None = None, preset: str | None = None,
          color: str | None = None, law: str | None = None,
          model: str | None = None) -> tuple[Material, list[str]]:
-    """A new soil for `project`: the default sand, or the library preset `preset`, with
-    the law of the project's dimension and its variables in the project's units.
+    """A new soil for `project`: the blank soil the material window's **Create soil**
+    makes (`soil_models.blank_si`), or the library preset `preset`, with the law of the
+    project's dimension and its variables in the project's units.
 
     `model` (`core/model/soil_models.py`) makes it that soil model instead of linear
-    elastic: its law, and its defaults for what the sand or the preset lacks. `law` names
-    any other law, written as typed.
+    elastic: its law, and what choosing it in the window fills in (`fill_choice`) -- for
+    a blank soil, nothing the law must have, which stays the user's to type; for a
+    preset, its defaults for what the preset lacks. `law` names any other law, written
+    as typed.
 
     Returns the material and what the unit conversion and the model had to say about it.
     """
@@ -139,7 +143,12 @@ def soil(project: Project, id: str, *, name: str | None = None, preset: str | No
             if model == start["model"]:
                 filled = []
     else:
-        variables_si = soil_models.defaults_si(model or soil_models.LINEAR_ELASTIC)
+        # Created as the window creates it, then made `model` as the window's list does.
+        blank_law = soil_models.law(soil_models.LINEAR_ELASTIC, project.dimension)
+        variables_si = soil_models.blank_si()
+        if model is not None and model != soil_models.LINEAR_ELASTIC:
+            filled = soil_models.fill_choice(blank_law, soil_models.blank_si(), chosen,
+                                             variables_si, "SI", flow=reads_flow(project))
     variables, notes = units.convert_variables(variables_si, "SI", project.unit_system)
     note = soil_models.filled_note(model, filled) if model is not None else None
     if note:

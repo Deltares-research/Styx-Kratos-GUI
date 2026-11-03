@@ -142,7 +142,9 @@ kratos-cli parts pit.json                                 # soil_top__lift1, ...
   `set --top` or `--bottom` moves a level and the neighbour's with it, and refuses a
   level that would cross the neighbour. `split` halves a layer, and `remove` closes the
   gap with the layer above.
-- **Materials** start as the GUI starts them: the default loose sand, or a library preset
+- **Materials** start as the GUI's **Create soil** starts them: linear elastic,
+  `DRAINED` and saturated below the phreatic level, with nothing else; the command
+  lists what is still to fill in before a calculation. Or from a library preset
   (`--preset`). The law follows the model's dimension, and the values are converted into
   the project's units. Variables given as `NAME=VALUE` are Kratos' own, in the project's
   units; `get P materials[ID].variables` lists the values a material has. `--color` is a
@@ -151,7 +153,7 @@ kratos-cli parts pit.json                                 # soil_top__lift1, ...
   linear elastic soil and 1 − sin φ for a Mohr-Coulomb one, into
   `initial_materials.json`, but that warning does not list it.
 - **Soil models**: `--model linear-elastic` or `--model mohr-coulomb` sets the law for the
-  model's dimension, as the **Soil model** list of the Material set window does. The
+  model's dimension, as the **Soil model** list of the Soil material window does. The
   values the soil already has stay. The values the model needs and the soil does not
   have get the model's defaults, and the command prints their names; a soil that still
   has empty values, such as a new one, gets none of the values the law needs, as in the

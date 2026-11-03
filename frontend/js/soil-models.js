@@ -140,6 +140,31 @@ App.SoilModels = (function () {
     return out;
   }
 
+  /* What the law `name` cannot run without and a soil holding `variables` leaves blank. */
+  function missing(name, variables) {
+    variables = variables || {};
+    return required(name, variables).filter(function (n) { return number(variables, n) === null; });
+  }
+
+  /* `fill`, as a choice in the material window fills -- a model, a drainage type, a
+     flag. A soil still being filled in by hand, `missing` something before the choice,
+     gets no number its new law must have, and nothing it was listing and left blank. */
+  function fillChoice(beforeLaw, before, afterLaw, after, system, flow) {
+    var skip = [];
+    if (missing(beforeLaw, before).length) {
+      skip = parameters(modelOf(afterLaw)).filter(function (p) { return p.required; })
+        .concat(shown(modelOf(beforeLaw), before, flow).filter(function (p) {
+          return !has(before, p.name);
+        }))
+        .map(function (p) { return p.name; });
+    }
+    return fill(beforeLaw, before, afterLaw, after, system, skip, flow);
+  }
+
+  /* A soil to fill in by hand, in SI: the catalogue's (core/model/soil_models.py
+     `blank_si`), which `kratos-cli material add` starts from too. */
+  function blankSI() { return JSON.parse(JSON.stringify(table().blank)); }
+
   function filledNote(model, names) {
     if (!names.length) return null;
     return 'Filled in from the ' + label(model) + ' defaults: ' + names.join(', ') + '.';

@@ -13,7 +13,7 @@ import pytest
 
 from core import session
 from core.geometry import cad_import, primitives
-from core.model import drafts
+from core.model import drafts, soil_models
 from tests.models import excavation
 from tests.test_importer import obj_text
 
@@ -163,9 +163,24 @@ def test_material_add_of_a_soil_model(cli, site):
     assert ran.code == 0, ran.err
     clay = session.load(site).materials[-1]
     assert clay.constitutive_law == "GeoMohrCoulombLawPlaneStrain"
-    assert (clay.variables["GEO_FRICTION_ANGLE"], clay.variables["GEO_DILATANCY_ANGLE"]) == \
-        (25, 0.0)
+    assert clay.variables["GEO_FRICTION_ANGLE"] == 25
+    assert "GEO_DILATANCY_ANGLE" not in clay.variables, \
+        "a blank soil made Mohr-Coulomb gets no strength, as in the GUI"
+    assert ("Still to fill in before a calculation: YOUNG_MODULUS, POISSON_RATIO, "
+            "DENSITY_SOLID, POROSITY, GEO_COHESION, GEO_DILATANCY_ANGLE") in ran.out
     assert "Mohr-Coulomb (GeoMohrCoulombLawPlaneStrain)" in cli("material", site, "list").out
+
+
+def test_material_add_makes_the_soil_the_gui_s_create_soil_makes(cli, site):
+    ran = cli("material", site, "add", "peat")
+
+    assert ran.code == 0, ran.err
+    peat = session.load(site).material("peat")
+    assert peat.constitutive_law == "GeoLinearElasticPlaneStrain2DLaw"
+    assert peat.variables == soil_models.blank_si()
+    assert "Still to fill in before a calculation: YOUNG_MODULUS" in ran.out
+    assert cli("material", site, "set", "peat", "YOUNG_MODULUS=2e6").code == 0
+    assert "POISSON_RATIO" not in session.load(site).material("peat").variables
 
 
 def test_material_set_model_fills_and_says_what_it_filled(cli, site):
@@ -353,6 +368,11 @@ def test_the_ground_of_the_test_model_is_built_with_commands_alone(cli, tmp_path
             "--color", material.color, "--law", material.constitutive_law,
             *(f"{name}={value if isinstance(value, str) else repr(value)}"
               for name, value in material.variables.items()))
+        # A new soil starts blank; what it has that this one has not goes.
+        extra = [name for name in soil_models.blank_si() if name not in material.variables]
+        if extra:
+            run("material", path, "set", material.id,
+                *(word for name in extra for word in ("--unset", name)))
     for layer in target.layers:
         run("layer", path, "add", layer.id, "--material", layer.mat, "--name", layer.name,
             "--bottom", repr(layer.bottom))

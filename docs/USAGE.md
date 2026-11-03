@@ -115,19 +115,28 @@ and the bottom (**y min**) of a layer in the Selection explorer. This is the sam
 
 For a layer that is not horizontal, draw a soil surface or a soil volume (see below).
 
-### Material sets
+### Soil materials
 
-Click **Show material sets…**. Each soil material is a Kratos property set: a constitutive
+Click **Soil materials…**. Each soil material is a Kratos property set: a constitutive
 law and its parameters.
 
-- To add a soil, select a preset in **Default library** (Fill, Sand loose, Sand dense, Clay
-  soft, Clay stiff or Bedrock) and click **Add to project**. Styx adds a copy that you can
-  change.
+- To add a soil, click **Create soil**. Styx adds a linear elastic soil that is drained
+  (`DRAINED`) and saturated below the phreatic level (`SaturatedBelowPhreaticLevelLaw`), and
+  opens its properties. `kratos-cli material add` makes the same soil. The other values are empty: type them. The line at the bottom of
+  the window lists the values that the soil still needs for a calculation. Until you type
+  K0, the window shows the K0 that the export calculates from the Poisson's ratio (linear
+  elastic) or the friction angle (Mohr-Coulomb).
+- To start from a preset instead, go to **Default soil material library** under the soils, select a preset
+  (Fill, Sand loose, Sand dense, Clay soft, Clay stiff or Bedrock) and click **Add to
+  project**. Styx adds a copy that you can change. The presets with a cohesion and a
+  friction angle are Mohr-Coulomb soils; Bedrock is linear elastic.
 - To change a material, click **Properties…** in its row.
 - To make a material Mohr-Coulomb, open **Properties…** and select **Mohr-Coulomb** in
   **Soil model**. Styx sets the Kratos law for the dimension of the model, keeps the values
   the material has, and fills in defaults for the others. The line at the bottom of the
-  window lists the values it filled in. The material is then ready for a calculation.
+  window lists the values it filled in. The material is then ready for a calculation. For a
+  soil that still has empty values, such as a new soil, Styx fills in no values that you
+  must type, for example the friction angle: the soil stays yours to fill in.
 - In the **Properties…** window, the parameters are in groups (Drainage, Stiffness,
   Weight, Saturation, Flow, Grain-water interaction, Strength, Hardening, Initial
   stresses). Each has
@@ -154,9 +163,8 @@ law and its parameters.
   in the Soil materials window; its unit weight is that of the water level. Empty, each is
   the value of water at 20 °C.
 - For any other Kratos law, for example a UDSM, select **Other** in **Soil model** and type
-  the law name. Styx writes it as you type it, with the variables you give it.
-- To give a material the strength and permeability of an interface, select the material, then
-  select an interface preset and click **Apply to selected**.
+  the law name. Styx writes it as you type it, with the variables you give it: only here
+  can you add variables of your own.
 - Click **OK** to save the materials, or **Cancel** to forget your changes.
 
 The preset values are only a start. Check them for your soil.
@@ -536,7 +544,7 @@ Type a command in the command box below the log, and press <kbd>Enter</kbd>. Use
 | `boundary`, `boundary standard` | Lists the boundary conditions, or puts the standard supports back |
 | `gravity`, `gravity on`, `gravity off` | Shows gravity, or switches it on or off |
 | `units`, `units SI`, `units kN` | Shows or changes the unit system |
-| `soillayers`, `materials` | Opens the **Modify soil layers** or **Material sets** window |
+| `soillayers`, `materials` | Opens the **Modify soil layers** or **Soil materials** window |
 | `cleargeometry` | Removes all drawn and imported solids |
 | `colour <part>`, `colour all`, `colour off` | Shows parts of the mesh in their own colour |
 | `node <id>` | Shows the parts that contain a node of the mesh |

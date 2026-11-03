@@ -377,6 +377,37 @@ def fill(before_law: str | None, before: dict, after_law: str, after: dict,
             return filled
 
 
+def missing(name: str, variables: dict) -> list[str]:
+    """What the law `name` cannot run without and a soil holding `variables` leaves
+    blank: what the window says is still to fill in."""
+    return [n for n in required(name, variables) if _number(variables.get(n)) is None]
+
+
+def fill_choice(before_law: str, before: dict, after_law: str, after: dict, system: str,
+                flow: bool = False, skip: tuple[str, ...] = ()) -> list[str]:
+    """`fill`, as a choice in the material window fills -- a model, a drainage type, a
+    flag (`App.MaterialSets` `choose`). A soil still being filled in by hand, `missing`
+    something before the choice, gets no number its new law must have, and nothing it
+    was listing and left blank: those stay the user's to type. Nor is a name in `skip`
+    filled."""
+    if missing(before_law, before):
+        skip += tuple(p.name for p in parameters(model_of(after_law)) if p.required) + \
+            tuple(p.name for p in shown(model_of(before_law), before, flow)
+                  if p.name not in before)
+    return fill(before_law, before, after_law, after, system, skip, flow)
+
+
+def blank_si() -> dict:
+    """A soil to fill in by hand, in SI: what the material window's **Create soil** and
+    `kratos-cli material add` both start from. Linear elastic, `DRAINED`, saturated below
+    the phreatic level -- with the saturations that retention law cannot run without --
+    and nothing else: its stiffness and weight are the user's to type (`missing`)."""
+    soil: dict = {"GEO_DRAINAGE_TYPE": "DRAINED"}
+    for name in ("RETENTION_LAW", "SATURATED_SATURATION", "RESIDUAL_SATURATION"):
+        soil[name] = next(p.default for p in parameters(LINEAR_ELASTIC) if p.name == name)
+    return soil
+
+
 def default_in(parameter: Parameter, system: str) -> Any:
     """`parameter`'s default in the unit system `system`; None when it has none."""
     value = parameter.default

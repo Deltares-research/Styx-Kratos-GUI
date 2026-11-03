@@ -40,7 +40,7 @@
     }).then(function () { T.eq(JSON.stringify(App.MATERIALS), before); });
   });
 
-  test('material dialog adds library soil, applies interface preset and cancels both', function () {
+  test('material dialog adds library soil, has no interface preset and cancels', function () {
     var saved = App.MATERIALS, savedLayers = App.LAYERS;
     var host = document.createElement('div'); host.id = 'modal-layer'; document.body.appendChild(host);
     // Closing the dialog remounts the Model explorer, which needs its host.
@@ -49,11 +49,9 @@
     App.MATERIALS = []; App.LAYERS = [];
     try {
       App.Dialogs.materials();
-      var apply = host.querySelector('[data-action="apply-interface-preset"]');
+      T.eq(host.querySelector('[data-action="apply-interface-preset"]'), null);
       host.querySelector('[data-action="add-soil-preset"]').click();
       T.eq(App.MATERIALS.length, 1);
-      apply.click();
-      T.eq(App.MATERIALS[0].rInter, App.MaterialLibrary.interfaces()[0].rInter);
       Array.from(host.querySelectorAll('.dlg-foot button')).find(function (b) {
         return b.textContent === 'Cancel';
       }).click();
@@ -114,13 +112,17 @@
       App.MATERIALS = [];
       App.PROJECT = { unit_system: 'kN', dimension: 3 };
       var m = App.MaterialLibrary.addSoil('m2');
-      T.eq(m.constitutive_law, 'GeoIncrementalLinearElastic3DLaw');
+      T.eq(m.constitutive_law, 'GeoMohrCoulombLaw3D', 'a soil with a strength is Mohr-Coulomb');
+      T.near(m.variables.GEO_COHESION, 0.5, 1e-12, 'its own cohesion, in kPa');
+      T.eq(m.variables.GEO_DILATANCY_ANGLE, 0, 'and the model\'s defaults for the rest');
       T.near(m.variables.YOUNG_MODULUS, 2.5e4, 1e-6);
       T.near(m.variables.DENSITY_SOLID, 18 / 9.81, 1e-9);
       T.eq(m.variables.GEO_FRICTION_ANGLE, 32.0);
       App.PROJECT = { unit_system: 'SI', dimension: 2 };
       var si = App.MaterialLibrary.addSoil('m2');
-      T.eq(si.constitutive_law, 'GeoLinearElasticPlaneStrain2DLaw');
+      T.eq(si.constitutive_law, 'GeoMohrCoulombLawPlaneStrain');
+      T.eq(App.MaterialLibrary.addSoil('m6').constitutive_law, 'GeoLinearElasticPlaneStrain2DLaw',
+           'bedrock has no strength: linear elastic');
       T.eq(si.variables.YOUNG_MODULUS, 2.5e7);
     } finally { App.PROJECT = saved; App.MATERIALS = savedMaterials; }
   });

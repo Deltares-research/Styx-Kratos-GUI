@@ -89,8 +89,10 @@
 
   T.test('a left-out derivable variable shows as derived, labelled in the project units', function () {
     var rows = P.rows('soil', soil(), 2);
+    var k0 = rows.filter(function (r) { return r[0] === 'K0_NC'; })[0];
+    T.eq(k0.slice(0, 4), ['K0_NC', 'derived', '', true]);
     var porosity = rows.filter(function (r) { return r[0] === 'POROSITY'; })[0];
-    T.eq(porosity.slice(0, 4), ['POROSITY', 'derived', '', true]);
+    T.eq(porosity.slice(0, 4), ['POROSITY', '—', '', true], 'the soil\'s own: nothing derives it');
     var modulus = rows.filter(function (r) { return r[0] === 'YOUNG_MODULUS'; })[0];
     T.eq(modulus[2], App.Units.variableLabel('YOUNG_MODULUS'));
     T.eq(modulus[4].kind, 'number');

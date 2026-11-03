@@ -79,7 +79,7 @@ App.MaterialLibrary = (function () {
   }
   function applyInterface(material, id) {
     var preset = find(interfaces, id);
-    if (!material) throw new Error('Select a material set first.');
+    if (!material) throw new Error('Select a soil material first.');
     material.rInter = preset.rInter;
     material.interfacePerm = preset.interfacePerm;
   }

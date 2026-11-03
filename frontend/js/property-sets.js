@@ -129,8 +129,10 @@ App.PropertySets = (function () {
   }
 
   /* An error sentence, or null. Mirrors what the server and the export refuse, so a set
-     accepted here does not come back as a 422 or an export error. */
-  function validate(kindName, set) {
+     accepted here does not come back as a 422 or an export error. `partial`: a value
+     the law needs may still be blank -- the server stores such a set and the export
+     names what it lacks -- so a soil can be filled in one value at a time. */
+  function validate(kindName, set, partial) {
     var k = kind(kindName);
     if (!set.constitutive_law || !String(set.constitutive_law).trim()) {
       return 'A property set needs a constitutive law.';
@@ -177,7 +179,7 @@ App.PropertySets = (function () {
                set.constitutive_law === lawFor(kindName, 3)) {
       needed = k.required;
     }
-    if (needed) {
+    if (needed && !partial) {
       var missing = needed.filter(function (n) { return !isNumber(variables[n]); });
       if (missing.length) {
         return set.constitutive_law + ' needs ' + missing.join(', ') + '.';

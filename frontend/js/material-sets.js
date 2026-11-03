@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════════════════
-   material-sets.js — the Material sets dialog, for Kratos property sets.
+   material-sets.js — the Soil materials dialog, for Kratos property sets.
 
    The frozen dialog (js/dialogs.js) edits an engineering-units sheet: unit weights in kN/m3,
    E in kN/m2, permeability in m/day, a material model and a drainage type -- numbers
@@ -61,6 +61,36 @@ App.MaterialSets = (function () {
 
   var sequence = 0;
 
+  /* Earthy colours, far enough apart that soils side by side in a section can be told
+     from each other, and none the grey of the mesh. */
+  var PALETTE = [
+    '#d8c48a', '#8fa86b', '#6f8fa8', '#c4785a', '#9a80b0', '#5fa89f',
+    '#b08a6a', '#b0606f', '#7f9f3f', '#4f6f9f', '#d89a4a', '#8d8d99'
+  ];
+
+  function hex(h, s, l) {
+    var a = s * Math.min(l, 1 - l);
+    function channel(n) {
+      var k = (n + h / 30) % 12;
+      var v = l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1));
+      return ('0' + Math.round(v * 255).toString(16)).slice(-2);
+    }
+    return '#' + channel(0) + channel(8) + channel(4);
+  }
+
+  /* A colour no soil has yet: the palette's first free one, then hues a golden angle
+     apart once the palette is spent, so every soil added looks different. */
+  function freshColor() {
+    var used = {};
+    (App.MATERIALS || []).forEach(function (m) { used[String(m.color).toLowerCase()] = true; });
+    var free = PALETTE.filter(function (c) { return !used[c]; })[0];
+    if (free) return free;
+    for (var n = 0; ; n++) {
+      var c = hex((n * 137.508) % 360, 0.45, 0.6);
+      if (!used[c]) return c;
+    }
+  }
+
   /* A brand new soil: a loose drained sand in the project's units, valid as it stands
      so it can be saved without touching a field first. */
   function newMaterial() {
@@ -68,7 +98,7 @@ App.MaterialSets = (function () {
     do { sequence += 1; id = 'mx' + sequence; }
     while ((App.MATERIALS || []).some(function (m) { return m.id === id; }));
     var set = P.defaults('soil', App.Units.current(), dimension());
-    return { id: id, name: 'Material_' + ((App.MATERIALS || []).length + 1), color: '#9aa7b4',
+    return { id: id, name: 'Material_' + ((App.MATERIALS || []).length + 1), color: freshColor(),
              constitutive_law: set.constitutive_law, variables: set.variables, tables: {},
              rInter: 0.70, interfacePerm: 'Neutral' };
   }
@@ -79,27 +109,43 @@ App.MaterialSets = (function () {
     return m;
   }
 
-  function duplicateMaterial(source) {
-    var m = copy(source);
-    m.id = newMaterial().id;
-    m.name = source.name + ' (copy)';
-    App.MATERIALS.splice(App.MATERIALS.indexOf(source) + 1, 0, m);
+  /* A soil to fill in by hand: linear elastic, drained, saturated below the phreatic
+     level, and nothing else -- the catalogue's (App.SoilModels.blankSI), which
+     `kratos-cli material add` starts from too. Its stiffness and weight are the user's
+     to type, so it is not ready for a calculation until they are (`missing`); what is
+     left blank and derivable -- K0 from the Poisson ratio or the friction angle -- is
+     shown as derived. */
+  function blankSoil() {
+    var m = newMaterial();
+    m.constitutive_law = S.law('linear_elastic', dimension());
+    m.variables = App.Units.convertVariables(S.blankSI(), 'SI', App.Units.current());
     return m;
   }
 
-  /* What a table cell shows for one variable: the number, or that the export derives
-     it, or a dash. */
-  function shown(m, name) {
-    var value = (m.variables || {})[name];
-    if (value === undefined) return P.derivable('soil', name) ? 'derived' : '—';
-    return typeof value === 'number' ? String(+value.toPrecision(6)) : P.format(value);
+  function createSoil() {
+    var m = blankSoil();
+    App.MATERIALS.push(m);
+    return m;
   }
 
-  var COLUMNS = ['GEO_DRAINAGE_TYPE', 'DENSITY_SOLID', 'YOUNG_MODULUS', 'GEO_FRICTION_ANGLE'];
+  /* What the soil's model needs and the soil leaves blank: the Kratos names. */
+  function missing(m) {
+    return S.missing(m.constitutive_law, m.variables || {});
+  }
 
-  function heading(name) {
-    var unit = App.Units.variableLabel(name);
-    return name + (unit ? ' [' + unit + ']' : '');
+  function labels(m, names) {
+    var model = S.modelOf(m.constitutive_law);
+    return names.map(function (name) { return S.find(model, name).label; });
+  }
+
+  function duplicateMaterial(source) {
+    var m = copy(source);
+    var fresh = newMaterial();
+    m.id = fresh.id;
+    m.color = fresh.color;
+    m.name = source.name + ' (copy)';
+    App.MATERIALS.splice(App.MATERIALS.indexOf(source) + 1, 0, m);
+    return m;
   }
 
   /* ── The dialog ──────────────────────────────────────────────────── */
@@ -124,14 +170,9 @@ App.MaterialSets = (function () {
     function render() {
       App.UI.clear(body);
       App.MATERIALS.forEach(function (m) {
-        var swatch = el('span.tree-swatch');
+        var swatch = el('span.tree-swatch.material-swatch');
         swatch.style.background = m.color;
-        var cells = [el('td', null, swatch), el('td', { text: m.name }),
-                     el('td', { text: S.label(S.modelOf(m.constitutive_law)),
-                                title: m.constitutive_law })];
-        COLUMNS.forEach(function (name) {
-          cells.push(el('td' + (name === 'GEO_DRAINAGE_TYPE' ? '' : '.num'), { text: shown(m, name) }));
-        });
+        var cells = [el('td', null, swatch), el('td', { text: m.name })];
         cells.push(el('td', null, el('button.btn.btn-sm', {
           text: 'Properties…', type: 'button', 'data-action': 'material-properties',
           onclick: function (event) {
@@ -141,13 +182,24 @@ App.MaterialSets = (function () {
             render();
           } })));
         var row = el('tr' + (m.id === selected ? '.sel' : ''), { 'data-material': m.id }, cells);
+        var lacks = labels(m, missing(m));
+        if (lacks.length) row.title = 'Still to fill in: ' + lacks.join(', ') + '.';
         row.addEventListener('click', function () { selected = m.id; say(null); render(); });
         body.appendChild(row);
       });
     }
 
-    [['new', 'New material set'], ['copy', 'Duplicate material set'],
-     ['delete', 'Delete material set'], null, ['materials', 'Properties…']].forEach(function (spec) {
+    /* A new soil is a blank one, opened to be filled in. */
+    function create() {
+      var m = createSoil();
+      selected = m.id;
+      say('Created ' + m.name + '. Fill in its values.');
+      render();
+      editor(m, render);
+    }
+
+    [['new', 'Create soil'], ['copy', 'Duplicate soil material'],
+     ['delete', 'Delete soil material'], null, ['materials', 'Properties…']].forEach(function (spec) {
       if (!spec) { toolbar.appendChild(el('span.tbsep')); return; }
       var button = el('button.tbtn', { type: 'button', 'data-action': spec[0] });
       button.appendChild(App.UI.icon(spec[0]));
@@ -155,13 +207,8 @@ App.MaterialSets = (function () {
       button.addEventListener('click', function () {
         App.UI.hideTip();
         var m = current();
-        if (spec[0] === 'new') {
-          selected = App.addMaterial().id;
-          say('Added ' + current().name + '. Open Properties… to set its values.');
-          render();
-          return;
-        }
-        if (!m) { say('Select a material set first.', true); return; }
+        if (spec[0] === 'new') { create(); return; }
+        if (!m) { say('Select a soil material first.', true); return; }
         if (spec[0] === 'copy') {
           selected = App.duplicateMaterial(m).id;
           say('Duplicated ' + m.name + '.');
@@ -185,15 +232,16 @@ App.MaterialSets = (function () {
     });
 
     return App.Dialogs.open({
-      title: 'Material sets', width: 860, height: 480, toolbar: toolbar, onClose: onClose,
+      title: 'Soil materials', width: 860, height: 620, toolbar: toolbar, onClose: onClose,
       buttons: [{ label: 'OK', primary: true }, { label: 'Cancel' }],
       build: function (root) {
         var wrap = el('div.dlg-simple');
-        wrap.appendChild(library(function (id) { selected = id; render(); }, current, say));
-        wrap.appendChild(el('h3', { text: 'Soil and interfaces — ' + App.Units.title() }));
+        wrap.appendChild(el('h3', { text: 'Soils — ' + App.Units.title() }));
+        wrap.appendChild(el('div.lay-toolbar', null, [el('button.btn.btn-sm.btn-primary', {
+          text: 'Create soil', type: 'button', 'data-action': 'create-soil', onclick: create })]));
         table = el('table.mat-table.selectable.material-sets');
         var head = el('tr');
-        ['', 'Identification', 'Soil model'].concat(COLUMNS.map(heading), ['']).forEach(function (h) {
+        ['', 'Identification', ''].forEach(function (h) {
           head.appendChild(el('th', { text: h }));
         });
         table.appendChild(el('thead', null, head));
@@ -201,6 +249,7 @@ App.MaterialSets = (function () {
         table.appendChild(body);
         wrap.appendChild(table);
         wrap.appendChild(water(function (message, invalid) { say(message, invalid); }));
+        wrap.appendChild(library(function (id) { selected = id; render(); }, say));
         hint = el('div.lay-hint', { style: 'border-top:0;background:none;padding:6px 0' });
         wrap.appendChild(hint);
         root.appendChild(wrap);
@@ -260,11 +309,12 @@ App.MaterialSets = (function () {
     return box;
   }
 
-  function library(onAdded, current, say) {
+  /* The presets, below the soils. */
+  function library(onAdded, say) {
     var box = el('div.material-library');
-    box.appendChild(el('h3', { text: 'Default library' }));
-    box.appendChild(el('p', { text: 'Copy a soil preset into this project, or apply interface ' +
-      'defaults to the selected material. Starting values in the project\'s units; review them.' }));
+    box.appendChild(el('h3', { text: 'Default soil material library' }));
+    box.appendChild(el('p', { text: 'Copy a soil preset into this project. Starting values in ' +
+      'the project\'s units; review them.' }));
     var soils = el('select', { 'aria-label': 'Soil preset' });
     App.MaterialLibrary.soils().forEach(function (m) {
       soils.appendChild(el('option', { value: m.id, text: m.name }));
@@ -274,20 +324,7 @@ App.MaterialSets = (function () {
         onclick: function () {
           var m = App.MaterialLibrary.addSoil(soils.value);
           onAdded(m.id);
-          say('Added ' + m.name + ' from the default library. Open Properties… to review it.');
-        } })]));
-    var contacts = el('select', { 'aria-label': 'Interface preset' });
-    App.MaterialLibrary.interfaces().forEach(function (p) {
-      contacts.appendChild(el('option', { value: p.id,
-        text: p.name + ' — Rinter ' + p.rInter + ', ' + p.interfacePerm }));
-    });
-    box.appendChild(el('div.lay-toolbar', null, [el('span', { text: 'Interface' }), contacts,
-      el('button.btn.btn-sm', { text: 'Apply to selected', type: 'button',
-        'data-action': 'apply-interface-preset', onclick: function () {
-          var m = current();
-          if (!m) { say('Select a material set first.', true); return; }
-          App.MaterialLibrary.applyInterface(m, contacts.value);
-          say('Applied interface defaults to ' + m.name + ': Rinter ' + m.rInter + ', ' + m.interfacePerm + '.');
+          say('Added ' + m.name + ' from the default soil material library. Open Properties… to review it.');
         } })]));
     return box;
   }
@@ -318,17 +355,26 @@ App.MaterialSets = (function () {
                   'blank value shows what the export derives in its place; an invalid ' +
                   'entry is refused and put back.';
 
+    /* No message: what the soil still lacks for a calculation, or the usual line. */
     function say(message, notice) {
       if (!hint) return;
-      hint.textContent = message || DEFAULT;
+      var lacks = labels(m, missing(m));
+      hint.textContent = message || (lacks.length
+        ? 'Still to fill in before a calculation: ' + lacks.join(', ') + '.' : DEFAULT);
       hint.classList.toggle('invalid', !!message && !notice);
     }
 
+    /* A value the law needs may stay blank -- a soil is filled in one value at a time --
+       but one the soil holds is not blanked, and none may be invalid. */
     function attempt(apply) {
       var before = copy(m);
       apply();
+      var blanked = missing(m).filter(function (name) {
+        return typeof (before.variables || {})[name] === 'number';
+      });
       var problem = (!m.name || !m.name.trim()) ? 'Identification cannot be empty.'
-                                               : P.validate('soil', m);
+                  : blanked.length ? m.constitutive_law + ' needs ' + blanked.join(', ') + '.'
+                  : P.validate('soil', m, true);
       if (problem) {
         Object.keys(m).forEach(function (k) { delete m[k]; });
         Object.assign(m, before);
@@ -342,13 +388,18 @@ App.MaterialSets = (function () {
     }
 
     /* An edit that can list more -- a model, a choice, a flag -- with the defaults of
-       what it lists anew filled in. */
+       what it lists anew filled in (App.SoilModels.fillChoice, which `kratos-cli
+       material add --model` fills with too). A soil still being filled in by hand gets
+       no number it must have, and nothing it was listing and left blank: those stay the
+       user's to type, a model chosen or not. */
     function choose(apply) {
       var beforeLaw = m.constitutive_law, before = copy(m.variables);
+      var flow = flowProject();
       var filled = [];
       var ok = attempt(function () {
         apply();
-        filled = S.fill(beforeLaw, before, m.constitutive_law, m.variables, App.Units.current());
+        filled = S.fillChoice(beforeLaw, before, m.constitutive_law, m.variables,
+                              App.Units.current(), flow);
       });
       if (ok && filled.length) say(S.filledNote(S.modelOf(m.constitutive_law), filled), true);
       draw();
@@ -469,12 +520,21 @@ App.MaterialSets = (function () {
       return typedRow(name, p.label, derived[name]);
     }
 
+    /* The grid is rebuilt whole; where it was scrolled to is kept, so a choice that
+       lists more or less does not throw the window back to the top. */
     function draw() {
+      var scrolled = grid.scrollTop, outer = grid.parentNode, outerScrolled = outer ? outer.scrollTop : 0;
+      fill();
+      grid.scrollTop = scrolled;
+      if (outer) outer.scrollTop = outerScrolled;
+    }
+
+    function fill() {
       App.UI.clear(grid);
       grid.appendChild(el('h4', { text: 'General' }));
       grid.appendChild(field('Identification', textInput(m.name, function (v) {
         attempt(function () { m.name = v.trim(); });
-        if (title) title.textContent = 'Material set — ' + m.name;
+        if (title) title.textContent = 'Soil material — ' + m.name;
       }, { 'data-field': 'name' })));
       var colour = el('input', { type: 'color', value: m.color, 'data-field': 'color' });
       colour.addEventListener('input', function () { attempt(function () { m.color = colour.value; }); });
@@ -601,22 +661,24 @@ App.MaterialSets = (function () {
 
     m.variables = m.variables || {};
     return App.Dialogs.open({
-      title: 'Material set — ' + m.name, width: 600, height: 620,
+      title: 'Soil material — ' + m.name, width: 600, height: 620,
       buttons: [{ label: 'Close', primary: true }],
       build: function (root, ctx) {
         title = ctx && ctx.dialog ? ctx.dialog.querySelector('.dlg-title') : null;
         var wrap = el('div.dlg-simple', { style: 'display:flex;flex-direction:column;padding:0' });
-        grid = el('div.pgrid.material-variables', { style: 'padding-top:10px;flex:1;overflow:auto' });
+        grid = el('div.pgrid.material-variables', { style: 'flex:1;overflow:auto' });
         hint = el('div.lay-hint', { text: DEFAULT });
         wrap.appendChild(grid);
         wrap.appendChild(hint);
         root.appendChild(wrap);
         draw();
+        say(null);
       }
     });
   }
 
-  return { open: open, editor: editor, newMaterial: newMaterial,
+  return { open: open, editor: editor, newMaterial: newMaterial, blankSoil: blankSoil,
+           createSoil: createSoil, missing: missing,
            addMaterial: addMaterial, duplicateMaterial: duplicateMaterial };
 })();
 
