@@ -909,6 +909,21 @@ def test_a_body_an_edit_takes_away_takes_its_mesh_size_with_it(edit):
                                       in project.mesh.body_sizes.items() if key not in gone}
 
 
+def test_a_body_a_3d_edit_takes_away_takes_its_mesh_size_with_it():
+    project = with_box(seed_project())
+    assert project.dimension == 3
+    project = edits.sized(project, soil_L2=1.0)
+
+    volume_gone = session.without_custom_part(project, "drawn_0")
+    layer_gone = session.remove_layer(project, "L2")
+
+    assert volume_gone.mesh.body_sizes == {"soil_L2": 1.0}
+    assert layer_gone.mesh.body_sizes == {"drawn_0": 0.5}
+    assert session.removed_sizes(project, volume_gone) == [
+        "Removed the mesh size of drawn_0 (0.5): the edit took that body away. If it "
+        "comes back, set its size again."]
+
+
 def test_a_size_for_a_body_the_model_never_had_is_left_for_check_to_name():
     project = edits.sized(excavation_project(staged=False), soil_typo=1.0)
 
