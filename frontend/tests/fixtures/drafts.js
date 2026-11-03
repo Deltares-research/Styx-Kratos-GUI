@@ -18,11 +18,536 @@ window.DRAFTS_FIXTURE =
     "POISSON_RATIO": 0.3,
     "DENSITY_SOLID": 1732.9255861365953,
     "POROSITY": 0.0,
-    "PERMEABILITY_XX": 1.1574074074074073e-05,
-    "GEO_COHESION": 0.0,
-    "GEO_FRICTION_ANGLE": 30.0
+    "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+    "SATURATED_SATURATION": 1.0,
+    "RESIDUAL_SATURATION": 1e-10
   },
   "soil_models": {
+    "derived": [
+      {
+        "title": "a new elastic soil",
+        "law": "GeoLinearElasticPlaneStrain2DLaw",
+        "variables": {
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "YOUNG_MODULUS": 10000000.0,
+          "POISSON_RATIO": 0.3,
+          "DENSITY_SOLID": 1732.9255861365953,
+          "POROSITY": 0.0,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10
+        },
+        "system": "SI",
+        "flow": false,
+        "water": {
+          "DENSITY_WATER": 1019.367991845056,
+          "BULK_MODULUS_FLUID": 2200000000.0,
+          "DYNAMIC_VISCOSITY": 0.001
+        },
+        "derived": {
+          "BULK_MODULUS_SOLID": 10000000000.0,
+          "K0_NC": 0.4285714285714286
+        },
+        "computed": {
+          "UNIT_WEIGHT_DRY": 17000.0,
+          "UNIT_WEIGHT_SATURATED": 17000.0
+        }
+      },
+      {
+        "title": "a new Mohr-Coulomb soil, in kN",
+        "law": "GeoMohrCoulombLawPlaneStrain",
+        "variables": {
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "YOUNG_MODULUS": 10000.0,
+          "POISSON_RATIO": 0.3,
+          "DENSITY_SOLID": 1.7329255861365953,
+          "POROSITY": 0.0,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10,
+          "GEO_COHESION": 1.0,
+          "GEO_FRICTION_ANGLE": 30.0,
+          "GEO_DILATANCY_ANGLE": 0.0,
+          "GEO_ENABLE_TENSION_CUT_OFF": false
+        },
+        "system": "kN",
+        "flow": false,
+        "water": {
+          "DENSITY_WATER": 1.019367991845056,
+          "BULK_MODULUS_FLUID": 2200000.0,
+          "DYNAMIC_VISCOSITY": 1e-06
+        },
+        "derived": {
+          "BULK_MODULUS_SOLID": 10000000.0,
+          "K0_NC": 0.5
+        },
+        "computed": {
+          "UNIT_WEIGHT_DRY": 17.0,
+          "UNIT_WEIGHT_SATURATED": 17.0
+        }
+      },
+      {
+        "title": "a coupled soil with its own water",
+        "law": "GeoMohrCoulombLawPlaneStrain",
+        "variables": {
+          "GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
+          "YOUNG_MODULUS": 10000000.0,
+          "POISSON_RATIO": 0.3,
+          "DENSITY_SOLID": 1732.9255861365953,
+          "POROSITY": 0.35,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10,
+          "GEO_COHESION": 1000.0,
+          "GEO_FRICTION_ANGLE": 30.0,
+          "GEO_DILATANCY_ANGLE": 0.0,
+          "GEO_ENABLE_TENSION_CUT_OFF": false,
+          "PERMEABILITY_XX": 3e-12
+        },
+        "system": "SI",
+        "flow": false,
+        "water": {
+          "DENSITY_WATER": 1000.0,
+          "BULK_MODULUS_FLUID": 2000000000.0,
+          "DYNAMIC_VISCOSITY": 0.0013
+        },
+        "derived": {
+          "BULK_MODULUS_SOLID": 10000000000.0,
+          "PERMEABILITY_YY": 3e-12,
+          "BIOT_COEFFICIENT": 0.9991666666666666,
+          "K0_NC": 0.5
+        },
+        "computed": {
+          "UNIT_WEIGHT_DRY": 11050.000000000002,
+          "UNIT_WEIGHT_SATURATED": 14483.500000000002,
+          "HYDRAULIC_CONDUCTIVITY_XX": 2.263846153846154e-05,
+          "HYDRAULIC_CONDUCTIVITY_YY": 2.263846153846154e-05
+        }
+      },
+      {
+        "title": "a drained soil in a flow project",
+        "law": "GeoLinearElasticPlaneStrain2DLaw",
+        "variables": {
+          "GEO_DRAINAGE_TYPE": "DRAINED",
+          "DENSITY_SOLID": 2000.0
+        },
+        "system": "SI",
+        "flow": true,
+        "water": {
+          "DENSITY_WATER": 1019.367991845056,
+          "BULK_MODULUS_FLUID": 2200000000.0,
+          "DYNAMIC_VISCOSITY": 0.001
+        },
+        "derived": {
+          "BULK_MODULUS_SOLID": 10000000000.0,
+          "PERMEABILITY_XX": 1.1574074074074074e-12,
+          "PERMEABILITY_YY": 1.1574074074074074e-12,
+          "BIOT_COEFFICIENT": 1.0
+        },
+        "computed": {
+          "HYDRAULIC_CONDUCTIVITY_XX": 1.1574074074074073e-05,
+          "HYDRAULIC_CONDUCTIVITY_YY": 1.1574074074074073e-05
+        }
+      },
+      {
+        "title": "an undrained soil",
+        "law": "GeoLinearElasticPlaneStrain2DLaw",
+        "variables": {
+          "GEO_DRAINAGE_TYPE": "UNDRAINED",
+          "YOUNG_MODULUS": 10000000.0,
+          "POISSON_RATIO": 0.3,
+          "POROSITY": 0.3,
+          "BULK_MODULUS_SOLID": 500000000.0
+        },
+        "system": "SI",
+        "flow": false,
+        "water": {
+          "DENSITY_WATER": 1019.367991845056,
+          "BULK_MODULUS_FLUID": 2200000000.0,
+          "DYNAMIC_VISCOSITY": 0.001
+        },
+        "derived": {
+          "BIOT_COEFFICIENT": 0.9833333333333334,
+          "GEO_POISSON_UNDRAINED": 0.4826565733660155,
+          "K0_NC": 0.4285714285714286
+        },
+        "computed": {}
+      },
+      {
+        "title": "a law of no model with a friction angle",
+        "law": "SmallStrainUDSM2DPlaneStrainLaw",
+        "variables": {
+          "GEO_FRICTION_ANGLE": 25.0
+        },
+        "system": "SI",
+        "flow": false,
+        "water": {
+          "DENSITY_WATER": 1019.367991845056,
+          "BULK_MODULUS_FLUID": 2200000000.0,
+          "DYNAMIC_VISCOSITY": 0.001
+        },
+        "derived": {
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "BULK_MODULUS_SOLID": 10000000000.0,
+          "K0_NC": 0.5773817382593005
+        },
+        "computed": {}
+      },
+      {
+        "title": "a drained soil carrying a permeability, which is fixed",
+        "law": "GeoLinearElasticPlaneStrain2DLaw",
+        "variables": {
+          "GEO_DRAINAGE_TYPE": "DRAINED",
+          "PERMEABILITY_XX": 3e-12
+        },
+        "system": "kN",
+        "flow": false,
+        "water": {
+          "DENSITY_WATER": 1.019367991845056,
+          "BULK_MODULUS_FLUID": 2200000.0,
+          "DYNAMIC_VISCOSITY": 1e-06
+        },
+        "derived": {
+          "BULK_MODULUS_SOLID": 10000000.0
+        },
+        "computed": {}
+      },
+      {
+        "title": "a blank soil",
+        "law": "GeoLinearElasticPlaneStrain2DLaw",
+        "variables": {
+          "GEO_DRAINAGE_TYPE": "DRAINED",
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10
+        },
+        "system": "SI",
+        "flow": false,
+        "water": {
+          "DENSITY_WATER": 1019.367991845056,
+          "BULK_MODULUS_FLUID": 2200000000.0,
+          "DYNAMIC_VISCOSITY": 0.001
+        },
+        "derived": {
+          "BULK_MODULUS_SOLID": 10000000000.0
+        },
+        "computed": {}
+      }
+    ],
+    "water": [
+      {
+        "system": "SI",
+        "specific_weight": null,
+        "bulk_modulus": null,
+        "viscosity": null,
+        "water": {
+          "DENSITY_WATER": 1019.367991845056,
+          "BULK_MODULUS_FLUID": 2200000000.0,
+          "DYNAMIC_VISCOSITY": 0.001
+        }
+      },
+      {
+        "system": "kN",
+        "specific_weight": null,
+        "bulk_modulus": null,
+        "viscosity": null,
+        "water": {
+          "DENSITY_WATER": 1.019367991845056,
+          "BULK_MODULUS_FLUID": 2200000.0,
+          "DYNAMIC_VISCOSITY": 1e-06
+        }
+      },
+      {
+        "system": "SI",
+        "specific_weight": null,
+        "bulk_modulus": 2000000000.0,
+        "viscosity": null,
+        "water": {
+          "DENSITY_WATER": 1019.367991845056,
+          "BULK_MODULUS_FLUID": 2000000000.0,
+          "DYNAMIC_VISCOSITY": 0.001
+        }
+      },
+      {
+        "system": "kN",
+        "specific_weight": null,
+        "bulk_modulus": null,
+        "viscosity": 1.3e-06,
+        "water": {
+          "DENSITY_WATER": 1.019367991845056,
+          "BULK_MODULUS_FLUID": 2200000.0,
+          "DYNAMIC_VISCOSITY": 1.3e-06
+        }
+      },
+      {
+        "system": "SI",
+        "specific_weight": 9810.0,
+        "bulk_modulus": 1e+20,
+        "viscosity": 0.0013,
+        "water": {
+          "DENSITY_WATER": 1000.0,
+          "BULK_MODULUS_FLUID": 1e+20,
+          "DYNAMIC_VISCOSITY": 0.0013
+        }
+      }
+    ],
+    "blank": {
+      "GEO_DRAINAGE_TYPE": "DRAINED",
+      "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+      "SATURATED_SATURATION": 1.0,
+      "RESIDUAL_SATURATION": 1e-10
+    },
+    "fixed": [
+      {
+        "variables": {
+          "GEO_DRAINAGE_TYPE": "DRAINED"
+        },
+        "system": "SI",
+        "flow": false,
+        "fixed": 1.0
+      },
+      {
+        "variables": {
+          "GEO_DRAINAGE_TYPE": "UNDRAINED"
+        },
+        "system": "kN",
+        "flow": false,
+        "fixed": 1e-30
+      },
+      {
+        "variables": {
+          "GEO_DRAINAGE_TYPE": "DRAINED"
+        },
+        "system": "SI",
+        "flow": true,
+        "fixed": null
+      },
+      {
+        "variables": {
+          "GEO_DRAINAGE_TYPE": "FULLY_COUPLED"
+        },
+        "system": "SI",
+        "flow": false,
+        "fixed": null
+      },
+      {
+        "variables": {},
+        "system": "SI",
+        "flow": false,
+        "fixed": null
+      }
+    ],
+    "fill_choice": [
+      {
+        "title": "a blank soil made Mohr-Coulomb gets no strength",
+        "before_law": "GeoLinearElasticPlaneStrain2DLaw",
+        "before": {
+          "GEO_DRAINAGE_TYPE": "DRAINED",
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10
+        },
+        "after_law": "GeoMohrCoulombLawPlaneStrain",
+        "changes": {},
+        "system": "SI",
+        "filled": [
+          "GEO_ENABLE_TENSION_CUT_OFF"
+        ],
+        "after": {
+          "GEO_DRAINAGE_TYPE": "DRAINED",
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10,
+          "GEO_ENABLE_TENSION_CUT_OFF": false
+        }
+      },
+      {
+        "title": "a complete soil made Mohr-Coulomb gets the defaults",
+        "before_law": "GeoLinearElasticPlaneStrain2DLaw",
+        "before": {
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "YOUNG_MODULUS": 10000000.0,
+          "POISSON_RATIO": 0.3,
+          "DENSITY_SOLID": 1732.9255861365953,
+          "POROSITY": 0.0,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10
+        },
+        "after_law": "GeoMohrCoulombLawPlaneStrain",
+        "changes": {},
+        "system": "kN",
+        "filled": [
+          "GEO_COHESION",
+          "GEO_FRICTION_ANGLE",
+          "GEO_DILATANCY_ANGLE",
+          "GEO_ENABLE_TENSION_CUT_OFF"
+        ],
+        "after": {
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "YOUNG_MODULUS": 10000000.0,
+          "POISSON_RATIO": 0.3,
+          "DENSITY_SOLID": 1732.9255861365953,
+          "POROSITY": 0.0,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10,
+          "GEO_COHESION": 1.0,
+          "GEO_FRICTION_ANGLE": 30.0,
+          "GEO_DILATANCY_ANGLE": 0.0,
+          "GEO_ENABLE_TENSION_CUT_OFF": false
+        }
+      },
+      {
+        "title": "linear hardening on a complete soil brings its slopes",
+        "before_law": "GeoMohrCoulombLawPlaneStrain",
+        "before": {
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "YOUNG_MODULUS": 10000000.0,
+          "POISSON_RATIO": 0.3,
+          "DENSITY_SOLID": 1732.9255861365953,
+          "POROSITY": 0.0,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10,
+          "GEO_COHESION": 1000.0,
+          "GEO_FRICTION_ANGLE": 30.0,
+          "GEO_DILATANCY_ANGLE": 0.0,
+          "GEO_ENABLE_TENSION_CUT_OFF": false
+        },
+        "after_law": "GeoMohrCoulombLawPlaneStrain",
+        "changes": {
+          "GEO_COULOMB_HARDENING_TYPE": "Linear"
+        },
+        "system": "SI",
+        "filled": [
+          "GEO_COHESION_FUNCTION_COEFFICIENTS",
+          "GEO_FRICTION_ANGLE_FUNCTION_COEFFICIENTS",
+          "GEO_DILATANCY_ANGLE_FUNCTION_COEFFICIENTS"
+        ],
+        "after": {
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "YOUNG_MODULUS": 10000000.0,
+          "POISSON_RATIO": 0.3,
+          "DENSITY_SOLID": 1732.9255861365953,
+          "POROSITY": 0.0,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10,
+          "GEO_COHESION": 1000.0,
+          "GEO_FRICTION_ANGLE": 30.0,
+          "GEO_DILATANCY_ANGLE": 0.0,
+          "GEO_ENABLE_TENSION_CUT_OFF": false,
+          "GEO_COULOMB_HARDENING_TYPE": "Linear",
+          "GEO_COHESION_FUNCTION_COEFFICIENTS": 0.0,
+          "GEO_FRICTION_ANGLE_FUNCTION_COEFFICIENTS": 0.0,
+          "GEO_DILATANCY_ANGLE_FUNCTION_COEFFICIENTS": 0.0
+        }
+      }
+    ],
+    "shown": [
+      {
+        "model": "linear_elastic",
+        "variables": {},
+        "flow": false,
+        "shown": [
+          "GEO_DRAINAGE_TYPE",
+          "YOUNG_MODULUS",
+          "POISSON_RATIO",
+          "DENSITY_SOLID",
+          "POROSITY",
+          "RETENTION_LAW",
+          "K0_NC"
+        ]
+      },
+      {
+        "model": "mohr_coulomb",
+        "variables": {
+          "GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
+          "YOUNG_MODULUS": 10000000.0,
+          "POISSON_RATIO": 0.3,
+          "DENSITY_SOLID": 1732.9255861365953,
+          "POROSITY": 0.35,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10,
+          "GEO_COHESION": 1000.0,
+          "GEO_FRICTION_ANGLE": 30.0,
+          "GEO_DILATANCY_ANGLE": 0.0,
+          "GEO_ENABLE_TENSION_CUT_OFF": false
+        },
+        "flow": false,
+        "shown": [
+          "GEO_DRAINAGE_TYPE",
+          "YOUNG_MODULUS",
+          "POISSON_RATIO",
+          "DENSITY_SOLID",
+          "POROSITY",
+          "RETENTION_LAW",
+          "SATURATED_SATURATION",
+          "RESIDUAL_SATURATION",
+          "PERMEABILITY_XX",
+          "PERMEABILITY_YY",
+          "MINIMUM_RELATIVE_PERMEABILITY",
+          "BULK_MODULUS_SOLID",
+          "BIOT_COEFFICIENT",
+          "GEO_COHESION",
+          "GEO_FRICTION_ANGLE",
+          "GEO_DILATANCY_ANGLE",
+          "GEO_ENABLE_TENSION_CUT_OFF",
+          "GEO_COULOMB_HARDENING_TYPE",
+          "K0_NC"
+        ]
+      },
+      {
+        "model": "mohr_coulomb",
+        "variables": {
+          "GEO_DRAINAGE_TYPE": "UNDRAINED"
+        },
+        "flow": false,
+        "shown": [
+          "GEO_DRAINAGE_TYPE",
+          "GEO_POISSON_UNDRAINED",
+          "YOUNG_MODULUS",
+          "POISSON_RATIO",
+          "DENSITY_SOLID",
+          "POROSITY",
+          "RETENTION_LAW",
+          "BULK_MODULUS_SOLID",
+          "BIOT_COEFFICIENT",
+          "GEO_COHESION",
+          "GEO_FRICTION_ANGLE",
+          "GEO_DILATANCY_ANGLE",
+          "GEO_ENABLE_TENSION_CUT_OFF",
+          "GEO_COULOMB_HARDENING_TYPE",
+          "K0_NC"
+        ]
+      },
+      {
+        "model": "linear_elastic",
+        "variables": {
+          "RETENTION_LAW": "VanGenuchtenLaw"
+        },
+        "flow": true,
+        "shown": [
+          "GEO_DRAINAGE_TYPE",
+          "YOUNG_MODULUS",
+          "POISSON_RATIO",
+          "DENSITY_SOLID",
+          "POROSITY",
+          "RETENTION_LAW",
+          "SATURATED_SATURATION",
+          "RESIDUAL_SATURATION",
+          "VAN_GENUCHTEN_AIR_ENTRY_PRESSURE",
+          "VAN_GENUCHTEN_GN",
+          "PERMEABILITY_XX",
+          "PERMEABILITY_YY",
+          "MINIMUM_RELATIVE_PERMEABILITY",
+          "VAN_GENUCHTEN_GL",
+          "K0_NC"
+        ]
+      }
+    ],
     "defaults": {
       "linear_elastic": {
         "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
@@ -30,9 +555,9 @@ window.DRAFTS_FIXTURE =
         "POISSON_RATIO": 0.3,
         "DENSITY_SOLID": 1732.9255861365953,
         "POROSITY": 0.0,
-        "PERMEABILITY_XX": 1.1574074074074073e-05,
-        "GEO_COHESION": 0.0,
-        "GEO_FRICTION_ANGLE": 30.0
+        "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+        "SATURATED_SATURATION": 1.0,
+        "RESIDUAL_SATURATION": 1e-10
       },
       "mohr_coulomb": {
         "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
@@ -40,11 +565,9 @@ window.DRAFTS_FIXTURE =
         "POISSON_RATIO": 0.3,
         "DENSITY_SOLID": 1732.9255861365953,
         "POROSITY": 0.0,
-        "PERMEABILITY_XX": 1.1574074074074073e-05,
         "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
         "SATURATED_SATURATION": 1.0,
         "RESIDUAL_SATURATION": 1e-10,
-        "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
         "GEO_COHESION": 1000.0,
         "GEO_FRICTION_ANGLE": 30.0,
         "GEO_DILATANCY_ANGLE": 0.0,
@@ -66,11 +589,9 @@ window.DRAFTS_FIXTURE =
           "POISSON_RATIO",
           "DENSITY_SOLID",
           "POROSITY",
-          "PERMEABILITY_XX",
           "RETENTION_LAW",
           "SATURATED_SATURATION",
           "RESIDUAL_SATURATION",
-          "MINIMUM_RELATIVE_PERMEABILITY",
           "GEO_COHESION",
           "GEO_FRICTION_ANGLE",
           "GEO_DILATANCY_ANGLE",
@@ -82,17 +603,15 @@ window.DRAFTS_FIXTURE =
           "POISSON_RATIO": 0.3,
           "DENSITY_SOLID": 1732.9255861365953,
           "POROSITY": 0.0,
-          "PERMEABILITY_XX": 1.1574074074074073e-05,
           "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
           "SATURATED_SATURATION": 1.0,
           "RESIDUAL_SATURATION": 1e-10,
-          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
           "GEO_COHESION": 1000.0,
           "GEO_FRICTION_ANGLE": 30.0,
           "GEO_DILATANCY_ANGLE": 0.0,
           "GEO_ENABLE_TENSION_CUT_OFF": false
         },
-        "note": "Filled in from the Mohr-Coulomb defaults: GEO_DRAINAGE_TYPE, YOUNG_MODULUS, POISSON_RATIO, DENSITY_SOLID, POROSITY, PERMEABILITY_XX, RETENTION_LAW, SATURATED_SATURATION, RESIDUAL_SATURATION, MINIMUM_RELATIVE_PERMEABILITY, GEO_COHESION, GEO_FRICTION_ANGLE, GEO_DILATANCY_ANGLE, GEO_ENABLE_TENSION_CUT_OFF."
+        "note": "Filled in from the Mohr-Coulomb defaults: GEO_DRAINAGE_TYPE, YOUNG_MODULUS, POISSON_RATIO, DENSITY_SOLID, POROSITY, RETENTION_LAW, SATURATED_SATURATION, RESIDUAL_SATURATION, GEO_COHESION, GEO_FRICTION_ANGLE, GEO_DILATANCY_ANGLE, GEO_ENABLE_TENSION_CUT_OFF."
       },
       {
         "title": "an elastic soil made Mohr-Coulomb keeps its cohesion",
@@ -110,11 +629,9 @@ window.DRAFTS_FIXTURE =
           "POISSON_RATIO",
           "DENSITY_SOLID",
           "POROSITY",
-          "PERMEABILITY_XX",
           "RETENTION_LAW",
           "SATURATED_SATURATION",
           "RESIDUAL_SATURATION",
-          "MINIMUM_RELATIVE_PERMEABILITY",
           "GEO_FRICTION_ANGLE",
           "GEO_DILATANCY_ANGLE",
           "GEO_ENABLE_TENSION_CUT_OFF"
@@ -126,16 +643,14 @@ window.DRAFTS_FIXTURE =
           "POISSON_RATIO": 0.3,
           "DENSITY_SOLID": 1.7329255861365953,
           "POROSITY": 0.0,
-          "PERMEABILITY_XX": 1.1574074074074073e-05,
           "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
           "SATURATED_SATURATION": 1.0,
           "RESIDUAL_SATURATION": 1e-10,
-          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
           "GEO_FRICTION_ANGLE": 30.0,
           "GEO_DILATANCY_ANGLE": 0.0,
           "GEO_ENABLE_TENSION_CUT_OFF": false
         },
-        "note": "Filled in from the Mohr-Coulomb defaults: GEO_DRAINAGE_TYPE, POISSON_RATIO, DENSITY_SOLID, POROSITY, PERMEABILITY_XX, RETENTION_LAW, SATURATED_SATURATION, RESIDUAL_SATURATION, MINIMUM_RELATIVE_PERMEABILITY, GEO_FRICTION_ANGLE, GEO_DILATANCY_ANGLE, GEO_ENABLE_TENSION_CUT_OFF."
+        "note": "Filled in from the Mohr-Coulomb defaults: GEO_DRAINAGE_TYPE, POISSON_RATIO, DENSITY_SOLID, POROSITY, RETENTION_LAW, SATURATED_SATURATION, RESIDUAL_SATURATION, GEO_FRICTION_ANGLE, GEO_DILATANCY_ANGLE, GEO_ENABLE_TENSION_CUT_OFF."
       },
       {
         "title": "a Van Genuchten law brings its parameters",
@@ -146,11 +661,9 @@ window.DRAFTS_FIXTURE =
           "POISSON_RATIO": 0.3,
           "DENSITY_SOLID": 1.7329255861365953,
           "POROSITY": 0.0,
-          "PERMEABILITY_XX": 1.1574074074074073e-05,
           "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
           "SATURATED_SATURATION": 1.0,
           "RESIDUAL_SATURATION": 1e-10,
-          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
           "GEO_COHESION": 1.0,
           "GEO_FRICTION_ANGLE": 30.0,
           "GEO_DILATANCY_ANGLE": 0.0,
@@ -164,8 +677,7 @@ window.DRAFTS_FIXTURE =
         "skip": [],
         "filled": [
           "VAN_GENUCHTEN_AIR_ENTRY_PRESSURE",
-          "VAN_GENUCHTEN_GN",
-          "VAN_GENUCHTEN_GL"
+          "VAN_GENUCHTEN_GN"
         ],
         "after": {
           "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
@@ -173,20 +685,17 @@ window.DRAFTS_FIXTURE =
           "POISSON_RATIO": 0.3,
           "DENSITY_SOLID": 1.7329255861365953,
           "POROSITY": 0.0,
-          "PERMEABILITY_XX": 1.1574074074074073e-05,
           "RETENTION_LAW": "VanGenuchtenLaw",
           "SATURATED_SATURATION": 1.0,
           "RESIDUAL_SATURATION": 1e-10,
-          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
           "GEO_COHESION": 1.0,
           "GEO_FRICTION_ANGLE": 30.0,
           "GEO_DILATANCY_ANGLE": 0.0,
           "GEO_ENABLE_TENSION_CUT_OFF": false,
           "VAN_GENUCHTEN_AIR_ENTRY_PRESSURE": 2.611,
-          "VAN_GENUCHTEN_GN": 1.377,
-          "VAN_GENUCHTEN_GL": 1.25
+          "VAN_GENUCHTEN_GN": 1.377
         },
-        "note": "Filled in from the Mohr-Coulomb defaults: VAN_GENUCHTEN_AIR_ENTRY_PRESSURE, VAN_GENUCHTEN_GN, VAN_GENUCHTEN_GL."
+        "note": "Filled in from the Mohr-Coulomb defaults: VAN_GENUCHTEN_AIR_ENTRY_PRESSURE, VAN_GENUCHTEN_GN."
       },
       {
         "title": "a Van Genuchten parameter left out on purpose",
@@ -197,11 +706,9 @@ window.DRAFTS_FIXTURE =
           "POISSON_RATIO": 0.3,
           "DENSITY_SOLID": 1.7329255861365953,
           "POROSITY": 0.0,
-          "PERMEABILITY_XX": 1.1574074074074073e-05,
           "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
           "SATURATED_SATURATION": 1.0,
           "RESIDUAL_SATURATION": 1e-10,
-          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
           "GEO_COHESION": 1.0,
           "GEO_FRICTION_ANGLE": 30.0,
           "GEO_DILATANCY_ANGLE": 0.0,
@@ -216,8 +723,7 @@ window.DRAFTS_FIXTURE =
           "VAN_GENUCHTEN_GN"
         ],
         "filled": [
-          "VAN_GENUCHTEN_AIR_ENTRY_PRESSURE",
-          "VAN_GENUCHTEN_GL"
+          "VAN_GENUCHTEN_AIR_ENTRY_PRESSURE"
         ],
         "after": {
           "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
@@ -225,19 +731,16 @@ window.DRAFTS_FIXTURE =
           "POISSON_RATIO": 0.3,
           "DENSITY_SOLID": 1.7329255861365953,
           "POROSITY": 0.0,
-          "PERMEABILITY_XX": 1.1574074074074073e-05,
           "RETENTION_LAW": "VanGenuchtenLaw",
           "SATURATED_SATURATION": 1.0,
           "RESIDUAL_SATURATION": 1e-10,
-          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
           "GEO_COHESION": 1.0,
           "GEO_FRICTION_ANGLE": 30.0,
           "GEO_DILATANCY_ANGLE": 0.0,
           "GEO_ENABLE_TENSION_CUT_OFF": false,
-          "VAN_GENUCHTEN_AIR_ENTRY_PRESSURE": 2.611,
-          "VAN_GENUCHTEN_GL": 1.25
+          "VAN_GENUCHTEN_AIR_ENTRY_PRESSURE": 2.611
         },
-        "note": "Filled in from the Mohr-Coulomb defaults: VAN_GENUCHTEN_AIR_ENTRY_PRESSURE, VAN_GENUCHTEN_GL."
+        "note": "Filled in from the Mohr-Coulomb defaults: VAN_GENUCHTEN_AIR_ENTRY_PRESSURE."
       },
       {
         "title": "the tension cut-off brings its tensile strength",
@@ -248,11 +751,9 @@ window.DRAFTS_FIXTURE =
           "POISSON_RATIO": 0.3,
           "DENSITY_SOLID": 1.7329255861365953,
           "POROSITY": 0.0,
-          "PERMEABILITY_XX": 1.1574074074074073e-05,
           "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
           "SATURATED_SATURATION": 1.0,
           "RESIDUAL_SATURATION": 1e-10,
-          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
           "GEO_COHESION": 1.0,
           "GEO_FRICTION_ANGLE": 30.0,
           "GEO_DILATANCY_ANGLE": 0.0,
@@ -273,11 +774,9 @@ window.DRAFTS_FIXTURE =
           "POISSON_RATIO": 0.3,
           "DENSITY_SOLID": 1.7329255861365953,
           "POROSITY": 0.0,
-          "PERMEABILITY_XX": 1.1574074074074073e-05,
           "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
           "SATURATED_SATURATION": 1.0,
           "RESIDUAL_SATURATION": 1e-10,
-          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
           "GEO_COHESION": 1.0,
           "GEO_FRICTION_ANGLE": 30.0,
           "GEO_DILATANCY_ANGLE": 0.0,
@@ -294,11 +793,9 @@ window.DRAFTS_FIXTURE =
           "YOUNG_MODULUS": 10000.0,
           "POISSON_RATIO": 0.3,
           "DENSITY_SOLID": 1.7329255861365953,
-          "PERMEABILITY_XX": 1.1574074074074073e-05,
           "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
           "SATURATED_SATURATION": 1.0,
           "RESIDUAL_SATURATION": 1e-10,
-          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
           "GEO_COHESION": 1.0,
           "GEO_FRICTION_ANGLE": 30.0,
           "GEO_DILATANCY_ANGLE": 0.0,
@@ -310,23 +807,24 @@ window.DRAFTS_FIXTURE =
         },
         "system": "kN",
         "skip": [],
-        "filled": [],
+        "filled": [
+          "POROSITY"
+        ],
         "after": {
           "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
           "YOUNG_MODULUS": 30000.0,
           "POISSON_RATIO": 0.3,
           "DENSITY_SOLID": 1.7329255861365953,
-          "PERMEABILITY_XX": 1.1574074074074073e-05,
           "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
           "SATURATED_SATURATION": 1.0,
           "RESIDUAL_SATURATION": 1e-10,
-          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
           "GEO_COHESION": 1.0,
           "GEO_FRICTION_ANGLE": 30.0,
           "GEO_DILATANCY_ANGLE": 0.0,
-          "GEO_ENABLE_TENSION_CUT_OFF": false
+          "GEO_ENABLE_TENSION_CUT_OFF": false,
+          "POROSITY": 0.0
         },
-        "note": null
+        "note": "Filled in from the Mohr-Coulomb defaults: POROSITY."
       },
       {
         "title": "a required variable left out comes back",
@@ -337,11 +835,9 @@ window.DRAFTS_FIXTURE =
           "POISSON_RATIO": 0.3,
           "DENSITY_SOLID": 1.7329255861365953,
           "POROSITY": 0.0,
-          "PERMEABILITY_XX": 1.1574074074074073e-05,
           "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
           "SATURATED_SATURATION": 1.0,
           "RESIDUAL_SATURATION": 1e-10,
-          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
           "GEO_COHESION": 1.0,
           "GEO_FRICTION_ANGLE": 30.0,
           "GEO_ENABLE_TENSION_CUT_OFF": false
@@ -359,11 +855,9 @@ window.DRAFTS_FIXTURE =
           "POISSON_RATIO": 0.3,
           "DENSITY_SOLID": 1.7329255861365953,
           "POROSITY": 0.0,
-          "PERMEABILITY_XX": 1.1574074074074073e-05,
           "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
           "SATURATED_SATURATION": 1.0,
           "RESIDUAL_SATURATION": 1e-10,
-          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
           "GEO_COHESION": 1.0,
           "GEO_FRICTION_ANGLE": 30.0,
           "GEO_ENABLE_TENSION_CUT_OFF": false,
@@ -401,11 +895,9 @@ window.DRAFTS_FIXTURE =
           "POISSON_RATIO",
           "DENSITY_SOLID",
           "POROSITY",
-          "PERMEABILITY_XX",
           "RETENTION_LAW",
           "SATURATED_SATURATION",
           "RESIDUAL_SATURATION",
-          "MINIMUM_RELATIVE_PERMEABILITY",
           "GEO_COHESION",
           "GEO_FRICTION_ANGLE",
           "GEO_DILATANCY_ANGLE",
@@ -417,17 +909,15 @@ window.DRAFTS_FIXTURE =
           "POISSON_RATIO": 0.3,
           "DENSITY_SOLID": 1732.9255861365953,
           "POROSITY": 0.0,
-          "PERMEABILITY_XX": 1.1574074074074073e-05,
           "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
           "SATURATED_SATURATION": 1.0,
           "RESIDUAL_SATURATION": 1e-10,
-          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
           "GEO_COHESION": 1000.0,
           "GEO_FRICTION_ANGLE": 30.0,
           "GEO_DILATANCY_ANGLE": 0.0,
           "GEO_ENABLE_TENSION_CUT_OFF": false
         },
-        "note": "Filled in from the Mohr-Coulomb defaults: GEO_DRAINAGE_TYPE, YOUNG_MODULUS, POISSON_RATIO, DENSITY_SOLID, POROSITY, PERMEABILITY_XX, RETENTION_LAW, SATURATED_SATURATION, RESIDUAL_SATURATION, MINIMUM_RELATIVE_PERMEABILITY, GEO_COHESION, GEO_FRICTION_ANGLE, GEO_DILATANCY_ANGLE, GEO_ENABLE_TENSION_CUT_OFF."
+        "note": "Filled in from the Mohr-Coulomb defaults: GEO_DRAINAGE_TYPE, YOUNG_MODULUS, POISSON_RATIO, DENSITY_SOLID, POROSITY, RETENTION_LAW, SATURATED_SATURATION, RESIDUAL_SATURATION, GEO_COHESION, GEO_FRICTION_ANGLE, GEO_DILATANCY_ANGLE, GEO_ENABLE_TENSION_CUT_OFF."
       }
     ],
     "problem": [
@@ -440,11 +930,9 @@ window.DRAFTS_FIXTURE =
           "POISSON_RATIO": 0.3,
           "DENSITY_SOLID": 1732.9255861365953,
           "POROSITY": 0.0,
-          "PERMEABILITY_XX": 1.1574074074074073e-05,
           "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
           "SATURATED_SATURATION": 1.0,
           "RESIDUAL_SATURATION": 1e-10,
-          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
           "GEO_COHESION": 1000.0,
           "GEO_FRICTION_ANGLE": 30.0,
           "GEO_DILATANCY_ANGLE": 0.0,
@@ -461,11 +949,9 @@ window.DRAFTS_FIXTURE =
           "POISSON_RATIO": 0.3,
           "DENSITY_SOLID": 1732.9255861365953,
           "POROSITY": 0.0,
-          "PERMEABILITY_XX": 1.1574074074074073e-05,
           "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
           "SATURATED_SATURATION": 1.0,
           "RESIDUAL_SATURATION": 1e-10,
-          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
           "GEO_COHESION": 1000.0,
           "GEO_FRICTION_ANGLE": 30.0,
           "GEO_DILATANCY_ANGLE": 35.0,
@@ -482,11 +968,9 @@ window.DRAFTS_FIXTURE =
           "POISSON_RATIO": 0.3,
           "DENSITY_SOLID": 1732.9255861365953,
           "POROSITY": 0.0,
-          "PERMEABILITY_XX": 1.1574074074074073e-05,
           "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
           "SATURATED_SATURATION": 1.0,
           "RESIDUAL_SATURATION": 1e-10,
-          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
           "GEO_COHESION": 1000.0,
           "GEO_FRICTION_ANGLE": 90.0,
           "GEO_DILATANCY_ANGLE": 0.0,
@@ -503,11 +987,9 @@ window.DRAFTS_FIXTURE =
           "POISSON_RATIO": 0.3,
           "DENSITY_SOLID": 1732.9255861365953,
           "POROSITY": 0.0,
-          "PERMEABILITY_XX": 1.1574074074074073e-05,
           "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
           "SATURATED_SATURATION": 1.0,
           "RESIDUAL_SATURATION": 1e-10,
-          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
           "GEO_COHESION": 1000.0,
           "GEO_FRICTION_ANGLE": 30.0,
           "GEO_DILATANCY_ANGLE": 0.0,
@@ -525,11 +1007,9 @@ window.DRAFTS_FIXTURE =
           "POISSON_RATIO": 0.3,
           "DENSITY_SOLID": 1732.9255861365953,
           "POROSITY": 0.0,
-          "PERMEABILITY_XX": 1.1574074074074073e-05,
           "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
           "SATURATED_SATURATION": 1.0,
           "RESIDUAL_SATURATION": 1e-10,
-          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
           "GEO_COHESION": 2000000.0,
           "GEO_FRICTION_ANGLE": 25.0,
           "GEO_DILATANCY_ANGLE": 0.0,
@@ -547,11 +1027,9 @@ window.DRAFTS_FIXTURE =
           "POISSON_RATIO": 0.3,
           "DENSITY_SOLID": 1732.9255861365953,
           "POROSITY": 0.0,
-          "PERMEABILITY_XX": 1.1574074074074073e-05,
           "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
           "SATURATED_SATURATION": 1.0,
           "RESIDUAL_SATURATION": 1e-10,
-          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
           "GEO_COHESION": 2e-05,
           "GEO_FRICTION_ANGLE": 30.0,
           "GEO_DILATANCY_ANGLE": 0.0,
@@ -569,11 +1047,9 @@ window.DRAFTS_FIXTURE =
           "POISSON_RATIO": 0.3,
           "DENSITY_SOLID": 1732.9255861365953,
           "POROSITY": 0.0,
-          "PERMEABILITY_XX": 1.1574074074074073e-05,
           "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
           "SATURATED_SATURATION": 1.0,
           "RESIDUAL_SATURATION": 1e-10,
-          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
           "GEO_COHESION": 1000.0,
           "GEO_FRICTION_ANGLE": 30.0,
           "GEO_DILATANCY_ANGLE": 0.0,
@@ -591,11 +1067,9 @@ window.DRAFTS_FIXTURE =
           "POISSON_RATIO": 0.3,
           "DENSITY_SOLID": 1732.9255861365953,
           "POROSITY": 0.0,
-          "PERMEABILITY_XX": 1.1574074074074073e-05,
           "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
           "SATURATED_SATURATION": 1.0,
           "RESIDUAL_SATURATION": 1e-10,
-          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
           "GEO_COHESION": 1000.0,
           "GEO_FRICTION_ANGLE": 30.0,
           "GEO_DILATANCY_ANGLE": 0.0,
@@ -612,15 +1086,79 @@ window.DRAFTS_FIXTURE =
           "POISSON_RATIO": 0.3,
           "DENSITY_SOLID": 1732.9255861365953,
           "POROSITY": 0.0,
-          "PERMEABILITY_XX": 1.1574074074074073e-05,
           "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
           "SATURATED_SATURATION": 1.0,
           "RESIDUAL_SATURATION": 1e-10,
-          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
           "GEO_COHESION": 1000.0,
           "GEO_FRICTION_ANGLE": 30.0,
           "GEO_DILATANCY_ANGLE": 35.0,
           "GEO_ENABLE_TENSION_CUT_OFF": false
+        },
+        "problem": null
+      },
+      {
+        "title": "a linear hardening",
+        "law": "GeoMohrCoulombLawPlaneStrain",
+        "variables": {
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "YOUNG_MODULUS": 10000000.0,
+          "POISSON_RATIO": 0.3,
+          "DENSITY_SOLID": 1732.9255861365953,
+          "POROSITY": 0.0,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10,
+          "GEO_COHESION": 1000.0,
+          "GEO_FRICTION_ANGLE": 30.0,
+          "GEO_DILATANCY_ANGLE": 0.0,
+          "GEO_ENABLE_TENSION_CUT_OFF": false,
+          "GEO_COULOMB_HARDENING_TYPE": "Linear",
+          "GEO_COHESION_FUNCTION_COEFFICIENTS": 100000.0,
+          "GEO_FRICTION_ANGLE_FUNCTION_COEFFICIENTS": 0.0,
+          "GEO_DILATANCY_ANGLE_FUNCTION_COEFFICIENTS": 0.0
+        },
+        "problem": null
+      },
+      {
+        "title": "a linear hardening that softens",
+        "law": "GeoMohrCoulombLawPlaneStrain",
+        "variables": {
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "YOUNG_MODULUS": 10000000.0,
+          "POISSON_RATIO": 0.3,
+          "DENSITY_SOLID": 1732.9255861365953,
+          "POROSITY": 0.0,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10,
+          "GEO_COHESION": 1000.0,
+          "GEO_FRICTION_ANGLE": 30.0,
+          "GEO_DILATANCY_ANGLE": 0.0,
+          "GEO_ENABLE_TENSION_CUT_OFF": false,
+          "GEO_COULOMB_HARDENING_TYPE": "Linear",
+          "GEO_COHESION_FUNCTION_COEFFICIENTS": 0.0,
+          "GEO_FRICTION_ANGLE_FUNCTION_COEFFICIENTS": -0.1,
+          "GEO_DILATANCY_ANGLE_FUNCTION_COEFFICIENTS": 0.0
+        },
+        "problem": "GEO_FRICTION_ANGLE_FUNCTION_COEFFICIENTS cannot be negative."
+      },
+      {
+        "title": "a slope with the hardening off is not read",
+        "law": "GeoMohrCoulombLawPlaneStrain",
+        "variables": {
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "YOUNG_MODULUS": 10000000.0,
+          "POISSON_RATIO": 0.3,
+          "DENSITY_SOLID": 1732.9255861365953,
+          "POROSITY": 0.0,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10,
+          "GEO_COHESION": 1000.0,
+          "GEO_FRICTION_ANGLE": 30.0,
+          "GEO_DILATANCY_ANGLE": 0.0,
+          "GEO_ENABLE_TENSION_CUT_OFF": false,
+          "GEO_COHESION_FUNCTION_COEFFICIENTS": -1.0
         },
         "problem": null
       }
@@ -632,7 +1170,8 @@ window.DRAFTS_FIXTURE =
         "required": [
           "YOUNG_MODULUS",
           "POISSON_RATIO",
-          "DENSITY_SOLID"
+          "DENSITY_SOLID",
+          "POROSITY"
         ]
       },
       {
@@ -642,6 +1181,7 @@ window.DRAFTS_FIXTURE =
           "YOUNG_MODULUS",
           "POISSON_RATIO",
           "DENSITY_SOLID",
+          "POROSITY",
           "GEO_COHESION",
           "GEO_FRICTION_ANGLE",
           "GEO_DILATANCY_ANGLE"
@@ -656,10 +1196,26 @@ window.DRAFTS_FIXTURE =
           "YOUNG_MODULUS",
           "POISSON_RATIO",
           "DENSITY_SOLID",
+          "POROSITY",
           "GEO_COHESION",
           "GEO_FRICTION_ANGLE",
           "GEO_DILATANCY_ANGLE",
           "GEO_TENSILE_STRENGTH"
+        ]
+      },
+      {
+        "law": "GeoMohrCoulombLawPlaneStrain",
+        "variables": {
+          "GEO_COULOMB_HARDENING_TYPE": "Linear"
+        },
+        "required": [
+          "YOUNG_MODULUS",
+          "POISSON_RATIO",
+          "DENSITY_SOLID",
+          "POROSITY",
+          "GEO_COHESION",
+          "GEO_FRICTION_ANGLE",
+          "GEO_DILATANCY_ANGLE"
         ]
       },
       {
@@ -724,6 +1280,7 @@ window.DRAFTS_FIXTURE =
   "library": [
     {
       "id": "m1",
+      "model": "mohr_coulomb",
       "name": "Fill",
       "color": "#d8c48a",
       "r_inter": 0.7,
@@ -733,7 +1290,7 @@ window.DRAFTS_FIXTURE =
         "YOUNG_MODULUS": 15000000.0,
         "POISSON_RATIO": 0.3,
         "DENSITY_SOLID": 1732.9255861365953,
-        "PERMEABILITY_XX": 1.1574074074074073e-05,
+        "PERMEABILITY_XX": 1.1574074074074074e-12,
         "POROSITY": 0.0,
         "GEO_COHESION": 1000,
         "GEO_FRICTION_ANGLE": 30.0
@@ -741,6 +1298,7 @@ window.DRAFTS_FIXTURE =
     },
     {
       "id": "m2",
+      "model": "mohr_coulomb",
       "name": "Sand, loose",
       "color": "#c4a86a",
       "r_inter": 0.7,
@@ -750,7 +1308,7 @@ window.DRAFTS_FIXTURE =
         "YOUNG_MODULUS": 25000000.0,
         "POISSON_RATIO": 0.28,
         "DENSITY_SOLID": 1834.8623853211009,
-        "PERMEABILITY_XX": 1.736111111111111e-05,
+        "PERMEABILITY_XX": 1.736111111111111e-12,
         "POROSITY": 0.0,
         "GEO_COHESION": 500,
         "GEO_FRICTION_ANGLE": 32.0
@@ -758,6 +1316,7 @@ window.DRAFTS_FIXTURE =
     },
     {
       "id": "m3",
+      "model": "mohr_coulomb",
       "name": "Clay, soft",
       "color": "#8fa86b",
       "r_inter": 0.5,
@@ -767,7 +1326,7 @@ window.DRAFTS_FIXTURE =
         "YOUNG_MODULUS": 4000000.0,
         "POISSON_RATIO": 0.35,
         "DENSITY_SOLID": 1529.051987767584,
-        "PERMEABILITY_XX": 1.1574074074074074e-09,
+        "PERMEABILITY_XX": 1.1574074074074073e-16,
         "POROSITY": 0.0,
         "GEO_COHESION": 5000,
         "GEO_FRICTION_ANGLE": 22.0
@@ -775,6 +1334,7 @@ window.DRAFTS_FIXTURE =
     },
     {
       "id": "m4",
+      "model": "mohr_coulomb",
       "name": "Clay, stiff",
       "color": "#6f8fa8",
       "r_inter": 0.55,
@@ -784,7 +1344,7 @@ window.DRAFTS_FIXTURE =
         "YOUNG_MODULUS": 12000000.0,
         "POISSON_RATIO": 0.33,
         "DENSITY_SOLID": 1783.893985728848,
-        "PERMEABILITY_XX": 5.787037037037037e-09,
+        "PERMEABILITY_XX": 5.787037037037037e-16,
         "POROSITY": 0.0,
         "GEO_COHESION": 15000,
         "GEO_FRICTION_ANGLE": 25.0
@@ -792,6 +1352,7 @@ window.DRAFTS_FIXTURE =
     },
     {
       "id": "m5",
+      "model": "mohr_coulomb",
       "name": "Sand, dense",
       "color": "#b08a6a",
       "r_inter": 0.75,
@@ -801,7 +1362,7 @@ window.DRAFTS_FIXTURE =
         "YOUNG_MODULUS": 45000000.0,
         "POISSON_RATIO": 0.25,
         "DENSITY_SOLID": 1936.7991845056065,
-        "PERMEABILITY_XX": 5.787037037037037e-05,
+        "PERMEABILITY_XX": 5.787037037037037e-12,
         "POROSITY": 0.0,
         "GEO_COHESION": 0,
         "GEO_FRICTION_ANGLE": 36.0
@@ -809,6 +1370,7 @@ window.DRAFTS_FIXTURE =
     },
     {
       "id": "m6",
+      "model": "linear_elastic",
       "name": "Bedrock",
       "color": "#8d8d99",
       "r_inter": 1.0,
@@ -845,11 +1407,8 @@ window.DRAFTS_FIXTURE =
             "YOUNG_MODULUS": 15000000.0,
             "POISSON_RATIO": 0.3,
             "DENSITY_SOLID": 1732.9255861365953,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.3,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 1.1574074074074073e-05,
             "PERMEABILITY_YY": 1.1574074074074073e-05,
             "PERMEABILITY_XY": 0.0,
@@ -873,11 +1432,8 @@ window.DRAFTS_FIXTURE =
             "YOUNG_MODULUS": 25000000.0,
             "POISSON_RATIO": 0.28,
             "DENSITY_SOLID": 1834.8623853211009,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.3,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 1.736111111111111e-05,
             "PERMEABILITY_YY": 1.736111111111111e-05,
             "PERMEABILITY_XY": 0.0,
@@ -901,11 +1457,8 @@ window.DRAFTS_FIXTURE =
             "YOUNG_MODULUS": 4000000.0,
             "POISSON_RATIO": 0.35,
             "DENSITY_SOLID": 1529.051987767584,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.3,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 1.1574074074074074e-09,
             "PERMEABILITY_YY": 1.1574074074074074e-09,
             "PERMEABILITY_XY": 0.0,
@@ -929,11 +1482,8 @@ window.DRAFTS_FIXTURE =
             "YOUNG_MODULUS": 12000000.0,
             "POISSON_RATIO": 0.33,
             "DENSITY_SOLID": 1783.893985728848,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.3,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 5.787037037037037e-09,
             "PERMEABILITY_YY": 5.787037037037037e-09,
             "PERMEABILITY_XY": 0.0,
@@ -957,11 +1507,8 @@ window.DRAFTS_FIXTURE =
             "YOUNG_MODULUS": 45000000.0,
             "POISSON_RATIO": 0.25,
             "DENSITY_SOLID": 1936.7991845056065,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.3,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 5.787037037037037e-05,
             "PERMEABILITY_YY": 5.787037037037037e-05,
             "PERMEABILITY_XY": 0.0,
@@ -985,11 +1532,8 @@ window.DRAFTS_FIXTURE =
             "YOUNG_MODULUS": 2000000000.0,
             "POISSON_RATIO": 0.2,
             "DENSITY_SOLID": 2446.4831804281343,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.3,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 0.0,
             "PERMEABILITY_YY": 0.0,
             "PERMEABILITY_XY": 0.0,
@@ -1174,11 +1718,8 @@ window.DRAFTS_FIXTURE =
             "YOUNG_MODULUS": 15000.0,
             "POISSON_RATIO": 0.3,
             "DENSITY_SOLID": 1.7329255861365953,
-            "DENSITY_WATER": 1.019367991845056,
             "POROSITY": 0.3,
             "BULK_MODULUS_SOLID": 10000000.0,
-            "BULK_MODULUS_FLUID": 2200000.0,
-            "DYNAMIC_VISCOSITY": 1e-06,
             "PERMEABILITY_XX": 1.1574074074074073e-05,
             "PERMEABILITY_YY": 1.1574074074074073e-05,
             "PERMEABILITY_XY": 0.0,
@@ -1202,11 +1743,8 @@ window.DRAFTS_FIXTURE =
             "YOUNG_MODULUS": 25000.0,
             "POISSON_RATIO": 0.28,
             "DENSITY_SOLID": 1.8348623853211008,
-            "DENSITY_WATER": 1.019367991845056,
             "POROSITY": 0.3,
             "BULK_MODULUS_SOLID": 10000000.0,
-            "BULK_MODULUS_FLUID": 2200000.0,
-            "DYNAMIC_VISCOSITY": 1e-06,
             "PERMEABILITY_XX": 1.736111111111111e-05,
             "PERMEABILITY_YY": 1.736111111111111e-05,
             "PERMEABILITY_XY": 0.0,
@@ -1230,11 +1768,8 @@ window.DRAFTS_FIXTURE =
             "YOUNG_MODULUS": 4000.0,
             "POISSON_RATIO": 0.35,
             "DENSITY_SOLID": 1.529051987767584,
-            "DENSITY_WATER": 1.019367991845056,
             "POROSITY": 0.3,
             "BULK_MODULUS_SOLID": 10000000.0,
-            "BULK_MODULUS_FLUID": 2200000.0,
-            "DYNAMIC_VISCOSITY": 1e-06,
             "PERMEABILITY_XX": 1.1574074074074074e-09,
             "PERMEABILITY_YY": 1.1574074074074074e-09,
             "PERMEABILITY_XY": 0.0,
@@ -1258,11 +1793,8 @@ window.DRAFTS_FIXTURE =
             "YOUNG_MODULUS": 12000.0,
             "POISSON_RATIO": 0.33,
             "DENSITY_SOLID": 1.783893985728848,
-            "DENSITY_WATER": 1.019367991845056,
             "POROSITY": 0.3,
             "BULK_MODULUS_SOLID": 10000000.0,
-            "BULK_MODULUS_FLUID": 2200000.0,
-            "DYNAMIC_VISCOSITY": 1e-06,
             "PERMEABILITY_XX": 5.787037037037037e-09,
             "PERMEABILITY_YY": 5.787037037037037e-09,
             "PERMEABILITY_XY": 0.0,
@@ -1286,11 +1818,8 @@ window.DRAFTS_FIXTURE =
             "YOUNG_MODULUS": 45000.0,
             "POISSON_RATIO": 0.25,
             "DENSITY_SOLID": 1.9367991845056065,
-            "DENSITY_WATER": 1.019367991845056,
             "POROSITY": 0.3,
             "BULK_MODULUS_SOLID": 10000000.0,
-            "BULK_MODULUS_FLUID": 2200000.0,
-            "DYNAMIC_VISCOSITY": 1e-06,
             "PERMEABILITY_XX": 5.787037037037037e-05,
             "PERMEABILITY_YY": 5.787037037037037e-05,
             "PERMEABILITY_XY": 0.0,
@@ -1314,11 +1843,8 @@ window.DRAFTS_FIXTURE =
             "YOUNG_MODULUS": 2000000.0,
             "POISSON_RATIO": 0.2,
             "DENSITY_SOLID": 2.4464831804281344,
-            "DENSITY_WATER": 1.019367991845056,
             "POROSITY": 0.3,
             "BULK_MODULUS_SOLID": 10000000.0,
-            "BULK_MODULUS_FLUID": 2200000.0,
-            "DYNAMIC_VISCOSITY": 1e-06,
             "PERMEABILITY_XX": 0.0,
             "PERMEABILITY_YY": 0.0,
             "PERMEABILITY_XY": 0.0,
@@ -1503,11 +2029,8 @@ window.DRAFTS_FIXTURE =
             "YOUNG_MODULUS": 15000000.0,
             "POISSON_RATIO": 0.3,
             "DENSITY_SOLID": 1732.9255861365953,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.3,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 1.1574074074074073e-05,
             "PERMEABILITY_YY": 1.1574074074074073e-05,
             "PERMEABILITY_XY": 0.0,
@@ -1531,11 +2054,8 @@ window.DRAFTS_FIXTURE =
             "YOUNG_MODULUS": 25000000.0,
             "POISSON_RATIO": 0.28,
             "DENSITY_SOLID": 1834.8623853211009,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.3,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 1.736111111111111e-05,
             "PERMEABILITY_YY": 1.736111111111111e-05,
             "PERMEABILITY_XY": 0.0,
@@ -1559,11 +2079,8 @@ window.DRAFTS_FIXTURE =
             "YOUNG_MODULUS": 4000000.0,
             "POISSON_RATIO": 0.35,
             "DENSITY_SOLID": 1529.051987767584,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.3,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 1.1574074074074074e-09,
             "PERMEABILITY_YY": 1.1574074074074074e-09,
             "PERMEABILITY_XY": 0.0,
@@ -1587,11 +2104,8 @@ window.DRAFTS_FIXTURE =
             "YOUNG_MODULUS": 12000000.0,
             "POISSON_RATIO": 0.33,
             "DENSITY_SOLID": 1783.893985728848,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.3,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 5.787037037037037e-09,
             "PERMEABILITY_YY": 5.787037037037037e-09,
             "PERMEABILITY_XY": 0.0,
@@ -1615,11 +2129,8 @@ window.DRAFTS_FIXTURE =
             "YOUNG_MODULUS": 45000000.0,
             "POISSON_RATIO": 0.25,
             "DENSITY_SOLID": 1936.7991845056065,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.3,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 5.787037037037037e-05,
             "PERMEABILITY_YY": 5.787037037037037e-05,
             "PERMEABILITY_XY": 0.0,
@@ -1643,11 +2154,8 @@ window.DRAFTS_FIXTURE =
             "YOUNG_MODULUS": 2000000000.0,
             "POISSON_RATIO": 0.2,
             "DENSITY_SOLID": 2446.4831804281343,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.3,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 0.0,
             "PERMEABILITY_YY": 0.0,
             "PERMEABILITY_XY": 0.0,
@@ -1733,11 +2241,8 @@ window.DRAFTS_FIXTURE =
             "YOUNG_MODULUS": 15000.0,
             "POISSON_RATIO": 0.3,
             "DENSITY_SOLID": 1.7329255861365953,
-            "DENSITY_WATER": 1.019367991845056,
             "POROSITY": 0.3,
             "BULK_MODULUS_SOLID": 10000000.0,
-            "BULK_MODULUS_FLUID": 2200000.0,
-            "DYNAMIC_VISCOSITY": 1e-06,
             "PERMEABILITY_XX": 1.1574074074074073e-05,
             "PERMEABILITY_YY": 1.1574074074074073e-05,
             "PERMEABILITY_XY": 0.0,
@@ -1761,11 +2266,8 @@ window.DRAFTS_FIXTURE =
             "YOUNG_MODULUS": 25000.0,
             "POISSON_RATIO": 0.28,
             "DENSITY_SOLID": 1.8348623853211008,
-            "DENSITY_WATER": 1.019367991845056,
             "POROSITY": 0.3,
             "BULK_MODULUS_SOLID": 10000000.0,
-            "BULK_MODULUS_FLUID": 2200000.0,
-            "DYNAMIC_VISCOSITY": 1e-06,
             "PERMEABILITY_XX": 1.736111111111111e-05,
             "PERMEABILITY_YY": 1.736111111111111e-05,
             "PERMEABILITY_XY": 0.0,
@@ -1789,11 +2291,8 @@ window.DRAFTS_FIXTURE =
             "YOUNG_MODULUS": 4000.0,
             "POISSON_RATIO": 0.35,
             "DENSITY_SOLID": 1.529051987767584,
-            "DENSITY_WATER": 1.019367991845056,
             "POROSITY": 0.3,
             "BULK_MODULUS_SOLID": 10000000.0,
-            "BULK_MODULUS_FLUID": 2200000.0,
-            "DYNAMIC_VISCOSITY": 1e-06,
             "PERMEABILITY_XX": 1.1574074074074074e-09,
             "PERMEABILITY_YY": 1.1574074074074074e-09,
             "PERMEABILITY_XY": 0.0,
@@ -1817,11 +2316,8 @@ window.DRAFTS_FIXTURE =
             "YOUNG_MODULUS": 12000.0,
             "POISSON_RATIO": 0.33,
             "DENSITY_SOLID": 1.783893985728848,
-            "DENSITY_WATER": 1.019367991845056,
             "POROSITY": 0.3,
             "BULK_MODULUS_SOLID": 10000000.0,
-            "BULK_MODULUS_FLUID": 2200000.0,
-            "DYNAMIC_VISCOSITY": 1e-06,
             "PERMEABILITY_XX": 5.787037037037037e-09,
             "PERMEABILITY_YY": 5.787037037037037e-09,
             "PERMEABILITY_XY": 0.0,
@@ -1845,11 +2341,8 @@ window.DRAFTS_FIXTURE =
             "YOUNG_MODULUS": 45000.0,
             "POISSON_RATIO": 0.25,
             "DENSITY_SOLID": 1.9367991845056065,
-            "DENSITY_WATER": 1.019367991845056,
             "POROSITY": 0.3,
             "BULK_MODULUS_SOLID": 10000000.0,
-            "BULK_MODULUS_FLUID": 2200000.0,
-            "DYNAMIC_VISCOSITY": 1e-06,
             "PERMEABILITY_XX": 5.787037037037037e-05,
             "PERMEABILITY_YY": 5.787037037037037e-05,
             "PERMEABILITY_XY": 0.0,
@@ -1873,11 +2366,8 @@ window.DRAFTS_FIXTURE =
             "YOUNG_MODULUS": 2000000.0,
             "POISSON_RATIO": 0.2,
             "DENSITY_SOLID": 2.4464831804281344,
-            "DENSITY_WATER": 1.019367991845056,
             "POROSITY": 0.3,
             "BULK_MODULUS_SOLID": 10000000.0,
-            "BULK_MODULUS_FLUID": 2200000.0,
-            "DYNAMIC_VISCOSITY": 1e-06,
             "PERMEABILITY_XX": 0.0,
             "PERMEABILITY_YY": 0.0,
             "PERMEABILITY_XY": 0.0,
@@ -2096,11 +2586,8 @@ window.DRAFTS_FIXTURE =
             "YOUNG_MODULUS": 15000000.0,
             "POISSON_RATIO": 0.3,
             "DENSITY_SOLID": 1732.9255861365953,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.3,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 1.1574074074074073e-05,
             "PERMEABILITY_YY": 1.1574074074074073e-05,
             "PERMEABILITY_XY": 0.0,
@@ -2124,11 +2611,8 @@ window.DRAFTS_FIXTURE =
             "YOUNG_MODULUS": 25000000.0,
             "POISSON_RATIO": 0.28,
             "DENSITY_SOLID": 1834.8623853211009,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.3,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 1.736111111111111e-05,
             "PERMEABILITY_YY": 1.736111111111111e-05,
             "PERMEABILITY_XY": 0.0,
@@ -2152,11 +2636,8 @@ window.DRAFTS_FIXTURE =
             "YOUNG_MODULUS": 4000000.0,
             "POISSON_RATIO": 0.35,
             "DENSITY_SOLID": 1529.051987767584,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.3,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 1.1574074074074074e-09,
             "PERMEABILITY_YY": 1.1574074074074074e-09,
             "PERMEABILITY_XY": 0.0,
@@ -2180,11 +2661,8 @@ window.DRAFTS_FIXTURE =
             "YOUNG_MODULUS": 12000000.0,
             "POISSON_RATIO": 0.33,
             "DENSITY_SOLID": 1783.893985728848,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.3,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 5.787037037037037e-09,
             "PERMEABILITY_YY": 5.787037037037037e-09,
             "PERMEABILITY_XY": 0.0,
@@ -2208,11 +2686,8 @@ window.DRAFTS_FIXTURE =
             "YOUNG_MODULUS": 45000000.0,
             "POISSON_RATIO": 0.25,
             "DENSITY_SOLID": 1936.7991845056065,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.3,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 5.787037037037037e-05,
             "PERMEABILITY_YY": 5.787037037037037e-05,
             "PERMEABILITY_XY": 0.0,
@@ -2236,11 +2711,8 @@ window.DRAFTS_FIXTURE =
             "YOUNG_MODULUS": 2000000000.0,
             "POISSON_RATIO": 0.2,
             "DENSITY_SOLID": 2446.4831804281343,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.3,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 0.0,
             "PERMEABILITY_YY": 0.0,
             "PERMEABILITY_XY": 0.0,
@@ -2459,11 +2931,8 @@ window.DRAFTS_FIXTURE =
             "YOUNG_MODULUS": 2000000.0,
             "POISSON_RATIO": 0.3,
             "DENSITY_SOLID": 1732.9255861365953,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.0,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 1e-08,
             "PERMEABILITY_YY": 1e-08,
             "PERMEABILITY_XY": 0.0,
@@ -2485,11 +2954,8 @@ window.DRAFTS_FIXTURE =
             "YOUNG_MODULUS": 30000000.0,
             "POISSON_RATIO": 0.3,
             "DENSITY_SOLID": 1936.7991845056065,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.0,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 1e-05,
             "PERMEABILITY_YY": 1e-05,
             "PERMEABILITY_XY": 0.0,
@@ -2816,11 +3282,8 @@ window.DRAFTS_FIXTURE =
             "YOUNG_MODULUS": 15000000.0,
             "POISSON_RATIO": 0.3,
             "DENSITY_SOLID": 1732.9255861365953,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.3,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 1.1574074074074073e-05,
             "PERMEABILITY_YY": 1.1574074074074073e-05,
             "PERMEABILITY_XY": 0.0,
@@ -2844,11 +3307,8 @@ window.DRAFTS_FIXTURE =
             "YOUNG_MODULUS": 25000000.0,
             "POISSON_RATIO": 0.28,
             "DENSITY_SOLID": 1834.8623853211009,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.3,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 1.736111111111111e-05,
             "PERMEABILITY_YY": 1.736111111111111e-05,
             "PERMEABILITY_XY": 0.0,
@@ -2872,11 +3332,8 @@ window.DRAFTS_FIXTURE =
             "YOUNG_MODULUS": 4000000.0,
             "POISSON_RATIO": 0.35,
             "DENSITY_SOLID": 1529.051987767584,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.3,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 1.1574074074074074e-09,
             "PERMEABILITY_YY": 1.1574074074074074e-09,
             "PERMEABILITY_XY": 0.0,
@@ -2900,11 +3357,8 @@ window.DRAFTS_FIXTURE =
             "YOUNG_MODULUS": 12000000.0,
             "POISSON_RATIO": 0.33,
             "DENSITY_SOLID": 1783.893985728848,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.3,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 5.787037037037037e-09,
             "PERMEABILITY_YY": 5.787037037037037e-09,
             "PERMEABILITY_XY": 0.0,
@@ -2928,11 +3382,8 @@ window.DRAFTS_FIXTURE =
             "YOUNG_MODULUS": 45000000.0,
             "POISSON_RATIO": 0.25,
             "DENSITY_SOLID": 1936.7991845056065,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.3,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 5.787037037037037e-05,
             "PERMEABILITY_YY": 5.787037037037037e-05,
             "PERMEABILITY_XY": 0.0,
@@ -2956,11 +3407,8 @@ window.DRAFTS_FIXTURE =
             "YOUNG_MODULUS": 2000000000.0,
             "POISSON_RATIO": 0.2,
             "DENSITY_SOLID": 2446.4831804281343,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.3,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 0.0,
             "PERMEABILITY_YY": 0.0,
             "PERMEABILITY_XY": 0.0,
@@ -3129,11 +3577,8 @@ window.DRAFTS_FIXTURE =
             "YOUNG_MODULUS": 15000000.0,
             "POISSON_RATIO": 0.3,
             "DENSITY_SOLID": 1732.9255861365953,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.3,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 1.1574074074074073e-05,
             "PERMEABILITY_YY": 1.1574074074074073e-05,
             "PERMEABILITY_XY": 0.0,
@@ -3157,11 +3602,8 @@ window.DRAFTS_FIXTURE =
             "YOUNG_MODULUS": 25000000.0,
             "POISSON_RATIO": 0.28,
             "DENSITY_SOLID": 1834.8623853211009,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.3,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 1.736111111111111e-05,
             "PERMEABILITY_YY": 1.736111111111111e-05,
             "PERMEABILITY_XY": 0.0,
@@ -3185,11 +3627,8 @@ window.DRAFTS_FIXTURE =
             "YOUNG_MODULUS": 4000000.0,
             "POISSON_RATIO": 0.35,
             "DENSITY_SOLID": 1529.051987767584,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.3,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 1.1574074074074074e-09,
             "PERMEABILITY_YY": 1.1574074074074074e-09,
             "PERMEABILITY_XY": 0.0,
@@ -3213,11 +3652,8 @@ window.DRAFTS_FIXTURE =
             "YOUNG_MODULUS": 12000000.0,
             "POISSON_RATIO": 0.33,
             "DENSITY_SOLID": 1783.893985728848,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.3,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 5.787037037037037e-09,
             "PERMEABILITY_YY": 5.787037037037037e-09,
             "PERMEABILITY_XY": 0.0,
@@ -3241,11 +3677,8 @@ window.DRAFTS_FIXTURE =
             "YOUNG_MODULUS": 45000000.0,
             "POISSON_RATIO": 0.25,
             "DENSITY_SOLID": 1936.7991845056065,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.3,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 5.787037037037037e-05,
             "PERMEABILITY_YY": 5.787037037037037e-05,
             "PERMEABILITY_XY": 0.0,
@@ -3269,11 +3702,8 @@ window.DRAFTS_FIXTURE =
             "YOUNG_MODULUS": 2000000000.0,
             "POISSON_RATIO": 0.2,
             "DENSITY_SOLID": 2446.4831804281343,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.3,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 0.0,
             "PERMEABILITY_YY": 0.0,
             "PERMEABILITY_XY": 0.0,
@@ -3476,11 +3906,8 @@ window.DRAFTS_FIXTURE =
             "YOUNG_MODULUS": 15000000.0,
             "POISSON_RATIO": 0.3,
             "DENSITY_SOLID": 1732.9255861365953,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.3,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 1.1574074074074073e-05,
             "PERMEABILITY_YY": 1.1574074074074073e-05,
             "PERMEABILITY_XY": 0.0,
@@ -3504,11 +3931,8 @@ window.DRAFTS_FIXTURE =
             "YOUNG_MODULUS": 25000000.0,
             "POISSON_RATIO": 0.28,
             "DENSITY_SOLID": 1834.8623853211009,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.3,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 1.736111111111111e-05,
             "PERMEABILITY_YY": 1.736111111111111e-05,
             "PERMEABILITY_XY": 0.0,
@@ -3532,11 +3956,8 @@ window.DRAFTS_FIXTURE =
             "YOUNG_MODULUS": 4000000.0,
             "POISSON_RATIO": 0.35,
             "DENSITY_SOLID": 1529.051987767584,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.3,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 1.1574074074074074e-09,
             "PERMEABILITY_YY": 1.1574074074074074e-09,
             "PERMEABILITY_XY": 0.0,
@@ -3560,11 +3981,8 @@ window.DRAFTS_FIXTURE =
             "YOUNG_MODULUS": 12000000.0,
             "POISSON_RATIO": 0.33,
             "DENSITY_SOLID": 1783.893985728848,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.3,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 5.787037037037037e-09,
             "PERMEABILITY_YY": 5.787037037037037e-09,
             "PERMEABILITY_XY": 0.0,
@@ -3588,11 +4006,8 @@ window.DRAFTS_FIXTURE =
             "YOUNG_MODULUS": 45000000.0,
             "POISSON_RATIO": 0.25,
             "DENSITY_SOLID": 1936.7991845056065,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.3,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 5.787037037037037e-05,
             "PERMEABILITY_YY": 5.787037037037037e-05,
             "PERMEABILITY_XY": 0.0,
@@ -3616,11 +4031,8 @@ window.DRAFTS_FIXTURE =
             "YOUNG_MODULUS": 2000000000.0,
             "POISSON_RATIO": 0.2,
             "DENSITY_SOLID": 2446.4831804281343,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.3,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 0.0,
             "PERMEABILITY_YY": 0.0,
             "PERMEABILITY_XY": 0.0,

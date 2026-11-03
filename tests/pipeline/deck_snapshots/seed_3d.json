@@ -31,6 +31,7 @@
   "materials:PorousDomain.Soil_2": {
    "law": "GeoIncrementalLinearElastic3DLaw",
    "variables": {
+    "BIOT_COEFFICIENT": 0.9988235294117647,
     "BULK_MODULUS_FLUID": 2200000000.0,
     "BULK_MODULUS_SOLID": 10000000000.0,
     "DENSITY_SOLID": 1783.893985728848,
