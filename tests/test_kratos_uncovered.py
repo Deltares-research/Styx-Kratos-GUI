@@ -9,9 +9,20 @@ from core.analysis import kratos_main
 from core.geometry import solid_model
 from core.kratos import (condition_checks, external_deck, interfaces, materials,
                          mdpa_reader, parameters, writer)
-from core.model.schemas import InterfaceSection, Stage
+from core.model.schemas import (InterfaceSection, MeshRequest, SeepageCondition, Stage,
+                                WaterPressureCondition)
 from core.model.templates import seed_project
-from tests.models.muskat import HEADS, muskat
+from tests.models.muskat import HEADS, HEIGHT, WIDTH, muskat
+
+ABOVE_THE_GROUND = 2.0
+"""A height over the seed model's ground (y = 0): a line drawn there has no soil around
+it, so `solid_model._embed_beams` clips all of it away and it gets no mesh."""
+
+
+@pytest.fixture(scope="module")
+def gmsh_session():
+    with solid_model.session():
+        yield
 
 
 def test_kratos_main_rejects_missing_or_extra_arguments(capsys):
@@ -282,13 +293,14 @@ def test_writer_repairs_negative_jacobians_without_losing_midside_order(
     assert writer._oriented(fixed, coordinates, dimension) == fixed
 
 
-def test_interface_export_refuses_a_contact_without_mesh():
+def test_interface_export_refuses_a_contact_without_mesh(gmsh_session):
     from tests.test_kratos_interfaces import interfaced_project
 
-    project = interfaced_project()
+    project = interfaced_project(side="left", structure=None,
+                                 points=[[2.0, ABOVE_THE_GROUND], [10.0, ABOVE_THE_GROUND]])
 
     with pytest.raises(writer.ExportError, match="Wall contact.*no mesh along its line"):
-        writer._interface_elements(project, 2, [], [], [], {}, {}, [])
+        writer.export_project(project, MeshRequest(element_size=3.0, order=1))
 
 
 def test_interface_export_translates_topology_failures(monkeypatch):
@@ -369,17 +381,24 @@ def test_panel_lookup_selects_the_named_panel():
     assert writer._panel_of(project, "panel") is panel
 
 
-@pytest.mark.parametrize("rows, message", [
-    ([], "River load.*no mesh along its line"),
-    ([[1, 2, 3, 4]], "no Kratos condition is mapped.*4 nodes"),
-])
-def test_normal_load_export_refuses_missing_or_unsupported_mesh(monkeypatch, rows, message):
+def test_normal_load_export_refuses_a_line_without_mesh(gmsh_session):
+    from tests.test_kratos_normal_loads import normal_load_project
+
+    project = normal_load_project(
+        points=[[8.0, ABOVE_THE_GROUND], [16.0, ABOVE_THE_GROUND]])
+
+    with pytest.raises(writer.ExportError, match="River load.*no mesh along its line"):
+        writer.export_project(project, MeshRequest(element_size=3.0, order=1))
+
+
+def test_normal_load_export_refuses_an_edge_with_no_mapped_condition(monkeypatch):
+    # No mesher writes a 4-node edge, so this guard can only be reached by stubbing.
     from tests.test_kratos_normal_loads import normal_load_project
 
     monkeypatch.setattr(writer, "_tagged", lambda _: {"normal_1": [10]})
-    monkeypatch.setattr(writer, "_segments", lambda _: rows)
+    monkeypatch.setattr(writer, "_segments", lambda _: [[1, 2, 3, 4]])
 
-    with pytest.raises(writer.ExportError, match=message):
+    with pytest.raises(writer.ExportError, match="no Kratos condition is mapped.*4 nodes"):
         writer._normal_load_conditions(normal_load_project(), 2, [])
 
 
@@ -388,17 +407,13 @@ def test_export_names_collapse_repeated_separators_and_refuse_numeric_prefixes()
     assert writer._sanitise("123 wall") == ""
 
 
-def test_seepage_export_refuses_a_drawn_line_without_mesh(monkeypatch):
-    from core.model.schemas import SeepageCondition
-    from core.model.templates import blank_project
-
-    condition = SeepageCondition(id="drain", name="Drain", on="line",
-                                points=[(0, 0), (1, 0)])
-    project = blank_project().model_copy(update={"boundary_conditions": [condition]})
-    monkeypatch.setattr(writer, "_tagged", lambda _: {})
+def test_seepage_export_refuses_a_drawn_line_without_mesh(gmsh_session):
+    above = HEIGHT + 1.0
+    drain = SeepageCondition(id="drain", name="Drain", on="line",
+                             points=[(0.2, above), (WIDTH - 0.2, above)])
 
     with pytest.raises(writer.ExportError, match="Drain.*no mesh along its line"):
-        writer._seepage_conditions(project, [], {}, [])
+        writer.export_project(muskat(conditions=[*HEADS, drain]))
 
 
 def test_seepage_export_warns_when_no_edge_lies_on_the_selected_face():
@@ -434,17 +449,12 @@ def test_a_condition_on_an_absent_soil_body_is_omitted_with_a_warning(monkeypatc
 
 
 @pytest.mark.parametrize("on, points", [
-    ("line", [(0, 0), (1, 0)]),
-    ("point", [(0, 0)]),
+    ("line", [(0.2, HEIGHT + 1.0), (WIDTH - 0.2, HEIGHT + 1.0)]),
+    ("point", [(WIDTH / 2, HEIGHT + 1.0)]),
 ])
-def test_drawn_water_conditions_without_mesh_are_refused(monkeypatch, on, points):
-    from core.model.schemas import WaterPressureCondition
-    from core.model.templates import blank_project
-
-    condition = WaterPressureCondition(id="water", name="Water", on=on,
-                                      points=points, fluid_pressure_type="Uniform")
-    project = blank_project().model_copy(update={"boundary_conditions": [condition]})
-    monkeypatch.setattr(writer, "_tagged", lambda _: {})
+def test_drawn_water_conditions_without_mesh_are_refused(gmsh_session, on, points):
+    water = WaterPressureCondition(id="drawn_water", name="Water", on=on,
+                                   points=points, fluid_pressure_type="Uniform")
 
     with pytest.raises(writer.ExportError, match=f"Water.*no mesh at its {on}"):
-        writer._condition_targets(project, 2, [], {}, {}, {}, {}, [])
+        writer.export_project(muskat(conditions=[*HEADS, water]))
