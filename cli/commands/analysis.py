@@ -13,9 +13,8 @@ import argparse
 from pathlib import Path
 
 from cli.commands.meshing import exported
-from cli.terminal.files import add_project, add_runs_dir, environment
+from cli.terminal.files import add_project, add_runs_dir, environment, read
 from cli.terminal.output import Answer, CommandError
-from core import session
 from core.analysis import calculation
 from core.kratos import deck_files, external_deck
 
@@ -58,7 +57,7 @@ def run_deck(args: argparse.Namespace) -> Answer:
 
 
 def calculate_model(args: argparse.Namespace) -> Answer:
-    project = session.load(args.project)
+    project = read(args)
     if project.deck is not None:
         with environment(args):
             return _ran(calculation.run_deck(project.deck))

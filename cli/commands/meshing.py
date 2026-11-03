@@ -11,7 +11,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from cli.terminal.files import add_project, add_writing, written
+from cli.terminal.files import add_project, add_writing, read, written
 from cli.terminal.output import Answer, CommandError
 from core import gmsh_worker, session
 from core.analysis import calculation
@@ -43,7 +43,7 @@ def register(commands, common: argparse.ArgumentParser) -> None:
 
 
 def mesh_model(args: argparse.Namespace) -> Answer:
-    project = session.load(args.project)
+    project = read(args)
     session.require_parametric(project, "meshed")
     changed = _with_settings(project, args)
     mesh = gmsh_worker.run_here(gmsh_worker.mesh_job, changed.model_dump_json(),
@@ -60,7 +60,7 @@ def mesh_model(args: argparse.Namespace) -> Answer:
 
 
 def export_deck(args: argparse.Namespace) -> Answer:
-    project = session.load(args.project)
+    project = read(args)
     session.require_parametric(project, "exported")
     named = project.model_copy(update={"name": args.name}) if args.name else project
     export = exported(named)

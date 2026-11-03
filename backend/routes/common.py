@@ -1,7 +1,7 @@
-"""What more than one router needs: reading an upload, answering a refused edit, and
-handing a mesh job to the gmsh worker.
+"""What more than one router needs: reading an upload, storing an edit and answering a
+refused one, and handing a mesh job to the gmsh worker.
 
-Written once so the routes cannot drift apart in how they refuse a request.
+Written once so the routes cannot drift apart in how they answer a request.
 """
 
 from __future__ import annotations
@@ -12,6 +12,7 @@ from fastapi import HTTPException, UploadFile
 from fastapi.exceptions import RequestValidationError
 from pydantic import BaseModel, ValidationError
 
+from backend import store
 from core import gmsh_worker, session
 from core.model.schemas import MeshRequest, Project
 
@@ -46,6 +47,16 @@ def refusals():
         raise HTTPException(status_code=404, detail=str(failure)) from failure
     except session.EditRefused as failure:
         raise HTTPException(status_code=422, detail=str(failure)) from failure
+
+
+def stored(project: Project) -> dict:
+    """Store the edited `project`, and start the answer to the edit: the project, and in
+    `edit_notes` the mesh sizes the edit took away with their bodies
+    (`session.removed_sizes`). The GUI shows `edit_notes` in its command box whatever
+    edit it made (frontend/js/api.js); kratos-cli prints the same note."""
+    notes = session.removed_sizes(store.get(), project)
+    store.put(project)
+    return {"project": project, "edit_notes": notes}
 
 
 def not_for_a_deck(project: Project, what: str) -> None:

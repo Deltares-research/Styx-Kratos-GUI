@@ -836,7 +836,7 @@ App.LivePatches = (function () {
      `_without_custom_parts`), and that sentence is the whole of what the user needs. */
   function deleteRequest(path, fallback) {
     return fetch(App.Api.base + path, { method: 'DELETE' }).then(function (res) {
-      if (res.ok) return res.json();
+      if (res.ok) return res.json().then(App.Api.told);
       return res.json().catch(function () { return {}; }).then(function (body) {
         throw new Error(typeof body.detail === 'string' ? body.detail : fallback);
       });

@@ -202,6 +202,27 @@ def _edited(project: Project, payload: dict) -> Project:
         update={"body_sizes": kept})})
 
 
+def removed_sizes(before: Project, after: Project) -> list[str]:
+    """The note on the mesh sizes an edit took away with their bodies (`_edited`), or none.
+
+    A body can come back -- a level moved back, a layer split again -- but its size does
+    not, so the user is told which sizes went and what they were. A size the user removed
+    on purpose, or one for a body the model never had, is not named. kratos-cli prints
+    the note after its answer and the GUI shows it in its command box.
+    """
+    gone = set(before.mesh.body_sizes) - set(after.mesh.body_sizes)
+    if gone:
+        gone &= set(before.part_keys()) - set(after.part_keys())
+    if not gone:
+        return []
+    sizes = ", ".join(f"{key} ({before.mesh.body_sizes[key]:g})" for key in sorted(gone))
+    if len(gone) == 1:
+        return [f"Removed the mesh size of {sizes}: the edit took that body away. If it "
+                "comes back, set its size again."]
+    return [f"Removed the mesh sizes of {sizes}: the edit took those bodies away. If they "
+            "come back, set their sizes again."]
+
+
 # ── Soil, water, materials, structures ──────────────────────────────────────
 
 def replace_layers(project: Project, update: LayersUpdate) -> Project:

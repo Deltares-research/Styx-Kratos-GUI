@@ -938,6 +938,31 @@ def test_a_size_for_a_body_the_model_never_had_is_left_for_check_to_name():
     assert session.unknown_mesh_keys(edited, settings) == ["soil_typo"]
 
 
+def test_the_user_is_told_which_sizes_an_edit_took_away():
+    """A body can come back -- a level moved back -- but its size does not."""
+    project = _sized(excavation_project(staged=False))
+
+    notes = session.removed_sizes(project, session.split_layer(project, "L_top"))
+
+    assert notes == ["Removed the mesh size of soil_L_top__lift3 (1): the edit took that "
+                     "body away. If it comes back, set its size again."]
+    several = session.removed_sizes(project, session.with_value(project, "excavation", None))
+    assert len(several) == 1
+    assert several[0].startswith("Removed the mesh sizes of soil_L_mid__pit (1), "
+                                 "soil_L_top__lift3 (1): the edit took those bodies away.")
+
+
+def test_a_size_removed_on_purpose_or_never_valid_is_not_noted():
+    project = _sized(excavation_project(staged=False), soil_typo=1.0)
+
+    on_purpose = session.without_value(project, "mesh.body_sizes[soil_L_mid]")
+    typo_kept = session.remove_layer(project, "L_mid")
+
+    assert session.removed_sizes(project, on_purpose) == []
+    assert "soil_typo" not in " ".join(session.removed_sizes(project, typo_kept))
+    assert session.removed_sizes(project, project) == []
+
+
 def test_every_edit_makes_its_result_through_the_one_rule():
     """`session._edited` is where a lost body's size goes. An edit that validated its
     project itself would skip the rule -- `layer split` and `layer set` once did."""

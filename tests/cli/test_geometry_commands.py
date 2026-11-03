@@ -224,6 +224,24 @@ def test_a_layer_edit_that_takes_a_lift_away_takes_its_mesh_size_too(cli, tmp_pa
     assert ran.code == 0, ran.err
 
 
+def test_a_layer_edit_says_which_mesh_size_it_took_away(cli, tmp_path):
+    """The lift can come back -- the split undone -- but its size does not, so the edit
+    says which size went, and what it was, whether it is written or only tried."""
+    project = excavation.excavation_project(staged=False)
+    sized = project.mesh.model_copy(update={"body_sizes": {"soil_L_top__lift3": 1.5}})
+    path = session.save(project.model_copy(update={"mesh": sized}), tmp_path / "pit.json")
+
+    tried = cli("layer", path, "split", "L_top", "--dry-run")
+    made = cli("layer", path, "split", "L_top")
+
+    for ran in (tried, made):
+        assert ran.code == 0, ran.err
+        assert "note: Removed the mesh size of soil_L_top__lift3 (1.5)" in ran.out
+    again = cli("layer", path, "split", "L1")
+    assert again.code == 0, again.err
+    assert "Removed" not in again.out
+
+
 def test_a_layer_needs_a_bottom_or_a_thickness_or_takes_five_metres(cli, site):
     assert cli("layer", site, "add", "L3", "--material", "m1").code == 0
 
