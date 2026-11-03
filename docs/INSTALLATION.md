@@ -16,10 +16,6 @@ You need **Python 3.10 or newer, 64-bit**, and an internet connection for the fi
    launcher, which `run.bat` uses.
 2. Optional: install [Git](https://git-scm.com/download/win) to clone the repository.
 
-On Windows, a free-threaded Python older than 3.14 is relaunched using regular Python
-of the same major/minor version via `py`. Install that regular version too; if it is
-missing, the launcher reports which version is needed.
-
 Check the version (3.10 or newer):
 
 ```powershell
@@ -92,9 +88,7 @@ What the launcher does:
 
 1. It creates a virtual environment in the repository folder. Each operating system gets its
    own: `.venv-windows`, `.venv-linux` or `.venv-macos`. This means one checkout can be shared
-   between systems, for example through WSL or a network drive. On Windows, an existing
-   environment is rebuilt if its interpreter cannot be probed or its free-threaded ABI
-   differs from the Python running the launcher.
+   between systems, for example through WSL or a network drive.
 2. It installs the pinned packages from [requirements.txt](../requirements.txt), and installs
    them again whenever that file changes.
 3. It starts the server on port 8000.
