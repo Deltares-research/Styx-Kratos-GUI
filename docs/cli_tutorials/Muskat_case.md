@@ -44,7 +44,7 @@ The soil is the reference deck's, value for value. The flow uses the intrinsic p
 flow element also checks that the other values are there. The water is the project's, the
 same in every soil: `fluid` sets its bulk modulus (the reference's water is
 incompressible), and its density follows from the water's specific weight, 10 kN/m³. A new
-soil starts from the default sand, which is saturated below the phreatic level and has a
+soil starts from the blank soil, which is saturated below the phreatic level and has a
 residual saturation above it. The reference soil is saturated everywhere, so `--unset`
 removes the residual saturation:
 
@@ -115,7 +115,7 @@ Pore pressure (Pa), stage 1 (Flow): -30000 to 24000 over 263 nodes
 PS> kratos-cli results field 1 fluxx
 q_x (m/s), stage 1 (Flow): 6.00e-6 to 6.00e-6 over 263 nodes
   min 6.00e-6 at node 1
-  max 6.00e-6 at node 2
+  max 6.00e-6 at node 1
 `--csv` writes every value.
 ```
 

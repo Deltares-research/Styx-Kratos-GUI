@@ -43,8 +43,8 @@ def register(commands, common: argparse.ArgumentParser) -> None:
             help="the soil models (--model), each with its parameters and defaults in "
                  "the project's units")
     add = action(material, common, "add", add_material, variables=True,
-                  help="a soil: the default sand, or a library preset, of a soil model, "
-                       "then NAME=VALUE variables of its own")
+                  help="a soil: the blank soil Create soil makes, or a library preset, of a "
+                       "soil model, then NAME=VALUE variables of its own")
     add.add_argument("id", nargs="?", help=id_help())
     add.add_argument("--preset", help="the library preset to start from (see `presets`)")
     _material_fields(add)
