@@ -527,24 +527,26 @@ def test_readline_is_optional_on_platforms_without_it(monkeypatch):
     assert shell._readline(shell.Shell(run=lambda _: 0)) is False
 
 
-@pytest.mark.parametrize("failure", [None, "set", "write"])
-def test_history_saving_is_bounded_and_tolerates_unwritable_history(tmp_path, failure):
+@pytest.mark.parametrize("set_error, write_error, writes", [
+    pytest.param(None, None, 1, id="saved"),
+    pytest.param(OSError("read-only"), None, 0, id="set-fails"),
+    pytest.param(None, OSError("read-only"), 1, id="write-fails"),
+])
+def test_history_saving_is_bounded_and_tolerates_unwritable_history(
+        tmp_path, set_error, write_error, writes):
     from types import SimpleNamespace
-    from unittest.mock import Mock
+    from unittest.mock import Mock, call
 
     history = tmp_path / ".kratos_cli_history"
     readline = SimpleNamespace(
-        set_history_length=Mock(side_effect=OSError("read-only") if failure == "set" else None),
-        write_history_file=Mock(side_effect=OSError("read-only") if failure == "write" else None),
+        set_history_length=Mock(side_effect=set_error),
+        write_history_file=Mock(side_effect=write_error),
     )
 
     shell._save_history(readline, history)
 
     readline.set_history_length.assert_called_once_with(1000)
-    if failure == "set":
-        readline.write_history_file.assert_not_called()
-    else:
-        readline.write_history_file.assert_called_once_with(history)
+    assert readline.write_history_file.call_args_list == [call(history)] * writes
 
 
 # ── Started as a user starts it ─────────────────────────────────────────────

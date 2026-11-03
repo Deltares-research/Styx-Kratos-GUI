@@ -449,8 +449,12 @@ def test_empty_bounding_box_requires_or_returns_a_camera_fallback():
         solid_model.bounding_box([])
 
 
-@pytest.mark.parametrize("previous", [None, "python-handler"])
-def test_posix_initialization_restores_pythons_sigpipe_handler(monkeypatch, previous):
+@pytest.mark.parametrize("previous, expected", [
+    (None, [("get", 13), ("initialize",)]),
+    ("python-handler", [("get", 13), ("initialize",), ("restore", 13, "python-handler")]),
+])
+def test_posix_initialization_restores_pythons_sigpipe_handler(
+        monkeypatch, previous, expected):
     events = []
     signal = SimpleNamespace(
         SIGPIPE=13,
@@ -464,7 +468,4 @@ def test_posix_initialization_restores_pythons_sigpipe_handler(monkeypatch, prev
 
     solid_model.initialize()
 
-    expected = [("get", 13), ("initialize",)]
-    if previous is not None:
-        expected.append(("restore", 13, previous))
     assert events == expected

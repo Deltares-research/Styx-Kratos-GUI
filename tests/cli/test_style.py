@@ -8,6 +8,7 @@ sees no difference.
 from __future__ import annotations
 
 import io
+from unittest.mock import call
 
 import pytest
 
@@ -105,13 +106,13 @@ def windows_console(monkeypatch):
     return kernel, runtime, stream
 
 
-@pytest.mark.parametrize("initial_mode, set_result, expected", [
-    (0x0001, 1, True),
-    (0x0001, 0, False),
-    (0x0005, 1, True),
+@pytest.mark.parametrize("initial_mode, set_result, expected, set_calls", [
+    (0x0001, 1, True, [call(123, 0x0005)]),
+    (0x0001, 0, False, [call(123, 0x0005)]),
+    (0x0005, 1, True, []),
 ])
 def test_windows_console_enables_virtual_terminal_processing_only_when_needed(
-        windows_console, initial_mode, set_result, expected):
+        windows_console, initial_mode, set_result, expected, set_calls):
     kernel, runtime, stream = windows_console
 
     def get_mode(handle, mode):
@@ -125,10 +126,7 @@ def test_windows_console_enables_virtual_terminal_processing_only_when_needed(
     assert style._reads_escape_codes(stream) is expected
     stream.fileno.assert_called_once_with()
     runtime.get_osfhandle.assert_called_once_with(7)
-    if initial_mode & 0x0004:
-        kernel.SetConsoleMode.assert_not_called()
-    else:
-        kernel.SetConsoleMode.assert_called_once_with(123, initial_mode | 0x0004)
+    assert kernel.SetConsoleMode.call_args_list == set_calls
 
 
 def test_windows_stream_without_a_console_gets_no_escape_codes(windows_console):

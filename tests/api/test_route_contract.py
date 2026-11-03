@@ -331,10 +331,15 @@ def test_geometry_import_reports_an_unreadable_obj_as_a_client_error(client):
     assert _readable(response.json().get("detail"))
 
 
-@pytest.mark.parametrize("error_name, status", [
-    ("Busy", 409), ("CalculationError", 500),
-])
-def test_calculate_project_reports_runner_errors(client, monkeypatch, error_name, status):
+RUNNER_ERRORS = [
+    ("Busy", 409, "A calculation is already running."),
+    ("CalculationError", 500, "Cannot start solver."),
+]
+
+
+@pytest.mark.parametrize("error_name, status, message", RUNNER_ERRORS)
+def test_calculate_project_reports_runner_errors(
+        client, monkeypatch, error_name, status, message):
     from unittest.mock import AsyncMock, Mock
 
     from backend.routes import decks
@@ -343,7 +348,6 @@ def test_calculate_project_reports_runner_errors(client, monkeypatch, error_name
     export = {"stats": {}, "warnings": []}
     mesh = AsyncMock(return_value=export)
     monkeypatch.setattr(decks, "run_mesh_job", mesh)
-    message = "A calculation is already running." if status == 409 else "Cannot start solver."
     run = Mock(side_effect=getattr(calculation, error_name)(message))
     monkeypatch.setattr(calculation, "run", run)
 
@@ -389,18 +393,15 @@ def deck_client(client, tmp_path):
     return client
 
 
-@pytest.mark.parametrize("error_name, status", [
-    ("Busy", 409), ("CalculationError", 500),
-])
+@pytest.mark.parametrize("error_name, status, message", RUNNER_ERRORS)
 def test_calculate_deck_reports_runner_errors(
-        deck_client, monkeypatch, error_name, status):
+        deck_client, monkeypatch, error_name, status, message):
     from unittest.mock import Mock
 
     from backend import store
     from core.analysis import calculation
 
     deck = store.get().deck
-    message = "A calculation is already running." if status == 409 else "Cannot start solver."
     run = Mock(side_effect=getattr(calculation, error_name)(message))
     monkeypatch.setattr(calculation, "run_deck", run)
 

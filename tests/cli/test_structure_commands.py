@@ -346,13 +346,14 @@ def test_a_normal_load_is_uniform_unless_it_is_hydrostatic(cli, pit):
 
 def test_section_set_renames_a_section_and_accepts_a_constitutive_law(cli, pit):
     original = session.load(pit).beam_sections[0]
+    assert original.constitutive_law != "BeamConstitutiveLaw"
     ran = cli("section", pit, "set", original.id, "--name", "Renamed profile",
-              "--law", original.constitutive_law)
+              "--law", "BeamConstitutiveLaw")
 
     assert ran.code == 0, ran.err
     changed = session.load(pit).beam_sections[0]
     assert changed.name == "Renamed profile"
-    assert changed.constitutive_law == original.constitutive_law
+    assert changed.constitutive_law == "BeamConstitutiveLaw"
 
 
 def test_beam_set_changes_the_section_reference(cli, pit):

@@ -964,18 +964,14 @@ def test_interface_export_refuses_a_contact_without_mesh(session):
         writer.export_project(project, MeshRequest(element_size=3.0, order=1))
 
 
-def test_interface_export_translates_topology_failures(monkeypatch):
-    project = interfaced_project(side="left", structure=None, points=[[0, 0], [1, 0]])
-    monkeypatch.setattr(writer, "_tagged", lambda _: {"interface_1": [10]})
-    monkeypatch.setattr(writer, "_segments", lambda _: [[1, 2]])
-
+def test_interface_export_translates_topology_failures(session, monkeypatch):
     def broken_split(*_args):
         raise interfaces.InterfaceError("contact crosses an unsupported junction")
 
     monkeypatch.setattr(interfaces, "split_mesh", broken_split)
 
     with pytest.raises(writer.ExportError, match="contact crosses an unsupported junction"):
-        writer._interface_elements(project, 2, [], [], [], {}, {}, [])
+        writer.export_project(interfaced_project(), MeshRequest(element_size=3.0, order=1))
 
 
 def test_contact_grouping_excludes_structures_and_faces_with_no_common_soil_owner():

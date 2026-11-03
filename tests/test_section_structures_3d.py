@@ -195,9 +195,12 @@ def test_the_two_dimensional_load_symbol_is_drawn_in_the_solid_model(drawn):
     assert drawable(drawn, "load1")
 
 
-@pytest.mark.parametrize("swept_faces", [[], [(2, 20)]])
+@pytest.mark.parametrize("swept_faces, expected", [
+    ([], []),
+    ([(2, 20)], [("interface_1", [20])]),
+])
 def test_section_sweeps_report_failed_piles_and_imprint_free_interfaces(
-        monkeypatch, swept_faces):
+        monkeypatch, swept_faces, expected):
     from tests.test_kratos_interfaces import interfaced_project
 
     project = interfaced_project(
@@ -213,7 +216,7 @@ def test_section_sweeps_report_failed_piles_and_imprint_free_interfaces(
 
     result = solid_model._section_sweeps(project, log)
 
-    assert result == ([("interface_1", [20])] if swept_faces else [])
+    assert result == expected
     assert any("sheetpile_1 could not be swept" in note for note in log)
     assert any("export no interface elements" in note for note in log)
     assert occ.extrude.call_count == 2

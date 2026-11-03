@@ -11,7 +11,7 @@ only about what OCC ends up holding.
 """
 
 from types import SimpleNamespace
-from unittest.mock import Mock
+from unittest.mock import Mock, call
 
 import gmsh
 import pytest
@@ -324,17 +324,29 @@ def test_three_dimensional_build_verification_names_parts_without_geometry():
         solid_model._verify(seed_project(), {})
 
 
-@pytest.mark.parametrize("scenario", ["embedded", "boundary", "outside", "failure"])
+INSIDE, OUTSIDE = (0.5, 0.5, 0.5), (2, 2, 2)
+EMBED = call(1, [7], 3, 10)
+
+
+@pytest.mark.parametrize("centre, bounds_a_face, embed_error, embeds, expected_log", [
+    pytest.param(INSIDE, 0, None, [EMBED], [], id="embedded"),
+    pytest.param(INSIDE, 1, None, [], [], id="boundary"),
+    pytest.param(OUTSIDE, 0, None, [], [
+        "Info    : member lies in no soil volume; it is meshed unbonded from the soil",
+    ], id="outside"),
+    pytest.param(INSIDE, 0, RuntimeError("mesher refused"), [EMBED], [
+        "Info    : member could not be embedded in volume 10 (mesher refused); "
+        "it is meshed unbonded from the soil",
+    ], id="failure"),
+])
 def test_volume_curve_embedding_preserves_topology_and_reports_unbonded_members(
-        monkeypatch, scenario):
-    occ = SimpleNamespace(synchronize=Mock(), getCenterOfMass=Mock(
-        return_value=(2, 2, 2) if scenario == "outside" else (0.5, 0.5, 0.5)))
-    embed = Mock(side_effect=RuntimeError("mesher refused") if scenario == "failure" else None)
+        monkeypatch, centre, bounds_a_face, embed_error, embeds, expected_log):
+    occ = SimpleNamespace(synchronize=Mock(), getCenterOfMass=Mock(return_value=centre))
+    embed = Mock(side_effect=embed_error)
     model = SimpleNamespace(
         occ=occ, mesh=SimpleNamespace(embed=embed),
         getBoundingBox=Mock(return_value=(0, 0, 0, 1, 1, 1)),
-        getAdjacencies=Mock(return_value=(SimpleNamespace(
-            size=1 if scenario == "boundary" else 0), [])),
+        getAdjacencies=Mock(return_value=(SimpleNamespace(size=bounds_a_face), [])),
     )
     monkeypatch.setattr(solid_model, "gmsh", SimpleNamespace(model=model))
     log = []
@@ -342,18 +354,8 @@ def test_volume_curve_embedding_preserves_topology_and_reports_unbonded_members(
     solid_model._embed_curves_in_volumes({"member": [7]}, [10], log)
 
     occ.synchronize.assert_called_once_with()
-    if scenario in ("boundary", "outside"):
-        embed.assert_not_called()
-    else:
-        embed.assert_called_once_with(1, [7], 3, 10)
-    if scenario in ("outside", "failure"):
-        assert len(log) == 1
-        assert "member" in log[0]
-        assert "meshed unbonded from the soil" in log[0]
-        assert ("lies in no soil volume" if scenario == "outside"
-                else "could not be embedded in volume 10 (mesher refused)") in log[0]
-    else:
-        assert log == []
+    assert embed.call_args_list == embeds
+    assert log == expected_log
 
 
 def test_a_spatial_structure_outside_the_soil_is_not_returned_as_embedded(monkeypatch):

@@ -150,7 +150,7 @@ def test_mesh_labels_route_returns_the_export_numbering():
 def test_mdpa_element_labels_skip_undefined_nodes_and_order_by_element_id():
     labels = mdpa_reader._element_labels(
         {1: (0.0, 0.0, 0.0), 2: (2.0, 0.0, 0.0), 3: (0.0, 2.0, 0.0)},
-        [(8, [99]), (4, [1, 2, 3])],
+        [(8, [99]), (6, [1, 2]), (4, [1, 2, 3])],
     )
 
-    assert labels == [[4, 2 / 3, 2 / 3, 0.0]]
+    assert labels == [[4, 2 / 3, 2 / 3, 0.0], [6, 1.0, 0.0, 0.0]]
