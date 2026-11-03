@@ -111,29 +111,25 @@ App.MeshSettings = (function () {
     var fallback = Number(mesh.element_size || defaults.element_size);
     var sizes = mesh.body_sizes || {};
     return meshBodies(project).map(function (body) {
+      var own = Object.prototype.hasOwnProperty.call(sizes, body.key);
       return {
         key: body.key,
         label: body.label,
         enabled: selectedKeys.indexOf(body.key) >= 0,
-        size: Object.prototype.hasOwnProperty.call(sizes, body.key)
-          ? Number(sizes[body.key]) : fallback
+        size: own ? Number(sizes[body.key]) : fallback,
+        follows: !own
       };
     });
   }
 
   /* The sizes the window saves. It has rows for the layers only, so a size it has no row
      for -- a structure's, a lift's, set in `kratos-cli` or a script -- stays as it is. A
-     row shows the global size when its body has none, and that asks for nothing: it adds
-     no size, so the body goes on following the global size. */
+     row that `follows` the global size has had no size typed, and asks for none. */
   function savedBodySizes(project, rows) {
-    var mesh = (project && project.mesh) || {};
-    var fallback = Number(mesh.element_size || defaults.element_size);
-    var sizes = Object.assign({}, mesh.body_sizes);
+    var sizes = Object.assign({}, ((project && project.mesh) || {}).body_sizes);
     rows.forEach(function (row) {
       if (!(row.size > 0)) delete sizes[row.key];
-      else if (row.size !== fallback || Object.prototype.hasOwnProperty.call(sizes, row.key)) {
-        sizes[row.key] = row.size;
-      }
+      else if (!row.follows) sizes[row.key] = row.size;
     });
     return sizes;
   }
@@ -208,6 +204,8 @@ App.MeshSettings = (function () {
         'data-body-size-key': bodyRow.key
       });
       size.value = bodyRow.size;
+      if (bodyRow.follows) size.setAttribute('data-follows-global', '');
+      size.addEventListener('input', function () { size.removeAttribute('data-follows-global'); });
 
       /* The target size only applies to a layer that is being meshed, so follow
          the checkbox: greyed out when unchecked, and skipped by read(). */
@@ -225,8 +223,14 @@ App.MeshSettings = (function () {
     row('Layer mesh sizes', bodyTable,
         'Check every layer to mesh. Each checked layer can use an independent target size; shared faces remain conformal.');
 
-    row('Global element size', input('element_size', 'number', { min: '0.01', step: '0.1' }),
+    var globalSize = row('Global element size', input('element_size', 'number', { min: '0.01', step: '0.1' }),
         'Maximum target edge length in model units. Smaller values create more tetrahedra.');
+    globalSize.addEventListener('input', function () {
+      if (!(Number(globalSize.value) > 0)) return;
+      form.querySelectorAll('.mesh-body-size[data-follows-global]').forEach(function (control) {
+        control.value = globalSize.value;
+      });
+    });
     var planar = App.PROJECT && App.PROJECT.dimension === 2;
     row('Element order', select('order', planar
           ? [[1, 'Linear · 3-node triangle'], [2, 'Quadratic · 6-node triangle']]
@@ -273,7 +277,7 @@ App.MeshSettings = (function () {
         }
         // Keep a size typed for a layer that is currently unchecked, so ticking it
         // again does not silently fall back to the global size.
-        rows.push({ key: key, size: size });
+        rows.push({ key: key, size: size, follows: control.hasAttribute('data-follows-global') });
       });
       value.body_sizes = savedBodySizes(App.PROJECT, rows);
       value.volume_keys = selectedKeys;

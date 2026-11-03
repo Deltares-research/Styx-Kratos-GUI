@@ -106,6 +106,41 @@ def test_a_project_stays_meshable_after_mesh_properties_and_a_deleted_layer(
     assert app_page.errors == []
 
 
+def test_mesh_properties_saves_what_it_shows(app_page, live_server):
+    """A row with no size of its own follows the global size as it is typed; a size typed
+    on a row is kept, also when it is the old global size; an unticked layer stays out
+    until another project is opened."""
+    project = excavation_project(staged=False)
+    assert project.mesh.element_size == 5.0
+    assert app_page.request.put(live_server["url"] + "/api/project",
+                                data=project.model_dump(mode="json")).ok
+    app_page.reload()
+    app_page.wait_for_function(
+        f"App.PROJECT && App.PROJECT.name === '{project.name}' && App.LAYERS"
+        " && App.LAYERS.length === 3", timeout=LONG)
+
+    app_page.evaluate("App.MeshSettings.open()")
+    window = app_page.locator("#mesh-settings-dialog")
+    window.locator("[name=element_size]").fill("2.5")
+    assert window.locator("[data-body-size-key=soil_L_mid]").input_value() == "2.5"
+    window.locator("[data-body-size-key=soil_L_top]").fill("5")
+    window.locator("[data-body-size-key=soil_L_bot]").fill("7")
+    window.locator("[data-body-key=soil_L_bot]").uncheck()
+    window.get_by_role("button", name="Apply", exact=True).click()
+    app_page.wait_for_selector("#mesh-settings-dialog", state="detached", timeout=LONG)
+
+    mesh = app_page.request.get(live_server["url"] + "/api/project").json()["mesh"]
+    assert mesh["element_size"] == 2.5
+    assert mesh["body_sizes"] == {**project.mesh.body_sizes, "soil_L_top": 5.0, "soil_L_bot": 7.0}
+    assert app_page.evaluate("App.Export.meshRequest().volume_keys") == ["soil_L_top", "soil_L_mid"]
+
+    app_page.locator(TOOL.format("newProject")).click()
+    app_page.locator("#modal-layer .dialog").filter(has_text="New project").get_by_role(
+        "button", name="OK").click()
+    app_page.wait_for_function("App.MESH_BODIES_LEFT_OUT === null", timeout=LONG)
+    assert app_page.errors == []
+
+
 def test_a_project_made_on_the_command_line_opens_in_the_gui_and_saves_back(
         app_page, tmp_path):
     made = tmp_path / "pit.json"
