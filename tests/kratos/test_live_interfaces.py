@@ -403,10 +403,13 @@ they had not converged after 50."""
 
 
 def slipped(variables: dict, tmp_path: Path) -> list[tuple[float, float, float, float]]:
-    """(c, phi, tn, ts) at every integration point of the contact, the pile pulled up."""
-    project = drawn_ground.pushed_pile_project(variables=SOFT | variables,
-                                               law=COULOMB_CONTACT, load=(0.0, PULL),
-                                               max_iterations=50)
+    """(c, phi, tn, ts) at every integration point of the contact, the pile pulled up.
+    A contact with no strength typed takes its soils', so they are Mohr-Coulomb: a linear
+    elastic soil has none to give."""
+    derived = not ({"GEO_COHESION", "GEO_FRICTION_ANGLE"} & set(variables))
+    project = drawn_ground.pushed_pile_project(
+        variables=SOFT | variables, law=COULOMB_CONTACT, load=(0.0, PULL),
+        max_iterations=50, soil_law="GeoMohrCoulombLawPlaneStrain" if derived else None)
     _, elements = contacts(project, tmp_path)
     return [(e["properties"]["GEO_COHESION"], e["properties"]["GEO_FRICTION_ANGLE"], tn, ts)
             for e in elements for tn, ts, *_ in e["traction"]]

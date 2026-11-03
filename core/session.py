@@ -1138,9 +1138,13 @@ def add_section(project: Project, kind: str, section) -> Project:
 
 def update_section(project: Project, id: str, *, kind: str | None = None,
                    variables: dict | None = None, unset: Sequence[str] = (),
-                   **fields) -> Project:
+                   notes: list[str] | None = None, **fields) -> Project:
     """The section `id` with the fields given by their schema names, the variables
-    given, and without the variables `unset` names."""
+    given, and without the variables `unset` names.
+
+    An interface section given a Coulomb law, or a linear elastic soil, that has no
+    strength to give gets one of its own, as the GUI's contact editor gives it
+    (`own_strength_if_needed`); `notes` is told so."""
     field = drafts.SECTION_FIELDS[find_section(project, id, kind)[0]]
     payload = project.model_dump()
     record = next(s for s in payload[field] if s["id"] == id)
@@ -1151,6 +1155,29 @@ def update_section(project: Project, id: str, *, kind: str | None = None,
             raise EditRefused(f"{id} has no variable {variable}; it has: "
                               + (", ".join(record["variables"]) or "none"))
         del record["variables"][variable]
+    project = Project.model_validate(payload)
+    if field == "interface_sections" and {"constitutive_law", "material"} & set(fields):
+        project = own_strength_if_needed(project, id, notes)
+    return project
+
+
+def own_strength_if_needed(project: Project, id: str,
+                           notes: list[str] | None = None) -> Project:
+    """`project` with the interface section `id` given a strength of its own when it is
+    a Coulomb contact against a linear elastic soil it names, which has none to give
+    (`materials.strength_problem`) -- the GUI's `ownStrengthIfNeeded`, said in its words
+    into `notes`. Its two numbers are then the user's to set."""
+    section = next(s for s in project.interface_sections if s.id == id)
+    soil = next((m for m in project.materials if m.id == section.material), None)
+    problem = materials.strength_problem(section, soil)
+    if problem is None:
+        return project
+    payload = project.model_dump()
+    record = next(s for s in payload["interface_sections"] if s["id"] == id)
+    record["variables"] = materials.own_strength(section, soil, project.unit_system)
+    if notes is not None:
+        notes.append(problem.split(": set ")[0] + ": the contact has a strength of its "
+                     "own now. Set its GEO_COHESION and GEO_FRICTION_ANGLE.")
     return Project.model_validate(payload)
 
 

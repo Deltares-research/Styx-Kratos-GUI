@@ -415,11 +415,109 @@ def water_notes(value: object) -> list[str]:
     return notes
 
 
+COULOMB_INTERFACE_LAWS = ("GeoInterfaceCoulombLawPlaneStrain",
+                          "GeoInterfaceCoulombWithTensionCutOff")
+"""The interface laws that read a strength (`core.kratos.materials`)."""
+INTERFACE_STRENGTH = ("GEO_COHESION", "GEO_FRICTION_ANGLE")
+DEFAULT_R_INTER = 0.70          # `Material.r_inter` when a soil gives none
+
+
+def keep_old_deck(value: dict) -> dict:
+    """What the export filled in for a document saved before 2026-11-02 -- one without
+    `fluid` -- and fills no longer, put into the project, so its deck does not change:
+
+    *   a soil's `POROSITY`, 0.3 when it had none. A porosity is the soil's now, and the
+        export refuses a soil of a model without one.
+    *   the strength of a Coulomb contact against a linear elastic soil it names: its
+        cohesion c R and friction angle atan(R tan phi), with R the section's Rinter or
+        else the soil's. The export took them from the soil whatever its law; now a
+        linear elastic soil has no strength to give, and the contact carries its own.
+
+    A Coulomb contact that names no soil takes each adjacent one's, which only the
+    export knows; `contact_notes` names it when opening the file. A document with
+    `fluid` is left alone."""
+    if "fluid" in value:
+        return value
+    out = dict(value)
+    materials = out.get("materials")
+    if not isinstance(materials, list):
+        return out
+    out["materials"] = [_with_porosity(m) for m in materials]
+    soils = {m.get("id"): m for m in materials if isinstance(m, dict)}
+    sections = out.get("interface_sections")
+    if isinstance(sections, list):
+        out["interface_sections"] = [_with_own_strength(s, soils) for s in sections]
+    return out
+
+
 def _with_porosity(material: object) -> object:
     if not isinstance(material, dict) or not isinstance(material.get("variables"), dict) \
             or "POROSITY" in material["variables"]:
         return material
     return {**material, "variables": {**material["variables"], "POROSITY": DEFAULT_POROSITY}}
+
+
+def _elastic(soil: object) -> TypeGuard[dict]:
+    from core.model import soil_models
+
+    return isinstance(soil, dict) and \
+        soil_models.model_of(str(soil.get("constitutive_law"))) == soil_models.LINEAR_ELASTIC
+
+
+def _number(value: object) -> float | None:
+    return (float(value) if isinstance(value, (int, float)) and not isinstance(value, bool)
+            else None)
+
+
+def _takes_no_strength(section: object) -> TypeGuard[dict]:
+    """A Coulomb contact without a strength of its own."""
+    return (isinstance(section, dict)
+            and section.get("constitutive_law") in COULOMB_INTERFACE_LAWS
+            and not all(name in (section.get("variables") or {})
+                        for name in INTERFACE_STRENGTH))
+
+
+def _with_own_strength(section: object, soils: dict) -> object:
+    if not _takes_no_strength(section):
+        return section
+    soil = soils.get(section.get("material"))
+    if not _elastic(soil):
+        return section
+    given = soil.get("variables") or {}
+    r_inter = _number(section.get("r_inter"))
+    r_inter = r_inter if r_inter is not None else (_number(soil.get("r_inter"))
+                                                   or DEFAULT_R_INTER)
+    variables = dict(section.get("variables") or {})
+    cohesion, phi = _number(given.get("GEO_COHESION")), _number(given.get("GEO_FRICTION_ANGLE"))
+    if cohesion is not None:
+        variables.setdefault("GEO_COHESION", cohesion * r_inter)
+    if phi is not None:
+        variables.setdefault("GEO_FRICTION_ANGLE", math.degrees(
+            math.atan(math.tan(math.radians(phi)) * r_inter)))
+    return {**section, "variables": variables}
+
+
+def contact_notes(value: object) -> list[str]:
+    """The Coulomb contacts of a document saved before 2026-11-02 whose deck may change,
+    one line each: one that names no soil, in a project with a linear elastic soil that
+    has a strength. Along such a soil the export took that strength, reduced by Rinter;
+    now it refuses the contact until it has one of its own."""
+    if not isinstance(value, dict) or "fluid" in value:
+        return []
+    materials = value.get("materials")
+    elastic = [str(m.get("name") or m.get("id"))
+               for m in (materials if isinstance(materials, list) else [])
+               if _elastic(m) and any(name in (m.get("variables") or {})
+                                      for name in INTERFACE_STRENGTH)]
+    sections = value.get("interface_sections")
+    if not elastic or not isinstance(sections, list):
+        return []
+    return [f"interface section {s.get('name') or s.get('id')!r}: a Coulomb contact takes "
+            f"no strength from a linear elastic soil any more ({', '.join(elastic)}). "
+            "Where it runs against one, it took that soil's cohesion and friction angle, "
+            "reduced by Rinter, and the export now refuses it: give the section its own "
+            "GEO_COHESION and GEO_FRICTION_ANGLE."
+            for s in sections if _takes_no_strength(s) and s.get("material") is None]
 
 
 def upgraded(value: object) -> object:

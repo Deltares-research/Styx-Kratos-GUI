@@ -67,6 +67,27 @@ def test_a_section_field_its_kind_does_not_have_is_refused(cli, site):
     assert "--spacing" in ran.err and "panel" in ran.err
 
 
+def test_a_coulomb_contact_against_a_linear_elastic_soil_gets_a_strength_of_its_own(cli, site):
+    """As the GUI's contact editor gives it (`App.Interfaces.setOwnStrength`): the soil
+    has none to give, so the contact starts from the Mohr-Coulomb defaults, keeps what it
+    was given, and the command says so."""
+    ran = cli("section", site, "add", "interface", "c1", "--law",
+              "GeoInterfaceCoulombLawPlaneStrain", "--material", "m1", "GEO_FRICTION_ANGLE=20")
+
+    assert ran.code == 0, ran.err
+    c1 = session.load(site).interface_sections[0]
+    assert (c1.variables["GEO_COHESION"], c1.variables["GEO_FRICTION_ANGLE"]) == (1000.0, 20)
+    assert ("Fill is linear elastic and has no strength to give: the contact has a strength "
+            "of its own now. Set its GEO_COHESION and GEO_FRICTION_ANGLE.") in ran.out
+
+    assert cli("section", site, "add", "interface", "c2", "--law",
+               "GeoInterfaceCoulombLawPlaneStrain", "--material", "none").code == 0
+    assert "GEO_COHESION" not in session.load(site).interface_sections[1].variables, \
+        "against the soil on each side, which only the export knows"
+    assert "strength of its own" not in cli("section", site, "set", "c1",
+                                            "GEO_COHESION=500").out
+
+
 def test_none_clears_an_optional_section_field(cli, pit):
     assert cli("section", pit, "set", "contact", "--r-inter", "none").code == 0
 

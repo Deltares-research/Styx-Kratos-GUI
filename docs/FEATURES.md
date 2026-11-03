@@ -77,14 +77,14 @@ export divides the section values (not the density) by the `spacing`.
 | Feature | Detail | Status |
 |---|---|---|
 | Element | `Geo_UPwLineInterfacePlaneStrainElement2Plus2N` / `Geo_UPwLineInterfacePlaneStrainDiffOrderElement3Plus3N` | Tested for quadratic, from a Kratos reference deck. Limited for linear: the name is inferred. |
-| Law | The law of the interface section. The default is `GeoIncrementalLinearElasticInterfaceLaw`. The K0 stage always uses this law. | Tested |
+| Law | The law of the interface section: **Elastic** (`GeoIncrementalLinearElasticInterfaceLaw`, the default), which reads the stiffnesses only, or **Coulomb** (`GeoInterfaceCoulombLawPlaneStrain`), which reads a strength too. The K0 stage always uses the elastic law. | Tested |
 | Placement | Along a whole sheet pile or the part between two points on it (From, To), or along a free line through the soil (soil against soil, a slip surface, a lining). Side: both, left or right on the screen (below or above for a flat line). Many interfaces per pile, but only one on each face over a length. | Tested |
 | Ends of an interface | At the toe, one node copy for the soil around it (for one face only: the soil on that side of the pile line). Where the pile goes on, the soil beyond the end stays on the pile node, as the Kratos-side InterfaceInserter does. | Tested, also in Kratos |
 | Ties before installation | A master/slave tie for each split node, also for an interface on one face only | Tested |
 | Along an anchor's grout body | Not possible: the grout body is a point in the model | Not available |
 | Node splitting | Styx duplicates the nodes after it makes the mesh, so the contact has zero thickness | Tested, [kratos/interfaces.py](../core/kratos/interfaces.py) |
 | Stiffness | `INTERFACE_SHEAR_STIFFNESS` and `INTERFACE_NORMAL_STIFFNESS` as you type them. If you leave them out: shear = G / t of the adjacent soil (t is the virtual thickness), normal = 10 × shear. | Tested |
-| Strength | If you leave them out: c × R and atan(R × tan φ) of the adjacent soil. R is the `R_inter` of the section, or else the `R_inter` of the soil (default 0.7). | Tested against the Kratos reference |
+| Strength | Read by a Coulomb law only. **From the soil**: c × R and atan(R × tan φ) of the adjacent soil. R is the `R_inter` of the section, or else the `R_inter` of the soil (default 0.7). **Set on the interface**: the `GEO_COHESION` and `GEO_FRICTION_ANGLE` you type. A linear elastic soil has no strength to give, so a Coulomb contact against one needs its own; the export refuses it otherwise. A Coulomb contact given a linear elastic soil (its law or its soil changed, in the GUI or with `kratos-cli section add/set`) gets the Mohr-Coulomb defaults as its own strength, and a note says so. A project saved before 2026-11-02 whose Coulomb contact names a linear elastic soil with c and φ keeps the strength its input files had, as the contact's own; one that names no soil is named when the file is opened. | Tested against the Kratos reference |
 | Permeability | Neutral, Drain or Impermeable. The interface is always exported as `CONSTANT_PW_FIELD`. | Not exported |
 | 3D interfaces | Not exported. The export shows a warning. | Not available |
 

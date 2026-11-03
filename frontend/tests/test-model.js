@@ -321,11 +321,28 @@
     });
   });
 
+  /* A Coulomb contact against a Mohr-Coulomb sand, taking the sand's strength. */
+  function coulombProject() {
+    var p = contactedProject();
+    p.materials[0].constitutive_law = 'GeoMohrCoulombLawPlaneStrain';
+    p.interface_sections[0].constitutive_law = 'GeoInterfaceCoulombLawPlaneStrain';
+    return p;
+  }
+
+  function contactRow(label) {
+    return App.OBJECT_PROPS.interface_1.groups.Contact.filter(function (row) {
+      return row[0] === label; })[0];
+  }
+
+  function contactLabels() {
+    return App.OBJECT_PROPS.interface_1.groups.Contact.map(function (row) { return row[0]; });
+  }
+
   test('the contact rows edit the shared library and reject a bad value', function () {
-    withProject(contactedProject(), function () {
+    withProject(coulombProject(), function () {
       var rows = App.OBJECT_PROPS.interface_1.groups.Contact;
       var reduction = rows.filter(function (row) {
-        return row[0] === 'R_inter (Coulomb law only)'; })[0];
+        return row[0] === 'R_inter'; })[0];
       T.eq(reduction[4].set(0.55), null);
       T.eq(App.INTERFACE_SECTIONS[0].r_inter, 0.55);
       T.ok(reduction[4].set(1.4), 'a contact stronger than the soil is refused');
@@ -334,12 +351,72 @@
   });
 
   test('a contact with no Rinter of its own says it takes each soil’s', function () {
-    var p = contactedProject();
+    var p = coulombProject();
     p.interface_sections[0].r_inter = null;
     withProject(p, function () {
-      var row = App.OBJECT_PROPS.interface_1.groups.Contact.filter(function (r) {
-        return r[0] === 'R_inter (Coulomb law only)'; })[0];
-      T.eq(row.slice(0, 4), ['R_inter (Coulomb law only)', 'each soil’s own', '', true]);
+      T.eq(contactRow('R_inter').slice(0, 4), ['R_inter', 'each soil’s own', '', true]);
+    });
+  });
+
+  test('an elastic contact lists no strength and no R_inter', function () {
+    var p = contactedProject();
+    p.interface_sections[0].variables = { GEO_COHESION: 3, GEO_FRICTION_ANGLE: 20 };
+    withProject(p, function () {
+      var labels = contactLabels();
+      ['Strength', 'R_inter', 'GEO_COHESION', 'GEO_FRICTION_ANGLE'].forEach(function (name) {
+        T.ok(labels.indexOf(name) < 0, name + ' in ' + labels.join(' | '));
+      });
+    });
+  });
+
+  test('a Coulomb contact takes its soil’s strength, or is given its own', function () {
+    withProject(coulombProject(), function () {
+      T.eq(contactRow('Strength')[1], 'From the soil');
+      T.ok(contactLabels().indexOf('GEO_COHESION') < 0, 'derived: not typed');
+      T.eq(contactRow('Strength')[4].set('own'), null);
+      var given = App.INTERFACE_SECTIONS[0].variables;
+      T.near(given.GEO_COHESION, 500 * 0.67, 1e-9, 'what it took from the sand, to start');
+      T.near(given.GEO_FRICTION_ANGLE,
+             Math.atan(0.67 * Math.tan(32 * Math.PI / 180)) * 180 / Math.PI, 1e-3);
+      T.eq(contactRow('Strength')[4].set('soil'), null);
+      T.ok(!('GEO_COHESION' in App.INTERFACE_SECTIONS[0].variables), 'left to the soil again');
+    });
+  });
+
+  test('a contact set on the interface lists its strength, typed', function () {
+    var p = coulombProject();
+    p.interface_sections[0].variables = { GEO_COHESION: 3, GEO_FRICTION_ANGLE: 20 };
+    withProject(p, function () {
+      T.eq(contactRow('Strength')[1], 'Set on the interface');
+      T.ok(contactLabels().indexOf('R_inter') < 0, 'nothing to reduce');
+      T.eq(contactRow('GEO_FRICTION_ANGLE')[4].set(25), null);
+      T.eq(App.INTERFACE_SECTIONS[0].variables.GEO_FRICTION_ANGLE, 25);
+      T.ok(contactRow('GEO_FRICTION_ANGLE')[4].set(0), 'Kratos wants it above zero');
+      T.ok(contactRow('GEO_FRICTION_ANGLE')[4].set(90), 'and below 90 degrees');
+    });
+  });
+
+  test('against a linear elastic soil a Coulomb contact has to have its own strength', function () {
+    var p = coulombProject();
+    p.materials[0].constitutive_law = 'GeoLinearElasticPlaneStrain2DLaw';
+    p.interface_sections[0].variables = { GEO_COHESION: 3, GEO_FRICTION_ANGLE: 20 };
+    withProject(p, function () {
+      var refused = contactRow('Strength')[4].set('soil');
+      T.ok(/linear elastic and has no strength/.test(refused), refused);
+      T.eq(App.INTERFACE_SECTIONS[0].variables.GEO_COHESION, 3, 'and kept');
+    });
+  });
+
+  test('choosing Coulomb against a linear elastic soil gives the contact its own strength', function () {
+    var p = contactedProject();
+    p.unit_system = 'kN';
+    withProject(p, function () {
+      T.eq(contactRow('Law')[4].options().map(function (o) { return o.text; }),
+           ['Elastic', 'Coulomb']);
+      T.eq(contactRow('Law')[4].set('GeoInterfaceCoulombLawPlaneStrain'), null);
+      var given = App.INTERFACE_SECTIONS[0].variables;
+      T.near(given.GEO_COHESION, 1, 1e-12, 'the Mohr-Coulomb default, 1 kPa: not what the elastic sand carries');
+      T.eq(given.GEO_FRICTION_ANGLE, 30);
     });
   });
 
@@ -349,8 +426,10 @@
        to the same is `section set ID INTERFACE_NORMAL_STIFFNESS=...`. */
     withProject(contactedProject(), function () {
       var rows = App.OBJECT_PROPS.interface_1.groups.Contact;
-      T.eq(rows.slice(0, 2).map(function (row) { return row.slice(0, 2); }),
-           [['INTERFACE_NORMAL_STIFFNESS', 'derived'], ['INTERFACE_SHEAR_STIFFNESS', 'derived']]);
+      T.eq(rows.slice(0, 3).map(function (row) { return row.slice(0, 2); }),
+           [['Law', 'GeoIncrementalLinearElasticInterfaceLaw'],
+            ['INTERFACE_NORMAL_STIFFNESS', 'derived'], ['INTERFACE_SHEAR_STIFFNESS', 'derived']]);
+      rows = rows.slice(1);
       T.eq(rows[0][3], false, 'editable while derived');
       T.ok(!rows.some(function (row) { return row[0] === 'Stiffness'; }),
            'nothing to put back while both are derived');
@@ -367,7 +446,7 @@
                                           INTERFACE_SHEAR_STIFFNESS: 2e8 };
     withProject(p, function () {
       var rows = App.OBJECT_PROPS.interface_1.groups.Contact;
-      T.eq(rows[0].slice(0, 2), ['INTERFACE_NORMAL_STIFFNESS', '2000000000']);
+      T.eq(rows[1].slice(0, 2), ['INTERFACE_NORMAL_STIFFNESS', '2000000000']);
       var reset = rows.filter(function (row) { return row[0] === 'Stiffness'; })[0];
       var committed = App.commitSelectionEdit;
       App.commitSelectionEdit = function () {};

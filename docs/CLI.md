@@ -223,7 +223,11 @@ kratos-cli set pit.json mesh.body_sizes.sheet 0.5
   `--material`, `--r-inter`, `--virtual-thickness` and `--permeability` to interfaces.
   `none` clears an optional one. An interface's stiffnesses are
   `INTERFACE_NORMAL_STIFFNESS=...` and `INTERFACE_SHEAR_STIFFNESS=...`; left out, they are
-  derived from the soil each stretch runs against, and `section list` says which.
+  derived from the soil each stretch runs against, and `section list` says which. A
+  Coulomb section (`--law GeoInterfaceCoulombLawPlaneStrain`) given a linear elastic
+  soil with `--material`, which has no strength to give, gets the Mohr-Coulomb defaults
+  as its own `GEO_COHESION` and `GEO_FRICTION_ANGLE`, as in the GUI, and the command
+  says so; set them after.
 - **Which side a normal load presses on.** The soil on the right of its line as drawn,
   where its arrows point in the GUI: `water_1` above runs along the pit floor to the wall
   and then up the wall face, with the retained ground on its right. On the outside of the

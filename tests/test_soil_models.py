@@ -528,6 +528,43 @@ def test_an_older_document_s_soil_without_a_porosity_gets_the_0_3_its_deck_had()
     assert "POROSITY" not in Project.model_validate(current).material("m2").variables
 
 
+def older_contact(material: str | None, **variables) -> dict:
+    """`older_document` with a Coulomb contact, naming `material` (an id, or None)."""
+    payload = older_document()
+    payload["interface_sections"] = [{
+        "id": "c1", "name": "Wall contact", "constitutive_law":
+        "GeoInterfaceCoulombLawPlaneStrain", "material": material, "r_inter": 0.5,
+        "variables": dict(variables)}]
+    payload["materials"][1]["variables"].update(GEO_COHESION=2000.0, GEO_FRICTION_ANGLE=30.0)
+    return payload
+
+
+def test_an_older_coulomb_contact_on_a_linear_elastic_soil_keeps_the_strength_it_had():
+    """The export took the soil's c R and atan(R tan phi) whatever its law; now a linear
+    elastic soil has none to give, so the contact carries them as its own."""
+    contact = Project.model_validate(older_contact("m2")).interface_sections[0]
+
+    assert contact.variables["GEO_COHESION"] == pytest.approx(1000.0)
+    assert contact.variables["GEO_FRICTION_ANGLE"] == pytest.approx(
+        math.degrees(math.atan(0.5 * math.tan(math.radians(30.0)))))
+    own = Project.model_validate(older_contact("m2", GEO_COHESION=7.0)).interface_sections[0]
+    assert own.variables["GEO_COHESION"] == 7.0, "its own is kept"
+    assert migration.notes(older_contact("m2")) == []
+
+
+def test_an_older_coulomb_contact_naming_no_soil_is_named_when_opened():
+    payload = older_contact(None)
+
+    notes = migration.notes(payload)
+
+    assert "GEO_COHESION" not in Project.model_validate(payload).interface_sections[0].variables
+    assert len(notes) == 1 and notes[0].startswith("interface section 'Wall contact'")
+    assert "Sand, loose" in notes[0]
+    current = older_contact(None)
+    current["fluid"] = {}
+    assert migration.notes(current) == []
+
+
 def test_every_soil_is_written_with_the_project_s_water():
     project = mohr_coulomb_site()
     project = session.set_fluid(project, bulk_modulus=2.0e9, dynamic_viscosity=1.3e-3)

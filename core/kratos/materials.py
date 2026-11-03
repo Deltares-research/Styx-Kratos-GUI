@@ -71,6 +71,15 @@ PANEL_LAW = "LinearElasticPlaneStress2DLaw"
 INTERFACE_LAW = "GeoIncrementalLinearElasticInterfaceLaw"
 """The law paired with the `Geo_UPwLineInterface*` elements."""
 
+COULOMB_INTERFACE_LAWS = ("GeoInterfaceCoulombLawPlaneStrain",
+                          "GeoInterfaceCoulombWithTensionCutOff")
+"""The interface laws that read a strength: `InterfaceCoulombLaw::Check` wants
+`GEO_COHESION`, `GEO_FRICTION_ANGLE` strictly between 0 and 90 degrees, and
+`GEO_DILATANCY_ANGLE` no larger than it. The second is the name Kratos builds before
+2026-10 register it under; the window offers the first (frontend/js/property-sets.js)."""
+
+INTERFACE_STRENGTH = ("GEO_COHESION", "GEO_FRICTION_ANGLE")
+
 BEAM_LAW = "TimoshenkoBeamElasticConstitutiveLaw"
 """The law paired with `LinearTimoshenkoCurvedBeamElement2D*N`."""
 
@@ -390,6 +399,10 @@ def _interface_variables(section: InterfaceSection, project: Project,
     exactly `G` and `10 G` for its two soils at `t = 1`. Strength is that soil's,
     reduced by `r_inter` -- the definition of the factor.
 
+    **A Coulomb law** reads that strength, and a linear elastic soil has none to give,
+    whatever it carries: against one, the section has to be given its own
+    `GEO_COHESION` and `GEO_FRICTION_ANGLE`, and is refused without them.
+
     **Which soil.** `adjacent` is the material of the body this stretch of contact runs
     against (`core/kratos/writer.py:_interface_by_body`): the reference groups its interfaces
     into property sets on exactly that basis. A section that *names* a material
@@ -430,7 +443,10 @@ def _interface_variables(section: InterfaceSection, project: Project,
         _fill(v, "INTERFACE_NORMAL_STIFFNESS", NORMAL_TO_SHEAR_STIFFNESS * shear,
               derived, label)
         _fill(v, "INTERFACE_SHEAR_STIFFNESS", shear, derived, label)
-    if soil is not None:
+    coulomb = section.constitutive_law in COULOMB_INTERFACE_LAWS
+    elastic_soil = (soil is not None and soil_models.model_of(soil.constitutive_law)
+                    == soil_models.LINEAR_ELASTIC)
+    if soil is not None and not (coulomb and elastic_soil):
         # The section's own Rinter, or -- left unset -- the soil's.
         r_inter = section.r_inter if section.r_inter is not None else soil.r_inter
         cohesion = soil.number("GEO_COHESION")
@@ -440,8 +456,76 @@ def _interface_variables(section: InterfaceSection, project: Project,
         if phi is not None:
             _fill(v, "GEO_FRICTION_ANGLE", math.degrees(
                 math.atan(math.tan(math.radians(phi)) * r_inter)), derived, label)
+    if soil is not None or coulomb:
         _fill(v, "GEO_DILATANCY_ANGLE", 0.0, derived, label)
+    if coulomb:
+        _check_coulomb_strength(section, soil, elastic_soil, v)
     return _ordered(v, INTERFACE_ORDER)
+
+
+def strength_problem(section: InterfaceSection, soil: Material | None) -> str | None:
+    """Why a Coulomb contact cannot take its strength from `soil`, the soil it names, or
+    None (`App.Interfaces.strengthProblem`): a linear elastic soil has none to give. One
+    that names no soil takes each adjacent one's, which only the export knows."""
+    if section.constitutive_law not in COULOMB_INTERFACE_LAWS:
+        return None
+    if all(name in section.variables for name in INTERFACE_STRENGTH):
+        return None
+    if soil is None or soil_models.model_of(soil.constitutive_law) != soil_models.LINEAR_ELASTIC:
+        return None
+    return (f"{soil.name} is linear elastic and has no strength to give: set the "
+            "contact's own GEO_COHESION and GEO_FRICTION_ANGLE.")
+
+
+def own_strength(section: InterfaceSection, soil: Material | None, system: str) -> dict:
+    """`section`'s variables with a strength of its own, as the GUI gives one
+    (`App.Interfaces.setOwnStrength`): what it took from `soil`, c R and atan(R tan phi),
+    or -- from a soil with none, a linear elastic one -- the Mohr-Coulomb defaults in
+    `system`. What the section already holds is kept."""
+    variables = dict(section.variables)
+    gives = soil is not None and \
+        soil_models.model_of(soil.constitutive_law) != soil_models.LINEAR_ELASTIC
+    r_inter = (section.r_inter if section.r_inter is not None
+               else soil.r_inter if soil is not None else 0.7)
+    cohesion = soil.number("GEO_COHESION") if soil is not None and gives else None
+    phi = soil.number("GEO_FRICTION_ANGLE") if soil is not None and gives else None
+    taken = {
+        "GEO_COHESION": None if cohesion is None else cohesion * r_inter,
+        "GEO_FRICTION_ANGLE": None if phi is None else math.degrees(
+            math.atan(math.tan(math.radians(phi)) * r_inter)),
+    }
+    defaults = {p.name: p for p in soil_models.parameters(soil_models.MOHR_COULOMB)}
+    for name in INTERFACE_STRENGTH:
+        if name in variables:
+            continue
+        value = taken[name]
+        variables[name] = (float(f"{value:.6g}") if value is not None
+                           else soil_models.default_in(defaults[name], system))
+    return variables
+
+
+def _check_coulomb_strength(section: InterfaceSection, soil: Material | None,
+                            elastic_soil: bool, variables: dict) -> None:
+    """Refuse a Coulomb contact Kratos would stop on for want of a strength."""
+    label = f"interface section {section.name!r} ({section.constitutive_law})"
+    missing = [name for name in INTERFACE_STRENGTH
+               if not isinstance(variables.get(name), (int, float))
+               or isinstance(variables.get(name), bool)]
+    if missing:
+        if soil is None:
+            why = "it has no soil to take a strength from"
+        elif elastic_soil:
+            why = (f"it runs against {soil.name!r}, a linear elastic soil, which has no "
+                   "strength to take")
+        else:
+            why = f"{soil.name!r} has no {' or '.join(missing)} to take"
+        raise MaterialError(
+            f"{label} reads a strength, and {why}: give the section its own "
+            f"{' and '.join(missing)}.")
+    phi = variables["GEO_FRICTION_ANGLE"]
+    if not 0.0 < phi < 90.0:
+        raise MaterialError(f"{label}: GEO_FRICTION_ANGLE must be above 0 and below 90 "
+                            f"degrees, not {phi:g}.")
 
 
 def _beam_variables(section: BeamSection, dim: int = 2,

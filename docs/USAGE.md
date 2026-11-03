@@ -217,8 +217,12 @@ explorer, and **Properties…** on the Model explorer row, open the same window.
    45 degrees, the faces are **Below** and **Above**. **Both sides** is only for a sheet
    pile. For a retaining wall, you usually select both.
 5. In **Contact**, select the contact properties, or **New contact**. You change their
-   numbers in the Selection explorer: the soil whose strength `R_inter` reduces, the
-   virtual thickness, and the permeability.
+   numbers in the Selection explorer: the law, the stiffnesses, the soil, the virtual
+   thickness, and the permeability. The **Elastic** law reads the stiffnesses only. The
+   **Coulomb** law reads a strength too: under **Strength**, select **From the soil**
+   (the soil's, reduced by `R_inter`) or **Set on the interface** (type `GEO_COHESION`
+   and `GEO_FRICTION_ANGLE`). A linear elastic soil has no strength, so against one the
+   contact gets its own, and you set it.
 
 You can make as many interfaces as you need, for example one on each face of a pile, or
 two on parts of one face. Two interfaces on the same face of a pile over the same length

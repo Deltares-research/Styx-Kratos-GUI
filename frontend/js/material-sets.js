@@ -568,12 +568,26 @@ App.MaterialSets = (function () {
           el('div.pgrid-val.field', null, [newName, newValue, add])]));
       }
 
+      // Rinter reduces the strength a Coulomb contact takes from the soil. A linear
+      // elastic soil has none to give: a Coulomb contact against it sets its own, in the
+      // interface's properties (core/kratos/materials.py), so there is nothing to reduce.
       grid.appendChild(el('h4', { text: 'Interfaces' }));
-      grid.appendChild(field('Rinter', textInput(String(m.rInter), function (v) {
-        var r = Number(v);
-        if (!(r > 0 && r <= 1)) { say('Rinter must be above 0 and at most 1.'); draw(); return; }
-        attempt(function () { m.rInter = r; });
-      }, { 'data-field': 'rInter' })));
+      if (model === 'linear_elastic') {
+        var why = 'A linear elastic soil has no strength to give a contact. A Coulomb ' +
+                  'contact against it sets its own cohesion and friction angle: select ' +
+                  'the interface, and under Contact set Strength to Set on the interface.';
+        grid.appendChild(el('div.pgrid-row', { 'data-field': 'no-strength', title: why }, [
+          el('div.pgrid-key', { text: 'Strength' }),
+          el('div.pgrid-val.readonly.field', null, [
+            el('span.computed-value', { text: 'None to give — a Coulomb contact sets its own' }),
+            el('span.remove-slot')])]));
+      } else {
+        grid.appendChild(field('Rinter', textInput(String(m.rInter), function (v) {
+          var r = Number(v);
+          if (!(r > 0 && r <= 1)) { say('Rinter must be above 0 and at most 1.'); draw(); return; }
+          attempt(function () { m.rInter = r; });
+        }, { 'data-field': 'rInter' })));
+      }
       var permeability = el('select', { 'data-field': 'interfacePerm' });
       ['Neutral', 'Drain', 'Impermeable'].forEach(function (p) {
         permeability.appendChild(el('option', { value: p, text: p }));
