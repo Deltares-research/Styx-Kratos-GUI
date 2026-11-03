@@ -10,6 +10,8 @@
    project's.
    The interface presets belong to a soil set: they are its Rinter and permeability. */
 App.MaterialLibrary = (function () {
+  /* The intrinsic permeability, m2, of a soil that conducts water at 1 m/day. */
+  var PER_M_PER_DAY = App.SOIL_MODEL_TABLE.constants.PERMEABILITY;
   var soils = [
     { id: 'm1', name: 'Fill', color: '#d8c48a', rInter: 0.70, interfacePerm: 'Neutral',
       variables: { GEO_DRAINAGE_TYPE: 'CONSTANT_PW_FIELD', YOUNG_MODULUS: 1.5e7,

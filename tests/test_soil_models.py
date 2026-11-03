@@ -73,6 +73,20 @@ def test_no_soil_lists_the_water_which_is_the_project_s():
         assert not set(soil_models.WATER) & set(names(soil_models.parameters(model)))
 
 
+def test_the_permeabilities_are_called_intrinsic():
+    labels = {p.name: p.label for p in soil_models.parameters(soil_models.MOHR_COULOMB)}
+    assert labels["PERMEABILITY_XX"] == "Intrinsic permeability xx"
+    assert labels["PERMEABILITY_YY"] == "Intrinsic permeability yy"
+
+
+def test_a_new_coupled_soil_conducts_water_at_a_metre_a_day():
+    variables = {"GEO_DRAINAGE_TYPE": "FULLY_COUPLED"}
+    soil_models.fill(None, {}, ELASTIC_2D, variables, "SI")
+    kappa = variables["PERMEABILITY_XX"]
+
+    assert kappa == pytest.approx(1.157e-12, rel=1e-3)          # m2, intrinsic
+    darcy = soil_models.computed(ELASTIC_2D, variables, soil_models.water("SI"), "SI")
+    assert darcy["HYDRAULIC_CONDUCTIVITY_XX"] * 86400 == pytest.approx(1.0)   # m/day
 
 
 def test_every_choice_lists_every_value_kratos_accepts():
