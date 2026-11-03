@@ -8,6 +8,7 @@ the edit itself, and `tests/test_api.py` keeps checking what the routes answer.
 
 from __future__ import annotations
 
+import ast
 import json
 from pathlib import Path
 
@@ -894,6 +895,9 @@ def _stack_without(project: Project, id: str) -> LayersUpdate:
 
 EDITS_THAT_TAKE_A_BODY = {
     "kratos-cli layer remove": lambda p: session.remove_layer(p, "L_mid"),
+    "kratos-cli layer split": lambda p: session.split_layer(p, "L_top"),
+    "kratos-cli layer set --top": lambda p: session.update_layer(p, "L_mid", top=-3.0),
+    "kratos-cli set excavation null": lambda p: session.with_value(p, "excavation", None),
     "kratos-cli excavation --levels": lambda p: session.set_excavation(
         p, levels=[-2.0, -4.5])[0],
     "the GUI deletes a layer": lambda p: session.replace_layers(p, _stack_without(p, "L_mid")),
@@ -932,6 +936,20 @@ def test_a_size_for_a_body_the_model_never_had_is_left_for_check_to_name():
     assert edited.mesh.body_sizes["soil_typo"] == 1.0
     settings = MeshRequest.model_validate(edited.mesh.model_dump())
     assert session.unknown_mesh_keys(edited, settings) == ["soil_typo"]
+
+
+def test_every_edit_makes_its_result_through_the_one_rule():
+    """`session._edited` is where a lost body's size goes. An edit that validated its
+    project itself would skip the rule -- `layer split` and `layer set` once did."""
+    tree = ast.parse(Path(session.__file__).read_text(encoding="utf-8"))
+    callers = {function.name for function in ast.walk(tree)
+               if isinstance(function, ast.FunctionDef)
+               for call in ast.walk(function)
+               if isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute)
+               and call.func.attr == "model_validate"
+               and getattr(call.func.value, "id", None) == "Project"}
+
+    assert callers == {"load", "_edited"}
 
 
 def test_a_section_is_added_changed_and_removed():

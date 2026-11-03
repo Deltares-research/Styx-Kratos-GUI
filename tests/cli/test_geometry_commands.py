@@ -208,6 +208,22 @@ def test_a_layer_level_that_crosses_its_neighbour_is_refused(cli, site):
     assert site.read_bytes() == before
 
 
+@pytest.mark.parametrize("edit", [("split", "L_top"), ("set", "L_mid", "--top", "-3")],
+                         ids=lambda edit: f"layer {edit[0]}")
+def test_a_layer_edit_that_takes_a_lift_away_takes_its_mesh_size_too(cli, tmp_path, edit):
+    """Splitting the top layer, or raising the one below it, leaves the pit's last lift
+    in no layer: its size goes with it, or `check` refuses the file the edit wrote."""
+    project = excavation.excavation_project(staged=False)
+    sized = project.mesh.model_copy(update={"body_sizes": {"soil_L_top__lift3": 1.0}})
+    path = session.save(project.model_copy(update={"mesh": sized}), tmp_path / "pit.json")
+
+    assert cli("layer", path, *edit).code == 0
+
+    assert session.load(path).mesh.body_sizes == {}
+    ran = cli("check", path)
+    assert ran.code == 0, ran.err
+
+
 def test_a_layer_needs_a_bottom_or_a_thickness_or_takes_five_metres(cli, site):
     assert cli("layer", site, "add", "L3", "--material", "m1").code == 0
 
