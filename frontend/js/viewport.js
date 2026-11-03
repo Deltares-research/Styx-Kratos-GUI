@@ -1038,12 +1038,12 @@ App.Viewport = (function () {
     var conditionKeys = conditionKeysOf(App.PROJECT);
     conditionIds = conditionKeys.supports.concat(conditionKeys.water);
     waterIds = conditionKeys.water.slice();
-    modeGroups = computeModeGroups(
-      soilKeys, customKeys, !!(App.PROJECT && App.PROJECT.layered_soil), loadKeys,
-      beamKeys.concat(anchorKeys), normalLoadKeys, conditionKeys);
     var contactKeys = (App.INTERFACES || []).filter(function (item) {
       return !item.structure;
     }).map(function (item) { return item.id; });
+    modeGroups = computeModeGroups(
+      soilKeys, customKeys, !!(App.PROJECT && App.PROJECT.layered_soil), loadKeys,
+      beamKeys.concat(anchorKeys, contactKeys), normalLoadKeys, conditionKeys);
     groupKeys = computeGroupKeys(soilKeys, customKeys, loadKeys, beamKeys, anchorKeys,
                                  contactKeys, normalLoadKeys,
                                  conditionKeys.supports.concat(conditionKeys.water));

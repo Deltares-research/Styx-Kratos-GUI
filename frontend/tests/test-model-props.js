@@ -20,7 +20,7 @@
       var props = App.OBJECT_PROPS[key];
       Object.keys((props && props.groups) || {}).forEach(function (group) {
         (props.groups[group] || []).forEach(function (row) {
-          if (row && row[4]) fn(key + ' / ' + group + ' / ' + row[0], row[4], key);
+          if (row && row[4]) fn(key + ' / ' + group + ' / ' + row[0], row[4], key, row[0]);
         });
       });
     });
@@ -262,32 +262,61 @@
 
     test('property grid (' + name + '): every button runs and reaches its module', function () {
       var reached = [];
-      function recorder(module) {
-        return new Proxy({}, { get: function (target, verb) {
-          return function () { reached.push(module + '.' + String(verb)); return Promise.resolve(); };
-        } });
-      }
       // Stood in only after the grids are built: building them reads these modules
       // (App.NormalLoads.length, for one), and a recorder there would be read as data.
       withProject(project(), function () {
         var saved = { commitSelectionEdit: App.commitSelectionEdit };
-        App.commitSelectionEdit = function (key) { reached.push('commit:' + key); return Promise.resolve(); };
+        App.commitSelectionEdit = function (key) {
+          reached.push({ method: 'commitSelectionEdit', args: [key] });
+          return Promise.resolve();
+        };
         ['Loads', 'NormalLoads', 'Beams', 'Anchors', 'Interfaces', 'SoilVolumeDialog',
-         'LivePatches', 'Water', 'WaterCommand', 'BoundaryConditions'].forEach(function (module) {
+         'BoundaryConditions'].forEach(function (module) {
           saved[module] = App[module];
-          App[module] = recorder(module);
+          App[module] = Object.assign({}, App[module]);
+          (module === 'SoilVolumeDialog' ? ['open'] : ['edit', 'remove']).forEach(function (verb) {
+            App[module][verb] = function () {
+              reached.push({ method: module + '.' + verb, args: Array.prototype.slice.call(arguments) });
+              return Promise.resolve();
+            };
+          });
         });
         try {
           var broken = [];
           var buttons = 0;
-          each(function (where, editor) {
+          each(function (where, editor, key, label) {
             if (editor.kind !== 'button') return;
             buttons += 1;
-            try { editor.run(); } catch (error) { broken.push(where + ': ' + error.message); }
+            try {
+              var part = (App.PROJECT.custom_parts || []).filter(function (item) { return item.key === key; })[0];
+              var module = [
+                ['Loads', App.LOADS], ['NormalLoads', App.NORMAL_LOADS],
+                ['Beams', App.BEAMS], ['Anchors', App.ANCHORS],
+                ['Interfaces', App.INTERFACES], ['BoundaryConditions', App.BOUNDARY_CONDITIONS]
+              ].filter(function (entry) {
+                return (entry[1] || []).some(function (record) { return record.id === key; });
+              })[0];
+              var expected;
+              if (part) expected = { method: 'SoilVolumeDialog.open', args: [part] };
+              else if (label === 'Stiffness') expected = { method: 'commitSelectionEdit', args: [key] };
+              else {
+                T.ok(module, where + ': no expected object family');
+                T.ok(label === 'Edit' || label === 'Delete', where + ': no expected button action');
+                expected = { method: module[0] + (label === 'Edit' ? '.edit' : '.remove'), args: [key] };
+              }
+              reached.length = 0;
+              editor.run();
+              T.eq(reached, [expected], where);
+              if (label === 'Stiffness') {
+                var record = App.INTERFACES.filter(function (item) { return item.id === key; })[0];
+                var section = App.INTERFACE_SECTIONS.filter(function (item) { return item.id === record.section; })[0];
+                T.eq(section.variables.INTERFACE_NORMAL_STIFFNESS, undefined, where);
+                T.eq(section.variables.INTERFACE_SHEAR_STIFFNESS, undefined, where);
+              }
+            } catch (error) { broken.push(where + ': ' + error.message); }
           });
           T.eq(broken, []);
           T.ok(buttons > 3, 'only ' + buttons + ' buttons');
-          T.ok(reached.length > 0, 'the buttons reached their modules');
         } finally {
           Object.keys(saved).forEach(function (module) { App[module] = saved[module]; });
         }

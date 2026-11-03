@@ -46,6 +46,7 @@
     App.setCoords = function () {};
     App.setZoom = function () {};
     App.selectObject = function (key) { App.state.selection = key; };
+    App.setMode = function (mode) { App.state.mode = mode; App.Viewport.setMode(mode); };
     App.viewportContextMenu = function (event, key) { App.__contextKey = key; };
     App.Explorer = { mountTree: function () {}, mountSelection: function () {} };
   }
@@ -495,12 +496,16 @@
         App.Viewport.select(null);
         App.state.mode = 'structures'; App.Viewport.setMode('structures');
         T.ok(sceneGroups()[contact.id], 'the free contact has its own drawable group');
+        T.eq(sceneGroups()[contact.id].visible, true, 'the free contact is drawn in structures mode');
         App.Viewport.setVisible('group:interfaces', false);
         T.eq(App.Viewport.isVisible(contact.id), false, 'the contact group controls its free lines');
+        T.eq(sceneGroups()[contact.id].visible, false);
         App.Viewport.setVisible('group:interfaces', true);
+        T.eq(sceneGroups()[contact.id].visible, true, 'showing contacts restores the drawable group');
         App.Viewport.select(App.BEAMS[0].id);
         T.ok(App.Viewport.getScene().children.some(function (child) { return child.type === 'Box3Helper'; }));
         App.state.mode = 'soil'; App.Viewport.setMode('soil');
+        T.eq(sceneGroups()[contact.id].visible, false, 'soil mode excludes contacts');
         T.eq(sceneGroups()[App.BEAMS[0].id].visible, false);
         T.eq(App.Viewport.getScene().children.some(function (child) { return child.type === 'Box3Helper'; }), false);
       });

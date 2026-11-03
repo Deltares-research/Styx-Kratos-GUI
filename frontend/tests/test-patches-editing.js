@@ -430,16 +430,50 @@
   test('stage insert and duplicate use the selected parent and refuse failed sequence writes', function () {
     return withShell(function (ctx, host) {
       App.state.mode = 'staged'; App.state.phase = App.PROJECT.stages[1].id;
+      var selected = App.PROJECT.stages[1], selectedId = selected.id;
+      selected.max_iterations = 37;
+      selected.tolerated_error = 0.0007;
+      selected.time_interval = 2.5;
+      selected.reset_displacements = true;
+      ctx.server = copy(App.PROJECT);
+      var original = copy(App.PROJECT.stages);
       App.Explorer.mountPhases();
       var before = App.PROJECT.stages.length;
       host.querySelectorAll('.stage-toolbar button')[1].click();
       return settle().then(function () {
         T.eq(App.PROJECT.stages.length, before + 1);
         T.eq(ctx.requests[0].path, '/api/project/stages');
+        var inserted = App.PROJECT.stages[1];
+        T.ok(!original.some(function (stage) { return stage.id === inserted.id; }), 'insertion has a fresh id');
+        T.eq(inserted.parent, selected.parent);
+        T.eq(App.PROJECT.stages[2].id, selectedId, 'insertion is immediately before the selected stage');
+        T.eq(App.PROJECT.stages[2].parent, inserted.id);
+        T.eq(App.PROJECT.stages.filter(function (stage) { return stage.id !== inserted.id; }),
+          original.map(function (stage) {
+            return stage.id === selectedId ? Object.assign({}, stage, { parent: inserted.id }) : stage;
+          }), 'insertion preserves every other stage');
+        T.eq(ctx.requests[0].body.stages, App.PROJECT.stages);
+        T.eq(App.state.phase, selectedId);
         host.querySelectorAll('.stage-toolbar button')[2].click();
         return settle();
       }).then(function () {
         T.eq(App.PROJECT.stages.length, before + 2);
+        var duplicate = App.PROJECT.stages[3];
+        T.eq(App.PROJECT.stages[2].id, selectedId);
+        T.eq(duplicate.parent, selectedId, 'the copy starts from the selected stage');
+        T.ok(!ctx.requests[0].body.stages.some(function (stage) { return stage.id === duplicate.id; }));
+        T.eq(duplicate.name, selected.name + ' (copy)');
+        ['calculation', 'reset_displacements', 'max_iterations', 'tolerated_error', 'time_interval'].forEach(function (key) {
+          T.eq(duplicate[key], selected[key], 'copied ' + key);
+        });
+        T.eq(duplicate.activate, []);
+        T.eq(duplicate.deactivate, []);
+        T.eq(App.PROJECT.stages.filter(function (stage) { return stage.id !== duplicate.id; }),
+          ctx.requests[0].body.stages.map(function (stage) {
+            return stage.parent === selectedId ? Object.assign({}, stage, { parent: duplicate.id }) : stage;
+          }), 'children follow the copy and unrelated stages are unchanged');
+        T.eq(ctx.requests[1].path, '/api/project/stages');
+        T.eq(ctx.requests[1].body.stages, App.PROJECT.stages);
         var stored = copy(App.PROJECT.stages);
         ctx.failure = new Error('Stage sequence refused');
         host.querySelectorAll('.stage-toolbar button')[0].click();

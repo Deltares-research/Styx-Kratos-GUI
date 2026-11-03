@@ -84,6 +84,9 @@ only to increase the percentage. Cover accepted and refused edits, retry after s
 errors, cancellation without writes, and cleanup of temporary UI. Await asynchronous
 work before restoring mocks, and check that the harness reports no uncaught errors as
 well as no failed assertions. Function coverage alone does not prove those paths work.
+For action wiring, assert each button's destination and arguments independently.
+For scene visibility, inspect the drawable group's visibility, not only its eye flag;
+for stage edits, check ordering and parent links as well as stage counts.
 
 ## What CI runs
 
