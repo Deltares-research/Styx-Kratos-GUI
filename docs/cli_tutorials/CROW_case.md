@@ -166,8 +166,11 @@ Layers are stacked from the top, each under the one before:
 
 ```text
 crow.json> layer add L_top --name Soil_Top --material m_upper --bottom -8
+added layer L_top; wrote ...\crow.json
 crow.json> layer add L_mid --name Soil_Middle --material m_upper --bottom -12
+added layer L_mid; wrote ...\crow.json
 crow.json> layer add L_bot --name Soil_Bottom --material m_lower --bottom -60
+added layer L_bot; wrote ...\crow.json
 ```
 
 The upper ground is split at −8 as well as at −12, so that the deepest lift of the pit ends
@@ -291,8 +294,11 @@ ground that stays is on the right of this walk. Its pressure is zero at its
 
 ```text
 crow.json> normal-load add water_1 --name WaterLoad_Stage1 --hydrostatic --reference-coordinate -1.5 --points 0 -2 5 -2 5 -1.5
+added normal load (id water_1, name WaterLoad_Stage1); wrote ...\crow.json
 crow.json> normal-load add water_2 --name WaterLoad_Stage2 --hydrostatic --reference-coordinate -1.5 --points 0 -5 5 -5 5 -1.5
+added normal load (id water_2, name WaterLoad_Stage2); wrote ...\crow.json
 crow.json> normal-load add water_3 --name WaterLoad_Stage3 --hydrostatic --reference-coordinate -1.5 --points 0 -8 5 -8 5 -1.5
+added normal load (id water_3, name WaterLoad_Stage3); wrote ...\crow.json
 ```
 
 ### Part 3: the mesh and the stages
@@ -305,7 +311,9 @@ size and order, keeps them in the project, and meshes:
 
 ```text
 crow.json> set mesh.body_sizes.sheetpile 0.5
+mesh.body_sizes.sheetpile = 0.5; wrote ...\crow.json
 crow.json> add mesh.refinements '{"kind": "box", "size": 0.75, "thickness": 45.0, "x_min": -1.0, "x_max": 8.0, "y_min": -16.0, "y_max": 1.0, "z_min": -1.0, "z_max": 11.0}'
+added {"kind": "box", "size": 0.75, "thickness": 45.0, "x_min":... to mesh.refinements; wrote ...\crow.json
 crow.json> mesh --size 5.0 --order 2
 4299 nodes, 2087 elements (2087 Triangle 6)
 ```

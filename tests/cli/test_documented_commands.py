@@ -7,9 +7,11 @@ Two checks, for two kinds of page:
   not one session, so that is all that is checked of it.
 - Every shell tutorial -- a page that starts a project with `new` in `kratos-cli shell`
   -- is followed line by line in an empty folder. Each command succeeds and prints what
-  the page shows it print; `...` on the page stands for a path and matches anything.
-  `run`, `calculate` and `results` need Kratos and are left out. The Muskat tutorial,
-  written as `kratos-cli` lines, has its own test (`test_muskat_tutorial.py`).
+  the page shows it print: nothing, when the page shows nothing. `...` on the page
+  stands for a path and matches anything. A command listed with a note in a column
+  (`stages show ID     what is in the model`) only has to succeed. `run`, `calculate`
+  and `results` need Kratos and are left out. The Muskat tutorial, written as
+  `kratos-cli` lines, has its own test (`test_muskat_tutorial.py`).
 
 The pages are found, not named: a tutorial added later is checked too.
 """
@@ -51,7 +53,8 @@ print is not compared."""
 class Step:
     command: str
     shown: list[str] | None
-    """What the page shows the command print; None in a script of bare lines."""
+    """What the page shows the command print, blank lines included; None in a script of
+    bare lines, and for a command listed with a note in a column."""
 
 
 def steps(page: Path) -> list[Step]:
@@ -66,12 +69,22 @@ def steps(page: Path) -> list[Step]:
         if line.startswith("```"):
             block, script = (line[3:].strip(), False) if block is None else (None, False)
             continue
-        if block != "text" or not line.strip():
+        if block != "text":
+            continue
+        if not line.strip():
+            # A blank line in what a command printed is part of it (`same_print` drops
+            # the ones at the end, before the next prompt).
+            if not script and found and found[-1].shown is not None:
+                found[-1].shown.append("")
             continue
         prompt = PROMPT.match(line)
         if prompt:
             if prompt.group(1):
-                found.append(Step(NOTE.sub("", prompt.group(1)).strip(), []))
+                typed = prompt.group(1)
+                # A line with a note in a column is one of a list of commands to try,
+                # whose output the page does not show.
+                listed = NOTE.search(typed) is not None
+                found.append(Step(NOTE.sub("", typed).strip(), None if listed else []))
         elif line.lstrip().startswith("#"):
             script = True
         elif script:
@@ -89,12 +102,22 @@ def tutorials() -> list[Path]:
 
 
 def same_print(shown: list[str], printed: list[str]) -> bool:
-    """Whether `printed` is what the page shows, a `...` path matching any path."""
+    """Whether `printed` is what the page shows, a `...` path matching any path. Blank
+    lines at the end do not count; a command the page shows print nothing prints
+    nothing."""
+    shown, printed = _trimmed(shown), _trimmed(printed)
     if len(shown) != len(printed):
         return False
     return all(re.fullmatch(".*".join(re.escape(part) for part in PATH.split(want.rstrip())),
                             got.rstrip())
                for want, got in zip(shown, printed))
+
+
+def _trimmed(lines: list[str]) -> list[str]:
+    end = len(lines)
+    while end and not lines[end - 1].strip():
+        end -= 1
+    return lines[:end]
 
 
 def follow(page: Path, folder: Path, monkeypatch) -> list[tuple[Step, int, list[str]]]:
@@ -119,13 +142,29 @@ def test_the_tutorials_are_found():
     assert all(len(steps(page)) >= 20 for page in tutorials())
 
 
+def test_what_a_page_shows_a_command_print_is_read_whole(tmp_path):
+    """A blank line inside the output is part of it, a command shown printing nothing
+    must print nothing, and a command listed with a note is only run."""
+    page = tmp_path / "page.md"
+    page.write_text("\n".join([
+        "```text", "kratos-cli> new a.json", "first", "", "second", "",
+        "a.json> undo", "a.json> stages show dig     what is in the model", "shown?",
+        "```"]), encoding="utf-8")
+
+    assert steps(page) == [Step("new a.json", ["first", "", "second", ""]),
+                           Step("undo", []), Step("stages show dig", None)]
+    assert same_print(["first", "", "second", ""], ["first", "", "second"])
+    assert not same_print(["first", "second"], ["first", "", "second"])
+    assert not same_print([], ["wrote a.json"])
+
+
 @pytest.mark.parametrize("page", tutorials(), ids=lambda page: page.stem)
 def test_a_tutorial_runs_as_written(page, tmp_path, monkeypatch):
     done = follow(page, tmp_path, monkeypatch)
 
     assert [(step.command, code) for step, code, _ in done if code != 0] == []
     differs = [(step.command, step.shown, printed) for step, _, printed in done
-               if step.shown and step.command.split()[0] not in MESH_DEPENDENT
+               if step.shown is not None and step.command.split()[0] not in MESH_DEPENDENT
                and not same_print(step.shown, printed)]
     assert differs == []
 
