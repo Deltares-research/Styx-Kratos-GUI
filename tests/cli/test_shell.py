@@ -466,20 +466,18 @@ def test_project_insertion_leaves_projectless_or_unrecognised_commands_to_the_pa
     assert shell._with_project(argv, None) == argv
 
 
+def test_completion_of_empty_input_offers_the_commands():
+    assert {"open", "undo", "layer"} <= set(shell.completions(""))
+
+
 @pytest.mark.parametrize("before, expected", [
     ('open "unfinished', []),
-    ("", ["open", "undo", "layer"]),
     ("kratos-cli lay", ["layer"]),
     ("unknown-command ", []),
     ("layer add another-word", []),
 ])
-def test_completion_handles_empty_prefixed_malformed_and_finished_input(before, expected):
-    found = shell.completions(before)
-
-    if before == "":
-        assert set(expected) <= set(found)
-    else:
-        assert found == expected
+def test_completion_handles_prefixed_malformed_and_finished_input(before, expected):
+    assert shell.completions(before) == expected
 
 
 def test_a_parser_without_subcommands_has_no_completions():
