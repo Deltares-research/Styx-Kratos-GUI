@@ -27,7 +27,7 @@
     var saved = { Api: App.Api, PROJECT: App.PROJECT, INTERFACES: App.INTERFACES,
                   INTERFACE_SECTIONS: App.INTERFACE_SECTIONS, Model: App.Model,
                   Viewport: App.Viewport, Command: App.Command, Explorer: App.Explorer,
-                  selectObject: App.selectObject, state: App.state };
+                  selectObject: App.selectObject, state: App.state, DrawInput: App.DrawInput };
     var ctx = { sent: [], notes: [], selected: null };
     App.PROJECT = project(dimension);
     App.INTERFACES = App.PROJECT.interfaces.slice();
@@ -212,6 +212,69 @@
       var w = opened(ctx, function () { App.Interfaces.edit('interface_1'); });
       T.eq(w.spec.title, 'Edit interface');
       T.eq(w.choices('Side'), ['both', 'below', 'above']);
+    }));
+  });
+
+  test('the own-coordinate editor removes only the last added point', function () {
+    var ctx = rig(2);
+    return ctx.done(Promise.resolve().then(function () {
+      var w = opened(ctx, function () { App.Interfaces.start(); });
+      w.set('Along', '');
+      function click(text) {
+        Array.prototype.filter.call(w.body.querySelectorAll('button'), function (b) {
+          return b.textContent === text;
+        })[0].click();
+      }
+      click('Add point');
+      T.ok(w.control('x3'));
+      click('Remove last point');
+      T.eq(w.control('x3'), null);
+      T.ok(Array.prototype.filter.call(w.body.querySelectorAll('button'), function (b) {
+        return b.textContent === 'Remove last point';
+      })[0].disabled, 'the line always keeps its first two points');
+    }));
+  });
+
+  test('picking a free interface reopens the form with the picked section coordinates', function () {
+    var ctx = rig(2), picked;
+    return ctx.done(Promise.resolve().then(function () {
+      App.DrawInput = { start: function (mode, options) { picked = { mode: mode, options: options }; } };
+      var first = opened(ctx, function () { App.Interfaces.start(); });
+      first.set('Along', '');
+      first.spec.buttons[0].onClick();
+      T.eq(picked.mode, 'load');
+      T.eq(picked.options.count, 2);
+      var second = opened(ctx, function () {
+        picked.options.onComplete([[20, -2, 0], [22, -9, 0]]);
+      });
+      T.eq(second.control('x1').value, '20');
+      T.eq(second.control('y2').value, '-9');
+      return second.save().then(function () {
+        T.eq(ctx.sent[0].body.interfaces[1].points, [[20, -2], [22, -9]]);
+        T.ok(second.closed());
+      });
+    }));
+  });
+
+  test('a rejected interface patch leaves the form open with the server reason', function () {
+    var ctx = rig(2);
+    return ctx.done(Promise.resolve().then(function () {
+      App.Api = { patch: function () { return Promise.reject(new Error('Contact refused')); } };
+      var w = opened(ctx, function () { App.Interfaces.edit('interface_1'); });
+      return w.save().then(function () {
+        T.ok(!w.closed());
+        T.eq(w.message(), 'Contact refused');
+      });
+    }));
+  });
+
+  test('an off-pile stored stretch reports the coordinates that are invalid', function () {
+    var ctx = rig(2);
+    return ctx.done(Promise.resolve().then(function () {
+      var record = Object.assign({}, App.PROJECT.interfaces[0], { stretch: [[14, -2], [12, -6]] });
+      var problem = App.Interfaces.validate(record, App.PROJECT);
+      T.ok(/From \(14, -2\)/.test(problem), problem);
+      T.ok(/Sheet pile 1/.test(problem), problem);
     }));
   });
 

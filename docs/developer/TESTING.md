@@ -50,6 +50,35 @@ failed, when something that it needs is missing: quickjs, Kratos or a browser.
   a tier that runs the browser tests. The Python report goes to `htmlcov/`, and the
   JavaScript function coverage to `htmlcov-js/summary.json`.
 
+## JavaScript coverage only
+
+To run just the browser JavaScript suite and print its per-module coverage table,
+use this command from the repository folder in PowerShell:
+
+```powershell
+$env:KRATOS_GUI_TEST_BROWSER_CHANNEL = "bundled"
+.\.venv-windows\Scripts\python.exe -m pytest tests\browser\test_js_unit_suite.py --js-coverage -q -s
+```
+
+This selects Playwright's Chromium rather than the separately installed Google Chrome.
+If Chromium is missing, install it with the same virtual environment:
+
+```powershell
+.\.venv-windows\Scripts\python.exe -m playwright install chromium
+```
+
+The report in `htmlcov-js/summary.json` lists each loaded `frontend/js` module's
+function count, covered count, percentage, and `missed` functions. This is function
+coverage, not line or branch coverage; it excludes `frontend/base/js`, vendor scripts,
+and modules the suite did not load. The report is written even when JavaScript
+assertions or the coverage threshold fail. With `--js-coverage`, every reported live
+module must reach at least **95% function coverage**; the overall average alone is
+not sufficient.
+
+Add pure-logic cases to the existing `frontend/tests/test-*.js` suites. Browser-only
+form and event tests belong in the browser suite; register new test files in
+`frontend/tests/index.html`. Do not add DOM-dependent files to the headless runner.
+
 ## What CI runs
 
 For each pull request and each push to `main`, CI runs the `e2e` tier on Windows and

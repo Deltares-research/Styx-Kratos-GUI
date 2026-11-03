@@ -72,6 +72,23 @@
     });
   });
 
+  test('post and patch send JSON and return the server response', function () {
+    var client = api([json(201, { id: 'load_1' }), json(200, { name: 'Updated' })]);
+    return client.post('/api/loads', { value: 12 }).then(function (body) {
+      T.eq(body, { id: 'load_1' });
+      return client.patch('/api/project', { name: 'Updated' });
+    }).then(function (body) {
+      T.eq(body, { name: 'Updated' });
+      T.eq(client.fetch.calls.map(function (call) {
+        return [call.url, call.opts.method, call.opts.headers['Content-Type'],
+                JSON.parse(call.opts.body)];
+      }), [
+        ['/api/loads', 'POST', 'application/json', { value: 12 }],
+        ['/api/project', 'PATCH', 'application/json', { name: 'Updated' }]
+      ]);
+    });
+  });
+
   test('the base url is prefixed to every path', function () {
     var client = App.Api.create({ base: 'http://127.0.0.1:8000', fetch: stub([json(200, {})]) });
     return client.get('/api/health').then(function () {

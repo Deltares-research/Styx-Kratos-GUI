@@ -33,7 +33,8 @@
       BEAMS: App.BEAMS, BEAM_SECTIONS: App.BEAM_SECTIONS, PANEL_SECTIONS: App.PANEL_SECTIONS,
       ANCHORS: App.ANCHORS, ANCHOR_SECTIONS: App.ANCHOR_SECTIONS,
       INTERFACES: App.INTERFACES, INTERFACE_SECTIONS: App.INTERFACE_SECTIONS,
-      NORMAL_LOADS: App.NORMAL_LOADS
+      NORMAL_LOADS: App.NORMAL_LOADS, BOUNDARY_CONDITIONS: App.BOUNDARY_CONDITIONS,
+      PENDING_GRAVITY: App.PENDING_GRAVITY
     };
     Object.keys(App.TREES || {}).forEach(function (mode) { saved.trees[mode] = App.TREES[mode]; });
     App.OBJECT_PROPS = Object.assign({}, App.OBJECT_PROPS);
@@ -50,8 +51,80 @@
     }
   }
 
+  function conditionsAndBodies() {
+    var project = JSON.parse(JSON.stringify(window.VIEWPORT_PAYLOADS.project));
+    var conditions = App.BoundaryConditions;
+    project.boundary_conditions = [
+      conditions.draftDisplacement(project, 'line', { points: [[0, 0], [0, -10]] }),
+      conditions.draftWaterPressure(project, 'domain', { fluid_pressure_type: 'Uniform', value: -100 }),
+      conditions.draftWaterPressure(project, 'face', { fluid_pressure_type: 'Hydrostatic',
+                                                      reference_coordinate: -1, face: 'left' }),
+      conditions.draftSeepage(project, 'face', { face: 'right' })
+    ];
+    project.boundary_conditions.forEach(function (record, index) { record.id = 'grid_condition_' + index; });
+    project.custom_parts = [{
+      key: 'grid_fill', label: 'Grid fill', mat: project.materials[0].id,
+      color: project.materials[0].color, source: 'drawn',
+      recipe: { kind: 'polygon_extrude', vertices: [[0, 0, 0], [4, 0, 0], [0, -3, 0]],
+                extrusion: [0, 0, 40] }
+    }];
+    return project;
+  }
+
   var MODELS = [['2D', function () { return window.VIEWPORT_PAYLOADS.project; }],
-                ['3D', function () { return window.VIEWPORT_PAYLOADS.project3d; }]];
+                ['3D', function () { return window.VIEWPORT_PAYLOADS.project3d; }],
+                ['conditions and custom soil', conditionsAndBodies]];
+
+  test('model exposes the edited domain separately from the stored project', function () {
+    withProject(window.VIEWPORT_PAYLOADS.project3d, function () {
+      T.eq(App.Model.domain(), App.Model.pendingDomain());
+      T.eq(App.Model.domain().x0, App.PROJECT.domain.x0);
+    });
+  });
+
+  test('computed volumes replace the property-grid placeholder without changing other rows', function () {
+    withProject(window.VIEWPORT_PAYLOADS.project3d, function () {
+      var key = 'soil_' + App.LAYERS[0].id;
+      var rows = App.OBJECT_PROPS[key].groups.General;
+      var volume = rows.filter(function (row) { return row[0] === 'Volume'; })[0];
+      T.ok(volume, 'the solid layer has a volume row');
+      var others = JSON.stringify(rows.filter(function (row) { return row !== volume; }));
+      var mass = {}; mass[key] = 123.456; mass.missing_part = 5;
+      App.Model.setVolumes(mass);
+      T.eq(volume[1], '123.5');
+      T.eq(volume[3], false);
+      T.eq(JSON.stringify(rows.filter(function (row) { return row !== volume; })), others);
+    });
+  });
+
+  test('accepted imported parts populate the explorer and its visibility group', function () {
+    withProject(window.VIEWPORT_PAYLOADS.project3d, function () {
+      var saved = { Viewport: App.Viewport, Explorer: App.Explorer, state: App.state }, keys, mounted;
+      App.state = { mode: 'soil' };
+      App.Viewport = { setImportedGroupKeys: function (value) { keys = value; } };
+      App.Explorer = { mountTree: function (mode) { mounted = mode; } };
+      try {
+        App.Model.setImportedParts([{ key: 'deck:soil', label: 'Imported soil', color: '#123456' }]);
+        T.eq(keys, ['deck:soil']);
+        T.eq(mounted, App.state.mode);
+        var found;
+        (function walk(nodes) {
+          (nodes || []).forEach(function (node) {
+            if (node.label === 'Imported mesh') found = node;
+            walk(node.children);
+          });
+        })(App.TREES[App.state.mode]);
+        T.ok(found);
+        T.eq(found.count, 1);
+        T.eq(found.children[0].obj, 'deck:soil');
+        App.Model.setImportedParts([]);
+        T.eq(keys, []);
+      } finally {
+        App.Model.setImportedParts([]);
+        Object.assign(App, saved);
+      }
+    });
+  });
 
   MODELS.forEach(function (model) {
     var name = model[0], project = model[1];
@@ -120,9 +193,10 @@
       // Stood in only after the grids are built: building them reads these modules
       // (App.NormalLoads.length, for one), and a recorder there would be read as data.
       withProject(project(), function () {
-        var saved = {};
+        var saved = { commitSelectionEdit: App.commitSelectionEdit };
+        App.commitSelectionEdit = function (key) { reached.push('commit:' + key); return Promise.resolve(); };
         ['Loads', 'NormalLoads', 'Beams', 'Anchors', 'Interfaces', 'SoilVolumeDialog',
-         'LivePatches', 'Water', 'WaterCommand'].forEach(function (module) {
+         'LivePatches', 'Water', 'WaterCommand', 'BoundaryConditions'].forEach(function (module) {
           saved[module] = App[module];
           App[module] = recorder(module);
         });

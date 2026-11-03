@@ -62,6 +62,44 @@
     return host.querySelector('.material-variables').parentNode.querySelector('.lay-hint');
   }
 
+  T.test('selecting a material and editing its identification, colour and interface defaults persists', function () {
+    withDialog(function (host) {
+      host.querySelector('.material-sets tbody tr').click();
+      openProperties(host);
+      type(field(host, 'name'), '  Dense sand  ');
+      T.eq(App.MATERIALS[0].name, 'Dense sand');
+      var name = field(host, 'name');
+      var enter = new KeyboardEvent('keydown', { key: 'Enter', cancelable: true });
+      name.dispatchEvent(enter);
+      T.ok(enter.defaultPrevented);
+      var colour = field(host, 'color');
+      colour.value = '#123456';
+      colour.dispatchEvent(new Event('input'));
+      T.eq(App.MATERIALS[0].color, '#123456');
+      type(field(host, 'rInter'), '0.85');
+      choose(field(host, 'interfacePerm'), 'Drain');
+      T.eq([App.MATERIALS[0].rInter, App.MATERIALS[0].interfacePerm], [0.85, 'Drain']);
+      type(field(host, 'rInter'), '2');
+      T.eq(App.MATERIALS[0].rInter, 0.85, 'invalid interface strength is not committed');
+      T.ok(/Rinter/.test(hint(host).textContent));
+    });
+  });
+
+  T.test('the remove-variable button drops an optional variable but preserves required ones', function () {
+    withDialog(function (host) {
+      openProperties(host);
+      host.querySelector('[data-field="new-variable"]').value = 'OCR';
+      host.querySelector('[data-field="new-value"]').value = '1.5';
+      host.querySelector('[data-action="add-variable"]').click();
+      T.eq(App.MATERIALS[0].variables.OCR, 1.5);
+      host.querySelector('[data-remove="OCR"]').click();
+      T.ok(!Object.prototype.hasOwnProperty.call(App.MATERIALS[0].variables, 'OCR'));
+      host.querySelector('[data-remove="DENSITY_SOLID"]').click();
+      T.eq(App.MATERIALS[0].variables.DENSITY_SOLID, 1.83486);
+      T.ok(/DENSITY_SOLID/.test(hint(host).textContent));
+    });
+  });
+
   T.test('the table shows the soil model and Kratos variables, headed in the project units', function () {
     withDialog(function (host) {
       var heads = Array.prototype.map.call(host.querySelectorAll('.material-sets th'),

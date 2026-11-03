@@ -64,9 +64,9 @@
   }
 
   var GLOBALS = ['Api', 'Command', 'Viewport', 'state', 'runAction', 'selectObject',
-                 'setMode', 'Download'];
+                 'setMode', 'Download', 'MODES', 'setCoords', 'ResultsView'];
 
-  function rig() {
+  function rig(freshMode) {
     var saved = {};
     GLOBALS.forEach(function (k) { saved[k] = App[k]; });
     var handle = App.Results.handleCommand;
@@ -93,6 +93,15 @@
     App.runAction = function () {};
     App.selectObject = function () {};
     App.setMode = function (mode) { App.state.mode = mode; };
+    if (freshMode) {
+      App.MODES = App.MODES.filter(function (mode) { return mode.id !== 'results'; });
+      App.setCoords = function () {};
+      App.ResultsView = {
+        clear: function () {},
+        isShowing: function () { return true; },
+        describeAt: function (point) { return 'Probe x=' + point.x; }
+      };
+    }
     App.Results.download = function (url, name) { ctx.downloads.push(name); };
     App.Results.handleCommand = function (text) {
       ctx.commands.push(text);
@@ -265,6 +274,92 @@
       T.ok(stage.sub[1].checked, 'the stage on screen is ticked');
       T.ok(fields.sub.some(function (s) { return s.cmd === 'results field uy'; }));
     }));
+  });
+
+  test('results: every display control issues its command and updates the shared options', function () {
+    var ctx = rig();
+    function change(name, value, checked) {
+      var control = dialogTitled(ctx, 'Choose results').querySelector('[data-res="' + name + '"]');
+      T.ok(control, name + ' is present');
+      if (checked === undefined) control.value = value; else control.checked = checked;
+      control.dispatchEvent(new Event('change'));
+      return settle();
+    }
+    return done(ctx, App.Results.handleCommand('results open ' + RUN).then(function () {
+      App.runAction({ action: 'chooseResults' });
+      return change('field', 'u');
+    }).then(function () { return change('bands', '8'); })
+      .then(function () { return change('bands', '0'); })
+      .then(function () { return change('map', 'viridis'); })
+      .then(function () { return change('reverse', null, true); })
+      .then(function () { return change('mesh', null, false); })
+      .then(function () { return change('loads', null, false); })
+      .then(function () { return change('deform', '10'); })
+      .then(function () { return change('lim-min', '-0.03'); })
+      .then(function () {
+        var options = App.Results.options();
+        T.eq(options.bands, 0);
+        T.eq(options.reversed, true);
+        T.eq(options.mesh, false);
+        T.eq(options.loads, false);
+        T.eq(options.deform, 10);
+        T.near(options.min, -0.03, 1e-10);
+        dialogTitled(ctx, 'Choose results').querySelector('[data-res="lim-auto"]').click();
+        return settle();
+      }).then(function () {
+        T.eq(App.Results.options().min, null);
+        ['results field u', 'results bands 8', 'results smooth', 'results reverse on',
+         'results mesh off', 'results loads off', 'results deform 10', 'results range auto']
+          .forEach(function (command) { T.ok(ctx.commands.indexOf(command) >= 0, command); });
+      }));
+  });
+
+  test('results: plot member selection and both download buttons use the plotted data', function () {
+    var ctx = rig();
+    return done(ctx, App.Results.handleCommand('results open ' + RUN).then(function () {
+      App.runAction({ action: 'plotResults' });
+      return settle(60);
+    }).then(function () {
+      var win = dialogTitled(ctx, 'Plot along the wall');
+      var member = win.querySelector('[data-res="plot-member"]');
+      member.dispatchEvent(new Event('change'));
+      return settle(60);
+    }).then(function () {
+      var win = dialogTitled(ctx, 'Plot along the wall');
+      button(win, 'Save SVG').click();
+      button(win, 'Save CSV').click();
+      return settle();
+    }).then(function () {
+      T.ok(ctx.commands.indexOf('results plot wall') >= 0);
+      T.ok(ctx.commands.indexOf('results plot svg') >= 0);
+      T.ok(ctx.commands.indexOf('results plot csv') >= 0);
+      T.ok(ctx.downloads.some(function (name) { return /\.svg$/.test(name); }));
+      T.ok(ctx.downloads.some(function (name) { return /\.csv$/.test(name); }));
+    }));
+  });
+
+  test('results: the dock actions work and leaving Results closes both floating windows', function () {
+    var dock = document.createElement('div');
+    dock.id = 'dock';
+    dock.innerHTML = '<div id="panel-results"><div id="panel-results-body"></div></div><span id="sb-hint"></span>';
+    document.body.appendChild(dock);
+    var ctx = rig(true);
+    return done(ctx, App.Results.handleCommand('results open ' + RUN).then(function () {
+      App.setMode('results');
+      T.ok(dialogTitled(ctx, 'Choose results'), 'entering Results opens the chooser');
+      App.setCoords(12, -3, 0);
+      T.eq(dock.querySelector('#sb-hint').textContent, 'Probe x=12');
+      dock.querySelector('[data-cmd="results range auto"]').click();
+      App.runAction({ action: 'plotResults' });
+      return settle(60);
+    }).then(function () {
+      T.ok(dialogTitled(ctx, 'Plot along the wall'), 'the plot opens beside the chooser');
+      T.ok(ctx.commands.indexOf('results range auto') >= 0);
+      App.setMode('soil');
+      T.eq(dialogTitled(ctx, 'Choose results'), undefined);
+      T.eq(dialogTitled(ctx, 'Plot along the wall'), undefined);
+      T.eq(dock.querySelector('#panel-results').hidden, true);
+    }).then(function () { dock.remove(); }, function (error) { dock.remove(); throw error; }));
   });
 
 })();
