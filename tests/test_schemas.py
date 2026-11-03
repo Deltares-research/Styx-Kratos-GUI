@@ -1812,26 +1812,23 @@ def test_an_anchor_id_cannot_overwrite_a_load_in_the_part_namespace():
         schemas.Project.model_validate(payload)
 
 
-@pytest.mark.parametrize("section_type, old, variable, expected", [
+@pytest.mark.parametrize("section_type, old, variable, expected, fields", [
     (schemas.BeamSection, {"E": 200000000, "nu": 0.3, "density": 7850,
                            "area": 0.02, "inertia": 0.001, "spacing": 2},
-     "YOUNG_MODULUS", 2e11),
+     "YOUNG_MODULUS", 2e11, {"spacing": 2}),
     (schemas.AnchorSection, {"E": 200000000, "density": 7850, "area": 0.002,
                              "spacing": 2, "tension_limit": 900},
-     "YOUNG_MODULUS", 2e11),
+     "YOUNG_MODULUS", 2e11, {"spacing": 2, "tension_limit": 900000}),
     (schemas.PanelSection, {"E": 30000000, "nu": 0.2, "density": 2400, "thickness": 0.4},
-     "THICKNESS", 0.4),
+     "THICKNESS", 0.4, {}),
 ])
 def test_old_script_section_constructors_migrate_and_round_trip(
-        section_type, old, variable, expected):
+        section_type, old, variable, expected, fields):
     section = section_type.model_validate({"id": "profile", "name": "Profile", **old})
 
     assert section.variables[variable] == expected
+    assert {name: getattr(section, name) for name in fields} == fields
     assert section_type.model_validate(section.model_dump()) == section
-    if isinstance(section, schemas.AnchorSection):
-        assert section.tension_limit == 900000
-    if not isinstance(section, schemas.PanelSection):
-        assert section.spacing == 2
 
 
 @pytest.mark.parametrize("levels, message", [
