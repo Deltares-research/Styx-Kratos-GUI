@@ -130,11 +130,15 @@ def test_beam_set_list_and_remove(cli, pit):
     assert ran.code == 1 and "strut" in ran.err
 
 
-def test_a_structure_command_names_the_command_for_the_record_kind(cli, pit):
-    ran = cli("beam", pit, "set", "strut", "--name", "Not a pile")
+@pytest.mark.parametrize("noun, id, message", [
+    ("beam", "strut", "strut is an anchor; use `kratos-cli anchor`"),
+    ("anchor", "sheetpile", "sheetpile is a sheet pile; use `kratos-cli beam`"),
+])
+def test_a_structure_command_names_the_command_for_the_record_kind(cli, pit, noun, id, message):
+    ran = cli(noun, pit, "set", id, "--name", "Wrong command")
 
     assert ran.code == 1
-    assert "strut is a anchor" in ran.err and "kratos-cli anchor" in ran.err
+    assert message in ran.err
 
 
 def test_a_wall_is_a_3d_structure(cli, site, solid):
