@@ -304,15 +304,17 @@ def test_only_the_soil_carries_the_k0_variables(result):
                             if "SheetPileWall" in n or "Strut" in n or "Interface" in n]
 
 
-def test_k0_nc_is_jaky_unless_the_material_says_otherwise():
-    """The test model types 0.58 and 0.47, which are Jaky at its two friction angles --
-    so its typed K0_NC and the fallback agree."""
-    from core.kratos.materials import jaky
+def test_k0_nc_is_the_material_s_or_else_its_model_s():
+    """The test model types 0.58 and 0.47, Jaky at its two friction angles, and they are
+    written. Left out, a linear elastic soil's is nu / (1 - nu): the elastic law has no
+    friction angle to take one from."""
+    from core.kratos.materials import k0_nc
     project = excavation.excavation_project(staged=False)
     for key, k0 in (("m_upper", 0.58), ("m_lower", 0.47)):
         material = project.material(key)
         assert material.variables["K0_NC"] == k0
-        assert round(jaky(material), 2) == k0
+        nu = material.variables["POISSON_RATIO"]
+        assert k0_nc(material) == pytest.approx(nu / (1 - nu))
 
 
 def test_an_unstaged_project_gets_no_second_materials_file():

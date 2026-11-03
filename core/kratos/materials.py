@@ -363,12 +363,16 @@ def _permeabilities(value: float, dim: int) -> dict:
     return out
 
 
-def jaky(material: Material) -> float | None:
-    """Jaky's 1 - sin(phi), the standard correlation for K0 of a normally consolidated
-    soil, and the one Kratos' staged-excavation reference deck's own numbers follow. None for a material with no friction angle: there is
-    nothing to derive it from, and the K0 procedure is left to its own default."""
-    phi = material.number("GEO_FRICTION_ANGLE")
-    return None if phi is None else 1.0 - math.sin(math.radians(phi))
+biot = soil_models.biot
+"""The Biot coefficient Kratos' coupled elements derive (`soil_models.biot`). A steady
+flow does not read it; a transient one does."""
+
+
+def k0_nc(material: Material) -> float | None:
+    """K0 of a normally consolidated soil as the export derives it (`soil_models.k0`):
+    Jaky's 1 - sin(phi), or nu / (1 - nu) for a linear elastic soil. None when the soil
+    says neither, and the K0 procedure is left to its own default."""
+    return soil_models.k0(material.constitutive_law, material.variables)
 
 
 def _interface_variables(section: InterfaceSection, project: Project,

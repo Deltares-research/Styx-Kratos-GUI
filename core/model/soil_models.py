@@ -462,6 +462,18 @@ def undrained_poisson(variables: dict, fluid_bulk_modulus: float) -> float | Non
     return min(result, UNDRAINED_POISSON_LIMIT)
 
 
+def k0(law: str, variables: dict) -> float | None:
+    """K0 of a normally consolidated soil: Jaky's 1 - sin(phi) for a soil with a friction
+    angle that is not elastic -- the correlation Kratos' staged-excavation reference
+    follows -- and the elastic nu / (1 - nu) for a linear elastic one, which has none.
+    None when the soil says neither."""
+    if model_of(law) == LINEAR_ELASTIC:
+        poisson = _number(variables.get("POISSON_RATIO"))
+        return None if poisson is None or poisson >= 1 else poisson / (1.0 - poisson)
+    phi = _number(variables.get("GEO_FRICTION_ANGLE"))
+    return None if phi is None else 1.0 - math.sin(math.radians(phi))
+
+
 def derived(law: str, variables: dict, water_variables: dict, system: str,
             flow: bool = False) -> dict:
     """What the export writes for a soil of `law` holding `variables` where the soil

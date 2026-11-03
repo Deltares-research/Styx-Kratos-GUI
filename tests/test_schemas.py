@@ -102,19 +102,28 @@ def _sand(**variables) -> schemas.Material:
     return schemas.Material(**{**SAND, "variables": {**SAND["variables"], **variables}})
 
 
-def test_k0_defaults_to_jaky_from_the_friction_angle():
-    """1 - sin(phi): the normally consolidated K0 a soil's own friction angle gives
-    (0.62 at 22.3 deg, 0.46 at 32.7 deg)."""
-    from core.kratos.materials import jaky
-    assert jaky(_sand(GEO_FRICTION_ANGLE=30.0)) == pytest.approx(0.5)
-    assert jaky(_sand(GEO_FRICTION_ANGLE=22.3)) == pytest.approx(0.62, abs=5e-3)
+def test_k0_defaults_to_jaky_from_the_friction_angle_of_a_plastic_soil():
+    """1 - sin(phi): the normally consolidated K0 a Mohr-Coulomb soil's own friction
+    angle gives (0.62 at 22.3 deg, 0.46 at 32.7 deg)."""
+    from core.kratos.materials import k0_nc
+    plastic = {"constitutive_law": "GeoMohrCoulombLawPlaneStrain"}
+    assert k0_nc(_sand(GEO_FRICTION_ANGLE=30.0).model_copy(update=plastic)) == \
+        pytest.approx(0.5)
+    assert k0_nc(_sand(GEO_FRICTION_ANGLE=22.3).model_copy(update=plastic)) == \
+        pytest.approx(0.62, abs=5e-3)
+
+
+def test_k0_of_an_elastic_soil_is_the_elastic_one_whatever_its_friction_angle():
+    from core.kratos.materials import k0_nc
+    assert k0_nc(_sand(GEO_FRICTION_ANGLE=30.0)) == pytest.approx(0.28 / 0.72)
 
 
 def test_a_material_with_no_friction_angle_has_no_k0():
-    """Non-porous rock carries neither, and nothing should be invented for it."""
-    from core.kratos.materials import jaky
+    """Non-porous rock with neither a friction angle nor a Poisson ratio: nothing should
+    be invented for it."""
+    from core.kratos.materials import k0_nc
     rock = schemas.Material(**{**SAND, "variables": {"YOUNG_MODULUS": 2e9}})
-    assert jaky(rock) is None
+    assert k0_nc(rock) is None
 
 
 # ── Soil layers ─────────────────────────────────────────────────────────────

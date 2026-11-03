@@ -68,7 +68,8 @@ material set m_soil DENSITY_SOLID=1834.8623853211009 POROSITY=0.0
 material set m_soil GEO_DRAINAGE_TYPE=CONSTANT_PW_FIELD BULK_MODULUS_SOLID=1e10
 material set m_soil PERMEABILITY_XX=1e-5 PERMEABILITY_YY=1e-5 PERMEABILITY_XY=0.0
 #    Strength (c = 1 kPa, phi = 30 degrees) and the K0 for the initial stresses.
-#    K0_NC can be left out: the export then writes 1 - sin(phi), which is 0.5 here too.
+#    K0_NC can be left out: the export then writes nu / (1 - nu) for this linear
+#    elastic soil, 0.43 here, and 1 - sin(phi) (0.5) for a Mohr-Coulomb one.
 material set m_soil GEO_COHESION=1000.0 GEO_FRICTION_ANGLE=30.0 K0_NC=0.5
 #    For a Mohr-Coulomb soil, add `--model mohr-coulomb` to `material add` (or run
 #    `material set m_soil --model mohr-coulomb`). The soil then also gets a dilatancy

@@ -197,6 +197,17 @@ App.SoilModels = (function () {
                     constant('UNDRAINED_POISSON_LIMIT'));
   }
 
+  /* K0 of a normally consolidated soil: nu / (1 - nu) for a linear elastic soil, Jaky's
+     1 - sin(phi) for another with a friction angle. */
+  function k0(law, variables) {
+    if (modelOf(law) === 'linear_elastic') {
+      var poisson = number(variables, 'POISSON_RATIO');
+      return poisson === null || poisson >= 1 ? null : poisson / (1.0 - poisson);
+    }
+    var phi = number(variables, 'GEO_FRICTION_ANGLE');
+    return phi === null ? null : 1.0 - Math.sin(phi * Math.PI / 180);
+  }
+
   /* What the export writes where a soil leaves it out, in `system`, in the order it
      derives them (core/model/soil_models.py `derived`). */
   function derived(law, variables, waterVariables, system, flow) {

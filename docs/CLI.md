@@ -147,8 +147,9 @@ kratos-cli parts pit.json                                 # soil_top__lift1, ...
   the project's units. Variables given as `NAME=VALUE` are Kratos' own, in the project's
   units; `get P materials[ID].variables` lists the values a material has. `--color` is a
   `#rrggbb` colour, such as `#c4a86a`. The export derives some variables that are left
-  out, and its warning lists them. It also derives `K0_NC` as 1 − sin φ from
-  `GEO_FRICTION_ANGLE`, into `initial_materials.json`, but that warning does not list it.
+  out, and its warning lists them. It also derives `K0_NC`, as ν / (1 − ν) for a
+  linear elastic soil and 1 − sin φ for a Mohr-Coulomb one, into
+  `initial_materials.json`, but that warning does not list it.
 - **Soil models**: `--model linear-elastic` or `--model mohr-coulomb` sets the law for the
   model's dimension, as the **Soil model** list of the Material set window does. The
   values the soil already has stay. The values the model needs and the soil does not

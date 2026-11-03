@@ -360,7 +360,7 @@ def test_a_contact_starts_from_the_stress_in_the_ground_beside_it(pulled):
     for element in elements:
         _, ya, yb = along(deck, element)
         in_fill = (ya + yb) / 2 > layer
-        k0 = materials.jaky(fill if in_fill else ground)
+        k0 = materials.k0_nc(fill if in_fill else ground)
         normal, shear = (element["properties"][name] for name in
                          ("INTERFACE_NORMAL_STIFFNESS", "INTERFACE_SHEAR_STIFFNESS"))
         # Lobatto points: one end, the middle, the other end.

@@ -304,6 +304,14 @@ def test_a_permeability_left_out_in_y_is_the_one_in_x():
     assert found["PERMEABILITY_YY"] == 2.0e-12
 
 
+def test_k0_is_elastic_for_an_elastic_soil_and_jaky_s_for_a_plastic_one():
+    elastic = soil_models.derived(ELASTIC_2D, {"POISSON_RATIO": 0.25}, WATER_SI, "SI")
+    plastic = soil_models.derived(MC_2D, {"GEO_FRICTION_ANGLE": 30.0}, WATER_SI, "SI")
+
+    assert elastic["K0_NC"] == pytest.approx(0.25 / 0.75)
+    assert plastic["K0_NC"] == pytest.approx(0.5)
+
+
 def test_a_coupled_soil_derives_its_permeability_and_a_constant_one_none():
     coupled = soil_models.derived(ELASTIC_2D, {"GEO_DRAINAGE_TYPE": "FULLY_COUPLED"},
                                   WATER_SI, "SI")
