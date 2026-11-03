@@ -402,14 +402,32 @@ slips, so the iterations creep; with the stiffness derived from the soil (1e8 Pa
 they had not converged after 50."""
 
 
+STRONGER = 10.0
+"""How much more cohesion than the drawn ground's own the soils get when the contact
+takes its strength from them. At their own the Mohr-Coulomb soils yield beside the pulled
+pile, and the stage does not converge."""
+
+R_INTER = 0.5
+"""The section's: the contact derives c R and atan(R tan phi) from those stronger soils,
+weak enough to slip, while they stay elastic."""
+
+
 def slipped(variables: dict, tmp_path: Path) -> list[tuple[float, float, float, float]]:
     """(c, phi, tn, ts) at every integration point of the contact, the pile pulled up.
     A contact with no strength typed takes its soils', so they are Mohr-Coulomb: a linear
-    elastic soil has none to give."""
+    elastic soil has none to give. They are `STRONGER`, and the section's R is
+    `R_INTER`."""
     derived = not ({"GEO_COHESION", "GEO_FRICTION_ANGLE"} & set(variables))
     project = drawn_ground.pushed_pile_project(
         variables=SOFT | variables, law=COULOMB_CONTACT, load=(0.0, PULL),
         max_iterations=50, soil_law="GeoMohrCoulombLawPlaneStrain" if derived else None)
+    if derived:
+        soils = [soil.model_copy(update={"variables": {
+            **soil.variables, "GEO_COHESION": STRONGER * soil.variables["GEO_COHESION"]}})
+            for soil in project.materials]
+        contact = project.interface_sections[0].model_copy(update={"r_inter": R_INTER})
+        project = project.model_copy(update={"materials": soils,
+                                             "interface_sections": [contact]})
     _, elements = contacts(project, tmp_path)
     return [(e["properties"]["GEO_COHESION"], e["properties"]["GEO_FRICTION_ANGLE"], tn, ts)
             for e in elements for tn, ts, *_ in e["traction"]]
@@ -439,10 +457,10 @@ def test_a_coulomb_contact_slips_at_its_strength(typed, tmp_path):
     once with c and phi typed on the section, used as they stand."""
     typed_values = {"GEO_COHESION": 2_000.0, "GEO_FRICTION_ANGLE": 25.0}
     points = slipped(typed_values if typed else {}, tmp_path)
-    r = 0.7
+    r, c = R_INTER, STRONGER
     wanted = ({(2_000.0, 25.0)} if typed else
-              {(r * 1_000.0, math.degrees(math.atan(r * math.tan(math.radians(30.0))))),
-               (r * 1_500.0, math.degrees(math.atan(r * math.tan(math.radians(40.0)))))})
+              {(r * c * 1_000.0, math.degrees(math.atan(r * math.tan(math.radians(30.0))))),
+               (r * c * 1_500.0, math.degrees(math.atan(r * math.tan(math.radians(40.0)))))})
     got = {(c, phi) for c, phi, _, _ in points}
     assert len(got) == len(wanted)
     for c, phi in wanted:
