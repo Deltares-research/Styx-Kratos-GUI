@@ -145,3 +145,12 @@ def test_mesh_labels_route_returns_the_export_numbering():
         assert nodes and [row[0] for row in nodes] == list(range(1, len(nodes) + 1))
         assert elements and [row[0] for row in elements] == list(range(1, len(elements) + 1))
         assert all(len(row) == 4 for row in nodes + elements)
+
+
+def test_mdpa_element_labels_skip_undefined_nodes_and_order_by_element_id():
+    labels = mdpa_reader._element_labels(
+        {1: (0.0, 0.0, 0.0), 2: (2.0, 0.0, 0.0), 3: (0.0, 2.0, 0.0)},
+        [(8, [99]), (4, [1, 2, 3])],
+    )
+
+    assert labels == [[4, 2 / 3, 2 / 3, 0.0]]

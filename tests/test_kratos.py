@@ -1,6 +1,7 @@
 """Kratos .mdpa export: node tables, element blocks, sub-model parts and materials."""
 
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -1230,3 +1231,132 @@ def test_a_shear_area_is_smeared_over_spacing_like_the_rest(session):
                                   variables=STEEL | {"AREA_EFFECTIVE_Y": 0.008})
     variables = materials._beam_variables(section, 2)
     assert variables["AREA_EFFECTIVE_Y"] == pytest.approx(0.008 / 2.5)
+
+
+def test_structural_materials_refuse_missing_required_properties():
+    from core.kratos import materials
+    prop = SimpleNamespace(
+        constitutive_law=materials.BEAM_LAW,
+        variables={},
+        number=lambda _name: None,
+    )
+
+    with pytest.raises(materials.MaterialError, match="YOUNG_MODULUS.*I33"):
+        materials._check(prop, "section 'missing'")
+
+
+def test_kratos_coordinate_conversion_refuses_nodes_off_the_section_plane():
+    world = {1: (1.0, 2.0, 0.0), 2: (3.0, 4.0, 1e-3)}
+
+    with pytest.raises(ValueError, match="1 node\\(s\\).*off the z = 0 plane"):
+        writer._kratos_coordinates(world, 2)
+
+    assert writer._kratos_coordinates({1: (1.0, 2.0, 0.0)}, 2) == {
+        1: (1.0, 2.0, 0.0),
+    }
+
+
+def test_drawn_order_is_consistent_across_a_bent_polyline():
+    world = {
+        1: (2.0, 0.0, 0.0), 2: (0.0, 0.0, 0.0),
+        3: (2.0, 2.0, 0.0), 4: (2.0, 1.0, 0.0),
+    }
+
+    assert writer._drawn_order([[1, 2], [3, 4]], [(0.0, 0.0), (2.0, 0.0),
+                                                  (2.0, 2.0)], world) == [
+        [2, 1], [4, 3],
+    ]
+
+
+def test_number_conditions_uses_its_own_ids_and_deduplicates_part_nodes():
+    numbered, parts = writer._number_conditions(
+        [("load", "LineLoadCondition2D2N", [[8, 3], [3, 5]])],
+        {"load": "Load"},
+        {3: 30, 5: 50, 8: 80},
+    )
+
+    assert numbered == [("LineLoadCondition2D2N", [(1, 0, [80, 30]),
+                                                     (2, 0, [30, 50])])]
+    assert parts == [("Load", [30, 50, 80], [], [1, 2])]
+
+
+def test_seepage_iteration_warning_counts_unique_face_nodes():
+    project = SimpleNamespace(stages=[SimpleNamespace(name="Short step", max_iterations=2)])
+
+    warning = writer._seepage_iterations(
+        project, [("water", "LineSeepageCondition2D2N", [[1, 2], [2, 3]])],
+    )
+
+    assert len(warning) == 1
+    assert "allows 2 iterations" in warning[0]
+    assert "faces have 3 nodes" in warning[0]
+    assert writer._seepage_iterations(
+        SimpleNamespace(stages=[SimpleNamespace(name="Long step", max_iterations=3)]),
+        [("water", "LineSeepageCondition2D2N", [[1, 2], [2, 3]])],
+    ) == []
+
+
+@pytest.mark.parametrize("dimension, row, coordinates, expected", [
+    (2, [1, 3, 2],
+     {1: (0, 0, 0), 2: (1, 0, 0), 3: (0, 1, 0)}, [1, 2, 3]),
+    (2, [1, 3, 2, 6, 5, 4],
+     {1: (0, 0, 0), 2: (1, 0, 0), 3: (0, 1, 0)},
+     [1, 2, 3, 4, 5, 6]),
+    (3, [2, 1, 3, 4],
+     {1: (0, 0, 0), 2: (1, 0, 0), 3: (0, 1, 0), 4: (0, 0, 1)},
+     [1, 2, 3, 4]),
+])
+def test_writer_repairs_negative_jacobians_without_losing_midside_order(
+        dimension, row, coordinates, expected):
+    original = list(row)
+
+    fixed = writer._oriented([row], coordinates, dimension)
+
+    assert fixed == [expected]
+    assert writer._signed_measure(
+        [coordinates[tag] for tag in fixed[0][:dimension + 1]], dimension) > 0
+    assert row == original
+    assert writer._oriented(fixed, coordinates, dimension) == fixed
+
+
+@pytest.mark.parametrize("missing", ["head", "tail"])
+def test_anchor_export_refuses_a_missing_endpoint_mesh_node(monkeypatch, missing):
+    from tests.models.excavation import excavation_project
+
+    project = excavation_project(staged=False)
+    anchor = project.plane_anchors[0]
+    anchor = anchor.model_copy(update={"name": "Test anchor"})
+    project = project.model_copy(update={"anchors": [anchor]})
+    head = (*anchor.head, 0.0)
+    tail = (*anchor.tail, 0.0)
+    world = {1: head} if missing == "tail" else {2: tail}
+    monkeypatch.setattr(writer, "_tagged", lambda _: {})
+    monkeypatch.setattr(writer, "_harvest",
+                        lambda *_args, **_kwargs: [("wall", "Beam", [[1]])])
+
+    with pytest.raises(writer.ExportError, match=f"Test anchor.*no mesh node at its {missing}"):
+        writer._anchor_ties(project, 2, world)
+
+
+def test_anchor_node_lookup_never_selects_a_coincident_nonstructural_node():
+    project = seed_project()
+    world = {1: (1, 2, 0), 2: (1, 2, 0)}
+
+    assert writer._node_at((1, 2), project, world, {2}) == 2
+    assert writer._node_at((1, 2), project, world, set()) is None
+
+
+def test_panel_lookup_selects_the_named_panel():
+    from core.model.schemas import Panel
+    from core.model.templates import blank_project
+
+    panel = Panel(id="panel", name="Panel", section="shell",
+                  footprint=[(0, 0), (1, 0)], y_top=0, y_toe=-2)
+    project = blank_project().model_copy(update={"beams": [panel]})
+
+    assert writer._panel_of(project, "panel") is panel
+
+
+def test_export_names_collapse_repeated_separators_and_refuse_numeric_prefixes():
+    assert writer._sanitise("  Wall / contact___A  ") == "Wall_contact_A"
+    assert writer._sanitise("123 wall") == ""

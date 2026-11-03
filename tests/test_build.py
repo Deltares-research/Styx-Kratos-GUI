@@ -10,6 +10,8 @@ with empty results) the number moves and this test fails.
 """
 
 import math
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
 
@@ -418,3 +420,51 @@ def test_a_footprint_overhanging_the_domain_leaves_no_free_floating_surface():
         overhang = [box for box in _top_faces() if box[5] > project.domain.z1 + 1e-5]
 
     assert overhang == []
+
+
+def test_solid_model_reentrant_session_does_not_finalize_a_caller_owned_gmsh():
+    import gmsh
+
+    with solid_model.session():
+        with solid_model.session():
+            assert gmsh.isInitialized()
+        assert gmsh.isInitialized()
+
+
+def test_solid_model_helpers_assign_owners_and_report_omitted_overlays():
+    assert solid_model._assign_by_priority({
+        1: {"soil_L1", "wall"}, 2: {"soil_L1", "custom_z", "custom_a"},
+    }) == {"wall": [1], "custom_a": [2]}
+
+    log = []
+    assert solid_model._drop_overlays({"z_line": [(1, 4)], "a_surface": [(2, 3)]}, log) == {}
+    assert [entry.split(" : ")[1].split()[0] for entry in log] == ["a_surface", "z_line"]
+
+
+def test_empty_bounding_box_requires_or_returns_a_camera_fallback():
+    fallback = (-1.0, -2.0, -3.0, 1.0, 2.0, 3.0)
+
+    assert solid_model.bounding_box([], fallback=fallback) == fallback
+    with pytest.raises(ValueError, match="no volumes and no fallback"):
+        solid_model.bounding_box([])
+
+
+@pytest.mark.parametrize("previous", [None, "python-handler"])
+def test_posix_initialization_restores_pythons_sigpipe_handler(monkeypatch, previous):
+    events = []
+    signal = SimpleNamespace(
+        SIGPIPE=13,
+        getsignal=Mock(side_effect=lambda sig: events.append(("get", sig)) or previous),
+        signal=Mock(side_effect=lambda sig, handler: events.append(("restore", sig, handler))),
+    )
+    monkeypatch.setattr(solid_model, "sys", SimpleNamespace(platform="linux"))
+    monkeypatch.setattr(solid_model, "signal", signal)
+    monkeypatch.setattr(solid_model, "gmsh", SimpleNamespace(
+        initialize=lambda: events.append(("initialize",))))
+
+    solid_model.initialize()
+
+    expected = [("get", 13), ("initialize",)]
+    if previous is not None:
+        expected.append(("restore", 13, previous))
+    assert events == expected

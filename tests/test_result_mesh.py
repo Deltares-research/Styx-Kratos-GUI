@@ -540,3 +540,7 @@ def test_a_mixed_3d_mesh_keeps_beam_edges_without_adding_them_to_the_soil_skin()
     assert beam["indices"] == []
     assert len(beam["edges"]) == 2 * 3
     assert {beam["node_ids"][index] for index in beam["edge_indices"]} == {1, 4}
+
+
+def test_a_point_element_is_not_drawn_as_a_line():
+    assert mesh.edges_of([7], 1, "Point") == []

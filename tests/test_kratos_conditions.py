@@ -319,3 +319,18 @@ def test_the_conditions_update_changes_only_what_it_names():
 def test_a_model_script_writes_gravity_off_out():
     assert "gravity=False" in script_writer.script(session.set_gravity(section(None), False))
     assert "gravity=" not in script_writer.script(section(None))
+
+
+def test_a_condition_on_an_absent_soil_body_is_omitted_with_a_warning(monkeypatch):
+    from core.model.schemas import WaterPressureCondition
+
+    condition = WaterPressureCondition(id="water", name="Water", on="part",
+                                      part="soil_missing", fluid_pressure_type="Uniform")
+    project = blank_project().model_copy(update={"boundary_conditions": [condition]})
+    monkeypatch.setattr(writer, "_tagged", lambda _: {})
+    warnings = []
+
+    assert writer._condition_targets(project, 2, [], {}, {}, {}, {}, warnings) == ([], [])
+    assert len(warnings) == 1
+    assert "soil_missing" in warnings[0]
+    assert "has no soil" in warnings[0]

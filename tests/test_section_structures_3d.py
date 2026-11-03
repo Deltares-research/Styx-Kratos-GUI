@@ -13,6 +13,9 @@ needs a width at all -- a shell has to have somewhere to be -- and takes it from
 profile's own out-of-plane `spacing`.
 """
 
+from types import SimpleNamespace
+from unittest.mock import Mock
+
 import gmsh
 import pytest
 
@@ -190,3 +193,28 @@ def test_the_plane_anchor_is_drawn_in_the_solid_model(drawn):
 def test_the_two_dimensional_load_symbol_is_drawn_in_the_solid_model(drawn):
     """The red arrows in the section have to survive the switch to 3D too."""
     assert drawable(drawn, "load1")
+
+
+@pytest.mark.parametrize("swept_faces", [[], [(2, 20)]])
+def test_section_sweeps_report_failed_piles_and_imprint_free_interfaces(
+        monkeypatch, swept_faces):
+    from tests.test_kratos_interfaces import interfaced_project
+
+    project = interfaced_project(
+        side="left", structure=None, points=[(5, 0), (5, -2)])
+    occ = SimpleNamespace(
+        addPoint=Mock(side_effect=range(1, 20)),
+        addLine=Mock(side_effect=range(30, 50)),
+        extrude=Mock(side_effect=[[], swept_faces]),
+    )
+    monkeypatch.setattr(solid_model, "gmsh", SimpleNamespace(
+        model=SimpleNamespace(occ=occ)))
+    log = []
+
+    result = solid_model._section_sweeps(project, log)
+
+    assert result == ([("interface_1", [20])] if swept_faces else [])
+    assert any("sheetpile_1 could not be swept" in note for note in log)
+    assert any("export no interface elements" in note for note in log)
+    assert occ.extrude.call_count == 2
+    assert occ.extrude.call_args.args[1:] == (0.0, 0.0, solid_model.INTERFACE_SWEEP)

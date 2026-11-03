@@ -17,7 +17,7 @@ stepped pile keeps the swept strip and says so.
 import pytest
 
 from core.model import wall_translation
-from core.model.schemas import Project
+from core.model.schemas import BeamSection, PanelSection, Project
 from core.model.templates import seed_project
 
 
@@ -222,3 +222,13 @@ def test_a_panel_narrowed_clear_of_the_section_plane_is_not_built_in_the_section
 
     assert section.cut_at() > 3.0, "the default cut is mid-domain, clear of z 1..3"
     assert [b.id for b in section.structures_for(2)] == []
+
+
+def test_a_wall_translation_reuses_a_previously_created_section():
+    section = BeamSection(id="profile", name="Profile",
+                          variables={"CROSS_AREA": 0.02})
+    panel_section = PanelSection(id="profile_wall", name="User-edited wall",
+                                 variables={"THICKNESS": 0.05})
+
+    assert wall_translation.wall_section_for(
+        section, {"profile_wall": panel_section}) is panel_section
