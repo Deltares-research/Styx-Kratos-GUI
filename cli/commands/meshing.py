@@ -84,7 +84,8 @@ def mesh_settings(project: Project) -> MeshRequest:
     unknown = session.unknown_mesh_keys(project, settings)
     if unknown:
         raise CommandError("the mesh settings name bodies this model does not have: "
-                           + ", ".join(unknown))
+                           + ", ".join(unknown) + ". Correct the name, or take the size "
+                           f"away: kratos-cli remove FILE mesh.body_sizes.{unknown[0]}")
     return settings
 
 

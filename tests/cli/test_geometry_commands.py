@@ -242,6 +242,24 @@ def test_a_layer_edit_says_which_mesh_size_it_took_away(cli, tmp_path):
     assert "Removed" not in again.out
 
 
+@pytest.mark.parametrize("refuser", ["check", "mesh"])
+def test_a_size_for_a_body_the_model_lacks_is_refused_with_how_to_take_it_away(
+        cli, tmp_path, refuser):
+    project = excavation.excavation_project(staged=False)
+    sized = project.mesh.model_copy(update={"body_sizes": {"gone": 0.5, "lost": 0.5}})
+    path = session.save(project.model_copy(update={"mesh": sized}), tmp_path / "pit.json")
+
+    refused = cli(refuser, path)
+
+    assert refused.code == 1
+    assert "the mesh settings name bodies this model does not have: gone, lost." in refused.err
+    assert "kratos-cli remove FILE mesh.body_sizes.gone" in refused.err
+    assert cli("remove", path, "mesh.body_sizes.gone").code == 0
+    assert cli("remove", path, "mesh.body_sizes.lost").code == 0
+    ran = cli("check", path)
+    assert ran.code == 0, ran.err
+
+
 def test_a_layer_needs_a_bottom_or_a_thickness_or_takes_five_metres(cli, site):
     assert cli("layer", site, "add", "L3", "--material", "m1").code == 0
 

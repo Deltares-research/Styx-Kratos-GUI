@@ -605,6 +605,13 @@ kratos-cli layer pit.json split L_top
 # note: Removed the mesh size of soil_L_top__lift3 (1): the edit took that body away. ...
 ```
 
+If a file has a size for a body that the model does not have, `check` and `mesh` refuse
+the file and name that body. Correct the name with `set`, or remove the size:
+
+```bash
+kratos-cli remove pit.json mesh.body_sizes.strut
+```
+
 ## The deck and the runs
 
 `export` writes the deck the GUI's **Export** writes for the same project: the `.mdpa`,

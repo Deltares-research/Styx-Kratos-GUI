@@ -8,13 +8,13 @@ import argparse
 from pathlib import Path
 
 from cli.commands import conditions
-from cli.commands.meshing import nothing_to_mesh
+from cli.commands.meshing import mesh_settings, nothing_to_mesh
 from cli.terminal.files import add_project, add_writing, read, written
 from cli.terminal.output import Answer, CommandError
 from core import session
 from core.kratos import condition_checks
 from core.model import stages
-from core.model.schemas import DimensionUpdate, MeshRequest, Project, UnitsUpdate
+from core.model.schemas import DimensionUpdate, Project, UnitsUpdate
 from core.model.templates import blank_project, seed_project
 
 REMOVE = ("off", "none", "remove")
@@ -132,10 +132,7 @@ def check_project(args: argparse.Namespace) -> Answer:
         refused = condition_checks.flow_refusal(project)
         if refused:
             raise CommandError(refused)
-        unknown = session.unknown_mesh_keys(project, MeshRequest(**project.mesh.model_dump()))
-        if unknown:
-            raise CommandError("the mesh settings name bodies this model does not have: "
-                               + ", ".join(unknown))
+        mesh_settings(project)
     warnings = condition_checks.warnings(project)
     return Answer(data={"ok": True, "file": str(args.project), **summary(project),
                         "warnings": warnings},
