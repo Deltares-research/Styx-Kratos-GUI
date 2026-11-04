@@ -54,9 +54,10 @@ domain --x 0 20 --y 0 10
 # 3. The soil: one linear elastic material, and one layer of it down to y = 0.
 #    --color is the colour the GUI draws the soil in, as #rrggbb. Colour names such
 #    as brown are refused.
-#    A new material starts with the values of the GUI's default loose sand. The lines
-#    below replace them. The variables have Kratos' own names, in the project's units
-#    (SI here). `get materials[m_soil].variables` lists the values a material has.
+#    A new material starts as the blank soil of the GUI's Create soil: drained, with a
+#    retention law and nothing else. The lines below give it the rest. The variables
+#    have Kratos' own names, in the project's units (SI here).
+#    `get materials[m_soil].variables` lists the values a material has.
 material add m_soil --name soil --color "#c4a86a" --law GeoLinearElasticPlaneStrain2DLaw
 #    Stiffness: E = 20 MPa
 material set m_soil YOUNG_MODULUS=2.0e7 POISSON_RATIO=0.3
@@ -64,16 +65,19 @@ material set m_soil YOUNG_MODULUS=2.0e7 POISSON_RATIO=0.3
 #    same in every soil: 10 kN/m3 unless the water level says otherwise, and its bulk
 #    modulus and viscosity water's unless `fluid` sets them.
 material set m_soil DENSITY_SOLID=1834.8623853211009 POROSITY=0.0
-#    Water: a fixed pore pressure field, and the soil's intrinsic permeability (m2)
+#    Water: a fixed pore pressure field, and the soil's intrinsic permeability (m2).
+#    1e-12 m2 conducts water at about 1e-5 m/s.
 material set m_soil GEO_DRAINAGE_TYPE=CONSTANT_PW_FIELD BULK_MODULUS_SOLID=1e10
-material set m_soil PERMEABILITY_XX=1e-5 PERMEABILITY_YY=1e-5 PERMEABILITY_XY=0.0
-#    Strength (c = 1 kPa, phi = 30 degrees) and the K0 for the initial stresses.
-#    K0_NC can be left out: the export then writes nu / (1 - nu) for this linear
-#    elastic soil, 0.43 here, and 1 - sin(phi) (0.5) for a Mohr-Coulomb one.
-material set m_soil GEO_COHESION=1000.0 GEO_FRICTION_ANGLE=30.0 K0_NC=0.5
+material set m_soil PERMEABILITY_XX=1e-12 PERMEABILITY_YY=1e-12 PERMEABILITY_XY=0.0
+#    The K0 for the initial stresses. A linear elastic soil has no strength. K0_NC can
+#    be left out: the export then writes nu / (1 - nu) for this soil, 0.43 here.
+material set m_soil K0_NC=0.5
 #    For a Mohr-Coulomb soil, add `--model mohr-coulomb` to `material add` (or run
-#    `material set m_soil --model mohr-coulomb`). The soil then also gets a dilatancy
-#    angle of 0, no tension cut-off and a retention law; `material models` lists them.
+#    `material set m_soil --model mohr-coulomb`), and give it its strength, for
+#    example c = 1 kPa and phi = 30 degrees:
+#        material set m_soil GEO_COHESION=1000.0 GEO_FRICTION_ANGLE=30.0
+#    The soil then also gets a dilatancy angle of 0 and no tension cut-off;
+#    `material models` lists them. Left out, its K0_NC is 1 - sin(phi), 0.5 here.
 layer add soil --name soil --material m_soil --bottom 0
 #    The block stands on the supports a new project has: the bottom fixed and the sides
 #    on rollers. It is dry, so it needs no water pressure condition.
