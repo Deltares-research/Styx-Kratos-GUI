@@ -513,7 +513,8 @@ def own_strength(section: InterfaceSection, soil: Material | None, system: str) 
 
 def _check_coulomb_strength(section: InterfaceSection, soil: Material | None,
                             elastic_soil: bool, variables: dict) -> None:
-    """Refuse a Coulomb contact Kratos would stop on for want of a strength."""
+    """Refuse a Coulomb contact Kratos would stop on: for want of a strength, or with
+    one `InterfaceCoulombLaw::Check` refuses (`App.Interfaces.validateSection`)."""
     label = f"interface section {section.name!r} ({section.constitutive_law})"
     missing = [name for name in INTERFACE_STRENGTH
                if not isinstance(variables.get(name), (int, float))
@@ -533,6 +534,10 @@ def _check_coulomb_strength(section: InterfaceSection, soil: Material | None,
     if not 0.0 < phi < 90.0:
         raise MaterialError(f"{label}: GEO_FRICTION_ANGLE must be above 0 and below 90 "
                             f"degrees, not {phi:g}.")
+    psi = variables.get("GEO_DILATANCY_ANGLE")
+    if isinstance(psi, (int, float)) and not isinstance(psi, bool) and psi > phi:
+        raise MaterialError(f"{label}: GEO_DILATANCY_ANGLE cannot be larger than "
+                            f"GEO_FRICTION_ANGLE ({phi:g} degrees).")
 
 
 def _beam_variables(section: BeamSection, dim: int = 2,

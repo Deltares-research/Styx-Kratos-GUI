@@ -1014,6 +1014,21 @@ def test_a_coulomb_contact_s_friction_angle_is_above_zero():
         materials._interface_variables(section, project, [], soil)
 
 
+def test_a_coulomb_contact_s_dilatancy_is_no_larger_than_its_friction_angle():
+    """`InterfaceCoulombLaw::Check` refuses it, and so does the GUI's section editor
+    (`App.Interfaces.validateSection`): the export says so before Kratos runs."""
+    project, section, soil = coulomb_contact(
+        {"GEO_COHESION": 2.0, "GEO_FRICTION_ANGLE": 20.0, "GEO_DILATANCY_ANGLE": 25.0})
+    with pytest.raises(materials.MaterialError,
+                       match=r"GEO_DILATANCY_ANGLE cannot be larger than "
+                             r"GEO_FRICTION_ANGLE \(20 degrees\)"):
+        materials._interface_variables(section, project, [], soil)
+    equal = section.model_copy(update={"variables": {**section.variables,
+                                                     "GEO_DILATANCY_ANGLE": 20.0}})
+    assert materials._interface_variables(equal, project, [], soil)[
+        "GEO_DILATANCY_ANGLE"] == 20.0
+
+
 def test_an_elastic_contact_still_takes_what_the_soil_carries():
     """It reads no strength, so nothing is refused, and its deck is as it was."""
     project = interfaced_project()
