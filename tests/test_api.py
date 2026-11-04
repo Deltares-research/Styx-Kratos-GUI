@@ -780,7 +780,7 @@ def test_patch_layers_can_resize_the_domain(client):
 
 def test_a_layer_delete_answers_with_the_mesh_size_it_took_away(client):
     """The GUI's soil layers window sends the stack without the layer; the size of the
-    layer's body goes with it, and the answer says so for the command box."""
+    layer's body goes with it, and the answer says so for the Session log."""
     from tests.models.excavation import excavation_project
 
     project = excavation_project(staged=False).model_dump(mode="json")

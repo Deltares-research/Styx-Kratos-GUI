@@ -208,7 +208,7 @@ def removed_sizes(before: Project, after: Project) -> list[str]:
     A body can come back -- a level moved back, a layer split again -- but its size does
     not, so the user is told which sizes went and what they were. A size the user removed
     on purpose, or one for a body the model never had, is not named. kratos-cli prints
-    the note after its answer and the GUI shows it in its command box.
+    the note after its answer and the GUI shows it in its Session log.
     """
     gone = set(before.mesh.body_sizes) - set(after.mesh.body_sizes)
     if gone:

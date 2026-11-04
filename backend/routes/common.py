@@ -52,7 +52,7 @@ def refusals():
 def stored(project: Project) -> dict:
     """Store the edited `project`, and start the answer to the edit: the project, and in
     `edit_notes` the mesh sizes the edit took away with their bodies
-    (`session.removed_sizes`). The GUI shows `edit_notes` in its command box whatever
+    (`session.removed_sizes`). The GUI shows `edit_notes` in its Session log whatever
     edit it made (frontend/js/api.js); kratos-cli prints the same note."""
     notes = session.removed_sizes(store.get(), project)
     store.put(project)
