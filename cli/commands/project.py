@@ -228,11 +228,8 @@ def set_fluid(args: argparse.Namespace) -> Answer:
     project = session.load(args.project)
     if args.bulk_modulus is None and args.viscosity is None and not args.unset:
         return Answer(data={"fluid": _fluid(project)}, lines=[_fluid_line(project)])
-    try:
-        project = session.set_fluid(project, bulk_modulus=args.bulk_modulus,
-                                    dynamic_viscosity=args.viscosity, unset=args.unset)
-    except ValueError as failure:
-        raise CommandError(str(failure)) from None
+    project = session.set_fluid(project, bulk_modulus=args.bulk_modulus,
+                                dynamic_viscosity=args.viscosity, unset=args.unset)
     target, where = written(args, project)
     return Answer(data={"file": _file(target), "fluid": _fluid(project)},
                   lines=[f"{_fluid_line(project)} {where}"])

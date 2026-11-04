@@ -239,7 +239,7 @@ App.Model = (function () {
     water = mapped.water ? Object.assign({ margin: 3.0, thickness: 0.06,
                                            specific_weight: null }, mapped.water) : null;
     App.MATERIALS = mapped.MATERIALS;
-    // The water every soil holds, edited in the Material sets window in place: a copy,
+    // The water every soil holds, edited in the Soil materials window in place: a copy,
     // for the same reason as `water`.
     App.FLUID = Object.assign({ bulk_modulus: null, dynamic_viscosity: null }, project.fluid || {});
     App.LAYERS = mapped.LAYERS;

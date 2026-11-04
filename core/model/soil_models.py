@@ -85,8 +85,7 @@ PERMEABILITY_SI = 1.0 / 86400 * WATER_VISCOSITY_SI / WATER_SPECIFIC_WEIGHT_SI
 """m2: the intrinsic permeability of a soil that conducts water at 1 m/day,
 k mu / gamma_w. `PERMEABILITY_XX` is intrinsic -- Kratos divides it by the viscosity
 (`GeoTransportEquationUtilities::CalculatePermeabilityMatrix`) -- not a Darcy
-conductivity: the 1/86400 a new soil started with until 2026-11-02 was ten million
-times too permeable."""
+conductivity."""
 MINIMUM_RELATIVE_PERMEABILITY = 1.0e-4
 """`MINIMUM_RELATIVE_PERMEABILITY` when a soil gives none. Only a soil whose water flows
 reads it, but Kratos' U-Pw elements check it for every soil whose retention law is one of
