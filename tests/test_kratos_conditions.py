@@ -324,7 +324,8 @@ def test_a_model_script_writes_gravity_off_out():
 def test_a_condition_on_an_absent_soil_body_is_omitted_with_a_warning(gmsh_session):
     from core.model.schemas import WaterPressureCondition
 
-    condition = WaterPressureCondition(id="water", name="Water", on="part",
+    condition = WaterPressureCondition(id="missing_soil_pressure", name="Missing soil pressure",
+                                      on="part",
                                       part="soil_missing", fluid_pressure_type="Uniform")
     project = section([condition.model_dump(mode="json")])
 
