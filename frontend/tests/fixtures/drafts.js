@@ -236,6 +236,29 @@ window.DRAFTS_FIXTURE =
           "MINIMUM_RELATIVE_PERMEABILITY": 0.0001
         },
         "computed": {}
+      },
+      {
+        "title": "a blank soil with the Van Genuchten law",
+        "law": "GeoLinearElasticPlaneStrain2DLaw",
+        "variables": {
+          "GEO_DRAINAGE_TYPE": "DRAINED",
+          "RETENTION_LAW": "VanGenuchtenLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10
+        },
+        "system": "SI",
+        "flow": false,
+        "water": {
+          "DENSITY_WATER": 1019.367991845056,
+          "BULK_MODULUS_FLUID": 2200000000.0,
+          "DYNAMIC_VISCOSITY": 0.001
+        },
+        "derived": {
+          "BULK_MODULUS_SOLID": 10000000000.0,
+          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
+          "VAN_GENUCHTEN_GL": 1.25
+        },
+        "computed": {}
       }
     ],
     "water": [

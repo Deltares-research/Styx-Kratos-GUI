@@ -366,6 +366,26 @@ def test_a_soil_not_saturated_everywhere_is_written_with_a_minimum_relative_perm
                      "MINIMUM_RELATIVE_PERMEABILITY": 1e-3}, WATER_SI, "SI")
 
 
+@pytest.mark.parametrize("drainage", soil_models.DRAINAGE_TYPES)
+def test_a_van_genuchten_soil_is_written_with_its_relative_permeability_exponent(drainage):
+    """`VanGenuchtenLaw::Check` asks for `VAN_GENUCHTEN_GL` whatever the drainage type,
+    also where the window does not list it."""
+    project = mohr_coulomb_site(GEO_DRAINAGE_TYPE=drainage, RETENTION_LAW="VanGenuchtenLaw")
+    project.material("m2").variables.pop("VAN_GENUCHTEN_GL", None)
+
+    variables = deck(project)["Variables"]
+    _, warnings = materials.material_parameters(project, [("Soil_1", "m2")], 2)
+
+    assert variables["VAN_GENUCHTEN_GL"] == soil_models.VAN_GENUCHTEN_GL
+    assert "VAN_GENUCHTEN_GL" in " ".join(warnings)
+    for other in ({}, {"RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw"}):
+        assert "VAN_GENUCHTEN_GL" not in soil_models.derived(
+            ELASTIC_2D, {"GEO_DRAINAGE_TYPE": drainage, **other}, WATER_SI, "SI")
+    assert "VAN_GENUCHTEN_GL" not in soil_models.derived(
+        ELASTIC_2D, {"RETENTION_LAW": "VanGenuchtenLaw", "VAN_GENUCHTEN_GL": 2.0},
+        WATER_SI, "SI")
+
+
 def test_a_drained_soil_in_a_flow_project_keeps_the_permeability_it_lists():
     assert soil_models.fixed_permeability({"GEO_DRAINAGE_TYPE": "DRAINED"}, "SI",
                                           flow=True) is None

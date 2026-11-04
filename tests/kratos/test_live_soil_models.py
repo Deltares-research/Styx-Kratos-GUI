@@ -70,15 +70,20 @@ def test_the_test_model_s_mohr_coulomb_variant_runs_every_stage():
     assert ran(calculation.run(deck))
 
 
-def test_a_new_soil_given_what_it_still_needs_runs_under_its_own_weight():
+@pytest.mark.parametrize("retention", [None, "VanGenuchtenLaw"])
+def test_a_new_soil_given_what_it_still_needs_runs_under_its_own_weight(retention):
     """The soil **Create soil** and `kratos-cli material add` make (`blank_si`), given the
     values the window lists as still needed and nothing else: Kratos checks more than
-    that, and the export derives the rest."""
+    that, and the export derives the rest. Also with the Van Genuchten law chosen, which
+    fills what the window then lists: `VanGenuchtenLaw::Check` asks for more."""
     p = live.block().model_dump(mode="json")
     law = soil_models.law(soil_models.LINEAR_ELASTIC, 2)
     for material in p["materials"]:
         typed = material["variables"]
         soil = soil_models.blank_si()
+        if retention is not None:
+            soil["RETENTION_LAW"] = retention
+            soil_models.fill(law, soil_models.blank_si(), law, soil, p["unit_system"])
         needed = soil_models.missing(law, soil)
         soil.update({name: typed[name] for name in needed})
         material.update(constitutive_law=law, variables=soil)

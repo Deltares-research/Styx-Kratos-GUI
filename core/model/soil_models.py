@@ -90,6 +90,10 @@ MINIMUM_RELATIVE_PERMEABILITY = 1.0e-4
 """`MINIMUM_RELATIVE_PERMEABILITY` when a soil gives none. Only a soil whose water flows
 reads it, but Kratos' U-Pw elements check it for every soil whose retention law is one of
 `UNSATURATED`, whatever its drainage type: the export derives it for those."""
+VAN_GENUCHTEN_GL = 1.25
+"""`VAN_GENUCHTEN_GL` when a soil gives none. As `MINIMUM_RELATIVE_PERMEABILITY`: only a
+soil whose water flows reads it, but `VanGenuchtenLaw::Check` asks for it whatever the
+drainage type, so the export derives it for every soil with that law."""
 HARDENING_TYPES = ("None", "Linear")
 """Every `GEO_COULOMB_HARDENING_TYPE` Kratos builds (`CoulombYieldSurface`, which reads
 it in any case). Left out, it is "None"."""
@@ -188,7 +192,7 @@ def _flow() -> tuple[Parameter, ...]:
             Parameter("PERMEABILITY_YY", "Intrinsic permeability yy", flow=True),
             Parameter("MINIMUM_RELATIVE_PERMEABILITY", "Minimum relative permeability",
                       MINIMUM_RELATIVE_PERMEABILITY, when=unsaturated, flow=True),
-            Parameter("VAN_GENUCHTEN_GL", "Relative permeability exponent g_l", 1.25,
+            Parameter("VAN_GENUCHTEN_GL", "Relative permeability exponent g_l", VAN_GENUCHTEN_GL,
                       when=van_genuchten, flow=True))
 
 
@@ -539,6 +543,8 @@ def derived(law: str, variables: dict, water_variables: dict, system: str,
         put("PERMEABILITY_YY", _number(given("PERMEABILITY_XX")))
     if variables.get("RETENTION_LAW") in UNSATURATED:
         put("MINIMUM_RELATIVE_PERMEABILITY", MINIMUM_RELATIVE_PERMEABILITY)
+    if variables.get("RETENTION_LAW") == "VanGenuchtenLaw":
+        put("VAN_GENUCHTEN_GL", VAN_GENUCHTEN_GL)
     if drainage in ("FULLY_COUPLED", "UNDRAINED") or flow:
         put("BIOT_COEFFICIENT", biot({**variables, **out}))
     if drainage == "UNDRAINED":
@@ -656,6 +662,7 @@ def table() -> dict:
                           "BULK_MODULUS_SOLID": BULK_MODULUS_SOLID_SI,
                           "PERMEABILITY": PERMEABILITY_SI,
                           "MINIMUM_RELATIVE_PERMEABILITY": MINIMUM_RELATIVE_PERMEABILITY,
+                          "VAN_GENUCHTEN_GL": VAN_GENUCHTEN_GL,
                           "UNDRAINED_POISSON_LIMIT": UNDRAINED_POISSON_LIMIT},
             "computed": {name: {"label": label, "quantity": quantity.name, "group": group}
                          for name, (label, quantity, group) in COMPUTED.items()},

@@ -258,6 +258,9 @@ App.SoilModels = (function () {
         table().unsaturated.indexOf(variables.RETENTION_LAW) >= 0) {
       put('MINIMUM_RELATIVE_PERMEABILITY', constant('MINIMUM_RELATIVE_PERMEABILITY'));
     }
+    if (variables.RETENTION_LAW === 'VanGenuchtenLaw') {
+      put('VAN_GENUCHTEN_GL', constant('VAN_GENUCHTEN_GL'));
+    }
     if (drainage === 'FULLY_COUPLED' || drainage === 'UNDRAINED' || flow) {
       put('BIOT_COEFFICIENT', biot(both()));
     }

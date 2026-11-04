@@ -20,9 +20,9 @@ stands. It does these things on top, and no others:
 *   **Fills what is missing and can be derived** -- a soil's what
     `soil_models.derived` says (the grains' bulk modulus, the symmetric
     permeabilities, a coupled soil's permeability, the minimum relative permeability of
-    a soil not saturated everywhere, the Biot coefficient and undrained Poisson ratio
-    where they are read, K0), a beam's shear areas, an interface's
-    stiffness and strength from its soil. A value the user gave is never replaced, and
+    a soil not saturated everywhere and a Van Genuchten soil's g_l, the Biot coefficient
+    and undrained Poisson ratio where they are read, K0), a beam's shear areas, an
+    interface's stiffness and strength from its soil. A value the user gave is never replaced, and
     every filled-in name is listed in the export's warnings.
 *   **Fixes a drained or an undrained soil's permeability** -- 1 m2 and 1e-30 m2
     (`soil_models.fixed_permeability`), over any the soil carries: the drainage type is

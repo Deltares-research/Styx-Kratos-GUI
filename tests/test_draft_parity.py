@@ -341,6 +341,8 @@ def soil_model_cases() -> dict:
             derived("a drained soil carrying a permeability, which is fixed", ELASTIC_2D,
                     {"GEO_DRAINAGE_TYPE": "DRAINED", "PERMEABILITY_XX": 3.0e-12}, "kN"),
             derived("a blank soil", ELASTIC_2D, soil_models.blank_si(), "SI"),
+            derived("a blank soil with the Van Genuchten law", ELASTIC_2D,
+                    {**soil_models.blank_si(), "RETENTION_LAW": "VanGenuchtenLaw"}, "SI"),
         ],
         "water": [
             water("SI"),
