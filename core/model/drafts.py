@@ -37,9 +37,6 @@ Kratos' reference, so the soil weighs DENSITY_SOLID g -- 17 kN/m3 -- above and b
 water alike. What the GUI gives a layer that has no soil to be of; a soil the user
 creates starts blank (`soil`)."""
 
-SOIL_COLOR = "#9aa7b4"
-"""The colour a new material gets (`App.newMaterialDefaults`)."""
-
 LAYER_THICKNESS = 5.0
 """How thick the soil dialog's Add makes a new layer, in metres."""
 
@@ -112,7 +109,8 @@ def soil(project: Project, id: str, *, name: str | None = None, preset: str | No
          model: str | None = None) -> tuple[Material, list[str]]:
     """A new soil for `project`: the blank soil the material window's **Create soil**
     makes (`soil_models.blank_si`), or the library preset `preset`, with the law of the
-    project's dimension and its variables in the project's units.
+    project's dimension and its variables in the project's units, and a colour no soil
+    of `project` has (`soil_models.fresh_color`): the preset's own while it is free.
 
     `model` (`core/model/soil_models.py`) makes it that soil model instead of linear
     elastic: its law, and what choosing it in the window fills in (`fill_choice`) -- for
@@ -157,7 +155,8 @@ def soil(project: Project, id: str, *, name: str | None = None, preset: str | No
     material = Material(
         id=id,
         name=name if name is not None else (start["name"] if start else id),
-        color=color if color is not None else (start["color"] if start else SOIL_COLOR),
+        color=color if color is not None else soil_models.fresh_color(
+            [m.color for m in project.materials], start["color"] if start else None),
         constitutive_law=chosen,
         variables=variables,
         **({"r_inter": start["r_inter"],

@@ -8,6 +8,8 @@
       var second = App.MaterialLibrary.addSoil(preset.id);
       T.ok(first.id !== second.id);
       T.ok(first.name !== second.name);
+      T.eq(first.color, preset.color, 'its own colour while it is free');
+      T.ok(second.color !== first.color, 'then another (#107)');
       first.variables.YOUNG_MODULUS = 123;
       preset.variables.YOUNG_MODULUS = 456;
       T.ok(App.MaterialLibrary.soils()[0].variables.YOUNG_MODULUS !== 123);

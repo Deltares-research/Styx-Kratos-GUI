@@ -64,8 +64,13 @@ App.MaterialLibrary = (function () {
              tables: {}, rInter: preset.rInter, interfacePerm: preset.interfacePerm };
   }
 
+  /* The preset `id` added to the project: a fresh id and name, and its own colour while
+     no soil has it, another free one otherwise (App.SoilModels.freshColor, as
+     `kratos-cli material add --preset` gives one). */
   function addSoil(id) {
     var material = asMaterial(copy(find(soils, id)));
+    material.color = App.SoilModels.freshColor(
+      App.MATERIALS.map(function (m) { return m.color; }), material.color);
     var n = 1;
     while (App.MATERIALS.some(function (m) { return m.id === 'ml' + n; })) n++;
     material.id = 'ml' + n;

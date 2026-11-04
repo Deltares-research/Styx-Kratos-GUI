@@ -38,8 +38,25 @@ def test_a_new_soil_is_the_blank_one_the_gui_s_create_soil_makes():
     assert isinstance(material, Material)
     assert material.constitutive_law == drafts.SOIL_LAWS[2]
     assert material.variables == soil_models.blank_si()
-    assert (material.id, material.name, material.color) == ("sand", "sand", drafts.SOIL_COLOR)
+    assert (material.id, material.name, material.color) == (
+        "sand", "sand", soil_models.PALETTE[0])
     assert notes == []
+
+
+def test_every_soil_added_takes_a_colour_no_other_soil_has():
+    """#107, as the material window does it (`App.SoilModels.freshColor`): a preset its
+    own colour while it is free, and every soil after another free one."""
+    project = blank_project()
+    colours = []
+    for id, preset in (("a", None), ("b", None), ("c", "m1"), ("d", "m1"), ("e", "m2")):
+        material, _ = drafts.soil(project, id, preset=preset)
+        project = session.add_material(project, material)
+        colours.append(material.color)
+
+    # The palette's first two; Fill's own is the first, so taken; Sand's own, free.
+    assert colours == ["#d8c48a", "#8fa86b", "#6f8fa8", "#c4785a", "#c4a86a"]
+    given, _ = drafts.soil(project, "f", color="#123456")
+    assert given.color == "#123456"
 
 
 def test_a_preset_in_a_kn_project_is_stated_in_kn():

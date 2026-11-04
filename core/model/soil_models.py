@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass
+from collections.abc import Iterable
 from typing import Any
 
 from core.model import units
@@ -104,6 +105,44 @@ slope of a linear hardening: the export writes a number given as `[number]`."""
 UNDRAINED_POISSON_LIMIT = 0.495
 """Kratos clamps an undrained Poisson ratio to this
 (`ConstitutiveLawUtilities::GetOrCalculateUndrainedPoissonsRatio`)."""
+
+
+PALETTE = ("#d8c48a", "#8fa86b", "#6f8fa8", "#c4785a", "#9a80b0", "#5fa89f",
+           "#b08a6a", "#b0606f", "#7f9f3f", "#4f6f9f", "#d89a4a", "#8d8d99")
+"""Earthy colours a new soil takes, far enough apart that soils side by side in a
+section can be told from each other, and none the grey of the mesh (`fresh_color`)."""
+
+
+def fresh_color(used: Iterable[str], preferred: str | None = None) -> str:
+    """A colour no soil has yet, `used` being the project's: `preferred` -- a preset's
+    own -- while it is free, else the palette's first free one, then hues a golden angle
+    apart once the palette is spent, so every soil added looks different. What the
+    material window and `kratos-cli material add` give a new, duplicated or preset soil
+    (`App.SoilModels.freshColor`)."""
+    taken = {str(color).lower() for color in used}
+    if preferred is not None and preferred.lower() not in taken:
+        return preferred
+    for color in PALETTE:
+        if color not in taken:
+            return color
+    n = 0
+    while True:
+        color = _hsl((n * 137.508) % 360, 0.45, 0.6)
+        if color not in taken:
+            return color
+        n += 1
+
+
+def _hsl(h: float, s: float, light: float) -> str:
+    """`#rrggbb` of a hue in degrees, a saturation and a lightness, as the browser's
+    twin rounds it (half up)."""
+    a = s * min(light, 1 - light)
+
+    def channel(n: int) -> str:
+        k = (n + h / 30) % 12
+        v = light - a * max(-1, min(k - 3, 9 - k, 1))
+        return f"{math.floor(v * 255 + 0.5):02x}"
+    return "#" + channel(0) + channel(8) + channel(4)
 
 
 @dataclass(frozen=True)
@@ -691,6 +730,7 @@ def table() -> dict:
     return {"order": list(MODELS), "other": OTHER, "flowing": list(FLOWING),
             "unsaturated": list(UNSATURATED),
             "blank": blank_si(), "fixed_permeability": dict(FIXED_PERMEABILITY_SI),
+            "palette": list(PALETTE),
             "vectors": list(VECTORS),
             "constants": {"WATER_SPECIFIC_WEIGHT": WATER_SPECIFIC_WEIGHT_SI,
                           "WATER_BULK_MODULUS": WATER_BULK_MODULUS_SI,

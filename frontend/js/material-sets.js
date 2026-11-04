@@ -61,34 +61,10 @@ App.MaterialSets = (function () {
 
   var sequence = 0;
 
-  /* Earthy colours, far enough apart that soils side by side in a section can be told
-     from each other, and none the grey of the mesh. */
-  var PALETTE = [
-    '#d8c48a', '#8fa86b', '#6f8fa8', '#c4785a', '#9a80b0', '#5fa89f',
-    '#b08a6a', '#b0606f', '#7f9f3f', '#4f6f9f', '#d89a4a', '#8d8d99'
-  ];
-
-  function hex(h, s, l) {
-    var a = s * Math.min(l, 1 - l);
-    function channel(n) {
-      var k = (n + h / 30) % 12;
-      var v = l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1));
-      return ('0' + Math.round(v * 255).toString(16)).slice(-2);
-    }
-    return '#' + channel(0) + channel(8) + channel(4);
-  }
-
-  /* A colour no soil has yet: the palette's first free one, then hues a golden angle
-     apart once the palette is spent, so every soil added looks different. */
+  /* A colour no soil has yet (App.SoilModels.freshColor, as `kratos-cli material add`
+     gives one). */
   function freshColor() {
-    var used = {};
-    (App.MATERIALS || []).forEach(function (m) { used[String(m.color).toLowerCase()] = true; });
-    var free = PALETTE.filter(function (c) { return !used[c]; })[0];
-    if (free) return free;
-    for (var n = 0; ; n++) {
-      var c = hex((n * 137.508) % 360, 0.45, 0.6);
-      if (!used[c]) return c;
-    }
+    return S.freshColor((App.MATERIALS || []).map(function (m) { return m.color; }));
   }
 
   /* A brand new soil: a loose drained sand in the project's units, valid as it stands

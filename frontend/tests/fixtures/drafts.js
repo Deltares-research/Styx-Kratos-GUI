@@ -1251,6 +1251,91 @@ window.DRAFTS_FIXTURE =
         "required": []
       }
     ],
+    "fresh_color": [
+      {
+        "used": [],
+        "preferred": null,
+        "color": "#d8c48a"
+      },
+      {
+        "used": [
+          "#D8C48A",
+          "#8fa86b"
+        ],
+        "preferred": null,
+        "color": "#6f8fa8"
+      },
+      {
+        "used": [
+          "#c4a86a"
+        ],
+        "preferred": "#c4a86a",
+        "color": "#d8c48a"
+      },
+      {
+        "used": [
+          "#d8c48a"
+        ],
+        "preferred": "#c4a86a",
+        "color": "#c4a86a"
+      },
+      {
+        "used": [
+          "#d8c48a",
+          "#8fa86b",
+          "#6f8fa8",
+          "#c4785a",
+          "#9a80b0",
+          "#5fa89f",
+          "#b08a6a",
+          "#b0606f",
+          "#7f9f3f",
+          "#4f6f9f",
+          "#d89a4a",
+          "#8d8d99"
+        ],
+        "preferred": null,
+        "color": "#c76b6b"
+      },
+      {
+        "used": [
+          "#d8c48a",
+          "#8fa86b",
+          "#6f8fa8",
+          "#c4785a",
+          "#9a80b0",
+          "#5fa89f",
+          "#b08a6a",
+          "#b0606f",
+          "#7f9f3f",
+          "#4f6f9f",
+          "#d89a4a",
+          "#8d8d99",
+          "#c78f70"
+        ],
+        "preferred": "#d8c48a",
+        "color": "#c76b6b"
+      },
+      {
+        "used": [
+          "#d8c48a",
+          "#8fa86b",
+          "#6f8fa8",
+          "#c4785a",
+          "#9a80b0",
+          "#5fa89f",
+          "#b08a6a",
+          "#b0606f",
+          "#7f9f3f",
+          "#4f6f9f",
+          "#d89a4a",
+          "#8d8d99",
+          "#c76b6b"
+        ],
+        "preferred": null,
+        "color": "#6bc786"
+      }
+    ],
     "unread": [
       {
         "law": "GeoLinearElasticPlaneStrain2DLaw",

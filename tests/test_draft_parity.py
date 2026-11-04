@@ -441,6 +441,15 @@ def soil_model_cases() -> dict:
             required(MOHR_COULOMB_2D, {"GEO_COULOMB_HARDENING_TYPE": "Linear"}),
             required("SmallStrainUDSM2DPlaneStrainLaw", {}),
         ],
+        "fresh_color": [{"used": used, "preferred": preferred,
+                         "color": soil_models.fresh_color(used, preferred)}
+                        for used, preferred in (
+                            ([], None), (["#D8C48A", "#8fa86b"], None),
+                            (["#c4a86a"], "#c4a86a"), (["#d8c48a"], "#c4a86a"),
+                            (list(soil_models.PALETTE), None),
+                            (list(soil_models.PALETTE) + ["#c78f70"], "#d8c48a"),
+                            (list(soil_models.PALETTE) + [
+                                soil_models.fresh_color(soil_models.PALETTE)], None))],
         "unread": [{"law": law, "variables": variables,
                     "unread": soil_models.unread(law, variables)}
                    for law in (ELASTIC_2D, MOHR_COULOMB_2D, "SmallStrainUDSM2DPlaneStrainLaw")

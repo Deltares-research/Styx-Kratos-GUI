@@ -117,6 +117,13 @@
     });
   });
 
+  T.test('a new soil takes the colour it takes on the command line', function () {
+    M.fresh_color.forEach(function (c) {
+      T.eq(App.SoilModels.freshColor(c.used, c.preferred), c.color,
+           JSON.stringify(c.used) + ', ' + c.preferred);
+    });
+  });
+
   T.test('a soil model chosen leaves out what it leaves out on the command line', function () {
     M.unread.forEach(function (c) {
       T.eq(App.SoilModels.unread(c.law, c.variables), c.unread, c.law);

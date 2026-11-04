@@ -58,6 +58,33 @@ App.SoilModels = (function () {
     return m.groups.reduce(function (all, g) { return all.concat(g.parameters); }, []);
   }
 
+  function hsl(h, s, l) {
+    var a = s * Math.min(l, 1 - l);
+    function channel(n) {
+      var k = (n + h / 30) % 12;
+      var v = l - a * Math.max(-1, Math.min(k - 3, 9 - k, 1));
+      return ('0' + Math.round(v * 255).toString(16)).slice(-2);
+    }
+    return '#' + channel(0) + channel(8) + channel(4);
+  }
+
+  /* A colour no soil has yet, `used` being the project's: `preferred` -- a preset's
+     own -- while it is free, else the palette's first free one, then hues a golden
+     angle apart once the palette is spent (core/model/soil_models.py `fresh_color`). */
+  function freshColor(used, preferred) {
+    var taken = {};
+    (used || []).forEach(function (c) { taken[String(c).toLowerCase()] = true; });
+    if (preferred !== undefined && preferred !== null && !taken[preferred.toLowerCase()]) {
+      return preferred;
+    }
+    var free = table().palette.filter(function (c) { return !taken[c]; })[0];
+    if (free) return free;
+    for (var n = 0; ; n++) {
+      var c = hsl((n * 137.508) % 360, 0.45, 0.6);
+      if (!taken[c]) return c;
+    }
+  }
+
   /* What choosing `law` leaves out of a soil holding `variables`: what another model
      lists and the model of `law` does not (core/model/soil_models.py `unread`). */
   function unread(law, variables) {
@@ -372,7 +399,7 @@ App.SoilModels = (function () {
 
   return { OTHER: OTHER, order: function () { return table().order.slice(); },
            modelOf: modelOf, label: label, law: law, lawIn: lawIn, parameters: parameters,
-           find: find, unread: unread, shown: shown, groups: groups, required: required, fill: fill,
+           find: find, unread: unread, freshColor: freshColor, shown: shown, groups: groups, required: required, fill: fill,
            defaultIn: defaultIn, defaultsSI: defaultsSI, filledNote: filledNote,
            missing: missing, fillChoice: fillChoice, blankSI: blankSI,
            fixedPermeability: fixedPermeability,

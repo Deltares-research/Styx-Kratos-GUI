@@ -31,6 +31,20 @@ App.SOIL_MODEL_TABLE =
     "DRAINED": 1.0,
     "UNDRAINED": 1e-30
   },
+  "palette": [
+    "#d8c48a",
+    "#8fa86b",
+    "#6f8fa8",
+    "#c4785a",
+    "#9a80b0",
+    "#5fa89f",
+    "#b08a6a",
+    "#b0606f",
+    "#7f9f3f",
+    "#4f6f9f",
+    "#d89a4a",
+    "#8d8d99"
+  ],
   "vectors": [
     "GEO_COHESION_FUNCTION_COEFFICIENTS",
     "GEO_FRICTION_ANGLE_FUNCTION_COEFFICIENTS",
