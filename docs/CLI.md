@@ -23,7 +23,8 @@ The wrappers use the environment `run.bat` / `run.sh` make (`.venv-windows`, `.v
 relative path you type is relative to where you are. In Git Bash on Windows, `kratos-cli.sh`
 uses `.venv-windows`, as `kratos-cli.bat` does, so a shell script of commands runs there too.
 
-`kratos-cli <command> --help` lists what each command takes.
+`kratos-cli <command> --help` lists what each command takes. `kratos-cli --version` says
+which version of Styx you have, as **Help > About** does in the GUI. Give it in a bug report.
 
 ## From an empty site to results
 
