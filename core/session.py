@@ -1179,19 +1179,19 @@ def own_strength_if_needed(project: Project, id: str,
                            notes: list[str] | None = None) -> Project:
     """`project` with the interface section `id` given a strength of its own when it is
     a Coulomb contact against a linear elastic soil it names, which has none to give
-    (`materials.strength_problem`) -- the GUI's `ownStrengthIfNeeded`, said in its words
+    (`materials.no_strength`) -- the GUI's `ownStrengthIfNeeded`, said in its words
     into `notes`. Its two numbers are then the user's to set."""
     section = next(s for s in project.interface_sections if s.id == id)
     soil = next((m for m in project.materials if m.id == section.material), None)
-    problem = materials.strength_problem(section, soil)
-    if problem is None:
+    why = materials.no_strength(section, soil)
+    if why is None:
         return project
     payload = project.model_dump()
     record = next(s for s in payload["interface_sections"] if s["id"] == id)
     record["variables"] = materials.own_strength(section, soil, project.unit_system)
     if notes is not None:
-        notes.append(problem.split(": set ")[0] + ": the contact has a strength of its "
-                     "own now. Set its GEO_COHESION and GEO_FRICTION_ANGLE.")
+        notes.append(f"{why}: the contact has a strength of its own now. Set its "
+                     "GEO_COHESION and GEO_FRICTION_ANGLE.")
     return Project.model_validate(payload)
 
 

@@ -1418,12 +1418,12 @@ App.Model = (function () {
      user's to set. */
   function ownStrengthIfNeeded(section) {
     var I = App.Interfaces;
-    var problem = I ? I.strengthProblem(section) : null;
-    if (!problem) return;
+    var why = I ? I.noStrength(section) : null;
+    if (!why) return;
     I.setOwnStrength(section);
     if (App.Command && App.Command.note) {
-      App.Command.note(problem.replace(/: set .*$/, '') + ': the contact has a strength of '
-                       + 'its own now. Set its GEO_COHESION and GEO_FRICTION_ANGLE.');
+      App.Command.note(why + ': the contact has a strength of its own now. Set its '
+                       + 'GEO_COHESION and GEO_FRICTION_ANGLE.');
     }
   }
 

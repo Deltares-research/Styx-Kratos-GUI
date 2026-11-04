@@ -74,16 +74,22 @@ App.Interfaces = (function () {
     return !!soil && App.SoilModels.modelOf(soil.constitutive_law) === 'linear_elastic';
   }
 
-  /* Why a Coulomb contact cannot take its strength from the soil it names, or null.
-     One that names none takes each adjacent soil's, which only the export knows. */
-  function strengthProblem(section) {
+  /* Why a Coulomb contact cannot take its strength from the soil it names, in a few
+     words, or null: the first part of `strengthProblem` and of the note that it has a
+     strength of its own (core/kratos/materials.py `no_strength`). One that names none
+     takes each adjacent soil's, which only the export knows. */
+  function noStrength(section) {
     if (!coulomb(section)) return null;
     if (STRENGTH.every(function (name) { return holds(section, name); })) return null;
     var soil = soilOf(section);
-    return elastic(soil)
-      ? soil.name + ' is linear elastic and has no strength to give: set the contact\'s '
-        + 'own GEO_COHESION and GEO_FRICTION_ANGLE.'
-      : null;
+    return elastic(soil) ? soil.name + ' is linear elastic and has no strength to give' : null;
+  }
+
+  /* `noStrength`, and what to do about it. */
+  function strengthProblem(section) {
+    var why = noStrength(section);
+    return why === null ? null
+      : why + ': set the contact\'s own GEO_COHESION and GEO_FRICTION_ANGLE.';
   }
 
   /* Give the contact a strength of its own, starting from what it took from its soil
@@ -889,7 +895,8 @@ App.Interfaces = (function () {
   return {
     SIDES: SIDES, STRETCH_SNAP: STRETCH_SNAP, defaultSection: defaultSection,
     ELASTIC_LAW: ELASTIC_LAW, COULOMB_LAW: COULOMB_LAW, LAWS: LAWS, STRENGTH: STRENGTH,
-    coulomb: coulomb, ownStrength: ownStrength, strengthProblem: strengthProblem,
+    coulomb: coulomb, ownStrength: ownStrength, noStrength: noStrength,
+    strengthProblem: strengthProblem,
     setOwnStrength: setOwnStrength, soilStrength: soilStrength,
     nearest: nearest, between: between, faces: faces, snap: snap, stretchOn: stretchOn,
     pileOf: pileOf,

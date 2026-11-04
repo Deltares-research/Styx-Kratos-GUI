@@ -470,18 +470,25 @@ def _interface_variables(section: InterfaceSection, project: Project,
     return _ordered(v, INTERFACE_ORDER)
 
 
-def strength_problem(section: InterfaceSection, soil: Material | None) -> str | None:
-    """Why a Coulomb contact cannot take its strength from `soil`, the soil it names, or
-    None (`App.Interfaces.strengthProblem`): a linear elastic soil has none to give. One
-    that names no soil takes each adjacent one's, which only the export knows."""
+def no_strength(section: InterfaceSection, soil: Material | None) -> str | None:
+    """Why a Coulomb contact cannot take its strength from `soil`, the soil it names, in
+    a few words, or None (`App.Interfaces.noStrength`): a linear elastic soil has none
+    to give. One that names no soil takes each adjacent one's, which only the export
+    knows. The first part of `strength_problem`, and of the note that the contact has a
+    strength of its own (`core.session.own_strength_if_needed`)."""
     if section.constitutive_law not in COULOMB_INTERFACE_LAWS:
         return None
     if all(name in section.variables for name in INTERFACE_STRENGTH):
         return None
     if soil is None or soil_models.model_of(soil.constitutive_law) != soil_models.LINEAR_ELASTIC:
         return None
-    return (f"{soil.name} is linear elastic and has no strength to give: set the "
-            "contact's own GEO_COHESION and GEO_FRICTION_ANGLE.")
+    return f"{soil.name} is linear elastic and has no strength to give"
+
+
+def strength_problem(section: InterfaceSection, soil: Material | None) -> str | None:
+    """`no_strength`, and what to do about it (`App.Interfaces.strengthProblem`)."""
+    why = no_strength(section, soil)
+    return None if why is None else         f"{why}: set the contact's own GEO_COHESION and GEO_FRICTION_ANGLE."
 
 
 def own_strength(section: InterfaceSection, soil: Material | None, system: str) -> dict:
