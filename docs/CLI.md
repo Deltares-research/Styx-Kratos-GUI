@@ -594,6 +594,24 @@ An edit is written back to the file it was read from. `--out FILE` writes it som
 leaves the original as it was. `--dry-run` makes and checks the edit, and writes nothing. A
 model script is never written: an edit of one needs `--out`.
 
+A mesh size belongs to its body. An edit that takes a body away, such as `layer remove`,
+`layer split` or `layer set --top` taking an excavation lift out of every layer, removes
+that body's size too, so `check` and `mesh` still accept the file. The edit says which
+sizes it removed, and their values, as a `note:` line after its answer, also with
+`--dry-run`. If the body comes back, set its size again.
+
+```bash
+kratos-cli layer pit.json split L_top
+# note: Removed the mesh size of soil_L_top__lift3 (1): the edit took that body away. ...
+```
+
+If a file has a size for a body that the model does not have, `check` and `mesh` refuse
+the file and name that body. Correct the name with `set`, or remove the size:
+
+```bash
+kratos-cli remove pit.json mesh.body_sizes.strut
+```
+
 ## The deck and the runs
 
 `export` writes the deck the GUI's **Export** writes for the same project: the `.mdpa`,

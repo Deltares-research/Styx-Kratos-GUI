@@ -79,6 +79,29 @@
     });
   });
 
+  /* ── What an edit took away ──────────────────────────────────── */
+
+  test("each of an edit's notes is said, and the answer comes back whole", function () {
+    var said = [];
+    var answer = { project: { name: 'Site' }, edit_notes: ['Removed the mesh size of a (1)'] };
+    var client = App.Api.create({ base: '', fetch: stub([json(200, answer)]),
+                                  note: function (line) { said.push(line); } });
+    return client.patch('/api/project/layers', {}).then(function (body) {
+      T.eq(said, ['Removed the mesh size of a (1)']);
+      T.eq(body, answer);
+    });
+  });
+
+  test('an answer with no notes says nothing', function () {
+    var said = [];
+    var client = App.Api.create({ base: '', fetch: stub([json(200, { edit_notes: [] }),
+                                                         json(200, { name: 'Site' })]),
+                                  note: function (line) { said.push(line); } });
+    return client.patch('/api/project/layers', {})
+      .then(function () { return client.get('/api/project'); })
+      .then(function () { T.eq(said, []); });
+  });
+
   /* ── Failures ────────────────────────────────────────────────── */
 
   test("a FastAPI error surfaces its detail, not just a status code", function () {

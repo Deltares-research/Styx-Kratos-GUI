@@ -72,6 +72,7 @@ def main(argv: list[str] | None = None) -> int:
         if isinstance(failure, refusals()):
             return output.refused(failure, args.json)
         raise
+    answer.notes = [*answer.notes, *getattr(args, "edit_notes", [])]
     return output.answered(answer, args.json, getattr(args, "csv", None))
 
 

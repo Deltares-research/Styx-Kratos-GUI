@@ -33,9 +33,70 @@
       ['soil_L1', 'soil_L2']
     );
     T.eq(rows, [
-      { key: 'soil_L1', label: 'Upper', enabled: true, size: 1.0 },
-      { key: 'soil_L2', label: 'Lower', enabled: true, size: 4.0 }
+      { key: 'soil_L1', label: 'Upper', enabled: true, size: 1.0, follows: false },
+      { key: 'soil_L2', label: 'Lower', enabled: true, size: 4.0, follows: false }
     ]);
+  });
+
+  test('a row with no size of its own shows the global size and follows it', function () {
+    var rows = App.MeshSettings.bodyControls(
+      { layers: [{ id: 'L1', name: 'Upper' }], mesh: { element_size: 2.5, body_sizes: {} } },
+      ['soil_L1']
+    );
+    T.eq(rows, [{ key: 'soil_L1', label: 'Upper', enabled: true, size: 2.5, follows: true }]);
+  });
+
+  test('the window keeps a size it has no row for', function () {
+    var project = { mesh: { element_size: 5, body_sizes: {
+      sheetpile: 0.5, soil_L1__lift3: 1.0, soil_L1: 2.0 } } };
+    T.eq(App.MeshSettings.savedBodySizes(project, [{ key: 'soil_L1', size: 3, follows: false }]),
+         { sheetpile: 0.5, soil_L1__lift3: 1.0, soil_L1: 3 });
+  });
+
+  test('a row that follows the global size adds no size of its own', function () {
+    var project = { mesh: { element_size: 5, body_sizes: {} } };
+    T.eq(App.MeshSettings.savedBodySizes(project, [{ key: 'soil_L1', size: 5, follows: true }]),
+         {});
+  });
+
+  test('a typed size is saved even when it equals the global size', function () {
+    var project = { mesh: { element_size: 5, body_sizes: {} } };
+    T.eq(App.MeshSettings.savedBodySizes(project, [{ key: 'soil_L1', size: 5, follows: false }]),
+         { soil_L1: 5 });
+  });
+
+  test('a row left empty takes its size away', function () {
+    var project = { mesh: { element_size: 5, body_sizes: { soil_L1: 2 } } };
+    T.eq(App.MeshSettings.savedBodySizes(project, [{ key: 'soil_L1', size: 0, follows: false }]),
+         {});
+  });
+
+  test('a choice is what was left out of it', function () {
+    var project = { layers: [{ id: 'L1' }, { id: 'L2' }],
+                    custom_parts: [{ key: 'drawn_0', mat: 'm1' }, { key: 'shown_only' }] };
+    T.eq(App.MeshSettings.leftOutBodies(project, ['soil_L1', 'drawn_0']), ['soil_L2']);
+    T.eq(App.MeshSettings.leftOutBodies(project, ['soil_L1', 'soil_L2', 'drawn_0']), []);
+  });
+
+  test('a choice names only the bodies the project still has', function () {
+    var project = { layers: [{ id: 'L1' }, { id: 'L3' }],
+                    custom_parts: [{ key: 'drawn_0', mat: 'm1' }] };
+    T.eq(App.MeshSettings.chosenBodies(project, ['soil_L3', 'soil_L_deleted']),
+         ['soil_L1', 'drawn_0']);
+  });
+
+  test('a body added after a choice is meshed, as kratos-cli meshes it', function () {
+    var before = { layers: [{ id: 'L1' }, { id: 'L2' }] };
+    var leftOut = App.MeshSettings.leftOutBodies(before, ['soil_L1']);
+    var after = { layers: [{ id: 'L1' }, { id: 'L2' }, { id: 'L_new' }] };
+    T.eq(App.MeshSettings.chosenBodies(after, leftOut), ['soil_L1', 'soil_L_new']);
+  });
+
+  test('no choice, or a choice with nothing left, is no choice', function () {
+    var project = { layers: [{ id: 'L1' }] };
+    T.eq(App.MeshSettings.chosenBodies(project, null), null);
+    T.eq(App.MeshSettings.chosenBodies(project, undefined), null);
+    T.eq(App.MeshSettings.chosenBodies(project, ['soil_L1']), null);
   });
 })();
 
