@@ -321,16 +321,18 @@ def test_a_model_script_writes_gravity_off_out():
     assert "gravity=" not in script_writer.script(section(None))
 
 
-def test_a_condition_on_an_absent_soil_body_is_omitted_with_a_warning(monkeypatch):
+def test_a_condition_on_an_absent_soil_body_is_omitted_with_a_warning(gmsh_session):
     from core.model.schemas import WaterPressureCondition
 
     condition = WaterPressureCondition(id="water", name="Water", on="part",
                                       part="soil_missing", fluid_pressure_type="Uniform")
-    project = blank_project().model_copy(update={"boundary_conditions": [condition]})
-    monkeypatch.setattr(writer, "_tagged", lambda _: {})
-    warnings = []
+    project = section([condition.model_dump(mode="json")])
 
-    assert writer._condition_targets(project, 2, [], {}, {}, {}, {}, warnings) == ([], [])
-    assert len(warnings) == 1
-    assert "soil_missing" in warnings[0]
-    assert "has no soil" in warnings[0]
+    export = writer.export_project(project, MESH)
+    assert any("soil_missing" in warning and "has no soil" in warning
+               for warning in export["warnings"])
+    stages = json.loads(export["project_parameters"])["stages"].values()
+    assert not any(
+        process["Parameters"].get("variable_name") == "WATER_PRESSURE"
+        for stage in stages
+        for process in stage["stage_settings"]["processes"]["constraints_process_list"])

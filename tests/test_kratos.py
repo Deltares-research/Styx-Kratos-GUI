@@ -1320,7 +1320,7 @@ def test_writer_repairs_negative_jacobians_without_losing_midside_order(
 
 
 @pytest.mark.parametrize("missing", ["head", "tail"])
-def test_anchor_export_refuses_a_missing_endpoint_mesh_node(monkeypatch, missing):
+def test_anchor_export_refuses_a_missing_endpoint_mesh_node(session, monkeypatch, missing):
     from tests.models.excavation import excavation_project
 
     project = excavation_project(staged=False)
@@ -1329,13 +1329,26 @@ def test_anchor_export_refuses_a_missing_endpoint_mesh_node(monkeypatch, missing
     project = project.model_copy(update={"anchors": [anchor]})
     head = (*anchor.head, 0.0)
     tail = (*anchor.tail, 0.0)
-    world = {1: head} if missing == "tail" else {2: tail}
-    monkeypatch.setattr(writer, "_tagged", lambda _: {})
-    monkeypatch.setattr(writer, "_harvest",
-                        lambda *_args, **_kwargs: [("wall", "Beam", [[1]])])
+    # Gmsh meshes the anchor's display line, so this missing-endpoint guard can only
+    # be reached with a stubbed, inconsistent mesh.
+    world = ({1: head} if missing == "tail"
+             else {1: (head[0], head[1] + 1.0, 0.0), 2: tail})
+    harvests = 0
+
+    def harvest(_entities, dimension, _kinds, **_kwargs):
+        nonlocal harvests
+        if dimension != 1:
+            return []
+        harvests += 1
+        return ([(project.beams[0].id, "Beam", [[1]])] if harvests == 2 else [])
+
+    monkeypatch.setattr(writer.meshing, "mesh_project",
+                        lambda *_args, **_kwargs: SimpleNamespace(log=[]))
+    monkeypatch.setattr(writer, "_world_coordinates", lambda: world)
+    monkeypatch.setattr(writer, "_harvest", harvest)
 
     with pytest.raises(writer.ExportError, match=f"Test anchor.*no mesh node at its {missing}"):
-        writer._anchor_ties(project, 2, world)
+        writer.export_project(project, MeshRequest(element_size=6.0, order=1))
 
 
 def test_anchor_node_lookup_never_selects_a_coincident_nonstructural_node():
