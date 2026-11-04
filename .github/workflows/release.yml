@@ -7,6 +7,9 @@
 # `git archive` (what it leaves out is listed in .gitattributes), and notes made from
 # the merged pull requests, sorted by label (.github/release.yml). A tag with a hyphen,
 # such as v1.2.0-rc.1, makes a pre-release.
+#
+# The tag has to be `v` + VERSION in core/version.py, and the unpacked archive has to
+# say that version (`kratos-cli --version`, the GUI's About box), or nothing is published.
 name: release
 
 on:
@@ -22,7 +25,19 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
+      # With the tags and their history: `git archive` writes `git describe` into the
+      # download (export-subst in .gitattributes), and describe needs the tag.
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: The tag is the version in core/version.py
+        run: |
+          version=$(python3 -c "from core.version import VERSION; print(VERSION)")
+          if [ "v$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::the tag is $GITHUB_REF_NAME, but core/version.py says $version: set VERSION to ${GITHUB_REF_NAME#v} first"
+            exit 1
+          fi
 
       - name: Source archives
         run: |
@@ -46,6 +61,15 @@ jobs:
           cd "$RUNNER_TEMP"
           unzip -q "$GITHUB_WORKSPACE/dist/styx-${GITHUB_REF_NAME}.zip"
           "./styx-${GITHUB_REF_NAME}/run.sh" --check
+
+      - name: The unpacked archive says its version
+        run: |
+          cd "$RUNNER_TEMP/styx-${GITHUB_REF_NAME}"
+          said=$(python3 -c "from core.version import describe; print(describe())")
+          if [ "$said" != "${GITHUB_REF_NAME#v}" ]; then
+            echo "::error::the archive says it is $said, not ${GITHUB_REF_NAME#v}"
+            exit 1
+          fi
 
       - uses: actions/upload-artifact@v4
         with:

@@ -72,6 +72,14 @@ def test_health_reports_the_gmsh_version(client):
     assert body["gmsh_version"].startswith("4.")
 
 
+def test_health_and_the_page_say_the_version_kratos_cli_says(client):
+    from core.version import describe
+
+    assert client.get("/api/health").json()["version"] == describe()
+    page = client.get("/").text
+    assert f'<meta name="styx-version" content="{describe()}">' in page
+
+
 # ── Project ─────────────────────────────────────────────────────────────────
 
 def test_get_project_returns_something_the_schema_accepts_back(client):
@@ -1133,6 +1141,9 @@ def test_the_live_shell_replaces_only_the_viewport_and_the_orbit_controller(clie
                              "water-command.js", "script-command.js", "node-parts.js",
                              "deck.js",
                              "results-plot.js",
+                             # The version the server writes into the page, in place of
+                             # the frozen js/data.js's own.
+                             "version.js",
                              # The unit system and the Kratos property sets the editors
                              # show, and the Material sets dialog that replaces the frozen
                              # one's old sheet (plan/outdated/kratos-native-inputs-plan.md).
