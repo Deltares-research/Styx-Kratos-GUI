@@ -193,6 +193,20 @@ def test_material_set_model_fills_and_says_what_it_filled(cli, site):
     assert m1.variables["GEO_COHESION"] == drafts.preset("m1")["variables"]["GEO_COHESION"]
 
 
+def test_material_set_says_when_a_permeability_is_not_used(cli, site):
+    """The export writes a drained soil's fixed permeability, and says so in the same
+    words: the user typed a number that is not used."""
+    assert cli("material", site, "set", "m1", "GEO_DRAINAGE_TYPE=CONSTANT_PW_FIELD").code == 0
+    ran = cli("material", site, "set", "m1", "GEO_DRAINAGE_TYPE=DRAINED",
+              "PERMEABILITY_XX=1e-12", "PERMEABILITY_YY=1e-12", "--unset", "PERMEABILITY_ZZ")
+
+    assert ran.code == 0, ran.err
+    assert ("PERMEABILITY_XX 1e-12, PERMEABILITY_YY 1e-12 not used: a DRAINED soil is "
+            "written with the fixed intrinsic permeability 1 m². Remove it, or make the "
+            "soil FULLY_COUPLED to have it written.") in ran.out
+    assert "not used" not in cli("material", site, "set", "m1", "K0_NC=0.5").out
+
+
 def test_a_soil_model_and_a_law_together_are_refused(cli, site):
     ran = cli("material", site, "set", "m1", "--model", "mohr-coulomb", "--law", "MyLaw")
 

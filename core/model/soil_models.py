@@ -569,6 +569,28 @@ def fixed_permeability(variables: dict, system: str, flow: bool = False) -> floa
     return units.from_si(fixed, units.PERMEABILITY, system)
 
 
+AXIS_PERMEABILITIES = ("PERMEABILITY_XX", "PERMEABILITY_YY", "PERMEABILITY_ZZ")
+"""A soil's permeabilities along the axes; the fixed one is 0 across them."""
+
+
+def unused_permeability(variables: dict, system: str, flow: bool = False) -> str | None:
+    """What the export and `kratos-cli material set` say about a soil holding
+    `variables` that carries a permeability the export does not write: one other than
+    its drainage type's fixed one (`fixed_permeability`). None when there is none."""
+    fixed = fixed_permeability(variables, system, flow)
+    if fixed is None:
+        return None
+    own = [f"{name} {number:g}" for name in AXIS_PERMEABILITIES
+           if (number := _number(variables.get(name))) is not None
+           and not math.isclose(number, fixed, rel_tol=1e-3)]
+    if not own:
+        return None
+    return (f"{', '.join(own)} not used: a {variables['GEO_DRAINAGE_TYPE']} soil is "
+            f"written with the fixed intrinsic permeability {fixed:g} "
+            f"{units.label(units.PERMEABILITY, system)}. Remove it, or make the soil "
+            "FULLY_COUPLED to have it written.")
+
+
 COMPUTED = {
     "UNIT_WEIGHT_DRY": ("Unit weight, dry", units.SPECIFIC_WEIGHT, "Weight"),
     "UNIT_WEIGHT_SATURATED": ("Unit weight, saturated", units.SPECIFIC_WEIGHT, "Weight"),

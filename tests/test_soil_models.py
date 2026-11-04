@@ -328,15 +328,26 @@ def test_a_coupled_soil_derives_its_permeability_and_a_constant_one_none():
 def test_a_drained_or_undrained_soil_is_written_with_its_fixed_permeability(drainage, fixed):
     """Kratos' U-Pw element checks a permeability for every drainage type but
     CONSTANT_PW_FIELD. For these two the drainage type is the physics: the permeability
-    is fixed, over any the soil carries, neither listed nor derived."""
+    is fixed, over any the soil carries, neither listed nor derived. One it carries is
+    named, once per soil: the user typed a number that is not used."""
     project = mohr_coulomb_site(GEO_DRAINAGE_TYPE=drainage, PERMEABILITY_XX=3.0e-12)
 
     variables = deck(project)["Variables"]
-    _, warnings = materials.material_parameters(project, [("Soil_1", "m2")], 2)
+    _, warnings = materials.material_parameters(project, [("Soil_1", "m2"), ("Soil_2", "m2")],
+                                                2)
 
     assert (variables["PERMEABILITY_XX"], variables["PERMEABILITY_YY"],
             variables["PERMEABILITY_XY"]) == (fixed, fixed, 0.0)
+    assert [w for w in warnings if "PERMEABILITY_" in w] == [
+        "material 'Sand, loose': " + soil_models.unused_permeability(
+            project.material("m2").variables, "SI")]
+    assert "PERMEABILITY_XX 3e-12, " in warnings[0]
+    at_fixed = mohr_coulomb_site(GEO_DRAINAGE_TYPE=drainage, PERMEABILITY_XX=fixed,
+                                 PERMEABILITY_YY=fixed, PERMEABILITY_ZZ=fixed)
+    _, warnings = materials.material_parameters(at_fixed, [("Soil_1", "m2")], 2)
     assert "PERMEABILITY_" not in " ".join(warnings)
+    assert soil_models.unused_permeability(project.material("m2").variables, "SI",
+                                           flow=True) is None
     assert "PERMEABILITY_XX" not in [p.name for p in soil_models.shown(
         soil_models.MOHR_COULOMB, project.material("m2").variables)]
     assert "PERMEABILITY_XX" not in soil_models.derived(
@@ -578,6 +589,45 @@ def test_soils_that_agree_lose_nothing_and_say_nothing():
 
     assert migration.notes(payload) == []
     assert migration.notes(seed_project().model_dump(mode="json")) == []
+
+
+def test_an_older_linear_elastic_soil_whose_k0_changes_is_named():
+    """Until 2026-11-02 a linear elastic soil with a friction angle took Jaky's K0; now
+    it takes nu / (1 - nu). The rule applies to the old project too, and says so."""
+    payload = older_document()
+    payload["stages"] = [{"id": "k0", "name": "Initial", "calculation": "K0 procedure"}]
+    payload["materials"][2]["variables"]["K0_NC"] = 0.6
+
+    notes = migration.notes(payload)
+
+    assert [note.split(":")[0] for note in notes] == [
+        "Fill", "Sand, loose", "Clay, stiff", "Sand, dense"],         "a typed K0_NC (Clay, soft) or no friction angle (Bedrock): none"
+    assert "K0_NC 0.3889 instead of Jaky's 1 - sin(phi) = 0.4701" in notes[1]
+    assert "Set K0_NC to 0.4701" in notes[1]
+    assert "K0_NC" not in Project.model_validate(payload).material("m2").variables
+    del payload["stages"]
+    assert migration.notes(payload) == [], "no K0 procedure, no initial stresses"
+
+
+@pytest.mark.parametrize("drainage, fixed", [("DRAINED", "1"), ("UNDRAINED", "1e-30")])
+def test_an_older_drained_or_undrained_soil_whose_permeability_is_now_fixed_is_named(
+        drainage, fixed):
+    payload = older_document()
+    for soil, permeability in ((1, 1e-12), (4, soil_models.FIXED_PERMEABILITY_SI[drainage])):
+        payload["materials"][soil]["variables"].update(
+            GEO_DRAINAGE_TYPE=drainage, PERMEABILITY_XX=permeability,
+            PERMEABILITY_YY=permeability, PERMEABILITY_ZZ=permeability)
+
+    notes = migration.notes(payload)
+
+    assert len(notes) == 1, "a soil already at the fixed value says nothing"
+    assert notes[0] == (
+        "Sand, loose: until 2026-11-02 the export wrote this soil's own permeability; "
+        "PERMEABILITY_XX 1e-12, PERMEABILITY_YY 1e-12, PERMEABILITY_ZZ 1e-12 not used: "
+        f"a {drainage} soil is written with the fixed intrinsic permeability {fixed} m². "
+        "Remove it, or make the soil FULLY_COUPLED to have it written.")
+    payload["stages"] = [{"id": "flow", "name": "Flow", "calculation": "Groundwater flow"}]
+    assert migration.notes(payload) == [], "a flow project writes the soil's own"
 
 
 def test_an_older_document_s_soil_without_a_porosity_gets_the_0_3_its_deck_had():

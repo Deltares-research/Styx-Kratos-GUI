@@ -26,7 +26,8 @@ stands. It does these things on top, and no others:
     every filled-in name is listed in the export's warnings.
 *   **Fixes a drained or an undrained soil's permeability** -- 1 m2 and 1e-30 m2
     (`soil_models.fixed_permeability`), over any the soil carries: the drainage type is
-    the user's choice, and Kratos still checks that a permeability is there.
+    the user's choice, and Kratos still checks that a permeability is there. A soil
+    that carries another is named in a warning (`soil_models.unused_permeability`).
 *   **Writes a hardening slope as Kratos' vector** -- the one number the project holds
     for each of `soil_models.VECTORS`, as `[number]`.
 *   **Smears** a 2D pile or anchor over its out-of-plane `spacing` -- plane strain models
@@ -186,6 +187,11 @@ def material_parameters(
     for part_name, material_id in part_materials:
         material = project.material(material_id)
         _check(material, f"material {material.name!r}")
+        unused = soil_models.unused_permeability(material.variables, project.unit_system,
+                                                 flow)
+        # Once per soil, which may be many parts, and not again for the K0 file.
+        if unused and not k0 and f"material {material.name!r}: {unused}" not in warnings:
+            warnings.append(f"material {material.name!r}: {unused}")
         law = dimension_law(material.constitutive_law, dim)
         if k0 and law not in LINEAR_ELASTIC:
             elastic.append(f"material {material.name!r}")

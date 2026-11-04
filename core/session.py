@@ -921,6 +921,13 @@ def update_material(project: Project, id: str, *, name: str | None = None,
     note = soil_models.filled_note(soil_models.model_of(record["constitutive_law"]), filled)
     if note and notes is not None:
         notes.append(note)
+    # A permeability or a drainage type set that the export will not write the soil's
+    # own permeability for: said in the export's words.
+    unused = soil_models.unused_permeability(record["variables"], project.unit_system,
+                                             drafts.reads_flow(project))
+    if unused and notes is not None and \
+            set(variables or {}) & {*soil_models.AXIS_PERMEABILITIES, "GEO_DRAINAGE_TYPE"}:
+        notes.append(unused)
     return Project.model_validate(payload)
 
 

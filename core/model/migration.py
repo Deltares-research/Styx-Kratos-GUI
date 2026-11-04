@@ -520,6 +520,63 @@ def contact_notes(value: object) -> list[str]:
             for s in sections if _takes_no_strength(s) and s.get("material") is None]
 
 
+def k0_notes(value: object) -> list[str]:
+    """The linear elastic soils of a document saved before 2026-11-02 whose K0 changes,
+    one line each: a soil without `K0_NC` that has a friction angle, in a project with a
+    K0 procedure. The export took Jaky's 1 - sin(phi) for it; now it takes the elastic
+    nu / (1 - nu) (`soil_models.k0`)."""
+    from core.model import soil_models
+
+    if not isinstance(value, dict) or "fluid" in value:
+        return []
+    stages = value.get("stages")
+    if not any(isinstance(s, dict) and s.get("calculation") == "K0 procedure"
+               for s in (stages if isinstance(stages, list) else [])):
+        return []
+    notes = []
+    materials = value.get("materials")
+    for soil in materials if isinstance(materials, list) else []:
+        if not _elastic(soil) or not isinstance(soil.get("variables"), dict) \
+                or "K0_NC" in soil["variables"]:
+            continue
+        phi = _number(soil["variables"].get("GEO_FRICTION_ANGLE"))
+        now = soil_models.k0(str(soil.get("constitutive_law")), soil["variables"])
+        if phi is None or now is None:
+            continue
+        was = 1.0 - math.sin(math.radians(phi))
+        if not math.isclose(was, now, rel_tol=1e-3):
+            notes.append(f"{soil.get('name') or soil.get('id')}: a linear elastic soil's K0 "
+                         f"is nu / (1 - nu) now, so this soil starts from K0_NC {now:.4g} "
+                         f"instead of Jaky's 1 - sin(phi) = {was:.4g}. Set K0_NC to "
+                         f"{was:.4g} to keep the old initial stresses.")
+    return notes
+
+
+def permeability_notes(value: object) -> list[str]:
+    """The drained and undrained soils of a document saved before 2026-11-02 whose
+    permeability changes, one line each: a soil carrying a permeability other than its
+    drainage type's fixed one, in a project that is not a groundwater flow calculation.
+    The export wrote the soil's own; now it writes the fixed one, and says so on every
+    export too (`soil_models.unused_permeability`)."""
+    from core.model import soil_models, units
+
+    if not isinstance(value, dict) or "fluid" in value:
+        return []
+    system = value.get("unit_system", units.DEFAULT)
+    stages = value.get("stages")
+    stages = [s for s in stages if isinstance(s, dict)] if isinstance(stages, list) else []
+    if system not in units.SYSTEMS or (
+            stages and all(s.get("calculation") == "Groundwater flow" for s in stages)):
+        return []
+    notes = []
+    for soil, variables in _soil_variables(value.get("materials")).items():
+        unused = soil_models.unused_permeability(variables, system)
+        if unused:
+            notes.append(f"{soil}: until 2026-11-02 the export wrote this soil's own "
+                         f"permeability; {unused}")
+    return notes
+
+
 def upgraded(value: object) -> object:
     """`value`, a project document of any age, in the current shape: every conversion
     above, in the order the shapes came (`Project`'s validator)."""
@@ -529,12 +586,15 @@ def upgraded(value: object) -> object:
 
 def notes(value: object) -> list[str]:
     """What opening `value` changes in its deck that the user has to know, one line
-    each: the soils' own water it replaces (`water_notes`) and the contacts that lose
-    their soil's strength (`contact_notes`). Empty for a current document. Said when a
-    file is opened (`core.session.migration_notes`, the GUI's Open), as the first save
-    of it writes the new shape and the old values are gone."""
+    each: the soils' own water it replaces (`water_notes`), the linear elastic soils
+    whose K0 changes (`k0_notes`), the drained and undrained soils whose permeability is
+    now fixed (`permeability_notes`) and the contacts that lose their soil's strength
+    (`contact_notes`). Empty for a current document. Said when a file is opened
+    (`core.session.migration_notes`, the GUI's Open), as the first save of it writes the
+    new shape and the old values are gone."""
     value = _before_water(value)
-    return water_notes(value) + contact_notes(value)
+    return (water_notes(value) + k0_notes(value) + permeability_notes(value)
+            + contact_notes(value))
 
 
 def _before_water(value: object) -> object:
