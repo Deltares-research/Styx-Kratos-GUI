@@ -20,6 +20,7 @@ from core import scripting
 from core.analysis import calculation
 from core.geometry import solid_model
 from core.kratos import materials, writer
+from core.model import soil_models
 from core.model.schemas import InterfaceSection, Material, Stage, Project
 from core.model.templates import seed_project
 from core.results import catalog, members
@@ -498,7 +499,8 @@ def test_the_reference_coulomb_contacts_are_what_their_soils_derive():
                    / math.tan(math.radians(soil["Variables"]["GEO_FRICTION_ANGLE"])))
         material = Material(id=f"soil_{soil_id}", name=f"Soil {soil_id}", color="#b08a6a",
                             constitutive_law=soil["constitutive_law"]["name"],
-                            variables=dict(soil["Variables"]))
+                            variables={k: v for k, v in soil["Variables"].items()
+                                       if k not in soil_models.WATER})
         section = InterfaceSection(id="contact", name="Contact",
                                    constitutive_law=COULOMB_CONTACT, r_inter=r_inter,
                                    virtual_thickness=1.0)
