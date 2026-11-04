@@ -1251,6 +1251,126 @@ window.DRAFTS_FIXTURE =
         "required": []
       }
     ],
+    "unread": [
+      {
+        "law": "GeoLinearElasticPlaneStrain2DLaw",
+        "variables": {
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "YOUNG_MODULUS": 15000000.0,
+          "POISSON_RATIO": 0.3,
+          "DENSITY_SOLID": 1732.9255861365953,
+          "PERMEABILITY_XX": 1.1574074074074074e-12,
+          "POROSITY": 0.0,
+          "GEO_COHESION": 1000,
+          "GEO_FRICTION_ANGLE": 30.0
+        },
+        "unread": [
+          "GEO_COHESION",
+          "GEO_FRICTION_ANGLE"
+        ]
+      },
+      {
+        "law": "GeoLinearElasticPlaneStrain2DLaw",
+        "variables": {
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "YOUNG_MODULUS": 10000000.0,
+          "POISSON_RATIO": 0.3,
+          "DENSITY_SOLID": 1732.9255861365953,
+          "POROSITY": 0.0,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10,
+          "GEO_COHESION": 1000.0,
+          "GEO_FRICTION_ANGLE": 30.0,
+          "GEO_DILATANCY_ANGLE": 0.0,
+          "GEO_ENABLE_TENSION_CUT_OFF": false,
+          "GEO_COULOMB_HARDENING_TYPE": "Linear",
+          "GEO_COHESION_FUNCTION_COEFFICIENTS": 1.0,
+          "MY_OWN": 2.0,
+          "PERMEABILITY_ZZ": 1e-12
+        },
+        "unread": [
+          "GEO_COHESION",
+          "GEO_FRICTION_ANGLE",
+          "GEO_DILATANCY_ANGLE",
+          "GEO_ENABLE_TENSION_CUT_OFF",
+          "GEO_COULOMB_HARDENING_TYPE",
+          "GEO_COHESION_FUNCTION_COEFFICIENTS"
+        ]
+      },
+      {
+        "law": "GeoMohrCoulombLawPlaneStrain",
+        "variables": {
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "YOUNG_MODULUS": 15000000.0,
+          "POISSON_RATIO": 0.3,
+          "DENSITY_SOLID": 1732.9255861365953,
+          "PERMEABILITY_XX": 1.1574074074074074e-12,
+          "POROSITY": 0.0,
+          "GEO_COHESION": 1000,
+          "GEO_FRICTION_ANGLE": 30.0
+        },
+        "unread": []
+      },
+      {
+        "law": "GeoMohrCoulombLawPlaneStrain",
+        "variables": {
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "YOUNG_MODULUS": 10000000.0,
+          "POISSON_RATIO": 0.3,
+          "DENSITY_SOLID": 1732.9255861365953,
+          "POROSITY": 0.0,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10,
+          "GEO_COHESION": 1000.0,
+          "GEO_FRICTION_ANGLE": 30.0,
+          "GEO_DILATANCY_ANGLE": 0.0,
+          "GEO_ENABLE_TENSION_CUT_OFF": false,
+          "GEO_COULOMB_HARDENING_TYPE": "Linear",
+          "GEO_COHESION_FUNCTION_COEFFICIENTS": 1.0,
+          "MY_OWN": 2.0,
+          "PERMEABILITY_ZZ": 1e-12
+        },
+        "unread": []
+      },
+      {
+        "law": "SmallStrainUDSM2DPlaneStrainLaw",
+        "variables": {
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "YOUNG_MODULUS": 15000000.0,
+          "POISSON_RATIO": 0.3,
+          "DENSITY_SOLID": 1732.9255861365953,
+          "PERMEABILITY_XX": 1.1574074074074074e-12,
+          "POROSITY": 0.0,
+          "GEO_COHESION": 1000,
+          "GEO_FRICTION_ANGLE": 30.0
+        },
+        "unread": []
+      },
+      {
+        "law": "SmallStrainUDSM2DPlaneStrainLaw",
+        "variables": {
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+          "YOUNG_MODULUS": 10000000.0,
+          "POISSON_RATIO": 0.3,
+          "DENSITY_SOLID": 1732.9255861365953,
+          "POROSITY": 0.0,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10,
+          "GEO_COHESION": 1000.0,
+          "GEO_FRICTION_ANGLE": 30.0,
+          "GEO_DILATANCY_ANGLE": 0.0,
+          "GEO_ENABLE_TENSION_CUT_OFF": false,
+          "GEO_COULOMB_HARDENING_TYPE": "Linear",
+          "GEO_COHESION_FUNCTION_COEFFICIENTS": 1.0,
+          "MY_OWN": 2.0,
+          "PERMEABILITY_ZZ": 1e-12
+        },
+        "unread": []
+      }
+    ],
     "law_in": [
       {
         "law": "GeoLinearElasticPlaneStrain2DLaw",

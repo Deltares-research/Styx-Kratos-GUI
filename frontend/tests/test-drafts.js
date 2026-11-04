@@ -117,6 +117,12 @@
     });
   });
 
+  T.test('a soil model chosen leaves out what it leaves out on the command line', function () {
+    M.unread.forEach(function (c) {
+      T.eq(App.SoilModels.unread(c.law, c.variables), c.unread, c.law);
+    });
+  });
+
   T.test('a soil law has the same name in each dimension as on the command line', function () {
     M.law_in.forEach(function (c) {
       T.eq(App.SoilModels.lawIn(c.law, c.dimension), c.result, c.law + ' in ' + c.dimension + 'D');

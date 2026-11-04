@@ -909,6 +909,10 @@ def update_material(project: Project, id: str, *, name: str | None = None,
     for field, value in (("name", name), ("color", color), ("constitutive_law", law)):
         if value is not None:
             record[field] = value
+    if law is not None:
+        # As the window's Soil model list: what the model does not read is left out.
+        for variable in soil_models.unread(law, record["variables"]):
+            del record["variables"][variable]
     record["variables"].update(variables or {})
     for variable in unset:
         if variable not in record["variables"]:

@@ -205,6 +205,28 @@ def test_a_model_change_keeps_what_was_typed_and_fills_the_rest():
     assert notes and notes[0].startswith("Filled in from the Mohr-Coulomb defaults: ")
 
 
+def test_a_soil_made_linear_elastic_leaves_out_the_strength_it_does_not_read():
+    """As the window's Soil model list does (`App.MaterialSets`, `unread`): a linear
+    elastic soil has no strength, and the export would write it into the deck. What no
+    model lists -- the user's own, a 3D permeability -- stays."""
+    project = mohr_coulomb_site(GEO_COULOMB_HARDENING_TYPE="Linear", MY_OWN=2.0)
+
+    changed = session.update_material(project, "m2", model=soil_models.LINEAR_ELASTIC)
+
+    after = changed.material("m2").variables
+    assert changed.material("m2").constitutive_law == ELASTIC_2D
+    assert not set(after) & {"GEO_COHESION", "GEO_FRICTION_ANGLE", "GEO_DILATANCY_ANGLE",
+                             "GEO_ENABLE_TENSION_CUT_OFF", "GEO_COULOMB_HARDENING_TYPE"}
+    assert after["MY_OWN"] == 2.0 and "PERMEABILITY_ZZ" in after
+    assert deck(changed)["Variables"].keys().isdisjoint({"GEO_COHESION", "GEO_FRICTION_ANGLE"})
+    typed = session.update_material(project, "m2", model=soil_models.LINEAR_ELASTIC,
+                                    variables={"GEO_COHESION": 5.0})
+    assert typed.material("m2").variables["GEO_COHESION"] == 5.0, "typed with it: kept"
+    preset, _ = drafts.soil(project, "x", preset="m1", model=soil_models.LINEAR_ELASTIC)
+    assert "GEO_COHESION" not in preset.variables
+    assert soil_models.unread("SmallStrainUDSM2DPlaneStrainLaw", {"GEO_COHESION": 1.0}) == []
+
+
 def test_a_choice_changed_fills_what_it_lists_and_a_left_out_value_stays_out():
     project = mohr_coulomb_site()
     project = session.update_material(project, "m2", unset=["RESIDUAL_SATURATION"])

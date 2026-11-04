@@ -154,7 +154,9 @@ kratos-cli parts pit.json                                 # soil_top__lift1, ...
   `initial_materials.json`, but that warning does not list it.
 - **Soil models**: `--model linear-elastic` or `--model mohr-coulomb` sets the law for the
   model's dimension, as the **Soil model** list of the Soil material window does. The
-  values the soil already has stay. The values the model needs and the soil does not
+  values the soil already has stay, except those another model reads and this one does
+  not: `--model linear-elastic` leaves out the strength and the hardening, as a linear
+  elastic soil has none. The values the model needs and the soil does not
   have get the model's defaults, and the command prints their names; a soil that still
   has empty values, such as a new one, gets none of the values the law needs, as in the
   GUI. Setting a choice

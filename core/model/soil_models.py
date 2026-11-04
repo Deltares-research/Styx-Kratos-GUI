@@ -319,6 +319,20 @@ def parameters(model: str) -> list[Parameter]:
     return [] if found is None else [p for _, group in found.groups for p in group]
 
 
+def unread(law: str, variables: dict) -> list[str]:
+    """What choosing `law` leaves out of a soil holding `variables`: what another model
+    lists and the model of `law` does not -- a linear elastic soil's strength and
+    hardening. The material window and `kratos-cli material set --model` both leave it
+    out; the window keeps it aside while it is open. Nothing for a law of no model,
+    which is written as typed, and nothing the catalogue does not know."""
+    model = model_of(law)
+    if model == OTHER:
+        return []
+    reads = {p.name for p in parameters(model)}
+    listed = {p.name for other in MODELS for p in parameters(other)}
+    return [name for name in variables if name in listed and name not in reads]
+
+
 def _value(name: str, variables: dict, model: str) -> Any:
     """`name` as the deck reads it: the soil's, or what Kratos takes when it is left
     out."""

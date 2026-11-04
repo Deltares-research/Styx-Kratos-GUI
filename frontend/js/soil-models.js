@@ -58,6 +58,19 @@ App.SoilModels = (function () {
     return m.groups.reduce(function (all, g) { return all.concat(g.parameters); }, []);
   }
 
+  /* What choosing `law` leaves out of a soil holding `variables`: what another model
+     lists and the model of `law` does not (core/model/soil_models.py `unread`). */
+  function unread(law, variables) {
+    var model = modelOf(law);
+    if (model === OTHER) return [];
+    var names = function (id) { return parameters(id).map(function (p) { return p.name; }); };
+    var reads = names(model);
+    var listed = table().order.reduce(function (all, id) { return all.concat(names(id)); }, []);
+    return Object.keys(variables || {}).filter(function (name) {
+      return listed.indexOf(name) >= 0 && reads.indexOf(name) < 0;
+    });
+  }
+
   /* `name` as the deck reads it: the soil's, or what Kratos takes when it is left out. */
   function valueOf(name, variables, model) {
     if (Object.prototype.hasOwnProperty.call(variables, name)) return variables[name];
@@ -359,7 +372,7 @@ App.SoilModels = (function () {
 
   return { OTHER: OTHER, order: function () { return table().order.slice(); },
            modelOf: modelOf, label: label, law: law, lawIn: lawIn, parameters: parameters,
-           find: find, shown: shown, groups: groups, required: required, fill: fill,
+           find: find, unread: unread, shown: shown, groups: groups, required: required, fill: fill,
            defaultIn: defaultIn, defaultsSI: defaultsSI, filledNote: filledNote,
            missing: missing, fillChoice: fillChoice, blankSI: blankSI,
            fixedPermeability: fixedPermeability,

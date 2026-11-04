@@ -441,6 +441,14 @@ def soil_model_cases() -> dict:
             required(MOHR_COULOMB_2D, {"GEO_COULOMB_HARDENING_TYPE": "Linear"}),
             required("SmallStrainUDSM2DPlaneStrainLaw", {}),
         ],
+        "unread": [{"law": law, "variables": variables,
+                    "unread": soil_models.unread(law, variables)}
+                   for law in (ELASTIC_2D, MOHR_COULOMB_2D, "SmallStrainUDSM2DPlaneStrainLaw")
+                   for variables in (
+                       drafts.preset("m1")["variables"],
+                       {**mohr_coulomb, "GEO_COULOMB_HARDENING_TYPE": "Linear",
+                        "GEO_COHESION_FUNCTION_COEFFICIENTS": 1.0, "MY_OWN": 2.0,
+                        "PERMEABILITY_ZZ": 1e-12})],
         "law_in": [{"law": law, "dimension": dim, "result": soil_models.law_in(law, dim)}
                    for law in (ELASTIC_2D, MOHR_COULOMB_2D,
                                "GeoMohrCoulombWithTensionCutOff2D",

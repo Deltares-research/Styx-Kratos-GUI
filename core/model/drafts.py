@@ -134,7 +134,8 @@ def soil(project: Project, id: str, *, name: str | None = None, preset: str | No
         law or SOIL_LAWS[project.dimension])
     filled: list[str] = []
     if start is not None:
-        variables_si = start["variables"]
+        variables_si = {name: value for name, value in start["variables"].items()
+                        if name not in soil_models.unread(chosen, start["variables"])}
         if model is not None:
             # What the model lists that the preset does not give, it fills -- quietly
             # for the preset's own model, which is how a preset is made.

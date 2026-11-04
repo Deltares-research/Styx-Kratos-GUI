@@ -454,8 +454,9 @@ App.MaterialSets = (function () {
     function held(name) { return Object.prototype.hasOwnProperty.call(m.variables, name); }
 
     /* The soil's law set to `law`: when it is a model's, what that model does not read
-       is put aside and what was put aside that it reads is put back. A law of no model
-       keeps all the soil carries. */
+       (App.SoilModels.unread, as `kratos-cli material set --model` leaves it out) is put
+       aside and what was put aside that it reads is put back. A law of no model keeps
+       all the soil carries. */
     function setLaw(law) {
       m.constitutive_law = law;
       var model = S.modelOf(law);
@@ -464,8 +465,9 @@ App.MaterialSets = (function () {
       Object.keys(aside).forEach(function (name) {
         if (reads.indexOf(name) >= 0 && !held(name)) m.variables[name] = aside[name];
       });
-      Object.keys(m.variables).forEach(function (name) {
-        if (reads.indexOf(name) < 0) { aside[name] = m.variables[name]; delete m.variables[name]; }
+      S.unread(law, m.variables).forEach(function (name) {
+        aside[name] = m.variables[name];
+        delete m.variables[name];
       });
     }
 
