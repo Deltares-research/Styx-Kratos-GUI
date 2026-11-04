@@ -230,3 +230,60 @@ def test_a_failed_server_exec_is_reported_as_a_launcher_error(
 
     assert _launcher.main([]) == 1
     assert "Launcher failed: cannot start server" in capsys.readouterr().err
+
+
+@_pytest.mark.parametrize("environment_exists, python_exists", [
+    (False, False),
+    (True, False),
+    (True, True),
+])
+def test_launcher_creates_missing_environment_and_reuses_existing_one(
+        tmp_path, monkeypatch, environment_exists, python_exists):
+    from unittest.mock import Mock
+
+    environment = tmp_path / ".venv-windows"
+    python = environment / "python.exe"
+    requirements = tmp_path / "requirements.txt"
+    requirements.write_text("example==1\n", encoding="ascii")
+    if environment_exists:
+        environment.mkdir()
+    if python_exists:
+        python.touch()
+    monkeypatch.setattr(_launcher, "ROOT", tmp_path)
+    monkeypatch.setattr(_launcher, "REQUIREMENTS", requirements)
+    monkeypatch.setattr(_launcher, "platform_venv_name", lambda: ".venv-windows")
+    monkeypatch.setattr(_launcher, "venv_python", lambda _: python)
+
+    def create(folder):
+        assert folder == environment
+        environment.mkdir(exist_ok=True)
+        python.touch()
+
+    builder = Mock()
+    builder.create.side_effect = create
+    factory = Mock(return_value=builder)
+    install = Mock()
+    monkeypatch.setattr(_launcher.venv, "EnvBuilder", factory)
+    monkeypatch.setattr(_launcher.subprocess, "check_call", install)
+
+    assert _launcher.ensure_environment() == python
+    if python_exists:
+        factory.assert_not_called()
+        builder.create.assert_not_called()
+    else:
+        factory.assert_called_once_with(
+            with_pip=True, clear=environment_exists)
+        builder.create.assert_called_once_with(environment)
+    install.assert_called_once_with(
+        [str(python), "-m", "pip", "install", "--disable-pip-version-check",
+         "-r", str(requirements)], cwd=tmp_path)
+    assert not _launcher.requirements_changed(
+        requirements, environment / ".requirements.sha256")
+    factory.reset_mock()
+    builder.create.reset_mock()
+    install.reset_mock()
+
+    assert _launcher.ensure_environment() == python
+    factory.assert_not_called()
+    builder.create.assert_not_called()
+    install.assert_not_called()
