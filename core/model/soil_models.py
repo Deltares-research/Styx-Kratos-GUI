@@ -555,8 +555,9 @@ def k0(law: str, variables: dict) -> float | None:
 def derived(law: str, variables: dict, water_variables: dict, system: str,
             flow: bool = False) -> dict:
     """What the export writes for a soil of `law` holding `variables` where the soil
-    leaves it out, in `system`, in the order it derives them. The window shows each in
-    place of the value it lacks.
+    leaves it out, in `system`, in the order it derives them -- but for what it leaves
+    to Kratos to derive (`left_to_kratos`). The window shows each in place of the value
+    it lacks.
 
     `water_variables` is `water`'s; `flow` is a groundwater flow deck's, whose water
     pressure elements read the permeability and the Biot coefficient of every soil. The
@@ -590,6 +591,17 @@ def derived(law: str, variables: dict, water_variables: dict, system: str,
             put(name, 0.0)
     put("K0_NC", k0(law, variables))
     return out
+
+
+def left_to_kratos(name: str, flow: bool = False) -> bool:
+    """Whether the export leaves `name` out of the deck although `derived` gives it, so
+    that Kratos derives it itself: a coupled soil's `BIOT_COEFFICIENT`, outside a
+    groundwater flow deck. Kratos' U-Pw elements derive it at each point from the soil's
+    current stiffness (`GeoTransportEquationUtilities::CalculateBiotCoefficient`), which
+    for a soil that yields is not the elastic one `biot` gives; the window shows that
+    one, Kratos' while the soil is elastic. A flow deck's water pressure elements do not
+    derive it, so there it is written."""
+    return name == "BIOT_COEFFICIENT" and not flow
 
 
 def kratos_drainage(value: Any) -> Any:

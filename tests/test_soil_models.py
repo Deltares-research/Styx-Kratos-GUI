@@ -390,6 +390,24 @@ def test_a_coupled_soil_is_written_under_its_own_name():
         "GEO_DRAINAGE_TYPE"] == "FULLY_COUPLED"
 
 
+def test_a_coupled_soil_s_biot_coefficient_is_shown_but_left_to_kratos():
+    """Kratos derives it from the soil's current stiffness, which for a soil that yields
+    is not the elastic one: the window shows the elastic value, and the deck leaves it
+    out. A typed one is written; a groundwater flow deck's elements need it written."""
+    project = mohr_coulomb_site(GEO_DRAINAGE_TYPE="FULLY_COUPLED")
+    soil = project.material("m2").variables
+
+    _, warnings = materials.material_parameters(project, [("Soil_1", "m2")], 2)
+
+    assert "BIOT_COEFFICIENT" in soil_models.derived(MC_2D, soil, WATER_SI, "SI")
+    assert "BIOT_COEFFICIENT" not in deck(project)["Variables"]
+    assert "BIOT_COEFFICIENT" not in " ".join(warnings)
+    typed = mohr_coulomb_site(GEO_DRAINAGE_TYPE="FULLY_COUPLED", BIOT_COEFFICIENT=0.8)
+    assert deck(typed)["Variables"]["BIOT_COEFFICIENT"] == 0.8
+    assert soil_models.left_to_kratos("BIOT_COEFFICIENT")
+    assert not soil_models.left_to_kratos("BIOT_COEFFICIENT", flow=True)
+
+
 @pytest.mark.parametrize("old", ["CONSTANT_PW_FIELD", "constant_pw_field"])
 def test_constant_pw_field_read_in_is_drained(old):
     """A project, a script or a deck from before 2026-11-04 named a drained soil by

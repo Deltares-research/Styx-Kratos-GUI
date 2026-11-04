@@ -21,7 +21,8 @@ stands. It does these things on top, and no others:
     `soil_models.derived` says (the grains' bulk modulus, the symmetric
     permeabilities, a coupled soil's permeability, the minimum relative permeability of
     a soil not saturated everywhere and a Van Genuchten soil's g_l, the Biot coefficient
-    where it is read, K0), a beam's shear areas, an
+    of a groundwater flow deck -- a coupled one's Kratos derives itself
+    (`soil_models.left_to_kratos`) -- and K0), a beam's shear areas, an
     interface's stiffness and strength from its soil. A value the user gave is never replaced, and
     every filled-in name is listed in the export's warnings.
 *   **Writes a drained soil as Kratos' `CONSTANT_PW_FIELD`** -- the one drainage type
@@ -338,7 +339,8 @@ def _variables(material: Material, dim: int, k0: bool, project: Project,
                                 project.water_variables, project.unit_system, flow)
     k0_derived = found.pop("K0_NC", None)
     for name, value in found.items():
-        _fill(v, name, value, derived, label)
+        if not soil_models.left_to_kratos(name, flow):
+            _fill(v, name, value, derived, label)
     v["GEO_DRAINAGE_TYPE"] = soil_models.kratos_drainage(v["GEO_DRAINAGE_TYPE"])
     permeability = v.get("PERMEABILITY_XX")
     if isinstance(permeability, (int, float)) and not isinstance(permeability, bool):
