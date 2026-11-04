@@ -27,9 +27,6 @@ App.SOIL_MODEL_TABLE =
     "SATURATED_SATURATION": 1.0,
     "RESIDUAL_SATURATION": 1e-10
   },
-  "fixed_permeability": {
-    "UNDRAINED": 1e-30
-  },
   "palette": [
     "#d8c48a",
     "#8fa86b",
@@ -56,8 +53,7 @@ App.SOIL_MODEL_TABLE =
     "BULK_MODULUS_SOLID": 10000000000.0,
     "PERMEABILITY": 1.1574074074074074e-12,
     "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
-    "VAN_GENUCHTEN_GL": 1.25,
-    "UNDRAINED_POISSON_LIMIT": 0.495
+    "VAN_GENUCHTEN_GL": 1.25
   },
   "computed": {
     "UNIT_WEIGHT_DRY": {
@@ -99,20 +95,9 @@ App.SOIL_MODEL_TABLE =
               "default": "DRAINED",
               "choices": [
                 "DRAINED",
-                "FULLY_COUPLED",
-                "UNDRAINED"
+                "FULLY_COUPLED"
               ],
               "absent": "DRAINED"
-            },
-            {
-              "name": "GEO_POISSON_UNDRAINED",
-              "label": "Undrained Poisson's ratio",
-              "when": {
-                "name": "GEO_DRAINAGE_TYPE",
-                "values": [
-                  "UNDRAINED"
-                ]
-              }
             }
           ]
         },
@@ -262,8 +247,7 @@ App.SOIL_MODEL_TABLE =
               "when": {
                 "name": "GEO_DRAINAGE_TYPE",
                 "values": [
-                  "FULLY_COUPLED",
-                  "UNDRAINED"
+                  "FULLY_COUPLED"
                 ]
               }
             },
@@ -273,8 +257,7 @@ App.SOIL_MODEL_TABLE =
               "when": {
                 "name": "GEO_DRAINAGE_TYPE",
                 "values": [
-                  "FULLY_COUPLED",
-                  "UNDRAINED"
+                  "FULLY_COUPLED"
                 ]
               }
             }
@@ -311,20 +294,9 @@ App.SOIL_MODEL_TABLE =
               "default": "DRAINED",
               "choices": [
                 "DRAINED",
-                "FULLY_COUPLED",
-                "UNDRAINED"
+                "FULLY_COUPLED"
               ],
               "absent": "DRAINED"
-            },
-            {
-              "name": "GEO_POISSON_UNDRAINED",
-              "label": "Undrained Poisson's ratio",
-              "when": {
-                "name": "GEO_DRAINAGE_TYPE",
-                "values": [
-                  "UNDRAINED"
-                ]
-              }
             }
           ]
         },
@@ -474,8 +446,7 @@ App.SOIL_MODEL_TABLE =
               "when": {
                 "name": "GEO_DRAINAGE_TYPE",
                 "values": [
-                  "FULLY_COUPLED",
-                  "UNDRAINED"
+                  "FULLY_COUPLED"
                 ]
               }
             },
@@ -485,8 +456,7 @@ App.SOIL_MODEL_TABLE =
               "when": {
                 "name": "GEO_DRAINAGE_TYPE",
                 "values": [
-                  "FULLY_COUPLED",
-                  "UNDRAINED"
+                  "FULLY_COUPLED"
                 ]
               }
             }

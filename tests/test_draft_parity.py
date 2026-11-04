@@ -291,10 +291,6 @@ def soil_model_cases() -> dict:
                 "after_law": after_law, "changes": changes, "system": system,
                 "filled": filled, "after": after}
 
-    def fixed(variables, system, flow=False):
-        return {"variables": variables, "system": system, "flow": flow,
-                "fixed": soil_models.fixed_permeability(variables, system, flow)}
-
     def problem(title, law, variables):
         return {"title": title, "law": law, "variables": variables,
                 "problem": soil_models.problem(law, variables)}
@@ -332,16 +328,12 @@ def soil_model_cases() -> dict:
             derived("a drained soil in a flow project", ELASTIC_2D,
                     {"GEO_DRAINAGE_TYPE": "DRAINED", "DENSITY_SOLID": 2000.0}, "SI",
                     flow=True),
-            derived("an undrained soil", ELASTIC_2D,
-                    {"GEO_DRAINAGE_TYPE": "UNDRAINED", "YOUNG_MODULUS": 1.0e7,
-                     "POISSON_RATIO": 0.3, "POROSITY": 0.3, "BULK_MODULUS_SOLID": 5.0e8},
-                    "SI"),
             derived("a law of no model with a friction angle",
                     "SmallStrainUDSM2DPlaneStrainLaw", {"GEO_FRICTION_ANGLE": 25.0}, "SI"),
             derived("a drained soil carrying a permeability, written as it is", ELASTIC_2D,
                     {"GEO_DRAINAGE_TYPE": "DRAINED", "PERMEABILITY_XX": 3.0e-12}, "kN"),
-            derived("an undrained soil carrying a permeability, which is fixed", ELASTIC_2D,
-                    {"GEO_DRAINAGE_TYPE": "UNDRAINED", "PERMEABILITY_XX": 3.0e-12}, "kN"),
+            derived("a coupled soil carrying a permeability, written as it is", ELASTIC_2D,
+                    {"GEO_DRAINAGE_TYPE": "FULLY_COUPLED", "PERMEABILITY_XX": 3.0e-12}, "kN"),
             derived("a blank soil", ELASTIC_2D, soil_models.blank_si(), "SI"),
             derived("a blank soil with the Van Genuchten law", ELASTIC_2D,
                     {**soil_models.blank_si(), "RETENTION_LAW": "VanGenuchtenLaw"}, "SI"),
@@ -354,13 +346,6 @@ def soil_model_cases() -> dict:
             water("SI", 9810.0, 1.0e20, 1.3e-3),
         ],
         "blank": soil_models.blank_si(),
-        "fixed": [
-            fixed({"GEO_DRAINAGE_TYPE": "DRAINED"}, "SI"),
-            fixed({"GEO_DRAINAGE_TYPE": "UNDRAINED"}, "kN"),
-            fixed({"GEO_DRAINAGE_TYPE": "DRAINED"}, "SI", flow=True),
-            fixed({"GEO_DRAINAGE_TYPE": "FULLY_COUPLED"}, "SI"),
-            fixed({}, "SI"),
-        ],
         "fill_choice": [
             fill_choice("a blank soil made Mohr-Coulomb gets no strength", ELASTIC_2D,
                         soil_models.blank_si(), MOHR_COULOMB_2D, {}, "SI"),
@@ -374,7 +359,7 @@ def soil_model_cases() -> dict:
         "shown": [
             shown(soil_models.LINEAR_ELASTIC, {}),
             shown(soil_models.MOHR_COULOMB, coupled),
-            shown(soil_models.MOHR_COULOMB, {"GEO_DRAINAGE_TYPE": "UNDRAINED"}),
+            shown(soil_models.MOHR_COULOMB, {"GEO_DRAINAGE_TYPE": "DRAINED"}),
             shown(soil_models.LINEAR_ELASTIC, {"RETENTION_LAW": "VanGenuchtenLaw"}, True),
         ],
         "defaults": {model: soil_models.defaults_si(model) for model in soil_models.MODELS},

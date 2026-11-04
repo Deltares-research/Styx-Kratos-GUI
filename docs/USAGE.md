@@ -152,8 +152,8 @@ law and its parameters.
   angles' in radians per unit of plastic strain; each starts at 0). When a choice brings in new
   parameters, Styx fills in their defaults. A `DRAINED` soil shows no permeability:
   its water pressures are the ones the water conditions set, and the deformation does
-  not change them (Kratos' `CONSTANT_PW_FIELD`, which the export writes). An `UNDRAINED`
-  soil shows none either: the export gives it a fixed one, 1e-30 m².
+  not change them (Kratos' `CONSTANT_PW_FIELD`, which the export writes). For an
+  undrained soil, choose `FULLY_COUPLED` and a very low permeability, such as 1e-30 m².
   A new soil is saturated below the phreatic level (`SaturatedBelowPhreaticLevelLaw`).
 - A value you leave empty shows, in grey, the value the export writes for it: the
   permeability in y is the one in x, K0 is ν / (1 − ν) for a linear elastic soil and
@@ -318,7 +318,7 @@ the changes.
 
 A new project has the standard supports and no water pressure condition. For a dry model
 whose soil couples the water pressure to the deformation (`GEO_DRAINAGE_TYPE`
-`FULLY_COUPLED` or `UNDRAINED`), add a **Uniform** water pressure of 0 on the whole soil. The export
+`FULLY_COUPLED`), add a **Uniform** water pressure of 0 on the whole soil. The export
 warns about it, and about a model that nothing holds.
 
 **Gravity** is on in a new project. Clear it in the window, or select **Model conditions**

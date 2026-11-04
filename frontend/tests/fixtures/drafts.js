@@ -153,30 +153,6 @@ window.DRAFTS_FIXTURE =
         }
       },
       {
-        "title": "an undrained soil",
-        "law": "GeoLinearElasticPlaneStrain2DLaw",
-        "variables": {
-          "GEO_DRAINAGE_TYPE": "UNDRAINED",
-          "YOUNG_MODULUS": 10000000.0,
-          "POISSON_RATIO": 0.3,
-          "POROSITY": 0.3,
-          "BULK_MODULUS_SOLID": 500000000.0
-        },
-        "system": "SI",
-        "flow": false,
-        "water": {
-          "DENSITY_WATER": 1019.367991845056,
-          "BULK_MODULUS_FLUID": 2200000000.0,
-          "DYNAMIC_VISCOSITY": 0.001
-        },
-        "derived": {
-          "BIOT_COEFFICIENT": 0.9833333333333334,
-          "GEO_POISSON_UNDRAINED": 0.4826565733660155,
-          "K0_NC": 0.4285714285714286
-        },
-        "computed": {}
-      },
-      {
         "title": "a law of no model with a friction angle",
         "law": "SmallStrainUDSM2DPlaneStrainLaw",
         "variables": {
@@ -217,10 +193,10 @@ window.DRAFTS_FIXTURE =
         "computed": {}
       },
       {
-        "title": "an undrained soil carrying a permeability, which is fixed",
+        "title": "a coupled soil carrying a permeability, written as it is",
         "law": "GeoLinearElasticPlaneStrain2DLaw",
         "variables": {
-          "GEO_DRAINAGE_TYPE": "UNDRAINED",
+          "GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
           "PERMEABILITY_XX": 3e-12
         },
         "system": "kN",
@@ -232,9 +208,13 @@ window.DRAFTS_FIXTURE =
         },
         "derived": {
           "BULK_MODULUS_SOLID": 10000000.0,
+          "PERMEABILITY_YY": 3e-12,
           "BIOT_COEFFICIENT": 1.0
         },
-        "computed": {}
+        "computed": {
+          "HYDRAULIC_CONDUCTIVITY_XX": 3e-05,
+          "HYDRAULIC_CONDUCTIVITY_YY": 3e-05
+        }
       },
       {
         "title": "a blank soil",
@@ -345,46 +325,6 @@ window.DRAFTS_FIXTURE =
       "SATURATED_SATURATION": 1.0,
       "RESIDUAL_SATURATION": 1e-10
     },
-    "fixed": [
-      {
-        "variables": {
-          "GEO_DRAINAGE_TYPE": "DRAINED"
-        },
-        "system": "SI",
-        "flow": false,
-        "fixed": null
-      },
-      {
-        "variables": {
-          "GEO_DRAINAGE_TYPE": "UNDRAINED"
-        },
-        "system": "kN",
-        "flow": false,
-        "fixed": 1e-30
-      },
-      {
-        "variables": {
-          "GEO_DRAINAGE_TYPE": "DRAINED"
-        },
-        "system": "SI",
-        "flow": true,
-        "fixed": null
-      },
-      {
-        "variables": {
-          "GEO_DRAINAGE_TYPE": "FULLY_COUPLED"
-        },
-        "system": "SI",
-        "flow": false,
-        "fixed": null
-      },
-      {
-        "variables": {},
-        "system": "SI",
-        "flow": false,
-        "fixed": null
-      }
-    ],
     "fill_choice": [
       {
         "title": "a blank soil made Mohr-Coulomb gets no strength",
@@ -550,19 +490,16 @@ window.DRAFTS_FIXTURE =
       {
         "model": "mohr_coulomb",
         "variables": {
-          "GEO_DRAINAGE_TYPE": "UNDRAINED"
+          "GEO_DRAINAGE_TYPE": "DRAINED"
         },
         "flow": false,
         "shown": [
           "GEO_DRAINAGE_TYPE",
-          "GEO_POISSON_UNDRAINED",
           "YOUNG_MODULUS",
           "POISSON_RATIO",
           "DENSITY_SOLID",
           "POROSITY",
           "RETENTION_LAW",
-          "BULK_MODULUS_SOLID",
-          "BIOT_COEFFICIENT",
           "GEO_COHESION",
           "GEO_FRICTION_ANGLE",
           "GEO_DILATANCY_ANGLE",

@@ -244,24 +244,6 @@ App.SoilModels = (function () {
     return 1.0 - young / (3.0 * (1.0 - 2.0 * poisson)) / grains;
   }
 
-  /* The undrained Poisson ratio Kratos derives from Skempton's B, clamped as it clamps
-     it; null when the soil does not say enough or Kratos would refuse the numbers. */
-  function undrainedPoisson(variables, fluidBulkModulus) {
-    var poisson = number(variables, 'POISSON_RATIO'), alpha = number(variables, 'BIOT_COEFFICIENT');
-    var porosity = number(variables, 'POROSITY'), grains = number(variables, 'BULK_MODULUS_SOLID');
-    if (poisson === null || alpha === null || porosity === null || grains === null ||
-        !fluidBulkModulus) return null;
-    var denominator = alpha + porosity * (grains / fluidBulkModulus + alpha - 1.0);
-    if (denominator <= 0) return null;
-    var b = alpha / denominator;
-    if (!(b >= 0 && b <= 1.0 + 1e-12)) return null;
-    b = Math.min(b, 1.0);
-    denominator = 3.0 - alpha * b * (1.0 - 2.0 * poisson);
-    if (denominator <= 0) return null;
-    return Math.min((3.0 * poisson + alpha * b * (1.0 - 2.0 * poisson)) / denominator,
-                    constant('UNDRAINED_POISSON_LIMIT'));
-  }
-
   /* K0 of a normally consolidated soil: nu / (1 - nu) for a linear elastic soil, Jaky's
      1 - sin(phi) for another with a friction angle. */
   function k0(law, variables) {
@@ -286,14 +268,11 @@ App.SoilModels = (function () {
     put('GEO_DRAINAGE_TYPE', 'DRAINED');
     put('BULK_MODULUS_SOLID', App.Units.fromSI(constant('BULK_MODULUS_SOLID'), 'stress', system));
     var drainage = given('GEO_DRAINAGE_TYPE');
-    // An undrained soil's permeability is not derived but fixed.
-    if (fixedPermeability(variables, system, flow) === null) {
-      if (drainage === 'FULLY_COUPLED' || flow) {
-        put('PERMEABILITY_XX', App.Units.fromSI(constant('PERMEABILITY'), 'permeability', system));
-      }
-      var kappa = given('PERMEABILITY_XX');
-      put('PERMEABILITY_YY', typeof kappa === 'number' && isFinite(kappa) ? kappa : null);
+    if (drainage === 'FULLY_COUPLED' || flow) {
+      put('PERMEABILITY_XX', App.Units.fromSI(constant('PERMEABILITY'), 'permeability', system));
     }
+    var kappa = given('PERMEABILITY_XX');
+    put('PERMEABILITY_YY', typeof kappa === 'number' && isFinite(kappa) ? kappa : null);
     if (has(variables, 'RETENTION_LAW') &&
         table().unsaturated.indexOf(variables.RETENTION_LAW) >= 0) {
       put('MINIMUM_RELATIVE_PERMEABILITY', constant('MINIMUM_RELATIVE_PERMEABILITY'));
@@ -301,11 +280,8 @@ App.SoilModels = (function () {
     if (variables.RETENTION_LAW === 'VanGenuchtenLaw') {
       put('VAN_GENUCHTEN_GL', constant('VAN_GENUCHTEN_GL'));
     }
-    if (drainage === 'FULLY_COUPLED' || drainage === 'UNDRAINED' || flow) {
+    if (drainage === 'FULLY_COUPLED' || flow) {
       put('BIOT_COEFFICIENT', biot(both()));
-    }
-    if (drainage === 'UNDRAINED') {
-      put('GEO_POISSON_UNDRAINED', undrainedPoisson(both(), waterVariables.BULK_MODULUS_FLUID));
     }
     var hardening = has(variables, 'GEO_COULOMB_HARDENING_TYPE')
       ? String(variables.GEO_COULOMB_HARDENING_TYPE) : 'None';
@@ -314,15 +290,6 @@ App.SoilModels = (function () {
     }
     put('K0_NC', k0(law, variables));
     return out;
-  }
-
-  /* The intrinsic permeability the export writes for an UNDRAINED soil in place of any
-     it carries, in `system`; null for another, and in a flow project. Not shown: the
-     drainage type is the user's choice (core/model/soil_models.py). */
-  function fixedPermeability(variables, system, flow) {
-    var fixed = table().fixed_permeability[(variables || {}).GEO_DRAINAGE_TYPE];
-    if (fixed === undefined || flow) return null;
-    return App.Units.fromSI(fixed, 'permeability', system);
   }
 
   /* What follows from a soil's numbers, in `system`: its unit weight dry and saturated
@@ -402,8 +369,7 @@ App.SoilModels = (function () {
            find: find, unread: unread, freshColor: freshColor, shown: shown, groups: groups, required: required, fill: fill,
            defaultIn: defaultIn, defaultsSI: defaultsSI, filledNote: filledNote,
            missing: missing, fillChoice: fillChoice, blankSI: blankSI,
-           fixedPermeability: fixedPermeability,
-           problem: problem, water: water, biot: biot, undrainedPoisson: undrainedPoisson,
+           problem: problem, water: water, biot: biot,
            k0: k0, derived: derived, computed: computed, computedInfo: computedInfo,
            WATER: ['DENSITY_WATER', 'BULK_MODULUS_FLUID', 'DYNAMIC_VISCOSITY'] };
 })();

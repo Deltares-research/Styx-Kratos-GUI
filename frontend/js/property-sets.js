@@ -37,7 +37,7 @@ App.PropertySets = (function () {
       derived: ['GEO_DRAINAGE_TYPE', 'BULK_MODULUS_SOLID', 'PERMEABILITY_XX',
                 'PERMEABILITY_YY', 'PERMEABILITY_XY', 'PERMEABILITY_ZZ', 'PERMEABILITY_YZ',
                 'PERMEABILITY_ZX', 'MINIMUM_RELATIVE_PERMEABILITY', 'VAN_GENUCHTEN_GL',
-                'K0_NC', 'BIOT_COEFFICIENT', 'GEO_POISSON_UNDRAINED'],
+                'K0_NC', 'BIOT_COEFFICIENT'],
       // A new soil: a loose drained sand, in SI (core/model/soil_models.py), saturated
       // below the phreatic level. Porosity 0, as in Kratos' reference: Kratos weighs a
       // point at (1 - n) DENSITY_SOLID g + n S gamma_w, so at n = 0 the soil weighs

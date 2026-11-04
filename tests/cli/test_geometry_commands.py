@@ -143,7 +143,7 @@ def test_material_models_lists_each_model_as_the_window_does(cli, site):
     assert "GEO_COHESION = 1000 Pa (required)" in ran.out
     assert ("GEO_TENSILE_STRENGTH = 0 Pa (required), when GEO_ENABLE_TENSION_CUT_OFF is "
             "true") in ran.out
-    assert "[DRAINED | FULLY_COUPLED | UNDRAINED]" in ran.out
+    assert "[DRAINED | FULLY_COUPLED]" in ran.out
     assert ("RETENTION_LAW = SaturatedBelowPhreaticLevelLaw [SaturatedLaw | "
             "SaturatedBelowPhreaticLevelLaw | VanGenuchtenLaw]") in ran.out
     assert ("PERMEABILITY_XX = 1.15741e-12 m², when GEO_DRAINAGE_TYPE is FULLY_COUPLED or "
@@ -193,18 +193,20 @@ def test_material_set_model_fills_and_says_what_it_filled(cli, site):
     assert m1.variables["GEO_COHESION"] == drafts.preset("m1")["variables"]["GEO_COHESION"]
 
 
-def test_material_set_says_when_a_permeability_is_not_used(cli, site):
-    """The export writes an undrained soil's fixed permeability, and says so in the same
-    words: the user typed a number that is not used."""
-    assert cli("material", site, "set", "m1", "GEO_DRAINAGE_TYPE=DRAINED").code == 0
+def test_material_set_says_an_undrained_soil_is_coupled(cli, site):
+    """UNDRAINED is no longer a drainage type: given, it is FULLY_COUPLED with the
+    permeability the export wrote for an undrained soil, and the command says so."""
     ran = cli("material", site, "set", "m1", "GEO_DRAINAGE_TYPE=UNDRAINED",
               "PERMEABILITY_XX=1e-12", "PERMEABILITY_YY=1e-12", "--unset", "PERMEABILITY_ZZ")
 
     assert ran.code == 0, ran.err
-    assert ("PERMEABILITY_XX 1e-12, PERMEABILITY_YY 1e-12 not used: an UNDRAINED soil is "
-            "written with the fixed intrinsic permeability 1e-30 m². Remove it, or make the "
-            "soil FULLY_COUPLED to have it written.") in ran.out
-    assert "not used" not in cli("material", site, "set", "m1", "K0_NC=0.5").out
+    assert ("UNDRAINED is no longer a drainage type: the soil is FULLY_COUPLED, with the "
+            "intrinsic permeability 1e-30 m² the export wrote for an undrained soil, in "
+            "place of its own.") in ran.out
+    soil = session.load(site).materials[0].variables
+    assert soil["GEO_DRAINAGE_TYPE"] == "FULLY_COUPLED"
+    assert soil["PERMEABILITY_XX"] == soil["PERMEABILITY_YY"] == 1e-30
+    assert "UNDRAINED" not in cli("material", site, "set", "m1", "K0_NC=0.5").out
 
 
 def test_a_soil_model_and_a_law_together_are_refused(cli, site):

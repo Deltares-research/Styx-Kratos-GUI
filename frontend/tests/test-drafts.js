@@ -60,13 +60,6 @@
     });
   });
 
-  T.test('a drained or undrained soil has the permeability it has on the command line', function () {
-    M.fixed.forEach(function (c) {
-      T.eq(App.SoilModels.fixedPermeability(c.variables, c.system, c.flow), c.fixed,
-           JSON.stringify(c.variables) + ' in ' + c.system + (c.flow ? ', a flow project' : ''));
-    });
-  });
-
   M.problem.forEach(function (c) {
     T.test('a soil refused as on the command line: ' + c.title, function () {
       T.eq(App.SoilModels.problem(c.law, c.variables), c.problem);

@@ -44,7 +44,7 @@ MOHR_COULOMB = "mohr_coulomb"
 OTHER = "other"
 """A law no model here is: the user's own, typed by name (a UDSM, say)."""
 
-DRAINAGE_TYPES = ("DRAINED", "FULLY_COUPLED", "UNDRAINED")
+DRAINAGE_TYPES = ("DRAINED", "FULLY_COUPLED")
 """The `GEO_DRAINAGE_TYPE`s a soil can have, as the project, the window and the command
 line name them. The deck writes `DRAINED` as `CONSTANT_PW_FIELD` (`KRATOS_DRAINAGE`)."""
 
@@ -60,25 +60,26 @@ given. Kratos' own `DRAINED` is not: its elements assemble it as a `FULLY_COUPLE
 `DrainageType::DRAINED`), drained only as far as its permeability lets the water go. So a
 drained soil is written as `CONSTANT_PW_FIELD`, and Kratos' `DRAINED` is not offered."""
 
-OLD_DRAINAGE = {"CONSTANT_PW_FIELD": "DRAINED"}
+OLD_DRAINAGE = {"CONSTANT_PW_FIELD": "DRAINED", "UNDRAINED": "FULLY_COUPLED"}
 """A `GEO_DRAINAGE_TYPE` the project held before 2026-11-04 -> its name now
-(`project_drainage`). Read in a saved project, a script or a deck, it is renamed: the deck
-it writes does not change."""
+(`project_drainage`). Read in a saved project, a script or a deck, it is renamed. A
+drained soil's deck does not change.
+
+`UNDRAINED` is not offered: Kratos' U-Pw elements assemble and check it as a
+`FULLY_COUPLED` soil (`UPwSmallStrainElement::Check`), and the export wrote it with an
+intrinsic permeability so tight that no water flows. So an undrained soil is a
+`FULLY_COUPLED` one with that permeability (`UNDRAINED_PERMEABILITY_SI`), which it is
+given when it is renamed."""
+
+UNDRAINED_PERMEABILITY_SI = 1.0e-30
+"""m2: the intrinsic permeability, in every direction, an `UNDRAINED` soil is given when
+it becomes `FULLY_COUPLED` (`project_drainage`): the one the export wrote for it."""
 
 FLOWING = ("FULLY_COUPLED",)
 """The drainage types the window lists flow parameters for.
 
 A drained soil is written as `CONSTANT_PW_FIELD`, for which Kratos' U-Pw elements leave
-the flow terms out and check no permeability, viscosity or fluid bulk modulus. An
-`UNDRAINED` soil is assembled, and checked, with them as a `FULLY_COUPLED` one is
-(`UPwSmallStrainElement::Check`): for it the drainage type is the physics, not a
-permeability, and the export gives it a fixed one (`FIXED_PERMEABILITY_SI`), which the
-window does not list."""
-
-FIXED_PERMEABILITY_SI = {"UNDRAINED": 1.0e-30}
-"""m2: the intrinsic permeability the export writes for an `UNDRAINED` soil, whatever the
-soil carries: so tight that no water flows. Neither shown nor typed: the drainage type is
-the user's choice (`fixed_permeability`)."""
+the flow terms out and check no permeability, viscosity or fluid bulk modulus."""
 
 RETENTION_LAWS = ("SaturatedLaw", "SaturatedBelowPhreaticLevelLaw", "VanGenuchtenLaw")
 """Every `RETENTION_LAW` Kratos builds (`RetentionLawFactory`). Its fourth name,
@@ -119,9 +120,6 @@ VECTORS = ("GEO_COHESION_FUNCTION_COEFFICIENTS", "GEO_FRICTION_ANGLE_FUNCTION_CO
            "GEO_DILATANCY_ANGLE_FUNCTION_COEFFICIENTS")
 """Variables Kratos reads as a `Vector` and the project holds as their one entry, the
 slope of a linear hardening: the export writes a number given as `[number]`."""
-UNDRAINED_POISSON_LIMIT = 0.495
-"""Kratos clamps an undrained Poisson ratio to this
-(`ConstitutiveLawUtilities::GetOrCalculateUndrainedPoissonsRatio`)."""
 
 
 PALETTE = ("#d8c48a", "#8fa86b", "#6f8fa8", "#c4785a", "#9a80b0", "#5fa89f",
@@ -201,9 +199,7 @@ class SoilModel:
 
 def _drainage() -> tuple[Parameter, ...]:
     return (Parameter("GEO_DRAINAGE_TYPE", "Drainage type", "DRAINED",
-                      choices=DRAINAGE_TYPES, absent="DRAINED"),
-            Parameter("GEO_POISSON_UNDRAINED", "Undrained Poisson's ratio",
-                      when=("GEO_DRAINAGE_TYPE", ("UNDRAINED",))))
+                      choices=DRAINAGE_TYPES, absent="DRAINED"),)
 
 
 def _stiffness() -> tuple[Parameter, ...]:
@@ -253,9 +249,8 @@ def _flow() -> tuple[Parameter, ...]:
 
 
 def _grain_water() -> tuple[Parameter, ...]:
-    """Read where the pore water carries load: a coupled soil's storage and an undrained
-    one's Skempton B (`ConstitutiveLawUtilities::GetOrCalculateSkemptonB`)."""
-    loaded = ("GEO_DRAINAGE_TYPE", ("FULLY_COUPLED", "UNDRAINED"))
+    """Read where the pore water carries load: a coupled soil's storage."""
+    loaded = ("GEO_DRAINAGE_TYPE", ("FULLY_COUPLED",))
     return (Parameter("BULK_MODULUS_SOLID", "Bulk modulus of the grains", when=loaded),
             Parameter("BIOT_COEFFICIENT", "Biot coefficient", when=loaded))
 
@@ -545,32 +540,6 @@ def biot(variables: dict) -> float:
     return 1.0 - young / (3.0 * (1.0 - 2.0 * poisson)) / grains
 
 
-def undrained_poisson(variables: dict, fluid_bulk_modulus: float) -> float | None:
-    """The undrained Poisson ratio Kratos derives when it is not given, from Skempton's
-    B (`ConstitutiveLawUtilities::CalculateUndrainedPoissonsRatio`), clamped as Kratos
-    clamps it. None when the soil does not say enough, or Kratos would refuse the
-    numbers (a Skempton B outside [0, 1])."""
-    poisson = _number(variables.get("POISSON_RATIO"))
-    alpha = _number(variables.get("BIOT_COEFFICIENT"))
-    porosity = _number(variables.get("POROSITY"))
-    grains = _number(variables.get("BULK_MODULUS_SOLID"))
-    if poisson is None or alpha is None or porosity is None or grains is None \
-            or not fluid_bulk_modulus:
-        return None
-    denominator = alpha + porosity * (grains / fluid_bulk_modulus + alpha - 1.0)
-    if denominator <= 0:
-        return None
-    b = alpha / denominator
-    if not 0.0 <= b <= 1.0 + 1e-12:     # Kratos refuses it: "out of range [0,1]"
-        return None
-    b = min(b, 1.0)
-    denominator = 3.0 - alpha * b * (1.0 - 2.0 * poisson)
-    if denominator <= 0:
-        return None
-    result = (3.0 * poisson + alpha * b * (1.0 - 2.0 * poisson)) / denominator
-    return min(result, UNDRAINED_POISSON_LIMIT)
-
-
 def k0(law: str, variables: dict) -> float | None:
     """K0 of a normally consolidated soil: Jaky's 1 - sin(phi) for a soil with a friction
     angle that is not elastic -- the correlation Kratos' staged-excavation reference
@@ -589,12 +558,11 @@ def derived(law: str, variables: dict, water_variables: dict, system: str,
     leaves it out, in `system`, in the order it derives them. The window shows each in
     place of the value it lacks.
 
-    `water_variables` is `water`'s, for the undrained Poisson ratio; `flow` is a
-    groundwater flow deck's, whose water pressure elements read the permeability and
-    the Biot coefficient of every soil. The water itself, the permeabilities a
-    dimension adds (`PERMEABILITY_XY`, the 3D ones) and an undrained soil's fixed
-    permeability (`fixed_permeability`), the export writes on top. The drainage type is
-    the project's name for it; the deck's is `kratos_drainage`'s."""
+    `water_variables` is `water`'s; `flow` is a groundwater flow deck's, whose water
+    pressure elements read the permeability and the Biot coefficient of every soil. The
+    water itself and the permeabilities a dimension adds (`PERMEABILITY_XY`, the 3D
+    ones) the export writes on top. The drainage type is the project's name for it; the
+    deck's is `kratos_drainage`'s."""
     out: dict = {}
 
     def given(name: str) -> Any:
@@ -607,37 +575,21 @@ def derived(law: str, variables: dict, water_variables: dict, system: str,
     put("GEO_DRAINAGE_TYPE", "DRAINED")
     put("BULK_MODULUS_SOLID", units.from_si(BULK_MODULUS_SOLID_SI, units.STRESS, system))
     drainage = given("GEO_DRAINAGE_TYPE")
-    # An undrained soil's permeability is not derived but fixed.
-    if fixed_permeability(variables, system, flow) is None:
-        if drainage == "FULLY_COUPLED" or flow:
-            put("PERMEABILITY_XX", units.from_si(PERMEABILITY_SI, units.PERMEABILITY, system))
-        put("PERMEABILITY_YY", _number(given("PERMEABILITY_XX")))
+    if drainage == "FULLY_COUPLED" or flow:
+        put("PERMEABILITY_XX", units.from_si(PERMEABILITY_SI, units.PERMEABILITY, system))
+    put("PERMEABILITY_YY", _number(given("PERMEABILITY_XX")))
     if variables.get("RETENTION_LAW") in UNSATURATED:
         put("MINIMUM_RELATIVE_PERMEABILITY", MINIMUM_RELATIVE_PERMEABILITY)
     if variables.get("RETENTION_LAW") == "VanGenuchtenLaw":
         put("VAN_GENUCHTEN_GL", VAN_GENUCHTEN_GL)
-    if drainage in ("FULLY_COUPLED", "UNDRAINED") or flow:
+    if drainage == "FULLY_COUPLED" or flow:
         put("BIOT_COEFFICIENT", biot({**variables, **out}))
-    if drainage == "UNDRAINED":
-        put("GEO_POISSON_UNDRAINED", undrained_poisson(
-            {**variables, **out}, water_variables["BULK_MODULUS_FLUID"]))
     if model_of(law) == MOHR_COULOMB and \
             str(variables.get("GEO_COULOMB_HARDENING_TYPE", "None")).lower() == "linear":
         for name in VECTORS:
             put(name, 0.0)
     put("K0_NC", k0(law, variables))
     return out
-
-
-def fixed_permeability(variables: dict, system: str, flow: bool = False) -> float | None:
-    """The intrinsic permeability, in every direction, the export writes for a soil
-    holding `variables` in place of any it carries, in `system`: `FIXED_PERMEABILITY_SI`
-    for an `UNDRAINED` soil. None for any other, and in a groundwater flow project
-    (`flow`), which lists every soil's permeability for the user to set."""
-    fixed = FIXED_PERMEABILITY_SI.get(str(variables.get("GEO_DRAINAGE_TYPE")))
-    if fixed is None or flow:
-        return None
-    return units.from_si(fixed, units.PERMEABILITY, system)
 
 
 def kratos_drainage(value: Any) -> Any:
@@ -648,33 +600,36 @@ def kratos_drainage(value: Any) -> Any:
 
 def project_drainage(variables: dict) -> dict:
     """`variables` with a `GEO_DRAINAGE_TYPE` from before 2026-11-04 under its name now
-    (`OLD_DRAINAGE`), in any case Kratos reads it in; as they are when there is none."""
+    (`OLD_DRAINAGE`), in any case Kratos reads it in; as they are when there is none. An
+    `UNDRAINED` soil becomes `FULLY_COUPLED` with `UNDRAINED_PERMEABILITY_SI` along each
+    axis, in place of its own (along z only when it has one: the export writes the 3D
+    ones from x), and without the undrained Poisson ratio a coupled soil does not
+    read."""
     value = variables.get("GEO_DRAINAGE_TYPE")
     if not isinstance(value, str) or value.upper() not in OLD_DRAINAGE:
         return variables
-    return {**variables, "GEO_DRAINAGE_TYPE": OLD_DRAINAGE[value.upper()]}
+    out = {**variables, "GEO_DRAINAGE_TYPE": OLD_DRAINAGE[value.upper()]}
+    if value.upper() == "UNDRAINED":
+        out.pop("GEO_POISSON_UNDRAINED", None)
+        for name in AXIS_PERMEABILITIES:
+            if name != "PERMEABILITY_ZZ" or name in out:
+                out[name] = UNDRAINED_PERMEABILITY_SI
+    return out
 
 
 AXIS_PERMEABILITIES = ("PERMEABILITY_XX", "PERMEABILITY_YY", "PERMEABILITY_ZZ")
-"""A soil's permeabilities along the axes; the fixed one is 0 across them."""
+"""A soil's permeabilities along the axes."""
 
 
-def unused_permeability(variables: dict, system: str, flow: bool = False) -> str | None:
-    """What the export and `kratos-cli material set` say about a soil holding
-    `variables` that carries a permeability the export does not write: one other than
-    its drainage type's fixed one (`fixed_permeability`). None when there is none."""
-    fixed = fixed_permeability(variables, system, flow)
-    if fixed is None:
+def undrained_note(drainage: Any) -> str | None:
+    """What `kratos-cli material set` and opening a project say of a soil given the
+    drainage type `drainage`, when it is `UNDRAINED` (`project_drainage`); None
+    otherwise."""
+    if not isinstance(drainage, str) or drainage.upper() != "UNDRAINED":
         return None
-    own = [f"{name} {number:g}" for name in AXIS_PERMEABILITIES
-           if (number := _number(variables.get(name))) is not None
-           and not math.isclose(number, fixed, rel_tol=1e-3)]
-    if not own:
-        return None
-    return (f"{', '.join(own)} not used: an {variables['GEO_DRAINAGE_TYPE']} soil is "
-            f"written with the fixed intrinsic permeability {fixed:g} "
-            f"{units.label(units.PERMEABILITY, system)}. Remove it, or make the soil "
-            "FULLY_COUPLED to have it written.")
+    return ("UNDRAINED is no longer a drainage type: the soil is FULLY_COUPLED, with the "
+            f"intrinsic permeability {UNDRAINED_PERMEABILITY_SI:g} m² the export wrote for an "
+            "undrained soil, in place of its own.")
 
 
 COMPUTED = {
@@ -762,7 +717,7 @@ def table() -> dict:
 
     return {"order": list(MODELS), "other": OTHER, "flowing": list(FLOWING),
             "unsaturated": list(UNSATURATED),
-            "blank": blank_si(), "fixed_permeability": dict(FIXED_PERMEABILITY_SI),
+            "blank": blank_si(),
             "palette": list(PALETTE),
             "vectors": list(VECTORS),
             "constants": {"WATER_SPECIFIC_WEIGHT": WATER_SPECIFIC_WEIGHT_SI,
@@ -771,8 +726,7 @@ def table() -> dict:
                           "BULK_MODULUS_SOLID": BULK_MODULUS_SOLID_SI,
                           "PERMEABILITY": PERMEABILITY_SI,
                           "MINIMUM_RELATIVE_PERMEABILITY": MINIMUM_RELATIVE_PERMEABILITY,
-                          "VAN_GENUCHTEN_GL": VAN_GENUCHTEN_GL,
-                          "UNDRAINED_POISSON_LIMIT": UNDRAINED_POISSON_LIMIT},
+                          "VAN_GENUCHTEN_GL": VAN_GENUCHTEN_GL},
             "computed": {name: {"label": label, "quantity": quantity.name, "group": group}
                          for name, (label, quantity, group) in COMPUTED.items()},
             "models": {

@@ -21,17 +21,13 @@ stands. It does these things on top, and no others:
     `soil_models.derived` says (the grains' bulk modulus, the symmetric
     permeabilities, a coupled soil's permeability, the minimum relative permeability of
     a soil not saturated everywhere and a Van Genuchten soil's g_l, the Biot coefficient
-    and undrained Poisson ratio where they are read, K0), a beam's shear areas, an
+    where it is read, K0), a beam's shear areas, an
     interface's stiffness and strength from its soil. A value the user gave is never replaced, and
     every filled-in name is listed in the export's warnings.
 *   **Writes a drained soil as Kratos' `CONSTANT_PW_FIELD`** -- the one drainage type
     whose pore pressures stay as the water conditions set them
     (`soil_models.kratos_drainage`). The project, the window and the command line call it
     `DRAINED`; Kratos' own `DRAINED` couples the water as `FULLY_COUPLED` does.
-*   **Fixes an undrained soil's permeability** -- 1e-30 m2
-    (`soil_models.fixed_permeability`), over any the soil carries: the drainage type is
-    the user's choice, and Kratos still checks that a permeability is there. A soil
-    that carries another is named in a warning (`soil_models.unused_permeability`).
 *   **Writes a hardening slope as Kratos' vector** -- the one number the project holds
     for each of `soil_models.VECTORS`, as `[number]`.
 *   **Smears** a 2D pile or anchor over its out-of-plane `spacing` -- plane strain models
@@ -191,11 +187,6 @@ def material_parameters(
     for part_name, material_id in part_materials:
         material = project.material(material_id)
         _check(material, f"material {material.name!r}")
-        unused = soil_models.unused_permeability(material.variables, project.unit_system,
-                                                 flow)
-        # Once per soil, which may be many parts, and not again for the K0 file.
-        if unused and not k0 and f"material {material.name!r}: {unused}" not in warnings:
-            warnings.append(f"material {material.name!r}: {unused}")
         law = dimension_law(material.constitutive_law, dim)
         if k0 and law not in LINEAR_ELASTIC:
             elastic.append(f"material {material.name!r}")
@@ -348,10 +339,6 @@ def _variables(material: Material, dim: int, k0: bool, project: Project,
     k0_derived = found.pop("K0_NC", None)
     for name, value in found.items():
         _fill(v, name, value, derived, label)
-    fixed = soil_models.fixed_permeability(material.variables, project.unit_system, flow)
-    if fixed is not None:
-        # The drainage type's, over any the soil carries: not derived, so not listed.
-        v.update(_permeabilities(fixed, dim))
     v["GEO_DRAINAGE_TYPE"] = soil_models.kratos_drainage(v["GEO_DRAINAGE_TYPE"])
     permeability = v.get("PERMEABILITY_XX")
     if isinstance(permeability, (int, float)) and not isinstance(permeability, bool):
@@ -374,14 +361,6 @@ def _variables(material: Material, dim: int, k0: bool, project: Project,
         _fill(k0_v, "K0_NC", k0_derived, derived, label)
         v.update(_ordered(k0_v, K0_ORDER))
     return v
-
-
-def _permeabilities(value: float, dim: int) -> dict:
-    """An isotropic intrinsic permeability `value` as the dimension `dim` writes it."""
-    out = {"PERMEABILITY_XX": value, "PERMEABILITY_YY": value, "PERMEABILITY_XY": 0.0}
-    if dim == 3:
-        out.update(PERMEABILITY_ZZ=value, PERMEABILITY_YZ=0.0, PERMEABILITY_ZX=0.0)
-    return out
 
 
 biot = soil_models.biot

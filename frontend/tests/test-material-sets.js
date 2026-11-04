@@ -218,10 +218,10 @@
       var drainage = variableInput(host, 'GEO_DRAINAGE_TYPE');
       T.eq(drainage.tagName, 'SELECT');
       T.eq(Array.prototype.map.call(drainage.options, function (o) { return o.value; }),
-           ['DRAINED', 'FULLY_COUPLED', 'UNDRAINED'], 'no CONSTANT_PW_FIELD: DRAINED is written as it');
-      choose(drainage, 'UNDRAINED');
-      T.eq(App.MATERIALS[0].variables.GEO_DRAINAGE_TYPE, 'UNDRAINED');
-      T.ok(variableInput(host, 'GEO_POISSON_UNDRAINED'), 'an undrained soil lists its Poisson ratio');
+           ['DRAINED', 'FULLY_COUPLED'],
+           'no CONSTANT_PW_FIELD: DRAINED is written as it; no UNDRAINED');
+      choose(drainage, 'FULLY_COUPLED');
+      T.eq(App.MATERIALS[0].variables.GEO_DRAINAGE_TYPE, 'FULLY_COUPLED');
       var retention = variableInput(host, 'RETENTION_LAW');
       T.eq(retention.value, 'SaturatedLaw', 'left out, the retention law is SaturatedLaw');
       T.ok(!('RETENTION_LAW' in App.MATERIALS[0].variables), 'and stays left out');
@@ -351,8 +351,6 @@
     withDialog(function (host) {
       openProperties(host);
       T.ok(!variableInput(host, 'PERMEABILITY_XX'), 'not for a drained soil');
-      choose(variableInput(host, 'GEO_DRAINAGE_TYPE'), 'UNDRAINED');
-      T.ok(!variableInput(host, 'PERMEABILITY_XX'), 'nor for an undrained one');
       choose(variableInput(host, 'GEO_DRAINAGE_TYPE'), 'FULLY_COUPLED');
       var kappa = App.MATERIALS[0].variables.PERMEABILITY_XX;
       T.near(kappa, 1.1574e-12, 1e-15, 'a metre a day, intrinsic');

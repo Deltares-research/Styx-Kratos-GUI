@@ -111,12 +111,12 @@
     T.eq(set.variables.YOUNG_MODULUS, 1e7);
   });
 
-  T.test('the drainage type is a choice between the three a soil can have', function () {
+  T.test('the drainage type is a choice between the two a soil can have', function () {
     var set = soil({ GEO_DRAINAGE_TYPE: 'DRAINED' });
     var row = P.rows('soil', set, 2).filter(function (r) { return r[0] === 'GEO_DRAINAGE_TYPE'; })[0];
     T.eq(row[4].kind, 'select');
     T.eq(row[4].options().map(function (o) { return o.value; }),
-         ['DRAINED', 'FULLY_COUPLED', 'UNDRAINED']);
+         ['DRAINED', 'FULLY_COUPLED']);
     T.eq(row[4].set('FULLY_COUPLED'), null);
     T.eq(set.variables.GEO_DRAINAGE_TYPE, 'FULLY_COUPLED');
   });

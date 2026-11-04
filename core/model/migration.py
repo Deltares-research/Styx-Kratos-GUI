@@ -552,29 +552,19 @@ def k0_notes(value: object) -> list[str]:
     return notes
 
 
-def permeability_notes(value: object) -> list[str]:
-    """The undrained soils of a document saved before 2026-11-02 whose permeability
-    changes, one line each: a soil carrying a permeability other than its drainage type's
-    fixed one, in a project that is not a groundwater flow calculation. The export wrote
-    the soil's own; now it writes the fixed one, and says so on every export too
-    (`soil_models.unused_permeability`). A drained soil has none since 2026-11-04: it is
-    written as `CONSTANT_PW_FIELD`, which reads no permeability."""
-    from core.model import soil_models, units
+def undrained_notes(value: object) -> list[str]:
+    """The `UNDRAINED` soils of a document saved before 2026-11-04, one line each: they
+    are `FULLY_COUPLED` now, with the permeability the export wrote for them in place of
+    their own (`soil_models.project_drainage`)."""
+    from core.model import soil_models
 
-    if not isinstance(value, dict) or "fluid" in value:
-        return []
-    system = value.get("unit_system", units.DEFAULT)
-    stages = value.get("stages")
-    stages = [s for s in stages if isinstance(s, dict)] if isinstance(stages, list) else []
-    if system not in units.SYSTEMS or (
-            stages and all(s.get("calculation") == "Groundwater flow" for s in stages)):
+    if not isinstance(value, dict):
         return []
     notes = []
     for soil, variables in _soil_variables(value.get("materials")).items():
-        unused = soil_models.unused_permeability(variables, system)
-        if unused:
-            notes.append(f"{soil}: until 2026-11-02 the export wrote this soil's own "
-                         f"permeability; {unused}")
+        note = soil_models.undrained_note(variables.get("GEO_DRAINAGE_TYPE"))
+        if note:
+            notes.append(f"{soil}: {note}")
     return notes
 
 
@@ -588,13 +578,13 @@ def upgraded(value: object) -> object:
 def notes(value: object) -> list[str]:
     """What opening `value` changes in its deck that the user has to know, one line
     each: the soils' own water it replaces (`water_notes`), the linear elastic soils
-    whose K0 changes (`k0_notes`), the undrained soils whose permeability is now fixed
-    (`permeability_notes`) and the contacts that lose their soil's strength
+    whose K0 changes (`k0_notes`), the undrained soils that are coupled now
+    (`undrained_notes`) and the contacts that lose their soil's strength
     (`contact_notes`). Empty for a current document. Said when a file is opened
     (`core.session.migration_notes`, the GUI's Open), as the first save of it writes the
     new shape and the old values are gone."""
     value = _before_water(value)
-    return (water_notes(value) + k0_notes(value) + permeability_notes(value)
+    return (water_notes(value) + k0_notes(value) + undrained_notes(value)
             + contact_notes(value))
 
 
