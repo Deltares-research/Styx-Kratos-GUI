@@ -21,25 +21,11 @@
     } finally { App.MATERIALS = saved; }
   });
 
-  test('interface presets change only interface properties and remain reusable', function () {
-    var m = Object.assign({}, App.MATERIALS[0]);
-    var before = Object.assign({}, m);
-    var preset = App.MaterialLibrary.interfaces()[0];
-    App.MaterialLibrary.applyInterface(m, preset.id);
-    T.eq(m.rInter, preset.rInter);
-    T.eq(m.interfacePerm, preset.interfacePerm);
-    m.rInter = before.rInter; m.interfacePerm = before.interfacePerm;
-    T.eq(m, before);
-    preset.rInter = 0.01;
-    T.ok(App.MaterialLibrary.interfaces()[0].rInter !== 0.01);
-  });
-
   test('material library rejects missing presets without changing the project', function () {
     var before = JSON.stringify(App.MATERIALS);
     return T.rejects(function () { App.MaterialLibrary.addSoil('missing'); }).then(function () {
       T.eq(JSON.stringify(App.MATERIALS), before);
-      return T.rejects(function () { App.MaterialLibrary.applyInterface(App.MATERIALS[0], 'missing'); });
-    }).then(function () { T.eq(JSON.stringify(App.MATERIALS), before); });
+    });
   });
 
   test('material dialog adds library soil, has no interface preset and cancels', function () {

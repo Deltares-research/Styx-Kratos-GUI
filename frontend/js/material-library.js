@@ -7,8 +7,7 @@
    Kratos' staged-excavation reference, so each soil weighs exactly DENSITY_SOLID g -- its unit weight -- above
    and below the water alike (add a porosity and a RETENTION_LAW to tell the two apart).
    What a preset leaves out, its model fills with its defaults; the water is the
-   project's.
-   The interface presets belong to a soil set: they are its Rinter and permeability. */
+   project's. */
 App.MaterialLibrary = (function () {
   /* The intrinsic permeability, m2, of a soil that conducts water at 1 m/day. */
   var PER_M_PER_DAY = App.SOIL_MODEL_TABLE.constants.PERMEABILITY;
@@ -37,15 +36,9 @@ App.MaterialLibrary = (function () {
       variables: { GEO_DRAINAGE_TYPE: 'CONSTANT_PW_FIELD', YOUNG_MODULUS: 2.0e9,
                    POISSON_RATIO: 0.20, DENSITY_SOLID: 24000 / 9.81, PERMEABILITY_XX: 0.0 , POROSITY: 0.0} }
   ];
-  var interfaces = [
-    { id: 'rough', name: 'Rough contact', rInter: 1.0, interfacePerm: 'Neutral' },
-    { id: 'reduced', name: 'Reduced-strength contact', rInter: 0.7, interfacePerm: 'Neutral' },
-    { id: 'sealed', name: 'Sealed contact', rInter: 0.5, interfacePerm: 'Impermeable' },
-    { id: 'draining', name: 'Draining contact', rInter: 0.7, interfacePerm: 'Drain' }
-  ];
   function copy(value) { return JSON.parse(JSON.stringify(value)); }
-  function find(items, id) {
-    var preset = items.filter(function (item) { return item.id === id; })[0];
+  function find(id) {
+    var preset = soils.filter(function (item) { return item.id === id; })[0];
     if (!preset) throw new Error('Unknown material library preset: ' + id);
     return preset;
   }
@@ -68,7 +61,7 @@ App.MaterialLibrary = (function () {
      no soil has it, another free one otherwise (App.SoilModels.freshColor, as
      `kratos-cli material add --preset` gives one). */
   function addSoil(id) {
-    var material = asMaterial(copy(find(soils, id)));
+    var material = asMaterial(copy(find(id)));
     material.color = App.SoilModels.freshColor(
       App.MATERIALS.map(function (m) { return m.color; }), material.color);
     var n = 1;
@@ -82,13 +75,5 @@ App.MaterialLibrary = (function () {
     App.MATERIALS.push(material);
     return material;
   }
-  function applyInterface(material, id) {
-    var preset = find(interfaces, id);
-    if (!material) throw new Error('Select a soil material first.');
-    material.rInter = preset.rInter;
-    material.interfacePerm = preset.interfacePerm;
-  }
-  return { soils: function () { return copy(soils); },
-    interfaces: function () { return copy(interfaces); },
-    asMaterial: asMaterial, addSoil: addSoil, applyInterface: applyInterface };
+  return { soils: function () { return copy(soils); }, asMaterial: asMaterial, addSoil: addSoil };
 })();
