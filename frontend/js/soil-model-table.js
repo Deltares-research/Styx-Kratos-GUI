@@ -28,7 +28,6 @@ App.SOIL_MODEL_TABLE =
     "RESIDUAL_SATURATION": 1e-10
   },
   "fixed_permeability": {
-    "DRAINED": 1.0,
     "UNDRAINED": 1e-30
   },
   "palette": [
@@ -97,14 +96,13 @@ App.SOIL_MODEL_TABLE =
             {
               "name": "GEO_DRAINAGE_TYPE",
               "label": "Drainage type",
-              "default": "CONSTANT_PW_FIELD",
+              "default": "DRAINED",
               "choices": [
-                "CONSTANT_PW_FIELD",
-                "FULLY_COUPLED",
                 "DRAINED",
+                "FULLY_COUPLED",
                 "UNDRAINED"
               ],
-              "absent": "CONSTANT_PW_FIELD"
+              "absent": "DRAINED"
             },
             {
               "name": "GEO_POISSON_UNDRAINED",
@@ -310,14 +308,13 @@ App.SOIL_MODEL_TABLE =
             {
               "name": "GEO_DRAINAGE_TYPE",
               "label": "Drainage type",
-              "default": "CONSTANT_PW_FIELD",
+              "default": "DRAINED",
               "choices": [
-                "CONSTANT_PW_FIELD",
-                "FULLY_COUPLED",
                 "DRAINED",
+                "FULLY_COUPLED",
                 "UNDRAINED"
               ],
-              "absent": "CONSTANT_PW_FIELD"
+              "absent": "DRAINED"
             },
             {
               "name": "GEO_POISSON_UNDRAINED",

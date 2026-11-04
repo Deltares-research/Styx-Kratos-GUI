@@ -67,7 +67,7 @@ material set m_soil YOUNG_MODULUS=2.0e7 POISSON_RATIO=0.3
 material set m_soil DENSITY_SOLID=1834.8623853211009 POROSITY=0.0
 #    Water: a fixed pore pressure field, and the soil's intrinsic permeability (m2).
 #    1e-12 m2 conducts water at about 1e-5 m/s.
-material set m_soil GEO_DRAINAGE_TYPE=CONSTANT_PW_FIELD BULK_MODULUS_SOLID=1e10
+material set m_soil GEO_DRAINAGE_TYPE=DRAINED BULK_MODULUS_SOLID=1e10
 material set m_soil PERMEABILITY_XX=1e-12 PERMEABILITY_YY=1e-12 PERMEABILITY_XY=0.0
 #    The K0 for the initial stresses. A linear elastic soil has no strength. K0_NC can
 #    be left out: the export then writes nu / (1 - nu) for this soil, 0.43 here.

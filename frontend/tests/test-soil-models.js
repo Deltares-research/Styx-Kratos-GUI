@@ -80,15 +80,21 @@
     T.eq(App.Units.variableLabel('GEO_FRICTION_ANGLE_FUNCTION_COEFFICIENTS'), 'rad');
   });
 
-  T.test('a drained or undrained soil lists and derives no permeability: it is fixed', function () {
-    ['DRAINED', 'UNDRAINED'].forEach(function (drainage) {
-      var soil = { GEO_DRAINAGE_TYPE: drainage };
-      T.ok(names(S.shown('linear_elastic', soil)).indexOf('PERMEABILITY_XX') < 0, drainage);
-      T.ok(!('PERMEABILITY_XX' in S.derived('GeoLinearElasticPlaneStrain2DLaw', soil, S.water('SI'), 'SI')),
-           drainage + ' derives none');
-    });
-    T.eq(S.fixedPermeability({ GEO_DRAINAGE_TYPE: 'DRAINED' }, 'SI'), 1);
+  T.test('an undrained soil lists and derives no permeability: it is fixed', function () {
+    var soil = { GEO_DRAINAGE_TYPE: 'UNDRAINED' };
+    T.ok(names(S.shown('linear_elastic', soil)).indexOf('PERMEABILITY_XX') < 0);
+    T.ok(!('PERMEABILITY_XX' in S.derived('GeoLinearElasticPlaneStrain2DLaw', soil, S.water('SI'), 'SI')),
+         'derives none');
     T.eq(S.fixedPermeability({ GEO_DRAINAGE_TYPE: 'UNDRAINED' }, 'SI'), 1e-30);
+  });
+
+  T.test('a drained soil lists, derives and fixes no permeability: Kratos reads none', function () {
+    var soil = { GEO_DRAINAGE_TYPE: 'DRAINED' };
+    T.ok(names(S.shown('linear_elastic', soil)).indexOf('PERMEABILITY_XX') < 0);
+    T.ok(!('PERMEABILITY_XX' in S.derived('GeoLinearElasticPlaneStrain2DLaw', soil, S.water('SI'), 'SI')));
+    T.eq(S.fixedPermeability(soil, 'SI'), null);
+    T.eq(S.derived('GeoLinearElasticPlaneStrain2DLaw', {}, S.water('SI'), 'SI').GEO_DRAINAGE_TYPE,
+         'DRAINED', 'left out, a soil is drained');
   });
 
   T.test('a linear elastic soil lists no cohesion or friction angle', function () {
@@ -98,7 +104,7 @@
   });
 
   T.test('the flow parameters are listed for a coupled soil, or in a flow project', function () {
-    ['CONSTANT_PW_FIELD', 'DRAINED', 'UNDRAINED'].forEach(function (drainage) {
+    ['DRAINED', 'UNDRAINED'].forEach(function (drainage) {
       T.ok(names(S.shown('linear_elastic', { GEO_DRAINAGE_TYPE: drainage }))
         .indexOf('PERMEABILITY_XX') < 0, drainage);
       T.ok(names(S.shown('linear_elastic', { GEO_DRAINAGE_TYPE: drainage }, true))
@@ -137,8 +143,7 @@
   });
 
   T.test('every text value Kratos accepts is a choice, and the cut-off is a flag', function () {
-    T.eq(App.PropertySets.CHOICES.GEO_DRAINAGE_TYPE,
-         ['CONSTANT_PW_FIELD', 'FULLY_COUPLED', 'DRAINED', 'UNDRAINED']);
+    T.eq(App.PropertySets.CHOICES.GEO_DRAINAGE_TYPE, ['DRAINED', 'FULLY_COUPLED', 'UNDRAINED']);
     T.eq(App.PropertySets.CHOICES.RETENTION_LAW,
          ['SaturatedLaw', 'SaturatedBelowPhreaticLevelLaw', 'VanGenuchtenLaw']);
     T.eq(App.PropertySets.FLAGS, ['GEO_ENABLE_TENSION_CUT_OFF']);

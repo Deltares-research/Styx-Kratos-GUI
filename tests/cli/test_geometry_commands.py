@@ -93,7 +93,7 @@ def test_material_add_from_a_preset_with_variables_of_its_own(cli, site):
     clay = session.load(site).materials[-1]
     assert (clay.id, clay.name) == ("clay", "Clay, soft")
     assert clay.variables["YOUNG_MODULUS"] == 5e6
-    assert clay.variables["GEO_DRAINAGE_TYPE"] == "CONSTANT_PW_FIELD"
+    assert clay.variables["GEO_DRAINAGE_TYPE"] == "DRAINED", "CONSTANT_PW_FIELD is DRAINED now"
 
 
 def test_a_material_and_a_layer_given_only_a_name_take_it_as_their_id(cli, site):
@@ -143,7 +143,7 @@ def test_material_models_lists_each_model_as_the_window_does(cli, site):
     assert "GEO_COHESION = 1000 Pa (required)" in ran.out
     assert ("GEO_TENSILE_STRENGTH = 0 Pa (required), when GEO_ENABLE_TENSION_CUT_OFF is "
             "true") in ran.out
-    assert "[CONSTANT_PW_FIELD | FULLY_COUPLED | DRAINED | UNDRAINED]" in ran.out
+    assert "[DRAINED | FULLY_COUPLED | UNDRAINED]" in ran.out
     assert ("RETENTION_LAW = SaturatedBelowPhreaticLevelLaw [SaturatedLaw | "
             "SaturatedBelowPhreaticLevelLaw | VanGenuchtenLaw]") in ran.out
     assert ("PERMEABILITY_XX = 1.15741e-12 m², when GEO_DRAINAGE_TYPE is FULLY_COUPLED or "
@@ -194,15 +194,15 @@ def test_material_set_model_fills_and_says_what_it_filled(cli, site):
 
 
 def test_material_set_says_when_a_permeability_is_not_used(cli, site):
-    """The export writes a drained soil's fixed permeability, and says so in the same
+    """The export writes an undrained soil's fixed permeability, and says so in the same
     words: the user typed a number that is not used."""
-    assert cli("material", site, "set", "m1", "GEO_DRAINAGE_TYPE=CONSTANT_PW_FIELD").code == 0
-    ran = cli("material", site, "set", "m1", "GEO_DRAINAGE_TYPE=DRAINED",
+    assert cli("material", site, "set", "m1", "GEO_DRAINAGE_TYPE=DRAINED").code == 0
+    ran = cli("material", site, "set", "m1", "GEO_DRAINAGE_TYPE=UNDRAINED",
               "PERMEABILITY_XX=1e-12", "PERMEABILITY_YY=1e-12", "--unset", "PERMEABILITY_ZZ")
 
     assert ran.code == 0, ran.err
-    assert ("PERMEABILITY_XX 1e-12, PERMEABILITY_YY 1e-12 not used: a DRAINED soil is "
-            "written with the fixed intrinsic permeability 1 m². Remove it, or make the "
+    assert ("PERMEABILITY_XX 1e-12, PERMEABILITY_YY 1e-12 not used: an UNDRAINED soil is "
+            "written with the fixed intrinsic permeability 1e-30 m². Remove it, or make the "
             "soil FULLY_COUPLED to have it written.") in ran.out
     assert "not used" not in cli("material", site, "set", "m1", "K0_NC=0.5").out
 

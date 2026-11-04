@@ -283,10 +283,10 @@ App.SoilModels = (function () {
       if (!has(variables, name) && value !== null && value !== undefined) out[name] = value;
     }
     function both() { return Object.assign({}, variables, out); }
-    put('GEO_DRAINAGE_TYPE', 'CONSTANT_PW_FIELD');
+    put('GEO_DRAINAGE_TYPE', 'DRAINED');
     put('BULK_MODULUS_SOLID', App.Units.fromSI(constant('BULK_MODULUS_SOLID'), 'stress', system));
     var drainage = given('GEO_DRAINAGE_TYPE');
-    // A drained or an undrained soil's permeability is not derived but fixed.
+    // An undrained soil's permeability is not derived but fixed.
     if (fixedPermeability(variables, system, flow) === null) {
       if (drainage === 'FULLY_COUPLED' || flow) {
         put('PERMEABILITY_XX', App.Units.fromSI(constant('PERMEABILITY'), 'permeability', system));
@@ -316,9 +316,9 @@ App.SoilModels = (function () {
     return out;
   }
 
-  /* The intrinsic permeability the export writes for a DRAINED or an UNDRAINED soil in
-     place of any it carries, in `system`; null for another, and in a flow project. Not
-     shown: the drainage type is the user's choice (core/model/soil_models.py). */
+  /* The intrinsic permeability the export writes for an UNDRAINED soil in place of any
+     it carries, in `system`; null for another, and in a flow project. Not shown: the
+     drainage type is the user's choice (core/model/soil_models.py). */
   function fixedPermeability(variables, system, flow) {
     var fixed = table().fixed_permeability[(variables || {}).GEO_DRAINAGE_TYPE];
     if (fixed === undefined || flow) return null;

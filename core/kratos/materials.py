@@ -24,7 +24,11 @@ stands. It does these things on top, and no others:
     and undrained Poisson ratio where they are read, K0), a beam's shear areas, an
     interface's stiffness and strength from its soil. A value the user gave is never replaced, and
     every filled-in name is listed in the export's warnings.
-*   **Fixes a drained or an undrained soil's permeability** -- 1 m2 and 1e-30 m2
+*   **Writes a drained soil as Kratos' `CONSTANT_PW_FIELD`** -- the one drainage type
+    whose pore pressures stay as the water conditions set them
+    (`soil_models.kratos_drainage`). The project, the window and the command line call it
+    `DRAINED`; Kratos' own `DRAINED` couples the water as `FULLY_COUPLED` does.
+*   **Fixes an undrained soil's permeability** -- 1e-30 m2
     (`soil_models.fixed_permeability`), over any the soil carries: the drainage type is
     the user's choice, and Kratos still checks that a permeability is there. A soil
     that carries another is named in a warning (`soil_models.unused_permeability`).
@@ -348,6 +352,7 @@ def _variables(material: Material, dim: int, k0: bool, project: Project,
     if fixed is not None:
         # The drainage type's, over any the soil carries: not derived, so not listed.
         v.update(_permeabilities(fixed, dim))
+    v["GEO_DRAINAGE_TYPE"] = soil_models.kratos_drainage(v["GEO_DRAINAGE_TYPE"])
     permeability = v.get("PERMEABILITY_XX")
     if isinstance(permeability, (int, float)) and not isinstance(permeability, bool):
         _fill(v, "PERMEABILITY_XY", 0.0, derived, label)
@@ -433,8 +438,10 @@ def _interface_variables(section: InterfaceSection, project: Project,
     # Fixed, and not inherited from the soil: Kratos defaults a material that says
     # nothing to `FULLY_COUPLED`, and a zero-thickness interface carries none of what
     # the coupling terms need, so the stage that installs the wall fails on NaN. The
-    # reference writes `CONSTANT_PW_FIELD` on its interfaces for the same reason.
-    _fill(v, "GEO_DRAINAGE_TYPE", "CONSTANT_PW_FIELD", derived, label)
+    # reference writes `CONSTANT_PW_FIELD` on its interfaces for the same reason: a
+    # drained contact (`soil_models.kratos_drainage`).
+    _fill(v, "GEO_DRAINAGE_TYPE", "DRAINED", derived, label)
+    v["GEO_DRAINAGE_TYPE"] = soil_models.kratos_drainage(v["GEO_DRAINAGE_TYPE"])
     shear = section.number("INTERFACE_SHEAR_STIFFNESS")
     if shear is None or "INTERFACE_NORMAL_STIFFNESS" not in v:
         modulus = soil.number("YOUNG_MODULUS") if soil is not None else None

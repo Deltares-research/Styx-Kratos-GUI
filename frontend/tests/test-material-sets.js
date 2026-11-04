@@ -14,7 +14,7 @@
   function sand() {
     return { id: 'm1', name: 'Sand', color: '#c4a86a',
              constitutive_law: 'GeoLinearElasticPlaneStrain2DLaw',
-             variables: { GEO_DRAINAGE_TYPE: 'CONSTANT_PW_FIELD', YOUNG_MODULUS: 2.5e4,
+             variables: { GEO_DRAINAGE_TYPE: 'DRAINED', YOUNG_MODULUS: 2.5e4,
                           POISSON_RATIO: 0.28, DENSITY_SOLID: 1.83486, POROSITY: 0.3 },
              tables: {}, rInter: 0.7, interfacePerm: 'Neutral' };
   }
@@ -212,13 +212,13 @@
     });
   });
 
-  T.test('a text value is a drop-down of every value Kratos accepts', function () {
+  T.test('a text value is a drop-down of every value the soil can take', function () {
     withDialog(function (host) {
       openProperties(host);
       var drainage = variableInput(host, 'GEO_DRAINAGE_TYPE');
       T.eq(drainage.tagName, 'SELECT');
       T.eq(Array.prototype.map.call(drainage.options, function (o) { return o.value; }),
-           ['CONSTANT_PW_FIELD', 'FULLY_COUPLED', 'DRAINED', 'UNDRAINED']);
+           ['DRAINED', 'FULLY_COUPLED', 'UNDRAINED'], 'no CONSTANT_PW_FIELD: DRAINED is written as it');
       choose(drainage, 'UNDRAINED');
       T.eq(App.MATERIALS[0].variables.GEO_DRAINAGE_TYPE, 'UNDRAINED');
       T.ok(variableInput(host, 'GEO_POISSON_UNDRAINED'), 'an undrained soil lists its Poisson ratio');
@@ -350,9 +350,9 @@
   T.test('the flow parameters come with a coupled soil, as intrinsic and Darcy permeabilities', function () {
     withDialog(function (host) {
       openProperties(host);
-      T.ok(!variableInput(host, 'PERMEABILITY_XX'), 'not for a constant water pressure');
-      choose(variableInput(host, 'GEO_DRAINAGE_TYPE'), 'DRAINED');
-      T.ok(!variableInput(host, 'PERMEABILITY_XX'), 'nor for a drained soil');
+      T.ok(!variableInput(host, 'PERMEABILITY_XX'), 'not for a drained soil');
+      choose(variableInput(host, 'GEO_DRAINAGE_TYPE'), 'UNDRAINED');
+      T.ok(!variableInput(host, 'PERMEABILITY_XX'), 'nor for an undrained one');
       choose(variableInput(host, 'GEO_DRAINAGE_TYPE'), 'FULLY_COUPLED');
       var kappa = App.MATERIALS[0].variables.PERMEABILITY_XX;
       T.near(kappa, 1.1574e-12, 1e-15, 'a metre a day, intrinsic');

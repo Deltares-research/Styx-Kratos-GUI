@@ -13,11 +13,11 @@ App.MaterialLibrary = (function () {
   var PER_M_PER_DAY = App.SOIL_MODEL_TABLE.constants.PERMEABILITY;
   var soils = [
     { id: 'm1', model: 'mohr_coulomb', name: 'Fill', color: '#d8c48a', rInter: 0.70, interfacePerm: 'Neutral',
-      variables: { GEO_DRAINAGE_TYPE: 'CONSTANT_PW_FIELD', YOUNG_MODULUS: 1.5e7,
+      variables: { GEO_DRAINAGE_TYPE: 'DRAINED', YOUNG_MODULUS: 1.5e7,
                    POISSON_RATIO: 0.30, DENSITY_SOLID: 17000 / 9.81,
                    PERMEABILITY_XX: 1.0 * PER_M_PER_DAY, POROSITY: 0.0, GEO_COHESION: 1000, GEO_FRICTION_ANGLE: 30.0 } },
     { id: 'm2', model: 'mohr_coulomb', name: 'Sand, loose', color: '#c4a86a', rInter: 0.70, interfacePerm: 'Neutral',
-      variables: { GEO_DRAINAGE_TYPE: 'CONSTANT_PW_FIELD', YOUNG_MODULUS: 2.5e7,
+      variables: { GEO_DRAINAGE_TYPE: 'DRAINED', YOUNG_MODULUS: 2.5e7,
                    POISSON_RATIO: 0.28, DENSITY_SOLID: 18000 / 9.81,
                    PERMEABILITY_XX: 1.5 * PER_M_PER_DAY, POROSITY: 0.0, GEO_COHESION: 500, GEO_FRICTION_ANGLE: 32.0 } },
     { id: 'm3', model: 'mohr_coulomb', name: 'Clay, soft', color: '#8fa86b', rInter: 0.50, interfacePerm: 'Impermeable',
@@ -29,11 +29,11 @@ App.MaterialLibrary = (function () {
                    POISSON_RATIO: 0.33, DENSITY_SOLID: 17500 / 9.81,
                    PERMEABILITY_XX: 0.0005 * PER_M_PER_DAY, POROSITY: 0.0, GEO_COHESION: 15000, GEO_FRICTION_ANGLE: 25.0 } },
     { id: 'm5', model: 'mohr_coulomb', name: 'Sand, dense', color: '#b08a6a', rInter: 0.75, interfacePerm: 'Neutral',
-      variables: { GEO_DRAINAGE_TYPE: 'CONSTANT_PW_FIELD', YOUNG_MODULUS: 4.5e7,
+      variables: { GEO_DRAINAGE_TYPE: 'DRAINED', YOUNG_MODULUS: 4.5e7,
                    POISSON_RATIO: 0.25, DENSITY_SOLID: 19000 / 9.81,
                    PERMEABILITY_XX: 5.0 * PER_M_PER_DAY, POROSITY: 0.0, GEO_COHESION: 0, GEO_FRICTION_ANGLE: 36.0 } },
     { id: 'm6', model: 'linear_elastic', name: 'Bedrock', color: '#8d8d99', rInter: 1.00, interfacePerm: 'Impermeable',
-      variables: { GEO_DRAINAGE_TYPE: 'CONSTANT_PW_FIELD', YOUNG_MODULUS: 2.0e9,
+      variables: { GEO_DRAINAGE_TYPE: 'DRAINED', YOUNG_MODULUS: 2.0e9,
                    POISSON_RATIO: 0.20, DENSITY_SOLID: 24000 / 9.81, PERMEABILITY_XX: 0.0 , POROSITY: 0.0} }
   ];
   function copy(value) { return JSON.parse(JSON.stringify(value)); }

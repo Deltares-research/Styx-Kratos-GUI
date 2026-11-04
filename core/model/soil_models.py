@@ -44,23 +44,41 @@ MOHR_COULOMB = "mohr_coulomb"
 OTHER = "other"
 """A law no model here is: the user's own, typed by name (a UDSM, say)."""
 
-DRAINAGE_TYPES = ("CONSTANT_PW_FIELD", "FULLY_COUPLED", "DRAINED", "UNDRAINED")
-"""Every `GEO_DRAINAGE_TYPE` Kratos accepts (`StringToDrainageType`)."""
+DRAINAGE_TYPES = ("DRAINED", "FULLY_COUPLED", "UNDRAINED")
+"""The `GEO_DRAINAGE_TYPE`s a soil can have, as the project, the window and the command
+line name them. The deck writes `DRAINED` as `CONSTANT_PW_FIELD` (`KRATOS_DRAINAGE`)."""
+
+KRATOS_DRAINAGE = {"DRAINED": "CONSTANT_PW_FIELD"}
+"""Drainage type -> the `GEO_DRAINAGE_TYPE` the deck writes for it, where they differ
+(`kratos_drainage`).
+
+Drained means the pore pressures do not follow the deformation: they are the ones the
+water conditions set. Kratos' `CONSTANT_PW_FIELD` is exactly that -- its U-Pw elements
+leave out the flow, storage and water-coupling terms and keep the pressure as it is
+given. Kratos' own `DRAINED` is not: its elements assemble it as a `FULLY_COUPLED` soil
+(`UPwSmallStrainElement`; nothing in `GeoMechanicsApplication` reads
+`DrainageType::DRAINED`), drained only as far as its permeability lets the water go. So a
+drained soil is written as `CONSTANT_PW_FIELD`, and Kratos' `DRAINED` is not offered."""
+
+OLD_DRAINAGE = {"CONSTANT_PW_FIELD": "DRAINED"}
+"""A `GEO_DRAINAGE_TYPE` the project held before 2026-11-04 -> its name now
+(`project_drainage`). Read in a saved project, a script or a deck, it is renamed: the deck
+it writes does not change."""
 
 FLOWING = ("FULLY_COUPLED",)
 """The drainage types the window lists flow parameters for.
 
-Kratos' U-Pw elements leave the flow terms out for `CONSTANT_PW_FIELD` only: a `DRAINED`
-or an `UNDRAINED` soil is assembled, and checked, with its permeability, viscosity and
-fluid bulk modulus as a `FULLY_COUPLED` one is (`UPwSmallStrainElement::Check`). For
-those two the drainage type is the physics, not a permeability: the export gives them a
-fixed one (`FIXED_PERMEABILITY_SI`), which the window does not list."""
+A drained soil is written as `CONSTANT_PW_FIELD`, for which Kratos' U-Pw elements leave
+the flow terms out and check no permeability, viscosity or fluid bulk modulus. An
+`UNDRAINED` soil is assembled, and checked, with them as a `FULLY_COUPLED` one is
+(`UPwSmallStrainElement::Check`): for it the drainage type is the physics, not a
+permeability, and the export gives it a fixed one (`FIXED_PERMEABILITY_SI`), which the
+window does not list."""
 
-FIXED_PERMEABILITY_SI = {"DRAINED": 1.0, "UNDRAINED": 1.0e-30}
-"""m2: the intrinsic permeability the export writes for a `DRAINED` and an `UNDRAINED`
-soil, whatever the soil carries: so permeable that the pore water drains at once, and so
-tight that none flows. Neither shown nor typed: the drainage type is the user's choice
-(`fixed_permeability`)."""
+FIXED_PERMEABILITY_SI = {"UNDRAINED": 1.0e-30}
+"""m2: the intrinsic permeability the export writes for an `UNDRAINED` soil, whatever the
+soil carries: so tight that no water flows. Neither shown nor typed: the drainage type is
+the user's choice (`fixed_permeability`)."""
 
 RETENTION_LAWS = ("SaturatedLaw", "SaturatedBelowPhreaticLevelLaw", "VanGenuchtenLaw")
 """Every `RETENTION_LAW` Kratos builds (`RetentionLawFactory`). Its fourth name,
@@ -182,8 +200,8 @@ class SoilModel:
 
 
 def _drainage() -> tuple[Parameter, ...]:
-    return (Parameter("GEO_DRAINAGE_TYPE", "Drainage type", "CONSTANT_PW_FIELD",
-                      choices=DRAINAGE_TYPES, absent="CONSTANT_PW_FIELD"),
+    return (Parameter("GEO_DRAINAGE_TYPE", "Drainage type", "DRAINED",
+                      choices=DRAINAGE_TYPES, absent="DRAINED"),
             Parameter("GEO_POISSON_UNDRAINED", "Undrained Poisson's ratio",
                       when=("GEO_DRAINAGE_TYPE", ("UNDRAINED",))))
 
@@ -574,8 +592,9 @@ def derived(law: str, variables: dict, water_variables: dict, system: str,
     `water_variables` is `water`'s, for the undrained Poisson ratio; `flow` is a
     groundwater flow deck's, whose water pressure elements read the permeability and
     the Biot coefficient of every soil. The water itself, the permeabilities a
-    dimension adds (`PERMEABILITY_XY`, the 3D ones) and a drained or an undrained soil's
-    fixed permeability (`fixed_permeability`), the export writes on top."""
+    dimension adds (`PERMEABILITY_XY`, the 3D ones) and an undrained soil's fixed
+    permeability (`fixed_permeability`), the export writes on top. The drainage type is
+    the project's name for it; the deck's is `kratos_drainage`'s."""
     out: dict = {}
 
     def given(name: str) -> Any:
@@ -585,10 +604,10 @@ def derived(law: str, variables: dict, water_variables: dict, system: str,
         if name not in variables and value is not None:
             out[name] = value
 
-    put("GEO_DRAINAGE_TYPE", "CONSTANT_PW_FIELD")
+    put("GEO_DRAINAGE_TYPE", "DRAINED")
     put("BULK_MODULUS_SOLID", units.from_si(BULK_MODULUS_SOLID_SI, units.STRESS, system))
     drainage = given("GEO_DRAINAGE_TYPE")
-    # A drained or an undrained soil's permeability is not derived but fixed.
+    # An undrained soil's permeability is not derived but fixed.
     if fixed_permeability(variables, system, flow) is None:
         if drainage == "FULLY_COUPLED" or flow:
             put("PERMEABILITY_XX", units.from_si(PERMEABILITY_SI, units.PERMEABILITY, system))
@@ -613,12 +632,27 @@ def derived(law: str, variables: dict, water_variables: dict, system: str,
 def fixed_permeability(variables: dict, system: str, flow: bool = False) -> float | None:
     """The intrinsic permeability, in every direction, the export writes for a soil
     holding `variables` in place of any it carries, in `system`: `FIXED_PERMEABILITY_SI`
-    for a `DRAINED` or an `UNDRAINED` soil. None for any other, and in a groundwater flow
-    project (`flow`), which lists every soil's permeability for the user to set."""
+    for an `UNDRAINED` soil. None for any other, and in a groundwater flow project
+    (`flow`), which lists every soil's permeability for the user to set."""
     fixed = FIXED_PERMEABILITY_SI.get(str(variables.get("GEO_DRAINAGE_TYPE")))
     if fixed is None or flow:
         return None
     return units.from_si(fixed, units.PERMEABILITY, system)
+
+
+def kratos_drainage(value: Any) -> Any:
+    """The `GEO_DRAINAGE_TYPE` the deck writes for the drainage type `value`: a drained
+    soil's is `CONSTANT_PW_FIELD` (`KRATOS_DRAINAGE`); any other as it is."""
+    return KRATOS_DRAINAGE.get(value, value) if isinstance(value, str) else value
+
+
+def project_drainage(variables: dict) -> dict:
+    """`variables` with a `GEO_DRAINAGE_TYPE` from before 2026-11-04 under its name now
+    (`OLD_DRAINAGE`), in any case Kratos reads it in; as they are when there is none."""
+    value = variables.get("GEO_DRAINAGE_TYPE")
+    if not isinstance(value, str) or value.upper() not in OLD_DRAINAGE:
+        return variables
+    return {**variables, "GEO_DRAINAGE_TYPE": OLD_DRAINAGE[value.upper()]}
 
 
 AXIS_PERMEABILITIES = ("PERMEABILITY_XX", "PERMEABILITY_YY", "PERMEABILITY_ZZ")
@@ -637,7 +671,7 @@ def unused_permeability(variables: dict, system: str, flow: bool = False) -> str
            and not math.isclose(number, fixed, rel_tol=1e-3)]
     if not own:
         return None
-    return (f"{', '.join(own)} not used: a {variables['GEO_DRAINAGE_TYPE']} soil is "
+    return (f"{', '.join(own)} not used: an {variables['GEO_DRAINAGE_TYPE']} soil is "
             f"written with the fixed intrinsic permeability {fixed:g} "
             f"{units.label(units.PERMEABILITY, system)}. Remove it, or make the soil "
             "FULLY_COUPLED to have it written.")

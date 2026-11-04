@@ -151,7 +151,9 @@ class KratosPropertySet(Base):
         for name, entry in value.items():
             if not _finite(entry):
                 raise ValueError(f"variable {name} must be finite")
-        return value
+        # A drained set's drainage type as it was named before 2026-11-04, from a saved
+        # project, a script or a deck: under its name now. Written as it was.
+        return soil_models.project_drainage(value)
 
     def number(self, name: str) -> float | None:
         """A numeric variable, or None when it is absent or not a number."""

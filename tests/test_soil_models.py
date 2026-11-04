@@ -71,7 +71,7 @@ def test_a_new_mohr_coulomb_soil_holds_what_its_law_reads():
 
 def test_a_new_linear_elastic_soil_is_the_sand_saturated_below_the_phreatic_level():
     assert soil_models.defaults_si(soil_models.LINEAR_ELASTIC) == {
-        "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD", "YOUNG_MODULUS": 1.0e7,
+        "GEO_DRAINAGE_TYPE": "DRAINED", "YOUNG_MODULUS": 1.0e7,
         "POISSON_RATIO": 0.3, "DENSITY_SOLID": 17000 / 9.81, "POROSITY": 0.0,
         "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw", "SATURATED_SATURATION": 1.0,
         "RESIDUAL_SATURATION": 1.0e-10}
@@ -91,8 +91,7 @@ def test_no_soil_lists_the_water_which_is_the_project_s():
 
 
 @pytest.mark.parametrize("drainage, listed", [
-    ("CONSTANT_PW_FIELD", False), ("DRAINED", False), ("UNDRAINED", False),
-    ("FULLY_COUPLED", True)])
+    ("DRAINED", False), ("UNDRAINED", False), ("FULLY_COUPLED", True)])
 def test_the_flow_parameters_are_listed_for_a_coupled_soil_only(drainage, listed):
     soil = {"GEO_DRAINAGE_TYPE": drainage, "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw"}
     shown = names(soil_models.shown(soil_models.MOHR_COULOMB, soil))
@@ -118,11 +117,10 @@ def test_a_new_coupled_soil_conducts_water_at_a_metre_a_day():
     assert darcy["HYDRAULIC_CONDUCTIVITY_XX"] * 86400 == pytest.approx(1.0)   # m/day
 
 
-def test_every_choice_lists_every_value_kratos_accepts():
+def test_every_choice_lists_every_value_a_soil_can_take():
     choices = {p.name: p.choices for model in soil_models.MODELS
                for p in soil_models.parameters(model) if p.choices}
-    assert choices["GEO_DRAINAGE_TYPE"] == ("CONSTANT_PW_FIELD", "FULLY_COUPLED", "DRAINED",
-                                            "UNDRAINED")
+    assert choices["GEO_DRAINAGE_TYPE"] == ("DRAINED", "FULLY_COUPLED", "UNDRAINED")
     assert choices["RETENTION_LAW"] == ("SaturatedLaw", "SaturatedBelowPhreaticLevelLaw",
                                         "VanGenuchtenLaw")
 
@@ -346,12 +344,12 @@ def test_a_coupled_soil_derives_its_permeability_and_a_constant_one_none():
     assert "PERMEABILITY_XX" not in constant
 
 
-@pytest.mark.parametrize("drainage, fixed", [("DRAINED", 1.0), ("UNDRAINED", 1.0e-30)])
-def test_a_drained_or_undrained_soil_is_written_with_its_fixed_permeability(drainage, fixed):
+def test_an_undrained_soil_is_written_with_its_fixed_permeability():
     """Kratos' U-Pw element checks a permeability for every drainage type but
-    CONSTANT_PW_FIELD. For these two the drainage type is the physics: the permeability
-    is fixed, over any the soil carries, neither listed nor derived. One it carries is
-    named, once per soil: the user typed a number that is not used."""
+    CONSTANT_PW_FIELD. For an undrained soil the drainage type is the physics: the
+    permeability is fixed, over any the soil carries, neither listed nor derived. One it
+    carries is named, once per soil: the user typed a number that is not used."""
+    drainage, fixed = "UNDRAINED", 1.0e-30
     project = mohr_coulomb_site(GEO_DRAINAGE_TYPE=drainage, PERMEABILITY_XX=3.0e-12)
 
     variables = deck(project)["Variables"]
@@ -374,6 +372,42 @@ def test_a_drained_or_undrained_soil_is_written_with_its_fixed_permeability(drai
         soil_models.MOHR_COULOMB, project.material("m2").variables)]
     assert "PERMEABILITY_XX" not in soil_models.derived(
         MC_2D, project.material("m2").variables, WATER_SI, "SI")
+
+
+@pytest.mark.parametrize("given", [{"GEO_DRAINAGE_TYPE": "DRAINED"}, {}])
+def test_a_drained_soil_is_written_as_kratos_constant_pw_field(given):
+    """Kratos' own DRAINED couples the water as FULLY_COUPLED does; CONSTANT_PW_FIELD keeps
+    the pressures the conditions set, which is what drained means. So DRAINED -- also
+    when left out -- is written as CONSTANT_PW_FIELD, with no fixed permeability: Kratos
+    reads none. One the soil carries is written as it is, unnamed."""
+    project = mohr_coulomb_site(PERMEABILITY_XX=3.0e-12)
+    project.material("m2").variables.pop("GEO_DRAINAGE_TYPE", None)
+    project.material("m2").variables.update(given)
+
+    variables = deck(project)["Variables"]
+    _, warnings = materials.material_parameters(project, [("Soil_1", "m2")], 2)
+
+    assert variables["GEO_DRAINAGE_TYPE"] == "CONSTANT_PW_FIELD"
+    assert variables["PERMEABILITY_XX"] == 3.0e-12
+    assert soil_models.fixed_permeability(project.material("m2").variables, "SI") is None
+    assert soil_models.unused_permeability(project.material("m2").variables, "SI") is None
+    assert "PERMEABILITY_" not in " ".join(warnings)
+
+
+@pytest.mark.parametrize("drainage", ["FULLY_COUPLED", "UNDRAINED"])
+def test_a_coupled_or_undrained_soil_is_written_under_its_own_name(drainage):
+    assert deck(mohr_coulomb_site(GEO_DRAINAGE_TYPE=drainage))["Variables"][
+        "GEO_DRAINAGE_TYPE"] == drainage
+
+
+@pytest.mark.parametrize("old", ["CONSTANT_PW_FIELD", "constant_pw_field"])
+def test_constant_pw_field_read_in_is_drained(old):
+    """A project, a script or a deck from before 2026-11-04 named a drained soil by
+    Kratos' CONSTANT_PW_FIELD: it is DRAINED now, and its deck does not change."""
+    project = mohr_coulomb_site(GEO_DRAINAGE_TYPE=old)
+
+    assert project.material("m2").variables["GEO_DRAINAGE_TYPE"] == "DRAINED"
+    assert deck(project)["Variables"]["GEO_DRAINAGE_TYPE"] == "CONSTANT_PW_FIELD"
 
 
 @pytest.mark.parametrize("drainage", soil_models.DRAINAGE_TYPES)
@@ -631,9 +665,8 @@ def test_an_older_linear_elastic_soil_whose_k0_changes_is_named():
     assert migration.notes(payload) == [], "no K0 procedure, no initial stresses"
 
 
-@pytest.mark.parametrize("drainage, fixed", [("DRAINED", "1"), ("UNDRAINED", "1e-30")])
-def test_an_older_drained_or_undrained_soil_whose_permeability_is_now_fixed_is_named(
-        drainage, fixed):
+def test_an_older_undrained_soil_whose_permeability_is_now_fixed_is_named():
+    drainage, fixed = "UNDRAINED", "1e-30"
     payload = older_document()
     for soil, permeability in ((1, 1e-12), (4, soil_models.FIXED_PERMEABILITY_SI[drainage])):
         payload["materials"][soil]["variables"].update(
@@ -646,7 +679,7 @@ def test_an_older_drained_or_undrained_soil_whose_permeability_is_now_fixed_is_n
     assert notes[0] == (
         "Sand, loose: until 2026-11-02 the export wrote this soil's own permeability; "
         "PERMEABILITY_XX 1e-12, PERMEABILITY_YY 1e-12, PERMEABILITY_ZZ 1e-12 not used: "
-        f"a {drainage} soil is written with the fixed intrinsic permeability {fixed} m². "
+        f"an {drainage} soil is written with the fixed intrinsic permeability {fixed} m². "
         "Remove it, or make the soil FULLY_COUPLED to have it written.")
     payload["stages"] = [{"id": "flow", "name": "Flow", "calculation": "Groundwater flow"}]
     assert migration.notes(payload) == [], "a flow project writes the soil's own"

@@ -553,11 +553,12 @@ def k0_notes(value: object) -> list[str]:
 
 
 def permeability_notes(value: object) -> list[str]:
-    """The drained and undrained soils of a document saved before 2026-11-02 whose
-    permeability changes, one line each: a soil carrying a permeability other than its
-    drainage type's fixed one, in a project that is not a groundwater flow calculation.
-    The export wrote the soil's own; now it writes the fixed one, and says so on every
-    export too (`soil_models.unused_permeability`)."""
+    """The undrained soils of a document saved before 2026-11-02 whose permeability
+    changes, one line each: a soil carrying a permeability other than its drainage type's
+    fixed one, in a project that is not a groundwater flow calculation. The export wrote
+    the soil's own; now it writes the fixed one, and says so on every export too
+    (`soil_models.unused_permeability`). A drained soil has none since 2026-11-04: it is
+    written as `CONSTANT_PW_FIELD`, which reads no permeability."""
     from core.model import soil_models, units
 
     if not isinstance(value, dict) or "fluid" in value:
@@ -587,8 +588,8 @@ def upgraded(value: object) -> object:
 def notes(value: object) -> list[str]:
     """What opening `value` changes in its deck that the user has to know, one line
     each: the soils' own water it replaces (`water_notes`), the linear elastic soils
-    whose K0 changes (`k0_notes`), the drained and undrained soils whose permeability is
-    now fixed (`permeability_notes`) and the contacts that lose their soil's strength
+    whose K0 changes (`k0_notes`), the undrained soils whose permeability is now fixed
+    (`permeability_notes`) and the contacts that lose their soil's strength
     (`contact_notes`). Empty for a current document. Said when a file is opened
     (`core.session.migration_notes`, the GUI's Open), as the first save of it writes the
     new shape and the old values are gone."""

@@ -67,7 +67,7 @@ def _soil(model, id_, name, color, density, modulus, poisson, cohesion, phi, del
     return Material(id=id_, name=name, color=color, r_inter=r_inter(delta, phi),
                     constitutive_law=LAWS[model][0],
                     variables={
-                        "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
+                        "GEO_DRAINAGE_TYPE": "DRAINED",
                         "YOUNG_MODULUS": modulus,
                         "POISSON_RATIO": poisson,
                         "DENSITY_SOLID": density,
