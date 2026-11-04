@@ -51,23 +51,23 @@
           T.ok(groups[mode].indexOf(key) >= 0,
                mode + ' hides ' + key + (simple ? ' (layered_soil)' : ''));
         });
-
-        test('free interfaces are listed in structural modes, separately from members', function () {
-          [true, false].forEach(function (layered) {
-            var groups = App.Viewport.computeModeGroups(
-              ['soil_L1'], [], layered, [], ['beam_1', 'anchor_1'], [], null, ['contact_1']);
-            ['structures', 'mesh', 'staged'].forEach(function (mode) {
-              T.ok(groups[mode].indexOf('contact_1') >= 0,
-                   mode + ' omits the free interface' + (layered ? ' (layered soil)' : ''));
-            });
-            ['soil', 'flow', 'results'].forEach(function (mode) {
-              T.eq(groups[mode].indexOf('contact_1'), -1,
-                   mode + ' should not show a free interface');
-            });
-          });
-        });
       });
       T.eq(groups.soil.indexOf('beam_1'), -1, 'soil mode stays soil-only');
+    });
+  });
+
+  test('free interfaces are listed in structural modes, separately from members', function () {
+    [true, false].forEach(function (layered) {
+      var groups = App.Viewport.computeModeGroups(
+        ['soil_L1'], [], layered, [], ['beam_1', 'anchor_1'], [], null, ['contact_1']);
+      ['structures', 'mesh', 'staged'].forEach(function (mode) {
+        T.ok(groups[mode].indexOf('contact_1') >= 0,
+             mode + ' omits the free interface' + (layered ? ' (layered soil)' : ''));
+      });
+      ['soil', 'flow', 'results'].forEach(function (mode) {
+        T.eq(groups[mode].indexOf('contact_1'), -1,
+             mode + ' should not show a free interface');
+      });
     });
   });
 

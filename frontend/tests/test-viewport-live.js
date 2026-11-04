@@ -514,6 +514,52 @@
     });
   });
 
+  test('viewport: a 3D free-interface face is visible with structures and follows its eye', function () {
+    function restore() {
+      App.Viewport.select(null);
+      standIns();
+      App.state.mode = 'soil';
+      return App.Viewport.refresh();
+    }
+    return boot().then(function () {
+      var project = JSON.parse(JSON.stringify(P.project3d));
+      var contact = {
+        id: 'free_contact_3d', name: 'Free 3D contact', kind: 'interface',
+        section: 'contact', structure: null, points: [[0, -2], [0, -10]],
+        side: 'left', active: true
+      };
+      project.interfaces = [contact];
+      var face = {
+        key: contact.id, color: '#123456',
+        positions: [0, -2, -1, 0, -10, -1, 0, -10, 1],
+        indices: [0, 1, 2],
+        edges: [0, -2, -1, 0, -10, -1, 0, -10, -1, 0, -10, 1,
+                0, -10, 1, 0, -2, -1]
+      };
+      var geometry = {
+        bbox: [-5, -15, -5, 5, 0, 5],
+        sections: [face]
+      };
+      App.Api.get = function (path) {
+        return Promise.resolve(path === '/api/project' ? project : geometry);
+      };
+      return App.Viewport.refresh().then(function () {
+        var group = sceneGroups()[contact.id];
+        T.ok(group, 'the face section has a scene group');
+        T.eq(group.children.some(function (child) { return child.isMesh; }), true,
+             'the supplied face, not just its edge, is rendered');
+        App.state.mode = 'structures'; App.Viewport.setMode('structures');
+        T.eq(group.visible, true, 'free interfaces remain visible in a 3D project');
+        App.Viewport.setVisible('group:interfaces', false);
+        T.eq(group.visible, false, 'the interface eye hides its face');
+        App.Viewport.setVisible('group:interfaces', true);
+        T.eq(group.visible, true, 'the interface eye restores its face');
+      });
+    }).then(restore, function (error) {
+      return restore().then(function () { throw error; });
+    });
+  });
+
   test('viewport: a 2D drag rewrites rotate into pan before the orbit controller sees it', function () {
     return boot().then(function () {
       var canvas = App.Viewport.getCanvas(), rect = canvas.getBoundingClientRect();
