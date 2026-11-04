@@ -193,7 +193,10 @@ def test_case_b_dry_soil_carries_no_flux(case_b):
 
 @pytest.fixture(scope="module", params=[1, 2], ids=["linear", "quadratic"])
 def case_c(request):
-    _, run_id = run(muskat.seepage(order=request.param, max_iterations=200))
+    """The quadratic mesh on the residual criterion (`muskat.seepage`)."""
+    criterion = "water_pressure_criterion" if request.param == 1 else "residual_criterion"
+    _, run_id = run(muskat.seepage(order=request.param, max_iterations=200,
+                                   convergence_criterion=criterion))
     return muskat.seepage_outcome(catalog.stage_mesh(run_id, 1),
                                   catalog.stage_results(run_id, 1))
 
@@ -220,3 +223,32 @@ def test_case_c_water_leaves_the_face_above_the_tail_water(case_c):
     assert all(rate > 0.0 for y, pressure, rate in face if pressure == 0.0)
     assert all(pressure == 0.0 for y, pressure, _ in face if y <= top)
     assert all(pressure > -1.0 for y, pressure, _ in face if y > top)
+
+
+
+def face_of(project: Project) -> tuple[list, float, float]:
+    _, run_id = run(project)
+    return muskat.seepage_outcome(catalog.stage_mesh(run_id, 1),
+                                  catalog.stage_results(run_id, 1))
+
+
+def test_case_c_as_a_deformation_stage_opens_the_same_face():
+    """A seepage face in a U-Pw stage is opened and closed by the same strategy
+    (`core.model.stages.model_strategy`), on the same water pressure: case C made a
+    mechanical stage, held by the standard supports, opens the same nodes and lets out
+    the same water as the flow stage (2026-11-04, linear: 35 of 89 nodes, 1.893e-5).
+    Quadratic it converges too, given 400 iterations (69 of 177 nodes, the same
+    discharge); the export warns that 100 may not be enough."""
+    from core.model.schemas import standard_conditions
+    payload = muskat.seepage(order=1, max_iterations=200).model_dump(mode="json")
+    payload["boundary_conditions"] += [c.model_dump(mode="json")
+                                       for c in standard_conditions()]
+    for stage in payload["stages"]:
+        stage.update(calculation="mechanical", stress_initialisation="gravity",
+                     convergence_criterion="residual_criterion")
+    face, inflow, outflow = face_of(Project.model_validate(payload))
+    flow_face, _, flow_outflow = face_of(muskat.seepage(order=1, max_iterations=200))
+    assert outflow == pytest.approx(-inflow, rel=1e-3)
+    assert outflow == pytest.approx(flow_outflow, rel=1e-3)
+    assert ([pressure == 0.0 for _, pressure, _ in face]
+            == [pressure == 0.0 for _, pressure, _ in flow_face])
