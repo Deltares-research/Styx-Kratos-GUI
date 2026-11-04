@@ -326,11 +326,14 @@ def test_a_condition_on_an_absent_soil_body_is_omitted_with_a_warning(gmsh_sessi
 
     condition = WaterPressureCondition(id="missing_soil_pressure", name="Missing soil pressure",
                                       on="part",
-                                      part="soil_missing", fluid_pressure_type="Uniform")
-    project = section([condition.model_dump(mode="json")])
+                                      part="soil_L2", fluid_pressure_type="Uniform")
+    project = section([condition.model_dump(mode="json")], dimension=3)
 
-    export = writer.export_project(project, MESH)
-    assert any("soil_missing" in warning and "has no soil" in warning
+    # L2 exists in the project, but only L1 is selected for meshing.
+    export = writer.export_project(
+        project, MeshRequest(element_size=8.0, order=1, volume_keys=["soil_L1"]))
+    assert export["meshed_keys"] == ["soil_L1"]
+    assert any("soil_L2" in warning and "has no soil" in warning
                for warning in export["warnings"])
     stages = json.loads(export["project_parameters"])["stages"].values()
     assert not any(
