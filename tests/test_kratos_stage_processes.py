@@ -412,3 +412,42 @@ def test_a_static_stage_is_static_and_a_dynamic_one_dynamic(gravity_then_dynamic
     # for exactly "Dynamic" (geomechanics_U_Pw_solver.py).
     assert _solver(gravity_then_dynamic, "3_Shake")["solution_type"] == "Dynamic"
 
+
+# -- Gravity follows the initial stage's stress initialisation -----------------------
+#
+# Gravity loading (and the K0 procedure) puts the self weight on every body in every
+# stage -- the structures too, which are in the computational model part the process
+# names -- and an initial stage that initialises no stresses leaves it out altogether.
+
+GRAVITY = "apply_vector_constraint_table_process"
+
+
+def _gravity_in(doc: dict, stage: str) -> bool:
+    return any(p["python_module"] == GRAVITY
+               and p["Parameters"].get("variable_name") == "VOLUME_ACCELERATION"
+               for p in processes(doc, stage, "loads_process_list"))
+
+
+def test_gravity_loading_weighs_every_body_in_every_stage(gravity_then_dynamic):
+    for stage in gravity_then_dynamic["stages"]:
+        assert _gravity_in(gravity_then_dynamic, stage), stage
+    bodies = _solver(gravity_then_dynamic, "1_Initial_stage")[
+        "problem_domain_sub_model_part_list"]
+    assert "SheetPileWall" in bodies, "the wall is not in the computational model part"
+
+
+@pytest.fixture(scope="module")
+def no_stresses() -> dict:
+    project = excavation.excavation_project(staged=False)
+    project = project.model_copy(update={"stages": [
+        Stage(id="initial", name="Initial stage", stress_initialisation="none"),
+        Stage(id="load", name="Load", parent="initial", deactivate=["surcharge"])]})
+    with session():
+        exported = writer.export_project(project, MeshRequest(**project.mesh.model_dump()))
+    return json.loads(exported["project_parameters"])
+
+
+def test_no_stress_initialisation_means_no_gravity_in_any_stage(no_stresses):
+    for stage in no_stresses["stages"]:
+        assert not _gravity_in(no_stresses, stage), stage
+

@@ -454,7 +454,8 @@ App.Model = (function () {
     return interfaceNode;
   }
 
-  /* "Model conditions": the boundary conditions, one row each, and gravity. The frozen
+  /* "Model conditions": the boundary conditions, one row each. Gravity is not one of
+     them: the initial stage's stress initialisation decides it (Stage explorer). The frozen
      tree's own "Model conditions" (js/data.js) lists a demo's rows -- Domain, Water,
      Climate -- that select nothing, and two rows of one label would be the dead-twin
      problem `dropFrozenInterfaceRow` solves; it is dropped the same way. */
@@ -581,18 +582,6 @@ App.Model = (function () {
     };
   }
 
-  function gravityProps() {
-    return {
-      title: 'Gravity', icon: 'settings',
-      groups: { 'General': [
-        ['Gravity acts', App.PROJECT && App.PROJECT.gravity === false ? 'No' : 'Yes', '', false,
-         yesNo(function () { return !(App.PROJECT && App.PROJECT.gravity === false); },
-               function (on) { App.PENDING_GRAVITY = on; return null; })],
-        ['', 'The self weight of every body, in every stage.', '', true]
-      ] }
-    };
-  }
-
   function ensureNormalLoadNode() {
     if (!normalLoadNode) {
       normalLoadNode = { label: 'Normal loads', icon: 'load', count: 0,
@@ -691,10 +680,10 @@ App.Model = (function () {
   function syncTrees(layeredSoil, soil) {
     var top = layeredSoil ? (soil ? [soil] : []) : topLevelUnion();
     var groups = [customGeometryNode, importedMeshNode, sheetPileNode, anchorNode,
-                  interfaceNode, normalLoadNode, loadConditionsNode];
+                  interfaceNode, normalLoadNode, loadConditionsNode, modelConditionsNode];
     function empty(node) { return groups.indexOf(node) >= 0 && !(node.children || []).length; }
     top = top.filter(function (node) { return !empty(node); });
-    groups.concat([waterLevelNode, modelConditionsNode]).forEach(function (node) {
+    groups.concat([waterLevelNode]).forEach(function (node) {
       if (node && !empty(node) && !containsNode(top, node)) top.push(node);
     });
     var tree = orderTree(top);
@@ -1858,16 +1847,13 @@ App.Model = (function () {
     });
     boundaryNode.count = listed.length;
     boundaryNode.children = listed.map(conditionChild);
-    var gravityOn = !(App.PROJECT && App.PROJECT.gravity === false);
-    // No "Boundary conditions [0]" row for a model without any; gravity always acts or not.
-    conditionsNode.children = (listed.length ? [boundaryNode] : []).concat([{
-      label: 'Gravity  ·  ' + (gravityOn ? 'on' : 'off'), icon: 'settings', leaf: true,
-      obj: 'gravity' }]);
+    // No "Boundary conditions [0]" row, nor an empty "Model conditions", for a model
+    // without any.
+    conditionsNode.children = listed.length ? [boundaryNode] : [];
     previousConditionKeys.forEach(function (key) { delete App.OBJECT_PROPS[key]; });
     conditions.forEach(function (record) {
       App.OBJECT_PROPS[record.id] = conditionProps(record);
     });
-    App.OBJECT_PROPS.gravity = gravityProps();
     previousConditionKeys = conditions.map(function (record) { return record.id; });
 
     // Last, so every node it has to place already exists.

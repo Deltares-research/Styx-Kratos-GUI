@@ -63,6 +63,80 @@
     });
   });
 
+  /* The expert solver settings, held to core/model/solver.py's `resolve` by the
+     fixture tests/test_solver_parity.py writes. */
+  var SOLVER = window.SOLVER_FIXTURE;
+
+  test('the expert settings catalogue and its fixture are loaded', function () {
+    T.ok((App.SOLVER_SETTINGS || []).length > 0,
+         'js/solver-settings.js did not load -- is it in index.html?');
+    T.ok(SOLVER && SOLVER.cases.length > 0,
+         'fixtures/solver-cases.js did not load -- is it in index.html?');
+  });
+
+  ((SOLVER && SOLVER.cases) || []).forEach(function (each) {
+    test('resolveSolver(' + each.calculation + ', ' + each.time_integration + ', ' +
+         JSON.stringify(each.overrides) + ', ' + each.model_strategy +
+         ') agrees with the server', function () {
+      T.eq(App.Stages.resolveSolver(each.calculation, each.time_integration,
+                                    each.overrides, each.model_strategy), each.rows);
+    });
+  });
+
+  function solverValue(rows, key) {
+    var row = rows.filter(function (each) { return each.key === key; })[0];
+    return row ? row.value : undefined;
+  }
+
+  test('a mechanical stage is solved by quasi-Newton, with its Sparse LU fixed',
+       function () {
+    var rows = App.Stages.solverRows({}, { calculation: 'mechanical',
+                                           time_integration: 'static' });
+    T.eq(solverValue(rows, 'strategy_type'), 'quasi_newton');
+    var linear = rows.filter(function (row) { return row.key === 'linear_solver_type'; })[0];
+    T.eq(linear.value, 'LinearSolversApplication.sparse_lu');
+    T.ok(linear.locked, 'the quasi-Newton strategy fixes its linear solver');
+  });
+
+  test('another strategy lets the linear solver be chosen', function () {
+    var rows = App.Stages.solverRows({}, {
+      calculation: 'mechanical', time_integration: 'static',
+      solver_settings: { strategy_type: 'newton_raphson', linear_solver_type: 'amgcl' } });
+    var linear = rows.filter(function (row) { return row.key === 'linear_solver_type'; })[0];
+    T.eq(linear.locked, null);
+    T.eq(linear.value, 'amgcl');
+    T.eq(solverValue(rows, 'linear_solver_smoother_type'), 'ilu0',
+         'an AMGCL solver has its own settings');
+    T.eq(solverValue(rows, 'quasi_newton_type'), undefined,
+         'and the quasi-Newton ones are gone');
+  });
+
+  test('a flow stage takes its default strategy from the server', function () {
+    var p = { model_strategies: { only: 'newton_raphson_with_seepage' } };
+    var rows = App.Stages.solverRows(p, { id: 'only', calculation: 'flow',
+                                          time_integration: 'static' });
+    var strategy = rows[0];
+    T.eq(strategy.value, 'newton_raphson_with_seepage');
+    T.ok(strategy.locked, 'a seepage face fixes it');
+    T.eq(App.Stages.solverLabel('strategy_type', strategy.value),
+         'Newton-Raphson with seepage');
+  });
+
+  test('only a dynamic stage has a time scheme', function () {
+    var still = App.Stages.solverRows({}, { calculation: 'mechanical',
+                                            time_integration: 'static' });
+    var moving = App.Stages.solverRows({}, { calculation: 'mechanical',
+                                             time_integration: 'dynamic' });
+    T.eq(solverValue(still, 'newmark_beta'), undefined);
+    T.eq(solverValue(moving, 'newmark_beta'), 0.25);
+  });
+
+  test('the linear strategy has nothing to converge', function () {
+    T.ok(App.Stages.iterates(App.Stages.solverRows({}, { calculation: 'mechanical' })));
+    T.ok(!App.Stages.iterates(App.Stages.solverRows({}, {
+      calculation: 'mechanical', solver_settings: { strategy_type: 'linear' } })));
+  });
+
   test('a part switched off and later back on is on', function () {
     /* The case that separates walking the chain from reading the last instruction:
        `soil_L1` is deactivated at dig_1 and activated again at dig_2. */
@@ -195,16 +269,31 @@
          ['static', 'dynamic']);
   });
 
-  /* The server refuses a flow stage with a stress initialisation (`schemas.Stage`). */
-  test('making a stage a flow stage drops its stress initialisation', function () {
-    var stage = { id: 's', calculation: 'mechanical', stress_initialisation: 'K0' };
-    var flow = App.Stages.withField(stage, 'calculation', 'flow');
-    T.eq(flow.stress_initialisation, 'none');
-    T.eq(stage.stress_initialisation, 'K0', 'the original was changed');
-    var back = App.Stages.withField(flow, 'calculation', 'mechanical');
-    T.eq(back.stress_initialisation, 'none');
-    T.eq(App.Stages.withField(stage, 'time_integration', 'dynamic').stress_initialisation,
-         'K0');
+  /* The calculation type and the stress initialisation are the initial stage's
+     (`core.model.stages.edited`); the parity fixture holds the rest of it. */
+  test('a flow sequence is chosen in the initial stage, and has no stresses', function () {
+    var list = App.Stages.edited(project(), 'initial', 'calculation', 'flow');
+    T.ok(list.every(function (stage) { return stage.calculation === 'flow'; }),
+         'not every stage became a flow stage');
+    T.ok(list.every(function (stage) { return stage.stress_initialisation === 'none'; }));
+    T.eq(App.Stages.edited(project(), 'dig_1', 'calculation', 'flow'), project().stages,
+         'a later stage changed the calculation type');
+    T.eq(App.Stages.edited(project(), 'dig_1', 'stress_initialisation', 'K0'),
+         project().stages, 'a later stage got a stress initialisation');
+  });
+
+  test('a project with no stages gets the initial stage first', function () {
+    var list = App.Stages.added({ stageable_parts: [], stages: [] });
+    T.eq(list.length, 1);
+    T.eq([list[0].id, list[0].name, list[0].parent, list[0].stress_initialisation],
+         ['initial', 'Initial stage', null, 'gravity']);
+  });
+
+  test('the initial stage is neither deleted nor preceded', function () {
+    T.eq(App.Stages.removed(project(), 'initial'), project().stages);
+    T.eq(App.Stages.inserted(project(), 'initial'), project().stages);
+    T.ok(App.Stages.isInitial(project(), 'initial'));
+    T.ok(!App.Stages.isInitial(project(), 'dig_1'));
   });
 
   test('add gives the new stage an id nothing else has', function () {
@@ -261,20 +350,10 @@
     T.eq(App.Stages.order(p).length, 6);
   });
 
-  test('deleting the root promotes its child', function () {
-    var p = project();
-    var list = App.Stages.removed(p, 'initial');
-    var byId = {};
-    list.forEach(function (ph) { byId[ph.id] = ph; });
-    T.eq(byId['null_step'].parent, null);
-    p.stages = list;
-    T.eq(App.Stages.order(p).length, 6);
-  });
-
-  test('deleting the only stage leaves an unstaged project', function () {
+  test('the only stage is the initial stage, and is not deleted either', function () {
     var p = project();
     p.stages = [{ id: 'only', name: 'Only', parent: null }];
-    T.eq(App.Stages.removed(p, 'only'), []);
+    T.eq(App.Stages.removed(p, 'only'), p.stages);
   });
 
   /* What a copy is *for* is repeating a dig: same solver settings, same shape, new
@@ -509,14 +588,14 @@
      of it. The window is DOM (patches.js `stagesDialog`); what it says is here. */
 
   function dike() {
-    function stage(id, name, parent, stresses, days) {
+    function stage(id, name, parent, stresses, seconds) {
       return { id: id, name: name, parent: parent, calculation: 'mechanical',
                stress_initialisation: stresses, time_integration: 'static',
-               activate: [], deactivate: [], time_interval: days };
+               activate: [], deactivate: [], duration: seconds, time_step: seconds };
     }
     return { stageable_parts: [], stages: [
-      stage('1_Initial_stage', 'Initial stage', null, 'K0', 0),
-      stage('2_Null_step', 'Null step', '1_Initial_stage', 'none', 0),
+      stage('1_Initial_stage', 'Initial stage', null, 'K0', 1),
+      stage('2_Null_step', 'Null step', '1_Initial_stage', 'none', 1),
       stage('3_Slag_1', 'Slag 1', '2_Null_step', 'none', 17),
       stage('4_Slag_2', 'Slag 2', '3_Slag_1', 'none', 22),
       stage('5_Kraan', 'Kraan load', '4_Slag_2', 'none', 0.5)
@@ -533,15 +612,35 @@
 
   test('T is the time reached at the end of a stage, summed along its chain', function () {
     var rows = App.Stages.overview(dike(), null);
-    T.eq(rows.map(function (r) { return r.total; }), [0, 0, 17, 39, 39.5]);
-    T.eq(rows[3].interval, 22);
+    T.eq(rows.map(function (r) { return r.total; }), [1, 2, 19, 41, 41.5]);
+    T.eq(rows[3].duration, 22);
   });
 
   test('a row lists its name, duration, T, and its id', function () {
     var rows = App.Stages.overview(dike(), null);
-    T.eq(rows[3].label, 'Slag 2 - 22 d, T = 39 d [4_Slag_2]');
-    T.eq(rows[4].label, 'Kraan load - 0.5 d, T = 39.5 d [5_Kraan]');
-    T.eq(rows[0].label, 'Initial stage [1_Initial_stage]', 'no time, no times');
+    T.eq(rows[3].label, 'Slag 2 - 22 s, T = 41 s [4_Slag_2]');
+    T.eq(rows[4].label, 'Kraan load - 0.5 s, T = 41.5 s [5_Kraan]');
+    T.eq(rows[0].label, 'Initial stage - 1 s, T = 1 s [1_Initial_stage]');
+  });
+
+  test('a stage that names no duration lasts the default second', function () {
+    var p = dike();
+    delete p.stages[0].duration;
+    var rows = App.Stages.overview(p, null);
+    T.eq(rows[0].duration, 1);
+    T.eq(rows[4].total, 41.5);
+  });
+
+  test('a stage made here has the duration and time step the server gives one', function () {
+    var list = App.Stages.added(dike());
+    var made = list[list.length - 1];
+    T.eq([made.duration, made.time_step], [1, 0.25]);
+  });
+
+  test('a copy keeps the duration and time step of the original', function () {
+    var list = App.Stages.copied(dike(), '4_Slag_2');
+    var made = list.filter(function (stage) { return stage.name === 'Slag 2 (copy)'; })[0];
+    T.eq([made.duration, made.time_step], [22, 22]);
   });
 
   test('before any calculation every stage says so', function () {

@@ -39,8 +39,8 @@ from core.model.load_translation import translate as translate_loads
 from core.model.schemas import (ConditionsUpdate, CustomPart, DimensionUpdate, LayersUpdate,
                                 MaterialsUpdate, MeshRequest, Panel, StagesUpdate, Project,
                                 StructuresUpdate,
-                                UnitsUpdate, WaterLevel, WaterUpdate, point_on_panel,
-                                point_on_polyline)
+                                UnitsUpdate, WaterLevel, WaterUpdate, followed_tolerance,
+                                point_on_panel, point_on_polyline)
 from core.model.wall_translation import translate as translate_walls
 
 
@@ -267,13 +267,16 @@ def replace_stages(project: Project, update: StagesUpdate) -> Project:
     `linearise` is deliberately not a schema validator: a branch is a legitimate thing
     to have half-built in an editor, and refusing it in `Project` would make it
     impossible to type. It is refused here, at the edit, rather than at export, because
-    this is where whoever made it can still see what they did.
+    this is where whoever made it can still see what they did. So is a calculation type
+    or a stress initialisation chosen anywhere but in the initial stage
+    (`stages.check_settings`).
     """
     _stages_of_a_deck_are_read_only(project)
     payload = project.model_dump()
     payload["stages"] = [stage.model_dump() for stage in update.stages]
     edited = Project.model_validate(payload)
     stages.linearise(edited)
+    stages.check_settings(edited)
     return edited
 
 
@@ -1143,15 +1146,13 @@ def _refuse_staged_conditions(project: Project, kept: set[str]) -> None:
 
 
 def replace_conditions(project: Project, update: ConditionsUpdate) -> Project:
-    """The boundary conditions, as one list, and gravity: what
-    `PATCH /api/project/conditions` sends. A field the update leaves out stays."""
+    """The boundary conditions, as one list: what `PATCH /api/project/conditions`
+    sends. Left out, they stay."""
     payload = project.model_dump()
     if update.boundary_conditions is not None:
         _refuse_staged_conditions(project, {c.id for c in update.boundary_conditions})
         payload["boundary_conditions"] = [c.model_dump()
                                           for c in update.boundary_conditions]
-    if update.gravity is not None:
-        payload["gravity"] = update.gravity
     return Project.model_validate(payload)
 
 
@@ -1203,11 +1204,6 @@ def standard_conditions(project: Project) -> Project:
     return Project.model_validate(payload)
 
 
-def set_gravity(project: Project, on: bool) -> Project:
-    """`project` with gravity on or off (`kratos-cli gravity`, the explorer's check box)."""
-    return Project.model_validate({**project.model_dump(), "gravity": on})
-
-
 def remove_condition(project: Project, id: str) -> Project:
     """The project without the boundary condition `id`."""
     find_condition(project, id)
@@ -1238,6 +1234,10 @@ def add_stage(project: Project, *, before: str | None = None, copy_of: str | Non
     for named in (before, copy_of):
         if named is not None:
             _index(project.stages, named, "stage")
+    first = stages.initial(project)
+    if before is not None and first is not None and before == first.id:
+        raise EditRefused(f"{first.name!r} is the initial stage, and nothing goes before "
+                          "it: add the stage after it instead.")
     if id is not None:
         _refuse_taken(id, [stage.id for stage in project.stages], "stage")
     if before is not None:
@@ -1251,7 +1251,8 @@ def add_stage(project: Project, *, before: str | None = None, copy_of: str | Non
     payload = [stage.model_dump() for stage in listed]
     for stage in payload:
         if stage["id"] == fresh:
-            stage.update(fields, id=id or fresh)
+            _set_stage_fields(stage, fields)
+            stage["id"] = id or fresh
         if id is not None and stage["parent"] == fresh:
             stage["parent"] = id
     edited = replace_stages(project, StagesUpdate.model_validate({"stages": payload}))
@@ -1259,16 +1260,41 @@ def add_stage(project: Project, *, before: str | None = None, copy_of: str | Non
 
 
 def update_stage(project: Project, id: str, **fields) -> Project:
-    """The stage `id` with the fields given, by their schema names."""
+    """The stage `id` with the fields given, by their schema names.
+
+    The calculation type of the initial stage is every stage's, so it is set on all of
+    them (`stages.edited`). On a later stage, and a stress initialisation on one, it is
+    refused (`stages.check_settings`)."""
     _index(project.stages, id, "stage")
-    payload = [stage.model_dump() for stage in project.stages]
-    next(stage for stage in payload if stage["id"] == id).update(fields)
+    first = stages.initial(project)
+    listed = list(project.stages)
+    if "calculation" in fields and first is not None and id == first.id:
+        listed = stages.edited(project, id, "calculation", fields["calculation"])
+    payload = [stage.model_dump() for stage in listed]
+    _set_stage_fields(next(stage for stage in payload if stage["id"] == id), fields)
     return replace_stages(project, StagesUpdate.model_validate({"stages": payload}))
 
 
+def _set_stage_fields(stage: dict, fields: dict) -> None:
+    """`fields` set on the dumped `stage`. A new convergence criterion takes its default
+    absolute tolerance along unless the stage, or `fields`, has its own
+    (`schemas.followed_tolerance`)."""
+    criterion = fields.get("convergence_criterion")
+    if criterion is not None and "absolute_tolerance" not in fields:
+        stage["absolute_tolerance"] = followed_tolerance(
+            stage["absolute_tolerance"], stage["convergence_criterion"], criterion)
+    stage.update(fields)
+
+
 def remove_stage(project: Project, id: str) -> Project:
-    """The project without stage `id`, its children starting from its parent."""
+    """The project without stage `id`, its children starting from its parent. The
+    initial stage is always there."""
     _index(project.stages, id, "stage")
+    first = stages.initial(project)
+    if first is not None and id == first.id:
+        raise EditRefused(f"{first.name!r} is the initial stage, which is always there: "
+                          "it chooses the calculation type and the stress initialisation "
+                          "of the whole sequence.")
     return replace_stages(project, StagesUpdate(stages=stages.removed(project, id)))
 
 

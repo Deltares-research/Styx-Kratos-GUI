@@ -227,15 +227,21 @@ START = WaterPressureCondition(
 """The start values of `tests/seepage_tests`: hydrostatic about the upstream level."""
 
 
-def seepage(order: int = 1, max_iterations: int = 100) -> Project:
+def seepage(order: int = 1, max_iterations: int = 100,
+            convergence_criterion: str = "water_pressure_criterion") -> Project:
     """Case C: the Van Genuchten soil, the left head at 3.0 m, the tail water and the
     seepage face on the right face, meshed at 0.4 m and at `FACE_SIZE` along the right
     face, started from `START`. The flow stage has the seepage decks' tolerance of 1e-4
     and `max_iterations`: the seepage strategy opens one node of the face per iteration,
-    and the face has 89 nodes at this size, of which 35 open (35 iterations, linear)."""
+    and the face has 89 nodes at this size, of which 35 open (35 iterations, linear).
+
+    On the quadratic mesh the water pressure criterion does not converge: the face
+    opening and closing keeps the ratio near 1.6e-3 (2026-11-03). The residual one
+    does, as the seepage decks have it."""
     return muskat(
         conditions=[head("left_head", "left", LEFT_LEVEL), TAIL, SEEPAGE_FACE, START],
         stages=[Stage(id="flow", name="Flow", calculation="flow",
+                      convergence_criterion=convergence_criterion,
                       max_iterations=max_iterations, tolerated_error=1e-4)],
         soil={**SOIL, **VAN_GENUCHTEN}, order=order,
         mesh=MeshSettings(element_size=0.4, order=order, refinements=[BoxRefinement(

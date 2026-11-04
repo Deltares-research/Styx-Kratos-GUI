@@ -1112,7 +1112,8 @@ def test_the_live_shell_replaces_only_the_viewport_and_the_orbit_controller(clie
                            "toolbars.js", "explorer.js", "command.js", "dialogs.js", "app.js"}
     # Additions rather than substitutions -- they have no frozen counterpart:
     # soil-volume-dialog.js, canvas-renderer.js, ruler.js, mesh-labels.js,
-    # download.js, zip.js, stages.js, results.js, results-render.js, results-view.js,
+    # download.js, zip.js, stages.js, solver-settings.js, results.js, results-render.js,
+    # results-view.js,
     # part-colors.js, water-command.js, script-command.js, node-parts.js, deck.js,
     # results-plot.js, vocabulary.js.
     # The assertion above is the one that guards the portability claim.
@@ -1129,6 +1130,9 @@ def test_the_live_shell_replaces_only_the_viewport_and_the_orbit_controller(clie
                              "material-library.js",
                              "orbit.js", "ruler.js", "mesh-labels.js",
                              "download.js", "zip.js", "stages.js", "results.js",
+                             # A stage's expert solver settings, generated from
+                             # core/model/solver.py, which stages.js resolves.
+                             "solver-settings.js",
                              "results-render.js", "results-view.js", "part-colors.js",
                              "water-command.js", "script-command.js", "node-parts.js",
                              "deck.js",

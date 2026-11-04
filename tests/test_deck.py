@@ -433,6 +433,7 @@ def staged_stage(name: str, domain: list[str], loads: tuple = (), *,
     solver = body["stage_settings"]["solver_settings"]
     solver.update({"problem_domain_sub_model_part_list": domain,
                    "reset_displacements": reset, "max_iterations": 50,
+                   "convergence_criterion": "residual_criterion",
                    "residual_relative_tolerance": 0.01})
     processes = {
         "loads_process_list": [
@@ -528,9 +529,12 @@ def test_a_stage_carries_its_stage_settings(staged):
     assert by_id["3_Fill"].reset_displacements is True
     assert by_id["4_Crane"].reset_displacements is False
     assert by_id["3_Fill"].max_iterations == 50
+    assert by_id["3_Fill"].convergence_criterion == "residual_criterion"
     assert by_id["3_Fill"].tolerated_error == 0.01
-    assert by_id["3_Fill"].time_interval == 17.0
-    assert by_id["1_Initial_stage"].time_interval == 0.0
+    # The deck's own seconds, which are the project's. Its solver names no step, so
+    # each stage is one step, as Kratos would run it.
+    assert (by_id["3_Fill"].duration, by_id["3_Fill"].time_step) == (17 * 86400.0,) * 2
+    assert (by_id["1_Initial_stage"].duration, by_id["1_Initial_stage"].time_step) == (1.0, 1.0)
 
 
 def test_a_deck_without_part_lists_has_stages_that_change_nothing(project):

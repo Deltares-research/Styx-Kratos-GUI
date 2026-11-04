@@ -3,17 +3,18 @@
 The warnings of plan/done/boundary-conditions-plan.md sec 2.3 that the project alone
 answers: a model nothing holds still, a water level nothing reads, a coupled soil with
 nothing to fix its water pressure, a condition on a face or a drawn line this dimension
-does not have, a K0 procedure with gravity off. The export (`core.kratos.writer`) adds them to its own, and
+does not have. The export (`core.kratos.writer`) adds them to its own, and
 `kratos-cli check` prints them without meshing, so both say the same thing in the same
 words.
 
-A seepage face (`SeepageCondition`) belongs to a groundwater flow calculation; a
-deformation deck leaves it out and says so.
+A seepage face (`SeepageCondition`) is written in a section, flow or deformation, and
+solved by the seepage strategy; a 3D deformation deck leaves it out and says so, as
+Kratos' seepage conditions are line conditions.
 
 A groundwater flow project (`core.model.stages.groundwater_flow`) has warnings of its own
 instead of the ones about deformation -- the structures and loads it leaves out (the
-supports it leaves out silently), a soil fixed everywhere,
-gravity off -- and the refusals of `flow_refusal`, which both say before meshing too.
+supports it leaves out silently), a soil fixed everywhere -- and the refusals of
+`flow_refusal`, which both say before meshing too.
 
 The ones that need the mesh -- two conditions sharing nodes, a part with no soil in this
 dimension, a line with no mesh at it -- stay with the export.
@@ -43,7 +44,6 @@ def warnings(project: Project) -> list[str]:
     if _flow(project):
         out += _left_out_of_flow(project)
         out += _water_fixed_everywhere(project)
-        out += _weightless_flow(project)
         out += _unused_water_level(project)
         return out
     out += _seepage_outside_flow(project)
@@ -51,7 +51,6 @@ def warnings(project: Project) -> list[str]:
     out += _unpinned_water(project)
     out += _free_water_in_stages(project)
     out += _unused_water_level(project)
-    out += _weightless_k0(project)
     return out
 
 
@@ -112,12 +111,15 @@ def held_by_section(project: Project, condition) -> bool:
 
 
 def _seepage_outside_flow(project: Project) -> list[str]:
-    """A seepage face in a deformation project: the deck has no seepage strategy to open
-    and close it, so it is left out."""
+    """A seepage face in a 3D deformation project: Kratos' seepage conditions are line
+    conditions, on a section's edges, so it is left out. In a section it is written,
+    and its stages are solved by the seepage strategy (`core.model.stages.seepage`)."""
+    if project.dimension == 2:
+        return []
     faces = [c for c in project.boundary_conditions
              if isinstance(c, SeepageCondition) and written(project, c)]
-    return [f"{noun(c)} is left out: a seepage face belongs to a groundwater flow "
-            "calculation, and this project's stages are not flow stages."
+    return [f"{noun(c)} is left out: a seepage face is written in a 2D section only, "
+            "on its edges, and this model is 3D."
             for c in faces]
 
 
@@ -230,19 +232,6 @@ def _unused_water_level(project: Project) -> list[str]:
         "if the soil should be under water."]
 
 
-def _weightless_k0(project: Project) -> list[str]:
-    """A K0 procedure, and gravity loading, derive their stresses from the self weight,
-    which gravity off leaves out: the stresses they start the next stage with are
-    zero."""
-    if project.gravity:
-        return []
-    named = {"K0": "a K0 procedure", "gravity": "gravity loading"}
-    return [f"stage {stage.name!r} initialises its stresses by "
-            f"{named[stage.stress_initialisation]}, whose stresses come from the self "
-            "weight; with gravity off they are zero."
-            for stage in project.stages if stage.stress_initialisation in named]
-
-
 # ── Groundwater flow ────────────────────────────────────────────────────────
 
 def _flow(project: Project) -> bool:
@@ -327,16 +316,6 @@ def _water_fixed_everywhere(project: Project) -> list[str]:
             "can flow. Fix it on the faces or lines where the head is known instead, and "
             "give the soil a start value (not fixed) if it needs one."
             for c in _water_pressures(project) if c.is_fixed and c.on == "domain"]
-
-
-def _weightless_flow(project: Project) -> list[str]:
-    """Without gravity the water has no weight: the flow follows the pressure alone, and
-    the hydraulic head is not written (`parameters._gid_output`)."""
-    if project.gravity:
-        return []
-    return ["gravity is off, so the water has no weight: it flows from the pressure "
-            "differences alone, and the hydraulic head is not written. Turn gravity on, "
-            "unless the section is a horizontal one."]
 
 
 def _names(records: list) -> str:

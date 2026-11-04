@@ -51,14 +51,42 @@ App.Stages = (function () {
 
   var FLOW = 'flow';
 
-  /* The three choices of a stage (`schemas.Stage`), as [value, label]: what the stage
-     solves for, how a mechanical one initialises its stresses, and whether it solves
-     statically or in time. A new calculation type is a new row here and in the
-     schema. */
+  /* The choices of a stage (`schemas.Stage`), as [value, label]: what the stage
+     solves for, how a mechanical one initialises its stresses, whether it solves
+     statically or in time, and the convergence criteria of each calculation type, its
+     default first (`schemas.CONVERGENCE_CRITERIA`). A new calculation type is a new
+     row here and in the schema. */
   var CALCULATION_TYPES = [['mechanical', 'Mechanical (U-Pw)'], [FLOW, 'Flow (Pw)']];
   var STRESS_INITIALISATIONS = [['K0', 'K0 procedure'], ['gravity', 'Gravity loading'],
                                 ['none', 'None']];
   var TIME_INTEGRATIONS = [['static', 'Static'], ['dynamic', 'Dynamic']];
+  var CONVERGENCE_CRITERIA = {
+    mechanical: [['residual_criterion', 'Residual'],
+                 ['displacement_criterion', 'Displacement']],
+    flow: [['water_pressure_criterion', 'Water pressure'],
+           ['residual_criterion', 'Residual']]
+  };
+
+  /* The convergence criteria a stage of `calculation` can have. */
+  function criteriaOf(calculation) {
+    return CONVERGENCE_CRITERIA[calculation || 'mechanical'] || [];
+  }
+
+  /* The default absolute tolerance of each criterion (`schemas.ABSOLUTE_TOLERANCES`). */
+  var ABSOLUTE_TOLERANCES = {
+    residual_criterion: 1e-8, displacement_criterion: 1e-12, water_pressure_criterion: 1e-8
+  };
+
+  /* `stage` solved on `criterion`: its absolute tolerance follows the default unless
+     it has its own (`schemas.followed_tolerance`). */
+  function setCriterion(stage, criterion) {
+    var old = ABSOLUTE_TOLERANCES[stage.convergence_criterion || 'residual_criterion'];
+    var tolerance = stage.absolute_tolerance == null ? old : stage.absolute_tolerance;
+    if (old != null && ABSOLUTE_TOLERANCES[criterion] != null && tolerance === old) {
+      stage.absolute_tolerance = ABSOLUTE_TOLERANCES[criterion];
+    }
+    stage.convergence_criterion = criterion;
+  }
 
   /* Whether the project is a groundwater flow calculation: it has stages, and every one
      is a flow stage (`core.model.stages.groundwater_flow`). A mix of flow and
@@ -80,16 +108,17 @@ App.Stages = (function () {
     return words.join(', ');
   }
 
-  /* `stage` with `field` set to `value`, and whatever that implies: a stage that is not
-     mechanical has no stresses to initialise, so it goes back to none -- which the
-     server would otherwise refuse (`schemas.Stage`). */
-  function withField(stage, field, value) {
-    var edited = copy(stage);
-    edited[field] = value;
-    if (field === 'calculation' && value !== 'mechanical') {
-      edited.stress_initialisation = 'none';
-    }
-    return edited;
+  /* The initial stage: the one that starts from the model as built
+     (`core.model.stages.initial`). It chooses the calculation type and the stress
+     initialisation of the whole sequence. */
+  function initialOf(project) {
+    return stagesOf(project).filter(function (stage) { return stage.parent == null; })[0]
+      || null;
+  }
+
+  function isInitial(project, id) {
+    var first = initialOf(project);
+    return !!first && first.id === id;
   }
 
   /* Both lists are optional on the wire -- pydantic defaults them and a stage that
@@ -254,13 +283,24 @@ App.Stages = (function () {
 
   /* The Stages overview (patches.js `stagesDialog`): `rows`, plus what the stage list
      puts on each line -- the stage's duration, the time T reached at its end (summed
-     along its chain), its id -- and what the last calculation made of it.
+     along its chain), its id -- and what the last calculation made of it. Times are in
+     the project's unit of time (App.Units, seconds in every system).
 
      `run` is `{completed, failed}`: how many stages the last run got through, and
      whether it stopped short. A failed run failed in the stage after the last one it
      completed. */
-  function days(value) {
-    return String(Math.round(value * 1000) / 1000) + ' d';
+  var DEFAULT_DURATION = 1.0;
+  var TIME_STEP = 0.25;
+
+  function timeUnit() {
+    return (App.Units && App.Units.label('time')) || 's';
+  }
+
+  function rounded(value) { return Math.round(value * 1000) / 1000; }
+
+  function durationOf(stage) {
+    var value = Number(stage.duration);
+    return isFinite(value) && value > 0 ? value : DEFAULT_DURATION;
   }
 
   function overview(project, run) {
@@ -269,18 +309,17 @@ App.Stages = (function () {
     return rows(project, run).map(function (row, position) {
       var stage = byId[row.id] || {};
       var total = 0;
-      chainTo(project, row.id).forEach(function (each) {
-        total += Number(each.time_interval) || 0;
-      });
-      total = Math.round(total * 1000) / 1000;
-      var interval = Number(stage.time_interval) || 0;
+      chainTo(project, row.id).forEach(function (each) { total += durationOf(each); });
+      total = rounded(total);
+      var duration = rounded(durationOf(stage));
+      var unit = timeUnit();
       var failedHere = !!(run && run.failed) && position === completed;
       return {
         number: position + 1, id: row.id, name: row.name, kind: row.kind,
-        depth: row.depth, interval: interval, total: total,
+        depth: row.depth, duration: duration, total: total, unit: unit,
         state: failedHere ? 'failed' : row.state,
-        label: row.name + (interval || total
-          ? ' - ' + days(interval) + ', T = ' + days(total) : '') + ' [' + row.id + ']',
+        label: row.name + ' - ' + duration + ' ' + unit + ', T = ' + total + ' ' + unit
+               + ' [' + row.id + ']',
         log: position < completed ? 'OK' : failedHere ? 'Failed' : 'Not calculated'
       };
     });
@@ -304,8 +343,9 @@ App.Stages = (function () {
       calculation: 'mechanical', stress_initialisation: 'none',
       time_integration: 'static', loading: 'Staged construction',
       activate: [], deactivate: [],
-      reset_displacements: false, max_iterations: 15,
-      tolerated_error: 1e-4, time_interval: 0.0
+      reset_displacements: false, convergence_criterion: 'residual_criterion',
+      max_iterations: 15, tolerated_error: 1e-4, absolute_tolerance: 1e-8,
+      duration: DEFAULT_DURATION, time_step: TIME_STEP, solver_settings: {}
     };
   }
 
@@ -315,12 +355,29 @@ App.Stages = (function () {
   }
 
   /* Add: a new stage at the end of the sequence. */
+  /* The stage a new project starts with (`stages.initial_stage`). */
+  function initialStage() {
+    var made = blank(null, 'initial', 'Initial stage', null);
+    made.stress_initialisation = 'gravity';
+    return made;
+  }
+
+  /* A blank stage after the initial one: its calculation type, no stress
+     initialisation (`stages._later`). */
+  function later(project, id, name, parent) {
+    var made = blank(project, id, name, parent);
+    var first = initialOf(project);
+    if (first) made.calculation = first.calculation || 'mechanical';
+    setCriterion(made, criteriaOf(made.calculation)[0][0]);
+    return made;
+  }
+
   function added(project) {
     var list = copy(stagesOf(project));
     var tail = lastOf(project);
+    if (!tail) return [initialStage()];
     var id = freshId(project, 'stage');
-    list.push(blank(project, id, 'Stage ' + (list.length + 1),
-                    tail ? tail.id : null));
+    list.push(later(project, id, 'Stage ' + (list.length + 1), tail.id));
     return list;
   }
 
@@ -333,9 +390,10 @@ App.Stages = (function () {
   function inserted(project, id) {
     var byId = index(project);
     var target = byId[id];
-    if (!target) return copy(stagesOf(project));
+    // Nothing goes before the initial stage.
+    if (!target || target.parent == null) return copy(stagesOf(project));
 
-    var made = blank(project, freshId(project, 'stage'), 'New stage', target.parent);
+    var made = later(project, freshId(project, 'stage'), 'New stage', target.parent);
     var list = copy(stagesOf(project));
     list.forEach(function (stage) {
       if (stage.id === id) stage.parent = made.id;
@@ -350,12 +408,12 @@ App.Stages = (function () {
      Its children adopt its parent. Without that the chain is cut in two and every
      stage after the deleted one is unreachable from the root -- which the server
      reports as "stages unreachable from the first one", naming stages the user never
-     touched. Deleting the root promotes its child, which is the same rule with
-     `parent` null. */
+     touched. The initial stage is not deleted: it is always there. */
   function removed(project, id) {
     var byId = index(project);
     var target = byId[id];
-    if (!target) return copy(stagesOf(project));
+    // The initial stage is always there.
+    if (!target || target.parent == null) return copy(stagesOf(project));
 
     var inherited = target.parent == null ? null : target.parent;
     return copy(stagesOf(project))
@@ -364,6 +422,41 @@ App.Stages = (function () {
         if (stage.parent === id) stage.parent = inherited;
         return stage;
       });
+  }
+
+  /* One field of stage `id` set to `value`, as the property grid sets it
+     (`stages.edited`). The calculation type is the initial stage's: set there, every
+     stage gets it, a stage that is not mechanical goes back to no stress
+     initialisation, and a stage of another type goes to the new type's default
+     convergence criterion and expert settings; set on a later stage, it changes
+     nothing. So does a stress initialisation on a later stage. A stage whose criterion
+     changes keeps its absolute tolerance unless it was the old criterion's default,
+     which becomes the new one's. */
+  function edited(project, id, field, value) {
+    var list = copy(stagesOf(project));
+    var target = list.filter(function (stage) { return stage.id === id; })[0];
+    if (!target) return list;
+    var first = isInitial(project, id);
+    if (field === 'calculation') {
+      if (!first) return list;
+      list.forEach(function (stage) {
+        var allowed = criteriaOf(value);
+        if (allowed.length && (stage.calculation || 'mechanical') !== value) {
+          setCriterion(stage, allowed[0][0]);
+          stage.solver_settings = {};
+        }
+        stage.calculation = value;
+        if (value !== 'mechanical') stage.stress_initialisation = 'none';
+      });
+      return list;
+    }
+    if (field === 'stress_initialisation' && !first) return list;
+    if (field === 'convergence_criterion') {
+      setCriterion(target, value);
+      return list;
+    }
+    target[field] = value;
+    return list;
   }
 
   /* Copy: the same solver settings, spliced in after the original.
@@ -381,12 +474,18 @@ App.Stages = (function () {
     var made = blank(project, freshId(project, 'stage'),
                      original.name + ' (copy)', original.id);
     made.calculation = original.calculation || 'mechanical';
-    made.stress_initialisation = original.stress_initialisation || 'none';
     made.time_integration = original.time_integration || 'static';
     made.reset_displacements = !!original.reset_displacements;
+    made.convergence_criterion = original.convergence_criterion ||
+      criteriaOf(made.calculation)[0][0];
     if (original.max_iterations != null) made.max_iterations = original.max_iterations;
     if (original.tolerated_error != null) made.tolerated_error = original.tolerated_error;
-    if (original.time_interval != null) made.time_interval = original.time_interval;
+    if (original.absolute_tolerance != null) {
+      made.absolute_tolerance = original.absolute_tolerance;
+    }
+    if (original.duration != null) made.duration = original.duration;
+    if (original.time_step != null) made.time_step = original.time_step;
+    made.solver_settings = copy(original.solver_settings || {});
 
     var list = copy(stagesOf(project));
     list.forEach(function (stage) {
@@ -394,6 +493,109 @@ App.Stages = (function () {
     });
     var at = list.map(function (stage) { return stage.id; }).indexOf(id);
     list.splice(at + 1, 0, made);
+    return list;
+  }
+
+  /* ── Expert solver settings ──────────────────────────────────────────── */
+
+  /* The catalogue `core.model.solver` publishes as js/solver-settings.js: every
+     expert setting, its default, when it applies and when it is fixed. */
+  function catalogue() { return App.SOLVER_SETTINGS || []; }
+
+  function holds(when, context) {
+    return Object.keys(when || {}).every(function (name) {
+      return when[name].indexOf(context[name]) >= 0;
+    });
+  }
+
+  function rule(rules, context) {
+    for (var i = 0; i < rules.length; i++) {
+      var each = rules[i];
+      if (holds(each.when, context) &&
+          (each.from === undefined || context[each.from] != null)) return each;
+    }
+    return null;
+  }
+
+  function ruleValue(each, context) {
+    return each.from !== undefined ? context[each.from] : each.value;
+  }
+
+  /* The expert settings that apply to a stage of `calculation` and `timeIntegration`
+     with `overrides` (its own `solver_settings`), in order: `{key, value, default,
+     overridden, locked}`, `locked` being the reason a value is fixed, or null.
+     `modelStrategy` is the strategy a flow stage's model calls for. The same steps as
+     `core.model.solver.resolve`, held to its answers by tests/test_solver_parity.py. */
+  function resolveSolver(calculation, timeIntegration, overrides, modelStrategy) {
+    overrides = overrides || {};
+    var context = { calculation: calculation, time_integration: timeIntegration,
+                    model_strategy: modelStrategy == null ? null : modelStrategy };
+    var out = [];
+    catalogue().forEach(function (setting) {
+      if (!holds(setting.when, context)) return;
+      var key = setting.key;
+      var lock = rule(setting.locked || [], context);
+      var defaulted = ruleValue(lock || rule(setting['default'], context) ||
+                                { value: null }, context);
+      var overridden = !lock && Object.prototype.hasOwnProperty.call(overrides, key);
+      var value = overridden ? overrides[key] : defaulted;
+      context[key] = value;
+      out.push({ key: key, value: value, 'default': defaulted, overridden: overridden,
+                 locked: lock ? lock.reason : null });
+    });
+    return out;
+  }
+
+  /* Stage `stage`'s expert settings, as `resolveSolver` gives them. The flow
+     strategy is the server's (`schemas.Project.model_strategies`), which works it out
+     from the soil in the stage and the project's conditions. */
+  function solverRows(project, stage) {
+    var strategies = (project && project.model_strategies) || {};
+    return resolveSolver(stage.calculation || 'mechanical',
+                         stage.time_integration || 'static',
+                         stage.solver_settings, strategies[stage.id]);
+  }
+
+  /* The catalogue entry of expert setting `key`. */
+  function solverSetting(key) {
+    return catalogue().filter(function (setting) { return setting.key === key; })[0]
+      || null;
+  }
+
+  /* What to call a setting's value: its option's label, or a fixed value's own. */
+  function solverLabel(key, value) {
+    var setting = solverSetting(key) || {};
+    var found = (setting.options || []).filter(function (option) {
+      return option[0] === value;
+    })[0];
+    if (found) return found[1];
+    var fixed = (setting.locked || []).filter(function (lock) {
+      return lock.value === value && lock.label;
+    })[0];
+    if (fixed) return fixed.label;
+    if (setting.kind === 'check') return value ? 'Yes' : 'No';
+    return value == null ? '' : String(value);
+  }
+
+  /* Whether the strategy `rows` resolve iterates: all but the linear one, which
+     solves once and has no convergence criterion, iterations or tolerances. */
+  function iterates(rows) {
+    var strategy = rows.filter(function (row) { return row.key === 'strategy_type'; })[0];
+    return !strategy || strategy.value !== 'linear';
+  }
+
+  /* One expert setting of stage `id` set to `value`, or back to its default with
+     `value` null (`stages.edited_solver`). */
+  function editedSolver(project, id, key, value) {
+    var list = copy(stagesOf(project));
+    var target = list.filter(function (stage) { return stage.id === id; })[0];
+    if (!target) return list;
+    var settings = {};
+    Object.keys(target.solver_settings || {}).forEach(function (name) {
+      if (name !== key) settings[name] = target.solver_settings[name];
+    });
+    if (value != null) settings[key] = value;
+    target.solver_settings = settings;
     return list;
   }
 
@@ -507,12 +709,17 @@ App.Stages = (function () {
   return {
     FLOW: FLOW, CALCULATION_TYPES: CALCULATION_TYPES,
     STRESS_INITIALISATIONS: STRESS_INITIALISATIONS, TIME_INTEGRATIONS: TIME_INTEGRATIONS,
-    groundwaterFlow: groundwaterFlow, kindOf: kindOf, withField: withField,
+    CONVERGENCE_CRITERIA: CONVERGENCE_CRITERIA, criteriaOf: criteriaOf,
+    ABSOLUTE_TOLERANCES: ABSOLUTE_TOLERANCES,
+    groundwaterFlow: groundwaterFlow, kindOf: kindOf, edited: edited,
+    initialOf: initialOf, isInitial: isInitial,
     chainTo: chainTo, activeParts: activeParts, stageableKeys: stageableKeys,
     hiddenKeys: hiddenKeys,
     order: order, branchProblem: branchProblem, rows: rows, overview: overview,
     added: added, inserted: inserted, removed: removed, copied: copied,
-    ownership: ownership, toggled: toggled, setActive: setActive, stateIn: stateIn
+    ownership: ownership, toggled: toggled, setActive: setActive, stateIn: stateIn,
+    resolveSolver: resolveSolver, solverRows: solverRows, solverSetting: solverSetting,
+    solverLabel: solverLabel, iterates: iterates, editedSolver: editedSolver
   };
 })();
 

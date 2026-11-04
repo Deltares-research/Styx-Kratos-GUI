@@ -228,7 +228,8 @@ def summary(project: Project) -> dict:
         "custom_parts": [p.key for p in project.custom_parts],
         "water": _water(project),
         "boundary_conditions": conditions.summary(project),
-        "gravity": project.gravity,
+        # Derived: the initial stage's stress initialisation decides it.
+        "gravity": stages.gravity(project),
         "stages": [p.id for p in project.stages],
         "mesh": {"element_size": project.mesh.element_size, "order": project.mesh.order},
         "deck": project.deck.directory if project.deck is not None else None,

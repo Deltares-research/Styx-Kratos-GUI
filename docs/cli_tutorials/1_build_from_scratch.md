@@ -113,7 +113,8 @@ mesh --size 1 --order 1
 #    --tolerance 1e-4, and the displacements of the stage before are kept.
 #    `stages show initial` prints a stage's settings. The solver is the same for every
 #    stage; "The stages, command by command" in docs/CLI.md says what it is.
-stages add initial --name "Initial stage" --stress-initialisation k0 --deactivate sheetpile_1 surcharge
+stages set initial --stress-initialisation k0
+stages deactivate initial sheetpile_1 surcharge
 stages add sheet_pile --name "Sheet pile" --activate sheetpile_1 --reset-displacements --max-iterations 150 --tolerance 1e-3
 stages add loading --name Load --activate surcharge --max-iterations 150 --tolerance 1e-3
 

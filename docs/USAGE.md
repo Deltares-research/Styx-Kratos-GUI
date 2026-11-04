@@ -290,9 +290,11 @@ whose soil couples the water pressure to the deformation (`GEO_DRAINAGE_TYPE` ot
 `CONSTANT_PW_FIELD`), add a **Uniform** water pressure of 0 on the whole soil. The export
 warns about it, and about a model that nothing holds.
 
-**Gravity** is on in a new project. Clear it in the window, or select **Model conditions**
-→ **Gravity**, to remove the self weight from every stage. A K0 stage then has zero
-stresses.
+**Gravity** is not a condition. Whether the self weight acts is decided by the stress
+initialisation of the initial stage (see [Stage settings](#stage-settings)): **K0
+procedure** and **Gravity loading** put it on every body, the soil and the structures, in
+every stage; **None** leaves it out of every stage. The initial stage's **Gravity** row in
+the **Stages** window says which. A flow calculation always has it.
 
 A **seepage face** is a part of the soil's outer boundary where the water may leave the
 soil in a groundwater flow calculation, for example the downstream face of a dam above the
@@ -346,10 +348,11 @@ on (active) or off. A stage starts from the result of the stage before it.
 
 ### Make the stages
 
-A new project has no stages. Click **Add stage** at the top of the Stages explorer to add
-the first one, for example an initial stage with the stress initialisation **K0
-procedure**. Add the other stages yourself, for example one to install the wall and one for
-each excavation lift.
+A new project has one stage, the **Initial stage**. It chooses the calculation type and
+the stress initialisation of the whole sequence, and it cannot be deleted, nor can a stage
+be inserted before it. Click **Add stage** at the top of the Stages explorer to add the
+other stages, for example one to install the wall and one for each excavation lift. A
+project saved without stages gets its initial stage from the first **Add stage**.
 
 To make the full sequence from the model in one step, use
 `kratos-cli stages P staged-excavation` (see
@@ -399,25 +402,71 @@ In the **Stages** window, select a stage and set:
 
 - **Name** and **Start from stage**
 - **Calculation type**: **Mechanical (U-Pw)** (the deformation of the soil, with the
-  water pressure in it) or **Flow (Pw)** (the flow of the water alone)
-- **Stress initialisation**, for a mechanical stage only: **K0 procedure** (the initial
-  stresses from the self weight and each soil's K0), **Gravity loading** (the initial
-  stresses calculated under the self weight), or **None** (the stresses of the stage
-  before)
+  water pressure in it) or **Flow (Pw)** (the flow of the water alone). You choose it in
+  the initial stage, and every stage has it: a later stage shows it, but cannot change it.
+- **Stress initialisation**, in the initial stage of a mechanical sequence only: **K0
+  procedure** (the initial stresses from the self weight and each soil's K0), **Gravity
+  loading** (the initial stresses calculated under the self weight, the default), or
+  **None** (no initial stresses, and no self weight in any stage). K0 and gravity loading
+  put the self weight on every body, the structures too, in every stage.
 - **Time integration**: **Static** or **Dynamic**. A dynamic mechanical stage includes
   inertia; a dynamic flow stage is a transient flow.
+- **Damping**, for a dynamic mechanical stage on the Newmark scheme: the **Rayleigh
+  mass damping** (alpha) and **Rayleigh stiffness damping** (beta), both 0 until you set
+  them.
 - **Reset displacements to zero**
-- **Max iterations** and **Tolerated error**
+- **Convergence criterion**: what Kratos checks to decide that a stage has converged. A
+  mechanical stage converges on the **Residual** (the default) or the **Displacement**; a
+  flow stage on the **Water pressure** (the default) or the **Residual**. Changing the
+  calculation type gives every stage the new type's default. The displacement criterion measures the water pressure too, so in a
+  coupled soil whose water pressure builds up it may not converge where the residual one
+  does; a flow stage with a seepage face that does not converge on the water pressure
+  may converge on the residual.
+- **Max iterations**, **Tolerated error** (the relative tolerance of the convergence
+  criterion) and **Absolute tolerance** (1e-12 for the displacement criterion, 1e-8
+  otherwise; changing the criterion changes it to the new one's default unless you set
+  your own)
 
-A stage that repeats the stage before it without changes, a *null step*, is a mechanical
-stage with the stress initialisation None that switches nothing on or off.
+**Expert settings**, below these and closed until you open them, are the rest of the
+solver settings Kratos reads. Only the settings that apply to the stage are shown. Each
+has the default for the stage's calculation type and time integration until you change
+it. A changed setting is shown in bold, and ↺ beside it puts the default back.
+
+- **Strategy**: **Quasi-Newton** (the default for a mechanical stage),
+  **Newton-Raphson**, **Newton-Raphson with line search** or **Linear (one solve)**, each
+  with its own settings. A flow stage's default is the one its soil calls for: one
+  linear solve for a saturated soil, Newton-Raphson for a soil with another retention
+  law. A stage with a seepage face, flow or mechanical, always uses Newton-Raphson with
+  seepage, tried once per step: you see it, but cannot change it. A linear stage has
+  nothing to converge, so it has no convergence criterion, iterations or tolerances.
+- **Linear solver**: **Sparse LU** or **Skyline LU** (direct), **AMGCL**, **BiCGStab**
+  or **CG** (iterative), each with its own settings. CG needs a symmetric system, as a
+  flow stage's is. The quasi-Newton strategy
+  factorises the stiffness matrix once with Sparse LU and reuses it, so with that
+  strategy you see Sparse LU, but cannot change it.
+- **Time step control**: how much Kratos enlarges a step that converges in few
+  iterations, up to the **Largest step** (a multiple of the time step), and how it cuts
+  a step that does not converge and tries it again, up to five **Attempts per step**,
+  until a step is smaller than the **Smallest step** (a fraction of the stage's
+  duration), where the stage stops.
+- **Time integration**, for a dynamic stage only: **Newmark** (the default) or
+  **Backward Euler**, and the Newmark coefficients. A mechanical stage on Backward Euler
+  is integrated in time without inertia, Kratos' quasi-static U-Pw, which is the only
+  one Kratos has Backward Euler for; it has no Rayleigh damping.
+- **Assembly**: the block builder, reforming the degrees of freedom at each step,
+  computing the reactions, and the updated mesh of a mechanical stage.
+
+Changing the calculation type puts every stage's expert settings back to the new
+type's defaults. A copied stage has the expert settings of its original.
+
+A stage that repeats the stage before it without changes, a *null step*, is a stage that
+switches nothing on or off.
 
 A **Flow** stage calculates a flow of the water through the soil, a steady state when it
 is static. It calculates the water pressure only, so the soil does not move and it has no
 stress initialisation:
 
-- Give every stage the type Flow. Calculate refuses a project that has both
-  flow stages and mechanical stages.
+- Choose Flow in the initial stage: every stage then has it.
 - Use a 2D model, and give every soil material a `PERMEABILITY_XX`.
 - In each stage, switch on at least one fixed water pressure condition on a face or a
   line, where the head is known. A boundary with no water pressure condition lets no water
@@ -524,7 +573,6 @@ Type a command in the command box below the log, and press <kbd>Enter</kbd>. Use
 | `stages` | Opens the **Stages** window |
 | `water <level>`, `water off` | Sets or removes the water level |
 | `boundary`, `boundary standard` | Lists the boundary conditions, or puts the standard supports back |
-| `gravity`, `gravity on`, `gravity off` | Shows gravity, or switches it on or off |
 | `units`, `units SI`, `units kN` | Shows or changes the unit system |
 | `soillayers`, `materials` | Opens the **Modify soil layers** or **Material sets** window |
 | `cleargeometry` | Removes all drawn and imported solids |

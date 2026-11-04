@@ -279,6 +279,48 @@ def stage_calculation(value: dict) -> dict:
     return {**value, "calculation": calculation, "stress_initialisation": stresses}
 
 
+def stage_time(value: dict) -> dict:
+    """A stage saved before 2026-11 has a `time_interval` in days, which the deck never
+    read: every stage ran for one second in one step. Now a stage has a `duration` and a
+    `time_step` in the project's unit of time, which is seconds in every system. A zero
+    interval -- every stage the GUI made -- becomes the default; any other one its
+    seconds, in one step, so the deck still solves the stage once."""
+    if "time_interval" not in value:
+        return value
+    out = {key: v for key, v in value.items() if key != "time_interval"}
+    days = value["time_interval"]
+    if isinstance(days, (int, float)) and not isinstance(days, bool) and days > 0:
+        out.setdefault("duration", days * SECONDS_PER_DAY)
+        out.setdefault("time_step", out["duration"])
+    return out
+
+
+def drop_gravity(value: dict) -> dict:
+    """A document saved before 2026-11-03 switches gravity on and off for itself
+    (`gravity`). Now the initial stage's stress initialisation decides it
+    (`core.model.stages.gravity`): none leaves the self weight out. Gravity off becomes
+    an initial mechanical stage that initialises no stresses -- the stresses it had with
+    gravity off were zero -- and the key is dropped. A flow sequence, or a project with
+    no stages, always has the self weight now."""
+    if "gravity" not in value:
+        return value
+    out = {key: v for key, v in value.items() if key != "gravity"}
+    stages = out.get("stages")
+    if value["gravity"] is not False or not isinstance(stages, list):
+        return out
+    out["stages"] = [_without_stresses(stage) for stage in stages]
+    return out
+
+
+def _without_stresses(stage: object) -> object:
+    if not isinstance(stage, dict) or stage.get("parent") is not None:
+        return stage
+    stage = stage_calculation(stage)
+    if stage.get("calculation", "mechanical") != "mechanical":
+        return stage
+    return {**stage, "stress_initialisation": "none"}
+
+
 def drop_boreholes(value: dict) -> dict:
     """A document saved before 2026-10-24 hangs each layer's levels on boreholes:
     `tops` and `bots` map a borehole id to a level. Now a layer has one `top` and one

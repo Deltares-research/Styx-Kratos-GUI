@@ -68,11 +68,12 @@ top and the bottom have no water pressure condition, so no water flows through t
 
 ### The calculation
 
-One stage, of the calculation type flow, and a mesh of quadratic triangles of 0.4 m:
+One stage, of the calculation type flow, and a mesh of quadratic triangles of 0.4 m. A
+new project has its initial stage already, where the calculation type is chosen:
 
 ```text
-PS> kratos-cli stages muskat.json add flow --name Flow --calculation flow
-added stage (id flow, name Flow) after nothing: it is the first; wrote muskat.json
+PS> kratos-cli stages muskat.json set initial --name Flow --calculation flow
+changed stage initial; wrote muskat.json
 
 PS> kratos-cli set muskat.json mesh.element_size 0.4
 mesh.element_size = 0.4; wrote muskat.json
@@ -148,7 +149,7 @@ added start  Initial phreatic line  water pressure on the whole soil; phreatic l
 The reference deck allows 100 iterations, with a relative tolerance of 1e-3:
 
 ```powershell
-kratos-cli stages muskat_vg.json set flow --max-iterations 100 --tolerance 1e-3
+kratos-cli stages muskat_vg.json set initial --max-iterations 100 --tolerance 1e-3
 kratos-cli set muskat_vg.json mesh.element_size 0.1
 ```
 
@@ -202,7 +203,7 @@ The calculation starts from a horizontal water level at 3.0 m, as Kratos' seepag
 
 ```powershell
 kratos-cli boundary muskat_seepage.json add start --name "Start values" --domain --water-pressure Hydrostatic --reference-coordinate 3 --pressure-tension-cut-off 1e5 --initial
-kratos-cli stages muskat_seepage.json set flow --tolerance 1e-4
+kratos-cli stages muskat_seepage.json set initial --tolerance 1e-4
 ```
 
 Kratos' seepage strategy decides, node by node, where the face is open. It changes one

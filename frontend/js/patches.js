@@ -735,7 +735,7 @@ App.LivePatches = (function () {
     });
   }
 
-  /* `boundary ...` and `gravity ...`, typed. What to send is App.BoundaryConditions'
+  /* `boundary ...`, typed. What to send is App.BoundaryConditions'
      (tested headless); this sends it and redraws. `false` when it is not this
      command. */
   function runBoundaryCommand(text) {
@@ -1883,13 +1883,13 @@ App.LivePatches = (function () {
       }, 'Stage added.'],
      ['phase', 'Insert stage above the selected one', function () {
         return selected ? App.Stages.inserted(App.PROJECT, selected) : null;
-      }, 'Stage inserted.'],
+      }, 'Stage inserted.', 'Nothing goes before the initial stage.'],
      ['copy', 'Duplicate the selected stage', function () {
         return selected ? App.Stages.copied(App.PROJECT, selected) : null;
       }, 'Stage duplicated.'],
      ['delete', 'Delete the selected stage', function () {
         return selected ? App.Stages.removed(App.PROJECT, selected) : null;
-      }, 'Stage deleted.']
+      }, 'Stage deleted.', 'The initial stage is always there.']
     ].forEach(function (spec) {
       var button = el('button.tbtn', { type: 'button' });
       button.appendChild(icon(spec[0]));
@@ -1899,6 +1899,11 @@ App.LivePatches = (function () {
         App.UI.hideTip();
         var list = spec[2]();
         if (!list) { App.Command.err('Select a stage first.'); return; }
+        // Insert and Delete refuse the initial stage (App.Stages.inserted, .removed).
+        if (spec[4] && App.Stages.isInitial(App.PROJECT, selected)) {
+          App.Command.err(spec[4]);
+          return;
+        }
         saveStages(list, spec[3]);
       });
       bar.appendChild(button);
@@ -1920,7 +1925,7 @@ App.LivePatches = (function () {
     var wrap = el('div.lay-hint', { style: 'padding:10px' });
     wrap.appendChild(el('div', { text:
       'This project has no construction sequence: it exports as a single stage, ' +
-      'the way it always has. Use "Add stage" above to start one.' }));
+      'the way it always has. Use "Add stage" above to add the initial stage.' }));
     return wrap;
   }
 
@@ -1952,10 +1957,19 @@ App.LivePatches = (function () {
     return true;
   }
 
+  /* Redrawn on every edit, so the panel keeps where it was scrolled to: emptying it
+     clamps its scroll to the top, and an edit low on the grid would jump the panel
+     away from the control just used. */
   function mountLiveStages() {
     if (typeof document === 'undefined') return;
     var host = document.getElementById('list-phases');
     if (!host) return;
+    var scroll = host.scrollTop;
+    drawLiveStages(host);
+    host.scrollTop = scroll;
+  }
+
+  function drawLiveStages(host) {
     var el = App.UI.el;
     var icon = App.UI.icon;
     App.UI.clear(host);
@@ -2008,14 +2022,177 @@ App.LivePatches = (function () {
     head.appendChild(icon('phase'));
     head.appendChild(el('span', { text: stage.name }));
     grid.appendChild(head);
+    appendStageGroups(grid, stage);
+    host.appendChild(grid);
+  }
+
+  /* The property grid's groups for `stage`, then its expert settings, collapsed until
+     opened. `after` runs once an edit is saved: the Stages dialog redraws with it,
+     since which rows a stage has follows what it is set to. The dock redraws anyway
+     (`saveStages`). */
+  function appendStageGroups(grid, stage, after) {
+    var el = App.UI.el;
     var groups = stageProps(stage);
+    var rows = App.Stages.solverRows(App.PROJECT, stage);
     Object.keys(groups).forEach(function (name) {
       grid.appendChild(el('div.pgrid-group', { text: name }));
       groups[name].forEach(function (row) {
-        grid.appendChild(stagePropRow(stage, row));
+        grid.appendChild(stagePropRow(stage, row, after));
       });
+      // The solver settings a stage of its kind is tuned by -- a dynamic stage's
+      // Rayleigh damping -- follow its time integration, outside the expert ones.
+      if (name === 'General') appendSolverGroups(grid, stage, rows, after, true);
     });
-    host.appendChild(grid);
+    grid.appendChild(expertSettings(stage, after, rows));
+  }
+
+  /* The solver settings among `rows` drawn on the stage's own grid (`onPanel`), or
+     the expert ones, each group under its own header. */
+  function appendSolverGroups(host, stage, rows, after, onPanel) {
+    var el = App.UI.el;
+    var group = null;
+    rows.forEach(function (row) {
+      var setting = App.Stages.solverSetting(row.key);
+      if ((setting.panel === 'stage') !== onPanel) return;
+      if (setting.group !== group) {
+        group = setting.group;
+        host.appendChild(el(onPanel ? 'div.pgrid-group' : 'div.pgrid-subgroup',
+                            { text: group }));
+      }
+      host.appendChild(solverPropRow(stage, row, setting, after));
+    });
+  }
+
+  /* The expert solver settings (`core.model.solver`): the strategy, the linear
+     solver, the time step control, the time scheme of a dynamic stage, the assembly.
+     Collapsed until opened, and kept open for the session once it is.
+
+     Only the settings that apply are drawn (App.Stages.solverRows), at the stage's
+     own value or the default its calculation type and time integration give it. A
+     setting the stage changed says so, with a button that puts it back; a setting
+     that is fixed -- the quasi-Newton strategy's Sparse LU, the seepage strategy of a
+     seepage face -- is shown, not offered, with the reason as its tooltip. The rows
+     are built when the section is first opened, so a closed one holds no controls. */
+  function expertSettings(stage, after, rows) {
+    var el = App.UI.el;
+    rows = rows || App.Stages.solverRows(App.PROJECT, stage);
+    var changed = rows.filter(function (row) {
+      return row.overridden && App.Stages.solverSetting(row.key).panel !== 'stage';
+    }).length;
+    var open = !!(App.state && App.state.stageExpert);
+    var wrap = el('div.pgrid-expert' + (open ? '.open' : ''));
+    var head = el('div.pgrid-group.pgrid-toggle', {
+      text: 'Expert settings' + (changed ? ' (' + changed + ' changed)' : ''),
+      title: open ? 'Hide the expert settings' : 'Show the expert settings'
+    });
+    var body = null;
+
+    function show() {
+      if (!body) {
+        body = el('div.pgrid-expert-body');
+        appendSolverGroups(body, stage, rows, after, false);
+        wrap.appendChild(body);
+      }
+      body.style.display = open ? '' : 'none';
+      wrap.classList.toggle('open', open);
+      head.title = open ? 'Hide the expert settings' : 'Show the expert settings';
+    }
+
+    head.addEventListener('click', function () {
+      open = !open;
+      App.state = App.state || {};
+      App.state.stageExpert = open;
+      show();
+    });
+    wrap.appendChild(head);
+    if (open) show();
+    return wrap;
+  }
+
+  /* One expert setting's row. Its edit stores the value on the stage
+     (App.Stages.editedSolver), or takes it off again, back to the default. */
+  function solverPropRow(stage, row, setting, after) {
+    var el = App.UI.el;
+    var key = el('div.pgrid-key' + (row.overridden ? '.changed' : ''), {
+      text: setting.label, title: setting.help || setting.label
+    });
+    var shown = App.Stages.solverLabel(row.key, row.value);
+
+    function commit(value) {
+      var saved = saveStages(App.Stages.editedSolver(App.PROJECT, stage.id, row.key,
+                                                     value));
+      if (after) saved.then(after);
+    }
+
+    if (row.locked) {
+      return el('div.pgrid-row', { title: row.locked }, [key, el('div.pgrid-val.readonly',
+        { text: 'fixed: ' + shown, title: row.locked })]);
+    }
+    // A deck case's stages are its deck's, which the server refuses to change.
+    if (App.PROJECT && App.PROJECT.deck) {
+      return el('div.pgrid-row', null, [key, el('div.pgrid-val.readonly',
+                                                 { text: shown })]);
+    }
+
+    var control;
+    if (setting.kind === 'select') {
+      control = el('select');
+      setting.options.forEach(function (option) {
+        var node = el('option', { value: option[0], text: option[1] });
+        if (option[0] === row.value) node.selected = true;
+        control.appendChild(node);
+      });
+      control.addEventListener('change', function () { commit(control.value); });
+    } else if (setting.kind === 'check') {
+      control = el('input.pgrid-check', { type: 'checkbox' });
+      control.checked = !!row.value;
+      control.addEventListener('change', function () { commit(control.checked); });
+    } else {
+      control = el('input.cell-input.cell-num', { value: String(row.value) });
+      control.addEventListener('change', function () {
+        var value = parseFloat(control.value.trim().replace(',', '.'));
+        var problem = numberProblem(setting.label, value, {
+          integer: setting.integer, min: setting.minimum,
+          exclusiveMin: setting.above, max: setting.maximum
+        });
+        if (problem) {
+          control.value = String(row.value);
+          App.Command.err(problem);
+          return;
+        }
+        commit(value);
+      });
+    }
+
+    var cell = el('div.pgrid-val.editable.field', null, [control]);
+    if (row.overridden) {
+      var reset = el('button.pgrid-reset', {
+        type: 'button', text: '↺',
+        title: 'Back to the default: ' + App.Stages.solverLabel(row.key, row['default'])
+      });
+      reset.addEventListener('click', function () { commit(null); });
+      cell.appendChild(reset);
+    }
+    return el('div.pgrid-row', null, [key, cell]);
+  }
+
+  /* What is wrong with `value` as `label`, given `bounds` -- `integer`, `min`,
+     `exclusiveMin`, `max` -- or null. */
+  function numberProblem(label, value, bounds) {
+    if (!isFinite(value)) return label + ' must be a number.';
+    if (bounds.integer && value !== Math.round(value)) {
+      return label + ' must be a whole number.';
+    }
+    if (bounds.min != null && value < bounds.min) {
+      return label + ' must be at least ' + bounds.min + '.';
+    }
+    if (bounds.exclusiveMin != null && value <= bounds.exclusiveMin) {
+      return label + ' must be greater than ' + bounds.exclusiveMin + '.';
+    }
+    if (bounds.max != null && value > bounds.max) {
+      return label + ' must be at most ' + bounds.max + '.';
+    }
+    return null;
   }
 
   /* The property grid for one stage.
@@ -2030,42 +2207,73 @@ App.LivePatches = (function () {
      "Water conditions" is read-only: the water pressure conditions the stage has on,
      which the Model explorer's check boxes switch (App.BoundaryConditions.waterIn).
 
-     The calculation type is mechanical or flow (App.Stages.CALCULATION_TYPES). Only a
-     mechanical stage has stresses, so only it has a "Stress initialisation" row; making
-     a stage a flow stage sets that back to none (App.Stages.withField). A flow stage
-     solves the water pressure alone, so its "Reset displacements to zero" box is
-     greyed out, with the reason as its tooltip; the CLI refuses the option on such a
-     stage. */
+     The calculation type is mechanical or flow (App.Stages.CALCULATION_TYPES), chosen
+     in the initial stage for the whole sequence: a later stage shows it, and cannot
+     change it. The stresses are initialised in the initial stage of a mechanical
+     sequence only, so only that stage has a "Stress initialisation" row; making the
+     sequence a flow one sets it back to none (App.Stages.edited). That row is also what
+     switches gravity: none leaves the self weight out of every stage
+     (`core.model.stages.gravity`), which the "Gravity" row under it says. A flow stage solves
+     the water pressure alone, so its "Reset displacements to zero" box is greyed out,
+     with the reason as its tooltip; the CLI refuses the option on such a stage.
+
+     The stage duration and its time step are in the project's unit of time
+     (App.Units); the server refuses a step longer than the duration.
+
+     The convergence criterion is one of the calculation type's
+     (App.Stages.CONVERGENCE_CRITERIA): residual or displacement for a mechanical
+     stage, water pressure or residual for a flow stage. "Tolerated error" and
+     "Absolute tolerance" are the criterion's relative and absolute tolerances. */
   function stageProps(stage) {
     var parent = stage.parent == null ? null : stageById(stage.parent);
     var flow = stage.calculation === App.Stages.FLOW;
+    var first = stage.parent == null;
+    var calculation = (App.Stages.CALCULATION_TYPES.filter(function (option) {
+      return option[0] === (stage.calculation || 'mechanical');
+    })[0] || [null, stage.calculation])[1];
+    var second = App.Units ? App.Units.label('time') : 's';
+    var criteria = App.Stages.criteriaOf(stage.calculation);
     var general = [
       ['Name', 'text', 'name'],
       ['Start from stage', 'static', parent ? parent.name : 'the model as built'],
-      ['Calculation type', 'select', 'calculation', App.Stages.CALCULATION_TYPES]
+      first ? ['Calculation type', 'select', 'calculation', App.Stages.CALCULATION_TYPES]
+            : ['Calculation type', 'static', calculation + ' (from the initial stage)']
     ];
-    if (stage.calculation === 'mechanical' || stage.calculation == null) {
+    if (first && (stage.calculation === 'mechanical' || stage.calculation == null)) {
       general.push(['Stress initialisation', 'select', 'stress_initialisation',
                     App.Stages.STRESS_INITIALISATIONS]);
+      general.push(['Gravity', 'static', (stage.stress_initialisation || 'none') === 'none'
+        ? 'Off: no body has a self weight' : 'On: every body has its self weight']);
     }
     general.push(['Time integration', 'select', 'time_integration',
                   App.Stages.TIME_INTEGRATIONS]);
-    return {
+    var groups = {
       'General': general.concat([
         ['Loading type', 'static', stage.loading || 'Staged construction'],
         ['Water conditions', 'static', App.BoundaryConditions
           ? App.BoundaryConditions.waterIn(App.PROJECT, stage.id) : ''],
-        ['Time interval', 'number', 'time_interval', { min: 0 }, 'day']
+        ['Stage duration', 'number', 'duration', { exclusiveMin: 0 }, second],
+        ['Time step', 'number', 'time_step', { exclusiveMin: 0 }, second]
       ]),
       'Deformation control': [
         ['Reset displacements to zero', 'check', 'reset_displacements',
          flow ? { greyed: 'A groundwater flow stage has no displacements.' } : null]
       ],
       'Numerical control': [
+        criteria.length > 1
+          ? ['Convergence criterion', 'select', 'convergence_criterion', criteria]
+          : ['Convergence criterion', 'static',
+             criteria.length ? criteria[0][1] : stage.convergence_criterion],
         ['Max iterations', 'number', 'max_iterations', { min: 1, integer: true }],
-        ['Tolerated error', 'number', 'tolerated_error', { exclusiveMin: 0 }]
+        ['Tolerated error', 'number', 'tolerated_error', { exclusiveMin: 0 }],
+        ['Absolute tolerance', 'number', 'absolute_tolerance', { exclusiveMin: 0 }]
       ]
     };
+    // The linear strategy solves once: there is nothing to converge.
+    if (!App.Stages.iterates(App.Stages.solverRows(App.PROJECT, stage))) {
+      delete groups['Numerical control'];
+    }
+    return groups;
   }
 
   /* One row, and the edit behind it.
@@ -2074,17 +2282,15 @@ App.LivePatches = (function () {
      endpoint takes -- there is no per-field write, and inventing one would be a
      second way for the list to get out of step with the server. The reply replaces
      the list, so a value the server normalises shows the normalised one. */
-  function stagePropRow(stage, spec) {
+  function stagePropRow(stage, spec, after) {
     var el = App.UI.el;
     var label = spec[0], kind = spec[1];
     var key = el('div.pgrid-key', { text: label });
 
     function commit(value) {
-      var list = ((App.PROJECT && App.PROJECT.stages) || []).map(function (each) {
-        return each.id === stage.id ? App.Stages.withField(each, spec[2], value)
-                                    : copy(each);
-      });
-      saveStages(list);
+      var list = App.Stages.edited(App.PROJECT, stage.id, spec[2], value);
+      var saved = saveStages(list);
+      if (after) saved.then(after);
     }
 
     if (kind === 'static') {
@@ -2146,15 +2352,7 @@ App.LivePatches = (function () {
       });
       control.addEventListener('change', function () {
         var value = parseFloat(control.value.trim().replace(',', '.'));
-        var problem = null;
-        if (!isFinite(value)) problem = label + ' must be a number.';
-        else if (bounds.integer && value !== Math.round(value)) {
-          problem = label + ' must be a whole number.';
-        } else if (bounds.min !== undefined && value < bounds.min) {
-          problem = label + ' must be at least ' + bounds.min + '.';
-        } else if (bounds.exclusiveMin !== undefined && value <= bounds.exclusiveMin) {
-          problem = label + ' must be greater than ' + bounds.exclusiveMin + '.';
-        }
+        var problem = numberProblem(label, value, bounds);
         if (problem) {
           control.value = String(stage[spec[2]]);
           App.Command.err(problem);
@@ -2251,13 +2449,7 @@ App.LivePatches = (function () {
           stageLog(log, current);
 
           var grid = el('div.pgrid');
-          var groups = stageProps(stage);
-          Object.keys(groups).forEach(function (name) {
-            grid.appendChild(el('div.pgrid-group', { text: name }));
-            groups[name].forEach(function (row) {
-              grid.appendChild(stagePropRow(stage, row));
-            });
-          });
+          appendStageGroups(grid, stage, draw);
           right.appendChild(grid);
 
           /* What this stage changes. Read-only here: the way to change it is to
@@ -2351,8 +2543,8 @@ App.LivePatches = (function () {
     var reached = el('div.pgrid');
     reached.appendChild(el('div.pgrid-group', { text: 'Reached values' }));
     [['Stage', row.number + ' of ' + ((App.PROJECT.stages || []).length)],
-     ['Time interval', row.interval + ' day'],
-     ['Reached total time', row.total + ' day']
+     ['Stage duration', row.duration + ' ' + row.unit],
+     ['Reached total time', row.total + ' ' + row.unit]
     ].forEach(function (pair) {
       reached.appendChild(el('div.pgrid-row', null, [
         el('div.pgrid-key', { text: pair[0] }),
@@ -2407,7 +2599,6 @@ App.LivePatches = (function () {
     ['stages', 'the Stages overview: every stage, its time and result'],
     ['water <level>|off', 'set or remove the water level, e.g. water -1.5'],
     ['boundary [list|standard]', 'the boundary conditions, or put the standard supports back'],
-    ['gravity [on|off]', 'show, or switch on or off, the self weight'],
     ['units [SI|kN]', 'show the unit system, or convert the project to another'],
     ['soillayers', 'open the Modify soil layers window'],
     ['materials', 'open the Material sets window'],
@@ -3893,7 +4084,7 @@ App.LivePatches = (function () {
       if (runColourCommand(text)) return;
       // `water <level>` / `water off`: the project's water level.
       if (runWaterCommand(text)) return;
-      // `boundary list|standard`, `gravity [on|off]`: the boundary conditions.
+      // `boundary list|standard`: the boundary conditions.
       if (runBoundaryCommand(text)) return;
       // `units` / `units <system>`: the project's unit system.
       if (runUnitsCommand(text)) return;
@@ -4032,12 +4223,6 @@ App.LivePatches = (function () {
         })[0];
         // The record is the whole write, as for a normal load.
         if (condition) return App.BoundaryConditions.save(condition);
-      }
-      if (reselect === 'gravity' && App.BoundaryConditions) {
-        var on = App.PENDING_GRAVITY;
-        App.PENDING_GRAVITY = undefined;
-        if (on !== undefined) return App.BoundaryConditions.setGravity(on);
-        return;
       }
 
       if (App.NormalLoads && App.NormalLoads.isNormalLoadKey(reselect)) {

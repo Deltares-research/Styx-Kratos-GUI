@@ -36,7 +36,9 @@ import shutil
 from pathlib import Path, PurePath
 
 from core.kratos import deck_files, mdpa_reader, node_parts
-from core.model.schemas import Deck, Domain, Stage, Project
+from core.kratos.parameters import CONVERGENCE_TOLERANCES
+from core.model.solver import from_deck, resolve
+from core.model.schemas import CONVERGENCE_CRITERIA, Deck, Domain, Stage, Project
 from core.model.templates import blank_project
 
 
@@ -150,7 +152,6 @@ builds or removes."""
 
 K0_PROCESS = "apply_k0_procedure_process"
 STAGE_NUMBER = re.compile(r"^\d+_")
-SECONDS_PER_DAY = 86400.0
 
 
 def stage_parts(stage: dict) -> list[str]:
@@ -218,14 +219,34 @@ def _styx_stage(name: str, stage: dict, parent: str | None, *, activate: list[st
                     "reset_displacements": bool(solver.get("reset_displacements", False))}
     if isinstance(solver.get("max_iterations"), int) and solver["max_iterations"] > 0:
         fields["max_iterations"] = solver["max_iterations"]
-    tolerance = solver.get("residual_relative_tolerance")
-    if isinstance(tolerance, (int, float)) and tolerance > 0:
-        fields["tolerated_error"] = float(tolerance)
+    # The deck's criterion when it is one a stage can have -- Kratos' default, which is
+    # the stage's, when it names none. Otherwise the stage's default, with the
+    # tolerances of the residual criterion.
+    allowed = CONVERGENCE_CRITERIA[fields["calculation"]]
+    criterion = str(solver.get("convergence_criterion", allowed[0])).lower()
+    measured = "residual"
+    if criterion in allowed:
+        fields["convergence_criterion"] = criterion
+        measured = CONVERGENCE_TOLERANCES[criterion]
+    for key, field in (("relative", "tolerated_error"), ("absolute", "absolute_tolerance")):
+        tolerance = solver.get(f"{measured}_{key}_tolerance")
+        if isinstance(tolerance, (int, float)) and tolerance > 0:
+            fields[field] = float(tolerance)
     start, end = problem.get("start_time"), problem.get("end_time")
     if isinstance(start, (int, float)) and isinstance(end, (int, float)) and end > start:
-        # Seconds in the deck, days in a stage. The K0 and null steps span one
-        # second of pseudo-time, which is no time at all to anyone reading days.
-        fields["time_interval"] = round((end - start) / SECONDS_PER_DAY, 3)
+        # The deck's own time, which is the project's: seconds in every unit system.
+        fields["duration"] = float(end - start)
+        step = (solver.get("time_stepping") or {}).get("time_step")
+        fields["time_step"] = (float(step) if isinstance(step, (int, float))
+                               and 0 < step <= end - start else fields["duration"])
+    # The deck's own expert settings, where it differs from a stage's defaults: shown
+    # as they are, since it is the deck that runs.
+    stated = from_deck(solver)
+    fields["solver_settings"] = {
+        row["key"]: row["value"]
+        for row in resolve(fields["calculation"], fields.get("time_integration", "static"),
+                           stated)
+        if row["overridden"] and row["value"] != row["default"]}
     return Stage(**fields)
 
 

@@ -36,7 +36,8 @@ JS = ROOT / "frontend" / "js"
 # plain scripts sharing one global, exactly as the browser loads them.
 SUITES = {
     "stages": (
-        [TESTS / "fixtures" / "stage-cases.js", JS / "stages.js"],
+        [TESTS / "fixtures" / "stage-cases.js", TESTS / "fixtures" / "solver-cases.js",
+         JS / "solver-settings.js", JS / "stages.js"],
         TESTS / "test-stages.js",
     ),
     # `results.js` loads no other module and touches no DOM, by design -- see its

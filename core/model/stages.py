@@ -14,7 +14,11 @@ and it turns that tree into the three things the exporter needs:
 
 and two that are not about export at all:
 
-*   `staged_excavation_stages` -- a whole sequence a model script can give a project.
+*   `initial_stage` and `staged_excavation_stages` -- the stage a new project starts
+    with, and a whole sequence a model script can give a project.
+*   `initial` and `check_settings` -- the initial stage, which chooses the calculation
+    type and the stress initialisation for the whole sequence, and the refusal of a
+    sequence that chooses them anywhere else.
 *   `added`, `inserted`, `removed`, `copied`, `set_active` -- the edits the GUI's
     Stages toolbar and Model explorer make to a list, for the command line to make
     the same way.
@@ -27,7 +31,7 @@ own namespace (`Project.stageable_keys`), not on deck part names -- one drawn
 
 from __future__ import annotations
 
-from core.model.schemas import Stage, Project
+from core.model.schemas import CONVERGENCE_CRITERIA, Stage, Project, followed_tolerance
 
 
 class StageError(Exception):
@@ -107,6 +111,62 @@ def groundwater_flow(project: Project) -> bool:
     return True
 
 
+def initial(project: Project) -> Stage | None:
+    """The initial stage: the one that starts from the model as built (`parent` None).
+    The schema allows one, so there is one unless there are no stages at all."""
+    return next((stage for stage in project.stages if stage.parent is None), None)
+
+
+def check_settings(project: Project) -> None:
+    """Raise `StageError` unless the initial stage alone chooses the calculation type
+    and the stress initialisation.
+
+    The calculation type is one for the whole sequence -- the element type is in the
+    .mdpa, which every stage reads -- so it is chosen once, in the initial stage, and
+    every later stage has it. The stresses are initialised once, before anything is
+    built, so a later stage has no stress initialisation. Checked where stages are
+    edited (`core.session.replace_stages`) rather than by the schema, so that a project
+    saved before either rule still opens, and can be put right.
+    """
+    first = initial(project)
+    if first is None:
+        return
+
+    def named(stages: list[Stage]) -> str:
+        names = ", ".join(repr(stage.name) for stage in stages)
+        return f"stage {names} is" if len(stages) == 1 else f"stages {names} are"
+
+    other = [stage for stage in project.stages if stage.calculation != first.calculation]
+    if other:
+        raise StageError(
+            f"{named(other)} not {first.calculation}, as the initial stage "
+            f"{first.name!r} is: the calculation type is chosen in the initial stage, and "
+            "every later stage has it. Change it there.")
+    later = [stage for stage in project.stages
+             if stage is not first and stage.stress_initialisation != "none"]
+    if later:
+        raise StageError(
+            f"{named(later)} given a stress initialisation, which only the initial stage "
+            f"{first.name!r} has: set it to none.")
+
+
+def gravity(project: Project) -> bool:
+    """Whether the self weight acts in the calculation, in every stage of it.
+
+    A mechanical sequence has it when its initial stage initialises the stresses from it
+    -- by the K0 procedure or by gravity loading -- and not at all when the initial stage
+    initialises none. Then it is the weight of every body: the soil, and the sheet piles,
+    walls and anchors with their `DENSITY` (`core.kratos.parameters._gravity`). A flow
+    sequence, which has no stresses to initialise, and a project with no stages have it
+    as before. It is the one switch for the self weight: a model loaded by its boundary
+    conditions alone has an initial stage that initialises no stresses.
+    """
+    first = initial(project)
+    if first is None or first.calculation != "mechanical":
+        return True
+    return first.stress_initialisation != "none"
+
+
 def _chain_to(project: Project, stage: Stage | str) -> list[Stage]:
     """The stages from the root down to `stage`, inclusive.
 
@@ -138,6 +198,51 @@ def active_parts(project: Project, stage: Stage | str) -> set[str]:
     return active
 
 
+SATURATED = "SaturatedLaw"
+"""Kratos' retention law when a material names none: a soil saturated whatever its water
+pressure, whose flow is linear in it."""
+
+
+def seepage(project: Project) -> bool:
+    """Whether the project has a seepage face the deck writes: one, in a 2D section --
+    Kratos' seepage conditions are line conditions (`core.kratos.writer`)."""
+    return project.dimension == 2 and any(
+        condition.kind == "seepage" for condition in project.boundary_conditions)
+
+
+def model_strategy(project: Project, stage: Stage | str) -> str | None:
+    """The strategy a stage's model calls for: a flow stage's default strategy
+    (`core.model.solver`), and the one strategy a stage of either kind can have with a
+    seepage face. `None` for a mechanical stage without one, which is quasi-Newton
+    unless it says otherwise.
+
+    Newton-Raphson with seepage where the project has a seepage face, as that strategy
+    is what opens and closes the face node by node. Newton-Raphson where a soil in a
+    flow stage has a retention law that makes its permeability depend on the water
+    pressure (Kratos' `tests/Muskat/van_genuchten_hydrostatic`). One linear solve
+    otherwise, as a saturated soil's flow is linear in it (`saturated_hydrostatic`).
+    """
+    if seepage(project):
+        return "newton_raphson_with_seepage"
+    if isinstance(stage, str):
+        stage = next(each for each in project.stages if each.id == stage)
+    if stage.calculation != FLOW:
+        return None
+    # Keyed by body, as `core.kratos.writer._part_materials` is: a lift is still the
+    # layer it was dug out of.
+    material_of = {f"soil_{layer.id}": layer.mat for layer in project.layers}
+    material_of.update({key: material_of[key.partition("__")[0]]
+                        for key, *_ in project.soil_bodies()
+                        if key.partition("__")[0] in material_of})
+    material_of.update({part.key: part.mat for part in project.custom_parts if part.mat})
+    known = {material.id: material for material in project.materials}
+    for key in active_parts(project, stage):
+        material = known.get(material_of.get(key, ""))
+        if material and material.variables.get("RETENTION_LAW", SATURATED) != SATURATED:
+            return "newton_raphson"
+    return "linear"
+
+
 def transitions(project: Project) -> list[tuple[Stage, set[str], set[str]]]:
     """Per stage in execution order: what genuinely switches on, and what switches off.
 
@@ -155,6 +260,22 @@ def transitions(project: Project) -> list[tuple[Stage, set[str], set[str]]]:
         active = (active - switched_off) | switched_on
         result.append((stage, switched_on, switched_off))
     return result
+
+
+# -- the initial stage, and a whole sequence -----------------------------------
+
+INITIAL_ID = "initial"
+INITIAL_NAME = "Initial stage"
+
+
+def initial_stage() -> Stage:
+    """The stage a new project starts with, and the first one added to a project with
+    none: "Initial stage", a mechanical stage whose stresses come from gravity loading.
+    Gravity loading rather than the K0 procedure because it runs with any soil: the K0
+    procedure needs each soil's K0 (`K0_NC`, or a friction angle to derive it from). It
+    switches nothing off: a part drawn later is in the model until a stage says
+    otherwise."""
+    return Stage(id=INITIAL_ID, name=INITIAL_NAME, stress_initialisation="gravity")
 
 
 # -- a whole sequence ----------------------------------------------------
@@ -285,23 +406,35 @@ def _last(project: Project) -> Stage | None:
     return sequence[-1] if sequence else None
 
 
+def _later(project: Project, id: str, name: str, parent: str | None) -> Stage:
+    """A blank stage after the initial one: the initial stage's calculation type, and
+    no stress initialisation."""
+    first = initial(project)
+    return Stage(id=id, name=name, parent=parent,
+                 calculation=first.calculation if first else "mechanical")
+
+
 def added(project: Project) -> list[Stage]:
-    """Add: a blank stage at the end of the sequence, starting from the last one."""
+    """Add: a blank stage at the end of the sequence, starting from the last one. To a
+    project with no stages, the initial stage."""
     listed = _copies(project)
     tail = _last(project)
-    listed.append(Stage(id=_fresh_id(project, "stage"), name=f"Stage {len(listed) + 1}",
-                        parent=tail.id if tail else None))
+    if tail is None:
+        return [initial_stage()]
+    listed.append(_later(project, _fresh_id(project, "stage"), f"Stage {len(listed) + 1}",
+                         tail.id))
     return listed
 
 
 def inserted(project: Project, id: str) -> list[Stage]:
     """Insert: a blank stage between `id` and the stage it starts from -- `id` then
-    starts from the new one, or the tree would branch."""
+    starts from the new one, or the tree would branch. Nothing goes before the initial
+    stage, so before it this changes nothing."""
     listed = _copies(project)
     at = next((n for n, stage in enumerate(listed) if stage.id == id), None)
-    if at is None:
+    if at is None or listed[at].parent is None:
         return listed
-    made = Stage(id=_fresh_id(project, "stage"), name="New stage", parent=listed[at].parent)
+    made = _later(project, _fresh_id(project, "stage"), "New stage", listed[at].parent)
     listed[at].parent = made.id
     listed.insert(at, made)
     return listed
@@ -309,9 +442,9 @@ def inserted(project: Project, id: str) -> list[Stage]:
 
 def removed(project: Project, id: str) -> list[Stage]:
     """Delete: the stage gone and the chain healed -- its children start from its
-    parent, and a deleted root promotes its child."""
+    parent. The initial stage is always there, so deleting it changes nothing."""
     target = next((stage for stage in project.stages if stage.id == id), None)
-    if target is None:
+    if target is None or target.parent is None:
         return _copies(project)
     listed = [stage for stage in _copies(project) if stage.id != id]
     for stage in listed:
@@ -323,7 +456,7 @@ def removed(project: Project, id: str) -> list[Stage]:
 def copied(project: Project, id: str) -> list[Stage]:
     """Copy: the same solver settings, spliced in after the original, without its parts
     -- a copy repeats a step with other parts, and the same switches twice would be
-    no-ops."""
+    no-ops. A copy comes after the original, so it initialises no stresses."""
     listed = _copies(project)
     at = next((n for n, stage in enumerate(listed) if stage.id == id), None)
     if at is None:
@@ -331,16 +464,82 @@ def copied(project: Project, id: str) -> list[Stage]:
     original = listed[at]
     made = Stage(id=_fresh_id(project, "stage"), name=f"{original.name} (copy)",
                  parent=original.id, calculation=original.calculation,
-                 stress_initialisation=original.stress_initialisation,
                  time_integration=original.time_integration,
                  reset_displacements=original.reset_displacements,
+                 convergence_criterion=original.convergence_criterion,
                  max_iterations=original.max_iterations,
                  tolerated_error=original.tolerated_error,
-                 time_interval=original.time_interval)
+                 absolute_tolerance=original.absolute_tolerance,
+                 duration=original.duration, time_step=original.time_step,
+                 solver_settings=dict(original.solver_settings))
     for stage in listed:
         if stage.parent == id:
             stage.parent = made.id
     listed.insert(at + 1, made)
+    return listed
+
+
+def edited(project: Project, id: str, field: str, value: object) -> list[Stage]:
+    """One field of stage `id` set to `value`, as the Stages window's property grid
+    sets it.
+
+    The calculation type is the initial stage's: set there, every stage gets it, a
+    stage that is not mechanical goes back to no stress initialisation, and a stage of
+    another type goes to the new type's default convergence criterion
+    (`schemas.CONVERGENCE_CRITERIA`) -- the residual one is both types', but a flow
+    stage made from a mechanical one converges on the water pressure, as a new flow
+    stage does. Its expert solver settings go back to the new type's defaults, as its
+    criterion does. Set on a later stage, it changes nothing. So does a stress
+    initialisation on a later stage. A stage whose criterion changes, either way, keeps
+    its absolute tolerance unless it was the old criterion's default, which becomes the
+    new one's (`schemas.ABSOLUTE_TOLERANCES`).
+    """
+    listed = _copies(project)
+    first = initial(project)
+    target = next((stage for stage in listed if stage.id == id), None)
+    if target is None:
+        return listed
+    is_first = first is not None and id == first.id
+    if field == "calculation":
+        if not is_first:
+            return listed
+        for stage in listed:
+            allowed = CONVERGENCE_CRITERIA.get(str(value), ())
+            if allowed and stage.calculation != value:
+                _criterion(stage, allowed[0])
+                stage.solver_settings = {}
+            stage.calculation = value  # type: ignore[assignment]
+            if value != "mechanical":
+                stage.stress_initialisation = "none"
+        return listed
+    if field == "stress_initialisation" and not is_first:
+        return listed
+    if field == "convergence_criterion":
+        _criterion(target, str(value))
+        return listed
+    setattr(target, field, value)
+    return listed
+
+
+def _criterion(stage: Stage, criterion: str) -> None:
+    """`stage` solved on `criterion`, its absolute tolerance following the default."""
+    stage.absolute_tolerance = followed_tolerance(
+        stage.absolute_tolerance, stage.convergence_criterion, criterion)
+    stage.convergence_criterion = criterion  # type: ignore[assignment]
+
+
+def edited_solver(project: Project, id: str, key: str, value: object) -> list[Stage]:
+    """One expert solver setting of stage `id` (`core.model.solver`) set to `value`, as
+    the Stages window's expert settings set it -- or, with `value` None, back to its
+    default, which is what the row's reset does."""
+    listed = _copies(project)
+    target = next((stage for stage in listed if stage.id == id), None)
+    if target is None:
+        return listed
+    settings = {k: v for k, v in target.solver_settings.items() if k != key}
+    if value is not None:
+        settings[key] = value  # type: ignore[assignment]
+    target.solver_settings = settings
     return listed
 
 

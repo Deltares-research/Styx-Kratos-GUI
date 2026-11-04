@@ -12,7 +12,7 @@ same. Sources:
   surface load magnitude                          js/data.js:426
 """
 
-from core.model import migration
+from core.model import migration, stages
 from core.model.schemas import (
     AnchorRows,
     Domain,
@@ -75,7 +75,8 @@ def blank_project() -> Project:
     first and replacing it once the project arrives.
 
     No excavation and none of the seeded demo's structures: a model has them when its
-    author adds them.
+    author adds them. One stage, the initial stage (`stages.initial_stage`): it is where
+    the calculation type and the stress initialisation are chosen.
     """
     return Project(
         name="Untitled project",
@@ -88,6 +89,7 @@ def blank_project() -> Project:
         layers=[],
         # No water level: a new model has none until its author sets one.
         mesh=MeshSettings(),
+        stages=[stages.initial_stage()],
     )
 
 

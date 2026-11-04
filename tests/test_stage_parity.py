@@ -73,9 +73,14 @@ STAGES = [
     {"id": "dig_2", "name": "Dig to -5.0 m", "parent": "prop",
      "activate": ["soil_L1__lift2", "soil_L1"], "deactivate": ["soil_L1__lift1"]},
     # Changes nothing: `soil_L1__lift1` is already off. Stages accumulate no-ops
-    # through ordinary editing, and both sides have to shrug at them identically.
+    # through ordinary editing, and both sides have to shrug at them identically. Its
+    # own convergence criterion is one a copy carries and a flow sequence replaces.
     {"id": "settle", "name": "Consolidate", "parent": "dig_2",
-     "deactivate": ["soil_L1__lift1"]},
+     "deactivate": ["soil_L1__lift1"], "convergence_criterion": "displacement_criterion",
+     "absolute_tolerance": 1e-6,
+     # Expert settings of its own: a copy carries them, a flow sequence drops them.
+     "solver_settings": {"strategy_type": "newton_raphson",
+                         "linear_solver_type": "amgcl"}},
 ]
 
 
@@ -115,14 +120,27 @@ EDITS = [
     ("setActive", ["prop", ["soil_L1", "anchors"], False]),
     ("setActive", ["settle", ["soil_L1__lift1"], True]),
     ("setActive", ["build_wall", ["wall"], False]),
+    ("edited", ["initial", "calculation", "flow"]),
+    ("edited", ["dig_1", "calculation", "flow"]),
+    ("edited", ["initial", "stress_initialisation", "gravity"]),
+    ("edited", ["dig_1", "stress_initialisation", "K0"]),
+    ("edited", ["dig_1", "time_integration", "dynamic"]),
+    ("edited", ["dig_1", "convergence_criterion", "displacement_criterion"]),
+    ("edited", ["settle", "convergence_criterion", "residual_criterion"]),
+    ("edited", ["prop", "name", "Props"]),
+    ("editedSolver", ["dig_1", "strategy_type", "line_search"]),
+    ("editedSolver", ["settle", "linear_solver_type", "bicgstab"]),
+    ("editedSolver", ["settle", "strategy_type", None]),
 ]
-"""The Stages toolbar's edits and the Model explorer's checkbox, each called on the
-project by its JavaScript name with these arguments after it. The roots and the last
-stage are in it because that is where healing a chain goes wrong."""
+"""The Stages toolbar's edits, the Model explorer's checkbox and the property grid, each
+called on the project by its JavaScript name with these arguments after it. The roots
+and the last stage are in it because that is where healing a chain goes wrong, and the
+initial stage because the calculation type and the stress initialisation are its alone."""
 
 PYTHON_EDITS = {"added": stages.added, "inserted": stages.inserted,
                 "removed": stages.removed, "copied": stages.copied,
-                "setActive": stages.set_active}
+                "setActive": stages.set_active, "edited": stages.edited,
+                "editedSolver": stages.edited_solver}
 
 
 def build() -> dict:

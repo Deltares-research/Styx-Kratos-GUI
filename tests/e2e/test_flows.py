@@ -224,9 +224,8 @@ def test_the_units_command_converts_the_project_and_the_status_bar_follows(app_p
 
 
 def test_the_boundary_conditions_are_set_in_their_window_and_by_command(app_page, live_server):
-    """The standard supports a new project has, the dialog's whole-soil row given a dry
-    pore pressure, and gravity switched off from the command box: each one write the
-    server stores."""
+    """The standard supports a new project has, and the dialog's whole-soil row given a
+    dry pore pressure: each one write the server stores."""
     url = live_server["url"] + "/api/project"
     command(app_page, "boundary list")
     app_page.wait_for_function("document.querySelector('#cmd-log').innerText"
@@ -246,8 +245,4 @@ def test_the_boundary_conditions_are_set_in_their_window_and_by_command(app_page
     assert [(c["on"], c["fluid_pressure_type"], c["value"]) for c in water] == [
         ("domain", "Uniform", 0.0)]
     assert sum(c["kind"] == "displacement" for c in stored["boundary_conditions"]) == 5
-
-    command(app_page, "gravity off")
-    app_page.wait_for_function("App.PROJECT.gravity === false", timeout=LONG)
-    assert app_page.request.get(url).json()["gravity"] is False
     assert app_page.errors == []

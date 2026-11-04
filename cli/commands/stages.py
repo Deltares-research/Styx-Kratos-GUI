@@ -12,7 +12,9 @@ Model explorer make (`core.model.stages`), stored the way the GUI stores it
     add [ID]           a stage at the end, or --before a stage (the toolbar's Insert)
     copy ID            the toolbar's Copy: the same solver settings, after the original
     set ID             a stage's name, calculation type, stress initialisation,
-                       time integration and solver settings
+                       time integration and solver settings -- the expert ones with
+                       --solver KEY=VALUE, and back to their defaults with
+                       --solver-default KEY
     remove ID          the toolbar's Delete: the stage goes, and the chain is healed
     activate ID KEY... / deactivate ID KEY...
                        parts in or out of the model from that stage on, with the
@@ -21,8 +23,13 @@ Model explorer make (`core.model.stages`), stored the way the GUI stores it
 A sequence that would branch, or a part the model does not have, is refused. So is
 --reset-displacements or --keep-displacements on a flow stage, which has no
 displacements: the GUI greys that box out; and a stress initialisation other than none
-on a flow stage, which has no stresses: the GUI hides that row. Making a stage a flow
-stage sets its stress initialisation to none, as the GUI does.
+on a flow stage, which has no stresses: the GUI hides that row. So is a convergence
+criterion the stage's calculation type does not have: a mechanical stage converges on
+the residual or the displacement, a flow stage on the water pressure or the residual.
+Making the sequence a flow one sets the stress initialisation to none, the
+convergence criterion to the water pressure one and the expert solver settings back to
+their defaults, as the GUI does. An expert setting a stage cannot have is refused by
+name, with the ones it can.
 """
 
 from __future__ import annotations
@@ -33,7 +40,7 @@ from cli.terminal.files import add_project, add_writing, written
 from cli.terminal.output import Answer, CommandError
 from cli.terminal.words import NAME_HELP, existing, file_of, given, id_and_name, id_help, named_ids
 from core import session
-from core.model import stages
+from core.model import solver, stages, units
 from core.model.schemas import Project
 
 CALCULATIONS = {"mechanical": "mechanical", "upw": "mechanical", "u_pw": "mechanical",
@@ -41,6 +48,15 @@ CALCULATIONS = {"mechanical": "mechanical", "upw": "mechanical", "u_pw": "mechan
                 "groundwater-flow": stages.FLOW}
 STRESS_INITIALISATIONS = {"k0": "K0", "gravity": "gravity", "none": "none"}
 TIME_INTEGRATIONS = {"static": "static", "dynamic": "dynamic"}
+CRITERIA = {
+    word: criterion
+    for criterion in ("residual_criterion", "displacement_criterion",
+                      "water_pressure_criterion")
+    for stem in (criterion.removesuffix("_criterion"),)
+    for word in (criterion, stem, stem.replace("_", "-"), stem.replace("_", " "))
+}
+"""Kratos' names for the convergence criteria, with and without `_criterion`, and with
+hyphens or spaces for the underscores."""
 
 
 def register(commands, common: argparse.ArgumentParser) -> None:
@@ -139,10 +155,30 @@ def _stage_fields(parser: argparse.ArgumentParser) -> None:
                        help="start the stage's displacements from zero")
     reset.add_argument("--keep-displacements", dest="reset_displacements",
                        action="store_const", const=False)
+    parser.add_argument("--convergence-criterion", "--convergence",
+                        dest="convergence_criterion",
+                        type=_choice(CRITERIA, "convergence criterion",
+                                     "residual, displacement or water_pressure"),
+                        help="of a mechanical stage: residual (the default) or "
+                             "displacement; of a flow stage: water_pressure (the default) "
+                             "or residual")
     parser.add_argument("--max-iterations", type=int)
     parser.add_argument("--tolerance", type=float, dest="tolerated_error",
-                        help="the residual relative tolerance")
-    parser.add_argument("--time-interval", type=float, help="in days")
+                        help="the convergence criterion's relative tolerance")
+    parser.add_argument("--absolute-tolerance", type=float,
+                        help="the convergence criterion's absolute tolerance")
+    parser.add_argument("--duration", type=float,
+                        help="how long the stage lasts, in the project's unit of time (s)")
+    parser.add_argument("--time-step", type=float,
+                        help="the step it is solved in, in the same unit; at most the "
+                             "duration")
+    parser.add_argument("--solver", nargs="+", default=[], metavar="KEY=VALUE",
+                        help="expert solver settings, by the names `stages show` lists: "
+                             "e.g. strategy_type=newton_raphson linear_solver_type=amgcl. "
+                             "A mechanical stage is solved by quasi_newton unless it says "
+                             "otherwise")
+    parser.add_argument("--solver-default", nargs="+", default=[], metavar="KEY",
+                        help="put expert solver settings back to their defaults")
 
 
 def _parts(parser: argparse.ArgumentParser) -> None:
@@ -154,7 +190,8 @@ def _parts(parser: argparse.ArgumentParser) -> None:
 
 
 FIELDS = ("name", "calculation", "stress_initialisation", "time_integration",
-          "reset_displacements", "max_iterations", "tolerated_error", "time_interval")
+          "reset_displacements", "convergence_criterion", "max_iterations",
+          "tolerated_error", "absolute_tolerance", "duration", "time_step")
 
 
 # ── Handlers ────────────────────────────────────────────────────────────────
@@ -172,15 +209,28 @@ def show_stage(args: argparse.Namespace) -> Answer:
     out = [key for key in project.stageable_keys() if key not in active]
     lines = [f"{stage.id}  {stage.name}" + (f"  (after {stage.parent})" if stage.parent
                                             else ""),
-             "  " + _settings(stage),
+             "  " + _settings(stage, units.label(units.TIME, project.unit_system)),
              "  in the model: " + (", ".join(keys) or "nothing"),
              "  not in the model: " + (", ".join(out) or "nothing")]
     if stage.activate:
         lines.append("  switches on: " + ", ".join(stage.activate))
     if stage.deactivate:
         lines.append("  switches off: " + ", ".join(stage.deactivate))
+    rows = _solver_rows(project, stage)
+    lines.append("  expert solver settings (* set on this stage; --solver KEY=VALUE "
+                 "changes one):")
+    lines += [f"    {row['key']} = {solver.label(row['key'], row['value'])}"
+              + (" *" if row["overridden"] else "")
+              + (f"  (fixed: {row['locked']})" if row["locked"] else "")
+              for row in rows]
     return Answer(data={"stage": stage.model_dump(mode="json"), "active": keys,
-                        "inactive": out}, lines=lines)
+                        "inactive": out, "solver_settings": rows}, lines=lines)
+
+
+def _solver_rows(project: Project, stage) -> list[dict]:
+    """The expert settings that apply to `stage`, as the GUI's stage panel shows them."""
+    return solver.resolve(stage.calculation, stage.time_integration,
+                          stage.solver_settings, stages.model_strategy(project, stage))
 
 
 def staged_excavation_stages(args: argparse.Namespace) -> Answer:
@@ -189,23 +239,34 @@ def staged_excavation_stages(args: argparse.Namespace) -> Answer:
 
 @named_ids()
 def add_stage(args: argparse.Namespace) -> Answer:
+    fields = _fields(args)
+    _with_solver(args, fields, {})
     project, stage = session.add_stage(session.load(args.project), before=args.before,
-                                       id=args.id, **_fields(args))
+                                       id=args.id, **fields)
     _no_reset_in_flow(args, stage)
     return _added(args, project, stage)
 
 
 @named_ids()
 def copy_stage(args: argparse.Namespace) -> Answer:
-    project, stage = session.add_stage(session.load(args.project), copy_of=args.original,
-                                       id=args.id, **_fields(args))
+    project = session.load(args.project)
+    fields = _fields(args)
+    original = session.find_stage(project, args.original)
+    _with_solver(args, fields, original.solver_settings)
+    project, stage = session.add_stage(project, copy_of=args.original, id=args.id,
+                                       **fields)
     _no_reset_in_flow(args, stage)
     return _added(args, project, stage)
 
 
 def update_stage(args: argparse.Namespace) -> Answer:
-    project = session.update_stage(session.load(args.project), args.id,
-                                   **_fields(args, "parent"))
+    project = session.load(args.project)
+    fields = _fields(args, "parent")
+    stage = session.find_stage(project, args.id)
+    # A stage made another calculation type starts from that type's defaults.
+    changes_type = fields.get("calculation", stage.calculation) != stage.calculation
+    _with_solver(args, fields, {} if changes_type else stage.solver_settings)
+    project = session.update_stage(project, args.id, **fields)
     _no_reset_in_flow(args, session.find_stage(project, args.id))
     return _edited(args, project, f"changed stage {args.id}")
 
@@ -228,11 +289,63 @@ def switch_parts(args: argparse.Namespace) -> Answer:
 def _fields(args: argparse.Namespace, *more: str) -> dict:
     """The fields given, by their schema names. A stage made a flow stage has no
     stresses to initialise, so unless the command says otherwise its stress
-    initialisation goes back to none, as the GUI's does."""
+    initialisation goes back to none, as the GUI's does. (Its convergence criterion goes
+    to the new type's default in `stages.edited`.)"""
     fields = given(args, *FIELDS, *more)
     if fields.get("calculation", "mechanical") != "mechanical":
         fields.setdefault("stress_initialisation", "none")
     return fields
+
+
+def _with_solver(args: argparse.Namespace, fields: dict, current: dict) -> None:
+    """`fields` with the stage's expert settings as `--solver` and `--solver-default`
+    leave them, starting from `current`, when either was given. The schema refuses a
+    value a setting cannot have (`core.model.solver.problems`)."""
+    if not args.solver and not args.solver_default:
+        return
+    settings = dict(current)
+    for key in args.solver_default:
+        _setting(key)
+        settings.pop(key, None)
+    for pair in args.solver:
+        key, sep, text = pair.partition("=")
+        if not sep:
+            raise CommandError(f"--solver takes KEY=VALUE, not {pair!r}: e.g. "
+                               "strategy_type=newton_raphson")
+        settings[key.strip()] = _solver_value(key.strip(), text.strip())
+    fields["solver_settings"] = settings
+
+
+def _setting(key: str) -> dict:
+    try:
+        return solver.BY_KEY[key]
+    except KeyError:
+        raise CommandError(f"there is no solver setting {key!r}: use one of "
+                           f"{', '.join(solver.BY_KEY)}") from None
+
+
+TRUE, FALSE = ("true", "yes", "on", "1"), ("false", "no", "off", "0")
+
+
+def _solver_value(key: str, text: str) -> object:
+    """`text` as the value of setting `key`: true or false for a switch, a number, or
+    one of a choice's values -- or its label, in any case."""
+    setting = _setting(key)
+    if setting["kind"] == "check":
+        if text.lower() in TRUE + FALSE:
+            return text.lower() in TRUE
+        raise CommandError(f"{key} is true or false, not {text!r}")
+    if setting["kind"] == "number":
+        try:
+            number = float(text)
+        except ValueError:
+            raise CommandError(f"{key} is a number, not {text!r}") from None
+        return int(number) if setting.get("integer") and number == int(number) else number
+    for value, label in setting["options"]:
+        if text.lower() in (value.lower(), label.lower()):
+            return value
+    raise CommandError(f"{key} is one of {', '.join(v for v, _ in setting['options'])}, "
+                       f"not {text!r}")
 
 
 def _no_reset_in_flow(args: argparse.Namespace, stage) -> None:
@@ -268,13 +381,15 @@ def _records(project) -> list[dict]:
     return [stage.model_dump(mode="json") for stage in project.stages]
 
 
-def _settings(stage) -> str:
+def _settings(stage, second: str) -> str:
+    """`second` is the project's unit of time, as it is labelled."""
     settings = [_calculation(stage),
-                f"{stage.max_iterations} iterations, tolerance {stage.tolerated_error:g}"]
+                f"{stage.convergence_criterion.replace('_', ' ')}, "
+                f"{stage.max_iterations} iterations, tolerance {stage.tolerated_error:g} "
+                f"(absolute {stage.absolute_tolerance:g})"]
     if stage.reset_displacements and stage.calculation != stages.FLOW:
         settings.append("displacements reset")
-    if stage.time_interval:
-        settings.append(f"{stage.time_interval:g} days")
+    settings.append(f"{stage.duration:g} {second} in steps of {stage.time_step:g} {second}")
     return "; ".join(settings)
 
 

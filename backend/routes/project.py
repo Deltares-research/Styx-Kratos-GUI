@@ -155,10 +155,9 @@ async def patch_structures(update: StructuresUpdate) -> dict:
 
 @router.patch("/api/project/conditions")
 async def patch_conditions(update: ConditionsUpdate) -> dict:
-    """Replace the boundary conditions as one list, and set gravity
-    (`session.replace_conditions`); a field left out stays as it is. What the GUI's
-    boundary conditions dialog, its explorer rows and the `boundary` and `gravity`
-    commands send (frontend/js/boundary-conditions.js)."""
+    """Replace the boundary conditions as one list (`session.replace_conditions`).
+    What the GUI's boundary conditions dialog, its explorer rows and the `boundary`
+    command send (frontend/js/boundary-conditions.js)."""
     with refusals():
         project = session.replace_conditions(store.get(), update)
     store.put(project)

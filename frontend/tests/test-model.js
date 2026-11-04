@@ -1018,15 +1018,15 @@
     p.custom_parts = [PART];
     withProject(p, function () {
       T.eq(topLabels(App.TREES.soil),
-           ['Soil', 'Custom geometry', 'Sheet piles', 'Anchors', 'Model conditions']);
+           ['Soil', 'Custom geometry', 'Sheet piles', 'Anchors']);
     });
   });
 
   /* A group the model has nothing in has no row: an empty "Sheet piles [0]" row reads
-     as if the model had sheet piles. Model conditions stays, for gravity. */
-  test('a model with nothing but soil lists only Soil and Model conditions', function () {
+     as if the model had sheet piles. So is an empty "Model conditions". */
+  test('a model with nothing but soil lists only Soil', function () {
     withProject(project(TWO, [], true), function () {
-      T.eq(topLabels(App.TREES.soil), ['Soil', 'Model conditions']);
+      T.eq(topLabels(App.TREES.soil), ['Soil']);
       T.ok(!nodeLabelled(App.TREES.soil, 'Boundary conditions'),
            'no "Boundary conditions [0]" row for a model without any');
     });

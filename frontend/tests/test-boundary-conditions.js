@@ -1,7 +1,7 @@
-/* The boundary conditions and gravity (frontend/js/boundary-conditions.js).
+/* The boundary conditions (frontend/js/boundary-conditions.js).
 
    The drafts are held to core/model/drafts.py by test-drafts.js; this suite holds the
-   rest: the `boundary` and `gravity` commands, the standard supports put back, the
+   rest: the `boundary` command, the standard supports put back, the
    dialog's face grid read off the records and written back to them, the one PATCH
    every write is, the explorer rows, and the symbols the viewport draws. */
 
@@ -31,7 +31,7 @@
 
   function section(conditions, extra) {
     return Object.assign({
-      dimension: 2, section_offset: 5, gravity: true,
+      dimension: 2, section_offset: 5,
       domain: { x0: 0, x1: 20, z0: 0, z1: 10, y_top: 0, y_bottom: -15 },
       water: { y: -1.5 }, layers: [{ id: 'L1' }, { id: 'L2' }], custom_parts: [],
       boundary_conditions: conditions === undefined ? standard() : conditions
@@ -82,16 +82,10 @@
           'pore']);
   });
 
-  test('gravity shows, and switches on and off', function () {
-    T.eq(BC().command('gravity', section()).message,
-         'Gravity is on: every body has its self weight.');
-    T.eq(BC().command('gravity off', section()).body, { gravity: false });
-    T.eq(BC().command('gravity ON', section()).body, { gravity: true });
-    T.eq(BC().command('gravity maybe', section()).ok, false);
-  });
-
-  test('a line that is not boundary or gravity is not this command', function () {
+  test('a line that is not boundary is not this command', function () {
     T.eq(BC().command('water -2', section()), false);
+    T.eq(BC().command('gravity off', section()), false,
+         'gravity is the stress initialisation of the initial stage, not a command');
     T.eq(BC().command('boundary teleport', section()).ok, false);
   });
 
@@ -268,21 +262,8 @@
     return BC().save(record).then(function () {
       T.eq(sent.path, '/api/project/conditions');
       T.eq(sent.body.boundary_conditions.length, 6);
-      T.eq('gravity' in sent.body, false, 'gravity is left as it is');
+      T.eq(Object.keys(sent.body), ['boundary_conditions']);
     });
-  });
-
-  test('switching gravity sends gravity alone', function () {
-    var sent = null;
-    App.Api = { patch: function (path, body) {
-      sent = body;
-      return Promise.resolve({ project: section() });
-    } };
-    App.Model = { apply: function () {}, load: function () { return Promise.resolve(); } };
-    App.Viewport = { refresh: function () { return Promise.resolve(); } };
-    App.Command = { ok: function () {}, err: function () {}, note: function () {} };
-    App.Explorer = null;
-    return BC().setGravity(false).then(function () { T.eq(sent, { gravity: false }); });
   });
 
   test('the explorer check box shows whether the conditions are active', function () {
@@ -318,9 +299,9 @@
 
   /* ── The explorer and the viewport ────────────────────────────────── */
 
-  test('the explorer lists the conditions and gravity under Model conditions', function () {
-    var project = section(standard().concat([pressure('pore', 'domain')]),
-                          { gravity: false });
+  test('the explorer lists the conditions, and no gravity, under Model conditions',
+       function () {
+    var project = section(standard().concat([pressure('pore', 'domain')]));
     App.BOUNDARY_CONDITIONS = JSON.parse(JSON.stringify(project.boundary_conditions));
     App.PROJECT = project;
     App.Model.rebuildDerived();
@@ -331,8 +312,8 @@
     T.eq(conditions.count, 4, 'no front and back supports in a 2D model');
     T.eq(conditions.children[1].label, 'roller_left  ·  x fixed');
     T.eq(conditions.children[3].label, 'pore  ·  h = -2.00 m');
-    T.eq(node[0].children[1].label, 'Gravity  ·  off');
-    T.ok(App.OBJECT_PROPS.pore && App.OBJECT_PROPS.gravity);
+    T.eq(node[0].children.length, 1, 'gravity is in the Stage explorer');
+    T.ok(App.OBJECT_PROPS.pore && !App.OBJECT_PROPS.gravity);
   });
 
   test('the explorer marks the supports of a groundwater flow project as left out',
