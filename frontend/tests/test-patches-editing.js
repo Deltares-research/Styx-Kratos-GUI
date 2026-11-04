@@ -159,7 +159,7 @@
         });
       }, Promise.resolve()).then(function () {
         T.ok(ctx.lines.some(function (line) { return /Converted library values/.test(line); }));
-        T.ok(ctx.refreshed >= 3);
+        T.eq(ctx.refreshed, 3, 'boundary, water and units refresh; saving a script does not');
         ctx.failure = new Error('Write refused');
         return ['boundary standard', 'water -5', 'units ' + App.Units.systems().filter(function (system) {
           return system.name !== App.Units.current();
