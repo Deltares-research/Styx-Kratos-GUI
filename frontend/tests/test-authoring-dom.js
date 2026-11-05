@@ -18,7 +18,7 @@
 
   function withEnvironment(initial, body) {
     var keys = ['PROJECT', 'LOADS', 'BEAMS', 'BEAM_SECTIONS', 'PANEL_SECTIONS', 'ANCHORS',
-                'ANCHOR_SECTIONS', 'NORMAL_LOADS', 'MATERIALS', 'MESH_BODY_SELECTION',
+                'ANCHOR_SECTIONS', 'NORMAL_LOADS', 'MATERIALS', 'MESH_BODIES_LEFT_OUT',
                 'Api', 'Model', 'Viewport', 'Explorer', 'Command', 'Dialogs', 'DrawInput',
                 'state', 'selectObject', 'runAction', 'matById'];
     var saved = {};
@@ -43,7 +43,7 @@
     App.matById = function (id) {
       T.eq(id, 'soil'); return App.MATERIALS[0];
     };
-    App.MESH_BODY_SELECTION = null;
+    App.MESH_BODIES_LEFT_OUT = null;
     App.state = { mode: 'structures', selection: null };
     App.selectObject = function (id) { ctx.selected.push(id); App.state.selection = id; };
     App.runAction = function (spec) { ctx.actions.push(spec.action); };
@@ -137,10 +137,12 @@
       var size = dialog.querySelector('.mesh-body-size');
       T.ok(!size.disabled);
       size.value = '0';
+      size.dispatchEvent(new Event('input', { bubbles: true }));
       realButton(dialog, 'Apply').click();
       T.ok(/greater than zero/.test(dialog.querySelector('.mesh-settings-message').textContent));
       T.eq(ctx.requests.length, 0);
       size.value = '1.25';
+      size.dispatchEvent(new Event('input', { bubbles: true }));
       dialog.querySelector('[name=algorithm_2d]').value = 'delaunay';
       realButton(dialog, 'Apply and generate').click();
       return drain().then(function () {
@@ -150,7 +152,8 @@
         T.eq(ctx.requests[0].body.mesh.algorithm_2d, 'delaunay');
         T.eq(ctx.requests[0].body.mesh.body_sizes.soil_L1, 1.25);
         T.eq(ctx.requests[0].body.mesh.volume_keys, undefined, 'selection is not a stored mesh setting');
-        T.eq(App.MESH_BODY_SELECTION, ['soil_L1']);
+        T.eq(App.MESH_BODIES_LEFT_OUT, ['soil_L2']);
+        T.eq(App.MeshSettings.chosenBodies(App.PROJECT, App.MESH_BODIES_LEFT_OUT), ['soil_L1']);
         T.eq(ctx.actions, ['generateMesh']);
         T.eq(ctx.applied.length, 1);
         T.ok(!document.getElementById('mesh-settings-dialog'));
