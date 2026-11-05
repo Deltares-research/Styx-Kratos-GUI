@@ -17,7 +17,7 @@ import argparse
 import json
 from pathlib import Path
 
-from cli.terminal.files import add_project, add_writing, written
+from cli.terminal.files import add_project, add_writing, read, written
 from cli.terminal.output import Answer, CommandError
 from cli.terminal.words import coordinates
 from core import gmsh_worker, session
@@ -78,7 +78,7 @@ def _part_fields(parser: argparse.ArgumentParser) -> None:
 
 
 def list_volumes(args: argparse.Namespace) -> Answer:
-    project = session.load(args.project)
+    project = read(args)
     rows = [part.model_dump(mode="json") for part in project.custom_parts]
     lines = [f"{part.key}  {part.label}  "
              + (f"soil of {part.mat}" if part.mat else "display only")
@@ -88,7 +88,7 @@ def list_volumes(args: argparse.Namespace) -> Answer:
 
 
 def add_volume(args: argparse.Namespace) -> Answer:
-    project = session.load(args.project)
+    project = read(args)
     session.require_parametric(project, "drawn into")
     recipe = _recipe(project, args)
     session.check_recipe(project, recipe)
@@ -102,7 +102,7 @@ def add_volume(args: argparse.Namespace) -> Answer:
 
 
 def import_volume(args: argparse.Namespace) -> Answer:
-    project = session.load(args.project)
+    project = read(args)
     session.require_parametric(project, "drawn into")
     extension = args.file.suffix.lower()
     if extension not in IMPORTABLE:
@@ -121,14 +121,14 @@ def import_volume(args: argparse.Namespace) -> Answer:
 
 
 def remove_volume(args: argparse.Namespace) -> Answer:
-    project = session.without_custom_part(session.load(args.project), args.key)
+    project = session.without_custom_part(read(args), args.key)
     target, where = written(args, project)
     return Answer(data={"file": str(target) if target else None},
                   lines=[f"removed {args.key}; {where}"])
 
 
 def clear_volumes(args: argparse.Namespace) -> Answer:
-    project = session.load(args.project)
+    project = read(args)
     project = session.without_custom_parts(project, [p.key for p in project.custom_parts])
     target, where = written(args, project)
     return Answer(data={"file": str(target) if target else None},

@@ -400,3 +400,23 @@ def test_two_interfaces_meeting_at_a_node_split_it_like_one_line():
     copies_of_2 = [new for new, old in result.duplicates.items() if old == 2]
     assert len(copies_of_2) == 2
     _check_invariants(before, rows, result, TOE_NODES, [lower, upper])
+
+
+def test_interfaces_without_specs_leave_rows_untouched_and_bad_element_shapes_are_refused():
+    rows = [[1, 2, 3]]
+    split = interfaces.split_mesh([], rows, {})
+
+    assert rows == [[1, 2, 3]]
+    assert split.renamed == [{}]
+    with pytest.raises(interfaces.InterfaceError, match="5-node element"):
+        interfaces._edges_of([1, 2, 3, 4, 5])
+
+
+def test_interface_segment_is_reversed_to_follow_the_drawn_path():
+    spec = interfaces.Spec("contact", [(0.0, 0.0), (2.0, 0.0)], [[2, 1]], True, "both")
+
+    assert interfaces._facing(spec, [2, 1, 9], {
+        1: (0.0, 0.0, 0.0), 2: (2.0, 0.0, 0.0),
+    }) == [1, 2, 9]
+    with pytest.raises(interfaces.InterfaceError, match="at least two points"):
+        interfaces._nearest_leg((0.0, 0.0), [(0.0, 0.0)])

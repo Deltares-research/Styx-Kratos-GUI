@@ -2053,9 +2053,8 @@ App.Viewport = (function () {
       second_order_linear: true
     }, {
       refinements: meshRefinements(),
-      volume_keys: Array.isArray(App.MESH_BODY_SELECTION)
-        ? App.MESH_BODY_SELECTION.slice()
-        : App.MeshSettings.meshTargets(App.PROJECT, App.state.selection, isVisible)
+      volume_keys: App.MeshSettings.chosenBodies(App.PROJECT, App.MESH_BODIES_LEFT_OUT)
+        || App.MeshSettings.meshTargets(App.PROJECT, App.state.selection, isVisible)
     });
   }
 

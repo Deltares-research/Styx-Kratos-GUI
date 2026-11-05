@@ -148,6 +148,18 @@ SUITES = {
          JS / "boundary-conditions.js"],
         TESTS / "test-drafts.js",
     ),
+    # What each Structure-mode Delete sends, held to the edit kratos-cli makes through
+    # the fixture tests/cli/test_edit_parity.py writes. The request is stood in. The
+    # Deletes made in a window, the stage list, the tree or the command box need the
+    # DOM, so the browser suite drives those.
+    "edits": (
+        [TESTS / "fixtures" / "edits.js", JS / "unit-table.js", JS / "units.js",
+         JS / "soil-model-table.js", JS / "soil-models.js", JS / "property-sets.js",
+         JS / "material-library.js", JS / "beams.js",
+         JS / "anchors.js", JS / "interfaces.js", JS / "loads.js", JS / "normal-loads.js",
+         JS / "boundary-conditions.js"],
+        TESTS / "test-edits.js",
+    ),
 }
 
 
