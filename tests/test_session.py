@@ -8,6 +8,7 @@ the edit itself, and `tests/test_api.py` keeps checking what the routes answer.
 
 from __future__ import annotations
 
+import ast
 import json
 from pathlib import Path
 
@@ -17,9 +18,10 @@ from pydantic import ValidationError
 from core import session
 from core.model import stages
 from core.model.schemas import (FULL_BUILD_BLOCKS, Deck, DimensionUpdate, LayersUpdate,
-                                MaterialsUpdate, Stage, StagesUpdate, Project, StructuresUpdate, UnitsUpdate,
+                                MaterialsUpdate, MeshRequest, Stage, StagesUpdate, Project, StructuresUpdate, UnitsUpdate,
                                 WaterLevel, WaterUpdate)
 from core.model.templates import blank_project, seed_project
+from tests.models import edits
 from tests.models.excavation import excavation_project
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "projects"
@@ -969,6 +971,121 @@ def test_a_removed_structure_takes_its_mesh_size_with_it():
 
     assert edited.beams == []
     assert "sheetpile" not in edited.mesh.body_sizes
+
+
+# ── A size goes with its body ───────────────────────────────────────────────
+
+def _structures(project: Project, **lists) -> StructuresUpdate:
+    return StructuresUpdate.model_validate(
+        edits.structures_sent(project.model_dump(mode="json"), **lists))
+
+
+def _without(project: Project, field: str, id: str) -> list[dict]:
+    return edits.without(project.model_dump(mode="json")[field], id)
+
+
+def _stack_without(project: Project, id: str) -> LayersUpdate:
+    return LayersUpdate.model_validate(
+        edits.layers_window_sent(project.model_dump(mode="json"), id))
+
+
+EDITS_THAT_TAKE_A_BODY = {
+    "kratos-cli layer remove": lambda p: session.remove_layer(p, "L_mid"),
+    "kratos-cli layer split": lambda p: session.split_layer(p, "L_top"),
+    "kratos-cli layer set --top": lambda p: session.update_layer(p, "L_mid", top=-3.0),
+    "kratos-cli set excavation null": lambda p: session.with_value(p, "excavation", None),
+    "kratos-cli excavation --levels": lambda p: session.set_excavation(
+        p, levels=[-2.0, -4.5])[0],
+    "the GUI deletes a layer": lambda p: session.replace_layers(p, _stack_without(p, "L_mid")),
+    "the GUI deletes an anchor": lambda p: session.replace_structures(
+        p, _structures(p, anchors=_without(p, "anchors", "strut"))),
+    "the GUI deletes an interface": lambda p: session.replace_structures(
+        p, _structures(p, interfaces=_without(p, "interfaces", "wall_contact"))),
+    "the GUI deletes a normal load": lambda p: session.replace_structures(
+        p, _structures(p, normal_loads=_without(p, "normal_loads", "water_1"))),
+    "the GUI deletes a sheet pile and what hangs from it": lambda p: session.replace_structures(
+        p, _structures(p, beams=[], anchors=[], interfaces=[])),
+}
+"""Each edit that takes a body away, made the way each front end makes it. The GUI does
+not call `remove_structure`: it sends the whole list."""
+
+
+@pytest.mark.parametrize("edit", sorted(EDITS_THAT_TAKE_A_BODY))
+def test_a_body_an_edit_takes_away_takes_its_mesh_size_with_it(edit):
+    """Or `kratos-cli check` and `mesh` refuse the saved project: "the mesh settings
+    name bodies this model does not have"."""
+    project = edits.sized(excavation_project(staged=False))
+
+    edited = EDITS_THAT_TAKE_A_BODY[edit](project)
+
+    gone = set(project.part_keys()) - set(edited.part_keys())
+    assert gone & set(project.mesh.body_sizes), "the edit takes no sized body away"
+    assert edited.mesh.body_sizes == {key: size for key, size
+                                      in project.mesh.body_sizes.items() if key not in gone}
+
+
+def test_a_body_a_3d_edit_takes_away_takes_its_mesh_size_with_it():
+    project = with_box(seed_project())
+    assert project.dimension == 3
+    project = edits.sized(project, soil_L2=1.0)
+
+    volume_gone = session.without_custom_part(project, "drawn_0")
+    layer_gone = session.remove_layer(project, "L2")
+
+    assert volume_gone.mesh.body_sizes == {"soil_L2": 1.0}
+    assert layer_gone.mesh.body_sizes == {"drawn_0": 0.5}
+    assert session.removed_sizes(project, volume_gone) == [
+        "Removed the mesh size of drawn_0 (0.5): the edit took that body away. If it "
+        "comes back, set its size again."]
+
+
+def test_a_size_for_a_body_the_model_never_had_is_left_for_check_to_name():
+    project = edits.sized(excavation_project(staged=False), soil_typo=1.0)
+
+    edited = session.remove_layer(project, "L_mid")
+
+    assert edited.mesh.body_sizes["soil_typo"] == 1.0
+    settings = MeshRequest.model_validate(edited.mesh.model_dump())
+    assert session.unknown_mesh_keys(edited, settings) == ["soil_typo"]
+
+
+def test_the_user_is_told_which_sizes_an_edit_took_away():
+    """A body can come back -- a level moved back -- but its size does not."""
+    project = edits.sized(excavation_project(staged=False))
+
+    notes = session.removed_sizes(project, session.split_layer(project, "L_top"))
+
+    assert notes == ["Removed the mesh size of soil_L_top__lift3 (1): the edit took that "
+                     "body away. If it comes back, set its size again."]
+    several = session.removed_sizes(project, session.with_value(project, "excavation", None))
+    assert len(several) == 1
+    assert several[0].startswith("Removed the mesh sizes of soil_L_mid__pit (1), "
+                                 "soil_L_top__lift3 (1): the edit took those bodies away.")
+
+
+def test_a_size_removed_on_purpose_or_never_valid_is_not_noted():
+    project = edits.sized(excavation_project(staged=False), soil_typo=1.0)
+
+    on_purpose = session.without_value(project, "mesh.body_sizes[soil_L_mid]")
+    typo_kept = session.remove_layer(project, "L_mid")
+
+    assert session.removed_sizes(project, on_purpose) == []
+    assert "soil_typo" not in " ".join(session.removed_sizes(project, typo_kept))
+    assert session.removed_sizes(project, project) == []
+
+
+def test_every_edit_makes_its_result_through_the_one_rule():
+    """`session._edited` is where a lost body's size goes. An edit that validated its
+    project itself would skip the rule -- `layer split` and `layer set` once did."""
+    tree = ast.parse(Path(session.__file__).read_text(encoding="utf-8"))
+    callers = {function.name for function in ast.walk(tree)
+               if isinstance(function, ast.FunctionDef)
+               for call in ast.walk(function)
+               if isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute)
+               and call.func.attr == "model_validate"
+               and getattr(call.func.value, "id", None) == "Project"}
+
+    assert callers == {"load", "_edited"}
 
 
 def test_a_section_is_added_changed_and_removed():

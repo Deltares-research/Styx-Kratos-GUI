@@ -8,13 +8,13 @@ import argparse
 from pathlib import Path
 
 from cli.commands import conditions
-from cli.commands.meshing import nothing_to_mesh
-from cli.terminal.files import add_project, add_writing, written
+from cli.commands.meshing import mesh_settings, nothing_to_mesh
+from cli.terminal.files import add_project, add_writing, read, written
 from cli.terminal.output import Answer, CommandError
 from core import session
 from core.kratos import condition_checks
 from core.model import stages
-from core.model.schemas import DimensionUpdate, MeshRequest, Project, UnitsUpdate
+from core.model.schemas import DimensionUpdate, Project, UnitsUpdate
 from core.model.templates import blank_project, seed_project
 
 REMOVE = ("off", "none", "remove")
@@ -111,7 +111,7 @@ def new_project(args: argparse.Namespace) -> Answer:
 
 
 def show_project(args: argparse.Namespace) -> Answer:
-    project = session.load(args.project)
+    project = read(args)
     data = {"file": str(args.project), **summary(project)}
     return Answer(data=data, lines=described(data))
 
@@ -123,7 +123,7 @@ def check_project(args: argparse.Namespace) -> Answer:
     (`condition_checks.flow_refusal`) is refused here, in the same words. The export's
     warnings about the boundary conditions that need no mesh (`core.kratos.condition_checks`)
     are said too, as warnings: the model can still be exported."""
-    project = session.load(args.project)
+    project = read(args)
     if project.deck is None:
         empty = nothing_to_mesh(project)
         if empty:
@@ -132,10 +132,7 @@ def check_project(args: argparse.Namespace) -> Answer:
         refused = condition_checks.flow_refusal(project)
         if refused:
             raise CommandError(refused)
-        unknown = session.unknown_mesh_keys(project, MeshRequest(**project.mesh.model_dump()))
-        if unknown:
-            raise CommandError("the mesh settings name bodies this model does not have: "
-                               + ", ".join(unknown))
+        mesh_settings(project)
     warnings = condition_checks.warnings(project)
     return Answer(data={"ok": True, "file": str(args.project), **summary(project),
                         "warnings": warnings},
@@ -152,7 +149,7 @@ def build_project(args: argparse.Namespace) -> Answer:
 
 
 def write_script(args: argparse.Namespace) -> Answer:
-    project = session.load(args.project)
+    project = read(args)
     session.write_script(project, args.out, force=args.force, source=args.project)
     return Answer(data={"file": str(args.out), **summary(project)},
                   lines=[f"wrote {args.out}: {headline(project)}",
@@ -163,7 +160,7 @@ def write_script(args: argparse.Namespace) -> Answer:
 # ── The edits with a command of their own ───────────────────────────────────
 
 def switch_dimension(args: argparse.Namespace) -> Answer:
-    project = session.load(args.project)
+    project = read(args)
     project, notes = session.set_dimension(project, DimensionUpdate(
         dimension=2 if args.to[0] == "2" else 3, section_offset=args.offset))
     target, where = written(args, project)
@@ -173,7 +170,7 @@ def switch_dimension(args: argparse.Namespace) -> Answer:
 
 
 def switch_units(args: argparse.Namespace) -> Answer:
-    project = session.load(args.project)
+    project = read(args)
     if args.system is None:
         return Answer(data={"unit_system": project.unit_system},
                       lines=[f"{project.name} is in {project.unit_system} units."])
@@ -186,7 +183,7 @@ def switch_units(args: argparse.Namespace) -> Answer:
 
 
 def set_water(args: argparse.Namespace) -> Answer:
-    project = session.load(args.project)
+    project = read(args)
     if args.level is None:
         return Answer(data={"water": _water(project)}, lines=[_water_line(project)])
     if args.level.lower() in REMOVE:

@@ -9,7 +9,7 @@ from pathlib import Path
 from fastapi import APIRouter, File, HTTPException, UploadFile
 
 from backend import store
-from backend.routes.common import read_upload, refusals
+from backend.routes.common import read_upload, refusals, stored
 from core import gmsh_worker, session
 from core.geometry.solid_model import GeometryError
 from core.geometry.cad_import import ImportRefused
@@ -24,16 +24,14 @@ async def clear_custom_parts() -> dict:
     project = store.get()
     with refusals():
         project = session.without_custom_parts(project, [p.key for p in project.custom_parts])
-    store.put(project)
-    return {"ok": True, "invalidates": ["project", "tree", "geometry", "mesh"]}
+    return stored(project) | {"ok": True, "invalidates": ["project", "tree", "geometry", "mesh"]}
 
 
 @router.delete("/api/geometry/parts/{key}")
 async def delete_geometry_part(key: str) -> dict:
     with refusals():
         project = session.without_custom_part(store.get(), key)
-    store.put(project)
-    return {"ok": True, "invalidates": ["project", "tree", "geometry", "mesh"]}
+    return stored(project) | {"ok": True, "invalidates": ["project", "tree", "geometry", "mesh"]}
 
 
 @router.get("/api/geometry")

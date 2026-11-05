@@ -208,6 +208,58 @@ def test_a_layer_level_that_crosses_its_neighbour_is_refused(cli, site):
     assert site.read_bytes() == before
 
 
+@pytest.mark.parametrize("edit", [("split", "L_top"), ("set", "L_mid", "--top", "-3")],
+                         ids=lambda edit: f"layer {edit[0]}")
+def test_a_layer_edit_that_takes_a_lift_away_takes_its_mesh_size_too(cli, tmp_path, edit):
+    """Splitting the top layer, or raising the one below it, leaves the pit's last lift
+    in no layer: its size goes with it, or `check` refuses the file the edit wrote."""
+    project = excavation.excavation_project(staged=False)
+    sized = project.mesh.model_copy(update={"body_sizes": {"soil_L_top__lift3": 1.0}})
+    path = session.save(project.model_copy(update={"mesh": sized}), tmp_path / "pit.json")
+
+    assert cli("layer", path, *edit).code == 0
+
+    assert session.load(path).mesh.body_sizes == {}
+    ran = cli("check", path)
+    assert ran.code == 0, ran.err
+
+
+def test_a_layer_edit_says_which_mesh_size_it_took_away(cli, tmp_path):
+    """The lift can come back -- the split undone -- but its size does not, so the edit
+    says which size went, and what it was, whether it is written or only tried."""
+    project = excavation.excavation_project(staged=False)
+    sized = project.mesh.model_copy(update={"body_sizes": {"soil_L_top__lift3": 1.5}})
+    path = session.save(project.model_copy(update={"mesh": sized}), tmp_path / "pit.json")
+
+    tried = cli("layer", path, "split", "L_top", "--dry-run")
+    made = cli("layer", path, "split", "L_top")
+
+    for ran in (tried, made):
+        assert ran.code == 0, ran.err
+        assert "note: Removed the mesh size of soil_L_top__lift3 (1.5)" in ran.out
+    again = cli("layer", path, "split", "L1")
+    assert again.code == 0, again.err
+    assert "Removed" not in again.out
+
+
+@pytest.mark.parametrize("refuser", ["check", "mesh"])
+def test_a_size_for_a_body_the_model_lacks_is_refused_with_how_to_take_it_away(
+        cli, tmp_path, refuser):
+    project = excavation.excavation_project(staged=False)
+    sized = project.mesh.model_copy(update={"body_sizes": {"gone": 0.5, "lost": 0.5}})
+    path = session.save(project.model_copy(update={"mesh": sized}), tmp_path / "pit.json")
+
+    refused = cli(refuser, path)
+
+    assert refused.code == 1
+    assert "the mesh settings name bodies this model does not have: gone, lost." in refused.err
+    assert "kratos-cli remove FILE mesh.body_sizes.gone" in refused.err
+    assert cli("remove", path, "mesh.body_sizes.gone").code == 0
+    assert cli("remove", path, "mesh.body_sizes.lost").code == 0
+    ran = cli("check", path)
+    assert ran.code == 0, ran.err
+
+
 def test_a_layer_needs_a_bottom_or_a_thickness_or_takes_five_metres(cli, site):
     assert cli("layer", site, "add", "L3", "--material", "m1").code == 0
 

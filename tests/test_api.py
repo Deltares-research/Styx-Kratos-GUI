@@ -805,6 +805,33 @@ def test_patch_layers_can_resize_the_domain(client):
     client.put("/api/project", json=seed_project().model_dump())
 
 
+def test_a_layer_delete_answers_with_the_mesh_size_it_took_away(client):
+    """The GUI's soil layers window sends the stack without the layer; the size of the
+    layer's body goes with it, and the answer says so for the Session log."""
+    from tests.models.excavation import excavation_project
+
+    project = excavation_project(staged=False).model_dump(mode="json")
+    project["mesh"]["body_sizes"] = {"soil_L_mid": 2.0}
+    layers = [dict(layer) for layer in project["layers"] if layer["id"] != "L_mid"]
+    layers[0]["bottom"] = layers[1]["top"]
+    try:
+        put = client.put("/api/project", json=project)
+        assert put.status_code == 200, put.text
+
+        response = client.patch("/api/project/layers", json={"layers": layers})
+
+        assert response.status_code == 200, response.text
+        answer = response.json()
+        assert answer["project"]["mesh"]["body_sizes"] == {}
+        assert answer["edit_notes"] == [
+            "Removed the mesh size of soil_L_mid (2): the edit took that body away. If it "
+            "comes back, set its size again."]
+        again = client.patch("/api/project/layers", json={"layers": layers})
+        assert again.json()["edit_notes"] == []
+    finally:
+        client.put("/api/project", json=seed_project().model_dump())
+
+
 # ── The water line ──────────────────────────────────────────────────────────
 # `Project.water` holds the two numbers the deck's hydrostatic processes read -- the
 # phreatic level and the fluid's specific weight (plan sec 7.2) -- and until now
