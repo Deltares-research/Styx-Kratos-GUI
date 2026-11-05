@@ -19,6 +19,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from pathlib import Path
+import importlib.resources
 
 from fastapi import FastAPI
 from fastapi.middleware.gzip import GZipMiddleware
@@ -29,7 +30,18 @@ from backend.middleware import do_not_cache_sources, only_this_browser_tab
 from backend.routes import decks, geometry, mesh, project, results
 from core import gmsh_worker
 
-ROOT = Path(__file__).resolve().parents[1]
+# Try to get frontend path from installed package, fall back to development path
+try:
+    if hasattr(importlib.resources, 'files'):
+        # Python 3.9+
+        backend_files = importlib.resources.files('backend')
+        ROOT = Path(str(backend_files)).parents[0]
+    else:
+        raise AttributeError
+except (ModuleNotFoundError, AttributeError, TypeError):
+    # Development mode: get path relative to this file
+    ROOT = Path(__file__).resolve().parents[1]
+
 FRONTEND = ROOT / "frontend"
 BASE = FRONTEND / "base"
 

@@ -17,11 +17,22 @@ import sys
 import threading
 import venv
 import webbrowser
+import importlib.resources
 
 
 ROOT = Path(__file__).resolve().parents[1]
 REQUIREMENTS = ROOT / "requirements.txt"
 MINIMUM_PYTHON = (3, 10)
+
+# Detect if running from installed wheel vs development checkout
+_is_installed = False
+try:
+    # If we can access frontend as a package resource, we're installed
+    if hasattr(importlib.resources, 'files'):
+        importlib.resources.files('backend')
+    _is_installed = True
+except (ModuleNotFoundError, TypeError):
+    pass
 
 
 def platform_venv_name(platform: str = sys.platform) -> str:
@@ -62,6 +73,12 @@ def _ensure_supported_python() -> None:
 
 def ensure_environment() -> Path:
     _ensure_supported_python()
+    
+    # If installed as a wheel, dependencies are already available
+    if _is_installed:
+        return Path(sys.executable)
+    
+    # Otherwise, use the development venv approach
     environment = ROOT / platform_venv_name()
     python = venv_python(environment)
 
@@ -159,7 +176,11 @@ def main(argv: list[str] | None = None) -> int:
             str(python), "-m", "uvicorn", "backend.main:app",
             "--host", args.host, "--port", str(args.port),
         ]
-        os.chdir(ROOT)
+        
+        # When installed, use current directory; in development, change to ROOT
+        if not _is_installed:
+            os.chdir(ROOT)
+        
         os.environ.update(server_environment(args, dict(os.environ)))
         if args.open_browser:
             url = f"http://{args.host}:{args.port}/"

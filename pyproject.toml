@@ -1,5 +1,37 @@
-# Settings for the Python tools: pytest, coverage, mypy and ruff. The app itself is not
-# installed from here: the launcher installs requirements.txt (backend/launcher.py).
+# Build system and project metadata
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kratos-gui"
+version = "0.1.0"
+description = "A GUI for the Kratos structural analysis framework"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi==0.143.0",
+    "uvicorn[standard]==0.34.0",
+    "pydantic==2.12.5",
+    "gmsh==4.13.1",
+    "numpy==2.2.6; python_version < '3.11'",
+    "numpy==2.3.5; python_version >= '3.11'",
+    "python-multipart==0.0.32",
+]
+
+[project.scripts]
+kratos-gui = "backend.launcher:main"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+include = ["backend*", "core*", "cli*"]
+
+[tool.setuptools.package-data]
+backend = ["../frontend/**/*"]
+
+# Settings for the Python tools: pytest, coverage, mypy and ruff.
 
 # ── pytest ──────────────────────────────────────────────────────────────────
 [tool.pytest.ini_options]
