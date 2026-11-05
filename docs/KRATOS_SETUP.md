@@ -36,9 +36,10 @@ python3 -m venv ~/kratos/.venv
 ```
 
 Any Python from 3.10 to 3.14 works for this environment. Version 10.4.4 was the latest
-release when this was written, and it has no packages for Python 3.15. If the app runs on
-Python 3.15, keep this environment on 3.14 or older. Pin it (`KratosGeoMechanicsApplication==10.4.4`) if you want
-every machine to run the same solver.
+release when this was written. It has no working package for Python 3.15: pip installs one
+without an error, and then `import KratosMultiphysics` fails with `No module named 'Kratos'`.
+If the app runs on Python 3.15, keep this environment on 3.14 or older. Pin the version
+(`KratosGeoMechanicsApplication==10.4.4`) if you want every machine to run the same solver.
 
 ### Option B: Build from source (macOS, or a development build)
 
