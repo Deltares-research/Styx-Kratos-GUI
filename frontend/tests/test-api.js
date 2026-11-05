@@ -132,6 +132,31 @@
       .then(function () { T.eq(said, []); });
   });
 
+  test('the live client reports edit notes in the command log', function () {
+    var originalFetch = window.fetch, originalCommand = App.Command;
+    var said = [];
+    var answer = { project: { name: 'Site' }, edit_notes: ['Removed an unused mesh size'] };
+    window.fetch = stub([json(200, answer)]);
+    App.Command = { note: function (line) { said.push(line); } };
+    function restore() { window.fetch = originalFetch; App.Command = originalCommand; }
+    return App.Api.patch('/api/project/layers', {}).then(function (body) {
+      T.eq(body, answer);
+      T.eq(said, answer.edit_notes);
+    }).then(restore, function (error) { restore(); throw error; });
+  });
+
+  test('answers fetched outside the client report their notes and remain unchanged', function () {
+    var original = App.Command, said = [];
+    var answer = { project: { name: 'Site' }, edit_notes: ['Removed the deleted part'] };
+    try {
+      App.Command = { note: function (line) { said.push(line); } };
+      T.eq(App.Api.told(answer), answer);
+      T.eq(said, answer.edit_notes);
+      App.Command = null;
+      T.eq(App.Api.told(answer), answer);
+    } finally { App.Command = original; }
+  });
+
   /* ── Failures ────────────────────────────────────────────────── */
 
   test("a FastAPI error surfaces its detail, not just a status code", function () {
