@@ -114,6 +114,17 @@ def test_check_refuses_a_model_with_nothing_to_mesh(cli, tmp_path):
     assert "nothing to mesh" in ran.err and "layer add" in ran.err
 
 
+def test_check_refuses_mesh_settings_for_a_part_the_model_does_not_have(cli, site):
+    payload = json.loads(site.read_text(encoding="utf-8"))
+    payload["mesh"]["body_sizes"] = {"removed_body": 1.25}
+    site.write_text(json.dumps(payload), encoding="utf-8")
+
+    ran = cli("check", site)
+
+    assert ran.code == 1
+    assert "mesh settings name bodies this model does not have: removed_body" in ran.err
+
+
 def test_check_refuses_stages_that_branch(cli, site):
     """The schema accepts a branching tree (an editor has to be able to hold one); a
     deck cannot run it, and `check` is where that is said."""

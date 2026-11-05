@@ -102,9 +102,31 @@ def test_a_script_loads_as_the_project_it_describes(tmp_path):
     assert session.load(script) == seed_project()
 
 
+def test_a_script_failure_is_refused_as_a_project_file(tmp_path):
+    script = tmp_path / "broken.py"
+    script.write_text("raise RuntimeError('broken model')\n", encoding="utf-8")
+
+    with pytest.raises(session.ProjectFileError, match="broken.py failed while running"):
+        session.load(script)
+
+
 def test_a_missing_file_is_refused_by_name(tmp_path):
     with pytest.raises(session.ProjectFileError, match="nope.json"):
         session.load(tmp_path / "nope.json")
+
+
+def test_an_unreadable_project_is_refused_with_where(tmp_path, monkeypatch):
+    path = tmp_path / "locked.json"
+    real_read_text = Path.read_text
+
+    def unreadable(source, *args, **kwargs):
+        if source == path:
+            raise PermissionError("access denied")
+        return real_read_text(source, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", unreadable)
+    with pytest.raises(session.ProjectFileError, match="locked.json could not be read"):
+        session.load(path)
 
 
 def test_a_file_that_is_not_a_project_is_refused(tmp_path):
@@ -425,6 +447,29 @@ def test_a_path_that_names_nothing_says_what_is_there():
         session.value_at(seed_project(), "layers[L1")
 
 
+def test_a_path_cannot_descend_into_a_scalar():
+    with pytest.raises(session.PathError, match="which has no fields"):
+        session.value_at(seed_project(), "mesh.element_size.depth")
+
+
+def test_a_material_is_not_a_structure():
+    material = seed_project().materials[0].model_copy(update={"id": "not_a_structure"})
+
+    with pytest.raises(session.EditRefused, match="Material is not a structure"):
+        session.add_structure(blank_project(), material)
+
+
+def test_setting_a_value_requires_a_nonempty_path():
+    with pytest.raises(session.PathError, match="give a path"):
+        session.with_value(seed_project(), "", {})
+
+
+def test_a_list_record_can_be_selected_by_a_negative_index():
+    project = seed_project()
+
+    assert session.value_at(project, "layers[-1].id") == project.layers[-1].id
+
+
 def test_a_value_is_set_by_its_path_and_validated():
     project = session.with_value(seed_project(), "mesh.element_size", 1.5)
     assert project.mesh.element_size == 1.5
@@ -593,6 +638,15 @@ def test_a_top_cannot_rise_above_the_layer_above():
         session.update_layer(seed_project(), "L2", top=5.0)
 
 
+def test_a_layer_cannot_be_collapsed_past_its_own_faces():
+    layer = seed_project().layers[0]
+
+    with pytest.raises(session.EditRefused, match="top must be at or above its bottom"):
+        session.update_layer(seed_project(), layer.id, top=layer.bottom - 1.0)
+    with pytest.raises(session.EditRefused, match="bottom must be at or below its top"):
+        session.update_layer(seed_project(), layer.id, bottom=layer.top + 1.0)
+
+
 def test_a_layer_takes_another_material():
     project = session.update_layer(seed_project(), "L1", material="m1", name="Fill")
 
@@ -728,6 +782,16 @@ def test_unsetting_a_variable_the_material_does_not_have_is_refused():
         session.update_material(seed_project(), "m1", unset=["NOPE"])
 
 
+def test_a_material_cannot_get_both_a_model_and_a_law():
+    with pytest.raises(session.EditRefused, match="give a soil model or a law"):
+        session.update_material(seed_project(), "m1", model="invalid", law="invalid")
+
+
+def test_an_unknown_soil_model_is_refused():
+    with pytest.raises(session.EditRefused):
+        session.update_material(seed_project(), "m1", model="not-a-soil-model")
+
+
 def test_a_material_a_layer_uses_is_not_removed():
     with pytest.raises(ValidationError):
         session.remove_material(seed_project(), "m2")
@@ -789,6 +853,11 @@ def test_a_part_given_a_material_the_model_lacks_is_refused():
         session.assign_part_material(with_box(seed_project()), "drawn_0", "nope")
 
 
+def test_a_part_that_is_not_there_cannot_be_assigned_a_material():
+    with pytest.raises(session.UnknownPart, match="no custom part with key 'drawn_9'"):
+        session.assign_part_material(seed_project(), "drawn_9", "m1")
+
+
 # ── Structures and their sections ────────────────────────────────────────────
 
 def plane_strain() -> Project:
@@ -805,6 +874,17 @@ def test_a_first_sheet_pile_brings_its_default_profile():
 
     assert [b.id for b in edited.beams] == ["beam_1"]
     assert [s.id for s in edited.beam_sections] == ["beamsection_1"]
+
+
+def test_a_structure_without_a_section_cannot_be_given_one():
+    from core.model import drafts
+
+    project = plane_strain()
+    normal_load = drafts.normal_load(project, id="load_1")
+    section = drafts.section(project, "beam", "beamsection_1")
+
+    with pytest.raises(session.EditRefused, match="built with no section"):
+        session.add_structure(project, normal_load, section)
 
 
 def test_a_structure_needs_an_id_no_other_part_has():
@@ -835,11 +915,46 @@ def test_a_structure_that_is_not_there_is_named_with_those_that_are():
         session.update_structure(excavation_project(staged=False), "wall9", name="x")
 
 
+def test_a_structure_lookup_in_an_empty_project_says_there_are_none():
+    with pytest.raises(session.UnknownRecord, match="no structure 'missing'; there are: none"):
+        session.find_structure(blank_project(), "missing")
+
+
 def test_a_pile_carrying_an_anchor_or_an_interface_is_not_removed():
     project = excavation_project(staged=False)
 
     with pytest.raises(session.EditRefused, match="strut, wall_contact"):
         session.remove_structure(project, "sheetpile")
+
+
+def test_a_wall_carrying_a_three_dimensional_anchor_is_not_removed():
+    from core.model import drafts
+
+    project, _ = session.set_dimension(seed_project(), DimensionUpdate(dimension=3))
+    wall = drafts.wall(project, id="support_wall")
+    project = session.add_structure(project, wall, drafts.section_for(project, wall))
+    anchor = drafts.anchor(project, id="anchor")
+    project = session.add_structure(project, anchor, drafts.section_for(project, anchor))
+
+    with pytest.raises(session.EditRefused, match="support_wall carries anchor"):
+        session.remove_structure(project, "support_wall")
+
+
+def test_a_pile_carrying_a_point_load_above_the_ground_is_not_removed():
+    from core.model import drafts
+
+    project = plane_strain()
+    x = (project.domain.x0 + project.domain.x1) / 2
+    pile = drafts.sheet_pile(
+        project, points=[(x, project.domain.y_top + 2), (x, project.domain.y_top - 10)],
+        id="pile",
+    )
+    project = session.add_structure(project, pile, drafts.section_for(project, pile))
+    load = drafts.point_load(project, at=(x, project.domain.y_top + 1), id="pile_load")
+    project = session.add_structure(project, load)
+
+    with pytest.raises(session.EditRefused, match="pile carries pile_load"):
+        session.remove_structure(project, "pile")
 
 
 def test_a_structure_a_stage_names_is_not_removed():
@@ -1002,6 +1117,21 @@ def test_a_section_id_two_kinds_share_needs_its_kind():
         session.update_section(project, "sheetpile", name="x")
     assert session.update_section(project, "sheetpile", kind="anchor",
                                   name="x").anchor_sections[-1].name == "x"
+
+
+def test_a_missing_section_is_named():
+    with pytest.raises(session.UnknownRecord, match="no section 'missing'"):
+        session.find_section(blank_project(), "missing")
+
+
+def test_unsetting_a_variable_a_section_does_not_have_is_refused():
+    from core.model import drafts
+
+    project = plane_strain()
+    project = session.add_section(project, "beam", drafts.section(project, "beam", "az26"))
+
+    with pytest.raises(session.EditRefused, match="az26 has no variable NOPE"):
+        session.update_section(project, "az26", unset=["NOPE"])
 
 
 # ── Stages, one at a time ────────────────────────────────────────────────────

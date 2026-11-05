@@ -458,7 +458,9 @@ def _own(project: Project, id: str, kinds: tuple[str, ...]):
         command = {"beam": "beam", "panel": "wall", "member": "member", "anchor": "anchor",
                    "anchor3d": "anchor", "interface": "interface",
                    "normal": "normal-load"}.get(record.kind, "load")
-        raise CommandError(f"{id} is a {NOUNS[record.kind]}; use `kratos-cli {command}`")
+        noun = NOUNS[record.kind]
+        article = "an" if noun[0] in "aeiou" else "a"
+        raise CommandError(f"{id} is {article} {noun}; use `kratos-cli {command}`")
     return record
 
 

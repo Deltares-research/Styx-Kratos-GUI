@@ -53,6 +53,17 @@ def test_a_deck_is_not_meshed(cli, tmp_path):
     assert "not meshed here" in ran.err
 
 
+def test_mesh_refuses_a_size_for_a_part_that_is_not_in_the_model(cli, site):
+    payload = json.loads(site.read_text(encoding="utf-8"))
+    payload["mesh"]["body_sizes"] = {"gone": 1.0}
+    site.write_text(json.dumps(payload), encoding="utf-8")
+
+    ran = cli("mesh", site)
+
+    assert ran.code == 1
+    assert "mesh settings name bodies this model does not have: gone" in ran.err
+
+
 # ── stages ──────────────────────────────────────────────────────────────────
 
 def test_stages_defaults_gives_the_initial_stage_and_the_null_step(cli, site):

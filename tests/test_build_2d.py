@@ -523,3 +523,27 @@ def test_a_plane_anchor_is_built_on_the_section_plane_of_a_3d_model():
 
     assert result.ties.get("anchor_1"), "the 2D anchor vanished from the solid model"
     assert "anchor_1" in result.tie_nodes
+
+
+def test_plane_strain_verification_allows_parts_that_miss_the_section():
+    project = seed_project().model_copy(update={"dimension": 2})
+    solid_model._verify(project, {})
+
+
+def test_split_at_inserts_on_segment_heads_in_order_and_ignores_other_points():
+    points = [(0.0, 0.0), (4.0, 0.0), (4.0, 2.0)]
+    heads = [
+        (3.0, 0.0), (1.0, 0.0), (4.0, 1.0), (1.0, 0.0000005),
+        (0.0, 0.0), (4.0, 0.0), (2.0, 1.0),
+    ]
+
+    assert solid_model._split_at(points, heads) == [
+        (0.0, 0.0), (1.0, 0.0), (3.0, 0.0),
+        (4.0, 0.0), (4.0, 1.0), (4.0, 2.0),
+    ]
+
+
+def test_anchor_head_insertion_skips_a_zero_length_polyline_leg():
+    assert solid_model._split_at(
+        [(0, 0), (0, 0), (2, 0)], [(1, 0)]) == [
+            (0, 0), (0, 0), (1, 0), (2, 0)]
