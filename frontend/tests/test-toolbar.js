@@ -281,6 +281,104 @@
     T.eq(App.History.peekUndo(), { layers: [{ id: 'L1' }] });
   });
 
+  test('history without an injected environment restores the model and refreshes the view', function () {
+    var saved = { Api: App.Api, Model: App.Model, Viewport: App.Viewport,
+                  PROJECT: App.PROJECT, Command: App.Command };
+    var puts = [], applied = [], refreshed = 0;
+    App.PROJECT = { name: 'after' };
+    App.Command = { ok: function () {}, note: function () {}, err: function () {} };
+    App.Api = { put: function (path, body) {
+      puts.push([path, body]); return Promise.resolve(body);
+    } };
+    App.Model = { apply: function (project) { applied.push(project); App.PROJECT = project; } };
+    App.Viewport = { refresh: function () { refreshed += 1; return Promise.resolve(); } };
+    function restore() { App.History.reset(); Object.assign(App, saved); }
+    return Promise.resolve().then(function () {
+      App.History.reset();
+      App.History.record({ name: 'before' }, App.PROJECT);
+      return App.History.undo();
+    }).then(function (changed) {
+      T.eq(changed, true);
+      T.eq(puts, [['/api/project', { name: 'before' }]]);
+      T.eq(applied, [{ name: 'before' }]);
+      T.eq(refreshed, 1);
+      T.eq(App.History.depth(), { undo: 0, redo: 1 });
+    }).then(restore, function (error) { restore(); throw error; });
+  });
+
+  test('history restores its environment when a test body throws synchronously', function () {
+    var failure = new Error('test body failed'), caught;
+    try {
+      App.History.withEnv({}, function () { throw failure; });
+    } catch (error) { caught = error; }
+    T.eq(caught, failure);
+  });
+
+  test('history reports rejected writes and keeps the undo step available for retry', function () {
+    var command = App.Command, errors = [];
+    App.Command = { err: function (text) { errors.push(text); }, ok: function () {}, note: function () {} };
+    return App.History.withEnv({
+      put: function () { return Promise.reject(new Error('Project is locked')); }
+    }, function () {
+      App.History.reset();
+      App.History.record({ name: 'before' }, { name: 'after' });
+      return App.History.undo().then(function (changed) {
+        T.eq(changed, false);
+        T.eq(App.History.depth(), { undo: 1, redo: 0 });
+        T.eq(errors, ['Could not undo: Project is locked']);
+      });
+    }).then(function () {
+      return T.rejects(function () {
+        return App.History.withEnv({}, function () {
+          return Promise.reject(new Error('asynchronous test failure'));
+        });
+      });
+    }).then(function (error) {
+      T.eq(error.message, 'asynchronous test failure');
+      return App.History.withEnv({ put: function (path, body) { return Promise.resolve(body); } },
+        function () { return App.History.undo(); });
+    }).then(function (changed) {
+      T.eq(changed, true, 'the default injected apply callback accepts the retry');
+    }).then(function () {
+      App.History.reset(); App.Command = command;
+    }, function (error) {
+      App.History.reset(); App.Command = command; throw error;
+    });
+  });
+
+  test('navigation, ruler and mesh-label switches notify the user and forward their state', function () {
+    var saved = { Viewport: App.Viewport, Ruler: App.Ruler, Toolbars: App.Toolbars,
+                  Command: App.Command, state: App.state };
+    var notes = [], navigation = [], enabled = [], labelChanges = [], on = false;
+    App.state = { modelMode: '2d', ruler: true };
+    App.Command = { note: function (text) { notes.push(text); } };
+    App.Ruler = { setEnabled: function (value) { enabled.push(value); } };
+    App.Toolbars = { setToolbarState: function () {} };
+    App.Viewport = {
+      setNavMode: function (value) { navigation.push(value); return value; },
+      syncRulers: function () {},
+      labelsOn: function () { return on; },
+      setLabels: function (kind, value, done) {
+        labelChanges.push([kind, value]); on = value;
+        if (done) done(12);
+      }
+    };
+    try {
+      App.LivePatches.setNavigation('pan');
+      T.eq(navigation, ['pan']);
+      T.ok(/left-drag pans/.test(notes[0]));
+      App.LivePatches.toggleRulers();
+      T.eq(App.state.ruler, false);
+      T.eq(enabled, [false]);
+      T.ok(/Rulers hidden/.test(notes[1]));
+      App.LivePatches.toggleLabels('nodes');
+      App.LivePatches.toggleLabels('nodes');
+      T.eq(labelChanges, [['nodes', true], ['nodes', false]]);
+      T.ok(/12 nodes/.test(notes[2]));
+      T.eq(notes[3], 'Node ID labels hidden.');
+    } finally { Object.assign(App, saved); }
+  });
+
   /* ── Structures rail order ─────────────────────────────────────── */
 
   /* Every live tool was appended to the frozen rail, so sheet piles, anchors and

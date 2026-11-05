@@ -304,3 +304,29 @@ def test_every_part_key_is_drawable_including_overlays(project_with_line_and_sur
         result = tessellation.tessellate(project_with_line_and_surface)
 
     assert {s.key for s in result.sections} == set(project_with_line_and_surface.part_keys())
+
+
+def test_first_facet_skips_a_degenerate_triangle_and_uses_a_valid_one(monkeypatch):
+    import gmsh
+
+    monkeypatch.setattr(
+        gmsh.model.mesh, "getElements",
+        lambda *_: ([tessellation.TRIANGLE], [], [[1, 2, 3, 1, 2, 4]]),
+    )
+    coordinates = {
+        1: (0.0, 0.0, 0.0), 2: (1.0, 0.0, 0.0), 3: (2.0, 0.0, 0.0),
+        4: (0.0, 1.0, 0.0),
+    }
+
+    facet = tessellation._first_facet(9, coordinates)
+
+    assert facet[0] == pytest.approx([1 / 3, 1 / 3, 0.0])
+    assert facet[1] == pytest.approx([0.0, 0.0, 1.0])
+    assert facet[2] == pytest.approx(0.5)
+
+
+def test_first_facet_returns_none_when_the_surface_has_no_triangles(monkeypatch):
+    import gmsh
+
+    monkeypatch.setattr(gmsh.model.mesh, "getElements", lambda *_: ([], [], []))
+    assert tessellation._first_facet(9, {}) is None

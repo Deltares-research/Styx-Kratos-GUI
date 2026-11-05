@@ -172,6 +172,19 @@
     T.eq(ctx.posts.length, 0);
   });
 
+  test('import: clicking the drop zone opens the file input without uploading', function () {
+    var ctx = rig(ok({}));
+    try {
+      App.ImportDialog.open();
+      var dialog = document.getElementById('import-dialog'), clicks = 0;
+      dialog.querySelector('input[type=file]').click = function () { clicks += 1; };
+      dialog.querySelector('.drop-zone').click();
+      T.eq(clicks, 1);
+      T.eq(ctx.posts, []);
+      dialog.querySelector('.dlg-x').click();
+    } finally { ctx.restore(); }
+  });
+
   /* ── Import mesh (.mdpa) ──────────────────────────────────────────────── */
 
   var MODEL = {
@@ -232,6 +245,28 @@
     } finally {
       ctx.restore();
     }
+  });
+
+  test('mdpa: browsing and drag feedback do not upload until a file is chosen', function () {
+    var ctx = rig(ok(MODEL));
+    try {
+      App.MdpaImportDialog.open();
+      var dialog = document.getElementById('mdpa-import-dialog'), clicks = 0;
+      dialog.querySelector('input[type=file]').click = function () { clicks += 1; };
+      var zone = dialog.querySelector('.drop-zone');
+      zone.click();
+      T.eq(clicks, 1);
+      var over = new Event('dragover', { cancelable: true });
+      zone.dispatchEvent(over);
+      T.ok(over.defaultPrevented);
+      T.ok(zone.style.backgroundColor !== '');
+      var leave = new Event('dragleave', { cancelable: true });
+      zone.dispatchEvent(leave);
+      T.ok(leave.defaultPrevented);
+      T.eq(zone.style.backgroundColor, '');
+      T.eq(ctx.posts, []);
+      dialog.querySelector('.dlg-x').click();
+    } finally { ctx.restore(); }
   });
 
 })();

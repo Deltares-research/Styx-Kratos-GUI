@@ -5,6 +5,11 @@
    message a person can act on: FastAPI returns `{detail: "..."}` for our own
    errors and `{detail: [{loc, msg}, ...]}` for schema rejections, and both need
    to end up as one line in the command log rather than "[object Object]".
+
+   An edit's answer can carry `edit_notes`: what the edit took away besides what was
+   asked, such as the mesh size of a body it removed (backend/routes/common.py
+   `stored`). Every answer comes through here, so each note is shown whichever part
+   of the GUI made the edit.
    ══════════════════════════════════════════════════════════════════ */
 
 var App = window.App || {};
@@ -36,9 +41,16 @@ App.Api = (function () {
     return 'HTTP ' + status;
   }
 
+  /* Give each of `answer`'s `edit_notes` to `note`, and give back the answer. */
+  function told(answer, note) {
+    if (note && answer && Array.isArray(answer.edit_notes)) answer.edit_notes.forEach(note);
+    return answer;
+  }
+
   function create(options) {
     var base = options.base || '';
     var fetcher = options.fetch;
+    var note = options.note;
 
     function request(method, path, body) {
       var opts = { method: method, headers: {} };
@@ -48,7 +60,9 @@ App.Api = (function () {
       }
 
       return fetcher(base + path, opts).then(function (response) {
-        if (response.ok) return response.json();
+        if (response.ok) {
+          return response.json().then(function (answer) { return told(answer, note); });
+        }
 
         // Read the body for a reason, but never let a malformed one mask the status.
         return response.json().catch(function () { return null; })
@@ -77,14 +91,21 @@ App.Api = (function () {
   }
 
   /* The instance the app uses. Tests build their own with create(). */
+  function noteInTheLog(line) {
+    if (App.Command && App.Command.note) App.Command.note(line);
+  }
+
   var live = create({
     base: baseFor(window.location),
-    fetch: function (url, opts) { return window.fetch(url, opts); }
+    fetch: function (url, opts) { return window.fetch(url, opts); },
+    note: noteInTheLog
   });
 
   return {
     create: create, baseFor: baseFor,
     base: live.base,
-    get: live.get, put: live.put, post: live.post, patch: live.patch
+    get: live.get, put: live.put, post: live.post, patch: live.patch,
+    /* For an answer fetched outside this client: a DELETE (js/patches.js). */
+    told: function (answer) { return told(answer, noteInTheLog); }
   };
 })();

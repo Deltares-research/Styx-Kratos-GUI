@@ -170,6 +170,46 @@ def test_a_helper_that_takes_arguments_is_not_mistaken_for_the_entry_point(tmp_p
     assert isinstance(scripting.load_project(path), Project)
 
 
+def test_a_required_argument_helper_is_skipped_before_a_zero_argument_builder(tmp_path):
+    path = write(tmp_path, SEED + """
+    def helper_project(depth):
+        raise AssertionError("not an entry point")
+
+    def site_project():
+        return seed_project()
+    """)
+
+    assert isinstance(scripting.load_project(path), Project)
+
+
+def test_a_type_error_inside_a_builder_is_reported_with_its_source_line(tmp_path):
+    path = write(tmp_path, """
+    def project():
+        return 1 + "invalid"
+    """)
+
+    with pytest.raises(scripting.ScriptError, match=r"project\(\) failed at line 3: TypeError"):
+        scripting.load_project(path)
+
+
+def test_exiting_inside_a_builder_does_not_exit_the_application(tmp_path):
+    path = write(tmp_path, """
+    def project():
+        raise SystemExit(7)
+    """)
+
+    with pytest.raises(scripting.ScriptError, match=r"model.py exited \(7\)"):
+        scripting.load_project(path)
+
+
+def test_a_model_variable_with_a_different_name_is_accepted(tmp_path):
+    path = write(tmp_path, SEED + """
+    SITE = seed_project()
+    """)
+
+    assert isinstance(scripting.load_project(path), Project)
+
+
 _SCRIPT = textwrap.dedent("""
     from core.model.templates import seed_project
     PROJECT = seed_project()
@@ -399,6 +439,24 @@ def test_running_a_script_leaves_the_import_path_as_it_found_it(tmp_path):
     with pytest.raises(scripting.ScriptError):
         scripting.load_project(write(tmp_path, "raise RuntimeError('x')\n", name="bad.py"))
     assert sys.path == before
+
+
+def test_script_cleanup_leaves_in_memory_modules_alone(tmp_path):
+    import sys
+
+    name = "in_memory_module_from_model"
+    assert name not in sys.modules
+    path = write(tmp_path, SEED + f"""
+    import sys, types
+    sys.modules[{name!r}] = types.ModuleType({name!r})
+    PROJECT = seed_project()
+    """)
+    try:
+        assert isinstance(scripting.load_project(path), Project)
+        assert name in sys.modules
+        assert not getattr(sys.modules[name], "__file__", None)
+    finally:
+        sys.modules.pop(name, None)
 
 
 # ── Through the API ─────────────────────────────────────────────────────────

@@ -104,6 +104,8 @@ def test_a_model_built_in_the_terminal_comes_back_whole(cli, tmp_path):
 def python(*argv, cwd: Path) -> subprocess.CompletedProcess:
     """The file run by the environment's own Python, from a folder of the user's."""
     environment = {key: value for key, value in os.environ.items() if key != "PYTHONPATH"}
+    # On Windows the child would print in the console code page (cp1252 turns "³" into 0xb3).
+    environment["PYTHONIOENCODING"] = "utf-8"
     return subprocess.run([sys.executable, *map(str, argv)], cwd=cwd, capture_output=True,
                           text=True, encoding="utf-8", env=environment, timeout=600)
 
