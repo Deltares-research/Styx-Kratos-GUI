@@ -115,6 +115,7 @@ kratos-cli picture mesh site.json --out mesh.png
 kratos-cli picture stage site.json --format png,pdf --out pictures/
 kratos-cli picture result 1 uy --stage all --map viridis --out pictures/
 kratos-cli picture result 1 all --stage 3 --csv --out pictures/
+kratos-cli picture stage site.json --format pdf --one-pdf --out stages.pdf
 ```
 
 The command draws with the GUI's own page, so the pictures are the same, and each one shows the
@@ -129,6 +130,9 @@ does not find one. On a computer with neither browser, the command stops and say
 | `--no-rulers`, `--no-axes`, `--grid` | What to leave out, or add |
 | `--out PATH` | A file, or a folder. A path that ends in `/` makes the folder. More than one file needs a folder. |
 | `--force` | Overwrite files that exist |
+
+`picture stage` and `picture result` also take `--one-pdf`, which puts all the pictures in one PDF
+file, one per page. It needs `pdf` in `--format`.
 
 `picture result` also takes `--no-legend`, `--csv` (the field values too), `--map`, `--bands`,
 `--range MIN MAX`, `--deform` and `--mesh`, which mean what the `results` commands of the GUI's

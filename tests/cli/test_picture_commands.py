@@ -137,6 +137,33 @@ def test_every_stage_is_the_default(stand, project, tmp_path):
     assert stand.job["asked"]["stage"] == "all"
 
 
+def test_one_pdf_is_asked_of_the_page(stand, project, tmp_path):
+    assert main(["picture", "stage", str(project), "--format", "pdf", "--one-pdf",
+                 "--out", str(tmp_path) + "/"]) == 0
+    assert stand.job["asked"]["onePdf"] is True
+    assert stand.job["asked"]["stage"] == "all"
+
+
+def test_one_pdf_goes_to_a_file_with_the_name_asked_for(stand, project, tmp_path):
+    stand.files = {"Pit_stages.pdf": b"%PDF-"}
+    out = tmp_path / "report.pdf"
+    assert main(["picture", "stage", str(project), "--format", "pdf", "--one-pdf",
+                 "--out", str(out)]) == 0
+    assert out.read_bytes() == b"%PDF-"
+
+
+def test_one_pdf_needs_a_pdf(stand, project, capsys):
+    assert main(["picture", "stage", str(project), "--one-pdf"]) != 0
+    assert stand.job is None
+    assert "--one-pdf needs pdf" in capsys.readouterr().err
+
+
+def test_a_pdf_for_each_picture_is_the_default(stand, project, tmp_path):
+    assert main(["picture", "stage", str(project), "--format", "pdf",
+                 "--out", str(tmp_path) + "/"]) == 0
+    assert "onePdf" not in stand.job["asked"]
+
+
 @pytest.mark.parametrize("wanted", ("2", "SECOND"))
 def test_a_stage_by_its_number_or_words_of_its_name(stand, tmp_path, wanted):
     model = excavation_project()

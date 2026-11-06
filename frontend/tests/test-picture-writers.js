@@ -132,6 +132,37 @@
     }
   });
 
+  test('a PDF of more pictures has a page for each, with its own size and images', function () {
+    var rgba = new Uint8ClampedArray([255, 0, 0, 255]);
+    function parts(list, page) {
+      var streams = W.pdfStreams(list, page);
+      return { page: page, parts: {
+        content: { bytes: W.latin1(streams.content), filter: null }, alphas: streams.alphas,
+        images: streams.images.map(function (image) {
+          return { width: image.width, height: image.height,
+                   rgb: { bytes: image.rgb, filter: null }, alpha: { bytes: image.alpha, filter: null } };
+        })
+      } };
+    }
+    var taller = Object.assign({}, PAGE, { heightMm: PAGE.heightMm * 2 });
+    var image = { t: 'image', width: 1, height: 1, w: 10, h: 10, rgba: rgba };
+    var file = pdfText(W.pdfDocument([parts([TRIANGLE], PAGE), parts([image], taller),
+                                      parts([image, LINE], PAGE)]));
+    T.ok(/\/Type \/Pages \/Kids \[\d+ 0 R \d+ 0 R \d+ 0 R\] \/Count 3/.test(file), file.slice(0, 300));
+    T.eq(file.match(/\/Type \/Page /g).length, 3);
+    T.ok(/\/MediaBox \[0 0 283\.465 141\.732\]/.test(file));
+    T.ok(/\/MediaBox \[0 0 283\.465 283\.465\]/.test(file));
+    T.eq(file.match(/\/Subtype \/Image/g).length, 4, 'two images, each with its mask');
+
+    var xref = file.lastIndexOf('\nxref\n') + 1;
+    var head = file.slice(xref).split('\n');
+    var count = Number(head[1].split(' ')[1]);
+    for (var i = 1; i < count; i++) {
+      var offset = Number(head[2 + i].slice(0, 10));
+      T.eq(file.slice(offset, offset + String(i).length + 6), i + ' 0 obj', 'object ' + i);
+    }
+  });
+
   test('a stream says its true length', function () {
     var file = pdfText(assemble([TRIANGLE]).bytes);
     var match = /\/Length (\d+)[^>]*>>\nstream\n/.exec(file);

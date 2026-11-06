@@ -18,14 +18,25 @@ App.PictureDialog = (function () {
     both: { label: 'Every stage, every field', stage: 'all', field: 'all' }
   };
 
+  var PDF_FILES = [
+    { value: 'each', one: false, label: 'One PDF file for each picture' },
+    { value: 'one', one: true, label: 'All pictures in one PDF file, one per page' }
+  ];
+
   /* The choices kept between two openings of the window. */
   var last = { formats: ['png'], width: App.PictureDraw.DEFAULT_WIDTH_CM, scope: 'view',
-               csv: false };
+               csv: false, onePdf: false };
 
   function scopesFor(results, staged) {
     if (results) return ['view', 'stages', 'fields', 'both'];
     if (staged) return ['view', 'stages'];
     return ['view'];
+  }
+
+  /* Whether the window has a choice to make about the PDF: PDF, and more than one picture. */
+  function asksAboutPdf(choice) {
+    var scope = SCOPES[choice.scope] || SCOPES.view;
+    return choice.formats.indexOf('pdf') >= 0 && !!(scope.stage || scope.field);
   }
 
   /* What the screen does unless told otherwise goes unsaid, so the line stays short. */
@@ -36,6 +47,7 @@ App.PictureDialog = (function () {
     var scope = SCOPES[choice.scope] || SCOPES.view;
     if (scope.stage) words.push('--stage', 'all');
     if (scope.field) words.push('--field', 'all');
+    if (choice.onePdf && asksAboutPdf(choice)) words.push('--one-pdf');
     if (!choice.legend && screen.legend) words.push('--no-legend');
     if (!choice.rulers && screen.rulers) words.push('--no-rulers');
     if (!choice.axes) words.push('--no-axes');
@@ -50,10 +62,17 @@ App.PictureDialog = (function () {
   function hint(choice, counts) {
     var scope = SCOPES[choice.scope] || SCOPES.view;
     var pictures = (scope.stage ? counts.stages : 1) * (scope.field ? counts.fields : 1);
-    var files = pictures * choice.formats.length + (choice.csv ? pictures : 0);
+    var onePdf = !!choice.onePdf && asksAboutPdf(choice);
+    var files = pictures * (choice.formats.length - (onePdf ? 1 : 0) + (choice.csv ? 1 : 0))
+              + (onePdf ? 1 : 0);
     if (!choice.formats.length && !choice.csv) return 'Choose a format.';
+    var about = scope.stage && scope.field;
+    if (onePdf && files === 1) {
+      return '1 PDF file with ' + (about ? 'about ' : '') + pictures + ' pages. '
+           + 'You choose its name and place next.';
+    }
     var many = files > 1 || scope.stage || scope.field;
-    var number = (scope.stage && scope.field ? 'About ' : '') + files + ' file' + (files === 1 ? '' : 's');
+    var number = (about ? 'About ' : '') + files + ' file' + (files === 1 ? '' : 's');
     return many ? number + '. You choose a folder next.'
                 : number + '. You choose its name and place next.';
   }
@@ -84,11 +103,12 @@ App.PictureDialog = (function () {
     };
     var form = el('div.picture-form', { id: 'picture-form' });
     var dpiNote = el('div.mesh-setting-help');
+    var pdfRow = [];
     var note = el('div.picture-note');
     var choice = {
       formats: last.formats.slice(), width: last.width,
       scope: scopes.indexOf(last.scope) >= 0 ? last.scope : 'view',
-      csv: results && last.csv, legend: true,
+      csv: results && last.csv, onePdf: last.onePdf, legend: true,
       rulers: !!(App.Picture.defaults().rulers && view.rulers), axes: true, grid: false,
       screenZoom: false
     };
@@ -98,6 +118,8 @@ App.PictureDialog = (function () {
         ? sizeLine(choice)
         : 'The width is in cm, more than 0 and at most ' + App.PictureDraw.MAX_WIDTH_CM + '.';
       note.textContent = hint(choice, counts);
+      var asked = asksAboutPdf(choice) ? '' : 'none';
+      pdfRow.forEach(function (part) { part.style.display = asked; });
     }
 
     function row(label, control) {
@@ -149,6 +171,19 @@ App.PictureDialog = (function () {
         list.appendChild(holder);
       });
       row('Pictures', list);
+
+      var pdfFiles = el('div.picture-column');
+      PDF_FILES.forEach(function (option) {
+        var radio = el('input', { type: 'radio', name: 'picture-pdf', value: option.value });
+        radio.checked = choice.onePdf === option.one;
+        radio.addEventListener('change', function () { choice.onePdf = option.one; refresh(); });
+        var holder = el('label.picture-tick');
+        holder.appendChild(radio);
+        holder.appendChild(document.createTextNode(' ' + option.label));
+        pdfFiles.appendChild(holder);
+      });
+      row('PDF files', pdfFiles);
+      pdfRow = [form.children[form.children.length - 2], pdfFiles];
     }
 
     var showing = el('div.picture-row');
@@ -186,7 +221,7 @@ App.PictureDialog = (function () {
 
     var handle = App.Dialogs.open({
       title: 'Save picture',
-      width: 500, height: 400,
+      width: 500, height: 450,
       buttons: [
         { label: 'Copy picture', keepOpen: true, onClick: function () {
           App.Picture.copy({ width: valid() ? choice.width : undefined, screenZoom: choice.screenZoom, show: {
@@ -196,7 +231,7 @@ App.PictureDialog = (function () {
         { label: 'Save…', primary: true, keepOpen: true, onClick: function () {
           if (!valid()) { refresh(); return; }
           last = { formats: choice.formats.slice(), width: choice.width, scope: choice.scope,
-                   csv: choice.csv };
+                   csv: choice.csv, onePdf: choice.onePdf };
           handle.close();
           // Straight out of the click, so the browser still offers its save window.
           App.Command.run(commandFor(choice, screen));

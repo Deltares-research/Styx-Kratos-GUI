@@ -95,6 +95,13 @@
     T.eq(D.parseCommand('picture save --screen-zoom').screenZoom, true);
   });
 
+  test('`--one-pdf` needs a PDF to put the pictures in', function () {
+    T.eq(D.parseCommand('picture save pdf --stage all --one-pdf').onePdf, true);
+    T.ok(!D.parseCommand('picture save pdf --stage all').onePdf);
+    T.ok(/pdf/.test(D.parseCommand('picture save png --one-pdf').error));
+    T.ok(/pdf/.test(D.parseCommand('picture save --one-pdf').error));
+  });
+
   test('`--stage` and `--field` take only `all`', function () {
     T.ok(/all/.test(D.parseCommand('picture save --stage 2').error));
     T.ok(/all/.test(D.parseCommand('picture save --field uy').error));

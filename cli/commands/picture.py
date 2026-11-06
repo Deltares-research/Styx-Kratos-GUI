@@ -27,6 +27,7 @@ FORMATS = ("png", "pdf", "svg")
 VIEWS = ("front", "top", "side", "iso")
 DEFAULT_WIDTH_CM = 16.0
 MAX_WIDTH_CM = 60.0
+ONE_PDF_HELP = "all pictures in one PDF file, one per page; needs pdf in --format"
 
 
 def _formats(text: str) -> list[str]:
@@ -81,6 +82,7 @@ def register(commands, common: argparse.ArgumentParser) -> None:
     add_project(stage)
     stage.add_argument("--stage", metavar="STAGE", default="all",
                        help="its number, words of its name, or all (default: all)")
+    stage.add_argument("--one-pdf", action="store_true", help=ONE_PDF_HELP)
 
     result = what("result", draw_result, "a result as the Results tab shows it")
     result.add_argument("run", help="the run's id, its number in `results runs`, or a run directory")
@@ -92,6 +94,7 @@ def register(commands, common: argparse.ArgumentParser) -> None:
                              "that wrote results)")
     result.add_argument("--project", type=Path,
                         help="the model the run is of, to draw its loads and water over the result")
+    result.add_argument("--one-pdf", action="store_true", help=ONE_PDF_HELP)
     result.add_argument("--no-legend", action="store_true", help="leave out the legend")
     result.add_argument("--csv", action="store_true", help="save the field values as CSV too")
     result.add_argument("--map", help="the colour map, as `results map` in the GUI")
@@ -105,6 +108,8 @@ def register(commands, common: argparse.ArgumentParser) -> None:
 
 def _asked(args: argparse.Namespace, **extra) -> dict:
     # Drawn in a section unless left out; a 3D view has none to draw.
+    if getattr(args, "one_pdf", False) and "pdf" not in args.format:
+        raise CommandError("--one-pdf needs pdf in the formats, as in --format pdf --one-pdf.")
     show: dict[str, bool] = {"rulers": not args.no_rulers}
     if args.no_axes:
         show["axes"] = False
@@ -112,6 +117,8 @@ def _asked(args: argparse.Namespace, **extra) -> dict:
         show["grid"] = True
     if getattr(args, "no_legend", False):
         show["legend"] = False
+    if getattr(args, "one_pdf", False):
+        extra["onePdf"] = True
     return {"formats": args.format, "width": args.width, "show": show,
             "csv": getattr(args, "csv", False), "stage": None, "field": None, **extra}
 

@@ -188,6 +188,8 @@ App.PictureDraw = (function () {
         asked.show.grid = true;
       } else if (token === '--screen-zoom') {
         asked.screenZoom = true;
+      } else if (token === '--one-pdf') {
+        asked.onePdf = true;
       } else if (token === '--csv') {
         asked.csv = true;
       } else if (FORMATS.indexOf(token) >= 0) {
@@ -198,6 +200,9 @@ App.PictureDraw = (function () {
       }
     }
     if (!asked.formats.length) asked.formats.push('png');
+    if (asked.onePdf && asked.formats.indexOf('pdf') < 0) {
+      return { error: '--one-pdf needs pdf in the formats, as in `picture save pdf --one-pdf`.' };
+    }
     return asked;
   }
 

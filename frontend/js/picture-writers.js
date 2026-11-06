@@ -310,9 +310,9 @@ App.PictureWriters = (function () {
     return bytes;
   }
 
-  /* `parts`: the streams of `pdfStreams` as {bytes, filter}, where `filter` names how the
-     caller compressed them, or is null. */
-  function pdfAssemble(page, parts) {
+  /* `pages`: a {page, parts} for each page. `parts`: the streams of `pdfStreams` as
+     {bytes, filter}, where `filter` names how the caller compressed them, or is null. */
+  function pdfDocument(pages) {
     var chunks = [], size = 0, offsets = [];
 
     function add(bytes) { chunks.push(bytes); size += bytes.length; }
@@ -327,38 +327,48 @@ App.PictureWriters = (function () {
       text('\nendstream\nendobj\n');
     }
 
-    var images = parts.images || [];
-    var CONTENT = 4, FONT_TEXT = 5, FONT_BOLD = 6, FONT_SYMBOL = 7, FIRST_IMAGE = 8;
-    var xObjects = images.map(function (image, i) {
-      return '/Im' + i + ' ' + (FIRST_IMAGE + i * 2) + ' 0 R';
-    }).join(' ');
-    var states = parts.alphas.map(function (alpha, i) {
-      return '/GS' + i + ' << /ca ' + number(alpha) + ' /CA ' + number(alpha) + ' >>';
-    }).join(' ');
+    var FONT_TEXT = 3, FONT_BOLD = 4, FONT_SYMBOL = 5;
+    var count = 6;
+    var first = pages.map(function (one) {
+      var at = count;
+      count += 2 + (one.parts.images || []).length * 2;
+      return at;
+    });
+    var kids = first.map(function (at) { return at + ' 0 R'; }).join(' ');
 
     text('%PDF-1.5\n%\xE2\xE3\xCF\xD3\n');
     object(1, '<< /Type /Catalog /Pages 2 0 R >>');
-    object(2, '<< /Type /Pages /Kids [3 0 R] /Count 1 >>');
-    object(3, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ' + number(page.widthMm * PT_PER_MM)
-              + ' ' + number(page.heightMm * PT_PER_MM) + '] /Contents ' + CONTENT + ' 0 R'
-              + ' /Resources << /Font << /F1 ' + FONT_TEXT + ' 0 R /F2 ' + FONT_BOLD
-              + ' 0 R /F3 ' + FONT_SYMBOL + ' 0 R >> /ExtGState << ' + states + ' >>'
-              + (xObjects ? ' /XObject << ' + xObjects + ' >>' : '') + ' >> >>');
-    object(CONTENT, '', parts.content);
+    object(2, '<< /Type /Pages /Kids [' + kids + '] /Count ' + pages.length + ' >>');
     object(FONT_TEXT, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica '
                       + '/Encoding /WinAnsiEncoding >>');
     object(FONT_BOLD, '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold '
                       + '/Encoding /WinAnsiEncoding >>');
     object(FONT_SYMBOL, '<< /Type /Font /Subtype /Type1 /BaseFont /Symbol >>');
-    images.forEach(function (image, i) {
-      var at = FIRST_IMAGE + i * 2;
-      var common = '/Type /XObject /Subtype /Image /Width ' + image.width + ' /Height '
-                 + image.height + ' /BitsPerComponent 8';
-      object(at, common + ' /ColorSpace /DeviceRGB /SMask ' + (at + 1) + ' 0 R', image.rgb);
-      object(at + 1, common + ' /ColorSpace /DeviceGray', image.alpha);
+
+    pages.forEach(function (one, n) {
+      var images = one.parts.images || [];
+      var at = first[n], content = at + 1, firstImage = at + 2;
+      var xObjects = images.map(function (image, i) {
+        return '/Im' + i + ' ' + (firstImage + i * 2) + ' 0 R';
+      }).join(' ');
+      var states = one.parts.alphas.map(function (alpha, i) {
+        return '/GS' + i + ' << /ca ' + number(alpha) + ' /CA ' + number(alpha) + ' >>';
+      }).join(' ');
+      object(at, '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ' + number(one.page.widthMm * PT_PER_MM)
+                 + ' ' + number(one.page.heightMm * PT_PER_MM) + '] /Contents ' + content + ' 0 R'
+                 + ' /Resources << /Font << /F1 ' + FONT_TEXT + ' 0 R /F2 ' + FONT_BOLD
+                 + ' 0 R /F3 ' + FONT_SYMBOL + ' 0 R >> /ExtGState << ' + states + ' >>'
+                 + (xObjects ? ' /XObject << ' + xObjects + ' >>' : '') + ' >> >>');
+      object(content, '', one.parts.content);
+      images.forEach(function (image, i) {
+        var picture = firstImage + i * 2;
+        var common = '/Type /XObject /Subtype /Image /Width ' + image.width + ' /Height '
+                   + image.height + ' /BitsPerComponent 8';
+        object(picture, common + ' /ColorSpace /DeviceRGB /SMask ' + (picture + 1) + ' 0 R', image.rgb);
+        object(picture + 1, common + ' /ColorSpace /DeviceGray', image.alpha);
+      });
     });
 
-    var count = FIRST_IMAGE + images.length * 2;
     var table = size;
     var lines = ['xref', '0 ' + count, '0000000000 65535 f '];
     for (var n = 1; n < count; n++) {
@@ -370,6 +380,10 @@ App.PictureWriters = (function () {
     var file = new Uint8Array(size), at = 0;
     chunks.forEach(function (chunk) { file.set(chunk, at); at += chunk.length; });
     return file;
+  }
+
+  function pdfAssemble(page, parts) {
+    return pdfDocument([{ page: page, parts: parts }]);
   }
 
   /* ── PNG ──────────────────────────────────────────────────────────────── */
@@ -395,6 +409,7 @@ App.PictureWriters = (function () {
 
   return {
     svg: svg, textRuns: textRuns, number: number, latin1: latin1,
-    pdfStreams: pdfStreams, pdfAssemble: pdfAssemble, pngWithDpi: pngWithDpi
+    pdfStreams: pdfStreams, pdfAssemble: pdfAssemble, pdfDocument: pdfDocument,
+    pngWithDpi: pngWithDpi
   };
 })();

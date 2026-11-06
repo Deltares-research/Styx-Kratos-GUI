@@ -550,12 +550,13 @@ addresses **Copy picture** is grey.
 | Format | PNG, PDF and SVG. You can select more than one. |
 | Width | The width of the picture in cm, 16 by default, with the legend. The height follows the shape of the model in all its stages. The resolution is 300 dpi. |
 | Pictures | **This view**, or more than one picture: see [Save every stage or field](#save-every-stage-or-field) |
+| PDF files | Only when you select **PDF** and more than one picture: **One PDF file for each picture**, or **All pictures in one PDF file, one per page** |
 | Show | The legend, the rulers (2D), the axes and the grid. **Grid** can be selected only when the grid is on in the viewport. |
 | Zoom | **Use the zoom of the screen**: the picture shows what is on the screen, and leaves out what is off it. This option is off each time that you open the window. |
 | Also save | In Results mode: the values of each field as a CSV file |
 
-One file opens the browser's save window. More than one file opens the system folder window, and
-all the files go in that folder. You can select any folder that you can write to, such as
+One file opens the browser's save window, also for one PDF file with many pages. More than one
+file opens the system folder window, and all the files go in that folder. You can select any folder that you can write to, such as
 Downloads or Desktop. If a file exists in the folder, Styx asks one time if it can overwrite the
 files.
 
@@ -570,6 +571,9 @@ folder.
 
 In the **Staged construction** tab, select **Every stage**. Each picture shows the stage with
 its own active parts.
+
+To get one document, select **PDF** and **All pictures in one PDF file, one per page**. If you stop
+the save, the file has the pages that were ready.
 
 All the pictures of the stages of a model have the same size, with the model in the same place,
 also if you save them one by one. The frame is large enough for what each stage draws, so a stage
@@ -610,6 +614,7 @@ picture save png pdf svg --width 12
 picture save svg --stage all --field all --csv
 picture save png --no-legend --no-rulers --no-axes --grid
 picture save png --screen-zoom
+picture save pdf --stage all --one-pdf
 ```
 
 `kratos-cli picture` makes the same pictures in a terminal: see [CLI.md](CLI.md).

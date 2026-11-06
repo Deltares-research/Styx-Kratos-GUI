@@ -66,6 +66,29 @@
     T.ok(/^About 280 files/.test(hint), hint);
   });
 
+  test('one PDF is asked for only when there is a PDF of more than one picture', function () {
+    var pdf = { formats: ['pdf'], onePdf: true };
+    T.eq(W.commandFor(choice(Object.assign({ scope: 'stages' }, pdf)), SCREEN),
+         'picture save pdf --stage all --one-pdf');
+    T.eq(W.commandFor(choice(Object.assign({ scope: 'view' }, pdf)), SCREEN), 'picture save pdf');
+    T.eq(W.commandFor(choice({ formats: ['png'], scope: 'stages', onePdf: true }), SCREEN),
+         'picture save png --stage all');
+  });
+
+  test('one PDF on its own is one file with a page for each picture', function () {
+    var hint = W.hint(choice({ formats: ['pdf'], scope: 'stages', onePdf: true }), COUNTS);
+    T.ok(/^1 PDF file with 7 pages\. You choose its name/.test(hint), hint);
+    hint = W.hint(choice({ formats: ['pdf'], scope: 'both', onePdf: true }), COUNTS);
+    T.ok(/^1 PDF file with about 140 pages/.test(hint), hint);
+  });
+
+  test('one PDF beside other files counts as one file, in a folder', function () {
+    var hint = W.hint(choice({ formats: ['png', 'pdf'], scope: 'stages', onePdf: true }), COUNTS);
+    T.ok(/^8 files\. You choose a folder/.test(hint), hint);
+    hint = W.hint(choice({ formats: ['pdf'], scope: 'stages', onePdf: true, csv: true }), COUNTS);
+    T.ok(/^8 files\. You choose a folder/.test(hint), hint);
+  });
+
   test('no format and no CSV asks for a format', function () {
     T.eq(W.hint(choice({ formats: [] }), COUNTS), 'Choose a format.');
   });

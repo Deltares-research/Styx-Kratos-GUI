@@ -300,7 +300,8 @@ App.Picture = (function () {
     });
   }
 
-  function pdfBytes(picture) {
+  /* A page of a PDF, as `App.PictureWriters.pdfDocument` takes it. */
+  function pdfPage(picture) {
     var streams = W.pdfStreams(picture.list, picture.page);
     if (streams.missing) {
       log('note', streams.missing + ' character(s) in this picture are not in the PDF fonts '
@@ -309,14 +310,18 @@ App.Picture = (function () {
     return Promise.all([deflate(W.latin1(streams.content))].concat(streams.images.map(function (image) {
       return Promise.all([deflate(image.rgb), deflate(image.alpha)]);
     }))).then(function (parts) {
-      return W.pdfAssemble(picture.page, {
+      return { page: picture.page, parts: {
         content: parts[0], alphas: streams.alphas,
         images: parts.slice(1).map(function (pair, i) {
           return { width: streams.images[i].width, height: streams.images[i].height,
                    rgb: pair[0], alpha: pair[1] };
         })
-      });
+      } };
     });
+  }
+
+  function pdfBytes(picture) {
+    return pdfPage(picture).then(function (page) { return W.pdfDocument([page]); });
   }
 
   function svgText(picture) {
@@ -411,6 +416,21 @@ App.Picture = (function () {
     return asked.formats.length > 1 || !!asked.csv
         || (asked.stage === 'all' && (inResults() || inStaged()))
         || (asked.field === 'all' && inResults());
+  }
+
+  /* Whether the PDF of this request has more than one picture in it. */
+  function isOnePdf(asked) {
+    return !!asked.onePdf && asked.formats.indexOf('pdf') >= 0
+        && ((asked.stage === 'all' && (inResults() || inStaged()))
+            || (asked.field === 'all' && inResults()));
+  }
+
+  /* What the pictures in one PDF have in common, named as `pictureParts` names one of them. */
+  function onePdfName(asked) {
+    if (!inResults()) return D.fileName([projectName(), 'stages'], 'pdf');
+    return D.fileName([App.Results.current(),
+                       asked.stage === 'all' ? 'stages' : 'stage' + App.Results.stage(),
+                       asked.field === 'all' ? 'fields' : App.Results.field().field], 'pdf');
   }
 
   /* Calls `visit(shown)` once per picture, with the screen showing it, and puts the screen
@@ -664,6 +684,7 @@ App.Picture = (function () {
   /* Every picture of the request into `out`. `{count, stopped}`. */
   function saveAll(asked, out) {
     var count = 0, refused = false, frame = null;
+    var together = isOnePdf(asked), pages = [];
     function stopped() { return refused || stopAsked; }
 
     function write(name, content) {
@@ -683,6 +704,13 @@ App.Picture = (function () {
       asked.formats.forEach(function (format) {
         chain = chain.then(function (go) {
           if (!go || stopped()) return false;
+          if (format === 'pdf' && together) {
+            return pdfPage(picture).then(function (page) {
+              pages.push(page);
+              progress('Saving pictures… ' + pages.length + ' page' + (pages.length === 1 ? '' : 's'));
+              return true;
+            });
+          }
           return encode(picture, format).then(function (content) {
             return write(D.fileName(parts, format), content);
           });
@@ -710,8 +738,12 @@ App.Picture = (function () {
       progress('Saving pictures…');
       return keepingSelection(function () { return walk(asked, visit, stopped); });
     }).then(function () {
+      // What a stop leaves of the pages is still a file, as the files before a stop are.
+      if (!pages.length || refused) return null;
+      return write(onePdfName(asked), W.pdfDocument(pages));
+    }).then(function () {
       finish();
-      return { count: count, stopped: stopped() };
+      return { count: count, pages: pages.length, stopped: stopped() };
     }, function (error) {
       finish();
       throw error;
@@ -729,6 +761,26 @@ App.Picture = (function () {
             + result.count + ' file' + (result.count === 1 ? '' : 's')
             + (folder && folder.name ? ' in ' + folder.name : '') + '.');
         return result.count;
+      });
+    });
+  }
+
+  /* Every picture in one PDF and nothing else: one file, so it asks for a file. */
+  function saveOnePdf(asked) {
+    var name = onePdfName(asked);
+    return App.Download.pickFile(name, MIME.pdf, WINDOW_ID).then(function (target) {
+      if (target === App.Download.CANCELLED) { log('note', 'Pictures not saved.'); return null; }
+      return saveAll(asked, {
+        add: function (file, content) {
+          return App.Download.write(target, file, content, MIME.pdf).then(function () { return true; });
+        }
+      }).then(function (result) {
+        if (!result.count) { log('note', 'Pictures not saved.'); return null; }
+        var called = target && target.name ? target.name : name;
+        var size = result.pages + ' page' + (result.pages === 1 ? '' : 's');
+        log(result.stopped ? 'note' : 'ok', result.stopped ? 'Stopped: ' + called + ' has ' + size + '.'
+                                                           : 'Saved ' + called + ' with ' + size + '.');
+        return 1;
       });
     });
   }
@@ -751,7 +803,8 @@ App.Picture = (function () {
     }
     // From here, as the window to choose a folder can stay open for as long as the user likes.
     walking = true;
-    return (isMany(asked) ? saveMany(asked) : saveOne(asked)).catch(function (error) {
+    var onlyOnePdf = isOnePdf(asked) && asked.formats.length === 1 && !asked.csv;
+    return (onlyOnePdf ? saveOnePdf(asked) : isMany(asked) ? saveMany(asked) : saveOne(asked)).catch(function (error) {
       log('err', 'The picture could not be saved: ' + error.message);
       return null;
     }).then(function (answer) {

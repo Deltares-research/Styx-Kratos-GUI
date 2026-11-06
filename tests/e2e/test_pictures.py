@@ -350,6 +350,112 @@ def test_every_tab_and_a_result_have_one_frame(excavation):
     assert page.errors == []
 
 
+def pages_of(pdf: bytes) -> int:
+    start = int(re.search(rb"startxref\n(\d+)", pdf).group(1))
+    assert pdf[start:start + 4] == b"xref"
+    found = len(re.findall(rb"/Type /Page ", pdf))
+    assert re.search(rb"/Count (\d+)", pdf).group(1) == str(found).encode()
+    return found
+
+
+def test_the_pdf_files_choice_is_asked_only_when_it_means_something(excavation):
+    page = excavation
+    command(page, "gotostaged")
+    page.wait_for_timeout(500)
+    page.locator(CAMERA).click()
+    one = page.locator('input[name="picture-pdf"][value="one"]')
+    assert not one.is_visible(), "one picture"
+    page.locator('input[name="picture-scope"][value="stages"]').check()
+    assert not one.is_visible(), "no PDF"
+    page.locator('input[name="picture-format-pdf"]').check()
+    assert one.is_visible()
+    page.locator('input[name="picture-format-pdf"]').uncheck()
+    assert not one.is_visible()
+    assert page.errors == []
+
+
+def test_every_stage_goes_in_one_pdf_when_asked(excavation):
+    page = excavation
+    command(page, "gotostaged")
+    page.wait_for_timeout(500)
+    stages = page.evaluate("App.PROJECT.stages.length")
+    page.locator(CAMERA).click()
+    page.locator('input[name="picture-format-png"]').uncheck()
+    page.locator('input[name="picture-format-pdf"]').check()
+    page.locator('input[name="picture-scope"][value="stages"]').check()
+    page.locator('input[name="picture-pdf"][value="one"]').check()
+    assert "1 PDF file with" in page.locator(".picture-note").inner_text()
+    page.get_by_role("button", name="Save…").click()
+    wait_saved(page, rf"Saved .*\.pdf with {stages} pages")
+
+    saved = files_of(page)
+    assert len(saved) == 1
+    name, pdf = next(iter(saved.items()))
+    assert name.endswith("_stages.pdf")
+    assert pdf.startswith(b"%PDF-")
+    assert pages_of(pdf) == stages
+    assert page.errors == []
+
+
+def test_one_pdf_goes_in_the_folder_beside_the_other_files(excavation):
+    page = excavation
+    command(page, "gotostaged")
+    page.wait_for_timeout(500)
+    stages = page.evaluate("App.PROJECT.stages.length")
+    page.locator(CAMERA).click()
+    page.locator('input[name="picture-format-pdf"]').check()
+    page.locator('input[name="picture-scope"][value="stages"]').check()
+    page.locator('input[name="picture-pdf"][value="one"]').check()
+    page.get_by_role("button", name="Save…").click()
+    wait_saved(page, r"Saved \d+ files")
+
+    saved = files_of(page)
+    assert sum(name.endswith(".png") for name in saved) == stages
+    pdfs = [data for name, data in saved.items() if name.endswith(".pdf")]
+    assert len(pdfs) == 1
+    assert pages_of(pdfs[0]) == stages
+
+
+def test_every_field_of_a_stage_goes_in_one_pdf(excavation):
+    page = excavation
+    command(page, "gotostaged")
+    page.wait_for_timeout(500)
+    page.evaluate("App.runAction({ action: 'calculate' })")
+    page.wait_for_function("App.state.mode === 'results' && App.Results.field()", timeout=LONG)
+    page.wait_for_timeout(1000)
+    keep = page.evaluate("[App.Results.stage(), App.Results.field().field]")
+    fields = page.evaluate("App.Results.fieldNames().length")
+    command(page, "picture save pdf --field all --one-pdf")
+    wait_saved(page, rf"Saved .*\.pdf with {fields} pages?")
+
+    saved = files_of(page)
+    assert len(saved) == 1
+    name, pdf = next(iter(saved.items()))
+    assert name.endswith(f"_stage{keep[0]}_fields.pdf")
+    assert pages_of(pdf) == fields
+    assert page.evaluate("[App.Results.stage(), App.Results.field().field]") == keep
+    assert page.errors == []
+
+
+def test_a_stop_leaves_one_pdf_with_the_pages_that_were_ready(excavation):
+    page = excavation
+    command(page, "gotostaged")
+    page.wait_for_timeout(500)
+    # Stops when the first page is ready.
+    page.evaluate("""() => {
+      const box = document.querySelector('.vp-loading-box');
+      new MutationObserver((_, watcher) => {
+        const stop = box.querySelector('.picture-stop');
+        if (stop && /1 page/.test(box.textContent)) { watcher.disconnect(); stop.click(); }
+      }).observe(box, { childList: true, subtree: true, characterData: true });
+    }""")
+    command(page, "picture save pdf --stage all --one-pdf")
+    wait_saved(page, r"Stopped: .*\.pdf has \d+ page")
+    pdf = next(iter(files_of(page).values()))
+    assert 1 <= pages_of(pdf) < page.evaluate("App.PROJECT.stages.length")
+    assert page.locator("#vp-loading").is_hidden()
+
+
 def test_saving_every_stage_keeps_what_is_selected(excavation):
     page = excavation
     command(page, "gotostaged")
@@ -510,6 +616,17 @@ def test_the_command_line_draws_the_same_picture_as_the_page(excavation, live_se
     png = next(out.glob("*.png")).read_bytes()
     assert png_size(png)[0] == 1890
     assert round(png_dpi(png)) == 300
+
+
+@pytest.mark.skipif(pictures.find_browser() is None, reason="no Chrome or Edge on this machine")
+def test_the_command_line_puts_every_stage_in_one_pdf(excavation, live_server, tmp_path):
+    model = tmp_path / "pit.json"
+    project = excavation_project()
+    session.save(project, model)
+    out = tmp_path / "all.pdf"
+    assert main(["picture", "stage", str(model), "--format", "pdf", "--one-pdf",
+                 "--out", str(out)]) == 0
+    assert pages_of(out.read_bytes()) == len(project.stages)
 
 
 @pytest.mark.skipif(pictures.find_browser() is None, reason="no Chrome or Edge on this machine")
