@@ -9,6 +9,7 @@
   /* ── The DOM it paints into ────────────────────────────────────── */
 
   test('install builds one canvas per edge and sync leaves them hidden in 3D', function () {
+    var enabled = R.isEnabled();
     var host = document.createElement('div');
     host.style.cssText = 'position:absolute;left:-9999px;width:800px;height:400px';
     document.body.appendChild(host);
@@ -20,6 +21,7 @@
            ['bottom', 'left', 'right', 'top']);
 
       R.setEnabled(true);
+      T.eq(R.isEnabled(), true);
       var drawn = R.sync({ active: true, center: [0, 0], halfW: 10, halfH: 5,
                            width: 800, height: 400 });
       T.eq(edges[0].hidden, false, 'a 2D section with the switch on shows them');
@@ -28,7 +30,13 @@
       R.sync({ active: false });
       T.ok(Array.prototype.every.call(edges, function (c) { return c.hidden; }),
            '3D hides every edge');
+      R.setEnabled(false);
+      T.eq(R.isEnabled(), false);
+      R.sync({ active: true, center: [0, 0], halfW: 10, halfH: 5, width: 800, height: 400 });
+      T.ok(Array.prototype.every.call(edges, function (c) { return c.hidden; }),
+           'the user switch also hides rulers in a 2D view');
     } finally {
+      R.setEnabled(enabled);
       R.uninstall();
       host.remove();
     }

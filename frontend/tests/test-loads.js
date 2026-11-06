@@ -168,12 +168,17 @@
     App.Command = { ok: function () {}, err: function () {}, note: function () {} };
     App.Explorer = null; App.selectObject = null;
 
-    try {
-      var dialog = openDialog(Object.assign({}, PAD, { y: null }));
+    var dialog;
+    function restore() { Object.assign(App, saved); }
+    return Promise.resolve().then(function () {
+      dialog = openDialog(Object.assign({}, PAD, { y: null }));
       dialog.buttons.filter(function (b) { return b.label === 'Save'; })[0].onClick();
-    } finally { Object.assign(App, saved); }
-    T.ok(sent, 'the save never reached the server');
-    T.eq(sent.loads[0].y, null, 'a blank field must not become a pad at y = 0');
+      return new Promise(function (resolve) { setTimeout(resolve, 0); });
+    }).then(function () {
+      T.ok(sent, 'the save never reached the server');
+      T.eq(sent.loads[0].y, null, 'a blank field must not become a pad at y = 0');
+      T.eq(dialog.closed, true, 'the save finishes before mocks are restored');
+    }).then(restore, function (error) { restore(); throw error; });
   });
 
   test('an edited elevation is what gets saved', function () {
@@ -191,14 +196,19 @@
     App.Command = { ok: function () {}, err: function () {}, note: function () {} };
     App.Explorer = null; App.selectObject = null;
 
-    try {
-      var dialog = openDialog(Object.assign({}, PAD, { y: 5 }));
+    var dialog;
+    function restore() { Object.assign(App, saved); }
+    return Promise.resolve().then(function () {
+      dialog = openDialog(Object.assign({}, PAD, { y: 5 }));
       var field = fieldNamed(dialog, 'y');
       T.ok(field, 'the form has no elevation field to edit');
       field.value = '2.5';
       dialog.buttons.filter(function (b) { return b.label === 'Save'; })[0].onClick();
-    } finally { Object.assign(App, saved); }
-    T.eq(sent.loads[0].y, 2.5);
+      return new Promise(function (resolve) { setTimeout(resolve, 0); });
+    }).then(function () {
+      T.eq(sent.loads[0].y, 2.5);
+      T.eq(dialog.closed, true, 'the save finishes before mocks are restored');
+    }).then(restore, function (error) { restore(); throw error; });
   });
 
   test('load capture refuses a zero-width line or surface', function () {

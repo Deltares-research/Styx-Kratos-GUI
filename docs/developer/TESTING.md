@@ -38,17 +38,55 @@ failed, when something that it needs is missing: quickjs, Kratos or a browser.
 
 ## Options
 
-- **Select tests:** the arguments after the tier go to pytest. For example,
-  `python tools/test.py quick -k stages -x` runs the tests with "stages" in their name, and
-  stops at the first failure.
-- **JavaScript tests without a browser:** these need the `quickjs` package. If it does not
-  install in the virtual environment, set `KRATOS_GUI_QUICKJS_PYTHON` to a Python that has
-  it.
-- **No Chrome:** the browser tests use the Chrome on your computer. Without Chrome, run
-  `python -m playwright install chromium` and set `KRATOS_GUI_TEST_BROWSER_CHANNEL=bundled`.
-- **Coverage:** add `--cov=core --cov=backend --cov=cli --cov-report=html --js-coverage` to
-  a tier that runs the browser tests. The Python report goes to `htmlcov/`, and the
-  JavaScript function coverage to `htmlcov-js/summary.json`.
+### Select tests
+
+The arguments after the tier go to pytest. For example,
+`python tools/test.py quick -k stages -x` runs the tests with "stages" in their name, and
+stops at the first failure.
+
+### JavaScript tests without a browser
+
+These need the `quickjs` package. If it does not install in the virtual environment, set
+`KRATOS_GUI_QUICKJS_PYTHON` to a Python that has it.
+
+### No Chrome
+
+The browser tests use the Chrome on your computer. Without Chrome, run
+`python -m playwright install chromium` and set `KRATOS_GUI_TEST_BROWSER_CHANNEL=bundled`.
+
+### Coverage
+
+Add `--cov=core --cov=backend --cov=cli --cov-report=html --js-coverage` to a tier that
+runs the browser tests. The Python report goes to `htmlcov/`, and JavaScript function
+coverage to `htmlcov-js/summary.json`.
+
+### JavaScript coverage only
+
+Run the browser tier with JavaScript coverage from the repository folder:
+
+```bash
+python tools/test.py browser --js-coverage
+```
+
+This runs the browser tier (including the quick checks) and prints the per-module
+JavaScript coverage table. If Chrome is unavailable, see [No Chrome](#no-chrome). To add
+Python coverage to the report as well, see [Coverage](#coverage).
+
+The report in `htmlcov-js/summary.json` lists each loaded `frontend/js` module's
+function count, covered count, percentage, and `missed` functions. This is function
+coverage, not line or branch coverage; it excludes `frontend/base/js`, vendor scripts,
+and modules the suite did not load. The report is written even when JavaScript
+assertions or the coverage threshold fail. With `--js-coverage`, every reported live
+module must reach at least **95% function coverage**; the overall average alone is
+not sufficient.
+
+Add pure-logic cases to the existing `frontend/tests/test-*.js` suites. Browser-only
+form and event tests belong in the browser suite; register new test files in
+`frontend/tests/index.html`. Do not add DOM-dependent files to the headless runner.
+
+Test observable behavior and meaningful failure paths, not just coverage. Await
+asynchronous work before restoring mocks, and check for both failed assertions and
+uncaught errors.
 
 ## Tests that keep the GUI and the command line together
 
@@ -78,7 +116,8 @@ suite only (the `browser` tier and up).
 For each pull request and each push to `main`, CI runs the `e2e` tier on Windows and
 Ubuntu with Python 3.11, and on Windows with Python 3.13
 ([.github/workflows/tests.yml](../../.github/workflows/tests.yml)). If the Python line
-coverage is less than 95 %, the run fails.
+coverage is less than 95 %, or any live JavaScript module has less than 95 % function
+coverage, the run fails.
 
 The `kratos` tier and the benchmarks need Kratos, which the GitHub runners do not have. A
 self-hosted runner with Kratos runs the `kratos` tier every night and the benchmarks every

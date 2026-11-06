@@ -14,7 +14,7 @@ from tests.browser import js_coverage
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 SUITE = ROOT / "frontend" / "tests" / "index.html"
 REPORT = ROOT / "htmlcov-js" / "summary.json"
-TARGET = 80.0
+TARGET = 95.0
 """Per live module, in percent of functions run (plan/active/full-test-and-validation-plan.md M4).
 Enforced whenever the suite runs with --js-coverage."""
 

@@ -26,6 +26,21 @@
     T.eq(App.MeshSettings.meshTargets(project, null, visible), ['soil_L2']);
   });
 
+  test('mesh bodies include material-bearing custom soil but not unassigned geometry', function () {
+    var project = {
+      layers: [{ id: 'L1', name: 'Upper' }],
+      custom_parts: [{ key: 'fill', label: 'Backfill', mat: 'sand' },
+                     { key: 'drawing', label: 'Unassigned geometry' }]
+    };
+    T.eq(App.MeshSettings.bodyControls(project, ['fill']).map(function (row) {
+      return { key: row.key, label: row.label, enabled: row.enabled };
+    }), [{ key: 'soil_L1', label: 'Upper', enabled: false },
+         { key: 'fill', label: 'Backfill', enabled: true }]);
+    T.eq(App.MeshSettings.meshTargets(project, 'fill', function () { return false; }), ['fill']);
+    T.eq(App.MeshSettings.meshTargets(project, 'drawing', function () { return true; }),
+         ['soil_L1', 'fill']);
+  });
+
   test('body controls preserve multiple selections and independent sizes', function () {
     var rows = App.MeshSettings.bodyControls(
       { layers: [{ id: 'L1', name: 'Upper' }, { id: 'L2', name: 'Lower' }],

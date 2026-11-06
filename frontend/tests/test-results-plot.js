@@ -357,6 +357,20 @@
     });
   });
 
+  test('an unknown plot quantity lists each member and leaves the existing plot unchanged', function () {
+    setup();
+    return P.command('wall M').then(function () {
+      var before = P.state().plot, count = api.calls.length;
+      return P.command('not-a-quantity').then(function () {
+        T.ok(/Nothing in this run can be plotted/.test(text()), text());
+        T.ok(/interface: tn, ts/.test(text()), text());
+        T.ok(/wall: M, Q, N, ux/.test(text()), text());
+        T.eq(api.calls.length, count, 'a nonexistent quantity does not request plot data');
+        T.eq(P.state().plot, before);
+      });
+    });
+  });
+
   test('results plot members lists what can be plotted', function () {
     setup();
     return P.command('members').then(function () {
