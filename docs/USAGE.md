@@ -15,7 +15,7 @@ GUI is the part of Styx that you use in the browser. To install Styx, see
 | Part | Where | What it does |
 |---|---|---|
 | Menu bar | Top | All commands, in menus |
-| Toolbar | Below the menu bar | New, open, save, the **2D** and **3D** buttons, undo, zoom, views, grid, rulers, snapping, **Calculate** |
+| Toolbar | Below the menu bar | New, open, save, **Save picture** (the camera), the **2D** and **3D** buttons, undo, zoom, views, grid, rulers, snapping, **Calculate** |
 | Mode tabs | Below the toolbar | One tab for each step of the work, from **Soil** to **Results** |
 | Tool rail | Left | The tools of the mode that is open |
 | Viewport | Centre | The model. Click an object to select it. |
@@ -498,11 +498,113 @@ model, also when the mesh is shown deformed. Type `results loads off` to hide th
 - **Plot along the wall:** click **Plot wall…**, or type `results plot`. The plot shows the
   bending moment (M), the shear force (Q), the normal force (N), the horizontal displacement
   (ux) and the interface tractions (tn, ts) against depth, with one line for each stage.
-  **Save SVG** saves the figure, and **Save CSV** saves the numbers.
+  **Save PNG**, **Save PDF** and **Save SVG** save the figure, and **Save CSV** saves the
+  numbers.
 - **Values at a node:** click **Results** → **Value at a node…**, or type
   `results at <node>`.
 - **Save the field as CSV:** click **Save CSV**, or type `results csv`.
 - **Save the full run:** click **Download run**, or type `results zip`.
+
+## Save pictures
+
+A picture shows what the viewport shows: the same camera and the same parts, on a white
+background, cut to the part of the view that has something in it, with white space on each side
+of the model. If you zoom in on a detail, the picture shows that detail. The view buttons, the mode label, the
+selection box and the highlight of a selected object are not in the picture. The symbols that you
+show by selecting a condition are in the picture.
+
+The other parts are outside the view, so they never cover the model:
+
+| Part | Where | When |
+|---|---|---|
+| Stage number and name | Above the view | Staged construction and Results |
+| Rulers | Left and bottom of the view | 2D |
+| Axes | Below the view, at the left | When **Axes** is selected |
+| Field name, and its maximum and minimum value with the node or element | Below the view, in the middle | Results |
+| Legend, with the unit | Right of the view, low | Results, when **Legend** is selected |
+
+### Copy a picture
+
+1. Right-click in the viewport.
+2. Click **Copy picture**.
+3. Paste the picture into your document.
+
+The picture on the clipboard is 16 cm wide at 300 dpi (1890 pixels). The clipboard does not
+keep the dpi value, so your document can show the picture at a different size. To get the
+correct size, save a PNG file.
+
+Copying works when the address of Styx is `localhost`, `127.0.0.1` or `https`. On other
+addresses **Copy picture** is grey.
+
+### Save pictures to files
+
+1. Show what you want to save: for example, open the **Mesh** tab, or select a stage in the
+   **Staged construction** tab.
+2. Click the camera in the toolbar, or click **File** → **Save picture…**, or right-click in
+   the viewport and click **Save picture…**.
+3. Set the options, then click **Save…**.
+4. In the system window, choose the location.
+
+| Option | What it does |
+|---|---|
+| Format | PNG, PDF and SVG. You can select more than one. |
+| Width | The width of the picture in cm, 16 by default, with the legend. The height follows the shape of the model in all its stages. The resolution is 300 dpi. |
+| Pictures | **This view**, or more than one picture: see [Save every stage or field](#save-every-stage-or-field) |
+| Show | The legend, the rulers (2D), the axes and the grid. **Grid** can be selected only when the grid is on in the viewport. |
+| Also save | In Results mode: the values of each field as a CSV file |
+
+One file opens the browser's save window. More than one file opens the system folder window, and
+all the files go in that folder. You can select any folder that you can write to, such as
+Downloads or Desktop. If a file exists in the folder, Styx asks one time if it can overwrite the
+files.
+
+If you do not see the folder window, look behind the browser or in the taskbar.
+
+If Styx runs on another computer, the browser's own folder window opens. Chrome and Edge can refuse
+some folders in that window, such as Downloads or Desktop themselves. If this occurs, select a
+subfolder. A browser without that window, such as Firefox, puts one zip file in the Downloads
+folder.
+
+### Save every stage or field
+
+In the **Staged construction** tab, select **Every stage**. Each picture shows the stage with
+its own active parts.
+
+All the pictures of the stages of a model have the same size, with the model in the same place,
+also if you save them one by one. The frame is large enough for what each stage draws, so a stage
+with no load has the same frame as a stage with a load. If you move the camera, the frame changes
+with it. In Results, to find this frame, Styx goes through the stages before it saves or copies a
+picture, so the viewport changes for a moment.
+
+In Results mode, select **Every stage**, **This stage, every field** or **Every stage, every
+field**. The colour map, the bands and the other display settings stay as they are on screen.
+A stage that has no results is not saved. To stop, click **Stop** in the viewport. After the
+save, the viewport shows the same stage and field as before.
+
+### What is in each format
+
+| Format | Lines and text | Colours |
+|---|---|---|
+| PNG | Pixels at 300 dpi | Pixels at 300 dpi |
+| SVG, PDF in 2D | Vector: you can scale and edit them | Flat faces are vector. Contour colours are an image at 300 dpi. |
+| SVG, PDF in 3D | Vector | All faces are an image at 300 dpi |
+
+PDF text uses Helvetica and Symbol. A character that is not in these fonts shows as `?`, and
+the Session log says so. PNG and SVG keep all characters.
+
+### Type the command
+
+The window runs these commands, and you can type them in the command box:
+
+```text
+picture                                     opens the window
+picture copy
+picture save png pdf svg --width 12
+picture save svg --stage all --field all --csv
+picture save png --no-legend --no-rulers --no-axes --grid
+```
+
+`kratos-cli picture` makes the same pictures in a terminal: see [CLI.md](CLI.md).
 
 ## The command box
 

@@ -121,6 +121,7 @@ the HTTP parts.
 | Runs | `routes/results.py` | `GET /api/results/runs`, `/runs/{run}`, `/runs/{run}/files/{name}`, `/runs/{run}/archive` |
 | Results of a stage | `routes/results.py` | `GET /api/results/runs/{run}/stages/{n}/fields`, `/mesh`, `/field/{name}`, `/displacement`, `/at/{node}`, `/parts` |
 | Results of a member | `routes/results.py` | `GET /api/results/runs/{run}/members`, `/members/{member}/{quantity}` |
+| Files | `routes/files.py` | `POST /api/files/folder` opens the system's folder window; `GET`/`PUT /api/files/folder/{folder}/{name}`. For a browser on the same computer, and only pictures and CSV files in a folder chosen in that window. |
 | Health | `main.py` | `GET /api/health` |
 
 ## Command-line modules (`cli/`)
@@ -139,6 +140,7 @@ the HTTP parts.
 | `cli/commands/conditions.py` | `boundary`, `gravity` |
 | `cli/commands/meshing.py`, `stages.py` | `mesh`, `export`; `stages` |
 | `cli/commands/inspection.py`, `analysis.py`, `results.py` | `node`, `deck show`; `run`, `calculate`; `results` |
+| `cli/commands/picture.py`, `cli/terminal/pictures.py` | `picture`: starts the server and a headless browser as separate processes, gives the page a job in its address, and takes the files on a one-time receiver |
 | `cli/commands/interactive.py` | `shell` |
 | `cli/kratos-shell.*`, `cli/kratos-init-powershell.bat` | Helper scripts for the tutorials |
 
@@ -158,6 +160,7 @@ shell. Only the camera of `base/js/orbit.js` is replaced; all other behaviour is
 | Modelling tools | `draw-input.js`, `beams.js`, `anchors.js`, `interfaces.js`, `loads.js`, `normal-loads.js`, `water-command.js`, `soil-volume-dialog.js`, `soil-layers-dialog.js` (the **Modify soil layers** window, in place of the shell's own) |
 | Materials | `material-sets.js`, `material-library.js`, `property-sets.js`, `soil-models.js` and `soil-model-table.js` (the soil models, generated from `core/model/soil_models.py`) |
 | Mesh and stages | `mesh-settings.js`, `stages.js` |
+| Saved pictures | `picture-draw.js` (the scene as a list of shapes in mm), `picture-writers.js` (SVG, PDF, the PNG's dpi); both without a DOM. `picture.js` (reads the scene, canvas, clipboard, save windows, the walk over stages and fields, the job of `kratos-cli picture`), `picture-dialog.js` |
 | Files and scripts | `export.js`, `import-dialog.js`, `mdpa-import-dialog.js`, `download.js`, `zip.js`, `deck.js`, `script-command.js` |
 | Calculation and results | `calculate.js`, `results.js` (the `results …` commands), `results-render.js` (colours, legend, CSV), `results-view.js` (the contours on screen), `results-plot.js` (`results plot …` and its SVG figure) |
 
