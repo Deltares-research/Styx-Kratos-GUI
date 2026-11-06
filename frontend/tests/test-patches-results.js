@@ -89,7 +89,11 @@
                     write: function () {}, run: function () {} };
     App.Viewport = Object.assign({}, App.Viewport, { requestRender: function () {},
                                                      getScene: function () { return null; } });
-    App.Download = { anchor: function (name) { ctx.downloads.push(name); } };
+    // No save window here: a test must not depend on what the browser makes of its click.
+    App.Download = Object.assign({}, App.Download, {
+      pickFile: function () { return Promise.resolve(null); },
+      anchor: function (name) { ctx.downloads.push(name); }
+    });
     App.state = { mode: 'results' };
     App.runAction = function () {};
     App.selectObject = function () {};

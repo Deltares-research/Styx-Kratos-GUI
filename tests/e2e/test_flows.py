@@ -71,6 +71,9 @@ def test_a_model_runs_from_its_script_to_results_and_downloads(app_page):
     stage = window.locator('select[data-res="stage"]')
     stage.select_option("1")
     app_page.wait_for_function("App.Results.stage() === 1", timeout=LONG)
+    # With a save window, Download run opens it, and nothing here can press it
+    # (tests/e2e/test_pictures.py answers it). With none, the run comes as a download.
+    app_page.evaluate("window.showSaveFilePicker = undefined")
     with app_page.expect_download() as download:
         window.get_by_role("button", name="Download run").click()
     assert download.value.suggested_filename.endswith(".zip")

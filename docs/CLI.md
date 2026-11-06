@@ -556,7 +556,7 @@ viewport's. A command can also be typed with a leading `_` in the box (`_mesh`).
 | `results plot [member] [quantity]` | `kratos-cli results profile RUN MEMBER QUANTITY` |
 | `results plot members`, `results plot list` | `kratos-cli results members RUN` |
 | `results plot csv` | `kratos-cli results profile RUN MEMBER --csv FILE` |
-| `results plot svg` | — the viewport's: a picture of the plot |
+| `results plot svg`, `results plot png`, `results plot pdf` | — the viewport's: a picture of the plot |
 | `results files` | `kratos-cli results files RUN` |
 | `results get <file>` | `kratos-cli results get RUN FILE` |
 | `results zip`, `results archive` | `kratos-cli results archive RUN` |
