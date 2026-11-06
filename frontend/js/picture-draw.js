@@ -154,9 +154,15 @@ App.PictureDraw = (function () {
 
   var FORMATS = ['png', 'pdf', 'svg'];
 
-  /* `picture`, `picture copy`, `picture save [png] [pdf] [svg] [--width CM] [--stage all]
-     [--field all] [--no-legend] [--no-rulers] [--no-axes] [--grid] [--csv]`. `null` for a
-     line that is not this command. */
+  function notAFormat(word) {
+    return '"' + word + '" is not something a picture can be saved as. '
+         + 'The formats are png, pdf and svg.';
+  }
+
+  /* `picture`, `picture copy`, `picture save [--format png,pdf,svg] [--width CM] [--stage all]
+     [--field all] [--no-legend] [--no-rulers] [--no-axes] [--grid] [--csv]`, the words of
+     `kratos-cli picture`. The formats can also stand on their own, as in `picture save pdf`.
+     `null` for a line that is not this command. */
   function parseCommand(text) {
     var tokens = String(text || '').trim().split(/\s+/);
     if (tokens[0].toLowerCase() !== 'picture') return null;
@@ -192,16 +198,22 @@ App.PictureDraw = (function () {
         asked.onePdf = true;
       } else if (token === '--csv') {
         asked.csv = true;
+      } else if (token === '--format') {
+        var names = (tokens[++i] || '').toLowerCase().split(',').filter(Boolean);
+        for (var n = 0; n < names.length; n++) {
+          if (FORMATS.indexOf(names[n]) < 0) return { error: notAFormat(names[n]) };
+          if (asked.formats.indexOf(names[n]) < 0) asked.formats.push(names[n]);
+        }
+        if (!names.length) return { error: '--format takes png, pdf or svg, with a comma between them.' };
       } else if (FORMATS.indexOf(token) >= 0) {
         if (asked.formats.indexOf(token) < 0) asked.formats.push(token);
       } else {
-        return { error: '"' + tokens[i] + '" is not something a picture can be saved as. '
-                        + 'The formats are png, pdf and svg.' };
+        return { error: notAFormat(tokens[i]) };
       }
     }
     if (!asked.formats.length) asked.formats.push('png');
     if (asked.onePdf && asked.formats.indexOf('pdf') < 0) {
-      return { error: '--one-pdf needs pdf in the formats, as in `picture save pdf --one-pdf`.' };
+      return { error: '--one-pdf needs pdf in the formats, as in `picture save --format pdf --one-pdf`.' };
     }
     return asked;
   }

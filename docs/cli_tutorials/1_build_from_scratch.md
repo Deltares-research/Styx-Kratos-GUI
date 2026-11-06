@@ -145,9 +145,10 @@ exit
 > - To open the model again later, run `cli\kratos-shell.bat` on the same folder, then
 >   `open simple_dike.json`.
 
-The shell reads the results as numbers and CSV files; it draws no pictures. To see a
-field drawn on the mesh, start the GUI on the same runs folder and open the run in its
-Results mode. In PowerShell:
+The shell reads the results as numbers and CSV files. `picture result 1 --out pictures/`
+saves a field drawn on the mesh as a PNG, with Chrome or Edge; see
+[Pictures](../CLI.md#pictures). To look around the results, start the GUI on the same runs
+folder and open the run in its Results mode. In PowerShell:
 
 ```powershell
 $env:KRATOS_GUI_RUNS = "C:\Users\you\simple_dike"

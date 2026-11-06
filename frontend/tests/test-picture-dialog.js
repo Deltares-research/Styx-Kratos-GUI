@@ -15,17 +15,17 @@
   var SCREEN = { legend: true, rulers: true };
 
   test('the plain choice is the plain line', function () {
-    T.eq(W.commandFor(choice(), SCREEN), 'picture save png');
+    T.eq(W.commandFor(choice(), SCREEN), 'picture save --format png');
   });
 
   test('the zoom of the screen is asked for in the words of the box', function () {
-    T.eq(W.commandFor(choice({ screenZoom: true }), SCREEN), 'picture save png --screen-zoom');
+    T.eq(W.commandFor(choice({ screenZoom: true }), SCREEN), 'picture save --format png --screen-zoom');
   });
 
   test('every choice in the window is a word of the command', function () {
     var line = W.commandFor(choice({ formats: ['png', 'svg'], width: 12, scope: 'both', csv: true,
                                      legend: false, rulers: false, axes: false, grid: true }), SCREEN);
-    T.eq(line, 'picture save png svg --width 12 --stage all --field all --no-legend --no-rulers '
+    T.eq(line, 'picture save --format png,svg --width 12 --stage all --field all --no-legend --no-rulers '
                + '--no-axes --grid --csv');
   });
 
@@ -39,9 +39,19 @@
     T.eq(asked.show.grid, true);
   });
 
+  test('the formats are written as kratos-cli picture takes them', function () {
+    var line = W.commandFor(choice({ formats: ['png', 'pdf'] }), SCREEN);
+    T.eq(line, 'picture save --format png,pdf');
+    T.eq(D.parseCommand(line).formats, ['png', 'pdf']);
+  });
+
+  test('with no format ticked the line names none', function () {
+    T.eq(W.commandFor(choice({ formats: [], csv: true }), SCREEN), 'picture save --csv');
+  });
+
   test('a thing the screen does not have is not left out in words', function () {
     var line = W.commandFor(choice({ legend: false, rulers: false }), { legend: false, rulers: false });
-    T.eq(line, 'picture save png');
+    T.eq(line, 'picture save --format png');
   });
 
   test('stages are offered in Staged construction, and fields in Results', function () {
@@ -69,10 +79,10 @@
   test('one PDF is asked for only when there is a PDF of more than one picture', function () {
     var pdf = { formats: ['pdf'], onePdf: true };
     T.eq(W.commandFor(choice(Object.assign({ scope: 'stages' }, pdf)), SCREEN),
-         'picture save pdf --stage all --one-pdf');
-    T.eq(W.commandFor(choice(Object.assign({ scope: 'view' }, pdf)), SCREEN), 'picture save pdf');
+         'picture save --format pdf --stage all --one-pdf');
+    T.eq(W.commandFor(choice(Object.assign({ scope: 'view' }, pdf)), SCREEN), 'picture save --format pdf');
     T.eq(W.commandFor(choice({ formats: ['png'], scope: 'stages', onePdf: true }), SCREEN),
-         'picture save png --stage all');
+         'picture save --format png --stage all');
   });
 
   test('one PDF on its own is one file with a page for each picture', function () {

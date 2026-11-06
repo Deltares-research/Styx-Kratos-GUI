@@ -107,6 +107,13 @@
     T.ok(/all/.test(D.parseCommand('picture save --field uy').error));
   });
 
+  test('`picture save --format` takes the formats as kratos-cli picture does', function () {
+    T.eq(D.parseCommand('picture save --format PDF,svg,pdf').formats, ['pdf', 'svg']);
+    T.eq(D.parseCommand('picture save png --format svg').formats, ['png', 'svg']);
+    T.ok(/tiff/.test(D.parseCommand('picture save --format png,tiff').error));
+    T.ok(/--format/.test(D.parseCommand('picture save --format').error));
+  });
+
   test('`picture save` with no format means PNG', function () {
     T.eq(D.parseCommand('picture save').formats, ['png']);
   });

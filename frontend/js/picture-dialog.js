@@ -41,7 +41,8 @@ App.PictureDialog = (function () {
 
   /* What the screen does unless told otherwise goes unsaid, so the line stays short. */
   function commandFor(choice, screen) {
-    var words = ['picture', 'save'].concat(choice.formats);
+    var words = ['picture', 'save'];
+    if (choice.formats.length) words.push('--format', choice.formats.join(','));
     var size = App.PictureDraw;
     if (choice.width !== size.DEFAULT_WIDTH_CM) words.push('--width', String(choice.width));
     var scope = SCOPES[choice.scope] || SCOPES.view;

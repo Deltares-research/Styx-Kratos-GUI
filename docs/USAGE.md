@@ -610,14 +610,15 @@ The window runs these commands, and you can type them in the command box:
 ```text
 picture                                     opens the window
 picture copy
-picture save png pdf svg --width 12
-picture save svg --stage all --field all --csv
-picture save png --no-legend --no-rulers --no-axes --grid
-picture save png --screen-zoom
-picture save pdf --stage all --one-pdf
+picture save --format png,pdf,svg --width 12
+picture save --format svg --stage all --field all --csv
+picture save --format png --no-legend --no-rulers --no-axes --grid
+picture save --format png --screen-zoom
+picture save --format pdf --stage all --one-pdf
 ```
 
-`kratos-cli picture` makes the same pictures in a terminal: see [CLI.md](CLI.md).
+`picture save pdf` is short for `picture save --format pdf`. `kratos-cli picture` takes the
+same words and makes the same pictures in a terminal: see [CLI.md](CLI.md#pictures).
 
 ## The command box
 

@@ -114,7 +114,7 @@ model: `show`, `check`, `get`, the `list` actions, `parts`, `stages show`, `node
 kratos-cli picture mesh site.json --out mesh.png
 kratos-cli picture stage site.json --format png,pdf --out pictures/
 kratos-cli picture result 1 uy --stage all --map viridis --out pictures/
-kratos-cli picture result 1 all --stage 3 --csv --out pictures/
+kratos-cli picture result 1 --field all --stage 3 --csv --out pictures/
 kratos-cli picture stage site.json --format pdf --one-pdf --out stages.pdf
 ```
 
@@ -128,13 +128,18 @@ does not find one. On a computer with neither browser, the command stops and say
 | `--width CM` | The width of the picture (default: 16) |
 | `--view front\|top\|side\|iso` | The camera, in a 3D model |
 | `--no-rulers`, `--no-axes`, `--grid` | What to leave out, or add |
-| `--out PATH` | A file, or a folder. A path that ends in `/` makes the folder. More than one file needs a folder. |
+| `--out PATH` | A file, or a folder. A path that ends in `/` makes the folder. More than one file needs a folder. A file must end in its format, as `.png`. |
 | `--force` | Overwrite files that exist |
+
+These are the words of `picture save` in the GUI's command box: `--format`, `--width`,
+`--stage all`, `--field all`, `--one-pdf`, `--no-legend`, `--no-rulers`, `--no-axes`, `--grid` and
+`--csv` mean the same in both.
 
 `picture stage` and `picture result` also take `--one-pdf`, which puts all the pictures in one PDF
 file, one per page. It needs `pdf` in `--format`.
 
-`picture result` also takes `--no-legend`, `--csv` (the field values too), `--map`, `--bands`,
+`picture result` takes the field as `FIELD` or as `--field FIELD`, and `all` for every field.
+It also takes `--no-legend`, `--csv` (the field values too), `--map`, `--bands`,
 `--range MIN MAX`, `--deform` and `--mesh`, which mean what the `results` commands of the GUI's
 command box mean, and `--project P` to draw the loads and the water of the model over the result.
 A run in a folder outside the runs root must keep its name, `<deck>_<date>_<time>`.
@@ -581,7 +586,7 @@ viewport's. A command can also be typed with a leading `_` in the box (`_mesh`).
 | `point`, `line`, `surface` | — a placeholder answer in the box; nothing is built |
 | `colour <part>`, `color <part>` | — the viewport's: a part drawn in its own colour |
 | `picture`, `picture copy` | — the viewport's: the Save picture window, and the clipboard |
-| `picture save [png] [pdf] [svg] ...` | `kratos-cli picture geometry P`, `kratos-cli picture mesh P`, `kratos-cli picture stage P`, `kratos-cli picture result RUN` |
+| `picture save [--format LIST] [--stage all] [--field all] ...` | `kratos-cli picture geometry P`, `kratos-cli picture mesh P`, `kratos-cli picture stage P`, `kratos-cli picture result RUN` |
 | `view iso\|top\|front\|side`, `zoomfit`, `clear` | — the viewport's and the log's |
 | `gotosoil`, `gotostructures`, `gotomesh`, `gotoflow`, `gotoflowconditions`, `gotostaged` | — the viewport's: the mode tabs |
 | `results` | `kratos-cli results show RUN` |

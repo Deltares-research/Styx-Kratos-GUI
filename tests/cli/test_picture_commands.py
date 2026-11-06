@@ -226,6 +226,22 @@ def test_every_field_of_every_stage(stand, run, tmp_path):
     assert stand.job["commands"] == [f"results open {run}"]
 
 
+def test_the_field_can_be_given_as_the_box_gives_it(stand, run, tmp_path):
+    assert main(["picture", "result", run, "--field", "all", "--stage", "all",
+                 "--format", "png,pdf", "--out", str(tmp_path) + "/"]) == 0
+    assert stand.job["asked"]["field"] == "all"
+    assert stand.job["asked"]["formats"] == ["png", "pdf"]
+    assert main(["picture", "result", run, "--field", "uy", "--stage", "2",
+                 "--out", str(tmp_path) + "/", "--force"]) == 0
+    assert "results field uy" in stand.job["commands"]
+
+
+def test_two_different_fields_are_refused(stand, run, capsys):
+    assert main(["picture", "result", run, "ux", "--field", "uy"]) != 0
+    assert "Two fields" in capsys.readouterr().err
+    assert stand.job is None
+
+
 def test_an_unknown_field_is_refused_in_the_words_of_results(stand, run, capsys):
     assert main(["picture", "result", run, "nonsense", "--stage", "2"]) != 0
     assert "results fields" in capsys.readouterr().err
@@ -257,6 +273,16 @@ def test_one_file_can_be_named(stand, project, tmp_path):
     target = tmp_path / "wall.png"
     assert main(["picture", "geometry", str(project), "--out", str(target)]) == 0
     assert target.read_bytes() == b"PNG"
+
+
+def test_a_file_named_for_another_format_is_refused(stand, project, tmp_path, capsys):
+    stand.files = {"Pit_stage1.pdf": b"%PDF-"}
+    target = tmp_path / "wall.png"
+    assert main(["picture", "geometry", str(project), "--format", "pdf", "--out", str(target)]) != 0
+    assert "does not end in .pdf" in capsys.readouterr().err
+    assert not target.exists()
+    assert main(["picture", "geometry", str(project), "--format", "pdf",
+                 "--out", str(tmp_path / "wall.PDF")]) == 0
 
 
 def test_many_files_need_a_folder(stand, project, tmp_path, capsys):

@@ -5,9 +5,9 @@
     stage PROJECT      a stage as the Staged construction tab shows it, or every stage
     result RUN [FIELD] a result as the Results tab shows it, or every field and stage
 
-The options have the words of `picture save` in the GUI's command box, and the same page
-draws both (`cli.terminal.pictures`), so the pictures are the same. RUN and `--stage` read
-as in `kratos-cli results`.
+The options have the words of `picture save` in the GUI's command box (`--format png,pdf`,
+`--stage all`, `--field all`, ...), and the same page draws both (`cli.terminal.pictures`),
+so the pictures are the same. RUN and `--stage` read as in `kratos-cli results`.
 """
 
 from __future__ import annotations
@@ -89,6 +89,9 @@ def register(commands, common: argparse.ArgumentParser) -> None:
     result.add_argument("field", nargs="?",
                         help="as `results fields` lists it, or all (default: what the Results "
                              "tab opens on)")
+    result.add_argument("--field", dest="field_option", metavar="FIELD",
+                        help="the same as FIELD, in the words of the GUI's command box "
+                             "(--field all)")
     result.add_argument("--stage", metavar="STAGE",
                         help="its number, words of its stage, or all (default: the last stage "
                              "that wrote results)")
@@ -130,6 +133,12 @@ def _save(args: argparse.Namespace, files: dict[str, bytes]) -> Answer:
     if len(files) > 1 and not folder:
         raise CommandError(f"This makes {len(files)} files, and {args.out} is not a folder. "
                            "End --out with / to make one.")
+    if not folder:
+        ending = Path(next(iter(files))).suffix.lower()
+        if Path(args.out).suffix.lower() != ending:
+            raise CommandError(f"This makes a {ending[1:].upper()} file, and {args.out} does not "
+                               f"end in {ending}. Give it that ending, or end --out with / to "
+                               "put it in a folder.")
     targets = {name: run_commands._target(args, name) for name in files}
     for name, target in targets.items():
         target.write_bytes(files[name])
@@ -212,6 +221,11 @@ def _run_id(run: catalog.Run, given: str) -> str:
 
 
 def draw_result(args: argparse.Namespace) -> Answer:
+    if args.field_option is not None:
+        if args.field is not None and args.field != args.field_option:
+            raise CommandError(f"Two fields: {args.field} and --field {args.field_option}. "
+                               "Give one of them.")
+        args.field = args.field_option
     with environment(args):
         run = run_commands._run(args.run)
         every_stage = (args.stage or "").strip().lower() == "all"
