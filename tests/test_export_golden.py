@@ -258,18 +258,27 @@ def test_the_load_value_and_the_anchor_support_reach_the_process_file(golden, de
 # a part can be named by a stage and be missing from the .mdpa, and nothing but a
 # cross-check between the two files catches it.
 #
-# The phases are `phases.default_phases`, not a hand-written list, so this also says
-# that what the GUI hands a new user exports.
+# The ground settles, the wall and its surcharge go in, the ground on one side of the wall
+# is dug away, and the anchor goes in.
+
+
+STAGES = [
+    {"id": "initial", "name": "Initial stage", "calculation": "K0 procedure",
+     "deactivate": ["pile_1", "anchor_1", "load_1"]},
+    {"id": "null_step", "name": "Null step", "parent": "initial",
+     "calculation": "Null step"},
+    {"id": "wall", "name": "Wall installation", "parent": "null_step",
+     "activate": ["pile_1", "load_1"], "reset_displacements": True},
+    {"id": "dig", "name": "Excavation", "parent": "wall", "deactivate": ["soil_L1__part1"]},
+    {"id": "anchor", "name": "Anchor installation", "parent": "dig",
+     "activate": ["anchor_1"]},
+]
 
 
 @pytest.fixture(scope="module")
 def staged(session):
-    from core.model import phases
-    project = golden_project()
-    project = Project.model_validate(
-        project.model_dump()
-        | {"phases": [phase.model_dump() for phase in phases.staged_excavation_phases(project)]})
-    return writer.export_project(project, MeshRequest(element_size=4.0, order=2))
+    return writer.export_project(golden_project(stages=STAGES),
+                                 MeshRequest(element_size=4.0, order=2))
 
 
 @pytest.fixture(scope="module")
@@ -365,11 +374,7 @@ def test_the_deck_reads_only_materials_files_the_export_produced(staged, staged_
 
 
 def test_a_staged_export_is_deterministic(session):
-    from core.model import phases
-    project = golden_project()
-    project = Project.model_validate(
-        project.model_dump()
-        | {"phases": [phase.model_dump() for phase in phases.staged_excavation_phases(project)]})
+    project = golden_project(stages=STAGES)
     first = writer.export_project(project, MeshRequest(element_size=4.0, order=2))
     second = writer.export_project(project, MeshRequest(element_size=4.0, order=2))
     assert first["project_parameters"] == second["project_parameters"]

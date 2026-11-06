@@ -798,46 +798,6 @@ def test_a_material_a_layer_uses_is_not_removed():
     assert "m1" not in [m.id for m in session.remove_material(seed_project(), "m1").materials]
 
 
-def test_the_excavation_is_dug_in_the_levels_given():
-    project, notes = session.set_excavation(seed_project(), x=(2.0, 8.0),
-                                            levels=[-2.0, -4.0, -6.0])
-
-    pit = project.excavation
-    assert (pit.x0, pit.x1, pit.levels, pit.floor_y) == (2.0, 8.0, [-2.0, -4.0, -6.0], -6.0)
-    assert any("__lift1" in key for key in project.part_keys())
-    assert notes == []
-
-
-def test_one_level_says_that_a_layered_model_digs_nothing():
-    """In a layered model the pit is only dug when it is staged
-    (`Project.layered_soil`): one level would leave the ground whole, silently."""
-    _, notes = session.set_excavation(seed_project(), x=(2.0, 8.0), levels=[-3.0])
-
-    assert any("two or more levels" in note for note in notes)
-
-
-def test_a_project_without_a_pit_gets_one():
-    """A new project has no excavation. In 2D the pit spans the domain's z range, the
-    one cut the section is."""
-    blank = blank_project()
-    assert blank.excavation is None
-
-    project, _ = session.set_excavation(blank, x=(2.0, 8.0), levels=[-2.0, -4.0])
-
-    pit = project.excavation
-    assert pit is not None
-    assert (pit.x0, pit.x1, pit.z0, pit.z1) == (2.0, 8.0, blank.domain.z0, blank.domain.z1)
-    assert pit.levels == [-2.0, -4.0]
-
-
-def test_a_pit_made_from_nothing_needs_its_outline_and_levels():
-    with pytest.raises(session.EditRefused, match="give levels"):
-        session.set_excavation(blank_project(), x=(2.0, 8.0))
-    solid = blank_project().model_copy(update={"dimension": 3})
-    with pytest.raises(session.EditRefused, match="give z, levels"):
-        session.set_excavation(solid, x=(2.0, 8.0))
-
-
 def test_a_part_given_a_material_takes_its_colour():
     project = with_box(seed_project())
     material = project.materials[2]

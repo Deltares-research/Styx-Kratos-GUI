@@ -1,4 +1,4 @@
-"""`domain`, `material`, `layer`, `line`, `body`, `excavation`, `parts`: the ground of a model.
+"""`domain`, `material`, `layer`, `line`, `body`, `parts`: the ground of a model.
 
 Each edit is `core.session`'s, made the way the GUI's soil dialogs make it -- a moved
 level moves its neighbour's, a deleted layer's neighbour closes the gap -- and each new
@@ -112,16 +112,6 @@ def register(commands, common: argparse.ArgumentParser) -> None:
     change.add_argument("--name", help="what to call it")
     change.add_argument("--material", help="its own material, or `layer` for its layer's")
 
-    excavation = commands.add_parser("excavation", parents=[common],
-                                     help="show or set the pit and the levels it is dug to")
-    add_project(excavation)
-    excavation.add_argument("--x", type=float, nargs=2, metavar=("FROM", "TO"))
-    excavation.add_argument("--z", type=float, nargs=2, metavar=("FROM", "TO"))
-    excavation.add_argument("--levels", type=float, nargs="+", metavar="Y",
-                            help="the levels it is dug to, shallowest first: one lift each")
-    add_writing(excavation)
-    excavation.set_defaults(handler=set_excavation)
-
     parts = commands.add_parser("parts", parents=[common],
                                 help="the parts of the model, and which a stage can switch")
     add_project(parts)
@@ -150,7 +140,7 @@ def _model(args: argparse.Namespace) -> str | None:
     return MODEL_WORDS[args.model] if args.model is not None else None
 
 
-# ── domain, excavation ──────────────────────────────────────────────────────
+# ── domain ──────────────────────────────────────────────────────────────────
 
 def set_domain(args: argparse.Namespace) -> Answer:
     project = read(args)
@@ -162,20 +152,6 @@ def set_domain(args: argparse.Namespace) -> Answer:
     return Answer(data={"file": file_of(target), "domain": project.domain.model_dump(mode="json"),
                         "section_offset": project.section_offset, "notes": notes},
                   lines=[f"{_domain_line(project)}; {where}", *notes])
-
-
-def set_excavation(args: argparse.Namespace) -> Answer:
-    project = read(args)
-    if args.x is None and args.z is None and args.levels is None:
-        pit = project.excavation
-        return Answer(data=pit.model_dump(mode="json") if pit is not None else None,
-                      lines=[_pit_line(project)])
-    project, notes = session.set_excavation(project, x=args.x, z=args.z, levels=args.levels)
-    target, where = written(args, project)
-    return Answer(data={"file": file_of(target),
-                        "excavation": project.pit().model_dump(mode="json"),
-                        "notes": notes},
-                  lines=[f"{_pit_line(project)}; {where}", *notes])
 
 
 def _line_fields(parser: argparse.ArgumentParser) -> None:
@@ -247,16 +223,6 @@ def _domain_line(project: Project) -> str:
         return f"{extent} (2D section at z = {project.section_offset:g})"
     return f"{extent}, z {d.z0:g} .. {d.z1:g}"
 
-
-def _pit_line(project: Project) -> str:
-    pit = project.excavation
-    if pit is None:
-        return "no excavation"
-    return (f"excavation x {pit.x0:g} .. {pit.x1:g}, z {pit.z0:g} .. {pit.z1:g}, dug to "
-            + ", ".join(f"{level:g}" for level in pit.levels))
-
-
-# ── materials ───────────────────────────────────────────────────────────────
 
 def list_materials(args: argparse.Namespace) -> Answer:
     project = read(args)

@@ -169,34 +169,6 @@ def _model():
     return excavation.excavation_project()
 
 
-def _staged(project) -> schemas.Project:
-    return schemas.Project.model_validate(
-        project.model_dump()
-        | {"stages": [ph.model_dump() for ph in stages.staged_excavation_stages(project)]})
-
-
-def test_staged_excavation_stages_reset_displacements_when_the_wall_goes_in():
-    """The reference sets `reset_totals` true in exactly one stage, the wall's, so the
-    wall's deflection is measured from the ground it was built into."""
-    made = stages.staged_excavation_stages(_model())
-    assert [ph.id for ph in made if ph.reset_displacements] == ["install_sheetpile"]
-
-
-def test_the_first_staged_stage_is_the_only_k0_one():
-    made = stages.staged_excavation_stages(_model())
-    assert made[0].calculation == "K0 procedure"
-    assert made[1].calculation == "Null step"
-    assert all(ph.calculation == "Plastic" for ph in made[2:])
-
-
-def test_staged_excavation_stages_make_a_project_that_validates():
-    """They are written straight into `Project.stages`, so every id, parent and part key
-    has to satisfy the schema's own cross-checks, and the chain has to linearise."""
-    staged = _staged(_model())
-    assert [ph.id for ph in stages.linearise(staged)] == \
-        [ph.id for ph in staged.stages]
-
-
 # -- default_stages ----------------------------------------------------------
 # What "Create default stages" gives: Initial stage, then Null step, and nothing else.
 # Every further stage is the user's to add. The staged sequence above used to be
@@ -295,11 +267,6 @@ def test_reactivating_a_part_brings_it_back_from_that_stage_on():
     assert "soil_L1__lift1" in stages.active_parts(project, "fill")
 
 
-def test_more_than_ten_lifts_are_still_named():
-    assert stages._ordinal(10) == "Tenth"
-    assert stages._ordinal(11) == "#11"
-
-
 # ── Editing: the Stages toolbar's list transforms (`App.Stages`) ─────────────
 
 def _test_model() -> schemas.Project:
@@ -373,7 +340,6 @@ def test_the_phases_module_still_imports():
     assert phases.PhaseError is stages.StageError
     assert phases.linearise is stages.linearise
     assert phases.default_phases is stages.default_stages
-    assert phases.staged_excavation_phases is stages.staged_excavation_stages
 
 
 def test_adding_a_stage_to_an_unresolved_branch_uses_the_last_stored_stage():

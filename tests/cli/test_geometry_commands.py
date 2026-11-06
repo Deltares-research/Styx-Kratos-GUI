@@ -267,35 +267,17 @@ def test_a_layer_needs_a_bottom_or_a_thickness_or_takes_five_metres(cli, site):
     assert layer.top - layer.bottom == 5.0
 
 
-# ── excavation ──────────────────────────────────────────────────────────────
-
-def test_excavation_digs_the_pit_in_lifts(cli, site):
-    ran = cli("excavation", site, "--x", "2", "8", "--levels", "-2", "-4", "-6")
-
-    assert ran.code == 0, ran.err
-    pit = session.load(site).excavation
-    assert (pit.x0, pit.x1, pit.levels) == (2.0, 8.0, [-2.0, -4.0, -6.0])
-    assert "-6" in cli("excavation", site).out
-
-
-def test_excavation_with_one_level_says_it_digs_nothing(cli, site):
-    ran = cli("excavation", site, "--x", "2", "8", "--levels", "-3")
-
-    assert ran.code == 0
-    assert "two or more levels" in ran.out
-
-
 # ── parts ───────────────────────────────────────────────────────────────────
 
 def test_parts_lists_what_a_stage_can_switch(cli, site):
-    cli("excavation", site, "--x", "2", "8", "--levels", "-2", "-4", "-6")
+    cli("line", site, "add", "floor", "--points", "0", "-2", "25", "-2")
 
     ran = cli("parts", site)
 
     assert ran.code == 0
-    assert "soil_L1__lift1" in ran.out and "lift 1" in ran.out
+    assert "soil_L1__part1" in ran.out and "Part 1" in ran.out
     keys = [part["key"] for part in cli("--json", "parts", site).json()]
-    assert keys[:2] == ["soil_L1", "soil_L2"]
+    assert keys[:3] == ["soil_L1__part1", "soil_L1__part2", "soil_L2"]
     assert set(session.load(site).part_keys()) <= set(keys)
 
 

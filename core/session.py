@@ -192,7 +192,7 @@ def _edited(project: Project, payload: dict) -> Project:
 
     The one way an edit here makes its result, so a rule every edit keeps is kept once:
     a size belongs to its body, so an edit that takes a body away takes its size too --
-    a layer removed or split, a level moved past a lift, a structure deleted -- whichever
+    a layer removed or split, a line removed, a structure deleted -- whichever
     front end made the edit and however it was sent. A size for a body the model never
     had is kept: `unknown_mesh_keys` names it as the mistake it is.
     """
@@ -749,7 +749,7 @@ def _joined(where: str, token: tuple[str, str]) -> str:
     return f"{where}.{name}" if where else name
 
 
-# ── The ground: domain, layers, materials, excavation ───────────────────────
+# ── The ground: domain, layers, materials ──────────────────────────────────
 #
 # The edits the GUI's soil layers dialog makes in the browser
 # (frontend/js/soil-layers-dialog.js), so the command line makes them the same way: a
@@ -1003,41 +1003,6 @@ def update_body(project: Project, key: str, **fields) -> Project:
         raise UnknownPart(f"{key} is a whole layer, not a part cut off by a line: change it "
                           "as a layer")
     raise UnknownPart(f"no soil body with key {key!r}")
-
-
-def set_excavation(project: Project, *, x: tuple[float, float] | None = None,
-                   z: tuple[float, float] | None = None,
-                   levels: list[float] | None = None) -> tuple[Project, list[str]]:
-    """The pit: its plan outline (`x`, `z` as from, to) and the levels it is dug to,
-    shallowest first -- one lift per level, each its own body, deactivated in its own
-    stage. The floor is the last level.
-
-    A project without a pit gets one when `x`, `z` and `levels` are all given. A 2D
-    model is one cut through z, so its pit spans the domain's z range unless `z` says
-    otherwise."""
-    payload = project.model_dump()
-    pit = payload.get("excavation")
-    if pit is None:
-        if z is None and project.dimension == 2:
-            z = (project.domain.z0, project.domain.z1)
-        missing = [name for name, value in (("x", x), ("z", z), ("levels", levels))
-                   if value is None]
-        if missing:
-            raise EditRefused(f"the project has no excavation yet; give "
-                              f"{', '.join(missing)} to make one")
-        pit = payload["excavation"] = {}
-    if x is not None:
-        pit["x0"], pit["x1"] = x
-    if z is not None:
-        pit["z0"], pit["z1"] = z
-    if levels is not None:
-        pit["levels"], pit["floor_y"] = list(levels), levels[-1]
-    edited = _edited(project, payload)
-    notes = []
-    if edited.layered_soil and len(edited.pit_levels()) < 2:
-        notes.append("With one level a layered model digs nothing: its pit is cut only "
-                     "when it is dug in two or more levels, one stage per lift.")
-    return edited, notes
 
 
 def assign_part_material(project: Project, key: str, material: str) -> Project:
@@ -1427,11 +1392,3 @@ def _no_part(project: Project, word: str, stageable: list[str]) -> str:
     ids = " or ".join(named)
     return (f"there is no part {word!r} to switch: {word!r} is the name of the part with "
             f"id {ids}, and a stage switches a part by its id. Use {ids}.")
-
-
-def staged_excavation_stages(project: Project) -> Project:
-    """The whole staged-excavation sequence derived from the model -- settle, build the
-    wall, then dig and prop lift by lift (`stages.staged_excavation_stages`) -- replacing
-    whatever is there."""
-    return replace_stages(project, StagesUpdate(
-        stages=stages.staged_excavation_stages(project)))

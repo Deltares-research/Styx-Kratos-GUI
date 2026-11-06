@@ -73,7 +73,6 @@ Genuchten soil.
 | `layer P list\|add\|set\|split\|remove ...` | The soil stack: `add ID --material M [--bottom Y \| --thickness T]`, `set ID [--top Y] [--bottom Y]` |
 | `line P list\|add\|set\|remove ...` | The lines that split the soil: `add ID --points X Y X Y ...` |
 | `body P list\|set ...` | The soil bodies by their keys: `set KEY [--name NAME] [--material M]` |
-| `excavation P [--x FROM TO] [--z FROM TO] [--levels Y ...]` | The pit, and the levels it is dug to, one lift each |
 | `volume P list\|add\|import\|remove\|clear ...` | Solids drawn or imported into the model; with `--material` they are soil |
 | `section P list\|add\|set\|remove ...` | The sections structures are built with: `add beam\|panel\|anchor\|interface ID [NAME=VALUE ...]` |
 | `beam P list\|add\|set\|remove ...` | Sheet piles, in 2D: `add [ID] [--points x y ...] [--section S]` |
@@ -87,7 +86,7 @@ Genuchten soil.
 | `gravity P [on\|off]` | Show, or switch on or off, the self weight of every body (on in a new project) |
 | `parts P` | Every part by its key, and every water pressure condition: the names stages activate and deactivate |
 | `mesh P [--size S] [--order 1\|2]` | Mesh the model and report its size. `--size` and `--order` are kept in the project |
-| `stages P [list\|show\|defaults\|staged-excavation\|add\|copy\|set\|remove\|activate\|deactivate] ...` | The construction sequence, edited as the GUI's Stages toolbar edits it. `phases` is the old name and still works |
+| `stages P [list\|show\|defaults\|add\|copy\|set\|remove\|activate\|deactivate] ...` | The construction sequence, edited as the GUI's Stages toolbar edits it. `phases` is the old name and still works |
 | `node SOURCE NODE ...` | Which SubModelParts a node of the deck is in, and the nodes an interface split from it |
 | `deck show SOURCE` | A deck's mesh, SubModelParts and stages |
 | `export P --out DIR [--name NAME]` | Write the Kratos deck into `DIR` |
@@ -127,10 +126,9 @@ kratos-cli material pit.json add sand --preset m5 --model mohr-coulomb
 kratos-cli layer pit.json add top --material clay --bottom -7
 kratos-cli layer pit.json add mid --material clay --bottom -10
 kratos-cli layer pit.json add bottom --material sand --bottom -40
-kratos-cli excavation pit.json --x 0 6 --z 0 10 --levels -2 -4.5 -7
 kratos-cli water pit.json -1
 kratos-cli boundary pit.json add pore --domain --water-pressure Hydrostatic   # about -1 m
-kratos-cli parts pit.json                                 # soil_top__lift1, ... for the stages
+kratos-cli parts pit.json                                 # soil_top, ... for the stages
 ```
 
 - **Layers** are stacked from the top. Each layer has one top and one bottom, and spans
@@ -170,23 +168,19 @@ kratos-cli parts pit.json                                 # soil_top__lift1, ...
   kratos-cli beam pit.json add sheetpile --points 6 0 6 -13
   kratos-cli line pit.json add floor_1 --points 0 -2 6 -2
   kratos-cli body pit.json list
-  kratos-cli body pit.json set soil_top__part1 --name "lift 1" --material grout
-  kratos-cli stages pit.json deactivate dig_1 soil_top__part1
+  kratos-cli body pit.json set soil_top__part3 --name "lift 1" --material grout
+  kratos-cli stages pit.json deactivate dig_1 soil_top__part3
   ```
 
   A layer that is cut has no plain key any more: each piece is `soil_<layer>__<id>`, with
-  a new id `part1`, `part2`, ... from the top down. A piece keeps its key, name and
-  material when another line is added. A stage that named the whole layer then names each
+  a new id `part1`, `part2`, ... in the order the pieces are made. `body list` shows the
+  pieces from the top down, and `get bodies` a point inside each. A piece keeps its key,
+  name and material when another line is added. A stage that named the whole layer then names each
   of its pieces. An edit that takes away a piece a stage still names is refused.
   `body set --material layer` goes back to the layer's material, and a body's material
   holds in every stage. In a model script, `lines=` and `bodies=` say the same. A record
   `SoilBody(id="lift1", name="lift 1", layer="top", point=(2.5, -1))` chooses the key of
   the piece its `point` lies in.
-- **The excavation** is dug in its `--levels`, shallowest first. Each lift is a body of
-  its own, deactivated in its own stage. In a layered model, a pit with one level is not
-  dug at all, and the command says so. A new project has no pit. The first `excavation`
-  command makes one, and it needs `--x` and `--levels`. In 3D it also needs `--z`. In 2D
-  the pit spans the model's z range.
 - **Volumes**: in 2D, `volume add polygon --points x y x y ...` is an outline in the
   section plane, swept across the whole model. In 3D, `polygon` takes `x y z` points and
   `--extrude dx dy dz`, and there are `box` (`--origin`, `--size`) and `cylinder`
@@ -206,6 +200,8 @@ The wall, the props and the loads of the pit above, then its stages:
 ```bash
 kratos-cli section pit.json add beam az26 --name "AZ 26" CROSS_AREA=0.015 I33=3e-4
 kratos-cli beam pit.json add sheet --points 6 0 6 -12        # on az26, the first profile
+kratos-cli line pit.json add floor_1 --points 0 -2 6 -2       # with the wall, the lifts
+kratos-cli line pit.json add floor_2 --points 0 -4.5 6 -4.5
 kratos-cli anchor pit.json add strut --head 6 -1 --tail 5 -1
 kratos-cli anchor pit.json add tie --head 6.3 -3.5 --prestress 1e5
 kratos-cli interface pit.json add contact --structure sheet --side right
@@ -298,7 +294,7 @@ kratos-cli boundary dam.json add exit --seepage --line 1.62 0.48 1.62 4     # a 
   does, and say so: they stay in the project for the solid model.
 - **Where.** One of `--domain` (the whole soil), `--face bottom|left|right|top|front|back`
   (front and back exist in 3D only), `--part KEY` (a soil part, as `parts` lists it: a layer
-  `soil_<id>` with all its lifts, one body, or a custom part with a material), `--line X Y
+  `soil_<id>` with all its pieces, one body, or a custom part with a material), `--line X Y
   X Y ...` or `--point X Y` (drawn in the 2D section, and left out of a 3D deck). `set` with
   another of these moves the condition.
 - **Water pressure.** `--water-pressure` takes Kratos' `fluid_pressure_type`:
@@ -357,14 +353,12 @@ works everywhere: `kratos-cli phases ...`, a `phases` path in `get`, `set`, `add
 Styx cannot read.
 
 ```bash
-kratos-cli stages pit.json staged-excavation       # derived from the model, all at once
-# or one by one:
 kratos-cli stages pit.json defaults                # the initial stage and the null step
 kratos-cli stages pit.json deactivate initial sheet strut tie contact surcharge water_1
 kratos-cli stages pit.json add wall --name Wall --activate sheet contact surcharge --reset-displacements
-kratos-cli stages pit.json add dig_1 --name "Dig 1" --activate water_1 --deactivate soil_top__lift1 --max-iterations 150 --tolerance 1e-3
+kratos-cli stages pit.json add dig_1 --name "Dig 1" --activate water_1 --deactivate soil_top__part3 --max-iterations 150 --tolerance 1e-3
 kratos-cli stages pit.json add props --name "Strut and tie" --activate strut tie
-kratos-cli stages pit.json add dig_2 --name "Dig 2" --deactivate soil_top__lift2
+kratos-cli stages pit.json add dig_2 --name "Dig 2" --deactivate soil_top__part1
 kratos-cli stages pit.json show dig_2              # what is in the model then
 kratos-cli boundary pit.json add low --domain --water-pressure Hydrostatic --reference-coordinate -6
 kratos-cli stages pit.json deactivate initial low  # the low level is off at first ...
@@ -373,11 +367,8 @@ kratos-cli stages pit.json deactivate dig_2 pore
 kratos-cli stages pit.json list
 ```
 
-- **`staged-excavation`** derives the whole sequence from the model, as a model script's
-  `stages.staged_excavation_stages` does: settle the ground, install each wall with its
-  interfaces and the loads, then dig lift by lift with its water load, each anchor after
-  the lift that exposes its head. **`defaults`** makes only the initial stage and the
-  null step, as the GUI's Create default stages does. Both replace the sequence there is.
+- **`defaults`** makes the initial stage and the null step, as the GUI's Create default
+  stages does. It replaces the sequence there is.
 - **`add [ID]`** puts a stage at the end of the sequence (the toolbar's Add); with
   `--before STAGE` it goes between that stage and the one it starts from (Insert).
   **`copy STAGE`** puts a stage with the same solver settings right after `STAGE` (Copy),
@@ -418,7 +409,7 @@ kratos-cli stages pit.json list
 pit.json> water -2
 pit.json> layer add L4 --material sand --thickness 10
 pit.json> undo
-pit.json> stages staged-excavation
+pit.json> stages defaults
 pit.json> calculate
 pit.json> results field 1 uy
 pit.json> exit
@@ -528,11 +519,9 @@ kratos-cli results field D:/copied/Pit_A_2026-10-12_09-14 uy   # a run anywhere
 - **`profile MEMBER [QUANTITY]`**: `M`, `Q`, `N`, `ux`, `uy` along a wall, `tn`, `ts` along
   an interface, or a word of the label (`moment`, `shear`, `normal`). Without a quantity it
   is the bending moment. `--stage` narrows it to one stage.
-- **Which interface members a run has.** In a model with an excavation, `interface` is the
-  face of the wall on the retained side. In a model without one, such as a dike with a
-  sheet pile, each face has its own member: `interface_left` and `interface_right`, the
-  faces toward -x and +x (`results profile 1 interface_left tn`). An interface
-  flatter than 45 degrees has `interface_below` and `interface_above` instead. With more
+- **Which interface members a run has.** Each face of the wall has its own member:
+  `interface_left` and `interface_right`, the faces toward -x and +x
+  (`results profile 1 interface_left tn`). An interface flatter than 45 degrees has `interface_below` and `interface_above` instead. With more
   than one interface, the member names start with the interface's id: `contact_left`.
   `results members` lists them.
 - **`--csv FILE`** writes the file the GUI saves (`results csv`, and the plot window's
@@ -620,7 +609,7 @@ leaves the original as it was. `--dry-run` makes and checks the edit, and writes
 model script is never written: an edit of one needs `--out`.
 
 A mesh size belongs to its body. An edit that takes a body away, such as `layer remove`,
-`layer split` or `layer set --top` taking an excavation lift out of every layer, removes
+`layer split` or `layer set --top` taking a soil body out of every layer, removes
 that body's size too, so `check` and `mesh` still accept the file. The edit says which
 sizes it removed, and their values, as a `note:` line after its answer, also with
 `--dry-run`. If the body comes back, set its size again.

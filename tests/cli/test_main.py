@@ -17,7 +17,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 COMMANDS = ["new", "show", "check", "build", "script", "get", "set", "add", "remove",
-            "dimension", "units", "water", "domain", "material", "layer", "excavation",
+            "dimension", "units", "water", "domain", "material", "layer", "line", "body",
             "volume", "section", "beam", "wall", "member", "anchor", "interface", "load",
             "normal-load", "parts", "mesh", "stages", "node", "deck", "export", "run",
             "calculate", "results", "shell"]
