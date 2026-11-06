@@ -42,7 +42,7 @@ Module paths are relative to `core/`.
 | Step | Module | What happens |
 |---|---|---|
 | 1. Edit | `model/schemas.py`, `session.py` | Each edit goes through one path (`session._edited`): it drops the mesh size of a body the edit took away, then checks the full project again |
-| 2. Build | `geometry/solid_model.py` | Boxes, then a boolean fragment, then the pit cut out, then the structures embedded. 2D sections and 3D solids. |
+| 2. Build | `geometry/solid_model.py` | A solid for each soil piece (`model/regions.py` finds the pieces), then a boolean fragment, then the structures embedded. 2D sections and 3D solids. |
 | 3. Draw | `geometry/tessellation.py` | A fast surface triangulation (about 0.1 s) for the view only. It is not a finite-element mesh. |
 | 4. Mesh | `geometry/meshing.py` | The finite-element mesh, made again from the geometry each time |
 | 5. Split | `kratos/interfaces.py` | Duplicates the nodes along a wall and writes zero-thickness contact elements |
@@ -134,7 +134,7 @@ the HTTP parts.
 | `cli/terminal/words.py` | How the words of a command line become a command and its values |
 | `cli/commands/project.py` | `new`, `show`, `check`, `build`, `script`, `dimension`, `units`, `water` |
 | `cli/commands/edit.py` | `get`, `set`, `add`, `remove` |
-| `cli/commands/ground.py`, `volumes.py` | `domain`, `material`, `layer`, `excavation`, `parts`; `volume` |
+| `cli/commands/ground.py`, `volumes.py` | `domain`, `material`, `layer`, `line`, `body`, `parts`; `volume` |
 | `cli/commands/structures.py` | `section`, `beam`, `wall`, `member`, `anchor`, `interface`, `load`, `normal-load` |
 | `cli/commands/conditions.py` | `boundary`, `gravity` |
 | `cli/commands/meshing.py`, `stages.py` | `mesh`, `export`; `stages` |

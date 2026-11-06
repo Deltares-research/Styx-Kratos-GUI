@@ -168,11 +168,12 @@ again, unless a stage still uses one of them. Then the deletion is refused.
 A part of a line that ends inside the soil splits nothing. The Session log says so when no
 part of a line splits anything.
 
-### Excavations
+An excavation is made in this way: a wall and a line at each level make the lifts, and a
+stage switches each lift off.
 
-The GUI cannot make an excavation pit yet. To add a pit and the levels to which it is dug,
-use `kratos-cli excavation` (see [CLI.md](CLI.md)) or a Python script. The GUI then shows each
-lift of the pit as its own soil body, for example *Soil_Top · lift 1*.
+A project saved with an excavation pit opens with lines and soil parts in its place, for
+example *Soil_Top · lift 1*. A pit with one level was never dug, so it just goes. A 3D pit
+narrower than the model in z cannot be made of lines, and the project does not open.
 
 ## Structures mode
 
@@ -351,7 +352,7 @@ Click **Apply and generate** to make the mesh, or **Apply** to only keep the set
 
 A mesh size belongs to its body. An edit that takes a body away also removes the body's
 size: for example, deleting a layer or a structure, or moving a layer boundary so that
-an excavation lift is no longer in any layer. The Session log names each size that was
+a soil part is no longer in any layer. The Session log names each size that was
 removed, and its value. If the body comes back later, for example when you move the
 boundary back, set its size again, or use undo to get the body and its size back.
 
@@ -373,11 +374,6 @@ on (active) or off. A stage starts from the result of the stage before it.
 If the project has no stages, the Stages explorer shows **Create default stages**. Click it.
 Styx then makes two stages: the initial stage (K0 procedure) and a null step. Add the other
 stages yourself, for example one to install the wall and one for each excavation lift.
-
-To make the full sequence from the model in one step, use
-`kratos-cli stages P staged-excavation` (see
-[Stage commands](CLI.md#stage-commands)). It installs each wall, digs lift by lift, and puts
-in each anchor after the lift that uncovers it.
 
 Use the buttons at the top of the Stages explorer to change the sequence:
 

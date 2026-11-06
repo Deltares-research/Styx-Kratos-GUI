@@ -181,6 +181,11 @@ kratos-cli parts pit.json                                 # soil_top, ... for th
   holds in every stage. In a model script, `lines=` and `bodies=` say the same. A record
   `SoilBody(id="lift1", name="lift 1", layer="top", point=(2.5, -1))` chooses the key of
   the piece its `point` lies in.
+- **A project saved with an excavation** opens with lines and soil bodies in its place: a
+  line on each side of the pit, a line at each level, and the bodies `lift1`, `lift2`, ...,
+  `pit` and `outside`. A stage that named the whole layer then names the ground outside the
+  pit. A pit with one level was never dug, so it just goes. A 3D pit narrower than the
+  model in z cannot be made of lines, and the file is refused.
 - **Volumes**: in 2D, `volume add polygon --points x y x y ...` is an outline in the
   section plane, swept across the whole model. In 3D, `polygon` takes `x y z` points and
   `--extrude dx dy dz`, and there are `box` (`--origin`, `--size`) and `cylinder`
