@@ -7,10 +7,10 @@ from pydantic import ValidationError
 
 from core import scripting, session
 from core.geometry import solid_model
-from core.kratos import writer
-from core.model import drafts, script_writer
-from core.model.schemas import (Beam, BeamSection, Domain, LayersUpdate, Line, Material, Project,
-                                SoilBody, SoilLayer, Stage)
+from core.kratos import condition_checks, writer
+from core.model import drafts, script_writer, stages
+from core.model.schemas import (Beam, BeamSection, DimensionUpdate, Domain, LayersUpdate, Line,
+                                Material, Project, SoilBody, SoilLayer, Stage)
 
 DOMAIN = Domain(x0=0.0, x1=20.0, z0=0.0, z1=10.0, y_top=0.0, y_bottom=-12.0)
 
@@ -174,6 +174,39 @@ def test_a_body_id_with_the_key_separator_is_refused():
         SoilBody(id="a__b", name="A", layer="top", point=(1.0, -1.0))
 
 
+def test_two_bodies_of_one_layer_cannot_have_one_id():
+    """They would have one key, so a stage or the deck could not tell them apart."""
+    with pytest.raises(ValidationError, match="soil_top__same"):
+        model(lines=[PIT_SIDE],
+              bodies=[SoilBody(id="same", name="Left", layer="top", point=(2.0, -1.0)),
+                      SoilBody(id="same", name="Right", layer="top", point=(10.0, -1.0))])
+
+
+def test_bodies_of_two_layers_can_have_one_id():
+    project = model(lines=[Line(id="side", name="Side", points=[(5.0, 0.0), (5.0, -12.0)])],
+                    bodies=[SoilBody(id="pit", name="Pit", layer="top", point=(2.0, -1.0)),
+                            SoilBody(id="pit", name="Pit", layer="low", point=(2.0, -5.0))])
+    assert {"soil_top__pit", "soil_low__pit"} <= set(project.soil_body_keys)
+
+
+@pytest.mark.parametrize("name", ["", "   "])
+def test_a_line_and_a_body_cannot_have_an_empty_name(name):
+    """The GUI refuses it in its window; the command line and the API say the same."""
+    project = model(lines=[PIT_SIDE])
+    with pytest.raises(ValidationError, match="cannot be empty"):
+        session.update_line(project, "pit_side", name=name)
+    with pytest.raises(ValidationError, match="cannot be empty"):
+        session.update_body(project, "soil_top__part1", name=name)
+
+
+@pytest.mark.parametrize("id", ["water", "excavation", "fixed_bottom"])
+def test_a_line_cannot_take_the_id_of_something_the_viewport_draws(id):
+    """The viewport keeps a line's drawing under its id, beside the water level and the
+    conditions, so hiding one would hide the other."""
+    with pytest.raises(ValidationError, match="line id collides"):
+        model(lines=[Line(id=id, name="A line", points=[(5.0, 0.0), (5.0, -4.0)])])
+
+
 def test_a_line_needs_two_different_points():
     with pytest.raises(ValidationError, match="two points"):
         Line(id="l", name="L", points=[(0.0, 0.0)])
@@ -273,6 +306,39 @@ def test_a_material_a_body_uses_cannot_be_removed():
         session.remove_material(project, "grout")
 
 
+def coupled_soils() -> list[Material]:
+    grout = material("grout")
+    grout.variables["GEO_DRAINAGE_TYPE"] = "FULLY_COUPLED"
+    return [material("sand"), grout]
+
+
+def test_the_water_warning_reads_the_material_of_a_part():
+    project = session.update_body(model(lines=[PIT_SIDE], materials=coupled_soils()),
+                                  "soil_top__part1", material="grout")
+    assert any("Soil grout" in warning for warning in condition_checks.warnings(project))
+
+
+def test_the_water_warning_leaves_out_a_layers_material_no_part_has_any_more():
+    project = model(lines=[PIT_SIDE], materials=coupled_soils(),
+                    layers=[SoilLayer(id="top", name="Top", mat="grout", top=0.0, bottom=-4.0),
+                            SoilLayer(id="low", name="Low", mat="sand", top=-4.0, bottom=-12.0)])
+    assert any("Soil grout" in warning for warning in condition_checks.warnings(project))
+    for key in ("soil_top__part1", "soil_top__part2"):
+        project = session.update_body(project, key, material="sand")
+    assert not any("Soil grout" in warning for warning in condition_checks.warnings(project))
+
+
+def test_a_flow_calculation_is_refused_when_a_part_has_no_permeability():
+    grout = material("grout")
+    del grout.variables["PERMEABILITY_XX"]
+    project = model(lines=[PIT_SIDE], materials=[material("sand"), grout],
+                    stages=[Stage(id="flow", name="Flow", calculation=stages.GROUNDWATER_FLOW)])
+    assert "Soil grout" not in (condition_checks.flow_refusal(project) or "")
+    refusal = condition_checks.flow_refusal(
+        session.update_body(project, "soil_top__part1", material="grout"))
+    assert "Soil grout" in refusal and "PERMEABILITY_XX" in refusal
+
+
 # ── The edits ────────────────────────────────────────────────────────────────────
 
 
@@ -302,7 +368,7 @@ def test_a_line_that_splits_nothing_gets_a_note():
     idle = Line(id="idle", name="Idle", points=[(5.0, 0.0), (5.0, -3.0)])
     project = session.add_line(model(), idle)
     assert session.edit_notes(model(), project) == [
-        "Line Idle splits no soil: a line has to cross a soil layer from one edge to another."]
+        "Line 'Idle' splits no soil: a line has to cross a soil layer from one edge to another."]
     assert session.edit_notes(project, project) == []
 
 
@@ -400,6 +466,14 @@ def test_a_solid_model_has_the_same_bodies_swept_across_the_domain():
         key: True for key in project.soil_body_keys}
     assert sum(built.mass[key] for key in project.soil_body_keys) == pytest.approx(
         20.0 * 12.0 * 10.0)
+
+
+def test_switching_the_dimension_keeps_every_body_key_and_name():
+    project = model(**wall(), lines=[FLOOR])
+    solid, _ = session.set_dimension(project, DimensionUpdate(dimension=3))
+    assert solid.soil_body_labels == project.soil_body_labels
+    section, _ = session.set_dimension(solid, DimensionUpdate(dimension=2))
+    assert section.soil_body_labels == project.soil_body_labels
 
 
 def test_a_closed_line_inside_a_layer_is_a_lens_with_soil_around_it():

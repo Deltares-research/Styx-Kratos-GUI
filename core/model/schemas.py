@@ -21,14 +21,23 @@ import re
 from collections.abc import Mapping, Sequence
 from typing import Annotated, Any, Literal, NamedTuple
 
-from pydantic import (BaseModel, Field, SerializerFunctionWrapHandler, computed_field,
-                      field_validator, model_serializer, model_validator)
+from pydantic import (AfterValidator, BaseModel, Field, SerializerFunctionWrapHandler,
+                      computed_field, field_validator, model_serializer, model_validator)
 
 from core.model import migration, polylines, regions, soil_models, units
 
 Hex = Annotated[str, Field(pattern=r"^#[0-9a-fA-F]{6}$")]
 Ident = Annotated[str, Field(min_length=1, max_length=64)]
 PositiveSize = Annotated[float, Field(gt=0)]
+
+
+def _not_blank(name: str) -> str:
+    if not name.strip():
+        raise ValueError("a name cannot be empty")
+    return name
+
+
+RequiredName = Annotated[str, AfterValidator(_not_blank)]
 
 ATTACHMENT_TOLERANCE = 1e-6
 """Metres. How close an anchor head must be to a sheet pile to count as on it."""
@@ -209,7 +218,7 @@ class Line(Base):
     the layer becomes separate soil bodies (`Project.split_soil`, `core.model.regions`).
     A solid model has the same line, swept across the domain's z range."""
     id: Ident
-    name: str
+    name: RequiredName
     points: list[tuple[float, float]]      # in-plane (x, y), metres
 
     @model_validator(mode="after")
@@ -234,7 +243,7 @@ class SoilBody(Base):
     is cut off by a new line elsewhere leaves this piece, its key and its name alone. A
     script may leave the records out; `Project.split_soil` makes them."""
     id: Ident
-    name: str
+    name: RequiredName
     layer: Ident
     point: tuple[float, float]             # in-plane (x, y), metres
     mat: Ident | None = None
@@ -1898,6 +1907,8 @@ class Project(Base):
         a stage that named a whole layer now cut names each of its pieces, which is the
         same soil. The other collections are checked against the result."""
         _reject_duplicates([line.id for line in self.lines], "line")
+        _reject_duplicates([f"soil_{body.layer}__{body.id}" for body in self.bodies],
+                           "soil body")
         if self.lines and not self.layered_soil:
             raise ValueError("a project with layered_soil false takes no lines: its soil is "
                              "the seeded demo's")
@@ -1910,8 +1921,11 @@ class Project(Base):
                   for piece in pieces]
         self.bodies = [piece.body for piece in pieces if piece.body is not None]
         _reject_same_names(pieces)
-        # The viewport keeps a line's drawing beside the parts', under its id.
-        taken = sorted({line.id for line in self.lines} & {*self._staged_parts_and_loads()})
+        # The viewport keeps a line's drawing under its id, beside the parts', the
+        # conditions' and the water level's.
+        taken = sorted({line.id for line in self.lines}
+                       & {*self._staged_parts_and_loads(), "excavation", "water",
+                          *(condition.id for condition in self.boundary_conditions)})
         if taken:
             raise ValueError("line id collides with an existing model part key: "
                              + ", ".join(taken))
@@ -2614,8 +2628,8 @@ class Project(Base):
                 for piece in self.split_soil()]
 
     def soil_part_keys(self) -> list[str]:
-        """What a condition on a soil part may name: each layer, each body dug out of a
-        staged one, and each custom part that has a material -- the soil a user can
+        """What a condition on a soil part may name: each layer, each body cut off a
+        layer, and each custom part that has a material -- the soil a user can
         pick in the explorer, the viewport or the Mesh properties dialog."""
         keys = [f"soil_{layer.id}" for layer in self.layers]
         keys += [key for key, *_ in self.soil_bodies() if key not in keys]

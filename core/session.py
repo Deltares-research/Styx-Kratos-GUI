@@ -219,9 +219,9 @@ def _parts_take_their_layers_material(project: Project, payload: dict) -> None:
     because the soil layers window sends every layer on every change.
     """
     before = {layer.id: layer.mat for layer in project.layers}
-    given = {layer.get("id"): layer.get("mat") for layer in payload.get("layers") or []
+    given = {layer["id"]: layer.get("mat") for layer in payload.get("layers") or []
              if isinstance(layer, dict) and layer.get("id") in before
-             and layer.get("mat") != before[layer.get("id")]}
+             and layer.get("mat") != before[layer["id"]]}
     for body in payload.get("bodies") or []:
         if isinstance(body, dict) and body.get("layer") in given:
             body["mat"] = given[body["layer"]]
@@ -560,7 +560,7 @@ def edit_notes(before: Project, after: Project) -> list[str]:
     was = {line.id: line for line in before.lines}
     idle = after.idle_lines()
     return removed_sizes(before, after) + [
-        f"Line {line.name} splits no soil: a line has to cross a soil layer from one edge "
+        f"Line {line.name!r} splits no soil: a line has to cross a soil layer from one edge "
         "to another."
         for line in after.lines if line.id in idle and was.get(line.id) != line]
 
