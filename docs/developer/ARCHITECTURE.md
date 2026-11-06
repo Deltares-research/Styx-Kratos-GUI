@@ -121,7 +121,7 @@ the HTTP parts.
 | Runs | `routes/results.py` | `GET /api/results/runs`, `/runs/{run}`, `/runs/{run}/files/{name}`, `/runs/{run}/archive` |
 | Results of a stage | `routes/results.py` | `GET /api/results/runs/{run}/stages/{n}/fields`, `/mesh`, `/field/{name}`, `/displacement`, `/at/{node}`, `/parts` |
 | Results of a member | `routes/results.py` | `GET /api/results/runs/{run}/members`, `/members/{member}/{quantity}` |
-| Files | `routes/files.py` | `POST /api/files/folder` opens the system's folder window; `GET`/`PUT /api/files/folder/{folder}/{name}`. For a browser on the same computer, and only pictures and CSV files in a folder chosen in that window. |
+| Files | `routes/files.py` | `POST /api/files/folder` opens the system's folder window; `GET`/`PUT /api/files/folder/{folder}/{name}`. For a browser on the same computer, and only pictures and CSV files in a folder chosen in that window. `GET /api/files/picture-job/{token}` says whether the page may run the picture job in its address: only on a server `kratos-cli picture` started with that token. |
 | Health | `main.py` | `GET /api/health` |
 
 ## Command-line modules (`cli/`)

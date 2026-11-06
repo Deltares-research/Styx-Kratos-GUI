@@ -79,9 +79,9 @@ def _box(c):
 
 
 def _on_this_computer() -> TestClient:
-    """A browser on the server's own computer, with a folder called `chosen` to write in. The
-    table's client is not one, so its request for the folder window opens nothing."""
-    files_routes._folders.update(chosen=Path(_fresh("any")).parent)
+    """A browser on the server's own computer, which may write in the folder called `chosen`
+    (the `client` fixture). The table's client is not one, so its request for the folder
+    window opens nothing."""
     return TestClient(app, base_url="http://127.0.0.1:8000", client=("127.0.0.1", 50000))
 
 
@@ -273,6 +273,8 @@ CONTRACTS = [
              lambda c: _on_this_computer().put("/api/files/folder/chosen/a.png", content=b"x"), {"path"},
              bad=lambda c: _on_this_computer().put("/api/files/folder/chosen/a.exe", content=b"x"),
              bad_status=422),
+    Contract("GET", "/api/files/picture-job/{token}", lambda c: c.get("/api/files/picture-job/x"),
+             {"ok"}),
     Contract("GET", "/", lambda c: c.get("/"), set(), content_type="text/html"),
 ]
 
@@ -292,6 +294,9 @@ def client(monkeypatch, tmp_path):
     monkeypatch.delenv(calculation.KRATOS_ENV, raising=False)
     monkeypatch.setenv(calculation.PYTHON_ENV, __import__("sys").executable)
     monkeypatch.setattr(calculation, "COMMAND", ["-c", "print('stand-in')"])
+    chosen = tmp_path / "chosen"
+    chosen.mkdir()
+    monkeypatch.setitem(files_routes._folders, "chosen", chosen)
     with TestClient(app) as c:
         c.post("/api/project/reset")
         yield c

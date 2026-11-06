@@ -9,7 +9,8 @@ what a user would do and posts each file here.
 Both are separate processes: the command line stays a front end of `core`
 (`tests/test_layout.py`), and only this one command needs them. The files come to a small
 receiver of our own, on an address only this process knows, so the server gains no route
-that takes files.
+that takes files. The server is told the job's token (`JOB_ENV`), and the page runs a job
+only when its server knows the token: a link to the GUI with a job in it does nothing.
 """
 
 from __future__ import annotations
@@ -49,6 +50,8 @@ WINDOW = "1600,1000"
 SERVER_START_SECONDS = 60.0
 WAIT_SECONDS = 600.0
 """A mesh and every field of every stage of a large run can take minutes."""
+JOB_ENV = "KRATOS_GUI_PICTURE_JOB"
+"""The token of the job, for the server this starts (`backend/routes/files.py`)."""
 
 
 def find_browser() -> str | None:
@@ -122,13 +125,15 @@ def _free_port() -> int:
         return probe.getsockname()[1]
 
 
-def start_server() -> tuple[subprocess.Popen, str]:
-    """The GUI's server in a process of its own, answering, and its address."""
+def start_server(job_token: str) -> tuple[subprocess.Popen, str]:
+    """The GUI's server in a process of its own, answering, and its address. It runs the
+    job with `job_token` and no other."""
     port = _free_port()
     process = subprocess.Popen(
         [sys.executable, "-m", "uvicorn", "backend.main:app", "--host", "127.0.0.1",
          "--port", str(port), "--log-level", "error", "--ws", "none"],
-        cwd=ROOT, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        cwd=ROOT, env={**os.environ, JOB_ENV: job_token},
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         start_new_session=sys.platform != "win32")
     url = f"http://127.0.0.1:{port}"
     deadline = time.monotonic() + SERVER_START_SECONDS
@@ -188,14 +193,15 @@ def draw(job: dict, project_json: str | None = None) -> dict[str, bytes]:
             "`kratos-cli picture` draws with Chrome or Edge, and neither was found. Install "
             f"one, or set {BROWSER_ENV} to the program. The GUI's camera button saves the "
             "same pictures.")
-    server, url = start_server()
+    token = secrets.token_urlsafe(16)
+    server, url = start_server(token)
     page = None
     try:
         if project_json is not None:
             put_project(url, project_json)
         with Receiver() as receiver, tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as profile:
             address = url + "/?" + urllib.parse.urlencode(
-                {"picture": json.dumps({**job, "receiver": receiver.url})})
+                {"picture": json.dumps({**job, "token": token, "receiver": receiver.url})})
             page = open_page(browser, address, profile)
             try:
                 _wait(receiver, page)

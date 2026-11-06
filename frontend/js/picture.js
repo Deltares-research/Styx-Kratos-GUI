@@ -861,11 +861,42 @@ App.Picture = (function () {
   /* The CLI has no browser of its own, so it opens this page with no window and a job in
      the address (cli/terminal/pictures.py). The page does what a user would, and posts
      each file to the receiver the CLI holds open. Another address, so `no-cors`: nothing
-     is read back, and the last post says how many files there should be. */
-  function jobFromAddress() {
-    if (typeof location === 'undefined' || !location.search) return null;
-    var text = new URLSearchParams(location.search).get('picture');
-    return text ? JSON.parse(text) : null;
+     is read back, and the last post says how many files there should be.
+
+     Anyone can make a link with a job in it. So the files go only to a receiver on this
+     computer, and a job runs only on the server the CLI started for it, which alone knows
+     its token: in the GUI a user started, such a link draws nothing. */
+  var NOT_A_JOB = 'This page was opened with a picture job that kratos-cli did not give it. '
+                + 'Nothing was drawn or sent.';
+
+  /* The job in `search`, `null` with none, or an Error for one that is not the CLI's. */
+  function jobFromAddress(search) {
+    var text = search ? new URLSearchParams(search).get('picture') : null;
+    if (!text) return null;
+    try {
+      var job = JSON.parse(text);
+      var to = new URL(job.receiver);
+      if (to.protocol === 'http:' && to.hostname === '127.0.0.1' && typeof job.token === 'string'
+          && job.token) return job;
+    } catch (error) { /* not a job: refused below */ }
+    return new Error(NOT_A_JOB);
+  }
+
+  function isOurJob(job) {
+    return App.Api.get('/api/files/picture-job/' + encodeURIComponent(job.token)).then(function (answer) {
+      return !!(answer && answer.ok);
+    }, function () { return false; });
+  }
+
+  /* `true` when the job in `search` ran. */
+  function startJob(search) {
+    var job = jobFromAddress(search);
+    if (!job) return Promise.resolve(false);
+    var ours = job instanceof Error ? Promise.resolve(false) : isOurJob(job);
+    return ours.then(function (yes) {
+      if (!yes) { log('err', NOT_A_JOB); return false; }
+      return runJob(job).then(function () { return true; });
+    });
   }
 
   function untilBooted() {
@@ -941,11 +972,8 @@ App.Picture = (function () {
     });
   }
 
-  if (typeof window !== 'undefined' && window.addEventListener) {
-    window.addEventListener('load', function () {
-      var job = jobFromAddress();
-      if (job) runJob(job);
-    });
+  if (typeof window !== 'undefined' && window.addEventListener && typeof location !== 'undefined') {
+    window.addEventListener('load', function () { startJob(location.search); });
   }
 
   /* ── The command ──────────────────────────────────────────────────────── */
@@ -967,6 +995,6 @@ App.Picture = (function () {
     canCopy: canCopy, copy: copy, save: save, command: command, isMany: isMany,
     inResults: inResults, inStaged: inStaged, resultStages: resultStages,
     askOverwrite: askOverwrite, outlet: outlet, saveFigure: saveFigure, figure: figure,
-    runJob: runJob
+    runJob: runJob, jobFromAddress: jobFromAddress, startJob: startJob
   };
 })();

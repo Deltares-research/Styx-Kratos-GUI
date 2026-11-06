@@ -8,11 +8,16 @@ A request never names a place on disk. It can only write a picture or a CSV file
 into a folder the user chose in that window, by an id that only this answer gave out. All of
 it is for a browser on the same computer: from another one, the system's window would open on
 the server, out of the user's sight, and the frontend falls back to the browser's own window.
+
+`kratos-cli picture` starts a server of its own and opens the page with a job in its address
+(`cli/terminal/pictures.py`). Only that server knows the job's token, so a link to a user's
+own GUI with a job in it draws nothing and sends nothing.
 """
 
 from __future__ import annotations
 
 import asyncio
+import os
 import re
 import secrets
 import subprocess
@@ -38,6 +43,9 @@ root.update()
 print(tkinter.filedialog.askdirectory(parent=root, title=sys.argv[1], initialdir=sys.argv[2]))
 """
 FOLDER_TITLE = "Choose a folder for the pictures"
+
+PICTURE_JOB_ENV = "KRATOS_GUI_PICTURE_JOB"
+"""The token of the one picture job this server was started for; unset in the GUI's own."""
 
 SAVED_TYPES = (".png", ".pdf", ".svg", ".csv")
 FILE_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
@@ -112,3 +120,10 @@ async def write_file(folder: str, name: str, request: Request) -> dict:
     except OSError as failure:
         raise HTTPException(status_code=500, detail=f"{target} could not be written: {failure}") from failure
     return {"path": str(target)}
+
+
+@router.get("/api/files/picture-job/{token}")
+def picture_job(token: str) -> dict:
+    """Whether the page may run the job in its address: only with the token of this server."""
+    expected = os.environ.get(PICTURE_JOB_ENV, "")
+    return {"ok": bool(expected) and secrets.compare_digest(token.encode(), expected.encode())}

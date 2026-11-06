@@ -53,6 +53,7 @@ def stand(monkeypatch):
         job = None
         projects: list[str] = []
         count = None
+        server_token = None
 
     def open_page(_browser, url, _profile):
         job = json.loads(urllib.parse.parse_qs(urllib.parse.urlsplit(url).query)["picture"][0])
@@ -73,7 +74,11 @@ def stand(monkeypatch):
         return FakePage()
 
     monkeypatch.setattr(pictures, "find_browser", lambda: "a browser")
-    monkeypatch.setattr(pictures, "start_server", lambda: (FakePage(), "http://server"))
+    def start_server(token):
+        Stand.server_token = token
+        return FakePage(), "http://server"
+
+    monkeypatch.setattr(pictures, "start_server", start_server)
     monkeypatch.setattr(pictures, "stop", lambda _process: None)
     monkeypatch.setattr(pictures, "put_project",
                         lambda _url, text: Stand.projects.append(text))
@@ -105,6 +110,13 @@ def test_geometry_is_what_the_structures_tab_shows(stand, project, tmp_path, cap
     assert json.loads(stand.projects[0])["name"] == excavation_project().name
     assert (tmp_path / "Pit_stage1.png").read_bytes() == b"PNG"
     assert "wrote" in capsys.readouterr().out
+
+
+def test_the_job_carries_the_token_only_its_server_knows(stand, project, tmp_path):
+    assert main(["picture", "geometry", str(project), "--out", str(tmp_path) + "/"]) == 0
+    assert len(stand.job["token"]) > 16
+    assert stand.job["token"] == stand.server_token
+    assert stand.job["receiver"].startswith("http://127.0.0.1:")
 
 
 def test_mesh_asks_for_the_mesh_tab(stand, project, tmp_path):
@@ -381,7 +393,7 @@ def test_a_server_that_does_not_start_is_reported(monkeypatch):
     monkeypatch.setattr(pictures.subprocess, "Popen", lambda *a, **k: Dead())
     monkeypatch.setattr(pictures, "stop", lambda _process: None)
     with pytest.raises(CommandError, match="did not start"):
-        pictures.start_server()
+        pictures.start_server("token")
 
 
 def test_the_server_is_waited_for(monkeypatch):
@@ -400,10 +412,17 @@ def test_the_server_is_waited_for(monkeypatch):
             raise urllib.error.URLError("not yet")
         return Answer()
 
-    monkeypatch.setattr(pictures.subprocess, "Popen", lambda *a, **k: FakePage())
+    started = {}
+
+    def popen(command, **options):
+        started.update(options)
+        return FakePage()
+
+    monkeypatch.setattr(pictures.subprocess, "Popen", popen)
     monkeypatch.setattr(pictures.urllib.request, "urlopen", urlopen)
-    _, url = pictures.start_server()
+    _, url = pictures.start_server("the-token")
     assert tries == [url + "/api/health"] * 2
+    assert started["env"][pictures.JOB_ENV] == "the-token"
 
 
 def test_a_refused_model_says_why(monkeypatch):

@@ -152,6 +152,27 @@ def test_a_server_reached_by_another_name_gets_no_window(chosen, monkeypatch):
     assert starts == []
 
 
+# ── The job of `kratos-cli picture` ──────────────────────────────────────────
+
+def test_a_server_started_for_a_picture_job_knows_its_token(client, monkeypatch):
+    monkeypatch.setenv(files.PICTURE_JOB_ENV, "the-token")
+
+    assert client.get("/api/files/picture-job/the-token").json() == {"ok": True}
+    assert client.get("/api/files/picture-job/another").json() == {"ok": False}
+
+
+def test_the_guis_own_server_runs_no_picture_job(client, monkeypatch):
+    monkeypatch.delenv(files.PICTURE_JOB_ENV, raising=False)
+
+    assert client.get("/api/files/picture-job/anything").json() == {"ok": False}
+
+
+def test_the_cli_and_the_server_name_the_token_alike():
+    from cli.terminal import pictures
+
+    assert pictures.JOB_ENV == files.PICTURE_JOB_ENV
+
+
 # ── The window itself ────────────────────────────────────────────────────────
 
 def test_the_window_runs_apart_and_says_what_was_chosen(monkeypatch, tmp_path):
