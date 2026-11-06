@@ -1,4 +1,4 @@
-"""`domain`, `material`, `layer`, `excavation`, `parts`: the ground of a model.
+"""`domain`, `material`, `layer`, `line`, `body`, `excavation`, `parts`: the ground of a model.
 
 Each edit is `core.session`'s, made the way the GUI's soil dialogs make it -- a moved
 level moves its neighbour's, a deleted layer's neighbour closes the gap -- and each new
@@ -6,6 +6,10 @@ record starts as those dialogs start it (`core.model.drafts`). Materials are Kra
 property sets: a law and its variables under Kratos' names, typed as `NAME=VALUE` in the
 project's own units. A soil model (`--model mohr-coulomb`) picks the law and fills in
 the defaults the material window fills in (`core.model.soil_models`).
+
+A line splits the layers it crosses from edge to edge, as a sheet pile does. Each piece is
+a soil body with its own key (`soil_<layer>__<id>`), which a stage can switch, and `body`
+names it and can give it a material of its own (`Project.split_soil`).
 """
 
 from __future__ import annotations
@@ -14,8 +18,8 @@ import argparse
 
 from cli.terminal.files import add_project, add_writing, read, written
 from cli.terminal.output import Answer, CommandError
-from cli.terminal.words import (NAME_HELP, action, assignments, edited, existing, file_of,
-                                id_help, named_ids, noun)
+from cli.terminal.words import (NAME_HELP, action, assignments, coordinates, edited, existing,
+                                file_of, id_help, named_ids, noun)
 from core import session
 from core.model import drafts, soil_models, units
 from core.model.schemas import Project
@@ -83,6 +87,31 @@ def register(commands, common: argparse.ArgumentParser) -> None:
     remove = action(layer, common, "remove", remove_layer)
     existing(remove, "layer")
 
+    line = noun(commands, common, "line",
+                "list, add, change or remove the lines that split the soil")
+    action(line, common, "list", list_lines, writes=False)
+    add = action(line, common, "add", add_line,
+                 help="a line; where it crosses a layer from one edge to another, the layer "
+                      "becomes separate soil bodies")
+    add.add_argument("id", nargs="?", help=id_help("the first free one"))
+    _line_fields(add)
+    change = action(line, common, "set", update_line)
+    existing(change, "line")
+    _line_fields(change)
+    remove = action(line, common, "remove", remove_line)
+    existing(remove, "line")
+
+    body = noun(commands, common, "body",
+                "list the soil bodies, and name them or give them a material")
+    action(body, common, "list", list_bodies, writes=False,
+           help="every soil body by its key, the word a stage takes")
+    change = action(body, common, "set", update_body,
+                    help="change a body that a line or a sheet pile cut off; a whole layer "
+                         "is changed with `layer set`")
+    change.add_argument("key", help="the body's key, as `body list` shows it")
+    change.add_argument("--name", help="what to call it")
+    change.add_argument("--material", help="its own material, or `layer` for its layer's")
+
     excavation = commands.add_parser("excavation", parents=[common],
                                      help="show or set the pit and the levels it is dug to")
     add_project(excavation)
@@ -147,6 +176,67 @@ def set_excavation(args: argparse.Namespace) -> Answer:
                         "excavation": project.pit().model_dump(mode="json"),
                         "notes": notes},
                   lines=[f"{_pit_line(project)}; {where}", *notes])
+
+
+def _line_fields(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--name", help=NAME_HELP)
+    parser.add_argument("--points", nargs="+", metavar="N",
+                        help="the line, x y ... as plain numbers, or @file (default for a new "
+                             "line: across the middle of the section)")
+
+
+def list_lines(args: argparse.Namespace) -> Answer:
+    project = read(args)
+    return Answer(data=[line.model_dump(mode="json") for line in project.lines],
+                  lines=[f"{line.id}  {line.name}: "
+                         + " .. ".join(f"{x:g},{y:g}" for x, y in line.points)
+                         for line in project.lines] or ["No lines yet."])
+
+
+@named_ids()
+def add_line(args: argparse.Namespace) -> Answer:
+    project = read(args)
+    points = None if args.points is None else coordinates(args.points, 2)
+    try:
+        line = drafts.line(project, points, id=args.id, name=args.name)
+    except drafts.DraftError as refused:
+        raise CommandError(str(refused)) from None
+    return edited(args, session.add_line(project, line), f"added line {line.id}")
+
+
+def update_line(args: argparse.Namespace) -> Answer:
+    fields = {}
+    if args.name is not None:
+        fields["name"] = args.name
+    if args.points is not None:
+        fields["points"] = coordinates(args.points, 2)
+    return edited(args, session.update_line(read(args), args.id, **fields),
+                  f"changed line {args.id}")
+
+
+def remove_line(args: argparse.Namespace) -> Answer:
+    return edited(args, session.remove_line(read(args), args.id), f"removed line {args.id}")
+
+
+def list_bodies(args: argparse.Namespace) -> Answer:
+    """Each row as the Model explorer shows it: the key's label, then the material."""
+    project = read(args)
+    materials = project.soil_body_materials
+    rows = [{"key": key, "label": project.soil_body_labels[key],
+             "material": materials[key]} for key in project.soil_body_keys]
+    return Answer(data=rows, lines=[
+        f"{row['key']}  {row['label']}  ·  {project.material(row['material']).name}"
+        for row in rows] or ["No soil bodies yet."])
+
+
+def update_body(args: argparse.Namespace) -> Answer:
+    fields: dict[str, str | None] = {}
+    if args.name is not None:
+        fields["name"] = args.name
+    if args.material is not None:
+        fields["material"] = None if args.material == "layer" else args.material
+    return edited(args, session.update_body(read(args), args.key, **fields),
+                  f"changed soil body {args.key}")
 
 
 def _domain_line(project: Project) -> str:

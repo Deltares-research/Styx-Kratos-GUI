@@ -71,6 +71,8 @@ Genuchten soil.
 | `domain P [--x FROM TO] [--y BOTTOM TOP] [--z FROM TO]` | Show or set the model's extents. `--y` is the bottom and the ground level; with layers, it moves the top of the first layer and the bottom of the last |
 | `material P list\|presets\|models\|add\|set\|remove ...` | Soils as Kratos property sets: `add ID [--preset m3] [--model mohr-coulomb] [NAME=VALUE ...]`, `set ID [--model M] NAME=VALUE ... [--unset NAME]`; `models` lists each soil model with its parameters and defaults |
 | `layer P list\|add\|set\|split\|remove ...` | The soil stack: `add ID --material M [--bottom Y \| --thickness T]`, `set ID [--top Y] [--bottom Y]` |
+| `line P list\|add\|set\|remove ...` | The lines that split the soil: `add ID --points X Y X Y ...` |
+| `body P list\|set ...` | The soil bodies by their keys: `set KEY [--name NAME] [--material M]` |
 | `excavation P [--x FROM TO] [--z FROM TO] [--levels Y ...]` | The pit, and the levels it is dug to, one lift each |
 | `volume P list\|add\|import\|remove\|clear ...` | Solids drawn or imported into the model; with `--material` they are soil |
 | `section P list\|add\|set\|remove ...` | The sections structures are built with: `add beam\|panel\|anchor\|interface ID [NAME=VALUE ...]` |
@@ -157,6 +159,29 @@ kratos-cli parts pit.json                                 # soil_top__lift1, ...
   values a choice can take and when a parameter is used. `--law` is for any other law,
   for example a UDSM. It is written as you type it. `--model` and `--law` cannot be
   given together.
+- **Lines** split the soil. Where a line crosses a layer from one edge to another, the
+  layer becomes separate soil bodies, and each is a SubModelPart that a stage can switch
+  off. A sheet pile splits the soil the same way, also when it is `--inactive`. A part of
+  a line that ends inside the soil splits nothing, and the command says so when no part of
+  the line splits anything. A line may be a polyline, and lines may cross. In 3D a line
+  cuts across the whole z range; it is drawn in 2D.
+
+  ```bash
+  kratos-cli beam pit.json add sheetpile --points 6 0 6 -13
+  kratos-cli line pit.json add floor_1 --points 0 -2 6 -2
+  kratos-cli body pit.json list
+  kratos-cli body pit.json set soil_top__part1 --name "lift 1" --material grout
+  kratos-cli stages pit.json deactivate dig_1 soil_top__part1
+  ```
+
+  A layer that is cut has no plain key any more: each piece is `soil_<layer>__<id>`, with
+  a new id `part1`, `part2`, ... from the top down. A piece keeps its key, name and
+  material when another line is added. A stage that named the whole layer then names each
+  of its pieces. An edit that takes away a piece a stage still names is refused.
+  `body set --material layer` goes back to the layer's material, and a body's material
+  holds in every stage. In a model script, `lines=` and `bodies=` say the same. A record
+  `SoilBody(id="lift1", name="lift 1", layer="top", point=(2.5, -1))` chooses the key of
+  the piece its `point` lies in.
 - **The excavation** is dug in its `--levels`, shallowest first. Each lift is a body of
   its own, deactivated in its own stage. In a layered model, a pit with one level is not
   dug at all, and the command says so. A new project has no pit. The first `excavation`
