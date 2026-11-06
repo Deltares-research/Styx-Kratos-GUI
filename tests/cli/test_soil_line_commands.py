@@ -78,6 +78,15 @@ def test_a_whole_layer_is_not_a_body_to_change(cli, site):
     assert "whole layer" in ran.err
 
 
+def test_a_name_another_part_of_the_layer_has_is_refused(cli, site):
+    assert cli("line", site, "add", "side", "--points", "5", "0", "5", "-4").code == 0
+    ran = cli("body", site, "set", "soil_top__part1", "--name", "Part 2")
+    assert ran.code != 0
+    assert ("soil_top__part1 and soil_top__part2 in layer 'top' are both called 'Part 2'"
+            in ran.err)
+    assert session.load(site).soil_body_labels["soil_top__part1"] == "top · Part 1"
+
+
 def test_a_stage_can_switch_a_body_off(cli, site):
     assert cli("line", site, "add", "side", "--points", "5", "0", "5", "-4").code == 0
     assert cli("stages", site, "add", "first", "--name", "First").code == 0

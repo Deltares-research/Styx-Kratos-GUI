@@ -17,6 +17,7 @@ Part keys (`Project.part_keys`) are the contract with the frozen frontend: each 
 from __future__ import annotations
 
 import math
+import re
 from collections.abc import Mapping, Sequence
 from typing import Annotated, Any, Literal, NamedTuple
 
@@ -1899,6 +1900,7 @@ class Project(Base):
                              "the seeded demo's")
         pieces = self.split_soil()
         self.bodies = [piece.body for piece in pieces if piece.body is not None]
+        _reject_same_names(pieces)
         # The viewport keeps a line's drawing beside the parts', under its id.
         taken = sorted({line.id for line in self.lines} & {*self._staged_parts_and_loads()})
         if taken:
@@ -2569,13 +2571,15 @@ class Project(Base):
                 if at is not None:
                     held[at] = body
             used = {body.id for body in records}
+            taken = {_deck_word(body.name) for body in held.values()}
             number = 0
             for index, piece in enumerate(found):
                 if index in held:
                     record = held[index]
                 else:
                     number += 1
-                    while f"part{number}" in used:
+                    # A part renamed `Part 3` keeps the next new piece from being one too.
+                    while f"part{number}" in used or _deck_word(f"Part {number}") in taken:
                         number += 1
                     record = SoilBody(id=f"part{number}", name=f"Part {number}", layer=layer.id,
                                       point=piece.point)
@@ -2725,3 +2729,31 @@ def _reject_duplicates(ids: list[str], what: str) -> None:
         if i in seen:
             raise ValueError(f"duplicate {what} id {i!r}")
         seen.add(i)
+
+
+def _deck_word(name: str) -> str:
+    """A soil body's name as the deck writes it (`core.kratos.writer._sanitise`), in any
+    case: two names with the same word name one sub-model part twice, as far as a user can
+    tell. A name the deck does not take, one that starts with a digit, is its own word."""
+    word = "_".join(re.findall(r"[^\W_]+", name)).casefold()
+    return name.strip().casefold() if word[:1].isdigit() or not word else word
+
+
+def _reject_same_names(pieces: list[SoilPiece]) -> None:
+    """Refuse two pieces of one layer with the same name: the explorer, the stages and the
+    deck could not tell them apart. Pieces of two layers may share one, as `Top_Pit` and
+    `Low_Pit`."""
+    seen: dict[tuple[str, str], SoilPiece] = {}
+    for piece in pieces:
+        if piece.body is None:
+            continue
+        word = (piece.layer.id, _deck_word(piece.body.name))
+        first = seen.setdefault(word, piece)
+        if first is piece:
+            continue
+        assert first.body is not None
+        names = (f"both called {piece.body.name!r}" if first.body.name == piece.body.name
+                 else f"called {first.body.name!r} and {piece.body.name!r}, which differ "
+                      f"only in case or punctuation")
+        raise ValueError(f"{first.key} and {piece.key} in layer {piece.layer.name!r} are "
+                         f"{names}: give each part of a layer a name of its own")

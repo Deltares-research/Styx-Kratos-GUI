@@ -258,6 +258,39 @@ def test_a_body_that_is_not_there_cannot_be_edited():
         session.update_body(model(), "soil_top__part1", name="Pit")
 
 
+def test_two_parts_of_one_layer_cannot_share_a_name():
+    with pytest.raises(ValidationError, match=(
+            r"soil_top__part1 and soil_top__part2 in layer 'Top' are both called 'Part 2': "
+            r"give each part of a layer a name of its own")):
+        session.update_body(model(lines=[PIT_SIDE]), "soil_top__part1", name="Part 2")
+
+
+def test_names_that_differ_only_in_case_or_punctuation_are_the_same_name():
+    """`part-2` and `Part 2` are both `Top_Part_2` in the deck, as far as a user can tell."""
+    with pytest.raises(ValidationError, match=(
+            r"soil_top__part1 and soil_top__part2 in layer 'Top' are called 'part-2' and "
+            r"'Part 2', which differ only in case or punctuation")):
+        session.update_body(model(lines=[PIT_SIDE]), "soil_top__part1", name="part-2")
+
+
+def test_parts_of_two_layers_can_share_a_name():
+    through = Line(id="through", name="Through", points=[(5.0, 0.0), (5.0, -12.0)])
+    project = session.update_body(model(lines=[through]), "soil_top__part1", name="Pit")
+    project = session.update_body(project, "soil_low__part1", name="Pit")
+    mdpa = deck_of(project)["mdpa"].splitlines()
+    assert "Begin SubModelPart Top_Pit" in mdpa and "Begin SubModelPart Low_Pit" in mdpa
+
+
+def test_a_new_part_is_not_given_a_name_another_part_has():
+    project = session.update_body(model(lines=[PIT_SIDE]), "soil_top__part2", name="Part 3")
+    shelf = Line(id="shelf", name="Shelf", points=[(0.0, -1.0), (5.0, -1.0)])
+    project = session.add_line(project, shelf)
+    assert project.soil_body_labels == {"soil_top__part4": "Top · Part 4",
+                                        "soil_top__part1": "Top · Part 1",
+                                        "soil_top__part2": "Top · Part 3",
+                                        "soil_low": "Low"}
+
+
 # ── The deck ─────────────────────────────────────────────────────────────────────
 
 
