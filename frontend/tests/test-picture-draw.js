@@ -91,6 +91,8 @@
     var asked = D.parseCommand('picture save --no-legend --no-rulers --no-axes --grid --csv');
     T.eq(asked.show, { legend: false, rulers: false, axes: false, grid: true });
     T.eq(asked.csv, true);
+    T.ok(!asked.screenZoom, 'the whole model, unless asked');
+    T.eq(D.parseCommand('picture save --screen-zoom').screenZoom, true);
   });
 
   test('`--stage` and `--field` take only `all`', function () {
@@ -548,6 +550,40 @@
     T.near(picture.page.scene.heightMm / picture.page.scene.widthMm, 0.5, 0.02, 'the screen\'s shape');
   });
 
+  test('a whole box goes past the screen and has white space on each side', function () {
+    var off = [-100, -2, 0, 5, -2, 0, 5, 2, 0, -100, -2, 0, 5, 2, 0, -100, 2, 0];
+    var seen = view([faces(off, { color: [1, 0, 0] })]);
+    var frame = D.drawnBox(seen, SCREEN, true);
+    T.near(frame.minX, -10, 1e-9);
+    T.eq(frame.whole, true);
+    var picture = D.picture(seen, 20, SCREEN, undefined, frame);
+    var scene = picture.page.scene;
+    var fill = ofType(picture.list, 'fill').filter(function (f) { return f.color[1] === 0; })[0];
+    T.ok(least(xs(fill.tris)) > scene.x + 1, 'the far end of the model is in the picture');
+    T.ok(most(xs(fill.tris)) < scene.x + scene.widthMm - 1);
+  });
+
+  test('zoom and pan do not change a picture with a whole box', function () {
+    var model = faces(SQUARE, { color: [1, 0, 0] });
+    function seenWith(scale, shift) {
+      var eye = camera();
+      eye.projection = eye.projection.slice();
+      eye.projection[0] *= scale;
+      eye.projection[5] *= scale;
+      eye.projection[12] = shift;
+      return view([model], { camera: eye });
+    }
+    function pictured(seen) {
+      return D.picture(seen, 16, SCREEN, undefined, D.drawnBox(seen, SCREEN, true));
+    }
+    var first = pictured(seenWith(1, 0));
+    [[8, 0], [0.25, 0], [1, 3], [8, -5]].forEach(function (move) {
+      var other = pictured(seenWith(move[0], move[1]));
+      T.eq(other.page.heightPx, first.page.heightPx, 'zoom ' + move[0] + ', pan ' + move[1]);
+      T.eq(other.page.scene.widthPx, first.page.scene.widthPx);
+    });
+  });
+
   test('pictures with one frame have one size and the model in one place', function () {
     var soil = faces(SQUARE, { color: [1, 0, 0] });
     var load = lines([0, 2, 0, 0, 4, 0], { color: [0, 0, 1] });
@@ -580,6 +616,7 @@
     T.eq(D.widerBox(null, b), b);
     T.eq(D.widerBox(a, null), a);
     T.eq(D.widerBox(null, null), null);
+    T.eq(D.widerBox(Object.assign({ whole: true }, a), Object.assign({ whole: true }, b)).whole, true);
   });
 
   test('the grid does not stretch the crop', function () {

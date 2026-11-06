@@ -507,9 +507,9 @@ model, also when the mesh is shown deformed. Type `results loads off` to hide th
 
 ## Save pictures
 
-A picture shows what the viewport shows: the same camera and the same parts, on a white
-background, cut to the part of the view that has something in it, with white space on each side
-of the model. If you zoom in on a detail, the picture shows that detail. The view buttons, the mode label, the
+A picture shows the parts that the viewport shows, on a white background, with white space on each
+side of the model. It shows the whole model, also if you zoom in or pan. To save a detail, zoom in
+and select **Use the zoom of the screen**. The view buttons, the mode label, the
 selection box and the highlight of a selected object are not in the picture. The symbols that you
 show by selecting a condition are in the picture.
 
@@ -551,6 +551,7 @@ addresses **Copy picture** is grey.
 | Width | The width of the picture in cm, 16 by default, with the legend. The height follows the shape of the model in all its stages. The resolution is 300 dpi. |
 | Pictures | **This view**, or more than one picture: see [Save every stage or field](#save-every-stage-or-field) |
 | Show | The legend, the rulers (2D), the axes and the grid. **Grid** can be selected only when the grid is on in the viewport. |
+| Zoom | **Use the zoom of the screen**: the picture shows what is on the screen, and leaves out what is off it. This option is off each time that you open the window. |
 | Also save | In Results mode: the values of each field as a CSV file |
 
 One file opens the browser's save window. More than one file opens the system folder window, and
@@ -573,9 +574,14 @@ its own active parts.
 All the pictures of the stages of a model have the same size, with the model in the same place,
 also if you save them one by one. The frame is large enough for what each stage draws, so a stage
 with no load has the same frame as a stage with a load. Pictures of the other tabs, such as
-**Mesh**, have this frame too, with space above the view where a stage picture has its title. If
-you move the camera, the frame changes with it. In Results, to find this frame, Styx goes through the stages before it saves or copies a
-picture, so the viewport changes for a moment.
+**Soil** and **Mesh**, have this frame too, with space above the view where a stage picture has its
+title. In 3D, the frame follows the direction that you look from. In Results, to find this frame,
+Styx goes through the stages before it saves or copies a picture, so the viewport changes for a
+moment.
+
+A picture in Results shows the same part of the model, but it has a different size and a smaller
+model. The legend takes 24 mm of the width, and the field name and its values go below the view. A
+deformed shape that goes past the frame makes the frame larger in Results.
 
 In Results mode, select **Every stage**, **This stage, every field** or **Every stage, every
 field**. The colour map, the bands and the other display settings stay as they are on screen.
@@ -603,6 +609,7 @@ picture copy
 picture save png pdf svg --width 12
 picture save svg --stage all --field all --csv
 picture save png --no-legend --no-rulers --no-axes --grid
+picture save png --screen-zoom
 ```
 
 `kratos-cli picture` makes the same pictures in a terminal: see [CLI.md](CLI.md).

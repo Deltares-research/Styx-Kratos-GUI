@@ -117,8 +117,8 @@ kratos-cli picture result 1 uy --stage all --map viridis --out pictures/
 kratos-cli picture result 1 all --stage 3 --csv --out pictures/
 ```
 
-The command draws with the GUI's own page, so the pictures are the same. It starts the Styx
-server and Chrome or Edge with no window. Set `KRATOS_GUI_BROWSER` to the program if the command
+The command draws with the GUI's own page, so the pictures are the same, and each one shows the
+whole model. It starts the Styx server and Chrome or Edge with no window. Set `KRATOS_GUI_BROWSER` to the program if the command
 does not find one. On a computer with neither browser, the command stops and says so.
 
 | Option | What it does |

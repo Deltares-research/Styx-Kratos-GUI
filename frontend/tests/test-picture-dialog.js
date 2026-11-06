@@ -18,6 +18,10 @@
     T.eq(W.commandFor(choice(), SCREEN), 'picture save png');
   });
 
+  test('the zoom of the screen is asked for in the words of the box', function () {
+    T.eq(W.commandFor(choice({ screenZoom: true }), SCREEN), 'picture save png --screen-zoom');
+  });
+
   test('every choice in the window is a word of the command', function () {
     var line = W.commandFor(choice({ formats: ['png', 'svg'], width: 12, scope: 'both', csv: true,
                                      legend: false, rulers: false, axes: false, grid: true }), SCREEN);

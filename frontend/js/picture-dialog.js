@@ -40,6 +40,7 @@ App.PictureDialog = (function () {
     if (!choice.rulers && screen.rulers) words.push('--no-rulers');
     if (!choice.axes) words.push('--no-axes');
     if (choice.grid) words.push('--grid');
+    if (choice.screenZoom) words.push('--screen-zoom');
     if (choice.csv) words.push('--csv');
     return words.join(' ');
   }
@@ -88,7 +89,8 @@ App.PictureDialog = (function () {
       formats: last.formats.slice(), width: last.width,
       scope: scopes.indexOf(last.scope) >= 0 ? last.scope : 'view',
       csv: results && last.csv, legend: true,
-      rulers: !!(App.Picture.defaults().rulers && view.rulers), axes: true, grid: false
+      rulers: !!(App.Picture.defaults().rulers && view.rulers), axes: true, grid: false,
+      screenZoom: false
     };
 
     function refresh() {
@@ -166,6 +168,11 @@ App.PictureDialog = (function () {
     }));
     row('Show', showing);
 
+    row('Zoom', tick('Use the zoom of the screen', false, function (on) { choice.screenZoom = on; }, {
+      name: 'picture-screen-zoom',
+      title: 'The picture shows what is on the screen. With this off, it shows the whole model.'
+    }));
+
     if (results) {
       row('Also save', tick('The field values as CSV', choice.csv, function (on) { choice.csv = on; },
                             { name: 'picture-csv' }));
@@ -179,10 +186,10 @@ App.PictureDialog = (function () {
 
     var handle = App.Dialogs.open({
       title: 'Save picture',
-      width: 500, height: 370,
+      width: 500, height: 400,
       buttons: [
         { label: 'Copy picture', keepOpen: true, onClick: function () {
-          App.Picture.copy({ width: valid() ? choice.width : undefined, show: {
+          App.Picture.copy({ width: valid() ? choice.width : undefined, screenZoom: choice.screenZoom, show: {
             legend: choice.legend, rulers: choice.rulers, axes: choice.axes, grid: choice.grid
           } });
         } },

@@ -503,18 +503,22 @@ App.Picture = (function () {
     });
   }
 
-  /* From a tab with no stages of its own, such as Mesh: `visit` once for what the tab draws,
-     then once for each stage as Staged construction draws it. Only which groups are visible
-     changes, and all of it is put back before the screen is next drawn. */
-  function throughStagesFromTab(visit) {
+  /* `visit` once for what the screen draws, once for each tab that draws the model, and once
+     for each stage as Staged construction draws it. Only which groups are visible changes, and
+     all of it is put back before the screen is next drawn. */
+  function throughTabsAndStages(visit) {
     var mode = App.state.mode, phase = App.state.phase;
+    function show(tab) {
+      App.state.mode = tab;
+      App.Viewport.applyStageVisibility();
+      visit();
+    }
     visit();
     try {
-      App.state.mode = 'staged';
+      App.Viewport.modelTabs().forEach(show);
       ((App.PROJECT && App.PROJECT.stages) || []).forEach(function (stage) {
         App.state.phase = stage.id;
-        App.Viewport.applyStageVisibility();
-        visit();
+        show('staged');
       });
     } finally {
       App.state.mode = mode;
@@ -523,15 +527,17 @@ App.Picture = (function () {
     }
   }
 
-  /* The frame every picture of this model shares: what any of its stages draws, so that a
-     stage with a load has the same size, and the model in the same place, as a stage with
-     none or a picture of the mesh, whichever of them are saved and when. Results come from
-     the server, so there the screen goes through the stages, as a save of every stage does. */
+  /* The frame every picture of this model shares: what any tab or stage draws, so that a stage
+     with a load has the same frame, with the model in the same place, as a stage with none, a
+     picture of the mesh or a result, whichever of them are saved and when. It takes in the whole
+     model, wherever the camera is, unless the user asks for the zoom of the screen. Results come
+     from the server, so there the screen also goes through the stages, as a save of every stage
+     does: a deformed shape that goes past the frame makes it wider there. */
   function commonFrame(asked) {
     var screen = App.Viewport.pictureView();
     var box = null;
     function take() {
-      box = D.widerBox(box, D.drawnBox(viewNow(asked, screen), screen));
+      box = D.widerBox(box, D.drawnBox(viewNow(asked, screen), screen, !asked.screenZoom));
       return null;
     }
     walking = true;
@@ -542,8 +548,9 @@ App.Picture = (function () {
       progress(null);
     }
     return keepingSelection(function () {
-      if (!inResults() && !inStaged()) return throughStagesFromTab(take);
-      return walk({ stage: 'all' }, take, function () { return stopAsked; });
+      throughTabsAndStages(take);
+      if (inResults()) return walk({ stage: 'all' }, take, function () { return stopAsked; });
+      return null;
     }).then(function () {
       done();
       return box;

@@ -186,6 +186,8 @@ App.PictureDraw = (function () {
         asked.show[token.slice(5)] = false;
       } else if (token === '--grid') {
         asked.show.grid = true;
+      } else if (token === '--screen-zoom') {
+        asked.screenZoom = true;
       } else if (token === '--csv') {
         asked.csv = true;
       } else if (FORMATS.indexOf(token) >= 0) {
@@ -892,11 +894,12 @@ App.PictureDraw = (function () {
 
   /* The part of the view that holds something to draw, in clip space: a box round what is
      drawn, cut to the screen. `null` for nothing. */
-  function drawnBox(view, screen) {
+  function drawnBox(view, screen, whole) {
     var viewProjection = multiply(view.camera.projection, view.camera.view);
     var box = null;
     function take(x, y) {
-      var cx = Math.max(-1, Math.min(1, x)), cy = Math.max(-1, Math.min(1, y));
+      var cx = whole ? x : Math.max(-1, Math.min(1, x));
+      var cy = whole ? y : Math.max(-1, Math.min(1, y));
       if (!box) box = { minX: cx, maxX: cx, minY: cy, maxY: cy };
       box.minX = Math.min(box.minX, cx); box.maxX = Math.max(box.maxX, cx);
       box.minY = Math.min(box.minY, cy); box.maxY = Math.max(box.maxY, cy);
@@ -916,22 +919,26 @@ App.PictureDraw = (function () {
         take(x + half, y + em / 2);
       }
     });
+    if (box && whole) box.whole = true;
     return box;
   }
 
   /* The box round two boxes, either of which can be `null`. */
   function widerBox(a, b) {
     if (!a || !b) return a || b;
-    return { minX: Math.min(a.minX, b.minX), maxX: Math.max(a.maxX, b.maxX),
-             minY: Math.min(a.minY, b.minY), maxY: Math.max(a.maxY, b.maxY) };
+    var box = { minX: Math.min(a.minX, b.minX), maxX: Math.max(a.maxX, b.maxX),
+                minY: Math.min(a.minY, b.minY), maxY: Math.max(a.maxY, b.maxY) };
+    if (a.whole) box.whole = true;
+    return box;
   }
 
   /* The view cropped to `frame`, or to what it draws, with white space round it, on a page with
      room for what goes round the view. A `frame` is a `drawnBox` that pictures share, so they
      come out the same size with the model in the same place: also the picture of a tab with no
-     stage to name, which keeps the title's band empty. A side where the model runs off
-     the screen has no space: a view zoomed in on stays zoomed in on. The camera is left alone:
-     the crop is one more matrix after its projection. */
+     stage to name, which keeps the title's band empty. A `whole` box can go past the screen, so
+     zoom and pan do not change what the picture shows. In any other box, a side where the model
+     runs off the screen has no space: a view zoomed in on stays zoomed in on. The camera is left
+     alone: the crop is one more matrix after its projection. */
   function framed(view, widthCm, screen, frame) {
     var parts = { legend: !!view.legend, rulers: !!view.rulers, title: !!(view.title || frame),
                   footer: !!view.triad, caption: !!view.caption };
@@ -945,10 +952,10 @@ App.PictureDraw = (function () {
       var space = CROP_MARGIN * Math.max((box.maxX - box.minX) / 2 * screen.width,
                                          (box.maxY - box.minY) / 2 * screen.height);
       var spaceX = space / screen.width, spaceY = space / screen.height;
-      var minX = box.minX > -1 ? box.minX - spaceX : box.minX;
-      var maxX = box.maxX < 1 ? box.maxX + spaceX : box.maxX;
-      var minY = box.minY > -1 ? box.minY - spaceY : box.minY;
-      var maxY = box.maxY < 1 ? box.maxY + spaceY : box.maxY;
+      var minX = box.whole || box.minX > -1 ? box.minX - spaceX : box.minX;
+      var maxX = box.whole || box.maxX < 1 ? box.maxX + spaceX : box.maxX;
+      var minY = box.whole || box.minY > -1 ? box.minY - spaceY : box.minY;
+      var maxY = box.whole || box.maxY < 1 ? box.maxY + spaceY : box.maxY;
       cx = (minX + maxX) / 2;
       cy = (minY + maxY) / 2;
       var a = (maxX - minX) / 2 * screen.width;

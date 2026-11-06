@@ -288,6 +288,68 @@ def test_a_picture_of_the_geometry_or_the_mesh_has_the_size_of_a_picture_of_a_st
     assert page.errors == []
 
 
+def size_of_one_save(page, screen_zoom=False):
+    said = "(document.getElementById('cmd-log').innerText.match(/Saved /g) || []).length"
+    page.evaluate(PRIVATE_WINDOWS)
+    before = page.evaluate(said)
+    page.locator(CAMERA).click()
+    if screen_zoom:
+        page.locator('input[name="picture-screen-zoom"]').check()
+    page.get_by_role("button", name="Save…").click()
+    page.wait_for_function(f"(before) => {said} > before", arg=before, timeout=LONG)
+    saved = files_of(page)
+    assert len(saved) == 1
+    return png_size(next(iter(saved.values())))
+
+
+def test_zoom_changes_a_picture_only_when_asked(excavation):
+    page = excavation
+    command(page, "gotosoil")
+    page.wait_for_timeout(1000)
+    whole = size_of_one_save(page)
+
+    page.evaluate("for (let i = 0; i < 6; i++) App.Viewport.dolly(1)")
+    page.wait_for_timeout(1000)
+    assert size_of_one_save(page) == whole
+    zoomed = size_of_one_save(page, screen_zoom=True)
+    assert zoomed[0] == whole[0]
+    assert zoomed[1] < whole[1], "the shape of the screen, with what is off it left out"
+
+    page.evaluate("for (let i = 0; i < 12; i++) App.Viewport.dolly(-1)")
+    page.wait_for_timeout(1000)
+    assert size_of_one_save(page) == whole
+    assert page.errors == []
+
+
+def test_every_tab_and_a_result_have_one_frame(excavation):
+    page = excavation
+    frame = "App.Picture.commonFrame({ show: {} })"
+    command(page, "gotomesh")
+    page.evaluate("App.runAction({ action: 'generateMesh' })")
+    wait_meshed(page)
+    for dialog in page.locator(".dlg-x").all():
+        dialog.click()
+    page.wait_for_timeout(1000)
+    mesh = page.evaluate(frame)
+
+    for tab in ("gotosoil", "gotostructures", "gotoflow", "gotostaged"):
+        command(page, tab)
+        page.wait_for_timeout(500)
+        assert page.evaluate(frame) == pytest.approx(mesh), tab
+
+    page.evaluate("App.runAction({ action: 'calculate' })")
+    page.wait_for_function("App.state.mode === 'results' && App.Results.field()", timeout=LONG)
+    page.wait_for_timeout(1000)
+    drawn = "App.Picture.compose({ show: {} }).list.length"
+    before = page.evaluate(drawn)
+    keep = page.evaluate("[App.Results.stage(), App.Results.field().field]")
+    assert page.evaluate(frame) == pytest.approx(mesh)
+    assert page.evaluate("App.state.mode") == "results", "the screen comes back"
+    assert page.evaluate("[App.Results.stage(), App.Results.field().field]") == keep
+    assert page.evaluate(drawn) == before
+    assert page.errors == []
+
+
 def test_saving_every_stage_keeps_what_is_selected(excavation):
     page = excavation
     command(page, "gotostaged")

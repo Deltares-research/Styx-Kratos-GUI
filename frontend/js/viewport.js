@@ -1725,6 +1725,11 @@ App.Viewport = (function () {
     return selected;
   }
 
+  /* The tabs that draw the model, each with its own parts. Results draws a result. */
+  function modelTabs() {
+    return Object.keys(modeGroups).filter(function (mode) { return mode !== 'results'; });
+  }
+
   function select(key) {
     if (!scene) return;
     selectedKeys.forEach(function (k) { restoreEmissive(k); });
@@ -2961,7 +2966,7 @@ App.Viewport = (function () {
 
   return {
     init: init, setMode: setMode, setVisible: setVisible, isVisible: isVisible,
-    select: select, selectedKey: selectedKey,
+    select: select, selectedKey: selectedKey, modelTabs: modelTabs,
     setView: setView, zoomFit: zoomFit, dolly: dolly, cameraMoving: cameraMoving,
     setProjection: setProjection, setGrid: setGrid, syncRulers: syncRulers,
     setViewMode: setViewMode, is2D: is2D,
