@@ -9,8 +9,8 @@ from core import scripting, session
 from core.geometry import solid_model
 from core.kratos import writer
 from core.model import drafts, script_writer
-from core.model.schemas import (Beam, BeamSection, Domain, Line, Material, Project, SoilBody,
-                                SoilLayer, Stage)
+from core.model.schemas import (Beam, BeamSection, Domain, LayersUpdate, Line, Material, Project,
+                                SoilBody, SoilLayer, Stage)
 
 DOMAIN = Domain(x0=0.0, x1=20.0, z0=0.0, z1=10.0, y_top=0.0, y_bottom=-12.0)
 
@@ -196,15 +196,54 @@ def test_a_body_takes_its_layers_material_until_it_is_given_one():
     assert [body.mat for body in project.bodies] == ["sand", "sand"]
 
 
-def test_a_part_keeps_its_material_when_its_layer_is_given_another():
-    """A user who renamed a part may no longer connect it with its layer, so a change to
-    the layer does not reach it. A layer in one piece is the layer, and does change."""
+def test_a_project_read_as_it_is_keeps_every_parts_own_material():
+    """An undo or an opened file sets the layers and the parts together, as they were;
+    only an edit of a layer passes its material on to its parts."""
     project = model(lines=[PIT_SIDE])
     layers = [layer.model_dump() | {"mat": "grout"} for layer in project.layers]
     changed = edited(project, layers=layers)
     assert changed.soil_body_materials == {"soil_top__part1": "sand",
                                            "soil_top__part2": "sand",
                                            "soil_low": "grout"}
+
+
+def three_soils(**fields) -> Project:
+    """The pit side cuts the top layer in two; its first part is grout of its own."""
+    project = model(materials=[material("sand"), material("grout"), material("clay")],
+                    lines=[PIT_SIDE], **fields)
+    return session.update_body(project, "soil_top__part1", material="grout")
+
+
+ALL_CLAY = {"soil_top__part1": "clay", "soil_top__part2": "clay", "soil_low": "sand"}
+
+
+def test_a_layer_given_another_material_in_the_soil_layers_window_gives_it_to_all_its_parts():
+    project = three_soils()
+    layers = [layer.model_copy(update={"mat": "clay"}) if layer.id == "top" else layer
+              for layer in project.layers]
+    changed = session.replace_layers(project, LayersUpdate(layers=layers))
+    assert changed.soil_body_materials == ALL_CLAY
+    assert [body.mat for body in changed.bodies] == ["clay", "clay"]
+
+
+def test_a_layer_given_another_material_by_its_command_gives_it_to_all_its_parts():
+    changed = session.update_layer(three_soils(), "top", material="clay")
+    assert changed.soil_body_materials == ALL_CLAY
+
+
+def test_a_layer_given_another_material_by_its_path_gives_it_to_all_its_parts():
+    changed = session.with_value(three_soils(), "layers[top].mat", "clay")
+    assert changed.soil_body_materials == ALL_CLAY
+
+
+def test_a_layer_edit_that_keeps_the_material_leaves_its_parts_own():
+    """The Soil layers window sends every layer on every change, so a layer whose material
+    is the same as before has not been given one."""
+    project = three_soils()
+    for changed in (session.replace_layers(project, LayersUpdate(layers=project.layers)),
+                    session.update_layer(project, "top", name="Upper"),
+                    session.update_layer(project, "top", material="sand")):
+        assert changed.soil_body_materials["soil_top__part1"] == "grout"
 
 
 def test_a_record_written_without_a_material_takes_its_layers_when_it_is_read():

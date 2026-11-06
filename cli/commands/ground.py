@@ -76,7 +76,8 @@ def register(commands, common: argparse.ArgumentParser) -> None:
     change = action(layer, common, "set", update_layer,
                      help="change a layer; a moved level moves its neighbour's with it")
     existing(change, "layer")
-    change.add_argument("--material")
+    change.add_argument("--material", help="its material, which every part a line or a "
+                                           "sheet pile cut off it takes too")
     change.add_argument("--name", help=NAME_HELP)
     change.add_argument("--top", type=float)
     change.add_argument("--bottom", type=float)

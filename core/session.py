@@ -209,6 +209,24 @@ def _edited(project: Project, payload: dict) -> Project:
         update={"body_sizes": kept})})
 
 
+def _parts_take_their_layers_material(project: Project, payload: dict) -> None:
+    """Every part of a layer the edit gives another material takes that material, a part
+    given one of its own included: what the user changes is the soil of the whole layer.
+
+    Only the edits of a layer call this. An undo or an opened file sets the layers and the
+    parts together, as they were, and each part keeps the material it was written with.
+    A layer whose material is the one it had has not been given another, which matters
+    because the soil layers window sends every layer on every change.
+    """
+    before = {layer.id: layer.mat for layer in project.layers}
+    given = {layer.get("id"): layer.get("mat") for layer in payload.get("layers") or []
+             if isinstance(layer, dict) and layer.get("id") in before
+             and layer.get("mat") != before[layer.get("id")]}
+    for body in payload.get("bodies") or []:
+        if isinstance(body, dict) and body.get("layer") in given:
+            body["mat"] = given[body["layer"]]
+
+
 def removed_sizes(before: Project, after: Project) -> list[str]:
     """The note on the mesh sizes an edit took away with their bodies (`_edited`), or none.
 
@@ -249,6 +267,7 @@ def replace_layers(project: Project, update: LayersUpdate) -> Project:
     if update.custom_parts is not None:
         payload["custom_parts"] = [part.model_dump() for part in update.custom_parts]
     _domain_from_layers(payload)
+    _parts_take_their_layers_material(project, payload)
     return _edited(project, payload)
 
 
@@ -661,6 +680,7 @@ def _validated_edit(project: Project, payload: dict, tokens: list[tuple[str, str
         return replace_stages(project, StagesUpdate(stages=payload["stages"]))
     if tokens[0][1] == "layers":
         _domain_from_layers(payload)
+        _parts_take_their_layers_material(project, payload)
     elif tokens[0][1] == "domain":
         _layers_from_domain(payload)
     return _edited(project, payload)
@@ -870,6 +890,7 @@ def update_layer(project: Project, id: str, *, material: str | None = None,
         if index < len(layers) - 1:
             layers[index + 1]["top"] = bottom
     _domain_from_layers(payload)
+    _parts_take_their_layers_material(project, payload)
     return _edited(project, payload)
 
 

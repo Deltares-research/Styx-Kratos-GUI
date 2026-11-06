@@ -72,6 +72,15 @@ def test_a_body_can_be_named_and_given_a_material(cli, site):
     assert session.load(site).soil_body_materials["soil_top__part1"] == "sand"
 
 
+def test_a_layer_given_another_material_gives_it_to_all_its_parts(cli, site):
+    assert cli("line", site, "add", "side", "--points", "5", "0", "5", "-4").code == 0
+    assert cli("material", site, "add", "clay").code == 0
+    assert cli("body", site, "set", "soil_top__part1", "--material", "grout").code == 0
+    assert cli("layer", site, "set", "top", "--material", "clay").code == 0
+    assert session.load(site).soil_body_materials == {
+        "soil_top__part1": "clay", "soil_top__part2": "clay", "soil_low": "sand"}
+
+
 def test_a_whole_layer_is_not_a_body_to_change(cli, site):
     ran = cli("body", site, "set", "soil_low", "--name", "x")
     assert ran.code != 0
@@ -120,3 +129,22 @@ def test_the_gui_route_and_the_command_line_make_the_same_project(cli, site, tmp
     assert answer.status_code == 200
     assert answer.json()["project"]["soil_body_keys"] == by_command["soil_body_keys"]
     assert answer.json()["project"]["bodies"] == by_command["bodies"]
+
+
+def test_the_soil_layers_window_and_the_command_line_give_a_layers_parts_its_material(
+        cli, site):
+    from fastapi.testclient import TestClient
+
+    from backend.main import app
+    from backend import store
+
+    assert cli("line", site, "add", "side", "--points", "5", "0", "5", "-4").code == 0
+    assert cli("body", site, "set", "soil_top__part1", "--material", "grout").code == 0
+    store.put(session.load(site))
+    assert cli("layer", site, "set", "top", "--material", "grout").code == 0
+    by_command = json.loads(session.load(site).model_dump_json())
+    with TestClient(app) as client:
+        answer = client.patch("/api/project/layers", json={"layers": by_command["layers"]})
+    assert answer.status_code == 200
+    assert answer.json()["project"]["bodies"] == by_command["bodies"]
+    assert [body["mat"] for body in by_command["bodies"]] == ["grout", "grout"]

@@ -239,8 +239,9 @@ class SoilBody(Base):
     point: tuple[float, float]             # in-plane (x, y), metres
     mat: Ident | None = None
     """Its material, in every stage. A record made without one, by a script or by a line
-    that cuts a new piece off, takes its layer's then and keeps it when the layer's
-    changes (`Project._split_the_soil`)."""
+    that cuts a new piece off, takes its layer's then (`Project._split_the_soil`). An edit
+    that gives the layer another material gives it to every part of the layer too
+    (`session._parts_take_their_layers_material`)."""
 
     @field_validator("id")
     @classmethod

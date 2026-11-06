@@ -178,7 +178,8 @@ kratos-cli parts pit.json                                 # soil_top, ... for th
   name and material when another line is added. A stage that named the whole layer then names each
   of its pieces. An edit that takes away a piece a stage still names is refused.
   `body set --material layer` gives a body its layer's material as it is now. A body keeps
-  its material when its layer's changes, and in every stage. In a model script, `lines=`
+  its material in every stage. `layer set --material` gives every body of that layer the
+  new material, also a body given one of its own. In a model script, `lines=`
   and `bodies=` say the same. A record
   `SoilBody(id="lift1", name="lift 1", layer="top", point=(2.5, -1))` chooses the key of
   the piece its `point` lies in.
