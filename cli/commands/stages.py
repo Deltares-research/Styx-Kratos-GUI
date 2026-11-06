@@ -27,7 +27,7 @@ from __future__ import annotations
 
 import argparse
 
-from cli.terminal.files import add_project, add_writing, written
+from cli.terminal.files import add_project, add_writing, read, written
 from cli.terminal.output import Answer, CommandError
 from cli.terminal.words import NAME_HELP, existing, file_of, given, id_and_name, id_help, named_ids
 from core import session
@@ -148,12 +148,12 @@ FIELDS = ("name", "calculation", "reset_displacements", "max_iterations", "toler
 # ── Handlers ────────────────────────────────────────────────────────────────
 
 def list_stages(args: argparse.Namespace) -> Answer:
-    project = session.load(args.project)
+    project = read(args)
     return Answer(data=_records(project), lines=_listed(project))
 
 
 def show_stage(args: argparse.Namespace) -> Answer:
-    project = session.load(args.project)
+    project = read(args)
     stage = session.find_stage(project, args.id)
     active = stages.active_parts(project, args.id)
     keys = [key for key in project.stageable_keys() if key in active]
@@ -172,16 +172,16 @@ def show_stage(args: argparse.Namespace) -> Answer:
 
 
 def default_stages(args: argparse.Namespace) -> Answer:
-    return _replaced(args, session.default_stages(session.load(args.project)))
+    return _replaced(args, session.default_stages(read(args)))
 
 
 def staged_excavation_stages(args: argparse.Namespace) -> Answer:
-    return _replaced(args, session.staged_excavation_stages(session.load(args.project)))
+    return _replaced(args, session.staged_excavation_stages(read(args)))
 
 
 @named_ids()
 def add_stage(args: argparse.Namespace) -> Answer:
-    project, stage = session.add_stage(session.load(args.project), before=args.before,
+    project, stage = session.add_stage(read(args), before=args.before,
                                        id=args.id, **given(args, *FIELDS))
     _no_reset_in_flow(args, stage)
     return _added(args, project, stage)
@@ -189,26 +189,26 @@ def add_stage(args: argparse.Namespace) -> Answer:
 
 @named_ids()
 def copy_stage(args: argparse.Namespace) -> Answer:
-    project, stage = session.add_stage(session.load(args.project), copy_of=args.original,
+    project, stage = session.add_stage(read(args), copy_of=args.original,
                                        id=args.id, **given(args, *FIELDS))
     _no_reset_in_flow(args, stage)
     return _added(args, project, stage)
 
 
 def update_stage(args: argparse.Namespace) -> Answer:
-    project = session.update_stage(session.load(args.project), args.id,
+    project = session.update_stage(read(args), args.id,
                                    **given(args, *FIELDS, "parent"))
     _no_reset_in_flow(args, session.find_stage(project, args.id))
     return _edited(args, project, f"changed stage {args.id}")
 
 
 def remove_stage(args: argparse.Namespace) -> Answer:
-    project = session.remove_stage(session.load(args.project), args.id)
+    project = session.remove_stage(read(args), args.id)
     return _edited(args, project, f"removed stage {args.id}")
 
 
 def switch_parts(args: argparse.Namespace) -> Answer:
-    project = session.switch_parts(session.load(args.project), args.id, args.keys,
+    project = session.switch_parts(read(args), args.id, args.keys,
                                    args.wanted)
     did = "into" if args.wanted else "out of"
     return _edited(args, project,

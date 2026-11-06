@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import argparse
 
+from cli.terminal.files import read
 from cli.terminal.output import Answer, CommandError
 from cli.terminal.words import (NAME_HELP, action, assignments, coordinates, edited, existing,
                                 given, id_and_name, id_help, named_ids, noun)
@@ -107,7 +108,7 @@ def _section_fields(parser: argparse.ArgumentParser) -> None:
 
 
 def list_sections(args: argparse.Namespace) -> Answer:
-    project = session.load(args.project)
+    project = read(args)
     rows, lines = [], []
     for kind, field in drafts.SECTION_FIELDS.items():
         for section in getattr(project, field):
@@ -132,7 +133,7 @@ def _interface_stiffness(section) -> str:
 
 @named_ids(required=True)
 def add_section(args: argparse.Namespace) -> Answer:
-    project = session.load(args.project)
+    project = read(args)
     section = drafts.section(project, args.kind, args.id, name=args.name)
     project = session.add_section(project, args.kind, section)
     fields = _section_values(args, args.kind)
@@ -144,7 +145,7 @@ def add_section(args: argparse.Namespace) -> Answer:
 
 
 def update_section(args: argparse.Namespace) -> Answer:
-    project = session.load(args.project)
+    project = read(args)
     kind, _ = session.find_section(project, args.id, args.kind)
     fields = _section_values(args, kind)
     if args.name is not None:
@@ -156,7 +157,7 @@ def update_section(args: argparse.Namespace) -> Answer:
 
 
 def remove_section(args: argparse.Namespace) -> Answer:
-    project = session.load(args.project)
+    project = read(args)
     kind, _ = session.find_section(project, args.id, args.kind)
     return edited(args, session.remove_section(project, args.id, kind),
                   f"removed {kind} section {args.id}")
@@ -406,7 +407,7 @@ def _records(project: Project, kinds: tuple[str, ...]) -> list:
 
 
 def list_structures(args: argparse.Namespace) -> Answer:
-    project = session.load(args.project)
+    project = read(args)
     records = _records(project, args.kinds)
     return Answer(data=[record.model_dump(mode="json") for record in records],
                   lines=[_line(record) for record in records]
@@ -415,7 +416,7 @@ def list_structures(args: argparse.Namespace) -> Answer:
 
 @named_ids()
 def add_structure(args: argparse.Namespace) -> Answer:
-    project = session.load(args.project)
+    project = read(args)
     record = _drafted(project, args)
     section = drafts.section_for(project, record)
     kind = drafts.section_kind(record)
@@ -436,7 +437,7 @@ def add_structure(args: argparse.Namespace) -> Answer:
 
 
 def update_structure(args: argparse.Namespace) -> Answer:
-    project = session.load(args.project)
+    project = read(args)
     record = _own(project, args.id, args.kinds)
     fields = _fields(project, record, args)
     return edited(args, session.update_structure(project, args.id, **fields),
@@ -444,7 +445,7 @@ def update_structure(args: argparse.Namespace) -> Answer:
 
 
 def remove_structure(args: argparse.Namespace) -> Answer:
-    project = session.load(args.project)
+    project = read(args)
     record = _own(project, args.id, args.kinds)
     return edited(args, session.remove_structure(project, args.id),
                   f"removed {NOUNS[record.kind]} {args.id}")
@@ -457,7 +458,9 @@ def _own(project: Project, id: str, kinds: tuple[str, ...]):
         command = {"beam": "beam", "panel": "wall", "member": "member", "anchor": "anchor",
                    "anchor3d": "anchor", "interface": "interface",
                    "normal": "normal-load"}.get(record.kind, "load")
-        raise CommandError(f"{id} is a {NOUNS[record.kind]}; use `kratos-cli {command}`")
+        noun = NOUNS[record.kind]
+        article = "an" if noun[0] in "aeiou" else "a"
+        raise CommandError(f"{id} is {article} {noun}; use `kratos-cli {command}`")
     return record
 
 

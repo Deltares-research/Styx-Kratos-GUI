@@ -13,6 +13,9 @@ from __future__ import annotations
 import pytest
 
 from core import session
+from core.kratos import deck_files
+from core.model.schemas import Deck
+from core.model.templates import blank_project
 from tests.models import excavation
 
 
@@ -203,6 +206,16 @@ def test_node_of_a_project_reads_the_deck_it_would_export(cli, pit, deck):
     assert from_project == from_deck
 
 
+def test_node_of_a_deck_project_reads_its_mdpa(cli, deck, tmp_path):
+    project = blank_project().model_copy(update={"deck": Deck(directory=str(deck))})
+    path = session.save(project, tmp_path / "deck-project.json")
+
+    from_project = cli("--json", "node", path, "1").json()
+    from_deck = cli("--json", "node", deck, "1").json()
+
+    assert from_project == from_deck
+
+
 def test_a_node_split_by_an_interface_names_its_twins(cli, deck):
     nodes = cli("--json", "node", deck, *map(str, range(1, 400))).json()
 
@@ -236,6 +249,73 @@ def test_deck_show_reads_an_mdpa_on_its_own(cli, deck):
     ran = cli("--json", "deck", "show", mdpa)
 
     assert ran.code == 0 and ran.json()["stages"] == []
+
+
+def test_deck_show_reads_its_parameters_file(cli, deck):
+    ran = cli("--json", "deck", "show", deck / deck_files.PARAMETERS_NAME)
+
+    assert ran.code == 0, ran.err
+    assert ran.json()["stages"]
+
+
+def test_node_rejects_a_missing_mdpa(cli, tmp_path):
+    ran = cli("node", tmp_path / "missing.mdpa", "1")
+
+    assert ran.code == 1
+    assert "no such file:" in ran.err
+
+
+def test_node_rejects_a_missing_source(cli, tmp_path):
+    ran = cli("node", tmp_path / "missing", "1")
+
+    assert ran.code == 1
+    assert "no such file or deck:" in ran.err
+
+
+def test_deck_show_rejects_a_missing_mdpa(cli, tmp_path):
+    ran = cli("deck", "show", tmp_path / "missing.mdpa")
+
+    assert ran.code == 1
+    assert "no such file:" in ran.err
+
+
+def test_deck_show_reports_an_invalid_mdpa(cli, tmp_path):
+    mdpa = tmp_path / "broken.mdpa"
+    mdpa.write_text("Begin Nodes\n1 not-a-number 0 0\nEnd Nodes\n", encoding="utf-8")
+
+    ran = cli("deck", "show", mdpa)
+
+    assert ran.code == 1
+    assert "broken.mdpa: malformed .mdpa deck:" in ran.err
+
+
+def test_deck_show_rejects_a_missing_deck(cli, tmp_path):
+    ran = cli("deck", "show", tmp_path / "missing")
+
+    assert ran.code == 1
+    assert "no such deck:" in ran.err
+
+
+def test_deck_show_reports_when_parameters_have_no_deck(
+        cli, tmp_path, monkeypatch):
+    from cli.commands import inspection
+
+    monkeypatch.setattr(inspection.external_deck, "deck_project",
+                        lambda *_args: blank_project())
+
+    ran = cli("deck", "show", tmp_path)
+
+    assert ran.code == 1
+    assert f"no deck in {tmp_path}" in ran.err
+
+
+def test_invalid_json_is_not_deck_parameters(tmp_path):
+    from cli.commands.inspection import _is_parameters
+
+    parameters = tmp_path / "ProjectParameters.json"
+    parameters.write_text("{", encoding="utf-8")
+
+    assert not _is_parameters(parameters)
 
 
 # ── The stages of the test model, from commands alone ───────────────────────

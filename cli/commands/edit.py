@@ -13,7 +13,7 @@ from __future__ import annotations
 import argparse
 import json
 
-from cli.terminal.files import add_project, add_writing, written
+from cli.terminal.files import add_project, add_writing, read, written
 from cli.terminal.output import Answer
 from cli.terminal.words import parsed
 from core import session
@@ -52,24 +52,24 @@ def register(commands, common: argparse.ArgumentParser) -> None:
 
 
 def get_value(args: argparse.Namespace) -> Answer:
-    value = session.value_at(session.load(args.project), args.path)
+    value = session.value_at(read(args), args.path)
     return Answer(data=value, lines=[json.dumps(value, indent=2, ensure_ascii=False)])
 
 
 def set_value(args: argparse.Namespace) -> Answer:
     value = parsed(args.value)
-    project = session.with_value(session.load(args.project), args.path, value)
+    project = session.with_value(read(args), args.path, value)
     return _edited(args, project, f"{args.path} = {_short(value)}", value)
 
 
 def add_value(args: argparse.Namespace) -> Answer:
     value = parsed(args.value)
-    project = session.with_added(session.load(args.project), args.path, value)
+    project = session.with_added(read(args), args.path, value)
     return _edited(args, project, f"added {_short(value)} to {args.path}", value)
 
 
 def remove_value(args: argparse.Namespace) -> Answer:
-    project = session.without_value(session.load(args.project), args.path)
+    project = session.without_value(read(args), args.path)
     return _edited(args, project, f"removed {args.path}")
 
 

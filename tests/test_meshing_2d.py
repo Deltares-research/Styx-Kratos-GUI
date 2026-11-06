@@ -7,6 +7,8 @@ than `VolumesList` -- that last one simply has no effect if left as it was, so a
 per-layer size would be silently ignored and every element would come out the same size.
 """
 
+from types import SimpleNamespace
+
 import pytest
 
 from core.geometry import solid_model, meshing
@@ -375,3 +377,16 @@ def test_the_test_model_carries_its_own_graded_mesh():
     assert sizes[0] < 0.25 * coarse, "fine at the excavation"
     assert sizes[-1] > 0.7 * coarse, "back to the model's own size at the far boundary"
     assert sizes[-1] > 4 * sizes[0], "and genuinely graded between them"
+
+
+def test_load_footprint_containment_distinguishes_line_and_surface_loads():
+    coordinates = {
+        1: (1.0, 0.0, -2.0), 2: (2.0, 0.0, -2.0), 3: (1.5, 0.0, -1.0),
+        4: (1.0, 0.0, 1.0),
+    }
+    line = SimpleNamespace(kind="line", x0=1.0, x1=2.0)
+    surface = SimpleNamespace(kind="surface", x0=1.0, x1=2.0, z0=-2.0, z1=0.0)
+
+    assert meshing._under_load([1, 2], coordinates, line)
+    assert meshing._under_load([1, 2], coordinates, surface)
+    assert not meshing._under_load([1, 4], coordinates, surface)
