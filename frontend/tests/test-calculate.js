@@ -150,3 +150,29 @@ test('a second press while one is in flight is refused rather than queued', func
     return first;
   });
 });
+
+test('a broken calculation listener is reported separately without failing the run', function () {
+  return withCalculateStubs(function (logged) {
+    var timeout = window.setTimeout, scheduled = [], armed = true;
+    var failure = new Error('calculation listener failed');
+    App.Calculate.onChange(function () {
+      if (armed) { armed = false; throw failure; }
+    });
+    App.Api = { post: function () { return Promise.resolve(calculationResult()); } };
+    window.setTimeout = function (callback, delay) {
+      scheduled.push({ callback: callback, delay: delay });
+      return 0;
+    };
+    var run;
+    try { run = App.Calculate.run(); }
+    finally { window.setTimeout = timeout; armed = false; }
+    return run.then(function (result) {
+      T.ok(result.ok);
+      T.eq(App.Calculate.running(), false);
+      T.eq(scheduled.length, 1);
+      T.eq(scheduled[0].delay, 0);
+      T.ok(!logged.some(function (line) { return line[0] === 'err'; }));
+      return T.rejects(scheduled[0].callback);
+    }).then(function (error) { T.eq(error, failure); });
+  });
+});

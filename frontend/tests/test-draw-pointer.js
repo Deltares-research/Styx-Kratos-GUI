@@ -9,7 +9,8 @@
 
   function rig(project, cameraAt) {
     var saved = { viewport: App.Viewport, model: App.Model, fetch: window.fetch,
-                  project: App.PROJECT, state: App.state, command: App.Command };
+                  project: App.PROJECT, state: App.state, command: App.Command,
+                  explorer: App.Explorer, select: App.selectObject };
     var canvas = document.createElement('canvas');
     canvas.style.cssText = 'position:fixed;left:0;top:0;width:200px;height:200px;';
     document.body.appendChild(canvas);
@@ -32,6 +33,8 @@
       resize: function () {}, refresh: function () { return Promise.resolve(); }
     };
     App.Model = { load: function () { return Promise.resolve(); } };
+    App.Explorer = { mountTree: function () {} };
+    App.selectObject = function () {};
     App.PROJECT = project;
     App.state = { mode: 'soil' };
     App.Command = { note: function (t) { ctx.notes.push(t); },
@@ -51,6 +54,7 @@
       canvas.remove();
       App.Viewport = saved.viewport; App.Model = saved.model; window.fetch = saved.fetch;
       App.PROJECT = saved.project; App.state = saved.state; App.Command = saved.command;
+      App.Explorer = saved.explorer; App.selectObject = saved.select;
     };
     return ctx;
   }
@@ -74,6 +78,45 @@
   var TOP_DOWN = [0, 10, 0];
   var FACE_ON = [0, 0, 10];
 
+  test('draw: a rejected geometry recipe reports the server reason without reloading', function () {
+    var ctx = rig(SOLID, TOP_DOWN), loaded = 0;
+    App.Model.load = function () { loaded += 1; return Promise.resolve(); };
+    window.fetch = function () {
+      return Promise.resolve({ ok: false, json: function () {
+        return Promise.resolve({ detail: 'The polygon intersects itself' });
+      } });
+    };
+    var promise = Promise.resolve().then(function () {
+      App.DrawInput.start('point');
+      App.DrawInput.handleCommand('0 0 0');
+      return new Promise(function (resolve) { setTimeout(resolve, 0); });
+    }).then(function () {
+      T.eq(ctx.errors, ['Error creating geometry: The polygon intersects itself']);
+      T.eq(loaded, 0);
+      T.eq(ctx.canvas.style.cursor, '', 'the draw mode ends even if the request fails');
+    });
+    return promise.then(function () { ctx.restore(); },
+                        function (error) { ctx.restore(); throw error; });
+  });
+
+  test('draw: a completed recipe reloads, redraws and selects the created part in order', function () {
+    var ctx = rig(SOLID, TOP_DOWN);
+    var saved = { Explorer: App.Explorer, selectObject: App.selectObject }, calls = [];
+    App.Model.load = function () { calls.push('load'); return Promise.resolve(); };
+    App.Viewport.refresh = function () { calls.push('refresh'); return Promise.resolve(); };
+    App.Explorer = { mountTree: function (mode) { calls.push('tree:' + mode); } };
+    App.selectObject = function (key, source) { calls.push('select:' + key + ':' + source); };
+    function restore() { Object.assign(App, saved); ctx.restore(); }
+    return Promise.resolve().then(function () {
+      App.DrawInput.start('point');
+      App.DrawInput.handleCommand('0 0 0');
+      return new Promise(function (resolve) { setTimeout(resolve, 0); });
+    }).then(function () {
+      T.eq(calls, ['load', 'refresh', 'tree:soil', 'select:drawn_0:tree']);
+      T.eq(ctx.errors, []);
+    }).then(restore, function (error) { restore(); throw error; });
+  });
+
   /* What the viewport draws a 2D model with (js/viewport.js `camOrtho`, SECTION_VIEW):
      an orthographic camera facing -z, centred on the section rather than on the
      origin. Every ray it casts runs along z, so it meets the plane y = 0 nowhere --
@@ -86,7 +129,7 @@
     return camera;
   }
 
-  test('draw: a click lands on the ground plane under the pointer', function () {
+  test('draw: a click lands on the ground plane under the pointer', async function () {
     var ctx = rig(SOLID, TOP_DOWN);
     try {
       App.DrawInput.start('box');
@@ -98,10 +141,10 @@
       T.near(recipe.origin[1], 0, 1e-6);
       T.near(recipe.origin[2], 0, 1e-6);
       T.ok(recipe.size[0] !== 0, 'the second click is somewhere else');
-    } finally { ctx.restore(); }
+    } finally { await new Promise(function (resolve) { setTimeout(resolve, 0); }); ctx.restore(); }
   });
 
-  test('draw: with snapping on, a click lands on whole metres', function () {
+  test('draw: with snapping on, a click lands on whole metres', async function () {
     var ctx = rig(SOLID, TOP_DOWN);
     try {
       App.state.snap = true;
@@ -113,7 +156,7 @@
       ctx.posted[0].vertices.forEach(function (point) {
         point.forEach(function (c) { T.eq(c, Math.round(c), 'snapped: ' + point); });
       });
-    } finally { ctx.restore(); }
+    } finally { await new Promise(function (resolve) { setTimeout(resolve, 0); }); ctx.restore(); }
   });
 
   test('draw: a keyboard "click" (detail 0) places nothing', function () {
@@ -126,7 +169,7 @@
     } finally { ctx.restore(); }
   });
 
-  test('draw: moving the pointer previews the shape being drawn', function () {
+  test('draw: moving the pointer previews the shape being drawn', async function () {
     var ctx = rig(SOLID, TOP_DOWN);
     try {
       App.DrawInput.start('polygon');
@@ -141,7 +184,7 @@
       at(ctx, 'contextmenu');
       T.eq(ctx.posted[0].kind, 'polygon');
       T.eq(preview(ctx).children.length, 0, 'the preview goes once it is committed');
-    } finally { ctx.restore(); }
+    } finally { await new Promise(function (resolve) { setTimeout(resolve, 0); }); ctx.restore(); }
   });
 
   test('draw: a load in the section is picked on the section and put on the ground', function () {
@@ -190,7 +233,7 @@
     } finally { ctx.restore(); }
   });
 
-  test('draw: in the section a drawn line is created where it was clicked', function () {
+  test('draw: in the section a drawn line is created where it was clicked', async function () {
     var ctx = rig(SECTION, sectionCamera());
     try {
       App.DrawInput.start('line');
@@ -201,7 +244,7 @@
       T.eq(ctx.posted[0].vertices.map(function (p) {
         return p.map(function (c) { return Math.round(c * 1e6) / 1e6; });
       }), [[0, -6, 0], [20, -11, 0]]);
-    } finally { ctx.restore(); }
+    } finally { await new Promise(function (resolve) { setTimeout(resolve, 0); }); ctx.restore(); }
   });
 
   /* "Water pressure point" and "Point prescribed displacement": one click, and the
