@@ -54,8 +54,8 @@ each process, and an OpenCASCADE crash on a thin solid must not stop the app.
 1. **Build the solids** ([core/geometry/solid_model.py](../../core/geometry/solid_model.py)).
    Each soil piece becomes a box, or a polygon swept across z where a line or a wall cuts
    the layer. Gmsh fragments the pieces against each other, so that neighbours share their
-   faces. Then it imprints the load areas, and embeds the walls and anchors. Each body gets its part key, which later
-   becomes its name in the deck.
+   faces. Then it imprints the load areas, and embeds the walls and anchors. Each body
+   gets its part key, which later becomes its name in the deck.
 2. **Draw them** ([core/geometry/tessellation.py](../../core/geometry/tessellation.py)). A
    fast surface triangulation (about 0.1 s) for the 3D view in the browser. It is for the
    display only, never for the analysis.

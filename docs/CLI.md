@@ -162,25 +162,18 @@ kratos-cli parts pit.json                                 # soil_top, ... for th
   off. A sheet pile splits the soil the same way, also when it is `--inactive`. A part of
   a line that ends inside the soil splits nothing, and the command says so when no part of
   the line splits anything. A line may be a polyline, and lines may cross. In 3D a line
-  cuts across the whole z range; it is drawn in 2D.
-
-  ```bash
-  kratos-cli beam pit.json add sheetpile --points 6 0 6 -13
-  kratos-cli line pit.json add floor_1 --points 0 -2 6 -2
-  kratos-cli body pit.json list
-  kratos-cli body pit.json set soil_top__part3 --name "lift 1" --material grout
-  kratos-cli stages pit.json deactivate dig_1 soil_top__part3
-  ```
+  cuts across the whole z range; it is drawn in 2D. The commands are in
+  [The structures, command by command](#the-structures-command-by-command).
 
   A layer that is cut has no plain key any more: each piece is `soil_<layer>__<id>`, with
   a new id `part1`, `part2`, ... in the order the pieces are made. `body list` shows the
   pieces from the top down, and `get bodies` a point inside each. A piece keeps its key,
-  name and material when another line is added. A stage that named the whole layer then names each
-  of its pieces. An edit that takes away a piece a stage still names is refused.
+  name and material when another line is added. A stage that named the whole layer then
+  names each of its pieces. An edit that takes away a piece a stage still names is refused.
   `body set --material layer` gives a body its layer's material as it is now. A body keeps
   its material in every stage. `layer set --material` gives every body of that layer the
-  new material, also a body given one of its own. In a model script, `lines=`
-  and `bodies=` say the same. A record
+  new material, also a body given one of its own. In a model script, `lines=` and
+  `bodies=` say the same. A record
   `SoilBody(id="lift1", name="lift 1", layer="top", point=(2.5, -1))` chooses the key of
   the piece its `point` lies in.
 - **A project saved with an excavation** opens with lines and soil bodies in its place: a
@@ -209,6 +202,9 @@ kratos-cli section pit.json add beam az26 --name "AZ 26" CROSS_AREA=0.015 I33=3e
 kratos-cli beam pit.json add sheet --points 6 0 6 -12        # on az26, the first profile
 kratos-cli line pit.json add floor_1 --points 0 -2 6 -2       # with the wall, the lifts
 kratos-cli line pit.json add floor_2 --points 0 -4.5 6 -4.5
+kratos-cli body pit.json list                                 # the pieces, and their keys
+kratos-cli body pit.json set soil_top__part3 --name "lift 1"
+kratos-cli body pit.json set soil_top__part4 --name "lift 3" --material sand
 kratos-cli anchor pit.json add strut --head 6 -1 --tail 5 -1
 kratos-cli anchor pit.json add tie --head 6.3 -3.5 --prestress 1e5
 kratos-cli interface pit.json add contact --structure sheet --side right
@@ -528,8 +524,8 @@ kratos-cli results field D:/copied/Pit_A_2026-10-12_09-14 uy   # a run anywhere
   is the bending moment. `--stage` narrows it to one stage.
 - **Which interface members a run has.** Each face of the wall has its own member:
   `interface_left` and `interface_right`, the faces toward -x and +x
-  (`results profile 1 interface_left tn`). An interface flatter than 45 degrees has `interface_below` and `interface_above` instead. With more
-  than one interface, the member names start with the interface's id: `contact_left`.
+  (`results profile 1 interface_left tn`). An interface flatter than 45 degrees has
+  `interface_below` and `interface_above` instead. With more than one interface, the member names start with the interface's id: `contact_left`.
   `results members` lists them.
 - **`--csv FILE`** writes the file the GUI saves (`results csv`, and the plot window's
   `results plot csv`), number for number, in UTF-8. `--csv` alone prints it, for a pipe;

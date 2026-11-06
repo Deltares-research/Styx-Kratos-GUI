@@ -97,6 +97,7 @@ generated file or snapshot with the command in the last column, and review the d
 | Test | What it checks | After a deliberate change |
 |---|---|---|
 | `tests/cli/test_edit_parity.py`, `frontend/tests/test-edits.js` | Each Delete the GUI offers, found in its code, sends a request that makes the same project as `kratos-cli ... remove` | `python tests/cli/test_edit_parity.py --write` |
+| `tests/cli/test_soil_line_commands.py` | A line or a soil body edit through the GUI's route and through `kratos-cli` makes the same project | Fix the side that changed |
 | `tests/test_draft_parity.py`, `frontend/tests/test-drafts.js` | A new record starts the same in both | `python tests/test_draft_parity.py --write` |
 | `tests/test_stage_parity.py` | The stages read the same in both | `python tests/test_stage_parity.py --write` |
 | `tests/cli/test_gui_commands.py` | The GUI's command box knows the words of `kratos-cli` | Add or remove the row in "The GUI's command box, in the terminal" in `docs/CLI.md` |

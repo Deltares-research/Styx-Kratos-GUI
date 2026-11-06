@@ -284,8 +284,8 @@ App.Model = (function () {
 
   /* One tree row per soil *body*, not per layer.
 
-     Lines and sheet piles split the soil, so one layer can be four bodies (core/model/schemas.py, `Project.soil_bodies`). Each
-     is separately meshed, separately deactivated in a stage, and separately shown or
+     Lines and sheet piles split the soil, so one layer can be four bodies
+     (core/model/schemas.py, `Project.soil_bodies`). Each is separately meshed, separately deactivated in a stage, and separately shown or
      hidden -- so each needs its own row with its own eye.
 
      The project publishes both the keys and what to call them; deriving either here

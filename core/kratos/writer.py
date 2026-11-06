@@ -1904,8 +1904,8 @@ def _segment_boundaries(project: Project, boundaries: list[tuple[str, int, list[
                         ) -> tuple[list[tuple[str, int, list[int]]], dict[str, str]]:
     """Split a domain face wherever a soil body a stage switches off meets it.
 
-    Such a body, say a lift, is deactivated in its own stage, and its stretch of the domain edge has to
-    go with it: a roller still holding the ground that was just dug away would restrain
+    Such a body, say a lift, is deactivated in its own stage, and its stretch of the domain
+    edge has to go with it: a roller still holding the ground that was just dug away would restrain
     soil that is no longer there. So the face the pit reaches becomes one part per lift
     -- the reference deck's `Excavated_Soil_N_Left_Edge` -- plus what is left, which
     keeps the face's own name and holds the ground that is never dug.
