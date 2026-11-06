@@ -193,6 +193,24 @@ def test_a_body_takes_its_layers_material_until_it_is_given_one():
     project = model(lines=[PIT_SIDE])
     assert project.soil_body_materials == {"soil_top__part1": "sand", "soil_top__part2": "sand",
                                            "soil_low": "sand"}
+    assert [body.mat for body in project.bodies] == ["sand", "sand"]
+
+
+def test_a_part_keeps_its_material_when_its_layer_is_given_another():
+    """A user who renamed a part may no longer connect it with its layer, so a change to
+    the layer does not reach it. A layer in one piece is the layer, and does change."""
+    project = model(lines=[PIT_SIDE])
+    layers = [layer.model_dump() | {"mat": "grout"} for layer in project.layers]
+    changed = edited(project, layers=layers)
+    assert changed.soil_body_materials == {"soil_top__part1": "sand",
+                                           "soil_top__part2": "sand",
+                                           "soil_low": "grout"}
+
+
+def test_a_record_written_without_a_material_takes_its_layers_when_it_is_read():
+    project = model(lines=[PIT_SIDE], bodies=[
+        SoilBody(id="pit", name="The pit", layer="top", point=(2.5, -2.0))])
+    assert next(body for body in project.bodies if body.id == "pit").mat == "sand"
 
 
 def test_a_body_can_have_its_own_material():
@@ -201,6 +219,7 @@ def test_a_body_can_have_its_own_material():
     assert project.soil_body_materials["soil_top__part2"] == "sand"
     back = session.update_body(project, "soil_top__part1", material=None)
     assert back.soil_body_materials["soil_top__part1"] == "sand"
+    assert back.bodies[0].mat == "sand"
 
 
 def test_a_body_with_an_unknown_material_is_refused():

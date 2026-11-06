@@ -110,7 +110,8 @@ def register(commands, common: argparse.ArgumentParser) -> None:
                          "is changed with `layer set`")
     change.add_argument("key", help="the body's key, as `body list` shows it")
     change.add_argument("--name", help="what to call it")
-    change.add_argument("--material", help="its own material, or `layer` for its layer's")
+    change.add_argument("--material", help="its material, or `layer` for its layer's as it "
+                                           "is now")
 
     parts = commands.add_parser("parts", parents=[common],
                                 help="the parts of the model, and which a stage can switch")

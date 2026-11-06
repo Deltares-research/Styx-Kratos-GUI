@@ -177,8 +177,9 @@ kratos-cli parts pit.json                                 # soil_top, ... for th
   pieces from the top down, and `get bodies` a point inside each. A piece keeps its key,
   name and material when another line is added. A stage that named the whole layer then names each
   of its pieces. An edit that takes away a piece a stage still names is refused.
-  `body set --material layer` goes back to the layer's material, and a body's material
-  holds in every stage. In a model script, `lines=` and `bodies=` say the same. A record
+  `body set --material layer` gives a body its layer's material as it is now. A body keeps
+  its material when its layer's changes, and in every stage. In a model script, `lines=`
+  and `bodies=` say the same. A record
   `SoilBody(id="lift1", name="lift 1", layer="top", point=(2.5, -1))` chooses the key of
   the piece its `point` lies in.
 - **A project saved with an excavation** opens with lines and soil bodies in its place: a

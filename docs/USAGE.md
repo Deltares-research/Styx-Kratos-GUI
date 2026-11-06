@@ -161,7 +161,8 @@ draw, you can also type `x y` in the command box to place a point.
 Where a line crosses a soil layer from one edge to another, the layer becomes separate soil
 parts. A sheet pile splits a layer in the same way. In the Model explorer each part has its
 own row, for example *Soil_Top · Part 1*. In **Staged construction** you can switch each
-part off in its own stage. Select a part to rename it or to give it another material.
+part off in its own stage. Select a part to rename it or to give it another material. A
+part starts with its layer's material and keeps it, even if you later change the layer's.
 Lines have their own group in the Model explorer. Delete a line there, and the parts join
 again, unless a stage still uses one of them. Then the deletion is refused.
 

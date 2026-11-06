@@ -989,8 +989,9 @@ def remove_line(project: Project, id: str) -> Project:
 
 
 def update_body(project: Project, key: str, **fields) -> Project:
-    """The soil body `key` with its `name` or its `material` changed; `material=None` goes
-    back to the layer's. A body that is a whole layer is that layer's to change."""
+    """The soil body `key` with its `name` or its `material` changed; `material=None` gives
+    it its layer's material as it is now. A body that is a whole layer is that layer's to
+    change."""
     payload = project.model_dump()
     for body in payload.get("bodies", []):
         if f"soil_{body['layer']}__{body['id']}" == key:

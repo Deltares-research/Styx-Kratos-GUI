@@ -372,7 +372,7 @@ def test_a_soil_part_takes_its_own_material_and_gives_it_back(app_page, live_ser
     stored = app_page.request.get(url + "/api/project").json()
     assert stored["soil_body_materials"]["soil_top__part1"] == "grout"
 
-    material.locator("select").select_option("")
+    material.locator("select").select_option("sand")
 
     app_page.wait_for_function(
         "App.PROJECT.soil_body_materials.soil_top__part1 === 'sand'", timeout=LONG)
@@ -380,7 +380,7 @@ def test_a_soil_part_takes_its_own_material_and_gives_it_back(app_page, live_ser
         state="detached")
     assert tree_label(app_page, "Top · Part 1").endswith("Soil sand")
     stored = app_page.request.get(url + "/api/project").json()
-    assert [body["mat"] for body in stored["bodies"]] == [None, None]
+    assert [body["mat"] for body in stored["bodies"]] == ["sand", "sand"]
     assert app_page.errors == []
 
 

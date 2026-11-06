@@ -238,7 +238,9 @@ class SoilBody(Base):
     layer: Ident
     point: tuple[float, float]             # in-plane (x, y), metres
     mat: Ident | None = None
-    """Its own material, in every stage; `None` is its layer's."""
+    """Its material, in every stage. A record made without one, by a script or by a line
+    that cuts a new piece off, takes its layer's then and keeps it when the layer's
+    changes (`Project._split_the_soil`)."""
 
     @field_validator("id")
     @classmethod
@@ -1899,6 +1901,12 @@ class Project(Base):
             raise ValueError("a project with layered_soil false takes no lines: its soil is "
                              "the seeded demo's")
         pieces = self.split_soil()
+        # A part keeps the material it was cut off with when its layer's changes: a record
+        # that has none takes its layer's now, as a new piece does.
+        pieces = [piece if piece.body is None or piece.body.mat is not None
+                  else piece._replace(body=piece.body.model_copy(
+                      update={"mat": piece.layer.mat}))
+                  for piece in pieces]
         self.bodies = [piece.body for piece in pieces if piece.body is not None]
         _reject_same_names(pieces)
         # The viewport keeps a line's drawing beside the parts', under its id.
@@ -2582,7 +2590,7 @@ class Project(Base):
                     while f"part{number}" in used or _deck_word(f"Part {number}") in taken:
                         number += 1
                     record = SoilBody(id=f"part{number}", name=f"Part {number}", layer=layer.id,
-                                      point=piece.point)
+                                      point=piece.point, mat=layer.mat)
                 out.append(SoilPiece(f"soil_{layer.id}__{record.id}", layer, piece, record))
         return out
 
