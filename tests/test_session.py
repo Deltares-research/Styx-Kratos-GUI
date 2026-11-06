@@ -33,9 +33,9 @@ how far it reaches. The tests here never run gmsh; that is the worker's business
 
 def staged() -> Project:
     """The seed with a pit dug in three lifts, so there is something to stage."""
-    payload = seed_project(simple=False).model_dump()
-    payload["excavation"] = {k: v for k, v in payload["excavation"].items() if k != "floor_y"}
-    payload["excavation"] |= {"levels": [-3.0, -5.0, -7.0]}
+    payload = seed_project().model_dump()
+    payload["excavation"] = {"x0": 8.0, "x1": 16.0, "z0": 0.0, "z1": 25.0,
+                             "levels": [-3.0, -5.0, -7.0]}
     return Project.model_validate(payload)
 
 

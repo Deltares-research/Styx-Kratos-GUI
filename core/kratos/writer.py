@@ -374,30 +374,10 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
         parts.append((slave_name, sorted({node_id[tag] for tag in slave}), [], []))
         ties[key] = (master_name, slave_name)
 
-    # The retained-side copies of the retained-side interfaces' nodes, as one node-only
-    # part. An interface element's second half is its soil-side copy of the split nodes
-    # (`_interface_by_body`), so the group is those halves, for the contacts that run
-    # against soil outside the pit. Written only for a staged deck, which is the only
-    # thing that reads it (plan sec C7).
-    #
-    # Without a pit there is no retained side to speak of -- a sheet pile through a dike
-    # holds ground on both faces -- and one group would mix the two faces into one
-    # curve. Each face of each wall interface gets a group and a curve of its own
-    # instead, over every body it runs against.
-    outside = {key for key, _, _, inside in project.soil_bodies() if not inside}
-    pit = len(outside) < len(project.soil_bodies())
-    retained_blocks = [(key, rows) for key, _, rows in interface_blocks
-                       if not pit or key.partition("__")[2] in outside]
-    right_side_part = None
+    # Each face of each wall interface gets a node group and a curve of its own, over every
+    # body it runs against.
     face_parts: list[tuple[str, str]] = []
-    if project.stages and retained_blocks and pit:
-        retained_nodes = sorted({node_id[tag] for _, rows in retained_blocks
-                                 for row in rows for tag in row[len(row) // 2:]
-                                 if tag in node_id})
-        if retained_nodes:
-            right_side_part = RIGHT_SIDE_PART
-            parts.append((right_side_part, retained_nodes, [], []))
-    elif project.stages and retained_blocks:
+    if project.stages and interface_blocks:
         several = len({key for key, _, _ in interface_faces}) > 1
         for key, face, tags in interface_faces:
             nodes = sorted({node_id[tag] for tag in tags if tag in node_id})
@@ -523,12 +503,10 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
         # material is ground like a layer is, and gets the same initial stresses.
         soils=tuple(names[key] for key, _, _ in soil_blocks if key in soil_keys),
         interfaces=interface_parts,
-        retained=tuple(names[key] for key, _ in retained_blocks),
         beams=tuple(names[key] for key, _, _ in beam_blocks),
         structures=tuple(names[key] for key, _, _ in beam_blocks + anchor_blocks),
         ties=tuple((master, slave, key) for key, (master, slave) in ties.items())
              if dim == 2 else (),
-        right_side=right_side_part,
         faces=tuple(face_parts),
         unsaturated=tuple(name for name, material in part_materials
                           if project.material(material).variables.get(
@@ -623,10 +601,8 @@ SATURATED = "SaturatedLaw"
 """Kratos' retention law when a material names none: a soil saturated whatever its water
 pressure, whose flow is linear in it."""
 INTERFACE_VARIABLES = ("GEO_EFFECTIVE_TRACTION_VECTOR",)
-RIGHT_SIDE_PART = "Right_Side_Of_Right_Interfaces"
-"""The retained-side nodes of the retained-side interfaces, as a node-only sub-model
-part. Written only when something reads it -- the `JsonOutputProcess` a staged deck
-carries -- so an unstaged project does not grow a part it never names (plan sec C7)."""
+"""What the `JsonOutputProcess` of a staged deck writes for each face of an interface, and
+what is made nodal for it."""
 
 
 @dataclass(frozen=True)
@@ -642,14 +618,12 @@ class _Deck:
     bodies: tuple[str, ...]
     soils: tuple[str, ...]
     interfaces: tuple[str, ...]
-    retained: tuple[str, ...]
     beams: tuple[str, ...]
     structures: tuple[str, ...]
     ties: tuple[tuple[str, str, str], ...] = ()
-    right_side: str | None = None
     faces: tuple[tuple[str, str], ...] = ()
-    """(node part, member name) per face of each wall interface, in a deck without a pit:
-    one curve per face (`_export`)."""
+    """(node part, member name) per face of each wall interface: one curve per face
+    (`_export`)."""
     unsaturated: tuple[str, ...] = ()
     """The soil parts whose retention law makes the permeability depend on the water
     pressure, so that a flow stage with any of them in it is solved by Newton-Raphson."""
@@ -745,7 +719,7 @@ def _sequenced_stages(project: Project, deck: _Deck) -> list[parameters.Stage]:
         carried = () if first else tuple(name for name in deck.interfaces + deck.structures
                                          if name in live and name in was)
         beams = tuple(name for name in deck.beams if name in live)
-        retained = tuple(name for name in deck.retained if name in live)
+        contacts = tuple(name for name in deck.interfaces if name in live)
 
         flow = stage.calculation == stages.GROUNDWATER_FLOW
         bodies = tuple(name for name in deck.bodies if name in live)
@@ -754,15 +728,13 @@ def _sequenced_stages(project: Project, deck: _Deck) -> list[parameters.Stage]:
             extrapolate += ((bodies, FLOW_EXTRAPOLATED),)
         if beams:
             extrapolate += ((beams, WALL_EXTRAPOLATED),)
-        if retained:
-            extrapolate += ((retained, INTERFACE_VARIABLES),)
+        if contacts:
+            extrapolate += ((contacts, INTERFACE_VARIABLES),)
 
         output: tuple[tuple[str, str, tuple[str, ...]], ...] = ()
         if beams:
             output += ((beams[0], "output_wall", WALL_OUTPUT_VARIABLES),)
-        if retained and deck.right_side:
-            output += ((deck.right_side, "output_interface", INTERFACE_VARIABLES),)
-        if retained:
+        if contacts:
             output += tuple((part, f"output_{member}", INTERFACE_VARIABLES)
                             for part, member in deck.faces)
 
@@ -1930,9 +1902,9 @@ def _boundary_parts(boundaries: list[tuple[str, int, list[int]]]
 def _segment_boundaries(project: Project, boundaries: list[tuple[str, int, list[int]]],
                         body_nodes: dict[str, set[int]], names: dict[str, str],
                         ) -> tuple[list[tuple[str, int, list[int]]], dict[str, str]]:
-    """Split a domain face wherever an excavation lift meets it.
+    """Split a domain face wherever a soil body a stage switches off meets it.
 
-    A lift is deactivated in its own stage, and its stretch of the domain edge has to
+    Such a body, say a lift, is deactivated in its own stage, and its stretch of the domain edge has to
     go with it: a roller still holding the ground that was just dug away would restrain
     soil that is no longer there. So the face the pit reaches becomes one part per lift
     -- the reference deck's `Excavated_Soil_N_Left_Edge` -- plus what is left, which
@@ -1955,9 +1927,7 @@ def _segment_boundaries(project: Project, boundaries: list[tuple[str, int, list[
     second, weaker copy of the naming rule below.
     """
     switched_off = {key for stage in project.stages for key in stage.deactivate}
-    lifts = [key for key, _, _, inside in project.soil_bodies()
-             if inside and "__lift" in key
-             or not inside and "__" in key and key in switched_off]
+    lifts = [key for key, *_ in project.soil_bodies() if "__" in key and key in switched_off]
     if not lifts:
         return boundaries, {}
     top = any(c.active and c.on == "face" and c.face == "top"

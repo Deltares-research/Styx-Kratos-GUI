@@ -343,7 +343,7 @@ def test_a_mesh_size_on_a_cut_layer_goes_with_the_layer():
 
 def staged() -> Project:
     project = model(lines=[PIT_SIDE, FLOOR])
-    lift = next(key for key, _, top, _ in project.soil_bodies() if top == 0.0
+    lift = next(key for key, _, top in project.soil_bodies() if top == 0.0
                 and project.split_soil()[0].key == key)
     return edited(project, stages=[
         Stage(id="first", name="First").model_dump(),

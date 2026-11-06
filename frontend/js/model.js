@@ -284,11 +284,9 @@ App.Model = (function () {
 
   /* One tree row per soil *body*, not per layer.
 
-     A staged excavation splits the soil inside the pit into the lifts it is dug in, so
-     one layer can be four bodies (core/model/schemas.py, `Project.soil_bodies`). Each
+     Lines and sheet piles split the soil, so one layer can be four bodies (core/model/schemas.py, `Project.soil_bodies`). Each
      is separately meshed, separately deactivated in a stage, and separately shown or
-     hidden -- so each needs its own row with its own eye, or the excavated side has no
-     representation in the tree at all.
+     hidden -- so each needs its own row with its own eye.
 
      The project publishes both the keys and what to call them; deriving either here
      would be a second implementation of the split to keep in step. A project that

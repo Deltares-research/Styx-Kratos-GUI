@@ -17,7 +17,7 @@ from tests.models.excavation import excavation_project
 
 def _project(*stage_records) -> schemas.Project:
     """A staged project -- layers crossed with three lifts -- and a stage list."""
-    p = seed_project(simple=False).model_dump()
+    p = seed_project().model_dump()
     p["domain"] |= {"y_top": 0.0, "y_bottom": -60.0}
     p["layers"] = [
         {"id": "L1", "name": "Soil_1", "mat": p["materials"][0]["id"],
@@ -25,9 +25,15 @@ def _project(*stage_records) -> schemas.Project:
         {"id": "L2", "name": "Soil_2", "mat": p["materials"][1]["id"],
          "top": -8.0, "bottom": -60.0},
     ]
-    p["excavation"] = {k: v for k, v in p["excavation"].items() if k != "floor_y"}
-    p["excavation"] |= {"x0": 0.0, "x1": 5.0, "levels": [-2.0, -5.0, -8.0]}
-    p["wall"] |= {"top_y": 0.0, "toe_y": -13.0}
+    p["excavation"] = {"x0": 0.0, "x1": 5.0, "z0": p["domain"]["z0"],
+                         "z1": p["domain"]["z1"], "levels": [-2.0, -5.0, -8.0]}
+    # Two parts for a stage to switch that are not soil.
+    p["beam_sections"] = [schemas.BeamSection(id="s", name="S", variables={}).model_dump()]
+    p["beams"] = [{"id": "pile", "name": "Pile", "section": "s",
+                   "points": [(5.0, 0.0), (5.0, -13.0)]}]
+    p["anchor_sections"] = [schemas.AnchorSection(id="t", name="T", variables={}).model_dump()]
+    p["anchors"] = [{"id": "tie", "name": "Tie", "section": "t",
+                     "head": (5.0, -1.0), "tail": (3.0, -1.0)}]
     p["stages"] = list(stage_records)
     return schemas.Project.model_validate(p)
 
@@ -78,24 +84,24 @@ def test_the_model_starts_with_everything_in_it():
     """The mesh carries every part; the first stage's job is to switch off what has not
     been built yet. That is exactly what the reference's stage 1 does -- it deactivates
     the wall, the anchor and all eight interfaces."""
-    p = _project(_stage("initial", deactivate=["wall", "anchors"]))
+    p = _project(_stage("initial", deactivate=["pile", "tie"]))
     assert stages.active_parts(p, "initial") == (
-        set(p.stageable_keys()) - {"wall", "anchors"})
+        set(p.stageable_keys()) - {"pile", "tie"})
 
 
 def test_active_parts_walks_the_whole_chain():
-    p = _project(_stage("initial", deactivate=["wall", "anchors"]),
-                 _stage("build", parent="initial", activate=["wall"]),
+    p = _project(_stage("initial", deactivate=["pile", "tie"]),
+                 _stage("build", parent="initial", activate=["pile"]),
                  _stage("dig_1", parent="build", deactivate=["soil_L1__lift1"]),
-                 _stage("anchor", parent="dig_1", activate=["anchors"]))
+                 _stage("anchor", parent="dig_1", activate=["tie"]))
     at = stages.active_parts(p, "anchor")
-    assert "wall" in at and "anchors" in at
+    assert "pile" in at and "tie" in at
     assert "soil_L1__lift1" not in at
     assert "soil_L1__lift2" in at
 
 
 def test_active_parts_takes_a_stage_or_its_id():
-    p = _project(_stage("initial", deactivate=["wall"]))
+    p = _project(_stage("initial", deactivate=["pile"]))
     assert stages.active_parts(p, p.stages[0]) == stages.active_parts(p, "initial")
 
 
@@ -103,7 +109,7 @@ def test_active_parts_resolves_a_branch_export_would_refuse():
     """Resolution follows parents, so it works on any tree. It has to: the editor shows
     a half-built branch, and refusing to say what is in it would make the branch
     invisible until the user deleted it."""
-    p = _project(_stage("initial", deactivate=["wall"]),
+    p = _project(_stage("initial", deactivate=["pile"]),
                  _stage("dig_wet", parent="initial", deactivate=["soil_L1__lift1"]),
                  _stage("dig_dry", parent="initial", deactivate=["soil_L1__lift2"]))
     assert "soil_L1__lift1" not in stages.active_parts(p, "dig_wet")
@@ -113,7 +119,7 @@ def test_active_parts_resolves_a_branch_export_would_refuse():
 def test_a_stage_that_names_nothing_inherits_its_parent_exactly():
     """The reference's null step: same model, solved again. Its domain list is its
     predecessor's, character for character."""
-    p = _project(_stage("initial", deactivate=["wall"]),
+    p = _project(_stage("initial", deactivate=["pile"]),
                  _stage("null_step", parent="initial"))
     assert stages.active_parts(p, "null_step") == stages.active_parts(p, "initial")
 
@@ -121,13 +127,13 @@ def test_a_stage_that_names_nothing_inherits_its_parent_exactly():
 # -- transitions -------------------------------------------------------------
 
 def test_transitions_are_the_stage_preprocess():
-    p = _project(_stage("initial", deactivate=["wall", "anchors"]),
-                 _stage("build", parent="initial", activate=["wall"]),
+    p = _project(_stage("initial", deactivate=["pile", "tie"]),
+                 _stage("build", parent="initial", activate=["pile"]),
                  _stage("dig_1", parent="build", deactivate=["soil_L1__lift1"]))
     got = [(ph.id, on, off) for ph, on, off in stages.transitions(p)]
     assert got == [
-        ("initial", set(), {"wall", "anchors"}),
-        ("build", {"wall"}, set()),
+        ("initial", set(), {"pile", "tie"}),
+        ("build", {"pile"}, set()),
         ("dig_1", set(), {"soil_L1__lift1"}),
     ]
 
@@ -137,20 +143,16 @@ def test_a_transition_reports_only_what_actually_changes():
     re-adding it leaves that behind. Writing the no-op into the deck would make Kratos
     deactivate an already inactive part, which it tolerates, and make the deck
     unreadable, which nobody does. The diff is filtered against the state it lands on."""
-    p = _project(_stage("initial", deactivate=["wall"]),
-                 _stage("again", parent="initial", deactivate=["wall"]),
-                 _stage("on", parent="again", activate=["wall"]),
-                 _stage("on_again", parent="on", activate=["wall"]))
+    p = _project(_stage("initial", deactivate=["pile"]),
+                 _stage("again", parent="initial", deactivate=["pile"]),
+                 _stage("on", parent="again", activate=["pile"]),
+                 _stage("on_again", parent="on", activate=["pile"]))
     assert [(on, off) for _, on, off in stages.transitions(p)] == [
-        (set(), {"wall"}), (set(), set()), ({"wall"}, set()), (set(), set()),
+        (set(), {"pile"}), (set(), set()), ({"pile"}, set()), (set(), set()),
     ]
 
 
-# -- staged_excavation_stages ----------------------------------------------------------
-# The staged excavation sequence (`tests/models/excavation.py` builds its stages
-# with it). Not what
-# "Create default stages" gives any more -- that is `default_stages`, below.
-#
+# -- The test model's sequence ----------------------------------------------------------
 # The reference deck's seven stages:
 #
 #   1 Initial stage     K0     deactivate the wall, the anchor and every interface
@@ -169,11 +171,59 @@ def _model():
     return excavation.excavation_project()
 
 
+def test_the_test_models_stages_follow_the_reference_sequence():
+    got = [(ph.id, sorted(on), sorted(off))
+           for ph, on, off in stages.transitions(_model())]
+    assert got == [
+        ("initial", [], ["sheetpile", "strut", "surcharge", "wall_contact",
+                         "water_1", "water_2", "water_3"]),
+        ("null_step", [], []),
+        ("install_sheetpile", ["sheetpile", "surcharge", "wall_contact"], []),
+        ("dig_1", ["water_1"], ["soil_L_top__lift1"]),
+        ("install_strut", ["strut"], []),
+        ("dig_2", ["water_2"], ["soil_L_top__lift2", "water_1"]),
+        ("dig_3", ["water_3"], ["soil_L_top__lift3", "water_2"]),
+    ]
+
+
+def test_the_ground_under_the_pit_stays_when_the_lifts_come_out():
+    """`Soil_Below_Pit` is on the dug side of the wall but is never dug, and stays
+    active in all seven reference stages. Only the lifts come out."""
+    last = stages.active_parts(_model(), "dig_3")
+    assert "soil_L_mid__pit" in last
+    assert not {"soil_L_top__lift1", "soil_L_top__lift2", "soil_L_top__lift3"} & last
+
+
+def test_the_displacements_are_reset_when_the_wall_goes_in():
+    """The reference sets `reset_totals` true in exactly one stage, the wall's, so the
+    wall's deflection is measured from the ground it was built into."""
+    made = _model().stages
+    assert [ph.id for ph in made if ph.reset_displacements] == ["install_sheetpile"]
+
+
+def test_the_first_staged_stage_is_the_only_k0_one():
+    made = _model().stages
+    assert made[0].calculation == "K0 procedure"
+    assert made[1].calculation == "Null step"
+    assert all(ph.calculation == "Plastic" for ph in made[2:])
+
+
+def test_the_test_models_stages_linearise():
+    staged = _model()
+    assert [ph.id for ph in stages.linearise(staged)] == \
+        [ph.id for ph in staged.stages]
+
+
+def test_an_anchor_is_installed_after_the_lift_that_exposes_it():
+    """The reference installs the strut at -1.5 after the first lift reaches -2.0, not
+    before: you cannot fix a strut to a wall face that is still buried."""
+    order = [ph.id for ph in _model().stages]
+    assert order.index("dig_1") < order.index("install_strut") < order.index("dig_2")
+
+
 # -- default_stages ----------------------------------------------------------
 # What "Create default stages" gives: Initial stage, then Null step, and nothing else.
-# Every further stage is the user's to add. The staged sequence above used to be
-# the default, and on a new model it produced a "First excavation" that dug nothing --
-# the blank project's placeholder excavation has a level but no soil to remove.
+# Every further stage is the user's to add.
 
 def test_the_default_is_the_initial_stage_then_the_null_step():
     made = stages.default_stages(_model())
