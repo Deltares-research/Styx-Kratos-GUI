@@ -92,6 +92,16 @@ SUITES = {
         [JS / "download.js", JS / "results-render.js", JS / "results.js", JS / "results-plot.js"],
         TESTS / "test-results-plot.js",
     ),
+    # A saved picture: the scene as a list of shapes, then those shapes as a file. Reading
+    # the scene, the canvas, the clipboard and the save windows are in the browser suite.
+    "picture-draw": (
+        [JS / "results-render.js", JS / "ruler.js", JS / "picture-draw.js"],
+        TESTS / "test-picture-draw.js",
+    ),
+    "picture-writers": (
+        [JS / "zip.js", JS / "picture-draw.js", JS / "picture-writers.js"],
+        TESTS / "test-picture-writers.js",
+    ),
     # The rulers' arithmetic: steps, ticks, labels, the ranges a view shows. Painting
     # the canvases and the toolbar wiring are test-ruler-dom.js, in the browser.
     "ruler": (
