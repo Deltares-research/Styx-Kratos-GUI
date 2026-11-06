@@ -498,8 +498,8 @@ model, also when the mesh is shown deformed. Type `results loads off` to hide th
 - **Plot along the wall:** click **Plot wall…**, or type `results plot`. The plot shows the
   bending moment (M), the shear force (Q), the normal force (N), the horizontal displacement
   (ux) and the interface tractions (tn, ts) against depth, with one line for each stage.
-  **Save PNG**, **Save PDF** and **Save SVG** save the figure, and **Save CSV** saves the
-  numbers.
+  Click **Save ▾** and choose a format: **PNG**, **PDF** or **SVG** saves the figure, and
+  **CSV** saves the numbers. The plot of an interface is saved in the same way.
 - **Values at a node:** click **Results** → **Value at a node…**, or type
   `results at <node>`.
 - **Save the field as CSV:** click **Save CSV**, or type `results csv`.

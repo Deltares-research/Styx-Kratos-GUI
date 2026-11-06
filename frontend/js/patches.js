@@ -3576,23 +3576,18 @@ App.LivePatches = (function () {
       if (plotWindow) return plotWindow;
       if (!App.Dialogs || !App.Dialogs.open) return null;
 
-      var act = function (label, cmd) {
-        return { label: label, keepOpen: true,
-                 onClick: function () { resultsCommand(cmd); } };
-      };
+      var saveMenu = null;
       var handle = App.Dialogs.open({
         title: 'Plot along the wall',
         width: 1180, height: 560,
         buttons: [
-          act('Save PNG', 'results plot png'),
-          act('Save PDF', 'results plot pdf'),
-          act('Save SVG', 'results plot svg'),
-          act('Save CSV', 'results plot csv'),
+          { label: 'Save ▾', keepOpen: true, onClick: function () { saveMenu.toggle(); } },
           { label: 'Close', primary: true }
         ],
-        onClose: function () { plotWindow = null; plotColumns = 0; }
+        onClose: function () { saveMenu.close(); plotWindow = null; plotColumns = 0; }
       });
       handle.dialog.classList.add('dlg-plot');
+      saveMenu = plotSaveMenu(handle.dialog.querySelector('.dlg-foot .btn'));
 
       var layer = document.getElementById('modal-layer');
       var scrims = layer ? layer.querySelectorAll('.scrim') : [];
@@ -3610,6 +3605,55 @@ App.LivePatches = (function () {
         new ResizeObserver(function () { renderPlotWindow(false); }).observe(handle.body);
       }
       return handle;
+    }
+
+    /* The plot window's one Save button: a small menu of the formats `results plot`
+       saves, opened above the button when there is no room below it. A pick saves at
+       once, from its own click, so the browser still opens its save window. The page
+       closes an open menu on any press outside it -- on this button too -- so the click
+       that follows such a press must not open the menu again. */
+    var PLOT_SAVE_FORMATS = [
+      { label: 'PNG', format: 'png' },
+      { label: 'PDF', format: 'pdf' },
+      { label: 'SVG', format: 'svg' },
+      { label: 'CSV', format: 'csv' }
+    ];
+
+    function plotSaveMenu(button) {
+      var open = false, justClosed = false, pressClosed = false;
+      button.setAttribute('aria-haspopup', 'menu');
+      button.setAttribute('aria-expanded', 'false');
+      button.addEventListener('mousedown', function () { pressClosed = justClosed; });
+
+      function show() {
+        App.UI.closePopups(0);
+        var r = button.getBoundingClientRect();
+        var menu = App.UI.popup(App.Menu.build(PLOT_SAVE_FORMATS, function (it) {
+          resultsCommand('results plot ' + it.format);
+        }), r.left, r.bottom);
+        var height = menu.getBoundingClientRect().height;
+        if (r.bottom + height > window.innerHeight - 4) {
+          menu.style.top = Math.max(4, Math.round(r.top - height)) + 'px';
+        }
+        open = true;
+        button.setAttribute('aria-expanded', 'true');
+        App.UI.whenClosed(function () {
+          open = false;
+          button.setAttribute('aria-expanded', 'false');
+          justClosed = true;
+          setTimeout(function () { justClosed = false; }, 0);
+        });
+      }
+
+      return {
+        toggle: function () {
+          var closedByThisPress = pressClosed;
+          pressClosed = false;
+          if (open) App.UI.closePopups(0);
+          else if (!closedByThisPress) show();
+        },
+        close: function () { if (open) App.UI.closePopups(0); }
+      };
     }
 
     function closePlotWindow() {

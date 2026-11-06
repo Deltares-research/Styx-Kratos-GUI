@@ -337,8 +337,30 @@
       }));
   });
 
-  test('results: plot member selection and both download buttons use the plotted data', function () {
+  /* App.UI keeps the first menu layer it finds, so this one stays for the whole page. */
+  function menuLayer() {
+    var layer = document.getElementById('menu-layer');
+    if (!layer) {
+      layer = document.createElement('div');
+      layer.id = 'menu-layer';
+      document.body.appendChild(layer);
+    }
+    return layer;
+  }
+
+  function menuItem(label) {
+    return Array.prototype.filter.call(menuLayer().querySelectorAll('.menu-item'), function (row) {
+      return row.textContent.indexOf(label) === 0;
+    })[0];
+  }
+
+  function press(target) {
+    target.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+  }
+
+  test('results: plot member selection and the Save menu use the plotted data', function () {
     var ctx = rig();
+    menuLayer();
     return done(ctx, App.Results.handleCommand('results open ' + RUN).then(function () {
       App.runAction({ action: 'plotResults' });
       return settle(60);
@@ -349,8 +371,16 @@
       return settle(60);
     }).then(function () {
       var win = dialogTitled(ctx, 'Plot along the wall');
-      button(win, 'Save SVG').click();
-      button(win, 'Save CSV').click();
+      T.ok(!button(win, 'Save SVG'), 'one Save button replaces the four');
+      var save = button(win, 'Save ▾');
+      T.eq(save.getAttribute('aria-haspopup'), 'menu');
+      save.click();
+      T.eq(save.getAttribute('aria-expanded'), 'true');
+      T.eq(['PNG', 'PDF', 'SVG', 'CSV'].filter(menuItem).length, 4, 'every format is offered');
+      menuItem('SVG').click();
+      T.eq(save.getAttribute('aria-expanded'), 'false', 'a pick closes the menu');
+      save.click();
+      menuItem('CSV').click();
       return settle();
     }).then(function () {
       T.ok(ctx.commands.indexOf('results plot wall') >= 0);
@@ -358,6 +388,33 @@
       T.ok(ctx.commands.indexOf('results plot csv') >= 0);
       T.ok(ctx.downloads.some(function (name) { return /\.svg$/.test(name); }));
       T.ok(ctx.downloads.some(function (name) { return /\.csv$/.test(name); }));
+
+      var save = button(dialogTitled(ctx, 'Plot along the wall'), 'Save ▾');
+      function menus() { return menuLayer().querySelectorAll('.menu').length; }
+      press(save);
+      save.click();
+      T.eq(menus(), 1, 'a click opens the menu');
+      // The press closes it, as any press outside a menu does; its click must not reopen it.
+      press(save);
+      save.click();
+      T.eq(menus(), 0, 'a second click closes it');
+      return settle().then(function () {
+        save.click();
+        T.eq(menus(), 1, 'a keyboard click opens it');
+        save.click();
+        T.eq(menus(), 0, 'and closes it again');
+
+        var bottom = window.innerHeight - 2;
+        save.getBoundingClientRect = function () {
+          return { left: 20, right: 90, top: bottom - 24, bottom: bottom, width: 70, height: 24 };
+        };
+        save.click();
+        var menu = menuLayer().querySelector('.menu');
+        T.ok(parseFloat(menu.style.top) + menu.getBoundingClientRect().height <= bottom - 24 + 1,
+             'without room below, the menu opens above the button');
+        delete save.getBoundingClientRect;
+        App.UI.closePopups(0);
+      });
     }));
   });
 
@@ -378,9 +435,12 @@
     }).then(function () {
       T.ok(dialogTitled(ctx, 'Plot along the wall'), 'the plot opens beside the chooser');
       T.ok(ctx.commands.indexOf('results range auto') >= 0);
+      button(dialogTitled(ctx, 'Plot along the wall'), 'Save ▾').click();
+      T.eq(menuLayer().querySelectorAll('.menu').length, 1, 'the Save menu is open');
       App.setMode('soil');
       T.eq(dialogTitled(ctx, 'Choose results'), undefined);
       T.eq(dialogTitled(ctx, 'Plot along the wall'), undefined);
+      T.eq(menuLayer().querySelectorAll('.menu').length, 0, 'its menu closes with it');
       T.eq(dock.querySelector('#panel-results').hidden, true);
     }).then(function () { dock.remove(); }, function (error) { dock.remove(); throw error; }));
   });
