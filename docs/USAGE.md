@@ -150,6 +150,24 @@ The preset values are only a start. Check them for your soil.
 is not a layer, for example an embankment or a lens. Type the corners of its outline and
 select its material.
 
+### Lines that split the soil
+
+**Structures > Create line** splits soil into parts. Click the points of the line in the
+section, then press Enter or right-click. The Line window opens with the points. Correct
+them there if needed, and select **Save**. The arrow in the corner of the button also has
+**Line by coordinates…**, which opens the same window with no drawing first. While you
+draw, you can also type `x y` in the command box to place a point.
+
+Where a line crosses a soil layer from one edge to another, the layer becomes separate soil
+parts. A sheet pile splits a layer in the same way. In the Model explorer each part has its
+own row, for example *Soil_Top · Part 1*. In **Staged construction** you can switch each
+part off in its own stage. Select a part to rename it or to give it another material.
+Lines have their own group in the Model explorer. Delete a line there, and the parts join
+again, unless a stage still uses one of them. Then the deletion is refused.
+
+A part of a line that ends inside the soil splits nothing. The Session log says so when no
+part of a line splits anything.
+
 ### Excavations
 
 The GUI cannot make an excavation pit yet. To add a pit and the levels to which it is dug,

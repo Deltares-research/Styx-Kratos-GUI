@@ -177,8 +177,9 @@ and adds only the values that are missing
 | Soil layers | A stack of horizontal layers across the whole domain, each with one top and one bottom. Made in **Modify soil layers** or with `kratos-cli layer`. The stack is checked for gaps. | Tested |
 | Free soil polygons in the stack | Not supported. Layers are always a stack. | Not available |
 | Soil surface (2D) or soil volume (3D) | Type the corners of an outline and select a material (embankment, cutting, fill, lens) | Tested |
+| Lines that split the soil | Drawn with **Create line**, typed in the Line window, or `kratos-cli line`. Where a line or a sheet pile crosses a layer from edge to edge, the layer becomes separate soil bodies. A stage can switch each off, and each can have its own name and material (for all stages). In 3D a line cuts across the whole z range. | Tested |
 | Excavation | A pit with several lifts. Each lift in each layer is its own soil body. Make it with `kratos-cli excavation` or a model script: the GUI shows it but cannot make it. | Tested |
-| Drawing tools | Point, line, surface, box and cylinder (box and cylinder in 3D only) | Tested |
+| Drawing tools | Point, surface, box and cylinder (box and cylinder in 3D only). These make display geometry. | Tested |
 | CAD import | STEP, IGES, BREP, STL, OBJ (surfaces are made into solids) | Tested |
 | Kratos `.mdpa` import | View only: a preview with a list of parts. You cannot change the mesh. | Tested |
 

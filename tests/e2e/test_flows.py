@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from tests import test_soil_lines as soil_lines
 from tests.e2e.conftest import command, log_text
 
 LONG = 120_000
@@ -250,4 +251,41 @@ def test_the_boundary_conditions_are_set_in_their_window_and_by_command(app_page
     command(app_page, "gravity off")
     app_page.wait_for_function("App.PROJECT.gravity === false", timeout=LONG)
     assert app_page.request.get(url).json()["gravity"] is False
+    assert app_page.errors == []
+
+
+def test_a_line_drawn_in_the_section_splits_the_soil(app_page, live_server):
+    """The Create line tool: two clicks, Enter, the exact points typed in its window, Save.
+    The layer it crosses is two soil parts then, each with its own row, and the Delete
+    joins them again."""
+    url = live_server["url"] + "/api/project"
+    answer = app_page.request.put(url, data=soil_lines.model().model_dump_json(),
+                                  headers={"Content-Type": "application/json"})
+    assert answer.status == 200
+    app_page.evaluate("App.Viewport.refresh()")
+    app_page.wait_for_function("(App.PROJECT.soil_body_keys || []).length === 2", timeout=LONG)
+
+    app_page.evaluate("App.setMode('structures'); App.runAction({action: 'drawLine'})")
+    box = app_page.locator("canvas").first.bounding_box()
+    for across in (0.4, 0.6):
+        app_page.mouse.click(box["x"] + box["width"] * across, box["y"] + box["height"] / 2)
+    app_page.keyboard.press("Enter")
+
+    rows = app_page.locator(".dialog .line-point")
+    rows.first.wait_for(state="visible")
+    for row, (x, y) in zip((rows.nth(0), rows.nth(1)), ((5, 0), (5, -4))):
+        row.locator("input").nth(0).fill(str(x))
+        row.locator("input").nth(1).fill(str(y))
+    app_page.locator(".dialog button", has_text="Save").click()
+
+    app_page.wait_for_function("(App.PROJECT.soil_body_keys || []).length === 3", timeout=LONG)
+    stored = app_page.request.get(url).json()
+    assert stored["soil_body_keys"] == ["soil_top__part1", "soil_top__part2", "soil_low"]
+    assert stored["lines"][0]["points"] == [[5.0, 0.0], [5.0, -4.0]]
+    tree = app_page.locator("#tree-model")
+    tree.get_by_text("Top · Part 2").wait_for(state="visible")
+    tree.get_by_text("Line 1").wait_for(state="visible")
+
+    app_page.evaluate("App.Lines.remove('line_1')")
+    app_page.wait_for_function("(App.PROJECT.soil_body_keys || []).length === 2", timeout=LONG)
     assert app_page.errors == []

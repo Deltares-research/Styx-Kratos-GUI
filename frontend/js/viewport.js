@@ -74,9 +74,10 @@ App.Viewport = (function () {
   /* Pure, for the same reason computeModeGroups is: this is the map the Model
      explorer's checkboxes are wired through. */
   function computeGroupKeys(soils, customs, loads, beams, anchors, contacts,
-                            normalLoads, conditions) {
+                            normalLoads, conditions, lines) {
     return {
       soil: (soils || []).slice(),
+      'group:lines': (lines || []).slice(),
       'group:custom': (customs || []).slice(),
       'group:loads': (loads || []).slice(),
       'group:sheetpiles': (beams || []).slice(),
@@ -896,6 +897,46 @@ App.Viewport = (function () {
     group.add(line);
   }
 
+  /* A line that splits the soil, where it is drawn: the polyline in the section, at
+     z = 0 as the section is. A solid model has it swept across the domain, so both ends
+     of the sweep. */
+  function linePaths(record, project) {
+    var at = project.dimension === 2 ? [0] : [project.domain.z0, project.domain.z1];
+    return at.map(function (z) {
+      return (record.points || []).map(function (point) { return [point[0], point[1], z]; });
+    });
+  }
+
+  /* Dashed, and drawn over the soil: a line can lie inside a body, where it splits nothing
+     and has no seam to show it. Never a pick target, as the water level is not: it would
+     steal clicks meant for the soil. The explorer's row selects it. */
+  function addLineGlyphs() {
+    var project = App.PROJECT;
+    if (!project) return;
+    var d = project.domain;
+    var dash = Math.max(d.x1 - d.x0, d.y_top - d.y_bottom) / 120;
+    (project.lines || []).forEach(function (record) {
+      var group = groups[record.id];
+      if (!group) {
+        group = groups[record.id] = new THREE.Group();
+        group.name = record.id;
+        scene.add(group);
+      }
+      linePaths(record, project).forEach(function (path) {
+        var line = new THREE.Line(
+          new THREE.BufferGeometry().setFromPoints(path.map(function (point) {
+            return new THREE.Vector3(point[0], point[1], point[2]);
+          })),
+          new THREE.LineDashedMaterial({ color: 0x7b1fa2, dashSize: dash, gapSize: dash / 2,
+                                         depthTest: false }));
+        line.computeLineDistances();
+        line.userData.noPick = true;
+        line.renderOrder = 16;
+        group.add(line);
+      });
+    });
+  }
+
   function addLoadGlyphs() {
     function groupFor(id) {
       var group = groups[id];
@@ -937,6 +978,7 @@ App.Viewport = (function () {
 
     addLoadGlyphs();
     addConditionGlyphs(payload.sections);
+    addLineGlyphs();
 
     // Before the visibility sweep below, so the group it creates is given its
     // `visible` entry like every other one.
@@ -957,7 +999,7 @@ App.Viewport = (function () {
      every section its own THREE.Group) and then invisible forever, in every mode,
      no matter what the eye toggle says. */
   function computeModeGroups(soilKeys, customKeys, layeredSoil, loadKeys, memberKeys,
-                             normalLoadKeys, conditionKeys, contactKeys) {
+                             normalLoadKeys, conditionKeys, contactKeys, lineKeys) {
     customKeys = customKeys || [];
     // The boundary conditions' symbols: in every mode, each one hidden until it is
     // shown (the explorer's Show) or selected.
@@ -979,7 +1021,8 @@ App.Viewport = (function () {
     // stands. Not the supports: they would hide the edges of the contour.
     var results = loadKeys.concat(['water'], (conditionKeys && conditionKeys.water) || []);
     if (layeredSoil) {
-      var visibleKeys = soilKeys.concat(customKeys);
+      // The lines go with the soil they split, in every mode that shows it.
+      var visibleKeys = soilKeys.concat(customKeys, lineKeys || []);
       // "water" in the same two modes the full build shows it in -- the level is what
       // Flow conditions mode is for, and a staged excavation is read against it. Left
       // out of soil/structures/mesh so those keep reading as they did.
@@ -1043,12 +1086,15 @@ App.Viewport = (function () {
     var contactKeys = (App.INTERFACES || []).filter(function (item) {
       return !item.structure;
     }).map(function (item) { return item.id; });
+    var lineKeys = ((App.PROJECT && App.PROJECT.lines) || []).map(function (line) {
+      return line.id;
+    });
     modeGroups = computeModeGroups(
       soilKeys, customKeys, !!(App.PROJECT && App.PROJECT.layered_soil), loadKeys,
-      beamKeys.concat(anchorKeys), normalLoadKeys, conditionKeys, contactKeys);
+      beamKeys.concat(anchorKeys), normalLoadKeys, conditionKeys, contactKeys, lineKeys);
     groupKeys = computeGroupKeys(soilKeys, customKeys, loadKeys, beamKeys, anchorKeys,
                                  contactKeys, normalLoadKeys,
-                                 conditionKeys.supports.concat(conditionKeys.water));
+                                 conditionKeys.supports.concat(conditionKeys.water), lineKeys);
   }
 
   /* ══════════════════════════════════════════════════════════════
