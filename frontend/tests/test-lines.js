@@ -2,7 +2,8 @@
    test-lines.js — the lines that split the soil (js/lines.js).
 
    What a new line starts as is held to the command line's in test-drafts.js. Which bodies
-   the lines make is the server's (tests/test_soil_lines.py).
+   the lines make is the server's (tests/test_soil_lines.py); what saving a body sends,
+   and what a refusal does, is held here.
    ══════════════════════════════════════════════════════════════════ */
 
 (function () {
@@ -52,5 +53,70 @@
     } finally {
       App.PROJECT = was;
     }
+  });
+
+  /* ── Saving a soil body ──────────────────────────────────────────── */
+
+  var STUBBED = ['Api', 'Model', 'Viewport', 'Command', 'Explorer'];
+
+  /* Runs `body` with the server, the model, the viewport, the log and the explorer
+     stubbed; `server` answers the PATCH. What each was given is in the returned record. */
+  function withStubs(server, body) {
+    var saved = {};
+    STUBBED.forEach(function (name) { saved[name] = App[name]; });
+    var seen = { patches: [], applied: [], errors: [], selected: [] };
+    App.Api = { patch: function (path, fields) {
+      seen.patches.push({ path: path, fields: fields });
+      return server();
+    } };
+    App.Model = { apply: function (project) { seen.applied.push(project); },
+                  load: function () { return Promise.resolve(); } };
+    App.Viewport = { refresh: function () { return Promise.resolve(); } };
+    App.Command = { ok: function () {}, note: function () {},
+                    err: function (text) { seen.errors.push(text); } };
+    App.Explorer = { mountTree: function () {},
+                     mountSelection: function (key) { seen.selected.push(key); } };
+    function restore() { STUBBED.forEach(function (name) { App[name] = saved[name]; }); }
+    return body(seen).then(function (result) { restore(); return result; },
+                           function (error) { restore(); throw error; });
+  }
+
+  T.test('a soil body is saved with one patch of the fields given', function () {
+    var project = { name: 'Saved' };
+    return withStubs(function () { return Promise.resolve({ project: project }); },
+      function (seen) {
+        return App.Lines.saveBody('soil_top__part1', { name: 'Pit' }).then(function (done) {
+          T.eq(done, true);
+          T.eq(seen.patches, [{ path: '/api/project/bodies/soil_top__part1',
+                                fields: { name: 'Pit' } }]);
+          T.eq(seen.applied, [project]);
+          T.eq(seen.selected, ['soil_top__part1'], 'its panel is shown again');
+          T.eq(seen.errors, []);
+        });
+      });
+  });
+
+  T.test('a soil body given back to its layer sends a null material', function () {
+    return withStubs(function () { return Promise.resolve({ project: {} }); },
+      function (seen) {
+        return App.Lines.saveBody('soil_top__part1', { mat: null }).then(function () {
+          T.eq(seen.patches[0].fields, { mat: null });
+        });
+      });
+  });
+
+  T.test('a refused soil body says why in the log and changes nothing', function () {
+    var reason = "stage 'dig' names no such part: soil_top__part1";
+    return withStubs(function () { return Promise.reject(new Error(reason)); },
+      function (seen) {
+        return App.Lines.saveBody('soil_top__part1', { name: 'Pit' }).then(
+          function () { throw new Error('the refusal was not passed on'); },
+          function (error) {
+            T.eq(error.message, reason);
+            T.eq(seen.errors, ['Could not save the soil part: ' + reason]);
+            T.eq(seen.applied, []);
+            T.eq(seen.selected, []);
+          });
+      });
   });
 })();

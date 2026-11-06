@@ -1609,7 +1609,10 @@ App.Model = (function () {
           ['Edit', '', '', false, { kind: 'button', text: 'Edit line…',
             run: function () { if (App.Lines) App.Lines.edit(record.id); } }],
           ['Delete', '', '', false, { kind: 'button', text: 'Delete line',
-            run: function () { if (App.Lines) App.Lines.remove(record.id); } }]
+            run: function () {
+              // A refusal is already in the log, with its reason.
+              if (App.Lines) App.Lines.remove(record.id).catch(function () {});
+            } }]
         ],
         'Geometry': geometry
       }
@@ -1629,7 +1632,7 @@ App.Model = (function () {
             run: function () {
               var name = window.prompt('New name', body.name);
               if (name && name.trim() && App.Lines) {
-                App.Lines.saveBody(key, { name: name.trim() });
+                App.Lines.saveBody(key, { name: name.trim() }).catch(function () {});
               }
             } }],
           ['Layer', layer.name, '', true],
