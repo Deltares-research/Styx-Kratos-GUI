@@ -397,7 +397,9 @@ def test_the_pile_is_embedded_in_the_soil_rather_than_cutting_it_away():
 
     for key, area in without.mass.items():
         if key not in solid_model.DISPLAY_ONLY:
-            assert with_pile.mass[key] == pytest.approx(area), key
+            # A layer the pile crosses is in two pieces now, with the same area between them.
+            pieces = piled.expand_body_keys([key])
+            assert sum(with_pile.mass[piece] for piece in pieces) == pytest.approx(area), key
 
 
 def test_a_polyline_pile_keeps_every_segment():

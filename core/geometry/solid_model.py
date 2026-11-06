@@ -30,6 +30,7 @@ from dataclasses import dataclass, field
 
 import gmsh
 
+from core.model import regions
 from core.model.schemas import Anchor, Project, SpaceAnchor
 
 # When a fragment output volume comes from several inputs, the structure wins over the
@@ -251,10 +252,14 @@ def _build_layered_soil(project: Project) -> BuildResult:
         gmsh.model.add("simple-cube")
         d = project.domain
         owners = {}
-        for layer in project.layers:
-            bottom, top = layer.bottom, layer.top
-            tag = gmsh.model.occ.addBox(d.x0, bottom, d.z0, d.dx, top - bottom, d.dz)
-            owners[tag] = {f"soil_{layer.id}"}
+        for piece in project.split_soil():
+            if piece.body is None:
+                layer = piece.layer
+                tag = gmsh.model.occ.addBox(d.x0, layer.bottom, d.z0, d.dx,
+                                            layer.top - layer.bottom, d.dz)
+            else:
+                tag = _soil_piece(piece.piece, d.z0, d.dz)
+            owners[tag] = {piece.key}
 
         # Same gate as the full build: several excavation levels means the soil in the
         # pit is dug lift by lift and has to stay in the model to be staged. This path
@@ -309,6 +314,21 @@ def _build_layered_soil(project: Project) -> BuildResult:
         )
     finally:
         gmsh.logger.stop()
+
+
+def _soil_piece(piece: regions.Piece, z0: float, dz: float) -> int:
+    """A piece of a layer that lines cut off, as its solid: its outline swept across the
+    domain's z range. Built whole, so which body a solid is needs no finding out after a
+    boolean; `_fragment` makes the seams between the pieces conformal."""
+    def loop(outline: regions.Polyline) -> int:
+        points = [gmsh.model.occ.addPoint(x, y, z0) for x, y in outline]
+        return gmsh.model.occ.addCurveLoop(
+            [gmsh.model.occ.addLine(a, b) for a, b in zip(points, points[1:] + points[:1])])
+
+    surface = gmsh.model.occ.addPlaneSurface([loop(piece.outline),
+                                              *[loop(hole) for hole in piece.holes]])
+    swept = gmsh.model.occ.extrude([(2, surface)], 0.0, 0.0, dz)
+    return next(tag for dim, tag in swept if dim == 3)
 
 
 # ── Primitives ──────────────────────────────────────────────────────────────

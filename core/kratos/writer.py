@@ -1694,10 +1694,13 @@ def _part_names(project: Project) -> dict[str, str]:
     # the project -- the user named the layer, not the lift -- so it takes the layer's
     # and says which part of it this is.
     layers = {f"soil_{layer.id}": layer for layer in project.layers}
+    recorded = {piece.key: piece.body.name for piece in project.split_soil() if piece.body}
     for key, *_ in project.soil_bodies():
         stem, _, suffix = key.partition("__")
         layer = layers[stem]
         base = _sanitise(layer.name) or layer.id
+        # A piece a line cut off has a name of its own, which the deck says.
+        suffix = _sanitise(recorded[key]) or suffix if key in recorded else suffix
         names[key] = _unique(f"{base}_{suffix}" if suffix else base, used)
     for part in project.custom_parts:
         names[part.key] = _unique(_sanitise(part.label) or part.key, used)
@@ -1951,8 +1954,10 @@ def _segment_boundaries(project: Project, boundaries: list[tuple[str, int, list[
     (plan sec C3), and reading that back off the part's name afterwards would be a
     second, weaker copy of the naming rule below.
     """
+    switched_off = {key for stage in project.stages for key in stage.deactivate}
     lifts = [key for key, _, _, inside in project.soil_bodies()
-             if inside and "__lift" in key]
+             if inside and "__lift" in key
+             or not inside and "__" in key and key in switched_off]
     if not lifts:
         return boundaries, {}
     top = any(c.active and c.on == "face" and c.face == "top"
@@ -2166,8 +2171,7 @@ def _part_materials(project: Project, names: dict[str, str],
     # `soil_L1__lift1` has to find `soil_L1`'s material or the deck exports a body with
     # no material at all.
     material_of = {f"soil_{layer.id}": layer.mat for layer in project.layers}
-    material_of.update({key: material_of[key.partition("__")[0]]
-                        for key, *_ in project.soil_bodies()})
+    material_of.update(project.soil_body_materials)
     material_of.update({p.key: p.mat for p in project.custom_parts if p.mat})
     seen: list[tuple[str, str]] = []
     for key, _, _ in blocks:

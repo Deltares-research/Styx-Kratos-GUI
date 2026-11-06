@@ -1962,6 +1962,16 @@ window.STAGE_FIXTURE =
       "soil_L2__pit": "Soil_2 \u00b7 below the pit",
       "soil_L3__pit": "Soil_3 \u00b7 below the pit"
     },
+    "soil_body_materials": {
+      "soil_L1": "m1",
+      "soil_L2": "m1",
+      "soil_L3": "m2",
+      "soil_L1__lift1": "m1",
+      "soil_L1__lift2": "m1",
+      "soil_L1__lift3": "m1",
+      "soil_L2__pit": "m1",
+      "soil_L3__pit": "m2"
+    },
     "stageable_parts": [
       "soil_L1",
       "soil_L2",

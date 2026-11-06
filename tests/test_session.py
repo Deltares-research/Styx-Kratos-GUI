@@ -1020,6 +1020,8 @@ def test_a_body_an_edit_takes_away_takes_its_mesh_size_with_it(edit):
 
     gone = set(project.part_keys()) - set(edited.part_keys())
     assert gone & set(project.mesh.body_sizes), "the edit takes no sized body away"
+    # A layer's key stays good when the layer is cut: it names each of the pieces.
+    gone -= {f"soil_{layer.id}" for layer in edited.layers}
     assert edited.mesh.body_sizes == {key: size for key, size
                                       in project.mesh.body_sizes.items() if key not in gone}
 

@@ -455,6 +455,16 @@ window.EDITS_FIXTURE =
         "soil_L_mid__pit": "Soil_Middle · below the pit",
         "soil_L_bot__pit": "Soil_Bottom · below the pit"
       },
+      "soil_body_materials": {
+        "soil_L_top": "m_upper",
+        "soil_L_mid": "m_upper",
+        "soil_L_bot": "m_lower",
+        "soil_L_top__lift1": "m_upper",
+        "soil_L_top__lift2": "m_upper",
+        "soil_L_top__lift3": "m_upper",
+        "soil_L_mid__pit": "m_upper",
+        "soil_L_bot__pit": "m_lower"
+      },
       "stageable_parts": [
         "soil_L_top",
         "soil_L_mid",
@@ -955,6 +965,16 @@ window.EDITS_FIXTURE =
         "soil_L_mid__pit": "Soil_Middle · below the pit",
         "soil_L_bot__pit": "Soil_Bottom · below the pit"
       },
+      "soil_body_materials": {
+        "soil_L_top": "m_upper",
+        "soil_L_mid": "m_upper",
+        "soil_L_bot": "m_lower",
+        "soil_L_top__lift1": "m_upper",
+        "soil_L_top__lift2": "m_upper",
+        "soil_L_top__lift3": "m_upper",
+        "soil_L_mid__pit": "m_upper",
+        "soil_L_bot__pit": "m_lower"
+      },
       "stageable_parts": [
         "soil_L_top",
         "soil_L_mid",
@@ -1450,6 +1470,16 @@ window.EDITS_FIXTURE =
         "soil_L_mid__pit": "Soil_Middle · below the pit",
         "soil_L_bot__pit": "Soil_Bottom · below the pit"
       },
+      "soil_body_materials": {
+        "soil_L_top": "m_upper",
+        "soil_L_mid": "m_upper",
+        "soil_L_bot": "m_lower",
+        "soil_L_top__lift1": "m_upper",
+        "soil_L_top__lift2": "m_upper",
+        "soil_L_top__lift3": "m_upper",
+        "soil_L_mid__pit": "m_upper",
+        "soil_L_bot__pit": "m_lower"
+      },
       "stageable_parts": [
         "soil_L_top",
         "soil_L_mid",
@@ -1886,6 +1916,16 @@ window.EDITS_FIXTURE =
         "soil_L_top__lift3": "Soil_Top · lift 3",
         "soil_L_mid__pit": "Soil_Middle · below the pit",
         "soil_L_bot__pit": "Soil_Bottom · below the pit"
+      },
+      "soil_body_materials": {
+        "soil_L_top": "m_upper",
+        "soil_L_mid": "m_upper",
+        "soil_L_bot": "m_lower",
+        "soil_L_top__lift1": "m_upper",
+        "soil_L_top__lift2": "m_upper",
+        "soil_L_top__lift3": "m_upper",
+        "soil_L_mid__pit": "m_upper",
+        "soil_L_bot__pit": "m_lower"
       },
       "stageable_parts": [
         "soil_L_top",
@@ -2472,6 +2512,16 @@ window.EDITS_FIXTURE =
         "soil_L_top__lift3": "Soil_Top · lift 3",
         "soil_L_mid__pit": "Soil_Middle · below the pit",
         "soil_L_bot__pit": "Soil_Bottom · below the pit"
+      },
+      "soil_body_materials": {
+        "soil_L_top": "m_upper",
+        "soil_L_mid": "m_upper",
+        "soil_L_bot": "m_lower",
+        "soil_L_top__lift1": "m_upper",
+        "soil_L_top__lift2": "m_upper",
+        "soil_L_top__lift3": "m_upper",
+        "soil_L_mid__pit": "m_upper",
+        "soil_L_bot__pit": "m_lower"
       },
       "stageable_parts": [
         "soil_L_top",

@@ -87,8 +87,9 @@ def test_one_deck_carries_soil_a_load_a_pile_and_an_anchor(deck):
         "LinearTrussElement2D2N",
     }
     assert {block.name for block in deck.conditions} == {"LineLoadDiffOrderCondition2D3N"}
-    for name in ("Soil_1", "Soil_2", "Sheet_pile_1", "Anchor_1", "Surcharge",
-                 "Anchor_1_Support"):
+    # The pile crosses the first layer, which it cuts in two; it ends in the second.
+    for name in ("Soil_1_Part_1", "Soil_1_Part_2", "Soil_2", "Sheet_pile_1", "Anchor_1",
+                 "Surcharge", "Anchor_1_Support"):
         assert name in deck.parts, name
 
 
@@ -153,7 +154,7 @@ def test_property_ids_are_unique_across_soil_steel_and_tendon(materials):
 
     assert len(set(ids)) == len(ids)
     assert all(isinstance(i, int) and i > 0 for i in ids)
-    assert len(materials) == 4, "two soil layers, one pile, one anchor"
+    assert len(materials) == 5, "a soil layer in two pieces, another, one pile, one anchor"
 
 
 def test_sub_model_part_names_are_unique_and_legal_kratos_identifiers(golden, deck):

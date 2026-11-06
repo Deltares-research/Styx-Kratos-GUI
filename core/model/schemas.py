@@ -18,12 +18,12 @@ from __future__ import annotations
 
 import math
 from collections.abc import Mapping, Sequence
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, NamedTuple
 
 from pydantic import (BaseModel, Field, SerializerFunctionWrapHandler, computed_field,
                       field_validator, model_serializer, model_validator)
 
-from core.model import migration, polylines, soil_models, units
+from core.model import migration, polylines, regions, soil_models, units
 
 Hex = Annotated[str, Field(pattern=r"^#[0-9a-fA-F]{6}$")]
 Ident = Annotated[str, Field(min_length=1, max_length=64)]
@@ -207,6 +207,60 @@ def validate_layer_stack(layers: list[SoilLayer]) -> None:
 
 
 # ── Structures ──────────────────────────────────────────────────────────────
+
+class Line(Base):
+    """A line in the 2D section: where it crosses a soil layer from one edge to another,
+    the layer becomes separate soil bodies (`Project.split_soil`, `core.model.regions`).
+    A solid model has the same line, swept across the domain's z range."""
+    id: Ident
+    name: str
+    points: list[tuple[float, float]]      # in-plane (x, y), metres
+
+    @model_validator(mode="after")
+    def _usable_polyline(self) -> Line:
+        if len(self.points) < 2:
+            raise ValueError(f"line {self.id!r} needs at least two points")
+        if not all(math.isfinite(v) for point in self.points for v in point):
+            raise ValueError(f"line {self.id!r} has a non-finite coordinate")
+        for first, second in zip(self.points, self.points[1:]):
+            if first == second:
+                raise ValueError(
+                    f"line {self.id!r} repeats the point {first}; every segment needs length"
+                )
+        return self
+
+
+class SoilBody(Base):
+    """A piece of a soil layer that lines or sheet piles cut off, with what the user calls
+    it. Its part key is `soil_<layer>__<id>`, which stages and conditions name.
+
+    `point` lies inside the piece and ties this record to it when the lines change: what
+    is cut off by a new line elsewhere leaves this piece, its key and its name alone. A
+    script may leave the records out; `Project.split_soil` makes them."""
+    id: Ident
+    name: str
+    layer: Ident
+    point: tuple[float, float]             # in-plane (x, y), metres
+    mat: Ident | None = None
+    """Its own material, in every stage; `None` is its layer's."""
+
+    @field_validator("id")
+    @classmethod
+    def _no_separator(cls, value: str) -> str:
+        if "__" in value:
+            raise ValueError(f"a soil body's id cannot hold '__', which ends the layer's "
+                             f"in its key: {value!r}")
+        return value
+
+
+class SoilPiece(NamedTuple):
+    """One closed piece of soil, as `Project.split_soil` finds it."""
+    key: str
+    layer: SoilLayer
+    piece: regions.Piece
+    body: SoilBody | None
+    """Its record; `None` for a layer in one piece, which is its own body."""
+
 
 class Excavation(Base):
     x0: float
@@ -1411,6 +1465,18 @@ class ConditionsUpdate(Base):
     gravity: bool | None = None
 
 
+class LinesUpdate(Base):
+    """The lines, as one list: what the GUI's Line window sends."""
+    lines: list[Line]
+
+
+class BodyUpdate(Base):
+    """A soil body's name and its material. A field left out stays as it is; `mat: null`
+    goes back to the layer's material."""
+    name: str | None = None
+    mat: Ident | None = None
+
+
 class StagesUpdate(Base):
     """The construction sequence, replaced wholesale.
 
@@ -1568,6 +1634,11 @@ class Project(Base):
     excavation: Excavation | None = None
     """The pit, or `None` for a model that digs none. A layered model reads it only when
     it has two or more levels (`pit_levels`); the full build needs it always."""
+    lines: list[Line] = Field(default_factory=list)
+    """The lines that split the soil, with the sheet piles (`split_soil`)."""
+    bodies: list[SoilBody] = Field(default_factory=list)
+    """The pieces those cut the layers into, with their names and materials. Kept in step
+    with the layers and the lines each time a project is validated (`_split_the_soil`)."""
     # The seeded demo's own structures, which only the full build raises
     # (`solid_model._build_solids`). `None` in a model that has none of them; the full
     # build needs all of them, and the validator says so.
@@ -1655,7 +1726,8 @@ class Project(Base):
         so the GUI's Save and `kratos-cli save` write the same file."""
         data = handler(self)
         return {key: value for key, value in data.items()
-                if value is not None or key not in FULL_BUILD_BLOCKS}
+                if (value is not None or key not in FULL_BUILD_BLOCKS)
+                and (value or key not in ("lines", "bodies"))}
 
     @model_validator(mode="before")
     @classmethod
@@ -1668,7 +1740,8 @@ class Project(Base):
         project and PUTs it back sends the whole document, these fields included, and
         `extra: forbid` would refuse it over values the server itself produced.
         """
-        derived = ("soil_body_keys", "soil_body_labels", "stageable_parts")
+        derived = ("soil_body_keys", "soil_body_labels", "soil_body_materials",
+                   "stageable_parts")
         if not isinstance(value, dict) or not any(k in value for k in derived):
             return value
         return {k: v for k, v in value.items() if k not in derived}
@@ -1791,6 +1864,45 @@ class Project(Base):
             return self.water.specific_weight
         return units.from_si(WATER_SPECIFIC_WEIGHT_SI, units.SPECIFIC_WEIGHT,
                              self.unit_system)
+
+    @model_validator(mode="after")
+    def _split_the_soil(self) -> Project:
+        """Keep `bodies` in step with the pieces the layers are cut into, whichever edit
+        changed them: a new piece gets a record, a piece that is gone loses its record, and
+        a stage that named a whole layer now cut names each of its pieces, which is the
+        same soil. The other collections are checked against the result."""
+        _reject_duplicates([line.id for line in self.lines], "line")
+        if self.lines and not self.layered_soil:
+            raise ValueError("a project with layered_soil false takes no lines: its soil is "
+                             "the seeded demo's")
+        if self.lines and len(self.pit_levels()) > 1:
+            raise ValueError("a model dug in excavation levels takes no lines; split the "
+                             "soil with lines or with levels, not both")
+        pieces = self.split_soil()
+        self.bodies = [piece.body for piece in pieces if piece.body is not None]
+        # The viewport keeps a line's drawing beside the parts', under its id.
+        taken = sorted({line.id for line in self.lines} & {*self._staged_parts_and_loads()})
+        if taken:
+            raise ValueError("line id collides with an existing model part key: "
+                             + ", ".join(taken))
+        known = {material.id for material in self.materials}
+        for body in self.bodies:
+            if body.mat is not None and body.mat not in known:
+                raise ValueError(f"soil body {body.id!r} references unknown material "
+                                 f"{body.mat!r}")
+        cut: dict[str, list[str]] = {}
+        for piece in pieces:
+            if piece.body is not None:
+                cut.setdefault(f"soil_{piece.layer.id}", []).append(piece.key)
+
+        def named(keys: list[str]) -> list[str]:
+            return [each for key in keys for each in cut.get(key, [key])]
+
+        if cut:
+            self.stages = [stage.model_copy(update={"activate": named(stage.activate),
+                                                    "deactivate": named(stage.deactivate)})
+                           for stage in self.stages]
+        return self
 
     @model_validator(mode="after")
     def _cross_references(self) -> Project:
@@ -2394,11 +2506,14 @@ class Project(Base):
         key's suffix, for the same reason: the split is this class's to describe.
         """
         names = {f"soil_{layer.id}": layer.name for layer in self.layers}
+        recorded = {piece.key: piece.body.name for piece in self.split_soil() if piece.body}
         labels: dict[str, str] = {}
         for key, *_ in self.soil_bodies():
             stem, _, suffix = key.partition("__")
             name = names.get(stem, stem)
-            if not suffix:
+            if key in recorded:
+                labels[key] = f"{name} · {recorded[key]}"
+            elif not suffix:
                 labels[key] = name
             elif suffix.startswith("lift"):
                 labels[key] = f"{name} · lift {suffix[len('lift'):]}"
@@ -2406,9 +2521,83 @@ class Project(Base):
                 labels[key] = f"{name} · below the pit"
         return labels
 
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def soil_body_materials(self) -> dict[str, str]:
+        """The material of each soil body, keyed by part key: its own, or its layer's.
+
+        Published beside `soil_body_labels`, for the Model explorer's rows."""
+        own = {piece.key: piece.body.mat for piece in self.split_soil()
+               if piece.body is not None and piece.body.mat is not None}
+        layers = {f"soil_{layer.id}": layer.mat for layer in self.layers}
+        return {key: own.get(key, layers[key.partition("__")[0]])
+                for key, *_ in self.soil_bodies()}
+
+    def _soil_cutters(self) -> tuple[regions.Polyline, ...]:
+        """What cuts the layers: the lines and the sheet piles, a pile that is switched off
+        too, so that switching it renames no soil. A wall or member of the solid model
+        does not. Nothing cuts a model dug in levels, or the full build."""
+        if not self.layered_soil or len(self.pit_levels()) > 1:
+            return ()
+        polylines = [line.points for line in self.lines]
+        polylines += [pile.points for pile in self.sheet_piles]
+        return tuple(tuple((float(x), float(y)) for x, y in points) for points in polylines)
+
+    def _pieces_with(self, cutters: tuple[regions.Polyline, ...]
+                     ) -> list[tuple[SoilLayer, tuple[regions.Piece, ...]]]:
+        d = self.domain
+        return [(layer, regions.pieces(d.x0, d.x1, layer.bottom, layer.top, cutters))
+                for layer in self.layers]
+
+    def split_soil(self) -> list[SoilPiece]:
+        """The pieces the layers are cut into, each with its key and its record.
+
+        A layer in one piece is its own body, with the plain key `soil_<layer>`. A layer in
+        several has no plain key any more: each piece is `soil_<layer>__<id>`. A record
+        holds the piece its `point` lies in, the first record of two in one piece being the
+        one that stays. A piece with no record gets a new one, `part1`, `part2`, ... in the
+        order of the pieces, so the same lines give the same keys.
+        """
+        out: list[SoilPiece] = []
+        for layer, found in self._pieces_with(self._soil_cutters()):
+            if len(found) == 1:
+                out.append(SoilPiece(f"soil_{layer.id}", layer, found[0], None))
+                continue
+            records = [body for body in self.bodies if body.layer == layer.id]
+            held: dict[int, SoilBody] = {}
+            for body in records:
+                at = next((index for index, piece in enumerate(found)
+                           if index not in held and piece.contains(body.point)), None)
+                if at is not None:
+                    held[at] = body
+            used = {body.id for body in records}
+            number = 0
+            for index, piece in enumerate(found):
+                if index in held:
+                    record = held[index]
+                else:
+                    number += 1
+                    while f"part{number}" in used:
+                        number += 1
+                    record = SoilBody(id=f"part{number}", name=f"Part {number}", layer=layer.id,
+                                      point=piece.point)
+                out.append(SoilPiece(f"soil_{layer.id}__{record.id}", layer, piece, record))
+        return out
+
+    def idle_lines(self) -> list[str]:
+        """The ids of the lines that split no soil: without one, the layers fall into as
+        many pieces as with it."""
+        def count(cutters: tuple[regions.Polyline, ...]) -> int:
+            return sum(len(found) for _, found in self._pieces_with(cutters))
+
+        cutters = self._soil_cutters()
+        return [line.id for index, line in enumerate(self.lines)
+                if count(cutters[:index] + cutters[index + 1:]) == count(cutters)]
+
     def soil_bodies(self) -> list[tuple[str, float, float, bool]]:
-        """Every soil body the excavation splits the layers into, as
-        `(part key, y_bottom, y_top, inside the pit outline)`.
+        """Every soil body the layers are split into, as
+        `(part key, y_bottom, y_top, inside the pit outline)`: by lines and sheet piles
+        (`split_soil`), or by the excavation.
 
         With one excavation level nothing is split: the pit is a void cut out of the
         soil (`solid_model._cut_the_pit`) and each layer is one body under its own key, which
@@ -2431,11 +2620,12 @@ class Project(Base):
             # that has no ground in it yet -- the site the server opens on. No layers
             # means no bodies, and it must not be an error to ask.
             return []
-        layers = [(f"soil_{layer.id}", layer.bottom, layer.top) for layer in self.layers]
-        outside = [(key, bottom, top, False) for key, bottom, top in layers]
         levels = self.pit_levels()
         if len(levels) < 2:
-            return outside
+            return [(piece.key, piece.piece.bottom, piece.piece.top, False)
+                    for piece in self.split_soil()]
+        layers = [(f"soil_{layer.id}", layer.bottom, layer.top) for layer in self.layers]
+        outside = [(key, bottom, top, False) for key, bottom, top in layers]
 
         # The lifts, top down, then the ground below the final floor. `None` marks that
         # last one: it is the part of the outline that is never dug.
