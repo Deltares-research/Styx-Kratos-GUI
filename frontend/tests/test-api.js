@@ -51,6 +51,19 @@
 
   /* ── Requests ────────────────────────────────────────────────── */
 
+  test('the live client forwards requests to the current window fetch', function () {
+    var original = window.fetch;
+    var transport = stub([json(200, { status: 'ready' })]);
+    window.fetch = transport;
+    function restore() { window.fetch = original; }
+    return App.Api.get('/api/health').then(function (body) {
+      T.eq(body, { status: 'ready' });
+      T.eq(transport.calls.length, 1);
+      T.eq(transport.calls[0].url, App.Api.base + '/api/health');
+      T.eq(transport.calls[0].opts.method, 'GET');
+    }).then(restore, function (error) { restore(); throw error; });
+  });
+
   test('get parses the body and sends no payload', function () {
     var client = api([json(200, { name: 'Site' })]);
     return client.get('/api/project').then(function (body) {
@@ -69,6 +82,23 @@
       T.eq(call.opts.method, 'PUT');
       T.eq(call.opts.headers['Content-Type'], 'application/json');
       T.eq(JSON.parse(call.opts.body), { name: 'Site' });
+    });
+  });
+
+  test('post and patch send JSON and return the server response', function () {
+    var client = api([json(201, { id: 'load_1' }), json(200, { name: 'Updated' })]);
+    return client.post('/api/loads', { value: 12 }).then(function (body) {
+      T.eq(body, { id: 'load_1' });
+      return client.patch('/api/project', { name: 'Updated' });
+    }).then(function (body) {
+      T.eq(body, { name: 'Updated' });
+      T.eq(client.fetch.calls.map(function (call) {
+        return [call.url, call.opts.method, call.opts.headers['Content-Type'],
+                JSON.parse(call.opts.body)];
+      }), [
+        ['/api/loads', 'POST', 'application/json', { value: 12 }],
+        ['/api/project', 'PATCH', 'application/json', { name: 'Updated' }]
+      ]);
     });
   });
 
@@ -100,6 +130,31 @@
     return client.patch('/api/project/layers', {})
       .then(function () { return client.get('/api/project'); })
       .then(function () { T.eq(said, []); });
+  });
+
+  test('the live client reports edit notes in the command log', function () {
+    var originalFetch = window.fetch, originalCommand = App.Command;
+    var said = [];
+    var answer = { project: { name: 'Site' }, edit_notes: ['Removed an unused mesh size'] };
+    window.fetch = stub([json(200, answer)]);
+    App.Command = { note: function (line) { said.push(line); } };
+    function restore() { window.fetch = originalFetch; App.Command = originalCommand; }
+    return App.Api.patch('/api/project/layers', {}).then(function (body) {
+      T.eq(body, answer);
+      T.eq(said, answer.edit_notes);
+    }).then(restore, function (error) { restore(); throw error; });
+  });
+
+  test('answers fetched outside the client report their notes and remain unchanged', function () {
+    var original = App.Command, said = [];
+    var answer = { project: { name: 'Site' }, edit_notes: ['Removed the deleted part'] };
+    try {
+      App.Command = { note: function (line) { said.push(line); } };
+      T.eq(App.Api.told(answer), answer);
+      T.eq(said, answer.edit_notes);
+      App.Command = null;
+      T.eq(App.Api.told(answer), answer);
+    } finally { App.Command = original; }
   });
 
   /* ── Failures ────────────────────────────────────────────────── */

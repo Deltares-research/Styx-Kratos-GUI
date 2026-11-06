@@ -56,6 +56,21 @@
     });
   });
 
+  test('free interfaces are listed in structural modes, separately from members', function () {
+    [true, false].forEach(function (layered) {
+      var groups = App.Viewport.computeModeGroups(
+        ['soil_L1'], [], layered, [], ['beam_1', 'anchor_1'], [], null, ['contact_1']);
+      ['structures', 'mesh', 'staged'].forEach(function (mode) {
+        T.ok(groups[mode].indexOf('contact_1') >= 0,
+             mode + ' omits the free interface' + (layered ? ' (layered soil)' : ''));
+      });
+      ['soil', 'flow', 'results'].forEach(function (mode) {
+        T.eq(groups[mode].indexOf('contact_1'), -1,
+             mode + ' should not show a free interface');
+      });
+    });
+  });
+
   /* What the Model explorer's group rows toggle: one checkbox standing for a family
      of part keys, the way the Soil row already stood for its layers. */
   test('a tree group row names the part keys it stands for', function () {

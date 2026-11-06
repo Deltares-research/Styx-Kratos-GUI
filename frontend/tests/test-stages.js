@@ -43,6 +43,17 @@
     T.eq(App.Stages.activeParts(p, 's1'), ['soil_1']);
   });
 
+  test('older projects derive unique stageable keys from both activation lists', function () {
+    var p = { stages: [
+      { id: 'initial', parent: null, activate: ['wall', 'soil'], deactivate: ['load'] },
+      { id: 'dig', parent: 'initial', activate: ['load'], deactivate: ['soil', 'soil'] }
+    ] };
+    T.eq(App.Stages.stageableKeys(p), ['load', 'soil', 'wall']);
+    T.eq(App.Stages.activeParts(p, 'initial'), ['soil', 'wall']);
+    T.eq(App.Stages.activeParts(p, 'dig'), ['load', 'wall']);
+    T.eq(p.stages[1].deactivate, ['soil', 'soil'], 'reading does not rewrite the saved stages');
+  });
+
   test('activeParts agrees with the server for every stage in the fixture',
        function () {
     var p = project();

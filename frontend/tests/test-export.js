@@ -99,6 +99,25 @@ test('the archive holds the deck, its materials and its process file', function 
   T.eq(App.Export.files(result, 'model.mdpa')[0].text, 'Begin Properties 0\r\n');
 });
 
+test('the real export save writes its archive to the picked file', function () {
+  var save = App.Export.save;
+  return withExportStubs(function () {
+    var handle = fakeFileHandle('deck.zip');
+    App.Export.save = save;
+    App.Download.pickFile = function () { return Promise.resolve(handle); };
+    App.Api = { post: function () {
+      return Promise.resolve({ mdpa: 'Begin Nodes\nEnd Nodes\n',
+                               stats: { nodes: 0, elements: 0 } });
+    } };
+    return App.Export.run().then(function () {
+      T.ok(handle.written instanceof Blob, 'the file receives the archive, not its name');
+      T.eq(handle.written.type, 'application/zip');
+      T.ok(handle.written.size > 0);
+      T.ok(handle.closed, 'the archive is committed to disk');
+    });
+  });
+});
+
 test('an export without materials or process metadata carries only the deck', function () {
   var bare = { mdpa: 'Begin Properties 0\r\n', materials: null, project_parameters: null };
   T.eq(App.Export.files(bare, 'model.mdpa').length, 1);
