@@ -1665,7 +1665,7 @@ window.STAGE_FIXTURE =
           2.5,
           -1.0
         ],
-        "mat": null
+        "mat": "m1"
       },
       {
         "id": "outside",
@@ -1675,7 +1675,7 @@ window.STAGE_FIXTURE =
           15.0,
           -4.0
         ],
-        "mat": null
+        "mat": "m1"
       },
       {
         "id": "lift2",
@@ -1685,7 +1685,7 @@ window.STAGE_FIXTURE =
           2.5,
           -3.5
         ],
-        "mat": null
+        "mat": "m1"
       },
       {
         "id": "lift3",
@@ -1695,7 +1695,7 @@ window.STAGE_FIXTURE =
           2.5,
           -6.5
         ],
-        "mat": null
+        "mat": "m1"
       },
       {
         "id": "pit",
@@ -1705,7 +1705,7 @@ window.STAGE_FIXTURE =
           2.5,
           -10.0
         ],
-        "mat": null
+        "mat": "m1"
       },
       {
         "id": "outside",
@@ -1715,7 +1715,7 @@ window.STAGE_FIXTURE =
           15.0,
           -10.0
         ],
-        "mat": null
+        "mat": "m1"
       },
       {
         "id": "pit",
@@ -1725,7 +1725,7 @@ window.STAGE_FIXTURE =
           2.5,
           -36.0
         ],
-        "mat": null
+        "mat": "m2"
       },
       {
         "id": "outside",
@@ -1735,7 +1735,7 @@ window.STAGE_FIXTURE =
           15.0,
           -36.0
         ],
-        "mat": null
+        "mat": "m2"
       }
     ],
     "loads": [

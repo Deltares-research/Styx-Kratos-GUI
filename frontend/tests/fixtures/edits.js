@@ -136,7 +136,7 @@ window.EDITS_FIXTURE =
             3.0,
             -1.0
           ],
-          "mat": null
+          "mat": "m_upper"
         },
         {
           "id": "retained",
@@ -146,7 +146,7 @@ window.EDITS_FIXTURE =
             33.0,
             -3.5
           ],
-          "mat": null
+          "mat": "m_upper"
         },
         {
           "id": "lift2",
@@ -156,7 +156,7 @@ window.EDITS_FIXTURE =
             3.0,
             -3.25
           ],
-          "mat": null
+          "mat": "m_upper"
         },
         {
           "id": "lift3",
@@ -166,7 +166,7 @@ window.EDITS_FIXTURE =
             3.0,
             -5.75
           ],
-          "mat": null
+          "mat": "m_upper"
         },
         {
           "id": "pit",
@@ -176,7 +176,7 @@ window.EDITS_FIXTURE =
             3.0,
             -8.5
           ],
-          "mat": null
+          "mat": "m_upper"
         },
         {
           "id": "retained",
@@ -186,7 +186,7 @@ window.EDITS_FIXTURE =
             33.0,
             -8.5
           ],
-          "mat": null
+          "mat": "m_upper"
         }
       ],
       "loads": [
@@ -689,7 +689,7 @@ window.EDITS_FIXTURE =
             3.0,
             -1.0
           ],
-          "mat": null
+          "mat": "m_upper"
         },
         {
           "id": "retained",
@@ -699,7 +699,7 @@ window.EDITS_FIXTURE =
             33.0,
             -3.5
           ],
-          "mat": null
+          "mat": "m_upper"
         },
         {
           "id": "lift2",
@@ -709,7 +709,7 @@ window.EDITS_FIXTURE =
             3.0,
             -3.25
           ],
-          "mat": null
+          "mat": "m_upper"
         },
         {
           "id": "lift3",
@@ -719,7 +719,7 @@ window.EDITS_FIXTURE =
             3.0,
             -5.75
           ],
-          "mat": null
+          "mat": "m_upper"
         },
         {
           "id": "pit",
@@ -729,7 +729,7 @@ window.EDITS_FIXTURE =
             3.0,
             -8.5
           ],
-          "mat": null
+          "mat": "m_upper"
         },
         {
           "id": "retained",
@@ -739,7 +739,7 @@ window.EDITS_FIXTURE =
             33.0,
             -8.5
           ],
-          "mat": null
+          "mat": "m_upper"
         }
       ],
       "loads": [
@@ -1301,7 +1301,7 @@ window.EDITS_FIXTURE =
             3.0,
             -1.0
           ],
-          "mat": null
+          "mat": "m_upper"
         },
         {
           "id": "retained",
@@ -1311,7 +1311,7 @@ window.EDITS_FIXTURE =
             33.0,
             -3.5
           ],
-          "mat": null
+          "mat": "m_upper"
         },
         {
           "id": "lift2",
@@ -1321,7 +1321,7 @@ window.EDITS_FIXTURE =
             3.0,
             -3.25
           ],
-          "mat": null
+          "mat": "m_upper"
         },
         {
           "id": "lift3",
@@ -1331,7 +1331,7 @@ window.EDITS_FIXTURE =
             3.0,
             -5.75
           ],
-          "mat": null
+          "mat": "m_upper"
         },
         {
           "id": "pit",
@@ -1341,7 +1341,7 @@ window.EDITS_FIXTURE =
             3.0,
             -8.5
           ],
-          "mat": null
+          "mat": "m_upper"
         },
         {
           "id": "retained",
@@ -1351,7 +1351,7 @@ window.EDITS_FIXTURE =
             33.0,
             -8.5
           ],
-          "mat": null
+          "mat": "m_upper"
         }
       ],
       "loads": [
@@ -1854,7 +1854,7 @@ window.EDITS_FIXTURE =
             3.0,
             -1.0
           ],
-          "mat": null
+          "mat": "m_upper"
         },
         {
           "id": "retained",
@@ -1864,7 +1864,7 @@ window.EDITS_FIXTURE =
             33.0,
             -3.5
           ],
-          "mat": null
+          "mat": "m_upper"
         },
         {
           "id": "lift2",
@@ -1874,7 +1874,7 @@ window.EDITS_FIXTURE =
             3.0,
             -3.25
           ],
-          "mat": null
+          "mat": "m_upper"
         },
         {
           "id": "lift3",
@@ -1884,7 +1884,7 @@ window.EDITS_FIXTURE =
             3.0,
             -5.75
           ],
-          "mat": null
+          "mat": "m_upper"
         },
         {
           "id": "pit",
@@ -1894,7 +1894,7 @@ window.EDITS_FIXTURE =
             3.0,
             -8.5
           ],
-          "mat": null
+          "mat": "m_upper"
         },
         {
           "id": "retained",
@@ -1904,7 +1904,7 @@ window.EDITS_FIXTURE =
             33.0,
             -8.5
           ],
-          "mat": null
+          "mat": "m_upper"
         }
       ],
       "loads": [
@@ -2374,7 +2374,7 @@ window.EDITS_FIXTURE =
             3.0,
             -1.0
           ],
-          "mat": null
+          "mat": "m_upper"
         },
         {
           "id": "retained",
@@ -2384,7 +2384,7 @@ window.EDITS_FIXTURE =
             33.0,
             -3.5
           ],
-          "mat": null
+          "mat": "m_upper"
         },
         {
           "id": "lift2",
@@ -2394,7 +2394,7 @@ window.EDITS_FIXTURE =
             3.0,
             -3.25
           ],
-          "mat": null
+          "mat": "m_upper"
         },
         {
           "id": "lift3",
@@ -2404,7 +2404,7 @@ window.EDITS_FIXTURE =
             3.0,
             -5.75
           ],
-          "mat": null
+          "mat": "m_upper"
         },
         {
           "id": "pit",
@@ -2414,7 +2414,7 @@ window.EDITS_FIXTURE =
             3.0,
             -8.5
           ],
-          "mat": null
+          "mat": "m_upper"
         },
         {
           "id": "retained",
@@ -2424,7 +2424,7 @@ window.EDITS_FIXTURE =
             33.0,
             -8.5
           ],
-          "mat": null
+          "mat": "m_upper"
         }
       ],
       "loads": [
