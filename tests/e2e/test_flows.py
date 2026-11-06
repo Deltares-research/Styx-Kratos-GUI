@@ -361,6 +361,9 @@ def test_a_soil_part_takes_its_own_material_and_gives_it_back(app_page, live_ser
     open_project(app_page, url, soil_lines.model(lines=[soil_lines.PIT_SIDE]))
     tree_row(app_page, "Top · Part 1").click()
     material = app_page.locator("#grid-selection .pgrid-row", has_text="Material")
+    assert material.locator("option").all_inner_texts() == [
+        m["name"] for m in app_page.evaluate("App.MATERIALS")]
+    assert material.locator("select").input_value() == "sand"
 
     material.locator("select").select_option("grout")
 

@@ -1636,14 +1636,15 @@ App.Model = (function () {
               }
             } }],
           ['Layer', layer.name, '', true],
+          // The materials only, the part's chosen: it has one of its own from the moment
+          // a line cuts it off, and keeps it when its layer's changes.
           ['Material', bodyMaterial(layer, key).name, '', false, {
             kind: 'select',
             options: function () {
-              return [{ value: '', text: 'As its layer (' + App.matById(layer.mat).name + ')' }]
-                .concat(App.MATERIALS.map(function (m) { return { value: m.id, text: m.name }; }));
+              return App.MATERIALS.map(function (m) { return { value: m.id, text: m.name }; });
             },
-            get: function () { return body.mat || ''; },
-            set: function (value) { body.mat = value || null; return null; }
+            get: function () { return body.mat || layer.mat; },
+            set: function (value) { body.mat = value || layer.mat; return null; }
           }],
           ['Volume', '—', 'm³', true]
         ]
