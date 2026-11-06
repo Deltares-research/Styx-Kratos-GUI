@@ -19,6 +19,7 @@ import pytest
 from cli.terminal import pictures
 from cli.terminal.main import main
 from core import session
+from core.model.schemas import DimensionUpdate
 from tests.e2e.conftest import command, log_text
 from tests.e2e.test_flows import LONG, wait_meshed
 from tests.models.excavation import excavation_project
@@ -75,10 +76,12 @@ def wait_saved(page, pattern: str) -> None:
                            arg=pattern, timeout=LONG)
 
 
-@pytest.fixture
-def excavation(app_page, live_server):
-    """The staged test model on screen, with the save windows answering."""
-    project = excavation_project()
+def solid_excavation():
+    """The test model as a solid: the same pit, swept across the model width."""
+    return session.set_dimension(excavation_project(), DimensionUpdate(dimension=3))[0]
+
+
+def open_model(app_page, live_server, project):
     app_page.request.put(live_server["url"] + "/api/project",
                          data=project.model_dump_json(),
                          headers={"Content-Type": "application/json"})
@@ -88,6 +91,32 @@ def excavation(app_page, live_server):
     app_page.wait_for_timeout(1500)
     app_page.evaluate(PRIVATE_WINDOWS)
     return app_page
+
+
+@pytest.fixture
+def excavation(app_page, live_server):
+    """The staged test model on screen, with the save windows answering."""
+    return open_model(app_page, live_server, excavation_project())
+
+
+@pytest.fixture
+def solid(app_page, live_server):
+    """The same model in 3D."""
+    return open_model(app_page, live_server, solid_excavation())
+
+
+def test_a_3d_picture_has_its_faces_in_the_image_and_no_rulers(solid):
+    page = solid
+    assert page.evaluate("App.PROJECT.dimension") == 3
+    command(page, "picture save --format png,svg")
+    wait_saved(page, r"Saved 2 files")
+    saved = files_of(page)
+    png = next(data for name, data in saved.items() if name.endswith(".png"))
+    assert png_size(png)[0] == 1890
+    text = next(data for name, data in saved.items() if name.endswith(".svg")).decode("utf-8")
+    assert "data:image/png;base64," in text, "the faces, hidden by depth, as one image"
+    assert ">-40<" not in text, "a ruler is for a section only"
+    assert page.errors == []
 
 
 def test_the_camera_opens_the_window_and_save_writes_a_300_dpi_png(excavation):
@@ -602,20 +631,45 @@ def test_the_plot_window_saves_a_png_and_a_pdf(excavation):
     assert next(data for name, data in saved.items() if name.endswith(".pdf")).startswith(b"%PDF-")
 
 
+def svg_outline(data: bytes) -> list[tuple[str, str]]:
+    """Each element of an SVG, by its tag and its text: what it draws, and not where to the
+    last decimal, which follows the window's shape."""
+    return [(element.tag, (element.text or "").strip())
+            for element in ElementTree.fromstring(data.decode("utf-8")).iter()]
+
+
 @pytest.mark.skipif(pictures.find_browser() is None, reason="no Chrome or Edge on this machine")
 def test_the_command_line_draws_the_same_picture_as_the_page(excavation, live_server, tmp_path):
-    """The real thing: its own server, a headless browser, the receiver."""
+    """The real thing: its own server, a headless browser, the receiver. The page on screen
+    saves the same stage, and the two are one picture."""
+    page = excavation
+    command(page, "gotostaged")
+    page.wait_for_timeout(500)
+    page.evaluate("App.state.phase = App.PROJECT.stages[0].id; App.Viewport.applyStageVisibility()")
+    command(page, "picture save --format png,svg --no-rulers")
+    wait_saved(page, r"Saved 2 files")
+    on_page = files_of(page)
+
     model = tmp_path / "pit.json"
     session.save(excavation_project(), model)
     out = tmp_path / "out"
     assert main(["picture", "stage", str(model), "--format", "png,svg,pdf", "--stage", "1",
-                 "--out", str(out) + "/"]) == 0
-    names = sorted(path.name for path in out.iterdir())
-    assert len(names) == 3
-    assert {name.rsplit(".", 1)[1] for name in names} == {"png", "svg", "pdf"}
-    png = next(out.glob("*.png")).read_bytes()
-    assert png_size(png)[0] == 1890
-    assert round(png_dpi(png)) == 300
+                 "--no-rulers", "--out", str(out) + "/"]) == 0
+    from_cli = {path.name: path.read_bytes() for path in out.iterdir()}
+    assert len(from_cli) == 3
+    assert {name.rsplit(".", 1)[1] for name in from_cli} == {"png", "svg", "pdf"}
+    assert set(on_page) <= set(from_cli), "the same names"
+
+    png = next(name for name in on_page if name.endswith(".png"))
+    assert png_size(from_cli[png]) == png_size(on_page[png])
+    assert png_size(from_cli[png])[0] == 1890
+    assert round(png_dpi(from_cli[png])) == 300
+    svg = next(name for name in on_page if name.endswith(".svg"))
+    assert svg_outline(from_cli[svg]) == svg_outline(on_page[svg])
+    root = ElementTree.fromstring(from_cli[svg].decode("utf-8"))
+    assert (root.get("width"), root.get("height")) == (
+        ElementTree.fromstring(on_page[svg].decode("utf-8")).get("width"),
+        ElementTree.fromstring(on_page[svg].decode("utf-8")).get("height"))
 
 
 @pytest.mark.skipif(pictures.find_browser() is None, reason="no Chrome or Edge on this machine")
@@ -644,3 +698,19 @@ def test_the_command_line_draws_the_whole_model_in_one_frame(excavation, live_se
         sizes[what] = png_size(next(out.glob("*.png")).read_bytes())
         assert ">-40<" in next(out.glob("*.svg")).read_text(encoding="utf-8"), what
     assert len(set(sizes.values())) == 1, sizes
+
+
+@pytest.mark.skipif(pictures.find_browser() is None, reason="no Chrome or Edge on this machine")
+def test_the_command_line_draws_a_3d_model_from_each_side(excavation, live_server, tmp_path):
+    model = tmp_path / "solid.json"
+    session.save(solid_excavation(), model)
+    pictures_of = {}
+    for view in ("iso", "top"):
+        out = tmp_path / view
+        assert main(["picture", "geometry", str(model), "--view", view, "--format", "png,svg",
+                     "--out", str(out) + "/"]) == 0
+        text = next(out.glob("*.svg")).read_text(encoding="utf-8")
+        assert "data:image/png;base64," in text
+        assert ">-40<" not in text, "no rulers, though they are asked by default"
+        pictures_of[view] = next(out.glob("*.png")).read_bytes()
+    assert pictures_of["iso"] != pictures_of["top"], "the camera follows --view"

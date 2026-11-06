@@ -23,6 +23,7 @@ from cli.terminal import pictures
 from cli.terminal.main import main
 from cli.terminal.output import CommandError
 from core import session
+from core.model.schemas import DimensionUpdate
 from tests import results_run
 from tests.models.excavation import excavation_project
 
@@ -133,6 +134,16 @@ def test_the_options_are_the_words_of_the_window(stand, project, tmp_path):
     assert asked["width"] == 12.5
     assert asked["show"] == {"rulers": False, "axes": False, "grid": True}
     assert stand.job["view"] == "top"
+
+
+def test_a_3d_model_is_drawn_from_the_view_asked(stand, tmp_path):
+    path = tmp_path / "solid.json"
+    session.save(session.set_dimension(excavation_project(), DimensionUpdate(dimension=3))[0],
+                 path)
+    assert main(["picture", "geometry", str(path), "--view", "iso",
+                 "--out", str(tmp_path) + "/"]) == 0
+    assert stand.job["view"] == "iso"
+    assert json.loads(stand.projects[0])["dimension"] == 3
 
 
 @pytest.mark.parametrize("option", (["--format", "tiff"], ["--width", "0"], ["--width", "lots"],
