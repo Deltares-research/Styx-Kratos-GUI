@@ -566,6 +566,14 @@
     T.ok(apart.page.heightPx !== one.page.heightPx, 'with no frame it would differ');
   });
 
+  test('a picture with no title in a shared frame has the size of one with a title', function () {
+    var frame = D.drawnBox(view([faces(SQUARE)]), SCREEN);
+    var named = D.picture(view([faces(SQUARE)], { title: 'Stage 1: Start' }), 16, SCREEN, undefined, frame);
+    var plain = D.picture(view([faces(SQUARE)]), 16, SCREEN, undefined, frame);
+    T.eq(plain.page.heightPx, named.page.heightPx);
+    T.eq(plain.page.scene, named.page.scene);
+  });
+
   test('the box round two boxes is wider than either, and null is no box', function () {
     var a = { minX: -1, maxX: 0, minY: 0, maxY: 1 }, b = { minX: 0, maxX: 0.5, minY: -0.5, maxY: 0.5 };
     T.eq(D.widerBox(a, b), { minX: -1, maxX: 0.5, minY: -0.5, maxY: 1 });

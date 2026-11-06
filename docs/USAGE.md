@@ -572,8 +572,9 @@ its own active parts.
 
 All the pictures of the stages of a model have the same size, with the model in the same place,
 also if you save them one by one. The frame is large enough for what each stage draws, so a stage
-with no load has the same frame as a stage with a load. If you move the camera, the frame changes
-with it. In Results, to find this frame, Styx goes through the stages before it saves or copies a
+with no load has the same frame as a stage with a load. Pictures of the other tabs, such as
+**Mesh**, have this frame too, with space above the view where a stage picture has its title. If
+you move the camera, the frame changes with it. In Results, to find this frame, Styx goes through the stages before it saves or copies a
 picture, so the viewport changes for a moment.
 
 In Results mode, select **Every stage**, **This stage, every field** or **Every stage, every

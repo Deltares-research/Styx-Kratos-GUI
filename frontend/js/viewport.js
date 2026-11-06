@@ -1721,6 +1721,10 @@ App.Viewport = (function () {
     });
   }
 
+  function selectedKey() {
+    return selected;
+  }
+
   function select(key) {
     if (!scene) return;
     selectedKeys.forEach(function (k) { restoreEmissive(k); });
@@ -2833,6 +2837,11 @@ App.Viewport = (function () {
 
   function dolly(dir) { if (orbit) orbit.dolly(dir); }
 
+  /* Whether the camera is still easing to a view: a picture taken now shows it on the way. */
+  function cameraMoving() {
+    return !!orbit && orbit.tick();
+  }
+
   /* ── Navigation mode: the toolbar's pan / rotate pair ───────────────────────
 
      js/orbit.js is frozen and has one rule for what a left-drag means
@@ -2952,7 +2961,8 @@ App.Viewport = (function () {
 
   return {
     init: init, setMode: setMode, setVisible: setVisible, isVisible: isVisible,
-    select: select, setView: setView, zoomFit: zoomFit, dolly: dolly,
+    select: select, selectedKey: selectedKey,
+    setView: setView, zoomFit: zoomFit, dolly: dolly, cameraMoving: cameraMoving,
     setProjection: setProjection, setGrid: setGrid, syncRulers: syncRulers,
     setViewMode: setViewMode, is2D: is2D,
     setNavMode: setNavMode, getNavMode: getNavMode,

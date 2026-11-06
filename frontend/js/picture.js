@@ -488,13 +488,52 @@ App.Picture = (function () {
     });
   }
 
+  /* Going through the stages can hide what is selected, and the user's selection stays. */
+  function keepingSelection(run) {
+    var key = App.Viewport.selectedKey();
+    function back() {
+      if (key && App.Viewport.selectedKey() !== key) App.Viewport.select(key);
+    }
+    return Promise.resolve().then(run).then(function (answer) {
+      back();
+      return answer;
+    }, function (error) {
+      back();
+      throw error;
+    });
+  }
+
+  /* From a tab with no stages of its own, such as Mesh: `visit` once for what the tab draws,
+     then once for each stage as Staged construction draws it. Only which groups are visible
+     changes, and all of it is put back before the screen is next drawn. */
+  function throughStagesFromTab(visit) {
+    var mode = App.state.mode, phase = App.state.phase;
+    visit();
+    try {
+      App.state.mode = 'staged';
+      ((App.PROJECT && App.PROJECT.stages) || []).forEach(function (stage) {
+        App.state.phase = stage.id;
+        App.Viewport.applyStageVisibility();
+        visit();
+      });
+    } finally {
+      App.state.mode = mode;
+      App.state.phase = phase;
+      App.Viewport.applyStageVisibility();
+    }
+  }
+
   /* The frame every picture of this model shares: what any of its stages draws, so that a
      stage with a load has the same size, and the model in the same place, as a stage with
-     none, whichever of them are saved and when. Results come from the server, so there the
-     screen goes through the stages, as a save of every stage does. */
+     none or a picture of the mesh, whichever of them are saved and when. Results come from
+     the server, so there the screen goes through the stages, as a save of every stage does. */
   function commonFrame(asked) {
     var screen = App.Viewport.pictureView();
     var box = null;
+    function take() {
+      box = D.widerBox(box, D.drawnBox(viewNow(asked, screen), screen));
+      return null;
+    }
     walking = true;
     stopAsked = false;
     if (inResults()) progress('Getting the stages…');
@@ -502,10 +541,10 @@ App.Picture = (function () {
       walking = false;
       progress(null);
     }
-    return Promise.resolve(walk({ stage: 'all' }, function () {
-      box = D.widerBox(box, D.drawnBox(viewNow(asked, screen), screen));
-      return null;
-    }, function () { return stopAsked; })).then(function () {
+    return keepingSelection(function () {
+      if (!inResults() && !inStaged()) return throughStagesFromTab(take);
+      return walk({ stage: 'all' }, take, function () { return stopAsked; });
+    }).then(function () {
       done();
       return box;
     }, function (error) {
@@ -662,7 +701,7 @@ App.Picture = (function () {
       if (stopAsked) return null;
       walking = true;
       progress('Saving pictures…');
-      return walk(asked, visit, stopped);
+      return keepingSelection(function () { return walk(asked, visit, stopped); });
     }).then(function () {
       finish();
       return { count: count, stopped: stopped() };
@@ -782,6 +821,16 @@ App.Picture = (function () {
     return new Promise(function (resolve) { App.Viewport.generateMesh(resolve); });
   }
 
+  /* The camera eases to the model for a moment after the page opens, and to a preset view. */
+  function cameraStill() {
+    return new Promise(function (resolve) {
+      (function check() {
+        if (App.Viewport.cameraMoving()) setTimeout(check, 50);
+        else resolve();
+      })();
+    });
+  }
+
   /* Puts the screen where the job wants it, in the words a user would type. */
   function prepareJob(job) {
     var ready = App.Viewport.refresh();
@@ -795,10 +844,8 @@ App.Picture = (function () {
         App.state.phase = App.PROJECT.stages[job.stage - 1].id;
         App.Viewport.applyStageVisibility();
       }
-      if (!job.view) return null;
-      App.Viewport.setView(job.view);
-      // The camera eases to a preset view, in a little under half a second.
-      return new Promise(function (resolve) { setTimeout(resolve, 600); });
+      if (job.view) App.Viewport.setView(job.view);
+      return cameraStill();
     });
   }
 

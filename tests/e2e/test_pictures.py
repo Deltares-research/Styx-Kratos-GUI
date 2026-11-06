@@ -251,6 +251,68 @@ def test_a_picture_saved_alone_has_the_size_of_the_same_stage_in_a_batch(excavat
     assert {png_size(data) for data in files_of(page).values()} == sizes
 
 
+def test_a_picture_of_the_geometry_or_the_mesh_has_the_size_of_a_picture_of_a_stage(excavation):
+    page = excavation
+    command(page, "gotomesh")
+    page.evaluate("App.runAction({ action: 'generateMesh' })")
+    wait_meshed(page)
+    for dialog in page.locator(".dlg-x").all():
+        dialog.click()
+
+    said = "(document.getElementById('cmd-log').innerText.match(/Saved /g) || []).length"
+
+    def size_of_this_tab():
+        page.evaluate(PRIVATE_WINDOWS)
+        before = page.evaluate(said)
+        page.locator(CAMERA).click()
+        page.get_by_role("button", name="Save…").click()
+        page.wait_for_function(f"(before) => {said} > before", arg=before, timeout=LONG)
+        saved = files_of(page)
+        assert len(saved) == 1
+        return png_size(next(iter(saved.values())))
+
+    phase = page.evaluate("App.state.phase")
+    mesh = size_of_this_tab()
+    assert page.evaluate("App.state.mode") == "mesh", "the tab on screen stays"
+    assert page.evaluate("App.state.phase") == phase
+
+    command(page, "gotostaged")
+    page.wait_for_timeout(500)
+    stage = size_of_this_tab()
+
+    command(page, "gotostructures")
+    page.wait_for_timeout(500)
+    structures = size_of_this_tab()
+
+    assert mesh == stage == structures
+    assert page.errors == []
+
+
+def test_saving_every_stage_keeps_what_is_selected(excavation):
+    page = excavation
+    command(page, "gotostaged")
+    page.wait_for_timeout(1000)
+    selected = page.evaluate("""() => {
+      const stages = App.PROJECT.stages;
+      const hidden = stages.flatMap(s => App.Stages.hiddenKeys(App.PROJECT, s.id, 'staged'));
+      App.state.phase = stages.find(s => hidden.some(key =>
+        !App.Stages.hiddenKeys(App.PROJECT, s.id, 'staged').includes(key))).id;
+      App.Viewport.applyStageVisibility();
+      const shown = App.Stages.hiddenKeys(App.PROJECT, App.state.phase, 'staged');
+      const key = hidden.find(k => !shown.includes(k));
+      App.Viewport.select(key);
+      return App.Viewport.selectedKey();
+    }""")
+    assert selected
+
+    page.locator(CAMERA).click()
+    page.locator('input[name="picture-scope"][value="stages"]').check()
+    page.get_by_role("button", name="Save…").click()
+    wait_saved(page, r"Saved \d+ files")
+
+    assert page.evaluate("App.Viewport.selectedKey()") == selected
+
+
 def test_every_stage_of_the_results_has_one_size(excavation):
     page = excavation
     command(page, "gotostaged")
@@ -386,3 +448,20 @@ def test_the_command_line_draws_the_same_picture_as_the_page(excavation, live_se
     png = next(out.glob("*.png")).read_bytes()
     assert png_size(png)[0] == 1890
     assert round(png_dpi(png)) == 300
+
+
+@pytest.mark.skipif(pictures.find_browser() is None, reason="no Chrome or Edge on this machine")
+def test_the_command_line_draws_the_whole_model_in_one_frame(excavation, live_server, tmp_path):
+    """Just after the page opens its camera is still on the way to the model, and a picture
+    taken then has the bottom of the model cut off."""
+    model = tmp_path / "pit.json"
+    session.save(excavation_project(), model)
+    sizes = {}
+    for what in ("geometry", "mesh", "stage"):
+        out = tmp_path / what
+        stage = ["--stage", "1"] if what == "stage" else []
+        assert main(["picture", what, str(model), *stage, "--format", "png,svg",
+                     "--out", str(out) + "/"]) == 0
+        sizes[what] = png_size(next(out.glob("*.png")).read_bytes())
+        assert ">-40<" in next(out.glob("*.svg")).read_text(encoding="utf-8"), what
+    assert len(set(sizes.values())) == 1, sizes

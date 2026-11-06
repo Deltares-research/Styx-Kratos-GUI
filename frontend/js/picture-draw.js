@@ -928,11 +928,12 @@ App.PictureDraw = (function () {
 
   /* The view cropped to `frame`, or to what it draws, with white space round it, on a page with
      room for what goes round the view. A `frame` is a `drawnBox` that pictures share, so they
-     come out the same size with the model in the same place. A side where the model runs off
+     come out the same size with the model in the same place: also the picture of a tab with no
+     stage to name, which keeps the title's band empty. A side where the model runs off
      the screen has no space: a view zoomed in on stays zoomed in on. The camera is left alone:
      the crop is one more matrix after its projection. */
   function framed(view, widthCm, screen, frame) {
-    var parts = { legend: !!view.legend, rulers: !!view.rulers, title: !!view.title,
+    var parts = { legend: !!view.legend, rulers: !!view.rulers, title: !!(view.title || frame),
                   footer: !!view.triad, caption: !!view.caption };
     var sceneMm = page(widthCm, 1, 1, parts).scene.widthMm;
     var lowest = (view.legend ? LOWEST_WITH_LEGEND_MM : LOWEST_MM) / sceneMm;
