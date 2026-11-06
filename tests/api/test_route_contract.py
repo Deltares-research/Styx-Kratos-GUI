@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import io
 import json
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
@@ -273,6 +274,9 @@ CONTRACTS = [
              lambda c: _on_this_computer().put("/api/files/folder/chosen/a.png", content=b"x"), {"path"},
              bad=lambda c: _on_this_computer().put("/api/files/folder/chosen/a.exe", content=b"x"),
              bad_status=422),
+    Contract("DELETE", "/api/files/folder/{folder}",
+             lambda c: _on_this_computer().delete("/api/files/folder/chosen"), {"released"},
+             bad=lambda c: c.delete("/api/files/folder/chosen"), bad_status=403),
     Contract("GET", "/api/files/picture-job/{token}", lambda c: c.get("/api/files/picture-job/x"),
              {"ok"}),
     Contract("GET", "/", lambda c: c.get("/"), set(), content_type="text/html"),
@@ -296,7 +300,8 @@ def client(monkeypatch, tmp_path):
     monkeypatch.setattr(calculation, "COMMAND", ["-c", "print('stand-in')"])
     chosen = tmp_path / "chosen"
     chosen.mkdir()
-    monkeypatch.setitem(files_routes._folders, "chosen", chosen)
+    monkeypatch.setitem(files_routes._folders, "chosen",
+                        files_routes.Folder(chosen, time.monotonic()))
     with TestClient(app) as c:
         c.post("/api/project/reset")
         yield c

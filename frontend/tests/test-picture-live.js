@@ -75,6 +75,10 @@
         if (options.onWrite) options.onWrite(name);
         return Promise.resolve();
       },
+      releaseFolder: function (folder) {
+        asked.push(['release', folder]);
+        return Promise.resolve();
+      },
       write: function (target, name, content, mime) {
         files.push({ name: name, content: content, mime: mime });
         return Promise.resolve();
@@ -256,6 +260,7 @@
       T.eq(App.state.phase, phase, 'the stage on screen is back');
       T.eq(App.Viewport.selectedKey(), key, 'the selection is back');
       T.ok(said('ok', /Saved \d+ files in out\./), JSON.stringify(lines));
+      T.eq(asked[asked.length - 1], ['release', { name: 'out' }], 'the folder is handed back');
     });
   });
 
@@ -382,6 +387,7 @@
       T.eq(count, null);
       T.ok(said('err', /could not be saved: folder gone/), JSON.stringify(lines));
       T.eq(App.state.phase, phase);
+      T.eq(asked[asked.length - 1], ['release', { name: 'out' }], 'a failed save hands it back too');
     });
   });
 

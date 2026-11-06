@@ -271,6 +271,39 @@
     }).then(function (folder) { T.eq(folder, App.Download.CANCELLED); });
   });
 
+  test('a server window open already stops the save and says why', function () {
+    var savedCommand = App.Command, said = [];
+    App.Command = { err: function (text) { said.push(text); } };
+    function back() { App.Command = savedCommand; }
+    return serverSays({ busy: 'A folder window is open already.' }, function () {
+      return App.Download.pickFolder('x');
+    }).then(function (folder) {
+      back();
+      T.eq(folder, App.Download.CANCELLED);
+      T.eq(said, ['A folder window is open already.']);
+    }, function (error) { back(); throw error; });
+  });
+
+  test('a folder of the server is handed back, and one of the browser has nothing to hand back', function () {
+    var savedFetch = window.fetch, sent = [];
+    window.fetch = function (url, options) {
+      sent.push([url, options.method]);
+      return sent.length === 1 ? Promise.resolve({ ok: true }) : Promise.reject(new Error('gone'));
+    };
+    function back() { window.fetch = savedFetch; }
+    return App.Download.releaseFolder({ server: 'a/b' }).then(function () {
+      return App.Download.releaseFolder({ server: 'c' });
+    }).then(function () {
+      return App.Download.releaseFolder({ name: 'out' });
+    }).then(function () {
+      return App.Download.releaseFolder(null);
+    }).then(function () {
+      back();
+      T.eq(sent, [[App.Api.base + '/api/files/folder/a%2Fb', 'DELETE'],
+                  [App.Api.base + '/api/files/folder/c', 'DELETE']]);
+    }, function (error) { back(); throw error; });
+  });
+
   test('a file in a folder of the server is asked for and written by name', function () {
     var savedGet = App.Api.get, savedFetch = window.fetch, sent = null;
     var base = '/api/files/folder/abc/a%20b.png';

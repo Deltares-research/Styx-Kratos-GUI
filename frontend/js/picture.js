@@ -755,12 +755,15 @@ App.Picture = (function () {
     return App.Download.pickFolder(WINDOW_ID).then(function (folder) {
       if (folder === App.Download.CANCELLED) { log('note', 'Pictures not saved.'); return null; }
       var out = outlet(folder);
+      var release = function () { return App.Download.releaseFolder(folder); };
       return saveAll(asked, out).then(function (result) {
         out.finish();
         log(result.stopped ? 'note' : 'ok', (result.stopped ? 'Stopped after ' : 'Saved ')
             + result.count + ' file' + (result.count === 1 ? '' : 's')
             + (folder && folder.name ? ' in ' + folder.name : '') + '.');
-        return result.count;
+        return release().then(function () { return result.count; });
+      }, function (error) {
+        return release().then(function () { throw error; });
       });
     });
   }

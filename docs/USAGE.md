@@ -560,7 +560,9 @@ file opens the system folder window, and all the files go in that folder. You ca
 Downloads or Desktop. If a file exists in the folder, Styx asks one time if it can overwrite the
 files.
 
-If you do not see the folder window, look behind the browser or in the taskbar.
+If you do not see the folder window, look behind the browser or in the taskbar. Only one folder
+window opens at a time. If you do not choose a folder in 10 minutes, the window closes and
+nothing is saved.
 
 If Styx runs on another computer, the browser's own folder window opens. Chrome and Edge can refuse
 some folders in that window, such as Downloads or Desktop themselves. If this occurs, select a

@@ -34,6 +34,8 @@ def chosen(monkeypatch, tmp_path):
 
     monkeypatch.setattr(files, "choose_folder", choose)
     monkeypatch.setattr(files, "_folders", {})
+    monkeypatch.setattr(files, "_last_chosen", None)
+    monkeypatch.setattr(files, "_window_open", False)
     return tmp_path, starts
 
 
@@ -61,11 +63,39 @@ def test_the_window_can_be_dismissed(client, monkeypatch):
 def test_the_window_opens_in_downloads_and_then_where_the_last_one_ended(client, chosen):
     folder, starts = chosen
 
-    client.post("/api/files/folder")
+    made = folder_id(client)
+    client.delete(f"/api/files/folder/{made}")
     client.post("/api/files/folder")
 
     assert starts[0].name == "Downloads"
     assert starts[1] == folder
+
+
+def test_one_window_is_open_at_a_time(client, chosen, monkeypatch):
+    _, starts = chosen
+    monkeypatch.setattr(files, "_window_open", True)
+
+    answer = client.post("/api/files/folder").json()
+
+    assert "already" in answer["busy"]
+    assert starts == []
+
+
+@pytest.mark.parametrize("ends", ["chosen", "dismissed", "no window"])
+def test_the_next_window_can_open_however_the_last_one_ended(client, monkeypatch, ends):
+    def choose(_start):
+        assert files._window_open
+        if ends == "no window":
+            raise files.NoFolderWindow("no display")
+        return "D:\\plots" if ends == "chosen" else ""
+
+    monkeypatch.setattr(files, "choose_folder", choose)
+    monkeypatch.setattr(files, "_folders", {})
+    monkeypatch.setattr(files, "_window_open", False)
+
+    client.post("/api/files/folder")
+
+    assert not files._window_open
 
 
 def test_a_computer_with_no_window_says_so_for_the_browser_to_take_over(client, monkeypatch):
@@ -111,6 +141,37 @@ def test_a_folder_nobody_chose_is_not_written_to(client, chosen):
     assert answer.status_code == 404
 
 
+def test_a_folder_handed_back_at_the_end_of_its_save_is_written_to_no_more(client, chosen):
+    folder, _ = chosen
+    made = folder_id(client)
+
+    assert client.delete(f"/api/files/folder/{made}").json() == {"released": True}
+    assert client.put(f"/api/files/folder/{made}/a.png", content=b"x").status_code == 404
+    assert client.delete(f"/api/files/folder/{made}").json() == {"released": False}
+    assert list(folder.iterdir()) == []
+
+
+def test_a_folder_left_unused_is_forgotten(client, chosen):
+    folder, _ = chosen
+    made = folder_id(client)
+    files._folders[made].used -= files.FOLDER_IDLE_SECONDS + 1
+
+    assert client.put(f"/api/files/folder/{made}/a.png", content=b"x").status_code == 404
+    assert made not in files._folders
+    assert list(folder.iterdir()) == []
+
+
+def test_a_folder_in_use_is_kept_for_as_long_as_its_save_goes_on(client, chosen):
+    folder, _ = chosen
+    made = folder_id(client)
+    files._folders[made].used -= files.FOLDER_IDLE_SECONDS - 5
+
+    assert client.put(f"/api/files/folder/{made}/a.png", content=b"x").status_code == 200
+    files._folders[made].used -= 10
+    assert client.put(f"/api/files/folder/{made}/b.png", content=b"x").status_code == 200
+    assert sorted(path.name for path in folder.iterdir()) == ["a.png", "b.png"]
+
+
 def test_a_folder_that_cannot_be_written_to_gives_the_reason(client, chosen, monkeypatch):
     def refuse(_self, _content):
         raise PermissionError("denied")
@@ -139,6 +200,8 @@ def test_a_browser_on_another_computer_gets_no_window_and_no_file(chosen):
     with TestClient(app, base_url="http://127.0.0.1:8000", client=("192.168.1.5", 1)) as there:
         assert "no_window" in there.post("/api/files/folder").json()
         assert there.put(f"/api/files/folder/{made}/a.png", content=b"x").status_code == 403
+        assert there.delete(f"/api/files/folder/{made}").status_code == 403
+    assert made in files._folders
     assert len(starts) == 1
     assert list(folder.iterdir()) == []
 
@@ -188,6 +251,16 @@ def test_the_window_runs_apart_and_says_what_was_chosen(monkeypatch, tmp_path):
     assert asked["command"][0] == sys.executable
     assert asked["command"][-1] == str(tmp_path)
     assert asked["options"]["encoding"] == "utf-8"
+    assert asked["options"]["timeout"] == files.FOLDER_WINDOW_SECONDS
+
+
+def test_a_window_nobody_answers_in_time_counts_as_dismissed(monkeypatch, tmp_path):
+    def run(command, **options):
+        raise subprocess.TimeoutExpired(command, options["timeout"])
+
+    monkeypatch.setattr(subprocess, "run", run)
+
+    assert files.choose_folder(tmp_path) == ""
 
 
 def test_a_window_that_could_not_open_says_why(monkeypatch, tmp_path):

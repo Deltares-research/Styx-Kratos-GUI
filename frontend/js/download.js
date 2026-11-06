@@ -55,10 +55,15 @@ App.Download = (function () {
   }
 
   /* `null` where the server cannot open the window: it is on another computer, or has no
-     display. The answer comes at once then, so the click still counts for the browser's. */
+     display. The answer comes at once then, so the click still counts for the browser's.
+     A window open already is the user's to answer: this save stops, and says why. */
   function serverFolder() {
     return App.Api.post('/api/files/folder', {}).then(function (answer) {
       if (answer.no_window) return null;
+      if (answer.busy) {
+        if (App.Command && App.Command.err) App.Command.err(answer.busy);
+        return CANCELLED;
+      }
       return answer.cancelled ? CANCELLED : { server: answer.id, name: answer.name };
     }, function () { return null; });
   }
@@ -74,6 +79,16 @@ App.Download = (function () {
 
   function onServer(folder, name) {
     return '/api/files/folder/' + encodeURIComponent(folder.server) + '/' + encodeURIComponent(name);
+  }
+
+  /* The save is over: the server's id for the folder writes nothing more. A folder of the
+     browser has nothing to hand back, and a failure here costs nothing -- the server forgets
+     an unused id by itself. */
+  function releaseFolder(folder) {
+    if (!folder || !folder.server) return Promise.resolve();
+    var path = '/api/files/folder/' + encodeURIComponent(folder.server);
+    return window.fetch(App.Api.base + path, { method: 'DELETE' })
+      .then(function () {}, function () {});
   }
 
   function writeOnServer(folder, name, content) {
@@ -134,5 +149,6 @@ App.Download = (function () {
   }
 
   return { CANCELLED: CANCELLED, pickFile: pickFile, pickFolder: pickFolder, exists: exists,
-           writeInFolder: writeInFolder, write: write, anchor: anchor };
+           writeInFolder: writeInFolder, releaseFolder: releaseFolder, write: write,
+           anchor: anchor };
 })();
