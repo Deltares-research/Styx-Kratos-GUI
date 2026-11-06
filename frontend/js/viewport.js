@@ -160,11 +160,88 @@ App.Viewport = (function () {
     return mesh;
   }
 
-  function sectionEdges(section) {
-    if (!section.edges.length) return null;
-    var lines = new THREE.LineSegments(App.Buffers.edges(section), edgeMaterial(section));
+  function sectionEdges(section, flat) {
+    flat = flat || section.edges;
+    if (!flat.length) return null;
+    var lines = new THREE.LineSegments(App.Buffers.edges({ edges: flat }),
+                                       edgeMaterial(section));
     lines.userData.noPick = true;
     return lines;
+  }
+
+  /* The soil's edges that a line puts there, where it splits a layer: each piece draws
+     one along the line. They are drawn with the line, so hiding the line in the Model
+     explorer hides all of it, not only its dashes over the seam. An edge on a layer's
+     outline stays the soil's, as it is there with or without the line. In 3D an edge
+     across the model at one of the line's points goes with it too, unless it is the
+     domain's side. Pure, so it is testable without a renderer.
+
+     Returns `edges`, each section's flat LineSegments pairs less the seams, and
+     `seams`, one `{line, section, edges}` per line and section that has one. */
+  function lineSeams(sections, project) {
+    var edges = {}, seams = [];
+    var lines = (project && project.layered_soil && project.lines) || [];
+    var layers = {};
+    ((project && project.layers) || []).forEach(function (layer) {
+      layers['soil_' + layer.id] = layer;
+    });
+    var d = project && project.domain;
+    // The edges come rounded to 4 decimals (core/geometry/tessellation.py DECIMALS).
+    var tol = 1e-3;
+
+    function near(a, b) { return Math.abs(a - b) <= tol; }
+
+    function onPolyline(x, y, points) {
+      for (var i = 0; i + 1 < points.length; i++) {
+        var ax = points[i][0], ay = points[i][1];
+        var dx = points[i + 1][0] - ax, dy = points[i + 1][1] - ay;
+        var length2 = dx * dx + dy * dy;
+        var t = length2 ? ((x - ax) * dx + (y - ay) * dy) / length2 : 0;
+        t = Math.max(0, Math.min(1, t));
+        var ex = ax + t * dx - x, ey = ay + t * dy - y;
+        if (ex * ex + ey * ey <= tol * tol) return true;
+      }
+      return false;
+    }
+
+    function onOutline(s, layer) {
+      var across = near(s[0], s[3]) && near(s[1], s[4]);
+      var sides = [[0, d.x0], [0, d.x1]];
+      if (!across) sides.push([1, layer.top], [1, layer.bottom]);
+      return sides.some(function (side) {
+        return near(s[side[0]], side[1]) && near(s[3 + side[0]], side[1]);
+      });
+    }
+
+    function lineOf(s, layer) {
+      if (onOutline(s, layer)) return null;
+      var mx = (s[0] + s[3]) / 2, my = (s[1] + s[4]) / 2;
+      for (var i = 0; i < lines.length; i++) {
+        var points = lines[i].points || [];
+        if (onPolyline(s[0], s[1], points) && onPolyline(s[3], s[4], points) &&
+            onPolyline(mx, my, points)) return lines[i].id;
+      }
+      return null;
+    }
+
+    sections.forEach(function (section) {
+      var layer = layers[section.key.split('__')[0]];
+      if (!lines.length || !layer || !d) { edges[section.key] = section.edges; return; }
+      var kept = [], byLine = {};
+      for (var i = 0; i + 5 < section.edges.length; i += 6) {
+        var s = section.edges.slice(i, i + 6);
+        var line = lineOf(s, layer);
+        if (line === null) kept.push.apply(kept, s);
+        else (byLine[line] = byLine[line] || []).push.apply(byLine[line], s);
+      }
+      edges[section.key] = kept.length === section.edges.length ? section.edges : kept;
+      lines.forEach(function (record) {
+        if (byLine[record.id]) {
+          seams.push({ line: record.id, section: section, edges: byLine[record.id] });
+        }
+      });
+    });
+    return { edges: edges, seams: seams };
   }
 
   /* Frees GPU memory before a group is replaced. The frozen code never does
@@ -964,6 +1041,7 @@ App.Viewport = (function () {
     Object.keys(groups).forEach(function (k) { disposeGroup(groups[k]); });
     groups = {};
 
+    var cut = lineSeams(payload.sections, App.PROJECT);
     payload.sections.forEach(function (section) {
       var g = groups[section.key];
       if (!g) {
@@ -972,13 +1050,16 @@ App.Viewport = (function () {
         scene.add(g);
       }
       g.add(sectionMesh(section));
-      var edges = sectionEdges(section);
+      var edges = sectionEdges(section, cut.edges[section.key]);
       if (edges) g.add(edges);
     });
 
     addLoadGlyphs();
     addConditionGlyphs(payload.sections);
     addLineGlyphs();
+    cut.seams.forEach(function (seam) {
+      if (groups[seam.line]) groups[seam.line].add(sectionEdges(seam.section, seam.edges));
+    });
 
     // Before the visibility sweep below, so the group it creates is given its
     // `visible` entry like every other one.
@@ -3009,6 +3090,7 @@ App.Viewport = (function () {
     // client-side edit they just made.
     rebuildSoil: function () {},
     refresh: refresh, gridReference: gridReference, computeModeGroups: computeModeGroups,
+    lineSeams: lineSeams,
     soilKeysOf: soilKeysOf,
     computeGroupKeys: computeGroupKeys,
     loadGlyphSpec: loadGlyphSpec, loadGlyphGroup: loadGlyphGroup,

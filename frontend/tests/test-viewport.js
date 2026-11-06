@@ -722,3 +722,80 @@
     });
   });
 })();
+
+/* ── A line's seam goes with the line ─────────────────────────────────────
+   Where a line splits a layer, the two pieces each draw an edge along it. Hiding the line
+   in the Model explorer hid only its dashes, so the seam stayed and nothing seemed to go.
+   The seam is drawn with the line instead; the outline of each layer stays the soil's. */
+(function () {
+  var PROJECT = {
+    dimension: 2, layered_soil: true,
+    domain: { x0: 0, x1: 10, y_top: 0, y_bottom: -12, z0: 0, z1: 0 },
+    layers: [{ id: 'top', top: 0, bottom: -4 }, { id: 'low', top: -4, bottom: -12 }],
+    lines: [{ id: 'pit_side', points: [[5, 0], [5, -4]] },
+            { id: 'on_the_layers', points: [[0, -4], [10, -4]] }]
+  };
+
+  function outline(corners) {
+    var flat = [];
+    corners.forEach(function (from, index) {
+      var to = corners[(index + 1) % corners.length];
+      flat.push(from[0], from[1], 0, to[0], to[1], 0);
+    });
+    return flat;
+  }
+
+  // The left piece's edge along the line comes in two segments, as gmsh may mesh it.
+  var SECTIONS = [
+    { key: 'soil_top__part1', color: '#c8a165',
+      edges: outline([[0, 0], [5, 0], [5, -2], [5, -4], [0, -4]]) },
+    { key: 'soil_top__part2', color: '#c8a165',
+      edges: outline([[5, 0], [10, 0], [10, -4], [5, -4]]) },
+    { key: 'soil_low', color: '#8a6d3b',
+      edges: outline([[0, -4], [10, -4], [10, -12], [0, -12]]) }
+  ];
+
+  function segments(flat) {
+    var out = [];
+    for (var i = 0; i < flat.length; i += 6) {
+      out.push(flat.slice(i, i + 6).map(function (v) { return Math.round(v * 1e6) / 1e6; }));
+    }
+    return out;
+  }
+
+  test("the edges along a line that splits a layer are the line's", function () {
+    var cut = App.Viewport.lineSeams(SECTIONS, PROJECT);
+    T.eq(cut.seams.map(function (seam) { return [seam.line, seam.section.key]; }),
+         [['pit_side', 'soil_top__part1'], ['pit_side', 'soil_top__part2']]);
+    T.eq(segments(cut.seams[0].edges), [[5, 0, 0, 5, -2, 0], [5, -2, 0, 5, -4, 0]]);
+    T.eq(segments(cut.seams[1].edges), [[5, -4, 0, 5, 0, 0]]);
+    T.eq(segments(cut.edges.soil_top__part1),
+         [[0, 0, 0, 5, 0, 0], [5, -4, 0, 0, -4, 0], [0, -4, 0, 0, 0, 0]],
+         'the left piece keeps its outline, less the seam');
+  });
+
+  test("a layer's outline stays the soil's, even where a line runs along it", function () {
+    var cut = App.Viewport.lineSeams(SECTIONS, PROJECT);
+    T.eq(segments(cut.edges.soil_low), segments(SECTIONS[2].edges));
+    T.eq(segments(cut.edges.soil_top__part2),
+         [[5, 0, 0, 10, 0, 0], [10, 0, 0, 10, -4, 0], [10, -4, 0, 5, -4, 0]]);
+  });
+
+  test('in 3D the edge across the model where the line meets the ground goes too', function () {
+    var solid = Object.assign({}, PROJECT, { dimension: 3,
+      domain: Object.assign({}, PROJECT.domain, { z0: 0, z1: 6 }) });
+    var sections = [{ key: 'soil_top__part1', color: '#c8a165',
+                      edges: [5, 0, 0, 5, 0, 6,      // across, at the line's top
+                              0, 0, 0, 0, 0, 6,      // across, at the domain's corner
+                              5, -4, 6, 5, 0, 6] }]; // along the line, at the back
+    var cut = App.Viewport.lineSeams(sections, solid);
+    T.eq(segments(cut.seams[0].edges), [[5, 0, 0, 5, 0, 6], [5, -4, 6, 5, 0, 6]]);
+    T.eq(segments(cut.edges.soil_top__part1), [[0, 0, 0, 0, 0, 6]]);
+  });
+
+  test("without lines every edge is the soil's", function () {
+    var cut = App.Viewport.lineSeams(SECTIONS, Object.assign({}, PROJECT, { lines: [] }));
+    T.eq(cut.seams, []);
+    T.eq(cut.edges.soil_top__part1, SECTIONS[0].edges);
+  });
+})();
