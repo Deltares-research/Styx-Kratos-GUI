@@ -3631,6 +3631,10 @@ App.LivePatches = (function () {
         var menu = App.UI.popup(App.Menu.build(PLOT_SAVE_FORMATS, function (it) {
           resultsCommand('results plot ' + it.format);
         }), r.left, r.bottom);
+        // The menu layer lies under the dialogs' layer, so the menu goes up beside the
+        // window it belongs to. Both layers cover the page, so it keeps its place.
+        var dialogs = document.getElementById('modal-layer');
+        if (dialogs) dialogs.appendChild(menu);
         var height = menu.getBoundingClientRect().height;
         if (r.bottom + height > window.innerHeight - 4) {
           menu.style.top = Math.max(4, Math.round(r.top - height)) + 'px';

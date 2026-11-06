@@ -348,8 +348,11 @@
     return layer;
   }
 
+  /* The Save menus open: in front of the dialogs, in their layer. */
+  function saveMenus() { return document.querySelectorAll('#modal-layer .menu'); }
+
   function menuItem(label) {
-    return Array.prototype.filter.call(menuLayer().querySelectorAll('.menu-item'), function (row) {
+    return Array.prototype.filter.call(document.querySelectorAll('#modal-layer .menu-item'), function (row) {
       return row.textContent.indexOf(label) === 0;
     })[0];
   }
@@ -376,6 +379,11 @@
       T.eq(save.getAttribute('aria-haspopup'), 'menu');
       save.click();
       T.eq(save.getAttribute('aria-expanded'), 'true');
+      var menu = saveMenus()[0];
+      T.ok(menu && menu.parentNode === win.parentNode, 'the menu is in the dialogs\' layer');
+      T.ok(win.compareDocumentPosition(menu) & Node.DOCUMENT_POSITION_FOLLOWING,
+           'and in front of the plot window');
+      T.eq(menuLayer().querySelectorAll('.menu').length, 0, 'not behind it, in the menu layer');
       T.eq(['PNG', 'PDF', 'SVG', 'CSV'].filter(menuItem).length, 4, 'every format is offered');
       menuItem('SVG').click();
       T.eq(save.getAttribute('aria-expanded'), 'false', 'a pick closes the menu');
@@ -390,7 +398,7 @@
       T.ok(ctx.downloads.some(function (name) { return /\.csv$/.test(name); }));
 
       var save = button(dialogTitled(ctx, 'Plot along the wall'), 'Save ▾');
-      function menus() { return menuLayer().querySelectorAll('.menu').length; }
+      function menus() { return saveMenus().length; }
       press(save);
       save.click();
       T.eq(menus(), 1, 'a click opens the menu');
@@ -409,7 +417,7 @@
           return { left: 20, right: 90, top: bottom - 24, bottom: bottom, width: 70, height: 24 };
         };
         save.click();
-        var menu = menuLayer().querySelector('.menu');
+        var menu = saveMenus()[0];
         T.ok(parseFloat(menu.style.top) + menu.getBoundingClientRect().height <= bottom - 24 + 1,
              'without room below, the menu opens above the button');
         delete save.getBoundingClientRect;
@@ -436,11 +444,11 @@
       T.ok(dialogTitled(ctx, 'Plot along the wall'), 'the plot opens beside the chooser');
       T.ok(ctx.commands.indexOf('results range auto') >= 0);
       button(dialogTitled(ctx, 'Plot along the wall'), 'Save ▾').click();
-      T.eq(menuLayer().querySelectorAll('.menu').length, 1, 'the Save menu is open');
+      T.eq(saveMenus().length, 1, 'the Save menu is open');
       App.setMode('soil');
       T.eq(dialogTitled(ctx, 'Choose results'), undefined);
       T.eq(dialogTitled(ctx, 'Plot along the wall'), undefined);
-      T.eq(menuLayer().querySelectorAll('.menu').length, 0, 'its menu closes with it');
+      T.eq(saveMenus().length, 0, 'its menu closes with it');
       T.eq(dock.querySelector('#panel-results').hidden, true);
     }).then(function () { dock.remove(); }, function (error) { dock.remove(); throw error; }));
   });
