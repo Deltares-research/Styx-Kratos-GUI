@@ -124,7 +124,7 @@ def test_the_k0_procedure_runs_in_the_k0_stage_only(doc):
 def test_the_k0_procedure_names_the_soil_and_only_the_soil(doc):
     parts = carrying(doc, "1_Initial_stage", "auxiliary_process_list",
                      "apply_k0_procedure_process")
-    assert len(parts) == 8
+    assert len(parts) == 7
     assert not [name for name in parts if "Interface" in name]
     assert "SheetPileWall" not in parts
 
@@ -150,7 +150,7 @@ def test_neighbours_are_found_in_the_stage_the_interfaces_arrive(doc):
                        "find_neighbours_of_interfaces_process") == \
         ["3_SheetPileWall_installation"]
     assert len(carrying(doc, "3_SheetPileWall_installation", "auxiliary_process_list",
-                        "find_neighbours_of_interfaces_process")) == 8
+                        "find_neighbours_of_interfaces_process")) == 7
 
 
 def test_stresses_carry_over_from_the_stage_after_the_wall_goes_in(doc):
@@ -174,15 +174,15 @@ def test_a_part_installed_this_stage_has_no_previous_stress_to_carry(doc):
 def test_a_dug_out_lifts_interface_stops_carrying_stress(doc):
     module = "apply_final_stresses_of_previous_stage_to_initial_state"
     fourth = carrying(doc, "4_First_excavation", "auxiliary_process_list", module)
-    assert not [name for name in fourth if name.endswith("lift1")]
-    assert [name for name in fourth if name.endswith("lift2")]
+    assert not [name for name in fourth if name.endswith("lift_1")]
+    assert [name for name in fourth if name.endswith("lift_2")]
 
 
 # -- C3: extrapolation and JSON output ---------------------------------------
 
-def test_results_are_extrapolated_from_the_wall_and_the_retained_interfaces(doc):
+def test_results_are_extrapolated_from_the_wall_and_the_interfaces(doc):
     """Two processes, because the reference writes one per group that shares a variable
-    list: the wall's forces and the retained side's tractions."""
+    list: the wall's forces and the contacts' tractions."""
     module = "geo_extrapolate_integration_point_values_to_nodes_process"
     written = [p for p in processes(doc, "4_First_excavation", "auxiliary_process_list")
                if p["python_module"] == module]
@@ -195,16 +195,19 @@ def test_results_are_extrapolated_from_the_wall_and_the_retained_interfaces(doc)
         ["GEO_EFFECTIVE_TRACTION_VECTOR"]
 
 
-def test_only_the_retained_side_interfaces_are_extrapolated(doc):
-    """The three against soil outside the pit -- the reference's `*_Right` ones. The
-    contacts on the dug side are excavated away and have nothing to report."""
+def test_only_the_interfaces_still_in_the_stage_are_extrapolated(doc):
+    """A contact goes with the soil it runs against, and then has nothing to report."""
     module = "geo_extrapolate_integration_point_values_to_nodes_process"
-    written = [p for p in processes(doc, "3_SheetPileWall_installation",
-                                    "auxiliary_process_list")
-               if p["python_module"] == module]
-    retained = named(written[1])
-    assert len(retained) == 3
-    assert not [name for name in retained if "lift" in name or "pit" in name]
+
+    def contacts(stage):
+        written = [p for p in processes(doc, stage, "auxiliary_process_list")
+                   if p["python_module"] == module]
+        return named(written[1])
+
+    assert len(contacts("3_SheetPileWall_installation")) == 7
+    assert [name for name in contacts("3_SheetPileWall_installation") if "lift_1" in name]
+    assert len(contacts("4_First_excavation")) == 6
+    assert not [name for name in contacts("4_First_excavation") if "lift_1" in name]
 
 
 def test_nothing_is_extrapolated_before_the_wall_exists(doc):
@@ -213,29 +216,33 @@ def test_nothing_is_extrapolated_before_the_wall_exists(doc):
 
 
 def test_each_stage_writes_its_own_json_output_files(doc):
-    """One per stage, named after it, so a seven-stage run leaves seven pairs rather
-    than seven writes into the same two files."""
+    """One per member per stage, named after it, so a seven-stage run does not write
+    seven times into the same files."""
     for stage in STAGES[2:]:
         written = processes(doc, stage, "json_output")
         assert [p["Parameters"]["output_file_name"] for p in written] == [
-            f"{stage}__output_wall.json", f"{stage}__output_interface.json"]
+            f"{stage}__output_wall.json", f"{stage}__output_interface_left.json",
+            f"{stage}__output_interface_right.json"]
     assert processes(doc, "1_Initial_stage", "json_output") == []
 
 
-def test_the_interface_output_reads_the_node_part_built_for_it(doc):
+def test_the_interface_output_reads_the_node_part_built_for_each_face(doc):
     written = processes(doc, "7_Third_excavation", "json_output")
-    assert named(written[1]) == [writer.RIGHT_SIDE_PART]
+    assert named(written[1]) == ["Interface_Left_face"]
+    assert named(written[2]) == ["Interface_Right_face"]
 
 
-# -- C7: Right_Side_Of_Right_Interfaces --------------------------------------
+# -- The node part of each face of the wall ------------------------------------
 
-def test_the_retained_side_node_part_is_in_the_mdpa(result):
-    assert f"Begin SubModelPart {writer.RIGHT_SIDE_PART}" in result["mdpa"]
+@pytest.mark.parametrize("part", ["Interface_Left_face", "Interface_Right_face"])
+def test_a_face_s_node_part_is_in_the_mdpa(result, part):
+    assert f"Begin SubModelPart {part}" in result["mdpa"]
 
 
-def test_the_retained_side_node_part_holds_nodes_and_no_elements(result):
+@pytest.mark.parametrize("part", ["Interface_Left_face", "Interface_Right_face"])
+def test_a_face_s_node_part_holds_nodes_and_no_elements(result, part):
     block = result["mdpa"].partition(
-        f"Begin SubModelPart {writer.RIGHT_SIDE_PART}")[2].partition("End SubModelPart")[0]
+        f"Begin SubModelPart {part}")[2].partition("End SubModelPart")[0]
     assert "Begin SubModelPartNodes" in block
     assert "Begin SubModelPartElements\n" not in block
 
@@ -246,7 +253,7 @@ def test_an_unstaged_project_grows_no_part_it_never_reads():
     with session():
         plain = writer.export_project(project,
                                       MeshRequest(**project.mesh.model_dump()))
-    assert writer.RIGHT_SIDE_PART not in plain["mdpa"]
+    assert "_face" not in plain["mdpa"]
 
 
 # -- C6: master/slave across the pre-installation stages ---------------------
@@ -363,5 +370,5 @@ def test_interfaces_built_from_the_start_find_their_neighbours_in_the_first_stag
         from_the_start):
     module = "find_neighbours_of_interfaces_process"
     assert len(carrying(from_the_start, "1_Initial_stage", "auxiliary_process_list",
-                        module)) == 8
+                        module)) == 7
     assert module not in modules(from_the_start, "2_Null_step", "auxiliary_process_list")

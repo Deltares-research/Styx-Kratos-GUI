@@ -38,8 +38,8 @@ if str(ROOT) not in sys.path:
 
 from core.model.schemas import (  # noqa: E402
     Anchor, AnchorSection, Beam, BeamSection, BoxRefinement, DisplacementCondition,
-    Domain, Excavation, Interface, InterfaceSection, LineLoad, Material, MeshSettings,
-    NormalLoad, Project, SoilLayer, Stage, WaterPressureCondition)
+    Domain, Interface, InterfaceSection, Line, LineLoad, Material, MeshSettings,
+    NormalLoad, Project, SoilBody, SoilLayer, Stage, WaterPressureCondition)
 
 
 # ── The site ──────────────────────────────────────────────────────────────────────────────
@@ -122,14 +122,22 @@ LAYERS = [
     ),
 ]
 
-EXCAVATION = Excavation(
-    x0=0.0,
-    x1=5.0,
-    z0=0.0,
-    z1=10.0,
-    floor_y=-8.0,
-    levels=[-2.0, -5.0, -8.0],
-)
+# The sheet pile cuts Soil_Top and Soil_Middle at x = 5, and each line is the floor of a lift;
+# the floor of the third lift is the boundary of the layer.
+LINES = [
+    Line(id="floor_1", name="Floor of lift 1", points=[(0.0, -2.0), (5.0, -2.0)]),
+    Line(id="floor_2", name="Floor of lift 2", points=[(0.0, -5.0), (5.0, -5.0)]),
+]
+
+# What those cut, named. A stage switches a body off by its key, soil_<layer>__<id>.
+BODIES = [
+    SoilBody(id="lift1", name="lift 1", layer="L_top", point=(2.5, -1.0)),
+    SoilBody(id="lift2", name="lift 2", layer="L_top", point=(2.5, -3.5)),
+    SoilBody(id="lift3", name="lift 3", layer="L_top", point=(2.5, -6.5)),
+    SoilBody(id="retained", name="retained", layer="L_top", point=(40.0, -4.0)),
+    SoilBody(id="pit", name="below the pit", layer="L_mid", point=(2.5, -10.0)),
+    SoilBody(id="retained", name="retained", layer="L_mid", point=(40.0, -10.0)),
+]
 
 # The supports: the bottom fixed in x and y, the left side (the symmetry plane) and the
 # right side on rollers, held in x. The plane-strain section holds z by itself.
@@ -341,7 +349,8 @@ def project() -> Project:
         domain=DOMAIN,
         materials=MATERIALS,
         layers=LAYERS,
-        excavation=EXCAVATION,
+        lines=LINES,
+        bodies=BODIES,
         boundary_conditions=BOUNDARY_CONDITIONS,
         beam_sections=BEAM_SECTIONS,
         beams=BEAMS,

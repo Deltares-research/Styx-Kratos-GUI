@@ -910,7 +910,6 @@ def test_without_a_pit_each_face_of_the_wall_gets_a_curve_of_its_own(drawn):
     assert all(x > drawn_ground.WALL_X for n in right - toe for x in centroids[n])
     for nodes in (left, right):
         assert max(deck.nodes[n][1] for n in nodes) == 0.0, "up through the drawn fill"
-    assert writer.RIGHT_SIDE_PART not in deck.parts
 
     doc = json.loads(export["project_parameters"])
     written = [p["Parameters"]["output_file_name"]

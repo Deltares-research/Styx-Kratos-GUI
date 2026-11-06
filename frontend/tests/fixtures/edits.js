@@ -97,18 +97,98 @@ window.EDITS_FIXTURE =
           "bottom": -40.0
         }
       ],
-      "excavation": {
-        "x0": 0.0,
-        "x1": 6.0,
-        "z0": 0.0,
-        "z1": 10.0,
-        "floor_y": -7.0,
-        "levels": [
-          -2.0,
-          -4.5,
-          -7.0
-        ]
-      },
+      "lines": [
+        {
+          "id": "floor_1",
+          "name": "Floor of lift 1",
+          "points": [
+            [
+              0.0,
+              -2.0
+            ],
+            [
+              6.0,
+              -2.0
+            ]
+          ]
+        },
+        {
+          "id": "floor_2",
+          "name": "Floor of lift 2",
+          "points": [
+            [
+              0.0,
+              -4.5
+            ],
+            [
+              6.0,
+              -4.5
+            ]
+          ]
+        }
+      ],
+      "bodies": [
+        {
+          "id": "lift1",
+          "name": "lift 1",
+          "layer": "L_top",
+          "point": [
+            3.0,
+            -1.0
+          ],
+          "mat": null
+        },
+        {
+          "id": "retained",
+          "name": "retained",
+          "layer": "L_top",
+          "point": [
+            33.0,
+            -3.5
+          ],
+          "mat": null
+        },
+        {
+          "id": "lift2",
+          "name": "lift 2",
+          "layer": "L_top",
+          "point": [
+            3.0,
+            -3.25
+          ],
+          "mat": null
+        },
+        {
+          "id": "lift3",
+          "name": "lift 3",
+          "layer": "L_top",
+          "point": [
+            3.0,
+            -5.75
+          ],
+          "mat": null
+        },
+        {
+          "id": "pit",
+          "name": "below the pit",
+          "layer": "L_mid",
+          "point": [
+            3.0,
+            -8.5
+          ],
+          "mat": null
+        },
+        {
+          "id": "retained",
+          "name": "retained",
+          "layer": "L_mid",
+          "point": [
+            33.0,
+            -8.5
+          ],
+          "mat": null
+        }
+      ],
       "loads": [
         {
           "id": "surcharge",
@@ -414,7 +494,6 @@ window.EDITS_FIXTURE =
           "strut": 0.5,
           "wall_contact": 0.5,
           "water_1": 0.5,
-          "soil_L_mid": 1.0,
           "soil_L_mid__pit": 1.0,
           "soil_L_top__lift3": 1.0
         },
@@ -436,44 +515,40 @@ window.EDITS_FIXTURE =
       "stages": [],
       "deck": null,
       "soil_body_keys": [
-        "soil_L_top",
-        "soil_L_mid",
-        "soil_L_bot",
         "soil_L_top__lift1",
+        "soil_L_top__retained",
         "soil_L_top__lift2",
         "soil_L_top__lift3",
         "soil_L_mid__pit",
-        "soil_L_bot__pit"
+        "soil_L_mid__retained",
+        "soil_L_bot"
       ],
       "soil_body_labels": {
-        "soil_L_top": "Soil_Top",
-        "soil_L_mid": "Soil_Middle",
-        "soil_L_bot": "Soil_Bottom",
         "soil_L_top__lift1": "Soil_Top · lift 1",
+        "soil_L_top__retained": "Soil_Top · retained",
         "soil_L_top__lift2": "Soil_Top · lift 2",
         "soil_L_top__lift3": "Soil_Top · lift 3",
         "soil_L_mid__pit": "Soil_Middle · below the pit",
-        "soil_L_bot__pit": "Soil_Bottom · below the pit"
+        "soil_L_mid__retained": "Soil_Middle · retained",
+        "soil_L_bot": "Soil_Bottom"
       },
       "soil_body_materials": {
-        "soil_L_top": "m_upper",
-        "soil_L_mid": "m_upper",
-        "soil_L_bot": "m_lower",
         "soil_L_top__lift1": "m_upper",
+        "soil_L_top__retained": "m_upper",
         "soil_L_top__lift2": "m_upper",
         "soil_L_top__lift3": "m_upper",
         "soil_L_mid__pit": "m_upper",
-        "soil_L_bot__pit": "m_lower"
+        "soil_L_mid__retained": "m_upper",
+        "soil_L_bot": "m_lower"
       },
       "stageable_parts": [
-        "soil_L_top",
-        "soil_L_mid",
-        "soil_L_bot",
         "soil_L_top__lift1",
+        "soil_L_top__retained",
         "soil_L_top__lift2",
         "soil_L_top__lift3",
         "soil_L_mid__pit",
-        "soil_L_bot__pit",
+        "soil_L_mid__retained",
+        "soil_L_bot",
         "sheetpile",
         "strut",
         "wall_contact",
@@ -575,18 +650,98 @@ window.EDITS_FIXTURE =
           "bottom": -40.0
         }
       ],
-      "excavation": {
-        "x0": 0.0,
-        "x1": 6.0,
-        "z0": 0.0,
-        "z1": 10.0,
-        "floor_y": -7.0,
-        "levels": [
-          -2.0,
-          -4.5,
-          -7.0
-        ]
-      },
+      "lines": [
+        {
+          "id": "floor_1",
+          "name": "Floor of lift 1",
+          "points": [
+            [
+              0.0,
+              -2.0
+            ],
+            [
+              6.0,
+              -2.0
+            ]
+          ]
+        },
+        {
+          "id": "floor_2",
+          "name": "Floor of lift 2",
+          "points": [
+            [
+              0.0,
+              -4.5
+            ],
+            [
+              6.0,
+              -4.5
+            ]
+          ]
+        }
+      ],
+      "bodies": [
+        {
+          "id": "lift1",
+          "name": "lift 1",
+          "layer": "L_top",
+          "point": [
+            3.0,
+            -1.0
+          ],
+          "mat": null
+        },
+        {
+          "id": "retained",
+          "name": "retained",
+          "layer": "L_top",
+          "point": [
+            33.0,
+            -3.5
+          ],
+          "mat": null
+        },
+        {
+          "id": "lift2",
+          "name": "lift 2",
+          "layer": "L_top",
+          "point": [
+            3.0,
+            -3.25
+          ],
+          "mat": null
+        },
+        {
+          "id": "lift3",
+          "name": "lift 3",
+          "layer": "L_top",
+          "point": [
+            3.0,
+            -5.75
+          ],
+          "mat": null
+        },
+        {
+          "id": "pit",
+          "name": "below the pit",
+          "layer": "L_mid",
+          "point": [
+            3.0,
+            -8.5
+          ],
+          "mat": null
+        },
+        {
+          "id": "retained",
+          "name": "retained",
+          "layer": "L_mid",
+          "point": [
+            33.0,
+            -8.5
+          ],
+          "mat": null
+        }
+      ],
       "loads": [
         {
           "id": "surcharge",
@@ -892,7 +1047,6 @@ window.EDITS_FIXTURE =
           "strut": 0.5,
           "wall_contact": 0.5,
           "water_1": 0.5,
-          "soil_L_mid": 1.0,
           "soil_L_mid__pit": 1.0,
           "soil_L_top__lift3": 1.0,
           "drawn_0": 0.5
@@ -946,44 +1100,40 @@ window.EDITS_FIXTURE =
       "stages": [],
       "deck": null,
       "soil_body_keys": [
-        "soil_L_top",
-        "soil_L_mid",
-        "soil_L_bot",
         "soil_L_top__lift1",
+        "soil_L_top__retained",
         "soil_L_top__lift2",
         "soil_L_top__lift3",
         "soil_L_mid__pit",
-        "soil_L_bot__pit"
+        "soil_L_mid__retained",
+        "soil_L_bot"
       ],
       "soil_body_labels": {
-        "soil_L_top": "Soil_Top",
-        "soil_L_mid": "Soil_Middle",
-        "soil_L_bot": "Soil_Bottom",
         "soil_L_top__lift1": "Soil_Top · lift 1",
+        "soil_L_top__retained": "Soil_Top · retained",
         "soil_L_top__lift2": "Soil_Top · lift 2",
         "soil_L_top__lift3": "Soil_Top · lift 3",
         "soil_L_mid__pit": "Soil_Middle · below the pit",
-        "soil_L_bot__pit": "Soil_Bottom · below the pit"
+        "soil_L_mid__retained": "Soil_Middle · retained",
+        "soil_L_bot": "Soil_Bottom"
       },
       "soil_body_materials": {
-        "soil_L_top": "m_upper",
-        "soil_L_mid": "m_upper",
-        "soil_L_bot": "m_lower",
         "soil_L_top__lift1": "m_upper",
+        "soil_L_top__retained": "m_upper",
         "soil_L_top__lift2": "m_upper",
         "soil_L_top__lift3": "m_upper",
         "soil_L_mid__pit": "m_upper",
-        "soil_L_bot__pit": "m_lower"
+        "soil_L_mid__retained": "m_upper",
+        "soil_L_bot": "m_lower"
       },
       "stageable_parts": [
-        "soil_L_top",
-        "soil_L_mid",
-        "soil_L_bot",
         "soil_L_top__lift1",
+        "soil_L_top__retained",
         "soil_L_top__lift2",
         "soil_L_top__lift3",
         "soil_L_mid__pit",
-        "soil_L_bot__pit",
+        "soil_L_mid__retained",
+        "soil_L_bot",
         "sheetpile",
         "strut",
         "wall_contact",
@@ -1112,18 +1262,98 @@ window.EDITS_FIXTURE =
           "bottom": -40.0
         }
       ],
-      "excavation": {
-        "x0": 0.0,
-        "x1": 6.0,
-        "z0": 0.0,
-        "z1": 10.0,
-        "floor_y": -7.0,
-        "levels": [
-          -2.0,
-          -4.5,
-          -7.0
-        ]
-      },
+      "lines": [
+        {
+          "id": "floor_1",
+          "name": "Floor of lift 1",
+          "points": [
+            [
+              0.0,
+              -2.0
+            ],
+            [
+              6.0,
+              -2.0
+            ]
+          ]
+        },
+        {
+          "id": "floor_2",
+          "name": "Floor of lift 2",
+          "points": [
+            [
+              0.0,
+              -4.5
+            ],
+            [
+              6.0,
+              -4.5
+            ]
+          ]
+        }
+      ],
+      "bodies": [
+        {
+          "id": "lift1",
+          "name": "lift 1",
+          "layer": "L_top",
+          "point": [
+            3.0,
+            -1.0
+          ],
+          "mat": null
+        },
+        {
+          "id": "retained",
+          "name": "retained",
+          "layer": "L_top",
+          "point": [
+            33.0,
+            -3.5
+          ],
+          "mat": null
+        },
+        {
+          "id": "lift2",
+          "name": "lift 2",
+          "layer": "L_top",
+          "point": [
+            3.0,
+            -3.25
+          ],
+          "mat": null
+        },
+        {
+          "id": "lift3",
+          "name": "lift 3",
+          "layer": "L_top",
+          "point": [
+            3.0,
+            -5.75
+          ],
+          "mat": null
+        },
+        {
+          "id": "pit",
+          "name": "below the pit",
+          "layer": "L_mid",
+          "point": [
+            3.0,
+            -8.5
+          ],
+          "mat": null
+        },
+        {
+          "id": "retained",
+          "name": "retained",
+          "layer": "L_mid",
+          "point": [
+            33.0,
+            -8.5
+          ],
+          "mat": null
+        }
+      ],
       "loads": [
         {
           "id": "surcharge",
@@ -1429,7 +1659,6 @@ window.EDITS_FIXTURE =
           "strut": 0.5,
           "wall_contact": 0.5,
           "water_1": 0.5,
-          "soil_L_mid": 1.0,
           "soil_L_mid__pit": 1.0,
           "soil_L_top__lift3": 1.0
         },
@@ -1451,44 +1680,40 @@ window.EDITS_FIXTURE =
       "stages": [],
       "deck": null,
       "soil_body_keys": [
-        "soil_L_top",
-        "soil_L_mid",
-        "soil_L_bot",
         "soil_L_top__lift1",
+        "soil_L_top__retained",
         "soil_L_top__lift2",
         "soil_L_top__lift3",
         "soil_L_mid__pit",
-        "soil_L_bot__pit"
+        "soil_L_mid__retained",
+        "soil_L_bot"
       ],
       "soil_body_labels": {
-        "soil_L_top": "Soil_Top",
-        "soil_L_mid": "Soil_Middle",
-        "soil_L_bot": "Soil_Bottom",
         "soil_L_top__lift1": "Soil_Top · lift 1",
+        "soil_L_top__retained": "Soil_Top · retained",
         "soil_L_top__lift2": "Soil_Top · lift 2",
         "soil_L_top__lift3": "Soil_Top · lift 3",
         "soil_L_mid__pit": "Soil_Middle · below the pit",
-        "soil_L_bot__pit": "Soil_Bottom · below the pit"
+        "soil_L_mid__retained": "Soil_Middle · retained",
+        "soil_L_bot": "Soil_Bottom"
       },
       "soil_body_materials": {
-        "soil_L_top": "m_upper",
-        "soil_L_mid": "m_upper",
-        "soil_L_bot": "m_lower",
         "soil_L_top__lift1": "m_upper",
+        "soil_L_top__retained": "m_upper",
         "soil_L_top__lift2": "m_upper",
         "soil_L_top__lift3": "m_upper",
         "soil_L_mid__pit": "m_upper",
-        "soil_L_bot__pit": "m_lower"
+        "soil_L_mid__retained": "m_upper",
+        "soil_L_bot": "m_lower"
       },
       "stageable_parts": [
-        "soil_L_top",
-        "soil_L_mid",
-        "soil_L_bot",
         "soil_L_top__lift1",
+        "soil_L_top__retained",
         "soil_L_top__lift2",
         "soil_L_top__lift3",
         "soil_L_mid__pit",
-        "soil_L_bot__pit",
+        "soil_L_mid__retained",
+        "soil_L_bot",
         "sheetpile",
         "strut",
         "wall_contact",
@@ -1590,18 +1815,98 @@ window.EDITS_FIXTURE =
           "bottom": -40.0
         }
       ],
-      "excavation": {
-        "x0": 0.0,
-        "x1": 6.0,
-        "z0": 0.0,
-        "z1": 10.0,
-        "floor_y": -7.0,
-        "levels": [
-          -2.0,
-          -4.5,
-          -7.0
-        ]
-      },
+      "lines": [
+        {
+          "id": "floor_1",
+          "name": "Floor of lift 1",
+          "points": [
+            [
+              0.0,
+              -2.0
+            ],
+            [
+              6.0,
+              -2.0
+            ]
+          ]
+        },
+        {
+          "id": "floor_2",
+          "name": "Floor of lift 2",
+          "points": [
+            [
+              0.0,
+              -4.5
+            ],
+            [
+              6.0,
+              -4.5
+            ]
+          ]
+        }
+      ],
+      "bodies": [
+        {
+          "id": "lift1",
+          "name": "lift 1",
+          "layer": "L_top",
+          "point": [
+            3.0,
+            -1.0
+          ],
+          "mat": null
+        },
+        {
+          "id": "retained",
+          "name": "retained",
+          "layer": "L_top",
+          "point": [
+            33.0,
+            -3.5
+          ],
+          "mat": null
+        },
+        {
+          "id": "lift2",
+          "name": "lift 2",
+          "layer": "L_top",
+          "point": [
+            3.0,
+            -3.25
+          ],
+          "mat": null
+        },
+        {
+          "id": "lift3",
+          "name": "lift 3",
+          "layer": "L_top",
+          "point": [
+            3.0,
+            -5.75
+          ],
+          "mat": null
+        },
+        {
+          "id": "pit",
+          "name": "below the pit",
+          "layer": "L_mid",
+          "point": [
+            3.0,
+            -8.5
+          ],
+          "mat": null
+        },
+        {
+          "id": "retained",
+          "name": "retained",
+          "layer": "L_mid",
+          "point": [
+            33.0,
+            -8.5
+          ],
+          "mat": null
+        }
+      ],
       "loads": [
         {
           "id": "surcharge",
@@ -1876,7 +2181,6 @@ window.EDITS_FIXTURE =
         "body_sizes": {
           "sheetpile": 0.5,
           "water_1": 0.5,
-          "soil_L_mid": 1.0,
           "soil_L_mid__pit": 1.0,
           "soil_L_top__lift3": 1.0
         },
@@ -1898,565 +2202,41 @@ window.EDITS_FIXTURE =
       "stages": [],
       "deck": null,
       "soil_body_keys": [
-        "soil_L_top",
-        "soil_L_mid",
-        "soil_L_bot",
         "soil_L_top__lift1",
+        "soil_L_top__retained",
         "soil_L_top__lift2",
         "soil_L_top__lift3",
         "soil_L_mid__pit",
-        "soil_L_bot__pit"
-      ],
-      "soil_body_labels": {
-        "soil_L_top": "Soil_Top",
-        "soil_L_mid": "Soil_Middle",
-        "soil_L_bot": "Soil_Bottom",
-        "soil_L_top__lift1": "Soil_Top · lift 1",
-        "soil_L_top__lift2": "Soil_Top · lift 2",
-        "soil_L_top__lift3": "Soil_Top · lift 3",
-        "soil_L_mid__pit": "Soil_Middle · below the pit",
-        "soil_L_bot__pit": "Soil_Bottom · below the pit"
-      },
-      "soil_body_materials": {
-        "soil_L_top": "m_upper",
-        "soil_L_mid": "m_upper",
-        "soil_L_bot": "m_lower",
-        "soil_L_top__lift1": "m_upper",
-        "soil_L_top__lift2": "m_upper",
-        "soil_L_top__lift3": "m_upper",
-        "soil_L_mid__pit": "m_upper",
-        "soil_L_bot__pit": "m_lower"
-      },
-      "stageable_parts": [
-        "soil_L_top",
-        "soil_L_mid",
-        "soil_L_bot",
-        "soil_L_top__lift1",
-        "soil_L_top__lift2",
-        "soil_L_top__lift3",
-        "soil_L_mid__pit",
-        "soil_L_bot__pit",
-        "sheetpile",
-        "water_1",
-        "water_2",
-        "water_3",
-        "surcharge",
-        "pore_pressure"
-      ]
-    },
-    "section with a line": {
-      "name": "Staged excavation",
-      "layered_soil": true,
-      "dimension": 2,
-      "unit_system": "SI",
-      "section_offset": 5.0,
-      "domain": {
-        "x0": 0.0,
-        "x1": 60.0,
-        "z0": 0.0,
-        "z1": 10.0,
-        "y_top": 0.0,
-        "y_bottom": -40.0
-      },
-      "materials": [
-        {
-          "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
-          "variables": {
-            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
-            "YOUNG_MODULUS": 2000000.0,
-            "POISSON_RATIO": 0.3,
-            "DENSITY_SOLID": 1732.9255861365953,
-            "DENSITY_WATER": 1019.367991845056,
-            "POROSITY": 0.0,
-            "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
-            "PERMEABILITY_XX": 1e-08,
-            "PERMEABILITY_YY": 1e-08,
-            "PERMEABILITY_XY": 0.0,
-            "GEO_COHESION": 2000.0,
-            "GEO_FRICTION_ANGLE": 25.0,
-            "K0_NC": 0.58
-          },
-          "tables": {},
-          "id": "m_upper",
-          "name": "Soft clay",
-          "color": "#c4a86a",
-          "r_inter": 0.7,
-          "interface_permeability": "Neutral"
-        },
-        {
-          "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
-          "variables": {
-            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
-            "YOUNG_MODULUS": 30000000.0,
-            "POISSON_RATIO": 0.3,
-            "DENSITY_SOLID": 1936.7991845056065,
-            "DENSITY_WATER": 1019.367991845056,
-            "POROSITY": 0.0,
-            "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
-            "PERMEABILITY_XX": 1e-05,
-            "PERMEABILITY_YY": 1e-05,
-            "PERMEABILITY_XY": 0.0,
-            "GEO_COHESION": 0.0,
-            "GEO_FRICTION_ANGLE": 32.0,
-            "K0_NC": 0.47
-          },
-          "tables": {},
-          "id": "m_lower",
-          "name": "Dense sand",
-          "color": "#b08a6a",
-          "r_inter": 0.7,
-          "interface_permeability": "Neutral"
-        }
-      ],
-      "layers": [
-        {
-          "id": "L_top",
-          "name": "Soil_Top",
-          "mat": "m_upper",
-          "top": 0.0,
-          "bottom": -7.0
-        },
-        {
-          "id": "L_mid",
-          "name": "Soil_Middle",
-          "mat": "m_upper",
-          "top": -7.0,
-          "bottom": -10.0
-        },
-        {
-          "id": "L_bot",
-          "name": "Soil_Bottom",
-          "mat": "m_lower",
-          "top": -10.0,
-          "bottom": -40.0
-        }
-      ],
-      "lines": [
-        {
-          "id": "floor",
-          "name": "Floor",
-          "points": [
-            [
-              0.0,
-              -2.0
-            ],
-            [
-              6.0,
-              -2.0
-            ]
-          ]
-        }
-      ],
-      "bodies": [
-        {
-          "id": "part1",
-          "name": "Part 1",
-          "layer": "L_top",
-          "point": [
-            3.0,
-            -1.0
-          ],
-          "mat": null
-        },
-        {
-          "id": "part2",
-          "name": "Part 2",
-          "layer": "L_top",
-          "point": [
-            33.0,
-            -4.5
-          ],
-          "mat": null
-        },
-        {
-          "id": "part3",
-          "name": "Part 3",
-          "layer": "L_top",
-          "point": [
-            3.0,
-            -4.5
-          ],
-          "mat": null
-        },
-        {
-          "id": "part1",
-          "name": "Part 1",
-          "layer": "L_mid",
-          "point": [
-            3.0,
-            -8.5
-          ],
-          "mat": null
-        },
-        {
-          "id": "part2",
-          "name": "Part 2",
-          "layer": "L_mid",
-          "point": [
-            33.0,
-            -8.5
-          ],
-          "mat": null
-        }
-      ],
-      "loads": [
-        {
-          "id": "surcharge",
-          "name": "Load",
-          "kind": "line",
-          "x0": 6.0,
-          "x1": 60.0,
-          "y": 0.0,
-          "thickness": 0.15,
-          "components": [
-            0.0,
-            -10000.0
-          ],
-          "distribution": "Uniform",
-          "active": true,
-          "derived_from": null
-        }
-      ],
-      "beam_sections": [
-        {
-          "constitutive_law": "TimoshenkoBeamElasticConstitutiveLaw",
-          "variables": {
-            "YOUNG_MODULUS": 210000000000.0,
-            "POISSON_RATIO": 0.0,
-            "DENSITY": 7850.0,
-            "CROSS_AREA": 0.015,
-            "I33": 0.0003,
-            "AREA_EFFECTIVE_Y": 0.0075
-          },
-          "tables": {},
-          "id": "sheetpile",
-          "name": "Sheet pile",
-          "spacing": 1.0
-        }
-      ],
-      "panel_sections": [],
-      "beams": [
-        {
-          "id": "sheetpile",
-          "name": "SheetPileWall",
-          "kind": "beam",
-          "section": "sheetpile",
-          "points": [
-            [
-              6.0,
-              0.0
-            ],
-            [
-              6.0,
-              -12.0
-            ]
-          ],
-          "active": true,
-          "derived_from": null
-        }
-      ],
-      "anchor_sections": [
-        {
-          "constitutive_law": "TrussConstitutiveLaw",
-          "variables": {
-            "YOUNG_MODULUS": 210000000000.0,
-            "CROSS_AREA": 0.002,
-            "DENSITY": 0.0
-          },
-          "tables": {},
-          "id": "strand",
-          "name": "Strut",
-          "spacing": 2.0,
-          "tension_limit": null,
-          "compression_limit": null
-        }
-      ],
-      "anchors": [
-        {
-          "id": "strut",
-          "name": "Strut",
-          "kind": "anchor",
-          "section": "strand",
-          "head": [
-            6.0,
-            -1.0
-          ],
-          "tail": [
-            5.0,
-            -1.0
-          ],
-          "prestress": 0.0,
-          "active": true
-        }
-      ],
-      "interface_sections": [
-        {
-          "constitutive_law": "GeoIncrementalLinearElasticInterfaceLaw",
-          "variables": {},
-          "tables": {},
-          "id": "contact",
-          "name": "Wall contact",
-          "material": null,
-          "r_inter": 0.67,
-          "virtual_thickness": 0.5,
-          "permeability": "Neutral"
-        }
-      ],
-      "interfaces": [
-        {
-          "id": "wall_contact",
-          "name": "Interface",
-          "kind": "interface",
-          "section": "contact",
-          "structure": "sheetpile",
-          "points": null,
-          "side": "both",
-          "stretch": null,
-          "active": true
-        }
-      ],
-      "interface_sides": "screen",
-      "normal_loads": [
-        {
-          "id": "water_1",
-          "name": "WaterLoad_Stage1",
-          "kind": "normal",
-          "points": [
-            [
-              0.0,
-              -2.0
-            ],
-            [
-              6.0,
-              -2.0
-            ],
-            [
-              6.0,
-              -1.0
-            ]
-          ],
-          "fluid_pressure_type": "Hydrostatic",
-          "pressure": 0.0,
-          "reference_coordinate": -1.0,
-          "active": true
-        },
-        {
-          "id": "water_2",
-          "name": "WaterLoad_Stage2",
-          "kind": "normal",
-          "points": [
-            [
-              0.0,
-              -4.5
-            ],
-            [
-              6.0,
-              -4.5
-            ],
-            [
-              6.0,
-              -1.0
-            ]
-          ],
-          "fluid_pressure_type": "Hydrostatic",
-          "pressure": 0.0,
-          "reference_coordinate": -1.0,
-          "active": true
-        },
-        {
-          "id": "water_3",
-          "name": "WaterLoad_Stage3",
-          "kind": "normal",
-          "points": [
-            [
-              0.0,
-              -7.0
-            ],
-            [
-              6.0,
-              -7.0
-            ],
-            [
-              6.0,
-              -1.0
-            ]
-          ],
-          "fluid_pressure_type": "Hydrostatic",
-          "pressure": 0.0,
-          "reference_coordinate": -1.0,
-          "active": true
-        }
-      ],
-      "water": {
-        "y": -1.0,
-        "margin": 3.0,
-        "thickness": 0.06,
-        "specific_weight": null
-      },
-      "boundary_conditions": [
-        {
-          "id": "fixed_bottom",
-          "name": "Fixed bottom",
-          "kind": "displacement",
-          "on": "face",
-          "face": "bottom",
-          "part": null,
-          "points": null,
-          "fixed": [
-            true,
-            true,
-            true
-          ],
-          "active": true
-        },
-        {
-          "id": "roller_left",
-          "name": "Roller left",
-          "kind": "displacement",
-          "on": "face",
-          "face": "left",
-          "part": null,
-          "points": null,
-          "fixed": [
-            true,
-            false,
-            false
-          ],
-          "active": true
-        },
-        {
-          "id": "roller_right",
-          "name": "Roller right",
-          "kind": "displacement",
-          "on": "face",
-          "face": "right",
-          "part": null,
-          "points": null,
-          "fixed": [
-            true,
-            false,
-            false
-          ],
-          "active": true
-        },
-        {
-          "id": "roller_front",
-          "name": "Roller front",
-          "kind": "displacement",
-          "on": "face",
-          "face": "front",
-          "part": null,
-          "points": null,
-          "fixed": [
-            false,
-            false,
-            true
-          ],
-          "active": true
-        },
-        {
-          "id": "roller_back",
-          "name": "Roller back",
-          "kind": "displacement",
-          "on": "face",
-          "face": "back",
-          "part": null,
-          "points": null,
-          "fixed": [
-            false,
-            false,
-            true
-          ],
-          "active": true
-        },
-        {
-          "id": "pore_pressure",
-          "name": "Pore pressure",
-          "kind": "water_pressure",
-          "on": "domain",
-          "face": null,
-          "part": null,
-          "points": null,
-          "fluid_pressure_type": "Hydrostatic",
-          "is_fixed": true,
-          "value": 0.0,
-          "reference_coordinate": -1.0,
-          "x_coordinates": null,
-          "y_coordinates": null,
-          "z_coordinates": null,
-          "pressure_tension_cut_off": 0.0,
-          "active": true
-        }
-      ],
-      "gravity": true,
-      "mesh": {
-        "element_size": 5.0,
-        "order": 2,
-        "algorithm_3d": "delaunay",
-        "algorithm_2d": "frontal",
-        "optimization": "gmsh",
-        "smoothing": 10,
-        "curvature_points": 16,
-        "size_min_factor": 0.05,
-        "second_order_linear": true,
-        "body_sizes": {
-          "sheetpile": 0.5
-        },
-        "refinements": [
-          {
-            "kind": "box",
-            "size": 0.8,
-            "thickness": 30.0,
-            "x_min": -1.0,
-            "x_max": 9.0,
-            "z_min": -1.0,
-            "z_max": 11.0,
-            "y_min": -15.0,
-            "y_max": 1.0
-          }
-        ]
-      },
-      "custom_parts": [],
-      "stages": [],
-      "deck": null,
-      "soil_body_keys": [
-        "soil_L_top__part1",
-        "soil_L_top__part2",
-        "soil_L_top__part3",
-        "soil_L_mid__part1",
-        "soil_L_mid__part2",
+        "soil_L_mid__retained",
         "soil_L_bot"
       ],
       "soil_body_labels": {
-        "soil_L_top__part1": "Soil_Top · Part 1",
-        "soil_L_top__part2": "Soil_Top · Part 2",
-        "soil_L_top__part3": "Soil_Top · Part 3",
-        "soil_L_mid__part1": "Soil_Middle · Part 1",
-        "soil_L_mid__part2": "Soil_Middle · Part 2",
+        "soil_L_top__lift1": "Soil_Top · lift 1",
+        "soil_L_top__retained": "Soil_Top · retained",
+        "soil_L_top__lift2": "Soil_Top · lift 2",
+        "soil_L_top__lift3": "Soil_Top · lift 3",
+        "soil_L_mid__pit": "Soil_Middle · below the pit",
+        "soil_L_mid__retained": "Soil_Middle · retained",
         "soil_L_bot": "Soil_Bottom"
       },
       "soil_body_materials": {
-        "soil_L_top__part1": "m_upper",
-        "soil_L_top__part2": "m_upper",
-        "soil_L_top__part3": "m_upper",
-        "soil_L_mid__part1": "m_upper",
-        "soil_L_mid__part2": "m_upper",
+        "soil_L_top__lift1": "m_upper",
+        "soil_L_top__retained": "m_upper",
+        "soil_L_top__lift2": "m_upper",
+        "soil_L_top__lift3": "m_upper",
+        "soil_L_mid__pit": "m_upper",
+        "soil_L_mid__retained": "m_upper",
         "soil_L_bot": "m_lower"
       },
       "stageable_parts": [
-        "soil_L_top__part1",
-        "soil_L_top__part2",
-        "soil_L_top__part3",
-        "soil_L_mid__part1",
-        "soil_L_mid__part2",
+        "soil_L_top__lift1",
+        "soil_L_top__retained",
+        "soil_L_top__lift2",
+        "soil_L_top__lift3",
+        "soil_L_mid__pit",
+        "soil_L_mid__retained",
         "soil_L_bot",
         "sheetpile",
-        "strut",
-        "wall_contact",
         "water_1",
         "water_2",
         "water_3",
@@ -2555,18 +2335,98 @@ window.EDITS_FIXTURE =
           "bottom": -40.0
         }
       ],
-      "excavation": {
-        "x0": 0.0,
-        "x1": 6.0,
-        "z0": 0.0,
-        "z1": 10.0,
-        "floor_y": -7.0,
-        "levels": [
-          -2.0,
-          -4.5,
-          -7.0
-        ]
-      },
+      "lines": [
+        {
+          "id": "floor_1",
+          "name": "Floor of lift 1",
+          "points": [
+            [
+              0.0,
+              -2.0
+            ],
+            [
+              6.0,
+              -2.0
+            ]
+          ]
+        },
+        {
+          "id": "floor_2",
+          "name": "Floor of lift 2",
+          "points": [
+            [
+              0.0,
+              -4.5
+            ],
+            [
+              6.0,
+              -4.5
+            ]
+          ]
+        }
+      ],
+      "bodies": [
+        {
+          "id": "lift1",
+          "name": "lift 1",
+          "layer": "L_top",
+          "point": [
+            3.0,
+            -1.0
+          ],
+          "mat": null
+        },
+        {
+          "id": "retained",
+          "name": "retained",
+          "layer": "L_top",
+          "point": [
+            33.0,
+            -3.5
+          ],
+          "mat": null
+        },
+        {
+          "id": "lift2",
+          "name": "lift 2",
+          "layer": "L_top",
+          "point": [
+            3.0,
+            -3.25
+          ],
+          "mat": null
+        },
+        {
+          "id": "lift3",
+          "name": "lift 3",
+          "layer": "L_top",
+          "point": [
+            3.0,
+            -5.75
+          ],
+          "mat": null
+        },
+        {
+          "id": "pit",
+          "name": "below the pit",
+          "layer": "L_mid",
+          "point": [
+            3.0,
+            -8.5
+          ],
+          "mat": null
+        },
+        {
+          "id": "retained",
+          "name": "retained",
+          "layer": "L_mid",
+          "point": [
+            33.0,
+            -8.5
+          ],
+          "mat": null
+        }
+      ],
       "loads": [
         {
           "id": "surcharge",
@@ -2872,7 +2732,6 @@ window.EDITS_FIXTURE =
           "strut": 0.5,
           "wall_contact": 0.5,
           "water_1": 0.5,
-          "soil_L_mid": 1.0,
           "soil_L_mid__pit": 1.0,
           "soil_L_top__lift3": 1.0
         },
@@ -3014,44 +2873,40 @@ window.EDITS_FIXTURE =
       ],
       "deck": null,
       "soil_body_keys": [
-        "soil_L_top",
-        "soil_L_mid",
-        "soil_L_bot",
         "soil_L_top__lift1",
+        "soil_L_top__retained",
         "soil_L_top__lift2",
         "soil_L_top__lift3",
         "soil_L_mid__pit",
-        "soil_L_bot__pit"
+        "soil_L_mid__retained",
+        "soil_L_bot"
       ],
       "soil_body_labels": {
-        "soil_L_top": "Soil_Top",
-        "soil_L_mid": "Soil_Middle",
-        "soil_L_bot": "Soil_Bottom",
         "soil_L_top__lift1": "Soil_Top · lift 1",
+        "soil_L_top__retained": "Soil_Top · retained",
         "soil_L_top__lift2": "Soil_Top · lift 2",
         "soil_L_top__lift3": "Soil_Top · lift 3",
         "soil_L_mid__pit": "Soil_Middle · below the pit",
-        "soil_L_bot__pit": "Soil_Bottom · below the pit"
+        "soil_L_mid__retained": "Soil_Middle · retained",
+        "soil_L_bot": "Soil_Bottom"
       },
       "soil_body_materials": {
-        "soil_L_top": "m_upper",
-        "soil_L_mid": "m_upper",
-        "soil_L_bot": "m_lower",
         "soil_L_top__lift1": "m_upper",
+        "soil_L_top__retained": "m_upper",
         "soil_L_top__lift2": "m_upper",
         "soil_L_top__lift3": "m_upper",
         "soil_L_mid__pit": "m_upper",
-        "soil_L_bot__pit": "m_lower"
+        "soil_L_mid__retained": "m_upper",
+        "soil_L_bot": "m_lower"
       },
       "stageable_parts": [
-        "soil_L_top",
-        "soil_L_mid",
-        "soil_L_bot",
         "soil_L_top__lift1",
+        "soil_L_top__retained",
         "soil_L_top__lift2",
         "soil_L_top__lift3",
         "soil_L_mid__pit",
-        "soil_L_bot__pit",
+        "soil_L_mid__retained",
+        "soil_L_bot",
         "sheetpile",
         "strut",
         "wall_contact",
@@ -3211,12 +3066,27 @@ window.EDITS_FIXTURE =
     {
       "title": "a line",
       "call": "Lines.remove",
-      "target": "floor",
+      "target": "floor_2",
       "method": "PATCH",
       "route": "/api/project/lines",
-      "project": "section with a line",
+      "project": "pit",
       "body": {
-        "lines": []
+        "lines": [
+          {
+            "id": "floor_1",
+            "name": "Floor of lift 1",
+            "points": [
+              [
+                0.0,
+                -2.0
+              ],
+              [
+                6.0,
+                -2.0
+              ]
+            ]
+          }
+        ]
       }
     },
     {

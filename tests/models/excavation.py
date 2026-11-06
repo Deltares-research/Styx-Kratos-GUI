@@ -1,12 +1,13 @@
 """A staged sheet-pile excavation in plane strain: the model most tests build.
 
 It carries every feature a staged excavation uses, each once, so a test about any of them
-has it to hand: three soil layers, a pit dug in three lifts, a sheet-pile wall, a strut
+has it to hand: three soil layers, cut by the wall and two lines into a pit dug in three
+lifts, a sheet-pile wall, a strut
 from the wall to a pinned support, an interface on both faces of the wall, a surcharge
 behind it, a water table, one hydrostatic water load per lift, a graded mesh carried by
-the project, and the staged construction sequence `stages.staged_excavation_stages`
-derives from all of that. `mohr_coulomb_project` is the same model with Mohr-Coulomb
-soils and Coulomb contacts.
+the project, and a staged construction sequence: settle the ground, build the wall, then
+dig and prop. `mohr_coulomb_project` is the same model with Mohr-Coulomb soils and Coulomb
+contacts.
 
 The numbers are round rather than taken from anywhere: a soft clay over a dense sand,
 a steel wall, a steel strut. What the tests pin is the pipeline, not a validated answer.
@@ -18,11 +19,11 @@ It is also a script the GUI can open, through the same path a user's own model t
 
 from __future__ import annotations
 
-from core.model import stages
 from core.model.schemas import (Anchor, AnchorSection, Beam, BeamSection,
-                         BoxRefinement, Domain, Excavation, Interface, InterfaceSection,
-                         LineLoad, Material, MeshSettings, NormalLoad, Project,
-                         SoilLayer, WaterLevel, WaterPressureCondition, standard_conditions)
+                         BoxRefinement, Domain, Interface, InterfaceSection, Line,
+                         LineLoad, Material, MeshSettings, NormalLoad, Project, SoilBody,
+                         SoilLayer, Stage, WaterLevel, WaterPressureCondition,
+                         standard_conditions)
 
 NAME = "Staged excavation"
 
@@ -79,6 +80,48 @@ def _soil(id_, name, color, modulus, poisson, weight, cohesion, phi, permeabilit
                     })
 
 
+def _bodies() -> list[SoilBody]:
+    """What the wall and the lines cut, named: the three lifts, what lies under the pit in
+    the middle layer, and the ground the wall retains. The bottom layer is whole: the wall
+    ends in it."""
+    pit_x, retained_x = (DOMAIN_LEFT_X + WALL_X) / 2, (WALL_X + DOMAIN_RIGHT_X) / 2
+    middle = (LIFTS[-1] + BOTTOM_LAYER_TOP_Y) / 2
+    lifts = [SoilBody(id=f"lift{index}", name=f"lift {index}", layer="L_top",
+                      point=(pit_x, (level + ceiling) / 2))
+             for index, (level, ceiling)
+             in enumerate(zip(LIFTS, (DOMAIN_TOP_Y, *LIFTS)), start=1)]
+    return [*lifts,
+            SoilBody(id="retained", name="retained", layer="L_top",
+                     point=(retained_x, LIFTS[-1] / 2)),
+            SoilBody(id="pit", name="below the pit", layer="L_mid", point=(pit_x, middle)),
+            SoilBody(id="retained", name="retained", layer="L_mid", point=(retained_x, middle))]
+
+
+def _stages() -> list[Stage]:
+    """Settle the ground, build the wall, then dig. Each water load arrives with its lift
+    and replaces the one before, and the strut goes in once the first lift has uncovered
+    it."""
+    solved = {"max_iterations": 150, "tolerated_error": 1e-3}
+    return [
+        Stage(id="initial", name="Initial stage", calculation="K0 procedure",
+              deactivate=["sheetpile", "strut", "wall_contact", "surcharge",
+                          "water_1", "water_2", "water_3"]),
+        Stage(id="null_step", name="Null step", parent="initial", calculation="Null step",
+              max_iterations=150),
+        Stage(id="install_sheetpile", name="SheetPileWall installation", parent="null_step",
+              activate=["sheetpile", "wall_contact", "surcharge"], reset_displacements=True,
+              **solved),
+        Stage(id="dig_1", name="First excavation", parent="install_sheetpile",
+              activate=["water_1"], deactivate=["soil_L_top__lift1"], **solved),
+        Stage(id="install_strut", name="Strut installation", parent="dig_1",
+              activate=["strut"], **solved),
+        Stage(id="dig_2", name="Second excavation", parent="install_strut",
+              activate=["water_2"], deactivate=["soil_L_top__lift2", "water_1"], **solved),
+        Stage(id="dig_3", name="Third excavation", parent="dig_2",
+              activate=["water_3"], deactivate=["soil_L_top__lift3", "water_2"], **solved),
+    ]
+
+
 def excavation_project(staged: bool = True) -> Project:
     """The model. `staged=False` is the same geometry with no construction sequence, for
     a test about the mesh or the deck that should not depend on the stages."""
@@ -121,9 +164,13 @@ def excavation_project(staged: bool = True) -> Project:
                       y_top=DOMAIN_TOP_Y, y_bottom=DOMAIN_BOTTOM_Y),
         materials=[upper, lower],
         layers=layers,
-        # Against the left edge, the model's symmetry plane, dug in three lifts.
-        excavation=Excavation(x0=DOMAIN_LEFT_X, x1=WALL_X, z0=Z0, z1=Z1,
-                              levels=list(LIFTS)),
+        # The pit is against the left edge, the model's symmetry plane. The wall cuts it off
+        # from the ground it retains, and each line is the floor of a lift; the last floor
+        # is a layer boundary.
+        lines=[Line(id=f"floor_{index}", name=f"Floor of lift {index}",
+                    points=[(DOMAIN_LEFT_X, level), (WALL_X, level)])
+               for index, level in enumerate(LIFTS[:-1], start=1)],
+        bodies=_bodies(),
         water=WaterLevel(y=WATER_Y),
         # The standard supports, and the pore pressure, hydrostatic about the water
         # level on the whole soil.
@@ -155,9 +202,8 @@ def excavation_project(staged: bool = True) -> Project:
     )
     if not staged:
         return project
-    return Project.model_validate(
-        project.model_dump()
-        | {"stages": [stage.model_dump() for stage in stages.staged_excavation_stages(project)]})
+    return Project.model_validate(project.model_dump()
+                                  | {"stages": [stage.model_dump() for stage in _stages()]})
 
 
 MOHR_COULOMB = "GeoMohrCoulombLawPlaneStrain"

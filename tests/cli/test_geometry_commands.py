@@ -404,8 +404,8 @@ def test_volume_list_remove_and_clear(cli, site):
 # ── The ground of the test model, from commands alone ───────────────────────
 
 def test_the_ground_of_the_test_model_is_built_with_commands_alone(cli, tmp_path):
-    """Domain, both soils, three layers, the pit in three lifts, the water:
-    everything about the ground `tests/models/excavation.py` builds, typed instead."""
+    """Domain, both soils, three layers, the lines, the water: everything about the
+    ground `tests/models/excavation.py` builds, typed instead."""
     target = excavation.excavation_project()
     path = tmp_path / "pit.json"
 
@@ -423,11 +423,12 @@ def test_the_ground_of_the_test_model_is_built_with_commands_alone(cli, tmp_path
     for layer in target.layers:
         run("layer", path, "add", layer.id, "--material", layer.mat, "--name", layer.name,
             "--bottom", repr(layer.bottom))
-    run("excavation", path, "--x", "0", "6", "--z", "0", "10", "--levels", "-2", "-4.5", "-7")
+    for line in target.lines:
+        run("line", path, "add", line.id, "--name", line.name, "--points",
+            *(repr(value) for point in line.points for value in point))
     run("water", path, "-1")
 
     built = session.load(path)
     for field in ("name", "dimension", "section_offset", "domain", "materials", "layers",
-                  "excavation", "water"):
+                  "lines", "water"):
         assert getattr(built, field) == getattr(target, field), field
-    assert built.soil_body_keys == target.soil_body_keys

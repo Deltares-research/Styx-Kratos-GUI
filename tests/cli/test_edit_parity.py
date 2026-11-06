@@ -79,17 +79,8 @@ def _with_a_drawn_box() -> Project:
     return edits.sized(built)
 
 
-def _with_a_line() -> Project:
-    """A pit that is not dug in levels, and a line that cuts its top layer."""
-    payload = excavation_project(staged=False).model_dump(mode="json")
-    payload.pop("excavation")
-    payload["lines"] = [{"id": "floor", "name": "Floor", "points": [[0.0, -2.0], [6.0, -2.0]]}]
-    return Project.model_validate(payload)
-
-
 PROJECTS: dict[str, Callable[[], Project]] = {
     "pit": _pit,
-    "section with a line": _with_a_line,
     "pit without strut or contact": lambda: _pit("strut", "wall_contact"),
     "staged pit": lambda: _pit(staged=True),
     "pit with a spare material": _with_a_spare_material,
@@ -186,8 +177,8 @@ CASES = [
          _structures("beams", "beam_sections"), project="pit without strut or contact"),
     Case("a line load", ("load", "remove", "surcharge"), "App.Loads.remove",
          "Loads.remove", STRUCTURES, _loads),
-    Case("a line", ("line", "remove", "floor"), "App.Lines.remove", "Lines.remove",
-         "/api/project/lines", _lines, project="section with a line"),
+    Case("a line", ("line", "remove", "floor_2"), "App.Lines.remove", "Lines.remove",
+         "/api/project/lines", _lines),
     Case("a normal load", ("normal-load", "remove", "water_1"), "App.NormalLoads.remove",
          "NormalLoads.remove", STRUCTURES, _structures("normal_loads", None)),
     Case("a boundary condition", ("boundary", "remove", "roller_front"),

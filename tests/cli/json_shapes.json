@@ -127,7 +127,13 @@
    "top": "number"
   }
  ],
- "line list": [],
+ "line list": [
+  {
+   "id": "string",
+   "name": "string",
+   "points": "array"
+  }
+ ],
  "load list": [
   {
    "active": "boolean",

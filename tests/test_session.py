@@ -993,9 +993,7 @@ EDITS_THAT_TAKE_A_BODY = {
     "kratos-cli layer remove": lambda p: session.remove_layer(p, "L_mid"),
     "kratos-cli layer split": lambda p: session.split_layer(p, "L_top"),
     "kratos-cli layer set --top": lambda p: session.update_layer(p, "L_mid", top=-3.0),
-    "kratos-cli set excavation null": lambda p: session.with_value(p, "excavation", None),
-    "kratos-cli excavation --levels": lambda p: session.set_excavation(
-        p, levels=[-2.0, -4.5])[0],
+    "kratos-cli line remove": lambda p: session.remove_line(p, "floor_2"),
     "the GUI deletes a layer": lambda p: session.replace_layers(p, _stack_without(p, "L_mid")),
     "the GUI deletes an anchor": lambda p: session.replace_structures(
         p, _structures(p, anchors=_without(p, "anchors", "strut"))),
@@ -1059,7 +1057,8 @@ def test_the_user_is_told_which_sizes_an_edit_took_away():
 
     assert notes == ["Removed the mesh size of soil_L_top__lift3 (1): the edit took that "
                      "body away. If it comes back, set its size again."]
-    several = session.removed_sizes(project, session.with_value(project, "excavation", None))
+    several = session.removed_sizes(project, session.remove_layer(
+        session.split_layer(project, "L_top"), "L_mid"))
     assert len(several) == 1
     assert several[0].startswith("Removed the mesh sizes of soil_L_mid__pit (1), "
                                  "soil_L_top__lift3 (1): the edit took those bodies away.")
@@ -1068,7 +1067,7 @@ def test_the_user_is_told_which_sizes_an_edit_took_away():
 def test_a_size_removed_on_purpose_or_never_valid_is_not_noted():
     project = edits.sized(excavation_project(staged=False), soil_typo=1.0)
 
-    on_purpose = session.without_value(project, "mesh.body_sizes[soil_L_mid]")
+    on_purpose = session.without_value(project, "mesh.body_sizes[soil_L_mid__pit]")
     typo_kept = session.remove_layer(project, "L_mid")
 
     assert session.removed_sizes(project, on_purpose) == []
@@ -1195,12 +1194,6 @@ def test_a_part_switched_by_its_name_is_refused_with_its_id():
     # The surcharge is called "Load"; a stage takes its id.
     with pytest.raises(session.EditRefused, match="name of the part with id surcharge"):
         session.switch_parts(excavation_project(), "dig_1", ["load"], True)
-
-
-def test_the_staged_excavation_sequence_is_derived_from_the_model():
-    project = session.staged_excavation_stages(excavation_project(staged=False))
-
-    assert project.stages == excavation_project().stages
 
 
 # ── A project file opened on another computer ──────────────────────────────

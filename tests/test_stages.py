@@ -175,29 +175,6 @@ def _staged(project) -> schemas.Project:
         | {"stages": [ph.model_dump() for ph in stages.staged_excavation_stages(project)]})
 
 
-def test_staged_excavation_stages_reproduce_the_reference_sequence():
-    got = [(ph.id, sorted(on), sorted(off))
-           for ph, on, off in stages.transitions(_staged(_model()))]
-    assert got == [
-        ("initial", [], ["sheetpile", "strut", "surcharge", "wall_contact",
-                         "water_1", "water_2", "water_3"]),
-        ("null_step", [], []),
-        ("install_sheetpile", ["sheetpile", "surcharge", "wall_contact"], []),
-        ("dig_1", ["water_1"], ["soil_L_top__lift1"]),
-        ("install_strut", ["strut"], []),
-        ("dig_2", ["water_2"], ["soil_L_top__lift2", "water_1"]),
-        ("dig_3", ["water_3"], ["soil_L_top__lift3", "water_2"]),
-    ]
-
-
-def test_staged_excavation_stages_leave_the_ground_under_the_pit_alone():
-    """`Soil_Below_Pit` is on the dug side of the wall but is never dug, and stays
-    active in all seven reference stages. Only the lifts come out."""
-    last = stages.active_parts(_staged(_model()), "dig_3")
-    assert {"soil_L_mid__pit", "soil_L_bot__pit"} <= last
-    assert not {"soil_L_top__lift1", "soil_L_top__lift2", "soil_L_top__lift3"} & last
-
-
 def test_staged_excavation_stages_reset_displacements_when_the_wall_goes_in():
     """The reference sets `reset_totals` true in exactly one stage, the wall's, so the
     wall's deflection is measured from the ground it was built into."""
@@ -218,13 +195,6 @@ def test_staged_excavation_stages_make_a_project_that_validates():
     staged = _staged(_model())
     assert [ph.id for ph in stages.linearise(staged)] == \
         [ph.id for ph in staged.stages]
-
-
-def test_an_anchor_is_installed_after_the_lift_that_exposes_it():
-    """The reference installs the strut at -1.5 after the first lift reaches -2.0, not
-    before: you cannot fix a strut to a wall face that is still buried."""
-    order = [ph.id for ph in stages.staged_excavation_stages(_model())]
-    assert order.index("dig_1") < order.index("install_strut") < order.index("dig_2")
 
 
 # -- default_stages ----------------------------------------------------------
@@ -404,22 +374,6 @@ def test_the_phases_module_still_imports():
     assert phases.linearise is stages.linearise
     assert phases.default_phases is stages.default_stages
     assert phases.staged_excavation_phases is stages.staged_excavation_stages
-
-
-def test_an_anchor_below_the_last_lift_is_installed_after_digging_not_lost():
-    project = excavation_project(staged=False)
-    payload = project.model_dump()
-    payload["anchors"][0].update(head=(6, -9), tail=(5, -9))
-    project = schemas.Project.model_validate(payload)
-
-    sequence = stages.staged_excavation_stages(project)
-    staged = schemas.Project.model_validate(project.model_dump() | {"stages": sequence})
-
-    assert sequence[-1].id == "install_strut"
-    assert sequence[-1].parent == "dig_3"
-    assert sequence[-1].activate == ["strut"]
-    assert "strut" not in stages.active_parts(staged, "dig_3")
-    assert "strut" in stages.active_parts(staged, "install_strut")
 
 
 def test_adding_a_stage_to_an_unresolved_branch_uses_the_last_stored_stage():

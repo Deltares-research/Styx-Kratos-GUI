@@ -2505,6 +2505,36 @@ window.DRAFTS_FIXTURE =
           "interface_permeability": "Neutral"
         }
       ],
+      "lines": [
+        {
+          "id": "floor_1",
+          "name": "Floor of lift 1",
+          "points": [
+            [
+              0.0,
+              -2.0
+            ],
+            [
+              6.0,
+              -2.0
+            ]
+          ]
+        },
+        {
+          "id": "floor_2",
+          "name": "Floor of lift 2",
+          "points": [
+            [
+              0.0,
+              -4.5
+            ],
+            [
+              6.0,
+              -4.5
+            ]
+          ]
+        }
+      ],
       "loads": [
         {
           "id": "surcharge",

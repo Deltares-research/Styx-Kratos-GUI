@@ -43,13 +43,6 @@ def test_stages_with_no_action_lists_them(cli, pit):
     assert "install_strut" in ran.out and "dig_3" in ran.out
 
 
-def test_staged_excavation_derives_the_whole_sequence(cli, unstaged):
-    ran = cli("stages", unstaged, "staged-excavation")
-
-    assert ran.code == 0, ran.err
-    assert session.load(unstaged).stages == excavation.excavation_project().stages
-
-
 @pytest.mark.parametrize("action", [[], ["list"], ["show", "dig_3"]])
 def test_the_old_phases_command_still_works(cli, pit, action):
     stages = cli("stages", pit, *action)
