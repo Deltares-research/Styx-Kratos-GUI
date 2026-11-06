@@ -181,6 +181,12 @@ def _replace(temporary: str, path: Path) -> None:
 
 # ── Every edit ──────────────────────────────────────────────────────────────
 
+def _sizable_keys(project: Project) -> set[str]:
+    """What a mesh size can name: the bodies, and a cut layer's key, which names each of
+    its pieces."""
+    return {*project.part_keys(), *(f"soil_{layer.id}" for layer in project.layers)}
+
+
 def _edited(project: Project, payload: dict) -> Project:
     """`payload`, an edit of `project`, validated as a whole project.
 
@@ -194,10 +200,8 @@ def _edited(project: Project, payload: dict) -> Project:
     sizes = edited.mesh.body_sizes
     if not sizes:
         return edited
-    # A layer's key stays good when a line cuts the layer: it names each of the pieces.
-    orphans = set(sizes) - set(edited.part_keys()) - {f"soil_{layer.id}"
-                                                      for layer in edited.layers}
-    lost = orphans & set(project.part_keys()) if orphans else set()
+    orphans = set(sizes) - _sizable_keys(edited)
+    lost = orphans & _sizable_keys(project) if orphans else set()
     if not lost:
         return edited
     kept = {key: size for key, size in sizes.items() if key not in lost}
@@ -215,7 +219,7 @@ def removed_sizes(before: Project, after: Project) -> list[str]:
     """
     gone = set(before.mesh.body_sizes) - set(after.mesh.body_sizes)
     if gone:
-        gone &= set(before.part_keys()) - set(after.part_keys())
+        gone &= _sizable_keys(before) - _sizable_keys(after)
     if not gone:
         return []
     sizes = ", ".join(f"{key} ({before.mesh.body_sizes[key]:g})" for key in sorted(gone))

@@ -326,6 +326,18 @@ def test_a_mesh_size_on_a_layer_stays_when_a_line_cuts_it():
     assert session.add_line(sized, PIT_SIDE).mesh.body_sizes == {"soil_top": 0.5}
 
 
+def test_a_mesh_size_on_a_cut_layer_goes_with_the_layer():
+    sized = edited(model(), mesh={"element_size": 2.0, "body_sizes": {"soil_top": 0.5}})
+    cut = session.add_line(sized, PIT_SIDE)
+
+    gone = session.remove_layer(cut, "top")
+
+    assert gone.mesh.body_sizes == {}
+    assert session.removed_sizes(cut, gone) == [
+        "Removed the mesh size of soil_top (0.5): the edit took that body away. If it comes "
+        "back, set its size again."]
+
+
 # ── The stages and the deck together ─────────────────────────────────────────────
 
 
