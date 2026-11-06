@@ -98,6 +98,10 @@ SUITES = {
         [JS / "results-render.js", JS / "ruler.js", JS / "picture-draw.js"],
         TESTS / "test-picture-draw.js",
     ),
+    "picture-dialog": (
+        [JS / "picture-draw.js", JS / "picture-dialog.js"],
+        TESTS / "test-picture-dialog.js",
+    ),
     "picture-writers": (
         [JS / "zip.js", JS / "picture-draw.js", JS / "picture-writers.js"],
         TESTS / "test-picture-writers.js",

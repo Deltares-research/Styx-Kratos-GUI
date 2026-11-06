@@ -543,6 +543,8 @@ viewport's. A command can also be typed with a leading `_` in the box (`_mesh`).
 | `soillayer`, `plate`, `beam`, `anchor` | `kratos-cli layer P add`, `kratos-cli wall P add`, `kratos-cli beam P add`, `kratos-cli anchor P add` (the box answers these with a placeholder and builds nothing) |
 | `point`, `line`, `surface` | — a placeholder answer in the box; nothing is built |
 | `colour <part>`, `color <part>` | — the viewport's: a part drawn in its own colour |
+| `picture`, `picture copy` | — the viewport's: the Save picture window, and the clipboard |
+| `picture save [png] [pdf] [svg] ...` | — the viewport's: the picture files |
 | `view iso\|top\|front\|side`, `zoomfit`, `clear` | — the viewport's and the log's |
 | `gotosoil`, `gotostructures`, `gotomesh`, `gotoflow`, `gotoflowconditions`, `gotostaged` | — the viewport's: the mode tabs |
 | `results` | `kratos-cli results show RUN` |

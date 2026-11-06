@@ -1187,6 +1187,8 @@ def test_the_live_shell_replaces_only_the_viewport_and_the_orbit_controller(clie
                              "water-command.js", "script-command.js", "node-parts.js",
                              "deck.js",
                              "results-plot.js",
+                             "picture-draw.js", "picture-writers.js", "picture.js",
+                             "picture-dialog.js",
                              # The unit system and the Kratos property sets the editors
                              # show, and the Material sets dialog that replaces the frozen
                              # one's old sheet (plan/outdated/kratos-native-inputs-plan.md).

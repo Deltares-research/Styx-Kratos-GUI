@@ -1256,6 +1256,8 @@ App.Viewport = (function () {
     sp.scale.set(4 * (scale || 1), 1 * (scale || 1), 1);
     sp.position.set(x, y, z);
     sp.userData.noPick = true;
+    sp.userData.pictureText = { text: text, fraction: 40 / 64, color: 0x1d2430, halo: true,
+                                bold: true };
     sp.renderOrder = 10;
     return sp;
   }
@@ -1509,6 +1511,30 @@ App.Viewport = (function () {
     animate();
 
     refresh().catch(function () { /* already reported to the command log */ });
+  }
+
+  /* What a saved picture needs of the view on screen (picture.js). The camera is brought
+     up to date, as a frame would do: the picture must not lag behind the last orbit. */
+  function pictureView() {
+    if (!scene || !cam || !host) return null;
+    orbit.apply(cam);
+    syncSectionGrid();
+    scene.updateMatrixWorld(true);
+    cam.updateMatrixWorld(true);
+    cam.matrixWorldInverse.copy(cam.matrixWorld).invert();
+    var section = dimension === 2 && !!cam.isOrthographicCamera && !!frame;
+    var extent = section ? visibleHalfExtent() : null;
+    var shown = triadAxes(dimension);
+    return {
+      scene: scene, camera: cam, width: host.clientWidth, height: host.clientHeight,
+      section: dimension === 2,
+      // Furniture of the moment, not of the model.
+      leaveOut: boxHelper ? [boxHelper] : [],
+      grid: [gridGroup, boundsGroup],
+      gridOn: !!showGrid,
+      rulers: section ? { center: sectionCenter(), halfW: extent.halfW, halfH: extent.halfH } : null,
+      axes: AXES.filter(function (axis) { return shown.indexOf(axis.name) >= 0; })
+    };
   }
 
   /* ── Axis triad (its own tiny renderer) ─────────────────────── */
@@ -2297,6 +2323,8 @@ App.Viewport = (function () {
     sprite.scale.set(0.035, 0.035, 1);
     sprite.renderOrder = 12;
     sprite.userData.noPick = true;
+    sprite.userData.pictureText = { text: letter, fraction: 34 / 64, color: colour, ring: colour,
+                                    bold: true, fixed: true };
     return sprite;
   }
 
@@ -2972,6 +3000,7 @@ App.Viewport = (function () {
     applyStageVisibility: applyStageVisibility,
     normalLoadGlyphSpec: normalLoadGlyphSpec,
     getScene: function() { return scene; },
+    pictureView: pictureView,
     getCamera: function() { return cam; },
     getCanvas: function() { return canvas; },
     // Ask for one frame. The loop is gated on `needsRender`, so anything that adds to

@@ -758,6 +758,11 @@ App.LivePatches = (function () {
     return true;
   }
 
+  function runPictureCommand(text) {
+    if (!App.Picture) return false;
+    return App.Picture.command(text) !== false;
+  }
+
   /* `water ...`, typed: set, show or remove the project's water level. What to send is
      `App.WaterCommand`'s (tested headless); this sends it and redraws from the project
      the server stored. `false` when it is not this command. */
@@ -1750,6 +1755,15 @@ App.LivePatches = (function () {
     return items.concat(['-', App.MeshLabels.menuItem()]);
   }
 
+  /* The picture rows. Copying needs localhost or https, so on a LAN address the row is
+     grey rather than a click that answers with an error. */
+  function withPictureRows(items) {
+    if (!App.Picture) return items;
+    return items.concat(['-',
+      { label: 'Copy picture', icon: 'copy', action: 'copyPicture', disabled: !App.Picture.canCopy() },
+      { label: 'Save picture…', icon: 'camera', action: 'savePicture' }]);
+  }
+
   var LABEL_NOUNS = { nodes: 'Node', elements: 'Element' };
 
   /* One toggle per kind, each independent of the other: a node number and the number of
@@ -1783,7 +1797,7 @@ App.LivePatches = (function () {
       var openAt = App.Menu.openAt;
       App.Menu.openAt = function (items, x, y, onPick) {
         App.Menu.openAt = openAt;
-        openAt(gateViewportItems(withLabelRows(items)), x, y, function (item) {
+        openAt(gateViewportItems(withPictureRows(withLabelRows(items))), x, y, function (item) {
           if (item && item.action === 'toggleNodeLabels') return toggleLabels('nodes');
           if (item && item.action === 'toggleElementLabels') return toggleLabels('elements');
           if (onPick) onPick(item);
@@ -2708,6 +2722,14 @@ App.LivePatches = (function () {
         }
         return;
       }
+      if (item && item.action === 'savePicture') {
+        if (App.PictureDialog) App.PictureDialog.open();
+        return;
+      }
+      if (item && item.action === 'copyPicture') {
+        if (App.Picture) App.Picture.copy();
+        return;
+      }
       if (item && item.action === 'exportModel') {
         if (App.Export) App.Export.run();
         return;
@@ -2844,6 +2866,15 @@ App.LivePatches = (function () {
         action: 'toggleRuler', on: rulersOn()
       });
     }
+    /* The camera goes with the file group: it saves something too. */
+    if (!App.ICONS.camera) {
+      App.ICONS.camera = '<path d="M3 8h4l2-3h6l2 3h4v11H3z"/><circle cx="12" cy="13" r="3.5"/>';
+    }
+    if (!App.TOOLBAR.some(function (t) { return t && t.action === 'savePicture'; })) {
+      App.TOOLBAR.splice(App.TOOLBAR.indexOf('|'), 0, {
+        icon: 'camera', tip: 'Save picture — the view as PNG, PDF or SVG', action: 'savePicture'
+      });
+    }
     var viewMenu = (App.MENUS || []).filter(function (m) { return m.label === 'View'; })[0];
     if (viewMenu && !viewMenu.items.some(function (i) { return i && i.action === 'toggleRuler'; })) {
       var gridItem = viewMenu.items.filter(function (i) { return i && i.action === 'toggleGrid'; })[0];
@@ -2873,6 +2904,13 @@ App.LivePatches = (function () {
           item.action = 'exportModel';
         }
       });
+      if (!fileMenu.items.some(function (item) { return item && item.action === 'savePicture'; })) {
+        var printAt = fileMenu.items.findIndex(function (item) {
+          return item && item.label === 'Print…';
+        });
+        fileMenu.items.splice(printAt < 0 ? fileMenu.items.length : printAt, 0,
+                              { label: 'Save picture…', icon: 'camera', action: 'savePicture' });
+      }
       /* There is deliberately no menu item for any one model. Models are opened by
          running the Python that builds them -- `run <file.py>` in the command box --
          which works for any model, not only the one somebody thought to add a
@@ -3546,6 +3584,8 @@ App.LivePatches = (function () {
         title: 'Plot along the wall',
         width: 1180, height: 560,
         buttons: [
+          act('Save PNG', 'results plot png'),
+          act('Save PDF', 'results plot pdf'),
           act('Save SVG', 'results plot svg'),
           act('Save CSV', 'results plot csv'),
           { label: 'Close', primary: true }
@@ -3894,6 +3934,8 @@ App.LivePatches = (function () {
         if (handledByResults !== false) return handledByResults;
       }
 
+      // `picture`, `picture copy`, `picture save`: the Save picture window's words.
+      if (runPictureCommand(text)) return;
       // `colour <part>`: the Model explorer's colour toggle, typed.
       if (runColourCommand(text)) return;
       // `water <level>` / `water off`: the project's water level.

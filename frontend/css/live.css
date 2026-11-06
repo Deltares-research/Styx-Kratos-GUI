@@ -500,3 +500,18 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
 @media (prefers-reduced-motion: reduce) {
   .tbtn.calculating::before, .rail-btn.calculating::before { animation: none; }
 }
+
+/* ── The Save picture window ──────────────────────────────────────────── */
+.picture-body { width: 100%; padding: 14px 18px; overflow: auto; }
+.picture-form {
+  display: grid;
+  grid-template-columns: 80px 1fr;
+  gap: 10px 12px;
+  align-items: center;
+}
+.picture-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
+.picture-row input[type="number"] { width: 70px; }
+.picture-column { display: flex; flex-direction: column; gap: 4px; }
+.picture-tick { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.picture-note { margin-top: 14px; color: var(--c-ink-soft); line-height: 1.4; }
+.picture-stop { display: block; margin: 8px auto 0; pointer-events: auto; }

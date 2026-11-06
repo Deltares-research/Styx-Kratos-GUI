@@ -342,6 +342,29 @@
     });
   }
 
+  /* One grid across both kinds: planned in KINDS order, so an element number is never
+     laid over a node number that is already there. */
+  function planned(state, width, height) {
+    var taken = {};
+    var plans = [];
+    KINDS.forEach(function (kind) {
+      var it = layers[kind];
+      if (!it.on || !it.points.length) return;
+      plans.push({ kind: kind,
+                   result: plan({ groups: it.groups, project: state.project,
+                                  width: width, height: height,
+                                  max: state.max, cell: state.cell, taken: taken }) });
+    });
+    return plans;
+  }
+
+  /* The labels for a saved picture: the same plan, for the paper's size. */
+  function forPicture(project, width, height) {
+    return planned({ project: project }, width, height).map(function (entry) {
+      return { result: entry.result, style: STYLE[entry.kind], halo: HALO };
+    });
+  }
+
   /* Called from the render tick with the camera's own projector, so a label cannot
      disagree with where its node or element is drawn. */
   function sync(state) {
@@ -351,18 +374,9 @@
     var height = state.height || host.clientHeight;
     if (!(width > 0 && height > 0)) { hide(); return null; }
 
-    // One grid across both kinds: planned in KINDS order, so an element number is never
-    // laid over a node number that is already there.
-    var taken = {};
-    var plans = [];
-    KINDS.forEach(function (kind) {
-      var it = layers[kind];
-      if (!it.on || !it.points.length) { last[kind] = null; return; }
-      last[kind] = plan({ groups: it.groups, project: state.project,
-                          width: width, height: height,
-                          max: state.max, cell: state.cell, taken: taken });
-      plans.push({ kind: kind, result: last[kind] });
-    });
+    var plans = planned(state, width, height);
+    KINDS.forEach(function (kind) { last[kind] = null; });
+    plans.forEach(function (entry) { last[entry.kind] = entry.result; });
     if (!plans.length) { hide(); return null; }
 
     canvas.hidden = false;
@@ -384,6 +398,7 @@
   App.MeshLabels = {
     KINDS: KINDS,
     groupCoincident: groupCoincident, fanOffsets: fanOffsets, plan: plan,
+    forPicture: forPicture,
     nodesFromSections: nodesFromSections, elementsFromSections: elementsFromSections,
     pointsFromTable: pointsFromTable,
     setPoints: setPoints, count: count, layer: layer, reset: reset,
