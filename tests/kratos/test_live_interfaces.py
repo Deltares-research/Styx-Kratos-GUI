@@ -510,7 +510,7 @@ print("TRACTIONS" + json.dumps([
 
 
 def test_an_interface_traction_is_normal_then_shear_and_compression_is_negative(tmp_path):
-    """What `results profile ... interface tn` and `ts` read: component 0 of
+    """What `results profile ... interface_right tn` and `ts` read: component 0 of
     GEO_EFFECTIVE_TRACTION_VECTOR is the normal traction, component 1 the shear, and a
     contact pressed shut has a negative normal traction. Kratos' own Neumann case on the
     3+3 line element, run on the build Styx runs, so a Kratos that changes either is

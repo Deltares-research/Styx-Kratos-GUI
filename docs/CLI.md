@@ -501,9 +501,9 @@ kratos-cli results fields 1                         # what the last stage can sh
 kratos-cli results field 1 uy                       # its range, and where it is reached
 kratos-cli results field 1 syy --stage "first excavation" --csv syy.csv
 kratos-cli results at 1 1234 --stage 4              # every field at node 1234
-kratos-cli results members 1                        # wall, interface, and their quantities
+kratos-cli results members 1                        # wall, interface_left, interface_right, ...
 kratos-cli results profile 1 wall M --csv wall_M.csv
-kratos-cli results profile 1 interface normal       # the normal traction, by a word of it
+kratos-cli results profile 1 interface_right normal # the normal traction, by a word of it
 kratos-cli results get 1 kratos.log --out logs/
 kratos-cli results archive 1                        # <run>.zip, here
 kratos-cli results field D:/copied/Pit_A_2026-10-12_09-14 uy   # a run anywhere

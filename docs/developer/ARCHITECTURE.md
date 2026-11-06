@@ -167,7 +167,7 @@ shell. Only the camera of `base/js/orbit.js` is replaced; all other behaviour is
 run folder (~/KratosGUI/runs/<deck>_<time>/)
   <deck>.mdpa, ProjectParameters.json           → part names, stage order, output names
   <deck>_<stage>.post.msh / .post.res           → results/gid_reader → results/fields, mesh, parts
-  <stage>__output_wall.json, __output_interface → results/members
+  <stage>__output_wall.json, __output_interface_<face> → results/members
         │
         ▼  results/catalog.py (finds the files, reads each one once, caches by size and time)
   /api/results/... routes
