@@ -136,6 +136,9 @@ EDITS = {
 The command line makes the same edits through the same functions, so the GUI and the
 terminal cannot come to different answers for one change."""
 
+SERVER_STATE = {"_folders"}
+"""What a route may write into: the server's own records, which hold no part of a project."""
+
 
 def _route_functions() -> dict[str, ast.AST]:
     return {node.name: node for path in sorted(ROUTES.glob("*.py"))
@@ -165,7 +168,9 @@ def test_no_route_puts_a_project_together_itself():
         f"{name}: line {node.lineno}" for name, function in _route_functions().items()
         for node in ast.walk(function)
         if (isinstance(node, ast.Assign)
-            and any(isinstance(target, ast.Subscript) for target in node.targets))
+            and any(isinstance(target, ast.Subscript)
+                    and getattr(target.value, "id", None) not in SERVER_STATE
+                    for target in node.targets))
         or (isinstance(node, ast.Call) and getattr(node.func, "attr", None) == "append"))
 
     assert builders == []
