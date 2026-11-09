@@ -161,6 +161,45 @@
     });
   });
 
+  test('mesh dialog sizes a sheet pile and edits the refinement boxes', function () {
+    var initial = project();
+    initial.beams = [{ id: 'sheetpile', name: 'SheetPileWall', section: 'sp',
+                       points: [[5, 0], [5, -13]] }];
+    initial.mesh.refinements = [{ kind: 'box', size: 0.75, thickness: 45, x_min: -1, x_max: 8,
+                                  y_min: -16, y_max: 1, z_min: -1, z_max: 41 }];
+    return withEnvironment(initial, function (ctx) {
+      App.MeshSettings.open();
+      var dialog = document.getElementById('mesh-settings-dialog');
+      var pile = dialog.querySelector('.mesh-structure-size[data-structure-key="sheetpile"]');
+      T.ok(pile, 'the sheet pile has a size field');
+      T.eq(pile.value, '', 'no size of its own yet: it takes the mesh around it');
+      pile.value = '0.5';
+      T.eq(dialog.querySelectorAll('.mesh-box').length, 1);
+      function boxField(index, name) {
+        return dialog.querySelectorAll('.mesh-box')[index]
+          .querySelector('[data-box-field="' + name + '"]');
+      }
+      T.eq(boxField(0, 'size').value, '0.75');
+      realButton(dialog, 'Add box').click();
+      T.eq(dialog.querySelectorAll('.mesh-box').length, 2);
+      boxField(1, 'x_max').value = String(Number(boxField(1, 'x_min').value) - 1);
+      realButton(dialog, 'Apply').click();
+      T.ok(/x/.test(dialog.querySelector('.mesh-settings-message').textContent),
+           'a box whose x runs backwards is refused, in the window');
+      T.eq(ctx.requests.length, 0);
+      realButton(dialog.querySelectorAll('.mesh-box')[1], 'Remove').click();
+      T.eq(dialog.querySelectorAll('.mesh-box').length, 1);
+      boxField(0, 'size').value = '0.5';
+      realButton(dialog, 'Apply').click();
+      return drain().then(function () {
+        var mesh = ctx.requests[0].body.mesh;
+        T.eq(mesh.body_sizes.sheetpile, 0.5);
+        T.eq(mesh.refinements, [{ kind: 'box', size: 0.5, thickness: 45, x_min: -1, x_max: 8,
+                                  y_min: -16, y_max: 1, z_min: -1, z_max: 41 }]);
+      });
+    });
+  });
+
   test('mesh dialog keeps failed saves editable and allows a retry without generation', function () {
     return withEnvironment(project(3), function (ctx) {
       ctx.failure = new Error('Mesh settings refused');
@@ -374,21 +413,75 @@
     });
   });
 
-  test('normal-load picker converts section coordinates and reopens the editor', function () {
+  function pointRows(dialog) {
+    return Array.prototype.map.call(dialog.form.querySelectorAll('.line-point'), function (row) {
+      return Array.prototype.map.call(row.querySelectorAll('input'), function (input) {
+        return input.value;
+      });
+    });
+  }
+
+  test('normal-load picker draws a polyline of any length and reopens the editor', function () {
     return withEnvironment(project(), function (ctx) {
       App.NormalLoads.start();
-      button(latest(ctx), 'Pick on model\u2026');
-      T.eq(ctx.drawn.mode, 'load');
-      T.eq(ctx.drawn.options.count, 2);
-      ctx.drawn.options.onComplete([[5, -2, 0], [15, -4, 0]]);
+      button(latest(ctx), 'Pick on model…');
+      T.eq(ctx.drawn.mode, 'line');
+      ctx.drawn.options.onComplete([[0, -2, 0], [5, -2, 0], [5, -1.5, 0]]);
       var dialog = latest(ctx);
-      T.eq(field(dialog, 'x1').value, '5');
-      T.eq(field(dialog, 'y2').value, '-4');
+      T.eq(pointRows(dialog), [['0', '-2'], ['5', '-2'], ['5', '-1.5']]);
       field(dialog, 'Pressure').value = '120';
       return button(dialog, 'Save').then(function () {
         T.ok(dialog.closed);
-        T.eq(ctx.requests[0].body.normal_loads[0].points, [[5, -2], [15, -4]]);
+        T.eq(ctx.requests[0].body.normal_loads[0].points, [[0, -2], [5, -2], [5, -1.5]]);
       });
+    });
+  });
+
+  test('the normal-load window adds and removes points, as the Line window does', function () {
+    return withEnvironment(project(), function (ctx) {
+      App.NormalLoads.start();
+      var dialog = latest(ctx);
+      var start = pointRows(dialog);
+      T.eq(start.length, 2);
+      realButton(dialog.form, 'Add point').click();
+      var rows = pointRows(dialog);
+      T.eq(rows.length, 3);
+      T.eq(rows[2], [String(Number(start[1][0]) + 1), start[1][1]]);
+      dialog.form.querySelectorAll('.line-point')[2].querySelector('input').value = '30';
+      field(dialog, 'Pressure').value = '10';
+      return button(dialog, 'Save').then(function () {
+        var points = ctx.requests[0].body.normal_loads[0].points;
+        T.eq(points.length, 3);
+        T.eq(points[2][0], 30);
+      });
+    });
+  });
+
+  test('a hydrostatic normal load is saved without a pressure, which it does not read', function () {
+    return withEnvironment(project(), function (ctx) {
+      App.NormalLoads.start();
+      var dialog = latest(ctx);
+      change(field(dialog, 'Type'), 'Hydrostatic');
+      T.ok(field(dialog, 'Pressure').disabled, 'nothing to type: the level sets the pressure');
+      field(dialog, 'Reference level').value = '-1.5';
+      return button(dialog, 'Save').then(function () {
+        T.ok(dialog.closed);
+        var saved = ctx.requests[0].body.normal_loads[0];
+        T.eq(saved.fluid_pressure_type, 'Hydrostatic');
+        T.eq(saved.reference_coordinate, -1.5);
+        T.eq(saved.pressure, 0);
+      });
+    });
+  });
+
+  test('a uniform normal load still asks for its pressure', function () {
+    return withEnvironment(project(), function (ctx) {
+      App.NormalLoads.start();
+      var dialog = latest(ctx);
+      T.eq(field(dialog, 'Pressure').disabled, false);
+      T.eq(button(dialog, 'Save'), null);
+      T.ok(/pressure/.test(dialog.form.textContent));
+      T.eq(ctx.requests.length, 0);
     });
   });
 

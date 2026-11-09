@@ -1211,6 +1211,43 @@ App.Model = (function () {
       }));
   }
 
+  /* The forces a tendon gives way at, in tension and in compression: a number typed in
+     place, or none, which is no limit (`kratos-cli section set ID --tension-limit
+     none`). Empty means none; a set limit has a button that takes it away, as a typed
+     interface stiffness has one that derives it again. */
+  function tendonLimitRows(tendon, anchorId) {
+    var unit = App.Units.label('force');
+    var rows = [];
+    [['tension_limit', 'Tension limit', 'tension'],
+     ['compression_limit', 'Compression limit', 'compression']].forEach(function (limit) {
+      var field = limit[0];
+      var value = tendon[field];
+      rows.push([limit[1], value === null || value === undefined ? '' : String(value), unit,
+                 false, {
+        kind: 'number', decimals: 0, unit: unit,
+        get: function () { return tendon[field] === undefined ? null : tendon[field]; },
+        set: function (number) {
+          if (number !== null && !Number.isFinite(number)) {
+            return limit[1] + ' must be a number.';
+          }
+          var was = tendon[field];
+          tendon[field] = number;
+          var problem = App.Anchors ? App.Anchors.validateSection(tendon) : null;
+          if (problem) { tendon[field] = was; return problem; }
+          return null;
+        }
+      }]);
+      if (value !== null && value !== undefined) {
+        rows.push(['Limit', '', '', false, { kind: 'button', text: 'No ' + limit[2] + ' limit',
+          run: function () {
+            tendon[field] = null;
+            if (App.commitSelectionEdit) App.commitSelectionEdit(anchorId);
+          } }]);
+      }
+    });
+    return rows;
+  }
+
   /* The 3D anchor: both ends in space, and no out-of-plane spacing to smear over --
      it is the discrete member the user drew, where it was drawn. */
   function spaceAnchorProps(anchor) {
@@ -1238,7 +1275,7 @@ App.Model = (function () {
                               App.PropertySets.decimals(anchor.prestress))],
           ['Active', anchor.active !== false, '', true]
         ],
-        'Tendon': tendonRows(tendon, 3),
+        'Tendon': tendonRows(tendon, 3).concat(tendonLimitRows(tendon, anchor.id)),
         'Geometry': geometry
       }
     };
@@ -1270,7 +1307,7 @@ App.Model = (function () {
         'Tendon': tendonRows(tendon, 2).concat([
           ['Spacing', String(tendon.spacing), 'm', false,
            tendonNumberEditor(tendon, 'spacing', 'm', 3)]
-        ]),
+        ], tendonLimitRows(tendon, anchor.id)),
         'Geometry': geometry
       }
     };

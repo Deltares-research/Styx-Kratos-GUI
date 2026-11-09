@@ -86,6 +86,59 @@
          {});
   });
 
+  /* ── The structures' sizes and the refinement boxes ─────────────────── */
+
+  test('each sheet pile has a row, with its own size or none', function () {
+    var project = { beams: [{ id: 'sheetpile', name: 'Wall' }, { id: 'b2', name: 'Strut' }],
+                    mesh: { element_size: 5, body_sizes: { sheetpile: 0.5 } } };
+    T.eq(App.MeshSettings.structureControls(project), [
+      { key: 'sheetpile', label: 'Wall', size: 0.5 },
+      { key: 'b2', label: 'Strut', size: null }]);
+    T.eq(App.MeshSettings.structureControls({ mesh: {} }), []);
+  });
+
+  test("a structure's size is saved, and a row left empty takes it away", function () {
+    var project = { mesh: { body_sizes: { soil_L1: 2, sheetpile: 0.5 } } };
+    T.eq(App.MeshSettings.savedStructureSizes(project.mesh.body_sizes, [
+      { key: 'sheetpile', size: null }, { key: 'b2', size: 0.25 }]),
+         { soil_L1: 2, b2: 0.25 });
+  });
+
+  test("the boxes the window lists are the model's own; a cylinder is kept as it is", function () {
+    var box = { kind: 'box', size: 0.75, thickness: 45, x_min: -1, x_max: 8,
+                y_min: -16, y_max: 1, z_min: -1, z_max: 11 };
+    var cylinder = { kind: 'cylinder', size: 1, x: 0, y: 0, z: 0, axis_x: 0, axis_y: 1,
+                     axis_z: 0, radius: 1 };
+    var project = { mesh: { refinements: [box, cylinder] } };
+    T.eq(App.MeshSettings.refinementBoxes(project), [box]);
+    var moved = Object.assign({}, box, { size: 0.5 });
+    T.eq(App.MeshSettings.savedRefinements(project, [moved]), [cylinder, moved]);
+    T.eq(App.MeshSettings.savedRefinements(project, []), [cylinder]);
+  });
+
+  test('a new box is in the middle of the section, finer than the mesh, and spans z', function () {
+    var project = { dimension: 2,
+                    domain: { x0: 0, x1: 80, y_top: 0, y_bottom: -60, z0: 0, z1: 10 },
+                    mesh: { element_size: 5 } };
+    var box = App.MeshSettings.draftBox(project);
+    T.eq(box.kind, 'box');
+    T.ok(box.size < 5, 'finer than the mesh around it');
+    T.ok(box.x_min > 0 && box.x_max < 80 && box.x_min < box.x_max);
+    T.ok(box.y_min > -60 && box.y_max === 0 && box.y_min < box.y_max, 'from the surface down');
+    T.ok(box.z_min < 0 && box.z_max > 10, 'the whole depth: a 2D section is cut anywhere in z');
+  });
+
+  test('a box is checked before it is saved', function () {
+    var ok = { kind: 'box', size: 1, thickness: 0, x_min: 0, x_max: 1, y_min: -1, y_max: 0,
+               z_min: 0, z_max: 1 };
+    T.eq(App.MeshSettings.boxProblem(ok), null);
+    T.ok(/size/.test(App.MeshSettings.boxProblem(Object.assign({}, ok, { size: 0 }))));
+    T.ok(/band/.test(App.MeshSettings.boxProblem(Object.assign({}, ok, { thickness: -1 }))));
+    T.ok(/x/.test(App.MeshSettings.boxProblem(Object.assign({}, ok, { x_max: 0 }))));
+    T.ok(/y/.test(App.MeshSettings.boxProblem(Object.assign({}, ok, { y_min: 0 }))));
+    T.ok(App.MeshSettings.boxProblem(Object.assign({}, ok, { x_min: NaN })));
+  });
+
   test('a choice is what was left out of it', function () {
     var project = { layers: [{ id: 'L1' }, { id: 'L2' }],
                     custom_parts: [{ key: 'drawn_0', mat: 'm1' }, { key: 'shown_only' }] };

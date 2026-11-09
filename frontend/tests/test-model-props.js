@@ -117,6 +117,42 @@
     });
   });
 
+  test("an anchor's force limits are typed in place, and taken away with a button", function () {
+    var project = JSON.parse(JSON.stringify(window.VIEWPORT_PAYLOADS.project));
+    var pile = project.beams[0];
+    var anchor = App.Anchors.draftFromPoints(project, [pile.points[0], [pile.points[0][0] - 1,
+                                                                        pile.points[0][1]]]);
+    project.anchors = [anchor];
+    project.anchor_sections = App.Anchors.sectionsFor(project, anchor);
+    project.anchor_sections.forEach(function (section) {
+      if (section.id === anchor.section) {
+        section.tension_limit = 900;
+        section.compression_limit = null;
+      }
+    });
+    withProject(project, function () {
+      var tendon = App.ANCHOR_SECTIONS.filter(function (s) { return s.id === anchor.section; })[0];
+      function rows() { return App.OBJECT_PROPS[anchor.id].groups.Tendon; }
+      function row(label) { return rows().filter(function (r) { return r[0] === label; }); }
+      var tension = row('Tension limit')[0], compression = row('Compression limit')[0];
+      T.ok(tension && compression, 'both limits have a row');
+      T.eq(tension[4].get(), tendon.tension_limit);
+      T.eq(compression[4].get(), null, 'a tendon takes no compression: no limit');
+      T.ok(tension[4].set(-5), 'a limit must be above nought');
+      T.eq(compression[4].set(250), null);
+      T.eq(tendon.compression_limit, 250);
+      var saved = App.commitSelectionEdit, committed = [];
+      App.commitSelectionEdit = function (key) { committed.push(key); };
+      try {
+        var clear = row('Limit').filter(function (r) { return /tension/.test(r[4].text); })[0];
+        T.ok(clear, 'a set tension limit can be taken away');
+        clear[4].run();
+        T.eq(tendon.tension_limit, null);
+        T.eq(committed, [anchor.id]);
+      } finally { App.commitSelectionEdit = saved; }
+    });
+  });
+
   test('free-interface property edits move its line and refuse coincident endpoints', function () {
     withProject(freeInterface(), function () {
       var contact = App.INTERFACES[0];
@@ -298,7 +334,9 @@
               })[0];
               var expected;
               if (part) expected = { method: 'SoilVolumeDialog.open', args: [part] };
-              else if (label === 'Stiffness') expected = { method: 'commitSelectionEdit', args: [key] };
+              else if (label === 'Stiffness' || label === 'Limit') {
+                expected = { method: 'commitSelectionEdit', args: [key] };
+              }
               else {
                 T.ok(module, where + ': no expected object family');
                 T.ok(label === 'Edit' || label === 'Delete', where + ': no expected button action');

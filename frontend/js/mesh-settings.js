@@ -122,8 +122,9 @@ App.MeshSettings = (function () {
     });
   }
 
-  /* The sizes the window saves. It has rows for the layers only, so a size it has no row
-     for -- a structure's, a lift's, set in `kratos-cli` or a script -- stays as it is. A
+  /* The sizes the layer rows save. A size they have no row for -- a sheet pile's, which
+     has a row of its own (`savedStructureSizes`), an anchor's, a lift's, set in
+     `kratos-cli` or a script -- stays as it is. A
      row that `follows` the global size has had no size typed, and asks for none. */
   function savedBodySizes(project, rows) {
     var sizes = Object.assign({}, ((project && project.mesh) || {}).body_sizes);
@@ -132,6 +133,80 @@ App.MeshSettings = (function () {
       else if (!row.follows) sizes[row.key] = row.size;
     });
     return sizes;
+  }
+
+  /* One row per sheet pile, with the size it is meshed at, or null: a sheet pile with no
+     size of its own takes the size of the mesh around it, which keeps the mesh grading
+     along it (core/geometry/meshing.py). */
+  function structureControls(project) {
+    var sizes = ((project && project.mesh) || {}).body_sizes || {};
+    return ((project && project.beams) || []).map(function (beam) {
+      var own = Object.prototype.hasOwnProperty.call(sizes, beam.id);
+      return { key: beam.id, label: beam.name || beam.id,
+               size: own ? Number(sizes[beam.id]) : null };
+    });
+  }
+
+  /* `sizes` with the structure rows' sizes: a size where one was typed, none where the
+     row was left empty. */
+  function savedStructureSizes(sizes, rows) {
+    var out = Object.assign({}, sizes);
+    rows.forEach(function (row) {
+      if (row.size === null) delete out[row.key]; else out[row.key] = row.size;
+    });
+    return out;
+  }
+
+  /* The refinement boxes the window lists, in the model's order. A cylinder has no row:
+     the window keeps it as it is (`savedRefinements`). */
+  function refinementBoxes(project) {
+    return (((project && project.mesh) || {}).refinements || []).filter(function (each) {
+      return each.kind === 'box';
+    });
+  }
+
+  function savedRefinements(project, boxes) {
+    var kept = (((project && project.mesh) || {}).refinements || []).filter(function (each) {
+      return each.kind !== 'box';
+    });
+    return kept.concat(boxes);
+  }
+
+  /* A new box: the middle third of the section in x, its top third in y, at a quarter
+     of the element size, stepping straight back to it. It spans the whole depth and
+     more, so a 2D section is inside it wherever it is cut. */
+  function draftBox(project) {
+    var d = (project && project.domain)
+      || { x0: 0, x1: 10, y_top: 0, y_bottom: -10, z0: 0, z1: 10 };
+    var size = Number(((project && project.mesh) || {}).element_size || defaults.element_size);
+    var width = d.x1 - d.x0, height = d.y_top - d.y_bottom;
+    function round(value) { return Math.round(value * 100) / 100; }
+    return {
+      kind: 'box', size: round(size / 4), thickness: 0,
+      x_min: round(d.x0 + width / 3), x_max: round(d.x1 - width / 3),
+      y_min: round(d.y_top - height / 3), y_max: d.y_top,
+      z_min: d.z0 - 1, z_max: d.z1 + 1
+    };
+  }
+
+  /* Why `box` cannot be saved, or null. */
+  function boxProblem(box) {
+    var names = ['size', 'thickness', 'x_min', 'x_max', 'y_min', 'y_max', 'z_min', 'z_max'];
+    for (var i = 0; i < names.length; i += 1) {
+      if (!Number.isFinite(box[names[i]])) {
+        return 'Every number of a refinement box must be given.';
+      }
+    }
+    if (!(box.size > 0)) return 'The size in a refinement box must be greater than zero.';
+    if (box.thickness < 0) return 'The grading band of a refinement box cannot be negative.';
+    if (!(box.x_max > box.x_min)) {
+      return 'A refinement box must run from a smaller x to a larger x.';
+    }
+    if (!(box.y_max > box.y_min)) return 'A refinement box must run from a lower y to a higher y.';
+    if (!(box.z_max > box.z_min)) {
+      return 'A refinement box must run from a smaller z to a larger z.';
+    }
+    return null;
   }
 
   /* The bodies of `project` that this window's check boxes leave out. */
@@ -223,6 +298,50 @@ App.MeshSettings = (function () {
     row('Layer mesh sizes', bodyTable,
         'Check every layer to mesh. Each checked layer can use an independent target size; shared faces remain conformal.');
 
+    var structures = structureControls(App.PROJECT);
+    if (structures.length) {
+      var structureTable = el('div.mesh-body-table');
+      structureTable.appendChild(el('div.mesh-body-head.mesh-structure-row', null, [
+        el('span', { text: 'Sheet pile' }), el('span', { text: 'Element size' })
+      ]));
+      structures.forEach(function (structureRow) {
+        var size = el('input.mesh-setting-control.mesh-structure-size', {
+          type: 'number', min: '0.01', step: '0.1', placeholder: 'as around it',
+          'data-structure-key': structureRow.key
+        });
+        size.value = structureRow.size === null ? '' : structureRow.size;
+        structureTable.appendChild(el('label.mesh-body-row.mesh-structure-row', null, [
+          el('span', { text: structureRow.label }), size
+        ]));
+      });
+      row('Structure mesh sizes', structureTable,
+          'The length of the elements along a sheet pile. Empty: it takes the size of the mesh around it.');
+    }
+
+    var boxList = el('div.mesh-box-list');
+    var BOX_FIELDS = [['size', 'Size'], ['thickness', 'Band'], ['x_min', 'x from'],
+                      ['x_max', 'x to'], ['y_min', 'y from'], ['y_max', 'y to']];
+    function addBox(box) {
+      var block = el('div.mesh-box');
+      block.boxRecord = box;
+      BOX_FIELDS.forEach(function (field) {
+        var control = el('input.mesh-setting-control', {
+          type: 'number', step: '0.1', 'data-box-field': field[0] });
+        control.value = box[field[0]];
+        block.appendChild(el('label.mesh-box-label', { text: field[1] }));
+        block.appendChild(control);
+      });
+      var drop = el('button.btn.btn-sm', { type: 'button', text: 'Remove' });
+      drop.addEventListener('click', function () { block.remove(); });
+      block.appendChild(drop);
+      boxList.appendChild(block);
+    }
+    refinementBoxes(App.PROJECT).forEach(addBox);
+    var addBoxButton = el('button.btn.btn-sm', { type: 'button', text: 'Add box' });
+    addBoxButton.addEventListener('click', function () { addBox(draftBox(App.PROJECT)); });
+    row('Refinement boxes', el('div', null, [boxList, addBoxButton]),
+        'A finer mesh inside each box: Size is the element size there, and Band the width outside it over which the size grows back to the global size [m].');
+
     var globalSize = row('Global element size', input('element_size', 'number', { min: '0.01', step: '0.1' }),
         'Maximum target edge length in model units. Smaller values create more tetrahedra.');
     globalSize.addEventListener('input', function () {
@@ -279,7 +398,27 @@ App.MeshSettings = (function () {
         // again does not silently fall back to the global size.
         rows.push({ key: key, size: size, follows: control.hasAttribute('data-follows-global') });
       });
-      value.body_sizes = savedBodySizes(App.PROJECT, rows);
+      var structureRows = [];
+      form.querySelectorAll('.mesh-structure-size').forEach(function (control) {
+        var typed = control.value.trim();
+        var key = control.getAttribute('data-structure-key');
+        if (typed !== '' && !(Number(typed) > 0)) {
+          throw new Error('Mesh size for ' + key + ' must be greater than zero.');
+        }
+        structureRows.push({ key: key, size: typed === '' ? null : Number(typed) });
+      });
+      value.body_sizes = savedStructureSizes(savedBodySizes(App.PROJECT, rows), structureRows);
+      var boxes = Array.prototype.map.call(form.querySelectorAll('.mesh-box'), function (block) {
+        var box = Object.assign({}, block.boxRecord);
+        block.querySelectorAll('[data-box-field]').forEach(function (control) {
+          box[control.getAttribute('data-box-field')] = control.value.trim() === ''
+            ? NaN : Number(control.value);
+        });
+        var problem = boxProblem(box);
+        if (problem) throw new Error(problem);
+        return box;
+      });
+      value.refinements = savedRefinements(App.PROJECT, boxes);
       value.volume_keys = selectedKeys;
       return validate(merge(App.PROJECT, value));
     }
@@ -315,6 +454,9 @@ App.MeshSettings = (function () {
   return {
     fromProject: fromProject, validate: validate, meshTargets: meshTargets,
     bodyControls: bodyControls, savedBodySizes: savedBodySizes, leftOutBodies: leftOutBodies,
+    structureControls: structureControls, savedStructureSizes: savedStructureSizes,
+    refinementBoxes: refinementBoxes, savedRefinements: savedRefinements,
+    draftBox: draftBox, boxProblem: boxProblem,
     chosenBodies: chosenBodies, algorithmRow: algorithmRow, merge: merge, open: open,
     TITLE: TITLE, optimizationChoices: optimizationChoices, optimizationHelp: optimizationHelp,
     opensOnModeTab: opensOnModeTab
