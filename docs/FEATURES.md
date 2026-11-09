@@ -202,7 +202,7 @@ and adds only the values that are missing
 | Size and order | Global element size; linear or quadratic elements, optionally with straight edges |
 | Algorithms | 2D: frontal, delaunay, meshadapt, auto. 3D: delaunay, frontal, hxt. |
 | Quality | Optimisation (none, gmsh, netgen), smoothing steps, points along curves, minimum size factor |
-| Local control | A target size for each soil layer and each structure; box and cylinder refinement zones; **Refine**, **Coarsen** and **Reset local refinement** |
+| Local control | A target size for each soil layer and each structure; box and cylinder refinement zones (in a model script or with `kratos-cli add`, not in the **Mesh properties** window); **Refine**, **Coarsen** and **Reset local refinement** |
 | Selection | Only the selected layers get a mesh. Shared faces keep common nodes. |
 | Mesh labels | Node and element numbers on the mesh, spread out where nodes overlap |
 

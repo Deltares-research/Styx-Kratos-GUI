@@ -315,7 +315,7 @@ added anchor (id strut, name Strut); wrote ...\crow.json
 #### Step 9. The interface between wall and soil
 
 ```text
-crow.json> section add interface contact --name "Wall contact" --material none --r-inter none --virtual-thickness 1.0 --law GeoInterfaceCoulombLawPlaneStrain GEO_ENABLE_TENSION_CUT_OFF=false BIOT_COEFFICIENT=1.0 RETENTION_LAW=SaturatedBelowPhreaticLevelLaw SATURATED_SATURATION=1.0 RESIDUAL_SATURATION=1e-10 MINIMUM_RELATIVE_PERMEABILITY=0.0001
+crow.json> section add interface contact --name "Wall contact" --material none --r-inter none --virtual-thickness 1.0 --law GeoInterfaceCoulombLawPlaneStrain
 added interface section (id contact, name Wall contact); wrote ...\crow.json
 
 crow.json> interface add wall_contact --name Interface --section contact --structure sheetpile --side both
@@ -325,7 +325,8 @@ added interface (id wall_contact, name Interface); wrote ...\crow.json
 - `--material none`: each stretch of the interface takes the soil it runs against.
   `--r-inter none` reduces it by that soil's own `--r-inter` of step 3.
 - `--law GeoInterfaceCoulombLawPlaneStrain` is a Coulomb interface: it slips when the
-  shear stress reaches the reduced strength.
+  shear stress reaches the reduced strength. Like the strength, it takes the soil's
+  tension cut-off and saturation (`RETENTION_LAW` and the four values after it).
 - `--side both` puts the interface on both faces of the wall. `left` is the face toward
   -x and `right` the face toward +x, as the GUI shows them.
 - The interface holds the whole pile. To hold a part of it only, give `--from X Y` and
@@ -367,26 +368,29 @@ added normal load (id water_3, name WaterLoad_Stage3); wrote ...\crow.json
 
 #### Step 11. The mesh
 
-The mesh settings are fields of the project. The size per body and the refinement box have
-no option of their own, so they are set by path with `set` and `add`. `mesh` takes the element
-size and order, keeps them in the project, and meshes:
+First add a refinement box round the pit. In the box the element size is 0.75 m. Outside
+it the size grows back to the global size over a band of 45 m:
 
 ```text
-crow.json> set mesh.body_sizes.sheetpile 0.5
-mesh.body_sizes.sheetpile = 0.5; wrote ...\crow.json
-crow.json> add mesh.refinements '{"kind": "box", "size": 0.75, "thickness": 45.0, "x_min": -1.0, "x_max": 8.0, "y_min": -16.0, "y_max": 1.0, "z_min": -1.0, "z_max": 11.0}'
-added {"kind": "box", "size": 0.75, "thickness": 45.0, "x_min":... to mesh.refinements; wrote ...\crow.json
-crow.json> mesh --size 5.0 --order 2
+crow.json> add mesh.refinements '{"kind": "box", "size": 0.75, "thickness": 45, "x_min": -1, "x_max": 8, "y_min": -16, "y_max": 1, "z_min": -1, "z_max": 11}'
+added {"kind": "box", "size": 0.75, "thickness": 45, "x_min": -... to mesh.refinements; wrote ...\crow.json
+```
+
+`mesh` takes the other mesh settings, keeps them in the project, and meshes. `--body-size`
+gives one body its own element size. These are fields of the **Mesh properties** window
+in the GUI.
+
+```text
+crow.json> mesh --size 5.0 --order 2 --body-size sheetpile 0.5
 4228 nodes, 2052 elements (2052 Triangle 6)
 mesh settings kept: wrote ...\crow.json
 ```
 
 | Setting | Why |
 |---|---|
-| `element_size 5.0` | 5 m elements far from the pit. |
-| `order 2` | 6-node triangles. |
-| `body_sizes.sheetpile 0.5` | The wall at 0.5 m: 26 equal beam elements. |
-| the box refinement | 0.75 m round the pit and the wall's toe, growing back to 5 m over 45 m. |
+| `--size 5.0` | 5 m elements far from the pit. |
+| `--order 2` | 6-node triangles. |
+| `--body-size sheetpile 0.5` | The wall at 0.5 m: 26 equal beam elements. |
 
 `mesh` runs gmsh and reports the size. It is only a check: `export` meshes anyway.
 `get mesh` prints the settings back.
@@ -466,7 +470,7 @@ wrote the Kratos deck CROW_excavation_wall to deck:
   kratos_gui_units.json
 4228 nodes, 2052 elements (2052 Triangle 6)
 next: kratos-cli run deck
-note: interface section 'Wall contact' against 'Clay' (Interface_Soil_Top_retained, ...): normal stiffness 3.75e+06 and shear stiffness 3.75e+05 N/m³, 10 G / t and G / t (E = 9e+05 Pa, nu = 0.2, t = 1 m); cohesion 1441 Pa = 0.480217 x 3000, friction angle 11.2 deg, tan reduced by 0.480217 from 22.5 deg. Type a value on the section to replace one.
+note: interface section 'Wall contact' against 'Clay' (Interface_Soil_Top_retained, ...): normal stiffness 3.75e+06 and shear stiffness 3.75e+05 N/m³, 10 G / t and G / t (E = 9e+05 Pa, nu = 0.2, t = 1 m); cohesion 1441 Pa = 0.480217 x 3000, friction angle 11.2 deg, tan reduced by 0.480217 from 22.5 deg; saturation as the soil's (SaturatedBelowPhreaticLevelLaw). Type a value on the section to replace one.
 note: interface section 'Wall contact' against 'Sand' (Interface_Soil_Bottom): ...
 ```
 

@@ -225,7 +225,12 @@ explorer, and **Properties…** on the Model explorer row, open the same window.
 5. In **Contact**, select the contact properties, or **New contact**. You change their
    numbers in the Selection explorer: the soil whose strength `R_inter` reduces, the
    virtual thickness, and the permeability. A new contact takes the soil each part of the
-   interface runs against (**From the soil it runs against**).
+   interface runs against (**From the soil it runs against**). **Law** is **Linear
+   elastic**, which uses the two stiffnesses only, or **Coulomb**, which also slips when
+   the shear stress reaches the soil's strength reduced by **R_inter**. **R_inter** is one
+   number for the whole contact; click **Each soil's own R_inter** to use the R_inter of
+   each soil instead. The contact takes the saturation of its soil, and a Coulomb contact
+   also takes its tension cut-off.
 
 You can make as many interfaces as you need, for example one on each face of a pile, or
 two on parts of one face. Two interfaces on the same face of a pile over the same length
@@ -344,7 +349,6 @@ When you open Mesh mode, the **Mesh properties** window opens:
 |---|---|
 | Layer mesh sizes | Select the layers to mesh, and give each one its own target size. A layer with no size of its own shows the global size and follows it. Type a value to give the layer its own size. Styx meshes the selected layers together, so their shared faces have common nodes. Sizes that are not in this table, for example the size of an anchor set in `kratos-cli`, do not change. |
 | Structure mesh sizes | The length of the elements along each sheet pile. Empty: the sheet pile takes the size of the mesh around it. |
-| Refinement boxes | A finer mesh in a box. **Size** is the element size in the box, and **Band** the width outside the box over which the size grows back to the global size. **Add box** adds a box in the middle of the model, and **Remove** takes one away. |
 | Global element size | The maximum length of an element edge, in metres |
 | Element order | Linear elements, or quadratic elements with a midside node on each edge |
 | 2D algorithm, 3D algorithm | The Gmsh algorithm that makes the elements |
