@@ -2,8 +2,8 @@
 
 Kratos' `json_output` process writes, per stage, one file per member --
 `<stage>__output_wall.json` with the bending moment, shear force, normal force and
-displacement at every wall node, and `<stage>__output_interface.json` with the effective
-traction on one side of the wall. `core.results.members` turns one of those into a curve
+displacement at every wall node, and `<stage>__output_interface_<face>.json` with the effective
+traction on one face of the wall. `core.results.members` turns one of those into a curve
 along the member: (value, y) per node, sorted by y, in the units a retaining-wall plot is
 read in.
 
@@ -17,6 +17,7 @@ in the files a real run writes. What a real Kratos run's curves look like is
 from __future__ import annotations
 
 import json
+import shutil
 
 import pytest
 
@@ -186,6 +187,26 @@ def test_the_plot_route_serves_one_quantity_along_one_member(client, run):
 def test_the_plot_route_refuses_a_member_with_404_and_a_quantity_with_422(client, run):
     assert client.get(f"/api/results/runs/{run}/members/strut/M").status_code == 404
     assert client.get(f"/api/results/runs/{run}/members/wall/tn").status_code == 422
+
+
+def test_a_run_saved_before_the_two_faces_still_plots_its_one_interface(tmp_path, monkeypatch):
+    """A run from before each face had its own output wrote `__output_interface.json`."""
+    root, run_id = results_run.fake_run()
+    old = tmp_path / run_id
+    shutil.copytree(root / run_id, old)
+    for path in old.glob("*__output_interface_left.json"):
+        path.unlink()
+    for path in old.glob("*__output_interface_right.json"):
+        path.rename(path.with_name(path.name.replace("_interface_right", "_interface")))
+    run = results_run.use(monkeypatch, (tmp_path, run_id))
+
+    listed = {m["name"]: m for m in catalog.stage_members(run)["members"]}
+    plot = catalog.member_profiles(run, "interface", "tn")
+
+    assert sorted(listed) == ["interface", "wall"]
+    assert [q["name"] for q in listed["interface"]["quantities"]] == ["tn", "ts"]
+    assert [stage["index"] for stage in plot["stages"]] == listed["interface"]["stages"]
+    assert all(stage["points"] for stage in plot["stages"])
 
 
 @pytest.mark.parametrize("raw", [None, "bad", True, [], [1], [1, False], [1, "bad"]])

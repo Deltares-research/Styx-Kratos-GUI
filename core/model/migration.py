@@ -326,3 +326,59 @@ def _on_screen(interface: object, piles: dict) -> object:
     except (TypeError, IndexError, KeyError, ValueError):
         return interface        # not a usable line: the schema says why
     return {**interface, "side": face}
+
+
+def pit_as_lines(pit: dict, domain: dict, layers: list[tuple[str, float, float]]
+                 ) -> tuple[list[dict], list[dict], dict[str, list[str]]]:
+    """A layered project's old pit, dug in two or more levels, as what says the same today:
+    lines that cut the same pieces, and records that give them the keys and names they had.
+
+    `layers` is (id, bottom, top). A vertical line down each side of the pit that is not the
+    domain's edge, from the ground to the bottom, and one line across it per level that is
+    not a layer boundary already. The pieces keep `soil_<layer>__lift<n>` and
+    `soil_<layer>__pit`, so a saved stage still names the same soil. What lay outside the
+    pit had the layer's plain key, which a cut layer no longer has: it is
+    `soil_<layer>__outside` now, or `__outside_left` and `__outside_right` when the pit is
+    in the middle.
+
+    Returns the lines, the records, and what became of each plain key a stage may name.
+    """
+    x0, x1 = max(pit["x0"], domain["x0"]), min(pit["x1"], domain["x1"])
+    top, bottom = domain["y_top"], domain["y_bottom"]
+    levels = list(pit["levels"])
+
+    lines = []
+    if x1 < domain["x1"]:
+        lines.append({"id": "pit_side", "name": "Pit side", "points": [(x1, top), (x1, bottom)]})
+    if x0 > domain["x0"]:
+        lines.append({"id": "pit_side_left", "name": "Pit side, left",
+                      "points": [(x0, top), (x0, bottom)]})
+    boundaries = {level for _, *span in layers for level in span}
+    lines += [{"id": f"pit_level_{index}", "name": f"Pit level {index}",
+               "points": [(x0, level), (x1, level)]}
+              for index, level in enumerate(levels, start=1) if level not in boundaries]
+
+    bands = [(f"lift{index}", f"lift {index}", level, ceiling) for index, (level, ceiling)
+             in enumerate(zip(levels, [top, *levels]), start=1)]
+    bands.append(("pit", "below the pit", bottom, levels[-1]))
+    sides = []
+    if x1 < domain["x1"]:
+        sides.append(("right", (x1 + domain["x1"]) / 2))
+    if x0 > domain["x0"]:
+        sides.append(("left", (domain["x0"] + x0) / 2))
+
+    bodies, outside = [], {}
+    for layer, low, high in layers:
+        for id, name, band_low, band_high in bands:
+            floor, ceiling = max(low, band_low), min(high, band_high)
+            if ceiling - floor > 1e-9:
+                bodies.append({"id": id, "name": name, "layer": layer,
+                               "point": ((x0 + x1) / 2, (floor + ceiling) / 2)})
+        kept = []
+        for side, x in sides:
+            id = "outside" if len(sides) == 1 else f"outside_{side}"
+            bodies.append({"id": id, "name": id.replace("_", " ") + " the pit", "layer": layer,
+                           "point": (x, (low + high) / 2)})
+            kept.append(f"soil_{layer}__{id}")
+        outside[f"soil_{layer}"] = kept
+    return lines, bodies, outside

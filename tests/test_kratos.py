@@ -936,7 +936,7 @@ def test_an_anchor_saved_in_a_3d_project_is_not_exported(session):
 def staged_project(dimension: int = 2):
     """A staged excavation: three layers, three lifts, pit against the left edge."""
     from core.model.schemas import Project
-    p = seed_project(simple=False).model_dump() | {"dimension": dimension}
+    p = seed_project().model_dump() | {"dimension": dimension}
     if dimension == 2:
         p["section_offset"] = 20.0
     p["domain"] |= {"y_top": 0.0, "y_bottom": -60.0}
@@ -948,9 +948,12 @@ def staged_project(dimension: int = 2):
         {"id": "L3", "name": "Deep_Sand", "mat": p["materials"][1]["id"],
          "top": -12.0, "bottom": -60.0},
     ]
-    p["excavation"] = {k: v for k, v in p["excavation"].items() if k != "floor_y"}
-    p["excavation"] |= {"x0": 0.0, "x1": 5.0, "levels": [-2.0, -5.0, -8.0]}
-    p["wall"] |= {"top_y": 0.0, "toe_y": -13.0}
+    p["excavation"] = {"x0": 0.0, "x1": 5.0, "z0": p["domain"]["z0"],
+                         "z1": p["domain"]["z1"], "levels": [-2.0, -5.0, -8.0]}
+    p["stages"] = [{"id": "first", "name": "First stage"},
+                   *({"id": f"dig_{n}", "name": f"Dig {n}",
+                      "parent": f"dig_{n - 1}" if n > 1 else "first",
+                      "deactivate": [f"soil_L1__lift{n}"]} for n in (1, 2, 3))]
     return Project.model_validate(p)
 
 
@@ -971,9 +974,9 @@ def test_every_staged_body_is_its_own_sub_model_part(staged):
 
 def test_a_lift_is_named_after_the_layer_it_is_dug_out_of(staged):
     names = writer._part_names(staged_project())
-    assert names["soil_L1__lift1"] == "Upper_Sand_lift1"
-    assert names["soil_L2__pit"] == "Middle_Clay_pit"
-    assert names["soil_L1"] == "Upper_Sand"
+    assert names["soil_L1__lift1"] == "Upper_Sand_lift_1"
+    assert names["soil_L2__pit"] == "Middle_Clay_below_the_pit"
+    assert names["soil_L1__outside"] == "Upper_Sand_outside_the_pit"
 
 
 def test_every_staged_body_carries_its_layer_material(staged):
@@ -990,7 +993,7 @@ def test_the_edge_a_lift_touches_is_segmented_per_lift(staged):
     """The reference deck's Excavated_Soil_N_Left_Edge: as a lift is dug away its own
     stretch of the domain edge goes with it, so the constraint can leave too."""
     deck = deck_of(staged)
-    for lift in ("Upper_Sand_lift1", "Upper_Sand_lift2", "Upper_Sand_lift3"):
+    for lift in ("Upper_Sand_lift_1", "Upper_Sand_lift_2", "Upper_Sand_lift_3"):
         assert f"{lift}_Left_Edge" in deck.parts, f"{lift} has no edge segment"
         assert deck.parts[f"{lift}_Left_Edge"].nodes
 
@@ -999,9 +1002,9 @@ def test_an_edge_segment_holds_only_that_lift_s_nodes(staged):
     """A segment spans its own lift and no more, or deactivating one lift would free
     the ground above or below it."""
     deck = deck_of(staged)
-    for lift, top, bottom in (("Upper_Sand_lift1", 0.0, -2.0),
-                              ("Upper_Sand_lift2", -2.0, -5.0),
-                              ("Upper_Sand_lift3", -5.0, -8.0)):
+    for lift, top, bottom in (("Upper_Sand_lift_1", 0.0, -2.0),
+                              ("Upper_Sand_lift_2", -2.0, -5.0),
+                              ("Upper_Sand_lift_3", -5.0, -8.0)):
         ys = [deck.nodes[n][1] for n in deck.parts[f"{lift}_Left_Edge"].nodes]
         assert min(ys) == pytest.approx(bottom, abs=1e-6), lift
         assert max(ys) == pytest.approx(top, abs=1e-6), lift
@@ -1031,7 +1034,7 @@ def test_each_edge_segment_is_constrained_like_the_edge_it_came_from(staged):
     fixities = {p["Parameters"]["model_part_name"].split(".")[-1]:
                 p["Parameters"]["is_fixed"] for p in constraints
                 if "is_fixed" in p["Parameters"]}
-    for name in ("Left_Edge", "Upper_Sand_lift1_Left_Edge"):
+    for name in ("Left_Edge", "Upper_Sand_lift_1_Left_Edge"):
         assert fixities[name] == [True, False, False], name
 
 

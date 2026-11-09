@@ -85,7 +85,7 @@ def _fields(parser: argparse.ArgumentParser) -> None:
                         help="a face of the model; front and back exist in 3D only")
     target.add_argument("--part", metavar="KEY",
                         help="a soil part, as `parts` lists it: a layer soil_<id> with all "
-                             "its lifts, one body, or a custom part with a material")
+                             "its pieces, one body, or a custom part with a material")
     target.add_argument("--line", nargs="+", metavar="N",
                         help="a drawn line in the 2D section, x y x y ..., or @file")
     target.add_argument("--point", nargs="+", metavar="N",
