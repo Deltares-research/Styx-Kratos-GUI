@@ -1439,6 +1439,56 @@ App.Model = (function () {
     };
   }
 
+  /* The two laws a contact can have: elastic, which reads the stiffnesses alone, and
+     Coulomb, which slips at the soil's strength reduced by R_inter. Either takes the
+     rest from the soil it runs against at export (core/kratos/materials.py).
+     `kratos-cli section set ID --law` is the same choice, and takes any other law too;
+     one of those is listed as it is named. */
+  var INTERFACE_LAWS = {
+    GeoIncrementalLinearElasticInterfaceLaw: 'Linear elastic',
+    GeoInterfaceCoulombLawPlaneStrain: 'Coulomb'
+  };
+
+  function contactLawEditor(section) {
+    return {
+      kind: 'select',
+      options: function () {
+        var laws = Object.keys(INTERFACE_LAWS);
+        if (laws.indexOf(section.constitutive_law) < 0) laws.push(section.constitutive_law);
+        return laws.map(function (law) {
+          return { value: law, text: INTERFACE_LAWS[law] || law };
+        });
+      },
+      get: function () { return section.constitutive_law; },
+      set: function (law) {
+        var was = section.constitutive_law;
+        section.constitutive_law = law;
+        var problem = App.Interfaces ? App.Interfaces.validateSection(section) : null;
+        if (problem) { section.constitutive_law = was; return problem; }
+        return null;
+      }
+    };
+  }
+
+  /* R_inter: one number for the whole contact, or none, which is each soil's own
+     (`Material.r_inter`) along the stretch that runs against it. None reads as words;
+     writing those words back changes nothing, as a derived stiffness does. */
+  var EACH_SOIL = 'each soil’s own';
+
+  function contactRInter(section) {
+    return section.r_inter === null || section.r_inter === undefined
+      ? EACH_SOIL : section.r_inter;
+  }
+
+  function contactRInterEditor(section) {
+    var number = contactNumberEditor(section, 'r_inter', '', 2);
+    return {
+      kind: 'number', decimals: 2, unit: '',
+      get: function () { return contactRInter(section); },
+      set: function (value) { return value === EACH_SOIL ? null : number.set(value); }
+    };
+  }
+
   /* `null` is a choice, not a gap: a contact with no material of its own takes the
      stiffness of whichever soil each stretch runs against (core/model/schemas.py,
      InterfaceSection). A <select> carries strings, so it is offered as ''. */
@@ -1528,16 +1578,25 @@ App.Model = (function () {
         } }]);
     }
     properties = properties.concat([
+      ['Law', INTERFACE_LAWS[contact.constitutive_law] || contact.constitutive_law,
+       '', false, contactLawEditor(contact)],
       ['Soil', (App.matById && contact.material
                 && (App.matById(contact.material) || {}).name) || contact.material
                || ADJACENT_SOIL.text,
        '', false, contactMaterialEditor(contact)],
       // Only a Coulomb law reads the strength R_inter reduces; the default elastic one
       // reads the two stiffnesses alone (`kratos-cli section add --help` says the same).
-      contact.r_inter === null || contact.r_inter === undefined
-        ? ['R_inter (Coulomb law only)', 'each soil’s own', '', true]
-        : ['R_inter (Coulomb law only)', String(contact.r_inter), '', false,
-           contactNumberEditor(contact, 'r_inter', '', 2)],
+      ['R_inter (Coulomb law only)', contactRInter(contact) === EACH_SOIL
+        ? EACH_SOIL : String(contact.r_inter), '', false, contactRInterEditor(contact)]
+    ]);
+    if (contactRInter(contact) !== EACH_SOIL) {
+      properties.push(['Strength', '', '', false, { kind: 'button',
+        text: 'Each soil’s own R_inter', run: function () {
+          contact.r_inter = null;
+          if (App.commitSelectionEdit) App.commitSelectionEdit(record.id);
+        } }]);
+    }
+    properties = properties.concat([
       ['Virtual thickness', String(contact.virtual_thickness), 'm', false,
        contactNumberEditor(contact, 'virtual_thickness', 'm', 4)],
       ['Permeability', contact.permeability || 'Neutral', '', false,

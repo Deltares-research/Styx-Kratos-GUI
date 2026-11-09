@@ -333,13 +333,13 @@
     });
   });
 
-  test('a contact with no Rinter of its own says it takes each soil’s', function () {
+  test('a contact with no Rinter of its own says it takes each soil’s, and can be given one', function () {
     var p = contactedProject();
     p.interface_sections[0].r_inter = null;
     withProject(p, function () {
       var row = App.OBJECT_PROPS.interface_1.groups.Contact.filter(function (r) {
         return r[0] === 'R_inter (Coulomb law only)'; })[0];
-      T.eq(row.slice(0, 4), ['R_inter (Coulomb law only)', 'each soil’s own', '', true]);
+      T.eq(row.slice(0, 4), ['R_inter (Coulomb law only)', 'each soil’s own', '', false]);
     });
   });
 

@@ -192,14 +192,6 @@ INTERFACE_SECTIONS = [
         id="contact",
         name="Wall contact",
         constitutive_law="GeoInterfaceCoulombLawPlaneStrain",
-        variables={
-            "GEO_ENABLE_TENSION_CUT_OFF": False,
-            "BIOT_COEFFICIENT": 1.0,
-            "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
-            "SATURATED_SATURATION": 1.0,
-            "RESIDUAL_SATURATION": 1e-10,
-            "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
-        },
     ),
 ]
 

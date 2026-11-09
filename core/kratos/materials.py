@@ -62,6 +62,13 @@ PANEL_LAW = "LinearElasticPlaneStress2DLaw"
 INTERFACE_LAW = "GeoIncrementalLinearElasticInterfaceLaw"
 """The law paired with the `Geo_UPwLineInterface*` elements."""
 
+COULOMB_INTERFACE_LAW = "GeoInterfaceCoulombLawPlaneStrain"
+"""The interface law that slips at the reduced strength of its soil."""
+
+RETENTION_VARIABLES = ("BIOT_COEFFICIENT", "RETENTION_LAW", "SATURATED_SATURATION",
+                       "RESIDUAL_SATURATION", "MINIMUM_RELATIVE_PERMEABILITY")
+"""How saturated a contact is, taken from its soil when the contact does not say."""
+
 BEAM_LAW = "TimoshenkoBeamElasticConstitutiveLaw"
 """The law paired with `LinearTimoshenkoCurvedBeamElement2D*N`."""
 
@@ -256,6 +263,8 @@ def _interface_note(section: InterfaceSection, project: Project, soil: Material 
         if section.constitutive_law == INTERFACE_LAW:
             shown.append("read only by a Coulomb law")
         parts.append(", ".join(shown))
+    if "RETENTION_LAW" in taken:
+        parts.append(f"saturation as the soil's ({variables['RETENTION_LAW']})")
     return "; ".join(parts) or None
 
 
@@ -442,6 +451,20 @@ def _interface_variables(section: InterfaceSection, project: Project,
             _fill(v, "GEO_FRICTION_ANGLE", math.degrees(
                 math.atan(math.tan(math.radians(phi)) * r_inter)), derived, label)
         _fill(v, "GEO_DILATANCY_ANGLE", 0.0, derived, label)
+        # A Coulomb contact opens in tension as its soil does, at the soil's tensile
+        # strength reduced like its cohesion.
+        if section.constitutive_law == COULOMB_INTERFACE_LAW:
+            cut_off = soil.variables.get("GEO_ENABLE_TENSION_CUT_OFF")
+            if isinstance(cut_off, bool):
+                _fill(v, "GEO_ENABLE_TENSION_CUT_OFF", cut_off, derived, label)
+            tensile = soil.number("GEO_TENSILE_STRENGTH")
+            if v.get("GEO_ENABLE_TENSION_CUT_OFF") is True and tensile is not None:
+                _fill(v, "GEO_TENSILE_STRENGTH", tensile * r_inter, derived, label)
+        # Saturated where its soil is: the reference deck gives each interface the
+        # retention law and saturations of the soil beside it.
+        for name in RETENTION_VARIABLES:
+            if name in soil.variables:
+                _fill(v, name, soil.variables[name], derived, label)
     return _ordered(v, INTERFACE_ORDER)
 
 

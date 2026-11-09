@@ -107,12 +107,11 @@ def project(model: str = MOHR_COULOMB) -> Project:
         "CROSS_AREA": 0.4924, "I33": 0.4924 ** 3 / 12, "AREA_EFFECTIVE_Y": 1.0e4})
     strut = AnchorSection(id="strut", name="Strut", spacing=1.0, variables={
         "YOUNG_MODULUS": 2.1e11, "CROSS_AREA": 4.7619e-5, "DENSITY": 0.0})
-    # No material and no Rinter: each stretch of contact takes the soil it runs against.
+    # No material, no Rinter and no variables: each stretch of contact takes the soil it
+    # runs against, its retention and (Coulomb) its tension cut-off included.
     contact = InterfaceSection(
         id="contact", name="Wall contact", constitutive_law=LAWS[model][1],
-        virtual_thickness=1.0,
-        variables=RETENTION if model == LINEAR_ELASTIC
-        else {"GEO_ENABLE_TENSION_CUT_OFF": False, **RETENTION})
+        virtual_thickness=1.0)
     water_loads = [NormalLoad(id=f"water_{index}", name=f"WaterLoad_Stage{index}",
                               fluid_pressure_type="Hydrostatic", reference_coordinate=WATER_Y,
                               points=[(0.0, level), (WALL_X, level), (WALL_X, WATER_Y)])
