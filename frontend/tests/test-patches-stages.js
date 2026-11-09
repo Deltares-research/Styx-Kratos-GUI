@@ -220,7 +220,7 @@
       T.eq(ctx.patches.length, 1);
       T.ok(ctx.patches[0].body.stages.every(function (stage) {
         return stage.calculation === 'flow' && stage.stress_initialisation === 'none' &&
-          stage.convergence_criterion === 'water_pressure_criterion';
+          stage.convergence_criterion === 'residual_criterion';
       }), 'not every stage became a flow stage');
     }));
   });
@@ -249,9 +249,9 @@
     }));
   });
 
-  test('stages window: a flow stage converges on the water pressure or the residual',
+  test('stages window: a flow stage converges on the residual or the water pressure',
        function () {
-    var flow = model();
+    var flow = JSON.parse(JSON.stringify(model()));
     flow.stages.forEach(function (stage) {
       stage.calculation = 'flow';
       stage.stress_initialisation = 'none';
@@ -263,7 +263,7 @@
       var grid = ctx.layer.querySelector('.stages-overview .pgrid');
       var selects = stageControls(ctx).selects;
       T.eq(selects.length, 3, 'calculation type, time integration, convergence criterion');
-      T.eq(values(selects[2]), ['water_pressure_criterion', 'residual_criterion']);
+      T.eq(values(selects[2]), ['residual_criterion', 'water_pressure_criterion']);
       T.eq(selects[2].value, 'water_pressure_criterion');
       T.ok(/Absolute tolerance/.test(grid.textContent));
     } finally { ctx.restore(); }
@@ -397,10 +397,10 @@
       T.ok(!section.querySelector('.pgrid-row'), 'closed, it holds no rows');
       section.querySelector('.pgrid-toggle').click();
       T.ok(App.state.stageExpert, 'it stays open for the session');
-      T.eq(expertRow(ctx, 'Strategy').querySelector('select').value, 'quasi_newton');
-      var linear = expertRow(ctx, 'Linear solver');
-      T.ok(!linear.querySelector('select'), 'the quasi-Newton strategy fixes it');
-      T.ok(/Sparse LU/.test(linear.textContent), linear.textContent);
+      T.eq(expertRow(ctx, 'Strategy').querySelector('select').value, 'newton_raphson');
+      var linear = expertRow(ctx, 'Linear solver').querySelector('select');
+      T.ok(linear, 'Newton-Raphson offers the linear solver');
+      T.eq(linear.value, 'skyline_lu_factorization');
       T.ok(!expertRow(ctx, 'Newmark beta'), 'a static stage has no time scheme');
     } finally { ctx.restore(); }
   });
@@ -431,26 +431,28 @@
     App.state.stageExpert = true;
     App.runAction({ action: 'stages' });
     var select = expertRow(ctx, 'Strategy').querySelector('select');
-    select.value = 'newton_raphson';
+    select.value = 'quasi_newton';
     select.dispatchEvent(new Event('change'));
     return done(ctx, new Promise(function (r) { setTimeout(r, 20); }).then(function () {
       T.eq(ctx.patches.length, 1, 'one PATCH of the sequence');
       var first = ctx.patches[0].body.stages[0];
-      T.eq(first.solver_settings, { strategy_type: 'newton_raphson' });
-      T.ok(expertRow(ctx, 'Linear solver').querySelector('select'),
-           'the dialog redraws, and another strategy offers the linear solver');
+      T.eq(first.solver_settings, { strategy_type: 'quasi_newton' });
+      var linear = expertRow(ctx, 'Linear solver');
+      T.ok(!linear.querySelector('select'),
+           'the dialog redraws, and the quasi-Newton strategy fixes the linear solver');
+      T.ok(/Sparse LU/.test(linear.textContent), linear.textContent);
     }));
   });
 
   test('stages window: a changed expert setting says so, and its button puts the ' +
        'default back', function () {
     var changed = JSON.parse(JSON.stringify(model()));
-    changed.stages[0].solver_settings = { quasi_newton_max_rank: 20 };
+    changed.stages[0].solver_settings = { min_iterations: 3 };
     var ctx = rig(changed);
     App.state.stageExpert = true;
     App.runAction({ action: 'stages' });
     T.ok(/1 changed/.test(expert(ctx).querySelector('.pgrid-toggle').textContent));
-    var row = expertRow(ctx, 'Stored updates');
+    var row = expertRow(ctx, 'Min iterations');
     T.ok(row.querySelector('.pgrid-key.changed'), 'marked as changed');
     row.querySelector('button.pgrid-reset').click();
     return done(ctx, new Promise(function (r) { setTimeout(r, 20); }).then(function () {

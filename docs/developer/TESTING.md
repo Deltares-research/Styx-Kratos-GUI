@@ -50,6 +50,33 @@ failed, when something that it needs is missing: quickjs, Kratos or a browser.
   a tier that runs the browser tests. The Python report goes to `htmlcov/`, and the
   JavaScript function coverage to `htmlcov-js/summary.json`.
 
+## Tests that keep the GUI and the command line together
+
+Some rules run twice: on the server, which the command line and the export use, and in
+the browser, which needs the answer while the user edits. These tests hold the two to
+one generated file. Each runs in the `quick` tier: the pytest side checks that the file
+is up to date with the Python, and the JavaScript side, in
+`frontend/tests/run_headless.py` and the browser suite, checks that the browser gives
+the same answers.
+
+| Test | What it holds together | The generated files |
+|---|---|---|
+| `tests/test_stage_parity.py` | The stage tree and the edits of the Stages window: `core/model/stages.py` and `App.Stages` | `frontend/tests/fixtures/stage-cases.js` |
+| `tests/test_solver_parity.py` | A stage's expert solver settings, which apply and their defaults, and the stage's convergence criteria and defaults: `core/model/solver.py` and `App.Stages.solverRows` | `frontend/js/solver-settings.js`, `frontend/tests/fixtures/solver-cases.js` |
+| `tests/test_draft_parity.py` | What a new soil, structure or load starts as: `core/model/drafts.py` and the GUI's drafts | `frontend/tests/fixtures/drafts.js` |
+| `tests/test_soil_model_table.py` | The soil models and their parameters: `core/model/soil_models.py` | `frontend/js/soil-model-table.js` |
+| `tests/test_unit_table.py` | The unit systems: `core/model/units.py` | `frontend/js/unit-table.js` |
+
+After a deliberate change to one of these rules, run the test with `--write` to rewrite
+its files, for example:
+
+```bash
+python tests/test_solver_parity.py --write
+```
+
+The rewritten files are part of the change. Read their diff, and check that each changed
+line is wanted.
+
 ## What CI runs
 
 For each pull request and each push to `main`, CI runs the `e2e` tier on Windows and

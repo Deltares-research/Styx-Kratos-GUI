@@ -27,9 +27,9 @@ than hidden, since the user would otherwise go looking for them:
     factorises the stiffness matrix once and reuses the factors for every iteration, so
     it builds that solver itself and uses no other
     (`GeoMechanicsQuasiNewtonStrategy`, `geo_mechanics_quasi_newton_strategy.hpp`).
-*   **the strategy of a stage with a seepage face**, flow or mechanical, Newton-Raphson
-    with seepage, which is what opens and closes the face node by node
-    (`seepage_tests`); and with it one attempt per step, as the strategy refuses more.
+*   **the strategy of a flow stage with a seepage face**, Newton-Raphson with seepage,
+    which is what opens and closes the face node by node (`seepage_tests`); and with it
+    one attempt per step, as the strategy refuses more.
 
 Rayleigh damping is drawn among a dynamic stage's own settings rather than the expert
 ones (`panel`), as it is what such a stage is tuned by.
@@ -43,7 +43,10 @@ it. `javascript` renders the catalogue as `frontend/js/solver-settings.js`, whic
 Every value below is read off Kratos GeoMechanicsApplication 10.4.4 -- its solvers'
 `GetDefaultParameters` (`geomechanics_solver.py`), the reference decks
 `core.kratos.parameters` copies, and the linear solvers' own defaults, which each one
-prints when asked for a setting it does not have.
+prints when asked for a setting it does not have. Where the reference decks give one,
+the default is theirs, so that a stage that changes nothing is written as the deck was
+before these settings could be chosen: Newton-Raphson with Skyline LU for a mechanical
+stage, one attempt per step.
 """
 
 from __future__ import annotations
@@ -114,10 +117,11 @@ SETTINGS: list[dict] = [
     # -- Strategy ---------------------------------------------------------------
     _setting(
         "strategy_type", "Strategy", "Strategy", "select",
-        # A mechanical stage is solved by quasi-Newton. A flow stage by what its model
-        # calls for -- see `core.model.stages.model_strategy` -- which is also the one
-        # strategy a seepage face can have, in a stage of either kind.
-        [{"when": FLOW, "from": "model_strategy"}, {"value": QUASI_NEWTON}],
+        # A mechanical stage is solved by Newton-Raphson, as the reference deck is. A
+        # flow stage by what its model calls for -- see
+        # `core.model.stages.model_strategy` -- which is also the one strategy a
+        # seepage face can have.
+        [{"when": FLOW, "from": "model_strategy"}, {"value": NEWTON_RAPHSON}],
         options=[[QUASI_NEWTON, "Quasi-Newton"], [NEWTON_RAPHSON, "Newton-Raphson"],
                  [LINE_SEARCH, "Newton-Raphson with line search"],
                  [LINEAR, "Linear (one solve)"]],
@@ -234,7 +238,8 @@ SETTINGS: list[dict] = [
              when={"strategy_type": ITERATING}, integer=True, minimum=1,
              help="A step that converges in fewer iterations than this is followed by "
                   "a larger one."),
-    _setting("number_cycles", "Attempts per step", "Time step control", "number", 5,
+    # One attempt, as every reference deck makes; Kratos' own default is five.
+    _setting("number_cycles", "Attempts per step", "Time step control", "number", 1,
              when={"strategy_type": ITERATING}, integer=True, minimum=1,
              locked=[{"when": {"strategy_type": [SEEPAGE]}, "value": 1,
                       "reason": "Kratos' seepage strategy refuses more than one: it "
@@ -306,6 +311,38 @@ SETTINGS: list[dict] = [
 
 BY_KEY = {setting["key"]: setting for setting in SETTINGS}
 GROUPS = list(dict.fromkeys(setting["group"] for setting in SETTINGS))
+
+# -- The stage's own settings ---------------------------------------------------
+# Not expert settings -- `schemas.Stage` has a field for each, which it validates -- but
+# here so that the browser has their choices and defaults from the same generated file
+# as the catalogue above (`javascript`), rather than from a copy of its own.
+
+CRITERIA: dict[str, list[list[str]]] = {
+    "mechanical": [["residual_criterion", "Residual"],
+                   ["displacement_criterion", "Displacement"]],
+    "flow": [["residual_criterion", "Residual"],
+             ["water_pressure_criterion", "Water pressure"]],
+}
+"""The convergence criteria a stage of each calculation type can be solved on, as
+[name, label], its default first (`schemas.CONVERGENCE_CRITERIA` says why these)."""
+
+ABSOLUTE_TOLERANCES: dict[str, float] = {
+    "residual_criterion": 1e-9,
+    "displacement_criterion": 1e-12,
+    "water_pressure_criterion": 1e-8,
+}
+"""The default absolute tolerance of each convergence criterion
+(`schemas.Stage.absolute_tolerance`)."""
+
+STAGE_DEFAULTS: dict[str, int | float] = {
+    "max_iterations": 15,
+    "tolerated_error": 1e-4,
+    "duration": 1.0,
+    "time_step": 1.0,
+}
+"""The defaults of a stage's iterations, relative tolerance, duration and time step
+(`schemas.Stage`): the reference deck's initial stage's, which solves a stage of one
+second in one step."""
 
 
 def _holds(when: Mapping[str, list] | None, context: Mapping[str, Any]) -> bool:
@@ -474,7 +511,10 @@ def from_deck(solver: Mapping[str, Any]) -> dict[str, Any]:
 JAVASCRIPT_HEADER = '''/* Generated from core/model/solver.py -- the expert solver settings of a stage: what
    each one is, its default, and when it applies. The browser resolves them with
    App.Stages.solverRows, written the way `core.model.solver.resolve` is, and
-   tests/test_solver_parity.py holds the two to the same answers.
+   tests/test_solver_parity.py holds the two to the same answers. App.STAGE_SETTINGS
+   is the convergence criteria of each calculation type, their absolute tolerances and
+   the stage's other defaults (`solver.CRITERIA`, `ABSOLUTE_TOLERANCES`,
+   `STAGE_DEFAULTS`).
 
    Not hand-edited. `python tests/test_solver_parity.py --write` rebuilds it.
 */
@@ -483,5 +523,9 @@ App.SOLVER_SETTINGS = '''
 
 
 def javascript() -> str:
-    """`frontend/js/solver-settings.js`: the catalogue, for the browser."""
-    return JAVASCRIPT_HEADER + json.dumps(SETTINGS, indent=2) + ";\n"
+    """`frontend/js/solver-settings.js`: the catalogue, and the choices and defaults of
+    the stage's own settings, for the browser."""
+    stage = {"criteria": CRITERIA, "absolute_tolerances": ABSOLUTE_TOLERANCES,
+             "defaults": STAGE_DEFAULTS}
+    return (JAVASCRIPT_HEADER + json.dumps(SETTINGS, indent=2) + ";\n"
+            + "App.STAGE_SETTINGS = " + json.dumps(stage, indent=2) + ";\n")

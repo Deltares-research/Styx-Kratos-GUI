@@ -178,7 +178,8 @@ def van_genuchten(order: int = 2, size: float = 0.1) -> Project:
         conditions=[head("left_head", "left", LEFT_LEVEL),
                     head("right_head", "right", RIGHT_LEVEL_B), PHREATIC_START],
         stages=[Stage(id="flow", name="Flow", calculation="flow",
-                      max_iterations=100, tolerated_error=1e-3)],
+                      max_iterations=100, tolerated_error=1e-3,
+                      absolute_tolerance=1e-15)],
         soil={**SOIL, **VAN_GENUCHTEN}, order=order,
         mesh=MeshSettings(element_size=size, order=order),
         name="Semi-Muskat, Van Genuchten")
@@ -228,16 +229,16 @@ START = WaterPressureCondition(
 
 
 def seepage(order: int = 1, max_iterations: int = 100,
-            convergence_criterion: str = "water_pressure_criterion") -> Project:
+            convergence_criterion: str = "residual_criterion") -> Project:
     """Case C: the Van Genuchten soil, the left head at 3.0 m, the tail water and the
     seepage face on the right face, meshed at 0.4 m and at `FACE_SIZE` along the right
     face, started from `START`. The flow stage has the seepage decks' tolerance of 1e-4
     and `max_iterations`: the seepage strategy opens one node of the face per iteration,
     and the face has 89 nodes at this size, of which 35 open (35 iterations, linear).
 
-    On the quadratic mesh the water pressure criterion does not converge: the face
-    opening and closing keeps the ratio near 1.6e-3 (2026-11-03). The residual one
-    does, as the seepage decks have it."""
+    It converges on the residual criterion, as the seepage decks do. On the quadratic
+    mesh the water pressure criterion does not: the face opening and closing keeps the
+    ratio near 1.6e-3 (2026-11-03)."""
     return muskat(
         conditions=[head("left_head", "left", LEFT_LEVEL), TAIL, SEEPAGE_FACE, START],
         stages=[Stage(id="flow", name="Flow", calculation="flow",

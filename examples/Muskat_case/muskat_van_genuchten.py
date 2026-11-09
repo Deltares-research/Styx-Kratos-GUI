@@ -76,9 +76,11 @@ PHREATIC_Y = [3.22, 3.22, 0.48, 0.48]
 ELEMENT_SIZE = 0.1
 ELEMENT_ORDER = 2
 
-# The deck's Newton-Raphson settings: at most 100 iterations, relative tolerance 1e-3.
+# The deck's Newton-Raphson settings: at most 100 iterations, relative tolerance 1e-3,
+# absolute tolerance 1e-15.
 MAX_ITERATIONS = 100
 TOLERANCE = 1e-3
+ABSOLUTE_TOLERANCE = 1e-15
 
 # The two heads and the start values. No support: a groundwater flow calculation solves
 # the water pressure alone, and a face with no water pressure condition (the top and the
@@ -142,7 +144,8 @@ def project() -> Project:
         mesh=MeshSettings(element_size=ELEMENT_SIZE, order=ELEMENT_ORDER),
 
         stages=[Stage(id="flow", name="Flow", calculation="flow",
-                      max_iterations=MAX_ITERATIONS, tolerated_error=TOLERANCE)],
+                      max_iterations=MAX_ITERATIONS, tolerated_error=TOLERANCE,
+                      absolute_tolerance=ABSOLUTE_TOLERANCE)],
     )
 
 

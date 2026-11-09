@@ -38,9 +38,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -57,9 +57,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -79,9 +79,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -102,9 +102,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -123,9 +123,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -147,9 +147,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -170,7 +170,7 @@ window.STAGE_FIXTURE =
           "tolerated_error": 0.0001,
           "absolute_tolerance": 1e-06,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {
             "strategy_type": "newton_raphson",
             "linear_solver_type": "amgcl"
@@ -190,9 +190,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         }
       ]
@@ -224,9 +224,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -243,9 +243,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -265,9 +265,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -284,9 +284,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -307,9 +307,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -328,9 +328,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -352,9 +352,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -375,7 +375,7 @@ window.STAGE_FIXTURE =
           "tolerated_error": 0.0001,
           "absolute_tolerance": 1e-06,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {
             "strategy_type": "newton_raphson",
             "linear_solver_type": "amgcl"
@@ -410,9 +410,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -429,9 +429,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -451,9 +451,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -474,9 +474,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -495,9 +495,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -519,9 +519,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -542,7 +542,7 @@ window.STAGE_FIXTURE =
           "tolerated_error": 0.0001,
           "absolute_tolerance": 1e-06,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {
             "strategy_type": "newton_raphson",
             "linear_solver_type": "amgcl"
@@ -577,9 +577,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -596,9 +596,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -618,9 +618,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -641,9 +641,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -665,9 +665,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -688,7 +688,7 @@ window.STAGE_FIXTURE =
           "tolerated_error": 0.0001,
           "absolute_tolerance": 1e-06,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {
             "strategy_type": "newton_raphson",
             "linear_solver_type": "amgcl"
@@ -723,9 +723,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -742,9 +742,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -764,9 +764,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -787,9 +787,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -808,9 +808,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -832,9 +832,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -855,7 +855,7 @@ window.STAGE_FIXTURE =
           "tolerated_error": 0.0001,
           "absolute_tolerance": 1e-06,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {
             "strategy_type": "newton_raphson",
             "linear_solver_type": "amgcl"
@@ -890,9 +890,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -909,9 +909,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -931,9 +931,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -950,9 +950,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -973,9 +973,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -994,9 +994,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -1018,9 +1018,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -1041,7 +1041,7 @@ window.STAGE_FIXTURE =
           "tolerated_error": 0.0001,
           "absolute_tolerance": 1e-06,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {
             "strategy_type": "newton_raphson",
             "linear_solver_type": "amgcl"
@@ -1076,9 +1076,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -1095,9 +1095,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -1117,9 +1117,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -1140,9 +1140,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -1161,9 +1161,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -1185,9 +1185,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -1208,7 +1208,7 @@ window.STAGE_FIXTURE =
           "tolerated_error": 0.0001,
           "absolute_tolerance": 1e-06,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {
             "strategy_type": "newton_raphson",
             "linear_solver_type": "amgcl"
@@ -1230,7 +1230,7 @@ window.STAGE_FIXTURE =
           "tolerated_error": 0.0001,
           "absolute_tolerance": 1e-06,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {
             "strategy_type": "newton_raphson",
             "linear_solver_type": "amgcl"
@@ -1269,9 +1269,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -1288,9 +1288,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -1310,9 +1310,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -1334,9 +1334,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -1355,9 +1355,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -1379,9 +1379,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -1402,7 +1402,7 @@ window.STAGE_FIXTURE =
           "tolerated_error": 0.0001,
           "absolute_tolerance": 1e-06,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {
             "strategy_type": "newton_raphson",
             "linear_solver_type": "amgcl"
@@ -1442,9 +1442,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -1461,9 +1461,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -1483,9 +1483,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -1506,9 +1506,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -1525,9 +1525,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -1549,9 +1549,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -1572,7 +1572,7 @@ window.STAGE_FIXTURE =
           "tolerated_error": 0.0001,
           "absolute_tolerance": 1e-06,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {
             "strategy_type": "newton_raphson",
             "linear_solver_type": "amgcl"
@@ -1611,9 +1611,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -1630,9 +1630,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -1652,9 +1652,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -1675,9 +1675,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -1696,9 +1696,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -1720,9 +1720,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -1743,7 +1743,7 @@ window.STAGE_FIXTURE =
           "tolerated_error": 0.0001,
           "absolute_tolerance": 1e-06,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {
             "strategy_type": "newton_raphson",
             "linear_solver_type": "amgcl"
@@ -1782,9 +1782,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -1801,9 +1801,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -1822,9 +1822,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -1845,9 +1845,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -1866,9 +1866,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -1890,9 +1890,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -1913,7 +1913,7 @@ window.STAGE_FIXTURE =
           "tolerated_error": 0.0001,
           "absolute_tolerance": 1e-06,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {
             "strategy_type": "newton_raphson",
             "linear_solver_type": "amgcl"
@@ -1947,12 +1947,12 @@ window.STAGE_FIXTURE =
             "soil_L1__lift3"
           ],
           "reset_displacements": false,
-          "convergence_criterion": "water_pressure_criterion",
+          "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -1966,12 +1966,12 @@ window.STAGE_FIXTURE =
           "activate": [],
           "deactivate": [],
           "reset_displacements": false,
-          "convergence_criterion": "water_pressure_criterion",
+          "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -1988,12 +1988,12 @@ window.STAGE_FIXTURE =
           ],
           "deactivate": [],
           "reset_displacements": true,
-          "convergence_criterion": "water_pressure_criterion",
+          "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -2011,12 +2011,12 @@ window.STAGE_FIXTURE =
             "soil_L1"
           ],
           "reset_displacements": false,
-          "convergence_criterion": "water_pressure_criterion",
+          "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -2032,12 +2032,12 @@ window.STAGE_FIXTURE =
           ],
           "deactivate": [],
           "reset_displacements": false,
-          "convergence_criterion": "water_pressure_criterion",
+          "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -2056,12 +2056,12 @@ window.STAGE_FIXTURE =
             "soil_L1__lift1"
           ],
           "reset_displacements": false,
-          "convergence_criterion": "water_pressure_criterion",
+          "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -2077,12 +2077,12 @@ window.STAGE_FIXTURE =
             "soil_L1__lift1"
           ],
           "reset_displacements": false,
-          "convergence_criterion": "water_pressure_criterion",
+          "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
           "absolute_tolerance": 1e-06,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         }
       ]
@@ -2116,9 +2116,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -2135,9 +2135,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -2157,9 +2157,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -2180,9 +2180,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -2201,9 +2201,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -2225,9 +2225,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -2248,7 +2248,7 @@ window.STAGE_FIXTURE =
           "tolerated_error": 0.0001,
           "absolute_tolerance": 1e-06,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {
             "strategy_type": "newton_raphson",
             "linear_solver_type": "amgcl"
@@ -2285,9 +2285,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -2304,9 +2304,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -2326,9 +2326,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -2349,9 +2349,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -2370,9 +2370,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -2394,9 +2394,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -2417,7 +2417,7 @@ window.STAGE_FIXTURE =
           "tolerated_error": 0.0001,
           "absolute_tolerance": 1e-06,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {
             "strategy_type": "newton_raphson",
             "linear_solver_type": "amgcl"
@@ -2454,9 +2454,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -2473,9 +2473,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -2495,9 +2495,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -2518,9 +2518,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -2539,9 +2539,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -2563,9 +2563,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -2586,7 +2586,7 @@ window.STAGE_FIXTURE =
           "tolerated_error": 0.0001,
           "absolute_tolerance": 1e-06,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {
             "strategy_type": "newton_raphson",
             "linear_solver_type": "amgcl"
@@ -2623,9 +2623,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -2642,9 +2642,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -2664,9 +2664,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -2687,9 +2687,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -2708,9 +2708,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -2732,9 +2732,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -2755,7 +2755,7 @@ window.STAGE_FIXTURE =
           "tolerated_error": 0.0001,
           "absolute_tolerance": 1e-06,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {
             "strategy_type": "newton_raphson",
             "linear_solver_type": "amgcl"
@@ -2792,9 +2792,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -2811,9 +2811,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -2833,9 +2833,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -2858,7 +2858,7 @@ window.STAGE_FIXTURE =
           "tolerated_error": 0.0001,
           "absolute_tolerance": 1e-12,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -2877,9 +2877,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -2901,9 +2901,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -2924,7 +2924,7 @@ window.STAGE_FIXTURE =
           "tolerated_error": 0.0001,
           "absolute_tolerance": 1e-06,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {
             "strategy_type": "newton_raphson",
             "linear_solver_type": "amgcl"
@@ -2961,9 +2961,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -2980,9 +2980,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -3002,9 +3002,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -3025,9 +3025,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -3046,9 +3046,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -3070,9 +3070,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -3093,7 +3093,7 @@ window.STAGE_FIXTURE =
           "tolerated_error": 0.0001,
           "absolute_tolerance": 1e-06,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {
             "strategy_type": "newton_raphson",
             "linear_solver_type": "amgcl"
@@ -3130,9 +3130,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -3149,9 +3149,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -3171,9 +3171,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -3194,9 +3194,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -3215,9 +3215,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -3239,9 +3239,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -3262,7 +3262,7 @@ window.STAGE_FIXTURE =
           "tolerated_error": 0.0001,
           "absolute_tolerance": 1e-06,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {
             "strategy_type": "newton_raphson",
             "linear_solver_type": "amgcl"
@@ -3299,9 +3299,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -3318,9 +3318,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -3340,9 +3340,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -3363,9 +3363,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {
             "strategy_type": "line_search"
           }
@@ -3386,9 +3386,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -3410,9 +3410,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -3433,7 +3433,7 @@ window.STAGE_FIXTURE =
           "tolerated_error": 0.0001,
           "absolute_tolerance": 1e-06,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {
             "strategy_type": "newton_raphson",
             "linear_solver_type": "amgcl"
@@ -3470,9 +3470,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -3489,9 +3489,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -3511,9 +3511,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -3534,9 +3534,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -3555,9 +3555,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -3579,9 +3579,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -3602,7 +3602,7 @@ window.STAGE_FIXTURE =
           "tolerated_error": 0.0001,
           "absolute_tolerance": 1e-06,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {
             "strategy_type": "newton_raphson",
             "linear_solver_type": "bicgstab"
@@ -3639,9 +3639,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -3658,9 +3658,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -3680,9 +3680,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -3703,9 +3703,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -3724,9 +3724,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -3748,9 +3748,9 @@ window.STAGE_FIXTURE =
           "convergence_criterion": "residual_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-08,
+          "absolute_tolerance": 1e-09,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {}
         },
         {
@@ -3771,7 +3771,7 @@ window.STAGE_FIXTURE =
           "tolerated_error": 0.0001,
           "absolute_tolerance": 1e-06,
           "duration": 1.0,
-          "time_step": 0.25,
+          "time_step": 1.0,
           "solver_settings": {
             "linear_solver_type": "amgcl"
           }
@@ -4226,9 +4226,9 @@ window.STAGE_FIXTURE =
         "convergence_criterion": "residual_criterion",
         "max_iterations": 15,
         "tolerated_error": 0.0001,
-        "absolute_tolerance": 1e-08,
+        "absolute_tolerance": 1e-09,
         "duration": 1.0,
-        "time_step": 0.25,
+        "time_step": 1.0,
         "solver_settings": {}
       },
       {
@@ -4245,9 +4245,9 @@ window.STAGE_FIXTURE =
         "convergence_criterion": "residual_criterion",
         "max_iterations": 15,
         "tolerated_error": 0.0001,
-        "absolute_tolerance": 1e-08,
+        "absolute_tolerance": 1e-09,
         "duration": 1.0,
-        "time_step": 0.25,
+        "time_step": 1.0,
         "solver_settings": {}
       },
       {
@@ -4267,9 +4267,9 @@ window.STAGE_FIXTURE =
         "convergence_criterion": "residual_criterion",
         "max_iterations": 15,
         "tolerated_error": 0.0001,
-        "absolute_tolerance": 1e-08,
+        "absolute_tolerance": 1e-09,
         "duration": 1.0,
-        "time_step": 0.25,
+        "time_step": 1.0,
         "solver_settings": {}
       },
       {
@@ -4290,9 +4290,9 @@ window.STAGE_FIXTURE =
         "convergence_criterion": "residual_criterion",
         "max_iterations": 15,
         "tolerated_error": 0.0001,
-        "absolute_tolerance": 1e-08,
+        "absolute_tolerance": 1e-09,
         "duration": 1.0,
-        "time_step": 0.25,
+        "time_step": 1.0,
         "solver_settings": {}
       },
       {
@@ -4311,9 +4311,9 @@ window.STAGE_FIXTURE =
         "convergence_criterion": "residual_criterion",
         "max_iterations": 15,
         "tolerated_error": 0.0001,
-        "absolute_tolerance": 1e-08,
+        "absolute_tolerance": 1e-09,
         "duration": 1.0,
-        "time_step": 0.25,
+        "time_step": 1.0,
         "solver_settings": {}
       },
       {
@@ -4335,9 +4335,9 @@ window.STAGE_FIXTURE =
         "convergence_criterion": "residual_criterion",
         "max_iterations": 15,
         "tolerated_error": 0.0001,
-        "absolute_tolerance": 1e-08,
+        "absolute_tolerance": 1e-09,
         "duration": 1.0,
-        "time_step": 0.25,
+        "time_step": 1.0,
         "solver_settings": {}
       },
       {
@@ -4358,7 +4358,7 @@ window.STAGE_FIXTURE =
         "tolerated_error": 0.0001,
         "absolute_tolerance": 1e-06,
         "duration": 1.0,
-        "time_step": 0.25,
+        "time_step": 1.0,
         "solver_settings": {
           "strategy_type": "newton_raphson",
           "linear_solver_type": "amgcl"

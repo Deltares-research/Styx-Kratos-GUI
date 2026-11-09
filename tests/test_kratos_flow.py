@@ -22,7 +22,7 @@ import json
 import pytest
 
 from core.geometry import solid_model
-from core.kratos import condition_checks, external_deck, materials, parameters, writer
+from core.kratos import condition_checks, external_deck, materials, writer
 from core.model import stages
 from core.model.schemas import (Beam, BeamSection, DisplacementCondition, Stage,
                                 SeepageCondition, WaterPressureCondition,
@@ -85,34 +85,13 @@ REFERENCE_SOLVER_B = {
 
 
 def as_written(reference: dict) -> dict:
-    """A reference deck's solver block as this exporter writes it on purpose: in steps
-    of the default 0.25 s (`parameters.TIME_STEP`) rather than in one, and, where it
-    iterates, trying a step that does not converge five times rather than once -- once
-    on the seepage strategy, which refuses more -- no smaller than Kratos' own smallest,
-    1e-4 of the stage (`core.model.solver`), and to the stage's absolute tolerance of
-    1e-8 rather than 1e-9 (`schemas.Stage.absolute_tolerance`)."""
+    """A reference deck's solver block as this exporter writes it: where it iterates,
+    with Kratos' own smallest step written out, 1e-4 of the stage (`core.model.solver`),
+    which the deck leaves to Kratos."""
     out = dict(reference)
-    iterates = "number_cycles" in out
-    if "time_stepping" in out:
-        out["time_stepping"] = {**out["time_stepping"], "time_step": parameters.TIME_STEP,
-                                **({"minimum_allowable_value": 1e-4} if iterates else {})}
-    if iterates and out.get("strategy_type") != "newton_raphson_with_seepage":
-        out["number_cycles"] = 5
-    for key in out:
-        if key.endswith("_absolute_tolerance"):
-            out[key] = 1e-8
+    if "number_cycles" in out and "time_stepping" in out:
+        out["time_stepping"] = {**out["time_stepping"], "minimum_allowable_value": 1e-4}
     return out
-
-
-def on_water_pressure(strategy: dict) -> dict:
-    """A reference deck's strategy as this exporter writes it: on the water pressure
-    criterion rather than the residual one, with the residual one's tolerances
-    (`parameters.FLOW_STRATEGIES`)."""
-    return {**{key: value for key, value in strategy.items()
-               if not key.startswith("residual_")},
-            "convergence_criterion": "water_pressure_criterion",
-            "water_pressure_relative_tolerance": strategy["residual_relative_tolerance"],
-            "water_pressure_absolute_tolerance": strategy["residual_absolute_tolerance"]}
 
 
 REFERENCE_CONSTRAINTS_B = [
@@ -185,7 +164,7 @@ def without_part(parameters: dict) -> dict:
 
 def test_the_solver_is_the_reference_one(case_a):
     solver = settings(case_a)["solver_settings"]
-    assert {key: solver[key] for key in REFERENCE_SOLVER} == as_written(REFERENCE_SOLVER)
+    assert {key: solver[key] for key in REFERENCE_SOLVER} == REFERENCE_SOLVER
     # Nothing a deformation analysis adds: no displacements to reset, no iterations.
     for key in ("reset_totals", "max_iterations", "convergence_criterion", "scheme_type"):
         assert key not in solver
@@ -309,9 +288,8 @@ def test_a_soil_whose_permeability_follows_the_pressure_is_solved_by_newton(case
     """The reference Newton-Raphson block, with the stage's 100 iterations and its
     tolerance of 1e-3."""
     solver = settings(case_b)["solver_settings"]
-    expected = as_written(on_water_pressure(REFERENCE_SOLVER_B))
+    expected = as_written(REFERENCE_SOLVER_B)
     assert {key: solver.get(key) for key in expected} == expected
-    assert not any(key.startswith("residual_") for key in solver)
     assert "reset_totals" not in solver
 
 
@@ -336,7 +314,7 @@ def test_a_stage_s_iterations_are_its_own(gmsh_session):
         Stage(id="flow", name="Flow", calculation="flow",
               max_iterations=40, tolerated_error=1e-5)]))
     solver = settings(export)["solver_settings"]
-    assert (solver["max_iterations"], solver["water_pressure_relative_tolerance"]) == (40, 1e-5)
+    assert (solver["max_iterations"], solver["residual_relative_tolerance"]) == (40, 1e-5)
 
 
 def test_a_dynamic_flow_stage_is_a_transient_flow(gmsh_session):
@@ -391,8 +369,8 @@ def case_c(gmsh_session):
 
 def test_a_seepage_face_is_solved_by_the_seepage_strategy(case_c):
     solver = settings(case_c)["solver_settings"]
-    expected = as_written(on_water_pressure(REFERENCE_SEEPAGE_STRATEGY))
-    assert {key: solver.get(key) for key in expected} == expected
+    assert {key: solver[key] for key in REFERENCE_SEEPAGE_STRATEGY} == \
+        REFERENCE_SEEPAGE_STRATEGY
     assert solver["solver_type"] == "Pw"
 
 
@@ -469,22 +447,16 @@ def test_a_seepage_line_through_the_soil_is_refused(gmsh_session):
         writer.export_project(muskat(conditions=[*HEADS, inside]))
 
 
-def test_a_seepage_face_in_a_deformation_project_is_written_and_fixes_the_strategy(
-        gmsh_session):
-    """A U-Pw stage opens and closes a seepage face as a flow stage does: its conditions
-    and its process are written, and its strategy is the seepage one."""
+def test_a_seepage_face_in_a_deformation_project_is_left_out_and_said(gmsh_session):
     face = SeepageCondition(id="top", name="Top", on="face", face="top")
     project = muskat(conditions=[*standard_conditions(), *HEADS, face],
                      stages=[Stage(id="p", name="P", stress_initialisation="gravity")])
     export = writer.export_project(project)
-    assert not any("left out" in w for w in export["warnings"])
-    assert mdpa.parse(export["mdpa"]).parts["Top"].conditions
-    stage = deck_stages(export)["1_P"]["stage_settings"]
-    assert stage["solver_settings"]["solver_type"] == "U_Pw"
-    assert stage["solver_settings"]["strategy_type"] == "newton_raphson_with_seepage"
-    assert stage["solver_settings"]["number_cycles"] == 1
-    assert any(process["process_name"] == "ApplySeepageBoundaryProcess"
-               for process in stage["processes"]["loads_process_list"])
+    assert any("seepage condition 'Top' is left out: a seepage face belongs to a "
+               "groundwater flow calculation" in w for w in export["warnings"])
+    assert not mdpa.parse(export["mdpa"]).conditions
+    solver = deck_stages(export)["1_P"]["stage_settings"]["solver_settings"]
+    assert solver["strategy_type"] == "newton_raphson"
 
 
 def test_a_seepage_condition_takes_a_face_or_a_line_only():

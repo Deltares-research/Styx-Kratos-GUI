@@ -204,30 +204,30 @@ pressure, whose flow is linear in it."""
 
 
 def seepage(project: Project) -> bool:
-    """Whether the project has a seepage face the deck writes: one, in a 2D section --
+    """Whether the project has a seepage face a flow deck writes: one, in a 2D section --
     Kratos' seepage conditions are line conditions (`core.kratos.writer`)."""
     return project.dimension == 2 and any(
         condition.kind == "seepage" for condition in project.boundary_conditions)
 
 
 def model_strategy(project: Project, stage: Stage | str) -> str | None:
-    """The strategy a stage's model calls for: a flow stage's default strategy
-    (`core.model.solver`), and the one strategy a stage of either kind can have with a
-    seepage face. `None` for a mechanical stage without one, which is quasi-Newton
-    unless it says otherwise.
+    """The strategy a flow stage's model calls for: its default strategy
+    (`core.model.solver`), and the one strategy it can have with a seepage face. `None`
+    for a mechanical stage, which is Newton-Raphson unless it says otherwise, and
+    whose deck leaves a seepage face out (`core.kratos.condition_checks`).
 
     Newton-Raphson with seepage where the project has a seepage face, as that strategy
-    is what opens and closes the face node by node. Newton-Raphson where a soil in a
-    flow stage has a retention law that makes its permeability depend on the water
-    pressure (Kratos' `tests/Muskat/van_genuchten_hydrostatic`). One linear solve
-    otherwise, as a saturated soil's flow is linear in it (`saturated_hydrostatic`).
+    is what opens and closes the face node by node. Newton-Raphson where a soil in the
+    stage has a retention law that makes its permeability depend on the water pressure
+    (Kratos' `tests/Muskat/van_genuchten_hydrostatic`). One linear solve otherwise, as a
+    saturated soil's flow is linear in it (`saturated_hydrostatic`).
     """
-    if seepage(project):
-        return "newton_raphson_with_seepage"
     if isinstance(stage, str):
         stage = next(each for each in project.stages if each.id == stage)
     if stage.calculation != FLOW:
         return None
+    if seepage(project):
+        return "newton_raphson_with_seepage"
     # Keyed by body, as `core.kratos.writer._part_materials` is: a lift is still the
     # layer it was dug out of.
     material_of = {f"soil_{layer.id}": layer.mat for layer in project.layers}
@@ -486,9 +486,8 @@ def edited(project: Project, id: str, field: str, value: object) -> list[Stage]:
     The calculation type is the initial stage's: set there, every stage gets it, a
     stage that is not mechanical goes back to no stress initialisation, and a stage of
     another type goes to the new type's default convergence criterion
-    (`schemas.CONVERGENCE_CRITERIA`) -- the residual one is both types', but a flow
-    stage made from a mechanical one converges on the water pressure, as a new flow
-    stage does. Its expert solver settings go back to the new type's defaults, as its
+    (`schemas.CONVERGENCE_CRITERIA`), the residual one, as a new stage of that type
+    has. Its expert solver settings go back to the new type's defaults, as its
     criterion does. Set on a later stage, it changes nothing. So does a stress
     initialisation on a later stage. A stage whose criterion changes, either way, keeps
     its absolute tolerance unless it was the old criterion's default, which becomes the

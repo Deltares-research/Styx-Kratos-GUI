@@ -399,11 +399,9 @@ def test_set_moves_a_seepage_face_and_keeps_it_one(cli, dry):
         in listed
 
 
-def test_check_keeps_a_seepage_face_in_a_deformation_section(cli, dry):
-    """A 2D deformation deck writes a seepage face and solves its stages by the seepage
-    strategy (`core.model.stages.seepage`); only a 3D one leaves it out."""
+def test_check_says_a_seepage_face_needs_a_flow_calculation(cli, dry):
     assert cli("boundary", dry, "add", "--face", "bottom", "--fixed").code == 0
     assert cli("boundary", dry, "add", "--seepage", "--face", "right").code == 0
 
     ran = cli("check", dry)
-    assert "Seepage face 1' is left out" not in ran.err + ran.out
+    assert "seepage condition 'Seepage face 1' is left out" in ran.err + ran.out

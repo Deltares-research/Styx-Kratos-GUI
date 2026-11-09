@@ -1,7 +1,10 @@
 /* Generated from core/model/solver.py -- the expert solver settings of a stage: what
    each one is, its default, and when it applies. The browser resolves them with
    App.Stages.solverRows, written the way `core.model.solver.resolve` is, and
-   tests/test_solver_parity.py holds the two to the same answers.
+   tests/test_solver_parity.py holds the two to the same answers. App.STAGE_SETTINGS
+   is the convergence criteria of each calculation type, their absolute tolerances and
+   the stage's other defaults (`solver.CRITERIA`, `ABSOLUTE_TOLERANCES`,
+   `STAGE_DEFAULTS`).
 
    Not hand-edited. `python tests/test_solver_parity.py --write` rebuilds it.
 */
@@ -22,7 +25,7 @@ App.SOLVER_SETTINGS = [
         "from": "model_strategy"
       },
       {
-        "value": "quasi_newton"
+        "value": "newton_raphson"
       }
     ],
     "options": [
@@ -643,7 +646,7 @@ App.SOLVER_SETTINGS = [
     "kind": "number",
     "default": [
       {
-        "value": 5
+        "value": 1
       }
     ],
     "when": {
@@ -979,3 +982,38 @@ App.SOLVER_SETTINGS = [
     "help": "Move the mesh with the displacements, so each step is solved on the deformed geometry."
   }
 ];
+App.STAGE_SETTINGS = {
+  "criteria": {
+    "mechanical": [
+      [
+        "residual_criterion",
+        "Residual"
+      ],
+      [
+        "displacement_criterion",
+        "Displacement"
+      ]
+    ],
+    "flow": [
+      [
+        "residual_criterion",
+        "Residual"
+      ],
+      [
+        "water_pressure_criterion",
+        "Water pressure"
+      ]
+    ]
+  },
+  "absolute_tolerances": {
+    "residual_criterion": 1e-09,
+    "displacement_criterion": 1e-12,
+    "water_pressure_criterion": 1e-08
+  },
+  "defaults": {
+    "max_iterations": 15,
+    "tolerated_error": 0.0001,
+    "duration": 1.0,
+    "time_step": 1.0
+  }
+};

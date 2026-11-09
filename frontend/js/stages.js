@@ -52,30 +52,28 @@ App.Stages = (function () {
   var FLOW = 'flow';
 
   /* The choices of a stage (`schemas.Stage`), as [value, label]: what the stage
-     solves for, how a mechanical one initialises its stresses, whether it solves
-     statically or in time, and the convergence criteria of each calculation type, its
-     default first (`schemas.CONVERGENCE_CRITERIA`). A new calculation type is a new
-     row here and in the schema. */
+     solves for, how a mechanical one initialises its stresses, and whether it solves
+     statically or in time. A new calculation type is a new row here and in the
+     schema. */
   var CALCULATION_TYPES = [['mechanical', 'Mechanical (U-Pw)'], [FLOW, 'Flow (Pw)']];
   var STRESS_INITIALISATIONS = [['K0', 'K0 procedure'], ['gravity', 'Gravity loading'],
                                 ['none', 'None']];
   var TIME_INTEGRATIONS = [['static', 'Static'], ['dynamic', 'Dynamic']];
-  var CONVERGENCE_CRITERIA = {
-    mechanical: [['residual_criterion', 'Residual'],
-                 ['displacement_criterion', 'Displacement']],
-    flow: [['water_pressure_criterion', 'Water pressure'],
-           ['residual_criterion', 'Residual']]
-  };
+
+  /* The rest is the server's, generated into js/solver-settings.js
+     (`core.model.solver.CRITERIA`, `ABSOLUTE_TOLERANCES`, `STAGE_DEFAULTS`): the
+     convergence criteria of each calculation type as [value, label], its default
+     first; the default absolute tolerance of each criterion; and the stage's other
+     defaults. */
+  var STAGE_SETTINGS = App.STAGE_SETTINGS;
+  var CONVERGENCE_CRITERIA = STAGE_SETTINGS.criteria;
+  var ABSOLUTE_TOLERANCES = STAGE_SETTINGS.absolute_tolerances;
+  var DEFAULTS = STAGE_SETTINGS.defaults;
 
   /* The convergence criteria a stage of `calculation` can have. */
   function criteriaOf(calculation) {
     return CONVERGENCE_CRITERIA[calculation || 'mechanical'] || [];
   }
-
-  /* The default absolute tolerance of each criterion (`schemas.ABSOLUTE_TOLERANCES`). */
-  var ABSOLUTE_TOLERANCES = {
-    residual_criterion: 1e-8, displacement_criterion: 1e-12, water_pressure_criterion: 1e-8
-  };
 
   /* `stage` solved on `criterion`: its absolute tolerance follows the default unless
      it has its own (`schemas.followed_tolerance`). */
@@ -289,9 +287,6 @@ App.Stages = (function () {
      `run` is `{completed, failed}`: how many stages the last run got through, and
      whether it stopped short. A failed run failed in the stage after the last one it
      completed. */
-  var DEFAULT_DURATION = 1.0;
-  var TIME_STEP = 0.25;
-
   function timeUnit() {
     return (App.Units && App.Units.label('time')) || 's';
   }
@@ -300,7 +295,7 @@ App.Stages = (function () {
 
   function durationOf(stage) {
     var value = Number(stage.duration);
-    return isFinite(value) && value > 0 ? value : DEFAULT_DURATION;
+    return isFinite(value) && value > 0 ? value : DEFAULTS.duration;
   }
 
   function overview(project, run) {
@@ -337,15 +332,18 @@ App.Stages = (function () {
   function blank(project, id, name, parent) {
     return {
       id: id, name: name, parent: parent == null ? null : parent,
-      // The server's own defaults, restated so that a stage made here and one made by
-      // `Stage()` are the same stage. A mismatch would show up as a field changing by
-      // itself the first time the project was reloaded.
+      // The server's own defaults -- the numbers generated into js/solver-settings.js,
+      // the rest restated -- so that a stage made here and one made by `Stage()` are
+      // the same stage. A mismatch would show up as a field changing by itself the
+      // first time the project was reloaded.
       calculation: 'mechanical', stress_initialisation: 'none',
       time_integration: 'static', loading: 'Staged construction',
       activate: [], deactivate: [],
-      reset_displacements: false, convergence_criterion: 'residual_criterion',
-      max_iterations: 15, tolerated_error: 1e-4, absolute_tolerance: 1e-8,
-      duration: DEFAULT_DURATION, time_step: TIME_STEP, solver_settings: {}
+      reset_displacements: false,
+      convergence_criterion: CONVERGENCE_CRITERIA.mechanical[0][0],
+      max_iterations: DEFAULTS.max_iterations, tolerated_error: DEFAULTS.tolerated_error,
+      absolute_tolerance: ABSOLUTE_TOLERANCES[CONVERGENCE_CRITERIA.mechanical[0][0]],
+      duration: DEFAULTS.duration, time_step: DEFAULTS.time_step, solver_settings: {}
     };
   }
 

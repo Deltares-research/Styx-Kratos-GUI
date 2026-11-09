@@ -417,27 +417,27 @@ In the **Stages** window, select a stage and set:
 - **Reset displacements to zero**
 - **Convergence criterion**: what Kratos checks to decide that a stage has converged. A
   mechanical stage converges on the **Residual** (the default) or the **Displacement**; a
-  flow stage on the **Water pressure** (the default) or the **Residual**. Changing the
-  calculation type gives every stage the new type's default. The displacement criterion measures the water pressure too, so in a
+  flow stage on the **Residual** (the default) or the **Water pressure**. Changing the
+  calculation type gives a stage on the other type's criterion the new type's default. The displacement criterion measures the water pressure too, so in a
   coupled soil whose water pressure builds up it may not converge where the residual one
   does; a flow stage with a seepage face that does not converge on the water pressure
   may converge on the residual.
 - **Max iterations**, **Tolerated error** (the relative tolerance of the convergence
-  criterion) and **Absolute tolerance** (1e-12 for the displacement criterion, 1e-8
-  otherwise; changing the criterion changes it to the new one's default unless you set
-  your own)
+  criterion) and **Absolute tolerance** (1e-9 for the residual criterion, 1e-12 for the
+  displacement one, 1e-8 for the water pressure; changing the criterion changes it to
+  the new one's default unless you set your own)
 
 **Expert settings**, below these and closed until you open them, are the rest of the
 solver settings Kratos reads. Only the settings that apply to the stage are shown. Each
 has the default for the stage's calculation type and time integration until you change
 it. A changed setting is shown in bold, and ↺ beside it puts the default back.
 
-- **Strategy**: **Quasi-Newton** (the default for a mechanical stage),
-  **Newton-Raphson**, **Newton-Raphson with line search** or **Linear (one solve)**, each
+- **Strategy**: **Newton-Raphson** (the default for a mechanical stage),
+  **Quasi-Newton**, **Newton-Raphson with line search** or **Linear (one solve)**, each
   with its own settings. A flow stage's default is the one its soil calls for: one
   linear solve for a saturated soil, Newton-Raphson for a soil with another retention
-  law. A stage with a seepage face, flow or mechanical, always uses Newton-Raphson with
-  seepage, tried once per step: you see it, but cannot change it. A linear stage has
+  law. A flow stage with a seepage face always uses Newton-Raphson with seepage, tried
+  once per step: you see it, but cannot change it. A linear stage has
   nothing to converge, so it has no convergence criterion, iterations or tolerances.
 - **Linear solver**: **Sparse LU** or **Skyline LU** (direct), **AMGCL**, **BiCGStab**
   or **CG** (iterative), each with its own settings. CG needs a symmetric system, as a
@@ -446,7 +446,8 @@ it. A changed setting is shown in bold, and ↺ beside it puts the default back.
   strategy you see Sparse LU, but cannot change it.
 - **Time step control**: how much Kratos enlarges a step that converges in few
   iterations, up to the **Largest step** (a multiple of the time step), and how it cuts
-  a step that does not converge and tries it again, up to five **Attempts per step**,
+  a step that does not converge and tries it again, if **Attempts per step** is more
+  than one (the default),
   until a step is smaller than the **Smallest step** (a fraction of the stage's
   duration), where the stage stops.
 - **Time integration**, for a dynamic stage only: **Newmark** (the default) or

@@ -67,12 +67,26 @@ def main(argv: list[str] | None = None) -> int:
         # --help (0) and a command line argparse cannot read (2), said by argparse.
         return stop.code if isinstance(stop.code, int) else 0
     try:
+        # Read before the command runs, which may write the file back in the new shape.
+        opened = opening_notes(args)
         answer = args.handler(args)
     except Exception as failure:
         if isinstance(failure, refusals()):
             return output.refused(failure, args.json)
         raise
+    answer.warnings[:0] = opened
     return output.answered(answer, args.json, getattr(args, "csv", None))
+
+
+def opening_notes(args: argparse.Namespace) -> list[str]:
+    """What opening the command's project file changes about its calculation
+    (`session.opening_notes`), said as warnings: an old file is converted the first time
+    a command opens it, so a command that writes it back says so once."""
+    path = getattr(args, "project", None)
+    if path is None:
+        return []
+    from core import session
+    return session.opening_notes(path)
 
 
 def refusals() -> tuple[type[Exception], ...]:

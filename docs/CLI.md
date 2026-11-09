@@ -388,27 +388,28 @@ kratos-cli stages pit.json list
   `--calculation flow` sets the stress initialisation to `none`.
 - **`--convergence-criterion`** (also `--convergence`) is what Kratos checks to decide
   that the stage has converged. A mechanical stage takes **`residual`** (the default) or
-  **`displacement`**; a flow stage **`water_pressure`** (the default) or **`residual`**.
+  **`displacement`**; a flow stage **`residual`** (the default) or **`water_pressure`**.
   Each refuses the other's. Kratos' own names, with `_criterion`, work too.
-  A new `--calculation` gives every stage the new type's default.
+  A new `--calculation` gives a stage on the other type's criterion the new type's
+  default.
 - **`--time-integration`** is **`static`** (equilibrium; a steady state for a flow stage)
   or **`dynamic`** (in time: Kratos' `Dynamic` solution type with inertia for a
   mechanical stage, `Transient_Groundwater_Flow` for a flow stage).
 - **Defaults.** A stage that is not given these options has the initial stage's
   calculation type, no stress initialisation (the initial stage itself: gravity loading),
   static time integration, the calculation type's convergence criterion, at most 15
-  iterations, a relative tolerance of 1e-4 and an absolute one of 1e-8 (1e-12 on the
-  displacement criterion, which a new criterion takes along unless the stage has its own
-  absolute tolerance), the displacements
-  of the stage before kept, and a duration of 1 s in time steps of 0.25 s.
+  iterations, a relative tolerance of 1e-4 and an absolute one of 1e-9 (1e-12 on the
+  displacement criterion and 1e-8 on the water pressure, which a new criterion takes
+  along unless the stage has its own absolute tolerance), the displacements
+  of the stage before kept, and a duration of 1 s in one time step of 1 s.
   `stages show ID` prints a stage's settings.
 - **`--duration`** is how long the stage lasts and **`--time-step`** the step Kratos
   solves it in, both in the project's unit of time (seconds in every unit system). The
   stage runs from where the stage before it ended, in `duration / time-step` steps; a
   step longer than the duration is refused.
-- **A seepage face** (`boundary add --seepage`, above) makes every stage, flow or
-  mechanical, use Kratos' seepage strategy, `newton_raphson_with_seepage`, with one
-  attempt per step. It is written in a 2D section only.
+- **A seepage face** (`boundary add --seepage`, above) makes every flow stage use
+  Kratos' seepage strategy, `newton_raphson_with_seepage`, with one attempt per step. It
+  is written in a 2D groundwater flow calculation only; a mechanical deck leaves it out.
 - **`--solver KEY=VALUE ...`** sets a stage's expert solver settings, the ones the
   Stages window shows under **Expert settings**: the strategy, the linear solver, the
   time step control, the time scheme of a dynamic stage, and the assembly.
@@ -424,14 +425,16 @@ kratos-cli stages pit.json list
 
   A setting a stage cannot have, or a value it cannot take, is refused, with the
   settings it can have. Each setting the stage does not set has the default for its
-  calculation type and time integration. A mechanical stage is solved by quasi-Newton
-  (`strategy_type=quasi_newton`), which always uses the `LinearSolversApplication.sparse_lu`
-  linear solver: it factorises the stiffness matrix once and reuses it. With another
-  strategy, the linear solver is `skyline_lu_factorization` unless the stage chooses
-  another. A flow stage uses the strategy its soil calls for: one linear solve for a
-  saturated soil, Newton-Raphson for a soil with another retention law. Its linear
-  solver is `sparse_lu`. A step that does not converge is tried again five times, smaller
-  each time (`number_cycles=5`). A dynamic mechanical stage on
+  calculation type and time integration, which is the reference decks': a stage that
+  sets none is written as before these settings could be chosen. A mechanical stage is
+  solved by Newton-Raphson (`strategy_type=newton_raphson`) with the
+  `skyline_lu_factorization` linear solver unless the stage chooses another. The
+  quasi-Newton strategy (`strategy_type=quasi_newton`) always uses the
+  `LinearSolversApplication.sparse_lu` linear solver: it factorises the stiffness matrix
+  once and reuses it. A flow stage uses the strategy its soil calls for: one linear solve
+  for a saturated soil, Newton-Raphson for a soil with another retention law. Its linear
+  solver is `sparse_lu`. A step that does not converge is not tried again
+  (`number_cycles=1`); with more attempts, each is smaller. A dynamic mechanical stage on
   `scheme_type=backward_euler` is Kratos' quasi-static U-Pw, without inertia. A new
   `--calculation` puts every stage's expert settings back to the new type's defaults.
   [`core/model/solver.py`](../core/model/solver.py) lists every setting, with its

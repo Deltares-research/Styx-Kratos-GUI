@@ -88,11 +88,21 @@
     return row ? row.value : undefined;
   }
 
-  test('a mechanical stage is solved by quasi-Newton, with its Sparse LU fixed',
-       function () {
+  test('a mechanical stage is solved by Newton-Raphson with Skyline LU, as the reference '
+       + 'deck is', function () {
     var rows = App.Stages.solverRows({}, { calculation: 'mechanical',
                                            time_integration: 'static' });
-    T.eq(solverValue(rows, 'strategy_type'), 'quasi_newton');
+    T.eq(solverValue(rows, 'strategy_type'), 'newton_raphson');
+    T.eq(solverValue(rows, 'number_cycles'), 1);
+    var linear = rows.filter(function (row) { return row.key === 'linear_solver_type'; })[0];
+    T.eq(linear.value, 'skyline_lu_factorization');
+    T.eq(linear.locked, null);
+  });
+
+  test('the quasi-Newton strategy fixes its Sparse LU', function () {
+    var rows = App.Stages.solverRows({}, {
+      calculation: 'mechanical', time_integration: 'static',
+      solver_settings: { strategy_type: 'quasi_newton' } });
     var linear = rows.filter(function (row) { return row.key === 'linear_solver_type'; })[0];
     T.eq(linear.value, 'LinearSolversApplication.sparse_lu');
     T.ok(linear.locked, 'the quasi-Newton strategy fixes its linear solver');
@@ -634,7 +644,7 @@
   test('a stage made here has the duration and time step the server gives one', function () {
     var list = App.Stages.added(dike());
     var made = list[list.length - 1];
-    T.eq([made.duration, made.time_step], [1, 0.25]);
+    T.eq([made.duration, made.time_step], [1, 1]);
   });
 
   test('a copy keeps the duration and time step of the original', function () {

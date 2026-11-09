@@ -314,6 +314,25 @@ def test_an_old_file_with_gravity_off_opens_with_an_initial_stage_without_stress
     first = Project.model_validate({**payload, "gravity": False,
                                     "stages": [old, *payload["stages"][1:]]}).stages[0]
     assert (first.calculation, first.stress_initialisation) == ("mechanical", "none")
+    # An initial plastic stage, or null step, had the self weight with gravity on, and
+    # keeps it; with gravity off, it has none.
+    for calculation in ("Plastic", "Null step"):
+        plastic = {**old, "calculation": calculation}
+        listed = [plastic, *payload["stages"][1:]]
+        kept = Project.model_validate({**payload, "stages": listed})
+        assert kept.stages[0].stress_initialisation == "gravity"
+        assert stages.gravity(kept)
+        assert all(s.stress_initialisation == "none" for s in kept.stages[1:])
+        weightless = Project.model_validate({**payload, "gravity": False,
+                                             "stages": listed})
+        assert weightless.stages[0].stress_initialisation == "none"
+        assert not stages.gravity(weightless)
+    # A later plastic stage initialises nothing either way.
+    later = {**payload["stages"][1], "calculation": "Plastic"}
+    later.pop("stress_initialisation", None)
+    staged = Project.model_validate({**payload, "stages": [payload["stages"][0], later,
+                                                           *payload["stages"][2:]]})
+    assert staged.stages[1].stress_initialisation == "none"
     # With no stages, or a flow sequence, there is nothing to switch off.
     assert Project.model_validate({**payload, "gravity": False, "stages": []}).stages == []
 

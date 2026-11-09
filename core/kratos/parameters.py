@@ -19,8 +19,8 @@ rejects it before it reads a single node. What a stage chooses replaces it: the
 settings on the stage panel (`schemas.Stage`), and the expert settings behind them --
 the strategy, the linear solver, the time step control, the time scheme, the assembly
 -- which `core.model.solver` resolves to the stage's own choices and its defaults, and
-writes only where they apply. A mechanical stage is solved by quasi-Newton unless it
-says otherwise. The parts of the analysis the project really does determine
+writes only where they apply. A stage that changes none of them is written as the
+reference deck is. The parts of the analysis the project really does determine
 (dimension, the sub-model part lists, whether anything has rotations) are derived from
 the export rather than defaulted.
 
@@ -91,11 +91,11 @@ WALL_INSTALLATION_STAGE_NAME = "2_Wall_installation"
 # The part GeoMechanics' solver assembles for itself out of the lists below; named here
 # because two things address it rather than a body: the tie process and the GiD output.
 COMPUTATIONAL_MODEL_PART = "porous_computational_model_part"
-DURATION = 1.0
-TIME_STEP = 0.25
+DURATION = solver.STAGE_DEFAULTS["duration"]
+TIME_STEP = solver.STAGE_DEFAULTS["time_step"]
 """Seconds: the length of a stage and its step when the project says neither -- an
 unstaged deck, or a stage left at `schemas.Stage`'s defaults, which are these. A static
-analysis has no real clock, so a stage lasts one second, solved in four steps, and
+analysis has no real clock, so a stage lasts one second, solved in one step, and
 stage *n* runs from *n* to *n+1*."""
 
 ECHO_LEVEL = 1
@@ -126,7 +126,7 @@ SOLVER = {
     "solution_type": "static",
     "convergence_criterion": "residual_criterion",
     "residual_relative_tolerance": 1e-4,
-    "residual_absolute_tolerance": 1e-8,
+    "residual_absolute_tolerance": 1e-9,
     "max_iterations": 15,
     "time_stepping": {"time_step": TIME_STEP},
     "buffer_size": 2,
@@ -138,13 +138,10 @@ SOLVER = {
 
 Copied from GeoMechanicsApplication's own
 `tests/test_interface_prestress/ProjectParameters_stage1.json`: a single-step drained
-static U_Pw analysis on a residual criterion, but for an absolute tolerance of 1e-8
-rather than 1e-9 (`schemas.Stage.absolute_tolerance` says why). A stage chooses its own
-criterion,
+static U_Pw analysis on a residual criterion. A stage chooses its own criterion,
 iterations and tolerances (`schemas.Stage`), and its expert settings -- the strategy,
 the linear solver, the time step control, the assembly -- are `core.model.solver`'s,
-whose defaults are the rest of that deck but for the strategy: quasi-Newton rather than
-its Newton-Raphson. Everything a project genuinely decides -- dimension, sub-model
+whose defaults are the rest of that deck: Newton-Raphson, with Skyline LU. Everything a project genuinely decides -- dimension, sub-model
 parts, rotations -- is filled in around this by `_solver_settings` rather than being
 listed here."""
 
@@ -152,9 +149,9 @@ FLOW_SOLVER = {
     "solver_type": "Pw",
     "model_part_name": "PorousDomain",
     "solution_type": "Steady_State_Groundwater_Flow",
-    "convergence_criterion": "water_pressure_criterion",
-    "water_pressure_relative_tolerance": 1e-4,
-    "water_pressure_absolute_tolerance": 1e-8,
+    "convergence_criterion": "residual_criterion",
+    "residual_relative_tolerance": 1e-4,
+    "residual_absolute_tolerance": 1e-9,
     "max_iterations": 15,
     "time_stepping": {"time_step": TIME_STEP},
     "buffer_size": 2,
@@ -164,8 +161,8 @@ FLOW_SOLVER = {
 }
 """The groundwater flow analysis: a steady state of the water pressure alone, read off
 Kratos' `tests/Muskat/saturated_hydrostatic/ProjectParameters.json` and
-`van_genuchten_hydrostatic`, on the water pressure criterion -- the `Pw` solver's own
-default, with its own tolerances, which a stage's replace as in a mechanical one. The
+`van_genuchten_hydrostatic`, on their residual criterion, whose tolerances a stage's
+replace as in a mechanical one. The
 strategy is the one the stage's model calls for unless it says otherwise
 (`core.model.stages.model_strategy`): linear for a saturated soil, Newton-Raphson for one
 whose permeability depends on the water pressure, Newton-Raphson with seepage for a
@@ -183,7 +180,7 @@ CONVERGENCE_TOLERANCES: dict[str, str] = {
 reads its tolerances as `<quantity>_relative_tolerance` and `<quantity>_absolute_tolerance`
 (`geomechanics_U_Pw_solver.py`, `geomechanics_Pw_solver.py`)."""
 
-SOLVERS = {"mechanical": SOLVER, "flow": FLOW_SOLVER}
+SOLVERS: dict[str, dict[str, Any]] = {"mechanical": SOLVER, "flow": FLOW_SOLVER}
 """The reference analysis of each calculation type (`schemas.Stage.calculation`): the
 coupled `U_Pw` solver for a mechanical stage, the `Pw` solver for a flow stage. A new
 calculation type is a new entry here and in `SOLUTION_TYPES`."""
@@ -272,8 +269,8 @@ class Stage:
 
     `calculation` is the stage's calculation type (`schemas.Stage.calculation`).
     `model_strategy` is the strategy its model calls for (`core.model.stages.
-    model_strategy`): a flow stage's default, and the only one a stage with a seepage
-    face can have; `None` for a mechanical stage without one.
+    model_strategy`): a flow stage's default, and the only one a flow stage with a
+    seepage face can have; `None` for a mechanical stage.
     `solver_settings` is the expert settings the stage changed (`schemas.Stage`), as
     (name, value) pairs. `time_integration` picks the stage's `SOLUTION_TYPES` entry.
     `seepage` is the parts of the seepage faces it has, each with its own
@@ -758,12 +755,10 @@ def _gid_output(output_name: str, gravity: bool = True, flow: bool = False,
     The same writer, flags and result list as the reference decks in `test/`, which is
     also what Kratos' own GeoMechanicsApplication test helpers read back when they
     compare two runs. Without gravity the hydraulic head is left out: it would be 0.
-    A groundwater flow stage writes the flow results (`FLOW_NODAL_RESULTS`). A stage of
-    either kind with a seepage face writes the nodal water flow rate too
-    (`SEEPAGE_NODAL_RESULTS`).
+    A groundwater flow stage writes the flow results (`FLOW_NODAL_RESULTS`), and the
+    nodal water flow rate when it has a seepage face (`SEEPAGE_NODAL_RESULTS`).
     """
-    nodal = (FLOW_NODAL_RESULTS if flow else NODAL_RESULTS) + (
-        SEEPAGE_NODAL_RESULTS if seepage else ())
+    nodal = (FLOW_NODAL_RESULTS + (SEEPAGE_NODAL_RESULTS if seepage else ())) if flow         else NODAL_RESULTS
     gauss = [name for name in (FLOW_GAUSS_POINT_RESULTS if flow else GAUSS_POINT_RESULTS)
              if gravity or name != "HYDRAULIC_HEAD"]
     return {

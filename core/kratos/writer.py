@@ -292,16 +292,12 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
                                       _anchor_ties(project, dim, _world_coordinates()))
     blocks.extend(anchor_blocks)
     # A flow deck's only conditions are its seepage faces; a deformation deck's are its
-    # loads, and its seepage faces in a section (`stages.seepage`): Kratos' seepage
-    # conditions are line conditions, so a 3D one is left out, and
-    # `condition_checks.warnings` says so.
-    seepage_faces = (_seepage_conditions(project, soil_blocks, world, warnings)
-                     if flow or stages.seepage(project) else [])
-    conditions = seepage_faces + ([] if flow else
-                                  _load_conditions(project, dim, world, warnings) +
-                                  _normal_load_conditions(project, dim, warnings, world))
-    if seepage_faces:
-        warnings.extend(_seepage_iterations(project, seepage_faces))
+    # loads, and a seepage face is left out of it (`condition_checks.warnings` says so).
+    conditions = (_seepage_conditions(project, soil_blocks, world, warnings) if flow else
+                  _load_conditions(project, dim, world, warnings) +
+                  _normal_load_conditions(project, dim, warnings, world))
+    if flow and conditions:
+        warnings.extend(_seepage_iterations(project, conditions))
     # Last, because it rewrites what everything above produced: the interface unglues
     # the soil from the structures already harvested, so it needs their connectivity in
     # hand -- and the nodes it adds have to be in `world` before the boundary groups and
@@ -534,7 +530,7 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
              if dim == 2 else (),
         right_side=right_side_part,
         faces=tuple(face_parts),
-        seepage=tuple(names[key] for key, _, rows in seepage_faces if rows),
+        seepage=tuple(names[key] for key, _, rows in conditions if flow and rows),
     )
     kratos_stages = _stages(project, deck, wall_parts, staged_ties)
     # The initial stage reads a materials file of its own. Rendered only when a stage
@@ -802,7 +798,7 @@ def _sequenced_stages(project: Project, deck: _Deck) -> list[parameters.Stage]:
             calculation=stage.calculation,
             model_strategy=stages.model_strategy(project, stage),
             solver_settings=tuple(stage.solver_settings.items()),
-            seepage=deck.seepage,
+            seepage=deck.seepage if flow else (),
             time_integration=stage.time_integration,
         ))
         start_time += stage.duration

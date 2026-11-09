@@ -209,3 +209,44 @@ def test_a_layer_already_in_the_new_shape_is_left_alone():
            "layers": [{"id": "L1", "name": "L1", "mat": "m", "top": 1.0, "bottom": 0.0}]}
     assert migration.drop_boreholes(doc) == {
         "layers": [{"id": "L1", "name": "L1", "mat": "m", "top": 1.0, "bottom": 0.0}]}
+
+
+def test_gravity_off_is_noted_where_it_has_no_equivalent():
+    """`migration.notes`: gravity off becomes an initial stage that initialises no
+    stresses (`migration.drop_gravity`), which a project with no stages and a flow
+    sequence do not have, so opening one says what it loses."""
+    from core.model import migration
+    from tests.models import muskat
+    from tests.models.excavation import excavation_project
+    staged = excavation_project().model_dump(mode="json")
+    flow = muskat.muskat().model_dump(mode="json")
+    assert migration.notes({**staged, "gravity": False}) == []
+    assert migration.notes({**staged, "gravity": True}) == []
+    assert migration.notes(staged) == []
+    [unstaged] = migration.notes({**staged, "stages": [], "gravity": False})
+    assert "no stages" in unstaged
+    old = [{**stage, "calculation": "Groundwater flow"} for stage in flow["stages"]]
+    for stages in (flow["stages"], old):
+        [flowing] = migration.notes({**flow, "stages": stages, "gravity": False})
+        assert "flow calculation" in flowing
+
+
+def test_an_old_van_genuchten_flow_stage_keeps_its_absolute_tolerance():
+    """`migration.flow_tolerance`: an old flow stage was written with the tolerance of
+    the deck its strategy came from, 1e-15 for Newton-Raphson; with a seepage face, or
+    in the current shape, the stage has its criterion's default."""
+    from tests.models import muskat
+    document = muskat.van_genuchten().model_dump(mode="json")
+    old = [{key: value for key, value in stage.items() if key != "absolute_tolerance"}
+           | {"calculation": "Groundwater flow"} for stage in document["stages"]]
+    [stage] = Project.model_validate({**document, "stages": old}).stages
+    assert stage.absolute_tolerance == 1e-15
+    current = [{key: value for key, value in stage.items() if key != "absolute_tolerance"}
+               for stage in document["stages"]]
+    assert Project.model_validate({**document, "stages": current}).stages[0] \
+        .absolute_tolerance == 1e-9
+    seepage = muskat.seepage().model_dump(mode="json")
+    old = [{key: value for key, value in stage.items() if key != "absolute_tolerance"}
+           | {"calculation": "Groundwater flow"} for stage in seepage["stages"]]
+    assert Project.model_validate({**seepage, "stages": old}).stages[0] \
+        .absolute_tolerance == 1e-9

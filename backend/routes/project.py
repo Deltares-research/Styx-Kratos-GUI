@@ -39,6 +39,29 @@ async def put_project(project: Project) -> Project:
     return store.put(await asyncio.to_thread(scripting.with_solids, project, False))
 
 
+@router.post("/api/project/open")
+async def open_project(document: dict) -> dict:
+    """Open a project file the GUI read: what `PUT /api/project` does with it, and the
+    notes on what opening it changes about its calculation (`migration.notes`), for the
+    command log. The document is taken as it is in the file, as only the old shape says
+    what the conversion loses; it is refused as `PUT` refuses it, field by field."""
+    from pydantic import ValidationError
+
+    from core import scripting
+    from core.model import migration
+
+    try:
+        project = Project.model_validate(document)
+    except ValidationError as failure:
+        raise RequestValidationError([
+            {**error, "loc": ("body", *error["loc"])}
+            for error in failure.errors(include_url=False, include_context=False)
+        ]) from failure
+    project = store.put(await asyncio.to_thread(scripting.with_solids, project, False))
+    return {"project": project, "notes": migration.notes(document),
+            "invalidates": ["project", "tree", "geometry", "mesh"]}
+
+
 @router.post("/api/project/reset")
 async def reset_project() -> dict:
     """Restore the seed (demo) model."""

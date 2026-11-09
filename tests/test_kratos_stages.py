@@ -226,10 +226,10 @@ def test_a_time_step_longer_than_its_stage_is_refused():
 
 def test_a_stage_saved_with_a_time_interval_in_days_lasts_it_in_seconds():
     """Before 2026-11 a stage had a time interval in days, which no deck read. A zero
-    one -- every stage the GUI made -- is the default stage, of 1 s in steps of 0.25 s;
-    any other one is its seconds, in one step, as it always ran."""
+    one -- every stage the GUI made -- is the default stage, of 1 s in one step; any
+    other one is its seconds, in one step, as it always ran."""
     assert (schemas.Stage(id="s", name="S", time_interval=0.0).duration,
-            schemas.Stage(id="s", name="S", time_interval=0.0).time_step) == (1.0, 0.25)
+            schemas.Stage(id="s", name="S", time_interval=0.0).time_step) == (1.0, 1.0)
     old = schemas.Stage(id="s", name="S", time_interval=2.0)
     assert (old.duration, old.time_step) == (2 * 86400.0, 2 * 86400.0)
 

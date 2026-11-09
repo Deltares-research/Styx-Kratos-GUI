@@ -271,11 +271,19 @@ def stage_calculation(value: dict) -> dict:
     """A stage saved before 2026-11 names one of four calculations. Now a stage has a
     calculation type and, if it is mechanical, a stress initialisation. A null step was
     a plastic stage that changes nothing, and it still is one. A stage in the new shape,
-    or with a value that is neither, is left alone for the schema to judge."""
+    or with a value that is neither, is left alone for the schema to judge.
+
+    An initial plastic stage, or null step, becomes one initialised by gravity loading:
+    that is what it was, as gravity was on unless the project switched it off
+    (`drop_gravity`), and the initial stage's stress initialisation is now what decides
+    the self weight (`core.model.stages.gravity`). Initialised by none, it would lose
+    it."""
     old = OLD_CALCULATIONS.get(str(value.get("calculation")))
     if old is None:
         return value
     calculation, stresses = old
+    if calculation == "mechanical" and stresses == "none" and value.get("parent") is None:
+        stresses = "gravity"
     return {**value, "calculation": calculation, "stress_initialisation": stresses}
 
 
@@ -319,6 +327,63 @@ def _without_stresses(stage: object) -> object:
     if stage.get("calculation", "mechanical") != "mechanical":
         return stage
     return {**stage, "stress_initialisation": "none"}
+
+
+def notes(value: object) -> list[str]:
+    """What opening the document `value` changes about its calculation, one sentence
+    each, for whoever opens it: the conversions above that have no equivalent. Empty for
+    a document in the current shape.
+
+    Only gravity has one: switched off in a project with no stages, or in a flow
+    sequence, it is on now (`drop_gravity`)."""
+    if not isinstance(value, dict) or value.get("gravity") is not False:
+        return []
+    stages = value.get("stages", value.get("phases"))
+    first = next((stage for stage in stages if isinstance(stage, dict)
+                  and stage.get("parent") is None), None) if isinstance(stages, list) else None
+    if first is None:
+        return ["This project switched gravity off, which is no longer a switch of its "
+                "own: the initial stage's stress initialisation decides it, and with no "
+                "stages the self weight acts. To leave it out, add an initial stage and "
+                "set its stress initialisation to none."]
+    if stage_calculation(first).get("calculation") == "flow":
+        return ["This project switched gravity off, which a flow calculation no longer "
+                "can: the water has its weight again, so it flows from the differences "
+                "in head rather than in pressure, and the hydraulic head is written. A "
+                "horizontal section cannot be modelled now."]
+    return []
+
+
+def flow_tolerance(value: dict) -> dict:
+    """A flow stage saved before 2026-11 has no absolute tolerance, and was written with
+    the one of the Kratos deck its strategy was copied from: Muskat's
+    `van_genuchten_hydrostatic`'s 1e-15 for Newton-Raphson, which a soil whose
+    permeability depends on the water pressure is solved by -- without a seepage face,
+    whose strategy has the default's 1e-9. A linear stage writes none. So a project
+    with such a soil and no seepage face gives its old flow stages 1e-15, and the deck
+    stays as it was."""
+    stages = value.get("stages")
+    if not isinstance(stages, list):
+        return value
+    conditions = value.get("boundary_conditions")
+    if isinstance(conditions, list) and any(
+            isinstance(c, dict) and c.get("kind") == "seepage" for c in conditions):
+        return value
+    materials = value.get("materials")
+    if not isinstance(materials, list) or not any(
+            isinstance(m, dict) and isinstance(m.get("variables"), dict)
+            and m["variables"].get("RETENTION_LAW", "SaturatedLaw") != "SaturatedLaw"
+            for m in materials):
+        return value
+    return {**value, "stages": [
+        {**stage, "absolute_tolerance": VAN_GENUCHTEN_ABSOLUTE_TOLERANCE}
+        if isinstance(stage, dict) and stage.get("calculation") == "Groundwater flow"
+        and "absolute_tolerance" not in stage else stage
+        for stage in stages]}
+
+
+VAN_GENUCHTEN_ABSOLUTE_TOLERANCE = 1e-15
+"""Kratos' `tests/Muskat/van_genuchten_hydrostatic`'s `residual_absolute_tolerance`."""
 
 
 def drop_boreholes(value: dict) -> dict:

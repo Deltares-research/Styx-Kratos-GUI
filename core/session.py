@@ -34,7 +34,7 @@ from pathlib import Path
 
 from core import scripting
 from core.kratos import materials
-from core.model import drafts, soil_models, stages, units
+from core.model import drafts, migration, soil_models, stages, units
 from core.model.load_translation import translate as translate_loads
 from core.model.schemas import (ConditionsUpdate, CustomPart, DimensionUpdate, LayersUpdate,
                                 MaterialsUpdate, MeshRequest, Panel, StagesUpdate, Project,
@@ -99,6 +99,20 @@ def load(path: str | Path) -> Project:
     # A drawn part's .brep is a path on the computer it was drawn on: built again from
     # its recipe here, so the file is the same model wherever it is opened.
     return scripting.with_solids(Project.model_validate(value), strict=False)
+
+
+def opening_notes(path: str | Path) -> list[str]:
+    """What opening the project file in `path` changes about its calculation, one
+    sentence each (`migration.notes`), for the command that opens it to say: the schema
+    converts an old file silently, and once it is saved the old shape is gone. Empty for
+    a model script, and for a file `load` refuses, whose refusal says what is wrong."""
+    path = Path(path)
+    if path.suffix.lower() == ".py":
+        return []
+    try:
+        return migration.notes(json.loads(path.read_text(encoding="utf-8")))
+    except (OSError, ValueError):
+        return []
 
 
 def save(project: Project, path: str | Path) -> Path:

@@ -1641,10 +1641,17 @@ App.LivePatches = (function () {
         var named = projectNameFromFile(file.name);
         if (named) opened.name = named;
         // Straight to the server: it is the validator. A project that fails there is
-        // one the app must not half-load, and the message says which field.
-        return App.Api.put('/api/project', opened)
-          .then(function (project) {
-            return adoptProject(project, 'Opened project: ' + file.name);
+        // one the app must not half-load, and the message says which field. It also
+        // says what opening an old file changes about its calculation.
+        return App.Api.post('/api/project/open', opened)
+          .then(function (result) {
+            return Promise.resolve(adoptProject(result.project,
+                                                'Opened project: ' + file.name))
+              .then(function () {
+                (result.notes || []).forEach(function (note) {
+                  if (App.Command.warn) App.Command.warn(note); else App.Command.note(note);
+                });
+              });
           });
       }).catch(function (error) {
         if (App.Command) App.Command.err('Could not open ' + file.name + ': ' + error.message);

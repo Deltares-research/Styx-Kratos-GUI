@@ -14,38 +14,24 @@ window.SOLVER_FIXTURE =
       "rows": [
         {
           "key": "strategy_type",
-          "value": "quasi_newton",
-          "default": "quasi_newton",
-          "overridden": false,
-          "locked": null
-        },
-        {
-          "key": "quasi_newton_type",
-          "value": "lbfgs",
-          "default": "lbfgs",
-          "overridden": false,
-          "locked": null
-        },
-        {
-          "key": "quasi_newton_max_rank",
-          "value": 10,
-          "default": 10,
-          "overridden": false,
-          "locked": null
-        },
-        {
-          "key": "quasi_newton_restart_interval",
-          "value": 100,
-          "default": 100,
+          "value": "newton_raphson",
+          "default": "newton_raphson",
           "overridden": false,
           "locked": null
         },
         {
           "key": "linear_solver_type",
-          "value": "LinearSolversApplication.sparse_lu",
-          "default": "LinearSolversApplication.sparse_lu",
+          "value": "skyline_lu_factorization",
+          "default": "skyline_lu_factorization",
           "overridden": false,
-          "locked": "The quasi-Newton strategy factorises the stiffness matrix once with Sparse LU and reuses it; it uses no other linear solver."
+          "locked": null
+        },
+        {
+          "key": "linear_solver_scaling",
+          "value": true,
+          "default": true,
+          "overridden": false,
+          "locked": null
         },
         {
           "key": "min_iterations",
@@ -56,8 +42,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "number_cycles",
-          "value": 5,
-          "default": 5,
+          "value": 1,
+          "default": 1,
           "overridden": false,
           "locked": null
         },
@@ -130,7 +116,7 @@ window.SOLVER_FIXTURE =
         {
           "key": "strategy_type",
           "value": "newton_raphson",
-          "default": "quasi_newton",
+          "default": "newton_raphson",
           "overridden": true,
           "locked": null
         },
@@ -157,8 +143,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "number_cycles",
-          "value": 5,
-          "default": 5,
+          "value": 1,
+          "default": 1,
           "overridden": false,
           "locked": null
         },
@@ -232,7 +218,7 @@ window.SOLVER_FIXTURE =
         {
           "key": "strategy_type",
           "value": "line_search",
-          "default": "quasi_newton",
+          "default": "newton_raphson",
           "overridden": true,
           "locked": null
         },
@@ -301,8 +287,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "number_cycles",
-          "value": 5,
-          "default": 5,
+          "value": 1,
+          "default": 1,
           "overridden": false,
           "locked": null
         },
@@ -376,7 +362,7 @@ window.SOLVER_FIXTURE =
         {
           "key": "strategy_type",
           "value": "linear",
-          "default": "quasi_newton",
+          "default": "newton_raphson",
           "overridden": true,
           "locked": null
         },
@@ -451,7 +437,7 @@ window.SOLVER_FIXTURE =
         {
           "key": "strategy_type",
           "value": "quasi_newton",
-          "default": "quasi_newton",
+          "default": "newton_raphson",
           "overridden": true,
           "locked": null
         },
@@ -492,8 +478,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "number_cycles",
-          "value": 5,
-          "default": 5,
+          "value": 1,
+          "default": 1,
           "overridden": false,
           "locked": null
         },
@@ -568,7 +554,7 @@ window.SOLVER_FIXTURE =
         {
           "key": "strategy_type",
           "value": "newton_raphson",
-          "default": "quasi_newton",
+          "default": "newton_raphson",
           "overridden": true,
           "locked": null
         },
@@ -630,8 +616,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "number_cycles",
-          "value": 5,
-          "default": 5,
+          "value": 1,
+          "default": 1,
           "overridden": false,
           "locked": null
         },
@@ -707,7 +693,7 @@ window.SOLVER_FIXTURE =
         {
           "key": "strategy_type",
           "value": "newton_raphson",
-          "default": "quasi_newton",
+          "default": "newton_raphson",
           "overridden": true,
           "locked": null
         },
@@ -776,8 +762,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "number_cycles",
-          "value": 5,
-          "default": 5,
+          "value": 1,
+          "default": 1,
           "overridden": false,
           "locked": null
         },
@@ -852,7 +838,7 @@ window.SOLVER_FIXTURE =
         {
           "key": "strategy_type",
           "value": "newton_raphson",
-          "default": "quasi_newton",
+          "default": "newton_raphson",
           "overridden": true,
           "locked": null
         },
@@ -900,8 +886,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "number_cycles",
-          "value": 5,
-          "default": 5,
+          "value": 1,
+          "default": 1,
           "overridden": false,
           "locked": null
         },
@@ -976,7 +962,7 @@ window.SOLVER_FIXTURE =
         {
           "key": "strategy_type",
           "value": "newton_raphson",
-          "default": "quasi_newton",
+          "default": "newton_raphson",
           "overridden": true,
           "locked": null
         },
@@ -1024,8 +1010,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "number_cycles",
-          "value": 5,
-          "default": 5,
+          "value": 1,
+          "default": 1,
           "overridden": false,
           "locked": null
         },
@@ -1099,38 +1085,24 @@ window.SOLVER_FIXTURE =
       "rows": [
         {
           "key": "strategy_type",
-          "value": "quasi_newton",
-          "default": "quasi_newton",
-          "overridden": false,
-          "locked": null
-        },
-        {
-          "key": "quasi_newton_type",
-          "value": "lbfgs",
-          "default": "lbfgs",
-          "overridden": false,
-          "locked": null
-        },
-        {
-          "key": "quasi_newton_max_rank",
-          "value": 10,
-          "default": 10,
-          "overridden": false,
-          "locked": null
-        },
-        {
-          "key": "quasi_newton_restart_interval",
-          "value": 100,
-          "default": 100,
+          "value": "newton_raphson",
+          "default": "newton_raphson",
           "overridden": false,
           "locked": null
         },
         {
           "key": "linear_solver_type",
-          "value": "LinearSolversApplication.sparse_lu",
-          "default": "LinearSolversApplication.sparse_lu",
+          "value": "skyline_lu_factorization",
+          "default": "skyline_lu_factorization",
           "overridden": false,
-          "locked": "The quasi-Newton strategy factorises the stiffness matrix once with Sparse LU and reuses it; it uses no other linear solver."
+          "locked": null
+        },
+        {
+          "key": "linear_solver_scaling",
+          "value": true,
+          "default": true,
+          "overridden": false,
+          "locked": null
         },
         {
           "key": "min_iterations",
@@ -1142,7 +1114,7 @@ window.SOLVER_FIXTURE =
         {
           "key": "number_cycles",
           "value": 3,
-          "default": 5,
+          "default": 1,
           "overridden": true,
           "locked": null
         },
@@ -1215,38 +1187,24 @@ window.SOLVER_FIXTURE =
       "rows": [
         {
           "key": "strategy_type",
-          "value": "quasi_newton",
-          "default": "quasi_newton",
-          "overridden": false,
-          "locked": null
-        },
-        {
-          "key": "quasi_newton_type",
-          "value": "lbfgs",
-          "default": "lbfgs",
-          "overridden": false,
-          "locked": null
-        },
-        {
-          "key": "quasi_newton_max_rank",
-          "value": 10,
-          "default": 10,
-          "overridden": false,
-          "locked": null
-        },
-        {
-          "key": "quasi_newton_restart_interval",
-          "value": 100,
-          "default": 100,
+          "value": "newton_raphson",
+          "default": "newton_raphson",
           "overridden": false,
           "locked": null
         },
         {
           "key": "linear_solver_type",
-          "value": "LinearSolversApplication.sparse_lu",
-          "default": "LinearSolversApplication.sparse_lu",
+          "value": "skyline_lu_factorization",
+          "default": "skyline_lu_factorization",
           "overridden": false,
-          "locked": "The quasi-Newton strategy factorises the stiffness matrix once with Sparse LU and reuses it; it uses no other linear solver."
+          "locked": null
+        },
+        {
+          "key": "linear_solver_scaling",
+          "value": true,
+          "default": true,
+          "overridden": false,
+          "locked": null
         },
         {
           "key": "min_iterations",
@@ -1257,8 +1215,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "number_cycles",
-          "value": 5,
-          "default": 5,
+          "value": 1,
+          "default": 1,
           "overridden": false,
           "locked": null
         },
@@ -1328,38 +1286,24 @@ window.SOLVER_FIXTURE =
       "rows": [
         {
           "key": "strategy_type",
-          "value": "quasi_newton",
-          "default": "quasi_newton",
-          "overridden": false,
-          "locked": null
-        },
-        {
-          "key": "quasi_newton_type",
-          "value": "lbfgs",
-          "default": "lbfgs",
-          "overridden": false,
-          "locked": null
-        },
-        {
-          "key": "quasi_newton_max_rank",
-          "value": 10,
-          "default": 10,
-          "overridden": false,
-          "locked": null
-        },
-        {
-          "key": "quasi_newton_restart_interval",
-          "value": 100,
-          "default": 100,
+          "value": "newton_raphson",
+          "default": "newton_raphson",
           "overridden": false,
           "locked": null
         },
         {
           "key": "linear_solver_type",
-          "value": "LinearSolversApplication.sparse_lu",
-          "default": "LinearSolversApplication.sparse_lu",
+          "value": "skyline_lu_factorization",
+          "default": "skyline_lu_factorization",
           "overridden": false,
-          "locked": "The quasi-Newton strategy factorises the stiffness matrix once with Sparse LU and reuses it; it uses no other linear solver."
+          "locked": null
+        },
+        {
+          "key": "linear_solver_scaling",
+          "value": true,
+          "default": true,
+          "overridden": false,
+          "locked": null
         },
         {
           "key": "min_iterations",
@@ -1370,8 +1314,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "number_cycles",
-          "value": 5,
-          "default": 5,
+          "value": 1,
+          "default": 1,
           "overridden": false,
           "locked": null
         },
@@ -1486,7 +1430,7 @@ window.SOLVER_FIXTURE =
         {
           "key": "strategy_type",
           "value": "newton_raphson",
-          "default": "quasi_newton",
+          "default": "newton_raphson",
           "overridden": true,
           "locked": null
         },
@@ -1513,8 +1457,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "number_cycles",
-          "value": 5,
-          "default": 5,
+          "value": 1,
+          "default": 1,
           "overridden": false,
           "locked": null
         },
@@ -1630,7 +1574,7 @@ window.SOLVER_FIXTURE =
         {
           "key": "strategy_type",
           "value": "line_search",
-          "default": "quasi_newton",
+          "default": "newton_raphson",
           "overridden": true,
           "locked": null
         },
@@ -1699,8 +1643,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "number_cycles",
-          "value": 5,
-          "default": 5,
+          "value": 1,
+          "default": 1,
           "overridden": false,
           "locked": null
         },
@@ -1816,7 +1760,7 @@ window.SOLVER_FIXTURE =
         {
           "key": "strategy_type",
           "value": "linear",
-          "default": "quasi_newton",
+          "default": "newton_raphson",
           "overridden": true,
           "locked": null
         },
@@ -1933,7 +1877,7 @@ window.SOLVER_FIXTURE =
         {
           "key": "strategy_type",
           "value": "quasi_newton",
-          "default": "quasi_newton",
+          "default": "newton_raphson",
           "overridden": true,
           "locked": null
         },
@@ -1974,8 +1918,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "number_cycles",
-          "value": 5,
-          "default": 5,
+          "value": 1,
+          "default": 1,
           "overridden": false,
           "locked": null
         },
@@ -2092,7 +2036,7 @@ window.SOLVER_FIXTURE =
         {
           "key": "strategy_type",
           "value": "newton_raphson",
-          "default": "quasi_newton",
+          "default": "newton_raphson",
           "overridden": true,
           "locked": null
         },
@@ -2154,8 +2098,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "number_cycles",
-          "value": 5,
-          "default": 5,
+          "value": 1,
+          "default": 1,
           "overridden": false,
           "locked": null
         },
@@ -2273,7 +2217,7 @@ window.SOLVER_FIXTURE =
         {
           "key": "strategy_type",
           "value": "newton_raphson",
-          "default": "quasi_newton",
+          "default": "newton_raphson",
           "overridden": true,
           "locked": null
         },
@@ -2342,8 +2286,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "number_cycles",
-          "value": 5,
-          "default": 5,
+          "value": 1,
+          "default": 1,
           "overridden": false,
           "locked": null
         },
@@ -2460,7 +2404,7 @@ window.SOLVER_FIXTURE =
         {
           "key": "strategy_type",
           "value": "newton_raphson",
-          "default": "quasi_newton",
+          "default": "newton_raphson",
           "overridden": true,
           "locked": null
         },
@@ -2508,8 +2452,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "number_cycles",
-          "value": 5,
-          "default": 5,
+          "value": 1,
+          "default": 1,
           "overridden": false,
           "locked": null
         },
@@ -2626,7 +2570,7 @@ window.SOLVER_FIXTURE =
         {
           "key": "strategy_type",
           "value": "newton_raphson",
-          "default": "quasi_newton",
+          "default": "newton_raphson",
           "overridden": true,
           "locked": null
         },
@@ -2674,8 +2618,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "number_cycles",
-          "value": 5,
-          "default": 5,
+          "value": 1,
+          "default": 1,
           "overridden": false,
           "locked": null
         },
@@ -2791,38 +2735,24 @@ window.SOLVER_FIXTURE =
       "rows": [
         {
           "key": "strategy_type",
-          "value": "quasi_newton",
-          "default": "quasi_newton",
-          "overridden": false,
-          "locked": null
-        },
-        {
-          "key": "quasi_newton_type",
-          "value": "lbfgs",
-          "default": "lbfgs",
-          "overridden": false,
-          "locked": null
-        },
-        {
-          "key": "quasi_newton_max_rank",
-          "value": 10,
-          "default": 10,
-          "overridden": false,
-          "locked": null
-        },
-        {
-          "key": "quasi_newton_restart_interval",
-          "value": 100,
-          "default": 100,
+          "value": "newton_raphson",
+          "default": "newton_raphson",
           "overridden": false,
           "locked": null
         },
         {
           "key": "linear_solver_type",
-          "value": "LinearSolversApplication.sparse_lu",
-          "default": "LinearSolversApplication.sparse_lu",
+          "value": "skyline_lu_factorization",
+          "default": "skyline_lu_factorization",
           "overridden": false,
-          "locked": "The quasi-Newton strategy factorises the stiffness matrix once with Sparse LU and reuses it; it uses no other linear solver."
+          "locked": null
+        },
+        {
+          "key": "linear_solver_scaling",
+          "value": true,
+          "default": true,
+          "overridden": false,
+          "locked": null
         },
         {
           "key": "min_iterations",
@@ -2834,7 +2764,7 @@ window.SOLVER_FIXTURE =
         {
           "key": "number_cycles",
           "value": 3,
-          "default": 5,
+          "default": 1,
           "overridden": true,
           "locked": null
         },
@@ -2914,38 +2844,24 @@ window.SOLVER_FIXTURE =
       "rows": [
         {
           "key": "strategy_type",
-          "value": "quasi_newton",
-          "default": "quasi_newton",
-          "overridden": false,
-          "locked": null
-        },
-        {
-          "key": "quasi_newton_type",
-          "value": "lbfgs",
-          "default": "lbfgs",
-          "overridden": false,
-          "locked": null
-        },
-        {
-          "key": "quasi_newton_max_rank",
-          "value": 10,
-          "default": 10,
-          "overridden": false,
-          "locked": null
-        },
-        {
-          "key": "quasi_newton_restart_interval",
-          "value": 100,
-          "default": 100,
+          "value": "newton_raphson",
+          "default": "newton_raphson",
           "overridden": false,
           "locked": null
         },
         {
           "key": "linear_solver_type",
-          "value": "LinearSolversApplication.sparse_lu",
-          "default": "LinearSolversApplication.sparse_lu",
+          "value": "skyline_lu_factorization",
+          "default": "skyline_lu_factorization",
           "overridden": false,
-          "locked": "The quasi-Newton strategy factorises the stiffness matrix once with Sparse LU and reuses it; it uses no other linear solver."
+          "locked": null
+        },
+        {
+          "key": "linear_solver_scaling",
+          "value": true,
+          "default": true,
+          "overridden": false,
+          "locked": null
         },
         {
           "key": "min_iterations",
@@ -2956,8 +2872,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "number_cycles",
-          "value": 5,
-          "default": 5,
+          "value": 1,
+          "default": 1,
           "overridden": false,
           "locked": null
         },
@@ -3163,8 +3079,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "number_cycles",
-          "value": 5,
-          "default": 5,
+          "value": 1,
+          "default": 1,
           "overridden": false,
           "locked": null
         },
@@ -3300,8 +3216,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "number_cycles",
-          "value": 5,
-          "default": 5,
+          "value": 1,
+          "default": 1,
           "overridden": false,
           "locked": null
         },
@@ -3477,8 +3393,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "number_cycles",
-          "value": 5,
-          "default": 5,
+          "value": 1,
+          "default": 1,
           "overridden": false,
           "locked": null
         },
@@ -3608,8 +3524,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "number_cycles",
-          "value": 5,
-          "default": 5,
+          "value": 1,
+          "default": 1,
           "overridden": false,
           "locked": null
         },
@@ -3747,8 +3663,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "number_cycles",
-          "value": 5,
-          "default": 5,
+          "value": 1,
+          "default": 1,
           "overridden": false,
           "locked": null
         },
@@ -3864,8 +3780,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "number_cycles",
-          "value": 5,
-          "default": 5,
+          "value": 1,
+          "default": 1,
           "overridden": false,
           "locked": null
         },
@@ -3981,8 +3897,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "number_cycles",
-          "value": 5,
-          "default": 5,
+          "value": 1,
+          "default": 1,
           "overridden": false,
           "locked": null
         },
@@ -4208,8 +4124,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "number_cycles",
-          "value": 5,
-          "default": 5,
+          "value": 1,
+          "default": 1,
           "overridden": false,
           "locked": null
         },
@@ -4316,8 +4232,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "number_cycles",
-          "value": 5,
-          "default": 5,
+          "value": 1,
+          "default": 1,
           "overridden": false,
           "locked": null
         },
@@ -4467,8 +4383,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "number_cycles",
-          "value": 5,
-          "default": 5,
+          "value": 1,
+          "default": 1,
           "overridden": false,
           "locked": null
         },
@@ -4672,8 +4588,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "number_cycles",
-          "value": 5,
-          "default": 5,
+          "value": 1,
+          "default": 1,
           "overridden": false,
           "locked": null
         },
@@ -4817,8 +4733,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "number_cycles",
-          "value": 5,
-          "default": 5,
+          "value": 1,
+          "default": 1,
           "overridden": false,
           "locked": null
         },
@@ -4970,8 +4886,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "number_cycles",
-          "value": 5,
-          "default": 5,
+          "value": 1,
+          "default": 1,
           "overridden": false,
           "locked": null
         },
@@ -5101,8 +5017,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "number_cycles",
-          "value": 5,
-          "default": 5,
+          "value": 1,
+          "default": 1,
           "overridden": false,
           "locked": null
         },
@@ -5232,8 +5148,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "number_cycles",
-          "value": 5,
-          "default": 5,
+          "value": 1,
+          "default": 1,
           "overridden": false,
           "locked": null
         },
@@ -5343,7 +5259,7 @@ window.SOLVER_FIXTURE =
         {
           "key": "number_cycles",
           "value": 3,
-          "default": 5,
+          "default": 1,
           "overridden": true,
           "locked": null
         },
@@ -5444,8 +5360,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "number_cycles",
-          "value": 5,
-          "default": 5,
+          "value": 1,
+          "default": 1,
           "overridden": false,
           "locked": null
         },

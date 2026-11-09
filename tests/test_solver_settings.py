@@ -27,20 +27,26 @@ def row(rows: list[dict], key: str) -> dict:
 
 # ── Defaults, by calculation type and time integration ──────────────────────
 
-def test_a_mechanical_stage_is_solved_by_quasi_newton_with_its_sparse_lu_fixed():
+def test_a_mechanical_stage_is_solved_as_the_reference_deck_is():
+    """Newton-Raphson with a scaled Skyline LU, one attempt per step: the reference
+    deck's, so a stage that changes nothing is written as it was before these settings
+    could be chosen."""
     rows = solver.resolve("mechanical", "static")
-    assert values(rows)["strategy_type"] == "quasi_newton"
+    assert values(rows)["strategy_type"] == solver.NEWTON_RAPHSON
     linear = row(rows, "linear_solver_type")
-    assert linear["value"] == solver.SPARSE_LU
-    assert "quasi-Newton" in linear["locked"]
-    # The quasi-Newton strategy uses no other linear solver, so nothing of one is shown.
-    assert not {"linear_solver_scaling", "linear_solver_tolerance"} & set(values(rows))
+    assert (linear["value"], linear["locked"]) == (solver.SKYLINE_LU, None)
+    assert values(rows)["linear_solver_scaling"] is True
+    assert values(rows)["number_cycles"] == 1
 
 
 def test_the_linear_solver_cannot_be_changed_under_quasi_newton():
-    rows = solver.resolve("mechanical", "static", {"linear_solver_type": "amgcl"})
+    rows = solver.resolve("mechanical", "static", {"strategy_type": "quasi_newton",
+                                                  "linear_solver_type": "amgcl"})
     assert values(rows)["linear_solver_type"] == solver.SPARSE_LU
+    assert "quasi-Newton" in row(rows, "linear_solver_type")["locked"]
     assert not row(rows, "linear_solver_type")["overridden"]
+    # The quasi-Newton strategy uses no other linear solver, so nothing of one is shown.
+    assert not {"linear_solver_scaling", "linear_solver_tolerance"} & set(values(rows))
 
 
 def test_another_strategy_offers_the_reference_linear_solver_and_its_settings():
@@ -167,14 +173,25 @@ def solver_settings(stage: parameters.Stage) -> dict:
     return deck["stages"][stage.name]["stage_settings"]["solver_settings"]
 
 
-def test_a_mechanical_stage_writes_quasi_newton_and_the_sparse_lu_it_uses():
+def test_a_mechanical_stage_writes_the_reference_decks_strategy_and_linear_solver():
     written = solver_settings(parameters.Stage(name="1_Stage"))
+    assert written["strategy_type"] == "newton_raphson"
+    assert written["linear_solver_settings"] == {"solver_type": solver.SKYLINE_LU,
+                                                 "scaling": True}
+    assert (written["number_cycles"], written["time_stepping"]["time_step"]) == (1, 1.0)
+    assert written["residual_absolute_tolerance"] == 1e-9
+    assert written["time_stepping"]["max_delta_time_factor"] == 1000.0
+    assert "newmark_beta" not in written and "scheme_type" not in written
+    assert "quasi_newton_type" not in written
+
+
+def test_a_quasi_newton_stage_writes_its_update_and_the_sparse_lu_it_uses():
+    written = solver_settings(parameters.Stage(
+        name="1_Stage", solver_settings=(("strategy_type", "quasi_newton"),)))
     assert written["strategy_type"] == "quasi_newton"
     assert (written["quasi_newton_type"], written["quasi_newton_max_rank"],
             written["quasi_newton_restart_interval"]) == ("lbfgs", 10, 100)
     assert written["linear_solver_settings"] == {"solver_type": solver.SPARSE_LU}
-    assert written["time_stepping"]["max_delta_time_factor"] == 1000.0
-    assert "newmark_beta" not in written and "scheme_type" not in written
 
 
 def test_a_stages_own_settings_are_written_and_the_ones_that_do_not_apply_are_not():
@@ -219,12 +236,15 @@ def test_the_smallest_step_is_written_as_a_time_and_never_more_than_the_step():
     assert "minimum_allowable_value" not in linear["time_stepping"]
 
 
-def test_five_attempts_per_step_unless_a_seepage_face_allows_one():
-    assert values(solver.resolve("mechanical", "static"))["number_cycles"] == 5
+def test_one_attempt_per_step_as_the_reference_decks_make_and_more_but_with_seepage():
+    assert values(solver.resolve("mechanical", "static"))["number_cycles"] == 1
     assert values(solver.resolve("flow", "static", {}, "newton_raphson"))[
+        "number_cycles"] == 1
+    assert values(solver.resolve("mechanical", "static", {"number_cycles": 5}))[
         "number_cycles"] == 5
-    assert values(solver.resolve("mechanical", "static", {},
-                                 "newton_raphson_with_seepage"))["number_cycles"] == 1
+    seepage = solver.resolve("flow", "static", {"number_cycles": 5},
+                             "newton_raphson_with_seepage")
+    assert values(seepage)["number_cycles"] == 1
 
 
 def test_cg_is_preconditioned_on_its_diagonal():
@@ -271,18 +291,15 @@ def test_the_model_strategies_are_published_not_accepted():
     assert echoed.model_strategies == project.model_strategies
 
 
-def test_a_seepage_face_fixes_a_mechanical_stages_strategy_too():
+def test_a_seepage_face_leaves_a_mechanical_stages_strategy_alone():
+    """A mechanical deck leaves a seepage face out (`condition_checks`), so its stages
+    keep the strategy they would have without it."""
     payload = muskat_model.muskat(conditions=[*muskat_model.HEADS,
                                               muskat_model.SEEPAGE_FACE]
                                   ).model_dump(mode="json")
     payload["stages"] = [{"id": "initial", "name": "Initial stage",
                           "stress_initialisation": "gravity"}]
-    project = Project.model_validate(payload)
-    assert project.model_strategies == {"initial": "newton_raphson_with_seepage"}
-    rows = solver.resolve("mechanical", "static", {"strategy_type": "quasi_newton"},
-                          project.model_strategies["initial"])
-    assert row(rows, "strategy_type")["value"] == "newton_raphson_with_seepage"
-    assert row(rows, "strategy_type")["locked"]
+    assert Project.model_validate(payload).model_strategies == {}
 
 
 def test_a_mechanical_project_publishes_no_model_strategy():
@@ -325,17 +342,17 @@ def test_another_calculation_type_starts_from_its_own_defaults():
 
 def test_a_decks_own_settings_are_read_where_they_differ_from_the_defaults():
     found = solver.from_deck({
-        "strategy_type": "newton_raphson", "scheme_type": "Newmark",
+        "strategy_type": "line_search", "scheme_type": "Newmark",
         "linear_solver_settings": {"solver_type": "amgcl", "tolerance": 1e-7},
         "max_line_search_iterations": 3, "move_mesh_flag": False})
-    assert found["strategy_type"] == "newton_raphson"
+    assert found["strategy_type"] == "line_search"
     assert found["scheme_type"] == "newmark", "Kratos reads it in any case"
     assert found["linear_solver_tolerance"] == 1e-7
     stage = external_deck._styx_stage("1_Stage", {"stage_settings": {
-        "solver_settings": {"solution_type": "static", "strategy_type": "newton_raphson",
+        "solver_settings": {"solution_type": "static", "strategy_type": "line_search",
                             "move_mesh_flag": False,
                             "linear_solver_settings": {"solver_type": "amgcl"}}}},
         None, activate=[], deactivate=[])
-    # The deck's Newton-Raphson and AMGCL, and not its default-valued mesh flag.
-    assert stage.solver_settings == {"strategy_type": "newton_raphson",
+    # The deck's line search and AMGCL, and not its default-valued mesh flag.
+    assert stage.solver_settings == {"strategy_type": "line_search",
                                      "linear_solver_type": "amgcl"}

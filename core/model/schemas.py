@@ -1261,27 +1261,24 @@ ConvergenceCriterion = Literal["residual_criterion", "displacement_criterion",
                                "water_pressure_criterion"]
 
 CONVERGENCE_CRITERIA: dict[str, tuple[str, ...]] = {
-    "mechanical": ("residual_criterion", "displacement_criterion"),
-    "flow": ("water_pressure_criterion", "residual_criterion"),
-}
+    calculation: tuple(name for name, _ in criteria)
+    for calculation, criteria in solver.CRITERIA.items()}
 """The convergence criteria a stage of each calculation type can be solved on, its
 default first: Kratos' names, which its `U_Pw` and `Pw` solvers read
-(`core.kratos.parameters.CONVERGENCE_TOLERANCES`).
+(`core.kratos.parameters.CONVERGENCE_TOLERANCES`). Listed, with their labels, in
+`core.model.solver.CRITERIA`, which the browser reads too.
 
-The residual one is a mechanical stage's default because Kratos' displacement criterion
-measures the update of every degree of freedom, the water pressure too: in a coupled
-soil whose water pressure builds up, it does not converge where the residual one does.
-A flow stage with a seepage face can need the residual one for the same reason: the face
-opening and closing keeps the water pressure from settling (a quadratic Muskat case C).
-Kratos' `displacement_and_water_pressure_criterion` is not offered: Kratos 10.4.4
-cannot build it (`geomechanics_U_Pw_solver.py` hands `MixedGenericCriteria` two
-criteria where it takes variables)."""
+The residual one is the default of both types: every reference deck converges on it.
+Kratos' displacement criterion measures the update of every degree of freedom, the
+water pressure too: in a coupled soil whose water pressure builds up, it does not
+converge where the residual one does. The water pressure criterion of a flow stage
+can fail to settle in the same way with a seepage face, whose opening and closing keeps
+the water pressure moving (a quadratic Muskat case C). Kratos'
+`displacement_and_water_pressure_criterion` is not offered: Kratos 10.4.4 cannot build
+it (`geomechanics_U_Pw_solver.py` hands `MixedGenericCriteria` two criteria where it
+takes variables)."""
 
-ABSOLUTE_TOLERANCES: dict[str, float] = {
-    "residual_criterion": 1e-8,
-    "displacement_criterion": 1e-12,
-    "water_pressure_criterion": 1e-8,
-}
+ABSOLUTE_TOLERANCES: dict[str, float] = solver.ABSOLUTE_TOLERANCES
 """The default absolute tolerance of each convergence criterion (`Stage.absolute_tolerance`)."""
 
 
@@ -1356,28 +1353,27 @@ class Stage(Base):
     convergence_criterion: ConvergenceCriterion = "residual_criterion"
     """What Kratos measures to decide the stage has converged: one of
     `CONVERGENCE_CRITERIA` for its calculation type. A stage that names none -- one
-    saved before it could be chosen, or made without it -- has its type's default: the
-    residual criterion for a mechanical stage, the water pressure criterion for a flow
-    stage."""
-    max_iterations: int = Field(default=15, gt=0)
-    tolerated_error: float = Field(default=1e-4, gt=0)
+    saved before it could be chosen, or made without it -- has its type's default, the
+    residual criterion."""
+    max_iterations: int = Field(default=int(solver.STAGE_DEFAULTS["max_iterations"]), gt=0)
+    tolerated_error: float = Field(default=solver.STAGE_DEFAULTS["tolerated_error"], gt=0)
     """The convergence criterion's relative tolerance: Kratos'
     `<quantity>_relative_tolerance` for each quantity it measures."""
-    absolute_tolerance: float = Field(default=1e-8, gt=0)
+    absolute_tolerance: float = Field(
+        default=solver.ABSOLUTE_TOLERANCES["residual_criterion"], gt=0)
     """Its absolute tolerance, `<quantity>_absolute_tolerance`. A stage that names none
-    has its criterion's default (`ABSOLUTE_TOLERANCES`): 1e-12 for the displacement
-    criterion, 1e-8 otherwise. 1e-8 rather than the
-    reference decks' 1e-9: they solve a stage in one step, and a stage solved in several
-    reaches equilibrium in the first, after which every step starts from a round-off
-    residual of 1e-9 to 1e-8 that 1e-9 cannot be met below -- Kratos then runs out of
-    cycles with the model already at rest (an interface model, a 3D excavation,
-    2026-11-04)."""
+    has its criterion's default (`ABSOLUTE_TOLERANCES`): the reference decks' 1e-9 for
+    the residual criterion, 1e-12 for the displacement one, 1e-8 for the water pressure.
+    A stage solved in several steps can need more than 1e-9: it reaches equilibrium in
+    the first, after which every step starts from a round-off residual of 1e-9 to 1e-8
+    that 1e-9 cannot be met below, and Kratos runs out of cycles with the model already
+    at rest (an interface model, a 3D excavation, 2026-11-04)."""
 
-    duration: float = Field(default=1.0, gt=0)
+    duration: float = Field(default=solver.STAGE_DEFAULTS["duration"], gt=0)
     """How long the stage lasts, in the project's unit of time (`core.model.units`): its
     deck's `end_time` minus its `start_time`. A static stage has no real clock, so the
     default is the one second every stage was before it could be set."""
-    time_step: float = Field(default=0.25, gt=0)
+    time_step: float = Field(default=solver.STAGE_DEFAULTS["time_step"], gt=0)
     """The solver's `time_step`, in the same unit: the stage is solved in
     `duration / time_step` steps. The default solves it in one."""
 
@@ -1386,8 +1382,8 @@ class Stage(Base):
     (`core.model.solver.SETTINGS`): the strategy, the linear solver, the time step
     control, the time scheme of a dynamic stage, the assembly. Every one it does not
     name has the default for its calculation type and time integration, so a stage
-    that names none -- every stage saved before they could be set -- is solved by
-    quasi-Newton if it is mechanical. A setting that does not apply to the stage as it
+    that names none -- every stage saved before they could be set -- is solved as the
+    reference decks are: by Newton-Raphson if it is mechanical. A setting that does not apply to the stage as it
     is now is kept, and neither shown nor written (`solver.resolve`)."""
 
     @field_validator("solver_settings")
@@ -1767,7 +1763,8 @@ class Project(Base):
         before 2026-10-24 has boreholes (`migration.drop_boreholes`), and one saved
         before 2026-10-25 reads an interface's side walking its line
         (`migration.screen_sides`), and one saved before 2026-11-03 switches gravity
-        itself (`migration.drop_gravity`)."""
+        itself (`migration.drop_gravity`), and one saved before 2026-11 has flow stages
+        with no absolute tolerance (`migration.flow_tolerance`)."""
         if isinstance(value, dict):
             value = migration.drop_gravity(migration.rename_phases(value))
         if migration.is_legacy(value):
@@ -1776,7 +1773,8 @@ class Project(Base):
             value = migration.migrate_records(value)
         if not isinstance(value, dict):
             return value
-        return migration.screen_sides(migration.drop_boreholes(value))
+        return migration.flow_tolerance(
+            migration.screen_sides(migration.drop_boreholes(value)))
 
     @model_serializer(mode="wrap")
     def _leave_out_absent_blocks(self, handler: SerializerFunctionWrapHandler) -> dict:
@@ -2672,12 +2670,12 @@ class Project(Base):
     def model_strategies(self) -> dict[str, str]:
         """The strategy each stage's model calls for, by stage id
         (`core.model.stages.model_strategy`): a flow stage's default, and the only one
-        a stage of either kind can have with a seepage face.
+        it can have with a seepage face.
 
         Published because the stage panel shows a stage's expert settings with their
         defaults (`frontend/js/stages.js`'s `solverRows`), and this default depends on
         the soil in the stage and the project's conditions, which is the server's to
-        work out. Empty for a mechanical project without a seepage face."""
+        work out. Empty for a mechanical project."""
         from core.model import stages  # stages imports this module
         found = {stage.id: stages.model_strategy(self, stage) for stage in self.stages}
         return {id: strategy for id, strategy in found.items() if strategy is not None}

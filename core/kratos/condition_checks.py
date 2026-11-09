@@ -7,9 +7,8 @@ does not have. The export (`core.kratos.writer`) adds them to its own, and
 `kratos-cli check` prints them without meshing, so both say the same thing in the same
 words.
 
-A seepage face (`SeepageCondition`) is written in a section, flow or deformation, and
-solved by the seepage strategy; a 3D deformation deck leaves it out and says so, as
-Kratos' seepage conditions are line conditions.
+A seepage face (`SeepageCondition`) belongs to a groundwater flow calculation; a
+deformation deck leaves it out and says so.
 
 A groundwater flow project (`core.model.stages.groundwater_flow`) has warnings of its own
 instead of the ones about deformation -- the structures and loads it leaves out (the
@@ -111,15 +110,12 @@ def held_by_section(project: Project, condition) -> bool:
 
 
 def _seepage_outside_flow(project: Project) -> list[str]:
-    """A seepage face in a 3D deformation project: Kratos' seepage conditions are line
-    conditions, on a section's edges, so it is left out. In a section it is written,
-    and its stages are solved by the seepage strategy (`core.model.stages.seepage`)."""
-    if project.dimension == 2:
-        return []
+    """A seepage face in a deformation project: the deck has no seepage strategy to open
+    and close it, so it is left out."""
     faces = [c for c in project.boundary_conditions
              if isinstance(c, SeepageCondition) and written(project, c)]
-    return [f"{noun(c)} is left out: a seepage face is written in a 2D section only, "
-            "on its edges, and this model is 3D."
+    return [f"{noun(c)} is left out: a seepage face belongs to a groundwater flow "
+            "calculation, and this project's stages are not flow stages."
             for c in faces]
 
 

@@ -252,20 +252,20 @@ def test_the_displacement_criterion_defaults_to_an_absolute_tolerance_of_1e_12(c
     assert cli("stages", pit, "add", "late", "--convergence", "displacement").code == 0
     assert _stage(pit, "late").absolute_tolerance == 1e-12
     assert cli("stages", pit, "set", "dig_1", "--convergence", "residual").code == 0
-    assert _stage(pit, "dig_1").absolute_tolerance == 1e-8
+    assert _stage(pit, "dig_1").absolute_tolerance == 1e-9
 
-def test_a_flow_stage_converges_on_the_water_pressure_or_the_residual(cli, pit):
-    """Making the sequence a flow one gives every stage the water pressure criterion,
-    the flow default; the displacement one is then refused, the residual one not."""
+def test_a_flow_stage_converges_on_the_residual_or_the_water_pressure(cli, pit):
+    """Making the sequence a flow one gives every stage the residual criterion, the
+    flow default; the displacement one is then refused, the water pressure one not."""
     assert cli("stages", pit, "set", "dig_1", "--convergence", "displacement").code == 0
     assert cli("stages", pit, "set", "initial", "--calculation", "flow").code == 0
 
     assert {stage.convergence_criterion for stage in session.load(pit).stages} == \
-        {"water_pressure_criterion"}
+        {"residual_criterion"}
     ran = cli("stages", pit, "set", "dig_1", "--convergence", "displacement")
     assert ran.code == 1
-    assert "use water_pressure_criterion or residual_criterion" in ran.err
-    assert cli("stages", pit, "set", "dig_1", "--convergence", "residual").code == 0
+    assert "use residual_criterion or water_pressure_criterion" in ran.err
+    assert cli("stages", pit, "set", "dig_1", "--convergence", "water_pressure").code == 0
 
 
 def test_a_flow_stage_lists_no_displacement_reset(cli, pit):
