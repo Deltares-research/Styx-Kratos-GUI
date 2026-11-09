@@ -119,6 +119,19 @@ def test_material_set_and_unset_variables(cli, site):
     assert "GEO_COHESION" not in m1.variables
 
 
+def test_material_add_and_set_take_the_soil_s_r_inter(cli, site):
+    """The material window's R_inter field, on the command line too."""
+    assert cli("material", site, "add", "clay", "--r-inter", "0.48").code == 0
+    assert session.load(site).materials[-1].r_inter == 0.48
+
+    assert cli("material", site, "set", "clay", "--r-inter", "0.5").code == 0
+    assert session.load(site).materials[-1].r_inter == 0.5
+
+    ran = cli("material", site, "set", "clay", "--r-inter", "1.5")
+    assert ran.code == 1
+    assert session.load(site).materials[-1].r_inter == 0.5
+
+
 def test_a_variable_that_is_not_name_equals_value_is_refused(cli, site):
     ran = cli("material", site, "set", "m1", "YOUNG_MODULUS")
 

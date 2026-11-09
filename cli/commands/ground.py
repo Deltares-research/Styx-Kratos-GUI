@@ -136,6 +136,9 @@ def _material_fields(parser: argparse.ArgumentParser) -> None:
                              "defaults for what the soil lacks (see `models`)")
     parser.add_argument("--law", help="any other Kratos constitutive law, written as typed "
                                       "(default: linear elastic for the model's dimension)")
+    parser.add_argument("--r-inter", type=float,
+                        help="the factor an interface puts on this soil's cohesion and "
+                             "tan(phi), above 0 and at most 1 (default 0.7)")
 
 
 def _model(args: argparse.Namespace) -> str | None:
@@ -292,8 +295,9 @@ def add_material(args: argparse.Namespace) -> Answer:
         raise CommandError(str(failure)) from None
     project = session.add_material(project, material)
     variables = assignments(args.variables)
-    if variables:
-        project = session.update_material(project, args.id, variables=variables)
+    if variables or args.r_inter is not None:
+        project = session.update_material(project, args.id, variables=variables,
+                                          r_inter=args.r_inter)
     answer = edited(args, project, f"added material {args.id}")
     answer.lines += notes
     return answer
@@ -305,7 +309,8 @@ def update_material(args: argparse.Namespace) -> Answer:
                                       name=args.name, color=args.color, law=args.law,
                                       model=_model(args),
                                       variables=assignments(args.variables),
-                                      unset=args.unset, notes=notes)
+                                      unset=args.unset, notes=notes,
+                                      r_inter=args.r_inter)
     answer = edited(args, project, f"changed material {args.id}")
     answer.lines += notes
     return answer

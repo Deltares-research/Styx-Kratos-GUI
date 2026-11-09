@@ -777,6 +777,10 @@ def test_a_material_is_changed_variable_by_variable():
     assert material.name == "Fill, stiff"
 
 
+def test_a_material_gets_its_own_r_inter():
+    assert session.update_material(seed_project(), "m1", r_inter=0.45).materials[0].r_inter         == 0.45
+
+
 def test_unsetting_a_variable_the_material_does_not_have_is_refused():
     with pytest.raises(session.EditRefused, match="NOPE"):
         session.update_material(seed_project(), "m1", unset=["NOPE"])

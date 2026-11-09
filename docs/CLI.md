@@ -147,6 +147,8 @@ kratos-cli parts pit.json                                 # soil_top, ... for th
   `#rrggbb` colour, such as `#c4a86a`. The export derives some variables that are left
   out, and its warning lists them. It also derives `K0_NC` as 1 − sin φ from
   `GEO_FRICTION_ANGLE`, into `initial_materials.json`, but that warning does not list it.
+  `--r-inter` is the factor an interface puts on this soil's cohesion and tan φ (default
+  0.7), the **R_inter** field of the Material set window.
 - **Soil models**: `--model linear-elastic` or `--model mohr-coulomb` sets the law for the
   model's dimension, as the **Soil model** list of the Material set window does. The
   values the soil already has stay. The values the model needs and the soil does not

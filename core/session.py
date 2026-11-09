@@ -937,9 +937,11 @@ def add_material(project: Project, material) -> Project:
 def update_material(project: Project, id: str, *, name: str | None = None,
                     color: str | None = None, law: str | None = None,
                     model: str | None = None, variables: dict | None = None,
-                    unset: Sequence[str] = (), notes: list[str] | None = None) -> Project:
+                    unset: Sequence[str] = (), notes: list[str] | None = None,
+                    r_inter: float | None = None) -> Project:
     """The material `id` with the fields and variables given; `unset` names variables to
-    leave out, so the export derives them where it can.
+    leave out, so the export derives them where it can. `r_inter` is the factor an
+    interface puts on this soil's strength.
 
     `model` makes it that soil model (`core/model/soil_models.py`): its law in the
     project's dimension. What the soil then lists and lacks gets the model's default, as
@@ -954,7 +956,8 @@ def update_material(project: Project, id: str, *, name: str | None = None,
     payload = project.model_dump()
     record = payload["materials"][_index(project.materials, id, "material")]
     before_law, before = record["constitutive_law"], dict(record["variables"])
-    for field, value in (("name", name), ("color", color), ("constitutive_law", law)):
+    for field, value in (("name", name), ("color", color), ("constitutive_law", law),
+                         ("r_inter", r_inter)):
         if value is not None:
             record[field] = value
     record["variables"].update(variables or {})
