@@ -29,7 +29,7 @@ jobs:
       # From the release's lychee-x86_64-unknown-linux-gnu.tar.gz.sha256; update with the version.
       LYCHEE_SHA256: 1f4e0ef7f6554a6ed33dd7ac144fb2e1bbed98598e7af973042fc5cd43951c9a
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # The binary itself, not lychee-action: the organisation allows only the actions
       # on its list, and a workflow that uses another one fails before any job starts.
