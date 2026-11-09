@@ -228,6 +228,29 @@
     }));
   });
 
+  test('stage list: a stage that is added, inserted or duplicated is selected', function () {
+    var ctx = rig(model());
+    var before = model().stages.map(function (stage) { return stage.id; });
+    function fresh() {
+      var last = ctx.patches[ctx.patches.length - 1].body.stages;
+      return last.filter(function (stage) { return before.indexOf(stage.id) < 0; })
+        .map(function (stage) { return stage.id; });
+    }
+    function press(index) {
+      App.state.phase = model().stages[1].id;
+      App.Explorer.mountPhases();
+      ctx.dock.querySelectorAll('.stage-toolbar button.tbtn')[index].click();
+      return new Promise(function (r) { setTimeout(r, 20); });
+    }
+    return done(ctx, [0, 1, 2].reduce(function (chain, index) {
+      return chain.then(function () { return press(index); }).then(function () {
+        T.eq(fresh().length, 1, 'one new stage');
+        T.eq(App.state.phase, fresh()[0], 'button ' + index + ' selects the stage it made');
+        App.Model.apply(JSON.parse(JSON.stringify(model())));
+      });
+    }, Promise.resolve()));
+  });
+
   test("stage list: the dock's Stages… button opens the window", function () {
     var ctx = rig(model());
     try {

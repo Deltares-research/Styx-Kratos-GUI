@@ -35,9 +35,8 @@ var App = window.App || {};
 App.Interfaces = (function () {
 
   /* Steel against a medium sand: the reduction factor an engineer starts from,
-     and a virtual thickness the stiffness is derived over. The material is filled
-     in from the project when the interface is drafted, because the factor reduces
-     a particular soil's strength rather than a number in the abstract. */
+     and a virtual thickness the stiffness is derived over. The factor reduces the
+     strength of the soil each stretch runs against (`sectionsFor`). */
   function defaultSection() {
     return Object.assign({ name: 'Interface', r_inter: 0.7, virtual_thickness: 0.01,
                            permeability: 'Neutral' }, App.PropertySets.defaults('interface'));
@@ -232,15 +231,14 @@ App.Interfaces = (function () {
   }
 
   /* The section list this interface needs saved alongside it: the project's own,
-     plus a default the first time anyone draws one. The default is bound to a soil
-     material, because r_inter reduces that soil's strength. */
+     plus a default the first time anyone draws one. The default has no material: each
+     stretch takes the soil it runs against, reduced by r_inter (`drafts.section`). */
   function sectionsFor(project, record) {
     var library = copy((project && project.interface_sections) || []);
     var known = library.some(function (s) { return s.id === record.section; });
     if (!known) {
-      var soil = ((project && project.materials) || [])[0];
       library.push(Object.assign({ id: record.section }, defaultSection(),
-                                 { material: soil ? soil.id : null }));
+                                 { material: null }));
     }
     return library;
   }

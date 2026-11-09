@@ -247,7 +247,9 @@ def section(project: Project, kind: str, id: str, *, name: str | None = None):
         fields["tension_limit"] = units.from_si(start["tension_limit"], units.FORCE,
                                                 project.unit_system)
     if kind == "interface":
-        fields["material"] = project.materials[0].id if project.materials else None
+        # Each stretch takes the soil it runs against, reduced by r_inter: the first
+        # soil in the list may be nowhere near the interface.
+        fields["material"] = None
     if name is not None:
         fields["name"] = name
     return SECTION_KINDS[kind](id=id, **fields, variables=variables, tables={})

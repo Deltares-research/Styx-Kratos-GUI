@@ -143,6 +143,23 @@ App.ResultsPlot = (function () {
     return out;
   }
 
+  /* The ticks of `ticks(min, max, target)`, or fewer, so that no two labels of a
+     `width`-pixel axis touch: a moment axis in N·m/m has labels of six digits. */
+  var LABEL_CHAR = 6, LABEL_GAP = 8;
+
+  function fittingTicks(min, max, target, width) {
+    var out = ticks(min, max, target);
+    for (var wanted = target - 1; wanted >= 2; wanted -= 1) {
+      var step = out.length > 1 ? out[1] - out[0] : 1;
+      var longest = Math.max.apply(null, out.map(function (t) {
+        return tickLabel(t, step).length;
+      }));
+      if (out.length * (longest * LABEL_CHAR + LABEL_GAP) <= width) break;
+      out = ticks(min, max, wanted);
+    }
+    return out;
+  }
+
   function tickLabel(value, step) {
     var text = value.toFixed(decimalsOf(step));
     return /^-0(\.0*)?$/.test(text) ? text.slice(1) : text;
@@ -215,7 +232,7 @@ App.ResultsPlot = (function () {
     // Upright: a higher level is further *up* the page, which is smaller screen y.
     function sy(y) { return bottom - (y - yr.min) / (yr.max - yr.min) * (bottom - top); }
 
-    var xticks = ticks(xr.min, xr.max, 5);
+    var xticks = fittingTicks(xr.min, xr.max, 5, right - left);
     var yticks = ticks(yr.min, yr.max, 6);
     var xstep = xticks.length > 1 ? xticks[1] - xticks[0] : 1;
     var ystep = yticks.length > 1 ? yticks[1] - yticks[0] : 1;
@@ -470,7 +487,7 @@ App.ResultsPlot = (function () {
 
   return {
     command: command, state: state, forget: forget, onChange: onChange,
-    svg: svg, ticks: ticks, tickLabel: tickLabel, padded: padded, csv: csv,
+    svg: svg, ticks: ticks, fittingTicks: fittingTicks, tickLabel: tickLabel, padded: padded, csv: csv,
     PANEL: PANEL
   };
 })();

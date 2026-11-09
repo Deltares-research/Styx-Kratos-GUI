@@ -453,7 +453,9 @@
             return stage.id === selectedId ? Object.assign({}, stage, { parent: inserted.id }) : stage;
           }), 'insertion preserves every other stage');
         T.eq(ctx.requests[0].body.stages, App.PROJECT.stages);
-        T.eq(App.state.phase, selectedId);
+        T.eq(App.state.phase, inserted.id, 'the inserted stage is selected, to fill in');
+        App.state.phase = selectedId;
+        App.Explorer.mountPhases();
         host.querySelectorAll('.stage-toolbar button')[2].click();
         return settle();
       }).then(function () {

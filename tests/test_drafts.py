@@ -143,13 +143,13 @@ def test_a_new_tendon_states_its_working_limit_in_the_project_s_force_unit():
     assert tendon.variables["DENSITY"] == pytest.approx(7.85)
 
 
-def test_a_new_interface_section_reduces_the_first_soil():
+def test_a_new_interface_section_takes_the_soil_each_stretch_runs_against():
     project = seed_project()
 
     contact = drafts.section(project, "interface", "contact")
 
     assert isinstance(contact, InterfaceSection)
-    assert contact.material == project.materials[0].id
+    assert contact.material is None
     assert (contact.r_inter, contact.virtual_thickness) == (0.7, 0.01)
 
 

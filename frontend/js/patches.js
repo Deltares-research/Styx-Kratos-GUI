@@ -1210,6 +1210,9 @@ App.LivePatches = (function () {
      so there is no borehole to make. */
   var SOIL_DROPPED = ['createBorehole'];
 
+  /* The status bar's words for Soil mode, in place of the frozen ones about boreholes. */
+  var SOIL_HINT = 'Soil mode — define the soil materials and the soil layers.';
+
   function orderStructuresRail(tools) {
     return orderRail(tools, STRUCTURES_RAIL_GROUPS, STRUCTURES_RAIL_DROPPED);
   }
@@ -1920,8 +1923,15 @@ App.LivePatches = (function () {
       button.disabled = spec[0] !== 'new' && !selected;
       button.addEventListener('click', function () {
         App.UI.hideTip();
+        var before = ((App.PROJECT && App.PROJECT.stages) || []).map(function (stage) {
+          return stage.id;
+        });
         var list = spec[2]();
         if (!list) { App.Command.err('Select a stage first.'); return; }
+        // A stage just made is the one to fill in next, so it is selected; after a
+        // delete, selectedStageId falls back to the first.
+        var made = list.filter(function (stage) { return before.indexOf(stage.id) < 0; })[0];
+        if (made) App.state.phase = made.id;
         saveStages(list, spec[3]);
       });
       bar.appendChild(button);
@@ -2940,6 +2950,10 @@ App.LivePatches = (function () {
       soilMenu.items.push({ label: 'Create soil volume…', icon: 'cube', action: 'createSoilVolume' });
     }
     if (soilMenu) soilMenu.items = orderSoilMenu(soilMenu.items);
+    // The frozen Soil-mode hint asks for boreholes, which a layer no longer has.
+    (App.MODES || []).forEach(function (mode) {
+      if (mode.id === 'soil') mode.hint = SOIL_HINT;
+    });
 
     // Add Import model to Structures rail
     if (App.RAILS.structures) {

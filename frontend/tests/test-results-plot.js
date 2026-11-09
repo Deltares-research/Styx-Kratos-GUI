@@ -150,6 +150,14 @@
     T.eq(P.ticks(-0.0234, -0.0036, 5), [-0.02, -0.015, -0.01, -0.005]);
   });
 
+  test('the value axis has as many ticks as its labels have room for', function () {
+    // 162 px of axis: seven labels of five digits ran into each other.
+    var large = P.fittingTicks(-2770, 58178, 5, 162);
+    T.ok(large.length >= 2 && large.length <= 4, 'room for ' + large.join(', '));
+    T.eq(P.ticks(-2770, 58178, 5).length > large.length, true);
+    T.eq(P.fittingTicks(-2.7, 56.6, 5, 162), [0, 10, 20, 30, 40, 50], 'short labels all fit');
+  });
+
   test('tick labels carry the decimals of the step and no more', function () {
     T.eq(P.tickLabel(-0.015, 0.005), '-0.015');
     T.eq(P.tickLabel(40, 10), '40');
