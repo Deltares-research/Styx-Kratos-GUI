@@ -128,9 +128,12 @@ def mesh_project(project: Project, element_size: float | None = None,
     # Only the sizes actually asked for, unlike the bodies above. Pinning every curve to
     # the base size would stop the mesh grading along it, and a curve that nobody sized
     # should take whatever the surface around it is doing.
+    # Every curve asked for, not only those among `meshed_keys`: that list names the
+    # soil bodies to mesh (the Mesh properties window sends its ticked layers), and a
+    # wall standing in them is meshed with them whether it is named or not.
     curve_sizes = {
-        tag: requested_sizes[key]
-        for key in meshed_keys if key in requested_sizes
+        tag: size
+        for key, size in requested_sizes.items()
         for tag in built.curves.get(key, [])
     }
 

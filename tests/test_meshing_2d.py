@@ -281,6 +281,22 @@ def test_a_size_asked_for_a_structure_reaches_the_mesh():
     assert fine > coarse * 2, (coarse, fine)
 
 
+def test_a_structure_s_size_holds_when_the_layers_to_mesh_are_named():
+    """The Mesh properties window always names the layers it meshes (`volume_keys`). The
+    wall is in none of them, and its size was dropped with it: the window's sheet-pile
+    size did nothing in the GUI, though the export and `kratos-cli` honoured it."""
+    project = excavation_like()
+    layers = [f"soil_{layer.id}" for layer in project.layers]
+
+    def elements(sizes):
+        with solid_model.session():
+            mesh = meshing.mesh_project(project, element_size=8.0, order=1,
+                                        volume_keys=layers, body_sizes=sizes)
+        return mesh.stats.elements
+
+    assert elements({"sheetpile": 0.5}) > elements({})
+
+
 def test_the_contact_follows_the_wall_it_holds():
     """The interface is split off the same curve, so refining the wall refines it too --
     one element a side, which is what keeps the two conformal."""
