@@ -182,13 +182,11 @@ def _colors_by_volume(project: Project, result: solid_model.BuildResult) -> dict
     # in that layer's material colour. Colouring only `soil_<layer id>` left every lift
     # without one, which `_group_by_color` reports as a KeyError that takes the whole
     # model view down rather than drawing one body grey.
-    layer_color = {f"soil_{layer.id}": project.material(layer.mat).color
-                   for layer in project.layers}
-    for key, *_ in project.soil_bodies():
+    for key, material in project.soil_body_materials.items():
         # .get, not [...]: in a 2D section a layer that does not cross the plane keeps
         # its key but owns nothing.
         for tag in result.volumes.get(key, []):
-            colors[tag] = layer_color[key.partition("__")[0]]
+            colors[tag] = project.material(material).color
     for key, color in PART_COLORS.items():
         for tag in result.volumes.get(key, []):
             colors[tag] = color
