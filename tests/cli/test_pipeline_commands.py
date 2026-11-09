@@ -53,6 +53,15 @@ def test_a_deck_is_not_meshed(cli, tmp_path):
     assert "not meshed here" in ran.err
 
 
+def test_mesh_sizes_a_body_as_the_mesh_window_does(cli, site):
+    """The Layer and Structure mesh sizes of the Mesh properties window."""
+    assert cli("mesh", site, "--body-size", "soil_L1", "2").code == 0
+    assert session.load(site).mesh.body_sizes == {"soil_L1": 2.0}
+
+    assert cli("mesh", site, "--body-size", "soil_L1", "none").code == 0
+    assert session.load(site).mesh.body_sizes == {}
+
+
 def test_mesh_refuses_a_size_for_a_part_that_is_not_in_the_model(cli, site):
     payload = json.loads(site.read_text(encoding="utf-8"))
     payload["mesh"]["body_sizes"] = {"gone": 1.0}

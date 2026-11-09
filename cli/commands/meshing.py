@@ -26,6 +26,10 @@ def register(commands, common: argparse.ArgumentParser) -> None:
     add_project(mesh)
     mesh.add_argument("--size", type=float, help="the element size, in metres")
     mesh.add_argument("--order", type=int, choices=(1, 2), help="linear (1) or quadratic (2)")
+    mesh.add_argument("--body-size", nargs=2, action="append", default=[],
+                      metavar=("KEY", "SIZE"),
+                      help="the element size of one body: a layer (soil_<layer>) or a sheet "
+                           "pile, by its key; none takes the size away. Repeat for more")
     add_writing(mesh)
     mesh.set_defaults(handler=mesh_model)
 
@@ -118,6 +122,19 @@ def _with_settings(project: Project, args: argparse.Namespace) -> Project:
         project = session.with_value(project, "mesh.element_size", args.size)
     if args.order is not None:
         project = session.with_value(project, "mesh.order", args.order)
+    sizes = dict(project.mesh.body_sizes)
+    for key, size in args.body_size:
+        if size.lower() == "none":
+            sizes.pop(key, None)
+        else:
+            try:
+                sizes[key] = float(size)
+            except ValueError:
+                raise CommandError(f"--body-size {key}: {size!r} is not a size or none") \
+                    from None
+    if args.body_size:
+        project = session.with_value(project, "mesh", {
+            **project.mesh.model_dump(), "body_sizes": sizes})
     return project
 
 

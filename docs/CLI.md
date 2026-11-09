@@ -85,7 +85,7 @@ Genuchten soil.
 | `boundary P list\|add\|set\|remove\|standard ...` | The boundary conditions: `add [ID] --face F\|--part KEY\|--line ...\|--point X Y --fixed\|--roller\|--fix AXIS ...` for a support, `add [ID] --domain\|... --water-pressure TYPE ...` for a water pressure, `add [ID] --face F\|--line ... --seepage` for a seepage face; `standard` puts back the standard supports |
 | `gravity P [on\|off]` | Show, or switch on or off, the self weight of every body (on in a new project) |
 | `parts P` | Every part by its key, and every water pressure condition: the names stages activate and deactivate |
-| `mesh P [--size S] [--order 1\|2]` | Mesh the model and report its size. `--size` and `--order` are kept in the project |
+| `mesh P [--size S] [--order 1\|2] [--body-size KEY S]` | Mesh the model and report its size. The settings given are kept in the project, as the **Mesh properties** window keeps them: `--body-size` sizes a layer (`soil_<layer>`) or a sheet pile, `none` takes the size away |
 | `stages P [list\|show\|defaults\|add\|copy\|set\|remove\|activate\|deactivate] ...` | The construction sequence, edited as the GUI's Stages toolbar edits it. `phases` is the old name and still works |
 | `node SOURCE NODE ...` | Which SubModelParts a node of the deck is in, and the nodes an interface split from it |
 | `deck show SOURCE` | A deck's mesh, SubModelParts and stages |
@@ -213,7 +213,7 @@ kratos-cli interface pit.json add contact --structure sheet --side right
 kratos-cli interface pit.json add upper --structure sheet --side left --from 6 0 --to 6 -1
 kratos-cli load pit.json add line surcharge --x 6 60 --components 0 -10000
 kratos-cli normal-load pit.json add water_1 --hydrostatic --points 0 -2 6 -2 6 -1
-kratos-cli set pit.json mesh.body_sizes.sheet 0.5
+kratos-cli mesh pit.json --body-size sheet 0.5
 ```
 
 - **Where a new one goes.** A structure given no geometry is put where the GUI's tool
