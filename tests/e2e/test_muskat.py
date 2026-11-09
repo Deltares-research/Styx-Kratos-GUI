@@ -35,7 +35,7 @@ def project():
     model = {model}
     return model.model_copy(update={{
         "boundary_conditions": [c for c in model.boundary_conditions if c.id in {keep!r}],
-        "stages": [stage.model_copy(update={{"calculation": "Plastic"}})
+        "stages": [stage.model_copy(update={{"calculation": "mechanical"}})
                    for stage in model.stages]}})
 '''
 """A model script: `model` with only the conditions in `keep`, and its stage not yet a
@@ -47,7 +47,7 @@ def open_column(page, directory: Path, name: str, model: str, keep: tuple, doc: 
     script.write_text(COLUMN.format(model=model, keep=keep, doc=doc), encoding="utf-8")
     command(page, f"run {script.as_posix()}")
     page.wait_for_function("App.PROJECT && App.PROJECT.stages.length === 1"
-                           " && App.PROJECT.stages[0].calculation === 'Plastic'",
+                           " && App.PROJECT.stages[0].calculation === 'mechanical'",
                            timeout=LONG)
 
 
@@ -105,9 +105,9 @@ def on_a_line(page, kind: str, name: str, points: str, **water):
 def groundwater_flow(page):
     """The stage's calculation type, in the Stages window."""
     command(page, "stages")
-    window(page).locator(".stages-overview .pgrid select").select_option("Groundwater flow")
-    page.wait_for_function("App.PROJECT.stages[0].calculation === 'Groundwater flow'",
-                           timeout=LONG)
+    row = window(page).locator(".stages-overview .pgrid-row", has_text="Calculation type")
+    row.locator("select").select_option("flow")
+    page.wait_for_function("App.PROJECT.stages[0].calculation === 'flow'", timeout=LONG)
     window(page).get_by_role("button", name="Close").click()
 
 
