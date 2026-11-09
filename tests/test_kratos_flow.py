@@ -29,7 +29,7 @@ from core.model.schemas import (Beam, BeamSection, DisplacementCondition, Stage,
                                 standard_conditions)
 from tests import mdpa
 from tests.models import muskat as muskat_model
-from tests.models.muskat import FLOW, HEADS, HEIGHT, VAN_GENUCHTEN, head, muskat
+from tests.models.muskat import FLOW, HEADS, HEIGHT, VAN_GENUCHTEN, WIDTH, head, muskat
 from tests.models.muskat import SOIL as REFERENCE_SOIL
 
 # ── Kratos' tests/Muskat/saturated_hydrostatic, copied ──────────────────────
@@ -506,3 +506,53 @@ def test_an_imported_flow_deck_s_stage_is_a_groundwater_flow_stage():
     stage = {"stage_settings": {"solver_settings": {
         "solution_type": "Steady_State_Groundwater_Flow"}}}
     assert external_deck._calculation(stage, "stage 1") == stages.GROUNDWATER_FLOW
+
+
+def test_coupled_soil_warns_when_a_stage_has_no_fixed_water_pressure():
+    project = muskat(
+        conditions=HEADS,
+        stages=[Stage(id="dry", name="Dry", calculation="Plastic",
+                      deactivate=["left_head", "right_head"])],
+    )
+
+    warnings = condition_checks.warnings(project)
+
+    assert any("in stage 'Dry' no fixed water pressure condition is on" in warning
+               for warning in warnings)
+    assert any("self weight builds up pressures" in warning for warning in warnings)
+
+
+def test_seepage_export_refuses_a_drawn_line_without_mesh(gmsh_session):
+    above = HEIGHT + 1.0
+    drain = SeepageCondition(id="drain", name="Drain", on="line",
+                             points=[(0.2, above), (WIDTH - 0.2, above)])
+
+    with pytest.raises(writer.ExportError, match="Drain.*no mesh along its line"):
+        writer.export_project(muskat(conditions=[*HEADS, drain]))
+
+
+def test_seepage_export_warns_when_no_edge_lies_on_the_selected_face():
+    from core.model.templates import blank_project
+
+    condition = SeepageCondition(id="drain", name="Drain", on="face", face="left")
+    project = blank_project().model_copy(update={"boundary_conditions": [condition]})
+    world = {1: (0, 0, 0), 2: (1, 0, 0), 3: (1, -1, 0)}
+    warnings = []
+
+    assert writer._seepage_conditions(
+        project, [("soil", "Triangle", [[1, 2, 3]])], world, warnings) == []
+    assert len(warnings) == 1
+    assert "Drain" in warnings[0]
+    assert "left face, which has no soil edge" in warnings[0]
+
+
+@pytest.mark.parametrize("on, points", [
+    ("line", [(0.2, HEIGHT + 1.0), (WIDTH - 0.2, HEIGHT + 1.0)]),
+    ("point", [(WIDTH / 2, HEIGHT + 1.0)]),
+])
+def test_drawn_water_conditions_without_mesh_are_refused(gmsh_session, on, points):
+    water = WaterPressureCondition(id="drawn_water", name="Water", on=on,
+                                   points=points, fluid_pressure_type="Uniform")
+
+    with pytest.raises(writer.ExportError, match=f"Water.*no mesh at its {on}"):
+        writer.export_project(muskat(conditions=[*HEADS, water]))

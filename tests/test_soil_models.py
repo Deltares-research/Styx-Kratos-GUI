@@ -17,7 +17,7 @@ from core import session
 from core.kratos import materials
 from core.kratos.materials import MaterialError
 from core.model import drafts, migration, soil_models, units
-from core.model.schemas import DimensionUpdate, Material, Project
+from core.model.schemas import DimensionUpdate, InterfaceSection, Material, Project
 from core.model.templates import blank_project, seed_project
 
 MC_2D, MC_3D = soil_models.law(soil_models.MOHR_COULOMB, 2), soil_models.law(
@@ -314,6 +314,48 @@ def test_a_law_of_no_model_is_written_as_typed():
         variables={"UDSM_NAME": "mc.dll"}).model_dump(mode="json")
     assert deck(Project.model_validate(payload))["constitutive_law"]["name"] == \
         "SmallStrainUDSM2DPlaneStrainLaw"
+
+
+def test_interface_materials_preserve_user_values_and_refuse_unresolvable_stiffness():
+    project = seed_project()
+    section = InterfaceSection(
+        id="contact", name="Contact", variables={
+            "INTERFACE_NORMAL_STIFFNESS": 900.0,
+            "INTERFACE_SHEAR_STIFFNESS": 90.0,
+        },
+    )
+    warnings = []
+    derived = []
+
+    variables = materials._interface_variables(
+        section, project, warnings, adjacent=None, derived=derived,
+    )
+
+    assert variables["GEO_DRAINAGE_TYPE"] == "CONSTANT_PW_FIELD"
+    assert variables["INTERFACE_NORMAL_STIFFNESS"] == 900.0
+    assert variables["INTERFACE_SHEAR_STIFFNESS"] == 90.0
+    assert derived == ["interface section 'Contact': GEO_DRAINAGE_TYPE"]
+    assert warnings == []
+
+    with pytest.raises(materials.MaterialError, match="neither a soil material"):
+        materials._interface_variables(
+            InterfaceSection(id="missing", name="Missing"), project, [], None, [],
+        )
+
+
+@pytest.mark.parametrize("law, dimension", [
+    ("GeoMohrCoulombWithTensionCutOff2D", 2),
+    ("GeoMohrCoulombWithTensionCutOff3D", 3),
+    ("UserSuppliedSoilLaw", None),
+])
+def test_soil_law_dimension_recognises_retired_names_without_guessing_custom_laws(
+        law, dimension):
+    assert soil_models.law_dimension(law) == dimension
+
+
+def test_an_unknown_soil_model_lists_the_supported_choices():
+    with pytest.raises(ValueError, match="there is no soil model 'unknown'; there are:"):
+        soil_models.law("unknown", 2)
 
 
 # ── What is derived, and what follows from a soil's numbers ────────────────

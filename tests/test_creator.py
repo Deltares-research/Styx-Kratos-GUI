@@ -185,3 +185,32 @@ def test_creator_rejects_unknown_kind(tmp_path, monkeypatch):
             primitives.process_creation({"kind": "sphere"})
     finally:
         gmsh.finalize()
+
+
+@pytest.mark.parametrize(
+    "recipe, message",
+    [
+        ({"kind": "box", "origin": [0, 0, 0], "size": [1, 0, 1]}, "non-zero 'size'"),
+        ({"kind": "cylinder", "center": [0, 0, 0], "axis": [0, 0, 0],
+          "radius": 1}, "non-zero 'axis'"),
+        ({"kind": "polygon", "vertices": [[0, 0, 0], [1, 0, 0], [2, 0, 0]],
+          }, "has no area"),
+        ({"kind": "polygon_extrude", "vertices": [[0, 0, 0], [1, 0, 0], [0, 1, 0]],
+          "extrusion": [0, 0, 0]}, "non-zero 'extrusion'"),
+    ],
+)
+def test_creation_recipe_rejects_geometries_that_cannot_be_built(recipe, message):
+    with pytest.raises(ValueError, match=message):
+        primitives._check(recipe, recipe["kind"])
+
+
+def test_creation_recipe_requires_a_kind_before_dispatch(tmp_path, monkeypatch):
+    monkeypatch.setattr(primitives, "DATA_DIR", tmp_path / "data")
+    with solid_model.session(), pytest.raises(ValueError, match="missing 'kind'"):
+        primitives.process_creation({})
+
+
+def test_line_creation_requires_two_vertices(tmp_path, monkeypatch):
+    monkeypatch.setattr(primitives, "DATA_DIR", tmp_path / "data")
+    with solid_model.session(), pytest.raises(ValueError, match="at least 2 vertices"):
+        primitives.process_creation({"kind": "line", "vertices": [[0, 0, 0]]})

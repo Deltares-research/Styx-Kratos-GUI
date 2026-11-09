@@ -114,6 +114,20 @@ def test_every_element_can_be_found_without_knowing_its_block():
 
     assert mesh.connectivity(13) == [1, 2, 3, 4, 5, 6]
     assert mesh.connectivity(999) is None
+    assert mesh.block_of(13) is mesh.blocks[1]
+    assert mesh.block_of(999) is None
+    assert mesh.elements() == {
+        11: [1, 2, 3, 4, 5, 6],
+        12: [3, 2, 1, 6, 5, 4],
+        13: [1, 2, 3, 4, 5, 6],
+    }
+
+
+def test_blank_mesh_lines_are_ignored():
+    mesh = gid_reader.read_mesh("\n  \n" + MESH.replace("Coordinates\n", "Coordinates\n\n  \n"))
+
+    assert len(mesh.nodes) == 3
+    assert len(mesh.elements()) == 3
 
 
 def test_the_dimension_is_read_from_the_block_header():
@@ -242,6 +256,30 @@ def test_a_variable_that_is_not_there_is_none_rather_than_a_raise():
     out = gid_reader.read_results(RES)
 
     assert out.field("TOTAL_STRESS_TENSOR") is None
+
+
+def test_all_fields_returns_the_parsed_blocks():
+    out = gid_reader.read_results(RES)
+
+    fields = out.all_fields()
+
+    assert fields == out.blocks
+    assert fields is not out.blocks
+
+
+def test_blank_result_lines_are_ignored_and_non_numeric_time_defaults_to_zero():
+    text = (
+        'Result "DISPLACEMENT" "Kratos" initial Vector OnNodes\n'
+        'Values\n'
+        '\n  \n'
+        '1 1 2 3\n'
+        'End Values\n'
+    )
+
+    field = gid_reader.read_results(text).field("DISPLACEMENT")
+
+    assert field.time == 0.0
+    assert field.values == {1: [1.0, 2.0, 3.0]}
 
 
 def test_an_empty_file_is_no_fields_rather_than_an_error():

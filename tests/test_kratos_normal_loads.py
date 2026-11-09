@@ -283,3 +283,20 @@ def test_a_load_on_the_ground_drawn_right_to_left_still_presses_but_says_so():
     (warning,) = direction_warnings(project)
     assert "arrows pointing out of the soil" in warning
     assert not pulling_warnings(project)
+
+
+def test_normal_load_export_refuses_a_line_without_mesh(session):
+    # Drawn 2 m above the ground: no soil around it, so the build clips all of it away.
+    project = normal_load_project(points=[[8.0, 2.0], [16.0, 2.0]])
+
+    with pytest.raises(writer.ExportError, match="River load.*no mesh along its line"):
+        writer.export_project(project, MeshRequest(element_size=3.0, order=1))
+
+
+def test_normal_load_export_refuses_an_edge_with_no_mapped_condition(monkeypatch):
+    # No mesher writes a 4-node edge, so this guard can only be reached by stubbing.
+    monkeypatch.setattr(writer, "_tagged", lambda _: {"normal_1": [10]})
+    monkeypatch.setattr(writer, "_segments", lambda _: [[1, 2, 3, 4]])
+
+    with pytest.raises(writer.ExportError, match="no Kratos condition is mapped.*4 nodes"):
+        writer._normal_load_conditions(normal_load_project(), 2, [])

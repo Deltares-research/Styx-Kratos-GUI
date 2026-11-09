@@ -14,6 +14,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from backend.main import app
+from core.geometry.cad_import import ImportRefused
 from core.geometry import solid_model
 from core.model.schemas import Project
 from core.model.templates import seed_project
@@ -161,6 +162,13 @@ def test_put_project_rejects_unknown_fields(client):
     assert client.put("/api/project", json=payload).status_code == 422
 
 
+def test_run_script_requires_a_path(client):
+    response = client.post("/api/project/script", json={})
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "run needs a path to a .py file"
+
+
 # ── Geometry ────────────────────────────────────────────────────────────────
 
 def test_geometry_returns_drawable_sections_for_every_part(client):
@@ -224,6 +232,25 @@ def test_post_geometry_import_rejects_unsupported_extensions(client):
     response = client.post("/api/geometry/import", files={"file": ("test.txt", b"foo")})
     assert response.status_code == 422
     assert "extension" in response.json()["detail"]
+
+
+@pytest.mark.parametrize(("failure", "status", "detail"), [
+    (ImportRefused("the file has no solid"), 422, "the file has no solid"),
+    (RuntimeError("worker unavailable"), 500, "worker unavailable"),
+])
+def test_post_geometry_import_reports_worker_failures(
+        client, monkeypatch, failure, status, detail):
+    from backend.routes import geometry
+
+    async def fail(*_args):
+        raise failure
+
+    monkeypatch.setattr(geometry.gmsh_worker, "run", fail)
+
+    response = client.post("/api/geometry/import", files={"file": ("broken.step", b"not CAD")})
+
+    assert response.status_code == status
+    assert response.json()["detail"] == detail
 
 
 def test_post_geometry_import_adds_custom_part_and_invalidates(client):
@@ -794,6 +821,33 @@ def test_patch_layers_can_resize_the_domain(client):
     assert (saved["x1"], saved["z1"]) == (60.0, 45.0)
 
     client.put("/api/project", json=seed_project().model_dump())
+
+
+def test_a_layer_delete_answers_with_the_mesh_size_it_took_away(client):
+    """The GUI's soil layers window sends the stack without the layer; the size of the
+    layer's body goes with it, and the answer says so for the Session log."""
+    from tests.models.excavation import excavation_project
+
+    project = excavation_project(staged=False).model_dump(mode="json")
+    project["mesh"]["body_sizes"] = {"soil_L_mid": 2.0}
+    layers = [dict(layer) for layer in project["layers"] if layer["id"] != "L_mid"]
+    layers[0]["bottom"] = layers[1]["top"]
+    try:
+        put = client.put("/api/project", json=project)
+        assert put.status_code == 200, put.text
+
+        response = client.patch("/api/project/layers", json={"layers": layers})
+
+        assert response.status_code == 200, response.text
+        answer = response.json()
+        assert answer["project"]["mesh"]["body_sizes"] == {}
+        assert answer["edit_notes"] == [
+            "Removed the mesh size of soil_L_mid (2): the edit took that body away. If it "
+            "comes back, set its size again."]
+        again = client.patch("/api/project/layers", json={"layers": layers})
+        assert again.json()["edit_notes"] == []
+    finally:
+        client.put("/api/project", json=seed_project().model_dump())
 
 
 # ── The water line ──────────────────────────────────────────────────────────

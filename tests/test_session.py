@@ -8,6 +8,7 @@ the edit itself, and `tests/test_api.py` keeps checking what the routes answer.
 
 from __future__ import annotations
 
+import ast
 import json
 from pathlib import Path
 
@@ -17,9 +18,10 @@ from pydantic import ValidationError
 from core import session
 from core.model import stages
 from core.model.schemas import (FULL_BUILD_BLOCKS, Deck, DimensionUpdate, LayersUpdate,
-                                MaterialsUpdate, Stage, StagesUpdate, Project, StructuresUpdate, UnitsUpdate,
+                                MaterialsUpdate, MeshRequest, Stage, StagesUpdate, Project, StructuresUpdate, UnitsUpdate,
                                 WaterLevel, WaterUpdate)
 from core.model.templates import blank_project, seed_project
+from tests.models import edits
 from tests.models.excavation import excavation_project
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "projects"
@@ -100,9 +102,31 @@ def test_a_script_loads_as_the_project_it_describes(tmp_path):
     assert session.load(script) == seed_project()
 
 
+def test_a_script_failure_is_refused_as_a_project_file(tmp_path):
+    script = tmp_path / "broken.py"
+    script.write_text("raise RuntimeError('broken model')\n", encoding="utf-8")
+
+    with pytest.raises(session.ProjectFileError, match="broken.py failed while running"):
+        session.load(script)
+
+
 def test_a_missing_file_is_refused_by_name(tmp_path):
     with pytest.raises(session.ProjectFileError, match="nope.json"):
         session.load(tmp_path / "nope.json")
+
+
+def test_an_unreadable_project_is_refused_with_where(tmp_path, monkeypatch):
+    path = tmp_path / "locked.json"
+    real_read_text = Path.read_text
+
+    def unreadable(source, *args, **kwargs):
+        if source == path:
+            raise PermissionError("access denied")
+        return real_read_text(source, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", unreadable)
+    with pytest.raises(session.ProjectFileError, match="locked.json could not be read"):
+        session.load(path)
 
 
 def test_a_file_that_is_not_a_project_is_refused(tmp_path):
@@ -423,6 +447,29 @@ def test_a_path_that_names_nothing_says_what_is_there():
         session.value_at(seed_project(), "layers[L1")
 
 
+def test_a_path_cannot_descend_into_a_scalar():
+    with pytest.raises(session.PathError, match="which has no fields"):
+        session.value_at(seed_project(), "mesh.element_size.depth")
+
+
+def test_a_material_is_not_a_structure():
+    material = seed_project().materials[0].model_copy(update={"id": "not_a_structure"})
+
+    with pytest.raises(session.EditRefused, match="Material is not a structure"):
+        session.add_structure(blank_project(), material)
+
+
+def test_setting_a_value_requires_a_nonempty_path():
+    with pytest.raises(session.PathError, match="give a path"):
+        session.with_value(seed_project(), "", {})
+
+
+def test_a_list_record_can_be_selected_by_a_negative_index():
+    project = seed_project()
+
+    assert session.value_at(project, "layers[-1].id") == project.layers[-1].id
+
+
 def test_a_value_is_set_by_its_path_and_validated():
     project = session.with_value(seed_project(), "mesh.element_size", 1.5)
     assert project.mesh.element_size == 1.5
@@ -591,6 +638,15 @@ def test_a_top_cannot_rise_above_the_layer_above():
         session.update_layer(seed_project(), "L2", top=5.0)
 
 
+def test_a_layer_cannot_be_collapsed_past_its_own_faces():
+    layer = seed_project().layers[0]
+
+    with pytest.raises(session.EditRefused, match="top must be at or above its bottom"):
+        session.update_layer(seed_project(), layer.id, top=layer.bottom - 1.0)
+    with pytest.raises(session.EditRefused, match="bottom must be at or below its top"):
+        session.update_layer(seed_project(), layer.id, bottom=layer.top + 1.0)
+
+
 def test_a_layer_takes_another_material():
     project = session.update_layer(seed_project(), "L1", material="m1", name="Fill")
 
@@ -726,6 +782,16 @@ def test_unsetting_a_variable_the_material_does_not_have_is_refused():
         session.update_material(seed_project(), "m1", unset=["NOPE"])
 
 
+def test_a_material_cannot_get_both_a_model_and_a_law():
+    with pytest.raises(session.EditRefused, match="give a soil model or a law"):
+        session.update_material(seed_project(), "m1", model="invalid", law="invalid")
+
+
+def test_an_unknown_soil_model_is_refused():
+    with pytest.raises(session.EditRefused):
+        session.update_material(seed_project(), "m1", model="not-a-soil-model")
+
+
 def test_a_material_a_layer_uses_is_not_removed():
     with pytest.raises(ValidationError):
         session.remove_material(seed_project(), "m2")
@@ -787,6 +853,11 @@ def test_a_part_given_a_material_the_model_lacks_is_refused():
         session.assign_part_material(with_box(seed_project()), "drawn_0", "nope")
 
 
+def test_a_part_that_is_not_there_cannot_be_assigned_a_material():
+    with pytest.raises(session.UnknownPart, match="no custom part with key 'drawn_9'"):
+        session.assign_part_material(seed_project(), "drawn_9", "m1")
+
+
 # ── Structures and their sections ────────────────────────────────────────────
 
 def plane_strain() -> Project:
@@ -803,6 +874,17 @@ def test_a_first_sheet_pile_brings_its_default_profile():
 
     assert [b.id for b in edited.beams] == ["beam_1"]
     assert [s.id for s in edited.beam_sections] == ["beamsection_1"]
+
+
+def test_a_structure_without_a_section_cannot_be_given_one():
+    from core.model import drafts
+
+    project = plane_strain()
+    normal_load = drafts.normal_load(project, id="load_1")
+    section = drafts.section(project, "beam", "beamsection_1")
+
+    with pytest.raises(session.EditRefused, match="built with no section"):
+        session.add_structure(project, normal_load, section)
 
 
 def test_a_structure_needs_an_id_no_other_part_has():
@@ -833,11 +915,46 @@ def test_a_structure_that_is_not_there_is_named_with_those_that_are():
         session.update_structure(excavation_project(staged=False), "wall9", name="x")
 
 
+def test_a_structure_lookup_in_an_empty_project_says_there_are_none():
+    with pytest.raises(session.UnknownRecord, match="no structure 'missing'; there are: none"):
+        session.find_structure(blank_project(), "missing")
+
+
 def test_a_pile_carrying_an_anchor_or_an_interface_is_not_removed():
     project = excavation_project(staged=False)
 
     with pytest.raises(session.EditRefused, match="strut, wall_contact"):
         session.remove_structure(project, "sheetpile")
+
+
+def test_a_wall_carrying_a_three_dimensional_anchor_is_not_removed():
+    from core.model import drafts
+
+    project, _ = session.set_dimension(seed_project(), DimensionUpdate(dimension=3))
+    wall = drafts.wall(project, id="support_wall")
+    project = session.add_structure(project, wall, drafts.section_for(project, wall))
+    anchor = drafts.anchor(project, id="anchor")
+    project = session.add_structure(project, anchor, drafts.section_for(project, anchor))
+
+    with pytest.raises(session.EditRefused, match="support_wall carries anchor"):
+        session.remove_structure(project, "support_wall")
+
+
+def test_a_pile_carrying_a_point_load_above_the_ground_is_not_removed():
+    from core.model import drafts
+
+    project = plane_strain()
+    x = (project.domain.x0 + project.domain.x1) / 2
+    pile = drafts.sheet_pile(
+        project, points=[(x, project.domain.y_top + 2), (x, project.domain.y_top - 10)],
+        id="pile",
+    )
+    project = session.add_structure(project, pile, drafts.section_for(project, pile))
+    load = drafts.point_load(project, at=(x, project.domain.y_top + 1), id="pile_load")
+    project = session.add_structure(project, load)
+
+    with pytest.raises(session.EditRefused, match="pile carries pile_load"):
+        session.remove_structure(project, "pile")
 
 
 def test_a_structure_a_stage_names_is_not_removed():
@@ -854,6 +971,121 @@ def test_a_removed_structure_takes_its_mesh_size_with_it():
 
     assert edited.beams == []
     assert "sheetpile" not in edited.mesh.body_sizes
+
+
+# ── A size goes with its body ───────────────────────────────────────────────
+
+def _structures(project: Project, **lists) -> StructuresUpdate:
+    return StructuresUpdate.model_validate(
+        edits.structures_sent(project.model_dump(mode="json"), **lists))
+
+
+def _without(project: Project, field: str, id: str) -> list[dict]:
+    return edits.without(project.model_dump(mode="json")[field], id)
+
+
+def _stack_without(project: Project, id: str) -> LayersUpdate:
+    return LayersUpdate.model_validate(
+        edits.layers_window_sent(project.model_dump(mode="json"), id))
+
+
+EDITS_THAT_TAKE_A_BODY = {
+    "kratos-cli layer remove": lambda p: session.remove_layer(p, "L_mid"),
+    "kratos-cli layer split": lambda p: session.split_layer(p, "L_top"),
+    "kratos-cli layer set --top": lambda p: session.update_layer(p, "L_mid", top=-3.0),
+    "kratos-cli set excavation null": lambda p: session.with_value(p, "excavation", None),
+    "kratos-cli excavation --levels": lambda p: session.set_excavation(
+        p, levels=[-2.0, -4.5])[0],
+    "the GUI deletes a layer": lambda p: session.replace_layers(p, _stack_without(p, "L_mid")),
+    "the GUI deletes an anchor": lambda p: session.replace_structures(
+        p, _structures(p, anchors=_without(p, "anchors", "strut"))),
+    "the GUI deletes an interface": lambda p: session.replace_structures(
+        p, _structures(p, interfaces=_without(p, "interfaces", "wall_contact"))),
+    "the GUI deletes a normal load": lambda p: session.replace_structures(
+        p, _structures(p, normal_loads=_without(p, "normal_loads", "water_1"))),
+    "the GUI deletes a sheet pile and what hangs from it": lambda p: session.replace_structures(
+        p, _structures(p, beams=[], anchors=[], interfaces=[])),
+}
+"""Each edit that takes a body away, made the way each front end makes it. The GUI does
+not call `remove_structure`: it sends the whole list."""
+
+
+@pytest.mark.parametrize("edit", sorted(EDITS_THAT_TAKE_A_BODY))
+def test_a_body_an_edit_takes_away_takes_its_mesh_size_with_it(edit):
+    """Or `kratos-cli check` and `mesh` refuse the saved project: "the mesh settings
+    name bodies this model does not have"."""
+    project = edits.sized(excavation_project(staged=False))
+
+    edited = EDITS_THAT_TAKE_A_BODY[edit](project)
+
+    gone = set(project.part_keys()) - set(edited.part_keys())
+    assert gone & set(project.mesh.body_sizes), "the edit takes no sized body away"
+    assert edited.mesh.body_sizes == {key: size for key, size
+                                      in project.mesh.body_sizes.items() if key not in gone}
+
+
+def test_a_body_a_3d_edit_takes_away_takes_its_mesh_size_with_it():
+    project = with_box(seed_project())
+    assert project.dimension == 3
+    project = edits.sized(project, soil_L2=1.0)
+
+    volume_gone = session.without_custom_part(project, "drawn_0")
+    layer_gone = session.remove_layer(project, "L2")
+
+    assert volume_gone.mesh.body_sizes == {"soil_L2": 1.0}
+    assert layer_gone.mesh.body_sizes == {"drawn_0": 0.5}
+    assert session.removed_sizes(project, volume_gone) == [
+        "Removed the mesh size of drawn_0 (0.5): the edit took that body away. If it "
+        "comes back, set its size again."]
+
+
+def test_a_size_for_a_body_the_model_never_had_is_left_for_check_to_name():
+    project = edits.sized(excavation_project(staged=False), soil_typo=1.0)
+
+    edited = session.remove_layer(project, "L_mid")
+
+    assert edited.mesh.body_sizes["soil_typo"] == 1.0
+    settings = MeshRequest.model_validate(edited.mesh.model_dump())
+    assert session.unknown_mesh_keys(edited, settings) == ["soil_typo"]
+
+
+def test_the_user_is_told_which_sizes_an_edit_took_away():
+    """A body can come back -- a level moved back -- but its size does not."""
+    project = edits.sized(excavation_project(staged=False))
+
+    notes = session.removed_sizes(project, session.split_layer(project, "L_top"))
+
+    assert notes == ["Removed the mesh size of soil_L_top__lift3 (1): the edit took that "
+                     "body away. If it comes back, set its size again."]
+    several = session.removed_sizes(project, session.with_value(project, "excavation", None))
+    assert len(several) == 1
+    assert several[0].startswith("Removed the mesh sizes of soil_L_mid__pit (1), "
+                                 "soil_L_top__lift3 (1): the edit took those bodies away.")
+
+
+def test_a_size_removed_on_purpose_or_never_valid_is_not_noted():
+    project = edits.sized(excavation_project(staged=False), soil_typo=1.0)
+
+    on_purpose = session.without_value(project, "mesh.body_sizes[soil_L_mid]")
+    typo_kept = session.remove_layer(project, "L_mid")
+
+    assert session.removed_sizes(project, on_purpose) == []
+    assert "soil_typo" not in " ".join(session.removed_sizes(project, typo_kept))
+    assert session.removed_sizes(project, project) == []
+
+
+def test_every_edit_makes_its_result_through_the_one_rule():
+    """`session._edited` is where a lost body's size goes. An edit that validated its
+    project itself would skip the rule -- `layer split` and `layer set` once did."""
+    tree = ast.parse(Path(session.__file__).read_text(encoding="utf-8"))
+    callers = {function.name for function in ast.walk(tree)
+               if isinstance(function, ast.FunctionDef)
+               for call in ast.walk(function)
+               if isinstance(call, ast.Call) and isinstance(call.func, ast.Attribute)
+               and call.func.attr == "model_validate"
+               and getattr(call.func.value, "id", None) == "Project"}
+
+    assert callers == {"load", "_edited"}
 
 
 def test_a_section_is_added_changed_and_removed():
@@ -885,6 +1117,21 @@ def test_a_section_id_two_kinds_share_needs_its_kind():
         session.update_section(project, "sheetpile", name="x")
     assert session.update_section(project, "sheetpile", kind="anchor",
                                   name="x").anchor_sections[-1].name == "x"
+
+
+def test_a_missing_section_is_named():
+    with pytest.raises(session.UnknownRecord, match="no section 'missing'"):
+        session.find_section(blank_project(), "missing")
+
+
+def test_unsetting_a_variable_a_section_does_not_have_is_refused():
+    from core.model import drafts
+
+    project = plane_strain()
+    project = session.add_section(project, "beam", drafts.section(project, "beam", "az26"))
+
+    with pytest.raises(session.EditRefused, match="az26 has no variable NOPE"):
+        session.update_section(project, "az26", unset=["NOPE"])
 
 
 # ── Stages, one at a time ────────────────────────────────────────────────────

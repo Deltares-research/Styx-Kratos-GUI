@@ -9,7 +9,8 @@ import pytest
 from pydantic import ValidationError
 
 from core.model import schemas
-from core.model.templates import seed_project
+from core.model.templates import blank_project, seed_project
+from tests.models.excavation import excavation_project
 
 
 # ── Domain ──────────────────────────────────────────────────────────────────
@@ -1729,3 +1730,121 @@ def test_a_model_saved_with_placeholder_blocks_still_opens():
     project = schemas.Project.model_validate(payload)
     assert project.struts is not None and project.struts.xs == []
     assert project.pit_levels() == [-1.0]
+
+
+@pytest.mark.parametrize("record, changes, message", [
+    ("PointLoad", {"components": [float("nan"), 0]}, "components must be finite"),
+    ("LineLoad", {"x0": 2, "x1": 1}, "extents must be strictly increasing"),
+    ("LineLoad", {"y": float("inf")}, "coordinates must be finite"),
+    ("LineLoad", {"components": [0, float("inf")]}, "components must be finite"),
+    ("Anchor", {"prestress": float("nan")}, "non-finite prestress"),
+    ("SpaceAnchor", {"head": [0, 0, float("inf")]}, "non-finite coordinate"),
+    ("SpaceAnchor", {"tail": [0, 0, 0]}, "non-zero length"),
+    ("SpaceAnchor", {"prestress": float("inf")}, "non-finite prestress"),
+    ("Panel", {"footprint": [[0, 0]]}, "at least two points"),
+    ("Panel", {"y_toe": float("-inf")}, "non-finite level"),
+    ("NormalLoad", {"points": [[0, 0]]}, "at least two points"),
+    ("NormalLoad", {"reference_coordinate": float("inf")}, "non-finite water level"),
+    ("WaterPressureCondition", {"value": float("nan")}, "non-finite value"),
+    ("WaterPressureCondition", {"z_coordinates": [0, 0]}, "z_coordinates but no"),
+    ("WaterPressureCondition", {"x_coordinates": [0, 1], "y_coordinates": [0, 0],
+                                "z_coordinates": [0]}, "as many x as y"),
+    ("WaterPressureCondition", {"on": "point", "points": [[float("inf"), 0]]},
+     "non-finite coordinate"),
+])
+def test_schema_refuses_invalid_structural_and_hydraulic_inputs(record, changes, message):
+    fields = {
+        "PointLoad": {"x": 0, "y": 0, "components": [0, -1]},
+        "LineLoad": {"x0": 0, "x1": 1, "y": 0, "components": [0, -1]},
+        "Anchor": {"section": "section", "head": [0, 0], "tail": [1, -1]},
+        "SpaceAnchor": {"section": "section", "head": [0, 0, 0], "tail": [1, -1, 0]},
+        "Panel": {"section": "section", "footprint": [[0, 0], [1, 0]],
+                  "y_top": 0, "y_toe": -5},
+        "NormalLoad": {"points": [[0, 0], [0, -1]]},
+        "WaterPressureCondition": {"on": "domain", "fluid_pressure_type": "Uniform"},
+    }
+
+    schema = getattr(schemas, record)
+    valid = {"id": "test", "name": "Test"} | fields[record]
+    schema.model_validate(valid)
+    with pytest.raises(ValidationError, match=message):
+        schema.model_validate(valid | changes)
+
+
+def test_an_excavation_requires_increasing_plan_extents():
+    with pytest.raises(ValidationError, match="extents must be strictly increasing"):
+        schemas.Excavation(x0=1, x1=1, z0=0, z1=2, levels=[-1])
+
+
+def test_a_demo_wall_requires_its_top_above_its_toe():
+    with pytest.raises(ValidationError, match="wall top must be above its toe"):
+        schemas.Wall(thickness=0.5, top_y=-2, toe_y=-1)
+
+
+def test_drawn_conditions_are_retained_but_not_embedded_in_a_3d_project():
+    payload = blank_project().model_dump()
+    payload["boundary_conditions"] = [{
+        "id": "point_pressure", "name": "Point pressure", "kind": "water_pressure",
+        "on": "point", "points": [[0, 0]], "fluid_pressure_type": "Uniform",
+    }]
+    section = schemas.Project.model_validate(payload)
+    spatial = schemas.Project.model_validate(payload | {"dimension": 3})
+
+    assert [condition.id for condition in section.drawn_conditions] == ["point_pressure"]
+    assert [condition.id for condition in spatial.boundary_conditions] == ["point_pressure"]
+    assert spatial.drawn_conditions == []
+
+
+def test_interfaces_on_different_piles_may_hold_the_same_depth_range():
+    payload = excavation_project(staged=False).model_dump()
+    payload["beams"].append({
+        **payload["beams"][0], "id": "second_pile", "name": "Second pile",
+        "points": [(12, 0), (12, -12)],
+    })
+    payload["interfaces"].append({
+        **payload["interfaces"][0], "id": "second_contact", "name": "Second contact",
+        "structure": "second_pile",
+    })
+
+    project = schemas.Project.model_validate(payload)
+
+    assert len(project.active_interfaces) == 2
+    assert project.interface_path(project.interfaces[0]) == [(6, 0), (6, -12)]
+    assert project.interface_path(project.interfaces[1]) == [(12, 0), (12, -12)]
+
+
+def test_an_anchor_id_cannot_overwrite_a_load_in_the_part_namespace():
+    payload = excavation_project(staged=False).model_dump()
+    payload["anchors"][0]["id"] = "surcharge"
+
+    with pytest.raises(ValidationError, match="anchor id collides.*surcharge"):
+        schemas.Project.model_validate(payload)
+
+
+@pytest.mark.parametrize("section_type, old, variable, expected, fields", [
+    (schemas.BeamSection, {"E": 200000000, "nu": 0.3, "density": 7850,
+                           "area": 0.02, "inertia": 0.001, "spacing": 2},
+     "YOUNG_MODULUS", 2e11, {"spacing": 2}),
+    (schemas.AnchorSection, {"E": 200000000, "density": 7850, "area": 0.002,
+                             "spacing": 2, "tension_limit": 900},
+     "YOUNG_MODULUS", 2e11, {"spacing": 2, "tension_limit": 900000}),
+    (schemas.PanelSection, {"E": 30000000, "nu": 0.2, "density": 2400, "thickness": 0.4},
+     "THICKNESS", 0.4, {}),
+])
+def test_old_script_section_constructors_migrate_and_round_trip(
+        section_type, old, variable, expected, fields):
+    section = section_type.model_validate({"id": "profile", "name": "Profile", **old})
+
+    assert section.variables[variable] == expected
+    assert {name: getattr(section, name) for name in fields} == fields
+    assert section_type.model_validate(section.model_dump()) == section
+
+
+@pytest.mark.parametrize("levels, message", [
+    ([-2, -2], "levels must descend"),
+    ([-4, -2], "levels must descend"),
+    ([-2, float("-inf")], "levels must all be finite"),
+])
+def test_excavation_lifts_must_represent_successively_deeper_finite_floors(levels, message):
+    with pytest.raises(ValidationError, match=message):
+        schemas.Excavation(x0=0, x1=5, z0=0, z1=5, levels=levels)

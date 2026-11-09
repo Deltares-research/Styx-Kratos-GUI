@@ -259,3 +259,31 @@ def test_a_lift_is_drawn_in_the_colour_of_the_layer_it_came_from():
     for key, *_ in project.soil_bodies():
         layer = next(l for l in project.layers if f"soil_{l.id}" == key.partition("__")[0])
         assert colours[key] == {project.material(layer.mat).color}, key
+
+
+def test_overlay_surface_is_visible_from_both_sides(monkeypatch):
+    import gmsh
+
+    edge_nodes = {10: [1, 2], 11: [2, 3], 12: [3, 1]}
+
+    def elements(dim, tag):
+        if dim == 2:
+            return [tessellation.TRIANGLE], [], [[1, 2, 3]]
+        return [tessellation.LINE], [], [edge_nodes[tag]]
+
+    monkeypatch.setattr(gmsh.model.mesh, "getElements", elements)
+    monkeypatch.setattr(
+        gmsh.model, "getBoundary",
+        lambda *_args, **_kwargs: [(1, tag) for tag in edge_nodes],
+    )
+    coordinates = {
+        1: (0.0, 0.0, 0.0), 2: (1.0, 0.0, 0.0), 3: (0.0, 1.0, 0.0),
+    }
+
+    section = tessellation._overlay_section(
+        "panel", "#fff", [(2, 9)], coordinates,
+    )
+
+    assert section.positions == [0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0, 0.0]
+    assert section.indices == [0, 1, 2, 0, 2, 1]
+    assert len(section.edges) == 18

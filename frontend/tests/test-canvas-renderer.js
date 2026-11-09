@@ -171,4 +171,15 @@
   test('it identifies itself as the software path', function () {
     T.eq(new App.CanvasRenderer(fakeCanvas()).isSoftware, true);
   });
+
+  test('disposing a software renderer leaves the caller-owned canvas intact', function () {
+    var canvas = fakeCanvas();
+    var renderer = new App.CanvasRenderer(canvas);
+    renderer.setSize(120, 80);
+    renderer.dispose();
+    renderer.dispose();
+    T.eq(renderer.domElement, canvas);
+    T.eq([canvas.width, canvas.height], [120, 80]);
+    T.eq([canvas.style.width, canvas.style.height], ['120px', '80px']);
+  });
 })();

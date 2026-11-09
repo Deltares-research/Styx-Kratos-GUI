@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import argparse
 
-from cli.terminal.files import add_project, add_writing, written
+from cli.terminal.files import add_project, add_writing, read, written
 from cli.terminal.output import Answer, CommandError
 from cli.terminal.words import (NAME_HELP, action, assignments, edited, existing, file_of,
                                 id_help, named_ids, noun)
@@ -124,7 +124,7 @@ def _model(args: argparse.Namespace) -> str | None:
 # ── domain, excavation ──────────────────────────────────────────────────────
 
 def set_domain(args: argparse.Namespace) -> Answer:
-    project = session.load(args.project)
+    project = read(args)
     if args.x is None and args.y is None and args.z is None:
         return Answer(data=project.domain.model_dump(mode="json"),
                       lines=[_domain_line(project)])
@@ -136,7 +136,7 @@ def set_domain(args: argparse.Namespace) -> Answer:
 
 
 def set_excavation(args: argparse.Namespace) -> Answer:
-    project = session.load(args.project)
+    project = read(args)
     if args.x is None and args.z is None and args.levels is None:
         pit = project.excavation
         return Answer(data=pit.model_dump(mode="json") if pit is not None else None,
@@ -169,7 +169,7 @@ def _pit_line(project: Project) -> str:
 # ── materials ───────────────────────────────────────────────────────────────
 
 def list_materials(args: argparse.Namespace) -> Answer:
-    project = session.load(args.project)
+    project = read(args)
     return Answer(data=[m.model_dump(mode="json") for m in project.materials],
                   lines=[f"{m.id}  {m.name}  "
                          f"{soil_models.label(soil_models.model_of(m.constitutive_law))} "
@@ -179,7 +179,7 @@ def list_materials(args: argparse.Namespace) -> Answer:
 
 
 def list_models(args: argparse.Namespace) -> Answer:
-    system = session.load(args.project).unit_system
+    system = read(args).unit_system
     lines = []
     for word, model in MODEL_WORDS.items():
         found = soil_models.MODELS[model]
@@ -229,7 +229,7 @@ def list_presets(args: argparse.Namespace) -> Answer:
 
 @named_ids(required=True)
 def add_material(args: argparse.Namespace) -> Answer:
-    project = session.load(args.project)
+    project = read(args)
     try:
         material, notes = drafts.soil(project, args.id, name=args.name, preset=args.preset,
                                       color=args.color, law=args.law, model=_model(args))
@@ -252,7 +252,7 @@ def add_material(args: argparse.Namespace) -> Answer:
 
 def update_material(args: argparse.Namespace) -> Answer:
     notes: list[str] = []
-    project = session.update_material(session.load(args.project), args.id,
+    project = session.update_material(read(args), args.id,
                                       name=args.name, color=args.color, law=args.law,
                                       model=_model(args),
                                       variables=assignments(args.variables),
@@ -263,7 +263,7 @@ def update_material(args: argparse.Namespace) -> Answer:
 
 
 def remove_material(args: argparse.Namespace) -> Answer:
-    project = session.remove_material(session.load(args.project), args.id)
+    project = session.remove_material(read(args), args.id)
     return edited(args, project, f"removed material {args.id}")
 
 
@@ -272,7 +272,7 @@ def remove_material(args: argparse.Namespace) -> Answer:
 # ── layers ──────────────────────────────────────────────────────────────────
 
 def list_layers(args: argparse.Namespace) -> Answer:
-    project = session.load(args.project)
+    project = read(args)
     lines = []
     for layer in project.layers:
         lines.append(f"{layer.id}  {layer.name}  of {layer.mat}: "
@@ -283,27 +283,27 @@ def list_layers(args: argparse.Namespace) -> Answer:
 
 @named_ids(required=True)
 def add_layer(args: argparse.Namespace) -> Answer:
-    project = session.add_layer(session.load(args.project), args.id, args.material,
+    project = session.add_layer(read(args), args.id, args.material,
                                 name=args.name, bottom=args.bottom, thickness=args.thickness)
     return edited(args, project, f"added layer {args.id}")
 
 
 def update_layer(args: argparse.Namespace) -> Answer:
-    project = session.update_layer(session.load(args.project), args.id,
+    project = session.update_layer(read(args), args.id,
                                    material=args.material, name=args.name, top=args.top,
                                    bottom=args.bottom)
     return edited(args, project, f"changed layer {args.id}")
 
 
 def split_layer(args: argparse.Namespace) -> Answer:
-    before = session.load(args.project)
+    before = read(args)
     project = session.split_layer(before, args.id, args.new_id)
     new = project.layers[[layer.id for layer in project.layers].index(args.id) + 1].id
     return edited(args, project, f"split layer {args.id}; its lower half is {new}")
 
 
 def remove_layer(args: argparse.Namespace) -> Answer:
-    project = session.remove_layer(session.load(args.project), args.id)
+    project = session.remove_layer(read(args), args.id)
     return edited(args, project, f"removed layer {args.id}")
 
 
@@ -312,7 +312,7 @@ def remove_layer(args: argparse.Namespace) -> Answer:
 def list_parts(args: argparse.Namespace) -> Answer:
     """Every part of the model by its key -- the names stages activate and deactivate --
     with what to call it and whether a stage can switch it."""
-    project = session.load(args.project)
+    project = read(args)
     labels = session.part_names(project)
     for part in project.custom_parts:
         if part.mat:

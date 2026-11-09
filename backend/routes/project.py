@@ -14,7 +14,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.exceptions import RequestValidationError
 
 from backend import store
-from backend.routes.common import refusals
+from backend.routes.common import refusals, stored
 from core import session
 from core.model import migration, stages
 from core.model.schemas import (ConditionsUpdate, DimensionUpdate, LayersUpdate, MaterialsUpdate,
@@ -121,8 +121,7 @@ async def new_project() -> dict:
 async def patch_layers(update: LayersUpdate) -> dict:
     with refusals():
         project = session.replace_layers(store.get(), update)
-    store.put(project)
-    return {"project": project, "invalidates": ["project", "tree", "geometry", "mesh"]}
+    return stored(project) | {"invalidates": ["project", "tree", "geometry", "mesh"]}
 
 
 @router.put("/api/project/water")
@@ -135,8 +134,7 @@ async def put_water(update: WaterUpdate) -> dict:
     """
     with refusals():
         project = session.set_water(store.get(), update)
-    store.put(project)
-    return {"project": project, "invalidates": ["project", "tree", "geometry", "mesh"]}
+    return stored(project) | {"invalidates": ["project", "tree", "geometry", "mesh"]}
 
 
 @router.patch("/api/project/materials")
@@ -144,11 +142,10 @@ async def patch_materials(update: MaterialsUpdate) -> dict:
     """Replace the material library; a material a layer still points at is refused."""
     with refusals():
         project = session.replace_materials(store.get(), update)
-    store.put(project)
     # Soil colour comes from the assigned material (`_colors_by_volume` in
     # core/geometry/tessellation.py), so the geometry has to be re-tessellated even though
     # no shape changed.
-    return {"project": project, "invalidates": ["project", "tree", "geometry"]}
+    return stored(project) | {"invalidates": ["project", "tree", "geometry"]}
 
 
 @router.patch("/api/project/structures")
@@ -157,8 +154,7 @@ async def patch_structures(update: StructuresUpdate) -> dict:
     (`session.replace_structures`)."""
     with refusals():
         project = session.replace_structures(store.get(), update)
-    store.put(project)
-    return {"project": project, "invalidates": ["project", "tree", "geometry", "mesh"]}
+    return stored(project) | {"invalidates": ["project", "tree", "geometry", "mesh"]}
 
 
 @router.patch("/api/project/conditions")
@@ -169,10 +165,9 @@ async def patch_conditions(update: ConditionsUpdate) -> dict:
     commands send (frontend/js/boundary-conditions.js)."""
     with refusals():
         project = session.replace_conditions(store.get(), update)
-    store.put(project)
     # A condition on a drawn line or point is embedded in the section, so the mesh
     # changes with it.
-    return {"project": project, "invalidates": ["project", "tree", "geometry", "mesh"]}
+    return stored(project) | {"invalidates": ["project", "tree", "geometry", "mesh"]}
 
 
 @router.patch("/api/project/stages")
@@ -196,8 +191,7 @@ async def patch_stages(update: StagesUpdate) -> dict:
             "type": "value_error", "loc": ("body", "stages"), "msg": str(failure),
             "input": [stage.model_dump() for stage in update.stages],
         }]) from failure
-    store.put(project)
-    return {"project": project, "invalidates": ["project"]}
+    return stored(project) | {"invalidates": ["project"]}
 
 
 @router.post("/api/project/stages/defaults")
@@ -210,8 +204,7 @@ async def seed_default_stages() -> dict:
     """
     with refusals():
         project = session.default_stages(store.get())
-    store.put(project)
-    return {"project": project, "invalidates": ["project"]}
+    return stored(project) | {"invalidates": ["project"]}
 
 
 @router.patch("/api/project/dimension")
@@ -224,10 +217,9 @@ async def patch_dimension(update: DimensionUpdate) -> dict:
     """
     with refusals():
         project, notes = session.set_dimension(store.get(), update)
-    store.put(project)
     # `notes` is what the command log says about the loads that changed shape; the
     # frontend prints them under the mode-switch line (frontend/js/patches.js).
-    return {"project": project, "notes": notes,
+    return stored(project) | {"notes": notes,
             "invalidates": ["project", "tree", "geometry", "mesh"]}
 
 
@@ -240,5 +232,4 @@ def patch_units(update: UnitsUpdate) -> dict:
     """
     with refusals():
         project, notes = session.set_units(store.get(), update)
-    store.put(project)
-    return {"project": project, "notes": notes, "invalidates": ["project", "tree"]}
+    return stored(project) | {"notes": notes, "invalidates": ["project", "tree"]}

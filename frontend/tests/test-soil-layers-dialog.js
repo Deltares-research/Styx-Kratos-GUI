@@ -126,7 +126,7 @@
   /* ── The window ────────────────────────────────────────────────────── */
 
   /* The window, opened on `layers` with a stub server; `run(ui)` drives it. */
-  function withWindow(layers, run) {
+  function withWindow(layers, run, parts) {
     var saved = { layers: App.LAYERS, materials: App.MATERIALS, project: App.PROJECT,
                   api: App.Api, model: App.Model, viewport: App.Viewport,
                   command: App.Command, explorer: App.Explorer };
@@ -136,7 +136,7 @@
     App.LAYERS = layers;
     App.MATERIALS = [{ id: 'm2', name: 'Sand', color: '#c4a86a' },
                      { id: 'm4', name: 'Clay', color: '#6f8fa8' }];
-    App.PROJECT = { custom_parts: [], water: { y: -1 } };
+    App.PROJECT = { custom_parts: parts || [], water: { y: -1 } };
     App.Api = { patch: function (path, body) {
       sent.push([path, body]);
       return Promise.resolve({ project: { layers: body.layers } });
@@ -149,6 +149,7 @@
     App.Explorer = { mountTree: function () {} };
     App.Command = { ok: function (t) { said.push(t); }, err: function (t) { said.push(t); } };
     function restore() {
+      Array.prototype.slice.call(host.querySelectorAll('.dlg-x')).reverse().forEach(function (x) { x.click(); });
       host.remove();
       App.LAYERS = saved.layers; App.MATERIALS = saved.materials; App.PROJECT = saved.project;
       App.Api = saved.api; App.Model = saved.model; App.Viewport = saved.viewport;
@@ -261,6 +262,98 @@
     });
   });
 
+  test('layer rows and the column select the same layer and editable cells save their values', function () {
+    return withWindow(stack(), function (ui) {
+      var rows = ui.host.querySelectorAll('.lay-table-wrap tbody tr');
+      rows[1].dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+      T.ok(rows[1].classList.contains('sel'));
+      ui.host.querySelector('.soil-column-band').dispatchEvent(new MouseEvent('mousedown'));
+      T.ok(rows[0].classList.contains('sel'));
+      ui.type(0, 0, '  Upper sand  ');
+      ui.type(0, 2, '1');
+      ui.type(1, 4, '15');
+      var material = rows[0].querySelector('select');
+      material.value = 'm4'; material.dispatchEvent(new Event('change'));
+      var input = rows[0].querySelector('input');
+      var enter = new KeyboardEvent('keydown', { key: 'Enter', cancelable: true });
+      input.dispatchEvent(enter);
+      T.ok(enter.defaultPrevented);
+      ui.click('OK');
+      return new Promise(function (done) { setTimeout(done, 0); }).then(function () {
+        T.eq(ui.sent[0][1].layers[0].name, 'Upper sand');
+        T.eq(ui.sent[0][1].layers[0].mat, 'm4');
+        T.eq(levels(ui.sent[0][1].layers), [['L1', 1, -8], ['L2', -8, -23]]);
+      });
+    });
+  });
+
+  test('a failed layer save reports its reason and re-enables the footer for retry', function () {
+    return withWindow(stack(), function (ui) {
+      var patch = App.Api.patch;
+      App.Api.patch = function () { return Promise.reject(new Error('Layer stack refused')); };
+      ui.click('OK');
+      return new Promise(function (done) { setTimeout(done, 0); }).then(function () {
+        T.eq(ui.said, ['Layer stack refused']);
+        T.eq(ui.host.querySelectorAll('.dialog').length, 1);
+        Array.prototype.forEach.call(ui.host.querySelectorAll('.dlg-foot .btn'), function (b) {
+          T.ok(!b.disabled);
+        });
+        App.Api.patch = patch;
+        ui.click('OK');
+        return new Promise(function (done) { setTimeout(done, 0); });
+      }).then(function () {
+        T.eq(ui.sent.length, 1);
+        T.eq(ui.host.querySelectorAll('.dialog').length, 0);
+      });
+    });
+  });
+
+  test('Soil materials refreshes the layer material choices when its window closes', function () {
+    return withWindow(stack(), function (ui) {
+      var materials = App.Dialogs.materials, closed = 0;
+      App.Dialogs.materials = function (onClose) {
+        App.MATERIALS.push({ id: 'm9', name: 'Fill', color: '#123456' });
+        closed += 1; onClose();
+      };
+      try {
+        ui.click('Soil materials\u2026');
+        T.eq(closed, 1);
+        T.eq(ui.host.querySelectorAll('.lay-table-wrap tbody tr:first-child select option').length, 3);
+      } finally { App.Dialogs.materials = materials; }
+      ui.click('Cancel');
+    });
+  });
+
+  test('custom soil rows save name and material edits and open their coordinates', function () {
+    var saved = { commitSelectionEdit: App.commitSelectionEdit, state: App.state,
+                  open: App.SoilVolumeDialog.open };
+    var committed = [], opened;
+    var parts = [{ key: 'fill_1', label: 'Fill 1', mat: 'm2', color: '#c4a86a' },
+                 { key: 'fill_2', label: 'Fill 2', mat: 'm4', color: '#6f8fa8' }];
+    function restore() {
+      App.commitSelectionEdit = saved.commitSelectionEdit; App.state = saved.state;
+      App.SoilVolumeDialog.open = saved.open;
+    }
+    return withWindow(stack(), function (ui) {
+      App.state = { selection: 'fill_2' };
+      App.commitSelectionEdit = function (key) { committed.push(key); return Promise.resolve(); };
+      App.SoilVolumeDialog.open = function (part) { opened = part; };
+      var rows = ui.host.querySelectorAll('.soil-body-section tbody tr');
+      rows[1].dispatchEvent(new MouseEvent('mousedown'));
+      T.ok(rows[1].classList.contains('selected'));
+      T.ok(!rows[0].classList.contains('selected'));
+      var name = rows[1].querySelector('input');
+      name.value = 'Renamed fill'; name.dispatchEvent(new Event('change'));
+      var select = rows[1].querySelector('select');
+      select.value = 'm2'; select.dispatchEvent(new Event('change'));
+      T.eq([parts[1].label, parts[1].mat, parts[1].color], ['Renamed fill', 'm2', '#c4a86a']);
+      T.eq(committed, ['fill_2', 'fill_2']);
+      rows[1].querySelector('button').click();
+      T.eq(opened, parts[1]);
+      T.eq(ui.host.querySelectorAll('.dialog').length, 0);
+    }, parts).then(restore, function (error) { restore(); throw error; });
+  });
+
   /* ── Custom soil volumes ───────────────────────────────────────────── */
 
   test('a custom volume action saves the stack first, then opens its form', function () {
@@ -282,6 +375,56 @@
       });
     }).then(function () { App.SoilVolumeDialog = soil; },
             function (error) { App.SoilVolumeDialog = soil; throw error; });
+  });
+
+  test('deleting a custom soil body saves the stack, deletes the selected body, then reloads and redraws', function () {
+    var deleted = [], order = [];
+    var parts = [{ key: 'fill one', label: 'Fill', mat: 'm2' }];
+    return withWindow(stack(), function (ui) {
+      var patches = App.LivePatches;
+      App.LivePatches = Object.assign({}, patches, {
+        deleteRequest: function (path) {
+          T.eq(ui.sent.length, 1, 'the stack is saved before deleting geometry');
+          deleted.push(path); order.push('delete');
+          App.PROJECT.custom_parts = [];
+          return Promise.resolve();
+        }
+      });
+      App.Model.load = function () { order.push('load'); return Promise.resolve(); };
+      App.Viewport.refresh = function () { order.push('refresh'); return Promise.resolve(); };
+      var button = ui.host.querySelectorAll('.soil-body-section .lay-toolbar button')[2];
+      button.click();
+      T.ok(button.disabled, 'a pending delete cannot be submitted twice');
+      function restore() { App.LivePatches = patches; }
+      return new Promise(function (resolve) { setTimeout(resolve, 0); }).then(function () {
+        T.eq(deleted, ['/api/geometry/parts/fill%20one']);
+        T.eq(order, ['delete', 'load', 'refresh']);
+        T.eq(ui.host.querySelectorAll('.soil-body-section tbody tr').length, 0);
+        T.ok(ui.host.querySelectorAll('.soil-body-section .lay-toolbar button')[2].disabled);
+        ui.click('Cancel');
+      }).then(restore, function (error) { restore(); throw error; });
+    }, parts);
+  });
+
+  test('a refused custom-soil deletion preserves its row and allows a retry', function () {
+    var parts = [{ key: 'fill', label: 'Fill', mat: 'm2' }];
+    return withWindow(stack(), function (ui) {
+      var patches = App.LivePatches, loaded = 0;
+      App.LivePatches = Object.assign({}, patches, {
+        deleteRequest: function () { return Promise.reject(new Error('A stage still uses Fill')); }
+      });
+      App.Model.load = function () { loaded += 1; return Promise.resolve(); };
+      var button = ui.host.querySelectorAll('.soil-body-section .lay-toolbar button')[2];
+      button.click();
+      function restore() { App.LivePatches = patches; }
+      return new Promise(function (resolve) { setTimeout(resolve, 0); }).then(function () {
+        T.eq(loaded, 0);
+        T.eq(ui.host.querySelectorAll('.soil-body-section tbody tr').length, 1);
+        T.eq(button.disabled, false);
+        T.ok(ui.said.some(function (text) { return /A stage still uses Fill/.test(text); }));
+        ui.click('Cancel');
+      }).then(restore, function (error) { restore(); throw error; });
+    }, parts);
   });
 
   test('the soil dialog and the Model explorer’s layer Delete are the live ones',

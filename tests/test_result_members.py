@@ -186,3 +186,15 @@ def test_the_plot_route_serves_one_quantity_along_one_member(client, run):
 def test_the_plot_route_refuses_a_member_with_404_and_a_quantity_with_422(client, run):
     assert client.get(f"/api/results/runs/{run}/members/strut/M").status_code == 404
     assert client.get(f"/api/results/runs/{run}/members/wall/tn").status_code == 422
+
+
+@pytest.mark.parametrize("raw", [None, "bad", True, [], [1], [1, False], [1, "bad"]])
+def test_invalid_member_values_leave_a_gap_in_the_profile_instead_of_zero(raw):
+    output = {1: {"GEO_EFFECTIVE_TRACTION_VECTOR": raw},
+              2: {"GEO_EFFECTIVE_TRACTION_VECTOR": [-10, 5]}}
+    coordinates = {1: (0, 0, 0), 2: (0, -1, 0)}
+
+    profile = members.profile(output, coordinates, members.quantity("ts"))
+
+    assert profile["nodes"] == [2]
+    assert profile["points"] == [[5.0, -1]]

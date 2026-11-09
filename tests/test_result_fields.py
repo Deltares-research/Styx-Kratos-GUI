@@ -523,3 +523,42 @@ def test_an_isotropic_state_has_p_equal_to_the_stress_and_no_q():
     assert _mean_stress(s) == sigma
     assert _deviatoric_stress(s) == 0.0
     assert _principal(s) == (sigma, sigma, sigma)
+
+
+@pytest.mark.parametrize("text", [
+    "",
+    'Result "TOTAL_DISPLACEMENT" "Kratos" 1 Vector OnNodes\nValues\nEnd Values\n',
+])
+def test_a_stage_without_displacements_has_no_deformed_shape(text):
+    assert fields.displacement(gid_reader.read_results(text)) == {
+        "source": None, "ids": [], "values": [],
+    }
+
+
+@pytest.mark.parametrize("text", [
+    "",
+    'Result "WATER_PRESSURE" "Kratos" 1 Scalar OnNodes\nValues\nEnd Values\n',
+])
+def test_a_known_field_without_values_names_the_missing_solver_variable(text):
+    with pytest.raises(fields.UnknownField, match="needs WATER_PRESSURE"):
+        fields.values(gid_reader.read_results(text), gid_reader.GidMesh(), "pw")
+
+
+def test_inspecting_a_node_outside_the_stage_reports_its_id():
+    with pytest.raises(fields.UnknownField, match="no node 42"):
+        fields.at_node(gid_reader.Results(), gid_reader.GidMesh(), 42)
+
+
+def test_a_node_in_an_excavated_body_keeps_the_field_rows_with_missing_values():
+    mesh = gid_reader.GidMesh(nodes={1: (0, 0, 0), 2: (1, 0, 0)})
+    results = gid_reader.read_results(
+        'Result "WATER_PRESSURE" "Kratos" 1 Scalar OnNodes\n'
+        'Values\n1 -5000\nEnd Values\n')
+
+    inspected = fields.at_node(results, mesh, 2, system="kN")
+
+    assert inspected["at"] == [1, 0, 0]
+    assert inspected["values"] == [{
+        "group": "Groundwater", "field": "pw", "label": "Pore pressure",
+        "unit": "kPa", "value": None,
+    }]

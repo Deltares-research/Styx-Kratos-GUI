@@ -957,7 +957,7 @@ App.Viewport = (function () {
      every section its own THREE.Group) and then invisible forever, in every mode,
      no matter what the eye toggle says. */
   function computeModeGroups(soilKeys, customKeys, layeredSoil, loadKeys, memberKeys,
-                             normalLoadKeys, conditionKeys) {
+                             normalLoadKeys, conditionKeys, contactKeys) {
     customKeys = customKeys || [];
     // The boundary conditions' symbols: in every mode, each one hidden until it is
     // shown (the explorer's Show) or selected.
@@ -965,8 +965,11 @@ App.Viewport = (function () {
       .concat((conditionKeys && conditionKeys.water) || []);
     loadKeys = loadKeys || [];
     // Sheet piles and anchors are sections of their own (core/geometry/tessellation.py
-    // :112-126). Leaving them out of every mode is what kept them invisible.
+    // :112-126), so their keys need to be listed in the modes that show structures.
     memberKeys = memberKeys || [];
+    // Free interfaces also have their own drawable sections; keep their visibility
+    // separate from members even though they are shown in the same modes.
+    contactKeys = contactKeys || [];
     // And a normal load is a section of its own too -- the strip the build draws
     // along its line -- so it needs naming here for the same reason, in the modes a
     // load belongs to.
@@ -981,23 +984,23 @@ App.Viewport = (function () {
       // Flow conditions mode is for, and a staged excavation is read against it. Left
       // out of soil/structures/mesh so those keep reading as they did.
       return { soil: visibleKeys.concat(conditions),
-               structures: visibleKeys.concat(loadKeys, memberKeys, conditions),
-               mesh: visibleKeys.concat(['mesh'], memberKeys, conditions),
+               structures: visibleKeys.concat(loadKeys, memberKeys, contactKeys, conditions),
+               mesh: visibleKeys.concat(['mesh'], memberKeys, contactKeys, conditions),
                flow: visibleKeys.concat(['water'], conditions),
                // Loads too: Staged construction is where a load is switched on and
                // off, so it has to be on screen there (`stageHidden` still hides one
                // the selected stage has switched off).
-               staged: visibleKeys.concat(loadKeys, memberKeys, ['water'], conditions),
+               staged: visibleKeys.concat(loadKeys, memberKeys, contactKeys, ['water'], conditions),
                results: results };
     }
     return {
       soil:       soilKeys.concat(conditions),
       structures: soilKeys.concat(['wall', 'struts', 'anchors', 'piles'],
-                                  loadKeys, memberKeys, customKeys, conditions),
-      mesh:       ['mesh', 'wall'].concat(memberKeys, customKeys, conditions),
+                                  loadKeys, memberKeys, contactKeys, customKeys, conditions),
+      mesh:       ['mesh', 'wall'].concat(memberKeys, contactKeys, customKeys, conditions),
       flow:       soilKeys.concat(['water', 'wells', 'wall'], customKeys, conditions),
       staged:     ['excavation', 'wall', 'struts', 'anchors', 'water']
-                    .concat(loadKeys, memberKeys, customKeys, conditions),
+                    .concat(loadKeys, memberKeys, contactKeys, customKeys, conditions),
       results:    results
     };
   }
@@ -1030,20 +1033,19 @@ App.Viewport = (function () {
     // frontend/js/model.js -- a 3D project keeps its piles saved but draws none.
     var beamKeys = (App.BEAMS || []).map(function (beam) { return beam.id; });
     var anchorKeys = (App.ANCHORS || []).map(function (anchor) { return anchor.id; });
-    // Plane strain only, like a free interface: in 3D the record is kept but the
-    // build draws nothing for it, so naming it in a mode would name an empty group.
+    // normal loads are 2D-only and aren’t drawn for 3D projects.
     var normalLoadKeys = (App.PROJECT && App.PROJECT.dimension === 2)
       ? (App.NORMAL_LOADS || []).map(function (item) { return item.id; })
       : [];
     var conditionKeys = conditionKeysOf(App.PROJECT);
     conditionIds = conditionKeys.supports.concat(conditionKeys.water);
     waterIds = conditionKeys.water.slice();
-    modeGroups = computeModeGroups(
-      soilKeys, customKeys, !!(App.PROJECT && App.PROJECT.layered_soil), loadKeys,
-      beamKeys.concat(anchorKeys), normalLoadKeys, conditionKeys);
     var contactKeys = (App.INTERFACES || []).filter(function (item) {
       return !item.structure;
     }).map(function (item) { return item.id; });
+    modeGroups = computeModeGroups(
+      soilKeys, customKeys, !!(App.PROJECT && App.PROJECT.layered_soil), loadKeys,
+      beamKeys.concat(anchorKeys), normalLoadKeys, conditionKeys, contactKeys);
     groupKeys = computeGroupKeys(soilKeys, customKeys, loadKeys, beamKeys, anchorKeys,
                                  contactKeys, normalLoadKeys,
                                  conditionKeys.supports.concat(conditionKeys.water));
@@ -2051,9 +2053,8 @@ App.Viewport = (function () {
       second_order_linear: true
     }, {
       refinements: meshRefinements(),
-      volume_keys: Array.isArray(App.MESH_BODY_SELECTION)
-        ? App.MESH_BODY_SELECTION.slice()
-        : App.MeshSettings.meshTargets(App.PROJECT, App.state.selection, isVisible)
+      volume_keys: App.MeshSettings.chosenBodies(App.PROJECT, App.MESH_BODIES_LEFT_OUT)
+        || App.MeshSettings.meshTargets(App.PROJECT, App.state.selection, isVisible)
     });
   }
 

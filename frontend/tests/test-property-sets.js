@@ -112,13 +112,20 @@
   });
 
   T.test('the drainage type is a choice between the two a soil can have', function () {
-    var set = soil({ GEO_DRAINAGE_TYPE: 'DRAINED' });
+    var set = soil({ GEO_DRAINAGE_TYPE: 'DRAINED', POROSITY: 0.3 });
     var row = P.rows('soil', set, 2).filter(function (r) { return r[0] === 'GEO_DRAINAGE_TYPE'; })[0];
     T.eq(row[4].kind, 'select');
     T.eq(row[4].options().map(function (o) { return o.value; }),
          ['DRAINED', 'FULLY_COUPLED']);
+    T.eq(row[4].get(), 'DRAINED');
     T.eq(row[4].set('FULLY_COUPLED'), null);
+    T.eq(row[4].get(), 'FULLY_COUPLED');
     T.eq(set.variables.GEO_DRAINAGE_TYPE, 'FULLY_COUPLED');
+    var checked = P.rows('soil', set, 2, function (value) { return P.validate('soil', value); })
+      .filter(function (r) { return r[0] === 'GEO_DRAINAGE_TYPE'; })[0][4];
+    checked.set('DRAINED');
+    T.ok(checked.set('not-a-drainage-type'));
+    T.eq(checked.get(), 'DRAINED', 'a refused choice restores the last valid value');
   });
 
 })();

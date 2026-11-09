@@ -77,6 +77,7 @@ def main(argv: list[str] | None = None) -> int:
             return output.refused(failure, args.json)
         raise
     answer.warnings = [*lost, *answer.warnings]
+    answer.notes = [*answer.notes, *getattr(args, "edit_notes", [])]
     return output.answered(answer, args.json, getattr(args, "csv", None))
 
 

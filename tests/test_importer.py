@@ -269,3 +269,81 @@ def test_a_key_is_never_reused_after_a_part_is_deleted(client):
     keys = [p["key"] for p in c.get("/api/project").json()["custom_parts"]]
     assert len(keys) == len(set(keys)) == 2, keys
     assert third.json()["parts"][0]["key"] != second
+
+
+def test_obj_negative_indices_are_relative_to_vertices_already_read(tmp_path):
+    obj = tmp_path / "fan.obj"
+    obj.write_text(
+        "v 0 0 0\nv 2 0 0\nv 2 1 0\nv 0 1 0\nf -4 -3 -2 -1\n",
+        encoding="ascii",
+    )
+
+    points, triangles = cad_import._read_obj(obj)
+
+    assert points == [(0.0, 0.0, 0.0), (2.0, 0.0, 0.0),
+                      (2.0, 1.0, 0.0), (0.0, 1.0, 0.0)]
+    assert triangles == [(0, 1, 2), (0, 2, 3)]
+
+
+def test_obj_face_with_an_unavailable_vertex_is_refused(tmp_path):
+    obj = tmp_path / "bad.obj"
+    obj.write_text("v 0 0 0\nv 1 0 0\nf 1 2 3\n", encoding="ascii")
+
+    with pytest.raises(cad_import.ImportRefused, match="does not have"):
+        cad_import._read_obj(obj)
+
+
+def test_import_refuses_unsupported_formats(tmp_path, monkeypatch):
+    import gmsh
+
+    monkeypatch.setattr(cad_import, "DATA_DIR", tmp_path / "data")
+    monkeypatch.setattr(gmsh, "clear", lambda: None)
+    monkeypatch.setattr(gmsh.model, "add", lambda *_args: None)
+
+    with pytest.raises(cad_import.ImportRefused, match="\\.xyz is not a format"):
+        cad_import.process_import(str(tmp_path / "model.xyz"), ".xyz")
+
+
+def test_cad_healing_options_are_restored_even_when_gmsh_cannot_read_the_file(
+    tmp_path, monkeypatch,
+):
+    import gmsh
+
+    source = tmp_path / "broken.step"
+    source.write_text("not a CAD model", encoding="ascii")
+    monkeypatch.setattr(gmsh, "merge", lambda *_: (_ for _ in ()).throw(RuntimeError("bad CAD")))
+
+    with solid_model.session():
+        previous = {name: gmsh.option.getNumber(name) for name in cad_import.HEALING}
+        with pytest.raises(cad_import.ImportRefused, match="bad CAD"):
+            cad_import._merge_cad(source)
+
+        assert {name: gmsh.option.getNumber(name) for name in cad_import.HEALING} == previous
+
+
+def test_ascii_stl_reader_preserves_facet_vertices(tmp_path):
+    stl = tmp_path / "triangle.stl"
+    stl.write_text(
+        "solid triangle\nfacet normal 0 0 1\nouter loop\n"
+        "vertex 0 0 0\nvertex 2 0 0\nvertex 0 1 0\n"
+        "endloop\nendfacet\nendsolid triangle\n",
+        encoding="ascii",
+    )
+
+    assert cad_import._read_stl(stl) == (
+        [(0.0, 0.0, 0.0), (2.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+        [(0, 1, 2)],
+    )
+
+
+def test_obj_reader_accepts_texture_index_face_syntax(tmp_path):
+    obj = tmp_path / "textured.obj"
+    obj.write_text(
+        "v 0 0 0\nv 1 0 0\nv 0 1 0\nf 1/1 2/2 3/3\n",
+        encoding="ascii",
+    )
+
+    assert cad_import._read_obj(obj) == (
+        [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)],
+        [(0, 1, 2)],
+    )
