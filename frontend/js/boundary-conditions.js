@@ -884,6 +884,10 @@ App.BoundaryConditions = (function () {
     function submit() {
       var kind = c.kind.value;
       var on = c.on.value;
+      // A new condition opens as a support; switched to another kind, it takes that
+      // kind's id and name (waterpressure_1, "Water pressure 1"), as the command line's.
+      var draftName = record ? record.name : null;
+      if (record && !known && record.kind !== kind) record = null;
       var where = { };
       if (on === 'face') where.face = c.face.value;
       if (on === 'part') where.part = c.part.value;
@@ -929,7 +933,8 @@ App.BoundaryConditions = (function () {
           made = draftWaterPressure(project, on, opts);
         }
       } catch (error) { message.textContent = error.message; return null; }
-      made.name = c.name.value.trim() || made.name;
+      var typed = c.name.value.trim();
+      if (typed && !(record === null && typed === draftName)) made.name = typed;
       made.active = c.active.checked;
       return save(made).then(function () { shell.close(); }, function (error) {
         message.textContent = error.message;

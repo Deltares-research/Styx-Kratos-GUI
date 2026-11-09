@@ -161,12 +161,13 @@
     });
   });
 
-  test('mesh dialog sizes a sheet pile and edits the refinement boxes', function () {
+  test("mesh dialog sizes a sheet pile and keeps the model's refinement boxes", function () {
     var initial = project();
     initial.beams = [{ id: 'sheetpile', name: 'SheetPileWall', section: 'sp',
                        points: [[5, 0], [5, -13]] }];
-    initial.mesh.refinements = [{ kind: 'box', size: 0.75, thickness: 45, x_min: -1, x_max: 8,
-                                  y_min: -16, y_max: 1, z_min: -1, z_max: 41 }];
+    var box = { kind: 'box', size: 0.75, thickness: 45, x_min: -1, x_max: 8,
+                y_min: -16, y_max: 1, z_min: -1, z_max: 41 };
+    initial.mesh.refinements = [box];
     return withEnvironment(initial, function (ctx) {
       App.MeshSettings.open();
       var dialog = document.getElementById('mesh-settings-dialog');
@@ -174,28 +175,12 @@
       T.ok(pile, 'the sheet pile has a size field');
       T.eq(pile.value, '', 'no size of its own yet: it takes the mesh around it');
       pile.value = '0.5';
-      T.eq(dialog.querySelectorAll('.mesh-box').length, 1);
-      function boxField(index, name) {
-        return dialog.querySelectorAll('.mesh-box')[index]
-          .querySelector('[data-box-field="' + name + '"]');
-      }
-      T.eq(boxField(0, 'size').value, '0.75');
-      realButton(dialog, 'Add box').click();
-      T.eq(dialog.querySelectorAll('.mesh-box').length, 2);
-      boxField(1, 'x_max').value = String(Number(boxField(1, 'x_min').value) - 1);
-      realButton(dialog, 'Apply').click();
-      T.ok(/x/.test(dialog.querySelector('.mesh-settings-message').textContent),
-           'a box whose x runs backwards is refused, in the window');
-      T.eq(ctx.requests.length, 0);
-      realButton(dialog.querySelectorAll('.mesh-box')[1], 'Remove').click();
-      T.eq(dialog.querySelectorAll('.mesh-box').length, 1);
-      boxField(0, 'size').value = '0.5';
+      T.ok(!/box/i.test(dialog.textContent), 'the window has no refinement boxes');
       realButton(dialog, 'Apply').click();
       return drain().then(function () {
         var mesh = ctx.requests[0].body.mesh;
         T.eq(mesh.body_sizes.sheetpile, 0.5);
-        T.eq(mesh.refinements, [{ kind: 'box', size: 0.5, thickness: 45, x_min: -1, x_max: 8,
-                                  y_min: -16, y_max: 1, z_min: -1, z_max: 41 }]);
+        T.eq(mesh.refinements, [box], 'a box made in a script or with add is kept');
       });
     });
   });
@@ -516,6 +501,29 @@
         return App.BoundaryConditions.applyStandard();
       }).then(function () {
         T.ok(ctx.requests[3].body.boundary_conditions.length > 0);
+      });
+    });
+  });
+
+  test('a new condition switched to water pressure or seepage gets that kind of id and name', function () {
+    return withEnvironment(project(), function (ctx) {
+      App.BoundaryConditions.openRecord();
+      var dialog = latest(ctx);
+      change(field(dialog, 'Condition'), 'water_pressure');
+      change(field(dialog, 'Where'), 'domain');
+      field(dialog, 'Reference level').value = '-1';
+      return button(dialog, 'Save').then(function () {
+        var water = ctx.requests[0].body.boundary_conditions[0];
+        T.eq([water.id, water.name], ['waterpressure_1', 'Water pressure 1']);
+        App.BoundaryConditions.openRecord();
+        dialog = latest(ctx);
+        field(dialog, 'Name').value = 'Polder face';
+        change(field(dialog, 'Condition'), 'seepage');
+        change(field(dialog, 'Where'), 'face');
+        return button(dialog, 'Save');
+      }).then(function () {
+        var seepage = ctx.requests[1].body.boundary_conditions[1];
+        T.eq([seepage.id, seepage.name], ['seepage_1', 'Polder face'], 'a typed name is kept');
       });
     });
   });

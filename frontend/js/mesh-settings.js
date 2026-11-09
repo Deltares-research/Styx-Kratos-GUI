@@ -157,58 +157,6 @@ App.MeshSettings = (function () {
     return out;
   }
 
-  /* The refinement boxes the window lists, in the model's order. A cylinder has no row:
-     the window keeps it as it is (`savedRefinements`). */
-  function refinementBoxes(project) {
-    return (((project && project.mesh) || {}).refinements || []).filter(function (each) {
-      return each.kind === 'box';
-    });
-  }
-
-  function savedRefinements(project, boxes) {
-    var kept = (((project && project.mesh) || {}).refinements || []).filter(function (each) {
-      return each.kind !== 'box';
-    });
-    return kept.concat(boxes);
-  }
-
-  /* A new box: the middle third of the section in x, its top third in y, at a quarter
-     of the element size, stepping straight back to it. It spans the whole depth and
-     more, so a 2D section is inside it wherever it is cut. */
-  function draftBox(project) {
-    var d = (project && project.domain)
-      || { x0: 0, x1: 10, y_top: 0, y_bottom: -10, z0: 0, z1: 10 };
-    var size = Number(((project && project.mesh) || {}).element_size || defaults.element_size);
-    var width = d.x1 - d.x0, height = d.y_top - d.y_bottom;
-    function round(value) { return Math.round(value * 100) / 100; }
-    return {
-      kind: 'box', size: round(size / 4), thickness: 0,
-      x_min: round(d.x0 + width / 3), x_max: round(d.x1 - width / 3),
-      y_min: round(d.y_top - height / 3), y_max: d.y_top,
-      z_min: d.z0 - 1, z_max: d.z1 + 1
-    };
-  }
-
-  /* Why `box` cannot be saved, or null. */
-  function boxProblem(box) {
-    var names = ['size', 'thickness', 'x_min', 'x_max', 'y_min', 'y_max', 'z_min', 'z_max'];
-    for (var i = 0; i < names.length; i += 1) {
-      if (!Number.isFinite(box[names[i]])) {
-        return 'Every number of a refinement box must be given.';
-      }
-    }
-    if (!(box.size > 0)) return 'The size in a refinement box must be greater than zero.';
-    if (box.thickness < 0) return 'The grading band of a refinement box cannot be negative.';
-    if (!(box.x_max > box.x_min)) {
-      return 'A refinement box must run from a smaller x to a larger x.';
-    }
-    if (!(box.y_max > box.y_min)) return 'A refinement box must run from a lower y to a higher y.';
-    if (!(box.z_max > box.z_min)) {
-      return 'A refinement box must run from a smaller z to a larger z.';
-    }
-    return null;
-  }
-
   /* The bodies of `project` that this window's check boxes leave out. */
   function leftOutBodies(project, selectedKeys) {
     return meshBodies(project).map(function (body) { return body.key; })
@@ -318,30 +266,6 @@ App.MeshSettings = (function () {
           'The length of the elements along a sheet pile. Empty: it takes the size of the mesh around it.');
     }
 
-    var boxList = el('div.mesh-box-list');
-    var BOX_FIELDS = [['size', 'Size'], ['thickness', 'Band'], ['x_min', 'x from'],
-                      ['x_max', 'x to'], ['y_min', 'y from'], ['y_max', 'y to']];
-    function addBox(box) {
-      var block = el('div.mesh-box');
-      block.boxRecord = box;
-      BOX_FIELDS.forEach(function (field) {
-        var control = el('input.mesh-setting-control', {
-          type: 'number', step: '0.1', 'data-box-field': field[0] });
-        control.value = box[field[0]];
-        block.appendChild(el('label.mesh-box-label', { text: field[1] }));
-        block.appendChild(control);
-      });
-      var drop = el('button.btn.btn-sm', { type: 'button', text: 'Remove' });
-      drop.addEventListener('click', function () { block.remove(); });
-      block.appendChild(drop);
-      boxList.appendChild(block);
-    }
-    refinementBoxes(App.PROJECT).forEach(addBox);
-    var addBoxButton = el('button.btn.btn-sm', { type: 'button', text: 'Add box' });
-    addBoxButton.addEventListener('click', function () { addBox(draftBox(App.PROJECT)); });
-    row('Refinement boxes', el('div', null, [boxList, addBoxButton]),
-        'A finer mesh inside each box: Size is the element size there, and Band the width outside it over which the size grows back to the global size [m].');
-
     var globalSize = row('Global element size', input('element_size', 'number', { min: '0.01', step: '0.1' }),
         'Maximum target edge length in model units. Smaller values create more tetrahedra.');
     globalSize.addEventListener('input', function () {
@@ -408,17 +332,6 @@ App.MeshSettings = (function () {
         structureRows.push({ key: key, size: typed === '' ? null : Number(typed) });
       });
       value.body_sizes = savedStructureSizes(savedBodySizes(App.PROJECT, rows), structureRows);
-      var boxes = Array.prototype.map.call(form.querySelectorAll('.mesh-box'), function (block) {
-        var box = Object.assign({}, block.boxRecord);
-        block.querySelectorAll('[data-box-field]').forEach(function (control) {
-          box[control.getAttribute('data-box-field')] = control.value.trim() === ''
-            ? NaN : Number(control.value);
-        });
-        var problem = boxProblem(box);
-        if (problem) throw new Error(problem);
-        return box;
-      });
-      value.refinements = savedRefinements(App.PROJECT, boxes);
       value.volume_keys = selectedKeys;
       return validate(merge(App.PROJECT, value));
     }
@@ -455,8 +368,6 @@ App.MeshSettings = (function () {
     fromProject: fromProject, validate: validate, meshTargets: meshTargets,
     bodyControls: bodyControls, savedBodySizes: savedBodySizes, leftOutBodies: leftOutBodies,
     structureControls: structureControls, savedStructureSizes: savedStructureSizes,
-    refinementBoxes: refinementBoxes, savedRefinements: savedRefinements,
-    draftBox: draftBox, boxProblem: boxProblem,
     chosenBodies: chosenBodies, algorithmRow: algorithmRow, merge: merge, open: open,
     TITLE: TITLE, optimizationChoices: optimizationChoices, optimizationHelp: optimizationHelp,
     opensOnModeTab: opensOnModeTab
