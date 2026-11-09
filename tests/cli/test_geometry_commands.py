@@ -194,19 +194,29 @@ def test_material_set_model_fills_and_says_what_it_filled(cli, site):
 
 
 def test_material_set_says_an_undrained_soil_is_coupled(cli, site):
-    """UNDRAINED is no longer a drainage type: given, it is FULLY_COUPLED with the
-    permeability the export wrote for an undrained soil, and the command says so."""
+    """UNDRAINED is no longer a drainage type: given, it is FULLY_COUPLED with its own
+    permeability, and the command says so."""
     ran = cli("material", site, "set", "m1", "GEO_DRAINAGE_TYPE=UNDRAINED",
               "PERMEABILITY_XX=1e-12", "PERMEABILITY_YY=1e-12", "--unset", "PERMEABILITY_ZZ")
 
     assert ran.code == 0, ran.err
-    assert ("UNDRAINED is no longer a drainage type: the soil is FULLY_COUPLED, with the "
-            "intrinsic permeability 1e-30 m² the export wrote for an undrained soil, in "
-            "place of its own.") in ran.out
+    assert ("UNDRAINED is no longer a drainage type: the soil is FULLY_COUPLED, as Kratos "
+            "calculates it, and keeps its own permeability.") in ran.out
+    assert "not used" not in ran.out, "a coupled soil reads its permeability"
     soil = session.load(site).materials[0].variables
     assert soil["GEO_DRAINAGE_TYPE"] == "FULLY_COUPLED"
-    assert soil["PERMEABILITY_XX"] == soil["PERMEABILITY_YY"] == 1e-30
+    assert soil["PERMEABILITY_XX"] == soil["PERMEABILITY_YY"] == 1e-12
     assert "UNDRAINED" not in cli("material", site, "set", "m1", "K0_NC=0.5").out
+
+
+def test_a_permeability_a_drained_soil_does_not_read_is_named(cli, site):
+    """Accepted, as the soil may be made coupled later, and said to be unused."""
+    ran = cli("material", site, "set", "m1", "GEO_DRAINAGE_TYPE=DRAINED",
+              "PERMEABILITY_XX=1e-12")
+
+    assert ran.code == 0, ran.err
+    assert ("PERMEABILITY_XX not used: Kratos reads no flow parameters of a soil that is "
+            "not FULLY_COUPLED. Remove it, or make the soil FULLY_COUPLED.") in ran.out
 
 
 def test_a_soil_model_and_a_law_together_are_refused(cli, site):
