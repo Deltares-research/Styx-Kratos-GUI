@@ -489,7 +489,8 @@ def test_a_line_a_stage_needs_is_not_deleted_and_the_log_says_why(app_page, live
     reason = capsys.readouterr().err.split("the project: ", 1)[1].strip()
     assert reason == "Value error, stage 'dig' names no such part: soil_top__part1"
     assert f"Could not save the line: {reason}" in log_text(app_page)
-    # The browser itself notes the refused request; the page adds nothing to it.
-    assert app_page.errors == [
-        "Failed to load resource: the server responded with a status of 422"
-        " (Unprocessable Content)"]
+    # The browser itself notes the refused request; the page adds nothing to it. What
+    # follows the 422 is the server's wording, which differs per Python version.
+    assert len(app_page.errors) == 1
+    assert app_page.errors[0].startswith(
+        "Failed to load resource: the server responded with a status of 422")
