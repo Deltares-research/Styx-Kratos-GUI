@@ -387,26 +387,47 @@ def test_a_coupled_soil_derives_its_permeability_and_a_constant_one_none():
 
 
 @pytest.mark.parametrize("old", ["UNDRAINED", "undrained"])
-def test_an_undrained_soil_read_in_is_coupled_with_the_permeability_it_was_written_with(old):
-    """UNDRAINED is not offered: Kratos assembles it as FULLY_COUPLED, and the export
-    wrote it with a permeability so tight no water flows. Read in, it is FULLY_COUPLED
-    with that permeability in place of its own, and without the undrained Poisson ratio
-    a coupled soil does not read."""
-    fixed = soil_models.UNDRAINED_PERMEABILITY_SI
+def test_an_undrained_soil_read_in_is_coupled_with_its_own_permeability(old):
+    """UNDRAINED is not offered: Kratos assembles it as FULLY_COUPLED. Read in, it is
+    FULLY_COUPLED with the permeability it had, also the one a groundwater flow deck
+    reads, and without the undrained Poisson ratio a coupled soil does not read."""
     project = mohr_coulomb_site(GEO_DRAINAGE_TYPE=old, PERMEABILITY_XX=3.0e-12,
-                                GEO_POISSON_UNDRAINED=0.49)
+                                PERMEABILITY_YY=2.0e-12, GEO_POISSON_UNDRAINED=0.49)
 
     soil = project.material("m2").variables
     variables = deck(project)["Variables"]
 
     assert soil["GEO_DRAINAGE_TYPE"] == "FULLY_COUPLED"
-    assert [soil[name] for name in soil_models.AXIS_PERMEABILITIES] == [fixed] * 3
+    assert (soil["PERMEABILITY_XX"], soil["PERMEABILITY_YY"]) == (3.0e-12, 2.0e-12)
     assert "GEO_POISSON_UNDRAINED" not in soil
     assert variables["GEO_DRAINAGE_TYPE"] == "FULLY_COUPLED"
     assert (variables["PERMEABILITY_XX"], variables["PERMEABILITY_YY"],
-            variables["PERMEABILITY_XY"]) == (fixed, fixed, 0.0)
-    in_2d = soil_models.project_drainage({"GEO_DRAINAGE_TYPE": old})
-    assert "PERMEABILITY_ZZ" not in in_2d, "the export writes z from x"
+            variables["PERMEABILITY_XY"]) == (3.0e-12, 2.0e-12, 0.0)
+
+
+@pytest.mark.parametrize("law, variables, given, flow, unused", [
+    (ELASTIC_2D, {"GEO_DRAINAGE_TYPE": "DRAINED"}, {"PERMEABILITY_XX": 1e-12}, False,
+     "PERMEABILITY_XX"),
+    (ELASTIC_2D, {}, {"PERMEABILITY_XX": 1e-12, "PERMEABILITY_ZZ": 1e-12, "POROSITY": 0.3},
+     False, "PERMEABILITY_XX, PERMEABILITY_ZZ"),
+    (ELASTIC_2D, {"GEO_DRAINAGE_TYPE": "FULLY_COUPLED"}, {"PERMEABILITY_XX": 1e-12}, False,
+     None),
+    (ELASTIC_2D, {"GEO_DRAINAGE_TYPE": "DRAINED"}, {"PERMEABILITY_XX": 1e-12}, True, None),
+    (ELASTIC_2D, {"GEO_DRAINAGE_TYPE": "DRAINED"}, {"POROSITY": 0.3}, False, None),
+    ("MyOwnLaw", {"GEO_DRAINAGE_TYPE": "DRAINED"}, {"PERMEABILITY_XX": 1e-12}, False, None),
+])
+def test_a_flow_parameter_given_to_a_soil_that_does_not_read_it_is_named(
+        law, variables, given, flow, unused):
+    """Not for a coupled soil or in a flow project, which read it, nor for a law of no
+    model, which is written as typed."""
+    note = soil_models.unused_flow_note(law, variables, given, flow)
+
+    if unused is None:
+        assert note is None
+    else:
+        assert note == (f"{unused} not used: Kratos reads no flow parameters of a soil "
+                        "that is not FULLY_COUPLED. Remove it, or make the soil "
+                        "FULLY_COUPLED.")
 
 
 @pytest.mark.parametrize("given", [{"GEO_DRAINAGE_TYPE": "DRAINED"}, {}])
@@ -640,11 +661,14 @@ def test_an_older_document_s_soil_water_becomes_the_project_s():
 
 
 def older_document(**water_of: dict) -> dict:
-    """The seed as saved before 2026-11-02: no `fluid`, and the soils named in
-    `water_of` (by id) carrying the water variables given."""
+    """The seed as saved before 2026-11-02: no `fluid`, its drained soils under the name
+    they had then, and the soils named in `water_of` (by id) carrying the water variables
+    given."""
     payload = seed_project().model_dump(mode="json")
     del payload["fluid"]
     for material in payload["materials"]:
+        if material["variables"].get("GEO_DRAINAGE_TYPE") == "DRAINED":
+            material["variables"]["GEO_DRAINAGE_TYPE"] = "CONSTANT_PW_FIELD"
         material["variables"].update(water_of.get(material["id"], {}))
     return payload
 
@@ -705,10 +729,40 @@ def test_an_older_undrained_soil_that_is_coupled_now_is_named():
 
     assert notes == [
         "Sand, loose: UNDRAINED is no longer a drainage type: the soil is FULLY_COUPLED, "
-        "with the intrinsic permeability 1e-30 m² the export wrote for an undrained soil, "
-        "in place of its own."]
+        "as Kratos calculates it, and keeps its own permeability."]
     saved = Project.model_validate(payload).model_dump(mode="json")
     assert migration.notes(saved) == [], "said once: the first save writes the new shape"
+
+
+def test_an_older_drained_soil_that_is_not_coupled_any_more_is_named():
+    """Kratos calculates its own DRAINED as FULLY_COUPLED; the export now writes
+    CONSTANT_PW_FIELD, so the results change. A soil that was CONSTANT_PW_FIELD or says
+    nothing keeps its deck."""
+    payload = older_document()
+    payload["materials"][0]["variables"]["GEO_DRAINAGE_TYPE"] = "CONSTANT_PW_FIELD"
+    payload["materials"][1]["variables"]["GEO_DRAINAGE_TYPE"] = "DRAINED"
+    payload["materials"][2]["variables"].pop("GEO_DRAINAGE_TYPE", None)
+
+    notes = migration.drained_notes(payload)
+
+    assert notes == [
+        "Sand, loose: a DRAINED soil is written as Kratos' CONSTANT_PW_FIELD now, so its "
+        "water pressures are the ones the water conditions set, and Kratos does not solve "
+        "them. It was written as Kratos' DRAINED, which Kratos calculates as FULLY_COUPLED "
+        "with the soil's own permeability. Make it FULLY_COUPLED to keep that."]
+    assert notes[0] in migration.notes(payload)
+    assert migration.drained_notes({**payload, "fluid": {}}) == [], "a current document"
+
+
+def test_an_older_flow_project_s_drained_soil_is_not_named():
+    """Kratos' water pressure elements of a flow deck read no drainage type."""
+    payload = older_document()
+    payload["materials"][1]["variables"]["GEO_DRAINAGE_TYPE"] = "DRAINED"
+    payload["stages"] = [{"id": "s", "name": "Flow", "calculation": "Groundwater flow"}]
+    assert migration.drained_notes(payload) == []
+
+    payload["stages"].append({"id": "t", "name": "Load", "calculation": "Plastic"})
+    assert len(migration.drained_notes(payload)) == 1
 
 
 def test_an_older_document_s_soil_without_a_porosity_gets_the_0_3_its_deck_had():

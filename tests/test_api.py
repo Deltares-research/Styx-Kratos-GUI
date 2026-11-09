@@ -776,6 +776,8 @@ def test_migration_notes_name_the_soil_whose_water_is_overridden(client):
     shape, and this route says which soil's own water that dropped."""
     old = seed_project().model_dump(mode="json")
     del old["fluid"]
+    for material in old["materials"]:
+        material["variables"]["GEO_DRAINAGE_TYPE"] = "CONSTANT_PW_FIELD"
     old["materials"][0]["variables"]["DYNAMIC_VISCOSITY"] = 1e-3
     old["materials"][1]["variables"]["DYNAMIC_VISCOSITY"] = 5e-3
 

@@ -152,8 +152,12 @@ law and its parameters.
   angles' in radians per unit of plastic strain; each starts at 0). When a choice brings in new
   parameters, Styx fills in their defaults. A `DRAINED` soil shows no permeability:
   its water pressures are the ones the water conditions set, and the deformation does
-  not change them (Kratos' `CONSTANT_PW_FIELD`, which the export writes). For an
-  undrained soil, choose `FULLY_COUPLED` and a very low permeability, such as 1e-30 m².
+  not change them (Kratos' `CONSTANT_PW_FIELD`, which the export writes). Styx has no
+  undrained drainage type. A low permeability does not make a soil undrained: a stage
+  is static, so a load does not raise the water pressure of a `FULLY_COUPLED` soil. For
+  an undrained soil, use a `DRAINED` soil with undrained values (total stresses): the
+  undrained Young's modulus, a Poisson's ratio close to 0.5 (such as 0.49), and, for
+  Mohr-Coulomb, the undrained shear strength as cohesion with a friction angle of 0.
   A new soil is saturated below the phreatic level (`SaturatedBelowPhreaticLevelLaw`).
 - A value you leave empty shows, in grey, the value the export writes for it: the
   permeability in y is the one in x, K0 is ν / (1 − ν) for a linear elastic soil and

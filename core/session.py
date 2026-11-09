@@ -972,6 +972,11 @@ def update_material(project: Project, id: str, *, name: str | None = None,
     undrained = soil_models.undrained_note((variables or {}).get("GEO_DRAINAGE_TYPE"))
     if undrained and notes is not None:
         notes.append(undrained)
+    unused = soil_models.unused_flow_note(record["constitutive_law"],
+                                          soil_models.project_drainage(record["variables"]),
+                                          variables or {}, flow=drafts.reads_flow(project))
+    if unused and notes is not None:
+        notes.append(unused)
     return _edited(project, payload)
 
 

@@ -66,14 +66,11 @@ OLD_DRAINAGE = {"CONSTANT_PW_FIELD": "DRAINED", "UNDRAINED": "FULLY_COUPLED"}
 drained soil's deck does not change.
 
 `UNDRAINED` is not offered: Kratos' U-Pw elements assemble and check it as a
-`FULLY_COUPLED` soil (`UPwSmallStrainElement::Check`), and the export wrote it with an
-intrinsic permeability so tight that no water flows. So an undrained soil is a
-`FULLY_COUPLED` one with that permeability (`UNDRAINED_PERMEABILITY_SI`), which it is
-given when it is renamed."""
-
-UNDRAINED_PERMEABILITY_SI = 1.0e-30
-"""m2: the intrinsic permeability, in every direction, an `UNDRAINED` soil is given when
-it becomes `FULLY_COUPLED` (`project_drainage`): the one the export wrote for it."""
+`FULLY_COUPLED` soil (`UPwSmallStrainElement::Check`), so a soil that was one is a
+`FULLY_COUPLED` one with its own permeability, and its deck keeps its physics. A stage is
+static (`GeoStaticScheme`, no time derivatives), so no permeability makes a coupled soil
+build an undrained water pressure under a load: undrained behaviour is the user's to
+model, with the undrained values of a `DRAINED` soil."""
 
 FLOWING = ("FULLY_COUPLED",)
 """The drainage types the window lists flow parameters for.
@@ -613,24 +610,15 @@ def kratos_drainage(value: Any) -> Any:
 def project_drainage(variables: dict) -> dict:
     """`variables` with a `GEO_DRAINAGE_TYPE` from before 2026-11-04 under its name now
     (`OLD_DRAINAGE`), in any case Kratos reads it in; as they are when there is none. An
-    `UNDRAINED` soil becomes `FULLY_COUPLED` with `UNDRAINED_PERMEABILITY_SI` along each
-    axis, in place of its own (along z only when it has one: the export writes the 3D
-    ones from x), and without the undrained Poisson ratio a coupled soil does not
-    read."""
+    `UNDRAINED` soil becomes `FULLY_COUPLED` with its own permeability, without the
+    undrained Poisson ratio a coupled soil does not read."""
     value = variables.get("GEO_DRAINAGE_TYPE")
     if not isinstance(value, str) or value.upper() not in OLD_DRAINAGE:
         return variables
     out = {**variables, "GEO_DRAINAGE_TYPE": OLD_DRAINAGE[value.upper()]}
     if value.upper() == "UNDRAINED":
         out.pop("GEO_POISSON_UNDRAINED", None)
-        for name in AXIS_PERMEABILITIES:
-            if name != "PERMEABILITY_ZZ" or name in out:
-                out[name] = UNDRAINED_PERMEABILITY_SI
     return out
-
-
-AXIS_PERMEABILITIES = ("PERMEABILITY_XX", "PERMEABILITY_YY", "PERMEABILITY_ZZ")
-"""A soil's permeabilities along the axes."""
 
 
 def undrained_note(drainage: Any) -> str | None:
@@ -639,9 +627,28 @@ def undrained_note(drainage: Any) -> str | None:
     otherwise."""
     if not isinstance(drainage, str) or drainage.upper() != "UNDRAINED":
         return None
-    return ("UNDRAINED is no longer a drainage type: the soil is FULLY_COUPLED, with the "
-            f"intrinsic permeability {UNDRAINED_PERMEABILITY_SI:g} m² the export wrote for an "
-            "undrained soil, in place of its own.")
+    return ("UNDRAINED is no longer a drainage type: the soil is FULLY_COUPLED, as Kratos "
+            "calculates it, and keeps its own permeability.")
+
+
+AXIS_PERMEABILITIES = ("PERMEABILITY_XX", "PERMEABILITY_YY", "PERMEABILITY_ZZ")
+"""A soil's permeabilities along the axes; the catalogue lists only the first two."""
+
+
+def unused_flow_note(law: str, variables: dict, given: dict, flow: bool = False) -> str | None:
+    """What `kratos-cli material set` says of the flow parameters in `given` when a soil
+    of `law` holding `variables` does not read them: it is not coupled, in a project
+    that is not a groundwater flow calculation (`FLOWING`; `flow` when it is one). None
+    when there are none, and for a law of no model, which is written as typed."""
+    model = model_of(law)
+    if model == OTHER or flow or _value("GEO_DRAINAGE_TYPE", variables, model) in FLOWING:
+        return None
+    names = {*AXIS_PERMEABILITIES, *(p.name for p in parameters(model) if p.flow)}
+    unused = [name for name in given if name in names]
+    if not unused:
+        return None
+    return (f"{', '.join(unused)} not used: Kratos reads no flow parameters of a soil that "
+            "is not FULLY_COUPLED. Remove it, or make the soil FULLY_COUPLED.")
 
 
 COMPUTED = {

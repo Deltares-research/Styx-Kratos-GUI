@@ -150,8 +150,9 @@ kratos-cli parts pit.json                                 # soil_top__lift1, ...
   units; `get P materials[ID].variables` lists the values a material has.
   `GEO_DRAINAGE_TYPE` is `DRAINED` or `FULLY_COUPLED`; the export writes `DRAINED` as
   Kratos' `CONSTANT_PW_FIELD`, and `CONSTANT_PW_FIELD` given becomes `DRAINED`.
-  `UNDRAINED` given becomes `FULLY_COUPLED` with an intrinsic permeability of 1e-30 m²,
-  and `set` says so. `--color` is a
+  `UNDRAINED` given becomes `FULLY_COUPLED` with its own permeability, and `set` says
+  so. A permeability given to a soil that does not read it is kept, and `set` says that
+  it is not used. `--color` is a
   `#rrggbb` colour, such as `#c4a86a`. Without it, `add` gives a colour no other soil has, as the GUI does. The export derives some variables that are left
   out, and its warning lists them. It also derives `K0_NC`, as ν / (1 − ν) for a
   linear elastic soil and 1 − sin φ for a Mohr-Coulomb one, into

@@ -554,8 +554,8 @@ def k0_notes(value: object) -> list[str]:
 
 def undrained_notes(value: object) -> list[str]:
     """The `UNDRAINED` soils of a document saved before 2026-11-04, one line each: they
-    are `FULLY_COUPLED` now, with the permeability the export wrote for them in place of
-    their own (`soil_models.project_drainage`)."""
+    are `FULLY_COUPLED` now, with their own permeability
+    (`soil_models.project_drainage`)."""
     from core.model import soil_models
 
     if not isinstance(value, dict):
@@ -566,6 +566,30 @@ def undrained_notes(value: object) -> list[str]:
         if note:
             notes.append(f"{soil}: {note}")
     return notes
+
+
+def drained_notes(value: object) -> list[str]:
+    """The `DRAINED` soils of a document saved before 2026-11-02, one line each. The
+    export wrote them as Kratos' `DRAINED`, which its U-Pw elements assemble as a coupled
+    soil with the soil's own permeability; now it writes `CONSTANT_PW_FIELD`
+    (`soil_models.KRATOS_DRAINAGE`). None in a groundwater flow calculation, whose water
+    pressure elements read no drainage type."""
+    from core.model import stages
+
+    if not isinstance(value, dict) or "fluid" in value:
+        return []
+    every = value.get("stages")
+    if isinstance(every, list) and every and all(
+            isinstance(s, dict) and s.get("calculation") == stages.GROUNDWATER_FLOW
+            for s in every):
+        return []
+    return [f"{soil}: a DRAINED soil is written as Kratos' CONSTANT_PW_FIELD now, so its "
+            "water pressures are the ones the water conditions set, and Kratos does not "
+            "solve them. It was written as Kratos' DRAINED, which Kratos calculates as "
+            "FULLY_COUPLED with the soil's own permeability. Make it FULLY_COUPLED to "
+            "keep that."
+            for soil, variables in _soil_variables(value.get("materials")).items()
+            if variables.get("GEO_DRAINAGE_TYPE") == "DRAINED"]
 
 
 def upgraded(value: object) -> object:
@@ -579,13 +603,13 @@ def notes(value: object) -> list[str]:
     """What opening `value` changes in its deck that the user has to know, one line
     each: the soils' own water it replaces (`water_notes`), the linear elastic soils
     whose K0 changes (`k0_notes`), the undrained soils that are coupled now
-    (`undrained_notes`) and the contacts that lose their soil's strength
-    (`contact_notes`). Empty for a current document. Said when a file is opened
-    (`core.session.migration_notes`, the GUI's Open), as the first save of it writes the
-    new shape and the old values are gone."""
+    (`undrained_notes`), the drained soils that are not any more (`drained_notes`) and
+    the contacts that lose their soil's strength (`contact_notes`). Empty for a current
+    document. Said when a file is opened (`core.session.migration_notes`, the GUI's
+    Open), as the first save of it writes the new shape and the old values are gone."""
     value = _before_water(value)
     return (water_notes(value) + k0_notes(value) + undrained_notes(value)
-            + contact_notes(value))
+            + drained_notes(value) + contact_notes(value))
 
 
 def _before_water(value: object) -> object:
