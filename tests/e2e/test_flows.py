@@ -241,8 +241,11 @@ def test_the_boundary_conditions_are_set_in_their_window_and_by_command(app_page
     soil.locator("select.bc-water").select_option("Uniform")
     soil.locator("input.bc-number").fill("0")
     app_page.get_by_role("button", name="Save").click()
+    # Wait for the Uniform type, not only for a whole-soil water pressure: the new project
+    # has a Hydrostatic one already, so that wait would pass before the save is stored.
     app_page.wait_for_function("(App.PROJECT.boundary_conditions || []).some(function (c) {"
-                               " return c.kind === 'water_pressure' && c.on === 'domain'; })",
+                               " return c.kind === 'water_pressure' && c.on === 'domain'"
+                               " && c.fluid_pressure_type === 'Uniform'; })",
                                timeout=LONG)
     stored = app_page.request.get(url).json()
     water = [c for c in stored["boundary_conditions"] if c["kind"] == "water_pressure"]
