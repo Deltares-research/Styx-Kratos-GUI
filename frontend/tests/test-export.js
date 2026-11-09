@@ -2,7 +2,7 @@
 
 function withExportStubs(body) {
   var saved = { Api: App.Api, Command: App.Command, PROJECT: App.PROJECT,
-                REFINEMENTS: App.MESH_REFINEMENTS, SELECTION: App.MESH_BODY_SELECTION,
+                REFINEMENTS: App.MESH_REFINEMENTS, LEFT_OUT: App.MESH_BODIES_LEFT_OUT,
                 save: App.Export.save, pickFile: App.Download.pickFile };
   var written = [], logged = [];
   App.Command = {
@@ -13,14 +13,14 @@ function withExportStubs(body) {
   App.Export.save = function (name, text) { written.push([name, text]); };
   // Never the real one: it would put a save dialog in front of the test run.
   App.Download.pickFile = function () { return Promise.resolve(null); };
-  App.PROJECT = { name: 'Deep excavation — Rotterdam Zuid',
+  App.PROJECT = { name: 'Deep excavation — Rotterdam Zuid', layers: [{ id: 'L1' }, { id: 'L2' }],
                   mesh: { element_size: 2.5, order: 2 } };
   App.MESH_REFINEMENTS = [];
-  App.MESH_BODY_SELECTION = null;
+  App.MESH_BODIES_LEFT_OUT = null;
   function restore() {
     App.Api = saved.Api; App.Command = saved.Command; App.PROJECT = saved.PROJECT;
     App.MESH_REFINEMENTS = saved.REFINEMENTS;
-    App.MESH_BODY_SELECTION = saved.SELECTION;
+    App.MESH_BODIES_LEFT_OUT = saved.LEFT_OUT;
     App.Export.save = saved.save;
     App.Download.pickFile = saved.pickFile;
   }
@@ -45,10 +45,16 @@ test('the export meshes every body unless bodies were explicitly chosen', functi
   withExportStubs(function () {
     T.eq(App.Export.meshRequest().volume_keys, undefined,
          'hiding a layer must not drop it from the analysis');
-    App.MESH_BODY_SELECTION = ['soil_L1'];
+    App.MESH_BODIES_LEFT_OUT = ['soil_L2'];
     T.eq(App.Export.meshRequest().volume_keys, ['soil_L1'],
          'an explicit choice in the mesh dialog is still honoured');
     T.eq(App.Export.meshRequest().element_size, 2.5, "the project's own mesh settings");
+    App.PROJECT.layers = [{ id: 'L1' }, { id: 'L3' }];
+    T.eq(App.Export.meshRequest().volume_keys, ['soil_L1', 'soil_L3'],
+         'a body deleted after the choice is not asked for, and one added later is');
+    App.MESH_BODIES_LEFT_OUT = ['soil_L1', 'soil_L3'];
+    T.eq(App.Export.meshRequest().volume_keys, undefined,
+         'with nothing left of the choice, every body is meshed');
   });
 });
 
@@ -91,6 +97,25 @@ test('the archive holds the deck, its materials and its process file', function 
   T.eq(App.Export.files(result, 'model.mdpa').map(function (f) { return f.name; }),
        ['model.mdpa', 'MaterialParameters.json', 'ProjectParameters.json']);
   T.eq(App.Export.files(result, 'model.mdpa')[0].text, 'Begin Properties 0\r\n');
+});
+
+test('the real export save writes its archive to the picked file', function () {
+  var save = App.Export.save;
+  return withExportStubs(function () {
+    var handle = fakeFileHandle('deck.zip');
+    App.Export.save = save;
+    App.Download.pickFile = function () { return Promise.resolve(handle); };
+    App.Api = { post: function () {
+      return Promise.resolve({ mdpa: 'Begin Nodes\nEnd Nodes\n',
+                               stats: { nodes: 0, elements: 0 } });
+    } };
+    return App.Export.run().then(function () {
+      T.ok(handle.written instanceof Blob, 'the file receives the archive, not its name');
+      T.eq(handle.written.type, 'application/zip');
+      T.ok(handle.written.size > 0);
+      T.ok(handle.closed, 'the archive is committed to disk');
+    });
+  });
 });
 
 test('an export without materials or process metadata carries only the deck', function () {

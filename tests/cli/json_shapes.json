@@ -1,0 +1,303 @@
+{
+ "anchor list": [
+  {
+   "active": "boolean",
+   "head": "array",
+   "id": "string",
+   "kind": "string",
+   "name": "string",
+   "prestress": "number",
+   "section": "string",
+   "tail": "array"
+  }
+ ],
+ "beam list": [
+  {
+   "active": "boolean",
+   "derived_from": "null",
+   "id": "string",
+   "kind": "string",
+   "name": "string",
+   "points": "array",
+   "section": "string"
+  }
+ ],
+ "boundary list": [
+  {
+   "active": "boolean",
+   "face": "null|string",
+   "fixed": "array",
+   "fluid_pressure_type": "string",
+   "id": "string",
+   "is_fixed": "boolean",
+   "kind": "string",
+   "name": "string",
+   "on": "string",
+   "part": "null",
+   "points": "null",
+   "pressure_tension_cut_off": "number",
+   "reference_coordinate": "number",
+   "value": "number",
+   "x_coordinates": "null",
+   "y_coordinates": "null",
+   "z_coordinates": "null"
+  }
+ ],
+ "check": {
+  "bodies": [
+   "string"
+  ],
+  "boundary_conditions": [
+   "object"
+  ],
+  "custom_parts": [],
+  "deck": "null",
+  "dimension": "number",
+  "domain": {
+   "x0": "number",
+   "x1": "number",
+   "y_bottom": "number",
+   "y_top": "number",
+   "z0": "number",
+   "z1": "number"
+  },
+  "file": "string",
+  "gravity": "boolean",
+  "layers": [
+   "string"
+  ],
+  "materials": [
+   "string"
+  ],
+  "mesh": {
+   "element_size": "number",
+   "order": "number"
+  },
+  "name": "string",
+  "ok": "boolean",
+  "parts": [
+   "string"
+  ],
+  "section_offset": "number",
+  "stages": [
+   "string"
+  ],
+  "structures": {
+   "anchors": "number",
+   "beams": "number",
+   "interfaces": "number",
+   "loads": "number",
+   "normal_loads": "number"
+  },
+  "unit_system": "string",
+  "warnings": [],
+  "water": {
+   "margin": "number",
+   "specific_weight": "null",
+   "thickness": "number",
+   "y": "number"
+  }
+ },
+ "interface list": [
+  {
+   "active": "boolean",
+   "id": "string",
+   "kind": "string",
+   "name": "string",
+   "points": "null",
+   "section": "string",
+   "side": "string",
+   "stretch": "null",
+   "structure": "string"
+  }
+ ],
+ "layer list": [
+  {
+   "bottom": "number",
+   "id": "string",
+   "mat": "string",
+   "name": "string",
+   "top": "number"
+  }
+ ],
+ "load list": [
+  {
+   "active": "boolean",
+   "components": "array",
+   "derived_from": "null",
+   "distribution": "string",
+   "id": "string",
+   "kind": "string",
+   "name": "string",
+   "thickness": "number",
+   "x0": "number",
+   "x1": "number",
+   "y": "number"
+  }
+ ],
+ "material list": [
+  {
+   "color": "string",
+   "constitutive_law": "string",
+   "id": "string",
+   "interface_permeability": "string",
+   "name": "string",
+   "r_inter": "number",
+   "tables": "object",
+   "variables": "object"
+  }
+ ],
+ "material models": [
+  {
+   "groups": "array",
+   "label": "string",
+   "laws": "object",
+   "model": "string",
+   "old_laws": "object"
+  }
+ ],
+ "material presets": [
+  {
+   "color": "string",
+   "id": "string",
+   "interface_permeability": "string",
+   "name": "string",
+   "r_inter": "number",
+   "variables": "object"
+  }
+ ],
+ "member list": [],
+ "normal-load list": [
+  {
+   "active": "boolean",
+   "fluid_pressure_type": "string",
+   "id": "string",
+   "kind": "string",
+   "name": "string",
+   "points": "array",
+   "pressure": "number",
+   "reference_coordinate": "number"
+  }
+ ],
+ "parts": [
+  {
+   "key": "string",
+   "label": "string",
+   "stageable": "boolean"
+  }
+ ],
+ "phases list": [
+  {
+   "absolute_tolerance": "number",
+   "activate": "array",
+   "calculation": "string",
+   "convergence_criterion": "string",
+   "deactivate": "array",
+   "duration": "number",
+   "id": "string",
+   "loading": "string",
+   "max_iterations": "number",
+   "name": "string",
+   "parent": "null|string",
+   "reset_displacements": "boolean",
+   "solver_settings": "object",
+   "stress_initialisation": "string",
+   "time_integration": "string",
+   "time_step": "number",
+   "tolerated_error": "number"
+  }
+ ],
+ "section list": [
+  {
+   "compression_limit": "null",
+   "constitutive_law": "string",
+   "id": "string",
+   "kind": "string",
+   "material": "null",
+   "name": "string",
+   "permeability": "string",
+   "r_inter": "number",
+   "spacing": "number",
+   "tables": "object",
+   "tension_limit": "null",
+   "variables": "object",
+   "virtual_thickness": "number"
+  }
+ ],
+ "show": {
+  "bodies": [
+   "string"
+  ],
+  "boundary_conditions": [
+   "object"
+  ],
+  "custom_parts": [],
+  "deck": "null",
+  "dimension": "number",
+  "domain": {
+   "x0": "number",
+   "x1": "number",
+   "y_bottom": "number",
+   "y_top": "number",
+   "z0": "number",
+   "z1": "number"
+  },
+  "file": "string",
+  "gravity": "boolean",
+  "layers": [
+   "string"
+  ],
+  "materials": [
+   "string"
+  ],
+  "mesh": {
+   "element_size": "number",
+   "order": "number"
+  },
+  "name": "string",
+  "parts": [
+   "string"
+  ],
+  "section_offset": "number",
+  "stages": [
+   "string"
+  ],
+  "structures": {
+   "anchors": "number",
+   "beams": "number",
+   "interfaces": "number",
+   "loads": "number",
+   "normal_loads": "number"
+  },
+  "unit_system": "string",
+  "water": {
+   "margin": "number",
+   "specific_weight": "null",
+   "thickness": "number",
+   "y": "number"
+  }
+ },
+ "stages list": [
+  {
+   "absolute_tolerance": "number",
+   "activate": "array",
+   "calculation": "string",
+   "convergence_criterion": "string",
+   "deactivate": "array",
+   "duration": "number",
+   "id": "string",
+   "loading": "string",
+   "max_iterations": "number",
+   "name": "string",
+   "parent": "null|string",
+   "reset_displacements": "boolean",
+   "solver_settings": "object",
+   "stress_initialisation": "string",
+   "time_integration": "string",
+   "time_step": "number",
+   "tolerated_error": "number"
+  }
+ ],
+ "volume list": [],
+ "wall list": []
+}

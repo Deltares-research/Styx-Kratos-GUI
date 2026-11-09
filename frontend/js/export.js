@@ -44,9 +44,8 @@ App.Export = (function () {
          deck is built from the mesh the user is looking at rather than a flatter one. */
       refinements: App.Viewport.meshRefinements()
     });
-    if (Array.isArray(App.MESH_BODY_SELECTION) && App.MESH_BODY_SELECTION.length) {
-      settings.volume_keys = App.MESH_BODY_SELECTION.slice();
-    }
+    var chosen = App.MeshSettings.chosenBodies(project, App.MESH_BODIES_LEFT_OUT);
+    if (chosen) settings.volume_keys = chosen;
     return settings;
   }
 

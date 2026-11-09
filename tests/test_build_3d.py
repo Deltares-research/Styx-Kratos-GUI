@@ -10,12 +10,15 @@ Nothing here pins a Kratos element name; that lives in test_kratos.py. This file
 only about what OCC ends up holding.
 """
 
+from types import SimpleNamespace
+from unittest.mock import Mock, call
+
 import gmsh
 import pytest
 
 from core.geometry import solid_model
-from core.model.schemas import Project
-from core.model.templates import seed_project
+from core.model.schemas import Member, Project
+from core.model.templates import blank_project, seed_project
 
 SECTION_AZ26 = {"id": "az26", "name": "AZ 26-700", "E": 2.1e8, "nu": 0.3,
                 "area": 0.0198, "inertia": 5.52e-4, "density": 7850.0, "spacing": 1.0}
@@ -314,3 +317,60 @@ def test_every_part_key_still_gets_a_section_with_3d_structures_present():
         model = tessellation.tessellate(project)
 
     assert set(project.part_keys()) <= {s.key for s in model.sections}
+
+
+def test_three_dimensional_build_verification_names_parts_without_geometry():
+    with pytest.raises(solid_model.GeometryError, match="soil_L1"):
+        solid_model._verify(seed_project(), {})
+
+
+INSIDE, OUTSIDE = (0.5, 0.5, 0.5), (2, 2, 2)
+EMBED = call(1, [7], 3, 10)
+
+
+@pytest.mark.parametrize("centre, bounds_a_face, embed_error, embeds, expected_log", [
+    pytest.param(INSIDE, 0, None, [EMBED], [], id="embedded"),
+    pytest.param(INSIDE, 1, None, [], [], id="boundary"),
+    pytest.param(OUTSIDE, 0, None, [], [
+        "Info    : member lies in no soil volume; it is meshed unbonded from the soil",
+    ], id="outside"),
+    pytest.param(INSIDE, 0, RuntimeError("mesher refused"), [EMBED], [
+        "Info    : member could not be embedded in volume 10 (mesher refused); "
+        "it is meshed unbonded from the soil",
+    ], id="failure"),
+])
+def test_volume_curve_embedding_preserves_topology_and_reports_unbonded_members(
+        monkeypatch, centre, bounds_a_face, embed_error, embeds, expected_log):
+    occ = SimpleNamespace(synchronize=Mock(), getCenterOfMass=Mock(return_value=centre))
+    embed = Mock(side_effect=embed_error)
+    model = SimpleNamespace(
+        occ=occ, mesh=SimpleNamespace(embed=embed),
+        getBoundingBox=Mock(return_value=(0, 0, 0, 1, 1, 1)),
+        getAdjacencies=Mock(return_value=(SimpleNamespace(size=bounds_a_face), [])),
+    )
+    monkeypatch.setattr(solid_model, "gmsh", SimpleNamespace(model=model))
+    log = []
+
+    solid_model._embed_curves_in_volumes({"member": [7]}, [10], log)
+
+    occ.synchronize.assert_called_once_with()
+    assert embed.call_args_list == embeds
+    assert log == expected_log
+
+
+def test_a_spatial_structure_outside_the_soil_is_not_returned_as_embedded(monkeypatch):
+    member = Member(id="member", name="Member", section="steel",
+                    points=[(1, 0, 0), (1, -2, 0)])
+    project = blank_project().model_copy(update={"dimension": 3, "beams": [member]})
+    occ = SimpleNamespace(
+        addPoint=Mock(side_effect=[1, 2]), addLine=Mock(return_value=7),
+        intersect=Mock(return_value=([], [])), fragment=Mock())
+    monkeypatch.setattr(solid_model, "gmsh", SimpleNamespace(model=SimpleNamespace(occ=occ)))
+    owners = {10: {"soil"}}
+    log = []
+
+    assert solid_model._embed_3d_structures(project, owners, log) == (owners, {}, {})
+    assert log == ["Info    : member lies outside the soil and is not part of the model"]
+    occ.intersect.assert_called_once_with(
+        [(1, 7)], [(3, 10)], removeObject=True, removeTool=False)
+    occ.fragment.assert_not_called()

@@ -320,7 +320,7 @@ When you open Mesh mode, the **Mesh properties** window opens:
 
 | Setting | What it does |
 |---|---|
-| Layer mesh sizes | Select the layers to mesh, and give each one its own target size. Styx meshes the selected layers together, so their shared faces have common nodes. |
+| Layer mesh sizes | Select the layers to mesh, and give each one its own target size. A layer with no size of its own shows the global size and follows it. Type a value to give the layer its own size. Styx meshes the selected layers together, so their shared faces have common nodes. Sizes that are not in this table, for example the size of a sheet pile set in `kratos-cli`, do not change. |
 | Global element size | The maximum length of an element edge, in metres |
 | Element order | Linear elements, or quadratic elements with a midside node on each edge |
 | 2D algorithm, 3D algorithm | The Gmsh algorithm that makes the elements |
@@ -332,6 +332,12 @@ When you open Mesh mode, the **Mesh properties** window opens:
 
 Click **Apply and generate** to make the mesh, or **Apply** to only keep the settings.
 <kbd>F9</kbd> in Mesh mode makes the mesh again with the saved settings.
+
+A mesh size belongs to its body. An edit that takes a body away also removes the body's
+size: for example, deleting a layer or a structure, or moving a layer boundary so that
+an excavation lift is no longer in any layer. The Session log names each size that was
+removed, and its value. If the body comes back later, for example when you move the
+boundary back, set its size again, or use undo to get the body and its size back.
 
 To see the numbers of the nodes or the elements, right-click in the viewport and select
 **Show labels**. To show a part of the mesh in its own colour, type `colour <part>`. To see

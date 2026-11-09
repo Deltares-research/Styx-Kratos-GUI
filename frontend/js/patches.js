@@ -836,7 +836,7 @@ App.LivePatches = (function () {
      `_without_custom_parts`), and that sentence is the whole of what the user needs. */
   function deleteRequest(path, fallback) {
     return fetch(App.Api.base + path, { method: 'DELETE' }).then(function (res) {
-      if (res.ok) return res.json();
+      if (res.ok) return res.json().then(App.Api.told);
       return res.json().catch(function () { return {}; }).then(function (body) {
         throw new Error(typeof body.detail === 'string' ? body.detail : fallback);
       });
@@ -1558,6 +1558,8 @@ App.LivePatches = (function () {
   function adoptProject(project, message) {
     App.Model.apply(project);
     App.History.reset();
+    // The Mesh properties window's choice of layers is about the document left behind.
+    App.MESH_BODIES_LEFT_OUT = null;
     syncHistoryButtons();
     // A previewed or accepted .mdpa belongs to the document that was open when it was
     // loaded -- swapping to a different one (new or opened) leaves all of it behind:

@@ -11,6 +11,7 @@ import json
 import sys
 import textwrap
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 from fastapi.testclient import TestClient
@@ -563,3 +564,52 @@ def test_staging_brings_the_units_record_when_the_deck_has_one(project, deck_dir
     written = external_deck.stage(project.deck, tmp_path)
     assert calculation.UNITS_NAME in written
     assert (tmp_path / calculation.UNITS_NAME).read_text(encoding="utf-8") == '{"unit_system": "kN"}'
+
+
+def test_external_deck_stages_follow_execution_order_and_keep_only_changes():
+    parameters_doc = {
+        "orchestrator": {"settings": {"execution_list": ["1_Initial", "2_Install", "missing"]}},
+        "stages": {
+            "1_Initial": {"stage_settings": {
+                "solver_settings": {"problem_domain_sub_model_part_list": ["PorousDomain.Soil"]},
+            }},
+            "2_Install": {"stage_settings": {
+                "solver_settings": {"problem_domain_sub_model_part_list":
+                                    ["PorousDomain.Soil", "PorousDomain.Wall"]},
+            }},
+        },
+    }
+
+    stages = external_deck.styx_stages(parameters_doc)
+
+    assert [stage.id for stage in stages] == ["1_Initial", "2_Install"]
+    assert stages[0].name == "Initial"
+    assert stages[0].parent is None
+    assert stages[0].activate == []
+    assert stages[0].deactivate == ["Wall"]
+    assert stages[1].parent == "1_Initial"
+    assert stages[1].activate == ["Wall"]
+    assert stages[1].deactivate == []
+
+
+def test_external_deck_parameters_fail_with_a_user_facing_missing_file_message(tmp_path):
+    deck = SimpleNamespace(directory=str(tmp_path), parameters="missing.json")
+
+    with pytest.raises(external_deck.DeckError, match="no deck parameters"):
+        external_deck._parameters(deck)
+
+
+def test_external_deck_rejects_json_without_a_stages_object(tmp_path):
+    (tmp_path / "parameters.json").write_text('{"problem_data": {}}', encoding="utf-8")
+    deck = SimpleNamespace(directory=str(tmp_path), parameters="parameters.json")
+
+    with pytest.raises(external_deck.DeckError, match='no "stages" to run'):
+        external_deck._parameters(deck)
+
+
+def test_external_deck_reports_unreadable_parameter_json(tmp_path):
+    (tmp_path / "parameters.json").write_text("{", encoding="utf-8")
+    deck = SimpleNamespace(directory=str(tmp_path), parameters="parameters.json")
+
+    with pytest.raises(external_deck.DeckError, match="could not be read"):
+        external_deck._parameters(deck)

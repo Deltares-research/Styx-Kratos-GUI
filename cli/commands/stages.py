@@ -36,7 +36,7 @@ from __future__ import annotations
 
 import argparse
 
-from cli.terminal.files import add_project, add_writing, written
+from cli.terminal.files import add_project, add_writing, read, written
 from cli.terminal.output import Answer, CommandError
 from cli.terminal.words import NAME_HELP, existing, file_of, given, id_and_name, id_help, named_ids
 from core import session
@@ -197,12 +197,12 @@ FIELDS = ("name", "calculation", "stress_initialisation", "time_integration",
 # ── Handlers ────────────────────────────────────────────────────────────────
 
 def list_stages(args: argparse.Namespace) -> Answer:
-    project = session.load(args.project)
+    project = read(args)
     return Answer(data=_records(project), lines=_listed(project))
 
 
 def show_stage(args: argparse.Namespace) -> Answer:
-    project = session.load(args.project)
+    project = read(args)
     stage = session.find_stage(project, args.id)
     active = stages.active_parts(project, args.id)
     keys = [key for key in project.stageable_keys() if key in active]
@@ -234,14 +234,14 @@ def _solver_rows(project: Project, stage) -> list[dict]:
 
 
 def staged_excavation_stages(args: argparse.Namespace) -> Answer:
-    return _replaced(args, session.staged_excavation_stages(session.load(args.project)))
+    return _replaced(args, session.staged_excavation_stages(read(args)))
 
 
 @named_ids()
 def add_stage(args: argparse.Namespace) -> Answer:
     fields = _fields(args)
     _with_solver(args, fields, {})
-    project, stage = session.add_stage(session.load(args.project), before=args.before,
+    project, stage = session.add_stage(read(args), before=args.before,
                                        id=args.id, **fields)
     _no_reset_in_flow(args, stage)
     return _added(args, project, stage)
@@ -249,7 +249,7 @@ def add_stage(args: argparse.Namespace) -> Answer:
 
 @named_ids()
 def copy_stage(args: argparse.Namespace) -> Answer:
-    project = session.load(args.project)
+    project = read(args)
     fields = _fields(args)
     original = session.find_stage(project, args.original)
     _with_solver(args, fields, original.solver_settings)
@@ -260,7 +260,7 @@ def copy_stage(args: argparse.Namespace) -> Answer:
 
 
 def update_stage(args: argparse.Namespace) -> Answer:
-    project = session.load(args.project)
+    project = read(args)
     fields = _fields(args, "parent")
     stage = session.find_stage(project, args.id)
     # A stage made another calculation type starts from that type's defaults.
@@ -272,12 +272,12 @@ def update_stage(args: argparse.Namespace) -> Answer:
 
 
 def remove_stage(args: argparse.Namespace) -> Answer:
-    project = session.remove_stage(session.load(args.project), args.id)
+    project = session.remove_stage(read(args), args.id)
     return _edited(args, project, f"removed stage {args.id}")
 
 
 def switch_parts(args: argparse.Namespace) -> Answer:
-    project = session.switch_parts(session.load(args.project), args.id, args.keys,
+    project = session.switch_parts(read(args), args.id, args.keys,
                                    args.wanted)
     did = "into" if args.wanted else "out of"
     return _edited(args, project,

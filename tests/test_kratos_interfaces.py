@@ -21,7 +21,7 @@ import json
 import pytest
 
 from core.geometry import solid_model
-from core.kratos import writer
+from core.kratos import interfaces, writer
 KILO = 1000.0  # kN -> N: these tests write old-style projects, converted on load (core/model/migration.py)
 from core.model.schemas import MeshRequest, Project
 from core.model.templates import seed_project
@@ -953,3 +953,46 @@ def test_the_contact_stops_where_the_ground_does(standing, drawn):
     standing_out, flush = contacts(standing[1]), contacts(drawn[1])
     assert standing_out and max(y for ys in standing_out for y in ys) == 0.0
     assert len(standing_out) == len(flush)
+
+
+def test_interface_export_refuses_a_contact_without_mesh(session):
+    # Drawn 2 m above the ground: no soil around it, so the build clips all of it away.
+    project = interfaced_project(side="left", structure=None,
+                                 points=[[2.0, 2.0], [10.0, 2.0]])
+
+    with pytest.raises(writer.ExportError, match="Wall contact.*no mesh along its line"):
+        writer.export_project(project, MeshRequest(element_size=3.0, order=1))
+
+
+def test_interface_export_translates_topology_failures(session, monkeypatch):
+    def broken_split(*_args):
+        raise interfaces.InterfaceError("contact crosses an unsupported junction")
+
+    monkeypatch.setattr(interfaces, "split_mesh", broken_split)
+
+    with pytest.raises(writer.ExportError, match="contact crosses an unsupported junction"):
+        writer.export_project(interfaced_project(), MeshRequest(element_size=3.0, order=1))
+
+
+def test_contact_grouping_excludes_structures_and_faces_with_no_common_soil_owner():
+    held = [1, 2, 4, 5]
+    unheld = [1, 2, 5, 6]
+    blocks = [
+        ("wall", "Beam", [[4, 5, 6]]),
+        ("soil_a", "Triangle", [[4, 5, 7]]),
+        ("soil_b", "Triangle", [[6, 8, 9]]),
+    ]
+
+    assert writer._interface_by_body(
+        [held, unheld], 2, blocks, frozenset({"soil_a", "soil_b"})) == [
+            ("soil_a", [held]),
+        ]
+
+
+def test_a_condition_without_an_owning_soil_element_is_not_relocated():
+    rows = [[1, 9]]
+    split = interfaces.Split(duplicates={4: 1}, renamed=[{1: 4}])
+
+    writer._follow_the_soil([("load", "LineLoad", rows)], [[1, 2, 3]], split)
+
+    assert rows == [[1, 9]]

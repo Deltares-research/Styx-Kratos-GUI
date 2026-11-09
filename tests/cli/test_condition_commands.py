@@ -143,6 +143,18 @@ def test_set_to_hydrostatic_copies_the_water_level_in(cli, dry):
     assert conditions(dry)[0].reference_coordinate == -3.0
 
 
+def test_set_cannot_change_a_water_pressure_into_a_seepage_face_or_support(cli, dry):
+    assert cli("boundary", dry, "add", "wp", "--domain", "--water-pressure", "Uniform").code \
+        == 0
+
+    seepage = cli("boundary", dry, "set", "wp", "--seepage")
+    support = cli("boundary", dry, "set", "wp", "--roller")
+
+    assert seepage.code == 1 and "remove it and add a seepage face instead" in seepage.err
+    assert support.code == 1 and "a support's" in support.err
+    assert conditions(dry)[0].kind == "water_pressure"
+
+
 def test_list_and_remove(cli, dry):
     assert cli("boundary", dry, "list").out.strip() == "No boundary conditions yet."
     assert cli("boundary", dry, "add", "wp", "--face", "right", "--water-pressure",

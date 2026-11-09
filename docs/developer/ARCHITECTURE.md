@@ -41,7 +41,7 @@ Module paths are relative to `core/`.
 
 | Step | Module | What happens |
 |---|---|---|
-| 1. Edit | `model/schemas.py`, `session.py` | Each edit checks the full project again |
+| 1. Edit | `model/schemas.py`, `session.py` | Each edit goes through one path (`session._edited`): it drops the mesh size of a body the edit took away, then checks the full project again |
 | 2. Build | `geometry/solid_model.py` | Boxes, then a boolean fragment, then the pit cut out, then the structures embedded. 2D sections and 3D solids. |
 | 3. Draw | `geometry/tessellation.py` | A fast surface triangulation (about 0.1 s) for the view only. It is not a finite-element mesh. |
 | 4. Mesh | `geometry/meshing.py` | The finite-element mesh, made again from the geometry each time |
@@ -103,7 +103,7 @@ with `-m` in a Python that has no pydantic and no Gmsh.
 |---|---|
 | `main.py` | Makes the FastAPI app and mounts the browser files |
 | `middleware.py` | Checks the Host and Origin headers, and switches off the browser cache for the app files |
-| `routes/` | One module for each group of the HTTP API (see below). `routes/common.py` has what they share: the upload limit (256 MB), the answer to a refused edit, and the mesh jobs. |
+| `routes/` | One module for each group of the HTTP API (see below). `routes/common.py` has what they share: the upload limit (256 MB), the answer to a refused edit, the answer to a stored edit (the project, and in `edit_notes` the mesh sizes the edit removed), and the mesh jobs. |
 | `store.py` | The one open project |
 | `launcher.py` | Makes the virtual environment and starts the server (`run.bat`, `run.sh`) |
 

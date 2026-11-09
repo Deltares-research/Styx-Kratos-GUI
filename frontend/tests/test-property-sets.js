@@ -115,8 +115,15 @@
     T.eq(row[4].kind, 'select');
     T.eq(row[4].options().map(function (o) { return o.value; }),
          ['CONSTANT_PW_FIELD', 'FULLY_COUPLED', 'DRAINED', 'UNDRAINED']);
+    T.eq(row[4].get(), 'CONSTANT_PW_FIELD');
     T.eq(row[4].set('FULLY_COUPLED'), null);
+    T.eq(row[4].get(), 'FULLY_COUPLED');
     T.eq(set.variables.GEO_DRAINAGE_TYPE, 'FULLY_COUPLED');
+    var checked = P.rows('soil', set, 2, function (value) { return P.validate('soil', value); })
+      .filter(function (r) { return r[0] === 'GEO_DRAINAGE_TYPE'; })[0][4];
+    checked.set('DRAINED');
+    T.ok(checked.set('not-a-drainage-type'));
+    T.eq(checked.get(), 'DRAINED', 'a refused choice restores the last valid value');
   });
 
 })();

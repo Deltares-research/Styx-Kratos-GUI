@@ -229,3 +229,14 @@ def test_each_stage_lasts_a_second_and_the_settling_stages_sit_before_zero():
     assert all(end - start == 1.0 for start, end in times)
     assert all(params["stages"][n]["stage_settings"]["solver_settings"]["time_stepping"]
                ["time_step"] == 1.0 for n in order)
+
+
+def test_gid_flow_output_includes_hydraulic_results_and_optional_seepage_rate():
+    output = parameters._gid_output("flow-results", gravity=False, flow=True, seepage=True)
+    configuration = output["Parameters"]["postprocess_parameters"]["result_file_configuration"]
+
+    assert output["Parameters"]["output_name"] == "flow-results"
+    assert "WATER_PRESSURE" in configuration["nodal_results"]
+    assert "FLUID_FLUX_VECTOR" in configuration["nodal_results"]
+    assert "NODAL_WATER_FLOW_RATE" in configuration["nodal_results"]
+    assert "HYDRAULIC_HEAD" not in configuration["gauss_point_results"]

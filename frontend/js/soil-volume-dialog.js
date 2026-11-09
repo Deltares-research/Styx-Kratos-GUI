@@ -347,13 +347,17 @@ App.SoilVolumeDialog = (function () {
     function check() {
       var points = readVertices();
       if (surface) {
-        return { problem: validateOutline(points),
-                 summary: points.length + ' corners · area ' + areaOf(points).toFixed(1) + ' m²' };
+        var outlineProblem = validateOutline(points);
+        return { problem: outlineProblem,
+                 summary: outlineProblem ? null
+                   : points.length + ' corners · area ' + areaOf(points).toFixed(1) + ' m²' };
       }
       var extrusion = readExtrusion();
-      return { problem: validate(points, extrusion),
-               summary: points.length + ' corners · volume '
-                        + volumeOf(points, extrusion).toFixed(1) + ' m³' };
+      var volumeProblem = validate(points, extrusion);
+      return { problem: volumeProblem,
+               summary: volumeProblem ? null
+                 : points.length + ' corners · volume '
+                   + volumeOf(points, extrusion).toFixed(1) + ' m³' };
     }
 
     function refresh() {

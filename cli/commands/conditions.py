@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 
+from cli.terminal.files import read
 from cli.terminal.output import Answer, CommandError
 from cli.terminal.words import (NAME_HELP, action, coordinates, edited, existing, given,
                                 id_help, named_ids, noun)
@@ -129,7 +130,7 @@ def listed_lines(project: Project) -> list[str]:
 
 
 def list_conditions(args: argparse.Namespace) -> Answer:
-    project = session.load(args.project)
+    project = read(args)
     records = condition_checks.listed(project)
     return Answer(data=[record.model_dump(mode="json") for record in records],
                   lines=listed_lines(project))
@@ -137,7 +138,7 @@ def list_conditions(args: argparse.Namespace) -> Answer:
 
 @named_ids()
 def add_condition(args: argparse.Namespace) -> Answer:
-    project = session.load(args.project)
+    project = read(args)
     support = args.roller or args.fix is not None
     if args.seepage:
         return _add_seepage(args, project)
@@ -207,7 +208,7 @@ def _only_seepage(args: argparse.Namespace) -> None:
 
 
 def update_condition(args: argparse.Namespace) -> Answer:
-    project = session.load(args.project)
+    project = read(args)
     record = session.find_condition(project, args.id)
     if record.kind == "seepage":
         _only_seepage(args)
@@ -273,7 +274,7 @@ def _update_support(args: argparse.Namespace, project: Project, record) -> Answe
 
 
 def standard_conditions(args: argparse.Namespace) -> Answer:
-    project = session.standard_conditions(session.load(args.project))
+    project = session.standard_conditions(read(args))
     answer = edited(args, project, "the standard supports: the bottom fixed, the sides on "
                                    "rollers")
     answer.lines += listed_lines(project)
@@ -281,7 +282,7 @@ def standard_conditions(args: argparse.Namespace) -> Answer:
 
 
 def remove_condition(args: argparse.Namespace) -> Answer:
-    project = session.load(args.project)
+    project = read(args)
     record = session.find_condition(project, args.id)
     return edited(args, session.remove_condition(project, args.id),
                   f"removed {record.kind.replace('_', ' ')} condition {args.id}")

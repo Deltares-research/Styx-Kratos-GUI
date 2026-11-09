@@ -96,6 +96,38 @@ test('a picked file is written and closed', function () {
     });
 });
 
+test('an anchor download uses a temporary blob URL and revokes it after the click', function () {
+  var original = { create: URL.createObjectURL, revoke: URL.revokeObjectURL,
+                   click: HTMLAnchorElement.prototype.click };
+  var blob, link, revoked = [], url = 'blob:coverage-download';
+  URL.createObjectURL = function (value) { blob = value; return url; };
+  URL.revokeObjectURL = function (value) { revoked.push(value); };
+  HTMLAnchorElement.prototype.click = function () {
+    link = this;
+    T.ok(document.body.contains(this), 'the anchor is attached before clicking');
+    T.eq(revoked, [], 'the blob must still exist during the click');
+  };
+  function restore() {
+    URL.createObjectURL = original.create;
+    URL.revokeObjectURL = original.revoke;
+    HTMLAnchorElement.prototype.click = original.click;
+    if (link) link.remove();
+  }
+  return Promise.resolve().then(function () {
+    App.Download.anchor('model.json', '{"name":"Test"}', 'application/json');
+    T.eq(link.download, 'model.json');
+    T.eq(link.getAttribute('href'), url);
+    T.ok(!link.isConnected, 'the temporary anchor is removed');
+    T.eq(blob.type, 'application/json');
+    return blob.text();
+  }).then(function (text) {
+    T.eq(text, '{"name":"Test"}');
+    return new Promise(function (resolve) { setTimeout(resolve, 10); });
+  }).then(function () {
+    T.eq(revoked, [url]);
+  }).then(function () { restore(); }, function (error) { restore(); throw error; });
+});
+
 test('no handle still downloads, so nothing is lost where there is no picker', function () {
   var saved = App.Download.anchor, downloaded = [];
   App.Download.anchor = function (name, text, mime) { downloaded.push([name, text, mime]); };

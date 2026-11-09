@@ -11,7 +11,7 @@ import pytest
 from pydantic import ValidationError
 
 from core.model import stages, schemas
-from core.model.templates import seed_project
+from core.model.templates import blank_project, seed_project
 from tests.models.excavation import excavation_project
 
 
@@ -590,3 +590,46 @@ def test_the_phases_module_still_imports():
     assert phases.PhaseError is stages.StageError
     assert phases.linearise is stages.linearise
     assert phases.staged_excavation_phases is stages.staged_excavation_stages
+
+
+def test_an_anchor_below_the_last_lift_is_installed_after_digging_not_lost():
+    project = excavation_project(staged=False)
+    payload = project.model_dump()
+    payload["anchors"][0].update(head=(6, -9), tail=(5, -9))
+    project = schemas.Project.model_validate(payload)
+
+    sequence = stages.staged_excavation_stages(project)
+    staged = schemas.Project.model_validate(project.model_dump() | {"stages": sequence})
+
+    assert sequence[-1].id == "install_strut"
+    assert sequence[-1].parent == "dig_3"
+    assert sequence[-1].activate == ["strut"]
+    assert "strut" not in stages.active_parts(staged, "dig_3")
+    assert "strut" in stages.active_parts(staged, "install_strut")
+
+
+def test_adding_a_stage_to_an_unresolved_branch_uses_the_last_stored_stage():
+    project = blank_project().model_copy(update={"stages": [
+        schemas.Stage(id="initial", name="Initial"),
+        schemas.Stage(id="wet", name="Wet", parent="initial"),
+        schemas.Stage(id="dry", name="Dry", parent="initial"),
+    ]})
+
+    added = stages.added(project)
+
+    assert added[-1].parent == "dry"
+    assert [stage.id for stage in project.stages] == ["initial", "wet", "dry"]
+    assert all(new is not old for new, old in zip(added, project.stages))
+
+
+def test_adding_a_stage_reuses_the_first_free_number_without_duplicating_an_id():
+    project = blank_project().model_copy(update={"stages": [
+        schemas.Stage(id="stage_1", name="Initial"),
+        schemas.Stage(id="stage_3", name="Dig", parent="stage_1"),
+    ]})
+
+    added = stages.added(project)
+
+    assert added[-1].id == "stage_2"
+    assert added[-1].parent == "stage_3"
+    assert len({stage.id for stage in added}) == len(added)

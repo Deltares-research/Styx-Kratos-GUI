@@ -37,3 +37,12 @@ def test_a_number_is_shown_as_the_results_log_shows_it(value, shown):
 def test_a_cell_with_a_comma_or_a_quote_is_quoted():
     assert tables.cell('Dig, "deep"') == '"Dig, ""deep"""'
     assert tables.cell(None) == ""
+
+
+@pytest.mark.parametrize("value, written", [
+    (float("nan"), "NaN"),
+    (float("inf"), "Infinity"),
+    (float("-inf"), "-Infinity"),
+])
+def test_non_finite_field_values_keep_javascript_csv_spelling(value, written):
+    assert tables.js_number(value) == written

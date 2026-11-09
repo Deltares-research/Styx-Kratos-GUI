@@ -359,13 +359,15 @@ times over."""
 
 def _mesh(deck: Deck) -> mdpa_reader.MdpaModel:
     path = _path(deck, _mdpa_file(deck))
-    stat = path.stat()
-    key = (str(path), stat.st_mtime_ns, stat.st_size)
-    if key not in _meshes:
-        _meshes.clear()
-        try:
+    try:
+        stat = path.stat()
+        key = (str(path), stat.st_mtime_ns, stat.st_size)
+        if key not in _meshes:
+            _meshes.clear()
             _meshes[key] = mdpa_reader.import_mdpa(path.read_text(encoding="utf-8",
                                                                   errors="replace"))
-        except mdpa_reader.ImportError_ as failure:
-            raise DeckError(f"{path.name}: {failure}") from failure
+    except OSError as failure:
+        raise DeckError(f"{path.name} could not be read: {failure}") from failure
+    except mdpa_reader.ImportError_ as failure:
+        raise DeckError(f"{path.name}: {failure}") from failure
     return _meshes[key]
