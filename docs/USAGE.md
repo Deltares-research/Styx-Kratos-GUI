@@ -516,6 +516,8 @@ model, also when the mesh is shown deformed. Type `results loads off` to hide th
 - **Plot along the wall:** click **Plot wall…**, or type `results plot`. The plot shows the
   bending moment (M), the shear force (Q), the normal force (N), the horizontal displacement
   (ux) and the interface tractions (tn, ts) against depth, with one line for each stage.
+  Each face of the wall has its own tractions. They show only where the contact is on in
+  that stage, so the face a pit is dug against starts at the pit floor.
   **Save SVG** saves the figure, and **Save CSV** saves the numbers.
 - **Values at a node:** click **Results** → **Value at a node…**, or type
   `results at <node>`.

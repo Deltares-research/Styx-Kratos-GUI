@@ -17,7 +17,7 @@ from core.kratos import writer, materials
 from core.model import stages
 from tests.models import drawn_ground, excavation
 from core.geometry.solid_model import session
-from core.model.schemas import MeshRequest
+from core.model.schemas import MeshRequest, Project
 
 
 @pytest.fixture(scope="module")
@@ -227,9 +227,52 @@ def test_each_stage_writes_its_own_json_output_files(doc):
 
 
 def test_the_interface_output_reads_the_node_part_built_for_each_face(doc):
-    written = processes(doc, "7_Third_excavation", "json_output")
+    written = processes(doc, "3_SheetPileWall_installation", "json_output")
     assert named(written[1]) == ["Interface_Left_face"]
     assert named(written[2]) == ["Interface_Right_face"]
+
+
+def face_heights(result: dict, doc: dict, stage: str, face: str) -> list[float]:
+    """The heights of the nodes a stage's curve of `face` reads, highest first."""
+    written = [p for p in processes(doc, stage, "json_output")
+               if p["Parameters"]["output_file_name"].endswith(f"interface_{face}.json")]
+    lines = result["mdpa"].splitlines()
+    start = lines.index(f"Begin SubModelPart {named(written[0])[0]}")
+    block = "\n".join(lines[start:]).partition("Begin SubModelPartNodes")[2]
+    nodes = block.partition("End SubModelPartNodes")[0].split()
+    assert nodes, "the curve reads no nodes"
+    height = {index: y for index, _, y, _ in result["nodes"]}
+    return sorted((height[int(node)] for node in nodes), reverse=True)
+
+
+@pytest.mark.parametrize("stage, floor", [("4_First_excavation", excavation.LIFTS[0]),
+                                          ("5_Strut_installation", excavation.LIFTS[0]),
+                                          ("6_Second_excavation", excavation.LIFTS[1]),
+                                          ("7_Third_excavation", excavation.LIFTS[2])])
+def test_the_curve_of_a_dug_face_starts_at_the_pit_floor(result, doc, stage, floor):
+    """A contact that is switched off no longer updates its nodes: they would plot the
+    tractions of the stage before, against soil that is gone."""
+    assert face_heights(result, doc, stage, "left")[0] == pytest.approx(floor)
+
+
+@pytest.mark.parametrize("stage", STAGES[3:])
+def test_the_curve_of_a_retained_face_stays_whole(result, doc, stage):
+    assert face_heights(result, doc, stage, "right") == face_heights(
+        result, doc, "3_SheetPileWall_installation", "right")
+
+
+def test_a_contact_on_one_face_writes_a_curve_of_that_face_only():
+    project = excavation.excavation_project(staged=True)
+    payload = project.model_dump()
+    payload["interfaces"][0]["side"] = "right"
+    with session():
+        one_sided = writer.export_project(Project.model_validate(payload),
+                                          MeshRequest(**project.mesh.model_dump()))
+    written = processes(json.loads(one_sided["project_parameters"]), "7_Third_excavation",
+                        "json_output")
+    assert [p["Parameters"]["output_file_name"] for p in written] == [
+        "7_Third_excavation__output_wall.json",
+        "7_Third_excavation__output_interface_right.json"]
 
 
 # -- The node part of each face of the wall ------------------------------------

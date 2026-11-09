@@ -525,7 +525,9 @@ kratos-cli results field D:/copied/Pit_A_2026-10-12_09-14 uy   # a run anywhere
 - **Which interface members a run has.** Each face of the wall has its own member:
   `interface_left` and `interface_right`, the faces toward -x and +x
   (`results profile 1 interface_left tn`). An interface flatter than 45 degrees has
-  `interface_below` and `interface_above` instead. With more than one interface, the member names start with the interface's id: `contact_left`.
+  `interface_below` and `interface_above` instead. A member holds the stretch of the wall
+  whose contact is on in that stage, so the face a pit is dug against starts at the pit
+  floor. With more than one interface, the member names start with the interface's id: `contact_left`.
   `results members` lists them.
 - **`--csv FILE`** writes the file the GUI saves (`results csv`, and the plot window's
   `results plot csv`), number for number, in UTF-8. `--csv` alone prints it, for a pipe;

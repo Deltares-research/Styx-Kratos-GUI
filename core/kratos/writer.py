@@ -374,20 +374,6 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
         parts.append((slave_name, sorted({node_id[tag] for tag in slave}), [], []))
         ties[key] = (master_name, slave_name)
 
-    # Each face of each wall interface gets a node group and a curve of its own, over every
-    # body it runs against.
-    face_parts: list[tuple[str, str]] = []
-    if project.stages and interface_blocks:
-        several = len({key for key, _, _ in interface_faces}) > 1
-        for key, face, tags in interface_faces:
-            nodes = sorted({node_id[tag] for tag in tags if tag in node_id})
-            if not nodes:
-                continue
-            part = f"{names[key]}_{face}_face"
-            parts.append((part, nodes, [], []))
-            face_parts.append((part, f"{key}_{face.lower()}" if several
-                               else f"interface_{face.lower()}"))
-
     condition_keys = {key for key, _, rows in conditions if rows}
     active_loads = [(names[load.id], *_load_variable(load, dim))
                     for load in project.loads if load.id in condition_keys]
@@ -494,6 +480,11 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
     owners.update({f"{names[key]}_Support": (key,) for key in anchor_supports
                    if key in stageable})
 
+    face_parts, face_outputs = _face_outputs(project, interface_faces, interface_blocks, names,
+                                             node_id, owners)
+    parts.extend(face_parts)
+    owners.update({name: () for name, *_ in face_parts})
+
     interface_parts = tuple(names[key] for key, _, _ in interface_blocks)
     deck = _Deck(
         name=deck_name(project),
@@ -507,7 +498,7 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
         structures=tuple(names[key] for key, _, _ in beam_blocks + anchor_blocks),
         ties=tuple((master, slave, key) for key, (master, slave) in ties.items())
              if dim == 2 else (),
-        faces=tuple(face_parts),
+        faces=face_outputs,
         unsaturated=tuple(name for name, material in part_materials
                           if project.material(material).variables.get(
                               "RETENTION_LAW", SATURATED) != SATURATED),
@@ -621,9 +612,9 @@ class _Deck:
     beams: tuple[str, ...]
     structures: tuple[str, ...]
     ties: tuple[tuple[str, str, str], ...] = ()
-    faces: tuple[tuple[str, str], ...] = ()
-    """(node part, member name) per face of each wall interface: one curve per face
-    (`_export`)."""
+    faces: tuple[tuple[str, tuple[str | None, ...]], ...] = ()
+    """(member name, the node part its curve reads in each stage, in stage order, or None
+    in a stage with no contact on) per face of each wall interface (`_face_outputs`)."""
     unsaturated: tuple[str, ...] = ()
     """The soil parts whose retention law makes the permeability depend on the water
     pressure, so that a flow stage with any of them in it is solved by Newton-Raphson."""
@@ -734,9 +725,9 @@ def _sequenced_stages(project: Project, deck: _Deck) -> list[parameters.Stage]:
         output: tuple[tuple[str, str, tuple[str, ...]], ...] = ()
         if beams:
             output += ((beams[0], "output_wall", WALL_OUTPUT_VARIABLES),)
-        if contacts:
-            output += tuple((part, f"output_{member}", INTERFACE_VARIABLES)
-                            for part, member in deck.faces)
+        output += tuple((part, f"output_{member}", INTERFACE_VARIABLES)
+                        for member, per_stage in deck.faces
+                        if (part := per_stage[index]) is not None)
 
         out.append(parameters.Stage(
             name=parameters.stage_name(index, stage.name),
@@ -1002,6 +993,61 @@ def _faces(key: str, rows: list[list[int]], per_side: int, split: interfaces.Spl
                          (named[face],) if face in named else ()):
                 out[name].add(node)
     return [(key, name, sorted(nodes)) for name, nodes in out.items() if nodes]
+
+
+def _face_outputs(project: Project, faces: list[tuple[str, str, list[int]]],
+                  blocks: list[tuple[str, str, list[list[int]]]], names: dict[str, str],
+                  node_id: dict[int, int], owners: dict[str, tuple[str, ...]]
+                  ) -> tuple[list[tuple[str, list[int], list, list]],
+                             tuple[tuple[str, tuple[str | None, ...]], ...]]:
+    """What each stage's curve of each face of a wall interface reads: the node parts to
+    write, and for each face its member name and its part per stage.
+
+    A curve holds the nodes of the contacts that are on in its stage. A contact that is
+    switched off no longer updates its nodes, so a face that spans the whole wall would
+    plot, above the pit floor, the tractions of an earlier stage against soil that is gone.
+    The part of the whole face is `<interface>_<face>_face`; the shorter ones a stage needs
+    are numbered after it.
+    """
+    if not project.stages or not blocks:
+        return [], ()
+    active = set(project.stageable_keys())
+    states = []
+    for _, switched_on, switched_off in stages.transitions(project):
+        active = (active - switched_off) | switched_on
+        states.append(active)
+
+    several = len({key for key, _, _ in faces}) > 1
+    parts: list[tuple[str, list[int], list, list]] = []
+    outputs = []
+    for key, face, tags in faces:
+        whole = sorted({node_id[tag] for tag in tags if tag in node_id})
+        if not whole:
+            continue
+        on_face = set(tags)
+        stretches = [
+            (owners[names[block]],
+             {node_id[tag] for row in rows for tag in row[len(row) // 2:]
+              if tag in on_face and tag in node_id})
+            for block, _, rows in blocks if block.partition("__")[0] == key]
+        name = f"{names[key]}_{face}_face"
+        made: dict[tuple[int, ...], str] = {tuple(whole): name}
+        written: set[str] = set()
+        per_stage: list[str | None] = []
+        for state in states:
+            nodes = sorted({node for owned, stretch in stretches
+                            if all(owner in state for owner in owned) for node in stretch})
+            if not nodes:
+                per_stage.append(None)
+                continue
+            part = made.setdefault(tuple(nodes), f"{name}_{len(made)}")
+            if part not in written:
+                written.add(part)
+                parts.append((part, nodes, [], []))
+            per_stage.append(part)
+        outputs.append((f"{key}_{face.lower()}" if several else f"interface_{face.lower()}",
+                        tuple(per_stage)))
+    return parts, tuple(outputs)
 
 
 ON_PATH = 1e-6

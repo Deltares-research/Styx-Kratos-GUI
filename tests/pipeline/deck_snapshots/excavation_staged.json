@@ -489,6 +489,9 @@
  "parts": [
   "Bottom_Fixed",
   "Interface_Left_face",
+  "Interface_Left_face_1",
+  "Interface_Left_face_2",
+  "Interface_Left_face_3",
   "Interface_Master",
   "Interface_Right_face",
   "Interface_Slave",

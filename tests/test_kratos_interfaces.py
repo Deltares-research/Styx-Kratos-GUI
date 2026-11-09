@@ -103,7 +103,7 @@ def interface_parts(deck: mdpa.Deck) -> dict[str, mdpa.Part]:
     """The contact's sub-model parts, one per soil body it holds."""
     return {name: part for name, part in deck.parts.items()
             if name.startswith("Wall_contact")
-            and not name.endswith(("_Master", "_Slave", "_face"))}
+            and not name.endswith(("_Master", "_Slave")) and "_face" not in name}
 
 
 def soil_nodes(deck: mdpa.Deck) -> set[int]:
