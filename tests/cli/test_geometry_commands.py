@@ -265,8 +265,8 @@ def test_a_size_for_a_body_the_model_lacks_is_refused_with_how_to_take_it_away(
     refused = cli(refuser, path)
 
     assert refused.code == 1
-    assert "the mesh settings name bodies this model does not have: gone, lost." in refused.err
-    assert "kratos-cli remove FILE mesh.body_sizes.gone" in refused.err
+    assert "the mesh settings name objects this model does not have: gone, lost." in refused.err
+    assert "kratos-cli mesh FILE --body-size gone none" in refused.err
     assert cli("remove", path, "mesh.body_sizes.gone").code == 0
     assert cli("remove", path, "mesh.body_sizes.lost").code == 0
     ran = cli("check", path)

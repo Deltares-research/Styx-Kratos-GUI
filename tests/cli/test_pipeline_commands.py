@@ -62,6 +62,23 @@ def test_mesh_sizes_a_body_as_the_mesh_window_does(cli, site):
     assert session.load(site).mesh.body_sizes == {}
 
 
+def test_mesh_grows_a_size_back_over_a_band(cli, site):
+    """The Band of a local mesh size, as the Selection explorer sets it."""
+    assert cli("mesh", site, "--body-size", "soil_L1", "1", "--band", "soil_L1", "5").code == 0
+    assert session.load(site).mesh.size_bands == {"soil_L1": 5.0}
+
+    assert cli("mesh", site, "--band", "soil_L1", "none").code == 0
+    assert session.load(site).mesh.size_bands == {}
+
+    refused = cli("mesh", site, "--band", "soil_L2", "5")
+    assert refused.code == 1 and "give soil_L2 a size first" in refused.err
+
+    assert cli("mesh", site, "--band", "soil_L1", "5").code == 0
+    assert cli("mesh", site, "--body-size", "soil_L1", "none").code == 0
+    mesh = session.load(site).mesh
+    assert (mesh.body_sizes, mesh.size_bands) == ({}, {}), "the band goes with its size"
+
+
 def test_mesh_refuses_a_size_for_a_part_that_is_not_in_the_model(cli, site):
     payload = json.loads(site.read_text(encoding="utf-8"))
     payload["mesh"]["body_sizes"] = {"gone": 1.0}
@@ -70,7 +87,7 @@ def test_mesh_refuses_a_size_for_a_part_that_is_not_in_the_model(cli, site):
     ran = cli("mesh", site)
 
     assert ran.code == 1
-    assert "mesh settings name bodies this model does not have: gone" in ran.err
+    assert "mesh settings name objects this model does not have: gone" in ran.err
 
 
 # ── stages ──────────────────────────────────────────────────────────────────

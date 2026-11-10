@@ -28,8 +28,16 @@ def register(commands, common: argparse.ArgumentParser) -> None:
     mesh.add_argument("--order", type=int, choices=(1, 2), help="linear (1) or quadratic (2)")
     mesh.add_argument("--body-size", nargs=2, action="append", default=[],
                       metavar=("KEY", "SIZE"),
-                      help="the element size of one body: a layer (soil_<layer>) or a sheet "
-                           "pile, by its key; none takes the size away. Repeat for more")
+                      help="the element size at one object, by its key: a layer "
+                           "(soil_<layer>) or soil body, a sheet pile, an interface, a "
+                           "normal load, a soil line, a condition on a line or at a point, "
+                           "or a point load; none takes the size and its band away. "
+                           "Repeat for more")
+    mesh.add_argument("--band", nargs=2, action="append", default=[],
+                      metavar=("KEY", "BAND"),
+                      help="the distance, in metres, over which the size of --body-size "
+                           "grows back to the element size away from its object; none or "
+                           "0 takes the band away. Repeat for more")
     add_writing(mesh)
     mesh.set_defaults(handler=mesh_model)
 
@@ -87,9 +95,11 @@ def mesh_settings(project: Project) -> MeshRequest:
     settings = MeshRequest(**project.mesh.model_dump())
     unknown = session.unknown_mesh_keys(project, settings)
     if unknown:
-        raise CommandError("the mesh settings name bodies this model does not have: "
-                           + ", ".join(unknown) + ". Correct the name, or take the size "
-                           f"away: kratos-cli remove FILE mesh.body_sizes.{unknown[0]}")
+        raise CommandError("the mesh settings name objects this model does not have: "
+                           + ", ".join(unknown) + ". A size can be given to: "
+                           + ", ".join(project.mesh_size_keys()) + ". Correct the name, "
+                           f"or take the size away: kratos-cli mesh FILE --body-size "
+                           f"{unknown[0]} none")
     return settings
 
 
@@ -123,19 +133,33 @@ def _with_settings(project: Project, args: argparse.Namespace) -> Project:
     if args.order is not None:
         project = session.with_value(project, "mesh.order", args.order)
     sizes = dict(project.mesh.body_sizes)
+    bands = dict(project.mesh.size_bands)
     for key, size in args.body_size:
         if size.lower() == "none":
             sizes.pop(key, None)
+            bands.pop(key, None)
         else:
-            try:
-                sizes[key] = float(size)
-            except ValueError:
-                raise CommandError(f"--body-size {key}: {size!r} is not a size or none") \
-                    from None
-    if args.body_size:
+            sizes[key] = _number("--body-size", key, size)
+    for key, band in args.band:
+        value = 0.0 if band.lower() == "none" else _number("--band", key, band)
+        if value == 0.0:
+            bands.pop(key, None)
+        elif key not in sizes:
+            raise CommandError(f"--band {key}: give {key} a size first, with "
+                               f"--body-size {key} SIZE")
+        else:
+            bands[key] = value
+    if args.body_size or args.band:
         project = session.with_value(project, "mesh", {
-            **project.mesh.model_dump(), "body_sizes": sizes})
+            **project.mesh.model_dump(), "body_sizes": sizes, "size_bands": bands})
     return project
+
+
+def _number(option: str, key: str, text: str) -> float:
+    try:
+        return float(text)
+    except ValueError:
+        raise CommandError(f"{option} {key}: {text!r} is not a number or none") from None
 
 
 def _stats_line(stats: dict) -> str:
