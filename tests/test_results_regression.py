@@ -140,8 +140,9 @@ def test_every_block_in_the_gid_mesh_belongs_to_a_named_part(run, deck):
 
 # ── The parts: what the stage did ───────────────────────────────────────────
 
-SOIL = {"Soil_Top", "Soil_Middle", "Soil_Bottom", "Soil_Middle_pit", "Soil_Bottom_pit"}
-LIFTS = {"Soil_Top_lift1", "Soil_Top_lift2", "Soil_Top_lift3"}
+SOIL = {"Soil_Top_retained", "Soil_Middle_below_the_pit", "Soil_Middle_retained",
+        "Soil_Bottom"}
+LIFTS = {"Soil_Top_lift_1", "Soil_Top_lift_2", "Soil_Top_lift_3"}
 
 
 def test_stage_one_has_the_ground_and_nothing_that_is_built_later(run):
@@ -310,10 +311,10 @@ def test_the_gid_parser_agrees_with_the_decks_own_json_output(run, real, deck):
 def test_the_run_offers_the_wall_and_the_interface(run):
     members = {m["name"]: m for m in catalog.stage_members(run)["members"]}
 
-    assert sorted(members) == ["interface", "wall"]
+    assert sorted(members) == ["interface_left", "interface_right", "wall"]
     assert members["wall"]["stages"] == [3, 4, 5, 6, 7]
     assert [q["name"] for q in members["wall"]["quantities"]] == ["M", "Q", "N", "ux", "uy"]
-    assert [q["name"] for q in members["interface"]["quantities"]] == ["tn", "ts"]
+    assert [q["name"] for q in members["interface_left"]["quantities"]] == ["tn", "ts"]
     assert members["wall"]["quantities"][0] == \
         {"name": "M", "label": "Bending moment", "unit": "N·m/m"}
 

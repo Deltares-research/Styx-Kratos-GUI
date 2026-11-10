@@ -74,9 +74,10 @@ App.Viewport = (function () {
   /* Pure, for the same reason computeModeGroups is: this is the map the Model
      explorer's checkboxes are wired through. */
   function computeGroupKeys(soils, customs, loads, beams, anchors, contacts,
-                            normalLoads, conditions) {
+                            normalLoads, conditions, lines) {
     return {
       soil: (soils || []).slice(),
+      'group:lines': (lines || []).slice(),
       'group:custom': (customs || []).slice(),
       'group:loads': (loads || []).slice(),
       'group:sheetpiles': (beams || []).slice(),
@@ -159,11 +160,88 @@ App.Viewport = (function () {
     return mesh;
   }
 
-  function sectionEdges(section) {
-    if (!section.edges.length) return null;
-    var lines = new THREE.LineSegments(App.Buffers.edges(section), edgeMaterial(section));
+  function sectionEdges(section, flat) {
+    flat = flat || section.edges;
+    if (!flat.length) return null;
+    var lines = new THREE.LineSegments(App.Buffers.edges({ edges: flat }),
+                                       edgeMaterial(section));
     lines.userData.noPick = true;
     return lines;
+  }
+
+  /* The soil's edges that a line puts there, where it splits a layer: each piece draws
+     one along the line. They are drawn with the line, so hiding the line in the Model
+     explorer hides all of it, not only its dashes over the seam. An edge on a layer's
+     outline stays the soil's, as it is there with or without the line. In 3D an edge
+     across the model at one of the line's points goes with it too, unless it is the
+     domain's side. Pure, so it is testable without a renderer.
+
+     Returns `edges`, each section's flat LineSegments pairs less the seams, and
+     `seams`, one `{line, section, edges}` per line and section that has one. */
+  function lineSeams(sections, project) {
+    var edges = {}, seams = [];
+    var lines = (project && project.layered_soil && project.lines) || [];
+    var layers = {};
+    ((project && project.layers) || []).forEach(function (layer) {
+      layers['soil_' + layer.id] = layer;
+    });
+    var d = project && project.domain;
+    // The edges come rounded to 4 decimals (core/geometry/tessellation.py DECIMALS).
+    var tol = 1e-3;
+
+    function near(a, b) { return Math.abs(a - b) <= tol; }
+
+    function onPolyline(x, y, points) {
+      for (var i = 0; i + 1 < points.length; i++) {
+        var ax = points[i][0], ay = points[i][1];
+        var dx = points[i + 1][0] - ax, dy = points[i + 1][1] - ay;
+        var length2 = dx * dx + dy * dy;
+        var t = length2 ? ((x - ax) * dx + (y - ay) * dy) / length2 : 0;
+        t = Math.max(0, Math.min(1, t));
+        var ex = ax + t * dx - x, ey = ay + t * dy - y;
+        if (ex * ex + ey * ey <= tol * tol) return true;
+      }
+      return false;
+    }
+
+    function onOutline(s, layer) {
+      var across = near(s[0], s[3]) && near(s[1], s[4]);
+      var sides = [[0, d.x0], [0, d.x1]];
+      if (!across) sides.push([1, layer.top], [1, layer.bottom]);
+      return sides.some(function (side) {
+        return near(s[side[0]], side[1]) && near(s[3 + side[0]], side[1]);
+      });
+    }
+
+    function lineOf(s, layer) {
+      if (onOutline(s, layer)) return null;
+      var mx = (s[0] + s[3]) / 2, my = (s[1] + s[4]) / 2;
+      for (var i = 0; i < lines.length; i++) {
+        var points = lines[i].points || [];
+        if (onPolyline(s[0], s[1], points) && onPolyline(s[3], s[4], points) &&
+            onPolyline(mx, my, points)) return lines[i].id;
+      }
+      return null;
+    }
+
+    sections.forEach(function (section) {
+      var layer = layers[section.key.split('__')[0]];
+      if (!lines.length || !layer || !d) { edges[section.key] = section.edges; return; }
+      var kept = [], byLine = {};
+      for (var i = 0; i + 5 < section.edges.length; i += 6) {
+        var s = section.edges.slice(i, i + 6);
+        var line = lineOf(s, layer);
+        if (line === null) kept.push.apply(kept, s);
+        else (byLine[line] = byLine[line] || []).push.apply(byLine[line], s);
+      }
+      edges[section.key] = kept.length === section.edges.length ? section.edges : kept;
+      lines.forEach(function (record) {
+        if (byLine[record.id]) {
+          seams.push({ line: record.id, section: section, edges: byLine[record.id] });
+        }
+      });
+    });
+    return { edges: edges, seams: seams };
   }
 
   /* Frees GPU memory before a group is replaced. The frozen code never does
@@ -896,6 +974,46 @@ App.Viewport = (function () {
     group.add(line);
   }
 
+  /* A line that splits the soil, where it is drawn: the polyline in the section, at
+     z = 0 as the section is. A solid model has it swept across the domain, so both ends
+     of the sweep. */
+  function linePaths(record, project) {
+    var at = project.dimension === 2 ? [0] : [project.domain.z0, project.domain.z1];
+    return at.map(function (z) {
+      return (record.points || []).map(function (point) { return [point[0], point[1], z]; });
+    });
+  }
+
+  /* Dashed, and drawn over the soil: a line can lie inside a body, where it splits nothing
+     and has no seam to show it. Never a pick target, as the water level is not: it would
+     steal clicks meant for the soil. The explorer's row selects it. */
+  function addLineGlyphs() {
+    var project = App.PROJECT;
+    if (!project) return;
+    var d = project.domain;
+    var dash = Math.max(d.x1 - d.x0, d.y_top - d.y_bottom) / 120;
+    (project.lines || []).forEach(function (record) {
+      var group = groups[record.id];
+      if (!group) {
+        group = groups[record.id] = new THREE.Group();
+        group.name = record.id;
+        scene.add(group);
+      }
+      linePaths(record, project).forEach(function (path) {
+        var line = new THREE.Line(
+          new THREE.BufferGeometry().setFromPoints(path.map(function (point) {
+            return new THREE.Vector3(point[0], point[1], point[2]);
+          })),
+          new THREE.LineDashedMaterial({ color: 0x7b1fa2, dashSize: dash, gapSize: dash / 2,
+                                         depthTest: false }));
+        line.computeLineDistances();
+        line.userData.noPick = true;
+        line.renderOrder = 16;
+        group.add(line);
+      });
+    });
+  }
+
   function addLoadGlyphs() {
     function groupFor(id) {
       var group = groups[id];
@@ -923,6 +1041,7 @@ App.Viewport = (function () {
     Object.keys(groups).forEach(function (k) { disposeGroup(groups[k]); });
     groups = {};
 
+    var cut = lineSeams(payload.sections, App.PROJECT);
     payload.sections.forEach(function (section) {
       var g = groups[section.key];
       if (!g) {
@@ -931,12 +1050,16 @@ App.Viewport = (function () {
         scene.add(g);
       }
       g.add(sectionMesh(section));
-      var edges = sectionEdges(section);
+      var edges = sectionEdges(section, cut.edges[section.key]);
       if (edges) g.add(edges);
     });
 
     addLoadGlyphs();
     addConditionGlyphs(payload.sections);
+    addLineGlyphs();
+    cut.seams.forEach(function (seam) {
+      if (groups[seam.line]) groups[seam.line].add(sectionEdges(seam.section, seam.edges));
+    });
 
     // Before the visibility sweep below, so the group it creates is given its
     // `visible` entry like every other one.
@@ -957,7 +1080,7 @@ App.Viewport = (function () {
      every section its own THREE.Group) and then invisible forever, in every mode,
      no matter what the eye toggle says. */
   function computeModeGroups(soilKeys, customKeys, layeredSoil, loadKeys, memberKeys,
-                             normalLoadKeys, conditionKeys) {
+                             normalLoadKeys, conditionKeys, contactKeys, lineKeys) {
     customKeys = customKeys || [];
     // The boundary conditions' symbols: in every mode, each one hidden until it is
     // shown (the explorer's Show) or selected.
@@ -965,8 +1088,11 @@ App.Viewport = (function () {
       .concat((conditionKeys && conditionKeys.water) || []);
     loadKeys = loadKeys || [];
     // Sheet piles and anchors are sections of their own (core/geometry/tessellation.py
-    // :112-126). Leaving them out of every mode is what kept them invisible.
+    // :112-126), so their keys need to be listed in the modes that show structures.
     memberKeys = memberKeys || [];
+    // Free interfaces also have their own drawable sections; keep their visibility
+    // separate from members even though they are shown in the same modes.
+    contactKeys = contactKeys || [];
     // And a normal load is a section of its own too -- the strip the build draws
     // along its line -- so it needs naming here for the same reason, in the modes a
     // load belongs to.
@@ -976,28 +1102,29 @@ App.Viewport = (function () {
     // stands. Not the supports: they would hide the edges of the contour.
     var results = loadKeys.concat(['water'], (conditionKeys && conditionKeys.water) || []);
     if (layeredSoil) {
-      var visibleKeys = soilKeys.concat(customKeys);
+      // The lines go with the soil they split, in every mode that shows it.
+      var visibleKeys = soilKeys.concat(customKeys, lineKeys || []);
       // "water" in the same two modes the full build shows it in -- the level is what
       // Flow conditions mode is for, and a staged excavation is read against it. Left
       // out of soil/structures/mesh so those keep reading as they did.
       return { soil: visibleKeys.concat(conditions),
-               structures: visibleKeys.concat(loadKeys, memberKeys, conditions),
-               mesh: visibleKeys.concat(['mesh'], memberKeys, conditions),
+               structures: visibleKeys.concat(loadKeys, memberKeys, contactKeys, conditions),
+               mesh: visibleKeys.concat(['mesh'], memberKeys, contactKeys, conditions),
                flow: visibleKeys.concat(['water'], conditions),
                // Loads too: Staged construction is where a load is switched on and
                // off, so it has to be on screen there (`stageHidden` still hides one
                // the selected stage has switched off).
-               staged: visibleKeys.concat(loadKeys, memberKeys, ['water'], conditions),
+               staged: visibleKeys.concat(loadKeys, memberKeys, contactKeys, ['water'], conditions),
                results: results };
     }
     return {
       soil:       soilKeys.concat(conditions),
       structures: soilKeys.concat(['wall', 'struts', 'anchors', 'piles'],
-                                  loadKeys, memberKeys, customKeys, conditions),
-      mesh:       ['mesh', 'wall'].concat(memberKeys, customKeys, conditions),
+                                  loadKeys, memberKeys, contactKeys, customKeys, conditions),
+      mesh:       ['mesh', 'wall'].concat(memberKeys, contactKeys, customKeys, conditions),
       flow:       soilKeys.concat(['water', 'wells', 'wall'], customKeys, conditions),
       staged:     ['excavation', 'wall', 'struts', 'anchors', 'water']
-                    .concat(loadKeys, memberKeys, customKeys, conditions),
+                    .concat(loadKeys, memberKeys, contactKeys, customKeys, conditions),
       results:    results
     };
   }
@@ -1030,23 +1157,25 @@ App.Viewport = (function () {
     // frontend/js/model.js -- a 3D project keeps its piles saved but draws none.
     var beamKeys = (App.BEAMS || []).map(function (beam) { return beam.id; });
     var anchorKeys = (App.ANCHORS || []).map(function (anchor) { return anchor.id; });
-    // Plane strain only, like a free interface: in 3D the record is kept but the
-    // build draws nothing for it, so naming it in a mode would name an empty group.
+    // normal loads are 2D-only and aren’t drawn for 3D projects.
     var normalLoadKeys = (App.PROJECT && App.PROJECT.dimension === 2)
       ? (App.NORMAL_LOADS || []).map(function (item) { return item.id; })
       : [];
     var conditionKeys = conditionKeysOf(App.PROJECT);
     conditionIds = conditionKeys.supports.concat(conditionKeys.water);
     waterIds = conditionKeys.water.slice();
-    modeGroups = computeModeGroups(
-      soilKeys, customKeys, !!(App.PROJECT && App.PROJECT.layered_soil), loadKeys,
-      beamKeys.concat(anchorKeys), normalLoadKeys, conditionKeys);
     var contactKeys = (App.INTERFACES || []).filter(function (item) {
       return !item.structure;
     }).map(function (item) { return item.id; });
+    var lineKeys = ((App.PROJECT && App.PROJECT.lines) || []).map(function (line) {
+      return line.id;
+    });
+    modeGroups = computeModeGroups(
+      soilKeys, customKeys, !!(App.PROJECT && App.PROJECT.layered_soil), loadKeys,
+      beamKeys.concat(anchorKeys), normalLoadKeys, conditionKeys, contactKeys, lineKeys);
     groupKeys = computeGroupKeys(soilKeys, customKeys, loadKeys, beamKeys, anchorKeys,
                                  contactKeys, normalLoadKeys,
-                                 conditionKeys.supports.concat(conditionKeys.water));
+                                 conditionKeys.supports.concat(conditionKeys.water), lineKeys);
   }
 
   /* ══════════════════════════════════════════════════════════════
@@ -2051,9 +2180,8 @@ App.Viewport = (function () {
       second_order_linear: true
     }, {
       refinements: meshRefinements(),
-      volume_keys: Array.isArray(App.MESH_BODY_SELECTION)
-        ? App.MESH_BODY_SELECTION.slice()
-        : App.MeshSettings.meshTargets(App.PROJECT, App.state.selection, isVisible)
+      volume_keys: App.MeshSettings.chosenBodies(App.PROJECT, App.MESH_BODIES_LEFT_OUT)
+        || App.MeshSettings.meshTargets(App.PROJECT, App.state.selection, isVisible)
     });
   }
 
@@ -2962,6 +3090,7 @@ App.Viewport = (function () {
     // client-side edit they just made.
     rebuildSoil: function () {},
     refresh: refresh, gridReference: gridReference, computeModeGroups: computeModeGroups,
+    lineSeams: lineSeams,
     soilKeysOf: soilKeysOf,
     computeGroupKeys: computeGroupKeys,
     loadGlyphSpec: loadGlyphSpec, loadGlyphGroup: loadGlyphGroup,

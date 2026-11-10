@@ -24,9 +24,9 @@ from __future__ import annotations
 import math
 
 from core.model.schemas import (Anchor, AnchorSection, Beam, BeamSection, BoxRefinement,
-                                DisplacementCondition, Domain, Excavation, Interface,
-                                InterfaceSection, LineLoad, Material, MeshSettings,
-                                NormalLoad, Project, SoilLayer, Stage,
+                                DisplacementCondition, Domain, Interface,
+                                InterfaceSection, Line, LineLoad, Material, MeshSettings,
+                                NormalLoad, Project, SoilBody, SoilLayer, Stage,
                                 WaterPressureCondition)
 
 NAME = "CROW excavation"
@@ -71,10 +71,8 @@ def _soil(model, id_, name, color, density, modulus, poisson, cohesion, phi, del
                         "YOUNG_MODULUS": modulus,
                         "POISSON_RATIO": poisson,
                         "DENSITY_SOLID": density,
-                        "DENSITY_WATER": 1.01937e3,
                         "POROSITY": 0.0,
                         "BULK_MODULUS_SOLID": 1.0e10,
-                        "BULK_MODULUS_FLUID": 2.2e9,
                         **strength,
                         "K0_NC": k0,
                         **RETENTION,
@@ -114,9 +112,21 @@ def project(model: str = MOHR_COULOMB) -> Project:
                           bottom=SAND_TOP_Y),
                 SoilLayer(id="L_bot", name="Soil_Bottom", mat="sand", top=SAND_TOP_Y,
                           bottom=-60.0)],
-        # Against the left edge, the model's symmetry plane.
-        excavation=Excavation(x0=0.0, x1=WALL_X, z0=0.0, z1=10.0, floor_y=LIFTS[-1],
-                              levels=list(LIFTS)),
+        # The pit is against the left edge, the model's symmetry plane. The wall cuts it off
+        # from the ground it retains, and each line is the floor of a lift; the last floor
+        # is a layer boundary.
+        lines=[Line(id=f"floor_{index}", name=f"Floor of lift {index}",
+                    points=[(0.0, level), (WALL_X, level)])
+               for index, level in enumerate(LIFTS[:-1], start=1)],
+        bodies=[
+            *[SoilBody(id=f"lift{index}", name=f"lift {index}", layer="L_top",
+                       point=(WALL_X / 2, (level + ceiling) / 2))
+              for index, (level, ceiling) in enumerate(zip(LIFTS, (0.0, *LIFTS)), start=1)],
+            SoilBody(id="retained", name="retained", layer="L_top", point=(40.0, LIFTS[-1] / 2)),
+            SoilBody(id="pit", name="below the pit", layer="L_mid",
+                     point=(WALL_X / 2, (LIFTS[-1] + SAND_TOP_Y) / 2)),
+            SoilBody(id="retained", name="retained", layer="L_mid",
+                     point=(40.0, (LIFTS[-1] + SAND_TOP_Y) / 2))],
         boundary_conditions=[
             DisplacementCondition(id="fixed_bottom", name="Fixed bottom", on="face",
                                   face="bottom", fixed=(True, True, True)),

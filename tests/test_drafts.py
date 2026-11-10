@@ -13,7 +13,7 @@ import math
 import pytest
 
 from core import session
-from core.model import drafts, units
+from core.model import drafts, soil_models, units
 from core.model.schemas import (SOIL_LAW_PAIRS, Anchor, AnchorSection, Beam, BeamSection,
                                 DimensionUpdate, Interface, InterfaceSection, LineLoad,
                                 Material, Member, NormalLoad, Panel, PanelSection, PointLoad,
@@ -28,26 +28,46 @@ def test_a_new_soil_takes_the_linear_elastic_law_of_the_dimension():
         assert SOIL_LAW_PAIRS[law][0] == dimension
 
 
-def test_a_new_soil_is_a_loose_drained_sand_in_the_project_s_units():
+def test_a_new_soil_is_the_blank_one_the_gui_s_create_soil_makes():
+    """`App.MaterialSets.blankSoil`: drained, saturated below the phreatic level, its
+    stiffness and weight left for the user to type."""
     project = blank_project()
 
     material, notes = drafts.soil(project, "sand")
 
     assert isinstance(material, Material)
     assert material.constitutive_law == drafts.SOIL_LAWS[2]
-    assert material.variables == drafts.SOIL_DEFAULTS_SI
-    assert (material.id, material.name, material.color) == ("sand", "sand", drafts.SOIL_COLOR)
+    assert material.variables == soil_models.blank_si()
+    assert (material.id, material.name, material.color) == (
+        "sand", "sand", soil_models.PALETTE[0])
     assert notes == []
 
 
-def test_a_new_soil_in_a_kn_project_is_stated_in_kn():
+def test_every_soil_added_takes_a_colour_no_other_soil_has():
+    """#107, as the material window does it (`App.SoilModels.freshColor`): a preset its
+    own colour while it is free, and every soil after another free one."""
+    project = blank_project()
+    colours = []
+    for id, preset in (("a", None), ("b", None), ("c", "m1"), ("d", "m1"), ("e", "m2")):
+        material, _ = drafts.soil(project, id, preset=preset)
+        project = session.add_material(project, material)
+        colours.append(material.color)
+
+    # The palette's first two; Fill's own is the first, so taken; Sand's own, free.
+    assert colours == ["#d8c48a", "#8fa86b", "#6f8fa8", "#c4785a", "#c4a86a"]
+    given, _ = drafts.soil(project, "f", color="#123456")
+    assert given.color == "#123456"
+
+
+def test_a_preset_in_a_kn_project_is_stated_in_kn():
     project = blank_project().model_copy(update={"unit_system": "kN"})
 
-    material, _ = drafts.soil(project, "sand")
+    material, _ = drafts.soil(project, "sand", preset="m2")
 
-    expected, _ = units.convert_variables(drafts.SOIL_DEFAULTS_SI, "SI", "kN")
-    assert material.variables == expected
-    assert material.variables["YOUNG_MODULUS"] == pytest.approx(1.0e4)
+    expected, _ = units.convert_variables(drafts.preset("m2")["variables"], "SI", "kN")
+    assert {name: material.variables[name] for name in expected} == expected
+    assert material.variables["YOUNG_MODULUS"] == pytest.approx(
+        drafts.preset("m2")["variables"]["YOUNG_MODULUS"] / 1000)
 
 
 def test_a_soil_can_start_from_a_library_preset():
@@ -56,7 +76,11 @@ def test_a_soil_can_start_from_a_library_preset():
     preset = drafts.preset("m3")
     assert material.name == preset["name"]
     assert material.color == preset["color"]
-    assert material.variables == preset["variables"]
+    assert {name: material.variables[name] for name in preset["variables"]} ==         preset["variables"]
+    assert material.constitutive_law == soil_models.law(preset["model"], 2)
+    assert all(name in material.variables for name in
+               soil_models.required(material.constitutive_law, material.variables)), \
+        "ready to run"
     assert (material.r_inter, material.interface_permeability) == (0.5, "Impermeable")
 
 
@@ -350,3 +374,134 @@ def test_a_structure_brings_its_default_section_when_its_library_lacks_it():
     assert isinstance(section, BeamSection) and section.id == "beamsection_1"
     assert drafts.section_for(excavation_project(staged=False),
                               drafts.sheet_pile(excavation_project(staged=False))) is None
+
+
+def test_a_load_draft_uses_the_first_available_number_without_reusing_an_existing_id():
+    project = blank_project()
+    first = drafts.point_load(project, id="load_1")
+    third = drafts.point_load(project, id="load_3")
+    project = project.model_copy(update={"dimension": 2, "loads": [first, third]})
+
+    made = drafts.point_load(project)
+
+    assert made.id == "load_2"
+    assert made.name == "PointLoad_2"
+    assert [load.id for load in project.loads] == ["load_1", "load_3"]
+
+
+@pytest.mark.parametrize("kind, coordinates, dimension", [
+    ("sheet_pile", [(5, 0)], 2),
+    ("wall", [(5, 0)], 3),
+    ("member", [(5, 0, 0)], 3),
+])
+def test_a_structure_draft_needs_a_line_not_a_single_click(kind, coordinates, dimension):
+    project = blank_project().model_copy(update={"dimension": dimension})
+
+    with pytest.raises(drafts.DraftError, match="at least two points"):
+        getattr(drafts, kind)(project, coordinates)
+
+
+@pytest.mark.parametrize("kind", ["wall", "member"])
+def test_a_spatial_structure_draft_explains_how_to_leave_2d(kind):
+    with pytest.raises(drafts.DraftError, match="switch to 3D"):
+        getattr(drafts, kind)(blank_project())
+
+
+@pytest.mark.parametrize("kind, coordinates", [
+    ("wall", [(10, 0), (10, 11)]),
+    ("member", [(10, 0, 0), (10, -5, 11)]),
+])
+def test_a_spatial_structure_cannot_extend_outside_the_site(kind, coordinates):
+    project = blank_project().model_copy(update={"dimension": 3})
+
+    with pytest.raises(drafts.DraftError, match="inside the model domain"):
+        getattr(drafts, kind)(project, coordinates)
+
+
+def test_an_anchor_needs_coordinates_in_the_projects_dimension():
+    project = excavation_project(staged=False)
+
+    with pytest.raises(drafts.DraftError, match="2 coordinates each"):
+        drafts.anchor(project, head=(6, -2, 0), tail=(8, -4, 0))
+
+
+def test_an_anchor_cannot_collapse_when_its_head_snaps_onto_the_wall():
+    project = excavation_project(staged=False)
+
+    with pytest.raises(drafts.DraftError, match="non-zero length"):
+        drafts.anchor(project, head=(6.2, -2), tail=(6, -2))
+
+
+def test_an_anchor_in_an_empty_3d_site_asks_for_a_wall_or_member():
+    with pytest.raises(drafts.DraftError, match="wall or a member; create one first"):
+        drafts.anchor(seed_project())
+
+
+def test_an_interface_cannot_follow_a_pile_that_was_switched_off():
+    project = excavation_project(staged=False)
+    project = project.model_copy(update={
+        "beams": [project.beams[0].model_copy(update={"active": False})],
+    })
+
+    with pytest.raises(drafts.DraftError, match="only follow a live sheet pile"):
+        drafts.interface(project, structure="sheetpile")
+
+
+def test_an_interface_on_its_own_line_cannot_take_a_pile_stretch():
+    with pytest.raises(drafts.DraftError, match="own points runs its whole line"):
+        drafts.interface(blank_project(), points=[(5, 0), (5, -5)],
+                         stretch_from=(5, -1))
+
+
+@pytest.mark.parametrize("kind", ["normal_load", "interface"])
+def test_plane_strain_contact_and_pressure_drafts_are_refused_in_3d(kind):
+    with pytest.raises(drafts.DraftError, match="plane-strain object"):
+        getattr(drafts, kind)(seed_project())
+
+
+def test_a_displacement_draft_names_all_three_components():
+    with pytest.raises(drafts.DraftError, match="give three values"):
+        drafts.displacement_condition(blank_project(), "face", face="bottom",
+                                      fixed=(True, False))
+
+
+def test_a_point_support_starts_at_the_centre_of_the_section():
+    condition = drafts.displacement_condition(blank_project(), "point")
+
+    assert condition.points == [(10, -7.5)]
+    assert condition.fixed == (True, True, True)
+
+
+@pytest.mark.parametrize("interval, message", [
+    ((5, 5), "non-zero width"),
+    ((-1, 5), "inside the model domain"),
+])
+def test_a_line_load_draft_refuses_an_unusable_interval(interval, message):
+    with pytest.raises(drafts.DraftError, match=message):
+        drafts.line_load(blank_project(), interval)
+
+
+def test_a_line_load_draft_in_3d_explains_the_dimension_mismatch():
+    with pytest.raises(drafts.DraftError, match="only in 2D"):
+        drafts.line_load(seed_project())
+
+
+@pytest.mark.parametrize("x, z, message", [
+    ((2, 2), (2, 5), "non-zero width"),
+    ((2, 5), (2, 2), "non-zero width"),
+    ((-1, 5), (2, 5), "inside the model domain"),
+    ((2, 5), (2, 30), "inside the model domain"),
+])
+def test_a_surface_load_draft_refuses_an_unusable_footprint(x, z, message):
+    with pytest.raises(drafts.DraftError, match=message):
+        drafts.surface_load(seed_project(), x, z)
+
+
+def test_a_named_load_keeps_its_id_and_an_untyped_line_load_gets_a_usable_span():
+    project = blank_project()
+
+    point = drafts.point_load(project, id="crane")
+    line = drafts.line_load(project)
+
+    assert (point.id, point.name) == ("crane", "crane")
+    assert (line.x0, line.x1, line.y) == (8, 12, 0)

@@ -160,7 +160,7 @@ def test_a_profile_says_each_stage_s_extremes(cli, run):
 
 
 def test_a_profile_takes_a_quantity_by_a_word_of_its_label(cli, run):
-    by_word = cli("--json", "results", "profile", run, "interface", "normal").json()
+    by_word = cli("--json", "results", "profile", run, "interface_left", "normal").json()
 
     assert by_word["quantity"] == "tn"
 
@@ -175,11 +175,27 @@ def test_a_profile_can_be_narrowed_to_one_stage(cli, run):
     assert [stage["index"] for stage in one["stages"]] == [4]
 
 
+def test_a_profile_refuses_a_stage_without_member_output(cli, run):
+    from core.results import catalog
+
+    members = catalog.stage_members(run)["members"]
+    wall = next(member for member in members if member["name"] == "wall")
+    stages = catalog.describe(run)["stages"]
+    index = next(stage["index"] for stage in stages
+                 if stage["index"] not in wall["stages"])
+
+    ran = cli("results", "profile", run, "wall", "M", "--stage", str(index))
+
+    assert ran.code == 1
+    assert "has no output in stage" in ran.err
+    assert "it has stages" in ran.err
+
+
 def test_a_member_the_run_has_no_output_for_is_refused_with_the_ones_it_has(cli, run):
     ran = cli("results", "profile", run, "strut", "N")
 
     assert ran.code == 1
-    assert "strut" in ran.err and "interface, wall" in ran.err
+    assert "strut" in ran.err and "interface_left, interface_right, wall" in ran.err
 
 
 def test_a_quantity_the_member_does_not_carry_is_refused(cli, run):

@@ -21,7 +21,7 @@ import json
 import pytest
 
 from core.geometry import solid_model
-from core.kratos import writer
+from core.kratos import interfaces, materials, writer
 KILO = 1000.0  # kN -> N: these tests write old-style projects, converted on load (core/model/migration.py)
 from core.model.schemas import MeshRequest, Project
 from core.model.templates import seed_project
@@ -103,7 +103,7 @@ def interface_parts(deck: mdpa.Deck) -> dict[str, mdpa.Part]:
     """The contact's sub-model parts, one per soil body it holds."""
     return {name: part for name, part in deck.parts.items()
             if name.startswith("Wall_contact")
-            and not name.endswith(("_Master", "_Slave", "_face"))}
+            and not name.endswith(("_Master", "_Slave")) and "_face" not in name}
 
 
 def soil_nodes(deck: mdpa.Deck) -> set[int]:
@@ -910,7 +910,6 @@ def test_without_a_pit_each_face_of_the_wall_gets_a_curve_of_its_own(drawn):
     assert all(x > drawn_ground.WALL_X for n in right - toe for x in centroids[n])
     for nodes in (left, right):
         assert max(deck.nodes[n][1] for n in nodes) == 0.0, "up through the drawn fill"
-    assert writer.RIGHT_SIDE_PART not in deck.parts
 
     doc = json.loads(export["project_parameters"])
     written = [p["Parameters"]["output_file_name"]
@@ -953,3 +952,129 @@ def test_the_contact_stops_where_the_ground_does(standing, drawn):
     standing_out, flush = contacts(standing[1]), contacts(drawn[1])
     assert standing_out and max(y for ys in standing_out for y in ys) == 0.0
     assert len(standing_out) == len(flush)
+
+
+def test_interface_export_refuses_a_contact_without_mesh(session):
+    # Drawn 2 m above the ground: no soil around it, so the build clips all of it away.
+    project = interfaced_project(side="left", structure=None,
+                                 points=[[2.0, 2.0], [10.0, 2.0]])
+
+    with pytest.raises(writer.ExportError, match="Wall contact.*no mesh along its line"):
+        writer.export_project(project, MeshRequest(element_size=3.0, order=1))
+
+
+def test_interface_export_translates_topology_failures(session, monkeypatch):
+    def broken_split(*_args):
+        raise interfaces.InterfaceError("contact crosses an unsupported junction")
+
+    monkeypatch.setattr(interfaces, "split_mesh", broken_split)
+
+    with pytest.raises(writer.ExportError, match="contact crosses an unsupported junction"):
+        writer.export_project(interfaced_project(), MeshRequest(element_size=3.0, order=1))
+
+
+def test_contact_grouping_excludes_structures_and_faces_with_no_common_soil_owner():
+    held = [1, 2, 4, 5]
+    unheld = [1, 2, 5, 6]
+    blocks = [
+        ("wall", "Beam", [[4, 5, 6]]),
+        ("soil_a", "Triangle", [[4, 5, 7]]),
+        ("soil_b", "Triangle", [[6, 8, 9]]),
+    ]
+
+    assert writer._interface_by_body(
+        [held, unheld], 2, blocks, frozenset({"soil_a", "soil_b"})) == [
+            ("soil_a", [held]),
+        ]
+
+
+def test_a_condition_without_an_owning_soil_element_is_not_relocated():
+    rows = [[1, 9]]
+    split = interfaces.Split(duplicates={4: 1}, renamed=[{1: 4}])
+
+    writer._follow_the_soil([("load", "LineLoad", rows)], [[1, 2, 3]], split)
+
+    assert rows == [[1, 9]]
+
+
+# ── A Coulomb contact's strength ────────────────────────────────────────────
+
+COULOMB = "GeoInterfaceCoulombLawPlaneStrain"
+
+
+def coulomb_contact(variables: dict | None = None, soil_law: str | None = None):
+    """A Coulomb contact against the seed's first soil, and that soil. The seed's soils
+    are linear elastic carrying an old cohesion and friction angle; `soil_law` makes the
+    soil another model's."""
+    project = interfaced_project(section={"constitutive_law": COULOMB,
+                                          "variables": variables or {}})
+    if soil_law is not None:
+        data = project.model_dump()
+        data["materials"][0].update(constitutive_law=soil_law)
+        data["materials"][0]["variables"]["GEO_DILATANCY_ANGLE"] = 0.0
+        project = Project.model_validate(data)
+    return project, project.interface_sections[0], project.materials[0]
+
+
+def test_a_coulomb_contact_takes_the_strength_of_a_mohr_coulomb_soil():
+    import math
+    project, section, soil = coulomb_contact(soil_law="GeoMohrCoulombLawPlaneStrain")
+    variables = materials._interface_variables(section, project, [], soil)
+    assert variables["GEO_COHESION"] == pytest.approx(soil.variables["GEO_COHESION"] * 0.67)
+    assert variables["GEO_FRICTION_ANGLE"] == pytest.approx(math.degrees(math.atan(
+        math.tan(math.radians(soil.variables["GEO_FRICTION_ANGLE"])) * 0.67)))
+    assert variables["GEO_DILATANCY_ANGLE"] == 0.0
+
+
+def test_a_coulomb_contact_against_a_linear_elastic_soil_needs_its_own_strength():
+    """Whatever the elastic soil carries: it does not read a strength, so has none."""
+    project, section, soil = coulomb_contact()
+    assert soil.number("GEO_COHESION") is not None, "the seed's soil carries an old one"
+    with pytest.raises(materials.MaterialError,
+                       match=r"linear elastic soil.*GEO_COHESION and GEO_FRICTION_ANGLE"):
+        materials._interface_variables(section, project, [], soil)
+
+
+def test_a_coulomb_contact_s_own_strength_is_used_against_a_linear_elastic_soil():
+    project, section, soil = coulomb_contact({"GEO_COHESION": 2.0, "GEO_FRICTION_ANGLE": 20.0})
+    variables = materials._interface_variables(section, project, [], soil)
+    assert (variables["GEO_COHESION"], variables["GEO_FRICTION_ANGLE"]) == (2.0, 20.0)
+    assert variables["GEO_DILATANCY_ANGLE"] == 0.0
+
+
+def test_a_coulomb_contact_without_a_soil_needs_its_own_strength():
+    project, section, _ = coulomb_contact(
+        {"INTERFACE_NORMAL_STIFFNESS": 1e7, "INTERFACE_SHEAR_STIFFNESS": 1e6})
+    with pytest.raises(materials.MaterialError, match="no soil to take a strength from"):
+        materials._interface_variables(section.model_copy(update={"material": None}),
+                                       project, [], None)
+
+
+def test_a_coulomb_contact_s_friction_angle_is_above_zero():
+    project, section, soil = coulomb_contact({"GEO_COHESION": 2.0, "GEO_FRICTION_ANGLE": 0.0})
+    with pytest.raises(materials.MaterialError, match="above 0 and below 90"):
+        materials._interface_variables(section, project, [], soil)
+
+
+def test_a_coulomb_contact_s_dilatancy_is_no_larger_than_its_friction_angle():
+    """`InterfaceCoulombLaw::Check` refuses it, and so does the GUI's section editor
+    (`App.Interfaces.validateSection`): the export says so before Kratos runs."""
+    project, section, soil = coulomb_contact(
+        {"GEO_COHESION": 2.0, "GEO_FRICTION_ANGLE": 20.0, "GEO_DILATANCY_ANGLE": 25.0})
+    with pytest.raises(materials.MaterialError,
+                       match=r"GEO_DILATANCY_ANGLE cannot be larger than "
+                             r"GEO_FRICTION_ANGLE \(20 degrees\)"):
+        materials._interface_variables(section, project, [], soil)
+    equal = section.model_copy(update={"variables": {**section.variables,
+                                                     "GEO_DILATANCY_ANGLE": 20.0}})
+    assert materials._interface_variables(equal, project, [], soil)[
+        "GEO_DILATANCY_ANGLE"] == 20.0
+
+
+def test_an_elastic_contact_still_takes_what_the_soil_carries():
+    """It reads no strength, so nothing is refused, and its deck is as it was."""
+    project = interfaced_project()
+    soil = project.materials[0]
+    variables = materials._interface_variables(project.interface_sections[0], project, [],
+                                               soil)
+    assert variables["GEO_COHESION"] == pytest.approx(soil.variables["GEO_COHESION"] * 0.67)

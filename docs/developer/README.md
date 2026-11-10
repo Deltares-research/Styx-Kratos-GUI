@@ -21,8 +21,8 @@ To use Styx, see the user guides: [INSTALLATION.md](../INSTALLATION.md),
 
 ## The big picture
 
-Styx is a geotechnical modeller. You describe the soil, the pit, the walls and the
-construction stages. Three programs then do the work:
+Styx is a geotechnical modeller. You describe the soil, the walls and the construction
+stages. Three programs then do the work:
 
 1. **Gmsh** makes solids and a finite-element mesh from the model.
 2. **Styx** writes the mesh, the materials and the stages as a Kratos GeoMechanics deck: a
@@ -42,7 +42,7 @@ code of Styx. [pipeline.svg](pipeline.svg) is a text file that you can edit.
 | | Styx | Gmsh | Kratos |
 |---|---|---|---|
 | Role | The model and each translation | Geometry and mesh | The solver |
-| Work | Keeps the project as one checked `Project`, and checks the full model again at each edit. Makes the stage tree into Kratos stages. Splits the mesh along walls and writes interface elements. Writes the deck, starts Kratos, reads the results. | Builds solids with the OpenCASCADE kernel: boxes, boolean operations, the pit cut out. Embeds walls, piles and anchors, so that the mesh follows them. Makes the finite-element mesh with the sizes and refinements that the model asks for. | GeoMechanicsApplication, run by its own orchestrator over the stages of the deck. Coupled soil and water (U-Pw elements), K0 initial stresses, parts switched on and off in stages. Writes GiD results and JSON curves for walls and interfaces. |
+| Work | Keeps the project as one checked `Project`, and checks the full model again at each edit. Makes the stage tree into Kratos stages. Splits the mesh along walls and writes interface elements. Writes the deck, starts Kratos, reads the results. | Builds solids with the OpenCASCADE kernel: boxes, boolean operations. Embeds walls, piles and anchors, so that the mesh follows them. Makes the finite-element mesh with the sizes and refinements that the model asks for. | GeoMechanicsApplication, run by its own orchestrator over the stages of the deck. Coupled soil and water (U-Pw elements), K0 initial stresses, parts switched on and off in stages. Writes GiD results and JSON curves for walls and interfaces. |
 | Runs in | The Python of the server or of `kratos-cli` | A separate worker process | A separate Python: the one that Kratos was built for |
 
 ## What Gmsh does
@@ -52,10 +52,10 @@ Gmsh does three separate jobs. All three run in a separate worker process
 each process, and an OpenCASCADE crash on a thin solid must not stop the app.
 
 1. **Build the solids** ([core/geometry/solid_model.py](../../core/geometry/solid_model.py)).
-   Soil layers become boxes. Gmsh fragments the boxes against each other, so that
-   neighbours share their faces. Then it cuts out the excavation lifts, imprints the load
-   areas, and embeds the walls and anchors. Each body gets its part key, which later
-   becomes its name in the deck.
+   Each soil piece becomes a box, or a polygon swept across z where a line or a wall cuts
+   the layer. Gmsh fragments the pieces against each other, so that neighbours share their
+   faces. Then it imprints the load areas, and embeds the walls and anchors. Each body
+   gets its part key, which later becomes its name in the deck.
 2. **Draw them** ([core/geometry/tessellation.py](../../core/geometry/tessellation.py)). A
    fast surface triangulation (about 0.1 s) for the 3D view in the browser. It is for the
    display only, never for the analysis.
@@ -84,7 +84,7 @@ The export makes the mesh and writes a deck folder. Kratos starts with
 | File | Contents | Made from |
 |---|---|---|
 | `<deck>.mdpa` | One node table, one element block for each soil body and structure, load conditions, and a SubModelPart for each part | The Gmsh mesh, the interface split and the part keys (`kratos/writer.py`, `kratos/interfaces.py`) |
-| `MaterialParameters.json` | A constitutive law and its Kratos variables for each material: soil, beams, anchors, interfaces | The property sets of the project as they are, plus the values that the user did not give and that Styx can calculate (K0 from Jaky, permeabilities, interface strength from its soil). In 2D, piles are spread over their spacing (`kratos/materials.py`). |
+| `MaterialParameters.json` | A constitutive law and its Kratos variables for each material: soil, beams, anchors, interfaces | The property sets of the project as they are, plus the values that the user did not give and that Styx can calculate (K0 from ν or from Jaky, permeabilities, interface strength from its soil). In 2D, piles are spread over their spacing (`kratos/materials.py`). |
 | `ProjectParameters.json` | One Kratos stage for each stage: what is active, water, constraints, loads, solver settings, output processes | The stage tree, made into a list of Kratos stages with Activate and Deactivate steps. The solver block is a fixed default analysis (`model/stages.py`, `kratos/parameters.py`). |
 | `initial_materials.json` | The materials, plus the K0 variables | Written only when the first stage runs the K0 procedure (`kratos/deck_files.py`) |
 | `kratos_gui_units.json` | The unit system, for the labels of the results. Kratos does not read it. | The project (`kratos/deck_files.py`) |

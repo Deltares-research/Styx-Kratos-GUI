@@ -4,7 +4,7 @@ A staged sheet-pile excavation, the CROW excavation wall, built and run from Pow
 from an empty project to the bending moment in the wall. You never need the GUI, but you can
 open the model in it at any point.
 
-Every command below was run on 2026-10-16, and the output shown is what it printed (long
+Every command below was run on 2026-11-06, and the output shown is what it printed (long
 paths are shortened to `...\`).
 
 ## What you build
@@ -146,10 +146,10 @@ converted on export. The model has two soils:
 is one line:
 
 ```text
-crow.json> material add m_upper --name "Upper ground" --color "#c4a86a" --law GeoLinearElasticPlaneStrain2DLaw GEO_DRAINAGE_TYPE=CONSTANT_PW_FIELD YOUNG_MODULUS=900000.0 POISSON_RATIO=0.2 DENSITY_SOLID=1834.8623853211009 DENSITY_WATER=1019.367991845056 POROSITY=0.0 BULK_MODULUS_SOLID=10000000000.0 BULK_MODULUS_FLUID=2200000000.0 DYNAMIC_VISCOSITY=0.001 PERMEABILITY_XX=1.1574074074074073e-05 PERMEABILITY_YY=1.1574074074074073e-05 PERMEABILITY_XY=0.0 GEO_COHESION=1000.0 GEO_FRICTION_ANGLE=22.3 K0_NC=0.62
+crow.json> material add m_upper --name "Upper ground" --color "#c4a86a" --law GeoLinearElasticPlaneStrain2DLaw GEO_DRAINAGE_TYPE=CONSTANT_PW_FIELD YOUNG_MODULUS=900000.0 POISSON_RATIO=0.2 DENSITY_SOLID=1834.8623853211009 POROSITY=0.0 BULK_MODULUS_SOLID=10000000000.0 PERMEABILITY_XX=1.1574074074074073e-05 PERMEABILITY_YY=1.1574074074074073e-05 PERMEABILITY_XY=0.0 GEO_COHESION=1000.0 GEO_FRICTION_ANGLE=22.3 K0_NC=0.62
 added material m_upper; wrote ...\crow.json
 
-crow.json> material add m_lower --name "Deep sand" --color "#b08a6a" --law GeoLinearElasticPlaneStrain2DLaw GEO_DRAINAGE_TYPE=CONSTANT_PW_FIELD YOUNG_MODULUS=7428600.0 POISSON_RATIO=0.3 DENSITY_SOLID=2038.735983690112 DENSITY_WATER=1019.367991845056 POROSITY=0.0 BULK_MODULUS_SOLID=10000000000.0 BULK_MODULUS_FLUID=2200000000.0 DYNAMIC_VISCOSITY=0.001 PERMEABILITY_XX=5.787037037037037e-05 PERMEABILITY_YY=5.787037037037037e-05 PERMEABILITY_XY=0.0 GEO_COHESION=0.0 GEO_FRICTION_ANGLE=32.7 K0_NC=0.46
+crow.json> material add m_lower --name "Deep sand" --color "#b08a6a" --law GeoLinearElasticPlaneStrain2DLaw GEO_DRAINAGE_TYPE=CONSTANT_PW_FIELD YOUNG_MODULUS=7428600.0 POISSON_RATIO=0.3 DENSITY_SOLID=2038.735983690112 POROSITY=0.0 BULK_MODULUS_SOLID=10000000000.0 PERMEABILITY_XX=5.787037037037037e-05 PERMEABILITY_YY=5.787037037037037e-05 PERMEABILITY_XY=0.0 GEO_COHESION=0.0 GEO_FRICTION_ANGLE=32.7 K0_NC=0.46
 added material m_lower; wrote ...\crow.json
 ```
 
@@ -166,49 +166,44 @@ Layers are stacked from the top, each under the one before:
 
 ```text
 crow.json> layer add L_top --name Soil_Top --material m_upper --bottom -8
+added layer L_top; wrote ...\crow.json
 crow.json> layer add L_mid --name Soil_Middle --material m_upper --bottom -12
+added layer L_mid; wrote ...\crow.json
 crow.json> layer add L_bot --name Soil_Bottom --material m_lower --bottom -60
+added layer L_bot; wrote ...\crow.json
 ```
 
 The upper ground is split at −8 as well as at −12, so that the deepest lift of the pit ends
 exactly on a layer boundary.
 
-#### Step 5. The pit and the pore pressure
+#### Step 5. The pore pressure
 
 ```text
-crow.json> excavation --x 0 5 --z 0 10 --levels -2 -5 -8
-excavation x 0 .. 5, z 0 .. 10, dug to -2, -5, -8; wrote ...\crow.json
-
 crow.json> boundary add pore_pressure --name "Pore pressure" --domain --water-pressure Hydrostatic --reference-coordinate -1.5
 added pore_pressure  Pore pressure  water pressure on the whole soil; hydrostatic about -1.5 m, fixed; wrote ...\crow.json
 ```
 
-- The pit runs from the symmetry plane (x = 0) to the wall (x = 5). Each level is one lift,
-  and each lift becomes a soil part of its own, which a stage can switch off.
 - The pore pressure is a boundary condition: hydrostatic on the whole soil, zero at the
   phreatic level −1.5 m, and fixed in every stage. Without it the deck fixes no water
   pressure. The model sets no project water level (`water`): the condition and the water
-  loads of step 9 carry the level themselves.
+  loads of step 10 carry the level themselves.
 - `boundary list` shows the conditions. A new project already has the displacement
   conditions: the bottom fixed, and the left and right sides on rollers.
 
-**Check your progress.** `parts` lists the part keys the stages switch on and off:
+**Check your progress.** `parts` lists the part keys a stage can switch on and off: the
+soil parts, and the pore pressure condition:
 
 ```text
 crow.json> parts
 soil_L_top  Soil_Top
 soil_L_mid  Soil_Middle
 soil_L_bot  Soil_Bottom
-soil_L_top__lift1  Soil_Top · lift 1
-soil_L_top__lift2  Soil_Top · lift 2
-soil_L_top__lift3  Soil_Top · lift 3
-soil_L_mid__pit  Soil_Middle · below the pit
-soil_L_bot__pit  Soil_Bottom · below the pit
+pore_pressure  Pore pressure
 ```
 
 `show` summarises the whole model at any time.
 
-### Part 2: the wall, the strut and the loads
+### Part 2: the wall, the lines, the strut and the loads
 
 A structure is built from a **section**, which holds its Kratos variables, and a
 **geometry**. Each step adds the section first, then the structure.
@@ -229,7 +224,64 @@ added sheet pile (id sheetpile, name SheetPileWall); wrote ...\crow.json
 - `--points 5 0 5 -13` runs the wall from the ground surface at x = 5 m down to its toe at
   y = −13 m.
 
-#### Step 7. The strut
+#### Step 7. The lines that split the soil
+
+A sheet pile or a line that crosses a soil layer from one edge to another splits the layer
+into separate bodies, and each body is a SubModelPart of its own, which a stage can switch
+off. The wall has already split `Soil_Top` and `Soil_Middle` at x = 5. `Soil_Bottom` stays
+whole, because the wall ends inside it. Two lines make the floors of the first two lifts. The
+floor of the third lift is the boundary between the layers.
+
+```text
+crow.json> line add floor_1 --name "Floor of lift 1" --points 0 -2 5 -2
+added line floor_1; wrote ...\crow.json
+crow.json> line add floor_2 --name "Floor of lift 2" --points 0 -5 5 -5
+added line floor_2; wrote ...\crow.json
+crow.json> body list
+soil_L_top__part3  Soil_Top · Part 3  ·  Upper ground
+soil_L_top__part2  Soil_Top · Part 2  ·  Upper ground
+soil_L_top__part1  Soil_Top · Part 1  ·  Upper ground
+soil_L_top__part4  Soil_Top · Part 4  ·  Upper ground
+soil_L_mid__part1  Soil_Middle · Part 1  ·  Upper ground
+soil_L_mid__part2  Soil_Middle · Part 2  ·  Upper ground
+soil_L_bot  Soil_Bottom  ·  Deep sand
+```
+
+A piece has the key `soil_<layer>__<id>`. The list runs from the top down, and within one
+depth from left to right. `get bodies` shows a point inside each piece, if you need to check
+which is which. Give each piece a name that says what it is:
+
+```text
+crow.json> body set soil_L_top__part3 --name "lift 1"
+changed soil body soil_L_top__part3; wrote ...\crow.json
+crow.json> body set soil_L_top__part1 --name "lift 2"
+changed soil body soil_L_top__part1; wrote ...\crow.json
+crow.json> body set soil_L_top__part4 --name "lift 3"
+changed soil body soil_L_top__part4; wrote ...\crow.json
+crow.json> body set soil_L_top__part2 --name retained
+changed soil body soil_L_top__part2; wrote ...\crow.json
+crow.json> body set soil_L_mid__part1 --name "below the pit"
+changed soil body soil_L_mid__part1; wrote ...\crow.json
+crow.json> body set soil_L_mid__part2 --name retained
+changed soil body soil_L_mid__part2; wrote ...\crow.json
+crow.json> body list
+soil_L_top__part3  Soil_Top · lift 1  ·  Upper ground
+soil_L_top__part2  Soil_Top · retained  ·  Upper ground
+soil_L_top__part1  Soil_Top · lift 2  ·  Upper ground
+soil_L_top__part4  Soil_Top · lift 3  ·  Upper ground
+soil_L_mid__part1  Soil_Middle · below the pit  ·  Upper ground
+soil_L_mid__part2  Soil_Middle · retained  ·  Upper ground
+soil_L_bot  Soil_Bottom  ·  Deep sand
+```
+
+- A body keeps its key and its name when you add another line, because it remembers a point
+  inside it. That is why the first floor gave `part3`: the wall had already made `part1` and
+  `part2`.
+- `body set KEY --material ID` gives one body its own material, in all stages.
+- `line list` shows the lines. A line that stops inside the soil splits nothing, and the
+  command says so.
+
+#### Step 8. The strut
 
 A strut is an anchor whose free end is a pinned support:
 
@@ -246,7 +298,7 @@ added anchor (id strut, name Strut); wrote ...\crow.json
 - Its head is snapped onto the wall, because it becomes one of the wall's nodes. A head more
   than 1 m from any structure is refused.
 
-#### Step 8. The interface between wall and soil
+#### Step 9. The interface between wall and soil
 
 ```text
 crow.json> section add interface contact --name "Wall contact" --material none --r-inter 0.7 --virtual-thickness 1.0
@@ -271,7 +323,7 @@ added interface (id wall_contact, name Interface); wrote ...\crow.json
   (`--law GeoInterfaceCoulombLawPlaneStrain`) reads the strength; the default elastic law
   reads the two stiffnesses only.
 
-#### Step 9. The loads
+#### Step 10. The loads
 
 The surcharge: 20 kN/m on the retained surface, from the wall to the right edge. Its
 components are in N/m:
@@ -289,13 +341,16 @@ ground that stays is on the right of this walk. Its pressure is zero at its
 
 ```text
 crow.json> normal-load add water_1 --name WaterLoad_Stage1 --hydrostatic --reference-coordinate -1.5 --points 0 -2 5 -2 5 -1.5
+added normal load (id water_1, name WaterLoad_Stage1); wrote ...\crow.json
 crow.json> normal-load add water_2 --name WaterLoad_Stage2 --hydrostatic --reference-coordinate -1.5 --points 0 -5 5 -5 5 -1.5
+added normal load (id water_2, name WaterLoad_Stage2); wrote ...\crow.json
 crow.json> normal-load add water_3 --name WaterLoad_Stage3 --hydrostatic --reference-coordinate -1.5 --points 0 -8 5 -8 5 -1.5
+added normal load (id water_3, name WaterLoad_Stage3); wrote ...\crow.json
 ```
 
 ### Part 3: the mesh and the stages
 
-#### Step 10. The mesh
+#### Step 11. The mesh
 
 The mesh settings are fields of the project. The size per body and the refinement box have
 no option of their own, so they are set by path with `set` and `add`. `mesh` takes the element
@@ -303,9 +358,12 @@ size and order, keeps them in the project, and meshes:
 
 ```text
 crow.json> set mesh.body_sizes.sheetpile 0.5
+mesh.body_sizes.sheetpile = 0.5; wrote ...\crow.json
 crow.json> add mesh.refinements '{"kind": "box", "size": 0.75, "thickness": 45.0, "x_min": -1.0, "x_max": 8.0, "y_min": -16.0, "y_max": 1.0, "z_min": -1.0, "z_max": 11.0}'
+added {"kind": "box", "size": 0.75, "thickness": 45.0, "x_min":... to mesh.refinements; wrote ...\crow.json
 crow.json> mesh --size 5.0 --order 2
-4299 nodes, 2087 elements (2087 Triangle 6)
+4228 nodes, 2052 elements (2052 Triangle 6)
+mesh settings kept: wrote ...\crow.json
 ```
 
 | Setting | Why |
@@ -318,12 +376,31 @@ crow.json> mesh --size 5.0 --order 2
 `mesh` runs gmsh and reports the size. It is only a check: `export` meshes anyway.
 `get mesh` prints the settings back.
 
-#### Step 11. The construction stages
+#### Step 12. The construction stages
 
-One command derives the whole sequence from the model:
+`stages defaults` makes the initial stage and the null step. Each `stages add` adds one stage
+after the last, and names what it switches on and off:
 
 ```text
-crow.json> stages staged-excavation
+crow.json> stages defaults
+1  initial  Initial stage
+     calculation: K0 procedure
+2  null_step  Null step  (after initial)
+     calculation: Null step
+wrote ...\crow.json
+crow.json> stages deactivate initial sheetpile strut wall_contact surcharge water_1 water_2 water_3
+sheetpile, strut, wall_contact, surcharge, water_1, water_2, water_3 out of the model from stage initial on; wrote ...\crow.json
+crow.json> stages add install_sheetpile --name "SheetPileWall installation" --activate sheetpile wall_contact surcharge --reset-displacements --max-iterations 150 --tolerance 1e-3
+added stage (id install_sheetpile, name SheetPileWall installation) after null_step; wrote ...\crow.json
+crow.json> stages add dig_1 --name "First excavation" --activate water_1 --deactivate soil_L_top__part3 --max-iterations 150 --tolerance 1e-3
+added stage (id dig_1, name First excavation) after install_sheetpile; wrote ...\crow.json
+crow.json> stages add install_strut --name "Strut installation" --activate strut --max-iterations 150 --tolerance 1e-3
+added stage (id install_strut, name Strut installation) after dig_1; wrote ...\crow.json
+crow.json> stages add dig_2 --name "Second excavation" --activate water_2 --deactivate soil_L_top__part1 water_1 --max-iterations 150 --tolerance 1e-3
+added stage (id dig_2, name Second excavation) after install_strut; wrote ...\crow.json
+crow.json> stages add dig_3 --name "Third excavation" --activate water_3 --deactivate soil_L_top__part4 water_2 --max-iterations 150 --tolerance 1e-3
+added stage (id dig_3, name Third excavation) after dig_2; wrote ...\crow.json
+crow.json> stages list
 1  initial  Initial stage
      calculation: K0 procedure; deactivates sheetpile, strut, wall_contact, surcharge, water_1, water_2, water_3
 2  null_step  Null step  (after initial)
@@ -331,13 +408,13 @@ crow.json> stages staged-excavation
 3  install_sheetpile  SheetPileWall installation  (after null_step)
      calculation: Plastic; activates sheetpile, wall_contact, surcharge
 4  dig_1  First excavation  (after install_sheetpile)
-     calculation: Plastic; activates water_1; deactivates soil_L_top__lift1
+     calculation: Plastic; activates water_1; deactivates soil_L_top__part3
 5  install_strut  Strut installation  (after dig_1)
      calculation: Plastic; activates strut
 6  dig_2  Second excavation  (after install_strut)
-     calculation: Plastic; activates water_2; deactivates soil_L_top__lift2, water_1
+     calculation: Plastic; activates water_2; deactivates soil_L_top__part1, water_1
 7  dig_3  Third excavation  (after dig_2)
-     calculation: Plastic; activates water_3; deactivates soil_L_top__lift3, water_2
+     calculation: Plastic; activates water_3; deactivates soil_L_top__part4, water_2
 ```
 
 In words: settle the ground with K0, take a null step, install the wall with its interface
@@ -358,7 +435,7 @@ example setting a value it already has) is not a step.
 
 ### Part 4: the deck and the run
 
-#### Step 12. Check and export the deck
+#### Step 13. Check and export the deck
 
 ```text
 crow.json> check
@@ -371,10 +448,10 @@ wrote the Kratos deck CROW_excavation_wall to deck:
   initial_materials.json
   ProjectParameters.json
   kratos_gui_units.json
-4299 nodes, 2087 elements (2087 Triangle 6)
+4228 nodes, 2052 elements (2052 Triangle 6)
 next: kratos-cli run deck
-note: interface section 'Wall contact' against 'Upper ground' (Interface_Soil_Top, ...): normal stiffness 3.75e+06 and shear stiffness 3.75e+05 N/m³, 10 G / t and G / t (E = 9e+05 Pa, nu = 0.2, t = 1 m); cohesion 700 Pa = 0.7 x 1000, ...
-note: interface section 'Wall contact' against 'Deep sand' (Interface_Soil_Bottom, Interface_Soil_Bottom_pit): ...
+note: interface section 'Wall contact' against 'Upper ground' (Interface_Soil_Top_retained, ...): normal stiffness 3.75e+06 and shear stiffness 3.75e+05 N/m³, 10 G / t and G / t (E = 9e+05 Pa, nu = 0.2, t = 1 m); cohesion 700 Pa = 0.7 x 1000, ...
+note: interface section 'Wall contact' against 'Deep sand' (Interface_Soil_Bottom): ...
 ```
 
 The notes say what the exporter took from the soil beside the interface, which is what this
@@ -382,36 +459,36 @@ model asks for: one line per soil, with the parts of the interface against it an
 numbers. Nothing needs to be done about them. The cohesion and friction angle are read only by a Coulomb law; this interface uses the default elastic law, which reads the two stiffnesses. The files are named after the project;
 `--name mesh` would write `mesh.mdpa` instead.
 
-#### Step 13. Look into the deck (optional)
+#### Step 14. Look into the deck (optional)
 
 ```text
 crow.json> deck show deck
-CROW_excavation_wall.mdpa: 2D, 4392 nodes, x 0 .. 80, y -60 .. 0
+CROW_excavation_wall.mdpa: 2D, 4321 nodes, x 0 .. 80, y -60 .. 0
   elements:
-    2087 SmallStrainUPwDiffOrderElement2D6N (continuum)
+    2052 SmallStrainUPwDiffOrderElement2D6N (continuum)
     26 LinearTimoshenkoCurvedBeamElement2D3N (beam)
     1 LinearTrussElement2D2N (truss)
     52 Geo_UPwLineInterfacePlaneStrainDiffOrderElement3Plus3N (interface)
   ...
-  33 SubModelParts:
+  32 SubModelParts:
   ...
   7 stages:
   ...
 
 crow.json> node deck 30
-Node 30 at (1.842, -12.000, 0.000)
-  SubModelParts: Soil_Middle_pit, Soil_Bottom_pit
+Node 30 at (1.105, -12.000, 0.000)
+  SubModelParts: Soil_Middle_below_the_pit, Soil_Bottom
 ```
 
-The deck has 4392 nodes, not 4299, because the interface splits each wall node into one per
+The deck has 4321 nodes, not 4228, because the interface splits each wall node into one per
 side. `node` says which SubModelParts a node is in, and which nodes share its position.
 
-#### Step 14. Run it
+#### Step 15. Run it
 
 ```text
 crow.json> run deck
-run CROW_excavation_wall_2026-10-16_00-50 finished in 5.6 s: 25 files in ...\crow\CROW_excavation_wall_2026-10-16_00-50
-next: kratos-cli results show CROW_excavation_wall_2026-10-16_00-50
+run CROW_excavation_wall_2026-11-06_09-25 finished in 5.5 s: 30 files in ...\crow\CROW_excavation_wall_2026-11-06_09-25
+next: kratos-cli results show CROW_excavation_wall_2026-11-06_09-25
 ```
 
 `run` copies the deck into a new run folder and runs Kratos there. Your `deck\` stays as it
@@ -420,7 +497,7 @@ was, and every run is kept.
 - The run folder is made under the runs root: `KRATOS_GUI_RUNS`, which `kratos-shell.bat`
   set to your working folder. Without it, the runs root is `~/KratosGUI/runs`.
   `--runs-dir DIR` puts one run somewhere else.
-- `calculate` does steps 12 and 14 in one go, without a `deck\` folder of your own.
+- `calculate` does steps 13 and 15 in one go, without a `deck\` folder of your own.
 
 ### Part 5: the results
 
@@ -433,42 +510,44 @@ means "the run just made".
 ```text
 crow.json> results runs
 1 run in ...\crow:
-  1  CROW_excavation_wall_2026-10-16_00-50  7 stage(s) with results, 31 files
+  1  CROW_excavation_wall_2026-11-06_09-25  7 stage(s) with results, 36 files
 
 crow.json> results show 1
-CROW_excavation_wall_2026-10-16_00-50  (deck CROW_excavation_wall, started 2026-10-16T00:50)
-  complete, SI units, 31 files, 5.9 MB
+CROW_excavation_wall_2026-11-06_09-25  (deck CROW_excavation_wall, started 2026-11-06T09:25)
+  complete, SI units, 36 files, 6.2 MB
     1  Initial stage                 results
     2  Null step                     results
-    3  SheetPileWall installation    results  +2 series
-    4  First excavation              results  +2 series
-    5  Strut installation            results  +2 series
-    6  Second excavation             results  +2 series
-    7  Third excavation              results  +2 series
+    3  SheetPileWall installation    results  +3 series
+    4  First excavation              results  +3 series
+    5  Strut installation            results  +3 series
+    6  Second excavation             results  +3 series
+    7  Third excavation              results  +3 series
 ```
 
-"+2 series" means the stage also wrote curves along the wall and along the interface.
+"+3 series" means the stage also wrote curves along the wall and along each face of the
+interface.
 
 #### The wall, stage by stage
 
 ```text
 crow.json> results members 1
 This run wrote curves for:
-  interface   stages 3, 4, 5, 6, 7  tn, ts
-  wall        stages 3, 4, 5, 6, 7  M, Q, N, ux, uy
+  interface_left   stages 3, 4, 5, 6, 7  tn, ts
+  interface_right  stages 3, 4, 5, 6, 7  tn, ts
+  wall             stages 3, 4, 5, 6, 7  M, Q, N, ux, uy
 
 crow.json> results profile 1 wall M
 Bending moment (N·m/m) along the wall, 5 stages:
-    3  SheetPileWall installation    min -417 at y 0, max 53902 at y -6.00
-    4  First excavation              min -1034 at y -12.5, max 81124 at y -6.50
-    5  Strut installation            min -1034 at y -12.5, max 81124 at y -6.50
-    6  Second excavation             min -1541 at y -12.5, max 1.27e+5 at y -4.50
-    7  Third excavation              min -3499 at y -12.5, max 3.30e+5 at y -6.00
+    3  SheetPileWall installation    min -417 at y 0, max 53906 at y -6.00
+    4  First excavation              min -1049 at y -12.5, max 81160 at y -6.50
+    5  Strut installation            min -1049 at y -12.5, max 81160 at y -6.50
+    6  Second excavation             min -1571 at y -12.5, max 1.27e+5 at y -4.50
+    7  Third excavation              min -3553 at y -12.5, max 3.30e+5 at y -6.00
 
 crow.json> results profile 1 wall ux
 Horizontal total displacement (m) along the wall, 5 stages:
     ...
-    7  Third excavation              min -0.0671 at y -6.50, max -0.0066 at y 0
+    7  Third excavation              min -0.0670 at y -6.50, max -0.0065 at y 0
 ```
 
 After the last lift, the wall carries about 330 kN·m/m at −6 m and deflects 67 mm into the
@@ -477,7 +556,7 @@ pit.
 | Along | Quantities |
 |---|---|
 | the wall | `M`, `Q`, `N`, `ux`, `uy` |
-| the interface | `tn`, `ts`, or a word of the label: `results profile 1 interface normal` |
+| each face of the interface | `tn`, `ts`, or a word of the label: `results profile 1 interface_right normal` |
 
 **Write a curve to a file**, for Excel or a plot of your own:
 
@@ -507,14 +586,14 @@ Stage 7 (Third excavation) offers:
     pw        Pore pressure                   Pa      nodes
 
 crow.json> results field 1 uy
-u_y (m), stage 7 (Third excavation): -0.3399 to 0.3896 over 4392 nodes
-  min -0.3399 at node 14
+u_y (m), stage 7 (Third excavation): -0.3399 to 0.3896 over 4321 nodes
+  min -0.3399 at node 15
   max 0.3896 at node 12
 
 crow.json> results field 1 syy --stage third --csv syy_stage7.csv
-wrote syy_stage7.csv (1876 rows)
+wrote syy_stage7.csv (1843 rows)
 
-crow.json> results at 1 14 --stage 7                    every field at node 14
+crow.json> results at 1 15 --stage 7                    every field at node 15
 ```
 
 - **Which stage.** Without `--stage`, a command reads the last stage. `--stage` takes the
@@ -522,9 +601,9 @@ crow.json> results at 1 14 --stage 7                    every field at node 14
   id (`dig_3`).
 - **Stresses** are read per element, as Kratos computed them. `--location nodes` averages
   them onto the nodes.
-- **Why 0.34 m?** That settlement is at the far-right corner (node 14). It is the total since
+- **Why 0.34 m?** That settlement is at the far-right corner (node 15). It is the total since
   the start, K0 stage included, in an elastic soil. The last lift adds less than a
-  millimetre there: `results at 1 14 --stage 7` shows Δu_y = −9.79e-4 m. To see what one
+  millimetre there: `results at 1 15 --stage 7` shows Δu_y = −9.79e-4 m. To see what one
   stage did, read the stage fields `du`, `dux` and `duy`.
 
 #### The raw files
@@ -537,7 +616,7 @@ crow.json> results archive 1                         the whole run as a .zip, he
 
 ### Part 6: keep the model
 
-#### Step 15. Open it in the GUI
+#### Step 16. Open it in the GUI
 
 The project file and the runs are the GUI's own. Start the GUI with the runs root set to
 your working folder, so its Results mode finds the runs there:
@@ -547,10 +626,10 @@ $env:KRATOS_GUI_RUNS = "$HOME\crow"; <repo>\run.bat
 ```
 
 1. **Open** `crow.json`. You see the model you typed: layers, wall, strut, loads and stages.
-2. **Results** mode lists the same runs. Open `CROW_excavation_wall_2026-10-16_00-50` for
+2. **Results** mode lists the same runs. Open `CROW_excavation_wall_2026-11-06_09-25` for
    the deformed mesh, the contours and the wall plots.
 
-#### Step 16. Save it as a Python script
+#### Step 17. Save it as a Python script
 
 ```text
 crow.json> script --out crow.py
@@ -558,9 +637,11 @@ wrote crow.py: CROW excavation wall (2D section at z = 5, SI)
 next: run crow.py in the GUI's command box, or python crow.py --out deck/
 ```
 
-`crow.py` holds the whole model as readable Python, every value typed out: the same file as
-the ready-made [`crow.py`](../../examples/CROW_case/crow.py) that ways 2 and 3 start from. Next
-time, start from it instead of typing the model again:
+`crow.py` holds the whole model as readable Python, every value typed out, like the
+ready-made [`crow.py`](../../examples/CROW_case/crow.py) that ways 2 and 3 start from. The one
+difference is the keys of the soil bodies: there they are `soil_L_top__lift1`, and so on, where
+yours are `soil_L_top__part3`, and so on. Next time, start from your file instead of typing
+the model again:
 
 | Where | What |
 |---|---|
@@ -568,7 +649,7 @@ time, start from it instead of typing the model again:
 | PowerShell | `<repo>\kratos-cli.bat show $HOME\crow\crow.py`, and every command that only reads a model |
 | PowerShell | `<repo>\.venv-windows\Scripts\python.exe $HOME\crow\crow.py --calculate` writes the deck and runs it |
 
-#### Step 17. Leave the shell
+#### Step 18. Leave the shell
 
 ```text
 crow.json> exit
@@ -576,8 +657,8 @@ crow.json> exit
 
 ### All in one go
 
-[`crow.json`](../../examples/CROW_case/crow.json) is the whole model: the file steps 1 to 11
-build, and the same file the GUI saves. Open the shell in a new folder:
+[`crow.json`](../../examples/CROW_case/crow.json) is the whole model: the model steps 1 to 12
+build, and the same kind of file the GUI saves. Open the shell in a new folder:
 
 ```powershell
 <repo>\cli\kratos-shell.bat $HOME\my_crow
@@ -598,7 +679,7 @@ Edits made in the shell are saved into the file that is open. To make a model of
 copy `crow.json`, change its values (sizes, materials, stages, ...) and `open` your copy
 instead. `check` tells you whether it can be meshed and staged.
 
-**Your own commands from a file.** Put steps 1 to 12 in a text file, one shell line per
+**Your own commands from a file.** Put steps 1 to 13 in a text file, one shell line per
 command (a line that starts with `#` is a comment), say `crow.txt` in your working folder.
 Any of these then builds `crow.json` and `deck\` in a few seconds, in the folder the shell
 is in:
@@ -681,7 +762,7 @@ results at 1 14
 results members 1
 results profile 1 wall M
 results profile 1 wall ux
-results profile 1 interface tn
+results profile 1 interface_right tn
 
 # Every value, to a CSV file
 results field 1 uy --csv uy.csv
@@ -734,8 +815,8 @@ as `results show 1` and `results profile 1 wall M`.
 |---|---|
 | `crow.json` | the model (way 1 only; ways 2 and 3 read `crow.py`) |
 | `deck\` | the Kratos input files: `CROW_excavation_wall.mdpa`, `ProjectParameters.json`, `MaterialParameters.json`, `initial_materials.json`, `kratos_gui_units.json` |
-| `CROW_excavation_wall_<date>_<time>\` | one folder per run: a copy of the deck, `kratos.log`, the results (`*.post.res`, `*.post.msh`) and the curves along the wall and the interface (`*_output_wall.json`, `*_output_interface.json`) |
-| `crow.py` | the model as a Python script (way 1, step 16) |
+| `CROW_excavation_wall_<date>_<time>\` | one folder per run: a copy of the deck, `kratos.log`, the results (`*.post.res`, `*.post.msh`) and the curves along the wall and the interface (`*_output_wall.json`, `*_output_interface_left.json`, `*_output_interface_right.json`) |
+| `crow.py` | the model as a Python script (way 1, step 17) |
 | `wall_M.csv`, `syy_stage7.csv`, `uy.csv` | every value of a curve or a field, if you asked for it with `--csv` |
 
 Way 1 writes into the working folder you chose; ways 2 and 3 into the project folder,
@@ -750,7 +831,7 @@ Way 1 writes into the working folder you chose; ways 2 and 3 into the project fo
 | `error: ...`, and nothing changed | The command was refused as a whole, and the project was not written. The message names the field. |
 | `no stage matches 'dig_3'` | `--stage` takes the stage's number or words of its name, not the stage id. |
 | `error: no project is open` | Start with `new FILE` or `open FILE`, or name the project on the line. |
-| `note: interface section 'Wall contact' against ...` | What the interface took from the soil: see step 12. |
+| `note: interface section 'Wall contact' against ...` | What the interface took from the soil: see step 13. |
 | `'/c/Users/...' is not a run` | A Git Bash path given to a Windows program. Use `C:/Users/...`, or the run's number. |
 | `nothing to undo` | `undo` steps back only through commands of this shell session that changed the project. |
 | *The term '\kratos-cli.bat' is not recognized* | `$cli` is empty: type the command in the PowerShell from [Before ways 2 and 3](#before-ways-2-and-3). |

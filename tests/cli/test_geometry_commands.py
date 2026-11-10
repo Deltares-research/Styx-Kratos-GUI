@@ -13,7 +13,7 @@ import pytest
 
 from core import session
 from core.geometry import cad_import, primitives
-from core.model import drafts
+from core.model import drafts, soil_models
 from tests.models import excavation
 from tests.test_importer import obj_text
 
@@ -143,8 +143,11 @@ def test_material_models_lists_each_model_as_the_window_does(cli, site):
     assert "GEO_COHESION = 1000 Pa (required)" in ran.out
     assert ("GEO_TENSILE_STRENGTH = 0 Pa (required), when GEO_ENABLE_TENSION_CUT_OFF is "
             "true") in ran.out
-    assert "[CONSTANT_PW_FIELD | FULLY_COUPLED | DRAINED | UNDRAINED]" in ran.out
-    assert "RETENTION_LAW = SaturatedLaw when left out" in ran.out
+    assert "[CONSTANT_PW_FIELD | FULLY_COUPLED]" in ran.out
+    assert ("RETENTION_LAW = SaturatedBelowPhreaticLevelLaw [SaturatedLaw | "
+            "SaturatedBelowPhreaticLevelLaw | VanGenuchtenLaw]") in ran.out
+    assert ("PERMEABILITY_XX = 1.15741e-12 m², when GEO_DRAINAGE_TYPE is FULLY_COUPLED or "
+            "the project a groundwater flow calculation") in ran.out
 
 
 def test_material_models_states_the_defaults_in_the_project_s_units(cli, site):
@@ -160,9 +163,24 @@ def test_material_add_of_a_soil_model(cli, site):
     assert ran.code == 0, ran.err
     clay = session.load(site).materials[-1]
     assert clay.constitutive_law == "GeoMohrCoulombLawPlaneStrain"
-    assert (clay.variables["GEO_FRICTION_ANGLE"], clay.variables["GEO_DILATANCY_ANGLE"]) == \
-        (25, 0.0)
+    assert clay.variables["GEO_FRICTION_ANGLE"] == 25
+    assert "GEO_DILATANCY_ANGLE" not in clay.variables, \
+        "a blank soil made Mohr-Coulomb gets no strength, as in the GUI"
+    assert ("Still to fill in before a calculation: YOUNG_MODULUS, POISSON_RATIO, "
+            "DENSITY_SOLID, POROSITY, GEO_COHESION, GEO_DILATANCY_ANGLE") in ran.out
     assert "Mohr-Coulomb (GeoMohrCoulombLawPlaneStrain)" in cli("material", site, "list").out
+
+
+def test_material_add_makes_the_soil_the_gui_s_create_soil_makes(cli, site):
+    ran = cli("material", site, "add", "peat")
+
+    assert ran.code == 0, ran.err
+    peat = session.load(site).material("peat")
+    assert peat.constitutive_law == "GeoLinearElasticPlaneStrain2DLaw"
+    assert peat.variables == soil_models.blank_si()
+    assert "Still to fill in before a calculation: YOUNG_MODULUS" in ran.out
+    assert cli("material", site, "set", "peat", "YOUNG_MODULUS=2e6").code == 0
+    assert "POISSON_RATIO" not in session.load(site).material("peat").variables
 
 
 def test_material_set_model_fills_and_says_what_it_filled(cli, site):
@@ -173,6 +191,32 @@ def test_material_set_model_fills_and_says_what_it_filled(cli, site):
     m1 = session.load(site).materials[0]
     assert m1.constitutive_law == "GeoMohrCoulombLawPlaneStrain"
     assert m1.variables["GEO_COHESION"] == drafts.preset("m1")["variables"]["GEO_COHESION"]
+
+
+def test_material_set_says_an_undrained_soil_is_coupled(cli, site):
+    """UNDRAINED is no longer a drainage type: given, it is FULLY_COUPLED with its own
+    permeability, and the command says so."""
+    ran = cli("material", site, "set", "m1", "GEO_DRAINAGE_TYPE=UNDRAINED",
+              "PERMEABILITY_XX=1e-12", "PERMEABILITY_YY=1e-12", "--unset", "PERMEABILITY_ZZ")
+
+    assert ran.code == 0, ran.err
+    assert ("UNDRAINED is no longer a drainage type: the soil is FULLY_COUPLED, as Kratos "
+            "calculates it, and keeps its own permeability.") in ran.out
+    assert "not used" not in ran.out, "a coupled soil reads its permeability"
+    soil = session.load(site).materials[0].variables
+    assert soil["GEO_DRAINAGE_TYPE"] == "FULLY_COUPLED"
+    assert soil["PERMEABILITY_XX"] == soil["PERMEABILITY_YY"] == 1e-12
+    assert "UNDRAINED" not in cli("material", site, "set", "m1", "K0_NC=0.5").out
+
+
+def test_a_permeability_a_drained_soil_does_not_read_is_named(cli, site):
+    """Accepted, as the soil may be made coupled later, and said to be unused."""
+    ran = cli("material", site, "set", "m1", "GEO_DRAINAGE_TYPE=CONSTANT_PW_FIELD",
+              "PERMEABILITY_XX=1e-12")
+
+    assert ran.code == 0, ran.err
+    assert ("PERMEABILITY_XX not used: Kratos reads no flow parameters of a soil that is "
+            "not FULLY_COUPLED. Remove it, or make the soil FULLY_COUPLED.") in ran.out
 
 
 def test_a_soil_model_and_a_law_together_are_refused(cli, site):
@@ -208,6 +252,58 @@ def test_a_layer_level_that_crosses_its_neighbour_is_refused(cli, site):
     assert site.read_bytes() == before
 
 
+@pytest.mark.parametrize("edit", [("split", "L_top"), ("set", "L_mid", "--top", "-3")],
+                         ids=lambda edit: f"layer {edit[0]}")
+def test_a_layer_edit_that_takes_a_lift_away_takes_its_mesh_size_too(cli, tmp_path, edit):
+    """Splitting the top layer, or raising the one below it, leaves the pit's last lift
+    in no layer: its size goes with it, or `check` refuses the file the edit wrote."""
+    project = excavation.excavation_project(staged=False)
+    sized = project.mesh.model_copy(update={"body_sizes": {"soil_L_top__lift3": 1.0}})
+    path = session.save(project.model_copy(update={"mesh": sized}), tmp_path / "pit.json")
+
+    assert cli("layer", path, *edit).code == 0
+
+    assert session.load(path).mesh.body_sizes == {}
+    ran = cli("check", path)
+    assert ran.code == 0, ran.err
+
+
+def test_a_layer_edit_says_which_mesh_size_it_took_away(cli, tmp_path):
+    """The lift can come back -- the split undone -- but its size does not, so the edit
+    says which size went, and what it was, whether it is written or only tried."""
+    project = excavation.excavation_project(staged=False)
+    sized = project.mesh.model_copy(update={"body_sizes": {"soil_L_top__lift3": 1.5}})
+    path = session.save(project.model_copy(update={"mesh": sized}), tmp_path / "pit.json")
+
+    tried = cli("layer", path, "split", "L_top", "--dry-run")
+    made = cli("layer", path, "split", "L_top")
+
+    for ran in (tried, made):
+        assert ran.code == 0, ran.err
+        assert "note: Removed the mesh size of soil_L_top__lift3 (1.5)" in ran.out
+    again = cli("layer", path, "split", "L1")
+    assert again.code == 0, again.err
+    assert "Removed" not in again.out
+
+
+@pytest.mark.parametrize("refuser", ["check", "mesh"])
+def test_a_size_for_a_body_the_model_lacks_is_refused_with_how_to_take_it_away(
+        cli, tmp_path, refuser):
+    project = excavation.excavation_project(staged=False)
+    sized = project.mesh.model_copy(update={"body_sizes": {"gone": 0.5, "lost": 0.5}})
+    path = session.save(project.model_copy(update={"mesh": sized}), tmp_path / "pit.json")
+
+    refused = cli(refuser, path)
+
+    assert refused.code == 1
+    assert "the mesh settings name bodies this model does not have: gone, lost." in refused.err
+    assert "kratos-cli remove FILE mesh.body_sizes.gone" in refused.err
+    assert cli("remove", path, "mesh.body_sizes.gone").code == 0
+    assert cli("remove", path, "mesh.body_sizes.lost").code == 0
+    ran = cli("check", path)
+    assert ran.code == 0, ran.err
+
+
 def test_a_layer_needs_a_bottom_or_a_thickness_or_takes_five_metres(cli, site):
     assert cli("layer", site, "add", "L3", "--material", "m1").code == 0
 
@@ -215,35 +311,17 @@ def test_a_layer_needs_a_bottom_or_a_thickness_or_takes_five_metres(cli, site):
     assert layer.top - layer.bottom == 5.0
 
 
-# ── excavation ──────────────────────────────────────────────────────────────
-
-def test_excavation_digs_the_pit_in_lifts(cli, site):
-    ran = cli("excavation", site, "--x", "2", "8", "--levels", "-2", "-4", "-6")
-
-    assert ran.code == 0, ran.err
-    pit = session.load(site).excavation
-    assert (pit.x0, pit.x1, pit.levels) == (2.0, 8.0, [-2.0, -4.0, -6.0])
-    assert "-6" in cli("excavation", site).out
-
-
-def test_excavation_with_one_level_says_it_digs_nothing(cli, site):
-    ran = cli("excavation", site, "--x", "2", "8", "--levels", "-3")
-
-    assert ran.code == 0
-    assert "two or more levels" in ran.out
-
-
 # ── parts ───────────────────────────────────────────────────────────────────
 
 def test_parts_lists_what_a_stage_can_switch(cli, site):
-    cli("excavation", site, "--x", "2", "8", "--levels", "-2", "-4", "-6")
+    cli("line", site, "add", "floor", "--points", "0", "-2", "25", "-2")
 
     ran = cli("parts", site)
 
     assert ran.code == 0
-    assert "soil_L1__lift1" in ran.out and "lift 1" in ran.out
+    assert "soil_L1__part1" in ran.out and "Part 1" in ran.out
     keys = [part["key"] for part in cli("--json", "parts", site).json()]
-    assert keys[:2] == ["soil_L1", "soil_L2"]
+    assert keys[:3] == ["soil_L1__part1", "soil_L1__part2", "soil_L2"]
     assert set(session.load(site).part_keys()) <= set(keys)
 
 
@@ -286,6 +364,24 @@ def test_points_that_do_not_pair_up_are_refused(cli, site):
 
     assert ran.code == 1
     assert "pairs" in ran.err
+
+
+def test_polygon_volume_requires_the_dimension_specific_extrusion(cli, site):
+    section = cli("volume", site, "add", "polygon", "--points", "0", "0", "6", "0", "3", "2",
+                  "--extrude", "0", "0", "1")
+    assert section.code == 1 and "takes no --extrude" in section.err
+
+    assert cli("dimension", site, "3d").code == 0
+    solid = cli("volume", site, "add", "polygon", "--points", "0", "0", "0", "4", "0", "0",
+                "4", "0", "4")
+    assert solid.code == 1 and "needs --extrude" in solid.err
+
+
+def test_volume_import_refuses_a_missing_cad_file(cli, site, tmp_path):
+    ran = cli("volume", site, "import", tmp_path / "missing.step")
+
+    assert ran.code == 1
+    assert "no such file" in ran.err and "missing.step" in ran.err
 
 
 def test_points_can_come_from_a_file(cli, site, tmp_path):
@@ -334,8 +430,8 @@ def test_volume_list_remove_and_clear(cli, site):
 # ── The ground of the test model, from commands alone ───────────────────────
 
 def test_the_ground_of_the_test_model_is_built_with_commands_alone(cli, tmp_path):
-    """Domain, both soils, three layers, the pit in three lifts, the water:
-    everything about the ground `tests/models/excavation.py` builds, typed instead."""
+    """Domain, both soils, three layers, the lines, the water: everything about the
+    ground `tests/models/excavation.py` builds, typed instead."""
     target = excavation.excavation_project()
     path = tmp_path / "pit.json"
 
@@ -350,14 +446,20 @@ def test_the_ground_of_the_test_model_is_built_with_commands_alone(cli, tmp_path
             "--color", material.color, "--law", material.constitutive_law,
             *(f"{name}={value if isinstance(value, str) else repr(value)}"
               for name, value in material.variables.items()))
+        # A new soil starts blank; what it has that this one has not goes.
+        extra = [name for name in soil_models.blank_si() if name not in material.variables]
+        if extra:
+            run("material", path, "set", material.id,
+                *(word for name in extra for word in ("--unset", name)))
     for layer in target.layers:
         run("layer", path, "add", layer.id, "--material", layer.mat, "--name", layer.name,
             "--bottom", repr(layer.bottom))
-    run("excavation", path, "--x", "0", "6", "--z", "0", "10", "--levels", "-2", "-4.5", "-7")
+    for line in target.lines:
+        run("line", path, "add", line.id, "--name", line.name, "--points",
+            *(repr(value) for point in line.points for value in point))
     run("water", path, "-1")
 
     built = session.load(path)
     for field in ("name", "dimension", "section_offset", "domain", "materials", "layers",
-                  "excavation", "water"):
+                  "lines", "water"):
         assert getattr(built, field) == getattr(target, field), field
-    assert built.soil_body_keys == target.soil_body_keys

@@ -393,7 +393,7 @@ App.SoilLayersDialog = (function () {
         tools.appendChild(el('button.btn.btn-sm', { text: t[0], type: 'button', onclick: t[1] }));
       });
       tools.appendChild(el('button.btn.btn-sm', {
-        text: 'Material sets…', type: 'button',
+        text: 'Soil materials…', type: 'button',
         onclick: function () { App.Dialogs.materials(function () { renderAll(); renderBodies(); }); }
       }));
       tableWrap = el('div.lay-table-wrap');

@@ -24,10 +24,7 @@
         "PERMEABILITY_XX": 1.1574074074074073e-05,
         "GEO_COHESION": 1000.0,
         "GEO_FRICTION_ANGLE": 22.3,
-        "DENSITY_WATER": 1019.367991845056,
         "BULK_MODULUS_SOLID": 10000000000.0,
-        "BULK_MODULUS_FLUID": 2200000000.0,
-        "DYNAMIC_VISCOSITY": 0.001,
         "PERMEABILITY_YY": 1.1574074074074073e-05,
         "PERMEABILITY_XY": 0.0,
         "K0_NC": 0.62
@@ -50,10 +47,7 @@
         "PERMEABILITY_XX": 5.787037037037037e-05,
         "GEO_COHESION": 0.0,
         "GEO_FRICTION_ANGLE": 32.7,
-        "DENSITY_WATER": 1019.367991845056,
         "BULK_MODULUS_SOLID": 10000000000.0,
-        "BULK_MODULUS_FLUID": 2200000000.0,
-        "DYNAMIC_VISCOSITY": 0.001,
         "PERMEABILITY_YY": 5.787037037037037e-05,
         "PERMEABILITY_XY": 0.0,
         "K0_NC": 0.46
@@ -89,18 +83,98 @@
       "bottom": -60.0
     }
   ],
-  "excavation": {
-    "x0": 0.0,
-    "x1": 5.0,
-    "z0": 0.0,
-    "z1": 10.0,
-    "floor_y": -8.0,
-    "levels": [
-      -2.0,
-      -5.0,
-      -8.0
-    ]
-  },
+  "lines": [
+    {
+      "id": "floor_1",
+      "name": "Floor of lift 1",
+      "points": [
+        [
+          0.0,
+          -2.0
+        ],
+        [
+          5.0,
+          -2.0
+        ]
+      ]
+    },
+    {
+      "id": "floor_2",
+      "name": "Floor of lift 2",
+      "points": [
+        [
+          0.0,
+          -5.0
+        ],
+        [
+          5.0,
+          -5.0
+        ]
+      ]
+    }
+  ],
+  "bodies": [
+    {
+      "id": "lift1",
+      "name": "lift 1",
+      "layer": "L_top",
+      "point": [
+        2.5,
+        -1.0
+      ],
+      "mat": "m_upper"
+    },
+    {
+      "id": "retained",
+      "name": "retained",
+      "layer": "L_top",
+      "point": [
+        40.0,
+        -4.0
+      ],
+      "mat": "m_upper"
+    },
+    {
+      "id": "lift2",
+      "name": "lift 2",
+      "layer": "L_top",
+      "point": [
+        2.5,
+        -3.5
+      ],
+      "mat": "m_upper"
+    },
+    {
+      "id": "lift3",
+      "name": "lift 3",
+      "layer": "L_top",
+      "point": [
+        2.5,
+        -6.5
+      ],
+      "mat": "m_upper"
+    },
+    {
+      "id": "pit",
+      "name": "below the pit",
+      "layer": "L_mid",
+      "point": [
+        2.5,
+        -10.0
+      ],
+      "mat": "m_upper"
+    },
+    {
+      "id": "retained",
+      "name": "retained",
+      "layer": "L_mid",
+      "point": [
+        40.0,
+        -10.0
+      ],
+      "mat": "m_upper"
+    }
+  ],
   "loads": [
     {
       "id": "surcharge",
@@ -290,6 +364,10 @@
     }
   ],
   "water": null,
+  "fluid": {
+    "bulk_modulus": null,
+    "dynamic_viscosity": null
+  },
   "boundary_conditions": [
     {
       "id": "fixed_bottom",
@@ -507,34 +585,40 @@
   ],
   "deck": null,
   "soil_body_keys": [
-    "soil_L_top",
-    "soil_L_mid",
-    "soil_L_bot",
     "soil_L_top__lift1",
+    "soil_L_top__retained",
     "soil_L_top__lift2",
     "soil_L_top__lift3",
     "soil_L_mid__pit",
-    "soil_L_bot__pit"
+    "soil_L_mid__retained",
+    "soil_L_bot"
   ],
   "soil_body_labels": {
-    "soil_L_top": "Soil_Top",
-    "soil_L_mid": "Soil_Middle",
-    "soil_L_bot": "Soil_Bottom",
     "soil_L_top__lift1": "Soil_Top · lift 1",
+    "soil_L_top__retained": "Soil_Top · retained",
     "soil_L_top__lift2": "Soil_Top · lift 2",
     "soil_L_top__lift3": "Soil_Top · lift 3",
     "soil_L_mid__pit": "Soil_Middle · below the pit",
-    "soil_L_bot__pit": "Soil_Bottom · below the pit"
+    "soil_L_mid__retained": "Soil_Middle · retained",
+    "soil_L_bot": "Soil_Bottom"
+  },
+  "soil_body_materials": {
+    "soil_L_top__lift1": "m_upper",
+    "soil_L_top__retained": "m_upper",
+    "soil_L_top__lift2": "m_upper",
+    "soil_L_top__lift3": "m_upper",
+    "soil_L_mid__pit": "m_upper",
+    "soil_L_mid__retained": "m_upper",
+    "soil_L_bot": "m_lower"
   },
   "stageable_parts": [
-    "soil_L_top",
-    "soil_L_mid",
-    "soil_L_bot",
     "soil_L_top__lift1",
+    "soil_L_top__retained",
     "soil_L_top__lift2",
     "soil_L_top__lift3",
     "soil_L_mid__pit",
-    "soil_L_bot__pit",
+    "soil_L_mid__retained",
+    "soil_L_bot",
     "sheetpile",
     "strut",
     "wall_contact",

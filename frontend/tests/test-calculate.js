@@ -2,7 +2,7 @@
 
 function withCalculateStubs(body) {
   var saved = { Api: App.Api, Command: App.Command, PROJECT: App.PROJECT, Results: App.Results,
-                REFINEMENTS: App.MESH_REFINEMENTS, SELECTION: App.MESH_BODY_SELECTION };
+                REFINEMENTS: App.MESH_REFINEMENTS, LEFT_OUT: App.MESH_BODIES_LEFT_OUT };
   var logged = [];
   App.Command = {
     ok: function (line) { logged.push(['ok', line]); },
@@ -18,13 +18,13 @@ function withCalculateStubs(body) {
   App.PROJECT = { name: 'Deep excavation — Rotterdam Zuid',
                   mesh: { element_size: 2.5, order: 2 } };
   App.MESH_REFINEMENTS = [];
-  App.MESH_BODY_SELECTION = null;
+  App.MESH_BODIES_LEFT_OUT = null;
 
   function restore() {
     App.Api = saved.Api; App.Command = saved.Command; App.PROJECT = saved.PROJECT;
     App.Results = saved.Results;
     App.MESH_REFINEMENTS = saved.REFINEMENTS;
-    App.MESH_BODY_SELECTION = saved.SELECTION;
+    App.MESH_BODIES_LEFT_OUT = saved.LEFT_OUT;
   }
 
   var outcome;
@@ -148,5 +148,31 @@ test('a second press while one is in flight is refused rather than queued', func
     }), 'the second press says so');
     release(calculationResult());
     return first;
+  });
+});
+
+test('a broken calculation listener is reported separately without failing the run', function () {
+  return withCalculateStubs(function (logged) {
+    var timeout = window.setTimeout, scheduled = [], armed = true;
+    var failure = new Error('calculation listener failed');
+    App.Calculate.onChange(function () {
+      if (armed) { armed = false; throw failure; }
+    });
+    App.Api = { post: function () { return Promise.resolve(calculationResult()); } };
+    window.setTimeout = function (callback, delay) {
+      scheduled.push({ callback: callback, delay: delay });
+      return 0;
+    };
+    var run;
+    try { run = App.Calculate.run(); }
+    finally { window.setTimeout = timeout; armed = false; }
+    return run.then(function (result) {
+      T.ok(result.ok);
+      T.eq(App.Calculate.running(), false);
+      T.eq(scheduled.length, 1);
+      T.eq(scheduled[0].delay, 0);
+      T.ok(!logged.some(function (line) { return line[0] === 'err'; }));
+      return T.rejects(scheduled[0].callback);
+    }).then(function (error) { T.eq(error, failure); });
   });
 });

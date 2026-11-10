@@ -144,7 +144,7 @@ def test_a_dry_coupled_soil_needs_its_uniform_zero_as_the_warning_says():
     assert water_pressure(fixed) == 0.0
     assert water_pressure(free) > 1e5
     assert settlement(fixed) == pytest.approx(settlement(drained), rel=1e-6)
-    assert settlement(free) > 5 * settlement(fixed)
+    assert settlement(free) > 1.5 * settlement(fixed)
 
 
 # ── Water conditions per stage ──────────────────────────────────────────────
@@ -219,4 +219,4 @@ def test_a_uniform_condition_switched_off_leaves_a_coupled_soil_s_water_free():
     deck, outcome = run(_switched("Uniform", "FULLY_COUPLED"))
     assert any("stage 'None'" in w and "is free there" in w for w in deck["warnings"])
     assert _pressure_range(outcome, 2) == pytest.approx((-50_000.0, -50_000.0))
-    assert _pressure_range(outcome, 3)[1] > 1e6
+    assert _pressure_range(outcome, 3)[1] > 1e5

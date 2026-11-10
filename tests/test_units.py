@@ -8,6 +8,7 @@ import math
 import pytest
 
 from core.model import units
+from core.model.templates import blank_project
 
 
 def test_the_systems_on_offer_and_the_default():
@@ -101,3 +102,20 @@ def test_an_unknown_system_is_refused():
 
 def test_converting_keeps_finite_values_finite():
     assert math.isfinite(units.convert(1e300, units.STRESS, "kN", "SI"))
+
+
+def test_unit_conversion_preserves_tables_and_warns_that_they_need_checking():
+    project = blank_project().model_dump()
+    tables = {"1": {"input_variable": "TIME", "output_variable": "YOUNG_MODULUS",
+                    "data": [[0, 1000000]]}}
+    project["materials"] = [{"id": "soil", "name": "Soil",
+                             "variables": {"YOUNG_MODULUS": 1000000}, "tables": tables}]
+    project["unit_system"] = "SI"
+
+    converted, notes = units.convert_project(project, "kN")
+
+    assert converted["materials"][0]["variables"]["YOUNG_MODULUS"] == 1000
+    assert converted["materials"][0]["tables"] == tables
+    assert any("Soil: its Tables were kept as typed; check their units" in note
+               for note in notes)
+    assert project["materials"][0]["variables"]["YOUNG_MODULUS"] == 1000000

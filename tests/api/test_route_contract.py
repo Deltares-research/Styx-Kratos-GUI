@@ -78,6 +78,9 @@ def _box(c):
 
 
 PROJECT_KEYS = {"project", "invalidates"}
+EDITED = PROJECT_KEYS | {"edit_notes"}
+"""An edit's answer: with the mesh sizes it took away with their bodies
+(`backend.routes.common.stored`), which `frontend/js/api.js` shows."""
 EVERYTHING = {"project", "tree", "geometry", "mesh"}
 
 CONTRACTS = [
@@ -89,6 +92,9 @@ CONTRACTS = [
              {"name", "layers", "materials"},
              bad=lambda c: c.put("/api/project", json={**_project(c), "no_such_key": 1}),
              bad_status=422),
+    Contract("POST", "/api/project/migration-notes",
+             lambda c: c.post("/api/project/migration-notes", json=_project(c)), {"notes"},
+             bad=lambda c: c.post("/api/project/migration-notes", json=[]), bad_status=422),
     Contract("POST", "/api/project/reset", lambda c: c.post("/api/project/reset"),
              PROJECT_KEYS, EVERYTHING),
     Contract("POST", "/api/project/new", lambda c: c.post("/api/project/new"),
@@ -105,61 +111,75 @@ CONTRACTS = [
              bad_status=422),
     Contract("PATCH", "/api/project/layers",
              lambda c: c.patch("/api/project/layers", json={"layers": _project(c)["layers"]}),
-             PROJECT_KEYS,
+             EDITED,
              bad=lambda c: c.patch("/api/project/layers", json={"layers": [
                  {**_project(c)["layers"][0], "mat": "no_such_material"}]}),
              bad_status=422),
     Contract("PUT", "/api/project/water",
-             lambda c: c.put("/api/project/water", json={"water": None}), PROJECT_KEYS,
+             lambda c: c.put("/api/project/water", json={"water": None}), EDITED,
              bad=lambda c: c.put("/api/project/water", json={}), bad_status=422),
     Contract("PATCH", "/api/project/materials",
              lambda c: c.patch("/api/project/materials",
                                json={"materials": _project(c)["materials"]}),
-             PROJECT_KEYS,
+             EDITED,
              bad=lambda c: c.patch("/api/project/materials", json={"materials": []}),
              bad_status=422),
     Contract("PATCH", "/api/project/structures",
              lambda c: c.patch("/api/project/structures", json=_structures(c)),
-             PROJECT_KEYS,
+             EDITED,
              bad=lambda c: c.patch("/api/project/structures", json={}), bad_status=422),
+    Contract("PATCH", "/api/project/lines",
+             lambda c: c.patch("/api/project/lines", json={"lines": [
+                 {"id": "l", "name": "L", "points": [[1.0, 0.0], [1.0, -2.0]]}]}),
+             EDITED,
+             bad=lambda c: c.patch("/api/project/lines", json={"lines": [
+                 {"id": "l", "name": "L", "points": [[1.0, 0.0]]}]}), bad_status=422),
+    Contract("PATCH", "/api/project/bodies/{key}",
+             lambda c: (c.patch("/api/project/lines", json={"lines": [
+                 {"id": "l", "name": "L", "points": [[1.0, 0.0], [1.0, -8.0]]}]}),
+                        c.patch(f"/api/project/bodies/{c.get('/api/project').json()['soil_body_keys'][0]}",
+                                json={"name": "A"}))[1],
+             EDITED,
+             bad=lambda c: c.patch("/api/project/bodies/no_such_body", json={"name": "A"}),
+             bad_status=404),
     Contract("PATCH", "/api/project/conditions",
              lambda c: c.patch("/api/project/conditions", json={
                  "boundary_conditions": _project(c)["boundary_conditions"],
                  "gravity": True}),
-             PROJECT_KEYS,
+             EDITED,
              bad=lambda c: c.patch("/api/project/conditions", json={"boundary_conditions": [
                  {"id": "d", "name": "d", "kind": "displacement", "on": "domain"}]}),
              bad_status=422),
     Contract("PATCH", "/api/project/stages",
-             lambda c: c.patch("/api/project/stages", json={"stages": []}), PROJECT_KEYS,
+             lambda c: c.patch("/api/project/stages", json={"stages": []}), EDITED,
              bad=lambda c: c.patch("/api/project/stages", json={"stages": [
                  {"id": "a", "name": "A"}, {"id": "b", "name": "B", "parent": "a",
                                             "deactivate": ["no_such_part"]}]}),
              bad_status=422),
     Contract("POST", "/api/project/stages/defaults",
-             lambda c: c.post("/api/project/stages/defaults"), PROJECT_KEYS),
+             lambda c: c.post("/api/project/stages/defaults"), EDITED),
     # The pre-rename routes, kept so old clients keep working.
     Contract("PATCH", "/api/project/phases",
-             lambda c: c.patch("/api/project/phases", json={"phases": []}), PROJECT_KEYS),
+             lambda c: c.patch("/api/project/phases", json={"phases": []}), EDITED),
     Contract("POST", "/api/project/phases/defaults",
-             lambda c: c.post("/api/project/phases/defaults"), PROJECT_KEYS),
+             lambda c: c.post("/api/project/phases/defaults"), EDITED),
     Contract("PATCH", "/api/project/dimension",
              lambda c: c.patch("/api/project/dimension",
                                json={"dimension": _project(c)["dimension"]}),
-             {"project", "notes", "invalidates"},
+             {"project", "notes", "edit_notes", "invalidates"},
              bad=lambda c: c.patch("/api/project/dimension", json={"dimension": 4}),
              bad_status=422),
     Contract("PATCH", "/api/project/units",
              lambda c: c.patch("/api/project/units",
                                json={"unit_system": _project(c)["unit_system"]}),
-             {"project", "notes", "invalidates"},
+             {"project", "notes", "edit_notes", "invalidates"},
              bad=lambda c: c.patch("/api/project/units", json={"unit_system": "imperial"}),
              bad_status=422),
     Contract("DELETE", "/api/project/custom_parts",
-             lambda c: c.delete("/api/project/custom_parts"), {"ok", "invalidates"},
+             lambda c: c.delete("/api/project/custom_parts"), {"ok"} | EDITED,
              EVERYTHING),
     Contract("DELETE", "/api/geometry/parts/{key}",
-             lambda c: c.delete(f"/api/geometry/parts/{_box(c)}"), {"ok", "invalidates"},
+             lambda c: c.delete(f"/api/geometry/parts/{_box(c)}"), {"ok"} | EDITED,
              EVERYTHING,
              bad=lambda c: c.delete("/api/geometry/parts/no_such_part"), bad_status=404),
     Contract("GET", "/api/geometry", lambda c: c.get("/api/geometry"), {"bbox", "sections"}),
@@ -323,6 +343,43 @@ def test_a_refused_request_says_why(client, contract):
     assert _readable(response.json().get("detail")), response.text[:500]
 
 
+def test_geometry_import_reports_an_unreadable_obj_as_a_client_error(client):
+    response = client.post("/api/geometry/import", files={
+        "file": ("bad.obj", io.BytesIO(b"f 1 2 3\n")),
+    })
+
+    assert response.status_code == 422, response.text
+    assert _readable(response.json().get("detail"))
+
+
+RUNNER_ERRORS = [
+    ("Busy", 409, "A calculation is already running."),
+    ("CalculationError", 500, "Cannot start solver."),
+]
+
+
+@pytest.mark.parametrize("error_name, status, message", RUNNER_ERRORS)
+def test_calculate_project_reports_runner_errors(
+        client, monkeypatch, error_name, status, message):
+    from unittest.mock import AsyncMock, Mock
+
+    from backend.routes import decks
+    from core.analysis import calculation
+
+    export = {"stats": {}, "warnings": []}
+    mesh = AsyncMock(return_value=export)
+    monkeypatch.setattr(decks, "run_mesh_job", mesh)
+    run = Mock(side_effect=getattr(calculation, error_name)(message))
+    monkeypatch.setattr(calculation, "run", run)
+
+    response = client.post("/api/calculate", json=COARSE)
+
+    assert response.status_code == status, response.text
+    assert response.json() == {"detail": message}
+    mesh.assert_awaited_once()
+    run.assert_called_once_with(export)
+
+
 # ── (d) a project that is a Kratos deck ──────────────────────────────────────
 
 DECK_MDPA = ("Begin Properties 1\nEnd Properties\nBegin Nodes\n1 0 0 0\n2 1 0 0\n3 0 1 0\n"
@@ -355,6 +412,42 @@ def deck_client(client, tmp_path):
     project = external_deck.deck_project(directory, "site.json", name="Site")
     assert client.put("/api/project", json=project.model_dump()).status_code == 200
     return client
+
+
+@pytest.mark.parametrize("error_name, status, message", RUNNER_ERRORS)
+def test_calculate_deck_reports_runner_errors(
+        deck_client, monkeypatch, error_name, status, message):
+    from unittest.mock import Mock
+
+    from backend import store
+    from core.analysis import calculation
+
+    deck = store.get().deck
+    run = Mock(side_effect=getattr(calculation, error_name)(message))
+    monkeypatch.setattr(calculation, "run_deck", run)
+
+    response = deck_client.post("/api/calculate", json=COARSE)
+
+    assert response.status_code == status, response.text
+    assert response.json() == {"detail": message}
+    run.assert_called_once_with(deck)
+
+
+def test_calculate_reports_a_missing_external_deck_file_as_a_client_error(
+        deck_client, tmp_path, monkeypatch):
+    from core.analysis import calculation
+    from unittest.mock import Mock
+
+    run = Mock()
+    monkeypatch.setattr(calculation, "run_deck", run)
+    (tmp_path / "deck" / "site.mdpa").unlink()
+
+    response = deck_client.post("/api/calculate", json=COARSE)
+
+    assert response.status_code == 400, response.text
+    assert _readable(response.json().get("detail"))
+    assert "site.mdpa could not be read" in response.json()["detail"]
+    run.assert_not_called()
 
 
 REFUSED_FOR_A_DECK = [

@@ -57,7 +57,8 @@ saved in that shape is converted (`core/model/migration.py`)."""
 
 
 def _materials(dim: int) -> list[Material]:
-    return [Material.model_validate(migration.material(m, dim)) for m in _DEMO_MATERIALS]
+    return [Material.model_validate(migration.without_water(migration.material(m, dim)))
+            for m in _DEMO_MATERIALS]
 
 
 _LAYERS = [
@@ -74,8 +75,7 @@ def blank_project() -> Project:
     x-y section, and the client comes up in it rather than drawing the solid model
     first and replacing it once the project arrives.
 
-    No excavation and none of the seeded demo's structures: a model has them when its
-    author adds them.
+    None of the seeded demo's structures: a model has them when its author adds them.
     """
     return Project(
         name="Untitled project",
@@ -94,9 +94,8 @@ def blank_project() -> Project:
 def seed_project(simple: bool = True) -> Project:
     """A fresh, independently-mutable copy of the demo model.
 
-    `simple` is the layered model, which raises none of the demo's wall ring, struts,
+    `simple` is the layered model, which raises none of the demo's pit, wall ring, struts,
     anchor rows, piles and wells, so it has none of them; the full build has them all.
-    Both keep the pit: a layered model digs it once it has two or more levels.
     """
     demo = {} if simple else _demo_structures()
     return Project(
@@ -107,7 +106,6 @@ def seed_project(simple: bool = True) -> Project:
                 Domain(x0=0.0, x1=50.0, z0=0.0, z1=40.0, y_top=0.0, y_bottom=-25.0)),
         materials=_materials(3),
         layers=[l.model_copy(deep=True) for l in _LAYERS],
-        excavation=Excavation(x0=12.0, x1=38.0, z0=10.0, z1=30.0, floor_y=-7.0),
         # js/viewport.js:180 — 9 x 12 m pad centred at (5.5, 20); magnitude js/data.js:426,
         # 20 kN/m2 there, in Pa here: the project is SI.
         loads=[SurfaceLoad(
@@ -128,6 +126,7 @@ def seed_project(simple: bool = True) -> Project:
 def _demo_structures() -> dict:
     """The full build's own structures, which only `seed_project(simple=False)` has."""
     return {
+        "excavation": Excavation(x0=12.0, x1=38.0, z0=10.0, z1=30.0, floor_y=-7.0),
         "wall": Wall(thickness=0.8, top_y=0.6, toe_y=-14.0),
         # js/viewport.js:120 — length PY1-PY0+1.6, i.e. 0.8 m past each pit face.
         "struts": Struts(xs=[14.0, 20.0, 26.0, 32.0], y=-3.0, radius=0.28, overhang=0.8,

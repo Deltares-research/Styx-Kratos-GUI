@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════════════════
-   material-sets.js — the Material sets dialog, for Kratos property sets.
+   material-sets.js — the Soil materials dialog, for Kratos property sets.
 
    The frozen dialog (js/dialogs.js) edits an engineering-units sheet: unit weights in kN/m3,
    E in kN/m2, permeability in m/day, a material model and a drainage type -- numbers
@@ -7,7 +7,8 @@
    `Material`): a constitutive law and its Variables under Kratos' own names, in the
    project's unit system, written into the deck as they stand. So this replaces that
    dialog with one that shows and edits exactly that, each number labelled in the
-   project's units, and says which variables the export derives when they are left out.
+   project's units, and shows what the export derives when a value is left out. The
+   water is not a soil's: it is the project's, one for every soil, edited under Water.
 
    The contract with patches.js is unchanged: the dialog edits App.MATERIALS in place,
    its footer carries OK and Cancel, and patches.js turns OK into the PATCH that stores
@@ -26,7 +27,45 @@ App.MaterialSets = (function () {
   function copy(value) { return JSON.parse(JSON.stringify(value)); }
   function dimension() { return App.PROJECT && App.PROJECT.dimension === 3 ? 3 : 2; }
 
+  /* A groundwater flow project reads every soil's flow parameters, whatever its
+     drainage type. */
+  function flowProject() {
+    return !!(App.Stages && App.PROJECT && App.Stages.groundwaterFlow(App.PROJECT));
+  }
+
+  /* The water every soil holds, as Kratos reads it: the water level's specific weight,
+     and the bulk modulus and viscosity edited under Water in this window (App.FLUID). */
+  function waterWeight() {
+    var level = App.PROJECT && App.PROJECT.water;
+    return level && level.specific_weight !== null && level.specific_weight !== undefined
+      ? level.specific_weight : null;
+  }
+
+  function waterVariables() {
+    var fluid = App.FLUID || {};
+    return S.water(App.Units.current(), waterWeight(), fluid.bulk_modulus, fluid.dynamic_viscosity);
+  }
+
+  /* A number as the window shows it: six significant figures, and a power of ten when it
+     is very large or very small, so 1.157e-12 m² reads as what it is. */
+  function number(value) {
+    if (typeof value !== 'number' || !isFinite(value)) return P.format(value);
+    if (value === 0) return '0';
+    var size = Math.abs(value);
+    if (size >= 1e6 || size < 1e-3) {
+      var parts = value.toExponential(5).split('e');
+      return parts[0].replace(/\.?0+$/, '') + 'e' + parts[1].replace('+', '');
+    }
+    return String(+value.toPrecision(6));
+  }
+
   var sequence = 0;
+
+  /* A colour no soil has yet (App.SoilModels.freshColor, as `kratos-cli material add`
+     gives one). */
+  function freshColor() {
+    return S.freshColor((App.MATERIALS || []).map(function (m) { return m.color; }));
+  }
 
   /* A brand new soil: a loose drained sand in the project's units, valid as it stands
      so it can be saved without touching a field first. */
@@ -35,7 +74,7 @@ App.MaterialSets = (function () {
     do { sequence += 1; id = 'mx' + sequence; }
     while ((App.MATERIALS || []).some(function (m) { return m.id === id; }));
     var set = P.defaults('soil', App.Units.current(), dimension());
-    return { id: id, name: 'Material_' + ((App.MATERIALS || []).length + 1), color: '#9aa7b4',
+    return { id: id, name: 'Material_' + ((App.MATERIALS || []).length + 1), color: freshColor(),
              constitutive_law: set.constitutive_law, variables: set.variables, tables: {},
              rInter: 0.70, interfacePerm: 'Neutral' };
   }
@@ -46,27 +85,43 @@ App.MaterialSets = (function () {
     return m;
   }
 
-  function duplicateMaterial(source) {
-    var m = copy(source);
-    m.id = newMaterial().id;
-    m.name = source.name + ' (copy)';
-    App.MATERIALS.splice(App.MATERIALS.indexOf(source) + 1, 0, m);
+  /* A soil to fill in by hand: linear elastic, drained, saturated below the phreatic
+     level, and nothing else -- the catalogue's (App.SoilModels.blankSI), which
+     `kratos-cli material add` starts from too. Its stiffness and weight are the user's
+     to type, so it is not ready for a calculation until they are (`missing`); what is
+     left blank and derivable -- K0 from the Poisson ratio or the friction angle -- is
+     shown as derived. */
+  function blankSoil() {
+    var m = newMaterial();
+    m.constitutive_law = S.law('linear_elastic', dimension());
+    m.variables = App.Units.convertVariables(S.blankSI(), 'SI', App.Units.current());
     return m;
   }
 
-  /* What a table cell shows for one variable: the number, or that the export derives
-     it, or a dash. */
-  function shown(m, name) {
-    var value = (m.variables || {})[name];
-    if (value === undefined) return P.derivable('soil', name) ? 'derived' : '—';
-    return typeof value === 'number' ? String(+value.toPrecision(6)) : P.format(value);
+  function createSoil() {
+    var m = blankSoil();
+    App.MATERIALS.push(m);
+    return m;
   }
 
-  var COLUMNS = ['GEO_DRAINAGE_TYPE', 'DENSITY_SOLID', 'YOUNG_MODULUS', 'GEO_FRICTION_ANGLE'];
+  /* What the soil's model needs and the soil leaves blank: the Kratos names. */
+  function missing(m) {
+    return S.missing(m.constitutive_law, m.variables || {});
+  }
 
-  function heading(name) {
-    var unit = App.Units.variableLabel(name);
-    return name + (unit ? ' [' + unit + ']' : '');
+  function labels(m, names) {
+    var model = S.modelOf(m.constitutive_law);
+    return names.map(function (name) { return S.find(model, name).label; });
+  }
+
+  function duplicateMaterial(source) {
+    var m = copy(source);
+    var fresh = newMaterial();
+    m.id = fresh.id;
+    m.color = fresh.color;
+    m.name = source.name + ' (copy)';
+    App.MATERIALS.splice(App.MATERIALS.indexOf(source) + 1, 0, m);
+    return m;
   }
 
   /* ── The dialog ──────────────────────────────────────────────────── */
@@ -91,14 +146,9 @@ App.MaterialSets = (function () {
     function render() {
       App.UI.clear(body);
       App.MATERIALS.forEach(function (m) {
-        var swatch = el('span.tree-swatch');
+        var swatch = el('span.tree-swatch.material-swatch');
         swatch.style.background = m.color;
-        var cells = [el('td', null, swatch), el('td', { text: m.name }),
-                     el('td', { text: S.label(S.modelOf(m.constitutive_law)),
-                                title: m.constitutive_law })];
-        COLUMNS.forEach(function (name) {
-          cells.push(el('td' + (name === 'GEO_DRAINAGE_TYPE' ? '' : '.num'), { text: shown(m, name) }));
-        });
+        var cells = [el('td', null, swatch), el('td', { text: m.name })];
         cells.push(el('td', null, el('button.btn.btn-sm', {
           text: 'Properties…', type: 'button', 'data-action': 'material-properties',
           onclick: function (event) {
@@ -108,13 +158,24 @@ App.MaterialSets = (function () {
             render();
           } })));
         var row = el('tr' + (m.id === selected ? '.sel' : ''), { 'data-material': m.id }, cells);
+        var lacks = labels(m, missing(m));
+        if (lacks.length) row.title = 'Still to fill in: ' + lacks.join(', ') + '.';
         row.addEventListener('click', function () { selected = m.id; say(null); render(); });
         body.appendChild(row);
       });
     }
 
-    [['new', 'New material set'], ['copy', 'Duplicate material set'],
-     ['delete', 'Delete material set'], null, ['materials', 'Properties…']].forEach(function (spec) {
+    /* A new soil is a blank one, opened to be filled in. */
+    function create() {
+      var m = createSoil();
+      selected = m.id;
+      say('Created ' + m.name + '. Fill in its values.');
+      render();
+      editor(m, render);
+    }
+
+    [['new', 'Create soil'], ['copy', 'Duplicate soil material'],
+     ['delete', 'Delete soil material'], null, ['materials', 'Properties…']].forEach(function (spec) {
       if (!spec) { toolbar.appendChild(el('span.tbsep')); return; }
       var button = el('button.tbtn', { type: 'button', 'data-action': spec[0] });
       button.appendChild(App.UI.icon(spec[0]));
@@ -122,13 +183,8 @@ App.MaterialSets = (function () {
       button.addEventListener('click', function () {
         App.UI.hideTip();
         var m = current();
-        if (spec[0] === 'new') {
-          selected = App.addMaterial().id;
-          say('Added ' + current().name + '. Open Properties… to set its values.');
-          render();
-          return;
-        }
-        if (!m) { say('Select a material set first.', true); return; }
+        if (spec[0] === 'new') { create(); return; }
+        if (!m) { say('Select a soil material first.', true); return; }
         if (spec[0] === 'copy') {
           selected = App.duplicateMaterial(m).id;
           say('Duplicated ' + m.name + '.');
@@ -152,21 +208,24 @@ App.MaterialSets = (function () {
     });
 
     return App.Dialogs.open({
-      title: 'Material sets', width: 860, height: 480, toolbar: toolbar, onClose: onClose,
+      title: 'Soil materials', width: 860, height: 620, toolbar: toolbar, onClose: onClose,
       buttons: [{ label: 'OK', primary: true }, { label: 'Cancel' }],
       build: function (root) {
         var wrap = el('div.dlg-simple');
-        wrap.appendChild(library(function (id) { selected = id; render(); }, current, say));
-        wrap.appendChild(el('h3', { text: 'Soil and interfaces — ' + App.Units.title() }));
+        wrap.appendChild(el('h3', { text: 'Soils — ' + App.Units.title() }));
+        wrap.appendChild(el('div.lay-toolbar', null, [el('button.btn.btn-sm.btn-primary', {
+          text: 'Create soil', type: 'button', 'data-action': 'create-soil', onclick: create })]));
         table = el('table.mat-table.selectable.material-sets');
         var head = el('tr');
-        ['', 'Identification', 'Soil model'].concat(COLUMNS.map(heading), ['']).forEach(function (h) {
+        ['', 'Identification', ''].forEach(function (h) {
           head.appendChild(el('th', { text: h }));
         });
         table.appendChild(el('thead', null, head));
         body = el('tbody');
         table.appendChild(body);
         wrap.appendChild(table);
+        wrap.appendChild(water(function (message, invalid) { say(message, invalid); }));
+        wrap.appendChild(library(function (id) { selected = id; render(); }, say));
         hint = el('div.lay-hint', { style: 'border-top:0;background:none;padding:6px 0' });
         wrap.appendChild(hint);
         root.appendChild(wrap);
@@ -176,11 +235,62 @@ App.MaterialSets = (function () {
     });
   }
 
-  function library(onAdded, current, say) {
+  /* The water in every soil's pores: one for the project, as every soil holds the same
+     water (core/model/schemas.py `Fluid`). Its weight is the water level's, shown here;
+     its bulk modulus and viscosity are edited here, on App.FLUID, and saved with the
+     soils. Left blank, each is water's at 20 C. */
+  function water(say) {
+    var box = el('div.pgrid.material-water');
+    box.appendChild(el('h3', { text: 'Water' }));
+    var weight = waterWeight();
+    var shownWeight = weight !== null ? weight
+      : App.Units.fromSI(App.SOIL_MODEL_TABLE.constants.WATER_SPECIFIC_WEIGHT, 'specific weight');
+    box.appendChild(el('div.pgrid-row', { title: 'DENSITY_WATER is this over g' }, [
+      el('div.pgrid-key', { text: 'Unit weight' }),
+      el('div.pgrid-val.readonly.field', { 'data-water': 'specific_weight' }, [
+        el('span.computed-value', { text: number(shownWeight) }),
+        el('span.unit', { text: App.Units.label('specific weight') })])]));
+    [['bulk_modulus', 'Bulk modulus', 'BULK_MODULUS_FLUID', 'stress',
+      App.SOIL_MODEL_TABLE.constants.WATER_BULK_MODULUS],
+     ['dynamic_viscosity', 'Dynamic viscosity', 'DYNAMIC_VISCOSITY', 'viscosity',
+      App.SOIL_MODEL_TABLE.constants.WATER_VISCOSITY]].forEach(function (spec) {
+      App.FLUID = App.FLUID || {};
+      var value = App.FLUID[spec[0]];
+      var input = el('input.cell-input', {
+        value: value === null || value === undefined ? '' : number(value), 'data-water': spec[0],
+        placeholder: number(App.Units.fromSI(spec[4], spec[3])) + ' (water)' });
+      input.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+      });
+      input.addEventListener('change', function () {
+        var parsed = P.parse(input.value);
+        if (parsed === undefined) {
+          App.FLUID[spec[0]] = null;
+          say(spec[1] + ' of the water left blank: water\'s own.');
+        } else if (typeof parsed !== 'number' || !(parsed > 0)) {
+          input.value = value === null || value === undefined ? '' : number(value);
+          say('The water\'s ' + spec[1].toLowerCase() + ' must be a number greater than zero.', true);
+          return;
+        } else {
+          App.FLUID[spec[0]] = parsed;
+          say(null);
+        }
+        value = App.FLUID[spec[0]];
+      });
+      box.appendChild(el('div.pgrid-row', { title: spec[2] + ', written into every soil' }, [
+        el('div.pgrid-key', { text: spec[1] }),
+        el('div.pgrid-val.editable.field', null, [
+          input, el('span.unit', { text: App.Units.label(spec[3]) })])]));
+    });
+    return box;
+  }
+
+  /* The presets, below the soils. */
+  function library(onAdded, say) {
     var box = el('div.material-library');
-    box.appendChild(el('h3', { text: 'Default library' }));
-    box.appendChild(el('p', { text: 'Copy a soil preset into this project, or apply interface ' +
-      'defaults to the selected material. Starting values in the project\'s units; review them.' }));
+    box.appendChild(el('h3', { text: 'Default soil material library' }));
+    box.appendChild(el('p', { text: 'Copy a soil preset into this project. Starting values in ' +
+      'the project\'s units; review them.' }));
     var soils = el('select', { 'aria-label': 'Soil preset' });
     App.MaterialLibrary.soils().forEach(function (m) {
       soils.appendChild(el('option', { value: m.id, text: m.name }));
@@ -190,20 +300,7 @@ App.MaterialSets = (function () {
         onclick: function () {
           var m = App.MaterialLibrary.addSoil(soils.value);
           onAdded(m.id);
-          say('Added ' + m.name + ' from the default library. Open Properties… to review it.');
-        } })]));
-    var contacts = el('select', { 'aria-label': 'Interface preset' });
-    App.MaterialLibrary.interfaces().forEach(function (p) {
-      contacts.appendChild(el('option', { value: p.id,
-        text: p.name + ' — Rinter ' + p.rInter + ', ' + p.interfacePerm }));
-    });
-    box.appendChild(el('div.lay-toolbar', null, [el('span', { text: 'Interface' }), contacts,
-      el('button.btn.btn-sm', { text: 'Apply to selected', type: 'button',
-        'data-action': 'apply-interface-preset', onclick: function () {
-          var m = current();
-          if (!m) { say('Select a material set first.', true); return; }
-          App.MaterialLibrary.applyInterface(m, contacts.value);
-          say('Applied interface defaults to ' + m.name + ': Rinter ' + m.rInter + ', ' + m.interfacePerm + '.');
+          say('Added ' + m.name + ' from the default soil material library. Open Properties… to review it.');
         } })]));
     return box;
   }
@@ -217,25 +314,43 @@ App.MaterialSets = (function () {
      dimension and the parameters listed, in groups. A choice is a drop-down of the
      values Kratos accepts, a flag a check box, a number a text box in the project's
      units. A model chosen, a choice changed or a flag switched fills in the defaults of
-     what the soil now lists and lacks, and the hint says which. "Other" is any law,
-     typed by name, with only the variables the soil carries. */
+     what the soil now lists and lacks, and the hint says which. Only what the model,
+     the drainage type and the retention law make relevant is listed. A value left
+     blank shows what the export derives in its place; the unit weights and the Darcy
+     permeability that follow from the soil's numbers are shown, not typed. "Other" is
+     any law, typed by name, with the variables the soil carries and any it is given.
+
+     A model chosen leaves out what it does not read -- no cohesion for a linear elastic
+     soil -- and keeps it aside while the window is open, so choosing the model back
+     brings back the values typed, not its defaults. */
   function editor(m, changed) {
     var hint, grid, title;
     var other = S.modelOf(m.constitutive_law) === S.OTHER;
-    var DEFAULT = 'Kratos\' names, in ' + App.Units.title() + '. A blank variable the ' +
-                  'export can derive is left to it; an invalid entry is refused and put back.';
+    var aside = {};
+    var DEFAULT = 'In ' + App.Units.title() + '; hover a name for its Kratos variable. A ' +
+                  'blank value shows what the export derives in its place; an invalid ' +
+                  'entry is refused and put back.';
 
+    /* No message: what the soil still lacks for a calculation, or the usual line. */
     function say(message, notice) {
       if (!hint) return;
-      hint.textContent = message || DEFAULT;
+      var lacks = labels(m, missing(m));
+      hint.textContent = message || (lacks.length
+        ? 'Still to fill in before a calculation: ' + lacks.join(', ') + '.' : DEFAULT);
       hint.classList.toggle('invalid', !!message && !notice);
     }
 
+    /* A value the law needs may stay blank -- a soil is filled in one value at a time --
+       but one the soil holds is not blanked, and none may be invalid. */
     function attempt(apply) {
       var before = copy(m);
       apply();
+      var blanked = missing(m).filter(function (name) {
+        return typeof (before.variables || {})[name] === 'number';
+      });
       var problem = (!m.name || !m.name.trim()) ? 'Identification cannot be empty.'
-                                               : P.validate('soil', m);
+                  : blanked.length ? m.constitutive_law + ' needs ' + blanked.join(', ') + '.'
+                  : P.validate('soil', m, true);
       if (problem) {
         Object.keys(m).forEach(function (k) { delete m[k]; });
         Object.assign(m, before);
@@ -249,23 +364,50 @@ App.MaterialSets = (function () {
     }
 
     /* An edit that can list more -- a model, a choice, a flag -- with the defaults of
-       what it lists anew filled in. */
+       what it lists anew filled in (App.SoilModels.fillChoice, which `kratos-cli
+       material add --model` fills with too). A soil still being filled in by hand gets
+       no number it must have, and nothing it was listing and left blank: those stay the
+       user's to type, a model chosen or not. */
     function choose(apply) {
       var beforeLaw = m.constitutive_law, before = copy(m.variables);
+      var flow = flowProject();
       var filled = [];
       var ok = attempt(function () {
         apply();
-        filled = S.fill(beforeLaw, before, m.constitutive_law, m.variables, App.Units.current());
+        filled = S.fillChoice(beforeLaw, before, m.constitutive_law, m.variables,
+                              App.Units.current(), flow);
       });
       if (ok && filled.length) say(S.filledNote(S.modelOf(m.constitutive_law), filled), true);
       draw();
       return ok;
     }
 
-    function field(label, control, unit) {
-      var value = el('div.pgrid-val.editable.field', null, [control]);
-      if (unit) value.appendChild(el('span.unit', { text: unit }));
-      return el('div.pgrid-row', null, [el('div.pgrid-key', { text: label }), value]);
+    /* A row: the label, the control, and the unit right beside it -- a slot every row
+       has, empty for a pure number, so the units line up -- then a slot for the button
+       that leaves a value out, so they stay lined up whether it is there or not. `name`
+       is the Kratos variable the row writes, shown when the label is hovered. */
+    function field(label, control, unit, name) {
+      var value = el('div.pgrid-val.editable.field', null,
+                     [control, el('span.unit', { text: unit || '' }), el('span.remove-slot')]);
+      var key = el('div.pgrid-key', { text: label });
+      if (name) key.title = name;
+      return el('div.pgrid-row', null, [key, value]);
+    }
+
+    /* A value that follows from the soil's numbers (App.SoilModels.computed): shown,
+       never typed, never written. */
+    function computedRow(name, value) {
+      var info = S.computedInfo()[name];
+      var cell = el('div.pgrid-val.readonly.field', null, [
+        el('span.computed-value', { text: number(value) }),
+        el('span.unit', { text: App.Units.label(info.quantity) })]);
+      // A conductivity also in the unit people quote it in.
+      if (info.quantity === 'velocity') {
+        cell.appendChild(el('span.unit-also', { text: '= ' + number(value * 86400) + ' m/day' }));
+      }
+      cell.appendChild(el('span.remove-slot'));
+      return el('div.pgrid-row', { 'data-computed': name }, [
+        el('div.pgrid-key', { text: info.label }), cell]);
     }
 
     function textInput(value, onCommit, attrs) {
@@ -287,19 +429,44 @@ App.MaterialSets = (function () {
 
     function held(name) { return Object.prototype.hasOwnProperty.call(m.variables, name); }
 
-    /* A number, list or text variable, typed; blank leaves it out. */
-    function typedRow(name) {
-      var input = textInput(P.format(m.variables[name]), function (text) {
+    /* The soil's law set to `law`: when it is a model's, what that model does not read
+       (App.SoilModels.unread, as `kratos-cli material set --model` leaves it out) is put
+       aside and what was put aside that it reads is put back. A law of no model keeps
+       all the soil carries. */
+    function setLaw(law) {
+      m.constitutive_law = law;
+      var model = S.modelOf(law);
+      if (model === S.OTHER) return;
+      var reads = S.parameters(model).map(function (p) { return p.name; });
+      Object.keys(aside).forEach(function (name) {
+        if (reads.indexOf(name) >= 0 && !held(name)) m.variables[name] = aside[name];
+      });
+      S.unread(law, m.variables).forEach(function (name) {
+        aside[name] = m.variables[name];
+        delete m.variables[name];
+      });
+    }
+
+    /* A number, list or text variable, typed; blank leaves it out. Left out, it shows
+       what the export derives in its place (`derived`), or that it derives one. */
+    function typedRow(name, label, derived) {
+      var placeholder = derived !== undefined ? number(derived) + ' (derived)'
+                      : P.derivable('soil', name) ? 'derived' : '';
+      var input = textInput(number(m.variables[name]), function (text) {
         attempt(function () {
           var parsed = P.parse(text);
           if (parsed === undefined) delete m.variables[name]; else m.variables[name] = parsed;
         });
         draw();
-      }, { 'data-variable': name, placeholder: P.derivable('soil', name) ? 'derived' : '' });
-      var row = field(name, input, App.Units.variableLabel(name));
+      }, { 'data-variable': name, placeholder: placeholder });
+      var row = field(label || name, input, App.Units.variableLabel(name), label ? name : null);
       if (held(name)) {
-        // In the value's cell: a third child of the two-column row would wrap below it.
-        row.lastChild.appendChild(el('button.btn.btn-sm', { text: '×', type: 'button', title: 'Leave out',
+        // In the value's cell, in its slot: a third child of the two-column row would
+        // wrap below it.
+        var slot = row.querySelector('.remove-slot');
+        slot.appendChild(el('button.btn.btn-sm', { text: '×', type: 'button',
+          title: derived !== undefined || P.derivable('soil', name) ? 'Leave out, and derive it'
+                                                                    : 'Leave out',
           'data-remove': name, onclick: function () {
             attempt(function () { delete m.variables[name]; });
             draw();
@@ -308,16 +475,23 @@ App.MaterialSets = (function () {
       return row;
     }
 
-    function parameterRow(p) {
+    function parameterRow(p, derived) {
       var name = p.name;
       if (p.choices) {
         var value = held(name) ? m.variables[name] : p.absent;
         var options = p.choices.slice();
         if (value !== undefined && options.indexOf(value) < 0) options.unshift(value);
-        return field(name, select(options.map(function (c) { return { value: c, text: c }; }),
-          value, { 'data-variable': name }, function (chosen) {
+        var text = p.choice_text || {};
+        var row = field(p.label, select(options.map(function (c) {
+          return { value: c, text: text[c] ? text[c].label : c };
+        }), value, { 'data-variable': name }, function (chosen) {
             choose(function () { m.variables[name] = chosen; });
-          }));
+          }), '', name);
+        if (!text[value] || !text[value].note) return row;
+        // Below the row, the width of the grid: a third child of the two-column row
+        // would squeeze into a column.
+        return el('div.pgrid-choice', null, [row,
+          el('div.pgrid-note', { text: text[value].note, 'data-note': name })]);
       }
       if (p.flag) {
         var box = el('input', { type: 'checkbox', 'data-variable': name });
@@ -326,17 +500,26 @@ App.MaterialSets = (function () {
           var on = box.checked;
           choose(function () { m.variables[name] = on; });
         });
-        return field(name, box);
+        return field(p.label, box, '', name);
       }
-      return typedRow(name);
+      return typedRow(name, p.label, derived[name]);
     }
 
+    /* The grid is rebuilt whole; where it was scrolled to is kept, so a choice that
+       lists more or less does not throw the window back to the top. */
     function draw() {
+      var scrolled = grid.scrollTop, outer = grid.parentNode, outerScrolled = outer ? outer.scrollTop : 0;
+      fill();
+      grid.scrollTop = scrolled;
+      if (outer) outer.scrollTop = outerScrolled;
+    }
+
+    function fill() {
       App.UI.clear(grid);
       grid.appendChild(el('h4', { text: 'General' }));
       grid.appendChild(field('Identification', textInput(m.name, function (v) {
         attempt(function () { m.name = v.trim(); });
-        if (title) title.textContent = 'Material set — ' + m.name;
+        if (title) title.textContent = 'Soil material — ' + m.name;
       }, { 'data-field': 'name' })));
       var colour = el('input', { type: 'color', value: m.color, 'data-field': 'color' });
       colour.addEventListener('input', function () { attempt(function () { m.color = colour.value; }); });
@@ -345,12 +528,15 @@ App.MaterialSets = (function () {
       var model = other ? S.OTHER : S.modelOf(m.constitutive_law);
       var models = S.order().map(function (id) { return { value: id, text: S.label(id) }; })
         .concat([{ value: S.OTHER, text: 'Other (type a law name)' }]);
-      grid.appendChild(field('Soil model', select(models, model, { 'data-field': 'soil-model' },
+      var modelRow = field('Soil model', select(models, model, { 'data-field': 'soil-model' },
         function (chosen) {
           other = chosen === S.OTHER;
           if (other) { say('Type the name of the Kratos law below.', true); draw(); return; }
-          choose(function () { m.constitutive_law = S.law(chosen, dimension()); });
-        })));
+          choose(function () { setLaw(S.law(chosen, dimension())); });
+        }));
+      // A model's law follows from the model and the dimension: named on hover, not shown.
+      if (!other) modelRow.title = m.constitutive_law;
+      grid.appendChild(modelRow);
       if (other) {
         var laws = el('datalist', { id: 'material-laws' });
         S.order().forEach(function (id) {
@@ -361,56 +547,92 @@ App.MaterialSets = (function () {
         grid.appendChild(laws);
         grid.appendChild(field('Constitutive law', textInput(m.constitutive_law, function (v) {
           var law = v.trim();
-          if (choose(function () { m.constitutive_law = law; })) {
+          if (choose(function () { setLaw(law); })) {
             other = S.modelOf(m.constitutive_law) === S.OTHER;
             draw();
           }
         }, { list: 'material-laws', 'data-field': 'constitutive_law' })));
-      } else {
-        grid.appendChild(field('Constitutive law', el('input.cell-input', {
-          value: m.constitutive_law, readonly: 'readonly', 'data-field': 'constitutive_law',
-          title: 'The Kratos law of the soil model in a ' + dimension() + 'D model' })));
       }
 
-      var listed = [];
-      S.groups(model, m.variables).forEach(function (group) {
+      // What the export derives where the soil is silent, and what follows from its
+      // numbers: shown with the parameters they belong to.
+      var system = App.Units.current(), flow = flowProject(), water = waterVariables();
+      var derived = S.derived(m.constitutive_law, m.variables, water, system, flow);
+      var computed = S.computed(m.constitutive_law, m.variables, water, system, flow);
+      function after(names) {
+        names.forEach(function (name) {
+          if (computed[name] !== undefined) grid.appendChild(computedRow(name, computed[name]));
+        });
+      }
+      S.groups(model, m.variables, flow).forEach(function (group) {
         grid.appendChild(el('h4', { text: group.title }));
         group.parameters.forEach(function (p) {
-          listed.push(p.name);
-          grid.appendChild(parameterRow(p));
+          grid.appendChild(parameterRow(p, derived));
+          if (/^PERMEABILITY_(XX|YY)$/.test(p.name)) after(['HYDRAULIC_CONDUCTIVITY_' + p.name.slice(-2)]);
         });
+        if (group.title === 'Weight') after(['UNIT_WEIGHT_DRY', 'UNIT_WEIGHT_SATURATED']);
       });
 
-      // Any other Kratos variable the soil carries -- a UDSM's parameters, OCR, a value
-      // the model does not read -- typed in place.
-      var rest = Object.keys(m.variables).filter(function (n) { return listed.indexOf(n) < 0; });
-      grid.appendChild(el('h4', { text: other ? 'Variables' : 'Other variables' }));
-      rest.forEach(function (name) { grid.appendChild(typedRow(name)); });
+      // A model lists all it reads. What else the soil carries -- from an older project,
+      // or the command line -- is named in one line, given no fields, and can be left
+      // out; nothing is added to it here. A law of no model is the user's own: its
+      // variables are typed and added freely.
+      var parameters = S.parameters(model).map(function (p) { return p.name; });
+      var rest = Object.keys(m.variables).filter(function (n) { return parameters.indexOf(n) < 0; });
+      if (!other && rest.length) {
+        grid.appendChild(el('div.pgrid-row', { 'data-unread': rest.join(' '),
+          title: 'Written into the deck as they stand; ' + S.label(model) + ' does not read them.' }, [
+          el('div.pgrid-key', { text: 'Not read by ' + S.label(model) }),
+          el('div.pgrid-val.readonly.field', null, [
+            el('span.computed-value', { text: rest.join(', ') }),
+            el('button.btn.btn-sm', { text: 'Leave out', type: 'button', 'data-action': 'leave-out-unread',
+              onclick: function () {
+                attempt(function () { rest.forEach(function (name) { delete m.variables[name]; }); });
+                draw();
+              } })])]));
+      }
+      if (other) {
+        grid.appendChild(el('h4', { text: 'Variables' }));
+        rest.forEach(function (name) { grid.appendChild(typedRow(name)); });
+        var names = el('datalist', { id: 'kratos-variables' });
+        Object.keys(App.UNIT_TABLE.variables).forEach(function (n) {
+          if (S.WATER.indexOf(n) < 0) names.appendChild(el('option', { value: n }));
+        });
+        grid.appendChild(names);
+        var newName = el('input.cell-input', { list: 'kratos-variables', placeholder: 'VARIABLE_NAME',
+                                               'data-field': 'new-variable' });
+        var newValue = el('input.cell-input', { placeholder: 'value', 'data-field': 'new-value' });
+        var add = el('button.btn.btn-sm', { text: 'Add variable', type: 'button', 'data-action': 'add-variable',
+          onclick: function () {
+            var name = newName.value.trim().toUpperCase();
+            var value = P.parse(newValue.value);
+            if (!name || value === undefined) { say('Give the variable a name and a value.'); return; }
+            if (attempt(function () { m.variables[name] = value; })) draw();
+          } });
+        grid.appendChild(el('div.pgrid-row', null, [el('div.pgrid-key', { text: 'Add' }),
+          el('div.pgrid-val.field', null, [newName, newValue, add])]));
+      }
 
-      var names = el('datalist', { id: 'kratos-variables' });
-      Object.keys(App.UNIT_TABLE.variables).forEach(function (n) {
-        names.appendChild(el('option', { value: n }));
-      });
-      grid.appendChild(names);
-      var newName = el('input.cell-input', { list: 'kratos-variables', placeholder: 'VARIABLE_NAME',
-                                             'data-field': 'new-variable' });
-      var newValue = el('input.cell-input', { placeholder: 'value', 'data-field': 'new-value' });
-      var add = el('button.btn.btn-sm', { text: 'Add variable', type: 'button', 'data-action': 'add-variable',
-        onclick: function () {
-          var name = newName.value.trim().toUpperCase();
-          var value = P.parse(newValue.value);
-          if (!name || value === undefined) { say('Give the variable a name and a value.'); return; }
-          if (attempt(function () { m.variables[name] = value; })) draw();
-        } });
-      grid.appendChild(el('div.pgrid-row', null, [el('div.pgrid-key', { text: 'Add' }),
-        el('div.pgrid-val.field', null, [newName, newValue, add])]));
-
+      // Rinter reduces the strength a Coulomb contact takes from the soil. A linear
+      // elastic soil has none to give: a Coulomb contact against it sets its own, in the
+      // interface's properties (core/kratos/materials.py), so there is nothing to reduce.
       grid.appendChild(el('h4', { text: 'Interfaces' }));
-      grid.appendChild(field('Rinter', textInput(String(m.rInter), function (v) {
-        var r = Number(v);
-        if (!(r > 0 && r <= 1)) { say('Rinter must be above 0 and at most 1.'); draw(); return; }
-        attempt(function () { m.rInter = r; });
-      }, { 'data-field': 'rInter' })));
+      if (model === 'linear_elastic') {
+        var why = 'A linear elastic soil has no strength to give a contact. A Coulomb ' +
+                  'contact against it sets its own cohesion and friction angle: select ' +
+                  'the interface, and under Contact set Strength to Set on the interface.';
+        grid.appendChild(el('div.pgrid-row', { 'data-field': 'no-strength', title: why }, [
+          el('div.pgrid-key', { text: 'Strength' }),
+          el('div.pgrid-val.readonly.field', null, [
+            el('span.computed-value', { text: 'None to give — a Coulomb contact sets its own' }),
+            el('span.remove-slot')])]));
+      } else {
+        grid.appendChild(field('Rinter', textInput(String(m.rInter), function (v) {
+          var r = Number(v);
+          if (!(r > 0 && r <= 1)) { say('Rinter must be above 0 and at most 1.'); draw(); return; }
+          attempt(function () { m.rInter = r; });
+        }, { 'data-field': 'rInter' })));
+      }
       var permeability = el('select', { 'data-field': 'interfacePerm' });
       ['Neutral', 'Drain', 'Impermeable'].forEach(function (p) {
         permeability.appendChild(el('option', { value: p, text: p }));
@@ -424,22 +646,24 @@ App.MaterialSets = (function () {
 
     m.variables = m.variables || {};
     return App.Dialogs.open({
-      title: 'Material set — ' + m.name, width: 600, height: 620,
+      title: 'Soil material — ' + m.name, width: 600, height: 620,
       buttons: [{ label: 'Close', primary: true }],
       build: function (root, ctx) {
         title = ctx && ctx.dialog ? ctx.dialog.querySelector('.dlg-title') : null;
         var wrap = el('div.dlg-simple', { style: 'display:flex;flex-direction:column;padding:0' });
-        grid = el('div.pgrid.material-variables', { style: 'padding-top:10px;flex:1;overflow:auto' });
+        grid = el('div.pgrid.material-variables', { style: 'flex:1;overflow:auto' });
         hint = el('div.lay-hint', { text: DEFAULT });
         wrap.appendChild(grid);
         wrap.appendChild(hint);
         root.appendChild(wrap);
         draw();
+        say(null);
       }
     });
   }
 
-  return { open: open, editor: editor, newMaterial: newMaterial,
+  return { open: open, editor: editor, newMaterial: newMaterial, blankSoil: blankSoil,
+           createSoil: createSoil, missing: missing,
            addMaterial: addMaterial, duplicateMaterial: duplicateMaterial };
 })();
 

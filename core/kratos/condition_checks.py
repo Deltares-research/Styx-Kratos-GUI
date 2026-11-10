@@ -142,9 +142,10 @@ def _water_pressures(project: Project) -> list[WaterPressureCondition]:
 
 
 def _unpinned_water(project: Project) -> list[str]:
-    """A soil whose water pressure stays as it starts (`CONSTANT_PW_FIELD`, what
-    `core.kratos.materials` fills in) needs nothing to fix it: a dry model of such soil
-    runs, and gives the results it gave when the export still fixed zero everywhere. One
+    """A mechanical-only soil's water pressure stays as it starts (`CONSTANT_PW_FIELD`,
+    what `core.kratos.materials` fills in): it needs nothing
+    to fix it, and a dry model of such soil runs, giving the results it gave when the
+    export still fixed zero everywhere. One
     that couples it is the one to say something about: Kratos solves it, but with the
     pressure free the self weight raises one of its own -- about 1.5 MPa and 8 m of
     settlement in a 40 m block that settles 0.65 m dry
@@ -163,8 +164,8 @@ def _unpinned_water(project: Project) -> list[str]:
 
 
 def _soil_materials(project: Project) -> list[Material]:
-    """The materials the soil uses: the layers' and the custom parts'."""
-    used = ({layer.mat for layer in project.layers}
+    """The materials the soil uses: each soil body's and the custom parts'."""
+    used = ({*project.soil_body_materials.values()}
             | {part.mat for part in project.custom_parts if part.mat is not None})
     return [m for m in project.materials if m.id in used]
 
@@ -173,8 +174,7 @@ def _coupled_soils(project: Project) -> list[str]:
     """The names of the soil materials in use that couple the water pressure to the
     deformation (`GEO_DRAINAGE_TYPE` other than `CONSTANT_PW_FIELD`)."""
     return [m.name for m in _soil_materials(project)
-            if m.variables.get("GEO_DRAINAGE_TYPE", "CONSTANT_PW_FIELD")
-            != "CONSTANT_PW_FIELD"]
+            if m.variables.get("GEO_DRAINAGE_TYPE", "CONSTANT_PW_FIELD") != "CONSTANT_PW_FIELD"]
 
 
 def _free_water_in_stages(project: Project) -> list[str]:
