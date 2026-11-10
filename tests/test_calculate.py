@@ -272,7 +272,7 @@ def test_a_missing_kratos_is_explained_rather_than_left_as_a_traceback(
         runs, monkeypatch):
     """The one failure that is configuration rather than modelling, and the one a
     traceback about an import is least likely to tell someone how to fix."""
-    stand_in(monkeypatch, "import KratosMultiphysics")
+    stand_in(monkeypatch, "raise ModuleNotFoundError(\"No module named 'KratosMultiphysics'\")")
 
     result = calculation.run(DECK)
 
