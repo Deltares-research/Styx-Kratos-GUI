@@ -1937,6 +1937,7 @@ window.STAGE_FIXTURE =
       "size_min_factor": 0.05,
       "second_order_linear": true,
       "body_sizes": {},
+      "size_bands": {},
       "refinements": []
     },
     "custom_parts": [],

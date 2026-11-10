@@ -1003,6 +1003,18 @@ def test_a_body_a_3d_edit_takes_away_takes_its_mesh_size_with_it():
         "comes back, set its size again."]
 
 
+def test_a_soil_line_removed_takes_its_mesh_size_and_band_with_it():
+    project = excavation_project(staged=False)
+    mesh = project.mesh.model_copy(update={"body_sizes": {"floor_1": 0.5, "floor_2": 0.5},
+                                           "size_bands": {"floor_1": 5.0, "floor_2": 5.0}})
+    project = project.model_copy(update={"mesh": mesh})
+
+    edited = session.remove_line(project, "floor_2")
+
+    assert edited.mesh.body_sizes == {"floor_1": 0.5}
+    assert edited.mesh.size_bands == {"floor_1": 5.0}
+
+
 def test_a_size_for_a_body_the_model_never_had_is_left_for_check_to_name():
     project = edits.sized(excavation_project(staged=False), soil_typo=1.0)
 

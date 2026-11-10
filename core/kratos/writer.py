@@ -246,6 +246,7 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
         size_min_factor=settings.size_min_factor,
         second_order_linear=settings.second_order_linear,
         volume_keys=settings.volume_keys, body_sizes=settings.body_sizes,
+        size_bands=settings.size_bands,
     )
     dim = 2 if project.dimension == 2 else 3
     names = _part_names(project)

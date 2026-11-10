@@ -182,9 +182,9 @@ def _replace(temporary: str, path: Path) -> None:
 # ── Every edit ──────────────────────────────────────────────────────────────
 
 def _sizable_keys(project: Project) -> set[str]:
-    """What a mesh size can name: the bodies, and a cut layer's key, which names each of
-    its pieces."""
-    return {*project.part_keys(), *(f"soil_{layer.id}" for layer in project.layers)}
+    """What a mesh size can name: the bodies, a cut layer's key, which names each of
+    its pieces, and the lines and points of `Project.mesh_size_keys`."""
+    return set(project.mesh_size_keys())
 
 
 def _edited(project: Project, payload: dict) -> Project:
@@ -205,8 +205,9 @@ def _edited(project: Project, payload: dict) -> Project:
     if not lost:
         return edited
     kept = {key: size for key, size in sizes.items() if key not in lost}
+    bands = {key: band for key, band in edited.mesh.size_bands.items() if key not in lost}
     return edited.model_copy(update={"mesh": edited.mesh.model_copy(
-        update={"body_sizes": kept})})
+        update={"body_sizes": kept, "size_bands": bands})})
 
 
 def _parts_take_their_layers_material(project: Project, payload: dict) -> None:
@@ -570,8 +571,10 @@ def edit_notes(before: Project, after: Project) -> list[str]:
 def unknown_mesh_keys(project: Project, settings: MeshRequest) -> list[str]:
     """The bodies `settings` names -- to mesh, or to size -- that this project does not
     have, sorted. Empty when every one is the project's own."""
-    named = project.expand_body_keys([*(settings.volume_keys or []), *settings.body_sizes])
-    return sorted(set(named) - set(project.part_keys()))
+    meshed = project.expand_body_keys(list(settings.volume_keys or []))
+    sized = project.expand_body_keys(list(settings.body_sizes))
+    return sorted((set(meshed) - set(project.part_keys()))
+                  | (set(sized) - set(project.mesh_size_keys())))
 
 
 def nothing_to_mesh(project: Project) -> str | None:

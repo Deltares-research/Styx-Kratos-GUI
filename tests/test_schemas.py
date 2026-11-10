@@ -531,6 +531,20 @@ def test_mesh_settings_expose_safe_gmsh_controls():
         schemas.MeshSettings(element_size=2, algorithm_3d="unknown")
 
 
+def test_a_band_needs_a_size_on_the_same_object_and_is_not_negative():
+    schemas.MeshSettings(body_sizes={"sheet": 0.5}, size_bands={"sheet": 10.0})
+    with pytest.raises(ValidationError, match="a band needs a mesh size"):
+        schemas.MeshSettings(size_bands={"sheet": 10.0})
+    with pytest.raises(ValidationError):
+        schemas.MeshSettings(body_sizes={"sheet": 0.5}, size_bands={"sheet": -1.0})
+
+
+def test_a_mesh_size_can_name_a_soil_line_a_drawn_condition_and_a_point_load():
+    keys = excavation_project(staged=False).mesh_size_keys()
+    assert {"floor_1", "floor_2", "sheetpile", "soil_L_top", "soil_L_top__lift1"} <= set(keys)
+    assert len(keys) == len(set(keys))
+
+
 def test_mesh_request_accepts_an_explicit_body_selection():
     request = schemas.MeshRequest(
         element_size=2, order=1, volume_keys=["soil_L1", "soil_L2"],

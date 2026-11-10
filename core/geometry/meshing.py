@@ -74,7 +74,8 @@ def mesh_project(project: Project, element_size: float | None = None,
                  size_min_factor: float | None = None,
                  second_order_linear: bool | None = None,
                  volume_keys: list[str] | None = None,
-                 body_sizes: dict[str, float] | None = None) -> MeshModel:
+                 body_sizes: dict[str, float] | None = None,
+                 size_bands: dict[str, float] | None = None) -> MeshModel:
     """Rebuild the OCC model, generate tetrahedra, and expose its outer skin."""
     size = project.mesh.element_size if element_size is None else element_size
     requested_order = project.mesh.order if order is None else order
@@ -106,10 +107,13 @@ def mesh_project(project: Project, element_size: float | None = None,
         raise ValueError("unknown mesh body key(s): " + ", ".join(unknown))
     finite_element_tags = _finite_element_volumes(project, built, meshed_keys)
     requested_sizes = project.mesh.body_sizes if body_sizes is None else body_sizes
+    requested_bands = project.mesh.size_bands if size_bands is None else size_bands
     # A size asked for a layer applies to every body dug out of it, for the same reason.
     requested_sizes = {key: size for layer_key, size in requested_sizes.items()
                        for key in project.expand_body_keys([layer_key])}
-    unknown_sizes = sorted(set(requested_sizes) - set(project.part_keys()))
+    requested_bands = {key: band for layer_key, band in requested_bands.items()
+                       for key in project.expand_body_keys([layer_key])}
+    unknown_sizes = sorted(set(requested_sizes) - set(project.mesh_size_keys()))
     if unknown_sizes:
         raise ValueError("unknown mesh body size key(s): " + ", ".join(unknown_sizes))
     volume_sizes = {
@@ -131,16 +135,27 @@ def mesh_project(project: Project, element_size: float | None = None,
     # Every curve asked for, not only those among `meshed_keys`: that list names the
     # soil bodies to mesh (the Mesh properties window sends its ticked layers), and a
     # wall standing in them is meshed with them whether it is named or not.
+    curves_of = _curves_of(project, built, requested_sizes, dim)
     curve_sizes = {
         tag: size
         for key, size in requested_sizes.items()
-        for tag in built.curves.get(key, [])
+        for tag in curves_of.get(key, [])
     }
+    # A 3D wall panel is faces, and a soil line in a solid model is the faces it was
+    # swept into: one dimension below the model, as a curve is in a section.
+    faces_of = _faces_of(project, built, requested_sizes, dim)
+    face_sizes = {
+        tag: size
+        for key, size in requested_sizes.items()
+        for tag in faces_of.get(key, [])
+    }
+    graded = _graded_sizes(project, built, size, requested_sizes, requested_bands,
+                           meshed_keys, curves_of, faces_of, dim)
 
     gmsh.logger.start()
     try:
         _configure(size, finite_element_tags, refinements or [], volume_sizes=volume_sizes,
-                   curve_sizes=curve_sizes,
+                   curve_sizes=curve_sizes, face_sizes=face_sizes, graded=graded,
                    algorithm_3d=algorithm, algorithm_2d=algorithm_planar, dim=dim,
                    smoothing=smooth, curvature_points=curvature,
                    size_min_factor=minimum_factor, second_order_linear=linear_order_two,
@@ -167,6 +182,118 @@ def mesh_project(project: Project, element_size: float | None = None,
                      meshed_keys=list(meshed_keys), parts=parts)
 
 
+@dataclass(frozen=True)
+class GradedSize:
+    """A local size that grows back to the element size over a band.
+
+    `dim` and `tags` are the entities the size is measured from: the model's own
+    dimension for a soil body (the size holds inside it and grows outside it), one
+    below for a wall, a line or a panel. A point has no entity: `at` is where it is.
+    """
+    size: float
+    band: float
+    dim: int = 0
+    tags: tuple[int, ...] = ()
+    at: tuple[float, float, float] | None = None
+
+
+# How near a curve or face has to lie to a drawn line to be part of it, in metres. Looser
+# than `solid_model.TOLERANCE`: a centre of mass carries more rounding than a vertex.
+ON_LINE = 1e-5
+
+
+def _entities_on(points: list[tuple[float, float]], dim: int,
+                 among: list[int] | None = None) -> list[int]:
+    """The entities of dimension `dim` that lie on the polyline `points` in the (x, y)
+    plane: every vertex of the entity and its centre of mass. In a section that is the
+    curves along a line; in a solid model, the faces the line was swept into."""
+    out: list[int] = []
+    tags = among if among is not None else [tag for _, tag in gmsh.model.getEntities(dim)]
+    for tag in tags:
+        corners = [gmsh.model.getValue(0, vertex, [])
+                   for _, vertex in gmsh.model.getBoundary([(dim, tag)], combined=False,
+                                                           oriented=False, recursive=True)]
+        middle = gmsh.model.occ.getCenterOfMass(dim, tag)
+        if corners and all(polylines.nearest(points, (p[0], p[1]))[1] < ON_LINE
+                           for p in [*corners, middle]):
+            out.append(tag)
+    return sorted(out)
+
+
+def _curves_of(project: Project, built: solid_model.BuildResult,
+               sizes: dict[str, float], dim: int) -> dict[str, list[int]]:
+    """Part key -> the curves a size on it applies to. The structures the build embeds
+    have their own (`built.curves`). A soil line and an interface on a pile have none:
+    their curves are found on their polylines, the soil line's only in a section."""
+    curves = dict(built.curves)
+    lines = {line.id: line for line in project.lines} if dim == 2 else {}
+    for key in sizes:
+        if key in curves:
+            continue
+        if key in lines:
+            curves[key] = _entities_on([tuple(p) for p in lines[key].points], 1)
+            continue
+        interface = next((i for i in project.interfaces
+                          if i.id == key and i.structure is not None), None)
+        if interface is not None and interface.structure in built.curves:
+            curves[key] = _entities_on(project.interface_path(interface), 1,
+                                       built.curves[interface.structure])
+    return curves
+
+
+def _faces_of(project: Project, built: solid_model.BuildResult,
+              sizes: dict[str, float], dim: int) -> dict[str, list[int]]:
+    """Part key -> the faces a size on it applies to, in a solid model only: a wall
+    panel's own faces, and the faces a soil line was swept into."""
+    if dim != 3:
+        return {}
+    faces = dict(built.faces)
+    for line in project.lines:
+        if line.id in sizes and line.id not in faces:
+            faces[line.id] = _entities_on([tuple(p) for p in line.points], 2)
+    return faces
+
+
+def _point_of(project: Project, key: str, dim: int) -> tuple[float, float, float] | None:
+    """Where the point condition or the point load `key` is, or None."""
+    for condition in project.boundary_conditions:
+        if condition.id == key and condition.on == "point" and condition.points:
+            x, y = condition.points[0]
+            return (x, y, 0.0)
+    for load in project.loads:
+        if load.id == key and load.kind == "point":
+            return (load.x, load.y, 0.0) if dim == 2 else (load.x, load.y, project.cut_at())
+    return None
+
+
+def _graded_sizes(project: Project, built: solid_model.BuildResult, base: float,
+                  sizes: dict[str, float], bands: dict[str, float],
+                  meshed_keys: list[str], curves_of: dict[str, list[int]],
+                  faces_of: dict[str, list[int]], dim: int) -> list[GradedSize]:
+    """The sizes that grow back to `base` over a band, and every point size.
+
+    A size with no band keeps the field it always had, so a project that sets no band
+    meshes as it did. A band on a size coarser than `base` has nothing to grow back to
+    and is not used. A point has no field of its own to fall back on: with no band, its
+    size holds within one element of it."""
+    out: list[GradedSize] = []
+    for key, size in sizes.items():
+        band = bands.get(key, 0.0)
+        at = _point_of(project, key, dim)
+        if at is not None:
+            out.append(GradedSize(size=size, band=band, at=at))
+            continue
+        if band <= 0.0 or size >= base:
+            continue
+        if key in meshed_keys and built.volumes.get(key):
+            out.append(GradedSize(size, band, dim, tuple(built.volumes[key])))
+        elif curves_of.get(key):
+            out.append(GradedSize(size, band, 1, tuple(curves_of[key])))
+        elif faces_of.get(key):
+            out.append(GradedSize(size, band, 2, tuple(faces_of[key])))
+    return out
+
+
 def _structural_entities(result: solid_model.BuildResult) -> list[tuple[int, int]]:
     """The wall faces and member curves the mesher has to be told to mesh."""
     return ([(2, tag) for tags in result.faces.values() for tag in tags]
@@ -185,6 +312,8 @@ def _configure(element_size: float, volume_tags: list[int],
                refinements: list[BoxRefinement | CylinderRefinement] | None = None,
                *, volume_sizes: dict[int, float] | None = None,
                curve_sizes: dict[int, float] | None = None,
+               face_sizes: dict[int, float] | None = None,
+               graded: list[GradedSize] | None = None,
                algorithm_3d: str = "delaunay", algorithm_2d: str = "frontal",
                dim: int = 3, smoothing: int = 10,
                curvature_points: int = 16, size_min_factor: float = 0.05,
@@ -201,7 +330,8 @@ def _configure(element_size: float, volume_tags: list[int],
         max([element_size]
             + [r.size for r in refinements or []]
             + list((volume_sizes or {}).values())
-            + list((curve_sizes or {}).values())),
+            + list((curve_sizes or {}).values())
+            + list((face_sizes or {}).values())),
     )
     gmsh.option.setNumber("Mesh.MeshSizeExtendFromBoundary", 0)
     gmsh.option.setNumber("Mesh.MeshSizeFromPoints", 0)
@@ -226,14 +356,16 @@ def _configure(element_size: float, volume_tags: list[int],
         gmsh.model.setVisibility(structural, 1, recursive=True)
     gmsh.option.setNumber("Mesh.MeshOnlyVisible", 1)
     _apply_refinements(element_size, refinements or [], volume_sizes or {}, dim,
-                       curve_sizes or {})
+                       curve_sizes or {}, face_sizes=face_sizes, graded=graded)
 
 
 def _apply_refinements(base_size: float,
                        refinements: list[BoxRefinement | CylinderRefinement],
                        volume_sizes: dict[int, float] | None = None,
                        dim: int = 3,
-                       curve_sizes: dict[int, float] | None = None) -> int:
+                       curve_sizes: dict[int, float] | None = None,
+                       *, face_sizes: dict[int, float] | None = None,
+                       graded: list[GradedSize] | None = None) -> int:
     """Create local size fields and return the background Min field tag, or zero.
 
     A size is restricted to each OCC volume instead of meshing the volumes in
@@ -290,12 +422,63 @@ def _apply_refinements(base_size: float,
         fields.setNumbers(restricted, "CurvesList", [curve_tag])
         field_tags.append(restricted)
 
+    # A 3D wall panel, the same way: a constant on its faces.
+    for face_tag, face_size in (face_sizes or {}).items():
+        constant = fields.add("MathEval")
+        fields.setString(constant, "F", repr(face_size))
+        restricted = fields.add("Restrict")
+        fields.setNumber(restricted, "InField", constant)
+        fields.setNumbers(restricted, "SurfacesList", [face_tag])
+        field_tags.append(restricted)
+
+    for local in graded or []:
+        field_tags.append(_graded_field(local, base_size, dim))
+
     if not field_tags:
         return 0
     background = fields.add("Min")
     fields.setNumbers(background, "FieldsList", field_tags)
     fields.setAsBackgroundMesh(background)
     return background
+
+
+def _graded_field(local: GradedSize, base_size: float, dim: int) -> int:
+    """A Threshold field: `local.size` at the object, growing linearly to `base_size`
+    over `local.band`, and no limit beyond it -- a coarser size outside the band (a layer
+    of its own size) is not cut back to `base_size`.
+
+    The distance is measured from the object's entities: a body's edges in a section or
+    its faces in a solid (the size inside the body is its own Restrict field), a curve
+    or a face itself, sampled finely enough that the distance is true to about a tenth
+    of the size. A point is measured from where it is."""
+    fields = gmsh.model.mesh.field
+    distance = fields.add("Distance" if local.at is None else "MathEval")
+    near = 0.0
+    if local.at is not None:
+        x, y, z = local.at
+        fields.setString(distance, "F", f"Sqrt((x-({x!r}))^2+(y-({y!r}))^2+(z-({z!r}))^2)")
+        near = local.size
+    else:
+        entity_dim = local.dim - 1 if local.dim == dim else local.dim
+        tags = list(local.tags)
+        if local.dim == dim:
+            tags = sorted({tag for _, tag in gmsh.model.getBoundary(
+                [(dim, tag) for tag in tags], combined=False, oriented=False)})
+        extent = max(gmsh.model.occ.getMass(entity_dim, tag) for tag in tags)
+        if entity_dim == 2:
+            extent = math.sqrt(extent)
+        fields.setNumbers(distance, "CurvesList" if entity_dim == 1 else "SurfacesList", tags)
+        fields.setNumber(distance, "Sampling",
+                         min(400 if entity_dim == 1 else 100,
+                             max(20, math.ceil(10 * extent / local.size))))
+    threshold = fields.add("Threshold")
+    fields.setNumber(threshold, "InField", distance)
+    fields.setNumber(threshold, "SizeMin", local.size)
+    fields.setNumber(threshold, "SizeMax", max(base_size, local.size))
+    fields.setNumber(threshold, "DistMin", near)
+    fields.setNumber(threshold, "DistMax", near + local.band)
+    fields.setNumber(threshold, "StopAtDistMax", 1)
+    return threshold
 
 
 def _stats(seconds: float, dim: int = 3) -> MeshStats:

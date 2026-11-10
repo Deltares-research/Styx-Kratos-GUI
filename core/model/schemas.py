@@ -1399,6 +1399,13 @@ class MeshSettings(Base):
     size_min_factor: float = Field(default=0.05, gt=0, le=1)
     second_order_linear: bool = True
     body_sizes: dict[Ident, PositiveSize] = Field(default_factory=dict)
+    """A local mesh size per object, by its key (`Project.mesh_size_keys`): a layer or
+    a soil body, a structure, a soil line, a drawn condition, a point load."""
+    size_bands: dict[Ident, Annotated[float, Field(ge=0)]] = Field(default_factory=dict)
+    """The distance, in metres, over which a size of `body_sizes` grows back to
+    `element_size` away from its object. Without one, a size keeps to its object: a
+    body's holds inside it, a line's on it, and the mesh round them grades as gmsh
+    likes. A point's holds within one element of it."""
     refinements: list[BoxRefinement | CylinderRefinement] = Field(default_factory=list)
     """Local size fields, finer than `element_size`, in the region each one covers.
 
@@ -1406,6 +1413,13 @@ class MeshSettings(Base):
     a refinement is part of what a model is: a deep excavation wants a fine mesh around
     its wall whoever opens it and whichever button they press. Left on the request, it
     had to be re-typed for every mesh and could not travel in a saved project at all."""
+
+    @model_validator(mode="after")
+    def _a_band_has_a_size(self) -> MeshSettings:
+        alone = sorted(set(self.size_bands) - set(self.body_sizes))
+        if alone:
+            raise ValueError(f"a band needs a mesh size on the same object: {', '.join(alone)}")
+        return self
 
 
 class WaterUpdate(Base):
@@ -2657,6 +2671,16 @@ class Project(Base):
                 if expanded not in out:
                     out.append(expanded)
         return out
+
+    def mesh_size_keys(self) -> list[str]:
+        """What a local mesh size can name (`MeshSettings.body_sizes`): every part, each
+        layer (all its bodies), each soil line, each condition drawn on a line or at a
+        point, and each point load."""
+        keys = [*self.part_keys(), *(f"soil_{layer.id}" for layer in self.layers),
+                *(line.id for line in self.lines),
+                *(c.id for c in self.boundary_conditions if c.on in ("line", "point")),
+                *(load.id for load in self.loads if load.kind == "point")]
+        return list(dict.fromkeys(keys))
 
     def part_keys(self) -> list[str]:
         """The frontend's userData.key namespace, in render order."""
