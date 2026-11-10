@@ -34,6 +34,13 @@ def test_the_values_a_run_is_held_to_are_kratos_own(case):
     assert reference.expected(case) == CASES[case][1]
 
 
+def without_water_density(materials: list) -> list:
+    """The materials, each without its `DENSITY_WATER`: the project's is 10 kN/m3 over g
+    to the last digit, where Kratos' deck rounds it to six."""
+    return [(law, {k: v for k, v in variables.items() if k != "DENSITY_WATER"})
+            for law, variables in materials]
+
+
 @pytest.mark.parametrize("case", CASES)
 def test_the_deck_is_kratos_own(gmsh_session, case):
     ours = reference.deck_view(writer.export_project(CASES[case][0]()))
@@ -44,6 +51,9 @@ def test_the_deck_is_kratos_own(gmsh_session, case):
     for group in reference.GROUPS:
         assert stage[group] == wanted[group], group
     assert stage["nodal_results"] == wanted["nodal_results"]
-    assert ours["materials"] == theirs["materials"]
+    assert without_water_density(ours["materials"]) == without_water_density(
+        theirs["materials"])
+    for (_, mine), (_, kratos) in zip(ours["materials"], theirs["materials"]):
+        assert mine["DENSITY_WATER"] == pytest.approx(kratos["DENSITY_WATER"], rel=1e-5)
     assert {name for name, _ in ours["mesh"]["elements"]} == reference.reference_elements()
     assert not ours["mesh"]["conditions"]

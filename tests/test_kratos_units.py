@@ -259,13 +259,15 @@ def _bare(**variables) -> schemas.Material:
                                        "DENSITY_SOLID": 1800.0, **variables})
 
 
-def test_a_material_that_says_nothing_about_porosity_still_gets_a_number():
-    """Derived when empty, and said: the export lists every name it filled in."""
+def test_a_material_that_says_nothing_about_porosity_is_refused_not_given_one():
+    """Porosity is the soil's: nothing derives it, and the export names it missing."""
     project = seed_project()
     derived: list[str] = []
+    with pytest.raises(materials.MaterialError, match="has no POROSITY"):
+        materials._check(_bare(), "material 'M'")
     written = materials._variables(_bare(), 2, False, project, derived)
-    assert written["POROSITY"] == materials.DEFAULT_POROSITY
-    assert "material 'M': POROSITY" in derived
+    assert "POROSITY" not in written
+    assert "material 'M': POROSITY" not in derived
     typed = materials._variables(_bare(POROSITY=0.0), 2, False, project, [])
     assert typed["POROSITY"] == 0.0
 
@@ -283,11 +285,15 @@ def test_the_constants_a_soil_leaves_out_are_in_the_projects_system(unit_system,
 @pytest.mark.parametrize("typed, expected", [
     ({}, "CONSTANT_PW_FIELD"),
     ({"GEO_DRAINAGE_TYPE": "FULLY_COUPLED"}, "FULLY_COUPLED"),
+    ({"GEO_DRAINAGE_TYPE": "UNDRAINED"}, "FULLY_COUPLED"),
+    ({"GEO_DRAINAGE_TYPE": "DRAINED"}, "CONSTANT_PW_FIELD"),
     ({"GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD"}, "CONSTANT_PW_FIELD"),
 ])
 def test_the_drainage_type_is_the_materials_own(typed, expected):
-    """As typed; a soil that says nothing is drained -- the pore pressure prescribed,
-    not solved for -- which is what the test model's soils are."""
+    """As typed; a soil that says nothing is CONSTANT_PW_FIELD -- the pore pressure
+    prescribed, not solved for -- which is what the test model's soils are. Kratos' own
+    DRAINED would couple the water, so the project's old DRAINED is read in as
+    CONSTANT_PW_FIELD. UNDRAINED, no longer offered, is read in as FULLY_COUPLED."""
     written = materials._variables(_bare(**typed), 2, False, seed_project(), [])
     assert written["GEO_DRAINAGE_TYPE"] == expected
 

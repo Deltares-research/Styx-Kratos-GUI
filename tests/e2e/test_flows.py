@@ -200,7 +200,7 @@ def test_a_soil_is_edited_as_kratos_reads_it_and_saved(app_page, live_server):
     window = app_page.locator("#modal-layer .dialog").last
     window.locator('[data-action="material-properties"]').first.click()
     modulus = app_page.locator('.material-variables [data-variable="YOUNG_MODULUS"]')
-    assert modulus.input_value() == "2000000", "the test model's own 2e6 Pa, as typed"
+    assert modulus.input_value() == "2e6", "the test model's own 2e6 Pa, as typed"
     modulus.fill("2500000")
     modulus.press("Enter")
     app_page.locator("#modal-layer .dialog").last.get_by_role("button", name="Close").click()

@@ -68,6 +68,7 @@ Genuchten soil.
 | `dimension P 2d\|3d [--offset Z]` | Switch between the plane-strain section and the solid model |
 | `units P [SI\|kN]` | Show the unit system, or convert the whole project to another |
 | `water P [LEVEL\|off]` | Show, set or remove the water level. It fixes no pressure by itself: a new hydrostatic condition or normal load takes it as its level |
+| `fluid P [--bulk-modulus K] [--viscosity MU] [--unset FIELD ...]` | Show or set the water in every soil's pores, one for the whole project: `BULK_MODULUS_FLUID` and `DYNAMIC_VISCOSITY`. Unset, each is water's at 20 °C |
 | `domain P [--x FROM TO] [--y BOTTOM TOP] [--z FROM TO]` | Show or set the model's extents. `--y` is the bottom and the ground level; with layers, it moves the top of the first layer and the bottom of the last |
 | `material P list\|presets\|models\|add\|set\|remove ...` | Soils as Kratos property sets: `add ID [--preset m3] [--model mohr-coulomb] [NAME=VALUE ...]`, `set ID [--model M] NAME=VALUE ... [--unset NAME]`; `models` lists each soil model with its parameters and defaults |
 | `layer P list\|add\|set\|split\|remove ...` | The soil stack: `add ID --material M [--bottom Y \| --thickness T]`, `set ID [--top Y] [--bottom Y]` |
@@ -169,6 +170,7 @@ kratos-cli layer pit.json add top --material clay --bottom -7
 kratos-cli layer pit.json add mid --material clay --bottom -10
 kratos-cli layer pit.json add bottom --material sand --bottom -40
 kratos-cli water pit.json -1
+kratos-cli fluid pit.json                                 # the water every soil is written with
 kratos-cli boundary pit.json add pore --domain --water-pressure Hydrostatic   # about -1 m
 kratos-cli parts pit.json                                 # soil_top, ... for the stages
 ```
@@ -182,18 +184,31 @@ kratos-cli parts pit.json                                 # soil_top, ... for th
   `set --top` or `--bottom` moves a level and the neighbour's with it, and refuses a
   level that would cross the neighbour. `split` halves a layer, and `remove` closes the
   gap with the layer above.
-- **Materials** start as the GUI starts them: the default loose sand, or a library preset
+- **Materials** start as the GUI's **Create soil** starts them: linear elastic,
+  `CONSTANT_PW_FIELD` and saturated below the phreatic level, with nothing else; the command
+  lists what is still to fill in before a calculation. Or from a library preset
   (`--preset`). The law follows the model's dimension, and the values are converted into
   the project's units. Variables given as `NAME=VALUE` are Kratos' own, in the project's
-  units; `get P materials[ID].variables` lists the values a material has. `--color` is a
-  `#rrggbb` colour, such as `#c4a86a`. The export derives some variables that are left
-  out, and its warning lists them. It also derives `K0_NC` as 1 − sin φ from
-  `GEO_FRICTION_ANGLE`, into `initial_materials.json`, but that warning does not list it.
+  units; `get P materials[ID].variables` lists the values a material has.
+  `GEO_DRAINAGE_TYPE` is `CONSTANT_PW_FIELD` (the GUI's "Mechanical only") or
+  `FULLY_COUPLED` (its "Fully coupled"). `DRAINED` given becomes `CONSTANT_PW_FIELD`.
+  `UNDRAINED` given becomes `FULLY_COUPLED` with its own permeability, and `set` says
+  so. A permeability given to a soil that does not read it is kept, and `set` says that
+  it is not used. `--color` is a
+  `#rrggbb` colour, such as `#c4a86a`. Without it, `add` gives a colour no other soil has, as the GUI does. The export derives some variables that are left
+  out, and its warning lists them. It also derives `K0_NC`, as ν / (1 − ν) for a
+  linear elastic soil and 1 − sin φ for a Mohr-Coulomb one, into
+  `initial_materials.json`, but that warning does not list it.
 - **Soil models**: `--model linear-elastic` or `--model mohr-coulomb` sets the law for the
-  model's dimension, as the **Soil model** list of the Material set window does. The
-  values the soil already has stay. The values the model needs and the soil does not
-  have get the model's defaults, and the command prints their names. Setting a choice
-  such as `RETENTION_LAW=VanGenuchtenLaw` or `GEO_ENABLE_TENSION_CUT_OFF=true` fills in
+  model's dimension, as the **Soil model** list of the Soil material window does. The
+  values the soil already has stay, except those another model reads and this one does
+  not: `--model linear-elastic` leaves out the strength and the hardening, as a linear
+  elastic soil has none. The values the model needs and the soil does not
+  have get the model's defaults, and the command prints their names; a soil that still
+  has empty values, such as a new one, gets none of the values the law needs, as in the
+  GUI. Setting a choice
+  such as `RETENTION_LAW=VanGenuchtenLaw`, `GEO_ENABLE_TENSION_CUT_OFF=true` or
+  `GEO_COULOMB_HARDENING_TYPE=Linear` fills in
   the defaults of the values it brings in the same way. `material P models` lists each
   model: its laws, its parameters in groups, each default in the project's units, the
   values a choice can take and when a parameter is used. `--law` is for any other law,
@@ -231,6 +246,14 @@ kratos-cli parts pit.json                                 # soil_top, ... for th
 - **The water level** fixes no pressure by itself. A water pressure condition does
   (`boundary`, below): `boundary add --domain --water-pressure Hydrostatic` gives the
   soil hydrostatic pore pressures about the water level, and keeps that level as its own.
+- **The water in the pores** is the project's, not each soil's: every soil is written
+  with the same `DENSITY_WATER`, `BULK_MODULUS_FLUID` and `DYNAMIC_VISCOSITY`. `fluid`
+  without a value says what they are. `--bulk-modulus` (a stress) and `--viscosity` set
+  them in the project's units (Pa and Pa·s in SI, kPa and kPa·s in kN), and `--unset
+  bulk_modulus dynamic_viscosity` gives them back to water's at 20 °C: 2.2 GPa and
+  1 mPa·s. `DENSITY_WATER` is not set here: it is the water level's specific weight over
+  g. A soil that sets one of the three itself is refused; a file saved when each soil
+  had its own water is read with the first soil's, and says which soils changed.
 - **Coordinates are plain numbers**, `--points 0 0 6 0 3 2`, because a word starting with
   a minus, like `-3,2`, would be read as an option. A long outline can come from a file:
   `--points @outline.csv`, one point per line.
@@ -275,7 +298,11 @@ kratos-cli set pit.json mesh.body_sizes.sheet 0.5
   `--material`, `--r-inter`, `--virtual-thickness` and `--permeability` to interfaces.
   `none` clears an optional one. An interface's stiffnesses are
   `INTERFACE_NORMAL_STIFFNESS=...` and `INTERFACE_SHEAR_STIFFNESS=...`; left out, they are
-  derived from the soil each stretch runs against, and `section list` says which.
+  derived from the soil each stretch runs against, and `section list` says which. A
+  Coulomb section (`--law GeoInterfaceCoulombLawPlaneStrain`) given a linear elastic
+  soil with `--material`, which has no strength to give, gets the Mohr-Coulomb defaults
+  as its own `GEO_COHESION` and `GEO_FRICTION_ANGLE`, as in the GUI, and the command
+  says so; set them after.
 - **Which side a normal load presses on.** The soil on the right of its line as drawn,
   where its arrows point in the GUI: `water_1` above runs along the pit floor to the wall
   and then up the wall face, with the retained ground on its right. On the outside of the

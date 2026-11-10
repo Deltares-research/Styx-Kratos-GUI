@@ -289,6 +289,13 @@ def soil_model_cases() -> dict:
                 "skip": list(skip), "filled": filled, "after": after,
                 "note": soil_models.filled_note(soil_models.model_of(after_law), filled)}
 
+    def fill_choice(title, before_law, before, after_law, changes, system):
+        after = {**before, **changes}
+        filled = soil_models.fill_choice(before_law, dict(before), after_law, after, system)
+        return {"title": title, "before_law": before_law, "before": before,
+                "after_law": after_law, "changes": changes, "system": system,
+                "filled": filled, "after": after}
+
     def problem(title, law, variables):
         return {"title": title, "law": law, "variables": variables,
                 "problem": soil_models.problem(law, variables)}
@@ -297,7 +304,69 @@ def soil_model_cases() -> dict:
         return {"law": law, "variables": variables,
                 "required": soil_models.required(law, variables)}
 
+    def derived(title, law, variables, system, flow=False, **water):
+        water_variables = soil_models.water(system, **water)
+        return {"title": title, "law": law, "variables": variables, "system": system,
+                "flow": flow, "water": water_variables,
+                "derived": soil_models.derived(law, variables, water_variables, system, flow),
+                "computed": soil_models.computed(law, variables, water_variables, system,
+                                                 flow)}
+
+    def water(system, specific_weight=None, bulk_modulus=None, viscosity=None):
+        return {"system": system, "specific_weight": specific_weight,
+                "bulk_modulus": bulk_modulus, "viscosity": viscosity,
+                "water": soil_models.water(system, specific_weight, bulk_modulus, viscosity)}
+
+    def shown(model, variables, flow=False):
+        return {"model": model, "variables": variables, "flow": flow,
+                "shown": [p.name for p in soil_models.shown(model, variables, flow)]}
+
+    coupled = {**mohr_coulomb, "GEO_DRAINAGE_TYPE": "FULLY_COUPLED", "POROSITY": 0.35}
     return {
+        "derived": [
+            derived("a new elastic soil", ELASTIC_2D,
+                    soil_models.defaults_si(soil_models.LINEAR_ELASTIC), "SI"),
+            derived("a new Mohr-Coulomb soil, in kN", MOHR_COULOMB_2D, in_kn, "kN"),
+            derived("a coupled soil with its own water", MOHR_COULOMB_2D,
+                    {**coupled, "PERMEABILITY_XX": 3.0e-12}, "SI",
+                    specific_weight=9810.0, bulk_modulus=2.0e9, viscosity=1.3e-3),
+            derived("a drained soil in a flow project", ELASTIC_2D,
+                    {"GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD", "DENSITY_SOLID": 2000.0}, "SI",
+                    flow=True),
+            derived("a law of no model with a friction angle",
+                    "SmallStrainUDSM2DPlaneStrainLaw", {"GEO_FRICTION_ANGLE": 25.0}, "SI"),
+            derived("a drained soil carrying a permeability, written as it is", ELASTIC_2D,
+                    {"GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD", "PERMEABILITY_XX": 3.0e-12}, "kN"),
+            derived("a coupled soil carrying a permeability, written as it is", ELASTIC_2D,
+                    {"GEO_DRAINAGE_TYPE": "FULLY_COUPLED", "PERMEABILITY_XX": 3.0e-12}, "kN"),
+            derived("a blank soil", ELASTIC_2D, soil_models.blank_si(), "SI"),
+            derived("a blank soil with the Van Genuchten law", ELASTIC_2D,
+                    {**soil_models.blank_si(), "RETENTION_LAW": "VanGenuchtenLaw"}, "SI"),
+        ],
+        "water": [
+            water("SI"),
+            water("kN"),
+            water("SI", bulk_modulus=2.0e9),
+            water("kN", viscosity=1.3e-6),
+            water("SI", 9810.0, 1.0e20, 1.3e-3),
+        ],
+        "blank": soil_models.blank_si(),
+        "fill_choice": [
+            fill_choice("a blank soil made Mohr-Coulomb gets no strength", ELASTIC_2D,
+                        soil_models.blank_si(), MOHR_COULOMB_2D, {}, "SI"),
+            fill_choice("a complete soil made Mohr-Coulomb gets the defaults", ELASTIC_2D,
+                        soil_models.defaults_si(soil_models.LINEAR_ELASTIC),
+                        MOHR_COULOMB_2D, {}, "kN"),
+            fill_choice("linear hardening on a complete soil brings its slopes",
+                        MOHR_COULOMB_2D, mohr_coulomb, MOHR_COULOMB_2D,
+                        {"GEO_COULOMB_HARDENING_TYPE": "Linear"}, "SI"),
+        ],
+        "shown": [
+            shown(soil_models.LINEAR_ELASTIC, {}),
+            shown(soil_models.MOHR_COULOMB, coupled),
+            shown(soil_models.MOHR_COULOMB, {"GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD"}),
+            shown(soil_models.LINEAR_ELASTIC, {"RETENTION_LAW": "VanGenuchtenLaw"}, True),
+        ],
         "defaults": {model: soil_models.defaults_si(model) for model in soil_models.MODELS},
         "fill": [
             fill("a new Mohr-Coulomb soil", None, {}, MOHR_COULOMB_2D, {}, "SI"),
@@ -344,13 +413,43 @@ def soil_model_cases() -> dict:
                      if k != "GEO_ENABLE_TENSION_CUT_OFF"}),
             problem("an elastic soil is not held to it", ELASTIC_2D,
                     {**mohr_coulomb, "GEO_DILATANCY_ANGLE": 35.0}),
+            problem("a linear hardening", MOHR_COULOMB_2D,
+                    {**mohr_coulomb, "GEO_COULOMB_HARDENING_TYPE": "Linear",
+                     "GEO_COHESION_FUNCTION_COEFFICIENTS": 1.0e5,
+                     "GEO_FRICTION_ANGLE_FUNCTION_COEFFICIENTS": 0.0,
+                     "GEO_DILATANCY_ANGLE_FUNCTION_COEFFICIENTS": 0.0}),
+            problem("a linear hardening that softens", MOHR_COULOMB_2D,
+                    {**mohr_coulomb, "GEO_COULOMB_HARDENING_TYPE": "Linear",
+                     "GEO_COHESION_FUNCTION_COEFFICIENTS": 0.0,
+                     "GEO_FRICTION_ANGLE_FUNCTION_COEFFICIENTS": -0.1,
+                     "GEO_DILATANCY_ANGLE_FUNCTION_COEFFICIENTS": 0.0}),
+            problem("a slope with the hardening off is not read", MOHR_COULOMB_2D,
+                    {**mohr_coulomb, "GEO_COHESION_FUNCTION_COEFFICIENTS": -1.0}),
         ],
         "required": [
             required(ELASTIC_2D, {}),
             required(MOHR_COULOMB_2D, {}),
             required(MOHR_COULOMB_2D, {"GEO_ENABLE_TENSION_CUT_OFF": True}),
+            required(MOHR_COULOMB_2D, {"GEO_COULOMB_HARDENING_TYPE": "Linear"}),
             required("SmallStrainUDSM2DPlaneStrainLaw", {}),
         ],
+        "fresh_color": [{"used": used, "preferred": preferred,
+                         "color": soil_models.fresh_color(used, preferred)}
+                        for used, preferred in (
+                            ([], None), (["#D8C48A", "#8fa86b"], None),
+                            (["#c4a86a"], "#c4a86a"), (["#d8c48a"], "#c4a86a"),
+                            (list(soil_models.PALETTE), None),
+                            (list(soil_models.PALETTE) + ["#c78f70"], "#d8c48a"),
+                            (list(soil_models.PALETTE) + [
+                                soil_models.fresh_color(soil_models.PALETTE)], None))],
+        "unread": [{"law": law, "variables": variables,
+                    "unread": soil_models.unread(law, variables)}
+                   for law in (ELASTIC_2D, MOHR_COULOMB_2D, "SmallStrainUDSM2DPlaneStrainLaw")
+                   for variables in (
+                       drafts.preset("m1")["variables"],
+                       {**mohr_coulomb, "GEO_COULOMB_HARDENING_TYPE": "Linear",
+                        "GEO_COHESION_FUNCTION_COEFFICIENTS": 1.0, "MY_OWN": 2.0,
+                        "PERMEABILITY_ZZ": 1e-12})],
         "law_in": [{"law": law, "dimension": dim, "result": soil_models.law_in(law, dim)}
                    for law in (ELASTIC_2D, MOHR_COULOMB_2D,
                                "GeoMohrCoulombWithTensionCutOff2D",

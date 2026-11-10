@@ -771,6 +771,26 @@ def test_put_project_opens_a_file_saved_with_boreholes(client):
         (0.0, -8.0), (-8.0, -25.0)]
 
 
+def test_migration_notes_name_the_soil_whose_water_is_overridden(client):
+    """A file saved before 2026-11-02, as Open sends it: the PUT takes it in the new
+    shape, and this route says which soil's own water that dropped."""
+    old = seed_project().model_dump(mode="json")
+    del old["fluid"]
+    for material in old["materials"]:
+        material["variables"]["GEO_DRAINAGE_TYPE"] = "CONSTANT_PW_FIELD"
+    old["materials"][0]["variables"]["DYNAMIC_VISCOSITY"] = 1e-3
+    old["materials"][1]["variables"]["DYNAMIC_VISCOSITY"] = 5e-3
+
+    response = client.post("/api/project/migration-notes", json=old)
+
+    assert response.status_code == 200
+    notes = response.json()["notes"]
+    assert len(notes) == 1 and notes[0].startswith("Sand, loose:")
+    current = client.post("/api/project/migration-notes",
+                          json=seed_project().model_dump(mode="json"))
+    assert current.json() == {"notes": []}
+
+
 def test_patch_layers_refuses_boreholes(client):
     """The layer update has no boreholes to carry any more; one sent is an error, not
     something quietly dropped."""
