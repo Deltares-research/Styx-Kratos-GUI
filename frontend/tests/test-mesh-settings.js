@@ -86,22 +86,63 @@
          {});
   });
 
-  /* ── The structures' sizes ────────────────────────────────────────── */
+  /* ── Local mesh sizes ───────────────────────────────────────────────── */
 
-  test('each sheet pile has a row, with its own size or none', function () {
-    var project = { beams: [{ id: 'sheetpile', name: 'Wall' }, { id: 'b2', name: 'Strut' }],
-                    mesh: { element_size: 5, body_sizes: { sheetpile: 0.5 } } };
-    T.eq(App.MeshSettings.structureControls(project), [
-      { key: 'sheetpile', label: 'Wall', size: 0.5 },
-      { key: 'b2', label: 'Strut', size: null }]);
-    T.eq(App.MeshSettings.structureControls({ mesh: {} }), []);
+  test('every structure, interface, normal load, soil line, drawn condition and point load has a row', function () {
+    var project = {
+      beams: [{ id: 'sheetpile', name: 'Wall' }], anchors: [{ id: 'strut', name: 'Strut' }],
+      interfaces: [{ id: 'contact', name: 'Contact' }],
+      normal_loads: [{ id: 'water_1', name: 'Water' }], lines: [{ id: 'floor', name: 'Floor' }],
+      boundary_conditions: [{ id: 'left', name: 'Left', on: 'face' },
+                            { id: 'pin', name: 'Pin', on: 'point' }],
+      loads: [{ id: 'push', name: 'Push', kind: 'point' }, { id: 'strip', name: 'Strip', kind: 'line' }],
+      mesh: { element_size: 5, body_sizes: { sheetpile: 0.5 }, size_bands: { sheetpile: 10 } }
+    };
+    T.eq(App.MeshSettings.localControls(project).map(function (row) {
+      return [row.key, row.size, row.band];
+    }), [['sheetpile', 0.5, 10], ['contact', null, null], ['water_1', null, null],
+         ['floor', null, null], ['pin', null, null], ['push', null, null]],
+         'an anchor, a face condition and a line load have none');
+    T.eq(App.MeshSettings.localControls({ mesh: {} }), []);
   });
 
-  test("a structure's size is saved, and a row left empty takes it away", function () {
-    var project = { mesh: { body_sizes: { soil_L1: 2, sheetpile: 0.5 } } };
-    T.eq(App.MeshSettings.savedStructureSizes(project.mesh.body_sizes, [
-      { key: 'sheetpile', size: null }, { key: 'b2', size: 0.25 }]),
-         { soil_L1: 2, b2: 0.25 });
+  test('a size is saved with its band, and a row left empty takes both away', function () {
+    var mesh = { body_sizes: { soil_L1: 2, sheetpile: 0.5 }, size_bands: { sheetpile: 10 } };
+    T.eq(App.MeshSettings.savedLocalSizes(mesh, [
+      { key: 'sheetpile', size: null, band: null }, { key: 'floor', size: 0.25, band: 5 },
+      { key: 'pin', size: 1, band: 0 }]),
+         { body_sizes: { soil_L1: 2, floor: 0.25, pin: 1 }, size_bands: { floor: 5 } });
+  });
+
+  test('a band needs a size, and neither may be negative', function () {
+    var problem = App.MeshSettings.localProblem;
+    T.eq(problem(1, null), null);
+    T.eq(problem(1, 10), null);
+    T.eq(problem(null, null), null);
+    T.ok(/before a band/.test(problem(null, 5)));
+    T.ok(/greater than zero/.test(problem(0, null)));
+    T.ok(/negative/.test(problem(1, -1)));
+  });
+
+  test("a layer row that follows the global size keeps it as its own when a band is typed", function () {
+    var project = { mesh: { body_sizes: {} } };
+    T.eq(App.MeshSettings.savedBodySizes(project, [
+      { key: 'soil_L1', size: 5, follows: true, band: 10 },
+      { key: 'soil_L2', size: 5, follows: true, band: null }]), { soil_L1: 5 });
+  });
+
+  test('what can take a size: the layers, their bodies, the lines and the points', function () {
+    var project = { layers: [{ id: 'L1' }], soil_body_keys: ['soil_L1__pit', 'soil_L1__kept'],
+                    beams: [{ id: 'sheetpile' }], lines: [{ id: 'floor' }] };
+    T.eq(App.MeshSettings.sizableKeys(project),
+         ['soil_L1', 'soil_L1__pit', 'soil_L1__kept', 'sheetpile', 'floor']);
+  });
+
+  test('refine halves the size an object is meshed at, coarsen doubles it', function () {
+    var project = { mesh: { element_size: 4, body_sizes: { soil_L1: 2, sheetpile: 0.5 } } };
+    T.eq(App.MeshSettings.sizeNow(project, 'sheetpile'), 0.5, 'its own');
+    T.eq(App.MeshSettings.sizeNow(project, 'soil_L1__pit'), 2, "its layer's");
+    T.eq(App.MeshSettings.sizeNow(project, 'floor'), 4, 'the global size');
   });
 
   test('a choice is what was left out of it', function () {

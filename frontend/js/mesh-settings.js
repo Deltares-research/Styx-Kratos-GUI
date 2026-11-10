@@ -7,7 +7,7 @@ App.MeshSettings = (function () {
   var defaults = {
     element_size: 2.5, order: 2, algorithm_3d: 'delaunay', algorithm_2d: 'frontal',
     optimization: 'gmsh', smoothing: 10, curvature_points: 16, size_min_factor: 0.05,
-    second_order_linear: true, body_sizes: {}
+    second_order_linear: true, body_sizes: {}, size_bands: {}
   };
 
   var TITLE = 'Mesh properties';
@@ -122,39 +122,191 @@ App.MeshSettings = (function () {
     });
   }
 
-  /* The sizes the layer rows save. A size they have no row for -- a sheet pile's, which
-     has a row of its own (`savedStructureSizes`), an anchor's, a lift's, set in
-     `kratos-cli` or a script -- stays as it is. A
-     row that `follows` the global size has had no size typed, and asks for none. */
+  /* The sizes the layer rows save. A size they have no row for -- a lift's, set in
+     `kratos-cli` or a script -- stays as it is. A row that `follows` the global size
+     has had no size typed, and asks for none, unless a band was typed on it: a band
+     grows a size back out, so the size shown becomes the layer's own. */
   function savedBodySizes(project, rows) {
     var sizes = Object.assign({}, ((project && project.mesh) || {}).body_sizes);
     rows.forEach(function (row) {
       if (!(row.size > 0)) delete sizes[row.key];
-      else if (!row.follows) sizes[row.key] = row.size;
+      else if (!row.follows || row.band > 0) sizes[row.key] = row.size;
     });
     return sizes;
   }
 
-  /* One row per sheet pile, with the size it is meshed at, or null: a sheet pile with no
-     size of its own takes the size of the mesh around it, which keeps the mesh grading
-     along it (core/geometry/meshing.py). */
-  function structureControls(project) {
-    var sizes = ((project && project.mesh) || {}).body_sizes || {};
-    return ((project && project.beams) || []).map(function (beam) {
-      var own = Object.prototype.hasOwnProperty.call(sizes, beam.id);
-      return { key: beam.id, label: beam.name || beam.id,
-               size: own ? Number(sizes[beam.id]) : null };
+  /* ── Local mesh sizes ──────────────────────────────────────────────────
+     The size at one object and the band over which it grows back to the global
+     size (`body_sizes` and `size_bands`, core/geometry/meshing.py). */
+
+  function owns(map, key) {
+    return !!map && Object.prototype.hasOwnProperty.call(map, key);
+  }
+
+  function localSize(project, key) {
+    var mesh = (project && project.mesh) || {};
+    return { size: owns(mesh.body_sizes, key) ? Number(mesh.body_sizes[key]) : null,
+             band: owns(mesh.size_bands, key) ? Number(mesh.size_bands[key]) : null };
+  }
+
+  /* `mesh` with `key` at `size` and `band`. A null size takes the size and its band
+     away; a null or zero band takes the band only. */
+  function withLocalSize(mesh, key, size, band) {
+    var sizes = Object.assign({}, (mesh && mesh.body_sizes) || {});
+    var bands = Object.assign({}, (mesh && mesh.size_bands) || {});
+    if (size === null) {
+      delete sizes[key]; delete bands[key];
+    } else {
+      sizes[key] = size;
+      if (band > 0) bands[key] = band; else delete bands[key];
+    }
+    return Object.assign({}, mesh, { body_sizes: sizes, size_bands: bands });
+  }
+
+  /* Why a size and a band cannot be saved together, or null. */
+  function localProblem(size, band) {
+    if (size !== null && !(size > 0)) return 'The mesh size must be greater than zero.';
+    if (band !== null && !(band >= 0)) return 'The band cannot be negative.';
+    if (size === null && band > 0) return 'Give a mesh size before a band.';
+    return null;
+  }
+
+  /* The lines and points of `project` a size can be given to, in the order the Model
+     explorer lists them (`Project.mesh_size_keys`). An anchor is one truss element and
+     has none. */
+  function localObjects(project) {
+    var p = project || {};
+    var out = [];
+    function add(records, kind) {
+      (records || []).forEach(function (record) {
+        out.push({ key: record.id, label: record.name || record.id, kind: kind });
+      });
+    }
+    add(p.beams, 'structure');
+    add(p.interfaces, 'interface');
+    add(p.normal_loads, 'normal load');
+    add(p.lines, 'line');
+    add((p.boundary_conditions || []).filter(function (c) {
+      return c.on === 'line' || c.on === 'point';
+    }), 'condition');
+    add((p.loads || []).filter(function (load) { return load.kind === 'point'; }), 'point load');
+    return out;
+  }
+
+  /* Every key a size can name: the layers, their bodies and the lines and points. */
+  function sizableKeys(project) {
+    var keys = meshBodies(project).map(function (body) { return body.key; })
+      .concat((project && project.soil_body_keys) || []);
+    return keys.concat(localObjects(project).map(function (o) { return o.key; }));
+  }
+
+  /* One row per line and point object, with its own size and band or null. */
+  function localControls(project) {
+    return localObjects(project).map(function (object) {
+      var now = localSize(project, object.key);
+      return { key: object.key, label: object.label, kind: object.kind,
+               size: now.size, band: now.band };
     });
   }
 
-  /* `sizes` with the structure rows' sizes: a size where one was typed, none where the
+  /* `mesh` with the rows' sizes and bands: a size where one was typed, none where the
      row was left empty. */
-  function savedStructureSizes(sizes, rows) {
-    var out = Object.assign({}, sizes);
-    rows.forEach(function (row) {
-      if (row.size === null) delete out[row.key]; else out[row.key] = row.size;
-    });
+  function savedLocalSizes(mesh, rows) {
+    var out = mesh;
+    rows.forEach(function (row) { out = withLocalSize(out, row.key, row.size, row.band); });
     return out;
+  }
+
+  function reportError(error) {
+    if (App.Command && App.Command.err) App.Command.err(error.message);
+  }
+
+  /* What the user calls the object `key`. */
+  function nameOf(project, key) {
+    var found = meshBodies(project).concat(localObjects(project)).filter(function (o) {
+      return o.key === key;
+    })[0];
+    var labels = (project && project.soil_body_labels) || {};
+    return found ? found.label : (labels[key] || key);
+  }
+
+  /* Save one object's size and band, as the Mesh properties window saves its own. */
+  function saveLocalSize(key, size, band) {
+    var problem = localProblem(size, band);
+    if (problem) return Promise.reject(new Error(problem));
+    var project = JSON.parse(JSON.stringify(App.PROJECT));
+    project.mesh = withLocalSize(fromProject(project), key, size, band);
+    var name = nameOf(App.PROJECT, key);
+    return App.Api.put('/api/project', project).then(function (saved) {
+      App.Model.apply(saved);
+      if (App.Command && App.Command.ok) {
+        App.Command.ok(size === null ? name + ' takes the global mesh size again.'
+                       : 'Mesh size of ' + name + ': ' + size + ' m'
+                         + (band > 0 ? ', growing back over ' + band + ' m.' : '.'));
+      }
+      return saved;
+    });
+  }
+
+  /* The Selection explorer's Mesh group for `key`. The explorer calls
+     App.commitSelectionEdit after an edit, which sends what is kept in
+     App.PENDING_MESH_SIZE (js/patches.js). With no size of its own the object reads
+     "global"; writing that back, or the band it shows, changes nothing. */
+  var GLOBAL = 'global';
+  function selectionRows(key) {
+    var now = localSize(App.PROJECT, key);
+    function keep(size, band) {
+      if ((size !== null && !Number.isFinite(size)) || (band !== null && !Number.isFinite(band))) {
+        return 'The mesh size and the band must be numbers.';
+      }
+      if (size === now.size && (band || 0) === (now.band || 0)) return null;
+      var problem = localProblem(size, band);
+      if (problem) return problem;
+      App.PENDING_MESH_SIZE = { key: key, size: size, band: band };
+      return null;
+    }
+    var rows = [
+      ['Mesh size', now.size === null ? GLOBAL : String(now.size), 'm', false, {
+        kind: 'number', decimals: 2,
+        get: function () { return now.size === null ? GLOBAL : now.size; },
+        set: function (size) { return keep(size === GLOBAL ? now.size : size, now.band); } }],
+      ['Band', String(now.band || 0), 'm', false, {
+        kind: 'number', decimals: 2,
+        get: function () { return now.band || 0; },
+        set: function (band) { return keep(now.size, band); } }]
+    ];
+    if (now.size !== null) {
+      rows.push(['Size', '', '', false, { kind: 'button', text: 'Use the global size',
+        run: function () {
+          return App.MeshSettings.saveLocalSize(key, null, null).catch(reportError);
+        } }]);
+    }
+    return rows;
+  }
+
+  /* The size an object is meshed at now: its own, its layer's, or the global size. */
+  function sizeNow(project, key) {
+    var own = localSize(project, key).size;
+    if (own !== null) return own;
+    var layer = localSize(project, String(key).split('__')[0]).size;
+    if (layer !== null) return layer;
+    return Number(fromProject(project).element_size);
+  }
+
+  /* Refine mesh (factor 0.5), Coarsen mesh (2) and Reset local refinement (null) on the
+     selected object. */
+  function changeSelected(factor) {
+    var key = App.state && App.state.selection;
+    if (!key || sizableKeys(App.PROJECT).indexOf(key) < 0) {
+      if (App.Command && App.Command.note) {
+        App.Command.note('Select a layer, a soil body, a line or a point first.');
+      }
+      return Promise.resolve(null);
+    }
+    var band = localSize(App.PROJECT, key).band;
+    var size = factor === null ? null
+      : Math.round(sizeNow(App.PROJECT, key) * factor * 1000) / 1000;
+    return saveLocalSize(key, size, size === null ? null : band).catch(reportError);
   }
 
   /* The bodies of `project` that this window's check boxes leave out. */
@@ -180,8 +332,8 @@ App.MeshSettings = (function () {
     var layer = document.getElementById('modal-layer');
     var scrim = el('div.scrim');
     var dialog = el('div.dialog.mesh-settings-dialog', { id: 'mesh-settings-dialog' });
-    dialog.style.width = '660px'; dialog.style.height = '570px';
-    dialog.style.left = Math.max(20, (window.innerWidth - 660) / 2) + 'px';
+    dialog.style.width = '780px'; dialog.style.height = '570px';
+    dialog.style.left = Math.max(20, (window.innerWidth - 780) / 2) + 'px';
     dialog.style.top = Math.max(20, (window.innerHeight - 570) / 2) + 'px';
 
     var closeButton = el('button.dlg-x', { text: '✕', type: 'button' });
@@ -215,7 +367,8 @@ App.MeshSettings = (function () {
     // The checkbox column carries no caption: "Mesh" does not fit a 16px box, and
     // the help text beside the table already explains what ticking one does.
     bodyTable.appendChild(el('div.mesh-body-head', null, [
-      el('span'), el('span', { text: 'Layer' }), el('span', { text: 'Target size' })
+      el('span'), el('span', { text: 'Layer' }), el('span', { text: 'Target size' }),
+      el('span', { text: 'Band' })
     ]));
     bodyControls(App.PROJECT, targets).forEach(function (bodyRow) {
       var enabled = el('input.mesh-body-enabled', {
@@ -229,14 +382,20 @@ App.MeshSettings = (function () {
       size.value = bodyRow.size;
       if (bodyRow.follows) size.setAttribute('data-follows-global', '');
       size.addEventListener('input', function () { size.removeAttribute('data-follows-global'); });
+      var band = el('input.mesh-setting-control.mesh-body-band', {
+        type: 'number', min: '0', step: '1', placeholder: 'none',
+        'data-body-band-key': bodyRow.key
+      });
+      var bandNow = localSize(App.PROJECT, bodyRow.key).band;
+      band.value = bandNow === null ? '' : bandNow;
 
       /* The target size only applies to a layer that is being meshed, so follow
          the checkbox: greyed out when unchecked, and skipped by read(). */
       var bodyRowNode = el('label.mesh-body-row', null, [
-        enabled, el('span', { text: bodyRow.label }), size
+        enabled, el('span', { text: bodyRow.label }), size, band
       ]);
       function syncEnabled() {
-        size.disabled = !enabled.checked;
+        size.disabled = band.disabled = !enabled.checked;
         bodyRowNode.classList.toggle('off', !enabled.checked);
       }
       enabled.addEventListener('change', syncEnabled);
@@ -244,26 +403,32 @@ App.MeshSettings = (function () {
       bodyTable.appendChild(bodyRowNode);
     });
     row('Layer mesh sizes', bodyTable,
-        'Check every layer to mesh. Each checked layer can use an independent target size; shared faces remain conformal.');
+        'Check every layer to mesh. Each checked layer can use an independent target size; shared faces remain conformal. Band: the distance outside the layer over which its size grows back to the global size [m].');
 
-    var structures = structureControls(App.PROJECT);
-    if (structures.length) {
-      var structureTable = el('div.mesh-body-table');
-      structureTable.appendChild(el('div.mesh-body-head.mesh-structure-row', null, [
-        el('span', { text: 'Sheet pile' }), el('span', { text: 'Element size' })
+    var locals = localControls(App.PROJECT);
+    if (locals.length) {
+      var localTable = el('div.mesh-body-table');
+      localTable.appendChild(el('div.mesh-body-head.mesh-structure-row', null, [
+        el('span', { text: 'Structure, line or point' }), el('span', { text: 'Size' }),
+        el('span', { text: 'Band' })
       ]));
-      structures.forEach(function (structureRow) {
+      locals.forEach(function (localRow) {
         var size = el('input.mesh-setting-control.mesh-structure-size', {
-          type: 'number', min: '0.01', step: '0.1', placeholder: 'as around it',
-          'data-structure-key': structureRow.key
+          type: 'number', min: '0.01', step: '0.1', placeholder: 'global',
+          'data-structure-key': localRow.key
         });
-        size.value = structureRow.size === null ? '' : structureRow.size;
-        structureTable.appendChild(el('label.mesh-body-row.mesh-structure-row', null, [
-          el('span', { text: structureRow.label }), size
-        ]));
+        size.value = localRow.size === null ? '' : localRow.size;
+        var band = el('input.mesh-setting-control.mesh-structure-band', {
+          type: 'number', min: '0', step: '1', placeholder: 'none',
+          'data-structure-key': localRow.key
+        });
+        band.value = localRow.band === null ? '' : localRow.band;
+        localTable.appendChild(el('label.mesh-body-row.mesh-structure-row', {
+          title: localRow.kind
+        }, [el('span', { text: localRow.label }), size, band]));
       });
-      row('Structure mesh sizes', structureTable,
-          'The length of the elements along a sheet pile. Empty: it takes the size of the mesh around it.');
+      row('Structure mesh sizes', localTable,
+          'The element size at each structure, line or point, and the band over which it grows back to the global size [m]. Empty: it takes the size of the mesh around it. Also in the Selection explorer of each object.');
     }
 
     var globalSize = row('Global element size', input('element_size', 'number', { min: '0.01', step: '0.1' }),
@@ -318,22 +483,42 @@ App.MeshSettings = (function () {
         if (meshed && !(size > 0)) {
           throw new Error('Mesh size for ' + key + ' must be greater than zero.');
         }
+        var bandControl = form.querySelector('.mesh-body-band[data-body-band-key="' + key + '"]');
+        var band = typedNumber(bandControl, key);
+        if (band !== null && !(band >= 0)) throw new Error('The band of ' + key + ' cannot be negative.');
         // Keep a size typed for a layer that is currently unchecked, so ticking it
         // again does not silently fall back to the global size.
-        rows.push({ key: key, size: size, follows: control.hasAttribute('data-follows-global') });
+        rows.push({ key: key, size: size, band: band,
+                    follows: control.hasAttribute('data-follows-global') });
       });
-      var structureRows = [];
+      var sizes = savedBodySizes(App.PROJECT, rows);
+      var bands = Object.assign({}, fromProject(App.PROJECT).size_bands);
+      rows.forEach(function (row) {
+        if (row.band > 0 && owns(sizes, row.key)) bands[row.key] = row.band;
+        else delete bands[row.key];
+      });
+      var localRows = [];
       form.querySelectorAll('.mesh-structure-size').forEach(function (control) {
-        var typed = control.value.trim();
         var key = control.getAttribute('data-structure-key');
-        if (typed !== '' && !(Number(typed) > 0)) {
-          throw new Error('Mesh size for ' + key + ' must be greater than zero.');
-        }
-        structureRows.push({ key: key, size: typed === '' ? null : Number(typed) });
+        var size = typedNumber(control, key);
+        var band = typedNumber(form.querySelector(
+          '.mesh-structure-band[data-structure-key="' + key + '"]'), key);
+        var problem = localProblem(size, band);
+        if (problem) throw new Error(key + ': ' + problem);
+        localRows.push({ key: key, size: size, band: band });
       });
-      value.body_sizes = savedStructureSizes(savedBodySizes(App.PROJECT, rows), structureRows);
+      var local = savedLocalSizes({ body_sizes: sizes, size_bands: bands }, localRows);
+      value.body_sizes = local.body_sizes;
+      value.size_bands = local.size_bands;
       value.volume_keys = selectedKeys;
       return validate(merge(App.PROJECT, value));
+    }
+    function typedNumber(control, key) {
+      var typed = control ? control.value.trim() : '';
+      if (typed === '') return null;
+      var number = Number(typed);
+      if (!Number.isFinite(number)) throw new Error(key + ': "' + typed + '" is not a number.');
+      return number;
     }
     function save(andGenerate) {
       try { settings = read(); message.textContent = ''; }
@@ -367,7 +552,10 @@ App.MeshSettings = (function () {
   return {
     fromProject: fromProject, validate: validate, meshTargets: meshTargets,
     bodyControls: bodyControls, savedBodySizes: savedBodySizes, leftOutBodies: leftOutBodies,
-    structureControls: structureControls, savedStructureSizes: savedStructureSizes,
+    localSize: localSize, withLocalSize: withLocalSize, localProblem: localProblem,
+    localObjects: localObjects, localControls: localControls, savedLocalSizes: savedLocalSizes,
+    sizableKeys: sizableKeys, saveLocalSize: saveLocalSize, selectionRows: selectionRows,
+    sizeNow: sizeNow, changeSelected: changeSelected,
     chosenBodies: chosenBodies, algorithmRow: algorithmRow, merge: merge, open: open,
     TITLE: TITLE, optimizationChoices: optimizationChoices, optimizationHelp: optimizationHelp,
     opensOnModeTab: opensOnModeTab

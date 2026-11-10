@@ -202,7 +202,7 @@ and adds only the values that are missing
 | Size and order | Global element size; linear or quadratic elements, optionally with straight edges |
 | Algorithms | 2D: frontal, delaunay, meshadapt, auto. 3D: delaunay, frontal, hxt. |
 | Quality | Optimisation (none, gmsh, netgen), smoothing steps, points along curves, minimum size factor |
-| Local control | A target size for each soil layer and each structure; box and cylinder refinement zones (in a model script or with `kratos-cli add`, not in the **Mesh properties** window); **Refine**, **Coarsen** and **Reset local refinement** |
+| Local control | An element size and a band (the distance over which the size grows back to the global size) for each soil layer and body, structure, interface, normal load, soil line, condition on a line or at a point, and point load, in the Selection explorer, the **Mesh properties** window and `kratos-cli mesh`; **Refine mesh**, **Coarsen mesh** and **Reset local refinement** on the selected object. Box and cylinder refinement zones from a model script or `kratos-cli add` still mesh. |
 | Selection | Only the selected layers get a mesh. Shared faces keep common nodes. |
 | Mesh labels | Node and element numbers on the mesh, spread out where nodes overlap |
 
@@ -274,8 +274,7 @@ REST API: `/api/project`, `/api/mesh`, `/api/calculate`, `/api/results/…`.
    User-defined models (UDSM, UMAT) are written as typed, without a test.
 2. **No factor of safety.** Styx has no φ–c reduction stage.
 3. **Groundwater flow is steady-state and 2D only.** A project cannot mix flow stages
-   with deformation stages, and a drawn condition line has no element size of its own
-   (a box refinement gives a seepage face its fine mesh). With a Van Genuchten soil, the
+   with deformation stages. With a Van Genuchten soil, the
    Newton-Raphson iterations can fall into a cycle on some meshes and stop without
    converging; another element size then helps.
 4. **3D is not proven.** No 3D element, law or interface has run in Kratos in a test.

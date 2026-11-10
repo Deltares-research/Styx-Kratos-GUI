@@ -1883,8 +1883,7 @@ App.Model = (function () {
                      // Filled in from the geometry response, which measures it.
                      ['Volume', '—', 'm³', true],
                      ['Active', true]],
-        'Geometry': geometryRows(layer),
-        'Mesh':     [['Coarseness factor', '1.000'], ['Element count', '—', '', true]]
+        'Geometry': geometryRows(layer)
       }
     };
   }
@@ -2068,6 +2067,15 @@ App.Model = (function () {
     });
     App.OBJECT_PROPS.gravity = gravityProps();
     previousConditionKeys = conditions.map(function (record) { return record.id; });
+
+    // The local mesh size of every object that can have one, in one place: a layer, a
+    // soil body, a structure, a soil line, a drawn condition, a point load.
+    if (App.MeshSettings && App.MeshSettings.sizableKeys) {
+      App.MeshSettings.sizableKeys(App.PROJECT).forEach(function (key) {
+        var props = App.OBJECT_PROPS[key];
+        if (props && props.groups) props.groups.Mesh = App.MeshSettings.selectionRows(key);
+      });
+    }
 
     // Last, so every node it has to place already exists.
     syncTrees(!!(App.PROJECT && App.PROJECT.layered_soil), sharedSoilNodes[0]);

@@ -153,6 +153,32 @@
     });
   });
 
+  test('a layer and a sheet pile have a Mesh group: size and band', function () {
+    var project = JSON.parse(JSON.stringify(window.VIEWPORT_PAYLOADS.project));
+    var pile = project.beams[0].id;
+    project.mesh = Object.assign({}, project.mesh, { body_sizes: {}, size_bands: {} });
+    project.mesh.body_sizes[pile] = 0.5;
+    project.mesh.size_bands[pile] = 4;
+    withProject(project, function () {
+      var layerKey = 'soil_' + App.LAYERS[0].id;
+      [layerKey, pile].forEach(function (key) {
+        var rows = App.OBJECT_PROPS[key] && App.OBJECT_PROPS[key].groups.Mesh;
+        T.ok(rows, key + ' has a Mesh group');
+        T.eq(rows.slice(0, 2).map(function (r) { return r[0]; }), ['Mesh size', 'Band'], key);
+      });
+      var wall = App.OBJECT_PROPS[pile].groups.Mesh;
+      T.eq([wall[0][4].get(), wall[1][4].get()], [0.5, 4]);
+      T.eq(wall[2][0], 'Size', 'a size of its own can go back to the global size');
+      var layer = App.OBJECT_PROPS[layerKey].groups.Mesh;
+      T.eq(layer[0][4].get(), 'global');
+      T.ok(/before a band/.test(layer[1][4].set(5)), 'no band without a size');
+      try {
+        T.eq(layer[0][4].set(1.5), null);
+        T.eq(App.PENDING_MESH_SIZE, { key: layerKey, size: 1.5, band: null });
+      } finally { App.PENDING_MESH_SIZE = undefined; }
+    });
+  });
+
   test('an interface picks its law, and its R_inter can go back to each soil\'s own', function () {
     withProject(freeInterface(), function () {
       var contact = App.INTERFACES[0];
@@ -352,10 +378,11 @@
           return Promise.resolve();
         };
         ['Loads', 'NormalLoads', 'Beams', 'Anchors', 'Interfaces', 'SoilVolumeDialog',
-         'BoundaryConditions'].forEach(function (module) {
+         'BoundaryConditions', 'MeshSettings'].forEach(function (module) {
           saved[module] = App[module];
           App[module] = Object.assign({}, App[module]);
-          (module === 'SoilVolumeDialog' ? ['open'] : ['edit', 'remove']).forEach(function (verb) {
+          (module === 'SoilVolumeDialog' ? ['open']
+            : module === 'MeshSettings' ? ['saveLocalSize'] : ['edit', 'remove']).forEach(function (verb) {
             App[module][verb] = function () {
               reached.push({ method: module + '.' + verb, args: Array.prototype.slice.call(arguments) });
               return Promise.resolve();
@@ -378,7 +405,10 @@
                 return (entry[1] || []).some(function (record) { return record.id === key; });
               })[0];
               var expected;
-              if (part) expected = { method: 'SoilVolumeDialog.open', args: [part] };
+              if (label === 'Size') {
+                expected = { method: 'MeshSettings.saveLocalSize', args: [key, null, null] };
+              }
+              else if (part) expected = { method: 'SoilVolumeDialog.open', args: [part] };
               else if (label === 'Stiffness' || label === 'Limit' || label === 'Strength') {
                 expected = { method: 'commitSelectionEdit', args: [key] };
               }

@@ -175,12 +175,37 @@
       T.ok(pile, 'the sheet pile has a size field');
       T.eq(pile.value, '', 'no size of its own yet: it takes the mesh around it');
       pile.value = '0.5';
+      dialog.querySelector('.mesh-structure-band[data-structure-key="sheetpile"]').value = '10';
       T.ok(!/box/i.test(dialog.textContent), 'the window has no refinement boxes');
       realButton(dialog, 'Apply').click();
       return drain().then(function () {
         var mesh = ctx.requests[0].body.mesh;
         T.eq(mesh.body_sizes.sheetpile, 0.5);
+        T.eq(mesh.size_bands, { sheetpile: 10 });
         T.eq(mesh.refinements, [box], 'a box made in a script or with add is kept');
+      });
+    });
+  });
+
+  test("refine, coarsen and reset change the selected object's mesh size", function () {
+    var initial = project();
+    initial.beams = [{ id: 'sheetpile', name: 'Wall', section: 'sp', points: [[5, 0], [5, -13]] }];
+    return withEnvironment(initial, function (ctx) {
+      function sizes() { return ctx.requests[ctx.requests.length - 1].body.mesh; }
+      return App.MeshSettings.changeSelected(0.5).then(function () {
+        T.eq(ctx.requests.length, 0, 'nothing selected: nothing to refine');
+        T.ok(/Select a layer/.test(ctx.logs[0][1]));
+        App.state.selection = 'sheetpile';
+        return App.MeshSettings.changeSelected(0.5);
+      }).then(function () {
+        T.eq(sizes().body_sizes, { sheetpile: 1.25 }, 'half the global size it took');
+        return App.MeshSettings.changeSelected(2);
+      }).then(function () {
+        T.eq(sizes().body_sizes, { sheetpile: 2.5 }, 'twice its own');
+        return App.MeshSettings.changeSelected(null);
+      }).then(function () {
+        T.eq(sizes().body_sizes, {}, 'reset: the global size again');
+        T.ok(/Wall takes the global mesh size again/.test(ctx.logs[ctx.logs.length - 1][1]));
       });
     });
   });

@@ -1022,13 +1022,9 @@ App.LivePatches = (function () {
      exists. NOT_YET holds the actions that do run, but not what their label says:
 
        importSoilLayers   the mockup's import dialog, which imports nothing.
-       refineMesh,        one box over the excavation whatever is selected, so a
-       coarsenMesh,       refinement nobody placed. Mesh properties… is where the
-       resetMeshRefinement  element size is set.
        drawPoint          draws a point, which the server then refuses: the creation
                           recipes (core/geometry/primitives.py) have no `point` kind. */
-  var NOT_YET = ['importSoilLayers', 'refineMesh', 'coarsenMesh', 'resetMeshRefinement',
-                 'drawPoint'];
+  var NOT_YET = ['importSoilLayers', 'drawPoint'];
 
   /* Appended to a greyed rail tool's tip, the tip being the only words a rail button
      has. Menus need no such suffix: a grey row in a list of black ones says it. */
@@ -2771,8 +2767,12 @@ App.LivePatches = (function () {
         App.MeshSettings.open();
         return;
       }
-      // Refine, coarsen and reset are on NOT_YET and refused at the top: they set one
-      // box over the excavation whatever was selected.
+      // The selected object's local mesh size: halved, doubled, or taken away
+      // (js/mesh-settings.js). The frozen ones set one box whatever was selected.
+      var MESH_SIZE_FACTORS = { refineMesh: 0.5, coarsenMesh: 2, resetMeshRefinement: null };
+      if (item && Object.prototype.hasOwnProperty.call(MESH_SIZE_FACTORS, item.action)) {
+        return App.MeshSettings.changeSelected(MESH_SIZE_FACTORS[item.action]);
+      }
       var result = frozenAction(item);
       // The frozen toggles flip the state and the toolbar button, never the menu tick.
       syncCheckMarks();
@@ -4051,6 +4051,14 @@ App.LivePatches = (function () {
        showing a value the model does not hold. */
     App.commitSelectionEdit = function (objKey) {
       var reselect = objKey === undefined ? App.state.selection : objKey;
+
+      // A row of the Mesh group: the object's local mesh size, a mesh setting.
+      if (App.PENDING_MESH_SIZE) {
+        var pending = App.PENDING_MESH_SIZE;
+        App.PENDING_MESH_SIZE = undefined;
+        return App.MeshSettings.saveLocalSize(pending.key, pending.size, pending.band)
+          .catch(function (error) { App.Command.err(error.message); });
+      }
 
       if (App.Loads && App.Loads.isLoadKey(reselect)) {
         var load = (App.LOADS || []).filter(function (item) { return item.id === reselect; })[0];

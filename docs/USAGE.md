@@ -30,8 +30,8 @@ explorer**, below the Model explorer.
 Some menu items and tools come from the first design of the GUI and do nothing yet. They are
 grey, in the menus and on the tool rail, and you cannot select them. The tip of a grey tool
 says *not available yet*. These are, for example: **Import soil layers…**, **Create point**,
-**Create plate**, **Create beam**, **Create embedded beam**, **Tunnel designer…**, **Refine
-mesh**, **Coarsen mesh**, the wells, drains and flow functions, **Select multiple objects**,
+**Create plate**, **Create beam**, **Create embedded beam**, **Tunnel designer…**, the
+wells, drains and flow functions, **Select multiple objects**,
 **Activate selection**, **Deactivate selection**, **Preview stage**, **Pack project…**,
 **Print…**, the **Expert** menu (except **Command line**), and **Help** → **Reference
 manual** and **Tutorial manual**.
@@ -347,8 +347,8 @@ When you open Mesh mode, the **Mesh properties** window opens:
 
 | Setting | What it does |
 |---|---|
-| Layer mesh sizes | Select the layers to mesh, and give each one its own target size. A layer with no size of its own shows the global size and follows it. Type a value to give the layer its own size. Styx meshes the selected layers together, so their shared faces have common nodes. Sizes that are not in this table, for example the size of an anchor set in `kratos-cli`, do not change. |
-| Structure mesh sizes | The length of the elements along each sheet pile. Empty: the sheet pile takes the size of the mesh around it. |
+| Layer mesh sizes | Select the layers to mesh, and give each one its own target size. A layer with no size of its own shows the global size and follows it. Type a value to give the layer its own size. **Band** is the distance outside the layer over which its size grows back to the global size. Styx meshes the selected layers together, so their shared faces have common nodes. |
+| Structure mesh sizes | The element size at each structure, interface, normal load, soil line, condition on a line or at a point, and point load, and its **Band**: the distance over which the size grows back to the global size. Empty: the object takes the size of the mesh around it. |
 | Global element size | The maximum length of an element edge, in metres |
 | Element order | Linear elements, or quadratic elements with a midside node on each edge |
 | 2D algorithm, 3D algorithm | The Gmsh algorithm that makes the elements |
@@ -360,6 +360,30 @@ When you open Mesh mode, the **Mesh properties** window opens:
 
 Click **Apply and generate** to make the mesh, or **Apply** to only keep the settings.
 <kbd>F9</kbd> in Mesh mode makes the mesh again with the saved settings.
+
+### A finer mesh at one object
+
+You can give a finer mesh to a layer, a soil body, a sheet pile, an interface, a normal
+load, a soil line, a condition on a line or at a point, or a point load. Select the object.
+The **Mesh** group of the Selection explorer then shows two rows:
+
+- **Mesh size**: the element size at the object. *global* means that the object has no
+  size of its own.
+- **Band**: the distance over which the size grows back to the global size. With a band of
+  0, the size applies on the object only, and the mesh next to it changes size as Gmsh
+  chooses. A point with a band of 0 gets its size within one element of it.
+
+Click **Use the global size** to remove the object's own size. **Mesh** → **Refine mesh**
+halves the size of the selected object, **Coarsen mesh** doubles it, and **Reset local
+refinement** removes it. The same tools are on the tool rail in Mesh mode.
+
+For example, select the sheet pile, type 0.5 in **Mesh size** and 45 in **Band**: the
+elements are 0.5 m along the wall and round its toe, and grow to the global size 45 m away.
+A band only makes the mesh finer: on a size that is larger than the global size, it does
+nothing.
+
+A model from an older version can have a refinement box (`mesh.refinements`). Styx still
+meshes it. To add one, use `kratos-cli add` or a model script.
 
 A mesh size belongs to its body. An edit that takes a body away also removes the body's
 size: for example, deleting a layer or a structure, or moving a layer boundary so that

@@ -50,9 +50,7 @@
     T.eq(implemented({ label: 'Stage', sub: [] }), true, 'a submenu a caller fills is');
     T.eq(implemented('-'), true, 'a separator is not a control');
     T.eq(implemented({ title: 'Standard views' }), true, 'nor is a caption');
-    T.eq(App.LivePatches.NOT_YET.slice().sort(),
-         ['coarsenMesh', 'drawPoint', 'importSoilLayers', 'refineMesh',
-          'resetMeshRefinement']);
+    T.eq(App.LivePatches.NOT_YET.slice().sort(), ['drawPoint', 'importSoilLayers']);
   });
 
   test('every menu row that does nothing is greyed, submenus included', function () {
@@ -77,8 +75,7 @@
      ['Structures', /^Create point$/],
      ['Soil', /^Import soil layers/], ['Structures', /^Create plate$/],
      ['Structures', /^Create beam$/], ['Structures', /^Create embedded beam$/],
-     ['Structures', /^Tunnel designer/], ['Mesh', /^Refine mesh$/],
-     ['Mesh', /^Coarsen mesh$/], ['Mesh', /^Reset local refinement$/],
+     ['Structures', /^Tunnel designer/],
      ['Flow conditions', /^Create well$/], ['Flow conditions', /^Create drain$/],
      ['Flow conditions', /^Flow functions/], ['Flow conditions', /^Global water level$/],
      ['Stages', /^Add stage$/], ['Stages', /^Insert stage$/],
@@ -97,7 +94,8 @@
   test('the rows that work are left alone', function () {
     withInstall(function () {});
     [['File', /^Export model/], ['View', /^Zoom to fit$/], ['Soil', /^Modify soil layers/],
-     ['Help', /^Command reference$/], ['Help', /^About/]
+     ['Help', /^Command reference$/], ['Help', /^About/], ['Mesh', /^Refine mesh$/],
+     ['Mesh', /^Coarsen mesh$/], ['Mesh', /^Reset local refinement$/]
     ].forEach(function (pair) {
       T.eq(!!row(pair[0], pair[1])[0].disabled, false, pair[0] + ' > ' + pair[1]);
     });
@@ -115,7 +113,7 @@
     T.eq(notYetTips('soil'), []);
     T.eq(notYetTips('structures'), ['Select multiple objects', 'Create point', 'Create plate',
          'Create beam', 'Create embedded beam row', 'Tunnel designer']);
-    T.eq(notYetTips('mesh'), ['Refine mesh', 'Coarsen mesh', 'Reset local refinement']);
+    T.eq(notYetTips('mesh'), []);
     T.eq(notYetTips('flow'), ['Create well', 'Create drain', 'Flow functions']);
     T.eq(notYetTips('staged'), ['Select multiple objects', 'Activate selection',
          'Deactivate selection', 'Preview stage']);
@@ -194,10 +192,10 @@
   test('a NOT_YET action that still arrives is refused, not run', function () {
     withInstall(function (ctx) {
       App.runAction({ action: 'importSoilLayers', label: 'Import soil layers…' });
-      App.runAction({ action: 'refineMesh', tip: 'Refine mesh' + App.LivePatches.NOT_YET_TIP });
+      App.runAction({ action: 'drawPoint', tip: 'Create point' + App.LivePatches.NOT_YET_TIP });
       T.eq(ctx.frozen, [], 'the frozen dispatcher would open the mockup dialog');
       T.eq(ctx.notes, ['"Import soil layers…" is not available in Styx yet.',
-                       '"Refine mesh" is not available in Styx yet.']);
+                       '"Create point" is not available in Styx yet.']);
     });
   });
 
