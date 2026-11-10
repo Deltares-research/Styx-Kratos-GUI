@@ -16,9 +16,9 @@ the tests).
 | Part | What |
 |---|---|
 | Web framework | FastAPI 0.143.0 and Uvicorn 0.34.0 |
-| Validation | Pydantic 2.12.5. `Project` in `core/model/schemas.py` is the one description of a model. |
+| Validation | Pydantic 2.14.2. `Project` in `core/model/schemas.py` is the one description of a model. |
 | Geometry and mesh | Gmsh 4.13.1 (OpenCASCADE kernel) |
-| Numerics | NumPy 2.2.6 (Python 3.10) or 2.3.5 (Python 3.11 and newer) |
+| Numerics | NumPy 2.2.6 (Python 3.10), 2.3.5 (Python 3.11 to 3.14) or 2.5.4 (Python 3.15 and newer) |
 | State | One project in memory (`backend/store.py`). No database and no login. Runs are folders on disk. |
 | Processes | Gmsh in a `ProcessPoolExecutor(max_workers=1)` (`core/gmsh_worker.py`). Kratos in a new subprocess for each run (`core/analysis/calculation.py`). |
 | Solver | Kratos Multiphysics GeoMechanicsApplication. The launcher does not install it. Styx finds it through `kratos.local.json` or `KRATOS_GUI_PYTHON` and `KRATOS_GUI_KRATOS`. |
