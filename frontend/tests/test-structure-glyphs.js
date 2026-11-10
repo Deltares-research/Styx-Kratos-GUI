@@ -189,6 +189,13 @@
     T.eq(pick(-G.BESIDE_PILE - 4), 'contact', 'just outside the left dashes');
   });
 
+  T.test('a one-pixel line and a point are in reach a few pixels off', function () {
+    var line = [{ points: [[0, 0, 0], [100, 0, 0]] }];
+    var point = [{ points: [[10, -10, 0], [10, -10, 0]] }];
+    T.near(G.screenDistance(line, { width: 1 }, 0, toScreen, { x: 50, y: 4 }), 3.5, 1e-9);
+    T.near(G.screenDistance(point, { width: 1 }, 0, toScreen, { x: 13, y: 14 }), 4.5, 1e-9);
+  });
+
   T.test('nothing off screen is in reach', function () {
     var paths = [{ points: [[0, 0, 0], [10, 0, 0]] }];
     T.eq(G.screenDistance(paths, G.STYLES.pile, 1, function () { return null; }, { x: 0, y: 0 }),

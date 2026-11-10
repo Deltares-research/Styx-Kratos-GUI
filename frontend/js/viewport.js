@@ -137,9 +137,26 @@ App.Viewport = (function () {
   var GLYPH_HIGHLIGHT = new THREE.Color(0x2f7fe0);
   var GLYPH_TINT = { 0x1f3b70: 0.6, 0x2a3550: 0.35 };
 
+  /* A boundary condition and the water level are lines, lit by nothing, so they have
+     no emissive to swap: their own colour is tinted toward the selection blue, and
+     put back from what it was first. */
+  function lineHighlighted(key) { return key === 'water' || conditionIds.indexOf(key) >= 0; }
+
+  function tintLines(g, amount) {
+    g.traverse(function (o) {
+      if (!(o.isLine || o.isMesh) || !o.material || !o.material.color) return;
+      var data = o.material.userData;
+      if (!data.lineBase) data.lineBase = o.material.color.clone();
+      o.material.color.copy(data.lineBase);
+      if (amount) o.material.color.lerp(GLYPH_HIGHLIGHT, amount);
+    });
+    needsRender = true;
+  }
+
   function setEmissive(key, hex) {
     var g = groups[key];
     if (!g) return;
+    if (lineHighlighted(key)) return tintLines(g, GLYPH_TINT[hex] || 0.5);
     g.traverse(function (o) {
       if (!(o.material && o.material.emissive && o.material.userData)) return;
       if (o.material.userData.glyph) {
@@ -155,6 +172,7 @@ App.Viewport = (function () {
   function restoreEmissive(key) {
     var g = groups[key];
     if (!g) return;
+    if (lineHighlighted(key)) return tintLines(g, 0);
     g.traverse(function (o) {
       if (o.material && o.material.emissive && o.material.userData && o.material.userData.base) {
         o.material.emissive.copy(o.material.userData.base);
@@ -1107,8 +1125,8 @@ App.Viewport = (function () {
   }
 
   /* The keys of the conditions, supports and water pressures apart. Both are in every
-     mode but Results, and hidden until the user shows them: by Show in the Model
-     explorer's menu (off in a new view, `shownByDefault`), or by selecting it
+     mode but Results, and drawn until the user hides them by Hide in the Model
+     explorer's menu; one hidden is drawn again while it is selected
      (`revealConditions`). Their check box there is "active", not the eye
      (addConditionChecks in frontend/js/patches.js). */
   function conditionKeysOf(project) {
@@ -1173,9 +1191,9 @@ App.Viewport = (function () {
       // level is a reference plane, not a solid: it is meant to be legible through
       // the ground it passes behind.
       new THREE.LineBasicMaterial({ color: 0x2f8fd8, depthTest: false }));
-    // Never a pick target -- it is edited from the Selection explorer's rows, and a
-    // line lying inside the soil would otherwise steal clicks meant for the soil.
-    line.userData.noPick = true;
+    // Picked on screen, a few pixels either side of it (`linesUnderPointer`); a click
+    // farther into the soil still picks the soil.
+    line.userData.key = 'water';
     line.renderOrder = 17;
     group.add(line);
   }
@@ -1926,7 +1944,8 @@ App.Viewport = (function () {
     pointer.y = -((ev.clientY - r.top) / r.height) * 2 + 1;
     raycaster.setFromCamera(pointer, cam);
     var hits = raycaster.intersectObjects(pickables(), false);
-    var glyph = glyphUnderPointer({ x: ev.clientX - r.left, y: ev.clientY - r.top });
+    var glyph = App.StructureGlyphs && App.StructureGlyphs.nearest(
+      screenTargets({ x: ev.clientX - r.left, y: ev.clientY - r.top }));
     if (glyph) {
       return { object: glyph.mesh,
                point: hits.length ? hits[0].point
@@ -1935,26 +1954,68 @@ App.Viewport = (function () {
     return hits.length ? hits[0] : null;
   }
 
-  /* A sheet pile, anchor or interface is picked on screen rather than by the ray:
-     its band is a few pixels wide, and an interface's is dashes with gaps the ray
-     falls through. Anything within a few pixels of the band counts
-     (App.StructureGlyphs.nearest). Glyphs are drawn over everything, so one in
-     reach beats the soil or mesh under it, as it does on screen. */
-  function glyphUnderPointer(click) {
+  /* What is picked on screen rather than by the ray, each with its distance in
+     pixels from `click`, for App.StructureGlyphs.nearest to choose from:
+
+     • a sheet pile, anchor or interface: its band is a few pixels wide, and an
+       interface's is dashes with gaps the ray falls through;
+     • a boundary condition and the water level: drawn as one-pixel lines, which the
+       ray (meshes only, `pickables`) does not see at all.
+
+     Anything within a few pixels counts. All of them are drawn over the soil, so one
+     in reach beats the soil or mesh under it, as it does on screen; of two in reach,
+     the nearer, then the one drawn on top. */
+  function screenTargets(click) {
     var G = App.StructureGlyphs;
-    if (!G || !glyphs.length || !cam) return null;
+    if (!G || !cam) return [];
     function shown(object) {
       for (var o = object; o && o !== scene; o = o.parent) if (!o.visible) return false;
       return !object.userData.noPick;
     }
     function toScreen(p) { return projectToScreen(p[0], p[1], p[2]); }
-    return G.nearest(glyphs.filter(function (glyph) {
+    var targets = glyphs.filter(function (glyph) {
       return glyph.mesh.parent && shown(glyph.mesh);
     }).map(function (glyph) {
       return { mesh: glyph.mesh, order: glyph.style.order,
                distance: G.screenDistance(glyph.paths, glyph.style, glyph.px || 0,
                                           toScreen, click) };
-    }));
+    });
+    conditionIds.concat(['water']).forEach(function (key) {
+      var group = groups[key];
+      if (!group || !shown(group)) return;
+      group.traverse(function (part) {
+        // Its lines, and the dot a condition at a point is drawn as.
+        if (!(part.isLine || part.isMesh) || !part.userData.key || !shown(part)) return;
+        targets.push({ mesh: part, order: part.renderOrder,
+                       distance: G.screenDistance(linePaths3(part), LINE_PICK_STYLE, 0,
+                                                  toScreen, click) });
+      });
+    });
+    return targets;
+  }
+
+  var LINE_PICK_STYLE = { width: 1 };
+
+  /* A THREE.Line's points as structure-glyphs.js paths, in world coordinates: one
+     polyline, or for LineSegments one path per pair. A mesh -- a point condition's
+     dot -- is its centre. */
+  function linePaths3(line) {
+    line.updateMatrixWorld();
+    var v = new THREE.Vector3(), points = [];
+    if (line.isMesh) {
+      v.setFromMatrixPosition(line.matrixWorld);
+      return [{ points: [[v.x, v.y, v.z], [v.x, v.y, v.z]] }];
+    }
+    var position = line.geometry.attributes.position;
+    if (!position) return [];
+    for (var i = 0; i < position.count; i++) {
+      v.fromBufferAttribute(position, i).applyMatrix4(line.matrixWorld);
+      points.push([v.x, v.y, v.z]);
+    }
+    if (!line.isLineSegments) return points.length > 1 ? [{ points: points }] : [];
+    var paths = [];
+    for (var j = 0; j + 1 < points.length; j += 2) paths.push({ points: [points[j], points[j + 1]] });
+    return paths;
   }
 
   var groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -2255,18 +2316,16 @@ App.Viewport = (function () {
     return visible[key] !== false;
   }
 
-  /* Every part is drawn until its eye is turned off, but a boundary condition is not:
-     a model opens on its soil, and the supports and water levels of each face would
-     cover its edges. The user shows them one by one, from the Model explorer's menu. */
-  function shownByDefault(key) {
-    return !(App.BoundaryConditions && App.BoundaryConditions.isConditionKey(key));
-  }
+  /* Every part is drawn until its eye is turned off, the boundary conditions too: the
+     supports and water pressures are what the model is held and loaded by, and are
+     picked in the viewport like any other part. */
+  function shownByDefault() { return true; }
 
   /* When another project is opened. The standard conditions of every project have the
-     same ids, so an eye turned on in the last one would otherwise show the new one's. */
+     same ids, so an eye turned off in the last one would otherwise hide the new one's. */
   function forgetConditionEyes() {
     Object.keys(visible).forEach(function (key) {
-      if (conditionIds.indexOf(key) >= 0 || !shownByDefault(key)) delete visible[key];
+      if (conditionIds.indexOf(key) >= 0) delete visible[key];
     });
     revealed = [];
   }

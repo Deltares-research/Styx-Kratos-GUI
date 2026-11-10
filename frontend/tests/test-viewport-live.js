@@ -394,21 +394,22 @@
         var group = groups[record.id];
         T.ok(group, record.name + ' has a glyph group');
         T.ok(group.children.length > 0);
-        T.eq(group.visible, false, 'conditions start hidden');
+        T.eq(group.visible, true, 'conditions start shown');
+        App.Viewport.setVisible(record.id, false);
+        T.eq(group.visible, false, 'its eye hides it');
         App.Viewport.select(record.id);
         T.eq(group.visible, true, 'selecting the condition reveals it');
         App.Viewport.select(null);
         T.eq(group.visible, false, 'deselecting restores the eye');
-        App.Viewport.setVisible(record.id, true);
-        T.eq(App.Viewport.isVisible(record.id), true);
+        T.eq(App.Viewport.isVisible(record.id), false);
       });
       App.Viewport.forgetConditionEyes();
       return App.Viewport.refresh();
     }).then(function () {
       var groups = sceneGroups();
       App.PROJECT.boundary_conditions.forEach(function (record) {
-        T.eq(App.Viewport.isVisible(record.id), false);
-        T.eq(groups[record.id].visible, false);
+        T.eq(App.Viewport.isVisible(record.id), true, 'a new project shows them again');
+        T.eq(groups[record.id].visible, true);
       });
     }).then(restore, function (error) {
       return restore().then(function () { throw error; });

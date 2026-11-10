@@ -299,6 +299,10 @@ it to keep the condition in the project but leave it out of the calculation. The
 of **Boundary conditions** switches all of them. In Staged construction mode, the check box
 of a water pressure condition is for the selected stage.
 
+The viewport shows every condition and the water level. Click a condition or the water level
+to select it. A click a few pixels away from the line also selects it. To hide a condition,
+right-click its row in the Model explorer and select **Hide**.
+
 The viewport does not show the conditions when a model opens. To show a condition, select it
 in the Model explorer, or right-click it and select **Show**. **Show** on **Boundary
 conditions** shows all of them. A condition that you only selected goes away when you select
