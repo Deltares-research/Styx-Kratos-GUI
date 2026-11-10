@@ -52,7 +52,34 @@
                mode + ' hides ' + key + (simple ? ' (layered_soil)' : ''));
         });
       });
-      T.eq(groups.soil.indexOf('beam_1'), -1, 'soil mode stays soil-only');
+    });
+  });
+
+  /* Faded rather than left out: in Soil and Flow conditions the structures are there
+     to read the soil against, and `structureOpacity` draws them half transparent. */
+  test('sheet piles, anchors and interfaces are in Soil and Flow conditions too', function () {
+    [true, false].forEach(function (layered) {
+      var groups = App.Viewport.computeModeGroups(
+        ['soil_L1'], [], layered, ['load_1'], ['beam_1', 'anchor_1'], [], null, ['contact_1']);
+      ['soil', 'flow'].forEach(function (mode) {
+        ['beam_1', 'anchor_1', 'contact_1'].forEach(function (key) {
+          T.ok(groups[mode].indexOf(key) >= 0,
+               mode + ' omits ' + key + (layered ? ' (layered soil)' : ''));
+        });
+        T.eq(groups[mode].indexOf('load_1'), -1, mode + ' still draws no loads');
+      });
+    });
+  });
+
+  test('a structure is half transparent in Soil and Flow, half again when off', function () {
+    var opacity = App.Viewport.structureOpacity;
+    ['structures', 'mesh', 'staged'].forEach(function (mode) {
+      T.eq(opacity(mode, false), 1, mode + ' draws it solid');
+      T.eq(opacity(mode, true), 0.5, mode + ' draws a switched-off one half transparent');
+    });
+    ['soil', 'flow'].forEach(function (mode) {
+      T.eq(opacity(mode, false), 0.5, mode + ' draws it half transparent');
+      T.eq(opacity(mode, true), 0.25, mode + ' fades a switched-off one further');
     });
   });
 
@@ -64,10 +91,7 @@
         T.ok(groups[mode].indexOf('contact_1') >= 0,
              mode + ' omits the free interface' + (layered ? ' (layered soil)' : ''));
       });
-      ['soil', 'flow', 'results'].forEach(function (mode) {
-        T.eq(groups[mode].indexOf('contact_1'), -1,
-             mode + ' should not show a free interface');
-      });
+      T.eq(groups.results.indexOf('contact_1'), -1, 'results should not show an interface');
     });
   });
 

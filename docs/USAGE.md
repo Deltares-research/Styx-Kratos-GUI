@@ -198,6 +198,14 @@ To change an object, select it in the viewport or in the Model explorer, then ch
 properties in the Selection explorer. An object that is not **Active** stays in the project,
 but Styx does not send it to Kratos.
 
+In the viewport, a sheet pile is a thick dark line, an anchor is a green line with a dot at
+each end, and an interface is a dashed purple line. An interface on a sheet pile is drawn
+next to the pile, on each face that has the interface. These lines keep the same width when
+you zoom, and they are drawn over the soil and the mesh. On the **Soil** and **Flow
+conditions** tabs they are drawn half transparent. A sheet pile, anchor or interface that is
+not **Active**, or that the selected stage deactivates, is drawn half transparent too. On the
+**Soil** and **Flow conditions** tabs it is fainter still.
+
 The sheet pile section starts with values near an AZ 26-700 steel sheet pile. In 2D, the
 values are for each metre of wall, divided by the **Spacing**.
 

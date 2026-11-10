@@ -346,7 +346,14 @@
       App.Viewport.applyStageVisibility();
       var hidden = App.Stages.hiddenKeys(App.PROJECT, stages[0].id, 'staged');
       var groups = sceneGroups();
+      // A structure or interface the stage switched off stays on screen, faded.
+      var structures = (App.BEAMS || []).concat(App.ANCHORS || [], App.INTERFACES || [])
+        .map(function (record) { return record.id; });
       hidden.filter(function (key) { return groups[key]; }).forEach(function (key) {
+        if (structures.indexOf(key) >= 0) {
+          T.ok(groups[key].visible, key + ' is still drawn, faded');
+          return;
+        }
         T.eq(groups[key].visible, false, key + ' is not built in the first stage');
       });
       App.state.phase = null;
@@ -505,9 +512,60 @@
         App.Viewport.select(App.BEAMS[0].id);
         T.ok(App.Viewport.getScene().children.some(function (child) { return child.type === 'Box3Helper'; }));
         App.state.mode = 'soil'; App.Viewport.setMode('soil');
-        T.eq(sceneGroups()[contact.id].visible, false, 'soil mode excludes contacts');
+        // Soil mode draws the structures too, half transparent.
+        function opacity(key) {
+          var found = null;
+          sceneGroups()[key].traverse(function (o) { if (o.material && found === null) found = o.material.opacity; });
+          return found;
+        }
+        T.eq(sceneGroups()[contact.id].visible, true, 'soil mode draws contacts');
+        T.near(opacity(contact.id), 0.5, 1e-9, 'faded to half in soil mode');
+        T.eq(sceneGroups()[App.BEAMS[0].id].visible, true);
+        T.near(opacity(App.BEAMS[0].id), 0.5, 1e-9);
+        App.state.mode = 'structures'; App.Viewport.setMode('structures');
+        T.near(opacity(contact.id), 1, 1e-9, 'solid again in structures mode');
+        App.Viewport.setVisible(App.BEAMS[0].id, false);
         T.eq(sceneGroups()[App.BEAMS[0].id].visible, false);
         T.eq(App.Viewport.getScene().children.some(function (child) { return child.type === 'Box3Helper'; }), false);
+        App.Viewport.setVisible(App.BEAMS[0].id, true);
+      });
+    }).then(restore, function (error) {
+      return restore().then(function () { throw error; });
+    });
+  });
+
+  /* The server leaves a pile whose Active box is off out of the build, so it sends no
+     section for it; the viewport draws it from its record, half transparent. */
+  test('viewport: a switched-off sheet pile is drawn half transparent', function () {
+    function restore() {
+      App.Viewport.select(null);
+      standIns();
+      App.state.mode = 'soil';
+      return App.Viewport.refresh();
+    }
+    function opacity(key) {
+      var found = null;
+      sceneGroups()[key].traverse(function (o) { if (o.material && found === null) found = o.material.opacity; });
+      return found;
+    }
+    return boot().then(function () {
+      var project = JSON.parse(JSON.stringify(P.project));
+      T.ok((project.beams || []).length > 0, 'the test model has a sheet pile');
+      var pile = project.beams[0];
+      pile.active = false;
+      var geometry = Object.assign({}, P.geometry, {
+        sections: P.geometry.sections.filter(function (s) { return s.key !== pile.id; })
+      });
+      App.Api.get = function (path) {
+        return Promise.resolve(path === '/api/project' ? project : geometry);
+      };
+      return App.Viewport.refresh().then(function () {
+        App.state.mode = 'structures'; App.Viewport.setMode('structures');
+        T.ok(sceneGroups()[pile.id], 'drawn though the build left it out');
+        T.eq(sceneGroups()[pile.id].visible, true);
+        T.near(opacity(pile.id), 0.5, 1e-9, 'half transparent');
+        App.state.mode = 'soil'; App.Viewport.setMode('soil');
+        T.near(opacity(pile.id), 0.25, 1e-9, 'and faded further in soil mode');
       });
     }).then(restore, function (error) {
       return restore().then(function () { throw error; });

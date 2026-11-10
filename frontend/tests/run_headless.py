@@ -56,6 +56,12 @@ SUITES = {
         [JS / "part-colors.js"],
         TESTS / "test-part-colors.js",
     ),
+    # How a sheet pile, an anchor and an interface are drawn: triangles a fixed number
+    # of pixels wide. Putting them on screen is viewport.js's; the arithmetic is not.
+    "structure-glyphs": (
+        [JS / "structure-glyphs.js"],
+        TESTS / "test-structure-glyphs.js",
+    ),
     # `water <level>` / `water off`: what was asked and what to send. The request and
     # the redraw are patches.js's.
     "water": (

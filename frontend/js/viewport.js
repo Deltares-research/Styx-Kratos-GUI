@@ -61,6 +61,7 @@ App.Viewport = (function () {
   var frame = null;              // camera framing derived from the server bbox
   var home = null;               // the frame grown to take in loads, piles and the like
   var soilKeys = [];
+  var structureKeys = [];        // sheet piles, anchors and interfaces: faded, not hidden
   var groupKeys = {};            // Model-explorer group row -> the part keys under it
 
   /* A group row stands for a family of parts: hiding it hides all of them, and
@@ -82,9 +83,8 @@ App.Viewport = (function () {
       'group:loads': (loads || []).slice(),
       'group:sheetpiles': (beams || []).slice(),
       'group:anchors': (anchors || []).slice(),
-      // A contact along a pile draws nothing of its own -- it is the pile's line --
-      // so this is empty unless the interface was given a line of its own, which the
-      // build tags under the interface's own key.
+      // Every interface: one on a line of its own comes from the build under its own
+      // key, and one along a pile is drawn beside it under its own key as well.
       'group:interfaces': (contacts || []).slice(),
       // Its own row rather than a share of 'group:loads': the Model explorer lists
       // normal loads separately, and an eye has to toggle what its own row names.
@@ -130,11 +130,24 @@ App.Viewport = (function () {
     });
   }
 
+  /* A structure glyph is coloured by its emissive alone (glyphMaterial), so the
+     usual highlight -- swapping the emissive for a dark blue -- would turn a steel
+     pile and a purple interface the same navy as the selection box. It is tinted
+     toward the selection blue instead, more for a selection than for a hover. */
+  var GLYPH_HIGHLIGHT = new THREE.Color(0x2f7fe0);
+  var GLYPH_TINT = { 0x1f3b70: 0.6, 0x2a3550: 0.35 };
+
   function setEmissive(key, hex) {
     var g = groups[key];
     if (!g) return;
     g.traverse(function (o) {
-      if (o.material && o.material.emissive && o.material.userData) o.material.emissive.setHex(hex);
+      if (!(o.material && o.material.emissive && o.material.userData)) return;
+      if (o.material.userData.glyph) {
+        o.material.emissive.copy(o.material.userData.base)
+          .lerp(GLYPH_HIGHLIGHT, GLYPH_TINT[hex] || 0.5);
+      } else {
+        o.material.emissive.setHex(hex);
+      }
     });
     needsRender = true;
   }
@@ -167,6 +180,199 @@ App.Viewport = (function () {
                                        edgeMaterial(section));
     lines.userData.noPick = true;
     return lines;
+  }
+
+  /* ── Sheet piles, anchors and interfaces ──────────────────────────────────
+
+     Drawn as triangles a fixed number of pixels wide (frontend/js/structure-glyphs.js
+     says why and how), so each one is rebuilt whenever the camera moves: `glyphs`
+     lists them for syncGlyphs, which animate() runs before every frame. */
+  var glyphs = [];
+
+  /* Lit by nothing: the colour is the emissive, over a black base, so a band reads
+     the same at any angle -- and the same in the software renderer, which adds the
+     emissive to its own shading. Drawn over the soil and the mesh it lies in. */
+  function glyphMaterial(style) {
+    var m = new THREE.MeshLambertMaterial({
+      color: 0x000000, emissive: new THREE.Color(style.color),
+      side: THREE.DoubleSide, depthTest: false, depthWrite: false
+    });
+    m.userData = { base: m.emissive.clone(), glyph: true };
+    return m;
+  }
+
+  function glyphMesh(key, paths, style) {
+    var mesh = new THREE.Mesh(new THREE.BufferGeometry(), glyphMaterial(style));
+    mesh.userData.key = key;
+    mesh.renderOrder = style.order;
+    var glyph = { mesh: mesh, paths: paths, style: style, signature: null };
+    glyphs.push(glyph);
+    shapeGlyph(glyph, viewForGlyphs());
+    return mesh;
+  }
+
+  /* What the camera shows, in the terms structure-glyphs.js takes. Before the first
+     frame there is no camera to ask; a zero pixel size gives a band of no width
+     along the part's own line, which is still what the home view should measure. */
+  function viewForGlyphs() {
+    if (!cam || !host || !host.clientHeight) {
+      return { toCamera: [0, 0, 1], right: [1, 0, 0], up: [0, 1, 0],
+               camera: null, height: 0 };
+    }
+    cam.updateMatrixWorld();
+    var e = cam.matrixWorld.elements;
+    return {
+      right: [e[0], e[1], e[2]], up: [e[4], e[5], e[6]], toCamera: [e[8], e[9], e[10]],
+      camera: { ortho: !!cam.isOrthographicCamera, top: cam.top, bottom: cam.bottom,
+                zoom: cam.zoom, fov: cam.fov, position: cam.position.toArray() },
+      height: host.clientHeight
+    };
+  }
+
+  function shapeGlyph(glyph, view) {
+    var G = App.StructureGlyphs;
+    var px = view.camera
+      ? G.pixelSize(view.camera, G.centreOf(glyph.paths), view.height) : 0;
+    var signature = [px].concat(view.toCamera, view.up).map(function (v) {
+      return v.toPrecision(6);
+    }).join(',');
+    if (signature === glyph.signature) return;
+    glyph.signature = signature;
+    glyph.px = px;
+    var geometry = new THREE.BufferGeometry();
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(
+      G.triangles(glyph.paths, glyph.style,
+                  { toCamera: view.toCamera, right: view.right, up: view.up, px: px }), 3));
+    // Lit black, but lit all the same: with no normals the shader's lighting term is
+    // NaN, and NaN plus the emissive is drawn black.
+    geometry.computeVertexNormals();
+    glyph.mesh.geometry.dispose();
+    glyph.mesh.geometry = geometry;
+  }
+
+  function syncGlyphs() {
+    if (!glyphs.length) return;
+    var view = viewForGlyphs();
+    glyphs.forEach(function (glyph) { shapeGlyph(glyph, view); });
+  }
+
+  /* Where a section is drawn as a structure glyph rather than as its own buffers: a
+     sheet pile, an anchor or an interface that came as a bare line. A part with
+     triangles -- a 3D wall panel, a 3D interface swept into a surface -- keeps them. */
+  function sectionGlyph(section) {
+    var G = App.StructureGlyphs;
+    if (!G || (section.indices && section.indices.length) || !section.edges.length) return null;
+    var kind = G.kindOf(section.key, App.PROJECT);
+    if (!kind) return null;
+    var paths = G.edgePaths(section.edges);
+    if (kind === 'interface' && dimension === 2 && App.Interfaces) {
+      // From the record rather than the edges, so the dashes run on across its bends.
+      var record = (App.PROJECT.interfaces || []).filter(function (item) {
+        return item.id === section.key;
+      })[0];
+      var own = G.interfacePaths(record, App.Interfaces.pathOf(record, App.PROJECT),
+                                 null, section.edges[2]);
+      if (own.length) paths = own;
+    }
+    return glyphMesh(section.key, paths, G.STYLES[kind]);
+  }
+
+  /* An interface along a sheet pile has no geometry of its own -- it is the pile's
+     line, split after meshing -- so the build sends no section for it. It is drawn
+     here from the record, beside the pile, under its own key: the Model explorer's
+     eye and selection then work on it like on any other part. Plane strain only,
+     which is all an interface along a pile is (frontend/js/interfaces.js).
+
+     `depth` is each drawn pile's z, from its section: the section plane. */
+  function addPileInterfaces(depth) {
+    var G = App.StructureGlyphs;
+    if (!G || !App.Interfaces || dimension !== 2 || !App.PROJECT) return;
+    (App.PROJECT.interfaces || []).forEach(function (record) {
+      if (!record.structure || record.active === false || groups[record.id]) return;
+      // An inactive pile is not built, so there is nothing for it to run along.
+      if (!(record.structure in depth)) return;
+      var path = App.Interfaces.pathOf(record, App.PROJECT);
+      var paths = G.interfacePaths(record, path, App.Interfaces.faces(path),
+                                   depth[record.structure]);
+      if (!paths.length) return;
+      var g = groups[record.id] = new THREE.Group();
+      g.name = record.id;
+      g.add(glyphMesh(record.id, paths, G.STYLES.interface));
+      scene.add(g);
+    });
+  }
+
+  /* A sheet pile, an anchor or an interface whose Active box is off is not built --
+     the server leaves it out of the solid model -- so it has no section either. It is
+     drawn here from its record all the same, faded (`structureOpacity`), so the user
+     can still see where it is and pick it to switch it back on. An interface along a
+     pile that is off goes with the pile: it is not in the model either. Plane strain
+     only: a 2D section lies at z = 0 (core/geometry/solid_model.py). */
+  var inactiveKeys = {};
+
+  function addInactiveStructures() {
+    inactiveKeys = {};
+    var G = App.StructureGlyphs;
+    if (!G || dimension !== 2 || !App.PROJECT) return;
+    function at(p) { return [p[0], p[1], 0]; }
+    function draw(id, paths, style) {
+      if (groups[id] || !paths.length) return;
+      var g = groups[id] = new THREE.Group();
+      g.name = id;
+      g.add(glyphMesh(id, paths, style));
+      scene.add(g);
+      inactiveKeys[id] = true;
+    }
+    var off = {};
+    (App.BEAMS || []).forEach(function (beam) {
+      if (beam.active !== false) return;
+      off[beam.id] = true;
+      if ((beam.points || []).length >= 2) {
+        draw(beam.id, [{ points: beam.points.map(at) }], G.STYLES.pile);
+      }
+    });
+    (App.ANCHORS || []).forEach(function (anchor) {
+      if (anchor.active !== false || !anchor.head || !anchor.tail) return;
+      draw(anchor.id, [{ points: [at(anchor.head), at(anchor.tail)] }], G.STYLES.anchor);
+    });
+    if (!App.Interfaces) return;
+    (App.INTERFACES || []).forEach(function (record) {
+      if (record.active !== false && !(record.structure && off[record.structure])) return;
+      var path = App.Interfaces.pathOf(record, App.PROJECT);
+      var faces = record.structure ? App.Interfaces.faces(path) : null;
+      draw(record.id, G.interfacePaths(record, path, faces, 0), G.STYLES.interface);
+    });
+  }
+
+  /* How opaque a sheet pile, anchor or interface is drawn. Faded to half behind the
+     Soil and Flow conditions tabs, where it is there to be read against rather than
+     worked on; and to half of that again when it is switched off -- its own Active
+     box, or the stage selected in Staged construction. Pure, so it is testable. */
+  var MODE_OPACITY = { soil: 0.5, flow: 0.5 };
+  var INACTIVE_OPACITY = 0.5;
+
+  function structureOpacity(mode, off) {
+    var opacity = MODE_OPACITY[mode] === undefined ? 1 : MODE_OPACITY[mode];
+    return off ? opacity * INACTIVE_OPACITY : opacity;
+  }
+
+  /* Every material in `group` at `opacity` times its own. The first call keeps what
+     each material was made with, so fading back to 1 restores it exactly. */
+  function fadeGroup(group, opacity) {
+    group.traverse(function (o) {
+      var m = o.material;
+      if (!m || Array.isArray(m)) return;
+      var base = m.userData.unfaded;
+      if (!base) {
+        base = m.userData.unfaded = { opacity: m.opacity, transparent: m.transparent,
+                                      depthWrite: m.depthWrite };
+      }
+      var transparent = base.transparent || opacity < 1;
+      if (m.transparent !== transparent) m.needsUpdate = true;
+      m.transparent = transparent;
+      m.opacity = base.opacity * opacity;
+      m.depthWrite = opacity < 1 ? false : base.depthWrite;
+    });
   }
 
   /* The soil's edges that a line puts there, where it splits a layer: each piece draws
@@ -1040,8 +1246,10 @@ App.Viewport = (function () {
   function buildGroups(payload) {
     Object.keys(groups).forEach(function (k) { disposeGroup(groups[k]); });
     groups = {};
+    glyphs = [];
 
     var cut = lineSeams(payload.sections, App.PROJECT);
+    var lineDepth = {};
     payload.sections.forEach(function (section) {
       var g = groups[section.key];
       if (!g) {
@@ -1049,11 +1257,19 @@ App.Viewport = (function () {
         g.name = section.key;
         scene.add(g);
       }
+      var glyph = sectionGlyph(section);
+      if (glyph) {
+        g.add(glyph);
+        lineDepth[section.key] = section.edges[2];
+        return;
+      }
       g.add(sectionMesh(section));
       var edges = sectionEdges(section, cut.edges[section.key]);
       if (edges) g.add(edges);
     });
 
+    addPileInterfaces(lineDepth);
+    addInactiveStructures();
     addLoadGlyphs();
     addConditionGlyphs(payload.sections);
     addLineGlyphs();
@@ -1107,10 +1323,12 @@ App.Viewport = (function () {
       // "water" in the same two modes the full build shows it in -- the level is what
       // Flow conditions mode is for, and a staged excavation is read against it. Left
       // out of soil/structures/mesh so those keep reading as they did.
-      return { soil: visibleKeys.concat(conditions),
+      // The structures are in Soil and Flow conditions too, faded
+      // (`structureOpacity`), so the soil is read against where they stand.
+      return { soil: visibleKeys.concat(memberKeys, contactKeys, conditions),
                structures: visibleKeys.concat(loadKeys, memberKeys, contactKeys, conditions),
                mesh: visibleKeys.concat(['mesh'], memberKeys, contactKeys, conditions),
-               flow: visibleKeys.concat(['water'], conditions),
+               flow: visibleKeys.concat(['water'], memberKeys, contactKeys, conditions),
                // Loads too: Staged construction is where a load is switched on and
                // off, so it has to be on screen there (`stageHidden` still hides one
                // the selected stage has switched off).
@@ -1118,11 +1336,12 @@ App.Viewport = (function () {
                results: results };
     }
     return {
-      soil:       soilKeys.concat(conditions),
+      soil:       soilKeys.concat(memberKeys, contactKeys, conditions),
       structures: soilKeys.concat(['wall', 'struts', 'anchors', 'piles'],
                                   loadKeys, memberKeys, contactKeys, customKeys, conditions),
       mesh:       ['mesh', 'wall'].concat(memberKeys, contactKeys, customKeys, conditions),
-      flow:       soilKeys.concat(['water', 'wells', 'wall'], customKeys, conditions),
+      flow:       soilKeys.concat(['water', 'wells', 'wall'], customKeys, memberKeys,
+                                  contactKeys, conditions),
       staged:     ['excavation', 'wall', 'struts', 'anchors', 'water']
                     .concat(loadKeys, memberKeys, contactKeys, customKeys, conditions),
       results:    results
@@ -1164,12 +1383,13 @@ App.Viewport = (function () {
     var conditionKeys = conditionKeysOf(App.PROJECT);
     conditionIds = conditionKeys.supports.concat(conditionKeys.water);
     waterIds = conditionKeys.water.slice();
-    var contactKeys = (App.INTERFACES || []).filter(function (item) {
-      return !item.structure;
-    }).map(function (item) { return item.id; });
+    // Every interface, the ones along a pile too: those are drawn beside the pile
+    // under their own key (addPileInterfaces).
+    var contactKeys = (App.INTERFACES || []).map(function (item) { return item.id; });
     var lineKeys = ((App.PROJECT && App.PROJECT.lines) || []).map(function (line) {
       return line.id;
     });
+    structureKeys = beamKeys.concat(anchorKeys, contactKeys);
     modeGroups = computeModeGroups(
       soilKeys, customKeys, !!(App.PROJECT && App.PROJECT.layered_soil), loadKeys,
       beamKeys.concat(anchorKeys), normalLoadKeys, conditionKeys, contactKeys, lineKeys);
@@ -1706,7 +1926,35 @@ App.Viewport = (function () {
     pointer.y = -((ev.clientY - r.top) / r.height) * 2 + 1;
     raycaster.setFromCamera(pointer, cam);
     var hits = raycaster.intersectObjects(pickables(), false);
+    var glyph = glyphUnderPointer({ x: ev.clientX - r.left, y: ev.clientY - r.top });
+    if (glyph) {
+      return { object: glyph.mesh,
+               point: hits.length ? hits[0].point
+                 : raycaster.ray.intersectPlane(pickPlane(dimension), new THREE.Vector3()) };
+    }
     return hits.length ? hits[0] : null;
+  }
+
+  /* A sheet pile, anchor or interface is picked on screen rather than by the ray:
+     its band is a few pixels wide, and an interface's is dashes with gaps the ray
+     falls through. Anything within a few pixels of the band counts
+     (App.StructureGlyphs.nearest). Glyphs are drawn over everything, so one in
+     reach beats the soil or mesh under it, as it does on screen. */
+  function glyphUnderPointer(click) {
+    var G = App.StructureGlyphs;
+    if (!G || !glyphs.length || !cam) return null;
+    function shown(object) {
+      for (var o = object; o && o !== scene; o = o.parent) if (!o.visible) return false;
+      return !object.userData.noPick;
+    }
+    function toScreen(p) { return projectToScreen(p[0], p[1], p[2]); }
+    return G.nearest(glyphs.filter(function (glyph) {
+      return glyph.mesh.parent && shown(glyph.mesh);
+    }).map(function (glyph) {
+      return { mesh: glyph.mesh, order: glyph.style.order,
+               distance: G.screenDistance(glyph.paths, glyph.style, glyph.px || 0,
+                                          toScreen, click) };
+    }));
   }
 
   var groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -1796,6 +2044,19 @@ App.Viewport = (function () {
      pressure condition has the stage's checkbox in place of its eye, and the stage is
      what is read there: the conditions the selected stage has on are drawn, the others
      not (`stageHidden`). Results reads the stage on screen the same way. */
+  /* Whether the selected stage takes `key` off the screen. A structure or interface
+     the stage has switched off stays, faded (`syncStructureFade`): it is what the
+     user is stepping through the stages to see come and go. */
+  function stageGone(key, hidden) {
+    return !!hidden[key] && structureKeys.indexOf(key) < 0;
+  }
+
+  function syncStructureFade(mode, hidden) {
+    structureKeys.forEach(function (key) {
+      if (groups[key]) fadeGroup(groups[key], structureOpacity(mode, inactiveKeys[key] || hidden[key]));
+    });
+  }
+
   function eyeOpen(key, mode) {
     if ((mode === 'staged' || mode === 'results') && waterIds.indexOf(key) >= 0) return true;
     return visible[key] !== false;
@@ -1804,7 +2065,7 @@ App.Viewport = (function () {
   function shownByMode(key) {
     var mode = App.state && App.state.mode;
     return modeKeys(mode).indexOf(key) >= 0
-           && eyeOpen(key, mode) && !stageHidden()[key];
+           && eyeOpen(key, mode) && !stageGone(key, stageHidden());
   }
 
   function hideRevealed() {
@@ -1913,8 +2174,9 @@ App.Viewport = (function () {
     revealed = [];
     Object.keys(groups).forEach(function (k) {
       groups[k].visible = wanted.indexOf(k) >= 0 && eyeOpen(k, mode)
-                          && !hidden[k];
+                          && !stageGone(k, hidden);
     });
+    syncStructureFade(mode, hidden);
     if (mode === 'mesh' && !meshBuilt && groups.mesh) groups.mesh.visible = false;
     if (selected && conditionIds.indexOf(selected) >= 0) select(selected);
     else if (selected && !selectedKeys.every(function (k) { return groups[k] && groups[k].visible; })) select(null);
@@ -1971,7 +2233,7 @@ App.Viewport = (function () {
     var wanted = modeKeys(App.state.mode);
     // The stage gate applies here too, or turning an eye back on would draw a part
     // the selected stage has not built yet.
-    groups[key].visible = on && wanted.indexOf(key) >= 0 && !stageHidden()[key];
+    groups[key].visible = on && wanted.indexOf(key) >= 0 && !stageGone(key, stageHidden());
     if (key === 'mesh' && !meshBuilt && groups.mesh) groups.mesh.visible = false;
     if (!on && selectedKeys.indexOf(key) >= 0) select(null);
     // A hidden mesh has nothing to number: the labels follow the eye, or they float
@@ -3033,6 +3295,7 @@ App.Viewport = (function () {
     needsRender = false;
 
     orbit.apply(cam);
+    syncGlyphs();                          // pixel-sized, so sized for this camera
     syncSectionGrid();                     // needs the camera the frame is drawn with
     syncRulers();                          // same: the visible rectangle is known here
     renderer.render(scene, cam);
@@ -3090,6 +3353,7 @@ App.Viewport = (function () {
     // client-side edit they just made.
     rebuildSoil: function () {},
     refresh: refresh, gridReference: gridReference, computeModeGroups: computeModeGroups,
+    structureOpacity: structureOpacity,
     lineSeams: lineSeams,
     soilKeysOf: soilKeysOf,
     computeGroupKeys: computeGroupKeys,
