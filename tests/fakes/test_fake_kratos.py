@@ -17,7 +17,8 @@ def test_a_fake_run_reads_as_a_complete_run_with_member_curves(tmp_path, monkeyp
     run_id = outcome["directory"].replace("\\", "/").rsplit("/", 1)[1]
     described = catalog.describe(run_id)
     assert outcome["ok"] and described["complete"] and described["failed_at"] is None
-    assert [m["name"] for m in catalog.stage_members(run_id)["members"]] == ["interface", "wall"]
+    assert [m["name"] for m in catalog.stage_members(run_id)["members"]] == [
+        "interface_left", "interface_right", "wall"]
     profile = catalog.member_profiles(run_id, "wall", "M")
     assert profile["stages"], "the wall can be plotted"
     catalog.forget_cache()

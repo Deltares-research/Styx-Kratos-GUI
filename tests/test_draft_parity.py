@@ -81,7 +81,7 @@ def projects() -> dict:
 PROJECT_FIELDS = {"name", "dimension", "unit_system", "section_offset", "domain",
                   "materials", "custom_parts", "beams", "beam_sections", "panel_sections",
                   "anchors", "anchor_sections", "interfaces", "interface_sections", "loads",
-                  "normal_loads", "water", "boundary_conditions"}
+                  "normal_loads", "lines", "water", "boundary_conditions"}
 """What the draft functions read of a project, which is all the fixture carries of one."""
 
 
@@ -177,6 +177,11 @@ def calls(models: dict) -> list[dict]:
          lambda p: drafts.interface(p, stretch_from=(6.2, -3), stretch_to=(6, -3)))
     call("the contact a first interface brings", "Interfaces.sectionsFor", "section",
          [_record(drafts.interface(models["section"]))], library(drafts.interface))
+    call("a line across the middle of the section", "Lines.draft", "section", [],
+         drafts.line)
+    call("a line along points", "Lines.draft", "section", [[[0, -2], [5, -2]]],
+         lambda p: drafts.line(p, [(0, -2), (5, -2)]))
+    call("a line in the solid model is refused", "Lines.draft", "solid", [], drafts.line)
     call("a normal load down the middle", "NormalLoads.draft", "section", [],
          drafts.normal_load)
     call("a hydrostatic normal load takes the water level", "NormalLoads.draft", "section",
@@ -393,7 +398,8 @@ def test_every_structure_tool_is_called():
     assert called >= {"Beams.draft", "Beams.draftFromPoints", "Beams.draftPanel",
                       "Beams.draftMember", "Beams.sectionsFor", "Anchors.draft",
                       "Anchors.draftFromPoints", "Anchors.sectionsFor", "Interfaces.draft",
-                      "Interfaces.sectionsFor", "NormalLoads.draft", "Loads.draftPoint",
+                      "Interfaces.sectionsFor", "NormalLoads.draft", "Lines.draft",
+                      "Loads.draftPoint",
                       "Loads.draftFromPoints", "Loads.draftSurface",
                       "BoundaryConditions.draftDisplacement",
                       "BoundaryConditions.draftWaterPressure",

@@ -23,7 +23,7 @@ SOURCES = [BACKEND / "main.py", *sorted((BACKEND / "routes").glob("*.py"))]
 CHEAP = {
     "health", "get_project", "put_project", "reset_project", "new_project",
     "patch_layers", "put_water", "patch_materials", "patch_structures", "patch_conditions",
-    "patch_stages",
+    "patch_stages", "patch_lines", "patch_body",
     "seed_default_stages", "patch_dimension", "clear_custom_parts", "delete_geometry_part",
     "index",
 }

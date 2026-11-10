@@ -103,7 +103,7 @@ def interface_parts(deck: mdpa.Deck) -> dict[str, mdpa.Part]:
     """The contact's sub-model parts, one per soil body it holds."""
     return {name: part for name, part in deck.parts.items()
             if name.startswith("Wall_contact")
-            and not name.endswith(("_Master", "_Slave", "_face"))}
+            and not name.endswith(("_Master", "_Slave")) and "_face" not in name}
 
 
 def soil_nodes(deck: mdpa.Deck) -> set[int]:
@@ -910,7 +910,6 @@ def test_without_a_pit_each_face_of_the_wall_gets_a_curve_of_its_own(drawn):
     assert all(x > drawn_ground.WALL_X for n in right - toe for x in centroids[n])
     for nodes in (left, right):
         assert max(deck.nodes[n][1] for n in nodes) == 0.0, "up through the drawn fill"
-    assert writer.RIGHT_SIDE_PART not in deck.parts
 
     doc = json.loads(export["project_parameters"])
     written = [p["Parameters"]["output_file_name"]

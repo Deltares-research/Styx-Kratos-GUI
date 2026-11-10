@@ -19,7 +19,8 @@ from anywhere else, give the paths to `kratos-cli` and the files.
 - **Structures**: a sheet pile wall at x = 5 m down to -13 m, with a wall interface, and a
   strut at -1.5 m.
 - **Loads**: a 20 kN/m surcharge behind the wall, and the water in the pit at each lift.
-- **Excavation**: three lifts, to -2, -5 and -8 m.
+- **Lines**: the wall and two lines cut the upper ground into three lifts, to -2, -5 and
+  -8 m. Each lift is a soil body that a stage switches off.
 - **Stages**: initial stage (K0 procedure), null step, wall installation, first
   excavation, strut installation, second and third excavation.
 

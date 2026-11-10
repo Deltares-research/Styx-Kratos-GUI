@@ -13,7 +13,7 @@ import copy
 from core.model.schemas import Project
 
 SIZED = {"sheetpile": 0.5, "strut": 0.5, "wall_contact": 0.5, "water_1": 0.5,
-         "soil_L_mid": 1.0, "soil_L_mid__pit": 1.0, "soil_L_top__lift3": 1.0,
+         "soil_L_mid__pit": 1.0, "soil_L_top__lift3": 1.0,
          "drawn_0": 0.5}
 """An element size on each body an edit takes away: the two front ends once disagreed
 on what becomes of it."""
