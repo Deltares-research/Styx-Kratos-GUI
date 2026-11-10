@@ -2107,9 +2107,10 @@ App.Viewport = (function () {
      not (`stageHidden`). Results reads the stage on screen the same way. */
   /* Whether the selected stage takes `key` off the screen. A structure or interface
      the stage has switched off stays, faded (`syncStructureFade`): it is what the
-     user is stepping through the stages to see come and go. */
-  function stageGone(key, hidden) {
-    return !!hidden[key] && structureKeys.indexOf(key) < 0;
+     user is stepping through the stages to see come and go. Any other part stays as
+     a ghost in Staged construction (`stageGhosts`). */
+  function stageGone(key, hidden, ghosts) {
+    return !!hidden[key] && structureKeys.indexOf(key) < 0 && !(ghosts && ghosts[key]);
   }
 
   function syncStructureFade(mode, hidden) {
@@ -2126,7 +2127,7 @@ App.Viewport = (function () {
   function shownByMode(key) {
     var mode = App.state && App.state.mode;
     return modeKeys(mode).indexOf(key) >= 0
-           && eyeOpen(key, mode) && !stageGone(key, stageHidden());
+           && eyeOpen(key, mode) && !stageGone(key, stageHidden(), stageGhosts());
   }
 
   function hideRevealed() {
@@ -2206,6 +2207,53 @@ App.Viewport = (function () {
     return hidden;
   }
 
+  /* The parts the selected stage has switched off that are still drawn, as ghosts:
+     in Staged construction only, so that a part taken out of a stage can be
+     right-clicked to put it back (patches.js, the viewport menu's Activate). Not the
+     boundary conditions, which the Model explorer's stage check box switches, and not
+     Results, which draws only what was in the run. */
+  function stageGhosts() {
+    if (!App.state || App.state.mode !== 'staged') return {};
+    var ghosts = {};
+    Object.keys(stageHidden()).forEach(function (key) {
+      if (conditionIds.indexOf(key) < 0 && waterIds.indexOf(key) < 0) ghosts[key] = true;
+    });
+    return ghosts;
+  }
+
+  var GHOST_OPACITY = 0.15;
+
+  function ghostMaterial(material, on) {
+    if (!material) return;
+    var data = material.userData || (material.userData = {});
+    if (on && !data.ghostBase) {
+      data.ghostBase = { transparent: material.transparent, opacity: material.opacity,
+                         depthWrite: material.depthWrite };
+      material.transparent = true;
+      material.opacity = data.ghostBase.opacity * GHOST_OPACITY;
+      material.depthWrite = false;
+      material.needsUpdate = true;
+    } else if (!on && data.ghostBase) {
+      material.transparent = data.ghostBase.transparent;
+      material.opacity = data.ghostBase.opacity;
+      material.depthWrite = data.ghostBase.depthWrite;
+      delete data.ghostBase;
+      material.needsUpdate = true;
+    }
+  }
+
+  /* A structure is left out: it fades its own way (`syncStructureFade`), and two
+     fades on one material would each restore the other's opacity as its own. */
+  function applyGhosts(ghosts) {
+    Object.keys(groups).forEach(function (key) {
+      if (structureKeys.indexOf(key) >= 0) return;
+      var on = !!ghosts[key];
+      groups[key].traverse(function (o) {
+        [].concat(o.material || []).forEach(function (m) { ghostMaterial(m, on); });
+      });
+    });
+  }
+
   function resultsStage() {
     return App.Results && App.Results.projectStage
       ? App.Results.projectStage(App.PROJECT) : null;
@@ -2232,11 +2280,13 @@ App.Viewport = (function () {
   function setMode(mode) {
     var wanted = modeKeys(mode);
     var hidden = stageHidden();
+    var ghosts = stageGhosts();
     revealed = [];
     Object.keys(groups).forEach(function (k) {
       groups[k].visible = wanted.indexOf(k) >= 0 && eyeOpen(k, mode)
-                          && !stageGone(k, hidden);
+                          && !stageGone(k, hidden, ghosts);
     });
+    applyGhosts(ghosts);
     syncStructureFade(mode, hidden);
     if (mode === 'mesh' && !meshBuilt && groups.mesh) groups.mesh.visible = false;
     if (selected && conditionIds.indexOf(selected) >= 0) select(selected);
@@ -2294,7 +2344,8 @@ App.Viewport = (function () {
     var wanted = modeKeys(App.state.mode);
     // The stage gate applies here too, or turning an eye back on would draw a part
     // the selected stage has not built yet.
-    groups[key].visible = on && wanted.indexOf(key) >= 0 && !stageGone(key, stageHidden());
+    groups[key].visible = on && wanted.indexOf(key) >= 0
+                          && !stageGone(key, stageHidden(), stageGhosts());
     if (key === 'mesh' && !meshBuilt && groups.mesh) groups.mesh.visible = false;
     if (!on && selectedKeys.indexOf(key) >= 0) select(null);
     // A hidden mesh has nothing to number: the labels follow the eye, or they float
@@ -3420,7 +3471,7 @@ App.Viewport = (function () {
     waterLineSpec: waterLineSpec,
     conditionGlyphSpec: conditionGlyphSpec, conditionKeysOf: conditionKeysOf,
     soilFaceOutlines: soilFaceOutlines, forgetConditionEyes: forgetConditionEyes,
-    applyStageVisibility: applyStageVisibility,
+    applyStageVisibility: applyStageVisibility, stageGhosts: stageGhosts,
     normalLoadGlyphSpec: normalLoadGlyphSpec,
     getScene: function() { return scene; },
     getCamera: function() { return cam; },

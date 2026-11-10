@@ -13,8 +13,10 @@ Model explorer make (`core.model.stages`), stored the way the GUI stores it
     set ID             a stage's name, calculation and solver settings
     remove ID          the toolbar's Delete: the stage goes, and the chain is healed
     activate ID KEY... / deactivate ID KEY...
-                       parts in or out of the model from that stage on, with the
-                       smallest instruction that does it, as the explorer's checkbox
+                       parts in or out of the model in that stage alone -- the stages
+                       after it keep what they had -- with the smallest instruction that
+                       does it, as the explorer's checkbox. A stage added later starts
+                       with the state of the stage it follows.
 
 A sequence that would branch, or a part the model does not have, is refused. So is
 --reset-displacements or --keep-displacements on a groundwater flow stage, which has no
@@ -95,7 +97,7 @@ def register(commands, common: argparse.ArgumentParser) -> None:
     for name, wanted in (("activate", True), ("deactivate", False)):
         switch = actions.add_parser(
             name, parents=[common],
-            help=f"switch parts {'into' if wanted else 'out of'} the model from a stage on")
+            help=f"switch parts {'into' if wanted else 'out of'} the model in one stage")
         existing(switch, "stage", "stages")
         switch.add_argument("keys", nargs="+", metavar="KEY",
                             help="part keys, as `kratos-cli parts` lists them")
@@ -203,7 +205,7 @@ def switch_parts(args: argparse.Namespace) -> Answer:
                                    args.wanted)
     did = "into" if args.wanted else "out of"
     return _edited(args, project,
-                   f"{', '.join(args.keys)} {did} the model from stage {args.id} on")
+                   f"{', '.join(args.keys)} {did} the model in stage {args.id}")
 
 
 # ── Shared ──────────────────────────────────────────────────────────────────

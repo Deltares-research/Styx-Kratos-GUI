@@ -337,28 +337,56 @@
     });
   });
 
-  test('viewport: a stage hides what it has not built yet', function () {
+  /* A part the stage has switched off is drawn as a ghost -- faint, and still there to
+     right-click and activate again -- and only in Staged construction. */
+  function opacities(group) {
+    var found = [];
+    group.traverse(function (o) {
+      [].concat(o.material || []).forEach(function (m) { found.push(m.opacity); });
+    });
+    return found;
+  }
+
+  test('viewport: a stage draws what it has not built yet as a ghost', function () {
     return boot().then(function () {
       var stages = App.PROJECT.stages || [];
       T.ok(stages.length > 1, 'the test model is staged');
+      var groups = sceneGroups();
+      var hidden = App.Stages.hiddenKeys(App.PROJECT, stages[0].id, 'staged')
+        .filter(function (key) { return groups[key]; });
+      T.ok(hidden.length, 'the first stage switches something off');
+      var structures = (App.BEAMS || []).concat(App.ANCHORS || [], App.INTERFACES || [])
+        .map(function (record) { return record.id; });
+      var solid = {};
+      hidden.forEach(function (key) { solid[key] = opacities(groups[key]); });
+
       App.state.mode = 'staged';
       App.state.phase = stages[0].id;
       App.Viewport.applyStageVisibility();
-      var hidden = App.Stages.hiddenKeys(App.PROJECT, stages[0].id, 'staged');
-      var groups = sceneGroups();
-      // A structure or interface the stage switched off stays on screen, faded.
-      var structures = (App.BEAMS || []).concat(App.ANCHORS || [], App.INTERFACES || [])
-        .map(function (record) { return record.id; });
-      hidden.filter(function (key) { return groups[key]; }).forEach(function (key) {
+      var ghosts = App.Viewport.stageGhosts();
+      // A structure or interface the stage switched off stays on screen, faded its
+      // own way; any other part is drawn as a ghost.
+      hidden.forEach(function (key) {
         if (structures.indexOf(key) >= 0) {
           T.ok(groups[key].visible, key + ' is still drawn, faded');
-          return;
+        } else if (ghosts[key]) {
+          T.ok(groups[key].visible, key + ' is drawn, as a ghost');
+          opacities(groups[key]).forEach(function (o, i) {
+            T.ok(o < solid[key][i] || solid[key][i] === 0, key + ' is drawn faint');
+          });
+        } else {
+          T.eq(groups[key].visible, false, key + ' is not built in the first stage');
         }
-        T.eq(groups[key].visible, false, key + ' is not built in the first stage');
       });
+
       App.state.phase = null;
       App.state.mode = 'soil';
       App.Viewport.setMode('soil');
+      // A structure is drawn at half behind the Soil tab, so only the ghosts are
+      // held to what they were before.
+      hidden.filter(function (key) { return structures.indexOf(key) < 0; }).forEach(function (key) {
+        T.eq(opacities(groups[key]), solid[key], key + ' is solid again outside the stage');
+      });
     });
   });
 

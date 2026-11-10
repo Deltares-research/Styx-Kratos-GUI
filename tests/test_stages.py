@@ -378,6 +378,23 @@ def test_set_active_gives_the_smallest_instruction():
         "wall_contact", "surcharge"]
 
 
+def test_set_active_changes_no_other_stage():
+    """Switching a part in one stage keeps every other stage as it was: the stage after
+    it gets the instruction that holds it there, rather than following its parent."""
+    project = _test_model()
+    ids = [stage.id for stage in project.stages]
+
+    for key in project.stageable_keys():
+        for wanted in (True, False):
+            edited = project.model_copy(update={
+                "stages": stages.set_active(project, "install_sheetpile", [key], wanted)})
+            assert (key in stages.active_parts(edited, "install_sheetpile")) is wanted
+            for id in ids:
+                if id != "install_sheetpile":
+                    assert ((key in stages.active_parts(edited, id))
+                            == (key in stages.active_parts(project, id))), (key, id)
+
+
 def test_an_edit_of_a_stage_that_is_not_there_changes_nothing():
     project = _test_model()
 

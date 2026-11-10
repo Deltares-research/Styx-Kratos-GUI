@@ -12,7 +12,8 @@
   var GLOBALS = ['Api', 'Command', 'Viewport', 'Model', 'PROJECT', 'state', 'runAction',
                  'selectObject', 'setMode', 'LAYERS', 'MATERIALS', 'LOADS',
                  'BEAMS', 'BEAM_SECTIONS', 'PANEL_SECTIONS', 'ANCHORS', 'ANCHOR_SECTIONS',
-                 'INTERFACES', 'INTERFACE_SECTIONS', 'NORMAL_LOADS'];
+                 'INTERFACES', 'INTERFACE_SECTIONS', 'NORMAL_LOADS',
+                 'viewportContextMenu', 'Menu'];
 
   function rig(project) {
     var saved = { props: App.OBJECT_PROPS, trees: {} };
@@ -58,6 +59,15 @@
     App.runAction = function () {};
     App.selectObject = function (key) { ctx.selected.push(key); };
     App.setMode = function (mode) { App.state.mode = mode; };
+    // The shell's viewport menu (js/app.js), reduced to what it hands App.Menu: a
+    // title row and one of its own.
+    App.Menu = { openAt: function (items, x, y, onPick) {
+      ctx.menu = { items: items, pick: onPick };
+    } };
+    App.viewportContextMenu = function (event, key) {
+      App.Menu.openAt([{ title: key }, { label: 'Zoom to fit', action: 'zoomFit' }],
+                      0, 0, function () {});
+    };
     App.LivePatches.resetForTests();
     App.LivePatches.install();
     ctx.layer = layer;
@@ -254,17 +264,59 @@
     }));
   });
 
-  test('staged mode: clicking a part switches it for the selected stage', function () {
+  test('staged mode: clicking a part only selects it', function () {
     var ctx = rig(model());
     var stage = model().stages[model().stages.length - 1];
     App.state.phase = stage.id;
     var key = App.Stages.stageableKeys(App.PROJECT)[0];
     App.selectObject(key, 'viewport');
     return done(ctx, new Promise(function (r) { setTimeout(r, 20); }).then(function () {
+      T.eq(ctx.selected, [key], 'selected');
+      T.eq(ctx.patches.length, 0, 'a click is not an edit of the stage');
+    }));
+  });
+
+  function menuRow(ctx, action) {
+    return (ctx.menu.items || []).filter(function (item) {
+      return item && item.action === action;
+    })[0];
+  }
+
+  test('staged mode: the right-click menu activates and deactivates in this stage alone',
+       function () {
+    var ctx = rig(model());
+    var list = App.Stages.order(App.PROJECT);
+    var stage = list[list.length - 2], after = list[list.length - 1];
+    App.state.phase = stage.id;
+    var key = App.Stages.activeParts(App.PROJECT, stage.id)[0];
+    var stillAfter = App.Stages.activeParts(App.PROJECT, after.id).indexOf(key) >= 0;
+
+    App.viewportContextMenu({ clientX: 0, clientY: 0 }, key);
+    T.ok(ctx.menu.items[0].title, 'the title row stays first');
+    T.ok(menuRow(ctx, 'stageActivate').disabled, 'already active: Activate is greyed');
+    var off = menuRow(ctx, 'stageDeactivate');
+    T.ok(off && !off.disabled, 'Deactivate is offered');
+    T.ok(off.label.indexOf(stage.name) >= 0, off.label);
+    ctx.menu.pick(off);
+    return done(ctx, new Promise(function (r) { setTimeout(r, 20); }).then(function () {
       T.eq(ctx.patches.length, 1, 'one PATCH of the sequence');
-      T.ok(ctx.lines.some(function (l) { return /switched (on|off) in/.test(l); }),
+      var sent = { stageable_parts: App.PROJECT.stageable_parts,
+                   stages: ctx.patches[0].body.stages };
+      T.ok(App.Stages.activeParts(sent, stage.id).indexOf(key) < 0, 'off in this stage');
+      T.eq(App.Stages.activeParts(sent, after.id).indexOf(key) >= 0, stillAfter,
+           'the next stage keeps what it had');
+      T.ok(ctx.lines.some(function (l) { return /deactivated in/.test(l); }),
            ctx.lines.join(' | '));
     }));
+  });
+
+  test('outside staged mode the viewport menu has no stage rows', function () {
+    var ctx = rig(model());
+    App.state.mode = 'soil';
+    App.viewportContextMenu({ clientX: 0, clientY: 0 },
+                            App.Stages.stageableKeys(App.PROJECT)[0]);
+    T.ok(!menuRow(ctx, 'stageActivate') && !menuRow(ctx, 'stageDeactivate'));
+    ctx.restore();
   });
 
 })();

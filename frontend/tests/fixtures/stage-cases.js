@@ -979,7 +979,8 @@ window.STAGE_FIXTURE =
           "calculation": "Plastic",
           "loading": "Staged construction",
           "activate": [
-            "tie"
+            "tie",
+            "wall"
           ],
           "deactivate": [],
           "reset_displacements": false,
@@ -1125,7 +1126,9 @@ window.STAGE_FIXTURE =
           "loading": "Staged construction",
           "activate": [
             "soil_L1__lift2",
-            "soil_L1__outside"
+            "soil_L1__outside",
+            "soil_L1",
+            "anchors"
           ],
           "deactivate": [
             "soil_L1__lift1"
@@ -1334,6 +1337,263 @@ window.STAGE_FIXTURE =
           "deactivate": [
             "wall"
           ],
+          "reset_displacements": true,
+          "max_iterations": 15,
+          "tolerated_error": 0.0001,
+          "time_interval": 0.0
+        },
+        {
+          "id": "dig_1",
+          "name": "Dig to -2.0 m",
+          "parent": "build_wall",
+          "calculation": "Plastic",
+          "loading": "Staged construction",
+          "activate": [
+            "soil_L1__lift1",
+            "wall"
+          ],
+          "deactivate": [
+            "soil_L1__outside"
+          ],
+          "reset_displacements": false,
+          "max_iterations": 15,
+          "tolerated_error": 0.0001,
+          "time_interval": 0.0
+        },
+        {
+          "id": "prop",
+          "name": "Strut installation",
+          "parent": "dig_1",
+          "calculation": "Plastic",
+          "loading": "Staged construction",
+          "activate": [
+            "tie"
+          ],
+          "deactivate": [],
+          "reset_displacements": false,
+          "max_iterations": 15,
+          "tolerated_error": 0.0001,
+          "time_interval": 0.0
+        },
+        {
+          "id": "dig_2",
+          "name": "Dig to -5.0 m",
+          "parent": "prop",
+          "calculation": "Plastic",
+          "loading": "Staged construction",
+          "activate": [
+            "soil_L1__lift2",
+            "soil_L1__outside"
+          ],
+          "deactivate": [
+            "soil_L1__lift1"
+          ],
+          "reset_displacements": false,
+          "max_iterations": 15,
+          "tolerated_error": 0.0001,
+          "time_interval": 0.0
+        },
+        {
+          "id": "settle",
+          "name": "Consolidate",
+          "parent": "dig_2",
+          "calculation": "Plastic",
+          "loading": "Staged construction",
+          "activate": [],
+          "deactivate": [
+            "soil_L1__lift1"
+          ],
+          "reset_displacements": false,
+          "max_iterations": 15,
+          "tolerated_error": 0.0001,
+          "time_interval": 0.0
+        }
+      ]
+    },
+    {
+      "call": "setActive",
+      "args": [
+        "null_step",
+        [
+          "soil_L1__lift1"
+        ],
+        true
+      ],
+      "result": [
+        {
+          "id": "initial",
+          "name": "Initial stage",
+          "parent": null,
+          "calculation": "K0 procedure",
+          "loading": "Staged construction",
+          "activate": [],
+          "deactivate": [
+            "pile",
+            "tie",
+            "load",
+            "soil_L1__lift1",
+            "soil_L1__lift2",
+            "soil_L1__lift3"
+          ],
+          "reset_displacements": false,
+          "max_iterations": 15,
+          "tolerated_error": 0.0001,
+          "time_interval": 0.0
+        },
+        {
+          "id": "null_step",
+          "name": "Null step",
+          "parent": "initial",
+          "calculation": "Null step",
+          "loading": "Staged construction",
+          "activate": [
+            "soil_L1__lift1"
+          ],
+          "deactivate": [],
+          "reset_displacements": false,
+          "max_iterations": 15,
+          "tolerated_error": 0.0001,
+          "time_interval": 0.0
+        },
+        {
+          "id": "build_wall",
+          "name": "Wall installation",
+          "parent": "null_step",
+          "calculation": "Plastic",
+          "loading": "Staged construction",
+          "activate": [
+            "pile",
+            "load"
+          ],
+          "deactivate": [
+            "soil_L1__lift1"
+          ],
+          "reset_displacements": true,
+          "max_iterations": 15,
+          "tolerated_error": 0.0001,
+          "time_interval": 0.0
+        },
+        {
+          "id": "dig_1",
+          "name": "Dig to -2.0 m",
+          "parent": "build_wall",
+          "calculation": "Plastic",
+          "loading": "Staged construction",
+          "activate": [
+            "soil_L1__lift1"
+          ],
+          "deactivate": [
+            "soil_L1__outside"
+          ],
+          "reset_displacements": false,
+          "max_iterations": 15,
+          "tolerated_error": 0.0001,
+          "time_interval": 0.0
+        },
+        {
+          "id": "prop",
+          "name": "Strut installation",
+          "parent": "dig_1",
+          "calculation": "Plastic",
+          "loading": "Staged construction",
+          "activate": [
+            "tie"
+          ],
+          "deactivate": [],
+          "reset_displacements": false,
+          "max_iterations": 15,
+          "tolerated_error": 0.0001,
+          "time_interval": 0.0
+        },
+        {
+          "id": "dig_2",
+          "name": "Dig to -5.0 m",
+          "parent": "prop",
+          "calculation": "Plastic",
+          "loading": "Staged construction",
+          "activate": [
+            "soil_L1__lift2",
+            "soil_L1__outside"
+          ],
+          "deactivate": [
+            "soil_L1__lift1"
+          ],
+          "reset_displacements": false,
+          "max_iterations": 15,
+          "tolerated_error": 0.0001,
+          "time_interval": 0.0
+        },
+        {
+          "id": "settle",
+          "name": "Consolidate",
+          "parent": "dig_2",
+          "calculation": "Plastic",
+          "loading": "Staged construction",
+          "activate": [],
+          "deactivate": [
+            "soil_L1__lift1"
+          ],
+          "reset_displacements": false,
+          "max_iterations": 15,
+          "tolerated_error": 0.0001,
+          "time_interval": 0.0
+        }
+      ]
+    },
+    {
+      "call": "setActive",
+      "args": [
+        "prop",
+        [
+          "soil_L1"
+        ],
+        true
+      ],
+      "result": [
+        {
+          "id": "initial",
+          "name": "Initial stage",
+          "parent": null,
+          "calculation": "K0 procedure",
+          "loading": "Staged construction",
+          "activate": [],
+          "deactivate": [
+            "pile",
+            "tie",
+            "load",
+            "soil_L1__lift1",
+            "soil_L1__lift2",
+            "soil_L1__lift3"
+          ],
+          "reset_displacements": false,
+          "max_iterations": 15,
+          "tolerated_error": 0.0001,
+          "time_interval": 0.0
+        },
+        {
+          "id": "null_step",
+          "name": "Null step",
+          "parent": "initial",
+          "calculation": "Null step",
+          "loading": "Staged construction",
+          "activate": [],
+          "deactivate": [],
+          "reset_displacements": false,
+          "max_iterations": 15,
+          "tolerated_error": 0.0001,
+          "time_interval": 0.0
+        },
+        {
+          "id": "build_wall",
+          "name": "Wall installation",
+          "parent": "null_step",
+          "calculation": "Plastic",
+          "loading": "Staged construction",
+          "activate": [
+            "pile",
+            "load"
+          ],
+          "deactivate": [],
           "reset_displacements": true,
           "max_iterations": 15,
           "tolerated_error": 0.0001,
