@@ -25,7 +25,7 @@
     beams: 'BEAMS', beam_sections: 'BEAM_SECTIONS', panel_sections: 'PANEL_SECTIONS',
     anchors: 'ANCHORS', anchor_sections: 'ANCHOR_SECTIONS', interfaces: 'INTERFACES',
     interface_sections: 'INTERFACE_SECTIONS', loads: 'LOADS', normal_loads: 'NORMAL_LOADS',
-    boundary_conditions: 'BOUNDARY_CONDITIONS', layers: 'LAYERS'
+    boundary_conditions: 'BOUNDARY_CONDITIONS', layers: 'LAYERS', lines: 'LINES'
   };
   var STUBBED = ['Api', 'Model', 'Viewport', 'Command', 'Explorer', 'state',
                  'selectObject', 'PROJECT'].concat(Object.keys(GLOBALS).map(function (k) {

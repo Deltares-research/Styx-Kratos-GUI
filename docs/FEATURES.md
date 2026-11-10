@@ -138,7 +138,7 @@ and adds only the values that are missing
 | Stage types | K0 procedure, plastic, null step, groundwater flow. Every stage of a groundwater flow project is a flow stage. | Tested |
 | Stage tree | Each stage has a parent, and keeps only what it switches on and off. Kratos needs one sequence, so Styx makes the tree into a list. A tree that branches is refused. | Tested |
 | Default stages | **Create default stages** (GUI) and `stages P defaults` (CLI) make the initial stage (K0) and a null step | Tested |
-| Staged excavation sequence | `stages P staged-excavation` (CLI) and model scripts make the full sequence: K0, null step, wall installation, then one stage for each lift with its water load, and each anchor after the lift that uncovers it. It reproduces the 7 stages of the Kratos staged-excavation reference. The GUI has no button for it. | Tested |
+| Staged excavation | A wall and lines split the soil into lifts, and a stage switches each lift off. `tests/models/excavation.py` and the tutorial model have the 7 stages of the Kratos staged-excavation reference: K0, null step, wall installation, then one stage for each lift with its water load, and the strut after the lift that uncovers it. | Tested |
 | Switch parts on and off | `ActivateModelPartOperation` / `DeactivateModelPartOperation` for soil bodies, lifts, beams, anchors, interfaces and loads | Tested |
 | Settings for each stage | Reset displacements (`reset_totals`), maximum iterations, tolerance | Tested |
 | Stresses carried to the next stage | `ApplyFinalStressesOfPreviousStageToInitialState` | Tested |
@@ -182,8 +182,9 @@ and adds only the values that are missing
 | Soil layers | A stack of horizontal layers across the whole domain, each with one top and one bottom. Made in **Modify soil layers** or with `kratos-cli layer`. The stack is checked for gaps. | Tested |
 | Free soil polygons in the stack | Not supported. Layers are always a stack. | Not available |
 | Soil surface (2D) or soil volume (3D) | Type the corners of an outline and select a material (embankment, cutting, fill, lens) | Tested |
-| Excavation | A pit with several lifts. Each lift in each layer is its own soil body. Make it with `kratos-cli excavation` or a model script: the GUI shows it but cannot make it. | Tested |
-| Drawing tools | Point, line, surface, box and cylinder (box and cylinder in 3D only) | Tested |
+| Lines that split the soil | Drawn with **Create line**, typed in the Line window, or `kratos-cli line`. Where a line or a sheet pile crosses a layer from edge to edge, the layer becomes separate soil bodies. A stage can switch each off, and each can have its own name and material (for all stages). A new line is made in the 2D section only; in 3D a line cuts across the whole z range. | Tested |
+| Old saved excavations | A project saved with an excavation pit opens with lines and soil bodies in its place. | Tested |
+| Drawing tools | Point, surface, box and cylinder (box and cylinder in 3D only). These make display geometry. | Tested |
 | CAD import | STEP, IGES, BREP, STL, OBJ (surfaces are made into solids) | Tested |
 | Kratos `.mdpa` import | View only: a preview with a list of parts. You cannot change the mesh. | Tested |
 
@@ -285,6 +286,4 @@ REST API: `/api/project`, `/api/mesh`, `/api/calculate`, `/api/results/…`.
 4. **3D is not proven.** No 3D element, law or interface has run in Kratos in a test.
 5. **Fixed solver settings.** The calculation type of the stages chooses the analysis
    (deformation or groundwater flow). You cannot change the linear solver.
-6. **No excavation tool in the GUI.** A pit with lifts needs `kratos-cli excavation` or a
-   model script.
-7. **No single-element test** to check a soil model on its own.
+6. **No single-element test** to check a soil model on its own.

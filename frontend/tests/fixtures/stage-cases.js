@@ -25,8 +25,8 @@ window.STAGE_FIXTURE =
           "loading": "Staged construction",
           "activate": [],
           "deactivate": [
-            "wall",
-            "anchors",
+            "pile",
+            "tie",
             "load",
             "soil_L1__lift1",
             "soil_L1__lift2",
@@ -57,7 +57,7 @@ window.STAGE_FIXTURE =
           "calculation": "Plastic",
           "loading": "Staged construction",
           "activate": [
-            "wall",
+            "pile",
             "load"
           ],
           "deactivate": [],
@@ -76,7 +76,7 @@ window.STAGE_FIXTURE =
             "soil_L1__lift1"
           ],
           "deactivate": [
-            "soil_L1"
+            "soil_L1__outside"
           ],
           "reset_displacements": false,
           "max_iterations": 15,
@@ -90,7 +90,7 @@ window.STAGE_FIXTURE =
           "calculation": "Plastic",
           "loading": "Staged construction",
           "activate": [
-            "anchors"
+            "tie"
           ],
           "deactivate": [],
           "reset_displacements": false,
@@ -106,7 +106,7 @@ window.STAGE_FIXTURE =
           "loading": "Staged construction",
           "activate": [
             "soil_L1__lift2",
-            "soil_L1"
+            "soil_L1__outside"
           ],
           "deactivate": [
             "soil_L1__lift1"
@@ -160,8 +160,8 @@ window.STAGE_FIXTURE =
           "loading": "Staged construction",
           "activate": [],
           "deactivate": [
-            "wall",
-            "anchors",
+            "pile",
+            "tie",
             "load",
             "soil_L1__lift1",
             "soil_L1__lift2",
@@ -192,7 +192,7 @@ window.STAGE_FIXTURE =
           "calculation": "Plastic",
           "loading": "Staged construction",
           "activate": [
-            "wall",
+            "pile",
             "load"
           ],
           "deactivate": [],
@@ -224,7 +224,7 @@ window.STAGE_FIXTURE =
             "soil_L1__lift1"
           ],
           "deactivate": [
-            "soil_L1"
+            "soil_L1__outside"
           ],
           "reset_displacements": false,
           "max_iterations": 15,
@@ -238,7 +238,7 @@ window.STAGE_FIXTURE =
           "calculation": "Plastic",
           "loading": "Staged construction",
           "activate": [
-            "anchors"
+            "tie"
           ],
           "deactivate": [],
           "reset_displacements": false,
@@ -254,7 +254,7 @@ window.STAGE_FIXTURE =
           "loading": "Staged construction",
           "activate": [
             "soil_L1__lift2",
-            "soil_L1"
+            "soil_L1__outside"
           ],
           "deactivate": [
             "soil_L1__lift1"
@@ -308,8 +308,8 @@ window.STAGE_FIXTURE =
           "loading": "Staged construction",
           "activate": [],
           "deactivate": [
-            "wall",
-            "anchors",
+            "pile",
+            "tie",
             "load",
             "soil_L1__lift1",
             "soil_L1__lift2",
@@ -340,7 +340,7 @@ window.STAGE_FIXTURE =
           "calculation": "Plastic",
           "loading": "Staged construction",
           "activate": [
-            "wall",
+            "pile",
             "load"
           ],
           "deactivate": [],
@@ -359,7 +359,7 @@ window.STAGE_FIXTURE =
             "soil_L1__lift1"
           ],
           "deactivate": [
-            "soil_L1"
+            "soil_L1__outside"
           ],
           "reset_displacements": false,
           "max_iterations": 15,
@@ -373,7 +373,7 @@ window.STAGE_FIXTURE =
           "calculation": "Plastic",
           "loading": "Staged construction",
           "activate": [
-            "anchors"
+            "tie"
           ],
           "deactivate": [],
           "reset_displacements": false,
@@ -389,7 +389,7 @@ window.STAGE_FIXTURE =
           "loading": "Staged construction",
           "activate": [
             "soil_L1__lift2",
-            "soil_L1"
+            "soil_L1__outside"
           ],
           "deactivate": [
             "soil_L1__lift1"
@@ -430,8 +430,8 @@ window.STAGE_FIXTURE =
           "loading": "Staged construction",
           "activate": [],
           "deactivate": [
-            "wall",
-            "anchors",
+            "pile",
+            "tie",
             "load",
             "soil_L1__lift1",
             "soil_L1__lift2",
@@ -462,7 +462,7 @@ window.STAGE_FIXTURE =
           "calculation": "Plastic",
           "loading": "Staged construction",
           "activate": [
-            "wall",
+            "pile",
             "load"
           ],
           "deactivate": [],
@@ -481,7 +481,7 @@ window.STAGE_FIXTURE =
             "soil_L1__lift1"
           ],
           "deactivate": [
-            "soil_L1"
+            "soil_L1__outside"
           ],
           "reset_displacements": false,
           "max_iterations": 15,
@@ -496,7 +496,7 @@ window.STAGE_FIXTURE =
           "loading": "Staged construction",
           "activate": [
             "soil_L1__lift2",
-            "soil_L1"
+            "soil_L1__outside"
           ],
           "deactivate": [
             "soil_L1__lift1"
@@ -549,7 +549,7 @@ window.STAGE_FIXTURE =
           "calculation": "Plastic",
           "loading": "Staged construction",
           "activate": [
-            "wall",
+            "pile",
             "load"
           ],
           "deactivate": [],
@@ -568,7 +568,7 @@ window.STAGE_FIXTURE =
             "soil_L1__lift1"
           ],
           "deactivate": [
-            "soil_L1"
+            "soil_L1__outside"
           ],
           "reset_displacements": false,
           "max_iterations": 15,
@@ -582,7 +582,7 @@ window.STAGE_FIXTURE =
           "calculation": "Plastic",
           "loading": "Staged construction",
           "activate": [
-            "anchors"
+            "tie"
           ],
           "deactivate": [],
           "reset_displacements": false,
@@ -598,7 +598,7 @@ window.STAGE_FIXTURE =
           "loading": "Staged construction",
           "activate": [
             "soil_L1__lift2",
-            "soil_L1"
+            "soil_L1__outside"
           ],
           "deactivate": [
             "soil_L1__lift1"
@@ -639,8 +639,8 @@ window.STAGE_FIXTURE =
           "loading": "Staged construction",
           "activate": [],
           "deactivate": [
-            "wall",
-            "anchors",
+            "pile",
+            "tie",
             "load",
             "soil_L1__lift1",
             "soil_L1__lift2",
@@ -671,7 +671,7 @@ window.STAGE_FIXTURE =
           "calculation": "Plastic",
           "loading": "Staged construction",
           "activate": [
-            "wall",
+            "pile",
             "load"
           ],
           "deactivate": [],
@@ -703,7 +703,7 @@ window.STAGE_FIXTURE =
             "soil_L1__lift1"
           ],
           "deactivate": [
-            "soil_L1"
+            "soil_L1__outside"
           ],
           "reset_displacements": false,
           "max_iterations": 15,
@@ -717,7 +717,7 @@ window.STAGE_FIXTURE =
           "calculation": "Plastic",
           "loading": "Staged construction",
           "activate": [
-            "anchors"
+            "tie"
           ],
           "deactivate": [],
           "reset_displacements": false,
@@ -733,7 +733,7 @@ window.STAGE_FIXTURE =
           "loading": "Staged construction",
           "activate": [
             "soil_L1__lift2",
-            "soil_L1"
+            "soil_L1__outside"
           ],
           "deactivate": [
             "soil_L1__lift1"
@@ -774,8 +774,8 @@ window.STAGE_FIXTURE =
           "loading": "Staged construction",
           "activate": [],
           "deactivate": [
-            "wall",
-            "anchors",
+            "pile",
+            "tie",
             "load",
             "soil_L1__lift1",
             "soil_L1__lift2",
@@ -806,7 +806,7 @@ window.STAGE_FIXTURE =
           "calculation": "Plastic",
           "loading": "Staged construction",
           "activate": [
-            "wall",
+            "pile",
             "load"
           ],
           "deactivate": [],
@@ -825,7 +825,7 @@ window.STAGE_FIXTURE =
             "soil_L1__lift1"
           ],
           "deactivate": [
-            "soil_L1"
+            "soil_L1__outside"
           ],
           "reset_displacements": false,
           "max_iterations": 15,
@@ -839,7 +839,7 @@ window.STAGE_FIXTURE =
           "calculation": "Plastic",
           "loading": "Staged construction",
           "activate": [
-            "anchors"
+            "tie"
           ],
           "deactivate": [],
           "reset_displacements": false,
@@ -855,7 +855,7 @@ window.STAGE_FIXTURE =
           "loading": "Staged construction",
           "activate": [
             "soil_L1__lift2",
-            "soil_L1"
+            "soil_L1__outside"
           ],
           "deactivate": [
             "soil_L1__lift1"
@@ -913,8 +913,8 @@ window.STAGE_FIXTURE =
           "loading": "Staged construction",
           "activate": [],
           "deactivate": [
-            "wall",
-            "anchors",
+            "pile",
+            "tie",
             "load",
             "soil_L1__lift1",
             "soil_L1__lift2",
@@ -945,7 +945,7 @@ window.STAGE_FIXTURE =
           "calculation": "Plastic",
           "loading": "Staged construction",
           "activate": [
-            "wall",
+            "pile",
             "load"
           ],
           "deactivate": [],
@@ -964,7 +964,7 @@ window.STAGE_FIXTURE =
             "soil_L1__lift1"
           ],
           "deactivate": [
-            "soil_L1",
+            "soil_L1__outside",
             "wall"
           ],
           "reset_displacements": false,
@@ -979,7 +979,7 @@ window.STAGE_FIXTURE =
           "calculation": "Plastic",
           "loading": "Staged construction",
           "activate": [
-            "anchors"
+            "tie"
           ],
           "deactivate": [],
           "reset_displacements": false,
@@ -995,7 +995,7 @@ window.STAGE_FIXTURE =
           "loading": "Staged construction",
           "activate": [
             "soil_L1__lift2",
-            "soil_L1"
+            "soil_L1__outside"
           ],
           "deactivate": [
             "soil_L1__lift1"
@@ -1041,8 +1041,8 @@ window.STAGE_FIXTURE =
           "loading": "Staged construction",
           "activate": [],
           "deactivate": [
-            "wall",
-            "anchors",
+            "pile",
+            "tie",
             "load",
             "soil_L1__lift1",
             "soil_L1__lift2",
@@ -1073,7 +1073,7 @@ window.STAGE_FIXTURE =
           "calculation": "Plastic",
           "loading": "Staged construction",
           "activate": [
-            "wall",
+            "pile",
             "load"
           ],
           "deactivate": [],
@@ -1092,7 +1092,7 @@ window.STAGE_FIXTURE =
             "soil_L1__lift1"
           ],
           "deactivate": [
-            "soil_L1"
+            "soil_L1__outside"
           ],
           "reset_displacements": false,
           "max_iterations": 15,
@@ -1105,8 +1105,13 @@ window.STAGE_FIXTURE =
           "parent": "dig_1",
           "calculation": "Plastic",
           "loading": "Staged construction",
-          "activate": [],
-          "deactivate": [],
+          "activate": [
+            "tie"
+          ],
+          "deactivate": [
+            "soil_L1",
+            "anchors"
+          ],
           "reset_displacements": false,
           "max_iterations": 15,
           "tolerated_error": 0.0001,
@@ -1120,7 +1125,7 @@ window.STAGE_FIXTURE =
           "loading": "Staged construction",
           "activate": [
             "soil_L1__lift2",
-            "soil_L1"
+            "soil_L1__outside"
           ],
           "deactivate": [
             "soil_L1__lift1"
@@ -1165,8 +1170,8 @@ window.STAGE_FIXTURE =
           "loading": "Staged construction",
           "activate": [],
           "deactivate": [
-            "wall",
-            "anchors",
+            "pile",
+            "tie",
             "load",
             "soil_L1__lift1",
             "soil_L1__lift2",
@@ -1197,7 +1202,7 @@ window.STAGE_FIXTURE =
           "calculation": "Plastic",
           "loading": "Staged construction",
           "activate": [
-            "wall",
+            "pile",
             "load"
           ],
           "deactivate": [],
@@ -1216,7 +1221,7 @@ window.STAGE_FIXTURE =
             "soil_L1__lift1"
           ],
           "deactivate": [
-            "soil_L1"
+            "soil_L1__outside"
           ],
           "reset_displacements": false,
           "max_iterations": 15,
@@ -1230,7 +1235,7 @@ window.STAGE_FIXTURE =
           "calculation": "Plastic",
           "loading": "Staged construction",
           "activate": [
-            "anchors"
+            "tie"
           ],
           "deactivate": [],
           "reset_displacements": false,
@@ -1246,7 +1251,7 @@ window.STAGE_FIXTURE =
           "loading": "Staged construction",
           "activate": [
             "soil_L1__lift2",
-            "soil_L1"
+            "soil_L1__outside"
           ],
           "deactivate": [
             "soil_L1__lift1"
@@ -1291,8 +1296,8 @@ window.STAGE_FIXTURE =
           "loading": "Staged construction",
           "activate": [],
           "deactivate": [
-            "wall",
-            "anchors",
+            "pile",
+            "tie",
             "load",
             "soil_L1__lift1",
             "soil_L1__lift2",
@@ -1323,9 +1328,12 @@ window.STAGE_FIXTURE =
           "calculation": "Plastic",
           "loading": "Staged construction",
           "activate": [
+            "pile",
             "load"
           ],
-          "deactivate": [],
+          "deactivate": [
+            "wall"
+          ],
           "reset_displacements": true,
           "max_iterations": 15,
           "tolerated_error": 0.0001,
@@ -1341,7 +1349,7 @@ window.STAGE_FIXTURE =
             "soil_L1__lift1"
           ],
           "deactivate": [
-            "soil_L1"
+            "soil_L1__outside"
           ],
           "reset_displacements": false,
           "max_iterations": 15,
@@ -1355,7 +1363,7 @@ window.STAGE_FIXTURE =
           "calculation": "Plastic",
           "loading": "Staged construction",
           "activate": [
-            "anchors"
+            "tie"
           ],
           "deactivate": [],
           "reset_displacements": false,
@@ -1371,7 +1379,7 @@ window.STAGE_FIXTURE =
           "loading": "Staged construction",
           "activate": [
             "soil_L1__lift2",
-            "soil_L1"
+            "soil_L1__outside"
           ],
           "deactivate": [
             "soil_L1__lift1"
@@ -1401,15 +1409,15 @@ window.STAGE_FIXTURE =
   ],
   "project": {
     "name": "Deep excavation \u2014 Rotterdam Zuid",
-    "layered_soil": false,
+    "layered_soil": true,
     "dimension": 3,
     "unit_system": "SI",
     "section_offset": null,
     "domain": {
       "x0": 0.0,
-      "x1": 50.0,
+      "x1": 25.0,
       "z0": 0.0,
-      "z1": 40.0,
+      "z1": 25.0,
       "y_top": 0.0,
       "y_bottom": -60.0
     },
@@ -1586,66 +1594,132 @@ window.STAGE_FIXTURE =
         "bottom": -60.0
       }
     ],
-    "excavation": {
-      "x0": 0.0,
-      "x1": 5.0,
-      "z0": 10.0,
-      "z1": 30.0,
-      "floor_y": -8.0,
-      "levels": [
-        -2.0,
-        -5.0,
-        -8.0
-      ]
-    },
-    "wall": {
-      "thickness": 0.8,
-      "top_y": 0.0,
-      "toe_y": -13.0
-    },
-    "struts": {
-      "xs": [
-        14.0,
-        20.0,
-        26.0,
-        32.0
-      ],
-      "y": -3.0,
-      "radius": 0.28,
-      "overhang": 0.8,
-      "waler_width": 0.5,
-      "waler_height": 0.6,
-      "waler_offset": 0.5
-    },
-    "anchor_rows": {
-      "xs": [
-        15.0,
-        21.0,
-        27.0,
-        33.0
-      ],
-      "head_y": -4.5,
-      "length": 11.0,
-      "inclination_deg": 35.0,
-      "radius": 0.11,
-      "head_offset": 0.4
-    },
-    "piles": {
-      "xs": [
-        16.0,
-        22.0,
-        28.0,
-        34.0
-      ],
-      "zs": [
-        14.0,
-        20.0,
-        26.0
-      ],
-      "radius": 0.3,
-      "length": 9.0,
-      "top_y": -7.0
-    },
+    "lines": [
+      {
+        "id": "pit_side",
+        "name": "Pit side",
+        "points": [
+          [
+            5.0,
+            0.0
+          ],
+          [
+            5.0,
+            -60.0
+          ]
+        ]
+      },
+      {
+        "id": "pit_level_1",
+        "name": "Pit level 1",
+        "points": [
+          [
+            0.0,
+            -2.0
+          ],
+          [
+            5.0,
+            -2.0
+          ]
+        ]
+      },
+      {
+        "id": "pit_level_2",
+        "name": "Pit level 2",
+        "points": [
+          [
+            0.0,
+            -5.0
+          ],
+          [
+            5.0,
+            -5.0
+          ]
+        ]
+      }
+    ],
+    "bodies": [
+      {
+        "id": "lift1",
+        "name": "lift 1",
+        "layer": "L1",
+        "point": [
+          2.5,
+          -1.0
+        ],
+        "mat": "m1"
+      },
+      {
+        "id": "outside",
+        "name": "outside the pit",
+        "layer": "L1",
+        "point": [
+          15.0,
+          -4.0
+        ],
+        "mat": "m1"
+      },
+      {
+        "id": "lift2",
+        "name": "lift 2",
+        "layer": "L1",
+        "point": [
+          2.5,
+          -3.5
+        ],
+        "mat": "m1"
+      },
+      {
+        "id": "lift3",
+        "name": "lift 3",
+        "layer": "L1",
+        "point": [
+          2.5,
+          -6.5
+        ],
+        "mat": "m1"
+      },
+      {
+        "id": "pit",
+        "name": "below the pit",
+        "layer": "L2",
+        "point": [
+          2.5,
+          -10.0
+        ],
+        "mat": "m1"
+      },
+      {
+        "id": "outside",
+        "name": "outside the pit",
+        "layer": "L2",
+        "point": [
+          15.0,
+          -10.0
+        ],
+        "mat": "m1"
+      },
+      {
+        "id": "pit",
+        "name": "below the pit",
+        "layer": "L3",
+        "point": [
+          2.5,
+          -36.0
+        ],
+        "mat": "m2"
+      },
+      {
+        "id": "outside",
+        "name": "outside the pit",
+        "layer": "L3",
+        "point": [
+          15.0,
+          -36.0
+        ],
+        "mat": "m2"
+      }
+    ],
     "loads": [
       {
         "id": "load",
@@ -1667,30 +1741,71 @@ window.STAGE_FIXTURE =
         "derived_from": null
       }
     ],
-    "beam_sections": [],
+    "beam_sections": [
+      {
+        "constitutive_law": "TimoshenkoBeamElasticConstitutiveLaw",
+        "variables": {},
+        "tables": {},
+        "id": "s",
+        "name": "S",
+        "spacing": 1.0
+      }
+    ],
     "panel_sections": [],
-    "beams": [],
-    "anchor_sections": [],
-    "anchors": [],
+    "beams": [
+      {
+        "id": "pile",
+        "name": "Pile",
+        "kind": "beam",
+        "section": "s",
+        "points": [
+          [
+            5.0,
+            0.0
+          ],
+          [
+            5.0,
+            -13.0
+          ]
+        ],
+        "active": true,
+        "derived_from": null
+      }
+    ],
+    "anchor_sections": [
+      {
+        "constitutive_law": "TrussConstitutiveLaw",
+        "variables": {},
+        "tables": {},
+        "id": "t",
+        "name": "T",
+        "spacing": 2.5,
+        "tension_limit": null,
+        "compression_limit": null
+      }
+    ],
+    "anchors": [
+      {
+        "id": "tie",
+        "name": "Tie",
+        "kind": "anchor",
+        "section": "t",
+        "head": [
+          5.0,
+          -1.0
+        ],
+        "tail": [
+          3.0,
+          -1.0
+        ],
+        "prestress": 0.0,
+        "active": true
+      }
+    ],
     "interface_sections": [],
     "interfaces": [],
     "interface_sides": "screen",
     "normal_loads": [],
-    "wells": {
-      "positions": [
-        [
-          18.0,
-          15.0
-        ],
-        [
-          32.0,
-          25.0
-        ]
-      ],
-      "radius": 0.35,
-      "top_y": 0.0,
-      "length": 15.0
-    },
     "water": {
       "y": -1.5,
       "margin": 3.0,
@@ -1820,8 +1935,8 @@ window.STAGE_FIXTURE =
         "loading": "Staged construction",
         "activate": [],
         "deactivate": [
-          "wall",
-          "anchors",
+          "pile",
+          "tie",
           "load",
           "soil_L1__lift1",
           "soil_L1__lift2",
@@ -1852,7 +1967,7 @@ window.STAGE_FIXTURE =
         "calculation": "Plastic",
         "loading": "Staged construction",
         "activate": [
-          "wall",
+          "pile",
           "load"
         ],
         "deactivate": [],
@@ -1871,7 +1986,7 @@ window.STAGE_FIXTURE =
           "soil_L1__lift1"
         ],
         "deactivate": [
-          "soil_L1"
+          "soil_L1__outside"
         ],
         "reset_displacements": false,
         "max_iterations": 15,
@@ -1885,7 +2000,7 @@ window.STAGE_FIXTURE =
         "calculation": "Plastic",
         "loading": "Staged construction",
         "activate": [
-          "anchors"
+          "tie"
         ],
         "deactivate": [],
         "reset_displacements": false,
@@ -1901,7 +2016,7 @@ window.STAGE_FIXTURE =
         "loading": "Staged construction",
         "activate": [
           "soil_L1__lift2",
-          "soil_L1"
+          "soil_L1__outside"
         ],
         "deactivate": [
           "soil_L1__lift1"
@@ -1929,170 +2044,135 @@ window.STAGE_FIXTURE =
     ],
     "deck": null,
     "soil_body_keys": [
-      "soil_L1",
-      "soil_L2",
-      "soil_L3",
       "soil_L1__lift1",
+      "soil_L1__outside",
       "soil_L1__lift2",
       "soil_L1__lift3",
       "soil_L2__pit",
-      "soil_L3__pit"
+      "soil_L2__outside",
+      "soil_L3__pit",
+      "soil_L3__outside"
     ],
     "soil_body_labels": {
-      "soil_L1": "Soil_1",
-      "soil_L2": "Soil_2",
-      "soil_L3": "Soil_3",
       "soil_L1__lift1": "Soil_1 \u00b7 lift 1",
+      "soil_L1__outside": "Soil_1 \u00b7 outside the pit",
       "soil_L1__lift2": "Soil_1 \u00b7 lift 2",
       "soil_L1__lift3": "Soil_1 \u00b7 lift 3",
       "soil_L2__pit": "Soil_2 \u00b7 below the pit",
-      "soil_L3__pit": "Soil_3 \u00b7 below the pit"
+      "soil_L2__outside": "Soil_2 \u00b7 outside the pit",
+      "soil_L3__pit": "Soil_3 \u00b7 below the pit",
+      "soil_L3__outside": "Soil_3 \u00b7 outside the pit"
+    },
+    "soil_body_materials": {
+      "soil_L1__lift1": "m1",
+      "soil_L1__outside": "m1",
+      "soil_L1__lift2": "m1",
+      "soil_L1__lift3": "m1",
+      "soil_L2__pit": "m1",
+      "soil_L2__outside": "m1",
+      "soil_L3__pit": "m2",
+      "soil_L3__outside": "m2"
     },
     "stageable_parts": [
-      "soil_L1",
-      "soil_L2",
-      "soil_L3",
       "soil_L1__lift1",
+      "soil_L1__outside",
       "soil_L1__lift2",
       "soil_L1__lift3",
       "soil_L2__pit",
+      "soil_L2__outside",
       "soil_L3__pit",
-      "excavation",
-      "wall",
-      "struts",
-      "anchors",
-      "piles",
+      "soil_L3__outside",
+      "pile",
+      "tie",
       "load",
-      "water",
-      "wells",
       "pore_pressure"
     ]
   },
   "stageable_keys": [
-    "soil_L1",
-    "soil_L2",
-    "soil_L3",
     "soil_L1__lift1",
+    "soil_L1__outside",
     "soil_L1__lift2",
     "soil_L1__lift3",
     "soil_L2__pit",
+    "soil_L2__outside",
     "soil_L3__pit",
-    "excavation",
-    "wall",
-    "struts",
-    "anchors",
-    "piles",
+    "soil_L3__outside",
+    "pile",
+    "tie",
     "load",
-    "water",
-    "wells",
     "pore_pressure"
   ],
   "active_parts": {
     "initial": [
-      "excavation",
-      "piles",
       "pore_pressure",
-      "soil_L1",
-      "soil_L2",
+      "soil_L1__outside",
+      "soil_L2__outside",
       "soil_L2__pit",
-      "soil_L3",
-      "soil_L3__pit",
-      "struts",
-      "water",
-      "wells"
+      "soil_L3__outside",
+      "soil_L3__pit"
     ],
     "null_step": [
-      "excavation",
-      "piles",
       "pore_pressure",
-      "soil_L1",
-      "soil_L2",
+      "soil_L1__outside",
+      "soil_L2__outside",
       "soil_L2__pit",
-      "soil_L3",
-      "soil_L3__pit",
-      "struts",
-      "water",
-      "wells"
+      "soil_L3__outside",
+      "soil_L3__pit"
     ],
     "build_wall": [
-      "excavation",
       "load",
-      "piles",
+      "pile",
       "pore_pressure",
-      "soil_L1",
-      "soil_L2",
+      "soil_L1__outside",
+      "soil_L2__outside",
       "soil_L2__pit",
-      "soil_L3",
-      "soil_L3__pit",
-      "struts",
-      "wall",
-      "water",
-      "wells"
+      "soil_L3__outside",
+      "soil_L3__pit"
     ],
     "dig_1": [
-      "excavation",
       "load",
-      "piles",
+      "pile",
       "pore_pressure",
       "soil_L1__lift1",
-      "soil_L2",
+      "soil_L2__outside",
       "soil_L2__pit",
-      "soil_L3",
-      "soil_L3__pit",
-      "struts",
-      "wall",
-      "water",
-      "wells"
+      "soil_L3__outside",
+      "soil_L3__pit"
     ],
     "prop": [
-      "anchors",
-      "excavation",
       "load",
-      "piles",
+      "pile",
       "pore_pressure",
       "soil_L1__lift1",
-      "soil_L2",
+      "soil_L2__outside",
       "soil_L2__pit",
-      "soil_L3",
+      "soil_L3__outside",
       "soil_L3__pit",
-      "struts",
-      "wall",
-      "water",
-      "wells"
+      "tie"
     ],
     "dig_2": [
-      "anchors",
-      "excavation",
       "load",
-      "piles",
+      "pile",
       "pore_pressure",
-      "soil_L1",
       "soil_L1__lift2",
-      "soil_L2",
+      "soil_L1__outside",
+      "soil_L2__outside",
       "soil_L2__pit",
-      "soil_L3",
+      "soil_L3__outside",
       "soil_L3__pit",
-      "struts",
-      "wall",
-      "water",
-      "wells"
+      "tie"
     ],
     "settle": [
-      "anchors",
-      "excavation",
       "load",
-      "piles",
+      "pile",
       "pore_pressure",
-      "soil_L1",
       "soil_L1__lift2",
-      "soil_L2",
+      "soil_L1__outside",
+      "soil_L2__outside",
       "soil_L2__pit",
-      "soil_L3",
+      "soil_L3__outside",
       "soil_L3__pit",
-      "struts",
-      "wall",
-      "water",
-      "wells"
+      "tie"
     ]
   },
   "order": [

@@ -127,6 +127,20 @@ CONTRACTS = [
              lambda c: c.patch("/api/project/structures", json=_structures(c)),
              EDITED,
              bad=lambda c: c.patch("/api/project/structures", json={}), bad_status=422),
+    Contract("PATCH", "/api/project/lines",
+             lambda c: c.patch("/api/project/lines", json={"lines": [
+                 {"id": "l", "name": "L", "points": [[1.0, 0.0], [1.0, -2.0]]}]}),
+             EDITED,
+             bad=lambda c: c.patch("/api/project/lines", json={"lines": [
+                 {"id": "l", "name": "L", "points": [[1.0, 0.0]]}]}), bad_status=422),
+    Contract("PATCH", "/api/project/bodies/{key}",
+             lambda c: (c.patch("/api/project/lines", json={"lines": [
+                 {"id": "l", "name": "L", "points": [[1.0, 0.0], [1.0, -8.0]]}]}),
+                        c.patch(f"/api/project/bodies/{c.get('/api/project').json()['soil_body_keys'][0]}",
+                                json={"name": "A"}))[1],
+             EDITED,
+             bad=lambda c: c.patch("/api/project/bodies/no_such_body", json={"name": "A"}),
+             bad_status=404),
     Contract("PATCH", "/api/project/conditions",
              lambda c: c.patch("/api/project/conditions", json={
                  "boundary_conditions": _project(c)["boundary_conditions"],

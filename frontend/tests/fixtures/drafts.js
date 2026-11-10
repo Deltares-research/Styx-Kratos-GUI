@@ -3161,6 +3161,36 @@ window.DRAFTS_FIXTURE =
           "interface_permeability": "Neutral"
         }
       ],
+      "lines": [
+        {
+          "id": "floor_1",
+          "name": "Floor of lift 1",
+          "points": [
+            [
+              0.0,
+              -2.0
+            ],
+            [
+              6.0,
+              -2.0
+            ]
+          ]
+        },
+        {
+          "id": "floor_2",
+          "name": "Floor of lift 2",
+          "points": [
+            [
+              0.0,
+              -4.5
+            ],
+            [
+              6.0,
+              -4.5
+            ]
+          ]
+        }
+      ],
       "loads": [
         {
           "id": "surcharge",
@@ -5203,6 +5233,64 @@ window.DRAFTS_FIXTURE =
           "permeability": "Neutral"
         }
       ]
+    },
+    {
+      "title": "a line across the middle of the section",
+      "call": "Lines.draft",
+      "project": "section",
+      "args": [],
+      "result": {
+        "id": "line_1",
+        "name": "Line 1",
+        "points": [
+          [
+            0.0,
+            -12.5
+          ],
+          [
+            25.0,
+            -12.5
+          ]
+        ]
+      }
+    },
+    {
+      "title": "a line along points",
+      "call": "Lines.draft",
+      "project": "section",
+      "args": [
+        [
+          [
+            0,
+            -2
+          ],
+          [
+            5,
+            -2
+          ]
+        ]
+      ],
+      "result": {
+        "id": "line_1",
+        "name": "Line 1",
+        "points": [
+          [
+            0.0,
+            -2.0
+          ],
+          [
+            5.0,
+            -2.0
+          ]
+        ]
+      }
+    },
+    {
+      "title": "a line in the solid model is refused",
+      "call": "Lines.draft",
+      "project": "solid",
+      "args": [],
+      "error": "A line is drawn in the 2D section; switch to 2D to create one."
     },
     {
       "title": "a normal load down the middle",

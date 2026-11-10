@@ -166,6 +166,8 @@ App.Model = (function () {
       // the solid model even though the pressure it applies is plane strain only.
       NORMAL_LOADS: (project.normal_loads || [])
         .map(function (n) { return JSON.parse(JSON.stringify(n)); }),
+      LINES: (project.lines || [])
+        .map(function (l) { return JSON.parse(JSON.stringify(l)); }),
       // Both kinds, in every dimension: a line kept from the section stays in the list
       // in 3D, as the export keeps it, and says there that it is left out.
       BOUNDARY_CONDITIONS: (project.boundary_conditions || [])
@@ -252,6 +254,7 @@ App.Model = (function () {
     App.INTERFACES = mapped.INTERFACES;
     App.INTERFACE_SECTIONS = mapped.INTERFACE_SECTIONS;
     App.NORMAL_LOADS = mapped.NORMAL_LOADS;
+    App.LINES = mapped.LINES;
     App.BOUNDARY_CONDITIONS = mapped.BOUNDARY_CONDITIONS;
     App.PROJECT = project;
     rebuildDerived();
@@ -284,11 +287,9 @@ App.Model = (function () {
 
   /* One tree row per soil *body*, not per layer.
 
-     A staged excavation splits the soil inside the pit into the lifts it is dug in, so
-     one layer can be four bodies (core/model/schemas.py, `Project.soil_bodies`). Each
-     is separately meshed, separately deactivated in a stage, and separately shown or
-     hidden -- so each needs its own row with its own eye, or the excavated side has no
-     representation in the tree at all.
+     Lines and sheet piles split the soil, so one layer can be four bodies
+     (core/model/schemas.py, `Project.soil_bodies`). Each is separately meshed, separately deactivated in a stage, and separately shown or
+     hidden -- so each needs its own row with its own eye.
 
      The project publishes both the keys and what to call them; deriving either here
      would be a second implementation of the split to keep in step. A project that
@@ -302,10 +303,16 @@ App.Model = (function () {
     return mine.length ? mine : ['soil_' + layer.id];
   }
 
+  /* What a body is made of: its own material, or its layer's. */
+  function bodyMaterial(layer, key) {
+    var own = (App.PROJECT && App.PROJECT.soil_body_materials) || {};
+    return App.matById(own[key] || layer.mat);
+  }
+
   function layerChildren(layer) {
-    var m = App.matById(layer.mat);
     var labels = (App.PROJECT && App.PROJECT.soil_body_labels) || {};
     return layerBodies(layer).map(function (key) {
+      var m = bodyMaterial(layer, key);
       return { label: (labels[key] || layer.name) + '  ·  ' + m.name,
                swatch: m.color, leaf: true, eye: true, obj: key };
     });
@@ -339,6 +346,8 @@ App.Model = (function () {
   var interfaceNode = null;
   var previousInterfaceKeys = [];
   var normalLoadNode = null;
+  var linesNode = null;
+  var previousLineKeys = [];
   var previousNormalLoadKeys = [];
   var modelConditionsNode = null;
   var boundaryNode = null;
@@ -596,6 +605,14 @@ App.Model = (function () {
     };
   }
 
+  function ensureLinesNode() {
+    if (!linesNode) {
+      linesNode = { label: 'Lines', icon: 'line', count: 0,
+                    eye: true, obj: 'group:lines', children: [] };
+    }
+    return linesNode;
+  }
+
   function ensureNormalLoadNode() {
     if (!normalLoadNode) {
       normalLoadNode = { label: 'Normal loads', icon: 'load', count: 0,
@@ -613,7 +630,7 @@ App.Model = (function () {
      from it. A label this list does not name keeps its place at the end rather
      than being dropped. */
   var TREE_ORDER = [
-    'Attributes library', 'Soil', 'Geometry', 'Custom geometry',
+    'Attributes library', 'Soil', 'Lines', 'Geometry', 'Custom geometry',
     'Imported mesh', 'Structures', 'Sheet piles', 'Anchors', 'Interfaces',
     'Normal loads', 'Loads', 'Water levels', 'Flow conditions', 'Mesh',
     'Model conditions'
@@ -693,7 +710,7 @@ App.Model = (function () {
      row reads as if the model had sheet piles. It comes back with its first member. */
   function syncTrees(layeredSoil, soil) {
     var top = layeredSoil ? (soil ? [soil] : []) : topLevelUnion();
-    var groups = [customGeometryNode, importedMeshNode, sheetPileNode, anchorNode,
+    var groups = [customGeometryNode, importedMeshNode, linesNode, sheetPileNode, anchorNode,
                   interfaceNode, normalLoadNode, loadConditionsNode];
     function empty(node) { return groups.indexOf(node) >= 0 && !(node.children || []).length; }
     top = top.filter(function (node) { return !empty(node); });
@@ -1643,6 +1660,81 @@ App.Model = (function () {
     };
   }
 
+  /* ── Lines and the soil bodies they make ─────────────────────────────────── */
+
+  function linePointEditor(record, index, axis) {
+    return {
+      kind: 'number', decimals: 3, unit: 'm',
+      get: function () { return record.points[index][axis]; },
+      set: function (value) {
+        if (!Number.isFinite(value)) return 'Every coordinate must be a number.';
+        var was = record.points[index][axis];
+        record.points[index][axis] = value;
+        var problem = App.Lines ? App.Lines.validate(record) : null;
+        if (problem) { record.points[index][axis] = was; return problem; }
+        return null;
+      }
+    };
+  }
+
+  function lineProps(record) {
+    var geometry = [];
+    (record.points || []).forEach(function (point, index) {
+      geometry.push(['x' + (index + 1), fixed(point[0]), 'm', false,
+                     linePointEditor(record, index, 0)]);
+      geometry.push(['y' + (index + 1), fixed(point[1]), 'm', false,
+                     linePointEditor(record, index, 1)]);
+    });
+    return {
+      title: record.name, icon: 'line',
+      groups: {
+        'General': [
+          ['Edit', '', '', false, { kind: 'button', text: 'Edit line…',
+            run: function () { if (App.Lines) App.Lines.edit(record.id); } }],
+          ['Delete', '', '', false, { kind: 'button', text: 'Delete line',
+            run: function () {
+              // A refusal is already in the log, with its reason.
+              if (App.Lines) App.Lines.remove(record.id).catch(function () {});
+            } }]
+        ],
+        'Geometry': geometry
+      }
+    };
+  }
+
+  /* A soil body a line or a sheet pile cut off: what it is called and what it is made
+     of. Which layer it came out of is fixed. */
+  function bodyProps(layer, body, key) {
+    var labels = (App.PROJECT && App.PROJECT.soil_body_labels) || {};
+    return {
+      title: labels[key] || body.name, icon: 'cube',
+      groups: {
+        'General': [
+          ['Name', body.name, '', true],
+          ['Rename', '', '', false, { kind: 'button', text: 'Rename…',
+            run: function () {
+              var name = window.prompt('New name', body.name);
+              if (name && name.trim() && App.Lines) {
+                App.Lines.saveBody(key, { name: name.trim() }).catch(function () {});
+              }
+            } }],
+          ['Layer', layer.name, '', true],
+          // The materials only, the part's chosen: it has one of its own from the moment
+          // a line cuts it off, and keeps it when its layer's changes.
+          ['Material', bodyMaterial(layer, key).name, '', false, {
+            kind: 'select',
+            options: function () {
+              return App.MATERIALS.map(function (m) { return { value: m.id, text: m.name }; });
+            },
+            get: function () { return body.mat || layer.mat; },
+            set: function (value) { body.mat = value || layer.mat; return null; }
+          }],
+          ['Volume', '—', 'm³', true]
+        ]
+      }
+    };
+  }
+
   function normalLoadProps(record) {
     var hydrostatic = record.fluid_pressure_type === 'Hydrostatic';
     var geometry = [];
@@ -1864,7 +1956,8 @@ App.Model = (function () {
       // no entry for it shows nothing at all. A lift is the layer it was dug out of, so
       // it shows the layer's properties.
       layerBodies(layer).forEach(function (key) {
-        App.OBJECT_PROPS[key] = layerProps(layer, i);
+        var body = App.Lines && App.Lines.bodyOf(key);
+        App.OBJECT_PROPS[key] = body ? bodyProps(layer, body, key) : layerProps(layer, i);
       });
     });
 
@@ -1932,6 +2025,16 @@ App.Model = (function () {
       App.OBJECT_PROPS[record.id] = normalLoadProps(record);
     });
     previousNormalLoadKeys = normalLoads.map(function (record) { return record.id; });
+
+    var lines = App.LINES || [];
+    var lineNode = ensureLinesNode();
+    lineNode.count = lines.length;
+    lineNode.children = lines.map(function (record) {
+      return { label: record.name, icon: 'line', leaf: true, eye: true, obj: record.id };
+    });
+    previousLineKeys.forEach(function (key) { delete App.OBJECT_PROPS[key]; });
+    lines.forEach(function (record) { App.OBJECT_PROPS[record.id] = lineProps(record); });
+    previousLineKeys = lines.map(function (record) { return record.id; });
 
     var conditions = App.BOUNDARY_CONDITIONS || [];
     var conditionsNode = ensureModelConditionsNode();

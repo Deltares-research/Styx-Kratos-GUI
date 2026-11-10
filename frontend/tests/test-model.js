@@ -1218,4 +1218,51 @@
            ['soil_L1', 'soil_L2']);
     });
   });
+
+  /* A part a line cut off offered "As its layer (Sand, loose)" as a material, which
+     a user who renamed the part may no longer connect with anything. The list is the
+     materials, the part's own chosen; the layer's is one of them. */
+  function cutProject(mat) {
+    return Object.assign(project(TWO, [], true), {
+      bodies: [{ id: 'part1', name: 'Part 1', layer: 'L1', point: [5, -4], mat: mat },
+               { id: 'part2', name: 'Part 2', layer: 'L1', point: [40, -4], mat: null }],
+      soil_body_keys: ['soil_L1__part1', 'soil_L1__part2', 'soil_L2'],
+      soil_body_labels: { soil_L1__part1: 'Soil_1 · Part 1', soil_L1__part2: 'Soil_1 · Part 2',
+                          soil_L2: 'Soil_2' },
+      soil_body_materials: { soil_L1__part1: mat || 'm2', soil_L1__part2: 'm2', soil_L2: 'm4' }
+    });
+  }
+
+  function materialRow(key) {
+    return App.OBJECT_PROPS[key].groups.General.filter(function (row) {
+      return row[0] === 'Material';
+    })[0];
+  }
+
+  test("a soil part's materials are the project's, its layer's chosen", function () {
+    withProject(cutProject(null), function () {
+      var row = materialRow('soil_L1__part1');
+      T.eq(row[4].options(), [{ value: 'm2', text: 'Sand, loose' },
+                              { value: 'm4', text: 'Clay, stiff' }]);
+      T.eq(row[4].get(), 'm2');
+      T.eq(row[1], 'Sand, loose');
+    });
+  });
+
+  test('a soil part with a material of its own shows it chosen', function () {
+    withProject(cutProject('m4'), function () {
+      T.eq(materialRow('soil_L1__part1')[4].get(), 'm4');
+    });
+  });
+
+  test("choosing the layer's material makes it the part's own", function () {
+    withProject(cutProject('m4'), function () {
+      var body = App.Lines.bodyOf('soil_L1__part1');
+      var editor = materialRow('soil_L1__part1')[4];
+      T.eq(editor.set('m2'), null);
+      T.eq(body.mat, 'm2', 'so a later change to the layer leaves the part alone');
+      T.eq(editor.set('m4'), null);
+      T.eq(body.mat, 'm4');
+    });
+  });
 })();

@@ -38,6 +38,7 @@ from core.kratos import materials
 from core.model import drafts, migration, soil_models, stages, units
 from core.model.load_translation import translate as translate_loads
 from core.model.schemas import (ConditionsUpdate, CustomPart, DimensionUpdate, LayersUpdate,
+                                Line, LinesUpdate,
                                 MaterialsUpdate, MeshRequest, Panel, StagesUpdate, Project,
                                 StructuresUpdate,
                                 UnitsUpdate, WaterLevel, WaterUpdate, point_on_panel,
@@ -194,12 +195,18 @@ def _replace(temporary: str, path: Path) -> None:
 
 # ── Every edit ──────────────────────────────────────────────────────────────
 
+def _sizable_keys(project: Project) -> set[str]:
+    """What a mesh size can name: the bodies, and a cut layer's key, which names each of
+    its pieces."""
+    return {*project.part_keys(), *(f"soil_{layer.id}" for layer in project.layers)}
+
+
 def _edited(project: Project, payload: dict) -> Project:
     """`payload`, an edit of `project`, validated as a whole project.
 
     The one way an edit here makes its result, so a rule every edit keeps is kept once:
     a size belongs to its body, so an edit that takes a body away takes its size too --
-    a layer removed or split, a level moved past a lift, a structure deleted -- whichever
+    a layer removed or split, a line removed, a structure deleted -- whichever
     front end made the edit and however it was sent. A size for a body the model never
     had is kept: `unknown_mesh_keys` names it as the mistake it is.
     """
@@ -207,13 +214,31 @@ def _edited(project: Project, payload: dict) -> Project:
     sizes = edited.mesh.body_sizes
     if not sizes:
         return edited
-    orphans = set(sizes) - set(edited.part_keys())
-    lost = orphans & set(project.part_keys()) if orphans else set()
+    orphans = set(sizes) - _sizable_keys(edited)
+    lost = orphans & _sizable_keys(project) if orphans else set()
     if not lost:
         return edited
     kept = {key: size for key, size in sizes.items() if key not in lost}
     return edited.model_copy(update={"mesh": edited.mesh.model_copy(
         update={"body_sizes": kept})})
+
+
+def _parts_take_their_layers_material(project: Project, payload: dict) -> None:
+    """Every part of a layer the edit gives another material takes that material, a part
+    given one of its own included: what the user changes is the soil of the whole layer.
+
+    Only the edits of a layer call this. An undo or an opened file sets the layers and the
+    parts together, as they were, and each part keeps the material it was written with.
+    A layer whose material is the one it had has not been given another, which matters
+    because the soil layers window sends every layer on every change.
+    """
+    before = {layer.id: layer.mat for layer in project.layers}
+    given = {layer["id"]: layer.get("mat") for layer in payload.get("layers") or []
+             if isinstance(layer, dict) and layer.get("id") in before
+             and layer.get("mat") != before[layer["id"]]}
+    for body in payload.get("bodies") or []:
+        if isinstance(body, dict) and body.get("layer") in given:
+            body["mat"] = given[body["layer"]]
 
 
 def removed_sizes(before: Project, after: Project) -> list[str]:
@@ -226,7 +251,7 @@ def removed_sizes(before: Project, after: Project) -> list[str]:
     """
     gone = set(before.mesh.body_sizes) - set(after.mesh.body_sizes)
     if gone:
-        gone &= set(before.part_keys()) - set(after.part_keys())
+        gone &= _sizable_keys(before) - _sizable_keys(after)
     if not gone:
         return []
     sizes = ", ".join(f"{key} ({before.mesh.body_sizes[key]:g})" for key in sorted(gone))
@@ -256,6 +281,7 @@ def replace_layers(project: Project, update: LayersUpdate) -> Project:
     if update.custom_parts is not None:
         payload["custom_parts"] = [part.model_dump() for part in update.custom_parts]
     _domain_from_layers(payload)
+    _parts_take_their_layers_material(project, payload)
     return _edited(project, payload)
 
 
@@ -561,13 +587,25 @@ def without_custom_part(project: Project, key: str) -> Project:
     return without_custom_parts(project, [key])
 
 
+def edit_notes(before: Project, after: Project) -> list[str]:
+    """What to tell the user about an edit besides that it was done: the mesh sizes it took
+    away (`removed_sizes`), and each line it made or moved that splits no soil. kratos-cli
+    prints these after its answer and the GUI shows them in its Session log."""
+    was = {line.id: line for line in before.lines}
+    idle = after.idle_lines()
+    return removed_sizes(before, after) + [
+        f"Line {line.name!r} splits no soil: a line has to cross a soil layer from one edge "
+        "to another."
+        for line in after.lines if line.id in idle and was.get(line.id) != line]
+
+
 # ── Meshing ─────────────────────────────────────────────────────────────────
 
 def unknown_mesh_keys(project: Project, settings: MeshRequest) -> list[str]:
     """The bodies `settings` names -- to mesh, or to size -- that this project does not
     have, sorted. Empty when every one is the project's own."""
-    named = set(settings.volume_keys or []) | set(settings.body_sizes)
-    return sorted(named - set(project.part_keys()))
+    named = project.expand_body_keys([*(settings.volume_keys or []), *settings.body_sizes])
+    return sorted(set(named) - set(project.part_keys()))
 
 
 def nothing_to_mesh(project: Project) -> str | None:
@@ -676,6 +714,7 @@ def _validated_edit(project: Project, payload: dict, tokens: list[tuple[str, str
         return replace_stages(project, StagesUpdate(stages=payload["stages"]))
     if tokens[0][1] == "layers":
         _domain_from_layers(payload)
+        _parts_take_their_layers_material(project, payload)
     elif tokens[0][1] == "domain":
         _layers_from_domain(payload)
     return _edited(project, payload)
@@ -764,7 +803,7 @@ def _joined(where: str, token: tuple[str, str]) -> str:
     return f"{where}.{name}" if where else name
 
 
-# ── The ground: domain, layers, materials, excavation ───────────────────────
+# ── The ground: domain, layers, materials ──────────────────────────────────
 #
 # The edits the GUI's soil layers dialog makes in the browser
 # (frontend/js/soil-layers-dialog.js), so the command line makes them the same way: a
@@ -885,6 +924,7 @@ def update_layer(project: Project, id: str, *, material: str | None = None,
         if index < len(layers) - 1:
             layers[index + 1]["top"] = bottom
     _domain_from_layers(payload)
+    _parts_take_their_layers_material(project, payload)
     return _edited(project, payload)
 
 
@@ -989,39 +1029,51 @@ def remove_material(project: Project, id: str) -> Project:
     return _edited(project, payload)
 
 
-def set_excavation(project: Project, *, x: tuple[float, float] | None = None,
-                   z: tuple[float, float] | None = None,
-                   levels: list[float] | None = None) -> tuple[Project, list[str]]:
-    """The pit: its plan outline (`x`, `z` as from, to) and the levels it is dug to,
-    shallowest first -- one lift per level, each its own body, deactivated in its own
-    stage. The floor is the last level.
+# ── Lines and the soil bodies they make ─────────────────────────────────────
 
-    A project without a pit gets one when `x`, `z` and `levels` are all given. A 2D
-    model is one cut through z, so its pit spans the domain's z range unless `z` says
-    otherwise."""
+def replace_lines(project: Project, update: LinesUpdate) -> Project:
+    """The lines, as one list. The project's validation works out the bodies they make,
+    and refuses an edit that takes away a body a stage or a condition still names."""
     payload = project.model_dump()
-    pit = payload.get("excavation")
-    if pit is None:
-        if z is None and project.dimension == 2:
-            z = (project.domain.z0, project.domain.z1)
-        missing = [name for name, value in (("x", x), ("z", z), ("levels", levels))
-                   if value is None]
-        if missing:
-            raise EditRefused(f"the project has no excavation yet; give "
-                              f"{', '.join(missing)} to make one")
-        pit = payload["excavation"] = {}
-    if x is not None:
-        pit["x0"], pit["x1"] = x
-    if z is not None:
-        pit["z0"], pit["z1"] = z
-    if levels is not None:
-        pit["levels"], pit["floor_y"] = list(levels), levels[-1]
-    edited = _edited(project, payload)
-    notes = []
-    if edited.layered_soil and len(edited.pit_levels()) < 2:
-        notes.append("With one level a layered model digs nothing: its pit is cut only "
-                     "when it is dug in two or more levels, one stage per lift.")
-    return edited, notes
+    payload["lines"] = [line.model_dump() for line in update.lines]
+    return _edited(project, payload)
+
+
+def add_line(project: Project, line: Line) -> Project:
+    _refuse_taken(line.id, [each.id for each in project.lines], "line")
+    return replace_lines(project, LinesUpdate(lines=[*project.lines, line]))
+
+
+def update_line(project: Project, id: str, **fields) -> Project:
+    """The line `id` with `fields` (`name`, `points`) changed."""
+    at = _index(project.lines, id, "line")
+    lines = list(project.lines)
+    lines[at] = Line.model_validate(lines[at].model_dump() | fields)
+    return replace_lines(project, LinesUpdate(lines=lines))
+
+
+def remove_line(project: Project, id: str) -> Project:
+    at = _index(project.lines, id, "line")
+    return replace_lines(project, LinesUpdate(lines=[
+        line for index, line in enumerate(project.lines) if index != at]))
+
+
+def update_body(project: Project, key: str, **fields) -> Project:
+    """The soil body `key` with its `name` or its `material` changed; `material=None` gives
+    it its layer's material as it is now. A body that is a whole layer is that layer's to
+    change."""
+    payload = project.model_dump()
+    for body in payload.get("bodies", []):
+        if f"soil_{body['layer']}__{body['id']}" == key:
+            if "name" in fields:
+                body["name"] = fields["name"]
+            if "material" in fields:
+                body["mat"] = fields["material"]
+            return _edited(project, payload)
+    if any(f"soil_{layer.id}" == key for layer in project.layers):
+        raise UnknownPart(f"{key} is a whole layer, not a part cut off by a line: change it "
+                          "as a layer")
+    raise UnknownPart(f"no soil body with key {key!r}")
 
 
 def assign_part_material(project: Project, key: str, material: str) -> Project:
@@ -1438,11 +1490,3 @@ def _no_part(project: Project, word: str, stageable: list[str]) -> str:
     ids = " or ".join(named)
     return (f"there is no part {word!r} to switch: {word!r} is the name of the part with "
             f"id {ids}, and a stage switches a part by its id. Use {ids}.")
-
-
-def staged_excavation_stages(project: Project) -> Project:
-    """The whole staged-excavation sequence derived from the model -- settle, build the
-    wall, then dig and prop lift by lift (`stages.staged_excavation_stages`) -- replacing
-    whatever is there."""
-    return replace_stages(project, StagesUpdate(
-        stages=stages.staged_excavation_stages(project)))

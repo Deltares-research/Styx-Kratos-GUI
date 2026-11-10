@@ -21,7 +21,8 @@ from typing import Any
 
 from core.model import polylines, soil_models, units
 from core.model.schemas import (Anchor, AnchorSection, BeamSection, Beam, Interface,
-                                InterfaceSection, LineLoad, Material, Member, NormalLoad, Panel,
+                                InterfaceSection, Line, LineLoad, Material, Member, NormalLoad,
+                                Panel,
                                 PanelSection, PointLoad, Project, SoilLayer, SpaceAnchor,
                                 SeepageCondition, SurfaceLoad, WaterPressureCondition)
 from core.model.schemas import (FACE_NORMALS, ConditionTarget, DisplacementCondition, Face,
@@ -667,6 +668,20 @@ def normal_load(project: Project, points=None, *, id: str | None = None,
     return NormalLoad(id=id, name=name or default_name, kind="normal", points=line,
                       fluid_pressure_type="Hydrostatic" if hydrostatic else "Uniform",
                       pressure=pressure, active=True, **level)
+
+
+def line(project: Project, points=None, *, id: str | None = None,
+         name: str | None = None) -> Line:
+    """A new line along `points`, or across the middle of the section
+    (`App.Lines.draft`). It is drawn in the 2D section; a solid model has it swept."""
+    if project.dimension != 2:
+        raise DraftError("A line is drawn in the 2D section; switch to 2D to create one.")
+    id, default_name = _named(id, [each.id for each in project.lines], "line_", "Line")
+    d = project.domain
+    middle = (d.y_top + d.y_bottom) / 2
+    drawn = ([(d.x0, middle), (d.x1, middle)] if points is None
+             else [(p[0], p[1]) for p in points])
+    return Line(id=id, name=name or default_name, points=drawn)
 
 
 # Boundary conditions

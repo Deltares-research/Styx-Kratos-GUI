@@ -1199,8 +1199,8 @@ def test_the_live_shell_replaces_only_the_viewport_and_the_orbit_controller(clie
                              "soil-layers-dialog.js",
                              "export.js", "calculate.js", "history.js", "loads.js",
                              "beams.js", "anchors.js",
-                             "interfaces.js", "normal-loads.js", "boundary-conditions.js",
-                             "material-library.js",
+                             "interfaces.js", "normal-loads.js", "lines.js",
+                             "boundary-conditions.js", "material-library.js",
                              "orbit.js", "ruler.js", "mesh-labels.js",
                              "download.js", "zip.js", "stages.js", "results.js",
                              "results-render.js", "results-view.js", "part-colors.js",
@@ -1599,15 +1599,15 @@ def test_a_staged_excavation_can_be_opened_and_drawn(client):
     assert loaded.status_code == 200, loaded.text
     project = loaded.json()["project"]
     assert project["dimension"] == 2
-    assert len(project["excavation"]["levels"]) == 3
+    assert [line["id"] for line in project["lines"]] == ["floor_1", "floor_2"]
     assert project["beams"] and project["anchors"] and project["normal_loads"]
 
     geometry = client.get("/api/geometry")
     assert geometry.status_code == 200
     drawn = {section["key"] for section in geometry.json()["sections"]}
-    # Eight soil bodies, the wall and the strut. The loads are arrow glyphs the
+    # Seven soil bodies, the wall and the strut. The loads are arrow glyphs the
     # viewport draws from the project itself, so they are not in this payload.
-    assert len([k for k in drawn if k.startswith("soil_")]) == 8
+    assert len([k for k in drawn if k.startswith("soil_")]) == 7
     assert {"sheetpile", "strut"} <= drawn
 
 
@@ -1619,10 +1619,9 @@ def test_a_staged_excavation_can_be_opened_and_drawn(client):
 
 def _staged_project() -> dict:
     """The seed with a pit dug in three lifts, so there is something to stage."""
-    payload = seed_project(simple=False).model_dump()
-    payload["excavation"] = {k: v for k, v in payload["excavation"].items()
-                             if k != "floor_y"}
-    payload["excavation"] |= {"levels": [-3.0, -5.0, -7.0]}
+    payload = seed_project().model_dump()
+    payload["excavation"] = {"x0": 8.0, "x1": 16.0, "z0": 0.0, "z1": 25.0,
+                             "levels": [-3.0, -5.0, -7.0]}
     return payload
 
 

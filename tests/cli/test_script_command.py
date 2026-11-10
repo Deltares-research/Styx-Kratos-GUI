@@ -80,7 +80,7 @@ def test_a_model_built_in_the_terminal_comes_back_whole(cli, tmp_path):
         ("material", path, "add", "sand", "--preset", "m5"),
         ("layer", path, "add", "top", "--material", "clay", "--bottom", "-6"),
         ("layer", path, "add", "bottom", "--material", "sand", "--bottom", "-30"),
-        ("excavation", path, "--x", "0", "5", "--z", "0", "10", "--levels", "-2", "-4"),
+        ("line", path, "add", "floor", "--points", "0", "-2", "5", "-2"),
         ("water", path, "-1"),
         ("beam", path, "add", "sheet", "--points", "5", "0", "5", "-10"),
         ("anchor", path, "add", "strut", "--head", "5", "-1", "--tail", "4", "-1"),
@@ -90,7 +90,13 @@ def test_a_model_built_in_the_terminal_comes_back_whole(cli, tmp_path):
         ("normal-load", path, "add", "water_1", "--hydrostatic", "--points", "5", "-1", "5",
          "-2", "0", "-2"),
         ("set", path, "mesh.body_sizes.sheet", "0.5"),
-        ("stages", path, "staged-excavation"),
+        ("stages", path, "defaults"),
+        ("stages", path, "deactivate", "initial", "sheet", "strut", "contact", "surcharge",
+         "water_1"),
+        ("stages", path, "add", "wall", "--name", "Wall installation", "--activate", "sheet",
+         "contact", "surcharge", "--reset-displacements"),
+        ("stages", path, "add", "dig", "--name", "Excavation", "--activate", "water_1",
+         "--deactivate", "soil_top__part3"),
     ):
         ran = cli(*argv)
         assert ran.code == 0, (argv, ran.err)

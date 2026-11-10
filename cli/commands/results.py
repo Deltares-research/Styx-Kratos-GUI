@@ -74,7 +74,8 @@ def register(commands, common: argparse.ArgumentParser) -> None:
     action("members", list_members, "the members the run wrote curves for")
     profile = action("profile", show_profile, "one quantity along a member, stage by "
                                               "stage", stage=True, csv=True)
-    profile.add_argument("member", help="as `results members` lists it: wall, interface")
+    profile.add_argument("member", help="as `results members` lists it: wall, "
+                                           "interface_right, ...")
     profile.add_argument("quantity", nargs="?",
                          help="M, Q, N, ux, uy, tn, ts, or a word of its label "
                               "(default: the bending moment)")

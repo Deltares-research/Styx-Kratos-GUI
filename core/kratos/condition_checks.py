@@ -164,8 +164,8 @@ def _unpinned_water(project: Project) -> list[str]:
 
 
 def _soil_materials(project: Project) -> list[Material]:
-    """The materials the soil uses: the layers' and the custom parts'."""
-    used = ({layer.mat for layer in project.layers}
+    """The materials the soil uses: each soil body's and the custom parts'."""
+    used = ({*project.soil_body_materials.values()}
             | {part.mat for part in project.custom_parts if part.mat is not None})
     return [m for m in project.materials if m.id in used]
 

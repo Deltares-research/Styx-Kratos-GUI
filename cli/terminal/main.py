@@ -21,6 +21,14 @@ GROUPS = (project, edit, ground, volumes, structures, conditions, meshing, stage
           analysis, results, interactive)
 """The command modules, in the order a model is worked through; `--help` lists them so."""
 
+REMOVED = {
+    "excavation": "excavation is gone: split the soil with `line add`.",
+    "stages staged-excavation": "staged-excavation is gone: add each stage with `stages add`.",
+}
+"""Commands and actions that were taken out, as typed after `kratos-cli`, and what to do
+instead. They are no parser, so neither `--help`, the shell's `help` nor its completion
+offers them."""
+
 
 class Parser(argparse.ArgumentParser):
     """argparse's parser, saying a command line it cannot read in the colours of the
@@ -31,6 +39,12 @@ class Parser(argparse.ArgumentParser):
         on = style.enabled(sys.stderr)
         sys.stderr.write(style.paint(self.format_usage().rstrip("\n"), "dim", on) + "\n")
         self.exit(2, f"{self.prog}: {style.paint('error:', 'bold red', on)} {message}\n")
+
+    def _check_value(self, action, value):
+        typed = " ".join([*self.prog.split()[1:], str(value)])
+        if isinstance(action, argparse._SubParsersAction) and typed in REMOVED:
+            raise argparse.ArgumentError(None, REMOVED[typed])
+        super()._check_value(action, value)
 
 
 def parser() -> argparse.ArgumentParser:
