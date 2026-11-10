@@ -2,7 +2,7 @@
 
 The deck asks Kratos' `json_output` process for one file per member per stage --
 `<stage>__output_wall.json` (bending moment, shear force, normal force, displacement at
-every wall node) and `<stage>__output_interface.json` (effective traction on one side of
+every wall node) and `<stage>__output_interface_<face>.json` (effective traction on one face of
 the wall). These are the numbers a retaining-wall designer opens the program for, and
 they are not in the GiD output at all for the interface (`plan/active/postprocessing-plan.md`
 sec 0.3), so this reads them where they are.

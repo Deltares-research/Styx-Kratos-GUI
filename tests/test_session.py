@@ -33,9 +33,9 @@ how far it reaches. The tests here never run gmsh; that is the worker's business
 
 def staged() -> Project:
     """The seed with a pit dug in three lifts, so there is something to stage."""
-    payload = seed_project(simple=False).model_dump()
-    payload["excavation"] = {k: v for k, v in payload["excavation"].items() if k != "floor_y"}
-    payload["excavation"] |= {"levels": [-3.0, -5.0, -7.0]}
+    payload = seed_project().model_dump()
+    payload["excavation"] = {"x0": 8.0, "x1": 16.0, "z0": 0.0, "z1": 25.0,
+                             "levels": [-3.0, -5.0, -7.0]}
     return Project.model_validate(payload)
 
 
@@ -798,46 +798,6 @@ def test_a_material_a_layer_uses_is_not_removed():
     assert "m1" not in [m.id for m in session.remove_material(seed_project(), "m1").materials]
 
 
-def test_the_excavation_is_dug_in_the_levels_given():
-    project, notes = session.set_excavation(seed_project(), x=(2.0, 8.0),
-                                            levels=[-2.0, -4.0, -6.0])
-
-    pit = project.excavation
-    assert (pit.x0, pit.x1, pit.levels, pit.floor_y) == (2.0, 8.0, [-2.0, -4.0, -6.0], -6.0)
-    assert any("__lift1" in key for key in project.part_keys())
-    assert notes == []
-
-
-def test_one_level_says_that_a_layered_model_digs_nothing():
-    """In a layered model the pit is only dug when it is staged
-    (`Project.layered_soil`): one level would leave the ground whole, silently."""
-    _, notes = session.set_excavation(seed_project(), x=(2.0, 8.0), levels=[-3.0])
-
-    assert any("two or more levels" in note for note in notes)
-
-
-def test_a_project_without_a_pit_gets_one():
-    """A new project has no excavation. In 2D the pit spans the domain's z range, the
-    one cut the section is."""
-    blank = blank_project()
-    assert blank.excavation is None
-
-    project, _ = session.set_excavation(blank, x=(2.0, 8.0), levels=[-2.0, -4.0])
-
-    pit = project.excavation
-    assert pit is not None
-    assert (pit.x0, pit.x1, pit.z0, pit.z1) == (2.0, 8.0, blank.domain.z0, blank.domain.z1)
-    assert pit.levels == [-2.0, -4.0]
-
-
-def test_a_pit_made_from_nothing_needs_its_outline_and_levels():
-    with pytest.raises(session.EditRefused, match="give levels"):
-        session.set_excavation(blank_project(), x=(2.0, 8.0))
-    solid = blank_project().model_copy(update={"dimension": 3})
-    with pytest.raises(session.EditRefused, match="give z, levels"):
-        session.set_excavation(solid, x=(2.0, 8.0))
-
-
 def test_a_part_given_a_material_takes_its_colour():
     project = with_box(seed_project())
     material = project.materials[2]
@@ -993,9 +953,7 @@ EDITS_THAT_TAKE_A_BODY = {
     "kratos-cli layer remove": lambda p: session.remove_layer(p, "L_mid"),
     "kratos-cli layer split": lambda p: session.split_layer(p, "L_top"),
     "kratos-cli layer set --top": lambda p: session.update_layer(p, "L_mid", top=-3.0),
-    "kratos-cli set excavation null": lambda p: session.with_value(p, "excavation", None),
-    "kratos-cli excavation --levels": lambda p: session.set_excavation(
-        p, levels=[-2.0, -4.5])[0],
+    "kratos-cli line remove": lambda p: session.remove_line(p, "floor_2"),
     "the GUI deletes a layer": lambda p: session.replace_layers(p, _stack_without(p, "L_mid")),
     "the GUI deletes an anchor": lambda p: session.replace_structures(
         p, _structures(p, anchors=_without(p, "anchors", "strut"))),
@@ -1020,6 +978,8 @@ def test_a_body_an_edit_takes_away_takes_its_mesh_size_with_it(edit):
 
     gone = set(project.part_keys()) - set(edited.part_keys())
     assert gone & set(project.mesh.body_sizes), "the edit takes no sized body away"
+    # A layer's key stays good when the layer is cut: it names each of the pieces.
+    gone -= {f"soil_{layer.id}" for layer in edited.layers}
     assert edited.mesh.body_sizes == {key: size for key, size
                                       in project.mesh.body_sizes.items() if key not in gone}
 
@@ -1057,7 +1017,8 @@ def test_the_user_is_told_which_sizes_an_edit_took_away():
 
     assert notes == ["Removed the mesh size of soil_L_top__lift3 (1): the edit took that "
                      "body away. If it comes back, set its size again."]
-    several = session.removed_sizes(project, session.with_value(project, "excavation", None))
+    several = session.removed_sizes(project, session.remove_layer(
+        session.split_layer(project, "L_top"), "L_mid"))
     assert len(several) == 1
     assert several[0].startswith("Removed the mesh sizes of soil_L_mid__pit (1), "
                                  "soil_L_top__lift3 (1): the edit took those bodies away.")
@@ -1066,7 +1027,7 @@ def test_the_user_is_told_which_sizes_an_edit_took_away():
 def test_a_size_removed_on_purpose_or_never_valid_is_not_noted():
     project = edits.sized(excavation_project(staged=False), soil_typo=1.0)
 
-    on_purpose = session.without_value(project, "mesh.body_sizes[soil_L_mid]")
+    on_purpose = session.without_value(project, "mesh.body_sizes[soil_L_mid__pit]")
     typo_kept = session.remove_layer(project, "L_mid")
 
     assert session.removed_sizes(project, on_purpose) == []
@@ -1193,12 +1154,6 @@ def test_a_part_switched_by_its_name_is_refused_with_its_id():
     # The surcharge is called "Load"; a stage takes its id.
     with pytest.raises(session.EditRefused, match="name of the part with id surcharge"):
         session.switch_parts(excavation_project(), "dig_1", ["load"], True)
-
-
-def test_the_staged_excavation_sequence_is_derived_from_the_model():
-    project = session.staged_excavation_stages(excavation_project(staged=False))
-
-    assert project.stages == excavation_project().stages
 
 
 # ── A project file opened on another computer ──────────────────────────────

@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from tests import test_soil_lines as soil_lines
 from tests.e2e.conftest import command, log_text
 
 LONG = 120_000
@@ -257,3 +258,245 @@ def test_the_boundary_conditions_are_set_in_their_window_and_by_command(app_page
     app_page.wait_for_function("App.PROJECT.gravity === false", timeout=LONG)
     assert app_page.request.get(url).json()["gravity"] is False
     assert app_page.errors == []
+
+
+def test_a_line_drawn_in_the_section_splits_the_soil(app_page, live_server):
+    """The Create line tool: two clicks, Enter, the exact points typed in its window, Save.
+    The layer it crosses is two soil parts then, each with its own row, and the Delete
+    joins them again."""
+    url = live_server["url"] + "/api/project"
+    answer = app_page.request.put(url, data=soil_lines.model().model_dump_json(),
+                                  headers={"Content-Type": "application/json"})
+    assert answer.status == 200
+    app_page.evaluate("App.Viewport.refresh()")
+    app_page.wait_for_function("(App.PROJECT.soil_body_keys || []).length === 2", timeout=LONG)
+
+    app_page.evaluate("App.setMode('structures'); App.runAction({action: 'drawLine'})")
+    box = app_page.locator("canvas").first.bounding_box()
+    for across in (0.4, 0.6):
+        app_page.mouse.click(box["x"] + box["width"] * across, box["y"] + box["height"] / 2)
+    app_page.keyboard.press("Enter")
+
+    rows = app_page.locator(".dialog .line-point")
+    rows.first.wait_for(state="visible")
+    for row, (x, y) in zip((rows.nth(0), rows.nth(1)), ((5, 0), (5, -4))):
+        row.locator("input").nth(0).fill(str(x))
+        row.locator("input").nth(1).fill(str(y))
+    app_page.locator(".dialog button", has_text="Save").click()
+
+    app_page.wait_for_function("(App.PROJECT.soil_body_keys || []).length === 3", timeout=LONG)
+    stored = app_page.request.get(url).json()
+    assert stored["soil_body_keys"] == ["soil_top__part1", "soil_top__part2", "soil_low"]
+    assert stored["lines"][0]["points"] == [[5.0, 0.0], [5.0, -4.0]]
+    tree = app_page.locator("#tree-model")
+    tree.get_by_text("Top · Part 2").wait_for(state="visible")
+    tree.get_by_text("Line 1").wait_for(state="visible")
+
+    app_page.evaluate("App.Lines.remove('line_1')")
+    app_page.wait_for_function("(App.PROJECT.soil_body_keys || []).length === 2", timeout=LONG)
+    assert app_page.errors == []
+
+
+def open_project(page, url: str, project) -> None:
+    """`project` on the server and in the page, with no step to undo yet."""
+    answer = page.request.put(url + "/api/project", data=project.model_dump_json(),
+                              headers={"Content-Type": "application/json"})
+    assert answer.status == 200
+    page.evaluate("App.Viewport.refresh()")
+    page.wait_for_function("keys => JSON.stringify(App.PROJECT.soil_body_keys || [])"
+                           " === JSON.stringify(keys)", arg=project.soil_body_keys, timeout=LONG)
+    page.evaluate("App.History.reset()")
+
+
+def tree_row(page, label: str):
+    """The Model explorer's row whose text starts with `label`."""
+    return page.locator("#tree-model .tree-row").filter(
+        has=page.locator(".tree-label", has_text=label)).first
+
+
+def tree_label(page, label: str) -> str:
+    return tree_row(page, label).locator(".tree-label").inner_text()
+
+
+def wait_tree_label(page, text: str) -> None:
+    """The Model explorer is built again once the viewport has redrawn the change."""
+    page.locator("#tree-model .tree-label", has_text=text).first.wait_for(state="visible")
+
+
+def panel_button(page, text: str):
+    return page.locator("#grid-selection button", has_text=text)
+
+
+def rename_body(page, row: str, name: str) -> None:
+    """Select the body's row and rename it with the button in its panel."""
+    tree_row(page, row).click()
+    page.once("dialog", lambda dialog: dialog.accept(name))
+    panel_button(page, "Rename…").click()
+
+
+def press(page, keys: str) -> None:
+    """A shortcut, with the focus on the model rather than in a box."""
+    page.locator("#viewport canvas#scene").click(position={"x": 5, "y": 5})
+    page.keyboard.press(keys)
+
+
+def test_a_soil_part_is_renamed_in_its_panel(app_page, live_server):
+    """The row, the label the project publishes and the deck's part all take the new name;
+    the key stays, so the stages that name it still do."""
+    url = live_server["url"]
+    open_project(app_page, url, soil_lines.model(lines=[soil_lines.PIT_SIDE]))
+    keys = app_page.evaluate("App.PROJECT.soil_body_keys")
+
+    rename_body(app_page, "Top · Part 1", "Pit")
+
+    app_page.wait_for_function(
+        "App.PROJECT.soil_body_labels.soil_top__part1 === 'Top · Pit'", timeout=LONG)
+    tree_row(app_page, "Top · Pit").wait_for(state="visible")
+    assert "Top · Pit" in app_page.locator("#grid-selection .pgrid-header").inner_text()
+    stored = app_page.request.get(url + "/api/project").json()
+    assert stored["soil_body_keys"] == keys
+    assert stored["soil_body_labels"]["soil_top__part1"] == "Top · Pit"
+    mdpa = app_page.request.post(url + "/api/export/mdpa", data={}).json()["mdpa"]
+    assert "Begin SubModelPart Top_Pit" in mdpa.splitlines()
+    assert "Top_Part_1" not in mdpa
+    assert app_page.errors == []
+
+
+def test_a_soil_part_takes_its_own_material_and_gives_it_back(app_page, live_server):
+    url = live_server["url"]
+    open_project(app_page, url, soil_lines.model(lines=[soil_lines.PIT_SIDE]))
+    tree_row(app_page, "Top · Part 1").click()
+    material = app_page.locator("#grid-selection .pgrid-row", has_text="Material")
+    assert material.locator("option").all_inner_texts() == [
+        m["name"] for m in app_page.evaluate("App.MATERIALS")]
+    assert material.locator("select").input_value() == "sand"
+
+    material.locator("select").select_option("grout")
+
+    app_page.wait_for_function(
+        "App.PROJECT.soil_body_materials.soil_top__part1 === 'grout'", timeout=LONG)
+    wait_tree_label(app_page, "Soil grout")
+    assert tree_label(app_page, "Top · Part 1").endswith("Soil grout")
+    assert tree_label(app_page, "Top · Part 2").endswith("Soil sand")
+    stored = app_page.request.get(url + "/api/project").json()
+    assert stored["soil_body_materials"]["soil_top__part1"] == "grout"
+
+    material.locator("select").select_option("sand")
+
+    app_page.wait_for_function(
+        "App.PROJECT.soil_body_materials.soil_top__part1 === 'sand'", timeout=LONG)
+    app_page.locator("#tree-model .tree-label", has_text="Soil grout").wait_for(
+        state="detached")
+    assert tree_label(app_page, "Top · Part 1").endswith("Soil sand")
+    stored = app_page.request.get(url + "/api/project").json()
+    assert [body["mat"] for body in stored["bodies"]] == ["sand", "sand"]
+    assert app_page.errors == []
+
+
+def soil_span(page, key: str) -> list[float]:
+    """Where the viewport draws a soil part, from left to right."""
+    return page.evaluate("""key => {
+        const box = App.Viewport.boundsOf(App.Viewport.getScene().getObjectByName(key));
+        return [Math.round(box.min.x * 100) / 100, Math.round(box.max.x * 100) / 100]; }""",
+                         key)
+
+
+def test_a_line_opened_from_its_row_is_moved_and_the_parts_follow(app_page, live_server):
+    url = live_server["url"]
+    open_project(app_page, url, soil_lines.model(lines=[soil_lines.PIT_SIDE]))
+    keys = app_page.evaluate("App.PROJECT.soil_body_keys")
+    assert soil_span(app_page, "soil_top__part1") == [0, 5]
+    assert soil_span(app_page, "soil_top__part2") == [5, 20]
+
+    tree_row(app_page, "Pit side").click()
+    panel_button(app_page, "Edit line…").click()
+    top = app_page.locator(".dialog .line-point").first
+    top.locator("input").nth(0).fill("8")
+    app_page.locator(".dialog button", has_text="Save").click()
+
+    app_page.wait_for_function("App.PROJECT.lines[0].points[0][0] === 8", timeout=LONG)
+    app_page.wait_for_function("!document.querySelector('.dialog .line-point')", timeout=LONG)
+    stored = app_page.request.get(url + "/api/project").json()
+    assert stored["lines"][0]["points"] == [[8.0, 0.0], [5.0, -4.0]]
+    assert stored["soil_body_keys"] == keys
+    assert soil_span(app_page, "soil_top__part1") == [0, 8]
+    assert soil_span(app_page, "soil_top__part2") == [5, 20]
+    assert app_page.errors == []
+
+
+def test_a_saved_line_and_a_renamed_part_are_undone_and_redone(app_page, live_server):
+    url = live_server["url"]
+    open_project(app_page, url, soil_lines.model())
+    app_page.evaluate("App.setMode('structures');"
+                      " App.runAction({action: 'createLineByCoordinates'})")
+    rows = app_page.locator(".dialog .line-point")
+    rows.first.wait_for(state="visible")
+    for row, (x, y) in zip((rows.nth(0), rows.nth(1)), ((5, 0), (5, -4))):
+        row.locator("input").nth(0).fill(str(x))
+        row.locator("input").nth(1).fill(str(y))
+    app_page.locator(".dialog button", has_text="Save").click()
+    app_page.wait_for_function("App.PROJECT.soil_body_keys.length === 3", timeout=LONG)
+    keys = app_page.evaluate("App.PROJECT.soil_body_keys")
+
+    press(app_page, "Control+z")
+    app_page.wait_for_function("App.PROJECT.soil_body_keys.length === 2", timeout=LONG)
+    stored = app_page.request.get(url + "/api/project").json()
+    assert stored.get("lines", []) == [] and stored["soil_body_keys"] == ["soil_top", "soil_low"]
+    tree_row(app_page, "Line 1").wait_for(state="detached")
+
+    press(app_page, "Control+y")
+    app_page.wait_for_function("App.PROJECT.soil_body_keys.length === 3", timeout=LONG)
+    assert app_page.request.get(url + "/api/project").json()["soil_body_keys"] == keys
+    tree_row(app_page, "Line 1").wait_for(state="visible")
+
+    rename_body(app_page, "Top · Part 1", "Pit")
+    app_page.wait_for_function(
+        "App.PROJECT.soil_body_labels.soil_top__part1 === 'Top · Pit'", timeout=LONG)
+
+    press(app_page, "Control+z")
+    app_page.wait_for_function(
+        "App.PROJECT.soil_body_labels.soil_top__part1 === 'Top · Part 1'", timeout=LONG)
+    tree_row(app_page, "Top · Part 1").wait_for(state="visible")
+
+    press(app_page, "Control+y")
+    app_page.wait_for_function(
+        "App.PROJECT.soil_body_labels.soil_top__part1 === 'Top · Pit'", timeout=LONG)
+    stored = app_page.request.get(url + "/api/project").json()
+    assert stored["soil_body_keys"] == keys
+    assert stored["soil_body_labels"]["soil_top__part1"] == "Top · Pit"
+    assert app_page.errors == []
+
+
+def test_a_line_a_stage_needs_is_not_deleted_and_the_log_says_why(app_page, live_server,
+                                                                   tmp_path, capsys):
+    """The Session log gives the reason `kratos-cli line remove` gives for the same edit."""
+    from cli.terminal.main import main
+    from core import session
+    from core.model.schemas import Stage
+
+    url = live_server["url"]
+    project = soil_lines.model(lines=[soil_lines.PIT_SIDE], stages=[
+        Stage(id="dig", name="Dig", deactivate=["soil_top__part1"])])
+    open_project(app_page, url, project)
+    before = app_page.request.get(url + "/api/project").json()
+
+    tree_row(app_page, "Pit side").click()
+    panel_button(app_page, "Delete line").click()
+
+    app_page.wait_for_function("document.querySelector('#cmd-log').innerText"
+                               ".includes('Could not save the line')", timeout=LONG)
+    assert app_page.request.get(url + "/api/project").json() == before
+    tree_row(app_page, "Pit side").wait_for(state="visible")
+    assert app_page.evaluate("App.PROJECT.lines.length") == 1
+
+    capsys.readouterr()
+    assert main(["line", str(session.save(project, tmp_path / "pit.json")), "remove",
+                 "pit_side"]) == 1
+    reason = capsys.readouterr().err.split("the project: ", 1)[1].strip()
+    assert reason == "Value error, stage 'dig' names no such part: soil_top__part1"
+    assert f"Could not save the line: {reason}" in log_text(app_page)
+    # The browser itself notes the refused request; the page adds nothing to it. What
+    # follows the 422 is the server's wording, which differs per Python version.
+    assert len(app_page.errors) == 1
+    assert app_page.errors[0].startswith(
+        "Failed to load resource: the server responded with a status of 422")

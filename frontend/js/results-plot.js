@@ -13,7 +13,7 @@
        results plot                     the wall's bending moment, every stage
        results plot <quantity>          M, Q, N, ux, uy, tn, ts -- or a word of the
                                         label: moment, shear, normal, traction...
-       results plot <member> [<q>]      wall, interface
+       results plot <member> [<q>]      wall, interface_left, interface_right
        results plot members             what this run can plot
        results plot csv | svg | png | pdf
                                         the numbers, or the figure, as a file
@@ -411,7 +411,7 @@ App.ResultsPlot = (function () {
       log('note', '  ' + pad(m.name, 11) + pad('stages ' + m.stages.join(', '), 18)
                   + names(m.quantities || []));
     });
-    log('note', 'e.g. `results plot wall M`, `results plot interface normal`.');
+    log('note', 'e.g. `results plot wall M`, `results plot interface_right normal`.');
   }
 
   /* ── Saving ───────────────────────────────────────────────────────────── */

@@ -273,8 +273,8 @@ def test_the_real_stages_show_the_excavation_disappearing(real_run):
             (directory / stage["mesh_file"]).read_text(encoding="utf-8"))
         return {s["part"] for s in mesh.stage_sections(model, gid_mesh)["sections"]}
 
-    assert "Soil_Top_lift1" in parts_drawn(1)
-    assert "Soil_Top_lift1" not in parts_drawn(4)
+    assert "Soil_Top_lift_1" in parts_drawn(1)
+    assert "Soil_Top_lift_1" not in parts_drawn(4)
     assert "SheetPileWall" not in parts_drawn(1)
     assert "SheetPileWall" in parts_drawn(4)
 

@@ -42,7 +42,7 @@ Module paths are relative to `core/`.
 | Step | Module | What happens |
 |---|---|---|
 | 1. Edit | `model/schemas.py`, `session.py` | Each edit goes through one path (`session._edited`): it drops the mesh size of a body the edit took away, then checks the full project again |
-| 2. Build | `geometry/solid_model.py` | Boxes, then a boolean fragment, then the pit cut out, then the structures embedded. 2D sections and 3D solids. |
+| 2. Build | `geometry/solid_model.py` | A solid for each soil piece (`model/regions.py` finds the pieces), then a boolean fragment, then the structures embedded. 2D sections and 3D solids. |
 | 3. Draw | `geometry/tessellation.py` | A fast surface triangulation (about 0.1 s) for the view only. It is not a finite-element mesh. |
 | 4. Mesh | `geometry/meshing.py` | The finite-element mesh, made again from the geometry each time |
 | 5. Split | `kratos/interfaces.py` | Duplicates the nodes along a wall and writes zero-thickness contact elements |
@@ -77,7 +77,7 @@ is one step of the pipeline:
 
 | Package | Modules |
 |---|---|
-| `core/model/` | `schemas.py` (the `Project`), `units.py` (unit systems), `soil_models.py` (the soil models a material can be: law, parameters, defaults), `migration.py` (old project files), `templates.py` (empty and demo projects), `drafts.py` (where a new structure goes, as the GUI tools put it), `stages.py` (stage tree → Kratos stages), `script_writer.py` (the model as a Python script), `wall_translation.py` and `load_translation.py` (2D ↔ 3D) |
+| `core/model/` | `schemas.py` (the `Project`), `units.py` (unit systems), `soil_models.py` (the soil models a material can be: law, parameters, defaults), `regions.py` (the pieces lines and sheet piles cut a layer into), `migration.py` (old project files), `templates.py` (empty and demo projects), `drafts.py` (where a new structure goes, as the GUI tools put it), `stages.py` (stage tree → Kratos stages), `script_writer.py` (the model as a Python script), `wall_translation.py` and `load_translation.py` (2D ↔ 3D) |
 | `core/geometry/` | `solid_model.py` (OpenCASCADE solids), `tessellation.py` (view), `meshing.py` (finite-element mesh), `cad_import.py` (CAD files), `primitives.py` (recipes for drawn solids) |
 | `core/kratos/` | `writer.py` (the deck), `materials.py` (`MaterialParameters.json`), `parameters.py` (`ProjectParameters.json`: stages, solver, output), `condition_checks.py` (the boundary condition warnings the export and `check` share), `interfaces.py` (split nodes along walls), `deck_files.py` (file names of the deck), `external_deck.py` (existing decks), `mdpa_reader.py`, `node_parts.py` |
 | `core/analysis/` | `calculation.py` (run folder, subprocess, failure messages), `kratos_main.py` (runs inside the Python of Kratos) |
@@ -114,7 +114,7 @@ the HTTP parts.
 
 | Group | Module | Routes |
 |---|---|---|
-| Project | `routes/project.py` | `GET`/`PUT /api/project`; `POST /api/project/new`, `/reset`, `/script`, `/script/save`, `/stages/defaults`; `PATCH /api/project/layers`, `/materials`, `/structures`, `/conditions`, `/stages`, `/dimension`, `/units`; `PUT /api/project/water`; `DELETE /api/project/custom_parts` |
+| Project | `routes/project.py` | `GET`/`PUT /api/project`; `POST /api/project/new`, `/reset`, `/script`, `/script/save`, `/stages/defaults`; `PATCH /api/project/layers`, `/materials`, `/lines`, `/bodies/{key}`, `/structures`, `/conditions`, `/stages`, `/dimension`, `/units`; `PUT /api/project/water`; `DELETE /api/project/custom_parts` |
 | Geometry | `routes/geometry.py` | `GET /api/geometry`; `POST /api/geometry/create`, `/import`; `DELETE /api/geometry/parts/{key}` |
 | Mesh | `routes/mesh.py` | `POST /api/mesh`, `/api/mesh/labels`, `/api/mesh/node-parts` |
 | Decks | `routes/decks.py` | `POST /api/export/mdpa`, `/api/import/mdpa`, `/api/calculate` |
@@ -135,7 +135,7 @@ the HTTP parts.
 | `cli/terminal/words.py` | How the words of a command line become a command and its values |
 | `cli/commands/project.py` | `new`, `show`, `check`, `build`, `script`, `dimension`, `units`, `water` |
 | `cli/commands/edit.py` | `get`, `set`, `add`, `remove` |
-| `cli/commands/ground.py`, `volumes.py` | `domain`, `material`, `layer`, `excavation`, `parts`; `volume` |
+| `cli/commands/ground.py`, `volumes.py` | `domain`, `material`, `layer`, `line`, `body`, `parts`; `volume` |
 | `cli/commands/structures.py` | `section`, `beam`, `wall`, `member`, `anchor`, `interface`, `load`, `normal-load` |
 | `cli/commands/conditions.py` | `boundary`, `gravity` |
 | `cli/commands/meshing.py`, `stages.py` | `mesh`, `export`; `stages` |
@@ -157,7 +157,7 @@ shell. Only the camera of `base/js/orbit.js` is replaced; all other behaviour is
 | Connection to the shell | `patches.js`: menu actions, tool rails, panels, windows, the command box |
 | Data | `api.js`, `model.js` (server project → shape that the shell needs), `buffers.js`, `history.js` (undo and redo), `units.js`, `unit-table.js` |
 | View | `viewport.js` (three.js), `orbit.js` (camera with y up), `canvas-renderer.js`, `ruler.js`, `mesh-labels.js`, `part-colors.js`, `node-parts.js` |
-| Modelling tools | `draw-input.js`, `beams.js`, `anchors.js`, `interfaces.js`, `loads.js`, `normal-loads.js`, `water-command.js`, `soil-volume-dialog.js`, `soil-layers-dialog.js` (the **Modify soil layers** window, in place of the shell's own) |
+| Modelling tools | `draw-input.js`, `lines.js`, `beams.js`, `anchors.js`, `interfaces.js`, `loads.js`, `normal-loads.js`, `water-command.js`, `soil-volume-dialog.js`, `soil-layers-dialog.js` (the **Modify soil layers** window, in place of the shell's own) |
 | Materials | `material-sets.js`, `material-library.js`, `property-sets.js`, `soil-models.js` and `soil-model-table.js` (the soil models, generated from `core/model/soil_models.py`) |
 | Mesh and stages | `mesh-settings.js`, `stages.js` |
 | Saved pictures | `picture-draw.js` (the scene as a list of shapes in mm), `picture-writers.js` (SVG, PDF, the PNG's dpi); both without a DOM. `picture.js` (reads the scene, canvas, clipboard, save windows, the walk over stages and fields, the job of `kratos-cli picture`), `picture-dialog.js` |
@@ -170,7 +170,7 @@ shell. Only the camera of `base/js/orbit.js` is replaced; all other behaviour is
 run folder (~/KratosGUI/runs/<deck>_<time>/)
   <deck>.mdpa, ProjectParameters.json           → part names, stage order, output names
   <deck>_<stage>.post.msh / .post.res           → results/gid_reader → results/fields, mesh, parts
-  <stage>__output_wall.json, __output_interface → results/members
+  <stage>__output_wall.json, __output_interface_<face> → results/members
         │
         ▼  results/catalog.py (finds the files, reads each one once, caches by size and time)
   /api/results/... routes

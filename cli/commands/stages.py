@@ -8,8 +8,6 @@ Model explorer make (`core.model.stages`), stored the way the GUI stores it
     list               the sequence (also with no action)
     show ID            what is in the model during a stage, and what it changes
     defaults           the initial stage and the null step, as "Create default stages"
-    staged-excavation  the whole sequence derived from the model: settle, build the
-                       wall, then dig and prop lift by lift
     add [ID]           a stage at the end, or --before a stage (the toolbar's Insert)
     copy ID            the toolbar's Copy: the same solver settings, after the original
     set ID             a stage's name, calculation and solver settings
@@ -56,14 +54,11 @@ def register(commands, common: argparse.ArgumentParser) -> None:
     existing(show, "stage", "stages")
     show.set_defaults(handler=show_stage)
 
-    for name, handler, help in (
-            ("defaults", default_stages, "make the initial stage and the null step, "
-                                         "replacing the sequence"),
-            ("staged-excavation", staged_excavation_stages,
-             "derive the whole staged-excavation sequence from the model, replacing it")):
-        whole = actions.add_parser(name, parents=[common], help=help)
-        add_writing(whole)
-        whole.set_defaults(handler=handler)
+    whole = actions.add_parser("defaults", parents=[common],
+                               help="make the initial stage and the null step, replacing "
+                                    "the sequence")
+    add_writing(whole)
+    whole.set_defaults(handler=default_stages)
 
     add = actions.add_parser("add", parents=[common],
                              help="a stage at the end of the sequence, or --before one")
@@ -173,10 +168,6 @@ def show_stage(args: argparse.Namespace) -> Answer:
 
 def default_stages(args: argparse.Namespace) -> Answer:
     return _replaced(args, session.default_stages(read(args)))
-
-
-def staged_excavation_stages(args: argparse.Namespace) -> Answer:
-    return _replaced(args, session.staged_excavation_stages(read(args)))
 
 
 @named_ids()

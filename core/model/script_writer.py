@@ -40,7 +40,7 @@ WIDTH = 92
 
 GROUPS: dict[str, tuple[str, ...]] = {
     "The site": ("domain",),
-    "The soil": ("materials", "layers", "excavation", "water"),
+    "The soil": ("materials", "layers", "lines", "bodies", "excavation", "water"),
     "The structures": ("beam_sections", "panel_sections", "beams", "anchor_sections",
                        "anchors", "interface_sections", "interfaces"),
     "The loads": ("loads", "normal_loads"),

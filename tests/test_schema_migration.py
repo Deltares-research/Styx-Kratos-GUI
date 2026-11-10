@@ -52,8 +52,8 @@ def test_the_oldest_shape_keeps_its_meaning():
     project = Project.model_validate(old)
 
     assert project.dimension == 2
-    assert project.excavation.levels == [old["excavation"]["floor_y"]]
-    assert project.excavation.floor_y == old["excavation"]["floor_y"]
+    # One level dug nothing in a layered model, so the pit goes.
+    assert old["excavation"] and project.excavation is None
     assert project.layered_soil == old["simple_example"]
     assert project.anchors == []
     assert project.anchor_rows.model_dump() == {**project.anchor_rows.model_dump(),
@@ -205,3 +205,86 @@ def test_a_layer_already_in_the_new_shape_is_left_alone():
            "layers": [{"id": "L1", "name": "L1", "mat": "m", "top": 1.0, "bottom": 0.0}]}
     assert migration.drop_boreholes(doc) == {
         "layers": [{"id": "L1", "name": "L1", "mat": "m", "top": 1.0, "bottom": 0.0}]}
+
+
+# ── A saved pit opens as lines ──────────────────────────────────────────────
+
+def _saved_pit(**pit) -> dict:
+    """A layered project as it was saved with a pit: soil_top is 0..-8, soil_bottom the
+    rest of the domain, which is 0..40 wide."""
+    return {
+        "name": "Saved pit", "layered_soil": True, "dimension": 2,
+        "domain": {"x0": 0.0, "x1": 40.0, "z0": 0.0, "z1": 10.0,
+                   "y_top": 0.0, "y_bottom": -30.0},
+        "materials": [{"id": "m", "name": "Clay", "color": "#c4a86a", "constitutive_law":
+                       "GeoLinearElasticPlaneStrain2DLaw", "variables": {}}],
+        "layers": [{"id": "top", "name": "Top", "mat": "m", "top": 0.0, "bottom": -8.0},
+                   {"id": "bottom", "name": "Bottom", "mat": "m", "top": -8.0, "bottom": -30.0}],
+        "excavation": {"x0": 0.0, "x1": 5.0, "z0": 0.0, "z1": 10.0, "levels": [-2.0, -8.0]}
+        | pit,
+    }
+
+
+def test_a_saved_pit_opens_as_lines_with_the_keys_and_names_it_had():
+    project = Project.model_validate(_saved_pit())
+
+    assert project.excavation is None
+    # The second level is the boundary between the layers, so it needs no line.
+    assert [line.id for line in project.lines] == ["pit_side", "pit_level_1"]
+    assert project.soil_body_labels == {
+        "soil_top__lift1": "Top · lift 1", "soil_top__lift2": "Top · lift 2",
+        "soil_top__outside": "Top · outside the pit",
+        "soil_bottom__pit": "Bottom · below the pit",
+        "soil_bottom__outside": "Bottom · outside the pit"}
+
+
+def test_a_saved_pit_keeps_what_its_stages_switch():
+    """A lift keeps its key. The ground outside the pit had the layer's plain key, which a
+    cut layer does not have any more."""
+    project = Project.model_validate(_saved_pit() | {"stages": [
+        {"id": "first", "name": "First", "deactivate": ["soil_top"]},
+        {"id": "dig", "name": "Dig", "parent": "first", "activate": ["soil_top"],
+         "deactivate": ["soil_top__lift1"]}]})
+
+    assert project.stages[0].deactivate == ["soil_top__outside"]
+    assert project.stages[1].activate == ["soil_top__outside"]
+    assert project.stages[1].deactivate == ["soil_top__lift1"]
+
+
+def test_a_saved_pit_in_the_middle_of_the_model_has_ground_on_both_sides():
+    project = Project.model_validate(_saved_pit(x0=10.0, x1=20.0) | {"stages": [
+        {"id": "first", "name": "First", "deactivate": ["soil_top"]}]})
+
+    assert [line.id for line in project.lines] == ["pit_side", "pit_side_left", "pit_level_1"]
+    assert set(project.stages[0].deactivate) == {"soil_top__outside_left",
+                                                 "soil_top__outside_right"}
+
+
+def test_a_saved_pit_is_saved_as_lines_and_opens_the_same_again():
+    project = Project.model_validate(_saved_pit())
+    saved = project.model_dump(mode="json")
+
+    assert "excavation" not in saved
+    assert Project.model_validate(saved).model_dump(mode="json") == saved
+
+
+def test_a_saved_pit_of_one_level_dug_nothing_so_it_just_goes():
+    project = Project.model_validate(_saved_pit(levels=[-2.0]))
+
+    assert project.excavation is None and project.lines == []
+    assert project.soil_body_keys == ["soil_top", "soil_bottom"]
+
+
+def test_a_saved_3d_pit_narrower_than_the_model_is_refused():
+    with pytest.raises(ValueError, match="a line cuts across the whole domain"):
+        Project.model_validate(_saved_pit(z0=2.0, z1=8.0) | {"dimension": 3})
+
+
+def test_a_model_script_that_still_passes_a_pit_gets_lines_too():
+    from core.model.schemas import Excavation
+    payload = Project.model_validate(_saved_pit()).model_dump() | {"lines": [], "bodies": []}
+    project = Project(**payload | {
+        "excavation": Excavation(x0=0.0, x1=5.0, z0=0.0, z1=10.0, levels=[-2.0, -8.0])})
+
+    assert project.excavation is None and "soil_top__lift1" in project.soil_body_keys
+
