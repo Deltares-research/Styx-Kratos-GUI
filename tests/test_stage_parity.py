@@ -59,15 +59,15 @@ window.STAGE_FIXTURE =
 STAGES = [
     {"id": "initial", "name": "Initial stage", "parent": None,
      "stress_initialisation": "K0",
-     "deactivate": ["wall", "anchors", "load", "soil_L1__lift1",
+     "deactivate": ["pile", "tie", "load", "soil_L1__lift1",
                     "soil_L1__lift2", "soil_L1__lift3"]},
     {"id": "null_step", "name": "Null step", "parent": "initial"},
     {"id": "build_wall", "name": "Wall installation", "parent": "null_step",
-     "activate": ["wall", "load"], "reset_displacements": True},
+     "activate": ["pile", "load"], "reset_displacements": True},
     {"id": "dig_1", "name": "Dig to -2.0 m", "parent": "build_wall",
      "activate": ["soil_L1__lift1"], "deactivate": ["soil_L1"]},
     {"id": "prop", "name": "Strut installation", "parent": "dig_1",
-     "activate": ["anchors"]},
+     "activate": ["tie"]},
     # Re-activates a part an earlier stage switched off -- the case a "last write wins"
     # reading of the chain gets wrong.
     {"id": "dig_2", "name": "Dig to -5.0 m", "parent": "prop",
@@ -90,7 +90,7 @@ def _project() -> schemas.Project:
     The same shape `test_schemas._layered_pit` builds, restated rather than imported so
     that the fixture does not move when that helper is edited for a different reason.
     """
-    payload = seed_project(simple=False).model_dump()
+    payload = seed_project().model_dump()
     payload["domain"] |= {"y_top": 0.0, "y_bottom": -60.0}
     payload["layers"] = [
         {"id": "L1", "name": "Soil_1", "mat": payload["materials"][0]["id"],
@@ -100,10 +100,16 @@ def _project() -> schemas.Project:
         {"id": "L3", "name": "Soil_3", "mat": payload["materials"][1]["id"],
          "top": -12.0, "bottom": -60.0},
     ]
-    payload["excavation"] = {k: v for k, v in payload["excavation"].items()
-                             if k != "floor_y"}
-    payload["excavation"] |= {"x0": 0.0, "x1": 5.0, "levels": [-2.0, -5.0, -8.0]}
-    payload["wall"] |= {"top_y": 0.0, "toe_y": -13.0}
+    payload["excavation"] = {"x0": 0.0, "x1": 5.0, "z0": payload["domain"]["z0"],
+                         "z1": payload["domain"]["z1"], "levels": [-2.0, -5.0, -8.0]}
+    # Two parts for a stage to switch that are not soil.
+    payload["beam_sections"] = [schemas.BeamSection(id="s", name="S", variables={}).model_dump()]
+    payload["beams"] = [{"id": "pile", "name": "Pile", "section": "s",
+                         "points": [(5.0, 0.0), (5.0, -13.0)]}]
+    payload["anchor_sections"] = [schemas.AnchorSection(id="t", name="T",
+                                                        variables={}).model_dump()]
+    payload["anchors"] = [{"id": "tie", "name": "Tie", "section": "t",
+                           "head": (5.0, -1.0), "tail": (3.0, -1.0)}]
     payload["stages"] = STAGES
     return schemas.Project.model_validate(payload)
 
@@ -202,7 +208,7 @@ def test_the_fixture_exercises_the_cases_a_chain_walk_gets_wrong():
     assert document["active_parts"]["dig_1"] != document["active_parts"]["dig_2"]
     # soil_L1 is off from dig_1 and back on at dig_2.
     assert "soil_L1" not in document["active_parts"]["dig_1"]
-    assert "soil_L1" in document["active_parts"]["dig_2"]
+    assert "soil_L1__outside" in document["active_parts"]["dig_2"]
     # `settle` repeats an instruction that has already taken effect.
     assert document["active_parts"]["settle"] == document["active_parts"]["dig_2"]
     # `null_step` carries neither list.

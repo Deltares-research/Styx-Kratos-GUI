@@ -140,7 +140,7 @@ def test_the_domain_list_shrinks_as_the_pit_is_dug(staged_doc):
     dug = [len(domains(staged_doc, name)) for name in
            ("3_SheetPileWall_installation", "4_First_excavation",
             "6_Second_excavation", "7_Third_excavation")]
-    assert dug == [17, 15, 14, 12]
+    assert dug == [15, 13, 12, 10]
     # The three lifts and their interfaces are gone by the end; the ground under the pit
     # is not -- it is on the dug side of the wall but is never dug.
     assert not [name for name in domains(staged_doc, "7_Third_excavation")

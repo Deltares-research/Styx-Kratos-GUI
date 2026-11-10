@@ -446,6 +446,73 @@
     });
   });
 
+  /* ── A wall with an interface on each face ───────────────────────────── */
+
+  var FACES = { members: [
+    { name: 'interface_left', stages: [3, 7], quantities: [QUANTITIES.tn, QUANTITIES.ts] },
+    { name: 'interface_right', stages: [3, 7], quantities: [QUANTITIES.tn, QUANTITIES.ts] },
+    { name: 'wall', stages: [3, 7],
+      quantities: [QUANTITIES.M, QUANTITIES.Q, QUANTITIES.N, QUANTITIES.ux] }
+  ] };
+
+  function setupFaces() {
+    var answers = {};
+    answers[BASE + '/members'] = FACES;
+    setup(answers);
+  }
+
+  test('a wall with an interface on each face offers both faces to choose from', function () {
+    setupFaces();
+    return P.command('').then(function () {
+      T.eq(P.state().members.map(function (m) { return m.name; }),
+           ['interface_left', 'interface_right', 'wall']);
+      T.eq([P.state().member, P.state().quantity], ['wall', 'M']);
+    });
+  });
+
+  test('each face is plotted when it is chosen, with the quantity on screen kept', function () {
+    setupFaces();
+    return P.command('interface_left tn').then(function () {
+      T.eq(api.calls[api.calls.length - 1], BASE + '/members/interface_left/tn');
+      // What the window's Member list sends when the other face is chosen.
+      return P.command('interface_right');
+    }).then(function () {
+      T.eq(api.calls[api.calls.length - 1], BASE + '/members/interface_right/tn');
+      T.eq([P.state().member, P.state().quantity], ['interface_right', 'tn']);
+      T.eq(P.state().plot.member, 'interface_right');
+      T.eq(errors(), []);
+    });
+  });
+
+  test('results plot interface_right tn plots that face', function () {
+    setupFaces();
+    return P.command('interface_right tn').then(function () {
+      T.eq(api.calls, [BASE + '/members', BASE + '/members/interface_right/tn']);
+      T.ok(/Normal traction \(kN\/m²\) along the interface_right/.test(text()), text());
+    });
+  });
+
+  test('a traction alone is plotted on a face, the one on screen first', function () {
+    setupFaces();
+    return P.command('tn').then(function () {
+      T.eq([P.state().member, P.state().quantity], ['interface_left', 'tn']);
+      return P.command('interface_right ts');
+    }).then(function () {
+      return P.command('tn');
+    }).then(function () {
+      T.eq([P.state().member, P.state().quantity], ['interface_right', 'tn']);
+    });
+  });
+
+  test('the one interface of an older run is not a name a run with two faces has', function () {
+    setupFaces();
+    return P.command('interface tn').then(function () {
+      T.ok(/no member called "interface"/.test(text()), text());
+      T.ok(/interface_left, interface_right, wall/.test(text()), text());
+      T.eq(api.calls, [BASE + '/members']);
+    });
+  });
+
   test('(the doubles are put back for the suites that follow)', function () {
     P.forget();
     App.Api = real.Api;

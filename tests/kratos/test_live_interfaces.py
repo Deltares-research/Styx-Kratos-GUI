@@ -61,6 +61,25 @@ def test_a_water_load_on_a_wall_face_beside_dug_drawn_soil_runs():
 
 
 
+def test_a_dug_face_plots_only_the_contact_still_there():
+    """Above the pit floor the soil is gone, and a switched-off contact keeps its last
+    values on its nodes. Below it, every node of the face still changes from stage to
+    stage."""
+    export, outcome = run(excavation.excavation_project(staged=True))
+    directory = Path(outcome["directory"])
+    height = {index: y for index, _, y, _ in export["nodes"]}
+
+    def tractions(stage: str) -> dict[int, list[float]]:
+        written = json.loads((directory / f"{stage}__output_interface_left.json").read_text())
+        return {int(name[len("NODE_"):]): value["GEO_EFFECTIVE_TRACTION_VECTOR"][-1]
+                for name, value in written.items() if name.startswith("NODE_")}
+
+    second, third = tractions("6_Second_excavation"), tractions("7_Third_excavation")
+    assert max(height[node] for node in third) == pytest.approx(excavation.LIFTS[2])
+    assert max(height[node] for node in second) == pytest.approx(excavation.LIFTS[1])
+    assert all(third[node] != second[node] for node in third)
+
+
 def test_a_pile_standing_out_of_the_ground_runs():
     """The same model with the pile 1 m above the fill, as a dike's sheet pile stands
     above its crest. The piece above the ground has nodes no soil element holds; before
@@ -510,7 +529,7 @@ print("TRACTIONS" + json.dumps([
 
 
 def test_an_interface_traction_is_normal_then_shear_and_compression_is_negative(tmp_path):
-    """What `results profile ... interface tn` and `ts` read: component 0 of
+    """What `results profile ... interface_right tn` and `ts` read: component 0 of
     GEO_EFFECTIVE_TRACTION_VECTOR is the normal traction, component 1 the shear, and a
     contact pressed shut has a negative normal traction. Kratos' own Neumann case on the
     3+3 line element, run on the build Styx runs, so a Kratos that changes either is

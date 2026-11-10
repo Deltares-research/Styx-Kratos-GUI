@@ -267,35 +267,17 @@ def test_a_layer_needs_a_bottom_or_a_thickness_or_takes_five_metres(cli, site):
     assert layer.top - layer.bottom == 5.0
 
 
-# ── excavation ──────────────────────────────────────────────────────────────
-
-def test_excavation_digs_the_pit_in_lifts(cli, site):
-    ran = cli("excavation", site, "--x", "2", "8", "--levels", "-2", "-4", "-6")
-
-    assert ran.code == 0, ran.err
-    pit = session.load(site).excavation
-    assert (pit.x0, pit.x1, pit.levels) == (2.0, 8.0, [-2.0, -4.0, -6.0])
-    assert "-6" in cli("excavation", site).out
-
-
-def test_excavation_with_one_level_says_it_digs_nothing(cli, site):
-    ran = cli("excavation", site, "--x", "2", "8", "--levels", "-3")
-
-    assert ran.code == 0
-    assert "two or more levels" in ran.out
-
-
 # ── parts ───────────────────────────────────────────────────────────────────
 
 def test_parts_lists_what_a_stage_can_switch(cli, site):
-    cli("excavation", site, "--x", "2", "8", "--levels", "-2", "-4", "-6")
+    cli("line", site, "add", "floor", "--points", "0", "-2", "25", "-2")
 
     ran = cli("parts", site)
 
     assert ran.code == 0
-    assert "soil_L1__lift1" in ran.out and "lift 1" in ran.out
+    assert "soil_L1__part1" in ran.out and "Part 1" in ran.out
     keys = [part["key"] for part in cli("--json", "parts", site).json()]
-    assert keys[:2] == ["soil_L1", "soil_L2"]
+    assert keys[:3] == ["soil_L1__part1", "soil_L1__part2", "soil_L2"]
     assert set(session.load(site).part_keys()) <= set(keys)
 
 
@@ -404,8 +386,8 @@ def test_volume_list_remove_and_clear(cli, site):
 # ── The ground of the test model, from commands alone ───────────────────────
 
 def test_the_ground_of_the_test_model_is_built_with_commands_alone(cli, tmp_path):
-    """Domain, both soils, three layers, the pit in three lifts, the water:
-    everything about the ground `tests/models/excavation.py` builds, typed instead."""
+    """Domain, both soils, three layers, the lines, the water: everything about the
+    ground `tests/models/excavation.py` builds, typed instead."""
     target = excavation.excavation_project()
     path = tmp_path / "pit.json"
 
@@ -423,11 +405,12 @@ def test_the_ground_of_the_test_model_is_built_with_commands_alone(cli, tmp_path
     for layer in target.layers:
         run("layer", path, "add", layer.id, "--material", layer.mat, "--name", layer.name,
             "--bottom", repr(layer.bottom))
-    run("excavation", path, "--x", "0", "6", "--z", "0", "10", "--levels", "-2", "-4.5", "-7")
+    for line in target.lines:
+        run("line", path, "add", line.id, "--name", line.name, "--points",
+            *(repr(value) for point in line.points for value in point))
     run("water", path, "-1")
 
     built = session.load(path)
     for field in ("name", "dimension", "section_offset", "domain", "materials", "layers",
-                  "excavation", "water"):
+                  "lines", "water"):
         assert getattr(built, field) == getattr(target, field), field
-    assert built.soil_body_keys == target.soil_body_keys

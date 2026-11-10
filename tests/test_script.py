@@ -62,7 +62,7 @@ def test_the_test_model_runs_as_a_script(tmp_path):
     """
     loaded = scripting.load_project(pathlib.Path(__file__).parent / "models" / "excavation.py")
     assert isinstance(loaded, Project)
-    assert len(loaded.excavation.levels) == 3
+    assert len(loaded.lines) == 2
     assert loaded.beams and loaded.anchors
 
 

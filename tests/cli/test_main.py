@@ -8,16 +8,19 @@ script reading stdout always gets JSON.
 
 from __future__ import annotations
 
+import io
 import json
 import os
 import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = Path(__file__).resolve().parents[2]
 
 COMMANDS = ["new", "show", "check", "build", "script", "get", "set", "add", "remove",
-            "dimension", "units", "water", "domain", "material", "layer", "excavation",
+            "dimension", "units", "water", "domain", "material", "layer", "line", "body",
             "volume", "section", "beam", "wall", "member", "anchor", "interface", "load",
             "normal-load", "parts", "mesh", "stages", "node", "deck", "export", "run",
             "calculate", "results", "shell"]
@@ -66,6 +69,65 @@ def test_no_command_is_a_usage_error(cli):
 
 def test_an_unknown_command_is_a_usage_error(cli):
     assert cli("frobnicate").code == 2
+
+
+REMOVED = [
+    (["excavation", "{site}", "add", "pit"],
+     "excavation is gone: split the soil with `line add`."),
+    (["stages", "{site}", "staged-excavation"],
+     "staged-excavation is gone: add each stage with `stages add`."),
+    (["stages", "{site}", "defaults"],
+     "defaults is gone: a project starts with its initial stage; add each further stage "
+     "with `stages add`."),
+]
+
+
+@pytest.mark.parametrize("argv, said", REMOVED)
+def test_a_removed_command_says_what_to_use_instead(cli, site, argv, said):
+    ran = cli(*[word.format(site=site) for word in argv])
+
+    assert ran.code == 2
+    assert said in ran.err
+    assert "invalid choice" not in ran.err
+
+
+def test_a_removed_word_under_another_command_is_only_an_invalid_choice(cli, site):
+    ran = cli("layer", site, "staged-excavation")
+
+    assert ran.code == 2
+    assert "invalid choice" in ran.err and "is gone" not in ran.err
+
+
+@pytest.mark.parametrize("argv, said", REMOVED)
+def test_a_removed_command_says_the_same_in_the_shell(cli, site, monkeypatch, argv, said):
+    line = " ".join(word for word in argv if word != "{site}")
+    monkeypatch.setattr(sys, "stdin", io.StringIO(line + "\n"))
+
+    ran = cli("shell", site)
+
+    assert ran.code == 1
+    assert said in ran.err
+
+
+def test_the_removed_commands_are_in_no_help_and_no_completion(cli, capsys):
+    from cli.terminal import shell
+
+    lines = iter(["help", "help stages"])
+
+    def read(prompt: str) -> str:
+        try:
+            return next(lines)
+        except StopIteration:
+            raise EOFError from None
+
+    said = cli("--help").out + cli("stages", "--help").out
+    shell.Shell(None, read=read, interactive=True).loop()
+    said += capsys.readouterr().out
+    offered = shell.completions("") + shell.completions("stages ")
+
+    assert "excavation" not in said
+    assert not [word for word in offered if "excavation" in word]
+    assert "line" in offered and "add" in offered
 
 
 def test_a_refusal_is_one_line_on_stderr_and_exit_1(cli, tmp_path):

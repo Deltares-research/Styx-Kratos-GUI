@@ -150,11 +150,34 @@ The preset values are only a start. Check them for your soil.
 is not a layer, for example an embankment or a lens. Type the corners of its outline and
 select its material.
 
-### Excavations
+### Lines that split the soil
 
-The GUI cannot make an excavation pit yet. To add a pit and the levels to which it is dug,
-use `kratos-cli excavation` (see [CLI.md](CLI.md)) or a Python script. The GUI then shows each
-lift of the pit as its own soil body, for example *Soil_Top · lift 1*.
+**Structures > Create line** splits soil into parts. Click the points of the line in the
+section, then press Enter or right-click. The Line window opens with the points. Correct
+them there if needed, and select **Save**. The arrow in the corner of the button also has
+**Line by coordinates…**, which opens the same window with no drawing first. While you
+draw, you can also type `x y` in the command box to place a point.
+
+Where a line crosses a soil layer from one edge to another, the layer becomes separate soil
+parts. A sheet pile splits a layer in the same way. In the Model explorer each part has its
+own row, for example *Soil_Top · Part 1*. In **Staged construction** you can switch each
+part off in its own stage. Select a part to rename it or to give it another material. A
+part starts with its layer's material. Change the layer's material, in the **Soil layers**
+window or in the Selection explorer, and every part of that layer takes the new material,
+also a part you gave a material of its own.
+
+Lines have their own group in the Model explorer. Delete a line there, and the parts join
+again, unless a stage still uses one of them. Then the deletion is refused.
+
+A part of a line that ends inside the soil splits nothing. The Session log says so when no
+part of a line splits anything.
+
+An excavation is made in this way: a wall and a line at each level make the lifts, and a
+stage switches each lift off.
+
+A project saved with an excavation pit opens with lines and soil parts in its place, for
+example *Soil_Top · lift 1*. A pit with one level was never dug, so it just goes. A 3D pit
+narrower than the model in z cannot be made of lines, and the project does not open.
 
 ## Structures mode
 
@@ -335,7 +358,7 @@ Click **Apply and generate** to make the mesh, or **Apply** to only keep the set
 
 A mesh size belongs to its body. An edit that takes a body away also removes the body's
 size: for example, deleting a layer or a structure, or moving a layer boundary so that
-an excavation lift is no longer in any layer. The Session log names each size that was
+a soil part is no longer in any layer. The Session log names each size that was
 removed, and its value. If the body comes back later, for example when you move the
 boundary back, set its size again, or use undo to get the body and its size back.
 
@@ -359,11 +382,6 @@ the stress initialisation of the whole sequence, and it cannot be deleted, nor c
 be inserted before it. Click **Add stage** at the top of the Stages explorer to add the
 other stages, for example one to install the wall and one for each excavation lift. A
 project saved without stages gets its initial stage from the first **Add stage**.
-
-To make the full sequence from the model in one step, use
-`kratos-cli stages P staged-excavation` (see
-[Stage commands](CLI.md#stage-commands)). It installs each wall, digs lift by lift, and puts
-in each anchor after the lift that uncovers it.
 
 Use the buttons at the top of the Stages explorer to change the sequence:
 
@@ -559,6 +577,8 @@ model, also when the mesh is shown deformed. Type `results loads off` to hide th
 - **Plot along the wall:** click **Plot wall…**, or type `results plot`. The plot shows the
   bending moment (M), the shear force (Q), the normal force (N), the horizontal displacement
   (ux) and the interface tractions (tn, ts) against depth, with one line for each stage.
+  Each face of the wall has its own tractions. They show only where the contact is on in
+  that stage, so the face a pit is dug against starts at the pit floor.
   **Save SVG** saves the figure, and **Save CSV** saves the numbers.
 - **Values at a node:** click **Results** → **Value at a node…**, or type
   `results at <node>`.

@@ -7,8 +7,6 @@ Model explorer make (`core.model.stages`), stored the way the GUI stores it
 
     list               the sequence (also with no action)
     show ID            what is in the model during a stage, and what it changes
-    staged-excavation  the whole sequence derived from the model: settle, build the
-                       wall, then dig and prop lift by lift
     add [ID]           a stage at the end, or --before a stage (the toolbar's Insert)
     copy ID            the toolbar's Copy: the same solver settings, after the original
     set ID             a stage's name, calculation type, stress initialisation,
@@ -73,12 +71,6 @@ def register(commands, common: argparse.ArgumentParser) -> None:
                               help="what is in the model during a stage")
     existing(show, "stage", "stages")
     show.set_defaults(handler=show_stage)
-
-    whole = actions.add_parser(
-        "staged-excavation", parents=[common],
-        help="derive the whole staged-excavation sequence from the model, replacing it")
-    add_writing(whole)
-    whole.set_defaults(handler=staged_excavation_stages)
 
     add = actions.add_parser("add", parents=[common],
                              help="a stage at the end of the sequence, or --before one")
@@ -233,10 +225,6 @@ def _solver_rows(project: Project, stage) -> list[dict]:
                           stage.solver_settings, stages.model_strategy(project, stage))
 
 
-def staged_excavation_stages(args: argparse.Namespace) -> Answer:
-    return _replaced(args, session.staged_excavation_stages(read(args)))
-
-
 @named_ids()
 def add_stage(args: argparse.Namespace) -> Answer:
     fields = _fields(args)
@@ -369,12 +357,6 @@ def _edited(args: argparse.Namespace, project: Project, did: str) -> Answer:
     target, where = written(args, project)
     return Answer(data={"file": file_of(target), "stages": _records(project)},
                   lines=[f"{did}; {where}"])
-
-
-def _replaced(args: argparse.Namespace, project: Project) -> Answer:
-    target, where = written(args, project)
-    return Answer(data={"file": file_of(target), "stages": _records(project)},
-                  lines=[*_listed(project), where])
 
 
 def _records(project) -> list[dict]:

@@ -71,7 +71,8 @@
     /* And a boundary condition drawn along a line or at a point, which the section
        embeds as a normal load's line is. */
     T.eq(App.LivePatches.TWO_D_ONLY,
-         ['interface', 'createNormalLoad', 'toggleRuler', 'createSupportLine',
+         ['interface', 'createNormalLoad', 'drawLine', 'createLineByCoordinates',
+          'toggleRuler', 'createSupportLine',
           'createSupportPoint', 'createWaterPressureLine', 'createWaterPressurePoint',
           'createSeepageLine']);
     T.eq(App.LivePatches.availableIn3D('interface'), false);

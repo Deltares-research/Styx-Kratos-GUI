@@ -14,8 +14,7 @@ and it turns that tree into the three things the exporter needs:
 
 and two that are not about export at all:
 
-*   `initial_stage` and `staged_excavation_stages` -- the stage a new project starts
-    with, and a whole sequence a model script can give a project.
+*   `initial_stage` -- the stage a new project starts with.
 *   `initial` and `check_settings` -- the initial stage, which chooses the calculation
     type and the stress initialisation for the whole sequence, and the refusal of a
     sequence that chooses them anywhere else.
@@ -262,7 +261,7 @@ def transitions(project: Project) -> list[tuple[Stage, set[str], set[str]]]:
     return result
 
 
-# -- the initial stage, and a whole sequence -----------------------------------
+# -- the initial stage -------------------------------------------------------
 
 INITIAL_ID = "initial"
 INITIAL_NAME = "Initial stage"
@@ -276,106 +275,6 @@ def initial_stage() -> Stage:
     switches nothing off: a part drawn later is in the model until a stage says
     otherwise."""
     return Stage(id=INITIAL_ID, name=INITIAL_NAME, stress_initialisation="gravity")
-
-
-# -- a whole sequence ----------------------------------------------------
-
-_ORDINALS = ("First", "Second", "Third", "Fourth", "Fifth", "Sixth", "Seventh",
-             "Eighth", "Ninth", "Tenth")
-
-
-def _ordinal(n: int) -> str:
-    return _ORDINALS[n - 1] if n <= len(_ORDINALS) else f"#{n}"
-
-
-def staged_excavation_stages(project: Project) -> list[Stage]:
-    """A whole staged-excavation sequence, built from the model.
-
-    What a staged model script gives its model. Shaped like the reference deck,
-    because the reference deck is a normal excavation
-    and the shape generalises: settle the ground, build the wall, then alternate digging
-    with propping. For the reference deck it reproduces all seven
-    stages exactly (`tests/test_stages.py`).
-
-        1  initial            K0 stresses; everything not yet built is switched off
-        2  null_step          the same model, solved again, to settle the K0 stresses
-        3  install_<beam>     one per drawn beam: the beam and its interfaces, plus the
-                              surface loads, which the reference brings in here too
-        4  dig_<n>            one per excavation level: that lift's soil bodies out,
-                              and that lift's water load in as the previous one leaves
-           install_<anchor>   after the lift that digs past the anchor's head
-
-    This is a starting point, not a constraint: every field of every stage is editable
-    afterwards, and the only thing that has to hold is that the result validates and
-    linearises. The solver numbers are the reference's own, which is the nearest thing
-    to a worked example there is -- they are not derived from anything.
-    """
-    made: list[Stage] = []
-    parent: str | None = None
-
-    def add(id_: str, name: str, **kw) -> None:
-        nonlocal parent
-        made.append(Stage(id=id_, name=name, parent=parent, **kw))
-        parent = id_
-
-    structures = ([beam.id for beam in project.beams]
-                  + [anchor.id for anchor in project.anchors])
-    interfaces = [each.id for each in project.interfaces]
-    surface_loads = [load.id for load in project.loads]
-
-    # One water load per lift, paired in order: the reference's `WaterLoad_StageN`
-    # arrives with excavation N and replaces N-1. Only hydrostatic loads are paired --
-    # a uniform normal load is a surcharge on a face, not a water table, and has no
-    # reason to follow the digging -- and only as far as the lifts go; anything left
-    # over stays active throughout, which is what it does today.
-    levels = project.pit_levels()
-    water = [load.id for load in project.normal_loads
-             if load.fluid_pressure_type == "Hydrostatic"][:len(levels)]
-
-    not_yet_built = structures + interfaces + surface_loads + water
-    add("initial", "Initial stage", stress_initialisation="K0",
-        deactivate=not_yet_built)
-    add("null_step", "Null step", max_iterations=150)
-
-    # The beams, each with the interfaces drawn against it. The first one carries the
-    # surface loads and the displacement reset: the reference resets at the wall so the
-    # wall's deflection is measured from the ground it was built into, not from the
-    # undisturbed state.
-    first_build = True
-    for beam in project.beams:
-        add(f"install_{beam.id}", f"{beam.name} installation",
-            activate=([beam.id]
-                      + [i.id for i in project.interfaces if i.structure == beam.id]
-                      + (surface_loads if first_build else [])),
-            reset_displacements=first_build, max_iterations=150, tolerated_error=1e-3)
-        first_build = False
-
-    # Anchors go in after the lift that digs past their head. Before any of that, an
-    # anchor head is still buried, and there is nothing to fix a strut to.
-    pending = {anchor.id: anchor.head[1] for anchor in project.anchors}
-
-    for n, level in enumerate(levels, start=1):
-        lift = [key for key, _, _, inside in project.soil_bodies()
-                if inside and key.endswith(f"__lift{n}")]
-        add(f"dig_{n}", f"{_ordinal(n)} excavation",
-            deactivate=lift + ([water[n - 2]] if n >= 2 and n - 1 <= len(water) else []),
-            activate=[water[n - 1]] if n <= len(water) else [],
-            max_iterations=150, tolerated_error=1e-3)
-        exposed = [id_ for id_, head_y in pending.items() if head_y >= level]
-        for id_ in exposed:
-            anchor = next(a for a in project.anchors if a.id == id_)
-            add(f"install_{id_}", f"{anchor.name} installation", activate=[id_],
-                max_iterations=150, tolerated_error=1e-3)
-            del pending[id_]
-
-    # Anything still buried when the digging stops goes in at the end rather than being
-    # dropped: a part that exists in the model and in no stage is invisible in the deck.
-    for id_ in list(pending):
-        anchor = next(a for a in project.anchors if a.id == id_)
-        add(f"install_{id_}", f"{anchor.name} installation", activate=[id_],
-            max_iterations=150, tolerated_error=1e-3)
-
-    return made
 
 
 # -- editing ------------------------------------------------------------------

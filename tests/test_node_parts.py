@@ -93,7 +93,8 @@ def test_the_wall_and_each_soil_side_hold_their_own_node(wall_deck):
     """Every wall position the interface split is three nodes: the pile's own, and one
     for the soil on each side. Each side's copy is in that side's soil only -- one body,
     or two where the node sits on the seam between layers -- and never in the other
-    side's."""
+    side's. The exception is the bottom layer: the wall ends in it, so it does not cut it,
+    and both copies are in that one body."""
     by_node = membership(wall_deck)
     at = defaultdict(list)
     for node, x, y, _ in wall_deck["nodes"]:
@@ -107,7 +108,7 @@ def test_the_wall_and_each_soil_side_hold_their_own_node(wall_deck):
         soils = [n for n in ids if n not in walls]
         bodies = [{p for p in by_node[n] if p.startswith("Soil_")} for n in soils]
         assert all(bodies), ("a soil copy in no soil body", bodies)
-        assert not bodies[0] & bodies[1], ("both sides in one body", bodies)
+        assert bodies[0] & bodies[1] <= {"Soil_Bottom"}, ("both sides in one body", bodies)
 
 
 def test_the_numbering_is_the_deck_s(wall_deck):

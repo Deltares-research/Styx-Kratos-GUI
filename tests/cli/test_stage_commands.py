@@ -43,13 +43,6 @@ def test_stages_with_no_action_lists_them(cli, pit):
     assert "install_strut" in ran.out and "dig_3" in ran.out
 
 
-def test_staged_excavation_derives_the_whole_sequence(cli, unstaged):
-    ran = cli("stages", unstaged, "staged-excavation")
-
-    assert ran.code == 0, ran.err
-    assert session.load(unstaged).stages == excavation.excavation_project().stages
-
-
 @pytest.mark.parametrize("action", [[], ["list"], ["show", "dig_3"]])
 def test_the_old_phases_command_still_works(cli, pit, action):
     stages = cli("stages", pit, *action)
@@ -432,8 +425,7 @@ def test_invalid_json_is_not_deck_parameters(tmp_path):
 # ── The stages of the test model, from commands alone ───────────────────────
 
 def test_the_stages_of_the_test_model_are_built_with_commands_alone(cli, unstaged):
-    """The seven stages `stages.staged_excavation_stages` derives for the test model --
-    settle, the wall with its contact and the surcharge, three lifts each with its water
+    """The seven stages of the test model -- settle, the wall with its contact and the surcharge, three lifts each with its water
     load, the strut after the first -- typed one by one."""
     def run(*argv):
         ran = cli(*argv)

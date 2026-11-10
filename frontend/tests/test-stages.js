@@ -160,10 +160,10 @@
 
   test('a part switched off and later back on is on', function () {
     /* The case that separates walking the chain from reading the last instruction:
-       `soil_L1` is deactivated at dig_1 and activated again at dig_2. */
+       `soil_L1__outside` is deactivated at dig_1 and activated again at dig_2. */
     var p = project();
-    T.ok(App.Stages.activeParts(p, 'dig_1').indexOf('soil_L1') < 0);
-    T.ok(App.Stages.activeParts(p, 'dig_2').indexOf('soil_L1') >= 0);
+    T.ok(App.Stages.activeParts(p, 'dig_1').indexOf('soil_L1__outside') < 0);
+    T.ok(App.Stages.activeParts(p, 'dig_2').indexOf('soil_L1__outside') >= 0);
   });
 
   test('an instruction that changes nothing changes nothing', function () {
@@ -411,10 +411,10 @@
 
   test('toggling an active part deactivates it in that stage', function () {
     var p = project();
-    var list = App.Stages.toggled(p, 'prop', 'soil_L2');
+    var list = App.Stages.toggled(p, 'prop', 'soil_L2__pit');
     var stage = list.filter(function (ph) { return ph.id === 'prop'; })[0];
-    T.ok(stage.deactivate.indexOf('soil_L2') >= 0);
-    T.ok(stage.activate.indexOf('soil_L2') < 0, 'the part is in both lists');
+    T.ok(stage.deactivate.indexOf('soil_L2__pit') >= 0);
+    T.ok(stage.activate.indexOf('soil_L2__pit') < 0, 'the part is in both lists');
   });
 
   test('toggling an inactive part activates it', function () {
@@ -434,8 +434,8 @@
     var before = JSON.stringify(p.stages.filter(function (ph) {
       return ph.id === 'prop';
     })[0]);
-    p.stages = App.Stages.toggled(p, 'prop', 'soil_L2');
-    p.stages = App.Stages.toggled(p, 'prop', 'soil_L2');
+    p.stages = App.Stages.toggled(p, 'prop', 'soil_L2__pit');
+    p.stages = App.Stages.toggled(p, 'prop', 'soil_L2__pit');
     var after = JSON.stringify(p.stages.filter(function (ph) {
       return ph.id === 'prop';
     })[0]);
@@ -446,7 +446,7 @@
     /* `Stage._one_instruction_per_part` refuses that outright, so a toggle that
        produced it would be rejected by the server with the edit already on screen. */
     var p = project();
-    ['soil_L2', 'wall', 'anchors', 'soil_L1__lift3'].forEach(function (key) {
+    ['soil_L2__pit', 'pile', 'tie', 'soil_L1__lift3'].forEach(function (key) {
       p.stages = App.Stages.toggled(p, 'dig_2', key);
       var stage = p.stages.filter(function (ph) { return ph.id === 'dig_2'; })[0];
       T.eq((stage.activate || []).filter(function (k) {
@@ -469,7 +469,7 @@
   });
 
   test('a part re-activated in this stage is owned by it', function () {
-    T.eq(App.Stages.ownership(project(), 'dig_2', 'soil_L1'), 'own');
+    T.eq(App.Stages.ownership(project(), 'dig_2', 'soil_L1__outside'), 'own');
   });
 
   /* ── What the viewport hides ─────────────────────────────────────────── */
@@ -486,7 +486,7 @@
   test('in staged mode the parts a stage switched off are hidden', function () {
     var hidden = App.Stages.hiddenKeys(project(), 'prop', 'staged');
     T.ok(hidden.indexOf('soil_L1__lift2') >= 0, 'an inactive lift is still drawn');
-    T.ok(hidden.indexOf('soil_L2') < 0, 'an active body was hidden');
+    T.ok(hidden.indexOf('soil_L2__pit') < 0, 'an active body was hidden');
   });
 
   test('the hidden set is exactly the complement of the active one', function () {
@@ -528,8 +528,8 @@
 
   test('setActive switches a part off in the selected stage', function () {
     var p = project();
-    p.stages = App.Stages.setActive(p, 'prop', ['soil_L2'], false);
-    T.ok(!activeAt(p, 'prop', 'soil_L2'));
+    p.stages = App.Stages.setActive(p, 'prop', ['soil_L2__pit'], false);
+    T.ok(!activeAt(p, 'prop', 'soil_L2__pit'));
   });
 
   test('a part switched off earlier can be switched back on in a later stage', function () {
@@ -548,7 +548,7 @@
   test('switching a part in one stage changes no stage before it', function () {
     var before = project();
     var p = project();
-    p.stages = App.Stages.setActive(p, 'dig_2', ['soil_L2'], false);
+    p.stages = App.Stages.setActive(p, 'dig_2', ['soil_L2__pit'], false);
     App.Stages.chainTo(p, 'dig_2').slice(0, -1).forEach(function (ph) {
       T.eq(JSON.stringify(stageOf(p.stages, ph.id)),
            JSON.stringify(stageOf(before.stages, ph.id)), ph.id + ' was edited');
@@ -558,21 +558,21 @@
   test('setting a part to the state it already has adds no instruction', function () {
     var p = project();
     var before = JSON.stringify(stageOf(p.stages, 'prop'));
-    p.stages = App.Stages.setActive(p, 'prop', ['soil_L2'], true);
+    p.stages = App.Stages.setActive(p, 'prop', ['soil_L2__pit'], true);
     T.eq(JSON.stringify(stageOf(p.stages, 'prop')), before);
   });
 
   test('switching back what this stage changed drops its instruction', function () {
     var p = project();
     var before = JSON.stringify(stageOf(p.stages, 'prop'));
-    p.stages = App.Stages.setActive(p, 'prop', ['soil_L2'], false);
-    p.stages = App.Stages.setActive(p, 'prop', ['soil_L2'], true);
+    p.stages = App.Stages.setActive(p, 'prop', ['soil_L2__pit'], false);
+    p.stages = App.Stages.setActive(p, 'prop', ['soil_L2__pit'], true);
     T.eq(JSON.stringify(stageOf(p.stages, 'prop')), before);
   });
 
   test('a group row sets every part under it at once', function () {
     var p = project();
-    var keys = ['soil_L2', 'soil_L1__lift2'];
+    var keys = ['soil_L2__pit', 'soil_L1__lift2'];
     p.stages = App.Stages.setActive(p, 'prop', keys, true);
     keys.forEach(function (key) { T.ok(activeAt(p, 'prop', key), key); });
     p.stages = App.Stages.setActive(p, 'prop', keys, false);
@@ -581,7 +581,7 @@
 
   test('setActive never puts a part in both lists of one stage', function () {
     var p = project();
-    ['soil_L2', 'wall', 'anchors', 'soil_L1__lift3'].forEach(function (key) {
+    ['soil_L2__pit', 'pile', 'tie', 'soil_L1__lift3'].forEach(function (key) {
       p.stages = App.Stages.setActive(p, 'dig_2', [key], false);
       p.stages = App.Stages.setActive(p, 'dig_2', [key], true);
       var stage = stageOf(p.stages, 'dig_2');
@@ -593,9 +593,9 @@
 
   test('the checkbox state: on, off, or mixed for a group', function () {
     var p = project();
-    T.eq(App.Stages.stateIn(p, 'prop', ['soil_L2']), 'on');
+    T.eq(App.Stages.stateIn(p, 'prop', ['soil_L2__pit']), 'on');
     T.eq(App.Stages.stateIn(p, 'prop', ['soil_L1__lift2']), 'off');
-    T.eq(App.Stages.stateIn(p, 'prop', ['soil_L2', 'soil_L1__lift2']), 'mixed');
+    T.eq(App.Stages.stateIn(p, 'prop', ['soil_L2__pit', 'soil_L1__lift2']), 'mixed');
   });
 
   test('no selected stage hides nothing', function () {
