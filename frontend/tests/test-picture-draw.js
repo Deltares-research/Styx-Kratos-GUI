@@ -197,6 +197,28 @@
     T.eq(ofType(D.compose(view([soil, grey]), page()), 'fill').length, 3);
   });
 
+  /* The view ends at y = -5. The grey face reaches from -4.5 down to -9, so its middle is
+     off the view, but its top is on it: there the soil covers it. */
+  var OFF_THE_FOOT = [-1, -4.5, 0, 1, -4.5, 0, 0, -9, 0];
+
+  test('a pushed-back face with its middle off the view is still hidden by the soil', function () {
+    var soil = faces([-2, -8, 0, 2, -8, 0, 2, -3, 0, -2, -8, 0, 2, -3, 0, -2, -3, 0],
+                     { color: [1, 1, 0] });
+    var grey = faces(OFF_THE_FOOT, { color: [0.8, 0.8, 0.8], offset: 2 });
+    var fills = ofType(D.compose(view([soil, grey]), page()), 'fill').slice(1);
+    T.eq(fills.map(function (f) { return f.color; }), [[1, 1, 0]], 'no grey at the foot');
+  });
+
+  test('a face with its middle off the view shows where nothing covers it', function () {
+    var grey = faces(OFF_THE_FOOT, { color: [0.8, 0.8, 0.8], offset: 2 });
+    T.eq(ofType(D.compose(view([grey]), page()), 'fill').length, 2);
+  });
+
+  test('a face wholly off the view gives no fill', function () {
+    var away = faces([20, 20, 0, 22, 20, 0, 21, 22, 0]);
+    T.eq(ofType(D.compose(view([away]), page()), 'fill').length, 1, 'only the background');
+  });
+
   test('two faces in one plane both show, the later over the earlier', function () {
     var a = faces(SQUARE, { color: [1, 0, 0] });
     var b = faces(SQUARE, { color: [0, 0, 1], transparent: true, alpha: 0.5 });

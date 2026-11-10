@@ -419,13 +419,55 @@ App.PictureDraw = (function () {
     });
   }
 
-  /* Whether a face shows, judged at its middle against what was drawn before it. */
+  /* The corners of a polygon, [x, y, z] in pixels, cut to the side of one edge of the view
+     where `inside` holds (Sutherland-Hodgman). `cross(p, q)` is how far from p to q the edge is. */
+  function cutPolygon(points, inside, cross) {
+    var kept = [];
+    for (var i = 0; i < points.length; i++) {
+      var p = points[i], q = points[(i + 1) % points.length];
+      if (inside(p)) kept.push(p);
+      if (inside(p) !== inside(q)) {
+        var t = cross(p, q);
+        kept.push([p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t, p[2] + (q[2] - p[2]) * t]);
+      }
+    }
+    return kept;
+  }
+
+  /* The middle of the part of a face inside the view, as [x, y, z], or `null` when no part
+     is inside. The middle of the whole face can be off the view while some of the face is
+     on it: a model zoomed in on runs off the view. */
+  function middleInView(buffer, s, a, b, c) {
+    var points = [[s[a * 3], s[a * 3 + 1], s[a * 3 + 2]], [s[b * 3], s[b * 3 + 1], s[b * 3 + 2]],
+                  [s[c * 3], s[c * 3 + 1], s[c * 3 + 2]]];
+    var w = buffer.w, h = buffer.h;
+    points = cutPolygon(points, function (p) { return p[0] >= 0; },
+                        function (p, q) { return p[0] / (p[0] - q[0]); });
+    points = cutPolygon(points, function (p) { return p[0] <= w; },
+                        function (p, q) { return (p[0] - w) / (p[0] - q[0]); });
+    points = cutPolygon(points, function (p) { return p[1] >= 0; },
+                        function (p, q) { return p[1] / (p[1] - q[1]); });
+    points = cutPolygon(points, function (p) { return p[1] <= h; },
+                        function (p, q) { return (p[1] - h) / (p[1] - q[1]); });
+    if (points.length < 3) return null;
+    // The mean of the corners of a convex polygon is inside it.
+    var middle = [0, 0, 0];
+    points.forEach(function (p) {
+      middle[0] += p[0] / points.length;
+      middle[1] += p[1] / points.length;
+      middle[2] += p[2] / points.length;
+    });
+    return middle;
+  }
+
+  /* Whether a face shows, judged at the middle of its part in the view against what was
+     drawn before it. A face wholly off the view does not show: the margins would cover it. */
   function faceShows(buffer, s, a, b, c, push) {
-    var x = Math.floor((s[a * 3] + s[b * 3] + s[c * 3]) / 3);
-    var y = Math.floor((s[a * 3 + 1] + s[b * 3 + 1] + s[c * 3 + 1]) / 3);
-    if (x < 0 || y < 0 || x >= buffer.w || y >= buffer.h) return true;
-    var z = (s[a * 3 + 2] + s[b * 3 + 2] + s[c * 3 + 2]) / 3 + push;
-    return z <= buffer.depth[y * buffer.w + x] + DEPTH_ROUNDING;
+    var middle = middleInView(buffer, s, a, b, c);
+    if (!middle) return false;
+    var x = Math.min(buffer.w - 1, Math.floor(middle[0]));
+    var y = Math.min(buffer.h - 1, Math.floor(middle[1]));
+    return middle[2] + push <= buffer.depth[y * buffer.w + x] + DEPTH_ROUNDING;
   }
 
   /* One object's faces as vector fills, one fill per colour: within one path a viewer
