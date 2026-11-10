@@ -22,9 +22,7 @@ def material(id: str) -> Material:
     return Material(id=id, name=f"Soil {id}", constitutive_law="GeoLinearElasticPlaneStrain2DLaw",
                     variables={"YOUNG_MODULUS": 1e6, "POISSON_RATIO": 0.3, "DENSITY_SOLID": 2000.0,
                                "POROSITY": 0.0, "PERMEABILITY_XX": 1e-5, "PERMEABILITY_YY": 1e-5,
-                               "PERMEABILITY_XY": 0.0, "DENSITY_WATER": 1000.0,
-                               "BULK_MODULUS_SOLID": 1e10, "BULK_MODULUS_FLUID": 2e9,
-                               "DYNAMIC_VISCOSITY": 0.001},
+                               "PERMEABILITY_XY": 0.0, "BULK_MODULUS_SOLID": 1e10},
                     color="#c4a86a")
 
 

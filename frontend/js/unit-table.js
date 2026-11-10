@@ -222,6 +222,17 @@ App.UNIT_TABLE =
         "SI": "°",
         "kN": "°"
       }
+    },
+    "angle in radians": {
+      "dimension": [
+        0,
+        0,
+        0
+      ],
+      "labels": {
+        "SI": "rad",
+        "kN": "rad"
+      }
     }
   },
   "variables": {
@@ -245,6 +256,9 @@ App.UNIT_TABLE =
     "GEO_FRICTION_ANGLE": "angle",
     "GEO_DILATANCY_ANGLE": "angle",
     "GEO_TENSILE_STRENGTH": "stress",
+    "GEO_COHESION_FUNCTION_COEFFICIENTS": "stress",
+    "GEO_FRICTION_ANGLE_FUNCTION_COEFFICIENTS": "angle in radians",
+    "GEO_DILATANCY_ANGLE_FUNCTION_COEFFICIENTS": "angle in radians",
     "K0_NC": "dimensionless",
     "K0_MAIN_DIRECTION": "dimensionless",
     "K0_VALUE_XX": "dimensionless",

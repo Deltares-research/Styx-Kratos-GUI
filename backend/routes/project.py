@@ -16,7 +16,7 @@ from fastapi.exceptions import RequestValidationError
 from backend import store
 from backend.routes.common import refusals, stored
 from core import session
-from core.model import stages
+from core.model import migration, stages
 from core.model.schemas import (BodyUpdate, ConditionsUpdate, DimensionUpdate, LayersUpdate,
                                 LinesUpdate, MaterialsUpdate,
                                 StagesUpdate, Project, StructuresUpdate, UnitsUpdate,
@@ -49,7 +49,6 @@ async def open_project(document: dict) -> dict:
     from pydantic import ValidationError
 
     from core import scripting
-    from core.model import migration
 
     try:
         project = Project.model_validate(document)
@@ -61,6 +60,14 @@ async def open_project(document: dict) -> dict:
     project = store.put(await asyncio.to_thread(scripting.with_solids, project, False))
     return {"project": project, "notes": migration.notes(document),
             "invalidates": ["project", "tree", "geometry", "mesh"]}
+
+
+@router.post("/api/project/migration-notes")
+def migration_notes(document: dict) -> dict:
+    """What opening `document`, a project file as saved, changes in its deck
+    (`migration.notes`), without opening it. The GUI's Open gets them from
+    `/api/project/open` instead, in the same request that takes the file."""
+    return {"notes": migration.notes(document)}
 
 
 @router.post("/api/project/reset")

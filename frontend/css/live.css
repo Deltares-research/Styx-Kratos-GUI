@@ -513,3 +513,32 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
 .pgrid-reset { flex: 0 0 auto; margin-left: 3px; padding: 0 4px; border: 0;
   background: none; color: var(--c-ink-faint); cursor: pointer; font-size: var(--fs-md); }
 .pgrid-reset:hover { color: var(--brand-primary); }
+
+/* The material window (js/material-sets.js): every value row keeps a fixed slot for its
+   unit, right beside the field, so the unit is always there and the units line up. A
+   value left to the export shows what it derives as a faint placeholder; one that
+   follows from the soil's numbers is shown, not edited. The window has no padding of
+   its own, so the grid keeps its headings and rows off the window's edges. */
+.material-variables { padding: 10px 14px 12px; }
+.material-variables h4 { margin: 14px 0 4px; }
+.material-variables h4:first-child { margin-top: 0; }
+.material-variables .pgrid-val.field > .unit,
+.material-water .pgrid-val.field > .unit { flex: 0 0 48px; margin-left: 4px; white-space: nowrap; }
+.material-variables .pgrid-val.field > .remove-slot { flex: 0 0 26px; display: flex; justify-content: flex-end; }
+.material-variables .pgrid-val.field > select { flex: 1 1 auto; min-width: 0; }
+.material-variables .pgrid-val.field > input[type="checkbox"] { margin-right: auto; }
+.material-variables .pgrid-note {
+  margin-left: 46%; padding: 2px 6px 4px; color: var(--c-ink-faint); font-size: var(--fs-sm);
+  white-space: normal;
+}
+.material-variables .cell-input::placeholder,
+.material-water .cell-input::placeholder { color: var(--c-ink-faint); font-style: italic; }
+.pgrid-val.field > .computed-value {
+  flex: 1 1 auto; min-width: 0; padding-left: 4px; overflow: hidden; text-overflow: ellipsis;
+}
+.material-sets .material-swatch { display: inline-block; width: 18px; height: 18px; vertical-align: middle; }
+.material-water { margin-top: 10px; }
+.material-water h3 { margin: 0 0 4px; }
+/* The presets, below the soils. */
+.material-library { margin-top: 10px; }
+.material-library h3 { margin: 0 0 4px; }

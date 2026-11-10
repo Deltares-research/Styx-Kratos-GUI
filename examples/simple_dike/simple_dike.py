@@ -93,11 +93,8 @@ def project() -> Project:
                         "YOUNG_MODULUS": 2.0e7,
                         "POISSON_RATIO": 0.3,
                         "DENSITY_SOLID": 18_000.0 / 9.81,    # unit weight over g: kg/m3
-                        "DENSITY_WATER": 10_000.0 / 9.81,
                         "POROSITY": 0.0,
                         "BULK_MODULUS_SOLID": 1.0e10,
-                        "BULK_MODULUS_FLUID": 2.2e9,
-                        "DYNAMIC_VISCOSITY": 1.0e-3,
                         "PERMEABILITY_XX": 1.0e-5,
                         "PERMEABILITY_YY": 1.0e-5,
                         "PERMEABILITY_XY": 0.0,

@@ -89,8 +89,10 @@
 
   T.test('a left-out derivable variable shows as derived, labelled in the project units', function () {
     var rows = P.rows('soil', soil(), 2);
+    var k0 = rows.filter(function (r) { return r[0] === 'K0_NC'; })[0];
+    T.eq(k0.slice(0, 4), ['K0_NC', 'derived', '', true]);
     var porosity = rows.filter(function (r) { return r[0] === 'POROSITY'; })[0];
-    T.eq(porosity.slice(0, 4), ['POROSITY', 'derived', '', true]);
+    T.eq(porosity.slice(0, 4), ['POROSITY', '—', '', true], 'the soil\'s own: nothing derives it');
     var modulus = rows.filter(function (r) { return r[0] === 'YOUNG_MODULUS'; })[0];
     T.eq(modulus[2], App.Units.variableLabel('YOUNG_MODULUS'));
     T.eq(modulus[4].kind, 'number');
@@ -109,21 +111,24 @@
     T.eq(set.variables.YOUNG_MODULUS, 1e7);
   });
 
-  T.test('the drainage type is a choice between the four Kratos accepts', function () {
-    var set = soil({ GEO_DRAINAGE_TYPE: 'CONSTANT_PW_FIELD' });
+  T.test('the drainage type is a choice between the two a soil can have', function () {
+    var set = soil({ GEO_DRAINAGE_TYPE: 'CONSTANT_PW_FIELD', POROSITY: 0.3 });
     var row = P.rows('soil', set, 2).filter(function (r) { return r[0] === 'GEO_DRAINAGE_TYPE'; })[0];
     T.eq(row[4].kind, 'select');
     T.eq(row[4].options().map(function (o) { return o.value; }),
-         ['CONSTANT_PW_FIELD', 'FULLY_COUPLED', 'DRAINED', 'UNDRAINED']);
+         ['CONSTANT_PW_FIELD', 'FULLY_COUPLED']);
+    T.eq(row[4].options().map(function (o) { return o.text; }),
+         ['Mechanical only', 'Fully coupled']);
+    T.eq(row[1], 'Mechanical only');
     T.eq(row[4].get(), 'CONSTANT_PW_FIELD');
     T.eq(row[4].set('FULLY_COUPLED'), null);
     T.eq(row[4].get(), 'FULLY_COUPLED');
     T.eq(set.variables.GEO_DRAINAGE_TYPE, 'FULLY_COUPLED');
     var checked = P.rows('soil', set, 2, function (value) { return P.validate('soil', value); })
       .filter(function (r) { return r[0] === 'GEO_DRAINAGE_TYPE'; })[0][4];
-    checked.set('DRAINED');
+    checked.set('CONSTANT_PW_FIELD');
     T.ok(checked.set('not-a-drainage-type'));
-    T.eq(checked.get(), 'DRAINED', 'a refused choice restores the last valid value');
+    T.eq(checked.get(), 'CONSTANT_PW_FIELD', 'a refused choice restores the last valid value');
   });
 
 })();

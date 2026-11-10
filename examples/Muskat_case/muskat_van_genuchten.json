@@ -20,14 +20,11 @@
         "YOUNG_MODULUS": 10000.0,
         "POISSON_RATIO": 0.4,
         "DENSITY_SOLID": 2290.0,
-        "DENSITY_WATER": 1019.37,
         "POROSITY": 0.3333,
         "BULK_MODULUS_SOLID": 6.7e+19,
-        "BULK_MODULUS_FLUID": 1e+20,
         "PERMEABILITY_XX": 6.9444e-13,
         "PERMEABILITY_YY": 6.9444e-13,
         "PERMEABILITY_XY": 0.0,
-        "DYNAMIC_VISCOSITY": 0.001,
         "BIOT_COEFFICIENT": 1.0,
         "RETENTION_LAW": "VanGenuchtenLaw",
         "SATURATED_SATURATION": 0.403,
@@ -65,6 +62,10 @@
   "interface_sides": "screen",
   "normal_loads": [],
   "water": null,
+  "fluid": {
+    "bulk_modulus": 1e+20,
+    "dynamic_viscosity": null
+  },
   "boundary_conditions": [
     {
       "id": "left_head",

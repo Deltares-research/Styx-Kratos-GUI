@@ -115,31 +115,64 @@ and the bottom (**y min**) of a layer in the Selection explorer. This is the sam
 
 For a layer that is not horizontal, draw a soil surface or a soil volume (see below).
 
-### Material sets
+### Soil materials
 
-Click **Show material sets…**. Each soil material is a Kratos property set: a constitutive
+Click **Soil materials…**. Each soil material is a Kratos property set: a constitutive
 law and its parameters.
 
-- To add a soil, select a preset in **Default library** (Fill, Sand loose, Sand dense, Clay
-  soft, Clay stiff or Bedrock) and click **Add to project**. Styx adds a copy that you can
-  change.
+- To add a soil, click **Create soil**. Styx adds a linear elastic soil that is mechanical
+  only (`CONSTANT_PW_FIELD`) and saturated below the phreatic level (`SaturatedBelowPhreaticLevelLaw`), and
+  opens its properties. `kratos-cli material add` makes the same soil. The other values are empty: type them. The line at the bottom of
+  the window lists the values that the soil still needs for a calculation. Until you type
+  K0, the window shows the K0 that the export calculates from the Poisson's ratio (linear
+  elastic) or the friction angle (Mohr-Coulomb).
+- To start from a preset instead, go to **Default soil material library** under the soils, select a preset
+  (Fill, Sand loose, Sand dense, Clay soft, Clay stiff or Bedrock) and click **Add to
+  project**. Styx adds a copy that you can change. The presets with a cohesion and a
+  friction angle are Mohr-Coulomb soils; Bedrock is linear elastic.
 - To change a material, click **Properties…** in its row.
 - To make a material Mohr-Coulomb, open **Properties…** and select **Mohr-Coulomb** in
   **Soil model**. Styx sets the Kratos law for the dimension of the model, keeps the values
   the material has, and fills in defaults for the others. The line at the bottom of the
-  window lists the values it filled in. The material is then ready for a calculation.
+  window lists the values it filled in. The material is then ready for a calculation. For a
+  soil that still has empty values, such as a new soil, Styx fills in no values that you
+  must type, for example the friction angle: the soil stays yours to fill in.
 - In the **Properties…** window, the parameters are in groups (Drainage, Stiffness,
-  Weight, Flow, Strength, Pore fluid, Initial stresses). A text value, such as
-  `GEO_DRAINAGE_TYPE` or `RETENTION_LAW`, is a list of the values Kratos accepts. A
-  true/false value, such as `GEO_ENABLE_TENSION_CUT_OFF`, is a check box. Some
-  parameters show only when they are used: `GEO_TENSILE_STRENGTH` when the tension
-  cut-off is on, the saturations for a retention law other than `SaturatedLaw`, and the
-  Van Genuchten parameters for `VanGenuchtenLaw`. When a choice brings in new parameters,
-  Styx fills in their defaults.
+  Weight, Saturation, Flow, Grain-water interaction, Strength, Hardening, Initial
+  stresses). Each has
+  a name, with its Kratos variable when you hover it, and its unit beside the field. A text value, such
+  as the drainage type or the retention law, is a list of the values Kratos accepts. The
+  drainage type shows them as **Mechanical only** (`CONSTANT_PW_FIELD`) and **Fully
+  coupled** (`FULLY_COUPLED`), with a line under the list that says what each solves. A
+  true/false value, such as the tension cut-off, is a check box.
+- The window shows only what the soil model and its choices use. A linear elastic soil has
+  no cohesion or friction angle. The flow parameters (the intrinsic permeabilities, the
+  minimum relative permeability) show for a `FULLY_COUPLED` soil only, or in a groundwater
+  flow project. The tensile strength shows when the tension cut-off is on, the saturations
+  for a retention law other than `SaturatedLaw`, and the Van Genuchten parameters for
+  `VanGenuchtenLaw`, and the three hardening slopes when **Hardening** is Linear (the
+  angles' in radians per unit of plastic strain; each starts at 0). When a choice brings in new
+  parameters, Styx fills in their defaults. A mechanical-only soil shows no
+  permeability: its water pressures are the ones the water conditions set, and the
+  deformation does not change them. Styx has no
+  undrained drainage type. A low permeability does not make a soil undrained: a stage
+  is static, so a load does not raise the water pressure of a `FULLY_COUPLED` soil. For
+  an undrained soil, use a mechanical-only soil with undrained values (total stresses): the
+  undrained Young's modulus, a Poisson's ratio close to 0.5 (such as 0.49), and, for
+  Mohr-Coulomb, the undrained shear strength as cohesion with a friction angle of 0.
+  A new soil is saturated below the phreatic level (`SaturatedBelowPhreaticLevelLaw`).
+- A value you leave empty shows, in grey, the value the export writes for it: the
+  permeability in y is the one in x, K0 is ν / (1 − ν) for a linear elastic soil and
+  1 − sin φ for a Mohr-Coulomb one, and so on. Type a value to replace it.
+- The window also shows what follows from the soil's values: its unit weight dry and
+  saturated, and for a coupled soil the Darcy permeability (in m/s and m/day) that its
+  intrinsic permeability gives with the project's water.
+- The water is the same in every soil. Its bulk modulus and viscosity are under **Water**
+  in the Soil materials window; its unit weight is that of the water level. Empty, each is
+  the value of water at 20 °C.
 - For any other Kratos law, for example a UDSM, select **Other** in **Soil model** and type
-  the law name. Styx writes it as you type it, with the variables you give it.
-- To give a material the strength and permeability of an interface, select the material, then
-  select an interface preset and click **Apply to selected**.
+  the law name. Styx writes it as you type it, with the variables you give it: only here
+  can you add variables of your own.
 - Click **OK** to save the materials, or **Cancel** to forget your changes.
 
 The preset values are only a start. Check them for your soil.
@@ -223,8 +256,12 @@ explorer, and **Properties…** on the Model explorer row, open the same window.
    45 degrees, the faces are **Below** and **Above**. **Both sides** is only for a sheet
    pile. For a retaining wall, you usually select both.
 5. In **Contact**, select the contact properties, or **New contact**. You change their
-   numbers in the Selection explorer: the soil whose strength `R_inter` reduces, the
-   virtual thickness, and the permeability.
+   numbers in the Selection explorer: the law, the stiffnesses, the soil, the virtual
+   thickness, and the permeability. The **Elastic** law reads the stiffnesses only. The
+   **Coulomb** law reads a strength too: under **Strength**, select **From the soil**
+   (the soil's, reduced by `R_inter`) or **Set on the interface** (type `GEO_COHESION`
+   and `GEO_FRICTION_ANGLE`). A linear elastic soil has no strength, so against one the
+   contact gets its own, and you set it.
 
 You can make as many interfaces as you need, for example one on each face of a pile, or
 two on parts of one face. Two interfaces on the same face of a pile over the same length
@@ -309,8 +346,8 @@ seepage face (see below). **Standard conditions** sets the bottom to fixed and t
 the changes.
 
 A new project has the standard supports and no water pressure condition. For a dry model
-whose soil couples the water pressure to the deformation (`GEO_DRAINAGE_TYPE` other than
-`CONSTANT_PW_FIELD`), add a **Uniform** water pressure of 0 on the whole soil. The export
+whose soil couples the water pressure to the deformation (`GEO_DRAINAGE_TYPE`
+`FULLY_COUPLED`), add a **Uniform** water pressure of 0 on the whole soil. The export
 warns about it, and about a model that nothing holds.
 
 **Gravity** is not a condition. Whether the self weight acts is decided by the stress
@@ -601,7 +638,7 @@ Type a command in the command box below the log, and press <kbd>Enter</kbd>. Use
 | `water <level>`, `water off` | Sets or removes the water level |
 | `boundary`, `boundary standard` | Lists the boundary conditions, or puts the standard supports back |
 | `units`, `units SI`, `units kN` | Shows or changes the unit system |
-| `soillayers`, `materials` | Opens the **Modify soil layers** or **Material sets** window |
+| `soillayers`, `materials` | Opens the **Modify soil layers** or **Soil materials** window |
 | `cleargeometry` | Removes all drawn and imported solids |
 | `colour <part>`, `colour all`, `colour off` | Shows parts of the mesh in their own colour |
 | `node <id>` | Shows the parts that contain a node of the mesh |

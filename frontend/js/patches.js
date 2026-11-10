@@ -2631,7 +2631,7 @@ App.LivePatches = (function () {
     ['boundary [list|standard]', 'the boundary conditions, or put the standard supports back'],
     ['units [SI|kN]', 'show the unit system, or convert the project to another'],
     ['soillayers', 'open the Modify soil layers window'],
-    ['materials', 'open the Material sets window'],
+    ['materials', 'open the Soil materials window'],
     ['cleargeometry', 'remove the drawn and imported solids'],
     ['colour <part>|all|off', 'draw a part of the mesh in its own colour'],
     ['node <id>', 'which SubModelParts a node is in'],
@@ -3135,6 +3135,11 @@ App.LivePatches = (function () {
       soilMenu.items.push({ label: 'Create soil volume…', icon: 'cube', action: 'createSoilVolume' });
     }
     if (soilMenu) soilMenu.items = orderSoilMenu(soilMenu.items);
+    // The frozen "Show material sets…" (js/data.js) opens the Soil materials window.
+    (App.RAILS.soil || []).forEach(function (tool) {
+      if (tool && tool.action === 'materials') tool.tip = 'Soil materials…';
+    });
+    menuItemsFor('materials').forEach(function (item) { item.label = 'Soil materials…'; });
 
     // Add Import model to Structures rail
     if (App.RAILS.structures) {
@@ -4324,6 +4329,7 @@ App.LivePatches = (function () {
       var frozenMaterials = App.Dialogs.materials;
       App.Dialogs.materials = function (onClose) {
         var snapshot = copy(App.MATERIALS || []);
+        var fluidSnapshot = copy(App.FLUID || {});
         frozenMaterials(onClose);
         var dialogs = document.querySelectorAll('#modal-layer .dialog');
         var dialog = dialogs[dialogs.length - 1];
@@ -4332,6 +4338,7 @@ App.LivePatches = (function () {
         var committed = false;
         function discard() {
           App.MATERIALS = copy(snapshot);
+          App.FLUID = copy(fluidSnapshot);
           if (App.Model && App.Model.rebuildDerived) App.Model.rebuildDerived();
           if (App.Explorer && App.state) App.Explorer.mountTree(App.state.mode);
         }
@@ -4360,13 +4367,14 @@ App.LivePatches = (function () {
             });
 
             App.Api.patch('/api/project/materials',
-                          { materials: App.Model.materialsToServer(App.MATERIALS) })
+                          { materials: App.Model.materialsToServer(App.MATERIALS),
+                            fluid: App.FLUID || null })
               .then(function (response) {
                 App.Model.apply(response.project);
                 return App.Viewport.refresh();
               })
               .then(function () {
-                App.Command.ok('Material sets saved — ' + App.MATERIALS.length
+                App.Command.ok('Soil materials saved — ' + App.MATERIALS.length
                                + ' soil materials. Geometry regenerated.');
                 committed = true;
                 dialog.querySelector('.dlg-x').click();

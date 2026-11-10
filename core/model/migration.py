@@ -20,6 +20,7 @@ the file may or may not carry.
 
 from __future__ import annotations
 
+import math
 from typing import TypeGuard
 
 KILO = 1000.0                   # kN -> N
@@ -130,7 +131,8 @@ def migrate_records(value: dict) -> dict:
         if not isinstance(entries, list) or not any(
                 is_old_record(collection, e) for e in entries):
             continue
-        convert = (lambda m: material(m, dim, water_weight)) if collection == "materials"             else CONVERTERS[collection]
+        convert = (lambda m: without_water(material(m, dim, water_weight))) \
+            if collection == "materials" else CONVERTERS[collection]
         out[collection] = [converted(convert(e)) if is_old_record(collection, e) else e
                            for e in entries]
     return out
@@ -329,13 +331,10 @@ def _without_stresses(stage: object) -> object:
     return {**stage, "stress_initialisation": "none"}
 
 
-def notes(value: object) -> list[str]:
-    """What opening the document `value` changes about its calculation, one sentence
-    each, for whoever opens it: the conversions above that have no equivalent. Empty for
-    a document in the current shape.
-
-    Only gravity has one: switched off in a project with no stages, or in a flow
-    sequence, it is on now (`drop_gravity`)."""
+def gravity_notes(value: object) -> list[str]:
+    """What `drop_gravity` changes about the calculation of the document `value`, as it
+    was saved: gravity switched off in a project with no stages, or in a flow sequence,
+    is on now. Empty when gravity was not switched off, or still is off (`notes`)."""
     if not isinstance(value, dict) or value.get("gravity") is not False:
         return []
     stages = value.get("stages", value.get("phases"))
@@ -438,6 +437,318 @@ def screen_sides(value: dict) -> dict:
              if isinstance(b, dict)}
     out["interfaces"] = [_on_screen(i, piles) for i in interfaces]
     return out
+
+
+WATER = ("DENSITY_WATER", "BULK_MODULUS_FLUID", "DYNAMIC_VISCOSITY")
+"""A soil's water variables until 2026-11-02 (`soil_models.WATER`)."""
+
+
+def without_water(material: dict) -> dict:
+    """A soil record without the water's variables, which are the project's now."""
+    variables = material.get("variables")
+    if not isinstance(variables, dict) or not any(name in variables for name in WATER):
+        return material
+    return {**material, "variables": {name: value for name, value in variables.items()
+                                      if name not in WATER}}
+
+
+def lift_water(value: dict) -> dict:
+    """A document saved before 2026-11-02 has no `fluid`: each soil carried the water in
+    its pores as its own `DENSITY_WATER`, `BULK_MODULUS_FLUID` and `DYNAMIC_VISCOSITY`.
+    Now the water is the project's, one for every soil (`Fluid`). Its bulk modulus and
+    viscosity are the first soil's that gives them -- every soil the application made
+    gives the same -- and the soils' `DENSITY_WATER` goes: the export writes the water
+    level's specific weight over g, the value the application filled it with. A soil
+    whose deck that changes -- water of its own the others do not share -- is named
+    when the file is opened (`water_notes`).
+
+    The document says it is in the new shape by carrying `fluid`, which every document
+    saved since does; one that does is left alone, so a soil given water of its own is
+    refused, not quietly emptied."""
+    if "fluid" in value:
+        return value
+    out = dict(value)
+    materials = out.get("materials")
+    out["fluid"] = _fluid(materials)
+    if isinstance(materials, list):
+        out["materials"] = [without_water(m) if isinstance(m, dict) else m
+                            for m in materials]
+    return out
+
+
+FLUID_FIELDS = {"BULK_MODULUS_FLUID": "bulk_modulus", "DYNAMIC_VISCOSITY": "dynamic_viscosity"}
+
+
+def _fluid(materials: object) -> dict:
+    """The project's `Fluid` from its soils' water: each value the first soil's that
+    gives it."""
+    fluid: dict = {}
+    for variables in _soil_variables(materials).values():
+        for name, key in FLUID_FIELDS.items():
+            given = _given(variables.get(name))
+            if given is not None:
+                fluid.setdefault(key, given)
+    return fluid
+
+
+def _soil_variables(materials: object) -> dict[str, dict]:
+    """Each soil's `variables`, by its name."""
+    if not isinstance(materials, list):
+        return {}
+    return {str(m.get("name") or m.get("id")): m["variables"] for m in materials
+            if isinstance(m, dict) and isinstance(m.get("variables"), dict)}
+
+
+def _given(value: object) -> float | None:
+    return (float(value) if isinstance(value, (int, float)) and not isinstance(value, bool)
+            and value > 0 else None)
+
+
+def water_notes(value: object) -> list[str]:
+    """What `lift_water` changes in the deck, one line per soil: every water value a
+    soil was written with that the project's water now overrides. A soil that gave none
+    was written with water's own, so it is named when the project's water is not that.
+    Values within a rounding (0.1 %) of each other are the same water."""
+    from core.model import soil_models, units
+
+    if not isinstance(value, dict) or "fluid" in value:
+        return []
+    soils = _soil_variables(value.get("materials"))
+    system = value.get("unit_system", units.DEFAULT)
+    if not soils or system not in units.SYSTEMS:
+        return []
+    level = value.get("water")
+    weight = _given(level.get("specific_weight")) if isinstance(level, dict) else None
+    fluid = _fluid(value.get("materials"))
+    before = soil_models.water(system, weight)
+    after = soil_models.water(system, weight, fluid.get("bulk_modulus"),
+                              fluid.get("dynamic_viscosity"))
+    notes = []
+    for soil, variables in soils.items():
+        changed = []
+        for name in WATER:
+            was = _given(variables.get(name))
+            was = before[name] if was is None else was
+            if not math.isclose(was, after[name], rel_tol=1e-3):
+                unit = units.label(units.VARIABLES[name], system)
+                changed.append(f"{name} {after[name]:g} {unit} instead of {was:g}")
+        if changed:
+            notes.append(f"{soil}: the pore water is the project's now, one for every "
+                         f"soil, so this soil is written with {', '.join(changed)}. "
+                         "Set the water with `fluid` and the water level's specific "
+                         "weight, or under Water in the material window.")
+    return notes
+
+
+COULOMB_INTERFACE_LAWS = ("GeoInterfaceCoulombLawPlaneStrain",
+                          "GeoInterfaceCoulombWithTensionCutOff")
+"""The interface laws that read a strength (`core.kratos.materials`)."""
+INTERFACE_STRENGTH = ("GEO_COHESION", "GEO_FRICTION_ANGLE")
+DEFAULT_R_INTER = 0.70          # `Material.r_inter` when a soil gives none
+
+
+def keep_old_deck(value: dict) -> dict:
+    """What the export filled in for a document saved before 2026-11-02 -- one without
+    `fluid` -- and fills no longer, put into the project, so its deck does not change:
+
+    *   a soil's `POROSITY`, 0.3 when it had none. A porosity is the soil's now, and the
+        export refuses a soil of a model without one.
+    *   the strength of a Coulomb contact against a linear elastic soil it names: its
+        cohesion c R and friction angle atan(R tan phi), with R the section's Rinter or
+        else the soil's. The export took them from the soil whatever its law; now a
+        linear elastic soil has no strength to give, and the contact carries its own.
+
+    A Coulomb contact that names no soil takes each adjacent one's, which only the
+    export knows; `contact_notes` names it when opening the file. A document with
+    `fluid` is left alone."""
+    if "fluid" in value:
+        return value
+    out = dict(value)
+    materials = out.get("materials")
+    if not isinstance(materials, list):
+        return out
+    out["materials"] = [_with_porosity(m) for m in materials]
+    soils = {m.get("id"): m for m in materials if isinstance(m, dict)}
+    sections = out.get("interface_sections")
+    if isinstance(sections, list):
+        out["interface_sections"] = [_with_own_strength(s, soils) for s in sections]
+    return out
+
+
+def _with_porosity(material: object) -> object:
+    if not isinstance(material, dict) or not isinstance(material.get("variables"), dict) \
+            or "POROSITY" in material["variables"]:
+        return material
+    return {**material, "variables": {**material["variables"], "POROSITY": DEFAULT_POROSITY}}
+
+
+def _elastic(soil: object) -> TypeGuard[dict]:
+    from core.model import soil_models
+
+    return isinstance(soil, dict) and \
+        soil_models.model_of(str(soil.get("constitutive_law"))) == soil_models.LINEAR_ELASTIC
+
+
+def _number(value: object) -> float | None:
+    return (float(value) if isinstance(value, (int, float)) and not isinstance(value, bool)
+            else None)
+
+
+def _takes_no_strength(section: object) -> TypeGuard[dict]:
+    """A Coulomb contact without a strength of its own."""
+    return (isinstance(section, dict)
+            and section.get("constitutive_law") in COULOMB_INTERFACE_LAWS
+            and not all(name in (section.get("variables") or {})
+                        for name in INTERFACE_STRENGTH))
+
+
+def _with_own_strength(section: object, soils: dict) -> object:
+    if not _takes_no_strength(section):
+        return section
+    soil = soils.get(section.get("material"))
+    if not _elastic(soil):
+        return section
+    given = soil.get("variables") or {}
+    r_inter = _number(section.get("r_inter"))
+    r_inter = r_inter if r_inter is not None else (_number(soil.get("r_inter"))
+                                                   or DEFAULT_R_INTER)
+    variables = dict(section.get("variables") or {})
+    cohesion, phi = _number(given.get("GEO_COHESION")), _number(given.get("GEO_FRICTION_ANGLE"))
+    if cohesion is not None:
+        variables.setdefault("GEO_COHESION", cohesion * r_inter)
+    if phi is not None:
+        variables.setdefault("GEO_FRICTION_ANGLE", math.degrees(
+            math.atan(math.tan(math.radians(phi)) * r_inter)))
+    return {**section, "variables": variables}
+
+
+def contact_notes(value: object) -> list[str]:
+    """The Coulomb contacts of a document saved before 2026-11-02 whose deck may change,
+    one line each: one that names no soil, in a project with a linear elastic soil that
+    has a strength. Along such a soil the export took that strength, reduced by Rinter;
+    now it refuses the contact until it has one of its own."""
+    if not isinstance(value, dict) or "fluid" in value:
+        return []
+    materials = value.get("materials")
+    elastic = [str(m.get("name") or m.get("id"))
+               for m in (materials if isinstance(materials, list) else [])
+               if _elastic(m) and any(name in (m.get("variables") or {})
+                                      for name in INTERFACE_STRENGTH)]
+    sections = value.get("interface_sections")
+    if not elastic or not isinstance(sections, list):
+        return []
+    return [f"interface section {s.get('name') or s.get('id')!r}: a Coulomb contact takes "
+            f"no strength from a linear elastic soil any more ({', '.join(elastic)}). "
+            "Where it runs against one, it took that soil's cohesion and friction angle, "
+            "reduced by Rinter, and the export now refuses it: give the section its own "
+            "GEO_COHESION and GEO_FRICTION_ANGLE."
+            for s in sections if _takes_no_strength(s) and s.get("material") is None]
+
+
+def k0_notes(value: object) -> list[str]:
+    """The linear elastic soils of a document saved before 2026-11-02 whose K0 changes,
+    one line each: a soil without `K0_NC` that has a friction angle, in a project with a
+    K0 procedure. The export took Jaky's 1 - sin(phi) for it; now it takes the elastic
+    nu / (1 - nu) (`soil_models.k0`)."""
+    from core.model import soil_models
+
+    if not isinstance(value, dict) or "fluid" in value:
+        return []
+    stages = value.get("stages")
+    if not any(isinstance(s, dict) and stage_calculation(s).get("stress_initialisation") == "K0"
+               for s in (stages if isinstance(stages, list) else [])):
+        return []
+    notes = []
+    materials = value.get("materials")
+    for soil in materials if isinstance(materials, list) else []:
+        if not _elastic(soil) or not isinstance(soil.get("variables"), dict) \
+                or "K0_NC" in soil["variables"]:
+            continue
+        phi = _number(soil["variables"].get("GEO_FRICTION_ANGLE"))
+        now = soil_models.k0(str(soil.get("constitutive_law")), soil["variables"])
+        if phi is None or now is None:
+            continue
+        was = 1.0 - math.sin(math.radians(phi))
+        if not math.isclose(was, now, rel_tol=1e-3):
+            notes.append(f"{soil.get('name') or soil.get('id')}: a linear elastic soil's K0 "
+                         f"is nu / (1 - nu) now, so this soil starts from K0_NC {now:.4g} "
+                         f"instead of Jaky's 1 - sin(phi) = {was:.4g}. Set K0_NC to "
+                         f"{was:.4g} to keep the old initial stresses.")
+    return notes
+
+
+def undrained_notes(value: object) -> list[str]:
+    """The `UNDRAINED` soils of a document saved before 2026-11-04, one line each: they
+    are `FULLY_COUPLED` now, with their own permeability
+    (`soil_models.project_drainage`)."""
+    from core.model import soil_models
+
+    if not isinstance(value, dict):
+        return []
+    notes = []
+    for soil, variables in _soil_variables(value.get("materials")).items():
+        note = soil_models.undrained_note(variables.get("GEO_DRAINAGE_TYPE"))
+        if note:
+            notes.append(f"{soil}: {note}")
+    return notes
+
+
+def drained_notes(value: object) -> list[str]:
+    """The `DRAINED` soils of a document saved before 2026-11-02, one line each. The
+    export wrote them as Kratos' `DRAINED`, which its U-Pw elements assemble as a coupled
+    soil with the soil's own permeability; now it writes `CONSTANT_PW_FIELD`
+    (`soil_models.DRAINAGE_TYPES`). None in a groundwater flow calculation, whose water
+    pressure elements read no drainage type."""
+    from core.model import stages
+
+    if not isinstance(value, dict) or "fluid" in value:
+        return []
+    every = value.get("stages")
+    if isinstance(every, list) and every and all(
+            isinstance(s, dict) and stage_calculation(s).get("calculation") == stages.FLOW
+            for s in every):
+        return []
+    return [f"{soil}: a DRAINED soil is written as Kratos' CONSTANT_PW_FIELD now, so its "
+            "water pressures are the ones the water conditions set, and Kratos does not "
+            "solve them. It was written as Kratos' DRAINED, which Kratos calculates as "
+            "FULLY_COUPLED with the soil's own permeability. Make it FULLY_COUPLED to "
+            "keep that."
+            for soil, variables in _soil_variables(value.get("materials")).items()
+            if variables.get("GEO_DRAINAGE_TYPE") == "DRAINED"]
+
+
+def upgraded(value: object) -> object:
+    """`value`, a project document of any age, in the current shape: every conversion
+    above, in the order the shapes came (`Project`'s validator)."""
+    value = _before_water(value)
+    return lift_water(keep_old_deck(value)) if isinstance(value, dict) else value
+
+
+def notes(value: object) -> list[str]:
+    """What opening `value` changes in its deck that the user has to know, one line
+    each: the gravity it no longer switches off (`gravity_notes`), the soils' own water
+    it replaces (`water_notes`), the linear elastic soils whose K0 changes
+    (`k0_notes`), the undrained soils that are coupled now (`undrained_notes`), the
+    drained soils that are not any more (`drained_notes`) and the contacts that lose
+    their soil's strength (`contact_notes`). Empty for a current document. Said when a
+    file is opened (`core.session.migration_notes`, the GUI's Open), as the first save
+    of it writes the new shape and the old values are gone."""
+    gravity = gravity_notes(value)
+    value = _before_water(value)
+    return (gravity + water_notes(value) + k0_notes(value) + undrained_notes(value)
+            + drained_notes(value) + contact_notes(value))
+
+
+def _before_water(value: object) -> object:
+    if isinstance(value, dict):
+        value = drop_gravity(rename_phases(value))
+    if is_legacy(value):
+        value = migrate(value)
+    elif isinstance(value, dict):
+        value = migrate_records(value)
+    if not isinstance(value, dict):
+        return value
+    return flow_tolerance(screen_sides(drop_boreholes(value)))
 
 
 def _on_screen(interface: object, piles: dict) -> object:
