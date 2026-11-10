@@ -84,7 +84,7 @@ The export makes the mesh and writes a deck folder. Kratos starts with
 | File | Contents | Made from |
 |---|---|---|
 | `<deck>.mdpa` | One node table, one element block for each soil body and structure, load conditions, and a SubModelPart for each part | The Gmsh mesh, the interface split and the part keys (`kratos/writer.py`, `kratos/interfaces.py`) |
-| `MaterialParameters.json` | A constitutive law and its Kratos variables for each material: soil, beams, anchors, interfaces | The property sets of the project as they are, plus the values that the user did not give and that Styx can calculate (K0 from Jaky, permeabilities, interface strength from its soil). In 2D, piles are spread over their spacing (`kratos/materials.py`). |
+| `MaterialParameters.json` | A constitutive law and its Kratos variables for each material: soil, beams, anchors, interfaces | The property sets of the project as they are, plus the values that the user did not give and that Styx can calculate (K0 from ν or from Jaky, permeabilities, interface strength from its soil). In 2D, piles are spread over their spacing (`kratos/materials.py`). |
 | `ProjectParameters.json` | One Kratos stage for each stage: what is active, water, constraints, loads, solver settings, output processes | The stage tree, made into a list of Kratos stages with Activate and Deactivate steps. The solver block is a fixed default analysis (`model/stages.py`, `kratos/parameters.py`). |
 | `initial_materials.json` | The materials, plus the K0 variables | Written only when the first stage runs the K0 procedure (`kratos/deck_files.py`) |
 | `kratos_gui_units.json` | The unit system, for the labels of the results. Kratos does not read it. | The project (`kratos/deck_files.py`) |
