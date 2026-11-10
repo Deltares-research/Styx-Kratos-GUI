@@ -58,7 +58,7 @@ def test_a_material_is_a_kratos_law_and_its_variables():
     m = schemas.Material(**{**SAND, "variables": {
         **SAND["variables"], "UDSM_PARAMETERS": [1.0, 2.0], "IS_FORTRAN_UDSM": True}})
     assert m.constitutive_law == "GeoLinearElasticPlaneStrain2DLaw"
-    assert m.variables["GEO_DRAINAGE_TYPE"] == "DRAINED", "Kratos' CONSTANT_PW_FIELD, renamed"
+    assert m.variables["GEO_DRAINAGE_TYPE"] == "CONSTANT_PW_FIELD"
     assert m.number("YOUNG_MODULUS") == 2.5e7
     assert m.number("GEO_DRAINAGE_TYPE") is None and m.number("ABSENT") is None
 

@@ -44,39 +44,37 @@ MOHR_COULOMB = "mohr_coulomb"
 OTHER = "other"
 """A law no model here is: the user's own, typed by name (a UDSM, say)."""
 
-DRAINAGE_TYPES = ("DRAINED", "FULLY_COUPLED")
-"""The `GEO_DRAINAGE_TYPE`s a soil can have, as the project, the window and the command
-line name them. The deck writes `DRAINED` as `CONSTANT_PW_FIELD` (`KRATOS_DRAINAGE`)."""
+DRAINAGE_TYPES = ("CONSTANT_PW_FIELD", "FULLY_COUPLED")
+"""The `GEO_DRAINAGE_TYPE`s a soil can have, as Kratos names them and the deck writes
+them. The window calls them "Mechanical only" and "Fully coupled" (`choice_text`).
 
-KRATOS_DRAINAGE = {"DRAINED": "CONSTANT_PW_FIELD"}
-"""Drainage type -> the `GEO_DRAINAGE_TYPE` the deck writes for it, where they differ
-(`kratos_drainage`).
+A mechanical-only soil's pore pressures do not follow the deformation: they are the ones
+the water conditions set. Kratos' `CONSTANT_PW_FIELD` is exactly that -- its U-Pw
+elements leave out the flow, storage and water-coupling terms and keep the pressure as
+it is given. Kratos' own `DRAINED` is not: its elements assemble it as a `FULLY_COUPLED`
+soil (`UPwSmallStrainElement`; nothing in `GeoMechanicsApplication` reads
+`DrainageType::DRAINED`), drained only as far as its permeability lets the water go. So
+Kratos' `DRAINED` is not offered."""
 
-Drained means the pore pressures do not follow the deformation: they are the ones the
-water conditions set. Kratos' `CONSTANT_PW_FIELD` is exactly that -- its U-Pw elements
-leave out the flow, storage and water-coupling terms and keep the pressure as it is
-given. Kratos' own `DRAINED` is not: its elements assemble it as a `FULLY_COUPLED` soil
-(`UPwSmallStrainElement`; nothing in `GeoMechanicsApplication` reads
-`DrainageType::DRAINED`), drained only as far as its permeability lets the water go. So a
-drained soil is written as `CONSTANT_PW_FIELD`, and Kratos' `DRAINED` is not offered."""
+OLD_DRAINAGE = {"DRAINED": "CONSTANT_PW_FIELD", "UNDRAINED": "FULLY_COUPLED"}
+"""A `GEO_DRAINAGE_TYPE` the project held before 2026-11-10 -> its name now
+(`project_drainage`). Read in a saved project, a script or a deck, it is renamed.
 
-OLD_DRAINAGE = {"CONSTANT_PW_FIELD": "DRAINED", "UNDRAINED": "FULLY_COUPLED"}
-"""A `GEO_DRAINAGE_TYPE` the project held before 2026-11-04 -> its name now
-(`project_drainage`). Read in a saved project, a script or a deck, it is renamed. A
-drained soil's deck does not change.
+`DRAINED` is what the project called `CONSTANT_PW_FIELD` until 2026-11-10. The export
+has written it as `CONSTANT_PW_FIELD` since 2026-11-02 (before, as Kratos' own `DRAINED`:
+`migration.drained_notes`), so a deck since then does not change.
 
 `UNDRAINED` is not offered: Kratos' U-Pw elements assemble and check it as a
 `FULLY_COUPLED` soil (`UPwSmallStrainElement::Check`), so a soil that was one is a
 `FULLY_COUPLED` one with its own permeability, and its deck keeps its physics. A stage is
 static (`GeoStaticScheme`, no time derivatives), so no permeability makes a coupled soil
 build an undrained water pressure under a load: undrained behaviour is the user's to
-model, with the undrained values of a `DRAINED` soil."""
+model, with the undrained values of a `CONSTANT_PW_FIELD` soil."""
 
 FLOWING = ("FULLY_COUPLED",)
 """The drainage types the window lists flow parameters for.
 
-A drained soil is written as `CONSTANT_PW_FIELD`, for which Kratos' U-Pw elements leave
-the flow terms out and check no permeability, viscosity or fluid bulk modulus."""
+For a `CONSTANT_PW_FIELD` soil Kratos' U-Pw elements leave the flow terms out and check no permeability, viscosity or fluid bulk modulus."""
 
 RETENTION_LAWS = ("SaturatedLaw", "SaturatedBelowPhreaticLevelLaw", "VanGenuchtenLaw")
 """Every `RETENTION_LAW` Kratos builds (`RetentionLawFactory`). Its fourth name,
@@ -170,6 +168,10 @@ class Parameter:
     """The law cannot run without it, and nothing derives it."""
     choices: tuple[str, ...] = ()
     """The text values Kratos accepts: a drop-down list."""
+    choice_text: tuple[tuple[str, str, str], ...] = ()
+    """(value, label, note) per choice the list shows by a name of its own: the label is
+    the option's text, the note the line under the list while it is chosen. A choice
+    left out shows as its value, with no note."""
     flag: bool = False
     """True or false: a check box."""
     absent: Any = None
@@ -195,8 +197,14 @@ class SoilModel:
 
 
 def _drainage() -> tuple[Parameter, ...]:
-    return (Parameter("GEO_DRAINAGE_TYPE", "Drainage type", "DRAINED",
-                      choices=DRAINAGE_TYPES, absent="DRAINED"),)
+    return (Parameter("GEO_DRAINAGE_TYPE", "Drainage type", "CONSTANT_PW_FIELD",
+                      choices=DRAINAGE_TYPES, absent="CONSTANT_PW_FIELD",
+                      choice_text=(
+                          ("CONSTANT_PW_FIELD", "Mechanical only",
+                           "Solves displacements with prescribed pore pressures"),
+                          ("FULLY_COUPLED", "Fully coupled",
+                           "Solves pore pressures and displacements coupled with a UPw "
+                           "formulation"))),)
 
 
 def _stiffness() -> tuple[Parameter, ...]:
@@ -469,10 +477,10 @@ def fill_choice(before_law: str, before: dict, after_law: str, after: dict, syst
 
 def blank_si() -> dict:
     """A soil to fill in by hand, in SI: what the material window's **Create soil** and
-    `kratos-cli material add` both start from. Linear elastic, `DRAINED`, saturated below
+    `kratos-cli material add` both start from. Linear elastic, `CONSTANT_PW_FIELD`, saturated below
     the phreatic level -- with the saturations that retention law cannot run without --
     and nothing else: its stiffness and weight are the user's to type (`missing`)."""
-    soil: dict = {"GEO_DRAINAGE_TYPE": "DRAINED"}
+    soil: dict = {"GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD"}
     for name in ("RETENTION_LAW", "SATURATED_SATURATION", "RESIDUAL_SATURATION"):
         soil[name] = next(p.default for p in parameters(LINEAR_ELASTIC) if p.name == name)
     return soil
@@ -559,8 +567,7 @@ def derived(law: str, variables: dict, water_variables: dict, system: str,
     `water_variables` is `water`'s; `flow` is a groundwater flow deck's, whose water
     pressure elements read the permeability and the Biot coefficient of every soil. The
     water itself and the permeabilities a dimension adds (`PERMEABILITY_XY`, the 3D
-    ones) the export writes on top. The drainage type is the project's name for it; the
-    deck's is `kratos_drainage`'s."""
+    ones) the export writes on top."""
     out: dict = {}
 
     def given(name: str) -> Any:
@@ -570,7 +577,7 @@ def derived(law: str, variables: dict, water_variables: dict, system: str,
         if name not in variables and value is not None:
             out[name] = value
 
-    put("GEO_DRAINAGE_TYPE", "DRAINED")
+    put("GEO_DRAINAGE_TYPE", "CONSTANT_PW_FIELD")
     put("BULK_MODULUS_SOLID", units.from_si(BULK_MODULUS_SOLID_SI, units.STRESS, system))
     drainage = given("GEO_DRAINAGE_TYPE")
     if drainage == "FULLY_COUPLED" or flow:
@@ -601,14 +608,8 @@ def left_to_kratos(name: str, flow: bool = False) -> bool:
     return name == "BIOT_COEFFICIENT" and not flow
 
 
-def kratos_drainage(value: Any) -> Any:
-    """The `GEO_DRAINAGE_TYPE` the deck writes for the drainage type `value`: a drained
-    soil's is `CONSTANT_PW_FIELD` (`KRATOS_DRAINAGE`); any other as it is."""
-    return KRATOS_DRAINAGE.get(value, value) if isinstance(value, str) else value
-
-
 def project_drainage(variables: dict) -> dict:
-    """`variables` with a `GEO_DRAINAGE_TYPE` from before 2026-11-04 under its name now
+    """`variables` with a `GEO_DRAINAGE_TYPE` from before 2026-11-10 under its name now
     (`OLD_DRAINAGE`), in any case Kratos reads it in; as they are when there is none. An
     `UNDRAINED` soil becomes `FULLY_COUPLED` with its own permeability, without the
     undrained Poisson ratio a coupled soil does not read."""
@@ -724,6 +725,9 @@ def table() -> dict:
             out["required"] = True
         if p.choices:
             out["choices"] = list(p.choices)
+        if p.choice_text:
+            out["choice_text"] = {value: {"label": label, "note": note}
+                                  for value, label, note in p.choice_text}
         if p.flag:
             out["flag"] = True
         if p.absent is not None:

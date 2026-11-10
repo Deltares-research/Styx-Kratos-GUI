@@ -143,13 +143,13 @@ kratos-cli parts pit.json                                 # soil_top, ... for th
   level that would cross the neighbour. `split` halves a layer, and `remove` closes the
   gap with the layer above.
 - **Materials** start as the GUI's **Create soil** starts them: linear elastic,
-  `DRAINED` and saturated below the phreatic level, with nothing else; the command
+  `CONSTANT_PW_FIELD` and saturated below the phreatic level, with nothing else; the command
   lists what is still to fill in before a calculation. Or from a library preset
   (`--preset`). The law follows the model's dimension, and the values are converted into
   the project's units. Variables given as `NAME=VALUE` are Kratos' own, in the project's
   units; `get P materials[ID].variables` lists the values a material has.
-  `GEO_DRAINAGE_TYPE` is `DRAINED` or `FULLY_COUPLED`; the export writes `DRAINED` as
-  Kratos' `CONSTANT_PW_FIELD`, and `CONSTANT_PW_FIELD` given becomes `DRAINED`.
+  `GEO_DRAINAGE_TYPE` is `CONSTANT_PW_FIELD` (the GUI's "Mechanical only") or
+  `FULLY_COUPLED` (its "Fully coupled"). `DRAINED` given becomes `CONSTANT_PW_FIELD`.
   `UNDRAINED` given becomes `FULLY_COUPLED` with its own permeability, and `set` says
   so. A permeability given to a soil that does not read it is kept, and `set` says that
   it is not used. `--color` is a

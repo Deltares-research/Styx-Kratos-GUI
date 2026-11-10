@@ -62,7 +62,7 @@ def _soil(id_, name, color, modulus, poisson, weight, cohesion, phi, permeabilit
     return Material(id=id_, name=name, color=color,
                     constitutive_law="GeoLinearElasticPlaneStrain2DLaw",
                     variables={
-                        "GEO_DRAINAGE_TYPE": "DRAINED",
+                        "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
                         "YOUNG_MODULUS": modulus,
                         "POISSON_RATIO": poisson,
                         "DENSITY_SOLID": weight / 9.81,

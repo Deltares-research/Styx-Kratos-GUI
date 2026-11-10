@@ -265,7 +265,7 @@ App.SoilModels = (function () {
       if (!has(variables, name) && value !== null && value !== undefined) out[name] = value;
     }
     function both() { return Object.assign({}, variables, out); }
-    put('GEO_DRAINAGE_TYPE', 'DRAINED');
+    put('GEO_DRAINAGE_TYPE', 'CONSTANT_PW_FIELD');
     put('BULK_MODULUS_SOLID', App.Units.fromSI(constant('BULK_MODULUS_SOLID'), 'stress', system));
     var drainage = given('GEO_DRAINAGE_TYPE');
     if (drainage === 'FULLY_COUPLED' || flow) {

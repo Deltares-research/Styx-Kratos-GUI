@@ -572,7 +572,7 @@ def drained_notes(value: object) -> list[str]:
     """The `DRAINED` soils of a document saved before 2026-11-02, one line each. The
     export wrote them as Kratos' `DRAINED`, which its U-Pw elements assemble as a coupled
     soil with the soil's own permeability; now it writes `CONSTANT_PW_FIELD`
-    (`soil_models.KRATOS_DRAINAGE`). None in a groundwater flow calculation, whose water
+    (`soil_models.DRAINAGE_TYPES`). None in a groundwater flow calculation, whose water
     pressure elements read no drainage type."""
     from core.model import stages
 

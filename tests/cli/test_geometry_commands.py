@@ -93,7 +93,7 @@ def test_material_add_from_a_preset_with_variables_of_its_own(cli, site):
     clay = session.load(site).materials[-1]
     assert (clay.id, clay.name) == ("clay", "Clay, soft")
     assert clay.variables["YOUNG_MODULUS"] == 5e6
-    assert clay.variables["GEO_DRAINAGE_TYPE"] == "DRAINED", "CONSTANT_PW_FIELD is DRAINED now"
+    assert clay.variables["GEO_DRAINAGE_TYPE"] == "CONSTANT_PW_FIELD"
 
 
 def test_a_material_and_a_layer_given_only_a_name_take_it_as_their_id(cli, site):
@@ -143,7 +143,7 @@ def test_material_models_lists_each_model_as_the_window_does(cli, site):
     assert "GEO_COHESION = 1000 Pa (required)" in ran.out
     assert ("GEO_TENSILE_STRENGTH = 0 Pa (required), when GEO_ENABLE_TENSION_CUT_OFF is "
             "true") in ran.out
-    assert "[DRAINED | FULLY_COUPLED]" in ran.out
+    assert "[CONSTANT_PW_FIELD | FULLY_COUPLED]" in ran.out
     assert ("RETENTION_LAW = SaturatedBelowPhreaticLevelLaw [SaturatedLaw | "
             "SaturatedBelowPhreaticLevelLaw | VanGenuchtenLaw]") in ran.out
     assert ("PERMEABILITY_XX = 1.15741e-12 m², when GEO_DRAINAGE_TYPE is FULLY_COUPLED or "
@@ -211,7 +211,7 @@ def test_material_set_says_an_undrained_soil_is_coupled(cli, site):
 
 def test_a_permeability_a_drained_soil_does_not_read_is_named(cli, site):
     """Accepted, as the soil may be made coupled later, and said to be unused."""
-    ran = cli("material", site, "set", "m1", "GEO_DRAINAGE_TYPE=DRAINED",
+    ran = cli("material", site, "set", "m1", "GEO_DRAINAGE_TYPE=CONSTANT_PW_FIELD",
               "PERMEABILITY_XX=1e-12")
 
     assert ran.code == 0, ran.err

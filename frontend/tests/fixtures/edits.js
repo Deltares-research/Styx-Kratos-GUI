@@ -24,7 +24,7 @@ window.EDITS_FIXTURE =
         {
           "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
           "variables": {
-            "GEO_DRAINAGE_TYPE": "DRAINED",
+            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
             "YOUNG_MODULUS": 2000000.0,
             "POISSON_RATIO": 0.3,
             "DENSITY_SOLID": 1732.9255861365953,
@@ -47,7 +47,7 @@ window.EDITS_FIXTURE =
         {
           "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
           "variables": {
-            "GEO_DRAINAGE_TYPE": "DRAINED",
+            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
             "YOUNG_MODULUS": 30000000.0,
             "POISSON_RATIO": 0.3,
             "DENSITY_SOLID": 1936.7991845056065,
@@ -575,7 +575,7 @@ window.EDITS_FIXTURE =
         {
           "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
           "variables": {
-            "GEO_DRAINAGE_TYPE": "DRAINED",
+            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
             "YOUNG_MODULUS": 2000000.0,
             "POISSON_RATIO": 0.3,
             "DENSITY_SOLID": 1732.9255861365953,
@@ -598,7 +598,7 @@ window.EDITS_FIXTURE =
         {
           "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
           "variables": {
-            "GEO_DRAINAGE_TYPE": "DRAINED",
+            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
             "YOUNG_MODULUS": 30000000.0,
             "POISSON_RATIO": 0.3,
             "DENSITY_SOLID": 1936.7991845056065,
@@ -1159,7 +1159,7 @@ window.EDITS_FIXTURE =
         {
           "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
           "variables": {
-            "GEO_DRAINAGE_TYPE": "DRAINED",
+            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
             "YOUNG_MODULUS": 2000000.0,
             "POISSON_RATIO": 0.3,
             "DENSITY_SOLID": 1732.9255861365953,
@@ -1182,7 +1182,7 @@ window.EDITS_FIXTURE =
         {
           "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
           "variables": {
-            "GEO_DRAINAGE_TYPE": "DRAINED",
+            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
             "YOUNG_MODULUS": 30000000.0,
             "POISSON_RATIO": 0.3,
             "DENSITY_SOLID": 1936.7991845056065,
@@ -1205,7 +1205,7 @@ window.EDITS_FIXTURE =
         {
           "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
           "variables": {
-            "GEO_DRAINAGE_TYPE": "DRAINED",
+            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
             "YOUNG_MODULUS": 2000000.0,
             "POISSON_RATIO": 0.3,
             "DENSITY_SOLID": 1732.9255861365953,
@@ -1733,7 +1733,7 @@ window.EDITS_FIXTURE =
         {
           "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
           "variables": {
-            "GEO_DRAINAGE_TYPE": "DRAINED",
+            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
             "YOUNG_MODULUS": 2000000.0,
             "POISSON_RATIO": 0.3,
             "DENSITY_SOLID": 1732.9255861365953,
@@ -1756,7 +1756,7 @@ window.EDITS_FIXTURE =
         {
           "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
           "variables": {
-            "GEO_DRAINAGE_TYPE": "DRAINED",
+            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
             "YOUNG_MODULUS": 30000000.0,
             "POISSON_RATIO": 0.3,
             "DENSITY_SOLID": 1936.7991845056065,
@@ -2251,7 +2251,7 @@ window.EDITS_FIXTURE =
         {
           "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
           "variables": {
-            "GEO_DRAINAGE_TYPE": "DRAINED",
+            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
             "YOUNG_MODULUS": 2000000.0,
             "POISSON_RATIO": 0.3,
             "DENSITY_SOLID": 1732.9255861365953,
@@ -2274,7 +2274,7 @@ window.EDITS_FIXTURE =
         {
           "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
           "variables": {
-            "GEO_DRAINAGE_TYPE": "DRAINED",
+            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
             "YOUNG_MODULUS": 30000000.0,
             "POISSON_RATIO": 0.3,
             "DENSITY_SOLID": 1936.7991845056065,
@@ -3270,7 +3270,7 @@ window.EDITS_FIXTURE =
           {
             "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
             "variables": {
-              "GEO_DRAINAGE_TYPE": "DRAINED",
+              "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
               "YOUNG_MODULUS": 2000000.0,
               "POISSON_RATIO": 0.3,
               "DENSITY_SOLID": 1732.9255861365953,
@@ -3293,7 +3293,7 @@ window.EDITS_FIXTURE =
           {
             "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
             "variables": {
-              "GEO_DRAINAGE_TYPE": "DRAINED",
+              "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
               "YOUNG_MODULUS": 30000000.0,
               "POISSON_RATIO": 0.3,
               "DENSITY_SOLID": 1936.7991845056065,
@@ -3482,7 +3482,7 @@ window.EDITS_FIXTURE =
           {
             "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
             "variables": {
-              "GEO_DRAINAGE_TYPE": "DRAINED",
+              "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
               "YOUNG_MODULUS": 2000000.0,
               "POISSON_RATIO": 0.3,
               "DENSITY_SOLID": 1732.9255861365953,
@@ -3505,7 +3505,7 @@ window.EDITS_FIXTURE =
           {
             "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
             "variables": {
-              "GEO_DRAINAGE_TYPE": "DRAINED",
+              "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
               "YOUNG_MODULUS": 30000000.0,
               "POISSON_RATIO": 0.3,
               "DENSITY_SOLID": 1936.7991845056065,

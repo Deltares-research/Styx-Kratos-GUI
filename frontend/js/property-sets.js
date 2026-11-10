@@ -86,10 +86,12 @@ App.PropertySets = (function () {
   /* Every text value Kratos accepts, per variable that takes one, and the variables
      that are true or false: from the soil models' parameters. */
   var CHOICES = {};
+  var CHOICE_TEXT = {};
   var FLAGS = [];
   S.order().forEach(function (model) {
     S.parameters(model).forEach(function (p) {
       if (p.choices) CHOICES[p.name] = p.choices.slice();
+      if (p.choice_text) CHOICE_TEXT[p.name] = p.choice_text;
       if (p.flag && FLAGS.indexOf(p.name) < 0) FLAGS.push(p.name);
     });
   });
@@ -247,9 +249,13 @@ App.PropertySets = (function () {
         return [name, derivable(kindName, name) ? 'derived' : '—', unit, true];
       }
       if (CHOICES[name]) {
-        return [name, String(value), '', false, {
+        var text = CHOICE_TEXT[name] || {};
+        var labelOf = function (c) { return text[c] ? text[c].label : String(c); };
+        return [name, labelOf(value), '', false, {
           kind: 'select',
-          options: function () { return CHOICES[name].map(function (c) { return { value: c, text: c }; }); },
+          options: function () {
+            return CHOICES[name].map(function (c) { return { value: c, text: labelOf(c) }; });
+          },
           get: function () { return set.variables[name]; },
           set: function (chosen) { return assign(set, name, chosen, check); }
         }];

@@ -63,7 +63,7 @@
       id: 'm9', name: 'Sand, dense', color: '#c4a86a',
       constitutive_law: 'SmallStrainUDSM2DPlaneStrainLaw',
       variables: { YOUNG_MODULUS: 4.5e7, POROSITY: 0.33, K0_NC: 0.46,
-                   GEO_DRAINAGE_TYPE: 'DRAINED', UDSM_PARAMETERS: [1, 2.5] },
+                   GEO_DRAINAGE_TYPE: 'CONSTANT_PW_FIELD', UDSM_PARAMETERS: [1, 2.5] },
       tables: {}, r_inter: 0.7, interface_permeability: 'Neutral'
     }, extra || {});
   }

@@ -515,6 +515,10 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
 .material-variables .pgrid-val.field > .remove-slot { flex: 0 0 26px; display: flex; justify-content: flex-end; }
 .material-variables .pgrid-val.field > select { flex: 1 1 auto; min-width: 0; }
 .material-variables .pgrid-val.field > input[type="checkbox"] { margin-right: auto; }
+.material-variables .pgrid-note {
+  margin-left: 46%; padding: 2px 6px 4px; color: var(--c-ink-faint); font-size: var(--fs-sm);
+  white-space: normal;
+}
 .material-variables .cell-input::placeholder,
 .material-water .cell-input::placeholder { color: var(--c-ink-faint); font-style: italic; }
 .pgrid-val.field > .computed-value {

@@ -41,7 +41,7 @@ def weighing(spec: dict) -> dict:
         "id": spec["id"], "name": spec["name"], "color": spec["color"],
         "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
         "variables": {
-            "GEO_DRAINAGE_TYPE": "DRAINED",
+            "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
             "YOUNG_MODULUS": spec["E"] * 1000.0, "POISSON_RATIO": spec["nu"],
             "DENSITY_SOLID": spec["g_unsat"] * 1000.0 / ((1.0 - n) * 9.81),
             "POROSITY": n, "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",

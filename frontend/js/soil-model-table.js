@@ -22,7 +22,7 @@ App.SOIL_MODEL_TABLE =
     "VanGenuchtenLaw"
   ],
   "blank": {
-    "GEO_DRAINAGE_TYPE": "DRAINED",
+    "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
     "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
     "SATURATED_SATURATION": 1.0,
     "RESIDUAL_SATURATION": 1e-10
@@ -92,12 +92,22 @@ App.SOIL_MODEL_TABLE =
             {
               "name": "GEO_DRAINAGE_TYPE",
               "label": "Drainage type",
-              "default": "DRAINED",
+              "default": "CONSTANT_PW_FIELD",
               "choices": [
-                "DRAINED",
+                "CONSTANT_PW_FIELD",
                 "FULLY_COUPLED"
               ],
-              "absent": "DRAINED"
+              "choice_text": {
+                "CONSTANT_PW_FIELD": {
+                  "label": "Mechanical only",
+                  "note": "Solves displacements with prescribed pore pressures"
+                },
+                "FULLY_COUPLED": {
+                  "label": "Fully coupled",
+                  "note": "Solves pore pressures and displacements coupled with a UPw formulation"
+                }
+              },
+              "absent": "CONSTANT_PW_FIELD"
             }
           ]
         },
@@ -291,12 +301,22 @@ App.SOIL_MODEL_TABLE =
             {
               "name": "GEO_DRAINAGE_TYPE",
               "label": "Drainage type",
-              "default": "DRAINED",
+              "default": "CONSTANT_PW_FIELD",
               "choices": [
-                "DRAINED",
+                "CONSTANT_PW_FIELD",
                 "FULLY_COUPLED"
               ],
-              "absent": "DRAINED"
+              "choice_text": {
+                "CONSTANT_PW_FIELD": {
+                  "label": "Mechanical only",
+                  "note": "Solves displacements with prescribed pore pressures"
+                },
+                "FULLY_COUPLED": {
+                  "label": "Fully coupled",
+                  "note": "Solves pore pressures and displacements coupled with a UPw formulation"
+                }
+              },
+              "absent": "CONSTANT_PW_FIELD"
             }
           ]
         },

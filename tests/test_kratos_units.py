@@ -290,10 +290,10 @@ def test_the_constants_a_soil_leaves_out_are_in_the_projects_system(unit_system,
     ({"GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD"}, "CONSTANT_PW_FIELD"),
 ])
 def test_the_drainage_type_is_the_materials_own(typed, expected):
-    """As typed; a soil that says nothing is drained -- the pore pressure prescribed,
-    not solved for -- which is what the test model's soils are. Drained is Kratos'
-    CONSTANT_PW_FIELD: Kratos' own DRAINED would couple the water. UNDRAINED, no longer
-    offered, is read in as FULLY_COUPLED."""
+    """As typed; a soil that says nothing is CONSTANT_PW_FIELD -- the pore pressure
+    prescribed, not solved for -- which is what the test model's soils are. Kratos' own
+    DRAINED would couple the water, so the project's old DRAINED is read in as
+    CONSTANT_PW_FIELD. UNDRAINED, no longer offered, is read in as FULLY_COUPLED."""
     written = materials._variables(_bare(**typed), 2, False, seed_project(), [])
     assert written["GEO_DRAINAGE_TYPE"] == expected
 

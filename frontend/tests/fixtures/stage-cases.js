@@ -1425,7 +1425,7 @@ window.STAGE_FIXTURE =
       {
         "constitutive_law": "GeoIncrementalLinearElastic3DLaw",
         "variables": {
-          "GEO_DRAINAGE_TYPE": "DRAINED",
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
           "YOUNG_MODULUS": 15000000.0,
           "POISSON_RATIO": 0.3,
           "DENSITY_SOLID": 1732.9255861365953,
@@ -1450,7 +1450,7 @@ window.STAGE_FIXTURE =
       {
         "constitutive_law": "GeoIncrementalLinearElastic3DLaw",
         "variables": {
-          "GEO_DRAINAGE_TYPE": "DRAINED",
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
           "YOUNG_MODULUS": 25000000.0,
           "POISSON_RATIO": 0.28,
           "DENSITY_SOLID": 1834.8623853211009,
@@ -1525,7 +1525,7 @@ window.STAGE_FIXTURE =
       {
         "constitutive_law": "GeoIncrementalLinearElastic3DLaw",
         "variables": {
-          "GEO_DRAINAGE_TYPE": "DRAINED",
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
           "YOUNG_MODULUS": 45000000.0,
           "POISSON_RATIO": 0.25,
           "DENSITY_SOLID": 1936.7991845056065,
@@ -1550,7 +1550,7 @@ window.STAGE_FIXTURE =
       {
         "constitutive_law": "GeoIncrementalLinearElastic3DLaw",
         "variables": {
-          "GEO_DRAINAGE_TYPE": "DRAINED",
+          "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
           "YOUNG_MODULUS": 2000000000.0,
           "POISSON_RATIO": 0.2,
           "DENSITY_SOLID": 2446.4831804281343,

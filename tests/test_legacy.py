@@ -55,7 +55,7 @@ def test_a_soil_becomes_the_property_set_the_old_deck_carried(old, new):
     assert v["GEO_COHESION"] == o["c"] * 1000
     assert v["GEO_FRICTION_ANGLE"] == o["phi"]
     assert v["K0_NC"] == o["k0_nc"]
-    assert v["GEO_DRAINAGE_TYPE"] == "DRAINED"
+    assert v["GEO_DRAINAGE_TYPE"] == "CONSTANT_PW_FIELD"
     assert (m.r_inter, m.interface_permeability) == (o["r_inter"], o["interface_permeability"])
 
 

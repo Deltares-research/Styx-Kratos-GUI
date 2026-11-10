@@ -14,7 +14,7 @@
   function sand() {
     return { id: 'm1', name: 'Sand', color: '#c4a86a',
              constitutive_law: 'GeoLinearElasticPlaneStrain2DLaw',
-             variables: { GEO_DRAINAGE_TYPE: 'DRAINED', YOUNG_MODULUS: 2.5e4,
+             variables: { GEO_DRAINAGE_TYPE: 'CONSTANT_PW_FIELD', YOUNG_MODULUS: 2.5e4,
                           POISSON_RATIO: 0.28, DENSITY_SOLID: 1.83486, POROSITY: 0.3 },
              tables: {}, rInter: 0.7, interfacePerm: 'Neutral' };
   }
@@ -259,10 +259,17 @@
       var drainage = variableInput(host, 'GEO_DRAINAGE_TYPE');
       T.eq(drainage.tagName, 'SELECT');
       T.eq(Array.prototype.map.call(drainage.options, function (o) { return o.value; }),
-           ['DRAINED', 'FULLY_COUPLED'],
-           'no CONSTANT_PW_FIELD: DRAINED is written as it; no UNDRAINED');
+           ['CONSTANT_PW_FIELD', 'FULLY_COUPLED'],
+           'no DRAINED: Kratos couples it; no UNDRAINED');
+      T.eq(Array.prototype.map.call(drainage.options, function (o) { return o.text; }),
+           ['Mechanical only', 'Fully coupled']);
+      var note = function () {
+        return host.querySelector('.material-variables [data-note="GEO_DRAINAGE_TYPE"]').textContent;
+      };
+      T.eq(note(), 'Solves displacements with prescribed pore pressures');
       choose(drainage, 'FULLY_COUPLED');
       T.eq(App.MATERIALS[0].variables.GEO_DRAINAGE_TYPE, 'FULLY_COUPLED');
+      T.eq(note(), 'Solves pore pressures and displacements coupled with a UPw formulation');
       var retention = variableInput(host, 'RETENTION_LAW');
       T.eq(retention.value, 'SaturatedLaw', 'left out, the retention law is SaturatedLaw');
       T.ok(!('RETENTION_LAW' in App.MATERIALS[0].variables), 'and stays left out');
@@ -449,7 +456,7 @@
       var m = App.MATERIALS[1];
       T.ok(m.id !== App.MATERIALS[0].id);
       T.eq(m.constitutive_law, 'GeoLinearElasticPlaneStrain2DLaw');
-      T.eq(m.variables.GEO_DRAINAGE_TYPE, 'DRAINED');
+      T.eq(m.variables.GEO_DRAINAGE_TYPE, 'CONSTANT_PW_FIELD');
       T.eq(m.variables.RETENTION_LAW, 'SaturatedBelowPhreaticLevelLaw');
       ['YOUNG_MODULUS', 'POISSON_RATIO', 'DENSITY_SOLID', 'POROSITY', 'K0_NC'].forEach(function (name) {
         T.ok(!(name in m.variables), name + ' is left blank');
@@ -466,7 +473,7 @@
   T.test('the toolbar\'s new soil is the same blank soil', function () {
     withDialog(function (host) {
       host.querySelector('[data-action="new"]').click();
-      T.eq(App.MATERIALS[1].variables.GEO_DRAINAGE_TYPE, 'DRAINED');
+      T.eq(App.MATERIALS[1].variables.GEO_DRAINAGE_TYPE, 'CONSTANT_PW_FIELD');
       T.ok(!('YOUNG_MODULUS' in App.MATERIALS[1].variables));
     });
   });
@@ -535,7 +542,7 @@
        'GEO_FRICTION_ANGLE', 'GEO_DILATANCY_ANGLE'].forEach(function (name) {
         T.ok(!(name in m.variables), name + ' is still the user\'s to type');
       });
-      T.eq(m.variables.GEO_DRAINAGE_TYPE, 'DRAINED');
+      T.eq(m.variables.GEO_DRAINAGE_TYPE, 'CONSTANT_PW_FIELD');
       type(variableInput(host, 'GEO_FRICTION_ANGLE'), '30');
       T.eq(m.variables.GEO_FRICTION_ANGLE, 30);
       T.eq(variableInput(host, 'K0_NC').placeholder, '0.5 (derived)', '1 - sin(phi)');

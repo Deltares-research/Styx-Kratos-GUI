@@ -481,10 +481,17 @@ App.MaterialSets = (function () {
         var value = held(name) ? m.variables[name] : p.absent;
         var options = p.choices.slice();
         if (value !== undefined && options.indexOf(value) < 0) options.unshift(value);
-        return field(p.label, select(options.map(function (c) { return { value: c, text: c }; }),
-          value, { 'data-variable': name }, function (chosen) {
+        var text = p.choice_text || {};
+        var row = field(p.label, select(options.map(function (c) {
+          return { value: c, text: text[c] ? text[c].label : c };
+        }), value, { 'data-variable': name }, function (chosen) {
             choose(function () { m.variables[name] = chosen; });
           }), '', name);
+        if (!text[value] || !text[value].note) return row;
+        // Below the row, the width of the grid: a third child of the two-column row
+        // would squeeze into a column.
+        return el('div.pgrid-choice', null, [row,
+          el('div.pgrid-note', { text: text[value].note, 'data-note': name })]);
       }
       if (p.flag) {
         var box = el('input', { type: 'checkbox', 'data-variable': name });

@@ -89,7 +89,7 @@ def project() -> Project:
     soil = Material(id="m_soil", name="soil", color="#c4a86a",
                     constitutive_law="GeoLinearElasticPlaneStrain2DLaw",
                     variables={
-                        "GEO_DRAINAGE_TYPE": "DRAINED",
+                        "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
                         "YOUNG_MODULUS": 2.0e7,
                         "POISSON_RATIO": 0.3,
                         "DENSITY_SOLID": 18_000.0 / 9.81,    # unit weight over g: kg/m3

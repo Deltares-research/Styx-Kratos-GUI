@@ -120,8 +120,8 @@ For a layer that is not horizontal, draw a soil surface or a soil volume (see be
 Click **Soil materials…**. Each soil material is a Kratos property set: a constitutive
 law and its parameters.
 
-- To add a soil, click **Create soil**. Styx adds a linear elastic soil that is drained
-  (`DRAINED`) and saturated below the phreatic level (`SaturatedBelowPhreaticLevelLaw`), and
+- To add a soil, click **Create soil**. Styx adds a linear elastic soil that is mechanical
+  only (`CONSTANT_PW_FIELD`) and saturated below the phreatic level (`SaturatedBelowPhreaticLevelLaw`), and
   opens its properties. `kratos-cli material add` makes the same soil. The other values are empty: type them. The line at the bottom of
   the window lists the values that the soil still needs for a calculation. Until you type
   K0, the window shows the K0 that the export calculates from the Poisson's ratio (linear
@@ -141,7 +141,9 @@ law and its parameters.
   Weight, Saturation, Flow, Grain-water interaction, Strength, Hardening, Initial
   stresses). Each has
   a name, with its Kratos variable when you hover it, and its unit beside the field. A text value, such
-  as the drainage type or the retention law, is a list of the values Kratos accepts. A
+  as the drainage type or the retention law, is a list of the values Kratos accepts. The
+  drainage type shows them as **Mechanical only** (`CONSTANT_PW_FIELD`) and **Fully
+  coupled** (`FULLY_COUPLED`), with a line under the list that says what each solves. A
   true/false value, such as the tension cut-off, is a check box.
 - The window shows only what the soil model and its choices use. A linear elastic soil has
   no cohesion or friction angle. The flow parameters (the intrinsic permeabilities, the
@@ -150,12 +152,12 @@ law and its parameters.
   for a retention law other than `SaturatedLaw`, and the Van Genuchten parameters for
   `VanGenuchtenLaw`, and the three hardening slopes when **Hardening** is Linear (the
   angles' in radians per unit of plastic strain; each starts at 0). When a choice brings in new
-  parameters, Styx fills in their defaults. A `DRAINED` soil shows no permeability:
-  its water pressures are the ones the water conditions set, and the deformation does
-  not change them (Kratos' `CONSTANT_PW_FIELD`, which the export writes). Styx has no
+  parameters, Styx fills in their defaults. A mechanical-only soil shows no
+  permeability: its water pressures are the ones the water conditions set, and the
+  deformation does not change them. Styx has no
   undrained drainage type. A low permeability does not make a soil undrained: a stage
   is static, so a load does not raise the water pressure of a `FULLY_COUPLED` soil. For
-  an undrained soil, use a `DRAINED` soil with undrained values (total stresses): the
+  an undrained soil, use a mechanical-only soil with undrained values (total stresses): the
   undrained Young's modulus, a Poisson's ratio close to 0.5 (such as 0.49), and, for
   Mohr-Coulomb, the undrained shear strength as cohesion with a friction angle of 0.
   A new soil is saturated below the phreatic level (`SaturatedBelowPhreaticLevelLaw`).

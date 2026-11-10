@@ -16,7 +16,7 @@
     {
       "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
       "variables": {
-        "GEO_DRAINAGE_TYPE": "DRAINED",
+        "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
         "YOUNG_MODULUS": 900000.0,
         "POISSON_RATIO": 0.2,
         "DENSITY_SOLID": 1834.8623853211009,
@@ -39,7 +39,7 @@
     {
       "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
       "variables": {
-        "GEO_DRAINAGE_TYPE": "DRAINED",
+        "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
         "YOUNG_MODULUS": 7428600.0,
         "POISSON_RATIO": 0.3,
         "DENSITY_SOLID": 2038.735983690112,

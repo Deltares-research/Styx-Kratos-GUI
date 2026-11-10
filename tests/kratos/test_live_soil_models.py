@@ -111,7 +111,7 @@ def test_a_tight_coupled_soil_builds_no_undrained_pressure_in_a_static_stage():
             material["variables"].update(GEO_DRAINAGE_TYPE=drainage, **variables)
         return Project.model_validate(p)
 
-    _, drained = live.run(soil("DRAINED"))
+    _, drained = live.run(soil("CONSTANT_PW_FIELD"))
     _, tight = live.run(soil("FULLY_COUPLED", PERMEABILITY_XX=1e-16, PERMEABILITY_YY=1e-16))
 
     assert ran(drained) and ran(tight)
