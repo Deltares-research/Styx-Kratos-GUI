@@ -114,7 +114,7 @@ suite only (the `browser` tier and up).
 ## What CI runs
 
 For each pull request and each push to `main`, CI runs the `e2e` tier on Windows and
-Ubuntu with Python 3.11, and on Windows with Python 3.13 and 3.15
+Ubuntu with Python 3.11, and on Windows with Python 3.15
 ([.github/workflows/tests.yml](../../.github/workflows/tests.yml)). If the Python line
 coverage is less than 95 %, or any live JavaScript module has less than 95 % function
 coverage, the run fails.
