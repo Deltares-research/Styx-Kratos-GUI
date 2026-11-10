@@ -377,10 +377,12 @@ kratos-cli stages pit.json list
   **`copy STAGE`** puts a stage with the same solver settings right after `STAGE` (Copy),
   and the stages after it then start from the copy. **`remove`** heals the chain: the
   removed stage's children start from its parent.
-- **`activate` / `deactivate STAGE KEY ...`** put parts in or out of the model from that
-  stage on, as the Model explorer's checkbox does, with the smallest instruction that
-  does it: switching a part back to what the stage inherits drops the instruction.
-  `add` and `copy` take `--activate` and `--deactivate` the same way.
+- **`activate` / `deactivate STAGE KEY ...`** put parts in or out of the model in that
+  stage alone, as the Model explorer's checkbox does: the other stages keep what they
+  had. It is done with the smallest instruction that does it: switching a part back to
+  what the stage inherits drops the instruction. A stage added later starts with the
+  parts of the stage before it. `add` and `copy` take `--activate` and `--deactivate`
+  the same way.
 - **`set STAGE`** changes `--name`, `--calculation k0|plastic|null|flow`,
   `--reset-displacements` / `--keep-displacements`, `--max-iterations`, `--tolerance`
   (the residual relative tolerance), `--time-interval` (days) and `--parent`.
