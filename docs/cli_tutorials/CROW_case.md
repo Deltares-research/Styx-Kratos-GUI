@@ -378,8 +378,10 @@ mesh settings kept: wrote ...\crow.json
 
 #### Step 12. The construction stages
 
-`stages defaults` makes the initial stage and the null step. Each `stages add` adds one stage
-after the last, and names what it switches on and off:
+`stages defaults` makes the initial stage and the null step. `stages deactivate` switches parts
+out of one stage only -- the stages already after it keep what they had -- so the parts that
+are not built yet are taken out of both. Each `stages add` adds one stage after the last,
+starting with what the stage before it has, and names what it switches on and off:
 
 ```text
 crow.json> stages defaults
@@ -389,7 +391,9 @@ crow.json> stages defaults
      calculation: Null step
 wrote ...\crow.json
 crow.json> stages deactivate initial sheetpile strut wall_contact surcharge water_1 water_2 water_3
-sheetpile, strut, wall_contact, surcharge, water_1, water_2, water_3 out of the model from stage initial on; wrote ...\crow.json
+sheetpile, strut, wall_contact, surcharge, water_1, water_2, water_3 out of the model in stage initial; wrote ...\crow.json
+crow.json> stages deactivate null_step sheetpile strut wall_contact surcharge water_1 water_2 water_3
+sheetpile, strut, wall_contact, surcharge, water_1, water_2, water_3 out of the model in stage null_step; wrote ...\crow.json
 crow.json> stages add install_sheetpile --name "SheetPileWall installation" --activate sheetpile wall_contact surcharge --reset-displacements --max-iterations 150 --tolerance 1e-3
 added stage (id install_sheetpile, name SheetPileWall installation) after null_step; wrote ...\crow.json
 crow.json> stages add dig_1 --name "First excavation" --activate water_1 --deactivate soil_L_top__part3 --max-iterations 150 --tolerance 1e-3
@@ -426,7 +430,7 @@ To look at a stage, or change one:
 ```text
 crow.json> stages show dig_2                             what is in the model during that stage
 crow.json> stages set dig_1 --max-iterations 300         more iterations for the first dig
-crow.json> stages deactivate dig_3 strut                 take the strut out from dig_3 on
+crow.json> stages deactivate dig_3 strut                 take the strut out of dig_3 alone
 crow.json> undo                                          ...and put it back
 ```
 

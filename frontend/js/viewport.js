@@ -1804,7 +1804,7 @@ App.Viewport = (function () {
   function shownByMode(key) {
     var mode = App.state && App.state.mode;
     return modeKeys(mode).indexOf(key) >= 0
-           && eyeOpen(key, mode) && !stageHidden()[key];
+           && eyeOpen(key, mode) && (!stageHidden()[key] || !!stageGhosts()[key]);
   }
 
   function hideRevealed() {
@@ -1884,6 +1884,50 @@ App.Viewport = (function () {
     return hidden;
   }
 
+  /* The parts the selected stage has switched off that are still drawn, as ghosts:
+     in Staged construction only, so that a part taken out of a stage can be
+     right-clicked to put it back (patches.js, the viewport menu's Activate). Not the
+     boundary conditions, which the Model explorer's stage check box switches, and not
+     Results, which draws only what was in the run. */
+  function stageGhosts() {
+    if (!App.state || App.state.mode !== 'staged') return {};
+    var ghosts = {};
+    Object.keys(stageHidden()).forEach(function (key) {
+      if (conditionIds.indexOf(key) < 0 && waterIds.indexOf(key) < 0) ghosts[key] = true;
+    });
+    return ghosts;
+  }
+
+  var GHOST_OPACITY = 0.15;
+
+  function ghostMaterial(material, on) {
+    if (!material) return;
+    var data = material.userData || (material.userData = {});
+    if (on && !data.ghostBase) {
+      data.ghostBase = { transparent: material.transparent, opacity: material.opacity,
+                         depthWrite: material.depthWrite };
+      material.transparent = true;
+      material.opacity = data.ghostBase.opacity * GHOST_OPACITY;
+      material.depthWrite = false;
+      material.needsUpdate = true;
+    } else if (!on && data.ghostBase) {
+      material.transparent = data.ghostBase.transparent;
+      material.opacity = data.ghostBase.opacity;
+      material.depthWrite = data.ghostBase.depthWrite;
+      delete data.ghostBase;
+      material.needsUpdate = true;
+    }
+  }
+
+  function applyGhosts(ghosts) {
+    Object.keys(groups).forEach(function (key) {
+      var on = !!ghosts[key];
+      groups[key].traverse(function (o) {
+        [].concat(o.material || []).forEach(function (m) { ghostMaterial(m, on); });
+      });
+    });
+  }
+
   function resultsStage() {
     return App.Results && App.Results.projectStage
       ? App.Results.projectStage(App.PROJECT) : null;
@@ -1910,11 +1954,13 @@ App.Viewport = (function () {
   function setMode(mode) {
     var wanted = modeKeys(mode);
     var hidden = stageHidden();
+    var ghosts = stageGhosts();
     revealed = [];
     Object.keys(groups).forEach(function (k) {
       groups[k].visible = wanted.indexOf(k) >= 0 && eyeOpen(k, mode)
-                          && !hidden[k];
+                          && (!hidden[k] || !!ghosts[k]);
     });
+    applyGhosts(ghosts);
     if (mode === 'mesh' && !meshBuilt && groups.mesh) groups.mesh.visible = false;
     if (selected && conditionIds.indexOf(selected) >= 0) select(selected);
     else if (selected && !selectedKeys.every(function (k) { return groups[k] && groups[k].visible; })) select(null);
@@ -1971,7 +2017,8 @@ App.Viewport = (function () {
     var wanted = modeKeys(App.state.mode);
     // The stage gate applies here too, or turning an eye back on would draw a part
     // the selected stage has not built yet.
-    groups[key].visible = on && wanted.indexOf(key) >= 0 && !stageHidden()[key];
+    groups[key].visible = on && wanted.indexOf(key) >= 0
+                          && (!stageHidden()[key] || !!stageGhosts()[key]);
     if (key === 'mesh' && !meshBuilt && groups.mesh) groups.mesh.visible = false;
     if (!on && selectedKeys.indexOf(key) >= 0) select(null);
     // A hidden mesh has nothing to number: the labels follow the eye, or they float
@@ -3097,7 +3144,7 @@ App.Viewport = (function () {
     waterLineSpec: waterLineSpec,
     conditionGlyphSpec: conditionGlyphSpec, conditionKeysOf: conditionKeysOf,
     soilFaceOutlines: soilFaceOutlines, forgetConditionEyes: forgetConditionEyes,
-    applyStageVisibility: applyStageVisibility,
+    applyStageVisibility: applyStageVisibility, stageGhosts: stageGhosts,
     normalLoadGlyphSpec: normalLoadGlyphSpec,
     getScene: function() { return scene; },
     getCamera: function() { return cam; },

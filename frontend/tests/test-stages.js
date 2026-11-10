@@ -390,10 +390,9 @@
   /* ── The Model explorer's checkbox, in Staged construction mode ─────────
      Ticked means "in the model in the selected stage". Each stage is free to switch
      any part on or off: a part an earlier stage took out is not stuck out, because the
-     checkbox is there in every stage to put it back. The state is still inherited
-     from the stage before -- that is how Kratos' stages run, one model carried from
-     stage to stage -- so switching a part off in one stage leaves it off in the
-     stages after it until one of them switches it back on. */
+     checkbox is there in every stage to put it back. And a switch is per stage: the
+     stages are stored as diffs, but switching a part in one stage gives the stage
+     after it whatever instruction keeps it as it was, so no other stage changes. */
 
   function stageOf(list, id) {
     return list.filter(function (ph) { return ph.id === id; })[0];
@@ -454,6 +453,39 @@
     keys.forEach(function (key) { T.ok(activeAt(p, 'prop', key), key); });
     p.stages = App.Stages.setActive(p, 'prop', keys, false);
     keys.forEach(function (key) { T.ok(!activeAt(p, 'prop', key), key); });
+  });
+
+  test('switching a part in one stage leaves the stages after it as they were', function () {
+    var before = project();
+    var p = project();
+    var ids = p.stages.map(function (ph) { return ph.id; });
+    ['soil_L2__pit', 'pile', 'tie', 'soil_L1__lift2'].forEach(function (key) {
+      [true, false].forEach(function (wanted) {
+        p = project();
+        p.stages = App.Stages.setActive(p, 'build_wall', [key], wanted);
+        T.eq(activeAt(p, 'build_wall', key), wanted, key + ' in build_wall');
+        ids.filter(function (id) { return id !== 'build_wall'; }).forEach(function (id) {
+          T.eq(activeAt(p, id, key), activeAt(before, id, key),
+               key + ' changed in ' + id + ' when build_wall was switched');
+        });
+      });
+    });
+  });
+
+  test('switching a part off in the first stage does not switch it off in the second',
+       function () {
+    var p = { stageable_parts: ['soil_1', 'soil_2'], stages: [
+      { id: 's1', name: 'Stage 1', parent: null, activate: [], deactivate: [] },
+      { id: 's2', name: 'Stage 2', parent: 's1', activate: [], deactivate: [] }
+    ] };
+    p.stages = App.Stages.setActive(p, 's1', ['soil_1'], false);
+    T.eq(App.Stages.activeParts(p, 's1'), ['soil_2']);
+    T.eq(App.Stages.activeParts(p, 's2'), ['soil_1', 'soil_2']);
+    T.eq(stageOf(p.stages, 's2').activate, ['soil_1'], 'stage 2 keeps it with an instruction');
+    // ...and switching it back on in stage 1 leaves stage 2 with nothing to say.
+    p.stages = App.Stages.setActive(p, 's1', ['soil_1'], true);
+    T.eq(stageOf(p.stages, 's1').deactivate, []);
+    T.eq(stageOf(p.stages, 's2').activate, []);
   });
 
   test('setActive never puts a part in both lists of one stage', function () {
