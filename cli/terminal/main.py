@@ -13,6 +13,7 @@ import argparse
 import sys
 
 from cli.terminal import output, style
+from core import session
 from cli.commands import (analysis, conditions, edit, ground, inspection, interactive,
                           meshing, stages, project, results, structures, volumes)
 
@@ -80,12 +81,16 @@ def main(argv: list[str] | None = None) -> int:
     except SystemExit as stop:
         # --help (0) and a command line argparse cannot read (2), said by argparse.
         return stop.code if isinstance(stop.code, int) else 0
+    # Read before the command runs: one that edits the file saves it in the new shape.
+    project = getattr(args, "project", None)
+    lost = session.migration_notes(project) if project else []
     try:
         answer = args.handler(args)
     except Exception as failure:
         if isinstance(failure, refusals()):
             return output.refused(failure, args.json)
         raise
+    answer.warnings = [*lost, *answer.warnings]
     answer.notes = [*answer.notes, *getattr(args, "edit_notes", [])]
     return output.answered(answer, args.json, getattr(args, "csv", None))
 

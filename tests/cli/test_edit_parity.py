@@ -136,8 +136,9 @@ def _stages(project: dict, id: str) -> dict:
 
 
 def _materials(project: dict, id: str) -> dict:
-    """The Material sets window's Delete, then its OK: the library without it."""
-    return {"materials": edits.without(project["materials"], id)}
+    """The Material sets window's Delete, then its OK: the library without it, and the
+    water edited in the same window, as it was."""
+    return {"materials": edits.without(project["materials"], id), "fluid": project["fluid"]}
 
 
 @dataclass(frozen=True)

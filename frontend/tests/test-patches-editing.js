@@ -244,13 +244,16 @@
         return settle();
       }
       function restore() { HTMLInputElement.prototype.click = click; }
+      function writes() {
+        return ctx.requests.filter(function (r) { return r.method === 'PUT'; }).length;
+      }
       return choose('Opened site.json', JSON.stringify(ctx.server)).then(function () {
         T.eq(ctx.requests[0].method, 'PUT');
         T.eq(ctx.requests[0].body.name, 'Opened site');
         T.eq(App.PROJECT.name, 'Opened site');
         return choose('Broken.json', 'not json');
       }).then(function () {
-        T.eq(ctx.requests.length, 1, 'invalid JSON never reaches the server');
+        T.eq(writes(), 1, 'invalid JSON never reaches the server');
         T.ok(ctx.lines.some(function (line) { return /Could not open Broken.json/.test(line); }));
         ctx.failure = new Error('Unsupported project');
         return choose('Rejected.json', JSON.stringify(ctx.server));
@@ -261,7 +264,7 @@
         Object.defineProperty(input, 'files', { value: [] });
         input.dispatchEvent(new Event('change'));
         T.eq(input.isConnected, false);
-        T.eq(ctx.requests.length, 2, 'cancelling does not write');
+        T.eq(writes(), 2, 'cancelling does not write');
       }).then(restore, function (error) { restore(); throw error; });
     });
   });

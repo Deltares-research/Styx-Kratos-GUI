@@ -35,7 +35,7 @@ from pathlib import Path
 
 from core import scripting
 from core.kratos import materials
-from core.model import drafts, soil_models, stages, units
+from core.model import drafts, migration, soil_models, stages, units
 from core.model.load_translation import translate as translate_loads
 from core.model.schemas import (ConditionsUpdate, CustomPart, DimensionUpdate, LayersUpdate,
                                 Line, LinesUpdate,
@@ -101,6 +101,20 @@ def load(path: str | Path) -> Project:
     # A drawn part's .brep is a path on the computer it was drawn on: built again from
     # its recipe here, so the file is the same model wherever it is opened.
     return scripting.with_solids(Project.model_validate(value), strict=False)
+
+
+def migration_notes(path: str | Path) -> list[str]:
+    """What opening the project file `path` changes in its deck (`migration.notes`):
+    said before a command reads it, as the first save writes the new shape and the old
+    values are gone. A file that is not a readable project says nothing here; `load`
+    says why."""
+    path = Path(path)
+    if path.suffix.lower() != ".json":
+        return []
+    try:
+        return migration.notes(json.loads(path.read_text(encoding="utf-8")))
+    except (OSError, ValueError, TypeError, KeyError, AttributeError):
+        return []
 
 
 def save(project: Project, path: str | Path) -> Path:
@@ -299,11 +313,31 @@ def set_water_level(project: Project, level: float | None) -> Project:
     return set_water(project, WaterUpdate(water=water))
 
 
+def set_fluid(project: Project, *, bulk_modulus: float | None = None,
+              dynamic_viscosity: float | None = None,
+              unset: Sequence[str] = ()) -> Project:
+    """The water in every soil's pores: its bulk modulus and viscosity, in the project's
+    units. `unset` names fields to give back to water's own (`soil_models.water`)."""
+    payload = project.model_dump()
+    fluid = payload["fluid"]
+    for name in unset:
+        if name not in fluid:
+            raise EditRefused(f"the water has no {name}; it has: " + ", ".join(fluid))
+        fluid[name] = None
+    if bulk_modulus is not None:
+        fluid["bulk_modulus"] = bulk_modulus
+    if dynamic_viscosity is not None:
+        fluid["dynamic_viscosity"] = dynamic_viscosity
+    return _edited(project, payload)
+
+
 def replace_materials(project: Project, update: MaterialsUpdate) -> Project:
     """The material library. Validating the whole project is the point: it is what
     refuses a material a layer still points at."""
     payload = project.model_dump()
     payload["materials"] = [material.model_dump() for material in update.materials]
+    if update.fluid is not None:
+        payload["fluid"] = update.fluid.model_dump()
     return _edited(project, payload)
 
 
@@ -943,7 +977,9 @@ def update_material(project: Project, id: str, *, name: str | None = None,
 
     `model` makes it that soil model (`core/model/soil_models.py`): its law in the
     project's dimension. What the soil then lists and lacks gets the model's default, as
-    the material window fills it (`soil_models.fill`), and `notes` says which."""
+    the material window fills it (`soil_models.fill_choice`), and `notes` says which: a
+    soil still being filled in by hand, as `material add` makes one, gets no number its
+    law must have."""
     if model is not None and law is not None:
         raise EditRefused("give a soil model or a law, not both")
     if model is not None:
@@ -957,17 +993,30 @@ def update_material(project: Project, id: str, *, name: str | None = None,
     for field, value in (("name", name), ("color", color), ("constitutive_law", law)):
         if value is not None:
             record[field] = value
+    if law is not None:
+        # As the window's Soil model list: what the model does not read is left out.
+        for variable in soil_models.unread(law, record["variables"]):
+            del record["variables"][variable]
     record["variables"].update(variables or {})
     for variable in unset:
         if variable not in record["variables"]:
             raise EditRefused(f"{id} has no variable {variable}; it has: "
                               + ", ".join(record["variables"]))
         del record["variables"][variable]
-    filled = soil_models.fill(before_law, before, record["constitutive_law"],
-                              record["variables"], project.unit_system, skip=tuple(unset))
+    filled = soil_models.fill_choice(before_law, before, record["constitutive_law"],
+                                     record["variables"], project.unit_system,
+                                     flow=drafts.reads_flow(project), skip=tuple(unset))
     note = soil_models.filled_note(soil_models.model_of(record["constitutive_law"]), filled)
     if note and notes is not None:
         notes.append(note)
+    undrained = soil_models.undrained_note((variables or {}).get("GEO_DRAINAGE_TYPE"))
+    if undrained and notes is not None:
+        notes.append(undrained)
+    unused = soil_models.unused_flow_note(record["constitutive_law"],
+                                          soil_models.project_drainage(record["variables"]),
+                                          variables or {}, flow=drafts.reads_flow(project))
+    if unused and notes is not None:
+        notes.append(unused)
     return _edited(project, payload)
 
 
@@ -1199,9 +1248,13 @@ def add_section(project: Project, kind: str, section) -> Project:
 
 def update_section(project: Project, id: str, *, kind: str | None = None,
                    variables: dict | None = None, unset: Sequence[str] = (),
-                   **fields) -> Project:
+                   notes: list[str] | None = None, **fields) -> Project:
     """The section `id` with the fields given by their schema names, the variables
-    given, and without the variables `unset` names."""
+    given, and without the variables `unset` names.
+
+    An interface section given a Coulomb law, or a linear elastic soil, that has no
+    strength to give gets one of its own, as the GUI's contact editor gives it
+    (`own_strength_if_needed`); `notes` is told so."""
     field = drafts.SECTION_FIELDS[find_section(project, id, kind)[0]]
     payload = project.model_dump()
     record = next(s for s in payload[field] if s["id"] == id)
@@ -1212,6 +1265,29 @@ def update_section(project: Project, id: str, *, kind: str | None = None,
             raise EditRefused(f"{id} has no variable {variable}; it has: "
                               + (", ".join(record["variables"]) or "none"))
         del record["variables"][variable]
+    project = _edited(project, payload)
+    if field == "interface_sections" and {"constitutive_law", "material"} & set(fields):
+        project = own_strength_if_needed(project, id, notes)
+    return project
+
+
+def own_strength_if_needed(project: Project, id: str,
+                           notes: list[str] | None = None) -> Project:
+    """`project` with the interface section `id` given a strength of its own when it is
+    a Coulomb contact against a linear elastic soil it names, which has none to give
+    (`materials.no_strength`) -- the GUI's `ownStrengthIfNeeded`, said in its words
+    into `notes`. Its two numbers are then the user's to set."""
+    section = next(s for s in project.interface_sections if s.id == id)
+    soil = next((m for m in project.materials if m.id == section.material), None)
+    why = materials.no_strength(section, soil)
+    if why is None:
+        return project
+    payload = project.model_dump()
+    record = next(s for s in payload["interface_sections"] if s["id"] == id)
+    record["variables"] = materials.own_strength(section, soil, project.unit_system)
+    if notes is not None:
+        notes.append(f"{why}: the contact has a strength of its own now. Set its "
+                     "GEO_COHESION and GEO_FRICTION_ANGLE.")
     return _edited(project, payload)
 
 

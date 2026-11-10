@@ -28,7 +28,7 @@ It is also a script the GUI can open:
 
 from __future__ import annotations
 
-from core.model.schemas import (BoxRefinement, Domain, Material, MeshSettings,
+from core.model.schemas import (BoxRefinement, Domain, Fluid, Material, MeshSettings,
                                 Stage, Project, SeepageCondition, SoilLayer,
                                 WaterPressureCondition)
 
@@ -41,6 +41,9 @@ CUT_OFF = 1.0e5
 
 GAMMA_W = 1.0e4
 """The specific weight of the water the heads are written with, N/m3."""
+
+WATER = ("DENSITY_WATER", "BULK_MODULUS_FLUID", "DYNAMIC_VISCOSITY")
+"""The water's variables: the project's, not the soil's (`core.model.soil_models.WATER`)."""
 
 SOIL = {
     "GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
@@ -117,15 +120,20 @@ def muskat(conditions: list | None = None, stages: list[Stage] | None = None,
     """The column, meshed at 0.4 m: `conditions` in place of the two heads, `stages` in
     place of the one flow stage, `soil` in place of the material's variables, and any
     other `Project` field in `changes`."""
+    variables = SOIL if soil is None else soil
+    # The water is the project's: the deck's bulk modulus and viscosity go there, and
+    # its DENSITY_WATER is water's 10 kN/m3 over g, which the deck rounds.
     material = Material(id="sand", name="sand", color="#c4a86a",
                         constitutive_law="GeoLinearElasticPlaneStrain2DLaw",
-                        variables=SOIL if soil is None else soil)
+                        variables={k: v for k, v in variables.items() if k not in WATER})
     fields = dict(
         name=NAME,
         layered_soil=True,
         dimension=2,
         domain=Domain(x0=0.0, x1=WIDTH, z0=0.0, z1=1.0, y_top=HEIGHT, y_bottom=0.0),
         materials=[material],
+        fluid=Fluid(bulk_modulus=variables.get("BULK_MODULUS_FLUID"),
+                    dynamic_viscosity=variables.get("DYNAMIC_VISCOSITY")),
         layers=[SoilLayer(id="soil", name="soil", mat=material.id,
                           top=HEIGHT, bottom=0.0)],
         boundary_conditions=HEADS if conditions is None else conditions,

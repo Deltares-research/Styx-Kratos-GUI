@@ -156,7 +156,9 @@ class KratosPropertySet(Base):
         for name, entry in value.items():
             if not _finite(entry):
                 raise ValueError(f"variable {name} must be finite")
-        return value
+        # A drained set's drainage type as it was named before 2026-11-04, from a saved
+        # project, a script or a deck: under its name now. Written as it was.
+        return soil_models.project_drainage(value)
 
     def number(self, name: str) -> float | None:
         """A numeric variable, or None when it is absent or not a number."""
@@ -177,7 +179,7 @@ class Material(KratosPropertySet):
         """Built from the fields this had before 2026-10-10 (a script written against
         them, say): converted the way a saved project in that shape is (`core/model/migration.py`)."""
         if isinstance(value, dict) and migration.is_old_record("materials", value):
-            return migration.material(value, 2)
+            return migration.without_water(migration.material(value, 2))
         return value
 
     id: Ident
@@ -185,6 +187,21 @@ class Material(KratosPropertySet):
     color: Hex
     r_inter: float = Field(default=0.70, gt=0, le=1)
     interface_permeability: Literal["Neutral", "Drain", "Impermeable"] = "Neutral"
+
+    @model_validator(mode="after")
+    def _the_water_is_the_project_s(self) -> Material:
+        """Every soil has the same water in its pores, so its density, bulk modulus and
+        viscosity are the project's (`Project.fluid`, `WaterLevel.specific_weight`),
+        written into every soil by the export. One a soil carried would be a second
+        water nobody sees."""
+        own = [name for name in soil_models.WATER if name in self.variables]
+        if own:
+            raise ValueError(
+                f"{', '.join(own)} belong{'s' if len(own) == 1 else ''} to the project's "
+                "water, not to a soil: set the water's specific weight on the water level, "
+                "its bulk modulus and viscosity under Water in the material window "
+                "(`kratos-cli fluid`)")
+        return self
 
 
 class SoilLayer(Base):
@@ -1036,8 +1053,18 @@ class Wells(Base):
     length: float = Field(gt=0)
 
 
-WATER_SPECIFIC_WEIGHT_SI = 10_000.0
+WATER_SPECIFIC_WEIGHT_SI = soil_models.WATER_SPECIFIC_WEIGHT_SI
 """N/m3, the water a project that says nothing about it has."""
+
+
+class Fluid(Base):
+    """The water in every soil's pores: one for the whole project, as every soil holds
+    the same water. The export writes it into each soil as `BULK_MODULUS_FLUID` and
+    `DYNAMIC_VISCOSITY`, with `DENSITY_WATER` from the water's specific weight
+    (`WaterLevel.specific_weight`). In the project's units; None is water's at 20 C
+    (`soil_models.water`). Edited under Water in the material window."""
+    bulk_modulus: float | None = Field(default=None, gt=0)
+    dynamic_viscosity: float | None = Field(default=None, gt=0)
 
 
 class WaterLevel(Base):
@@ -1438,6 +1465,8 @@ class LayersUpdate(Base):
 
 class MaterialsUpdate(Base):
     materials: list[Material] = Field(min_length=1)
+    fluid: Fluid | None = None
+    """The water every soil holds, edited in the same window. None leaves it as it is."""
 
 
 class StructuresUpdate(Base):
@@ -1682,6 +1711,9 @@ class Project(Base):
     the level a new hydrostatic `WaterPressureCondition` or `NormalLoad` is given
     (`core.model.drafts`), which the record then keeps as its own. Only a hydrostatic
     normal load saved without a level still reads it at export."""
+    fluid: Fluid = Field(default_factory=Fluid)
+    """The water in every soil's pores: its bulk modulus and viscosity. Its weight is
+    `water`'s (`water_specific_weight`)."""
     boundary_conditions: list[BoundaryCondition] = Field(
         default_factory=standard_conditions)
     """The conditions the user prescribes on the model's boundaries and soil. The deck
@@ -1712,16 +1744,9 @@ class Project(Base):
         A project saved before 2026-10 also calls its stages `phases`, and one saved
         before 2026-10-24 has boreholes (`migration.drop_boreholes`), and one saved
         before 2026-10-25 reads an interface's side walking its line
-        (`migration.screen_sides`)."""
-        if isinstance(value, dict):
-            value = migration.rename_phases(value)
-        if migration.is_legacy(value):
-            value = migration.migrate(value)
-        elif isinstance(value, dict):
-            value = migration.migrate_records(value)
-        if not isinstance(value, dict):
-            return value
-        return migration.screen_sides(migration.drop_boreholes(value))
+        (`migration.screen_sides`). One saved before 2026-11-02 has no `fluid`: its soils
+        carry the water themselves (`migration.lift_water`)."""
+        return migration.upgraded(value)
 
     @model_serializer(mode="wrap")
     def _leave_out_absent_blocks(self, handler: SerializerFunctionWrapHandler) -> dict:
@@ -1868,6 +1893,13 @@ class Project(Base):
             return self.water.specific_weight
         return units.from_si(WATER_SPECIFIC_WEIGHT_SI, units.SPECIFIC_WEIGHT,
                              self.unit_system)
+
+    @property
+    def water_variables(self) -> dict:
+        """The water every soil is written with: `DENSITY_WATER`, `BULK_MODULUS_FLUID`
+        and `DYNAMIC_VISCOSITY`, in the project's units (`soil_models.water`)."""
+        return soil_models.water(self.unit_system, self.water_specific_weight,
+                                 self.fluid.bulk_modulus, self.fluid.dynamic_viscosity)
 
     @model_validator(mode="after")
     def _a_layered_model_has_no_pit(self) -> Project:
