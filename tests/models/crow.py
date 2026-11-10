@@ -29,7 +29,7 @@ from __future__ import annotations
 
 import math
 
-from core.model.schemas import (Anchor, AnchorSection, Beam, BeamSection, BoxRefinement,
+from core.model.schemas import (Anchor, AnchorSection, Beam, BeamSection,
                                 DisplacementCondition, Domain, Interface,
                                 InterfaceSection, Line, LineLoad, Material, MeshSettings,
                                 NormalLoad, Project, SoilBody, SoilLayer, Stage,
@@ -166,11 +166,11 @@ def project(model: str = MOHR_COULOMB) -> Project:
                         components=(0.0, -20_000.0))],
         normal_loads=water_loads,
         # The reference's mesh: 0.5 m quadratic elements along the wall, 0.25 m between
-        # its nodes, and a refined box around the pit.
+        # its nodes, growing to 5 m over 30 m from the wall. The Mohr-Coulomb strut stage
+        # is sensitive to the mesh: over 45 m or 55 m it does not converge in its 500
+        # iterations, over 30 m it takes about 270.
         mesh=MeshSettings(element_size=5.0, order=2, body_sizes={"sheetpile": 0.5},
-                          refinements=[BoxRefinement(kind="box", size=0.75, thickness=45.0,
-                                                     x_min=-1.0, x_max=8.0, y_min=-16.0,
-                                                     y_max=1.0, z_min=-1.0, z_max=11.0)]),
+                          size_bands={"sheetpile": 30.0}),
         stages=[
             Stage(id="initial", name="Initial stage", calculation="K0 procedure",
                   deactivate=["sheetpile", "strut", "wall_contact", "surcharge",

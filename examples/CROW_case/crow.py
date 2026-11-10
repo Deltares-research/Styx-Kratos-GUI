@@ -37,7 +37,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from core.model.schemas import (  # noqa: E402
-    Anchor, AnchorSection, Beam, BeamSection, BoxRefinement, DisplacementCondition, Domain,
+    Anchor, AnchorSection, Beam, BeamSection, DisplacementCondition, Domain,
     Interface, InterfaceSection, Line, LineLoad, Material, MeshSettings, NormalLoad,
     Project, SoilBody, SoilLayer, Stage, WaterPressureCondition)
 
@@ -279,19 +279,7 @@ BOUNDARY_CONDITIONS = [
 MESH = MeshSettings(
     element_size=5.0,
     body_sizes={"sheetpile": 0.5},
-    refinements=[
-        BoxRefinement(
-            kind="box",
-            size=0.75,
-            thickness=45.0,
-            x_min=-1.0,
-            x_max=8.0,
-            z_min=-1.0,
-            z_max=11.0,
-            y_min=-16.0,
-            y_max=1.0,
-        ),
-    ],
+    size_bands={"sheetpile": 30.0},
 )
 
 

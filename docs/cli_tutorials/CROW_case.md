@@ -368,21 +368,13 @@ added normal load (id water_3, name WaterLoad_Stage3); wrote ...\crow.json
 
 #### Step 11. The mesh
 
-First add a refinement box round the pit. In the box the element size is 0.75 m. Outside
-it the size grows back to the global size over a band of 45 m:
+`mesh` takes the mesh settings, keeps them in the project, and meshes. `--body-size` gives
+one object its own element size, and `--band` the distance over which that size grows back
+to the global size. These are the **Mesh size** and **Band** of the object in the GUI.
 
 ```text
-crow.json> add mesh.refinements '{"kind": "box", "size": 0.75, "thickness": 45, "x_min": -1, "x_max": 8, "y_min": -16, "y_max": 1, "z_min": -1, "z_max": 11}'
-added {"kind": "box", "size": 0.75, "thickness": 45, "x_min": -... to mesh.refinements; wrote ...\crow.json
-```
-
-`mesh` takes the other mesh settings, keeps them in the project, and meshes. `--body-size`
-gives one body its own element size. These are fields of the **Mesh properties** window
-in the GUI.
-
-```text
-crow.json> mesh --size 5.0 --order 2 --body-size sheetpile 0.5
-4228 nodes, 2052 elements (2052 Triangle 6)
+crow.json> mesh --size 5.0 --order 2 --body-size sheetpile 0.5 --band sheetpile 30
+3036 nodes, 1466 elements (1466 Triangle 6)
 mesh settings kept: wrote ...\crow.json
 ```
 
@@ -391,6 +383,10 @@ mesh settings kept: wrote ...\crow.json
 | `--size 5.0` | 5 m elements far from the pit. |
 | `--order 2` | 6-node triangles. |
 | `--body-size sheetpile 0.5` | The wall at 0.5 m: 26 equal beam elements. |
+| `--band sheetpile 30` | The elements grow from 0.5 m at the wall to 5 m at 30 m from it, so the pit and the soil round the wall's toe have a fine mesh too. |
+
+The strut stage of this model is sensitive to the mesh. With a band of 45 m, it does not
+converge in its 500 iterations.
 
 `mesh` runs gmsh and reports the size. It is only a check: `export` meshes anyway.
 `get mesh` prints the settings back.
@@ -448,6 +444,7 @@ crow.json> stages show dig_2                             what is in the model du
 crow.json> stages set dig_1 --max-iterations 600         more iterations for the first dig
 crow.json> stages deactivate dig_3 strut                 take the strut out from dig_3 on
 crow.json> undo                                          ...and put it back
+crow.json> undo                                          ...and the first dig back to 500
 ```
 
 `undo` takes back one command that changed the project. A command that changed nothing (for
@@ -468,7 +465,7 @@ wrote the Kratos deck CROW_excavation_wall to deck:
   initial_materials.json
   ProjectParameters.json
   kratos_gui_units.json
-4228 nodes, 2052 elements (2052 Triangle 6)
+3036 nodes, 1466 elements (1466 Triangle 6)
 next: kratos-cli run deck
 note: interface section 'Wall contact' against 'Clay' (Interface_Soil_Top_retained, ...): normal stiffness 3.75e+06 and shear stiffness 3.75e+05 N/m³, 10 G / t and G / t (E = 9e+05 Pa, nu = 0.2, t = 1 m); cohesion 1441 Pa = 0.480217 x 3000, friction angle 11.2 deg, tan reduced by 0.480217 from 22.5 deg; saturation as the soil's (SaturatedBelowPhreaticLevelLaw). Type a value on the section to replace one.
 note: interface section 'Wall contact' against 'Sand' (Interface_Soil_Bottom): ...
@@ -484,9 +481,9 @@ angles δ of step 3 (11.25° shows as 11.2). The files are named after the proje
 
 ```text
 crow.json> deck show deck
-CROW_excavation_wall.mdpa: 2D, 4321 nodes, x 0 .. 80, y -60 .. 0
+CROW_excavation_wall.mdpa: 2D, 3129 nodes, x 0 .. 80, y -60 .. 0
   elements:
-    2052 SmallStrainUPwDiffOrderElement2D6N (continuum)
+    1466 SmallStrainUPwDiffOrderElement2D6N (continuum)
     26 LinearTimoshenkoCurvedBeamElement2D3N (beam)
     1 LinearTrussElement2D2N (truss)
     52 Geo_UPwLineInterfacePlaneStrainDiffOrderElement3Plus3N (interface)
@@ -497,22 +494,22 @@ CROW_excavation_wall.mdpa: 2D, 4321 nodes, x 0 .. 80, y -60 .. 0
   ...
 
 crow.json> node deck 30
-Node 30 at (1.105, -12.000, 0.000)
+Node 30 at (1.471, -12.000, 0.000)
   SubModelParts: Soil_Middle_below_the_pit, Soil_Bottom
 ```
 
-The deck has 4321 nodes, not 4228, because the interface splits each wall node into one per
+The deck has 3129 nodes, not 3036, because the interface splits each wall node into one per
 side. `node` says which SubModelParts a node is in, and which nodes share its position.
 
 #### Step 15. Run it
 
 ```text
 crow.json> run deck
-run CROW_excavation_wall_2026-11-09_13-33 finished in 311.6 s: 30 files in ...\crow\CROW_excavation_wall_2026-11-09_13-33
-next: kratos-cli results show CROW_excavation_wall_2026-11-09_13-33
+run CROW_excavation_wall_2026-11-09_21-12 finished in 153.9 s: 30 files in ...\crow\CROW_excavation_wall_2026-11-09_21-12
+next: kratos-cli results show CROW_excavation_wall_2026-11-09_21-12
 ```
 
-The run takes about five minutes: the Mohr-Coulomb soil yields in the excavation stages,
+The run takes a few minutes: the Mohr-Coulomb soil yields in the excavation stages,
 and each needs many iterations.
 
 `run` copies the deck into a new run folder and runs Kratos there. Your `deck\` stays as it
@@ -534,11 +531,11 @@ means "the run just made".
 ```text
 crow.json> results runs
 1 run in ...\crow:
-  1  CROW_excavation_wall_2026-11-09_13-33  7 stage(s) with results, 36 files
+  1  CROW_excavation_wall_2026-11-09_21-12  7 stage(s) with results, 36 files
 
 crow.json> results show 1
-CROW_excavation_wall_2026-11-09_13-33  (deck CROW_excavation_wall, started 2026-11-09T13:33)
-  complete, SI units, 36 files, 6.5 MB
+CROW_excavation_wall_2026-11-09_21-12  (deck CROW_excavation_wall, started 2026-11-09T21:12)
+  complete, SI units, 36 files, 4.8 MB
     1  Initial stage                 results
     2  Null step                     results
     3  Wall installation             results  +3 series
@@ -562,19 +559,19 @@ This run wrote curves for:
 
 crow.json> results profile 1 wall M
 Bending moment (N·m/m) along the wall, 5 stages:
-    3  Wall installation             min -117 at y -12.5, max 31575 at y -7.50
-    4  First excavation              min -42320 at y -4.00, max 6767 at y -9.50
-    5  Strut installation            min -42353 at y -4.00, max 6756 at y -9.50
-    6  Second excavation             min -8988 at y -1.50, max 1.03e+5 at y -4.50
-    7  Third excavation              min -15594 at y -1.50, max 3.40e+5 at y -6.50
+    3  Wall installation             min -112 at y -12.5, max 31835 at y -7.50
+    4  First excavation              min -42304 at y -4.00, max 6692 at y -9.50
+    5  Strut installation            min -42347 at y -4.00, max 6679 at y -9.50
+    6  Second excavation             min -9041 at y -1.50, max 1.04e+5 at y -4.50
+    7  Third excavation              min -15667 at y -1.50, max 3.41e+5 at y -6.50
 
 crow.json> results profile 1 wall ux
 Horizontal total displacement (m) along the wall, 5 stages:
     ...
-    7  Third excavation              min -0.1084 at y -5.50, max -0.0190 at y -13.0
+    7  Third excavation              min -0.1086 at y -5.50, max -0.0192 at y -13.0
 ```
 
-After the last lift, the wall carries about 340 kN·m/m at −6.5 m and deflects 108 mm into
+After the last lift, the wall carries about 341 kN·m/m at −6.5 m and deflects 109 mm into
 the pit. These are the values the benchmark BM-CROW-MC compares with Kratos' own results.
 
 | Along | Quantities |
@@ -610,12 +607,12 @@ Stage 7 (Third excavation) offers:
     pw        Pore pressure                   Pa      nodes
 
 crow.json> results field 1 uy
-u_y (m), stage 7 (Third excavation): -2.75 to 0 over 4321 nodes
-  min -2.75 at node 311
+u_y (m), stage 7 (Third excavation): -2.75 to 0 over 3129 nodes
+  min -2.75 at node 15
   max 0 at node 16
 
 crow.json> results field 1 syy --stage third --csv syy_stage7.csv
-wrote syy_stage7.csv (1843 rows)
+wrote syy_stage7.csv (1262 rows)
 
 crow.json> results at 1 15 --stage 7                    every field at node 15
 ```
@@ -650,7 +647,7 @@ $env:KRATOS_GUI_RUNS = "$HOME\crow"; <repo>\run.bat
 ```
 
 1. **Open** `crow.json`. You see the model you typed: layers, wall, strut, loads and stages.
-2. **Results** mode lists the same runs. Open `CROW_excavation_wall_2026-11-09_13-33` for
+2. **Results** mode lists the same runs. Open `CROW_excavation_wall_2026-11-09_21-12` for
    the deformed mesh, the contours and the wall plots.
 
 #### Step 17. Save it as a Python script

@@ -463,19 +463,10 @@
     "body_sizes": {
       "sheetpile": 0.5
     },
-    "refinements": [
-      {
-        "kind": "box",
-        "size": 0.75,
-        "thickness": 45.0,
-        "x_min": -1.0,
-        "x_max": 8.0,
-        "z_min": -1.0,
-        "z_max": 11.0,
-        "y_min": -16.0,
-        "y_max": 1.0
-      }
-    ]
+    "size_bands": {
+      "sheetpile": 30.0
+    },
+    "refinements": []
   },
   "custom_parts": [],
   "stages": [
