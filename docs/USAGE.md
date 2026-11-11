@@ -565,8 +565,9 @@ model, also when the mesh is shown deformed. Type `results loads off` to hide th
 ## Save pictures
 
 A picture shows the parts that the viewport shows, on a white background, with white space on each
-side of the model. It shows the whole model, also if you zoom in or pan. To save a detail, zoom in
-and select **Use the zoom of the screen**. The view buttons, the mode label, the
+side of the model. It shows the whole model, also if you zoom in or pan. To save what the screen
+shows, zoomed in on a detail or zoomed out, select **Use the zoom of the screen**. The view
+buttons, the mode label, the
 selection box and the highlight of a selected object are not in the picture. The symbols that you
 show by selecting a condition are in the picture.
 

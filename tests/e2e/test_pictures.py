@@ -347,6 +347,7 @@ def test_zoom_changes_a_picture_only_when_asked(excavation):
     page.evaluate("for (let i = 0; i < 12; i++) App.Viewport.dolly(-1)")
     page.wait_for_timeout(1000)
     assert size_of_one_save(page) == whole
+    assert size_of_one_save(page, screen_zoom=True) == zoomed, "zoomed out, the screen too"
     assert page.errors == []
 
 

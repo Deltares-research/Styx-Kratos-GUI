@@ -991,6 +991,12 @@ App.PictureDraw = (function () {
     return box;
   }
 
+  /* The frame of a picture with the zoom of the screen: the screen itself, so a view zoomed
+     out keeps the space round the model and a view zoomed in leaves out what is off it. */
+  function screenBox() {
+    return { minX: -1, maxX: 1, minY: -1, maxY: 1 };
+  }
+
   /* The view cropped to `frame`, or to what it draws, with white space round it, on a page with
      room for what goes round the view. A `frame` is a `drawnBox` that pictures share, so they
      come out the same size with the model in the same place: also the picture of a tab with no
@@ -1055,7 +1061,8 @@ App.PictureDraw = (function () {
     FORMATS: FORMATS, MM_PER_CSS: MM_PER_CSS, LEGEND_STRIP_MM: LEGEND_STRIP_MM,
     page: page, fileName: fileName, pictureParts: pictureParts, textWidth: textWidth,
     parseCommand: parseCommand,
-    shade: shade, compose: compose, drawnBox: drawnBox, widerBox: widerBox, framed: framed,
+    shade: shade, compose: compose, drawnBox: drawnBox, widerBox: widerBox, screenBox: screenBox,
+    framed: framed,
     picture: picture
   };
 })();

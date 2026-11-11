@@ -550,14 +550,16 @@ App.Picture = (function () {
   /* The frame every picture of this model shares: what any tab or stage draws, so that a stage
      with a load has the same frame, with the model in the same place, as a stage with none, a
      picture of the mesh or a result, whichever of them are saved and when. It takes in the whole
-     model, wherever the camera is, unless the user asks for the zoom of the screen. Results come
-     from the server, so there the screen also goes through the stages, as a save of every stage
-     does: a deformed shape that goes past the frame makes it wider there. */
+     model, wherever the camera is, unless the user asks for the zoom of the screen: then it is
+     the screen. Results come from the server, so there the screen also goes through the stages,
+     as a save of every stage does: a deformed shape that goes past the frame makes it wider
+     there. */
   function commonFrame(asked) {
+    if (asked.screenZoom) return Promise.resolve(D.screenBox());
     var screen = App.Viewport.pictureView();
     var box = null;
     function take() {
-      box = D.widerBox(box, D.drawnBox(viewNow(asked, screen), screen, !asked.screenZoom));
+      box = D.widerBox(box, D.drawnBox(viewNow(asked, screen), screen, true));
       return null;
     }
     walking = true;

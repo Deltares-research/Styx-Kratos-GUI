@@ -586,6 +586,20 @@
     T.near(picture.page.scene.heightMm / picture.page.scene.widthMm, 0.5, 0.02, 'the screen\'s shape');
   });
 
+  test('with the zoom of the screen, a view zoomed out keeps the space round the model', function () {
+    var small = faces(SQUARE.map(function (v) { return v / 4; }), { color: [1, 0, 0] });
+    var seen = view([small]);
+    var picture = D.picture(seen, 20, SCREEN, undefined, D.screenBox());
+    var scene = picture.page.scene;
+    T.near(scene.heightMm / scene.widthMm, 0.5, 0.02, 'the screen\'s shape');
+    var fill = ofType(picture.list, 'fill').filter(function (f) { return f.color[1] === 0; })[0];
+    var across = most(xs(fill.tris)) - least(xs(fill.tris));
+    var cropped = ofType(D.picture(seen, 20, SCREEN).list, 'fill')
+      .filter(function (f) { return f.color[1] === 0; })[0];
+    T.ok(across < (most(xs(cropped.tris)) - least(xs(cropped.tris))) / 2,
+         'the model is as small as on the screen, not cropped to: ' + across);
+  });
+
   test('a whole box goes past the screen and has white space on each side', function () {
     var off = [-100, -2, 0, 5, -2, 0, 5, 2, 0, -100, -2, 0, 5, 2, 0, -100, 2, 0];
     var seen = view([faces(off, { color: [1, 0, 0] })]);
