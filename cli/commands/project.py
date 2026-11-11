@@ -273,6 +273,7 @@ def summary(project: Project) -> dict:
         "water": _water(project),
         "boundary_conditions": conditions.summary(project),
         "gravity": project.gravity,
+        "gravity_acceleration": project.gravity_acceleration,
         "stages": [p.id for p in project.stages],
         "mesh": {"element_size": project.mesh.element_size, "order": project.mesh.order},
         "deck": project.deck.directory if project.deck is not None else None,
@@ -317,7 +318,8 @@ def described(data: dict) -> list[str]:
             f"{c['id']} ({c['kind'].replace('_', ' ')} on {c['on']}"
             + ("" if c["active"] else ", inactive") + ")"
             for c in data["boundary_conditions"]) or "none"),
-        f"  gravity     {'on' if data['gravity'] else 'off'}",
+        f"  gravity     {'on' if data['gravity'] else 'off'}, "
+        f"g = {data['gravity_acceleration']:g} m/s²",
         f"  stages      {names(data['stages'])}",
         f"  mesh        element size {data['mesh']['element_size']:g}, "
         f"order {data['mesh']['order']}",

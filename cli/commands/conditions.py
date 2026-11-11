@@ -66,12 +66,16 @@ def register(commands, common: argparse.ArgumentParser) -> None:
                 "place of the supports on the faces")
 
     gravity = commands.add_parser("gravity", parents=[common],
-                                  help="show, or switch on or off, the self weight",
+                                  help="show, or switch on or off, the self weight, or "
+                                       "set g",
                                   description="Whether gravity acts: the self weight of "
                                               "every body, in every stage. On in a new "
-                                              "project.")
+                                              "project, with g = 9.81 m/s2. A number sets "
+                                              "g, in m/s2, as File > Project properties "
+                                              "does in the GUI.")
     add_project(gravity)
-    gravity.add_argument("switch", nargs="?", choices=("on", "off"), type=str.lower)
+    gravity.add_argument("switch", nargs="?", type=_gravity_switch, metavar="on|off|G",
+                         help="on, off, or the gravitational acceleration g in m/s2")
     add_writing(gravity)
     gravity.set_defaults(handler=set_gravity)
 
@@ -290,19 +294,43 @@ def standard_conditions(args: argparse.Namespace) -> Answer:
     return answer
 
 
+def _gravity_switch(text: str) -> bool | float:
+    """`on` or `off` as True or False, and a number as g in m/s2."""
+    word = text.strip().lower()
+    if word in ("on", "off"):
+        return word == "on"
+    try:
+        value = float(word)
+    except ValueError:
+        raise argparse.ArgumentTypeError(
+            f"{text!r} is not on, off or a number (g in m/s2)") from None
+    if not value > 0:
+        raise argparse.ArgumentTypeError(f"g must be above 0 m/s2, not {text}")
+    return value
+
+
 def set_gravity(args: argparse.Namespace) -> Answer:
     project = read(args)
     if args.switch is None:
-        return Answer(data={"gravity": project.gravity}, lines=[_gravity_line(project)])
-    project = session.set_gravity(project, args.switch == "on")
+        return Answer(data=_gravity_data(project), lines=[_gravity_line(project)])
+    if isinstance(args.switch, bool):
+        project = session.set_gravity(project, on=args.switch)
+    else:
+        project = session.set_gravity(project, acceleration=args.switch)
     target, where = written(args, project)
-    return Answer(data={"file": str(target) if target else None, "gravity": project.gravity},
+    return Answer(data={"file": str(target) if target else None, **_gravity_data(project)},
                   lines=[f"{_gravity_line(project)} {where}"])
 
 
+def _gravity_data(project: Project) -> dict:
+    return {"gravity": project.gravity,
+            "gravity_acceleration": project.gravity_acceleration}
+
+
 def _gravity_line(project: Project) -> str:
-    return ("Gravity is on: every body has its self weight." if project.gravity else
-            "Gravity is off: no body has a self weight.")
+    g = f"g = {project.gravity_acceleration:g} m/s²"
+    return (f"Gravity is on: every body has its self weight, with {g}." if project.gravity
+            else f"Gravity is off: no body has a self weight ({g} when it is on).")
 
 
 def remove_condition(args: argparse.Namespace) -> Answer:

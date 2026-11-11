@@ -85,7 +85,7 @@ Genuchten soil.
 | `load P list\|add\|set\|remove ...` | Loads: `add point [--at X Y]`, `add line [--x FROM TO]` (2D), `add surface [--x ...] [--z ...]` (3D), `--components ...` |
 | `normal-load P list\|add\|set\|remove ...` | Pressures normal to a line, in 2D: `add [ID] --points ... [--hydrostatic [--reference-coordinate Y] \| --pressure S]` |
 | `boundary P list\|add\|set\|remove\|standard ...` | The boundary conditions: `add [ID] --face F\|--part KEY\|--line ...\|--point X Y --fixed\|--roller\|--fix AXIS ...` for a support, `add [ID] --domain\|... --water-pressure TYPE ...` for a water pressure, `add [ID] --face F\|--line ... --seepage` for a seepage face; `standard` puts back the standard supports |
-| `gravity P [on\|off]` | Show, or switch on or off, the self weight of every body (on in a new project) |
+| `gravity P [on\|off\|G]` | Show, or switch on or off, the self weight of every body (on in a new project), or set g in m/s² (9.81 in a new project) |
 | `parts P` | Every part by its key, and every water pressure condition: the names stages activate and deactivate |
 | `mesh P [--size S] [--order 1\|2] [--body-size KEY S] [--band KEY B]` | Mesh the model and report its size. The settings given are kept in the project, as the **Mesh properties** window keeps them. `--body-size` is the element size at one object, by its key: a layer (`soil_<layer>`) or soil body, a sheet pile, an interface, a normal load, a soil line, a condition on a line or at a point, or a point load (not an anchor: it is one element); `none` takes the size and its band away. `--band` is the distance over which that size grows back to the element size; `none` takes it away |
 | `stages P [list\|show\|defaults\|add\|copy\|set\|remove\|activate\|deactivate] ...` | The construction sequence, edited as the GUI's Stages toolbar edits it. `phases` is the old name and still works |
@@ -368,6 +368,9 @@ kratos-cli boundary dam.json add exit --seepage --line 1.62 0.48 1.62 4     # a 
 - **Gravity.** `gravity P off` takes the self weight out of every stage, for a model loaded
   by its conditions alone; `gravity P on` puts it back. A K0 procedure takes its stresses
   from the self weight, so with gravity off they are zero, and the export says so.
+  `gravity P 9.80665` sets the acceleration g in m/s², as **File** → **Project
+  properties…** does in the GUI. The water keeps its specific weight: its density is
+  written as the specific weight divided by g.
 - `check` prints what the export will warn about the conditions: a model nothing holds, a
   water level that fixes nothing, a coupled soil with no water pressure condition or a
   stage that leaves its water free, a condition this dimension does not have, a K0
@@ -581,7 +584,7 @@ viewport's. A command can also be typed with a leading `_` in the box (`_mesh`).
 | `stages`, `phases` | `kratos-cli stages P` |
 | `water <level>`, `water off` | `kratos-cli water P LEVEL`, `kratos-cli water P off` |
 | `boundary`, `boundary list`, `boundary standard` | `kratos-cli boundary P list`, `kratos-cli boundary P standard` |
-| `gravity`, `gravity on`, `gravity off` | `kratos-cli gravity P`, `kratos-cli gravity P on`, `kratos-cli gravity P off` |
+| `gravity`, `gravity on`, `gravity off`, `gravity 9.80665` | `kratos-cli gravity P`, `kratos-cli gravity P on`, `kratos-cli gravity P off`, `kratos-cli gravity P 9.80665` |
 | `units`, `units <system>` | `kratos-cli units P`, `kratos-cli units P kN` |
 | `node <id>` | `kratos-cli node P NODE` |
 | `cleargeometry` | `kratos-cli volume P clear` |

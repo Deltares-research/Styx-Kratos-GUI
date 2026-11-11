@@ -362,6 +362,22 @@ def test_gravity_shows_and_switches_the_self_weight(cli, dry):
     assert session.load(dry).gravity is True
 
 
+def test_gravity_sets_g_as_the_project_properties_window_does(cli, dry):
+    assert "with g = 9.81 m/s²" in cli("gravity", dry).out
+    ran = cli("gravity", dry, "9.80665")
+
+    assert ran.code == 0, ran.err
+    loaded = session.load(dry)
+    assert (loaded.gravity, loaded.gravity_acceleration) == (True, 9.80665)
+    assert "with g = 9.80665 m/s²" in ran.out
+    assert "gravity     on, g = 9.80665 m/s²" in cli("show", dry).out
+    assert cli("show", dry, "--json").json()["gravity_acceleration"] == 9.80665
+    for wrong in ("0", "-9.81", "maybe"):
+        refused = cli("gravity", dry, wrong)
+        assert refused.code != 0, wrong
+    assert session.load(dry).gravity_acceleration == 9.80665
+
+
 def test_check_warns_about_a_k0_stage_without_gravity(cli, dry):
     assert cli("stages", dry, "defaults").code == 0
     assert cli("gravity", dry, "off").code == 0
