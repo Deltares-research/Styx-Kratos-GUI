@@ -66,7 +66,7 @@ See [FEATURES.md](docs/FEATURES.md) for the full list with the status of each fe
 
 | Part | Technology |
 |---|---|
-| Backend | [Python](https://www.python.org/) 3.10+, [FastAPI](https://fastapi.tiangolo.com/), [Uvicorn](https://uvicorn.dev/), [Pydantic](https://docs.pydantic.dev/) |
+| Backend | [Python](https://www.python.org/) 3.10+, [FastAPI](https://fastapi.tiangolo.com/), [Uvicorn](https://uvicorn.dev/), [Pydantic](https://pydantic.dev/docs/) |
 | Geometry and mesh | [Gmsh](https://gmsh.info/) 4.13 (OpenCASCADE kernel), [NumPy](https://numpy.org/) |
 | Frontend | Plain JavaScript and [three.js](https://threejs.org/), with no build step and no npm |
 | Solver | [Kratos Multiphysics](https://github.com/KratosMultiphysics/Kratos) GeoMechanicsApplication (installed separately, see [KRATOS_SETUP.md](docs/KRATOS_SETUP.md)) |
@@ -157,6 +157,6 @@ To cite Styx, use [CITATION.cff](CITATION.cff), or **Cite this repository** on t
 - [Deltares](https://www.deltares.nl/)
 - [Gmsh](https://gmsh.info/), for geometry and meshing
 - [three.js](https://threejs.org/), for the 3D viewport
-- [FastAPI](https://fastapi.tiangolo.com/) and [Pydantic](https://docs.pydantic.dev/)
+- [FastAPI](https://fastapi.tiangolo.com/) and [Pydantic](https://pydantic.dev/docs/)
 - [Best-README-Template](https://github.com/othneildrew/Best-README-Template), the structure
   of this README
