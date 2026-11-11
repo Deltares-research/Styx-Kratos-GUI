@@ -84,7 +84,8 @@ def test_a_round_trip_returns_the_same_numbers(client):
     after = current(client)
     for m, m0 in zip(after.materials, before.materials):
         for name, value in m0.variables.items():
-            assert m.variables[name] == pytest.approx(value, rel=1e-12), name
+            expected = value if isinstance(value, str) else pytest.approx(value, rel=1e-12)
+            assert m.variables[name] == expected, name
 
 
 def test_the_same_system_again_changes_nothing(client):
