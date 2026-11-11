@@ -276,6 +276,37 @@ def test_gravity_is_on_in_a_new_project_and_in_an_old_file():
     assert Project.model_validate(payload).gravity is True
 
 
+def test_g_is_9_81_in_a_new_project_and_in_an_old_file():
+    assert blank_project().gravity_acceleration == 9.81
+    payload = seed_project().model_dump()
+    del payload["gravity_acceleration"]
+    assert Project.model_validate(payload).gravity_acceleration == 9.81
+    for wrong in (0.0, -9.81):
+        with pytest.raises(ValueError):
+            Project.model_validate({**payload, "gravity_acceleration": wrong})
+
+
+def test_the_self_weight_and_the_water_density_follow_the_projects_g(gmsh_session):
+    """g is the deck's VOLUME_ACCELERATION; the water's density is its specific weight
+    over g, so the water pressures Kratos derives stay those of the specific weight."""
+    def written(project: Project) -> tuple[list[float], float]:
+        export = writer.export_project(project, MESH)
+        doc = json.loads(export["project_parameters"])
+        processes = doc["stages"]["1_Stage"]["stage_settings"]["processes"]
+        weight = next(p["Parameters"]["value"] for p in processes["loads_process_list"]
+                      if p["Parameters"].get("variable_name") == "VOLUME_ACCELERATION")
+        materials = json.loads(export["materials"])["properties"]
+        return weight, materials[0]["Material"]["Variables"]["DENSITY_WATER"]
+
+    project = section(None)
+    weight, density = written(project)
+    assert weight == [0.0, -9.81, 0.0]
+    assert density == pytest.approx(project.water_specific_weight / 9.81)
+    weight, density = written(session.set_gravity(project, acceleration=10.0))
+    assert weight == [0.0, -10.0, 0.0]
+    assert density == pytest.approx(project.water_specific_weight / 10.0)
+
+
 def test_with_gravity_off_no_stage_has_the_self_weight(gmsh_session):
     on = writer.export_project(section(None), MESH)
     off = writer.export_project(session.set_gravity(section(None), False), MESH)
@@ -314,11 +345,27 @@ def test_the_conditions_update_changes_only_what_it_names():
     assert (off.gravity, off.boundary_conditions) == (False, project.boundary_conditions)
     cleared = session.replace_conditions(project, ConditionsUpdate(boundary_conditions=[]))
     assert (cleared.gravity, cleared.boundary_conditions) == (True, [])
+    g = session.replace_conditions(project, ConditionsUpdate(gravity_acceleration=9.80665))
+    assert (g.gravity, g.gravity_acceleration) == (True, 9.80665)
+
+
+def test_set_gravity_changes_only_what_it_is_given():
+    project = section(None)
+    off = session.set_gravity(project, False)
+    assert (off.gravity, off.gravity_acceleration) == (False, 9.81)
+    g = session.set_gravity(off, acceleration=9.80665)
+    assert (g.gravity, g.gravity_acceleration) == (False, 9.80665)
 
 
 def test_a_model_script_writes_gravity_off_out():
     assert "gravity=False" in script_writer.script(session.set_gravity(section(None), False))
     assert "gravity=" not in script_writer.script(section(None))
+
+
+def test_a_model_script_writes_its_own_g_out():
+    script = script_writer.script(session.set_gravity(section(None), acceleration=9.80665))
+    assert "gravity_acceleration=9.80665" in script
+    assert "gravity_acceleration=" not in script_writer.script(section(None))
 
 
 def test_a_condition_on_an_absent_soil_body_is_omitted_with_a_warning(gmsh_session):

@@ -40,7 +40,8 @@ SYSTEMS: dict[str, System] = {
 }
 
 GRAVITY_SI = 9.81
-"""m/s2. The magnitude the deck's gravity is written with."""
+"""m/s2. The gravitational acceleration a new project has (`Project.gravity_acceleration`),
+and the one that turns a legacy file's unit weights into densities."""
 
 
 @dataclass(frozen=True)
@@ -129,10 +130,10 @@ def system(name: str) -> System:
             from None
 
 
-def gravity(name: str) -> float:
-    """Gravity's magnitude in the system `name`."""
+def gravity(name: str, acceleration_si: float = GRAVITY_SI) -> float:
+    """The gravitational acceleration `acceleration_si`, in m/s2, in the system `name`."""
     s = system(name)
-    return GRAVITY_SI * s.time ** 2 / s.length
+    return acceleration_si * s.time ** 2 / s.length
 
 
 def _unit(quantity: Quantity, s: System) -> float:

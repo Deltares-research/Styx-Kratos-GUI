@@ -1511,6 +1511,7 @@ class ConditionsUpdate(Base):
     (`core.session.replace_conditions`). A field left out stays as it is."""
     boundary_conditions: list[BoundaryCondition] | None = None
     gravity: bool | None = None
+    gravity_acceleration: float | None = Field(default=None, gt=0)
 
 
 class LinesUpdate(Base):
@@ -1741,6 +1742,11 @@ class Project(Base):
     user switches it off -- for a model loaded by its boundary conditions alone, say. A
     K0 procedure derives its stresses from the self weight, so with gravity off they are
     zero (`core.kratos.condition_checks`)."""
+    gravity_acceleration: float = Field(default=units.GRAVITY_SI, gt=0)
+    """The gravitational acceleration g, in m/s2: both unit systems measure length in
+    metres and time in seconds. The deck's self weight (`VOLUME_ACCELERATION`) is g, and
+    the water's density is its specific weight over g (`water_variables`), so the water
+    pressures stay those of `WaterLevel.specific_weight` whatever g is."""
     mesh: MeshSettings = Field(default_factory=MeshSettings)
     custom_parts: list[CustomPart] = Field(default_factory=list)
     stages: list[Stage] = Field(default_factory=list)
@@ -1913,7 +1919,8 @@ class Project(Base):
         """The water every soil is written with: `DENSITY_WATER`, `BULK_MODULUS_FLUID`
         and `DYNAMIC_VISCOSITY`, in the project's units (`soil_models.water`)."""
         return soil_models.water(self.unit_system, self.water_specific_weight,
-                                 self.fluid.bulk_modulus, self.fluid.dynamic_viscosity)
+                                 self.fluid.bulk_modulus, self.fluid.dynamic_viscosity,
+                                 gravity=self.gravity_acceleration)
 
     @model_validator(mode="after")
     def _a_layered_model_has_no_pit(self) -> Project:

@@ -1341,6 +1341,8 @@ def replace_conditions(project: Project, update: ConditionsUpdate) -> Project:
                                           for c in update.boundary_conditions]
     if update.gravity is not None:
         payload["gravity"] = update.gravity
+    if update.gravity_acceleration is not None:
+        payload["gravity_acceleration"] = update.gravity_acceleration
     return _edited(project, payload)
 
 
@@ -1392,9 +1394,17 @@ def standard_conditions(project: Project) -> Project:
     return _edited(project, payload)
 
 
-def set_gravity(project: Project, on: bool) -> Project:
-    """`project` with gravity on or off (`kratos-cli gravity`, the explorer's check box)."""
-    return _edited(project, {**project.model_dump(), "gravity": on})
+def set_gravity(project: Project, on: bool | None = None,
+                acceleration: float | None = None) -> Project:
+    """`project` with gravity on or off (`kratos-cli gravity`, the explorer's check box),
+    and with the gravitational acceleration `acceleration` in m/s2 (`kratos-cli gravity
+    P 9.80665`, File > Project properties). What is left out stays."""
+    payload = project.model_dump()
+    if on is not None:
+        payload["gravity"] = on
+    if acceleration is not None:
+        payload["gravity_acceleration"] = acceleration
+    return _edited(project, payload)
 
 
 def remove_condition(project: Project, id: str) -> Project:

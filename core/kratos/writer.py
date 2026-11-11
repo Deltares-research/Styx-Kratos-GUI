@@ -528,6 +528,7 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
         # interface do not, and dofs no element uses cost memory for nothing.
         rotation_dofs=bool(beam_blocks or panel_blocks),
         gravity=project.gravity,
+        gravity_acceleration=project.gravity_acceleration,
     )
     return {
         "mdpa": _render(coordinates, node_id, numbered, condition_blocks, parts),

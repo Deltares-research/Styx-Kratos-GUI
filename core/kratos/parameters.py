@@ -341,6 +341,7 @@ def project_parameters(
     body_parts: Sequence[str] = (),
     rotation_dofs: bool = False,
     gravity: bool = True,
+    gravity_acceleration: float = GRAVITY,
 ) -> str:
     """`constraints` is (sub-model part name, DISPLACEMENT is_fixed per axis).
     `loads` is (sub-model part name, Kratos variable, active per axis, value).
@@ -358,7 +359,8 @@ def project_parameters(
     the stem every result file is named after, `domain_size` is 2 or 3, `body_parts`
     names every element-carrying sub-model part, and `rotation_dofs` says whether
     anything in the deck has rotations -- a beam or a shell does, soil does not.
-    `gravity` is `Project.gravity`: off, no stage has the self weight process."""
+    `gravity` is `Project.gravity`: off, no stage has the self weight process.
+    `gravity_acceleration` is `Project.gravity_acceleration`, the self weight's g."""
     rendered: dict[str, dict] = {}
     for index, stage in enumerate(stages):
         live = stage.active
@@ -367,7 +369,7 @@ def project_parameters(
         # Gravity first, and in every stage of a deck that has it: it is what gives the
         # continuum elements their self weight, and it is not filtered because the part
         # it names is the one the solver assembles out of whatever is active.
-        loads_processes = [_gravity()] if gravity else []
+        loads_processes = [_gravity(gravity_acceleration)] if gravity else []
         # In the project's units, which are the deck's: written as they stand.
         loads_processes += [_load(name, variable, active, list(value))
                             for name, variable, active, value in loads if keep(name)]
@@ -915,7 +917,7 @@ def _seepage(part_name: str) -> dict:
     }
 
 
-def _gravity() -> dict:
+def _gravity(acceleration: float = GRAVITY) -> dict:
     """Self weight, as a body load on the computational model part.
 
     Copied field for field from `staged_construction_for_generated_mesh.json`, where it
@@ -932,9 +934,12 @@ def _gravity() -> dict:
     *   **Every stage, filtered by nothing.** The ground has its weight in every stage
         or in none: `Project.gravity` is one switch for the whole sequence, on unless the
         user turns it off.
+
+    `acceleration` is `Project.gravity_acceleration`, 9.81 m/s2 unless the user sets
+    another.
     """
     return _load(COMPUTATIONAL_MODEL_PART, "VOLUME_ACCELERATION",
-                 [False, True, False], [0.0, -GRAVITY, 0.0])
+                 [False, True, False], [0.0, -acceleration, 0.0])
 
 
 def _load(part_name: str, variable: str, active: list[bool], value: list[float]) -> dict:

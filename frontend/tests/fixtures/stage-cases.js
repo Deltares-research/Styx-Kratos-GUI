@@ -1912,6 +1912,7 @@ window.STAGE_FIXTURE =
       }
     ],
     "gravity": true,
+    "gravity_acceleration": 9.81,
     "mesh": {
       "element_size": 2.5,
       "order": 2,

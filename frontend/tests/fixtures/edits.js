@@ -477,6 +477,7 @@ window.EDITS_FIXTURE =
         }
       ],
       "gravity": true,
+      "gravity_acceleration": 9.81,
       "mesh": {
         "element_size": 5.0,
         "order": 2,
@@ -1029,6 +1030,7 @@ window.EDITS_FIXTURE =
         }
       ],
       "gravity": true,
+      "gravity_acceleration": 9.81,
       "mesh": {
         "element_size": 5.0,
         "order": 2,
@@ -1637,6 +1639,7 @@ window.EDITS_FIXTURE =
         }
       ],
       "gravity": true,
+      "gravity_acceleration": 9.81,
       "mesh": {
         "element_size": 5.0,
         "order": 2,
@@ -2160,6 +2163,7 @@ window.EDITS_FIXTURE =
         }
       ],
       "gravity": true,
+      "gravity_acceleration": 9.81,
       "mesh": {
         "element_size": 5.0,
         "order": 2,
@@ -2708,6 +2712,7 @@ window.EDITS_FIXTURE =
         }
       ],
       "gravity": true,
+      "gravity_acceleration": 9.81,
       "mesh": {
         "element_size": 5.0,
         "order": 2,
