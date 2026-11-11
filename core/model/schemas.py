@@ -1459,6 +1459,10 @@ class Stage(Base):
     that 1e-9 cannot be met below, and Kratos runs out of cycles with the model already
     at rest (an interface model, a 3D excavation, 2026-11-04)."""
 
+    start_time: float = Field(default=0.0, allow_inf_nan=False)
+    """The time the calculation starts at, in the project's unit of time: the deck's
+    `start_time` of the first stage. Read on the initial stage only -- every later
+    stage starts where the one before it ended."""
     duration: float = Field(default=solver.STAGE_DEFAULTS["duration"], gt=0)
     """How long the stage lasts, in the project's unit of time (`core.model.units`): its
     deck's `end_time` minus its `start_time`. A static stage has no real clock, so the

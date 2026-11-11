@@ -657,20 +657,9 @@ def _sequenced_stages(project: Project, deck: _Deck) -> list[parameters.Stage]:
     """One Kratos stage per Styx stage. Raises `stages.StageError` if the tree does not linearise."""
     steps = stages.transitions(project)
 
-    # The reference deck starts at -2.0: its K0 stage and its null step sit at negative
-    # time so that real construction starts at 0 and two runs' result files line up
-    # stage for stage. Cosmetic to Kratos, and free to reproduce -- the leading run of
-    # stages that initialise the stresses, or that solve again without changing the
-    # model (a null step), is exactly what "before construction" means. Each stage then
-    # starts where the one before it ended.
-    settling = 0
-    for index, (stage, switched_on, switched_off) in enumerate(steps):
-        null_step = (index > 0 and stage.calculation == "mechanical"
-                     and not switched_on and not switched_off)
-        if stage.stress_initialisation == "none" and not null_step:
-            break
-        settling += 1
-    start_time = 0.0 - sum(stage.duration for stage, _, _ in steps[:settling])
+    # The first stage starts at the initial stage's start time -- 0 unless the user set
+    # another -- and each stage starts where the one before it ended.
+    start_time = steps[0][0].start_time if steps else 0.0
 
     out: list[parameters.Stage] = []
     keys = set(project.stageable_keys())

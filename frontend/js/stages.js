@@ -299,14 +299,23 @@ App.Stages = (function () {
     return isFinite(value) && value > 0 ? value : DEFAULTS.duration;
   }
 
+  /* When stage `id` starts: the initial stage's start time (0 unless it was set), plus
+     the durations of the stages before it along its chain -- the deck's `start_time`
+     for that stage (core/kratos/writer.py `_sequenced_stages`). */
+  function startOf(project, id) {
+    var chain = chainTo(project, id);
+    var first = chain.length ? Number(chain[0].start_time) : 0;
+    var start = isFinite(first) ? first : 0;
+    chain.slice(0, -1).forEach(function (each) { start += durationOf(each); });
+    return rounded(start);
+  }
+
   function overview(project, run) {
     var byId = index(project);
     var completed = (run && run.completed) || 0;
     return rows(project, run).map(function (row, position) {
       var stage = byId[row.id] || {};
-      var total = 0;
-      chainTo(project, row.id).forEach(function (each) { total += durationOf(each); });
-      total = rounded(total);
+      var total = rounded(startOf(project, row.id) + durationOf(stage));
       var duration = rounded(durationOf(stage));
       var unit = timeUnit();
       var failedHere = !!(run && run.failed) && position === completed;
@@ -344,7 +353,8 @@ App.Stages = (function () {
       convergence_criterion: CONVERGENCE_CRITERIA.mechanical[0][0],
       max_iterations: DEFAULTS.max_iterations, tolerated_error: DEFAULTS.tolerated_error,
       absolute_tolerance: ABSOLUTE_TOLERANCES[CONVERGENCE_CRITERIA.mechanical[0][0]],
-      duration: DEFAULTS.duration, time_step: DEFAULTS.time_step, solver_settings: {}
+      start_time: 0, duration: DEFAULTS.duration, time_step: DEFAULTS.time_step,
+      solver_settings: {}
     };
   }
 
@@ -725,6 +735,7 @@ App.Stages = (function () {
     chainTo: chainTo, activeParts: activeParts, stageableKeys: stageableKeys,
     hiddenKeys: hiddenKeys,
     order: order, branchProblem: branchProblem, rows: rows, overview: overview,
+    startOf: startOf,
     added: added, inserted: inserted, removed: removed, copied: copied,
     ownership: ownership, toggled: toggled, setActive: setActive, stateIn: stateIn,
     resolveSolver: resolveSolver, solverRows: solverRows, solverSetting: solverSetting,

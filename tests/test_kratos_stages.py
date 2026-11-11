@@ -171,15 +171,14 @@ def test_the_body_domain_list_is_the_domain_list(staged_doc):
 
 # -- C1: time ----------------------------------------------------------------
 
-def test_construction_starts_at_time_zero(staged_doc):
-    """The reference numbers from `-2.0`: the K0 stage and the null step sit at negative
-    time so that real construction starts at 0 and the result files line up. Cosmetic to
-    Kratos, and the only way to compare two runs stage by stage without arithmetic."""
+def test_the_first_stage_starts_at_time_zero(staged_doc):
+    """The K0 stage and the null step included: the clock starts at 0, not at negative
+    time as in the reference deck."""
     times = [(staged_doc["stages"][name]["stage_settings"]["problem_data"]["start_time"],
               staged_doc["stages"][name]["stage_settings"]["problem_data"]["end_time"])
              for name in stage_names(staged_doc)]
-    assert times == [(-2.0, -1.0), (-1.0, 0.0), (0.0, 1.0), (1.0, 2.0),
-                     (2.0, 3.0), (3.0, 4.0), (4.0, 5.0)]
+    assert times == [(0.0, 1.0), (1.0, 2.0), (2.0, 3.0), (3.0, 4.0),
+                     (4.0, 5.0), (5.0, 6.0), (6.0, 7.0)]
 
 
 @pytest.fixture(scope="module")
@@ -196,12 +195,29 @@ def timed_doc() -> dict:
 
 
 def test_each_stage_lasts_its_own_duration_and_starts_where_the_last_ended(timed_doc):
-    """Still the reference's shape: the two settling stages end at time zero."""
     times = [(timed_doc["stages"][name]["stage_settings"]["problem_data"]["start_time"],
               timed_doc["stages"][name]["stage_settings"]["problem_data"]["end_time"])
              for name in stage_names(timed_doc)]
-    assert times == [(-15.0, -5.0), (-5.0, 0.0), (0.0, 100.0), (100.0, 200.0),
-                     (200.0, 300.0), (300.0, 400.0), (400.0, 500.0)]
+    assert times == [(0.0, 10.0), (10.0, 15.0), (15.0, 115.0), (115.0, 215.0),
+                     (215.0, 315.0), (315.0, 415.0), (415.0, 515.0)]
+
+
+def test_the_initial_stage_sets_the_start_time_of_the_calculation():
+    """0 unless the initial stage says otherwise; the rest follow on from it."""
+    project = excavation.excavation_project(staged=True)
+    first, *rest = project.stages
+    project = project.model_copy(update={"stages": [
+        first.model_copy(update={"start_time": -2.0}), *rest]})
+    with session():
+        result = writer.export_project(project, MeshRequest(**project.mesh.model_dump()))
+    doc = json.loads(result["project_parameters"])
+    starts = [doc["stages"][name]["stage_settings"]["problem_data"]["start_time"]
+              for name in stage_names(doc)]
+    assert starts == [-2.0, -1.0, 0.0, 1.0, 2.0, 3.0, 4.0]
+
+
+def test_a_stage_starts_at_zero_unless_told_otherwise():
+    assert schemas.Stage(id="s", name="S").start_time == 0.0
 
 
 def test_each_stage_is_solved_in_its_own_time_step(timed_doc):
@@ -235,7 +251,6 @@ def test_a_stage_saved_with_a_time_interval_in_days_lasts_it_in_seconds():
 
 
 def test_an_unstaged_deck_still_starts_at_zero(unstaged_doc):
-    """Nothing to settle first, so nothing sits at negative time."""
     first = unstaged_doc["stages"]["1_Initial_stage"]["stage_settings"]["problem_data"]
     assert (first["start_time"], first["end_time"]) == (0.0, 1.0)
 

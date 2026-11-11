@@ -214,17 +214,15 @@ def test_the_default_tolerances_and_step_controls(section):
     assert (solver["reduction_factor"], solver["increase_factor"]) == (0.5, 2.0)
 
 
-def test_each_stage_lasts_a_second_and_the_settling_stages_sit_before_zero():
-    """1 s per stage in one step, the defaults; the K0 stage and the null step
-    run at negative time, as in the reference deck, so the construction starts at
-    t = 0."""
+def test_each_stage_lasts_a_second_and_the_first_starts_at_zero():
+    """1 s per stage in one step, the defaults; the K0 stage is the first, at t = 0."""
     import json as _json
     from tests.models import excavation
     params = _json.loads(writer.export_project(excavation.excavation_project(staged=True))["project_parameters"])
     order = params["orchestrator"]["settings"]["execution_list"]
     times = [(params["stages"][n]["stage_settings"]["problem_data"]["start_time"],
               params["stages"][n]["stage_settings"]["problem_data"]["end_time"]) for n in order]
-    assert times[:3] == [(-2.0, -1.0), (-1.0, 0.0), (0.0, 1.0)]
+    assert times[:3] == [(0.0, 1.0), (1.0, 2.0), (2.0, 3.0)]
     assert all(end - start == 1.0 for start, end in times)
     assert all(params["stages"][n]["stage_settings"]["solver_settings"]["time_stepping"]
                ["time_step"] == 1.0 for n in order)

@@ -2250,7 +2250,9 @@ App.LivePatches = (function () {
      with the reason as its tooltip; the CLI refuses the option on such a stage.
 
      The stage duration and its time step are in the project's unit of time
-     (App.Units); the server refuses a step longer than the duration.
+     (App.Units); the server refuses a step longer than the duration. The initial
+     stage also has the start time of the whole calculation, 0 by default; a later
+     stage shows its own start time, where the stage before it ends, read-only.
 
      The convergence criterion is one of the calculation type's
      (App.Stages.CONVERGENCE_CRITERIA): residual or displacement for a mechanical
@@ -2287,11 +2289,19 @@ App.LivePatches = (function () {
     }
     general.push(['Time integration', 'select', 'time_integration',
                   App.Stages.TIME_INTEGRATIONS]);
+    // The calculation's clock starts at the initial stage; every later stage picks up
+    // where the one before it ended, so its start time is shown, not set.
+    var timing = [first
+      ? ['Start time', 'number', 'start_time', {}, second]
+      : ['Start time', 'static',
+         App.Stages.startOf(App.PROJECT, stage.id) + ' ' + second
+         + ' (where the previous stage ends)']];
     var groups = {
       'General': general.concat([
         ['Loading type', 'static', stage.loading || 'Staged construction'],
         ['Water conditions', 'static', App.BoundaryConditions
-          ? App.BoundaryConditions.waterIn(App.PROJECT, stage.id) : ''],
+          ? App.BoundaryConditions.waterIn(App.PROJECT, stage.id) : '']
+      ], timing, [
         ['Stage duration', 'number', 'duration', { exclusiveMin: 0 }, second],
         ['Time step', 'number', 'time_step', { exclusiveMin: 0 }, second]
       ]),

@@ -236,6 +236,8 @@ def _styx_stage(name: str, stage: dict, parent: str | None, *, activate: list[st
     if isinstance(start, (int, float)) and isinstance(end, (int, float)) and end > start:
         # The deck's own time, which is the project's: seconds in every unit system.
         fields["duration"] = float(end - start)
+        if parent is None:
+            fields["start_time"] = float(start)
         step = (solver.get("time_stepping") or {}).get("time_step")
         fields["time_step"] = (float(step) if isinstance(step, (int, float))
                                and 0 < step <= end - start else fields["duration"])
