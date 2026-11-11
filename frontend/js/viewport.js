@@ -1187,10 +1187,57 @@ App.Viewport = (function () {
      so a coarse line is always a line the fine grid also had. */
   function modelGridSpan(frame) { return Math.max(frame.size[0], frame.size[1]) * 1.6; }
 
+  /* 1, 2 or 5 times a power of ten, as the rulers step (js/ruler.js), so a grid line
+     falls on a ruler tick. Mantissa and exponent apart, so 0.1 * 2 never drifts. */
+  var NICE = [1, 2, 5];
+
+  function niceParts(value) {
+    var exp = Math.floor(Math.log10(value) + 1e-9);
+    return { mantissa: value / Math.pow(10, exp), exp: exp };
+  }
+
+  function niceValue(index, exp) {
+    var e = exp + Math.floor(index / NICE.length);
+    var m = NICE[((index % NICE.length) + NICE.length) % NICE.length];
+    return e < 0 ? m / Math.pow(10, -e) : m * Math.pow(10, e);
+  }
+
+  /* The largest 1-2-5 step that is not more than `value`. */
+  function niceAtMost(value) {
+    var p = niceParts(value);
+    var i = p.mantissa >= 5 - 1e-9 ? 2 : p.mantissa >= 2 - 1e-9 ? 1 : 0;
+    return niceValue(i, p.exp);
+  }
+
+  /* The next 1-2-5 step up from `step` that is a whole multiple of `base`. */
+  function coarserNice(step, base) {
+    var p = niceParts(step);
+    var i = p.mantissa >= 5 - 1e-9 ? 2 : p.mantissa >= 2 - 1e-9 ? 1 : 0;
+    for (var k = 1; k < 40; k++) {
+      var next = niceValue(i + k, p.exp);
+      var ratio = next / base;
+      if (Math.abs(ratio - Math.round(ratio)) < 1e-6) return next;
+    }
+    return step * 10;
+  }
+
+  /* At least eight cells across the model, and none wider than 2 m on a large one. */
+  var MAX_MODEL_CELL = 2;
+
   function gridCell(frame) {
     var span = modelGridSpan(frame);
-    return span / Math.max(8, Math.round(span / 2.5));
+    if (!(span > 0) || !isFinite(span)) return 1;
+    return niceAtMost(Math.min(span / 8, MAX_MODEL_CELL));
   }
+
+  /* The model-sized grid: whole cells, an even count so the centre is a line, and one
+     cell more than the span so snapping the centre to the lattice leaves no gap. */
+  function modelGridDivisions(frame) {
+    var divisions = Math.ceil(modelGridSpan(frame) / gridCell(frame) - 1e-9) + 1;
+    return divisions % 2 ? divisions + 1 : divisions;
+  }
+
+  function snapToCell(value, cell) { return Math.round(value / cell) * cell; }
 
   /* Beyond this the lines are closer than a pixel and cost more than they show. */
   var MAX_GRID_DIVISIONS = 240;
@@ -1207,7 +1254,7 @@ App.Viewport = (function () {
   function sectionGridSpec(cell, center, halfW, halfH) {
     var c = cell > 0 ? cell : 1;
     var needed = Math.max(halfW, halfH) * GRID_MARGIN * 2;
-    while (needed / c > MAX_GRID_DIVISIONS) c *= 2;
+    while (needed / c > MAX_GRID_DIVISIONS) c = coarserNice(c, cell > 0 ? cell : 1);
     var divisions = Math.ceil(needed / c);
     if (divisions % 2) divisions += 1;      // symmetric about the centre
     return {
@@ -1291,9 +1338,9 @@ App.Viewport = (function () {
   /* Back to the model-sized grid: what 3D wants, and what 2D starts from. */
   function resetReferenceGrid() {
     if (!frame || !gridGroup) return;
-    var span = modelGridSpan(frame);
+    var divisions = modelGridDivisions(frame);
     gridSpec = null;
-    makeReferenceGrid(span, Math.round(span / gridCell(frame)));
+    makeReferenceGrid(divisions * gridCell(frame), divisions);
     orientReferenceGrid(activeView, frameBBox());
   }
 
@@ -1303,11 +1350,11 @@ App.Viewport = (function () {
     disposeGroup(gridGroup);
     disposeGroup(boundsGroup);
 
-    var span = modelGridSpan(frame);
+    var divisions = modelGridDivisions(frame);
 
     gridGroup = new THREE.Group();
     gridSpec = null;                       // the 2D grid is re-derived from the camera
-    makeReferenceGrid(span, Math.round(span / gridCell(frame)));
+    makeReferenceGrid(divisions * gridCell(frame), divisions);
     orientReferenceGrid(activeView, bbox);
 
     boundsGroup = new THREE.Group();
@@ -2931,6 +2978,11 @@ App.Viewport = (function () {
     var c = center || (ref.plane === 'xz' ? [frame.center[0], frame.center[2]]
                      : ref.plane === 'xy' ? [frame.center[0], frame.center[1]]
                                           : [frame.center[1], frame.center[2]]);
+    if (!center) {
+      // On the lattice the 2D grid and the rulers use, not wherever the model's middle is.
+      var cell = gridCell(frame);
+      c = [snapToCell(c[0], cell), snapToCell(c[1], cell)];
+    }
     referenceGrid.rotation.set(0, 0, 0);
     if (ref.plane === 'xz') {
       referenceGrid.position.set(c[0], ref.offset, c[1]);
@@ -3102,6 +3154,7 @@ App.Viewport = (function () {
     orthoHalfHeight: orthoHalfHeight, ORTHO_BASE: ORTHO_BASE,
     radiusLimits: radiusLimits, pickPlane: pickPlane, modelSpan: modelSpan,
     sectionGridSpec: sectionGridSpec, sectionGridNeedsRebuild: sectionGridNeedsRebuild,
+    gridCell: gridCell,
     MAX_GRID_DIVISIONS: MAX_GRID_DIVISIONS,
     makeRenderer: makeRenderer, WEBGL_HELP: WEBGL_HELP,
     SOFTWARE_HELP: SOFTWARE_HELP,
