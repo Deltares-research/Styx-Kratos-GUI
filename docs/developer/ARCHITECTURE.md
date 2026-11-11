@@ -82,7 +82,7 @@ is one step of the pipeline:
 | `core/kratos/` | `writer.py` (the deck), `materials.py` (`MaterialParameters.json`), `parameters.py` (`ProjectParameters.json`: stages, solver, output), `condition_checks.py` (the boundary condition warnings the export and `check` share), `interfaces.py` (split nodes along walls), `deck_files.py` (file names of the deck), `external_deck.py` (existing decks), `mdpa_reader.py`, `node_parts.py` |
 | `core/analysis/` | `calculation.py` (run folder, subprocess, failure messages), `kratos_main.py` (runs inside the Python of Kratos) |
 | `core/results/` | `catalog.py` (list of runs, file access, cache), `gid_reader.py` (GiD ASCII), `fields.py` (quantities, units, invariants), `mesh.py` (buffers for the view), `parts.py`, `members.py` (curves along walls and interfaces) |
-| `core/` | `session.py` (each edit of a project, and the project file: the HTTP routes and the command line both use it), `gmsh_worker.py` (the Gmsh process), `scripting.py` (`run <file.py>`). They send work to several packages, so they are above all five. |
+| `core/` | `session.py` (each edit of a project, and the project file: the HTTP routes and the command line both use it), `gmsh_worker.py` (the Gmsh process), `scripting.py` (`run <file.py>`). They send work to several packages, so they are above all five. `version.py` (the version of Styx that the About box, `kratos-cli --version` and the release workflow use) is outside the packages too. |
 
 ### Import rule
 
@@ -121,7 +121,7 @@ the HTTP parts.
 | Runs | `routes/results.py` | `GET /api/results/runs`, `/runs/{run}`, `/runs/{run}/files/{name}`, `/runs/{run}/archive` |
 | Results of a stage | `routes/results.py` | `GET /api/results/runs/{run}/stages/{n}/fields`, `/mesh`, `/field/{name}`, `/displacement`, `/at/{node}`, `/parts` |
 | Results of a member | `routes/results.py` | `GET /api/results/runs/{run}/members`, `/members/{member}/{quantity}` |
-| Health | `main.py` | `GET /api/health` |
+| Health | `main.py` | `GET /api/health` (also the version of Styx) |
 
 ## Command-line modules (`cli/`)
 
