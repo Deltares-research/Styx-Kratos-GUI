@@ -1,4 +1,4 @@
-"""A Mohr-Coulomb soil, run in Kratos. Opt-in: `pytest --run-kratos`.
+"""A new soil and a Mohr-Coulomb soil, run in Kratos. Opt-in: `pytest --run-kratos`.
 
 Each soil here is made Mohr-Coulomb the way the material window makes it: the soil model
 chosen, its defaults filled in for what the soil lacks (`core.model.soil_models`), the
@@ -68,6 +68,58 @@ def test_the_test_model_s_mohr_coulomb_variant_runs_every_stage():
     project = excavation.mohr_coulomb_project()
     deck = live.export(project, MeshRequest(**project.mesh.model_dump()))
     assert ran(calculation.run(deck))
+
+
+@pytest.mark.parametrize("retention", [None, "VanGenuchtenLaw"])
+def test_a_new_soil_given_what_it_still_needs_runs_under_its_own_weight(retention):
+    """The soil **Create soil** and `kratos-cli material add` make (`blank_si`), given the
+    values the window lists as still needed and nothing else: Kratos checks more than
+    that, and the export derives the rest. Also with the Van Genuchten law chosen, which
+    fills what the window then lists: `VanGenuchtenLaw::Check` asks for more."""
+    p = live.block().model_dump(mode="json")
+    law = soil_models.law(soil_models.LINEAR_ELASTIC, 2)
+    for material in p["materials"]:
+        typed = material["variables"]
+        soil = soil_models.blank_si()
+        if retention is not None:
+            soil["RETENTION_LAW"] = retention
+            soil_models.fill_choice(law, soil_models.blank_si(), law, soil, p["unit_system"])
+        needed = soil_models.missing(law, soil)
+        soil.update({name: typed[name] for name in needed})
+        material.update(constitutive_law=law, variables=soil)
+    project = Project.model_validate(p)
+
+    assert needed and not soil_models.missing(law, project.materials[0].variables)
+    _, outcome = live.run(project)
+    assert ran(outcome)
+
+
+def test_a_tight_coupled_soil_builds_no_undrained_pressure_in_a_static_stage():
+    """A stage is static (`parameters.SOLVER`, `GeoStaticScheme`): no time derivatives, so
+    a load cannot raise a coupled soil's water pressure, and a low permeability does not
+    make it undrained. With the surface held at zero pressure it stays hydrostatic and
+    settles as a drained soil does; the block is 40 m deep."""
+    def soil(drainage: str, **variables) -> Project:
+        p = live.block(loads=[STRIP], stages=STAGES).model_dump(mode="json")
+        p["boundary_conditions"] += [
+            {"id": "start", "name": "Start", "kind": "water_pressure", "on": "domain",
+             "fluid_pressure_type": "Hydrostatic", "reference_coordinate": 0.0,
+             "is_fixed": False},
+            {"id": "top", "name": "Top", "kind": "water_pressure", "on": "face", "face": "top",
+             "fluid_pressure_type": "Uniform", "value": 0.0}]
+        for material in p["materials"]:
+            material["variables"].update(GEO_DRAINAGE_TYPE=drainage, **variables)
+        return Project.model_validate(p)
+
+    _, drained = live.run(soil("CONSTANT_PW_FIELD"))
+    _, tight = live.run(soil("FULLY_COUPLED", PERMEABILITY_XX=1e-16, PERMEABILITY_YY=1e-16))
+
+    assert ran(drained) and ran(tight)
+    pressure = catalog.stage_results(Path(tight["directory"]).name, 2).field("WATER_PRESSURE")
+    values = [value[0] for value in pressure.values.values()]
+    assert min(values) == pytest.approx(-400_000.0, rel=1e-3)
+    assert max(values) == pytest.approx(0.0, abs=1.0)
+    assert settlement(tight, 2) == pytest.approx(settlement(drained, 2), rel=1e-4)
 
 
 def test_a_mohr_coulomb_soil_that_cannot_yield_settles_as_the_elastic_one():

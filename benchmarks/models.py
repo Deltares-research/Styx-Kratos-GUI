@@ -76,7 +76,9 @@ def column(layers: list[tuple[float, float, dict]], width: float = 1.0,
     # The benchmark's own description of a soil is the engineer's (kN/m3, kN/m2, m/day),
     # which is what its analytical checks are written in; the project holds what Kratos
     # reads, converted the way every project in that shape is (`core/model/migration.py`).
-    p["materials"] = [mat["kratos"] if "kratos" in mat else migration.material(mat, 2)
+    # Its water is the project's (`Project.fluid`), which is water's here.
+    p["materials"] = [mat["kratos"] if "kratos" in mat
+                      else migration.without_water(migration.material(mat, 2))
                       for mat in materials]
     p["layers"] = [{"id": f"L{i}", "name": f"Layer_{i}", "mat": mat["id"],
                     "top": t, "bottom": b}
@@ -108,7 +110,7 @@ def column_under_drawn_fill(fill: tuple[float, float, dict],
     p = column([layer], width=width, name=name).model_dump(mode="json")
     p["domain"]["y_top"] = fill_top
     p["materials"].append(fill_material["kratos"] if "kratos" in fill_material
-                          else migration.material(fill_material, 2))
+                          else migration.without_water(migration.material(fill_material, 2)))
     corners = [(0.0, fill_top), (0.0, fill_bottom), (width, fill_bottom), (width, fill_top)]
     p["custom_parts"] = [{
         "key": "drawn_0", "label": "Fill", "source": "gui", "mat": fill_material["id"],

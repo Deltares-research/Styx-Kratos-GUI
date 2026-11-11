@@ -308,7 +308,7 @@
     });
   });
 
-  test('Material sets refreshes the layer material choices when its window closes', function () {
+  test('Soil materials refreshes the layer material choices when its window closes', function () {
     return withWindow(stack(), function (ui) {
       var materials = App.Dialogs.materials, closed = 0;
       App.Dialogs.materials = function (onClose) {
@@ -316,7 +316,7 @@
         closed += 1; onClose();
       };
       try {
-        ui.click('Material sets\u2026');
+        ui.click('Soil materials\u2026');
         T.eq(closed, 1);
         T.eq(ui.host.querySelectorAll('.lay-table-wrap tbody tr:first-child select option').length, 3);
       } finally { App.Dialogs.materials = materials; }

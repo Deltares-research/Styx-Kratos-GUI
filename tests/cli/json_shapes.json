@@ -175,6 +175,7 @@
    "color": "string",
    "id": "string",
    "interface_permeability": "string",
+   "model": "string",
    "name": "string",
    "r_inter": "number",
    "variables": "object"

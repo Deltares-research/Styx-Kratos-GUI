@@ -84,13 +84,17 @@ EDITED = PROJECT_KEYS | {"edit_notes"}
 EVERYTHING = {"project", "tree", "geometry", "mesh"}
 
 CONTRACTS = [
-    Contract("GET", "/api/health", lambda c: c.get("/api/health"), {"ok", "gmsh_version"}),
+    Contract("GET", "/api/health", lambda c: c.get("/api/health"),
+             {"ok", "version", "gmsh_version"}),
     Contract("GET", "/api/project", lambda c: c.get("/api/project"),
              {"name", "layers", "materials", "stages", "deck", "mesh"}),
     Contract("PUT", "/api/project", lambda c: c.put("/api/project", json=_project(c)),
              {"name", "layers", "materials"},
              bad=lambda c: c.put("/api/project", json={**_project(c), "no_such_key": 1}),
              bad_status=422),
+    Contract("POST", "/api/project/migration-notes",
+             lambda c: c.post("/api/project/migration-notes", json=_project(c)), {"notes"},
+             bad=lambda c: c.post("/api/project/migration-notes", json=[]), bad_status=422),
     Contract("POST", "/api/project/reset", lambda c: c.post("/api/project/reset"),
              PROJECT_KEYS, EVERYTHING),
     Contract("POST", "/api/project/new", lambda c: c.post("/api/project/new"),

@@ -16,7 +16,7 @@ from fastapi.exceptions import RequestValidationError
 from backend import store
 from backend.routes.common import refusals, stored
 from core import session
-from core.model import stages
+from core.model import migration, stages
 from core.model.schemas import (BodyUpdate, ConditionsUpdate, DimensionUpdate, LayersUpdate,
                                 LinesUpdate, MaterialsUpdate,
                                 StagesUpdate, Project, StructuresUpdate, UnitsUpdate,
@@ -38,6 +38,14 @@ async def put_project(project: Project) -> Project:
     from core import scripting
 
     return store.put(await asyncio.to_thread(scripting.with_solids, project, False))
+
+
+@router.post("/api/project/migration-notes")
+def migration_notes(document: dict) -> dict:
+    """What opening `document`, a project file as saved, changes in its deck
+    (`migration.notes`). The GUI's Open asks after the PUT above took the file: the
+    project it got back is already in the new shape, and the old values are gone."""
+    return {"notes": migration.notes(document)}
 
 
 @router.post("/api/project/reset")

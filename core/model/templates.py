@@ -57,7 +57,8 @@ saved in that shape is converted (`core/model/migration.py`)."""
 
 
 def _materials(dim: int) -> list[Material]:
-    return [Material.model_validate(migration.material(m, dim)) for m in _DEMO_MATERIALS]
+    return [Material.model_validate(migration.without_water(migration.material(m, dim)))
+            for m in _DEMO_MATERIALS]
 
 
 _LAYERS = [
