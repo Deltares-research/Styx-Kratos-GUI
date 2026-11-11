@@ -554,6 +554,11 @@ window.EDITS_FIXTURE =
         "water_2",
         "water_3",
         "surcharge",
+        "fixed_bottom",
+        "roller_left",
+        "roller_right",
+        "roller_front",
+        "roller_back",
         "pore_pressure"
       ]
     },
@@ -1138,6 +1143,11 @@ window.EDITS_FIXTURE =
         "water_3",
         "drawn_0",
         "surcharge",
+        "fixed_bottom",
+        "roller_left",
+        "roller_right",
+        "roller_front",
+        "roller_back",
         "pore_pressure"
       ]
     },
@@ -1712,6 +1722,11 @@ window.EDITS_FIXTURE =
         "water_2",
         "water_3",
         "surcharge",
+        "fixed_bottom",
+        "roller_left",
+        "roller_right",
+        "roller_front",
+        "roller_back",
         "pore_pressure"
       ]
     },
@@ -2230,6 +2245,11 @@ window.EDITS_FIXTURE =
         "water_2",
         "water_3",
         "surcharge",
+        "fixed_bottom",
+        "roller_left",
+        "roller_right",
+        "roller_front",
+        "roller_back",
         "pore_pressure"
       ]
     },
@@ -2901,6 +2921,11 @@ window.EDITS_FIXTURE =
         "water_2",
         "water_3",
         "surcharge",
+        "fixed_bottom",
+        "roller_left",
+        "roller_right",
+        "roller_front",
+        "roller_back",
         "pore_pressure"
       ]
     }

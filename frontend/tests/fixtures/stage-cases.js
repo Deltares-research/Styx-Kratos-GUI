@@ -2345,6 +2345,11 @@ window.STAGE_FIXTURE =
       "pile",
       "tie",
       "load",
+      "fixed_bottom",
+      "roller_left",
+      "roller_right",
+      "roller_front",
+      "roller_back",
       "pore_pressure"
     ]
   },
@@ -2360,11 +2365,21 @@ window.STAGE_FIXTURE =
     "pile",
     "tie",
     "load",
+    "fixed_bottom",
+    "roller_left",
+    "roller_right",
+    "roller_front",
+    "roller_back",
     "pore_pressure"
   ],
   "active_parts": {
     "initial": [
+      "fixed_bottom",
       "pore_pressure",
+      "roller_back",
+      "roller_front",
+      "roller_left",
+      "roller_right",
       "soil_L1__outside",
       "soil_L2__outside",
       "soil_L2__pit",
@@ -2372,7 +2387,12 @@ window.STAGE_FIXTURE =
       "soil_L3__pit"
     ],
     "null_step": [
+      "fixed_bottom",
       "pore_pressure",
+      "roller_back",
+      "roller_front",
+      "roller_left",
+      "roller_right",
       "soil_L1__outside",
       "soil_L2__outside",
       "soil_L2__pit",
@@ -2380,9 +2400,14 @@ window.STAGE_FIXTURE =
       "soil_L3__pit"
     ],
     "build_wall": [
+      "fixed_bottom",
       "load",
       "pile",
       "pore_pressure",
+      "roller_back",
+      "roller_front",
+      "roller_left",
+      "roller_right",
       "soil_L1__outside",
       "soil_L2__outside",
       "soil_L2__pit",
@@ -2390,9 +2415,14 @@ window.STAGE_FIXTURE =
       "soil_L3__pit"
     ],
     "dig_1": [
+      "fixed_bottom",
       "load",
       "pile",
       "pore_pressure",
+      "roller_back",
+      "roller_front",
+      "roller_left",
+      "roller_right",
       "soil_L1__lift1",
       "soil_L2__outside",
       "soil_L2__pit",
@@ -2400,9 +2430,14 @@ window.STAGE_FIXTURE =
       "soil_L3__pit"
     ],
     "prop": [
+      "fixed_bottom",
       "load",
       "pile",
       "pore_pressure",
+      "roller_back",
+      "roller_front",
+      "roller_left",
+      "roller_right",
       "soil_L1__lift1",
       "soil_L2__outside",
       "soil_L2__pit",
@@ -2411,9 +2446,14 @@ window.STAGE_FIXTURE =
       "tie"
     ],
     "dig_2": [
+      "fixed_bottom",
       "load",
       "pile",
       "pore_pressure",
+      "roller_back",
+      "roller_front",
+      "roller_left",
+      "roller_right",
       "soil_L1__lift2",
       "soil_L1__outside",
       "soil_L2__outside",
@@ -2423,9 +2463,14 @@ window.STAGE_FIXTURE =
       "tie"
     ],
     "settle": [
+      "fixed_bottom",
       "load",
       "pile",
       "pore_pressure",
+      "roller_back",
+      "roller_front",
+      "roller_left",
+      "roller_right",
       "soil_L1__lift2",
       "soil_L1__outside",
       "soil_L2__outside",

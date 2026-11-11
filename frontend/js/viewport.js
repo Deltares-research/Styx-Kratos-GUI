@@ -2101,10 +2101,6 @@ App.Viewport = (function () {
   var waterIds = [];
   var revealed = [];
 
-  /* Whether the eye lets `key` be drawn in `mode`. In Staged construction a water
-     pressure condition has the stage's checkbox in place of its eye, and the stage is
-     what is read there: the conditions the selected stage has on are drawn, the others
-     not (`stageHidden`). Results reads the stage on screen the same way. */
   /* Whether the selected stage takes `key` off the screen. A structure or interface
      the stage has switched off stays, faded (`syncStructureFade`): it is what the
      user is stepping through the stages to see come and go. Any other part stays as
@@ -2119,8 +2115,14 @@ App.Viewport = (function () {
     });
   }
 
+  /* Whether the eye lets `key` be drawn in `mode`. In Staged construction a boundary
+     condition -- a support or a water pressure -- has the stage's checkbox in place of
+     its eye, and the stage is what is read there: the conditions the selected stage has
+     on are drawn, the others ghosted (`stageGhosts`). Results reads the stage on screen
+     the same way for the water, the only conditions it draws. */
   function eyeOpen(key, mode) {
-    if ((mode === 'staged' || mode === 'results') && waterIds.indexOf(key) >= 0) return true;
+    if (mode === 'staged' && conditionIds.indexOf(key) >= 0) return true;
+    if (mode === 'results' && waterIds.indexOf(key) >= 0) return true;
     return visible[key] !== false;
   }
 
@@ -2209,28 +2211,30 @@ App.Viewport = (function () {
 
   /* The parts the selected stage has switched off that are still drawn, as ghosts:
      in Staged construction only, so that a part taken out of a stage can be
-     right-clicked to put it back (patches.js, the viewport menu's Activate). Not the
-     boundary conditions, which the Model explorer's stage check box switches, and not
-     Results, which draws only what was in the run. */
+     right-clicked to put it back (patches.js, the viewport menu's Activate). The
+     boundary conditions too -- a support or a water pressure a stage has switched off
+     is switched back on the same way. Not Results, which draws only what was in the
+     run. */
   function stageGhosts() {
     if (!App.state || App.state.mode !== 'staged') return {};
     var ghosts = {};
-    Object.keys(stageHidden()).forEach(function (key) {
-      if (conditionIds.indexOf(key) < 0 && waterIds.indexOf(key) < 0) ghosts[key] = true;
-    });
+    Object.keys(stageHidden()).forEach(function (key) { ghosts[key] = true; });
     return ghosts;
   }
 
+  /* How much of its own opacity a ghost keeps. A condition is drawn in thin lines,
+     which at a soil body's ghost would be gone altogether, so it keeps more. */
   var GHOST_OPACITY = 0.15;
+  var CONDITION_GHOST_OPACITY = 0.35;
 
-  function ghostMaterial(material, on) {
+  function ghostMaterial(material, on, factor) {
     if (!material) return;
     var data = material.userData || (material.userData = {});
     if (on && !data.ghostBase) {
       data.ghostBase = { transparent: material.transparent, opacity: material.opacity,
                          depthWrite: material.depthWrite };
       material.transparent = true;
-      material.opacity = data.ghostBase.opacity * GHOST_OPACITY;
+      material.opacity = data.ghostBase.opacity * (factor || GHOST_OPACITY);
       material.depthWrite = false;
       material.needsUpdate = true;
     } else if (!on && data.ghostBase) {
@@ -2248,8 +2252,9 @@ App.Viewport = (function () {
     Object.keys(groups).forEach(function (key) {
       if (structureKeys.indexOf(key) >= 0) return;
       var on = !!ghosts[key];
+      var factor = conditionIds.indexOf(key) >= 0 ? CONDITION_GHOST_OPACITY : GHOST_OPACITY;
       groups[key].traverse(function (o) {
-        [].concat(o.material || []).forEach(function (m) { ghostMaterial(m, on); });
+        [].concat(o.material || []).forEach(function (m) { ghostMaterial(m, on, factor); });
       });
     });
   }

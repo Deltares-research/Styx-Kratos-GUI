@@ -9,7 +9,7 @@ from core.model import schemas
 from core.geometry import solid_model
 from core.kratos import writer
 KILO = 1000.0  # kN -> N: these tests write old-style projects, converted on load (core/model/migration.py)
-from core.model.schemas import LineLoad, MeshRequest, PointLoad
+from core.model.schemas import LineLoad, MeshRequest, PointLoad, Stage
 from core.model.templates import seed_project
 from tests import mdpa
 
@@ -1283,20 +1283,24 @@ def test_number_conditions_uses_its_own_ids_and_deduplicates_part_nodes():
     assert parts == [("Load", [30, 50, 80], [], [1, 2])]
 
 
-def test_seepage_iteration_warning_counts_unique_face_nodes():
-    project = SimpleNamespace(stages=[SimpleNamespace(name="Short step", max_iterations=2)])
+def _staged(*stages_: Stage) -> SimpleNamespace:
+    return SimpleNamespace(stages=list(stages_), stageable_keys=lambda: ["water"])
 
+
+def test_seepage_iteration_warning_counts_unique_face_nodes():
+    face = [("water", "LineSeepageCondition2D2N", [[1, 2], [2, 3]])]
     warning = writer._seepage_iterations(
-        project, [("water", "LineSeepageCondition2D2N", [[1, 2], [2, 3]])],
-    )
+        _staged(Stage(id="short", name="Short step", max_iterations=2)), face)
 
     assert len(warning) == 1
     assert "allows 2 iterations" in warning[0]
     assert "faces have 3 nodes" in warning[0]
     assert writer._seepage_iterations(
-        SimpleNamespace(stages=[SimpleNamespace(name="Long step", max_iterations=3)]),
-        [("water", "LineSeepageCondition2D2N", [[1, 2], [2, 3]])],
-    ) == []
+        _staged(Stage(id="long", name="Long step", max_iterations=3)), face) == []
+    # A stage with the face switched off has no nodes to open.
+    assert writer._seepage_iterations(
+        _staged(Stage(id="dry", name="Dry step", max_iterations=2,
+                      deactivate=["water"])), face) == []
 
 
 @pytest.mark.parametrize("dimension, row, coordinates, expected", [

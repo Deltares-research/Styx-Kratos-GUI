@@ -40,8 +40,8 @@ from core.kratos import condition_checks
 from core.kratos import deck_files, interfaces
 from core.kratos import materials, parameters
 from core.kratos.materials import material_parameters
-from core.model.schemas import (TARGET_ORDER, Beam, DisplacementCondition, LineLoad, Member,
-                                MeshRequest, Panel, PanelSection, PointLoad, Project,
+from core.model.schemas import (STAGED_CONDITIONS, TARGET_ORDER, Beam,
+                                DisplacementCondition, LineLoad, Member, MeshRequest, Panel, PanelSection, PointLoad, Project,
                                 SeepageCondition, SurfaceLoad, WaterPressureCondition)
 
 # (dim, gmsh element type) -> (Kratos class, gmsh index order in Kratos' order)
@@ -435,7 +435,7 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
     load_mask = [True, True, dim == 3]
     # The far end of every anchor is pinned: in this formulation the grouted body is a
     # fixed point, so the tie reacts against a restraint rather than against the soil.
-    anchor_fixities = [(name, list(load_mask)) for name, _, _, _ in supports]
+    anchor_fixities = [(name, list(load_mask), "") for name, _, _, _ in supports]
     # A sheet pile does not exist before it is installed: it and whichever interface(s)
     # tie it to the soil are staged together, deactivated in the deck's initial state and
     # activated in a wall-installation stage -- see `staged_construction.json`. Members
@@ -619,8 +619,8 @@ class _Deck:
     """The soil parts whose retention law makes the permeability depend on the water
     pressure, so that a flow stage with any of them in it is solved by Newton-Raphson."""
     seepage: tuple[str, ...] = ()
-    """The parts of the seepage faces' conditions: a flow stage with any is solved by the
-    seepage strategy, in every stage."""
+    """The parts of the seepage faces' conditions: a flow stage with any of them on is
+    solved by the seepage strategy. Each goes with its face's condition (`owners`)."""
 
 
 def _deck_active(deck: _Deck, keys: set[str]) -> frozenset[str]:
@@ -678,8 +678,9 @@ def _sequenced_stages(project: Project, deck: _Deck) -> list[parameters.Stage]:
     out: list[parameters.Stage] = []
     keys = set(project.stageable_keys())
     live = _deck_active(deck, keys)
-    # The water pressure conditions a stage switches, as it does a load.
-    water = {c.id for c in project.boundary_conditions if c.kind == "water_pressure"}
+    # The boundary conditions a stage switches -- water pressures and supports -- as it
+    # does a load.
+    switched = {c.id for c in project.boundary_conditions if c.kind in STAGED_CONDITIONS}
     for index, (stage, switched_on, switched_off) in enumerate(steps):
         was = live
         keys = (set(keys) - switched_off) | switched_on
@@ -754,18 +755,18 @@ def _sequenced_stages(project: Project, deck: _Deck) -> list[parameters.Stage]:
             tolerated_error=stage.tolerated_error,
             materials_filename=(deck_files.INITIAL_MATERIALS_NAME if k0
                                 else deck_files.MATERIALS_NAME),
-            conditions=frozenset(key for key in keys if key in water),
+            conditions=frozenset(key for key in keys if key in switched),
             flow_strategy=_flow_strategy(deck, live) if flow else None,
-            seepage=deck.seepage if flow else (),
+            seepage=tuple(name for name in deck.seepage if name in live) if flow else (),
         ))
     return out
 
 
 def _flow_strategy(deck: _Deck, live: frozenset[str]) -> str:
     """The `parameters.FLOW_STRATEGIES` entry a flow stage is solved with: the seepage
-    strategy where there is a seepage face, Newton-Raphson where a soil's permeability
-    depends on the water pressure, one linear solve otherwise."""
-    if deck.seepage:
+    strategy where the stage has a seepage face on, Newton-Raphson where a soil's
+    permeability depends on the water pressure, one linear solve otherwise."""
+    if any(name in live for name in deck.seepage):
         return "newton_raphson_with_seepage"
     if any(name in live for name in deck.unsaturated):
         return "newton_raphson"
@@ -1860,13 +1861,19 @@ def _seepage_iterations(project: Project,
     that allows fewer iterations than its faces have nodes may stop before the faces
     have found where the water leaves them. How many it needs depends on how many nodes
     open: the Muskat column's face of 89 nodes opens 35 of them, in 35 iterations
-    (tests/kratos/test_live_flow.py). A warning, then, not a refusal."""
-    nodes = len({tag for _, _, rows in conditions for row in rows for tag in row})
-    return [f"stage {stage.name!r} allows {stage.max_iterations} iterations, and its "
-            f"seepage faces have {nodes} nodes, which the seepage strategy opens or "
-            "closes one per iteration; it may stop before the faces settle. If it does, "
-            "give the stage more iterations."
-            for stage in project.stages if stage.max_iterations < nodes]
+    (tests/kratos/test_live_flow.py). A warning, then, not a refusal. Only the faces a
+    stage has on count towards it."""
+    out = []
+    for stage in project.stages:
+        on = stages.active_parts(project, stage)
+        nodes = len({tag for key, _, rows in conditions if key in on
+                     for row in rows for tag in row})
+        if stage.max_iterations < nodes:
+            out.append(f"stage {stage.name!r} allows {stage.max_iterations} iterations, "
+                       f"and its seepage faces have {nodes} nodes, which the seepage "
+                       "strategy opens or closes one per iteration; it may stop before "
+                       "the faces settle. If it does, give the stage more iterations.")
+    return out
 
 
 def _number_conditions(
@@ -2097,8 +2104,9 @@ def _condition_targets(project: Project, dim: int,
 
 
 def _displacements(dim: int, boundaries: list[tuple[str, int, list[int]]],
-                   resolved: list[Resolved]) -> list[tuple[str, list[bool]]]:
-    """(part name, DISPLACEMENT is_fixed per axis) for every displacement condition.
+                   resolved: list[Resolved]) -> list[tuple[str, list[bool], str]]:
+    """(part name, DISPLACEMENT is_fixed per axis, condition id) for every displacement
+    condition. The id is what a stage switches the support by (`Stage.conditions`).
 
     The faces in the order of `BOUNDARIES` -- each one's lift segments, then what is
     left of it -- which is the order the deck has always had its supports in, then the
@@ -2111,9 +2119,9 @@ def _displacements(dim: int, boundaries: list[tuple[str, int, list[int]]],
 
     held = [(condition, targets) for condition, targets, _ in resolved
             if isinstance(condition, DisplacementCondition)]
-    out = [(name, mask(condition)) for name, _, _ in boundaries
+    out = [(name, mask(condition), condition.id) for name, _, _ in boundaries
            for condition, targets in held if condition.on == "face" and name in targets]
-    out += [(target, mask(condition)) for condition, targets in held
+    out += [(target, mask(condition), condition.id) for condition, targets in held
             if condition.on != "face" for target in targets if target is not None]
     return out
 

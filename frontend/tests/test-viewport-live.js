@@ -444,6 +444,68 @@
     });
   });
 
+  /* A support or a water pressure a stage has switched off stays on screen as a ghost
+     in Staged construction, so it can be right-clicked and activated again; the stage
+     check box stands in for its eye there, so a closed eye does not hide it. */
+  test('viewport: a condition a stage switches off is drawn as a ghost', function () {
+    function restore() {
+      App.Viewport.select(null);
+      App.Viewport.forgetConditionEyes();
+      standIns();
+      App.state.mode = 'soil'; App.state.phase = null;
+      return App.Viewport.refresh();
+    }
+    var support = 'staged_support', water = 'staged_water';
+    var solid = {};
+    return boot().then(function () {
+      var project = JSON.parse(JSON.stringify(P.project));
+      var conditions = App.BoundaryConditions;
+      var held = conditions.draftDisplacement(project, 'face', { face: 'bottom' });
+      held.id = support;
+      var pressure = conditions.draftWaterPressure(project, 'point', {
+        points: [[10, -5]], fluid_pressure_type: 'Uniform', value: -100
+      });
+      pressure.id = water;
+      project.boundary_conditions = [held, pressure];
+      project.stageable_parts = (project.stageable_parts || []).concat([support, water]);
+      project.stages = [
+        { id: 'on', name: 'On', parent: null, activate: [], deactivate: [] },
+        { id: 'off', name: 'Off', parent: 'on', activate: [], deactivate: [support, water] }
+      ];
+      var get = App.Api.get;
+      App.Api.get = function (path) {
+        return path === '/api/project' ? Promise.resolve(project) : get(path);
+      };
+      App.state.mode = 'soil'; App.state.phase = null;
+      return App.Viewport.refresh();
+    }).then(function () {
+      var groups = sceneGroups();
+      [support, water].forEach(function (key) { solid[key] = opacities(groups[key]); });
+      App.Viewport.setVisible(support, false);
+
+      App.state.mode = 'staged';
+      App.state.phase = 'on';
+      App.Viewport.applyStageVisibility();
+      [support, water].forEach(function (key) {
+        T.eq(groups[key].visible, true, key + ' is drawn in the stage that has it on');
+        T.eq(opacities(groups[key]), solid[key], key + ' is drawn solid there');
+      });
+
+      App.state.phase = 'off';
+      App.Viewport.applyStageVisibility();
+      var ghosts = App.Viewport.stageGhosts();
+      [support, water].forEach(function (key) {
+        T.ok(ghosts[key], key + ' is a ghost in the stage that has it off');
+        T.eq(groups[key].visible, true, key + ' is still there to right-click');
+        opacities(groups[key]).forEach(function (o, i) {
+          T.ok(o < solid[key][i] || solid[key][i] === 0, key + ' is drawn faint');
+        });
+      });
+    }).then(restore, function (error) {
+      return restore().then(function () { throw error; });
+    });
+  });
+
   ['project', 'geometry'].forEach(function (endpoint) {
     test('viewport: a failed ' + endpoint + ' refresh rejects, reports its cause and removes the progress overlay', function () {
       var timeout = window.setTimeout, clear = window.clearTimeout;

@@ -261,9 +261,9 @@ class Stage:
     contains, so nothing is filtered out of it, which is exactly how it exported before
     staged construction existed.
 
-    `conditions` is the water pressure conditions on in this stage, by id: a condition
-    a stage switched off is not written in it. `None` writes every one, as an unstaged
-    deck does.
+    `conditions` is the boundary conditions on in this stage -- water pressures and
+    supports -- by id: a condition a stage switched off is not written in it. `None`
+    writes every one, as an unstaged deck does.
 
     `max_iterations` and `tolerated_error` are `None` for "whatever `SOLVER` says",
     rather than being defaulted to its values here, so that the deck of a project with
@@ -330,7 +330,7 @@ def stage_name(index: int, label: str) -> str:
 
 
 def project_parameters(
-    constraints: list[tuple[str, list[bool]]],
+    constraints: Sequence[tuple[str, list[bool]] | tuple[str, list[bool], str]],
     loads: list[tuple[str, str, list[bool], list[float]]],
     stages: list[Stage],
     normal_loads: Sequence[tuple[str, str, float, float, float]] = (),
@@ -342,7 +342,9 @@ def project_parameters(
     rotation_dofs: bool = False,
     gravity: bool = True,
 ) -> str:
-    """`constraints` is (sub-model part name, DISPLACEMENT is_fixed per axis).
+    """`constraints` is (sub-model part name, DISPLACEMENT is_fixed per axis), with
+    optionally the id of the support it comes from, which a stage switches
+    (`Stage.conditions`); an empty or missing id is in every stage its part is.
     `loads` is (sub-model part name, Kratos variable, active per axis, value).
     `stages` is the deck's stages in execution order -- see `Stage`, and `core.kratos.writer`
     for where they come from. There is always at least one.
@@ -378,7 +380,8 @@ def project_parameters(
         ]
         loads_processes += [_seepage(name) for name in stage.seepage]
         constraint_processes = [_constraint(name, is_fixed)
-                                for name, is_fixed in constraints if keep(name)]
+                                for name, is_fixed, *of in constraints
+                                if keep(name) and _switched_on(stage, of)]
         # On the whole soil a condition is filtered by nothing, as the soil is the porous
         # domain itself; on a face or a part it goes with the stretch or body it names.
         # And it is in the stages whose stage has it switched on.
@@ -413,6 +416,13 @@ def project_parameters(
         },
         "stages": rendered,
     }, indent=4)
+
+
+def _switched_on(stage: Stage, of: list[str]) -> bool:
+    """Whether the support a constraint comes from (`of`, its id or nothing) is on in
+    `stage`. A constraint no support owns -- an anchor's pinned end -- always is."""
+    condition = of[0] if of else ""
+    return not condition or stage.conditions is None or condition in stage.conditions
 
 
 def _preprocess(stage: Stage, deck_name: str) -> dict | None:

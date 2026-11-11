@@ -1104,6 +1104,9 @@ TARGET_ORDER = ("domain", "part", "face", "line", "point")
 """The order fixed conditions are written in, least specific first: where two act on
 one node, Kratos keeps the value written last, so the more specific target wins."""
 
+STAGED_CONDITIONS = ("displacement", "water_pressure", "seepage")
+"""The boundary condition kinds a stage switches on and off (`Project.stageable_keys`)."""
+
 
 class WaterPressureCondition(Base):
     """A water pressure the user prescribes: on the whole soil, on one soil part, on a
@@ -1361,9 +1364,10 @@ class Stage(Base):
     is a legitimate thing to have half-built in the editor, and refusing it here would
     make it impossible to type.
 
-    The water in a stage is its water pressure conditions: their ids are stageable
-    keys (`Project.stageable_keys`), so a stage switches one on or off as it does a
-    load -- a high level, then a low one.
+    The water in a stage is its water pressure conditions and seepage faces, and its
+    supports its displacement conditions: their ids are stageable keys
+    (`Project.stageable_keys`), so a stage switches one on or off as it does a load -- a
+    high level, then a low one.
     """
     id: Ident
     name: str
@@ -2752,9 +2756,10 @@ class Project(Base):
         draw order: `part_keys` feeds tessellation, and a key appearing there makes the
         viewport look for geometry that a load pad in the simple example does not have.
 
-        The water pressure conditions are stageable too, last: a stage switches the
-        water on and off as it does a load -- the pit pumped dry, a level that drops.
-        The supports are not; they hold the model in every stage.
+        The boundary conditions are stageable too, last: a stage switches the water on
+        and off as it does a load -- the pit pumped dry, a level that drops -- a support
+        the same way, a prop of the model removed or added part way through, and a
+        seepage face, where water may leave the soil in some flow stages and not others.
         """
         if self.deck is not None:
             # A deck's Styx stages are its Kratos stages, and they switch the deck's own parts.
@@ -2762,7 +2767,7 @@ class Project(Base):
         keys = self._staged_parts_and_loads()
         seen = set(keys)
         for condition in self.boundary_conditions:
-            if condition.kind == "water_pressure" and condition.id not in seen:
+            if condition.kind in STAGED_CONDITIONS and condition.id not in seen:
                 seen.add(condition.id)
                 keys.append(condition.id)
         return keys

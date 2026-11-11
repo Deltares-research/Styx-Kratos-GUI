@@ -559,9 +559,9 @@ App.LivePatches = (function () {
      and a click switches it. It is not the eye: a condition is not drawn until the
      user selects its row or picks Show on it, so a box meaning "drawn" would be empty
      on every condition the model uses. The group row switches every condition under
-     it and shows a dash while they differ. In Staged construction a water pressure
-     row keeps its stage check (addStageChecks), which says more: in the model in the
-     selected stage. */
+     it and shows a dash while they differ. In Staged construction a condition row --
+     support or water pressure -- keeps its stage check (addStageChecks), which says
+     more: in the model in the selected stage. */
   function addConditionChecks(mode) {
     var host = document.getElementById('tree-model');
     if (!host || !App.BoundaryConditions) return;

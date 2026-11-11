@@ -191,13 +191,19 @@ added pore_pressure  Pore pressure  water pressure on the whole soil; hydrostati
   conditions: the bottom fixed, and the left and right sides on rollers.
 
 **Check your progress.** `parts` lists the part keys a stage can switch on and off: the
-soil parts, and the pore pressure condition:
+soil parts, the supports and the pore pressure condition (the front and back rollers are
+for a 3D model; a section leaves them out of its deck):
 
 ```text
 crow.json> parts
 soil_L_top  Soil_Top
 soil_L_mid  Soil_Middle
 soil_L_bot  Soil_Bottom
+fixed_bottom  Fixed bottom
+roller_left  Roller left
+roller_right  Roller right
+roller_front  Roller front
+roller_back  Roller back
 pore_pressure  Pore pressure
 ```
 

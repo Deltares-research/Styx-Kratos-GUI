@@ -85,7 +85,7 @@ Genuchten soil.
 | `normal-load P list\|add\|set\|remove ...` | Pressures normal to a line, in 2D: `add [ID] --points ... [--hydrostatic [--reference-coordinate Y] \| --pressure S]` |
 | `boundary P list\|add\|set\|remove\|standard ...` | The boundary conditions: `add [ID] --face F\|--part KEY\|--line ...\|--point X Y --fixed\|--roller\|--fix AXIS ...` for a support, `add [ID] --domain\|... --water-pressure TYPE ...` for a water pressure, `add [ID] --face F\|--line ... --seepage` for a seepage face; `standard` puts back the standard supports |
 | `gravity P [on\|off]` | Show, or switch on or off, the self weight of every body (on in a new project) |
-| `parts P` | Every part by its key, and every water pressure condition: the names stages activate and deactivate |
+| `parts P` | Every part by its key, and every support, water pressure condition and seepage face: the names stages activate and deactivate |
 | `mesh P [--size S] [--order 1\|2]` | Mesh the model and report its size. `--size` and `--order` are kept in the project |
 | `stages P [list\|show\|defaults\|add\|copy\|set\|remove\|activate\|deactivate] ...` | The construction sequence, edited as the GUI's Stages toolbar edits it. `phases` is the old name and still works |
 | `node SOURCE NODE ...` | Which SubModelParts a node of the deck is in, and the nodes an interface split from it |
@@ -348,16 +348,18 @@ kratos-cli boundary dam.json add exit --seepage --line 1.62 0.48 1.62 4     # a 
   those values. A `Uniform` condition frees its nodes when its stage ends, so in a soil
   that couples the water pressure to the deformation the pressure is then free, and the
   export warns about it. A condition a stage names cannot be removed; take it out of
-  those stages first. The supports are on in every stage.
+  those stages first. A support is switched per stage the same way, and is on in every
+  stage until one switches it off.
 - **Seepage face.** `--seepage` makes a seepage face, where water may leave the soil in a
   groundwater flow calculation: on `--face F`, or on `--line X Y X Y ...` along the soil's
   outer boundary. It takes no other option. Kratos' seepage strategy decides, node by node
   while it iterates, where the face is open: there the water pressure is zero and the water
   flows out; elsewhere the face is closed, as a boundary with no condition is. It opens or
   closes one node per iteration, so the export warns when a stage allows fewer iterations
-  than its seepage faces have nodes. A seepage line through the soil is refused, and a
-  deformation calculation leaves a seepage face out, with a warning. It is on in every
-  stage.
+  than the seepage faces it has on have nodes. A seepage line through the soil is refused,
+  and a deformation calculation leaves a seepage face out, with a warning. It is on in
+  every stage until a stage switches it off (`stages P deactivate STAGE ID`), as a water
+  pressure condition is.
 - **Overlap.** The export writes the start values first, then the fixed conditions from the
   least to the most specific target: the whole soil, a part, a face, a line, a point. On a
   node two of them share, the more specific one wins. Two fixed conditions on the same kind
@@ -372,8 +374,9 @@ kratos-cli boundary dam.json add exit --seepage --line 1.62 0.48 1.62 4     # a 
 
 ## The stages, command by command
 
-A stage says what it changes about the model it starts from: the parts and the water
-pressure conditions it switches on and off, and how it is solved. `kratos-cli parts P`
+A stage says what it changes about the model it starts from: the parts, the supports, the
+water pressure conditions and the seepage faces it switches on and off, and how it is
+solved. `kratos-cli parts P`
 lists the keys a stage can switch.
 
 Stages were called *phases* before Styx took Kratos' word for them. The old name still
@@ -421,8 +424,8 @@ kratos-cli stages pit.json list
 - **Defaults.** A stage that is not given these options is a plastic calculation with
   at most 15 iterations, a tolerance of 1e-4, the displacements of the stage before kept,
   and a time interval of 0 days. `stages show ID` prints a stage's settings.
-- **A seepage face** (`boundary add --seepage`, above) makes a flow stage use Kratos'
-  seepage strategy, `newton_raphson_with_seepage`.
+- **A seepage face** (`boundary add --seepage`, above) makes a flow stage that has it on
+  use Kratos' seepage strategy, `newton_raphson_with_seepage`.
 - **The solver** of a deformation stage is the same for every stage and no option
   changes it: a static U-Pw analysis (displacements and water pressure), Newton-Raphson
   iterations on a residual criterion, one step per stage, and the direct
