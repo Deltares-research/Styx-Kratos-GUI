@@ -74,6 +74,7 @@ Genuchten soil.
 | `layer P list\|add\|set\|split\|remove ...` | The soil stack: `add ID --material M [--bottom Y \| --thickness T]`, `set ID [--top Y] [--bottom Y]` |
 | `line P list\|add\|set\|remove ...` | The lines that split the soil: `add ID --points X Y X Y ...` |
 | `body P list\|set ...` | The soil bodies by their keys: `set KEY [--name NAME] [--material M]` |
+| `surface P list\|add\|set\|remove ...` | The soil surfaces of a 2D model, as Soil > Create soil surface… draws them: `add --points X Y X Y ... --material M [--label L]` |
 | `volume P list\|add\|import\|remove\|clear ...` | Solids drawn or imported into the model; with `--material` they are soil |
 | `section P list\|add\|set\|remove ...` | The sections structures are built with: `add beam\|panel\|anchor\|interface ID [NAME=VALUE ...]` |
 | `beam P list\|add\|set\|remove ...` | Sheet piles, in 2D: `add [ID] [--points x y ...] [--section S]` |
@@ -172,9 +173,9 @@ kratos-cli parts pit.json                                 # soil_top, ... for th
   values a choice can take and when a parameter is used. `--law` is for any other law,
   for example a UDSM. It is written as you type it. `--model` and `--law` cannot be
   given together.
-- **Lines** split the soil. Where a line crosses a layer from one edge to another, the
-  layer becomes separate soil bodies, and each is a SubModelPart that a stage can switch
-  off. A sheet pile splits the soil the same way, also when it is `--inactive`. A part of
+- **Lines** split the soil. Where a line crosses a layer or a soil surface from one edge to
+  another, it becomes separate soil bodies, and each is a SubModelPart that a stage can
+  switch off. A sheet pile splits the soil the same way, also when it is `--inactive`. A part of
   a line that ends inside the soil splits nothing, and the command says so when no part of
   the line splits anything. A line may be a polyline, and lines may cross. In 3D a line
   cuts across the whole z range; it is drawn in 2D. The commands are in
@@ -191,13 +192,29 @@ kratos-cli parts pit.json                                 # soil_top, ... for th
   `bodies=` say the same. A record
   `SoilBody(id="lift1", name="lift 1", layer="top", point=(2.5, -1))` chooses the key of
   the piece its `point` lies in.
+
+  A soil surface that a line cuts is split by the same rules. Each piece is
+  `<surface>__<id>`, for example `drawn_0__part1`, and its record names the surface with
+  `part="drawn_0"` in place of `layer=`. A stage, a mesh size or a condition on the whole
+  surface `drawn_0` means each of its pieces. `surface set drawn_0 --material M` gives every
+  piece the new material, and `body set --material layer` gives a piece the surface's
+  material. A line cuts a drawn soil volume in 3D too, when the volume is a polygon
+  extruded along z or a box.
+- **Soil surfaces** are the 2D bodies of soil that are not layers, for example an
+  embankment or a lens. `surface add --points 0 0 3 0 3 3 0 3 --material sand` draws one,
+  as **Create soil surface…** in the GUI does. It has the key `drawn_0`, `drawn_1`, ...,
+  and `--label` gives it a name (the default is *Soil surface*). `surface set KEY` changes
+  its corners, material or name and keeps its key, and `surface remove KEY` removes it with
+  its pieces. `surface list` shows each surface with its corners, and the pieces a line cut
+  it into. A soil surface is the same record that `volume add polygon` makes in 2D, so
+  `volume list` shows it too. A 3D model has soil volumes, not surfaces: use `volume`.
 - **A project saved with an excavation** opens with lines and soil bodies in its place: a
   line on each side of the pit, a line at each level, and the bodies `lift1`, `lift2`, ...,
   `pit` and `outside`. A stage that named the whole layer then names the ground outside the
   pit. A pit with one level was never dug, so it just goes. A 3D pit narrower than the
   model in z cannot be made of lines, and the file is refused.
 - **Volumes**: in 2D, `volume add polygon --points x y x y ...` is an outline in the
-  section plane, swept across the whole model. In 3D, `polygon` takes `x y z` points and
+  section plane, swept across the whole model, the same as `surface add`. In 3D, `polygon` takes `x y z` points and
   `--extrude dx dy dz`, and there are `box` (`--origin`, `--size`) and `cylinder`
   (`--center`, `--axis`, `--radius`). `volume import FILE` reads .step, .iges, .brep, .stl
   or .obj. With `--material`, a volume is soil.
