@@ -52,9 +52,13 @@ LAWS = {
     MOHR_COULOMB: ("GeoMohrCoulombLawPlaneStrain", "GeoInterfaceCoulombLawPlaneStrain"),
 }
 
-RETENTION = {"BIOT_COEFFICIENT": 1.0, "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
-             "SATURATED_SATURATION": 1.0, "RESIDUAL_SATURATION": 1.0e-10,
-             "MINIMUM_RELATIVE_PERMEABILITY": 1.0e-4}
+# Saturated below the phreatic level. With the water pressure fixed (CONSTANT_PW_FIELD)
+# Kratos reads no relative permeability, and it derives the Biot coefficient, 1 - K / K_s,
+# from the solid's bulk modulus the export gives (1e10 Pa): 0.9994 for the sand, 0.99995
+# for the clay. The reference writes 1.0; the Soil materials window offers neither for a
+# drained soil, so the GUI builds the same soil as this one.
+RETENTION = {"RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+             "SATURATED_SATURATION": 1.0, "RESIDUAL_SATURATION": 1.0e-10}
 
 
 def r_inter(delta: float, phi: float) -> float:
@@ -76,7 +80,6 @@ def _soil(model, id_, name, color, density, modulus, poisson, cohesion, phi, del
                         "POISSON_RATIO": poisson,
                         "DENSITY_SOLID": density,
                         "POROSITY": 0.0,
-                        "BULK_MODULUS_SOLID": 1.0e10,
                         **strength,
                         "K0_NC": k0,
                         **RETENTION,

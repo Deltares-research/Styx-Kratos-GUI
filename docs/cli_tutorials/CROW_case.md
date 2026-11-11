@@ -150,15 +150,16 @@ converted on export. The model has two Mohr-Coulomb soils (`GeoMohrCoulombLawPla
 
 `DENSITY_SOLID` is the unit weight divided by g, rounded as in the Kratos model (1834.86 and
 2038.74). The interface of step 9 reduces each soil's strength by that soil's own
-`--r-inter`, so that the wall friction angle is δ. The last five variables (from
-`BIOT_COEFFICIENT` on) say that the soil is saturated below the water table. Each soil is
-one line:
+`--r-inter`, so that the wall friction angle is δ. The last three variables (from
+`RETENTION_LAW` on) say that the soil is saturated below the water table. The export
+gives the solid's bulk modulus (10¹⁰ Pa), and Kratos derives the Biot coefficient from
+it. Each soil is one line:
 
 ```text
-crow.json> material add clay --name Clay --color "#c4a86a" --law GeoMohrCoulombLawPlaneStrain --r-inter 0.48021693505171 GEO_DRAINAGE_TYPE=CONSTANT_PW_FIELD YOUNG_MODULUS=900000.0 POISSON_RATIO=0.2 DENSITY_SOLID=1834.86 POROSITY=0.0 BULK_MODULUS_SOLID=10000000000.0 GEO_COHESION=3000.0 GEO_FRICTION_ANGLE=22.5 GEO_DILATANCY_ANGLE=0.0 GEO_ENABLE_TENSION_CUT_OFF=false K0_NC=0.62 BIOT_COEFFICIENT=1.0 RETENTION_LAW=SaturatedBelowPhreaticLevelLaw SATURATED_SATURATION=1.0 RESIDUAL_SATURATION=1e-10 MINIMUM_RELATIVE_PERMEABILITY=0.0001
+crow.json> material add clay --name Clay --color "#c4a86a" --law GeoMohrCoulombLawPlaneStrain --r-inter 0.48021693505171 GEO_DRAINAGE_TYPE=CONSTANT_PW_FIELD YOUNG_MODULUS=900000.0 POISSON_RATIO=0.2 DENSITY_SOLID=1834.86 POROSITY=0.0 GEO_COHESION=3000.0 GEO_FRICTION_ANGLE=22.5 GEO_DILATANCY_ANGLE=0.0 GEO_ENABLE_TENSION_CUT_OFF=false K0_NC=0.62 RETENTION_LAW=SaturatedBelowPhreaticLevelLaw SATURATED_SATURATION=1.0 RESIDUAL_SATURATION=1e-10
 added material clay; wrote ...\crow.json
 
-crow.json> material add sand --name Sand --color "#b08a6a" --law GeoMohrCoulombLawPlaneStrain --r-inter 0.571318827227732 GEO_DRAINAGE_TYPE=CONSTANT_PW_FIELD YOUNG_MODULUS=7428600.0 POISSON_RATIO=0.3 DENSITY_SOLID=2038.74 POROSITY=0.0 BULK_MODULUS_SOLID=10000000000.0 GEO_COHESION=0.0 GEO_FRICTION_ANGLE=32.5 GEO_DILATANCY_ANGLE=0.0 GEO_ENABLE_TENSION_CUT_OFF=false K0_NC=0.46 BIOT_COEFFICIENT=1.0 RETENTION_LAW=SaturatedBelowPhreaticLevelLaw SATURATED_SATURATION=1.0 RESIDUAL_SATURATION=1e-10 MINIMUM_RELATIVE_PERMEABILITY=0.0001
+crow.json> material add sand --name Sand --color "#b08a6a" --law GeoMohrCoulombLawPlaneStrain --r-inter 0.571318827227732 GEO_DRAINAGE_TYPE=CONSTANT_PW_FIELD YOUNG_MODULUS=7428600.0 POISSON_RATIO=0.3 DENSITY_SOLID=2038.74 POROSITY=0.0 GEO_COHESION=0.0 GEO_FRICTION_ANGLE=32.5 GEO_DILATANCY_ANGLE=0.0 GEO_ENABLE_TENSION_CUT_OFF=false K0_NC=0.46 RETENTION_LAW=SaturatedBelowPhreaticLevelLaw SATURATED_SATURATION=1.0 RESIDUAL_SATURATION=1e-10
 added material sand; wrote ...\crow.json
 ```
 
