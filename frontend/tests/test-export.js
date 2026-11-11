@@ -2,7 +2,7 @@
 
 function withExportStubs(body) {
   var saved = { Api: App.Api, Command: App.Command, PROJECT: App.PROJECT,
-                REFINEMENTS: App.MESH_REFINEMENTS, LEFT_OUT: App.MESH_BODIES_LEFT_OUT,
+                LEFT_OUT: App.MESH_BODIES_LEFT_OUT,
                 save: App.Export.save, pickFile: App.Download.pickFile };
   var written = [], logged = [];
   App.Command = {
@@ -15,11 +15,9 @@ function withExportStubs(body) {
   App.Download.pickFile = function () { return Promise.resolve(null); };
   App.PROJECT = { name: 'Deep excavation — Rotterdam Zuid', layers: [{ id: 'L1' }, { id: 'L2' }],
                   mesh: { element_size: 2.5, order: 2 } };
-  App.MESH_REFINEMENTS = [];
   App.MESH_BODIES_LEFT_OUT = null;
   function restore() {
     App.Api = saved.Api; App.Command = saved.Command; App.PROJECT = saved.PROJECT;
-    App.MESH_REFINEMENTS = saved.REFINEMENTS;
     App.MESH_BODIES_LEFT_OUT = saved.LEFT_OUT;
     App.Export.save = saved.save;
     App.Download.pickFile = saved.pickFile;

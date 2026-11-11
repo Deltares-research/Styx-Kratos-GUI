@@ -206,6 +206,37 @@
       }).then(function () {
         T.eq(sizes().body_sizes, {}, 'reset: the global size again');
         T.ok(/Wall takes the global mesh size again/.test(ctx.logs[ctx.logs.length - 1][1]));
+        T.eq(ctx.selected, ['sheetpile', 'sheetpile', 'sheetpile'],
+          'the Selection explorer is drawn again, so its Mesh size row shows the new size');
+        T.eq(ctx.actions, [], 'no mesh on screen: none is made');
+      });
+    });
+  });
+
+  test('refine names a selected object that takes no mesh size', function () {
+    var initial = project();
+    initial.anchors = [{ id: 'strut', name: 'Strut', section: 'a', head: [5, -1], tail: [0, -1] }];
+    return withEnvironment(initial, function (ctx) {
+      App.state.selection = 'strut';
+      return App.MeshSettings.changeSelected(0.5).then(function () {
+        T.eq(ctx.requests.length, 0);
+        T.ok(/^Strut takes no mesh size/.test(ctx.logs[0][1]), ctx.logs[0][1]);
+      });
+    });
+  });
+
+  test('refine in Mesh mode makes the shown mesh again and keeps the selection', function () {
+    var initial = project();
+    initial.beams = [{ id: 'sheetpile', name: 'Wall', section: 'sp', points: [[5, 0], [5, -13]] }];
+    return withEnvironment(initial, function (ctx) {
+      App.state.mode = 'mesh';
+      App.state.selection = 'sheetpile';
+      App.Viewport.hasMesh = function () { return true; };
+      var asked = [];
+      App.runAction = function (spec) { asked.push(spec); };
+      return App.MeshSettings.changeSelected(0.5).then(function () {
+        T.eq(asked, [{ action: 'generateMesh', keepSelection: true }]);
+        T.eq(App.state.selection, 'sheetpile');
       });
     });
   });

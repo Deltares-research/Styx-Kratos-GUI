@@ -239,6 +239,10 @@ App.MeshSettings = (function () {
     var name = nameOf(App.PROJECT, key);
     return App.Api.put('/api/project', project).then(function (saved) {
       App.Model.apply(saved);
+      // Drawn again, or its Mesh size row keeps the old size until the next click.
+      if (App.selectObject && App.state && App.state.selection === key) {
+        App.selectObject(key, 'tree');
+      }
       if (App.Command && App.Command.ok) {
         App.Command.ok(size === null ? name + ' takes the global mesh size again.'
                        : 'Mesh size of ' + name + ': ' + size + ' m'
@@ -267,7 +271,8 @@ App.MeshSettings = (function () {
     }
     var rows = [
       ['Mesh size', now.size === null ? GLOBAL : String(now.size), 'm', false, {
-        kind: 'number', decimals: 2,
+        // Three, as Refine rounds: two would show a halved 0.25 m as 0.13.
+        kind: 'number', decimals: 3,
         get: function () { return now.size === null ? GLOBAL : now.size; },
         set: function (size) { return keep(size === GLOBAL ? now.size : size, now.band); } }],
       ['Band', String(now.band || 0), 'm', false, {
@@ -294,19 +299,33 @@ App.MeshSettings = (function () {
   }
 
   /* Refine mesh (factor 0.5), Coarsen mesh (2) and Reset local refinement (null) on the
-     selected object. */
+     selected object. On the Mesh tab with a mesh on screen the mesh is made again, so
+     the user sees what the tool did; the object stays selected for the next press. */
   function changeSelected(factor) {
     var key = App.state && App.state.selection;
     if (!key || sizableKeys(App.PROJECT).indexOf(key) < 0) {
       if (App.Command && App.Command.note) {
-        App.Command.note('Select a layer, a soil body, a line or a point first.');
+        var anchor = ((App.PROJECT && App.PROJECT.anchors) || []).filter(function (a) {
+          return a.id === key;
+        })[0];
+        var named = anchor ? (anchor.name || anchor.id) : null;
+        App.Command.note(named
+          ? named + ' takes no mesh size: an anchor is one element. '
+            + 'Select a layer, a soil body, a line or a point.'
+          : 'Select a layer, a soil body, a line or a point first.');
       }
       return Promise.resolve(null);
     }
     var band = localSize(App.PROJECT, key).band;
     var size = factor === null ? null
       : Math.round(sizeNow(App.PROJECT, key) * factor * 1000) / 1000;
-    return saveLocalSize(key, size, size === null ? null : band).catch(reportError);
+    return saveLocalSize(key, size, size === null ? null : band).then(function (saved) {
+      if (App.state.mode === 'mesh' && App.Viewport && App.Viewport.hasMesh
+          && App.Viewport.hasMesh()) {
+        App.runAction({ action: 'generateMesh', keepSelection: true });
+      }
+      return saved;
+    }).catch(reportError);
   }
 
   /* The bodies of `project` that this window's check boxes leave out. */

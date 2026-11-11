@@ -103,6 +103,15 @@
 
   /* ── The rail ──────────────────────────────────────────────────────── */
 
+  test('the refine, coarsen and reset tips say they work on the selected object', function () {
+    withInstall(function () {});
+    var tips = (App.RAILS.mesh || []).filter(function (t) {
+      return t && /^(refineMesh|coarsenMesh|resetMeshRefinement)$/.test(t.action || '');
+    }).map(function (t) { return t.tip; });
+    T.eq(tips.length, 3);
+    tips.forEach(function (tip) { T.ok(/the selected object/.test(tip), tip); });
+  });
+
   function notYetTips(mode) {
     return (App.RAILS[mode] || []).filter(function (t) { return t && t.notYet; })
       .map(function (t) { return t.tip.replace(App.LivePatches.NOT_YET_TIP, ''); });
@@ -388,7 +397,7 @@
     App.Menu = { openAt: function (items) { opened = items; } };
     var row = document.createElement('div');
     row.className = 'tree-row';
-    row.dataset.obj = 'soil_L1';
+    row.dataset.obj = 'soil_no_such_layer';
     try {
       App.LivePatches.onTreeContextMenu({ target: row, preventDefault: function () {},
                                           stopImmediatePropagation: function () {} });

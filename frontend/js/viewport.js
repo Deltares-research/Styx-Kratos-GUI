@@ -2157,18 +2157,12 @@ App.Viewport = (function () {
      mesh itself, and the node numbering the ID labels are drawn from -- and a numbering
      taken from different settings than the mesh on screen would be numbers for a mesh
      nobody is looking at. */
-  /* The refinements a mesh is built with: the ones set from the toolbar this session
-     if there are any, and otherwise the model's own (`MeshSettings.refinements`). A
-     model can carry a graded mesh -- a model script can refine its excavation and
-     grade out to the far field -- and it has to mesh that way from the Generate-mesh
-     button and from Export alike, not only from a script.
-
-     Length, not truthiness: "Reset local mesh refinement" leaves an empty array behind,
-     and an empty array is truthy. Reset means "back to what the model asks for", not
-     "no refinement at all". */
+  /* The refinement boxes a mesh is built with: the model's own
+     (`MeshSettings.refinements`). A model script or `kratos-cli add` can give a model a
+     box, and it has to mesh that way from the Generate-mesh button and from Export
+     alike, not only from a script. Refine mesh and its twins change local sizes
+     (`body_sizes`), never a box. */
   function meshRefinements() {
-    var local = App.MESH_REFINEMENTS;
-    if (local && local.length) return local.slice();
     var mesh = App.PROJECT && App.PROJECT.mesh;
     return (mesh && mesh.refinements) ? mesh.refinements.slice() : [];
   }

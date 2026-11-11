@@ -410,7 +410,10 @@ The **Mesh** group of the Selection explorer then shows two rows:
 
 Click **Use the global size** to remove the object's own size. **Mesh** → **Refine mesh**
 halves the size of the selected object, **Coarsen mesh** doubles it, and **Reset local
-refinement** removes it. The same tools are on the tool rail in Mesh mode.
+refinement** removes it. The same tools are on the tool rail in Mesh mode. A tool keeps the
+band. If a mesh is shown in Mesh mode, the tool makes the mesh again, so you see the change
+at once, and the object stays selected, so you can click the tool again. An anchor has no
+mesh size, because it is one element.
 
 For example, select the sheet pile, type 0.5 in **Mesh size** and 45 in **Band**: the
 elements are 0.5 m along the wall and round its toe, and grow to the global size 45 m away.

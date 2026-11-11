@@ -2700,7 +2700,8 @@ App.LivePatches = (function () {
       }
       if (item && item.action === 'generateMesh') {
         var size = App.PROJECT && App.PROJECT.mesh ? App.PROJECT.mesh.element_size : 2.5;
-        requestMesh(true, 'mesh ' + size);
+        // Refine/Coarsen/Reset remake the mesh and leave their object selected.
+        requestMesh(!item.keepSelection, 'mesh ' + size);
         return;
       }
       if (item && item.action === 'createSoilVolume') {
@@ -2779,7 +2780,7 @@ App.LivePatches = (function () {
         return;
       }
       // The selected object's local mesh size: halved, doubled, or taken away
-      // (js/mesh-settings.js). The frozen ones set one box whatever was selected.
+      // (js/mesh-settings.js).
       var MESH_SIZE_FACTORS = { refineMesh: 0.5, coarsenMesh: 2, resetMeshRefinement: null };
       if (item && Object.prototype.hasOwnProperty.call(MESH_SIZE_FACTORS, item.action)) {
         return App.MeshSettings.changeSelected(MESH_SIZE_FACTORS[item.action]);
@@ -2905,8 +2906,17 @@ App.LivePatches = (function () {
     // not by tip: greyRailTools appends to the tip.
     var MESH_TOOL_ACTIONS = { refine: 'refineMesh', coarsen: 'coarsenMesh',
                               resetmesh: 'resetMeshRefinement' };
+    // The frozen tips do not say that the tool works on the selected object.
+    var MESH_TOOL_TIPS = {
+      refine: 'Refine mesh — halve the mesh size of the selected object',
+      coarsen: 'Coarsen mesh — double the mesh size of the selected object',
+      resetmesh: 'Reset local refinement — the selected object takes the global mesh size'
+    };
     (App.RAILS.mesh || []).forEach(function (tool) {
-      if (tool && MESH_TOOL_ACTIONS[tool.icon]) tool.action = MESH_TOOL_ACTIONS[tool.icon];
+      if (tool && MESH_TOOL_ACTIONS[tool.icon]) {
+        tool.action = MESH_TOOL_ACTIONS[tool.icon];
+        tool.tip = MESH_TOOL_TIPS[tool.icon];
+      }
     });
     if (!(App.RAILS.mesh || []).some(function (tool) { return tool && tool.action === 'meshSettings'; })) {
       App.RAILS.mesh.splice(2, 0, { icon: 'settings', tip: 'Mesh properties…', action: 'meshSettings' }, '-');
