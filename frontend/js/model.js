@@ -600,7 +600,11 @@ App.Model = (function () {
         ['Gravity acts', App.PROJECT && App.PROJECT.gravity === false ? 'No' : 'Yes', '', false,
          yesNo(function () { return !(App.PROJECT && App.PROJECT.gravity === false); },
                function (on) { App.PENDING_GRAVITY = on; return null; })],
-        ['', 'The self weight of every body, in every stage.', '', true]
+        ['', 'The self weight of every body, in every stage.', '', true],
+        ['Acceleration g', String(App.PROJECT && typeof App.PROJECT.gravity_acceleration === 'number'
+                                  ? App.PROJECT.gravity_acceleration : App.Units.gravity('SI')),
+         'm/s²', true],
+        ['', 'Set in File > Project properties.', '', true]
       ] }
     };
   }

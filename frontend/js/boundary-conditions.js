@@ -350,10 +350,14 @@ App.BoundaryConditions = (function () {
     return record.name + '  ·  ' + what;
   }
 
+  /* As `kratos-cli gravity` says it (`cli/commands/conditions.py` `_gravity_line`). */
   function gravityLine(project) {
+    var g = project && typeof project.gravity_acceleration === 'number'
+      ? project.gravity_acceleration : App.Units.gravity('SI');
+    var said = 'g = ' + g + ' m/s²';
     return project && project.gravity === false
-      ? 'Gravity is off: no body has a self weight.'
-      : 'Gravity is on: every body has its self weight.';
+      ? 'Gravity is off: no body has a self weight (' + said + ' when it is on).'
+      : 'Gravity is on: every body has its self weight, with ' + said + '.';
   }
 
   /* Said under a 2D list that leaves the front and back supports out
@@ -397,13 +401,20 @@ App.BoundaryConditions = (function () {
 
     if (word === 'gravity') {
       if (!arg) return { ok: true, body: null, message: gravityLine(project) };
-      if ((arg !== 'on' && arg !== 'off') || words.length > 2) {
+      var g = Number(arg);
+      var number = arg !== '' && isFinite(g);
+      if ((arg !== 'on' && arg !== 'off' && !number) || words.length > 2) {
         return { ok: false, body: null, message: '"' + words.slice(1).join(' ')
-                 + '" is not on or off. Use `gravity on` or `gravity off`.' };
+                 + '" is not on, off or a number. Use `gravity on`, `gravity off` or '
+                 + '`gravity 9.81` (g in m/s²).' };
       }
-      var on = arg === 'on';
-      return { ok: true, body: { gravity: on },
-               message: gravityLine({ gravity: on }) };
+      if (number && !(g > 0)) {
+        return { ok: false, body: null, message: 'g must be above 0 m/s², not ' + arg + '.' };
+      }
+      var after = Object.assign({}, project || {});
+      var body = number ? { gravity_acceleration: g } : { gravity: arg === 'on' };
+      Object.assign(after, body);
+      return { ok: true, body: body, message: gravityLine(after) };
     }
 
     if (!arg || arg === 'list') {

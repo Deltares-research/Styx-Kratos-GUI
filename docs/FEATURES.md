@@ -118,7 +118,7 @@ and adds only the values that are missing
 
 | Feature | Kratos | Dim | Status |
 |---|---|---|---|
-| Self weight | `VOLUME_ACCELERATION` on the computational part, in every stage. Gravity can be switched off for the whole model (`gravity off`, or the **Gravity** row). | 2D, 3D | Tested |
+| Self weight | `VOLUME_ACCELERATION` on the computational part, in every stage, with g = 9.81 m/s² or the project's own g (`gravity 9.80665`, or **File** → **Project properties…**). Gravity can be switched off for the whole model (`gravity off`, or the **Gravity** row). | 2D, 3D | Tested |
 | Point load | `PointLoadCondition2D1N` / `3D1N`, `POINT_LOAD` | 2D, 3D | Tested |
 | Line load | `LineLoadCondition2D2N` / `LineLoadDiffOrderCondition2D3N`, `LINE_LOAD` | 2D | Tested |
 | Surface load | `UPwFaceLoadCondition3D3N` / `SurfaceLoadDiffOrderCondition3D6N`, `SURFACE_LOAD` | 3D | Limited |
@@ -243,7 +243,7 @@ and adds only the values that are missing
 | `mesh`, `calculate`, `export` | Makes the mesh, calculates, or writes the Kratos files |
 | `stages` | Opens the **Stages** window |
 | `water`, `units`, `cleargeometry` | Changes the water level or the unit system, or removes drawn and imported solids |
-| `boundary`, `gravity` | Lists the boundary conditions or puts the standard supports back; shows gravity or switches it on or off |
+| `boundary`, `gravity` | Lists the boundary conditions or puts the standard supports back; shows gravity, switches it on or off, or sets g |
 | `soillayers`, `materials` | Opens the soil windows |
 | `colour`, `node` | Shows parts of the mesh in colour, or the parts that contain a node |
 | `results …` | `runs`, `open`, `stage`, `fields`, `field`, `at`, `bands`, `smooth`, `map`, `deform`, `range`, `reverse`, `mesh`, `loads`, `plot`, `csv`, `files`, `get`, `zip` |

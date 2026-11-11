@@ -29,11 +29,14 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
 .mesh-setting-control:disabled { background: var(--c-panel); color: var(--c-ink-faint); }
 .line-point { display: grid; grid-template-columns: 20px 1fr 1fr auto; gap: 6px; align-items: center; margin-bottom: 4px; }
 .mesh-setting-help { color: var(--c-ink-soft); font-size: var(--fs-sm); line-height: 1.3; }
-/* The Rename and project name window (js/name-dialog.js): a line of text, then one
-   field with its help and its message under it. `.dlg-body` is a flex row. */
+/* The Rename and Project properties windows (js/name-dialog.js): a line of text, then
+   the fields with their help, and a message under them. `.dlg-body` is a flex row. */
 .name-dialog-body { flex-direction: column; gap: 12px; padding: 14px 18px; overflow: auto; }
 .name-dialog-text { margin: 0; color: var(--c-ink-soft); line-height: 1.5; }
 .name-dialog-form { display: grid; grid-template-columns: 110px 1fr; gap: 6px 12px; align-items: center; }
+/* A number field with its unit after it (Gravity, m/s²). */
+.name-dialog-with-unit { display: flex; align-items: center; gap: 6px; }
+.name-dialog-with-unit .name-dialog-input { flex: 1; min-width: 0; }
 .mesh-setting-targets { font-family: var(--font-mono); color: var(--brand-primary); }
 /* Sized to the form's control column, so its right edge lines up with the
    single-line fields below it. A min-width wider than the track's max would

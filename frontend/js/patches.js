@@ -1665,21 +1665,44 @@ App.LivePatches = (function () {
   }
 
   /* File > Project properties…: the project's name, as `kratos-cli set FILE name ...`
-     sets it. Through the whole-project PUT, so Undo takes it back like any edit. */
+     sets it, and the gravitational acceleration g, as `kratos-cli gravity FILE G` sets
+     it. Through the whole-project PUT, so Undo takes it back like any edit. */
   function projectProperties() {
-    var now = (App.PROJECT && App.PROJECT.name) || '';
-    return App.NameDialog.ask({
-      title: 'Project properties', label: 'Project name', value: now,
-      help: 'Shown in the title bar, and the name Save gives the file.'
-    }).then(function (name) {
-      if (name === null || name === now) return;
-      var project = JSON.parse(JSON.stringify(App.PROJECT));
-      project.name = name;
-      return App.Api.put('/api/project', project).then(function (saved) {
+    var project = App.PROJECT || {};
+    var name = project.name || '';
+    var g = typeof project.gravity_acceleration === 'number' ? project.gravity_acceleration
+                                                             : App.Units.gravity('SI');
+    return App.NameDialog.form({
+      title: 'Project properties',
+      fields: [
+        { name: 'name', label: 'Project name', value: name, empty: 'Type a name.',
+          help: 'Shown in the title bar, and the name Save gives the file.' },
+        { name: 'gravity_acceleration', label: 'Gravity', value: g, unit: 'm/s²',
+          empty: 'Type the gravitational acceleration, in m/s².',
+          check: function (text) {
+            var value = Number(text);
+            return isFinite(value) && value > 0 ? null : 'Gravity is a number above 0 m/s².';
+          },
+          help: 'The self weight of every body. The water keeps its specific weight.' }
+      ]
+    }).then(function (values) {
+      if (values === null) return;
+      var newG = Number(values.gravity_acceleration);
+      var said = [];
+      if (values.name !== name) said.push('Project name: ' + values.name + '.');
+      if (newG !== g) said.push('Gravity: g = ' + newG + ' m/s².');
+      if (!said.length) return;
+      // Only what changed: a rename leaves the project's gravity fields as they are.
+      var edited = JSON.parse(JSON.stringify(App.PROJECT));
+      edited.name = values.name;
+      if (newG !== g) edited.gravity_acceleration = newG;
+      return App.Api.put('/api/project', edited).then(function (saved) {
         App.Model.apply(saved);
-        if (App.Command) App.Command.ok('Project name: ' + name + '.');
+        if (App.Command) App.Command.ok(said.join(' '));
       }).catch(function (error) {
-        if (App.Command) App.Command.err('Could not rename the project: ' + error.message);
+        if (App.Command) {
+          App.Command.err('Could not change the project properties: ' + error.message);
+        }
       });
     });
   }
@@ -2509,7 +2532,7 @@ App.LivePatches = (function () {
     ['stages', 'the Stages overview: every stage, its time and result'],
     ['water <level>|off', 'set or remove the water level, e.g. water -1.5'],
     ['boundary [list|standard]', 'the boundary conditions, or put the standard supports back'],
-    ['gravity [on|off]', 'show, or switch on or off, the self weight'],
+    ['gravity [on|off|G]', 'show, or switch on or off, the self weight, or set g in m/s²'],
     ['units [SI|kN]', 'show the unit system, or convert the project to another'],
     ['soillayers', 'open the Modify soil layers window'],
     ['materials', 'open the Soil materials window'],

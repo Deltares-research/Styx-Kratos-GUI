@@ -55,7 +55,8 @@ Click **Calculate** between Staged construction and Results.
 
 - **New project:** **File** → **New project…** starts an empty site. Type the project name
   in the window. The name shows in the title bar, and **Save** names the file after it.
-- **Project name:** **File** → **Project properties…** changes the name of the open project.
+- **Project properties:** **File** → **Project properties…** changes the name of the open
+  project and the gravitational acceleration g (9.81 m/s² in a new project).
   In the terminal, `kratos-cli new FILE --name NAME` and `kratos-cli set FILE name NAME` do
   the same.
 - **Open project:** **File** → **Open project…** opens a project file (`.json`).
@@ -361,7 +362,9 @@ warns about it, and about a model that nothing holds.
 
 **Gravity** is on in a new project. Clear it in the window, or select **Model conditions**
 → **Gravity**, to remove the self weight from every stage. A K0 stage then has zero
-stresses.
+stresses. The acceleration g is 9.81 m/s² unless you change it in **File** → **Project
+properties…**. The water keeps its specific weight when g changes: Styx writes the water's
+density as the specific weight divided by g.
 
 A **seepage face** is a part of the soil's outer boundary where the water may leave the
 soil in a groundwater flow calculation, for example the downstream face of a dam above the
@@ -614,7 +617,7 @@ Type a command in the command box below the log, and press <kbd>Enter</kbd>. Use
 | `stages` | Opens the **Stages** window |
 | `water <level>`, `water off` | Sets or removes the water level |
 | `boundary`, `boundary standard` | Lists the boundary conditions, or puts the standard supports back |
-| `gravity`, `gravity on`, `gravity off` | Shows gravity, or switches it on or off |
+| `gravity`, `gravity on`, `gravity off`, `gravity 9.80665` | Shows gravity, switches it on or off, or sets g in m/s² |
 | `units`, `units SI`, `units kN` | Shows or changes the unit system |
 | `soillayers`, `materials` | Opens the **Modify soil layers** or **Soil materials** window |
 | `cleargeometry` | Removes all drawn and imported solids |

@@ -294,9 +294,13 @@
       T.ok(file.items.some(function (item) {
         return item && item.action === 'projectProperties' && item.label === 'Project properties…';
       }), 'File > Project properties…');
-      var answers = [null, App.PROJECT.name, 'Pit B'];
-      App.NameDialog = { ask: function (options) {
-        T.eq(options.value, App.PROJECT.name);
+      var name = App.PROJECT.name;
+      delete App.PROJECT.gravity_acceleration;   // a project from before the field
+      var answers = [null, { name: name, gravity_acceleration: '9.81' },
+                     { name: 'Pit B', gravity_acceleration: '9.81' }];
+      App.NameDialog = { form: function (options) {
+        T.eq(options.fields.map(function (f) { return [f.name, f.value]; }),
+             [['name', App.PROJECT.name], ['gravity_acceleration', 9.81]]);
         return Promise.resolve(answers.shift());
       } };
       return App.LivePatches.projectProperties().then(function () {
@@ -306,8 +310,38 @@
         return App.LivePatches.projectProperties();
       }).then(function () {
         T.eq(ctx.requests[0].method + ' ' + ctx.requests[0].path, 'PUT /api/project');
+        T.eq('gravity_acceleration' in ctx.requests[0].body, false,
+             'a rename of a project without g sends no g');
         T.eq(App.PROJECT.name, 'Pit B');
         T.ok(ctx.lines.indexOf('ok:Project name: Pit B.') >= 0);
+      });
+    });
+  });
+
+  test('Project properties sets g, as kratos-cli gravity P G does, and refuses g <= 0', function () {
+    return withShell(function (ctx, host) {
+      App.LivePatches.projectProperties();
+      var dialog = host.querySelector('.name-dialog-window');
+      var input = dialog.querySelector('input[name=gravity_acceleration]');
+      T.eq(input.value, '9.81');
+      T.ok(dialog.textContent.indexOf('m/s²') >= 0, 'the unit is shown');
+      function ok() {
+        Array.prototype.filter.call(dialog.querySelectorAll('button'), function (button) {
+          return button.textContent === 'OK';
+        })[0].click();
+      }
+      input.value = '0';
+      ok();
+      T.ok(host.querySelector('.name-dialog-window'), 'g = 0 keeps the window open');
+      T.ok(dialog.textContent.indexOf('Gravity is a number above 0 m/s².') >= 0);
+      input.value = '9.80665';
+      ok();
+      return settle().then(settle).then(function () {
+        T.eq(ctx.requests.map(function (r) { return r.method + ' ' + r.path; }),
+             ['PUT /api/project']);
+        T.eq(ctx.requests[0].body.gravity_acceleration, 9.80665);
+        T.eq(App.PROJECT.gravity_acceleration, 9.80665);
+        T.ok(ctx.lines.indexOf('ok:Gravity: g = 9.80665 m/s².') >= 0);
       });
     });
   });

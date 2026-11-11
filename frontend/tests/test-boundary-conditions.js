@@ -84,10 +84,21 @@
 
   test('gravity shows, and switches on and off', function () {
     T.eq(BC().command('gravity', section()).message,
-         'Gravity is on: every body has its self weight.');
+         'Gravity is on: every body has its self weight, with g = 9.81 m/s².');
     T.eq(BC().command('gravity off', section()).body, { gravity: false });
     T.eq(BC().command('gravity ON', section()).body, { gravity: true });
     T.eq(BC().command('gravity maybe', section()).ok, false);
+  });
+
+  test('gravity with a number sets g, as kratos-cli gravity P G does', function () {
+    var answer = BC().command('gravity 9.80665', section());
+    T.eq(answer.body, { gravity_acceleration: 9.80665 });
+    T.eq(answer.message, 'Gravity is on: every body has its self weight, with g = 9.80665 m/s².');
+    T.eq(BC().command('gravity 0', section()).ok, false);
+    T.eq(BC().command('gravity -9.81', section()).ok, false);
+    var off = Object.assign(section(), { gravity: false, gravity_acceleration: 10 });
+    T.eq(BC().command('gravity', off).message,
+         'Gravity is off: no body has a self weight (g = 10 m/s² when it is on).');
   });
 
   test('a line that is not boundary or gravity is not this command', function () {
