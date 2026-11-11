@@ -131,18 +131,6 @@
     T.eq(App.MeshSettings.sizeNow(project, 'soil_L1__pit'), 2, "its layer's");
     T.eq(App.MeshSettings.sizeNow(project, 'floor'), 4, 'the global size');
   });
-
-  test('the viewport meshes the whole model, whatever is selected or hidden', function () {
-    var saved = { PROJECT: App.PROJECT, state: App.state };
-    try {
-      App.PROJECT = { layers: [{ id: 'L1' }, { id: 'L2' }], mesh: { element_size: 2.5 } };
-      App.state = { mode: 'mesh', selection: 'soil_L1' };
-      T.eq(App.Viewport.meshSettings().volume_keys, undefined);
-      T.eq(App.Viewport.meshSettings().element_size, 2.5);
-    } finally {
-      App.PROJECT = saved.PROJECT; App.state = saved.state;
-    }
-  });
 })();
 
 /* The mesh dialog has to ask for the algorithm that will actually be used: gmsh

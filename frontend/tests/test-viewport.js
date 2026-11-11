@@ -778,3 +778,21 @@
     T.eq(cut.edges.soil_top__part1, SECTIONS[0].edges);
   });
 })();
+
+/* Generate mesh meshes the whole model, as kratos-cli mesh does: no volume_keys in
+   the request, whatever is selected or hidden. This needs viewport.js, so it runs
+   in the browser suite only. */
+
+(function () {
+  test('the viewport meshes the whole model, whatever is selected or hidden', function () {
+    var saved = { PROJECT: App.PROJECT, state: App.state };
+    try {
+      App.PROJECT = { layers: [{ id: 'L1' }, { id: 'L2' }], mesh: { element_size: 2.5 } };
+      App.state = { mode: 'mesh', selection: 'soil_L1' };
+      T.eq(App.Viewport.meshSettings().volume_keys, undefined);
+      T.eq(App.Viewport.meshSettings().element_size, 2.5);
+    } finally {
+      App.PROJECT = saved.PROJECT; App.state = saved.state;
+    }
+  });
+})();
