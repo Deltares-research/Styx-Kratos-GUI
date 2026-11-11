@@ -45,8 +45,18 @@ Every value below is read off Kratos GeoMechanicsApplication 10.4.4 -- its solve
 `core.kratos.parameters` copies, and the linear solvers' own defaults, which each one
 prints when asked for a setting it does not have. Where the reference decks give one,
 the default is theirs, so that a stage that changes nothing is written as the deck was
-before these settings could be chosen: Newton-Raphson with Skyline LU for a mechanical
-stage, one attempt per step.
+before these settings could be chosen -- Newton-Raphson, one attempt per step -- but for
+the linear solver of a mechanical stage, which is a scaled Sparse LU rather than the
+reference deck's Skyline LU, as a flow stage's is.
+
+Scaled, because the system of a coupled soil with a low permeability is too badly
+conditioned to be factorised without it: its flow equations are some twenty orders of
+magnitude smaller than its equilibrium ones, so an unscaled factorisation loses them to
+round-off, and the water pressure comes out wrong where the residual criterion, which
+the equilibrium dominates, cannot see it. A static block of 1e-16 m2 soil under a strip
+load settles 0.166 m unscaled where it settles 0.175 m -- the drained answer, which a
+static stage has -- scaled (2026-11-11). Quasi-Newton's Sparse LU, which Kratos builds
+itself, is never scaled, so that strategy is the user's choice, not the default.
 """
 
 from __future__ import annotations
@@ -161,9 +171,9 @@ SETTINGS: list[dict] = [
     # -- Linear solver ----------------------------------------------------------
     _setting(
         "linear_solver_type", "Linear solver", "Linear solver", "select",
-        # The reference decks' own: Skyline LU for the mechanical one, Sparse LU for
-        # the flow one (`core.kratos.parameters.SOLVER`, `FLOW_SOLVER`).
-        [{"when": FLOW, "value": SPARSE_LU}, {"value": SKYLINE_LU}],
+        # Sparse LU for either type: the flow reference deck's. The mechanical one's
+        # Skyline LU stays a choice.
+        SPARSE_LU,
         options=[[SPARSE_LU, "Sparse LU (direct)"], [SKYLINE_LU, "Skyline LU (direct)"],
                  ["amgcl", "AMGCL (iterative)"], ["bicgstab", "BiCGStab (iterative)"],
                  ["cg", "CG (iterative)"]],
@@ -258,8 +268,13 @@ SETTINGS: list[dict] = [
                   "own time step. Kratos' own default."),
     _setting("increase_factor", "Step increase factor", "Time step control", "number",
              # A linear flow stage was always written without one, so it has Kratos'
-             # own default, and keeps it.
-             [{"when": {**FLOW, "strategy_type": ITERATING}, "value": 1.0},
+             # own default, and keeps it. A dynamic mechanical stage keeps the step the
+             # user set: a Newmark step that grows changes the result, and a linear
+             # dynamic step converges in so few iterations that it would grow after
+             # almost every one, up to `max_delta_time_factor` times. Kratos' own
+             # dynamic decks take 1 (`test_1d_wave_prop_drained_soil_constant_mass_damping`).
+             [{"when": {**MECHANICAL, **DYNAMIC}, "value": 1.0},
+              {"when": {**FLOW, "strategy_type": ITERATING}, "value": 1.0},
               {"value": 2.0}],
              minimum=1),
     _setting("max_delta_time_factor", "Largest step (x time step)", "Time step control",
@@ -320,8 +335,8 @@ GROUPS = list(dict.fromkeys(setting["group"] for setting in SETTINGS))
 CRITERIA: dict[str, list[list[str]]] = {
     "mechanical": [["residual_criterion", "Residual"],
                    ["displacement_criterion", "Displacement"]],
-    "flow": [["residual_criterion", "Residual"],
-             ["water_pressure_criterion", "Water pressure"]],
+    "flow": [["water_pressure_criterion", "Water pressure"],
+             ["residual_criterion", "Residual"]],
 }
 """The convergence criteria a stage of each calculation type can be solved on, as
 [name, label], its default first (`schemas.CONVERGENCE_CRITERIA` says why these)."""

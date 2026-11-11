@@ -27,16 +27,29 @@ def row(rows: list[dict], key: str) -> dict:
 
 # ── Defaults, by calculation type and time integration ──────────────────────
 
-def test_a_mechanical_stage_is_solved_as_the_reference_deck_is():
-    """Newton-Raphson with a scaled Skyline LU, one attempt per step: the reference
-    deck's, so a stage that changes nothing is written as it was before these settings
-    could be chosen."""
+def test_a_mechanical_stage_is_solved_by_newton_raphson_with_a_scaled_sparse_lu():
+    """Newton-Raphson, as the reference deck is, one attempt per step, but with a scaled
+    Sparse LU: a coupled soil with a low permeability needs the scaling, which
+    quasi-Newton's Sparse LU never has."""
     rows = solver.resolve("mechanical", "static")
     assert values(rows)["strategy_type"] == solver.NEWTON_RAPHSON
     linear = row(rows, "linear_solver_type")
-    assert (linear["value"], linear["locked"]) == (solver.SKYLINE_LU, None)
+    assert (linear["value"], linear["locked"]) == (solver.SPARSE_LU, None)
     assert values(rows)["linear_solver_scaling"] is True
     assert values(rows)["number_cycles"] == 1
+    assert "quasi_newton_type" not in values(rows)
+
+
+def test_a_dynamic_mechanical_stage_keeps_the_step_the_user_set():
+    """A Newmark step that grows changes the result; a static stage still grows its
+    step, and a flow stage is not affected."""
+    for scheme in ("newmark", "backward_euler"):
+        rows = values(solver.resolve("mechanical", "dynamic", {"scheme_type": scheme}))
+        assert rows["increase_factor"] == 1.0, scheme
+    assert values(solver.resolve("mechanical", "static"))["increase_factor"] == 2.0
+    assert values(solver.resolve("flow", "dynamic", {}, "newton_raphson"))[
+        "increase_factor"] == 1.0
+    assert values(solver.resolve("flow", "dynamic", {}, "linear"))["increase_factor"] == 2.0
 
 
 def test_the_linear_solver_cannot_be_changed_under_quasi_newton():
@@ -49,10 +62,10 @@ def test_the_linear_solver_cannot_be_changed_under_quasi_newton():
     assert not {"linear_solver_scaling", "linear_solver_tolerance"} & set(values(rows))
 
 
-def test_another_strategy_offers_the_reference_linear_solver_and_its_settings():
+def test_another_strategy_offers_the_default_linear_solver_and_its_settings():
     rows = values(solver.resolve("mechanical", "static",
-                                 {"strategy_type": "newton_raphson"}))
-    assert rows["linear_solver_type"] == solver.SKYLINE_LU
+                                 {"strategy_type": "line_search"}))
+    assert rows["linear_solver_type"] == solver.SPARSE_LU
     assert rows["linear_solver_scaling"] is True
     assert "quasi_newton_type" not in rows
 
@@ -173,10 +186,10 @@ def solver_settings(stage: parameters.Stage) -> dict:
     return deck["stages"][stage.name]["stage_settings"]["solver_settings"]
 
 
-def test_a_mechanical_stage_writes_the_reference_decks_strategy_and_linear_solver():
+def test_a_mechanical_stage_writes_newton_raphson_and_a_scaled_sparse_lu():
     written = solver_settings(parameters.Stage(name="1_Stage"))
     assert written["strategy_type"] == "newton_raphson"
-    assert written["linear_solver_settings"] == {"solver_type": solver.SKYLINE_LU,
+    assert written["linear_solver_settings"] == {"solver_type": solver.SPARSE_LU,
                                                  "scaling": True}
     assert (written["number_cycles"], written["time_stepping"]["time_step"]) == (1, 1.0)
     assert written["residual_absolute_tolerance"] == 1e-9

@@ -190,16 +190,15 @@ def test_the_output_asks_for_displacement_and_water_pressure(section):
 
 # ── What docs/FEATURES.md A1 promises about the solver, pinned─────────────────
 
-def test_the_default_is_newton_raphson_with_the_direct_skyline_solver_on_one_thread(
+def test_the_default_is_newton_raphson_with_the_direct_sparse_lu_solver_on_one_thread(
         section):
-    """Newton-Raphson, a direct solver, a block builder and one OpenMP thread in every
-    stage that says nothing else: the reference decks' settings, and the ones every
-    validated run used (`core.model.solver`)."""
+    """Newton-Raphson, a scaled direct Sparse LU, a block builder and one OpenMP thread
+    in every stage that says nothing else (`core.model.solver`)."""
     for settings in stages(section):
         solver = settings["solver_settings"]
         assert solver["strategy_type"] == "newton_raphson"
         assert solver["linear_solver_settings"] == {
-            "solver_type": "skyline_lu_factorization", "scaling": True}
+            "solver_type": "LinearSolversApplication.sparse_lu", "scaling": True}
         assert solver["block_builder"] is True
         assert settings["problem_data"]["number_of_threads"] == 1
 

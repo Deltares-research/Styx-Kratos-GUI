@@ -186,6 +186,7 @@ def van_genuchten(order: int = 2, size: float = 0.1) -> Project:
         conditions=[head("left_head", "left", LEFT_LEVEL),
                     head("right_head", "right", RIGHT_LEVEL_B), PHREATIC_START],
         stages=[Stage(id="flow", name="Flow", calculation="flow",
+                      convergence_criterion="residual_criterion",
                       max_iterations=100, tolerated_error=1e-3,
                       absolute_tolerance=1e-15)],
         soil={**SOIL, **VAN_GENUCHTEN}, order=order,

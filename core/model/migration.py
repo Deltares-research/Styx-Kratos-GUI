@@ -279,14 +279,21 @@ def stage_calculation(value: dict) -> dict:
     that is what it was, as gravity was on unless the project switched it off
     (`drop_gravity`), and the initial stage's stress initialisation is now what decides
     the self weight (`core.model.stages.gravity`). Initialised by none, it would lose
-    it."""
+    it.
+
+    An old flow stage was solved on the residual criterion, and keeps it, rather than
+    taking a new flow stage's default, the water pressure one: `flow_tolerance` gives it
+    the residual absolute tolerance it was written with."""
     old = OLD_CALCULATIONS.get(str(value.get("calculation")))
     if old is None:
         return value
     calculation, stresses = old
     if calculation == "mechanical" and stresses == "none" and value.get("parent") is None:
         stresses = "gravity"
-    return {**value, "calculation": calculation, "stress_initialisation": stresses}
+    out = {**value, "calculation": calculation, "stress_initialisation": stresses}
+    if calculation == "flow":
+        out.setdefault("convergence_criterion", "residual_criterion")
+    return out
 
 
 def stage_time(value: dict) -> dict:
@@ -325,10 +332,11 @@ def drop_gravity(value: dict) -> dict:
 def _without_stresses(stage: object) -> object:
     if not isinstance(stage, dict) or stage.get("parent") is not None:
         return stage
-    stage = stage_calculation(stage)
-    if stage.get("calculation", "mechanical") != "mechanical":
+    converted = stage_calculation(stage)
+    if converted.get("calculation", "mechanical") != "mechanical":
+        # Unchanged, so that `flow_tolerance` still knows it for an old flow stage.
         return stage
-    return {**stage, "stress_initialisation": "none"}
+    return {**converted, "stress_initialisation": "none"}
 
 
 def gravity_notes(value: object) -> list[str]:

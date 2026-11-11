@@ -322,7 +322,8 @@ def test_a_stage_s_iterations_are_its_own(gmsh_session):
         Stage(id="flow", name="Flow", calculation="flow",
               max_iterations=40, tolerated_error=1e-5)]))
     solver = settings(export)["solver_settings"]
-    assert (solver["max_iterations"], solver["residual_relative_tolerance"]) == (40, 1e-5)
+    assert (solver["max_iterations"], solver["water_pressure_relative_tolerance"]) == \
+        (40, 1e-5)
 
 
 def test_a_dynamic_flow_stage_is_a_transient_flow(gmsh_session):

@@ -478,7 +478,9 @@ In the **Stages** window, select a stage and set:
 - **Reset displacements to zero**
 - **Convergence criterion**: what Kratos checks to decide that a stage has converged. A
   mechanical stage converges on the **Residual** (the default) or the **Displacement**; a
-  flow stage on the **Residual** (the default) or the **Water pressure**. Changing the
+  flow stage on the **Water pressure** (the default) or the **Residual**. A flow stage
+  of a project saved before the criterion could be chosen keeps the Residual it was
+  solved on. Changing the
   calculation type gives a stage on the other type's criterion the new type's default. The displacement criterion measures the water pressure too, so in a
   coupled soil whose water pressure builds up it may not converge where the residual one
   does; a flow stage with a seepage face that does not converge on the water pressure
@@ -500,11 +502,13 @@ it. A changed setting is shown in bold, and ↺ beside it puts the default back.
   law. A flow stage with a seepage face always uses Newton-Raphson with seepage, tried
   once per step: you see it, but cannot change it. A linear stage has
   nothing to converge, so it has no convergence criterion, iterations or tolerances.
-- **Linear solver**: **Sparse LU** or **Skyline LU** (direct), **AMGCL**, **BiCGStab**
-  or **CG** (iterative), each with its own settings. CG needs a symmetric system, as a
-  flow stage's is. The quasi-Newton strategy
+- **Linear solver**: **Sparse LU** (the default, scaled) or **Skyline LU** (direct),
+  **AMGCL**, **BiCGStab** or **CG** (iterative), each with its own settings. CG needs a
+  symmetric system, as a flow stage's is. The quasi-Newton strategy
   factorises the stiffness matrix once with Sparse LU and reuses it, so with that
-  strategy you see Sparse LU, but cannot change it.
+  strategy you see Sparse LU, but cannot change it. Kratos does not scale it: a fully
+  coupled soil with a very low permeability then settles a few percent too little, so
+  use Newton-Raphson for such a soil.
 - **Time step control**: how much Kratos enlarges a step that converges in few
   iterations, up to the **Largest step** (a multiple of the time step), and how it cuts
   a step that does not converge and tries it again, if **Attempts per step** is more

@@ -2240,8 +2240,10 @@ App.LivePatches = (function () {
      The calculation type is mechanical or flow (App.Stages.CALCULATION_TYPES), chosen
      in the initial stage for the whole sequence: a later stage shows it, and cannot
      change it. The stresses are initialised in the initial stage of a mechanical
-     sequence only, so only that stage has a "Stress initialisation" row; making the
-     sequence a flow one sets it back to none (App.Stages.edited). That row is also what
+     sequence only, so only that stage has a "Stress initialisation" row -- and a later
+     stage that has one anyway, as an old project's later K0 procedure does, until it is
+     set to none; making the sequence a flow one sets it back to none, and making it a
+     mechanical one again gives it gravity loading (App.Stages.edited). That row is also what
      switches gravity: none leaves the self weight out of every stage
      (`core.model.stages.gravity`), which the "Gravity" row under it says. A flow stage solves
      the water pressure alone, so its "Reset displacements to zero" box is greyed out,
@@ -2269,11 +2271,19 @@ App.LivePatches = (function () {
       first ? ['Calculation type', 'select', 'calculation', App.Stages.CALCULATION_TYPES]
             : ['Calculation type', 'static', calculation + ' (from the initial stage)']
     ];
+    var stresses = stage.stress_initialisation || 'none';
     if (first && (stage.calculation === 'mechanical' || stage.calculation == null)) {
       general.push(['Stress initialisation', 'select', 'stress_initialisation',
                     App.Stages.STRESS_INITIALISATIONS]);
-      general.push(['Gravity', 'static', (stage.stress_initialisation || 'none') === 'none'
+      general.push(['Gravity', 'static', stresses === 'none'
         ? 'Off: no body has a self weight' : 'On: every body has its self weight']);
+    } else if (!first && stresses !== 'none') {
+      // An old project's later K0 procedure, which the server refuses every edit with:
+      // the row is here so that it can go back to none, the one a later stage takes.
+      general.push(['Stress initialisation', 'select', 'stress_initialisation',
+                    App.Stages.STRESS_INITIALISATIONS.filter(function (option) {
+                      return option[0] === stresses || option[0] === 'none';
+                    })]);
     }
     general.push(['Time integration', 'select', 'time_integration',
                   App.Stages.TIME_INTEGRATIONS]);

@@ -21,8 +21,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "linear_solver_type",
-          "value": "skyline_lu_factorization",
-          "default": "skyline_lu_factorization",
+          "value": "LinearSolversApplication.sparse_lu",
+          "default": "LinearSolversApplication.sparse_lu",
           "overridden": false,
           "locked": null
         },
@@ -122,8 +122,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "linear_solver_type",
-          "value": "skyline_lu_factorization",
-          "default": "skyline_lu_factorization",
+          "value": "LinearSolversApplication.sparse_lu",
+          "default": "LinearSolversApplication.sparse_lu",
           "overridden": false,
           "locked": null
         },
@@ -266,8 +266,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "linear_solver_type",
-          "value": "skyline_lu_factorization",
-          "default": "skyline_lu_factorization",
+          "value": "LinearSolversApplication.sparse_lu",
+          "default": "LinearSolversApplication.sparse_lu",
           "overridden": false,
           "locked": null
         },
@@ -368,8 +368,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "linear_solver_type",
-          "value": "skyline_lu_factorization",
-          "default": "skyline_lu_factorization",
+          "value": "LinearSolversApplication.sparse_lu",
+          "default": "LinearSolversApplication.sparse_lu",
           "overridden": false,
           "locked": null
         },
@@ -561,7 +561,7 @@ window.SOLVER_FIXTURE =
         {
           "key": "linear_solver_type",
           "value": "amgcl",
-          "default": "skyline_lu_factorization",
+          "default": "LinearSolversApplication.sparse_lu",
           "overridden": true,
           "locked": null
         },
@@ -700,7 +700,7 @@ window.SOLVER_FIXTURE =
         {
           "key": "linear_solver_type",
           "value": "amgcl",
-          "default": "skyline_lu_factorization",
+          "default": "LinearSolversApplication.sparse_lu",
           "overridden": true,
           "locked": null
         },
@@ -845,7 +845,7 @@ window.SOLVER_FIXTURE =
         {
           "key": "linear_solver_type",
           "value": "bicgstab",
-          "default": "skyline_lu_factorization",
+          "default": "LinearSolversApplication.sparse_lu",
           "overridden": true,
           "locked": null
         },
@@ -969,7 +969,7 @@ window.SOLVER_FIXTURE =
         {
           "key": "linear_solver_type",
           "value": "cg",
-          "default": "skyline_lu_factorization",
+          "default": "LinearSolversApplication.sparse_lu",
           "overridden": true,
           "locked": null
         },
@@ -1092,8 +1092,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "linear_solver_type",
-          "value": "skyline_lu_factorization",
-          "default": "skyline_lu_factorization",
+          "value": "LinearSolversApplication.sparse_lu",
+          "default": "LinearSolversApplication.sparse_lu",
           "overridden": false,
           "locked": null
         },
@@ -1194,8 +1194,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "linear_solver_type",
-          "value": "skyline_lu_factorization",
-          "default": "skyline_lu_factorization",
+          "value": "LinearSolversApplication.sparse_lu",
+          "default": "LinearSolversApplication.sparse_lu",
           "overridden": false,
           "locked": null
         },
@@ -1293,8 +1293,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "linear_solver_type",
-          "value": "skyline_lu_factorization",
-          "default": "skyline_lu_factorization",
+          "value": "LinearSolversApplication.sparse_lu",
+          "default": "LinearSolversApplication.sparse_lu",
           "overridden": false,
           "locked": null
         },
@@ -1335,8 +1335,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "increase_factor",
-          "value": 2.0,
-          "default": 2.0,
+          "value": 1.0,
+          "default": 1.0,
           "overridden": false,
           "locked": null
         },
@@ -1436,8 +1436,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "linear_solver_type",
-          "value": "skyline_lu_factorization",
-          "default": "skyline_lu_factorization",
+          "value": "LinearSolversApplication.sparse_lu",
+          "default": "LinearSolversApplication.sparse_lu",
           "overridden": false,
           "locked": null
         },
@@ -1478,8 +1478,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "increase_factor",
-          "value": 2.0,
-          "default": 2.0,
+          "value": 1.0,
+          "default": 1.0,
           "overridden": false,
           "locked": null
         },
@@ -1622,8 +1622,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "linear_solver_type",
-          "value": "skyline_lu_factorization",
-          "default": "skyline_lu_factorization",
+          "value": "LinearSolversApplication.sparse_lu",
+          "default": "LinearSolversApplication.sparse_lu",
           "overridden": false,
           "locked": null
         },
@@ -1664,8 +1664,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "increase_factor",
-          "value": 2.0,
-          "default": 2.0,
+          "value": 1.0,
+          "default": 1.0,
           "overridden": false,
           "locked": null
         },
@@ -1766,8 +1766,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "linear_solver_type",
-          "value": "skyline_lu_factorization",
-          "default": "skyline_lu_factorization",
+          "value": "LinearSolversApplication.sparse_lu",
+          "default": "LinearSolversApplication.sparse_lu",
           "overridden": false,
           "locked": null
         },
@@ -1780,8 +1780,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "increase_factor",
-          "value": 2.0,
-          "default": 2.0,
+          "value": 1.0,
+          "default": 1.0,
           "overridden": false,
           "locked": null
         },
@@ -1939,8 +1939,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "increase_factor",
-          "value": 2.0,
-          "default": 2.0,
+          "value": 1.0,
+          "default": 1.0,
           "overridden": false,
           "locked": null
         },
@@ -2043,7 +2043,7 @@ window.SOLVER_FIXTURE =
         {
           "key": "linear_solver_type",
           "value": "amgcl",
-          "default": "skyline_lu_factorization",
+          "default": "LinearSolversApplication.sparse_lu",
           "overridden": true,
           "locked": null
         },
@@ -2119,8 +2119,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "increase_factor",
-          "value": 2.0,
-          "default": 2.0,
+          "value": 1.0,
+          "default": 1.0,
           "overridden": false,
           "locked": null
         },
@@ -2224,7 +2224,7 @@ window.SOLVER_FIXTURE =
         {
           "key": "linear_solver_type",
           "value": "amgcl",
-          "default": "skyline_lu_factorization",
+          "default": "LinearSolversApplication.sparse_lu",
           "overridden": true,
           "locked": null
         },
@@ -2307,8 +2307,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "increase_factor",
-          "value": 2.0,
-          "default": 2.0,
+          "value": 1.0,
+          "default": 1.0,
           "overridden": false,
           "locked": null
         },
@@ -2411,7 +2411,7 @@ window.SOLVER_FIXTURE =
         {
           "key": "linear_solver_type",
           "value": "bicgstab",
-          "default": "skyline_lu_factorization",
+          "default": "LinearSolversApplication.sparse_lu",
           "overridden": true,
           "locked": null
         },
@@ -2473,8 +2473,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "increase_factor",
-          "value": 2.0,
-          "default": 2.0,
+          "value": 1.0,
+          "default": 1.0,
           "overridden": false,
           "locked": null
         },
@@ -2577,7 +2577,7 @@ window.SOLVER_FIXTURE =
         {
           "key": "linear_solver_type",
           "value": "cg",
-          "default": "skyline_lu_factorization",
+          "default": "LinearSolversApplication.sparse_lu",
           "overridden": true,
           "locked": null
         },
@@ -2639,8 +2639,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "increase_factor",
-          "value": 2.0,
-          "default": 2.0,
+          "value": 1.0,
+          "default": 1.0,
           "overridden": false,
           "locked": null
         },
@@ -2742,8 +2742,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "linear_solver_type",
-          "value": "skyline_lu_factorization",
-          "default": "skyline_lu_factorization",
+          "value": "LinearSolversApplication.sparse_lu",
+          "default": "LinearSolversApplication.sparse_lu",
           "overridden": false,
           "locked": null
         },
@@ -2784,8 +2784,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "increase_factor",
-          "value": 2.0,
-          "default": 2.0,
+          "value": 1.0,
+          "default": 1.0,
           "overridden": false,
           "locked": null
         },
@@ -2851,8 +2851,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "linear_solver_type",
-          "value": "skyline_lu_factorization",
-          "default": "skyline_lu_factorization",
+          "value": "LinearSolversApplication.sparse_lu",
+          "default": "LinearSolversApplication.sparse_lu",
           "overridden": false,
           "locked": null
         },
@@ -2893,8 +2893,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "increase_factor",
-          "value": 2.0,
-          "default": 2.0,
+          "value": 1.0,
+          "default": 1.0,
           "overridden": false,
           "locked": null
         },
@@ -6654,8 +6654,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "linear_solver_type",
-          "value": "skyline_lu_factorization",
-          "default": "skyline_lu_factorization",
+          "value": "LinearSolversApplication.sparse_lu",
+          "default": "LinearSolversApplication.sparse_lu",
           "overridden": false,
           "locked": null
         },
@@ -6696,8 +6696,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "increase_factor",
-          "value": 2.0,
-          "default": 2.0,
+          "value": 1.0,
+          "default": 1.0,
           "overridden": false,
           "locked": null
         },
@@ -6797,8 +6797,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "linear_solver_type",
-          "value": "skyline_lu_factorization",
-          "default": "skyline_lu_factorization",
+          "value": "LinearSolversApplication.sparse_lu",
+          "default": "LinearSolversApplication.sparse_lu",
           "overridden": false,
           "locked": null
         },
@@ -6839,8 +6839,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "increase_factor",
-          "value": 2.0,
-          "default": 2.0,
+          "value": 1.0,
+          "default": 1.0,
           "overridden": false,
           "locked": null
         },
@@ -6941,8 +6941,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "linear_solver_type",
-          "value": "skyline_lu_factorization",
-          "default": "skyline_lu_factorization",
+          "value": "LinearSolversApplication.sparse_lu",
+          "default": "LinearSolversApplication.sparse_lu",
           "overridden": false,
           "locked": null
         },
@@ -6983,8 +6983,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "increase_factor",
-          "value": 2.0,
-          "default": 2.0,
+          "value": 1.0,
+          "default": 1.0,
           "overridden": false,
           "locked": null
         },
@@ -7085,8 +7085,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "linear_solver_type",
-          "value": "skyline_lu_factorization",
-          "default": "skyline_lu_factorization",
+          "value": "LinearSolversApplication.sparse_lu",
+          "default": "LinearSolversApplication.sparse_lu",
           "overridden": false,
           "locked": null
         },
@@ -7127,8 +7127,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "increase_factor",
-          "value": 2.0,
-          "default": 2.0,
+          "value": 1.0,
+          "default": 1.0,
           "overridden": false,
           "locked": null
         },
@@ -7231,7 +7231,7 @@ window.SOLVER_FIXTURE =
         {
           "key": "linear_solver_type",
           "value": "amgcl",
-          "default": "skyline_lu_factorization",
+          "default": "LinearSolversApplication.sparse_lu",
           "overridden": true,
           "locked": null
         },
@@ -7314,8 +7314,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "increase_factor",
-          "value": 2.0,
-          "default": 2.0,
+          "value": 1.0,
+          "default": 1.0,
           "overridden": false,
           "locked": null
         },
@@ -7418,7 +7418,7 @@ window.SOLVER_FIXTURE =
         {
           "key": "linear_solver_type",
           "value": "amgcl",
-          "default": "skyline_lu_factorization",
+          "default": "LinearSolversApplication.sparse_lu",
           "overridden": true,
           "locked": null
         },
@@ -7494,8 +7494,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "increase_factor",
-          "value": 2.0,
-          "default": 2.0,
+          "value": 1.0,
+          "default": 1.0,
           "overridden": false,
           "locked": null
         },
@@ -7599,7 +7599,7 @@ window.SOLVER_FIXTURE =
         {
           "key": "linear_solver_type",
           "value": "amgcl",
-          "default": "skyline_lu_factorization",
+          "default": "LinearSolversApplication.sparse_lu",
           "overridden": true,
           "locked": null
         },
@@ -7682,8 +7682,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "increase_factor",
-          "value": 2.0,
-          "default": 2.0,
+          "value": 1.0,
+          "default": 1.0,
           "overridden": false,
           "locked": null
         },
@@ -7786,7 +7786,7 @@ window.SOLVER_FIXTURE =
         {
           "key": "linear_solver_type",
           "value": "bicgstab",
-          "default": "skyline_lu_factorization",
+          "default": "LinearSolversApplication.sparse_lu",
           "overridden": true,
           "locked": null
         },
@@ -7848,8 +7848,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "increase_factor",
-          "value": 2.0,
-          "default": 2.0,
+          "value": 1.0,
+          "default": 1.0,
           "overridden": false,
           "locked": null
         },
@@ -7952,7 +7952,7 @@ window.SOLVER_FIXTURE =
         {
           "key": "linear_solver_type",
           "value": "cg",
-          "default": "skyline_lu_factorization",
+          "default": "LinearSolversApplication.sparse_lu",
           "overridden": true,
           "locked": null
         },
@@ -8014,8 +8014,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "increase_factor",
-          "value": 2.0,
-          "default": 2.0,
+          "value": 1.0,
+          "default": 1.0,
           "overridden": false,
           "locked": null
         },
@@ -8117,8 +8117,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "linear_solver_type",
-          "value": "skyline_lu_factorization",
-          "default": "skyline_lu_factorization",
+          "value": "LinearSolversApplication.sparse_lu",
+          "default": "LinearSolversApplication.sparse_lu",
           "overridden": false,
           "locked": null
         },
@@ -8159,8 +8159,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "increase_factor",
-          "value": 2.0,
-          "default": 2.0,
+          "value": 1.0,
+          "default": 1.0,
           "overridden": false,
           "locked": null
         },
@@ -8226,8 +8226,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "linear_solver_type",
-          "value": "skyline_lu_factorization",
-          "default": "skyline_lu_factorization",
+          "value": "LinearSolversApplication.sparse_lu",
+          "default": "LinearSolversApplication.sparse_lu",
           "overridden": false,
           "locked": null
         },
@@ -8268,8 +8268,8 @@ window.SOLVER_FIXTURE =
         },
         {
           "key": "increase_factor",
-          "value": 2.0,
-          "default": 2.0,
+          "value": 1.0,
+          "default": 1.0,
           "overridden": false,
           "locked": null
         },

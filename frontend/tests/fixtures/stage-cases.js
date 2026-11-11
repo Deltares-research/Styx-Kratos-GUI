@@ -1955,10 +1955,10 @@ window.STAGE_FIXTURE =
             "soil_L1__lift3"
           ],
           "reset_displacements": false,
-          "convergence_criterion": "residual_criterion",
+          "convergence_criterion": "water_pressure_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-09,
+          "absolute_tolerance": 1e-08,
           "duration": 1.0,
           "time_step": 1.0,
           "solver_settings": {}
@@ -1974,10 +1974,10 @@ window.STAGE_FIXTURE =
           "activate": [],
           "deactivate": [],
           "reset_displacements": false,
-          "convergence_criterion": "residual_criterion",
+          "convergence_criterion": "water_pressure_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-09,
+          "absolute_tolerance": 1e-08,
           "duration": 1.0,
           "time_step": 1.0,
           "solver_settings": {}
@@ -1996,10 +1996,10 @@ window.STAGE_FIXTURE =
           ],
           "deactivate": [],
           "reset_displacements": true,
-          "convergence_criterion": "residual_criterion",
+          "convergence_criterion": "water_pressure_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-09,
+          "absolute_tolerance": 1e-08,
           "duration": 1.0,
           "time_step": 1.0,
           "solver_settings": {}
@@ -2019,10 +2019,10 @@ window.STAGE_FIXTURE =
             "soil_L1__outside"
           ],
           "reset_displacements": false,
-          "convergence_criterion": "residual_criterion",
+          "convergence_criterion": "water_pressure_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-09,
+          "absolute_tolerance": 1e-08,
           "duration": 1.0,
           "time_step": 1.0,
           "solver_settings": {}
@@ -2040,10 +2040,10 @@ window.STAGE_FIXTURE =
           ],
           "deactivate": [],
           "reset_displacements": false,
-          "convergence_criterion": "residual_criterion",
+          "convergence_criterion": "water_pressure_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-09,
+          "absolute_tolerance": 1e-08,
           "duration": 1.0,
           "time_step": 1.0,
           "solver_settings": {}
@@ -2064,10 +2064,10 @@ window.STAGE_FIXTURE =
             "soil_L1__lift1"
           ],
           "reset_displacements": false,
-          "convergence_criterion": "residual_criterion",
+          "convergence_criterion": "water_pressure_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
-          "absolute_tolerance": 1e-09,
+          "absolute_tolerance": 1e-08,
           "duration": 1.0,
           "time_step": 1.0,
           "solver_settings": {}
@@ -2085,7 +2085,7 @@ window.STAGE_FIXTURE =
             "soil_L1__lift1"
           ],
           "reset_displacements": false,
-          "convergence_criterion": "residual_criterion",
+          "convergence_criterion": "water_pressure_criterion",
           "max_iterations": 15,
           "tolerated_error": 0.0001,
           "absolute_tolerance": 1e-06,

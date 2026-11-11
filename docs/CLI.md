@@ -433,7 +433,9 @@ kratos-cli stages pit.json list
   `--calculation flow` sets the stress initialisation to `none`.
 - **`--convergence-criterion`** (also `--convergence`) is what Kratos checks to decide
   that the stage has converged. A mechanical stage takes **`residual`** (the default) or
-  **`displacement`**; a flow stage **`residual`** (the default) or **`water_pressure`**.
+  **`displacement`**; a flow stage **`water_pressure`** (the default) or **`residual`**.
+  A flow stage of a project saved before the criterion could be chosen keeps the
+  `residual` it was solved on.
   Each refuses the other's. Kratos' own names, with `_criterion`, work too.
   A new `--calculation` gives a stage on the other type's criterion the new type's
   default.
@@ -470,13 +472,12 @@ kratos-cli stages pit.json list
 
   A setting a stage cannot have, or a value it cannot take, is refused, with the
   settings it can have. Each setting the stage does not set has the default for its
-  calculation type and time integration, which is the reference decks': a stage that
-  sets none is written as before these settings could be chosen. A mechanical stage is
-  solved by Newton-Raphson (`strategy_type=newton_raphson`) with the
-  `skyline_lu_factorization` linear solver unless the stage chooses another. The
-  quasi-Newton strategy (`strategy_type=quasi_newton`) always uses the
-  `LinearSolversApplication.sparse_lu` linear solver: it factorises the stiffness matrix
-  once and reuses it. A flow stage uses the strategy its soil calls for: one linear solve
+  calculation type and time integration. A mechanical stage is solved by Newton-Raphson
+  (`strategy_type=newton_raphson`) with the scaled `LinearSolversApplication.sparse_lu`
+  linear solver unless the stage chooses another. The quasi-Newton strategy
+  (`strategy_type=quasi_newton`) always uses that linear solver, unscaled: it
+  factorises the stiffness matrix once and reuses it. Unscaled, a fully coupled soil
+  with a very low permeability can settle a few percent too little. A flow stage uses the strategy its soil calls for: one linear solve
   for a saturated soil, Newton-Raphson for a soil with another retention law. Its linear
   solver is `sparse_lu`. A step that does not converge is not tried again
   (`number_cycles=1`); with more attempts, each is smaller. A dynamic mechanical stage on

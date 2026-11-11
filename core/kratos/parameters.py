@@ -141,9 +141,10 @@ Copied from GeoMechanicsApplication's own
 static U_Pw analysis on a residual criterion. A stage chooses its own criterion,
 iterations and tolerances (`schemas.Stage`), and its expert settings -- the strategy,
 the linear solver, the time step control, the assembly -- are `core.model.solver`'s,
-whose defaults are the rest of that deck: Newton-Raphson, with Skyline LU. Everything a project genuinely decides -- dimension, sub-model
-parts, rotations -- is filled in around this by `_solver_settings` rather than being
-listed here."""
+whose defaults are the rest of that deck: Newton-Raphson, but with a scaled Sparse LU
+where the deck has Skyline LU.
+Everything a project genuinely decides -- dimension, sub-model parts, rotations -- is
+filled in around this by `_solver_settings` rather than being listed here."""
 
 FLOW_SOLVER = {
     "solver_type": "Pw",

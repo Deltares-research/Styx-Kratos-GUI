@@ -78,7 +78,8 @@ App.Stages = (function () {
   /* `stage` solved on `criterion`: its absolute tolerance follows the default unless
      it has its own (`schemas.followed_tolerance`). */
   function setCriterion(stage, criterion) {
-    var old = ABSOLUTE_TOLERANCES[stage.convergence_criterion || 'residual_criterion'];
+    var old = ABSOLUTE_TOLERANCES[stage.convergence_criterion ||
+                                  (criteriaOf(stage.calculation)[0] || [])[0]];
     var tolerance = stage.absolute_tolerance == null ? old : stage.absolute_tolerance;
     if (old != null && ABSOLUTE_TOLERANCES[criterion] != null && tolerance === old) {
       stage.absolute_tolerance = ABSOLUTE_TOLERANCES[criterion];
@@ -426,8 +427,12 @@ App.Stages = (function () {
      (`stages.edited`). The calculation type is the initial stage's: set there, every
      stage gets it, a stage that is not mechanical goes back to no stress
      initialisation, and a stage of another type goes to the new type's default
-     convergence criterion and expert settings; set on a later stage, it changes
-     nothing. So does a stress initialisation on a later stage. A stage whose criterion
+     convergence criterion and expert settings. An initial stage that goes back to
+     mechanical with no stress initialisation is initialised by gravity loading again,
+     as a new project's is, so that trying flow does not lose the self weight. Set on a
+     later stage, the calculation type changes nothing; nor does a stress initialisation
+     on a later stage, but for none, which an old project's later K0 procedure has to be
+     able to go back to (`stages.check_settings`). A stage whose criterion
      changes keeps its absolute tolerance unless it was the old criterion's default,
      which becomes the new one's. */
   function edited(project, id, field, value) {
@@ -443,12 +448,18 @@ App.Stages = (function () {
           setCriterion(stage, allowed[0][0]);
           stage.solver_settings = {};
         }
+        var was = stage.calculation || 'mechanical';
         stage.calculation = value;
-        if (value !== 'mechanical') stage.stress_initialisation = 'none';
+        if (value !== 'mechanical') {
+          stage.stress_initialisation = 'none';
+        } else if (was !== 'mechanical' && stage.id === id &&
+                   (stage.stress_initialisation || 'none') === 'none') {
+          stage.stress_initialisation = initialStage().stress_initialisation;
+        }
       });
       return list;
     }
-    if (field === 'stress_initialisation' && !first) return list;
+    if (field === 'stress_initialisation' && !first && value !== 'none') return list;
     if (field === 'convergence_criterion') {
       setCriterion(target, value);
       return list;

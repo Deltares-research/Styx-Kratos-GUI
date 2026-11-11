@@ -1354,12 +1354,15 @@ default first: Kratos' names, which its `U_Pw` and `Pw` solvers read
 (`core.kratos.parameters.CONVERGENCE_TOLERANCES`). Listed, with their labels, in
 `core.model.solver.CRITERIA`, which the browser reads too.
 
-The residual one is the default of both types: every reference deck converges on it.
-Kratos' displacement criterion measures the update of every degree of freedom, the
-water pressure too: in a coupled soil whose water pressure builds up, it does not
-converge where the residual one does. The water pressure criterion of a flow stage
-can fail to settle in the same way with a seepage face, whose opening and closing keeps
-the water pressure moving (a quadratic Muskat case C). Kratos'
+The residual one is the default of a mechanical stage: every reference deck converges
+on it. Kratos' displacement criterion measures the update of every degree of freedom,
+the water pressure too: in a coupled soil whose water pressure builds up, it does not
+converge where the residual one does. The water pressure one is the default of a flow
+stage, which solves for the water pressure alone, as Kratos' own `Pw` solver has it
+(`geomechanics_Pw_solver.py`). It can fail to settle with a seepage face, whose opening
+and closing keeps the water pressure moving (a quadratic Muskat case C); such a stage
+can be set to the residual one. A flow stage saved before the criterion could be chosen
+was solved on the residual one, and keeps it (`migration.stage_calculation`). Kratos'
 `displacement_and_water_pressure_criterion` is not offered: Kratos 10.4.4 cannot build
 it (`geomechanics_U_Pw_solver.py` hands `MixedGenericCriteria` two criteria where it
 takes variables)."""
@@ -1439,8 +1442,9 @@ class Stage(Base):
     convergence_criterion: ConvergenceCriterion = "residual_criterion"
     """What Kratos measures to decide the stage has converged: one of
     `CONVERGENCE_CRITERIA` for its calculation type. A stage that names none -- one
-    saved before it could be chosen, or made without it -- has its type's default, the
-    residual criterion."""
+    made without it -- has its type's default: the residual criterion for a mechanical
+    stage, the water pressure one for a flow stage. A flow stage saved before it could
+    be chosen has the residual one, which it was solved on."""
     max_iterations: int = Field(default=int(solver.STAGE_DEFAULTS["max_iterations"]), gt=0)
     tolerated_error: float = Field(default=solver.STAGE_DEFAULTS["tolerated_error"], gt=0)
     """The convergence criterion's relative tolerance: Kratos'
@@ -1469,8 +1473,8 @@ class Stage(Base):
     control, the time scheme of a dynamic stage, the assembly. Every one it does not
     name has the default for its calculation type and time integration, so a stage
     that names none -- every stage saved before they could be set -- is solved as the
-    reference decks are: by Newton-Raphson if it is mechanical. A setting that does not apply to the stage as it
-    is now is kept, and neither shown nor written (`solver.resolve`)."""
+    defaults are: by Newton-Raphson with Sparse LU if it is mechanical. A setting that does not apply to
+    the stage as it is now is kept, and neither shown nor written (`solver.resolve`)."""
 
     @field_validator("solver_settings")
     @classmethod

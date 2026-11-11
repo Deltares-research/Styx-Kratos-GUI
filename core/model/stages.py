@@ -385,12 +385,17 @@ def edited(project: Project, id: str, field: str, value: object) -> list[Stage]:
     The calculation type is the initial stage's: set there, every stage gets it, a
     stage that is not mechanical goes back to no stress initialisation, and a stage of
     another type goes to the new type's default convergence criterion
-    (`schemas.CONVERGENCE_CRITERIA`), the residual one, as a new stage of that type
-    has. Its expert solver settings go back to the new type's defaults, as its
-    criterion does. Set on a later stage, it changes nothing. So does a stress
-    initialisation on a later stage. A stage whose criterion changes, either way, keeps
-    its absolute tolerance unless it was the old criterion's default, which becomes the
-    new one's (`schemas.ABSOLUTE_TOLERANCES`).
+    (`schemas.CONVERGENCE_CRITERIA`), as a new stage of that type has. Its expert
+    solver settings go back to the new type's defaults, as its criterion does. An
+    initial stage that goes back to mechanical with no stress initialisation is
+    initialised by gravity loading again, as a new project's is (`initial_stage`):
+    otherwise trying flow would lose the self weight (`gravity`). Set on a later stage,
+    the calculation type changes nothing. Nor does a stress initialisation on a later
+    stage, but for none: a later stage has none (`check_settings`), and one opened with
+    another -- an old project's later K0 procedure -- has to be able to go back to it.
+    A stage whose criterion changes, either way, keeps its absolute tolerance unless it
+    was the old criterion's default, which becomes the new one's
+    (`schemas.ABSOLUTE_TOLERANCES`).
     """
     listed = _copies(project)
     first = initial(project)
@@ -406,11 +411,15 @@ def edited(project: Project, id: str, field: str, value: object) -> list[Stage]:
             if allowed and stage.calculation != value:
                 _criterion(stage, allowed[0])
                 stage.solver_settings = {}
+            was = stage.calculation
             stage.calculation = value  # type: ignore[assignment]
             if value != "mechanical":
                 stage.stress_initialisation = "none"
+            elif was != "mechanical" and stage.id == id \
+                    and stage.stress_initialisation == "none":
+                stage.stress_initialisation = initial_stage().stress_initialisation
         return listed
-    if field == "stress_initialisation" and not is_first:
+    if field == "stress_initialisation" and not is_first and value != "none":
         return listed
     if field == "convergence_criterion":
         _criterion(target, str(value))

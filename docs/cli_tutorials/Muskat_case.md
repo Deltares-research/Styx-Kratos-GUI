@@ -150,11 +150,12 @@ PS> kratos-cli boundary muskat_vg.json add start --name "Initial phreatic line" 
 added start  Initial phreatic line  water pressure on the whole soil; phreatic line (-0.25, 3.22) -> (0.05, 3.22) -> (1.6, 0.48) -> (1.7, 0.48), initial; wrote muskat_vg.json
 ```
 
-The reference deck allows 100 iterations, with a relative tolerance of 1e-3 and an
-absolute one of 1e-15:
+The reference deck converges on the residual rather than on the water pressure, which a
+flow stage converges on unless it says otherwise. It allows 100 iterations, with a
+relative tolerance of 1e-3 and an absolute one of 1e-15:
 
 ```powershell
-kratos-cli stages muskat_vg.json set initial --max-iterations 100 --tolerance 1e-3 --absolute-tolerance 1e-15
+kratos-cli stages muskat_vg.json set initial --convergence residual --max-iterations 100 --tolerance 1e-3 --absolute-tolerance 1e-15
 kratos-cli set muskat_vg.json mesh.element_size 0.1
 ```
 
@@ -205,7 +206,8 @@ A seepage face is on the soil's outer boundary: on a face (`--face`), or on a li
 it. The export refuses a seepage line through the soil.
 
 The calculation starts from a horizontal water level at 3.0 m, as Kratos' seepage tests do,
-and the stage has their tolerances, 1e-4 relative and 1e-9 absolute:
+and the stage has their tolerances, 1e-4 relative and 1e-9 absolute, on the residual it
+kept from case B:
 
 ```powershell
 kratos-cli boundary muskat_seepage.json add start --name "Start values" --domain --water-pressure Hydrostatic --reference-coordinate 3 --pressure-tension-cut-off 1e5 --initial

@@ -167,8 +167,8 @@ def _stage_fields(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--solver", nargs="+", default=[], metavar="KEY=VALUE",
                         help="expert solver settings, by the names `stages show` lists: "
                              "e.g. strategy_type=newton_raphson linear_solver_type=amgcl. "
-                             "A mechanical stage is solved by quasi_newton unless it says "
-                             "otherwise")
+                             "A mechanical stage is solved by newton_raphson unless it "
+                             "says otherwise")
     parser.add_argument("--solver-default", nargs="+", default=[], metavar="KEY",
                         help="put expert solver settings back to their defaults")
 

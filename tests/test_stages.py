@@ -287,18 +287,27 @@ def test_an_old_initial_stage_keeps_the_self_weight_it_had(old, new):
     assert (made.calculation, made.stress_initialisation) == new
 
 
-@pytest.mark.parametrize("calculation,default", [
-    ("mechanical", "residual_criterion"), ("flow", "residual_criterion")])
+@pytest.mark.parametrize("calculation,default,tolerance", [
+    ("mechanical", "residual_criterion", 1e-9),
+    ("flow", "water_pressure_criterion", 1e-8)])
 def test_a_stage_converges_on_its_calculation_type_s_default_criterion(calculation,
-                                                                      default):
-    """The reference decks' criterion and tolerances, for either type."""
+                                                                      default, tolerance):
+    """The residual criterion for a mechanical stage, the water pressure one for a flow
+    stage, each with its own absolute tolerance."""
     made = schemas.Stage(id="s", name="S", calculation=calculation)
     assert (made.convergence_criterion, made.tolerated_error, made.absolute_tolerance) == \
-        (default, 1e-4, 1e-9)
-    # A stage saved before the criterion could be chosen opens with the default too.
+        (default, 1e-4, tolerance)
+    # A stage that names none opens with the default too.
     saved = schemas.Stage.model_validate({"id": "s", "name": "S",
                                           "calculation": calculation})
     assert saved.convergence_criterion == default
+
+
+def test_an_old_flow_stage_keeps_the_residual_criterion_it_was_solved_on():
+    saved = schemas.Stage.model_validate({"id": "s", "name": "S",
+                                          "calculation": "Groundwater flow"})
+    assert (saved.calculation, saved.convergence_criterion, saved.absolute_tolerance) == \
+        ("flow", "residual_criterion", 1e-9)
 
 
 @pytest.mark.parametrize("calculation,criterion", [
@@ -389,17 +398,55 @@ def test_the_calculation_type_is_set_in_the_initial_stage_for_every_stage():
         "dynamic"
 
 
+def test_trying_flow_and_going_back_to_mechanical_keeps_the_self_weight():
+    """The initial stage of a new project is initialised by gravity loading; a flow
+    sequence has none, so going back to mechanical gives it gravity loading again
+    rather than leaving the self weight out of every stage."""
+    p = blank_project()
+    assert stages.gravity(p)
+    flow = p.model_copy(update={"stages": stages.edited(p, "initial", "calculation",
+                                                        "flow")})
+    back = flow.model_copy(update={"stages": stages.edited(flow, "initial", "calculation",
+                                                           "mechanical")})
+    assert back.stages[0].stress_initialisation == "gravity"
+    assert stages.gravity(back)
+    # Its own choice, made before trying flow, is gone with flow; none stays none when
+    # the type does not change.
+    off = _project(_stage("initial", stress_initialisation="none"),
+                   _stage("dig", parent="initial"))
+    assert [s.stress_initialisation
+            for s in stages.edited(off, "initial", "calculation", "mechanical")] == \
+        ["none", "none"]
+    two = _project(_stage("initial", calculation="flow"),
+                   _stage("dig", parent="initial", calculation="flow"))
+    assert [s.stress_initialisation
+            for s in stages.edited(two, "initial", "calculation", "mechanical")] == \
+        ["gravity", "none"]
+
+
+def test_a_later_stage_with_a_stress_initialisation_can_go_back_to_none():
+    """An old project's later K0 procedure opens as a later stage initialised by K0,
+    which `check_settings` refuses every edit with: setting it to none has to work."""
+    p = _project(_stage("initial", stress_initialisation="K0"),
+                 _stage("dig", parent="initial", stress_initialisation="K0"))
+    with pytest.raises(stages.StageError, match="only the initial stage"):
+        stages.check_settings(p)
+    fixed = p.model_copy(update={"stages": stages.edited(p, "dig", "stress_initialisation",
+                                                         "none")})
+    assert fixed.stages[1].stress_initialisation == "none"
+    stages.check_settings(fixed)
+    assert stages.edited(fixed, "dig", "stress_initialisation", "gravity") == fixed.stages
+
+
 def test_a_new_calculation_type_gives_every_stage_a_criterion_it_has():
-    """Every stage gets the new type's default, the residual one: a flow stage made from
-    a mechanical one converges as a new flow stage does. The same type again changes
-    nothing."""
+    """Every stage gets the new type's default -- the water pressure one for flow, the
+    residual one for mechanical: a flow stage made from a mechanical one converges as a
+    new flow stage does. The same type again changes nothing."""
     p = _project(_stage("initial", convergence_criterion="displacement_criterion"),
                  _stage("dig", parent="initial"))
     flow = stages.edited(p, "initial", "calculation", "flow")
-    assert [s.convergence_criterion for s in flow] == ["residual_criterion"] * 2
-    pressure = [s.model_copy(update={"convergence_criterion": "water_pressure_criterion"})
-                for s in flow]
-    back = stages.edited(_project(*pressure), "initial", "calculation", "mechanical")
+    assert [s.convergence_criterion for s in flow] == ["water_pressure_criterion"] * 2
+    back = stages.edited(_project(*flow), "initial", "calculation", "mechanical")
     assert [s.convergence_criterion for s in back] == ["residual_criterion"] * 2
     same = stages.edited(p, "initial", "calculation", "mechanical")
     assert [s.convergence_criterion for s in same] == \
@@ -426,10 +473,10 @@ def test_a_new_criterion_takes_its_default_absolute_tolerance_unless_the_stage_h
     own = stages.edited(p, "dig", "convergence_criterion", "displacement_criterion")
     assert own[1].absolute_tolerance == 1e-6
     flow = stages.edited(_project(*on), "initial", "calculation", "flow")
-    assert flow[0].absolute_tolerance == 1e-9
-    pressure = stages.edited(_project(*flow), "initial", "convergence_criterion",
-                             "water_pressure_criterion")
-    assert pressure[0].absolute_tolerance == 1e-8
+    assert flow[0].absolute_tolerance == 1e-8
+    residual = stages.edited(_project(*flow), "initial", "convergence_criterion",
+                             "residual_criterion")
+    assert residual[0].absolute_tolerance == 1e-9
 
 
 def test_a_sequence_that_chooses_them_elsewhere_is_refused():

@@ -99,14 +99,15 @@
     return row ? row.value : undefined;
   }
 
-  test('a mechanical stage is solved by Newton-Raphson with Skyline LU, as the reference '
-       + 'deck is', function () {
+  test('a mechanical stage is solved by Newton-Raphson with a scaled Sparse LU',
+       function () {
     var rows = App.Stages.solverRows({}, { calculation: 'mechanical',
                                            time_integration: 'static' });
     T.eq(solverValue(rows, 'strategy_type'), 'newton_raphson');
     T.eq(solverValue(rows, 'number_cycles'), 1);
+    T.eq(solverValue(rows, 'linear_solver_scaling'), true);
     var linear = rows.filter(function (row) { return row.key === 'linear_solver_type'; })[0];
-    T.eq(linear.value, 'skyline_lu_factorization');
+    T.eq(linear.value, 'LinearSolversApplication.sparse_lu');
     T.eq(linear.locked, null);
   });
 
@@ -301,6 +302,23 @@
          'a later stage changed the calculation type');
     T.eq(App.Stages.edited(project(), 'dig_1', 'stress_initialisation', 'K0'),
          project().stages, 'a later stage got a stress initialisation');
+  });
+
+  test('trying flow and going back to mechanical keeps the self weight', function () {
+    var p = project();
+    p.stages = App.Stages.edited(p, 'initial', 'calculation', 'flow');
+    var back = App.Stages.edited(p, 'initial', 'calculation', 'mechanical');
+    T.eq(back.map(function (stage) { return stage.stress_initialisation; }),
+         back.map(function (stage) {
+           return stage.id === 'initial' ? 'gravity' : 'none';
+         }));
+  });
+
+  test('a later stage with a stress initialisation can go back to none', function () {
+    var p = project();
+    p.stages[1].stress_initialisation = 'K0';
+    var list = App.Stages.edited(p, p.stages[1].id, 'stress_initialisation', 'none');
+    T.eq(list[1].stress_initialisation, 'none');
   });
 
   test('a project with no stages gets the initial stage first', function () {

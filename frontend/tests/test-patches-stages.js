@@ -220,7 +220,7 @@
       T.eq(ctx.patches.length, 1);
       T.ok(ctx.patches[0].body.stages.every(function (stage) {
         return stage.calculation === 'flow' && stage.stress_initialisation === 'none' &&
-          stage.convergence_criterion === 'residual_criterion';
+          stage.convergence_criterion === 'water_pressure_criterion';
       }), 'not every stage became a flow stage');
     }));
   });
@@ -249,13 +249,13 @@
     }));
   });
 
-  test('stages window: a flow stage converges on the residual or the water pressure',
+  test('stages window: a flow stage converges on the water pressure or the residual',
        function () {
     var flow = JSON.parse(JSON.stringify(model()));
     flow.stages.forEach(function (stage) {
       stage.calculation = 'flow';
       stage.stress_initialisation = 'none';
-      stage.convergence_criterion = 'water_pressure_criterion';
+      stage.convergence_criterion = 'residual_criterion';
     });
     var ctx = rig(flow);
     try {
@@ -263,8 +263,8 @@
       var grid = ctx.layer.querySelector('.stages-overview .pgrid');
       var selects = stageControls(ctx).selects;
       T.eq(selects.length, 3, 'calculation type, time integration, convergence criterion');
-      T.eq(values(selects[2]), ['residual_criterion', 'water_pressure_criterion']);
-      T.eq(selects[2].value, 'water_pressure_criterion');
+      T.eq(values(selects[2]), ['water_pressure_criterion', 'residual_criterion']);
+      T.eq(selects[2].value, 'residual_criterion');
       T.ok(/Absolute tolerance/.test(grid.textContent));
     } finally { ctx.restore(); }
   });
@@ -400,7 +400,7 @@
       T.eq(expertRow(ctx, 'Strategy').querySelector('select').value, 'newton_raphson');
       var linear = expertRow(ctx, 'Linear solver').querySelector('select');
       T.ok(linear, 'Newton-Raphson offers the linear solver');
-      T.eq(linear.value, 'skyline_lu_factorization');
+      T.eq(linear.value, 'LinearSolversApplication.sparse_lu');
       T.ok(!expertRow(ctx, 'Newmark beta'), 'a static stage has no time scheme');
     } finally { ctx.restore(); }
   });

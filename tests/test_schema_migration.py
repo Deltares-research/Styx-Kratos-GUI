@@ -252,6 +252,46 @@ def test_an_old_van_genuchten_flow_stage_keeps_its_absolute_tolerance():
         .absolute_tolerance == 1e-9
 
 
+def test_an_old_van_genuchten_flow_stage_keeps_its_tolerance_with_gravity_off():
+    """`migration.drop_gravity` leaves an old flow stage as it was saved, so that
+    `migration.flow_tolerance` still knows it."""
+    from tests.models import muskat
+    document = muskat.van_genuchten().model_dump(mode="json")
+    old = [{key: value for key, value in stage.items()
+            if key not in ("absolute_tolerance", "convergence_criterion")}
+           | {"calculation": "Groundwater flow"} for stage in document["stages"]]
+    for gravity in (True, False):
+        [stage] = Project.model_validate({**document, "stages": old,
+                                          "gravity": gravity}).stages
+        assert (stage.calculation, stage.convergence_criterion,
+                stage.absolute_tolerance) == ("flow", "residual_criterion", 1e-15), gravity
+
+
+def test_an_old_later_k0_procedure_can_be_set_to_none_and_then_edited():
+    """An old project whose later stage was a K0 procedure opens with a later stage
+    initialised by K0, which every stage edit is refused with until it is none
+    (`stages.check_settings`). The Stages window's edit sets it to none."""
+    from core import session
+    from core.model import stages
+    from core.model.schemas import StagesUpdate
+    document = json.loads((FIXTURES / "staged_v1.json").read_text(encoding="utf-8"))
+    document["phases"][1]["calculation"] = "K0 procedure"
+    project = Project.model_validate(document)
+    later = project.stages[1]
+    assert later.parent is not None and later.stress_initialisation == "K0"
+
+    def replaced(listed):
+        return session.replace_stages(project, StagesUpdate.model_validate(
+            {"stages": [stage.model_dump() for stage in listed]}))
+
+    with pytest.raises(stages.StageError, match="only the initial stage"):
+        replaced(stages.edited(project, later.id, "name", "renamed"))
+    project = replaced(stages.edited(project, later.id, "stress_initialisation", "none"))
+    project = replaced(stages.edited(project, later.id, "name", "renamed"))
+    assert (project.stages[1].name, project.stages[1].stress_initialisation) == \
+        ("renamed", "none")
+
+
 # ── A saved pit opens as lines ──────────────────────────────────────────────
 
 def _saved_pit(**pit) -> dict:

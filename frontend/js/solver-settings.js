@@ -245,15 +245,7 @@ App.SOLVER_SETTINGS = [
     "kind": "select",
     "default": [
       {
-        "when": {
-          "calculation": [
-            "flow"
-          ]
-        },
         "value": "LinearSolversApplication.sparse_lu"
-      },
-      {
-        "value": "skyline_lu_factorization"
       }
     ],
     "options": [
@@ -735,6 +727,17 @@ App.SOLVER_SETTINGS = [
       {
         "when": {
           "calculation": [
+            "mechanical"
+          ],
+          "time_integration": [
+            "dynamic"
+          ]
+        },
+        "value": 1.0
+      },
+      {
+        "when": {
+          "calculation": [
             "flow"
           ],
           "strategy_type": [
@@ -996,12 +999,12 @@ App.STAGE_SETTINGS = {
     ],
     "flow": [
       [
-        "residual_criterion",
-        "Residual"
-      ],
-      [
         "water_pressure_criterion",
         "Water pressure"
+      ],
+      [
+        "residual_criterion",
+        "Residual"
       ]
     ]
   },
