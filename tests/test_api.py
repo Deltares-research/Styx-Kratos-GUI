@@ -1167,6 +1167,28 @@ def test_the_mockup_viewport_is_not_served(client):
     assert client.get("/js/viewport.js").status_code == 404
 
 
+_BROWSER_BOX = re.compile(r"\b(?:window\.)?(prompt|alert|confirm)\s*\(")
+
+
+def test_no_browser_prompt_alert_or_confirm_opens():
+    """Every question the GUI asks is an app window. The browser's own prompt, alert
+    and confirm boxes cannot be shown in a screenshot of the page, so the scripted
+    GUI tutorial could not reach them. The live modules use none; the one frozen use,
+    the Model explorer's Rename of a soil layer, is never reached: the live tree menu
+    takes that row (frontend/js/patches.js, onTreeContextMenu)."""
+    live = Path(__file__).resolve().parents[1] / "frontend" / "js"
+    found = [f"{path.name}: {line.strip()}"
+             for path in sorted(live.glob("*.js"))
+             for line in path.read_text(encoding="utf-8").splitlines()
+             if _BROWSER_BOX.search(line) and not line.lstrip().startswith(("//", "*", "/*"))]
+    assert found == []
+    frozen = [f"{path.name}: {line.strip()}"
+              for path in sorted((BASE / "js").glob("*.js"))
+              for line in path.read_text(encoding="utf-8").splitlines()
+              if _BROWSER_BOX.search(line)]
+    assert frozen == ["explorer.js: var name = window.prompt('Layer name', layer.name);"]
+
+
 # ── The live shell ──────────────────────────────────────────────────────────
 
 def test_root_serves_the_live_shell(client):
@@ -1210,6 +1232,9 @@ def test_the_live_shell_replaces_only_the_viewport_and_the_orbit_controller(clie
                              "interfaces.js", "normal-loads.js", "lines.js",
                              # The x, y point list of the Line and normal load windows.
                              "point-list.js",
+                             # The Rename and project name window, in place of
+                             # the browser's prompt.
+                             "name-dialog.js",
                              "boundary-conditions.js", "material-library.js",
                              "orbit.js", "ruler.js", "mesh-labels.js",
                              "download.js", "zip.js", "stages.js", "results.js",

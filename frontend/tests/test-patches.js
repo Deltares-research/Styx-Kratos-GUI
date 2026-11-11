@@ -133,7 +133,7 @@
     }
   });
 
-  test('onTreeContextMenu ignores a row that is not a custom part', function () {
+  test('onTreeContextMenu ignores a row that is no live object', function () {
     var saved = { project: App.PROJECT, menu: App.Menu };
     App.PROJECT = { custom_parts: [] };
     var openedMenu = false;
@@ -141,7 +141,7 @@
 
     var row = document.createElement('div');
     row.className = 'tree-row';
-    row.dataset.obj = 'soil_L1';
+    row.dataset.obj = 'soil_no_such_layer';
     var prevented = false;
     var event = {
       target: row,
@@ -244,7 +244,9 @@
       T.eq(App.LivePatches.objectKind('beam_1'), 'beam');
       T.eq(App.LivePatches.objectKind('anchor_1'), 'anchor');
       T.eq(App.LivePatches.objectKind('point_1'), 'load');
-      T.eq(App.LivePatches.objectKind('soil_L1'), null);
+      // A soil layer is live too: its Rename must not fall to the frozen prompt.
+      T.eq(App.LivePatches.objectKind('soil_' + App.LAYERS[0].id), 'layer');
+      T.eq(App.LivePatches.objectKind('soil_no_such_layer'), null);
       T.eq(App.LivePatches.objectKind(null), null);
     } finally {
       App.PROJECT = saved.project; App.BEAMS = saved.beams;
@@ -252,25 +254,26 @@
     }
   });
 
-  test('renameObject prompts for a name and saves the beam under it', function () {
-    var saved = { beams: App.BEAMS, beamsModule: App.Beams, prompt: window.prompt };
+  test('renameObject asks for a name in the Rename window and saves the beam under it', function () {
+    var saved = { beams: App.BEAMS, beamsModule: App.Beams, ask: App.NameDialog };
     var beam = { id: 'beam_1', name: 'Sheet pile 1' };
     App.BEAMS = [beam];
-    window.prompt = function (message, current) {
-      T.eq(current, 'Sheet pile 1');
-      return '  New name  ';
-    };
+    App.NameDialog = { ask: function (options) {
+      T.eq(options.value, 'Sheet pile 1');
+      T.eq(options.title, 'Rename');
+      return Promise.resolve('New name');
+    } };
     var savedWith = null;
     App.Beams = Object.assign({}, App.Beams, {
       save: function (b) { savedWith = b; return Promise.resolve(b); }
     });
 
     function restore() {
-      App.BEAMS = saved.beams; App.Beams = saved.beamsModule; window.prompt = saved.prompt;
+      App.BEAMS = saved.beams; App.Beams = saved.beamsModule; App.NameDialog = saved.ask;
     }
 
     return Promise.resolve(App.LivePatches.renameObject('beam', 'beam_1')).then(function () {
-      T.eq(beam.name, 'New name', 'the field is trimmed before it is saved');
+      T.eq(beam.name, 'New name');
       T.eq(savedWith, beam, 'save is called with the renamed object');
     }).then(restore, function (e) { restore(); throw e; });
   });
@@ -280,7 +283,7 @@
                   normalLoads: App.NORMAL_LOADS, loads: App.LOADS,
                   anchorsModule: App.Anchors, interfacesModule: App.Interfaces,
                   normalLoadsModule: App.NormalLoads, loadsModule: App.Loads,
-                  prompt: window.prompt };
+                  ask: App.NameDialog };
     var objects = {
       anchor: { id: 'anchor_1', name: 'Anchor 1' },
       interface: { id: 'interface_1', name: 'Interface 1' },
@@ -300,14 +303,17 @@
     App.NormalLoads = Object.assign({}, App.NormalLoads, saver('normal_load'));
     App.Loads = Object.assign({}, App.Loads, saver('load'));
     var offered = [];
-    window.prompt = function (message, current) { offered.push(current); return 'Renamed ' + current; };
+    App.NameDialog = { ask: function (options) {
+      offered.push(options.value);
+      return Promise.resolve('Renamed ' + options.value);
+    } };
 
     function restore() {
       App.ANCHORS = saved.anchors; App.INTERFACES = saved.interfaces;
       App.NORMAL_LOADS = saved.normalLoads; App.LOADS = saved.loads;
       App.Anchors = saved.anchorsModule; App.Interfaces = saved.interfacesModule;
       App.NormalLoads = saved.normalLoadsModule; App.Loads = saved.loadsModule;
-      window.prompt = saved.prompt;
+      App.NameDialog = saved.ask;
     }
 
     var kinds = Object.keys(objects);
@@ -315,7 +321,7 @@
       return Promise.resolve(App.LivePatches.renameObject(kind, objects[kind].id));
     })).then(function () {
       T.eq(offered, ['Anchor 1', 'Interface 1', 'Normal load 1', 'Point load 1'],
-           'the prompt offers each object\'s current name');
+           'the Rename window offers each object\'s current name');
       kinds.forEach(function (kind) {
         T.eq(savedWith[kind], objects[kind], kind + ' is saved through its own module');
         T.ok(/^Renamed /.test(objects[kind].name), kind + ' carries the new name');
@@ -323,8 +329,8 @@
     }).then(restore, function (e) { restore(); throw e; });
   });
 
-  test('renameObject does nothing when the prompt is cancelled or blank', function () {
-    var saved = { beams: App.BEAMS, beamsModule: App.Beams, prompt: window.prompt };
+  test('renameObject does nothing when the Rename window is cancelled', function () {
+    var saved = { beams: App.BEAMS, beamsModule: App.Beams, ask: App.NameDialog };
     var beam = { id: 'beam_1', name: 'Sheet pile 1' };
     App.BEAMS = [beam];
     var saveCalled = false;
@@ -332,18 +338,15 @@
       save: function () { saveCalled = true; return Promise.resolve(); }
     });
 
-    try {
-      window.prompt = function () { return null; };
-      App.LivePatches.renameObject('beam', 'beam_1');
-      T.eq(beam.name, 'Sheet pile 1', 'a cancelled prompt must not touch the name');
-
-      window.prompt = function () { return '   '; };
-      App.LivePatches.renameObject('beam', 'beam_1');
-      T.eq(beam.name, 'Sheet pile 1', 'a blank name must not be saved');
-      T.eq(saveCalled, false);
-    } finally {
-      App.BEAMS = saved.beams; App.Beams = saved.beamsModule; window.prompt = saved.prompt;
+    // A blank name never leaves the window: see the Rename window's own test.
+    App.NameDialog = { ask: function () { return Promise.resolve(null); } };
+    function restore() {
+      App.BEAMS = saved.beams; App.Beams = saved.beamsModule; App.NameDialog = saved.ask;
     }
+    return App.LivePatches.renameObject('beam', 'beam_1').then(function () {
+      T.eq(beam.name, 'Sheet pile 1', 'a cancelled rename must not touch the name');
+      T.eq(saveCalled, false);
+    }).then(restore, function (e) { restore(); throw e; });
   });
 
   test('onTreeContextMenu opens a working Rename and Delete for an anchor, and Delete removes it', function () {

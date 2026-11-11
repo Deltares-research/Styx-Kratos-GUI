@@ -1776,10 +1776,13 @@ App.Model = (function () {
           ['Name', body.name, '', true],
           ['Rename', '', '', false, { kind: 'button', text: 'Rename…',
             run: function () {
-              var name = window.prompt('New name', body.name);
-              if (name && name.trim() && App.Lines) {
-                App.Lines.saveBody(key, { name: name.trim() }).catch(function () {});
-              }
+              return App.NameDialog.ask({ title: 'Rename', value: body.name,
+                                          help: 'Shown in the Model explorer.' })
+                .then(function (name) {
+                  if (name !== null && App.Lines) {
+                    return App.Lines.saveBody(key, { name: name }).catch(function () {});
+                  }
+                });
             } }],
           ['Layer', layer.name, '', true],
           // The materials only, the part's chosen: it has one of its own from the moment

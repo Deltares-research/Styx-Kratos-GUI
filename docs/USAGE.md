@@ -86,7 +86,8 @@ Right-click in the viewport for more commands: hide the selected object, hide al
 objects, show all, show node or element labels, and visibility settings.
 
 Right-click an object in the Model explorer to zoom to it, rename it, delete it, or open its
-properties.
+properties. This works for every object, soil layers too. **Rename…** opens a small window:
+type the new name and click **OK**, or press <kbd>Enter</kbd>.
 
 ## Soil mode
 
@@ -588,8 +589,9 @@ model, also when the mesh is shown deformed. Type `results loads off` to hide th
   Each face of the wall has its own tractions. They show only where the contact is on in
   that stage, so the face a pit is dug against starts at the pit floor.
   **Save SVG** saves the figure, and **Save CSV** saves the numbers.
-- **Values at a node:** click **Results** → **Value at a node…**, or type
-  `results at <node>`.
+- **Values at a node:** click **Results** → **Value at a node…**, type the node number in
+  the small window and click **OK**. Or type `results at <node>`. The values appear in the
+  Session log.
 - **Save the field as CSV:** click **Save CSV**, or type `results csv`.
 - **Save the full run:** click **Download run**, or type `results zip`.
 

@@ -294,17 +294,105 @@
   test('renaming a drawn body and a boundary condition saves through their respective owners', function () {
     return withShell(function (ctx) {
       App.PROJECT.custom_parts = [{ key: 'drawn_rename', label: 'Old body' }];
-      window.prompt = function () { return '  New body  '; };
+      var asked = [];
+      App.NameDialog = { ask: function (options) {
+        asked.push(options.value);
+        return Promise.resolve(asked.length === 1 ? 'New body' : 'New support');
+      } };
       return App.LivePatches.renameObject('part', 'drawn_rename').then(function () {
+        T.eq(asked, ['Old body'], 'the Rename window opens on the name it has');
         T.eq(ctx.requests[0].body.custom_parts[0].label, 'New body');
         var record = App.BoundaryConditions.draftDisplacement(App.PROJECT, 'face', { face: 'bottom' });
         App.PROJECT.boundary_conditions = [record];
         App.BOUNDARY_CONDITIONS = [record];
-        window.prompt = function () { return 'New support'; };
         return App.LivePatches.renameObject('condition', record.id);
       }).then(function () {
         T.eq(ctx.requests[1].path, '/api/project/conditions');
         T.eq(ctx.requests[1].body.boundary_conditions[0].name, 'New support');
+      });
+    });
+  });
+
+  test('a soil layer renames in the Rename window and deletes from the Model explorer, '
+       + 'with no browser prompt', function () {
+    return withShell(function (ctx, host) {
+      window.prompt = function () { throw new Error('the browser prompt must not open'); };
+      App.Explorer.mountTree('soil');
+      var menus = [];
+      App.Menu.openAt = function (items, x, y, pick) { menus.push({ items: items, pick: pick }); };
+      function rightClick(key) {
+        var row = host.querySelector('#tree-model .tree-row[data-obj="' + key + '"]');
+        T.ok(row, 'a row for ' + key);
+        row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+        var menu = menus[menus.length - 1];
+        return function (label) {
+          var item = menu.items.filter(function (it) { return it && it.label === label; })[0];
+          T.eq(!!item.disabled, false, label + ' is enabled for a soil layer');
+          return menu.pick(item);
+        };
+      }
+      var first = App.LAYERS[0], second = App.LAYERS[1];
+      var count = App.LAYERS.length;
+      rightClick('soil_' + first.id)('Rename…');
+      T.eq(menus.length, 1, 'one menu: the frozen one must not open as well');
+      var dialog = host.querySelector('.name-dialog-window');
+      T.ok(dialog, 'the Rename window opens');
+      var input = dialog.querySelector('input[name=name]');
+      T.eq(input.value, first.name);
+      input.value = 'Clay top';
+      Array.prototype.filter.call(dialog.querySelectorAll('button'), function (button) {
+        return button.textContent === 'OK';
+      })[0].click();
+      return settle().then(settle).then(function () {
+        T.eq(ctx.requests[0].path, '/api/project/layers');
+        T.eq(ctx.requests[0].body.layers[0].name, 'Clay top');
+        T.ok(ctx.lines.indexOf('ok:Renamed soil layer to Clay top.') >= 0, ctx.lines.join(' | '));
+        App.Explorer.mountTree('soil');
+        return rightClick('soil_' + second.id)('Delete');
+      }).then(function () {
+        T.eq(ctx.requests[1].path, '/api/project/layers');
+        T.eq(ctx.requests[1].body.layers.length, count - 1);
+        T.ok(!ctx.requests[1].body.layers.some(function (l) { return l.id === second.id; }));
+      });
+    });
+  });
+
+  test('a cancelled rename saves nothing', function () {
+    return withShell(function (ctx) {
+      App.PROJECT.custom_parts = [{ key: 'drawn_rename', label: 'Old body' }];
+      App.NameDialog = { ask: function () { return Promise.resolve(null); } };
+      return App.LivePatches.renameObject('part', 'drawn_rename').then(function () {
+        T.eq(ctx.requests, []);
+      });
+    });
+  });
+
+  test('the Rename window answers the typed name, refuses an empty one, and null on Cancel', function () {
+    return withShell(function () {
+      var layer = document.getElementById('modal-layer');
+      function shown() { return layer.querySelector('.name-dialog-window'); }
+      function button(label) {
+        return Array.prototype.filter.call(shown().querySelectorAll('.dlg-foot .btn'),
+          function (b) { return b.textContent === label; })[0];
+      }
+      var first = App.NameDialog.ask({ title: 'Rename', value: 'Old' });
+      var input = shown().querySelector('input[name=name]');
+      T.eq(input.value, 'Old');
+      T.eq(shown().querySelector('.dlg-title').textContent, 'Rename');
+      input.value = '   ';
+      button('OK').click();
+      T.ok(shown(), 'an empty name keeps the window open');
+      T.eq(shown().querySelector('.mesh-settings-message').textContent, 'Type a name.');
+      input.value = '  New  ';
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      return first.then(function (name) {
+        T.eq(name, 'New');
+        T.ok(!shown(), 'closed after OK');
+        var second = App.NameDialog.ask({ value: 'Old' });
+        button('Cancel').click();
+        return second;
+      }).then(function (name) {
+        T.eq(name, null);
       });
     });
   });
