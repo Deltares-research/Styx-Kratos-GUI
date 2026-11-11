@@ -381,6 +381,20 @@
     T.eq(App.Viewport.gridCell({ size: [3, 2, 1] }), 0.5);
   });
 
+  test('zooming in and out walks the 2D cell through 1, 2, 5, 10, on the ruler ticks', function () {
+    var width = 800, seen = [];
+    // From 2 m to 400 m across the screen.
+    for (var halfW = 1; halfW <= 200; halfW *= 1.25) {
+      var cell = App.Viewport.sectionGridCell(halfW, width, 0.5);
+      var ruler = App.Ruler.plan({ center: [0, 0], halfW: halfW, halfH: halfW / 2,
+                                   width: width, height: width / 2 });
+      T.eq(cell, ruler.h.step, 'grid and ruler disagree at half-width ' + halfW);
+      if (seen[seen.length - 1] !== cell) seen.push(cell);
+    }
+    T.eq(seen.join(' '), '0.2 0.5 1 2 5 10 20 50');
+    T.eq(App.Viewport.sectionGridCell(10, 0, 0.5), 0.5, 'no size yet: the model cell');
+  });
+
   test('the grid covers the whole visible rectangle, not just the model', function () {
     var g = spec([25, -12.5], 60, 30);
     T.ok(g.span / 2 >= 60, 'too narrow: ' + g.span);

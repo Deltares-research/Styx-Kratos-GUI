@@ -1182,9 +1182,8 @@ App.Viewport = (function () {
      Grid and bounds, sized to the model rather than to constants
      ══════════════════════════════════════════════════════════════ */
 
-  /* The 3D grid is a plane the model stands on, so it is sized to the model. Its cell
-     is the unit both grids are drawn in: the 2D one coarsens by whole multiples of it
-     so a coarse line is always a line the fine grid also had. */
+  /* The 3D grid is a plane the model stands on, so it is sized to the model, and so is
+     its cell. The 2D grid's cell follows the zoom instead (sectionGridCell). */
   function modelGridSpan(frame) { return Math.max(frame.size[0], frame.size[1]) * 1.6; }
 
   /* 1, 2 or 5 times a power of ten, as the rulers step (js/ruler.js), so a grid line
@@ -1264,6 +1263,14 @@ App.Viewport = (function () {
     };
   }
 
+  /* The 2D cell follows the zoom: the rulers' labelled step for the same visible width
+     (js/ruler.js), so every grid line is a numbered tick and zooming walks 1, 2, 5, 10.
+     `fallback` is for a view with no size yet. */
+  function sectionGridCell(halfW, widthPx, fallback) {
+    if (!(halfW > 0) || !(widthPx > 0) || !App.Ruler) return fallback > 0 ? fallback : 1;
+    return App.Ruler.niceStep(2 * halfW / widthPx * App.Ruler.MIN_SPACING);
+  }
+
   /* Rebuilt only when the view has actually left what is drawn, or needs a different
      cell: at GRID_MARGIN a drag crosses that boundary rarely, and the geometry is a
      few hundred vertices when it does. */
@@ -1306,7 +1313,8 @@ App.Viewport = (function () {
   function syncSectionGrid() {
     if (dimension !== 2 || !showGrid || !frame || !gridGroup || !cam.isOrthographicCamera) return;
     var view = visibleHalfExtent();
-    var next = sectionGridSpec(gridCell(frame), sectionCenter(), view.halfW, view.halfH);
+    var cell = sectionGridCell(view.halfW, host && host.clientWidth, gridCell(frame));
+    var next = sectionGridSpec(cell, sectionCenter(), view.halfW, view.halfH);
     if (!sectionGridNeedsRebuild(gridSpec, next)) return;
     gridSpec = next;
     makeReferenceGrid(next.span, next.divisions);
@@ -3154,7 +3162,7 @@ App.Viewport = (function () {
     orthoHalfHeight: orthoHalfHeight, ORTHO_BASE: ORTHO_BASE,
     radiusLimits: radiusLimits, pickPlane: pickPlane, modelSpan: modelSpan,
     sectionGridSpec: sectionGridSpec, sectionGridNeedsRebuild: sectionGridNeedsRebuild,
-    gridCell: gridCell,
+    gridCell: gridCell, sectionGridCell: sectionGridCell,
     MAX_GRID_DIVISIONS: MAX_GRID_DIVISIONS,
     makeRenderer: makeRenderer, WEBGL_HELP: WEBGL_HELP,
     SOFTWARE_HELP: SOFTWARE_HELP,
