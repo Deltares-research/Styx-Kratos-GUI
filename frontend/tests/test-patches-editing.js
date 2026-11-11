@@ -245,7 +245,8 @@
       }
       function restore() { HTMLInputElement.prototype.click = click; }
       function writes() {
-        return ctx.requests.filter(function (r) { return r.method === 'PUT'; }).length;
+        // Opening is a POST to /api/project/open; anything but a GET writes.
+        return ctx.requests.filter(function (r) { return r.method !== 'GET'; }).length;
       }
       return choose('Opened site.json', JSON.stringify(ctx.server)).then(function () {
         T.eq(ctx.requests[0].method, 'POST');

@@ -35,11 +35,15 @@ def project():
     model = {model}
     return model.model_copy(update={{
         "boundary_conditions": [c for c in model.boundary_conditions if c.id in {keep!r}],
-        "stages": [stage.model_copy(update={{"calculation": "mechanical"}})
-                   for stage in model.stages]}})
+        "stages": [Stage.model_validate({{
+            **stage.model_dump(exclude={{"convergence_criterion", "absolute_tolerance"}}),
+            "calculation": "mechanical"}}) for stage in model.stages]}})
 '''
 """A model script: `model` with only the conditions in `keep`, and its stage not yet a
-groundwater flow stage."""
+groundwater flow stage: a mechanical one, with a mechanical stage's default criterion
+and tolerance, as the Stages window then changes them (`core.model.stages.edited`).
+Validated, as a copy is not: the flow stage's water pressure criterion is no mechanical
+stage's."""
 
 
 def open_column(page, directory: Path, name: str, model: str, keep: tuple, doc: str):
@@ -102,12 +106,19 @@ def on_a_line(page, kind: str, name: str, points: str, **water):
     save_condition(page, count + 1)
 
 
-def groundwater_flow(page):
-    """The stage's calculation type, in the Stages window."""
+def groundwater_flow(page, criterion: str | None = None):
+    """The stage's calculation type, in the Stages window, and its convergence
+    criterion if `criterion` names one other than a flow stage's default."""
     command(page, "stages")
     row = window(page).locator(".stages-overview .pgrid-row", has_text="Calculation type")
     row.locator("select").select_option("flow")
     page.wait_for_function("App.PROJECT.stages[0].calculation === 'flow'", timeout=LONG)
+    if criterion:
+        row = window(page).locator(".stages-overview .pgrid-row",
+                                   has_text="Convergence criterion")
+        row.locator("select").select_option(criterion)
+        page.wait_for_function(
+            f"App.PROJECT.stages[0].convergence_criterion === '{criterion}'", timeout=LONG)
     window(page).get_by_role("button", name="Close").click()
 
 
@@ -169,7 +180,9 @@ def test_case_c_seepage_face_drawn_in_the_gui_lets_the_water_out(app_page, live_
                 "Case C without its right face: no tail water, no seepage face.")
     on_a_line(app_page, "water_pressure", "Tail water", "1.62 0, 1.62 0.48", level=0.48)
     on_a_line(app_page, "seepage", "Seepage face", "1.62 0.48, 1.62 4")
-    groundwater_flow(app_page)
+    # The seepage face keeps the water pressure moving: case C settles on the residual
+    # criterion, not on a flow stage's default (`schemas.CONVERGENCE_CRITERIA`).
+    groundwater_flow(app_page, "residual_criterion")
 
     assert reference.deck_view(gui_deck(app_page, live_server)) == \
         reference.deck_view(script_deck(muskat.seepage()))
