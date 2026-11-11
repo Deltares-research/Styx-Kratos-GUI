@@ -47,8 +47,8 @@ def register(commands, common: argparse.ArgumentParser) -> None:
             help="the soil models (--model), each with its parameters and defaults in "
                  "the project's units")
     add = action(material, common, "add", add_material, variables=True,
-                  help="a soil: the default sand, or a library preset, of a soil model, "
-                       "then NAME=VALUE variables of its own")
+                  help="a soil: the blank soil Create soil makes, or a library preset, of a "
+                       "soil model, then NAME=VALUE variables of its own")
     add.add_argument("id", nargs="?", help=id_help())
     add.add_argument("--preset", help="the library preset to start from (see `presets`)")
     _material_fields(add)
@@ -273,6 +273,9 @@ def _parameter_line(p: soil_models.Parameter, system: str) -> str:
         text += f" [{' | '.join(p.choices)}]"
     if p.when is not None:
         text += f", when {p.when[0]} is " + " or ".join(_shown(v) for v in p.when[1])
+    if p.flow:
+        text += (", when GEO_DRAINAGE_TYPE is " + " or ".join(soil_models.FLOWING)
+                 + " or the project a groundwater flow calculation")
     return text
 
 
@@ -296,6 +299,12 @@ def add_material(args: argparse.Namespace) -> Answer:
         project = session.update_material(project, args.id, variables=variables)
     answer = edited(args, project, f"added material {args.id}")
     answer.lines += notes
+    # A new soil is blank, as the GUI's Create soil makes it: said, as its window says it.
+    added = project.material(args.id)
+    lacks = soil_models.missing(added.constitutive_law, added.variables)
+    if lacks:
+        answer.lines.append(f"Still to fill in before a calculation: {', '.join(lacks)} "
+                            f"(`material set {args.id} NAME=VALUE`).")
     return answer
 
 

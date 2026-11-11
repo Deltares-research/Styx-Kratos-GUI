@@ -54,7 +54,7 @@ ROOT = checkout()
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from core.model.schemas import (Domain, Material,  # noqa: E402
+from core.model.schemas import (Fluid, Domain, Material,  # noqa: E402
                                 MeshSettings, Project, SoilLayer, Stage,
                                 WaterPressureCondition)
 
@@ -110,14 +110,11 @@ def project() -> Project:
                         "YOUNG_MODULUS": 1.0e4,
                         "POISSON_RATIO": 0.4,
                         "DENSITY_SOLID": 2.29e3,
-                        "DENSITY_WATER": 1.01937e3,
                         "POROSITY": 0.3333,
                         "BULK_MODULUS_SOLID": 6.7e19,
-                        "BULK_MODULUS_FLUID": 1.0e20,
                         "PERMEABILITY_XX": 6.9444e-13,   # m2, intrinsic
                         "PERMEABILITY_YY": 6.9444e-13,
                         "PERMEABILITY_XY": 0.0,
-                        "DYNAMIC_VISCOSITY": 1.0e-3,
                         "BIOT_COEFFICIENT": 1.0,
                         "RETENTION_LAW": "VanGenuchtenLaw",
                         "SATURATED_SATURATION": 0.403,
@@ -129,6 +126,8 @@ def project() -> Project:
                     })
 
     return Project(
+        # The reference deck's water: incompressible, so the flow is steady at once.
+        fluid=Fluid(bulk_modulus=1.0e20),
         name="muskat_van_genuchten",
         layered_soil=True,
         dimension=2,

@@ -241,6 +241,9 @@ App.Model = (function () {
     water = mapped.water ? Object.assign({ margin: 3.0, thickness: 0.06,
                                            specific_weight: null }, mapped.water) : null;
     App.MATERIALS = mapped.MATERIALS;
+    // The water every soil holds, edited in the Soil materials window in place: a copy,
+    // for the same reason as `water`.
+    App.FLUID = Object.assign({ bulk_modulus: null, dynamic_viscosity: null }, project.fluid || {});
     App.LAYERS = mapped.LAYERS;
     App.LOADS = mapped.LOADS;
     App.BEAMS = mapped.BEAMS;
@@ -1417,10 +1420,71 @@ App.Model = (function () {
       },
       get: function () { return section.material || ''; },
       set: function (value) {
-        var was = section.material;
+        var was = section.material, before = JSON.parse(JSON.stringify(section.variables || {}));
         section.material = value || null;
+        ownStrengthIfNeeded(section);
         var problem = App.Interfaces ? App.Interfaces.validateSection(section) : null;
-        if (problem) { section.material = was; return problem; }
+        if (problem) { section.material = was; section.variables = before; return problem; }
+        return null;
+      }
+    };
+  }
+
+  /* A Coulomb contact against a linear elastic soil, which has no strength to give,
+     gets one of its own, and the command log says so: its two numbers are now the
+     user's to set. */
+  function ownStrengthIfNeeded(section) {
+    var I = App.Interfaces;
+    var why = I ? I.noStrength(section) : null;
+    if (!why) return;
+    I.setOwnStrength(section);
+    if (App.Command && App.Command.note) {
+      App.Command.note(why + ': the contact has a strength of its own now. Set its '
+                       + 'GEO_COHESION and GEO_FRICTION_ANGLE.');
+    }
+  }
+
+  function contactLawEditor(section) {
+    var I = App.Interfaces;
+    return {
+      kind: 'select',
+      options: function () {
+        var laws = I.LAWS.slice();
+        var law = section.constitutive_law;
+        if (law && !laws.some(function (o) { return o.value === law; })) {
+          laws.push({ value: law, text: law });
+        }
+        return laws;
+      },
+      get: function () { return section.constitutive_law || I.ELASTIC_LAW; },
+      set: function (value) {
+        var was = section.constitutive_law, before = JSON.parse(JSON.stringify(section.variables || {}));
+        section.constitutive_law = value;
+        ownStrengthIfNeeded(section);
+        var problem = I.validateSection(section);
+        if (problem) { section.constitutive_law = was; section.variables = before; return problem; }
+        return null;
+      }
+    };
+  }
+
+  /* The strength a Coulomb contact reads: its soil's, reduced by R_inter, or its own. */
+  var FROM_SOIL = 'soil', OWN_STRENGTH = 'own';
+
+  function contactStrengthEditor(section) {
+    var I = App.Interfaces;
+    return {
+      kind: 'select',
+      options: function () {
+        return [{ value: FROM_SOIL, text: 'From the soil, reduced by R_inter' },
+                { value: OWN_STRENGTH, text: 'Set on the interface' }];
+      },
+      get: function () { return I.ownStrength(section) ? OWN_STRENGTH : FROM_SOIL; },
+      set: function (value) {
+        var before = JSON.parse(JSON.stringify(section.variables || {}));
+        if (value === OWN_STRENGTH) I.setOwnStrength(section); else I.soilStrength(section);
+        var problem = I.strengthProblem(section) || I.validateSection(section);
+        if (problem) { section.variables = before; return problem; }
         return null;
       }
     };
@@ -1470,13 +1534,17 @@ App.Model = (function () {
       run: function () { if (App.Interfaces) App.Interfaces.remove(record.id); } }]);
 
     function check(s) { return App.Interfaces ? App.Interfaces.validateSection(s) : null; }
-    // The two stiffnesses first, typed in place: what a user comes here to set. Left
-    // out they read "derived" -- the soil's own shear modulus over the virtual thickness
+    var I = App.Interfaces;
+    // The law first: it says what else is listed.
+    var properties = I ? [['Law', contact.constitutive_law || I.ELASTIC_LAW, '', false,
+                           contactLawEditor(contact)]] : [];
+    // The two stiffnesses, typed in place: what a user comes here to set. Left out
+    // they read "derived" -- the soil's own shear modulus over the virtual thickness
     // supplies them at export -- and the button puts them back to that.
     var stiffnesses = ['INTERFACE_NORMAL_STIFFNESS', 'INTERFACE_SHEAR_STIFFNESS'];
-    var properties = stiffnesses.map(function (name) {
+    properties = properties.concat(stiffnesses.map(function (name) {
       return App.PropertySets.typedRow('interface', contact, name, check);
-    });
+    }));
     var typed = stiffnesses.filter(function (name) {
       return (contact.variables || {})[name] !== undefined;
     });
@@ -1490,28 +1558,43 @@ App.Model = (function () {
           if (App.commitSelectionEdit) App.commitSelectionEdit(record.id);
         } }]);
     }
-    properties = properties.concat([
+    properties.push(
       ['Soil', (App.matById && contact.material
                 && (App.matById(contact.material) || {}).name) || contact.material
                || ADJACENT_SOIL.text,
-       '', false, contactMaterialEditor(contact)],
-      // Only a Coulomb law reads the strength R_inter reduces; the default elastic one
-      // reads the two stiffnesses alone (`kratos-cli section add --help` says the same).
-      contact.r_inter === null || contact.r_inter === undefined
-        ? ['R_inter (Coulomb law only)', 'each soil’s own', '', true]
-        : ['R_inter (Coulomb law only)', String(contact.r_inter), '', false,
-           contactNumberEditor(contact, 'r_inter', '', 2)],
+       '', false, contactMaterialEditor(contact)]);
+    // The elastic law reads the two stiffnesses alone: no strength, and no R_inter to
+    // reduce one (`kratos-cli section add --help` says the same). Any other law -- a
+    // Coulomb one, or one typed on the command line -- lists the strength: the soil's,
+    // reduced by R_inter, or the contact's own, typed.
+    var strength = I ? I.STRENGTH : [];
+    var rows = App.PropertySets.rows('interface', contact,
+                                     App.PROJECT && App.PROJECT.dimension, check);
+    if (I && (contact.constitutive_law || I.ELASTIC_LAW) !== I.ELASTIC_LAW) {
+      var own = I.ownStrength(contact);
+      properties.push(['Strength', own ? 'Set on the interface' : 'From the soil', '', false,
+                       contactStrengthEditor(contact)]);
+      if (own) {
+        properties = properties.concat(rows.filter(function (row) {
+          return strength.indexOf(row[0]) >= 0;
+        }));
+      } else {
+        properties.push(contact.r_inter === null || contact.r_inter === undefined
+          ? ['R_inter', 'each soil’s own', '', true]
+          : ['R_inter', String(contact.r_inter), '', false,
+             contactNumberEditor(contact, 'r_inter', '', 2)]);
+      }
+    }
+    properties.push(
       ['Virtual thickness', String(contact.virtual_thickness), 'm', false,
        contactNumberEditor(contact, 'virtual_thickness', 'm', 4)],
       ['Permeability', contact.permeability || 'Neutral', '', false,
-       contactPermeabilityEditor(contact)]
-    ]);
-    // The rest of Kratos' own variables. One the contact leaves out reads "derived"
-    // rather than zero: the soil's own strength supplies it at export.
-    properties = properties.concat(App.PropertySets.rows('interface', contact,
-      App.PROJECT && App.PROJECT.dimension, check).filter(function (row) {
-        return stiffnesses.indexOf(row[0]) < 0;
-      }));
+       contactPermeabilityEditor(contact)]);
+    // The rest of Kratos' own variables the contact carries: the ones listed above, and
+    // the strength the law does not read, aside.
+    properties = properties.concat(rows.filter(function (row) {
+      return stiffnesses.indexOf(row[0]) < 0 && strength.indexOf(row[0]) < 0;
+    }));
 
     return {
       title: record.name, icon: 'interface',
