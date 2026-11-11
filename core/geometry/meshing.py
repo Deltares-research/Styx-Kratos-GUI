@@ -231,7 +231,7 @@ def _curves_of(project: Project, built: solid_model.BuildResult,
         if key in curves:
             continue
         if key in lines:
-            curves[key] = _entities_on([tuple(p) for p in lines[key].points], 1)
+            curves[key] = _entities_on([(p[0], p[1]) for p in lines[key].points], 1)
             continue
         interface = next((i for i in project.interfaces
                           if i.id == key and i.structure is not None), None)
@@ -250,7 +250,7 @@ def _faces_of(project: Project, built: solid_model.BuildResult,
     faces = dict(built.faces)
     for line in project.lines:
         if line.id in sizes and line.id not in faces:
-            faces[line.id] = _entities_on([tuple(p) for p in line.points], 2)
+            faces[line.id] = _entities_on([(p[0], p[1]) for p in line.points], 2)
     return faces
 
 
