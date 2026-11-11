@@ -444,6 +444,64 @@
     });
   });
 
+  /* A load is arrows and a line through their tails, all one pixel wide: picked on
+     screen, so a right-click on the line names the load (and offers the stage's
+     Activate / Deactivate), not the soil under it. */
+  test('viewport: a right-click on a load line names the load', function () {
+    function restore() {
+      standIns();
+      App.state.mode = 'soil'; App.state.phase = null;
+      return App.Viewport.refresh();
+    }
+    var id = 'picked_load';
+    return boot().then(function () {
+      var project = JSON.parse(JSON.stringify(P.project));
+      if (project.dimension !== 2) return null;
+      var d = project.domain, width = d.x1 - d.x0;
+      project.loads = [{
+        id: id, name: 'Picked load', kind: 'line',
+        x0: d.x0 + 0.05 * width, x1: d.x0 + 0.3 * width, y: d.y_top, thickness: 0.15,
+        components: [0, -20], distribution: 'Uniform', active: true
+      }];
+      var get = App.Api.get;
+      App.Api.get = function (path) {
+        return path === '/api/project' ? Promise.resolve(project) : get(path);
+      };
+      App.state.mode = 'staged'; App.state.phase = null;
+      return App.Viewport.refresh().then(function () {
+        App.Viewport.setMode('staged');
+        App.Viewport.setView('front');
+        App.Viewport.zoomFit();
+        return new Promise(function (resolve) { setTimeout(resolve, 600); });
+      }).then(function () { return project; });
+    }).then(function (project) {
+      if (!project) return;
+      var group = sceneGroups()[id];
+      T.ok(group && group.visible, 'the load is drawn in Staged construction');
+      // The line through the arrows' tails: not a mesh, so the ray alone misses it.
+      var line = null;
+      group.traverse(function (o) {
+        if (!line && o.isLine && o.userData.loadGlyph && o.userData.noPick) line = o;
+      });
+      T.ok(line, 'the load has a line through its tails');
+      line.updateMatrixWorld();
+      var position = line.geometry.attributes.position;
+      var a = new THREE.Vector3().fromBufferAttribute(position, 0).applyMatrix4(line.matrixWorld);
+      var b = new THREE.Vector3().fromBufferAttribute(position, position.count - 1)
+        .applyMatrix4(line.matrixWorld);
+      // Part of the way along: between two arrows rather than on one.
+      var mid = a.clone().lerp(b, 0.37);
+      var at = App.Viewport.projectToScreen(mid.x, mid.y, mid.z);
+      T.ok(at, 'the line is on screen');
+      var canvas = App.Viewport.getCanvas(), r = canvas.getBoundingClientRect();
+      canvas.dispatchEvent(new MouseEvent('contextmenu', {
+        clientX: r.left + at.x, clientY: r.top + at.y, bubbles: true }));
+      T.eq(App.__contextKey, id, 'the context menu names the load');
+    }).then(restore, function (error) {
+      return restore().then(function () { throw error; });
+    });
+  });
+
   /* A support or a water pressure a stage has switched off stays on screen as a ghost
      in Staged construction, so it can be right-clicked and activated again; the stage
      check box stands in for its eye there, so a closed eye does not hide it. */

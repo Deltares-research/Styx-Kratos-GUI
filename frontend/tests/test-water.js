@@ -287,6 +287,6 @@
     var groups = App.Viewport.computeModeGroups(['soil_L1', 'soil_L2'], [], true);
     T.eq(groups.structures, ['soil_L1', 'soil_L2']);
     T.eq(groups.mesh, ['soil_L1', 'soil_L2', 'mesh']);
-    T.eq(groups.soil, ['soil_L1', 'soil_L2']);
+    T.eq(groups.soil, ['soil_L1', 'soil_L2', 'water'], 'Soil draws it too, faded');
   });
 })();

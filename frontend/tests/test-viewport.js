@@ -24,13 +24,15 @@
     });
   });
 
-  test('in a full (non-layered_soil) project, a custom part follows the structural ' +
-       'parts -- everywhere but the soil-only mode', function () {
+  test('in a full (non-layered_soil) project, a custom part is in every mode, ' +
+       'faded in the soil-only one', function () {
     var groups = App.Viewport.computeModeGroups(['soil_L1'], ['drawn_0'], false);
-    ['structures', 'mesh', 'flow', 'staged'].forEach(function (mode) {
+    ['soil', 'structures', 'mesh', 'flow', 'staged'].forEach(function (mode) {
       T.ok(groups[mode].indexOf('drawn_0') >= 0, mode + ' is missing the custom part');
     });
-    T.eq(groups.soil.indexOf('drawn_0'), -1, 'soil mode stays soil-only, like wall/struts');
+    var faded = App.Viewport.computeFadedKeys(['soil_L1'], ['drawn_0'], false);
+    T.ok(faded.soil.indexOf('drawn_0') >= 0, 'soil mode fades it, like wall/struts');
+    T.eq(faded.flow.indexOf('drawn_0'), -1, 'flow mode draws it solid');
   });
 
   test('with no custom parts, mode groups are unchanged from before', function () {
@@ -66,8 +68,52 @@
           T.ok(groups[mode].indexOf(key) >= 0,
                mode + ' omits ' + key + (layered ? ' (layered soil)' : ''));
         });
-        T.eq(groups[mode].indexOf('load_1'), -1, mode + ' still draws no loads');
       });
+    });
+  });
+
+  /* Every part is on screen in Soil and Flow conditions; what the tab is not about
+     is faded there, the way a sheet pile is (`structureOpacity`). */
+  test('Soil and Flow conditions draw the loads, faded', function () {
+    [true, false].forEach(function (layered) {
+      var args = [['soil_L1'], ['drawn_0'], layered, ['load_1'], ['beam_1'], ['normalload_1'],
+                  { supports: ['fixed_bottom'], water: ['pore'] }, ['contact_1'], ['line_1']];
+      var groups = App.Viewport.computeModeGroups.apply(null, args);
+      var faded = App.Viewport.computeFadedKeys.apply(null, args);
+      var tag = layered ? ' (layered soil)' : '';
+      ['soil', 'flow'].forEach(function (mode) {
+        ['load_1', 'normalload_1', 'beam_1', 'contact_1'].forEach(function (key) {
+          T.ok(groups[mode].indexOf(key) >= 0, mode + ' omits ' + key + tag);
+          T.ok(faded[mode].indexOf(key) >= 0, mode + ' draws ' + key + ' solid' + tag);
+        });
+        T.eq(groups[mode].indexOf('mesh'), -1, mode + ' leaves the mesh to its tab' + tag);
+        ['soil_L1', 'fixed_bottom', 'pore'].forEach(function (key) {
+          T.ok(groups[mode].indexOf(key) >= 0, mode + ' omits ' + key + tag);
+          T.eq(faded[mode].indexOf(key), -1, mode + ' fades ' + key + tag);
+        });
+        // Every faded key is one the mode draws.
+        faded[mode].forEach(function (key) {
+          T.ok(groups[mode].indexOf(key) >= 0, mode + ' fades undrawn ' + key + tag);
+        });
+      });
+      T.ok(groups.soil.indexOf('water') >= 0, 'soil omits the water' + tag);
+      T.ok(faded.soil.indexOf('water') >= 0, 'soil draws the water solid' + tag);
+      T.eq(faded.flow.indexOf('water'), -1, 'flow fades the water' + tag);
+    });
+  });
+
+  /* The Mesh tab draws the loads over the mesh at full strength: they are not context
+     there but what the mesh is refined around. */
+  test('the Mesh tab draws the loads, solid', function () {
+    [true, false].forEach(function (layered) {
+      var args = [['soil_L1'], [], layered, ['load_1'], [], ['normalload_1']];
+      var groups = App.Viewport.computeModeGroups.apply(null, args);
+      var faded = App.Viewport.computeFadedKeys.apply(null, args);
+      var tag = layered ? ' (layered soil)' : '';
+      ['load_1', 'normalload_1'].forEach(function (key) {
+        T.ok(groups.mesh.indexOf(key) >= 0, 'mesh omits ' + key + tag);
+      });
+      T.eq(faded.mesh, undefined, 'mesh fades nothing' + tag);
     });
   });
 

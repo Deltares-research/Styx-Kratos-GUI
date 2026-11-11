@@ -47,6 +47,7 @@ App.Viewport = (function () {
   var hovered = null, selected = null, selectedKeys = [];
   var visible = {};              // key -> bool, driven by the Model explorer
   var modeGroups = {};
+  var fadedKeys = {};            // mode -> keys drawn there for context, faded
   var showGrid = true, gridGroup, boundsGroup, referenceGrid;
   var activeView = 'iso';
   /* The section, not the solid model: the server opens on a plane-strain project
@@ -783,6 +784,7 @@ App.Viewport = (function () {
                                       transparent: true,
                                       opacity: spec.active ? 1 : 0.45 }));
       outline.userData.noPick = true;
+      outline.userData.key = load.id;
       outline.userData.loadGlyph = true;
       outline.renderOrder = 18;
       group.add(outline);
@@ -1238,7 +1240,12 @@ App.Viewport = (function () {
     });
   }
 
+  /* The keys of the groups holding load symbols, which are picked on screen
+     (`screenTargets`). */
+  var loadGlyphIds = [];
+
   function addLoadGlyphs() {
+    loadGlyphIds = [];
     function groupFor(id) {
       var group = groups[id];
       if (!group) {
@@ -1246,6 +1253,7 @@ App.Viewport = (function () {
         group.name = id;
         scene.add(group);
       }
+      if (loadGlyphIds.indexOf(id) < 0) loadGlyphIds.push(id);
       return group;
     }
     ((App.PROJECT && App.PROJECT.loads) || []).forEach(function (load) {
@@ -1315,6 +1323,20 @@ App.Viewport = (function () {
      no matter what the eye toggle says. */
   function computeModeGroups(soilKeys, customKeys, layeredSoil, loadKeys, memberKeys,
                              normalLoadKeys, conditionKeys, contactKeys, lineKeys) {
+    return modeLayout.apply(null, arguments).groups;
+  }
+
+  /* The keys Soil and Flow conditions draw for context rather than as their subject,
+     as `{soil: [...], flow: [...]}`: every part is on screen in those two tabs, and
+     what the tab is not about is faded the way a sheet pile is there
+     (`structureOpacity`). Same arguments as computeModeGroups; pure, so testable. */
+  function computeFadedKeys(soilKeys, customKeys, layeredSoil, loadKeys, memberKeys,
+                            normalLoadKeys, conditionKeys, contactKeys, lineKeys) {
+    return modeLayout.apply(null, arguments).faded;
+  }
+
+  function modeLayout(soilKeys, customKeys, layeredSoil, loadKeys, memberKeys,
+                      normalLoadKeys, conditionKeys, contactKeys, lineKeys) {
     customKeys = customKeys || [];
     // The boundary conditions' symbols: in every mode, each one hidden until it is
     // shown (the explorer's Show) or selected.
@@ -1335,34 +1357,51 @@ App.Viewport = (function () {
     // the loads and the water, so the user sees where the load is and where the water
     // stands. Not the supports: they would hide the edges of the contour.
     var results = loadKeys.concat(['water'], (conditionKeys && conditionKeys.water) || []);
+    // Soil and Flow conditions draw every part (not the generated mesh, which is the
+    // Mesh tab's): their own subject solid, the rest faded (`computeFadedKeys`) so the
+    // soil and the water are read against where everything else stands.
+    var soilFaded, flowFaded;
     if (layeredSoil) {
       // The lines go with the soil they split, in every mode that shows it.
       var visibleKeys = soilKeys.concat(customKeys, lineKeys || []);
-      // "water" in the same two modes the full build shows it in -- the level is what
+      soilFaded = loadKeys.concat(memberKeys, contactKeys, ['water']);
+      flowFaded = loadKeys.concat(memberKeys, contactKeys);
+      // "water" in the same modes the full build shows it in -- the level is what
       // Flow conditions mode is for, and a staged excavation is read against it. Left
-      // out of soil/structures/mesh so those keep reading as they did.
-      // The structures are in Soil and Flow conditions too, faded
-      // (`structureOpacity`), so the soil is read against where they stand.
-      return { soil: visibleKeys.concat(memberKeys, contactKeys, conditions),
-               structures: visibleKeys.concat(loadKeys, memberKeys, contactKeys, conditions),
-               mesh: visibleKeys.concat(['mesh'], memberKeys, contactKeys, conditions),
-               flow: visibleKeys.concat(['water'], memberKeys, contactKeys, conditions),
-               // Loads too: Staged construction is where a load is switched on and
-               // off, so it has to be on screen there (`stageHidden` still hides one
-               // the selected stage has switched off).
-               staged: visibleKeys.concat(loadKeys, memberKeys, contactKeys, ['water'], conditions),
-               results: results };
+      // out of structures/mesh so those keep reading as they did.
+      return {
+        groups: {
+          soil: visibleKeys.concat(conditions, soilFaded),
+          structures: visibleKeys.concat(loadKeys, memberKeys, contactKeys, conditions),
+          // The loads solid, not faded: the mesh is read against where it is loaded.
+          mesh: visibleKeys.concat(['mesh'], loadKeys, memberKeys, contactKeys, conditions),
+          flow: visibleKeys.concat(['water'], conditions, flowFaded),
+          // Loads too: Staged construction is where a load is switched on and
+          // off, so it has to be on screen there (`stageHidden` still hides one
+          // the selected stage has switched off).
+          staged: visibleKeys.concat(loadKeys, memberKeys, contactKeys, ['water'], conditions),
+          results: results
+        },
+        faded: { soil: soilFaded, flow: flowFaded }
+      };
     }
+    soilFaded = ['water', 'wells', 'wall', 'struts', 'anchors', 'piles']
+      .concat(customKeys, loadKeys, memberKeys, contactKeys);
+    flowFaded = ['struts', 'anchors', 'piles'].concat(loadKeys, memberKeys, contactKeys);
     return {
-      soil:       soilKeys.concat(memberKeys, contactKeys, conditions),
-      structures: soilKeys.concat(['wall', 'struts', 'anchors', 'piles'],
-                                  loadKeys, memberKeys, contactKeys, customKeys, conditions),
-      mesh:       ['mesh', 'wall'].concat(memberKeys, contactKeys, customKeys, conditions),
-      flow:       soilKeys.concat(['water', 'wells', 'wall'], customKeys, memberKeys,
-                                  contactKeys, conditions),
-      staged:     ['excavation', 'wall', 'struts', 'anchors', 'water']
-                    .concat(loadKeys, memberKeys, contactKeys, customKeys, conditions),
-      results:    results
+      groups: {
+        soil:       soilKeys.concat(conditions, soilFaded),
+        structures: soilKeys.concat(['wall', 'struts', 'anchors', 'piles'],
+                                    loadKeys, memberKeys, contactKeys, customKeys, conditions),
+        mesh:       ['mesh', 'wall'].concat(loadKeys, memberKeys, contactKeys, customKeys,
+                                            conditions),
+        flow:       soilKeys.concat(['water', 'wells', 'wall'], customKeys, conditions,
+                                    flowFaded),
+        staged:     ['excavation', 'wall', 'struts', 'anchors', 'water']
+                      .concat(loadKeys, memberKeys, contactKeys, customKeys, conditions),
+        results:    results
+      },
+      faded: { soil: soilFaded, flow: flowFaded }
     };
   }
 
@@ -1408,9 +1447,11 @@ App.Viewport = (function () {
       return line.id;
     });
     structureKeys = beamKeys.concat(anchorKeys, contactKeys);
-    modeGroups = computeModeGroups(
+    var layout = modeLayout(
       soilKeys, customKeys, !!(App.PROJECT && App.PROJECT.layered_soil), loadKeys,
       beamKeys.concat(anchorKeys), normalLoadKeys, conditionKeys, contactKeys, lineKeys);
+    modeGroups = layout.groups;
+    fadedKeys = layout.faded;
     groupKeys = computeGroupKeys(soilKeys, customKeys, loadKeys, beamKeys, anchorKeys,
                                  contactKeys, normalLoadKeys,
                                  conditionKeys.supports.concat(conditionKeys.water), lineKeys);
@@ -1960,7 +2001,9 @@ App.Viewport = (function () {
      • a sheet pile, anchor or interface: its band is a few pixels wide, and an
        interface's is dashes with gaps the ray falls through;
      • a boundary condition and the water level: drawn as one-pixel lines, which the
-       ray (meshes only, `pickables`) does not see at all.
+       ray (meshes only, `pickables`) does not see at all;
+     • a load: its arrows and the line through their tails, one-pixel lines too, which
+       left only the arrowheads to the ray -- too small to right-click.
 
      Anything within a few pixels counts. All of them are drawn over the soil, so one
      in reach beats the soil or mesh under it, as it does on screen; of two in reach,
@@ -1991,7 +2034,25 @@ App.Viewport = (function () {
                                                   toScreen, click) });
       });
     });
+    // The line through the tails is not picked by the ray (`noPick`), but it is the
+    // longest stretch of a load on screen, so here it counts.
+    loadGlyphIds.forEach(function (key) {
+      var group = groups[key];
+      if (!group || !shown(group)) return;
+      group.traverse(function (part) {
+        if (!(part.isLine || part.isMesh) || !part.userData.loadGlyph
+            || !part.userData.key || !visibleUpTo(part)) return;
+        targets.push({ mesh: part, order: part.renderOrder,
+                       distance: G.screenDistance(linePaths3(part), LINE_PICK_STYLE, 0,
+                                                  toScreen, click) });
+      });
+    });
     return targets;
+  }
+
+  function visibleUpTo(object) {
+    for (var o = object; o && o !== scene; o = o.parent) if (!o.visible) return false;
+    return true;
   }
 
   var LINE_PICK_STYLE = { width: 1 };
@@ -2222,10 +2283,10 @@ App.Viewport = (function () {
     return ghosts;
   }
 
-  /* How much of its own opacity a ghost keeps. A condition is drawn in thin lines,
-     which at a soil body's ghost would be gone altogether, so it keeps more. */
+  /* How much of its own opacity a ghost keeps. A condition or a load is drawn in thin
+     lines, which at a soil body's ghost would be gone altogether, so it keeps more. */
   var GHOST_OPACITY = 0.15;
-  var CONDITION_GHOST_OPACITY = 0.35;
+  var LINE_GHOST_OPACITY = 0.35;
 
   function ghostMaterial(material, on, factor) {
     if (!material) return;
@@ -2252,7 +2313,8 @@ App.Viewport = (function () {
     Object.keys(groups).forEach(function (key) {
       if (structureKeys.indexOf(key) >= 0) return;
       var on = !!ghosts[key];
-      var factor = conditionIds.indexOf(key) >= 0 ? CONDITION_GHOST_OPACITY : GHOST_OPACITY;
+      var factor = conditionIds.indexOf(key) >= 0 || loadGlyphIds.indexOf(key) >= 0
+        ? LINE_GHOST_OPACITY : GHOST_OPACITY;
       groups[key].traverse(function (o) {
         [].concat(o.material || []).forEach(function (m) { ghostMaterial(m, on, factor); });
       });
@@ -2282,6 +2344,28 @@ App.Viewport = (function () {
     setMode(App.state && App.state.mode);
   }
 
+  /* The parts Soil and Flow conditions draw for context (`computeFadedKeys`), faded
+     as a structure is there. A structure is left out: `syncStructureFade` has it.
+
+     Run in two halves around `applyGhosts`, because a ghost and this fade would each
+     restore the other's opacity as its own: they never meet on one material at once
+     (a ghost is Staged construction's, this fade Soil and Flow's), so the fade is
+     taken off before a ghost may go on, and put on after the ghosts are off. */
+  var contextFaded = [];
+
+  function clearContextFade() {
+    contextFaded.forEach(function (k) { if (groups[k]) fadeGroup(groups[k], 1); });
+    contextFaded = [];
+  }
+
+  function applyContextFade(mode) {
+    var opacity = structureOpacity(mode, false);
+    contextFaded = (fadedKeys[mode] || []).filter(function (k) {
+      return groups[k] && structureKeys.indexOf(k) < 0;
+    });
+    contextFaded.forEach(function (k) { fadeGroup(groups[k], opacity); });
+  }
+
   function setMode(mode) {
     var wanted = modeKeys(mode);
     var hidden = stageHidden();
@@ -2291,7 +2375,9 @@ App.Viewport = (function () {
       groups[k].visible = wanted.indexOf(k) >= 0 && eyeOpen(k, mode)
                           && !stageGone(k, hidden, ghosts);
     });
+    clearContextFade();
     applyGhosts(ghosts);
+    applyContextFade(mode);
     syncStructureFade(mode, hidden);
     if (mode === 'mesh' && !meshBuilt && groups.mesh) groups.mesh.visible = false;
     if (selected && conditionIds.indexOf(selected) >= 0) select(selected);
@@ -3468,6 +3554,7 @@ App.Viewport = (function () {
     // client-side edit they just made.
     rebuildSoil: function () {},
     refresh: refresh, gridReference: gridReference, computeModeGroups: computeModeGroups,
+    computeFadedKeys: computeFadedKeys,
     structureOpacity: structureOpacity,
     lineSeams: lineSeams,
     soilKeysOf: soilKeysOf,
