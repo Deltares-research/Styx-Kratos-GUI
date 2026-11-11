@@ -93,7 +93,8 @@ EDITED = PROJECT_KEYS | {"edit_notes"}
 EVERYTHING = {"project", "tree", "geometry", "mesh"}
 
 CONTRACTS = [
-    Contract("GET", "/api/health", lambda c: c.get("/api/health"), {"ok", "gmsh_version"}),
+    Contract("GET", "/api/health", lambda c: c.get("/api/health"),
+             {"ok", "version", "gmsh_version"}),
     Contract("GET", "/api/project", lambda c: c.get("/api/project"),
              {"name", "layers", "materials", "stages", "deck", "mesh"}),
     Contract("PUT", "/api/project", lambda c: c.put("/api/project", json=_project(c)),
