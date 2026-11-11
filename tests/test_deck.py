@@ -197,6 +197,43 @@ def test_staging_copies_the_deck_and_nothing_else(project, tmp_path):
     assert (run / "materials_b.json").read_text(encoding="utf-8") == '{"properties": [1]}'
 
 
+def with_own_process(deck_dir, module: str, ship: bool = True) -> Project:
+    """The dike deck with a process of its own in the second stage: a `python_module`
+    with no `kratos_module`, such as the temporary prestress workaround."""
+    parameters = json.loads((deck_dir / "dike.json").read_text(encoding="utf-8"))
+    parameters["stages"]["2_Load"]["stage_settings"]["processes"] = {
+        "auxiliary_process_list": [
+            {"python_module": module, "process_name": "Own",
+             "Parameters": {"model_part_name_list": ["PorousDomain.soil"]}},
+            {"python_module": "apply_final_stresses_of_previous_stage_to_initial_state",
+             "kratos_module": "KratosMultiphysics.GeoMechanicsApplication",
+             "Parameters": {"model_part_name_list": ["PorousDomain.soil"]}},
+        ]}
+    (deck_dir / "dike.json").write_text(json.dumps(parameters), encoding="utf-8")
+    if ship:
+        (deck_dir / f"{module}.py").write_text("def Factory(s, m): pass\n", encoding="utf-8")
+    return external_deck.deck_project(deck_dir, "dike.json", name="Dike")
+
+
+def test_a_process_module_beside_the_deck_is_staged_with_it(deck_dir, tmp_path):
+    """Kratos imports it from the directory the run happens in, so a run directory
+    without it is a deck that stops at the stage that runs it."""
+    project = with_own_process(deck_dir, "kratos_gui_prestress_workaround")
+    assert external_deck.input_files(project.deck)[-1] == \
+        "kratos_gui_prestress_workaround.py"
+    run = tmp_path / "run"
+    run.mkdir()
+    external_deck.stage(project.deck, run)
+    assert (run / "kratos_gui_prestress_workaround.py").read_text(encoding="utf-8") == \
+        "def Factory(s, m): pass\n"
+
+
+def test_a_process_module_not_beside_the_deck_is_left_where_it_is_installed(deck_dir):
+    project = with_own_process(deck_dir, "installed_elsewhere", ship=False)
+    assert external_deck.input_files(project.deck) == [
+        "dike.json", "dike.mdpa", "materials_a.json", "materials_b.json"]
+
+
 def test_staging_writes_the_output_beside_the_deck(project, tmp_path):
     """A run directory is flat -- `catalog.file_path` serves nothing else -- so an
     output name with a directory in it is cut down to its last component."""

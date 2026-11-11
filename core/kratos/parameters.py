@@ -68,6 +68,11 @@ field. The `"Uniform"` shape is not backed by a working example the way that one
 follows the same process's own Kratos source
 (`GeoMechanicsApplication/custom_processes/apply_normal_load_table_process.cpp`) for
 which fields that branch reads, but check it against the first real run.
+
+One process here is not Kratos' own, and it is temporary: `_exclude_prestress`. It works
+around Kratos counting an anchor's prestress twice when the anchor's stress is carried
+into the next stage. It is written only for prestressed anchors, and it is removed once
+Kratos is fixed (`core/kratos/prestress_workaround.py`).
 """
 
 from __future__ import annotations
@@ -78,7 +83,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from core.kratos.deck_files import MATERIALS_NAME
+from core.kratos.deck_files import MATERIALS_NAME, PRESTRESS_WORKAROUND_MODULE
 from core.model import units
 
 ORCHESTRATOR = "Orchestrators.KratosMultiphysics.SequentialOrchestrator"
@@ -272,6 +277,9 @@ class Stage:
     `flow_strategy` is `None` for a deformation stage, and for a groundwater flow stage
     the `FLOW_STRATEGIES` entry it is solved with. `seepage` is the parts of the seepage
     faces it has, each with its own `ApplySeepageBoundaryProcess`.
+
+    `prestressed` is the anchors in `final_stresses` that have a prestress. The temporary
+    prestress workaround runs for them (`_exclude_prestress`).
     """
     name: str
     activate: tuple[str, ...] = ()
@@ -284,6 +292,7 @@ class Stage:
     k0_parts: tuple[str, ...] = ()
     find_neighbours: tuple[str, ...] = ()
     final_stresses: tuple[str, ...] = ()
+    prestressed: tuple[str, ...] = ()
     extrapolate: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = ()
     json_output: tuple[tuple[str, str, tuple[str, ...]], ...] = ()
     reset_displacements: bool = False
@@ -470,11 +479,17 @@ def _auxiliary(stage: Stage) -> list[dict]:
     `staged_construction_for_generated_mesh.json`: K0 or the stress carry-over first,
     then the interface neighbour search, then the extrapolations that read what they
     set up.
+
+    The temporary prestress workaround comes directly before the stress carry-over. It
+    has to: it hides the prestress in its `ExecuteInitialize`, and the carry-over stores
+    the stresses in its own `ExecuteInitialize`, which Kratos runs next.
     """
     out: list[dict] = []
     if stage.k0_parts:
         out.append(_k0_procedure(stage.k0_parts))
     if stage.final_stresses:
+        if stage.prestressed:
+            out.append(_exclude_prestress(stage.prestressed))
         out.append(_apply_final_stresses(stage.final_stresses))
     if stage.find_neighbours:
         out.append(_find_neighbours_of_interfaces(stage.find_neighbours))
@@ -598,6 +613,32 @@ def _apply_final_stresses(parts: tuple[str, ...]) -> dict:
         "python_module": "apply_final_stresses_of_previous_stage_to_initial_state",
         "kratos_module": "KratosMultiphysics.GeoMechanicsApplication",
         "process_name": "ApplyFinalStressesOfPreviousStageToInitialState",
+        "Parameters": {
+            "model_part_name_list": [f"PorousDomain.{name}" for name in parts],
+        },
+    }
+
+
+PRESTRESS_WORKAROUND_PROCESS = "ExcludePrestressFromCarriedStress"
+
+
+def _exclude_prestress(parts: tuple[str, ...]) -> dict:
+    """TEMPORARY WORKAROUND for a Kratos limitation. Remove it when Kratos is fixed.
+
+    `ApplyFinalStressesOfPreviousStageToInitialState` carries an anchor's stress *with*
+    its prestress, and the truss element then adds the prestress again. Without this,
+    every stage after the anchor's installation adds the full prestress to the anchor
+    once more. This process hides the prestress while Kratos stores the stresses.
+    `core/kratos/prestress_workaround.py` explains how, and what to delete once Kratos
+    counts the prestress once.
+
+    This is a user-defined process: there is no `kratos_module`, so Kratos imports
+    `python_module` as it is, from the deck's own directory. The exporter ships the file
+    with the deck (`deck_files.PRESTRESS_WORKAROUND_NAME`).
+    """
+    return {
+        "python_module": PRESTRESS_WORKAROUND_MODULE,
+        "process_name": PRESTRESS_WORKAROUND_PROCESS,
         "Parameters": {
             "model_part_name_list": [f"PorousDomain.{name}" for name in parts],
         },

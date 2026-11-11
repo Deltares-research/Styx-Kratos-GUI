@@ -823,6 +823,25 @@ def test_the_anchor_head_node_is_the_pile_node(anchored):
     assert head in {n for nodes in beam.entries.values() for n in nodes}
 
 
+def test_an_anchor_in_both_stages_carries_its_stress_into_wall_installation(anchored):
+    """The anchor is not staged with its pile, so it is in the initial stage as well.
+    Kratos resets the displacements at the start of every stage, so its stress is
+    carried. It has a prestress, so the temporary prestress workaround comes directly
+    before the carry-over, and the deck ships the workaround's file."""
+    from core.kratos import deck_files
+    doc = json.loads(anchored["project_parameters"])
+    listed = doc["stages"]["2_Wall_installation"]["stage_settings"]["processes"][
+        "auxiliary_process_list"]
+    assert [p["python_module"] for p in listed][:2] == [
+        deck_files.PRESTRESS_WORKAROUND_MODULE,
+        "apply_final_stresses_of_previous_stage_to_initial_state"]
+    assert [p["Parameters"]["model_part_name_list"] for p in listed[:2]] == \
+        [["PorousDomain.Anchor_1"]] * 2
+    assert list(anchored["process_files"]) == [deck_files.PRESTRESS_WORKAROUND_NAME]
+    assert "auxiliary_process_list" not in \
+        doc["stages"]["1_Initial_stage"]["stage_settings"]["processes"]
+
+
 def test_the_anchor_tail_node_is_attached_to_nothing_else(anchored):
     deck = deck_of(anchored)
     tail = next(iter(truss_of(deck).entries.values()))[1]

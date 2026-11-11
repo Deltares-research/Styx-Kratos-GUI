@@ -358,6 +358,10 @@
    ],
    "processes": [
     [
+     "apply_final_stresses_of_previous_stage_to_initial_state",
+     1
+    ],
+    [
      "apply_normal_load_table_process",
      3
     ],
@@ -368,6 +372,10 @@
     [
      "apply_vector_constraint_table_process",
      6
+    ],
+    [
+     "find_neighbours_of_interfaces_process",
+     1
     ]
    ],
    "reset_totals": false

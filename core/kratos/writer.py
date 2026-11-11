@@ -503,8 +503,16 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
                           if project.material(material).variables.get(
                               "RETENTION_LAW", SATURATED) != SATURATED),
         seepage=tuple(names[key] for key, _, rows in conditions if flow and rows),
+        prestressed=tuple(name for name, section, prestress, _ in anchor_properties
+                          if materials.anchor_prestress(section, prestress)),
     )
     kratos_stages = _stages(project, deck, wall_parts, staged_ties)
+    if dim == 3:
+        warnings.extend(_untransferred_warnings(
+            kratos_stages,
+            panels=[names[key] for key, _, _ in panel_blocks],
+            members=[(names[key], len(rows[0]) == 3) for key, _, rows in beam_blocks
+                     if rows]))
     # The initial stage reads a materials file of its own. Rendered only when a stage
     # actually names it, so an unstaged deck is not shipped a file nothing opens.
     initial_materials = None
@@ -552,6 +560,13 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
         "materials": material_file,
         "initial_materials": initial_materials,
         "project_parameters": processes,
+        # Python processes the deck runs that are not Kratos' own, by the file name they
+        # go under beside the deck. Today there is one, and it is TEMPORARY: the prestress
+        # workaround, for a deck that carries a prestressed anchor into a later stage
+        # (`parameters._exclude_prestress`).
+        "process_files": ({deck_files.PRESTRESS_WORKAROUND_NAME:
+                           deck_files.PRESTRESS_WORKAROUND_SOURCE.read_text(encoding="utf-8")}
+                          if any(stage.prestressed for stage in kratos_stages) else {}),
         "stats": mesh.stats.to_dict(),
         "meshed_keys": mesh.meshed_keys,
         "warnings": warnings,
@@ -621,6 +636,10 @@ class _Deck:
     seepage: tuple[str, ...] = ()
     """The parts of the seepage faces' conditions: a flow stage with any of them on is
     solved by the seepage strategy. Each goes with its face's condition (`owners`)."""
+    prestressed: tuple[str, ...] = ()
+    """The anchors written with a prestress (`materials.anchor_prestress`). A stage that
+    carries one's stress also runs the temporary prestress workaround for it
+    (`parameters.Stage.prestressed`)."""
 
 
 def _deck_active(deck: _Deck, keys: set[str]) -> frozenset[str]:
@@ -640,22 +659,39 @@ def _stages(project: Project, deck: _Deck, staged_parts: list[str],
             staged_ties: list[tuple[str, str]]) -> list[parameters.Stage]:
     """The deck's stages, in execution order.
 
-    A project with no stages exports exactly the deck it exported before staged
-    construction existed -- one stage, or the implicit two a sheet pile has always
-    produced. That is the compatibility contract, and it is a gate rather than a
-    special case of the staged path so that nothing in the staged path can reach a
-    project that never asked for it.
+    A project with no stages exports the stages it exported before staged construction
+    existed: one stage, or the implicit two that a sheet pile has always produced, with
+    the same parts switched off and on. That is the compatibility contract. It is a gate
+    rather than a special case of the staged path, so that nothing in the staged path can
+    reach a project that never asked for it.
+
+    The two-stage deck does carry the bookkeeping that keeps its stresses right, by the
+    same rules as the staged path (`_sequenced_stages`). An interface finds its
+    neighbouring soil in the stage it arrives in: the pile's interfaces in wall
+    installation, and a soil-to-soil one (not staged) in the first stage. Without that,
+    an interface starts at zero traction against soil that is already stressed. And
+    whatever is in both stages, such as an anchor or a soil-to-soil interface, carries
+    its stress into wall installation, because Kratos resets the displacements at the
+    start of every stage.
     """
     if not project.stages:
         if not staged_parts:
             return [parameters.Stage(name=parameters.STAGE_NAME)]
+        staged = set(staged_parts)
+        kept = tuple(name for name in deck.interfaces + deck.structures
+                     if name not in staged)
         return [
             parameters.Stage(
                 name=parameters.INITIAL_STAGE_NAME, modeler=True,
-                deactivate=tuple(staged_parts), ties=tuple(staged_ties)),
+                deactivate=tuple(staged_parts), ties=tuple(staged_ties),
+                find_neighbours=tuple(name for name in deck.interfaces
+                                      if name not in staged)),
             parameters.Stage(
                 name=parameters.WALL_INSTALLATION_STAGE_NAME,
-                activate=tuple(staged_parts), start_time=1.0),
+                activate=tuple(staged_parts), start_time=1.0,
+                find_neighbours=tuple(name for name in deck.interfaces if name in staged),
+                final_stresses=kept,
+                prestressed=tuple(name for name in kept if name in deck.prestressed)),
         ]
     return _sequenced_stages(project, deck)
 
@@ -707,7 +743,9 @@ def _sequenced_stages(project: Project, deck: _Deck) -> list[parameters.Stage]:
                     if name in (live if first else activate)]
         # Stresses carry over for what was already there *and* still is. A part being
         # installed in this stage has no previous stress to carry, which is why the
-        # reference leaves the anchor out of stage 5 and puts it back in stage 6.
+        # reference leaves the anchor out of stage 5. Kratos' own `building_pit` deck
+        # also leaves it out of stages 6 and 7. Running the staged excavation showed that
+        # this loses the strut's force at each stage start, so here it is carried.
         carried = () if first else tuple(name for name in deck.interfaces + deck.structures
                                          if name in live and name in was)
         beams = tuple(name for name in deck.beams if name in live)
@@ -748,6 +786,7 @@ def _sequenced_stages(project: Project, deck: _Deck) -> list[parameters.Stage]:
             k0_parts=tuple(name for name in deck.soils if name in live) if k0 else (),
             find_neighbours=tuple(arriving),
             final_stresses=carried,
+            prestressed=tuple(name for name in carried if name in deck.prestressed),
             extrapolate=extrapolate,
             json_output=output,
             reset_displacements=stage.reset_displacements,
@@ -771,6 +810,74 @@ def _flow_strategy(deck: _Deck, live: frozenset[str]) -> str:
     if any(name in live for name in deck.unsaturated):
         return "newton_raphson"
     return "linear"
+
+
+def _kept_across_a_stage(kratos_stages: list[parameters.Stage],
+                         names: Sequence[str]) -> list[str]:
+    """The parts of `names` that are in two consecutive stages. These are the parts whose
+    stress has to be carried from one stage into the next. A stage with no `active` set
+    has every part in it."""
+    def within(stage: parameters.Stage, name: str) -> bool:
+        return stage.active is None or name in stage.active
+    return [name for name in names
+            if any(within(before, name) and within(after, name)
+                   for before, after in zip(kratos_stages, kratos_stages[1:]))]
+
+
+def _untransferred_warnings(kratos_stages: list[parameters.Stage], panels: list[str],
+                            members: list[tuple[str, bool]]) -> list[str]:
+    """Warnings for the 3D structures whose stress Kratos cannot carry into the next stage.
+
+    Kratos resets the displacements at the start of every stage. A structural element
+    therefore keeps its stress only through
+    `ApplyFinalStressesOfPreviousStageToInitialState`, which reads the element's
+    `PK2_STRESS_VECTOR`. Kratos 10.4.4 gives that process nothing usable for these:
+
+    *   `ShellThinElement3D3N` (a wall panel) reports no `PK2_STRESS_VECTOR`, so a panel
+        is not carried at all. In the staged excavation run in 3D, the panel's moments
+        and forces were zero at the start of every stage, and a stage that changed
+        nothing still moved the ground.
+    *   `LinearTimoshenkoCurvedBeamElement3D3N` (a quadratic member) reports no stress
+        either. The process stops the run when a stage carries one.
+    *   `LinearTimoshenkoBeamElement3D2N` (a linear member) reports a plane stress of
+        three components, and its 3D law has six. So what is carried is not the
+        member's real state.
+
+    Members are carried anyway, as in 2D, so a quadratic one stops the run rather than
+    giving a wrong answer without a word. These are warnings, not refusals: a part in
+    only one stage, or a single-stage calculation, is not affected.
+    """
+    out: list[str] = []
+    kept_panels = _kept_across_a_stage(kratos_stages, panels)
+    if kept_panels:
+        out.append(
+            f"wall panel(s) {', '.join(kept_panels)} stay in the model from one stage to "
+            "the next, and Kratos cannot carry a shell's forces into the next stage "
+            "(ShellThinElement3D3N gives ApplyFinalStressesOfPreviousStageToInitialState "
+            "no stress to carry). Every such stage starts the panel at zero moment and "
+            "force. So the panel forces of a stage are only what that stage added, and "
+            "the soil beside the panel starts the stage out of balance, which moves it. "
+            "Until Kratos supports this, read panel forces from a single-stage "
+            "calculation, or treat staged ones as indicative only.")
+    kept = _kept_across_a_stage(kratos_stages, [name for name, _ in members])
+    if kept:
+        quadratic = {name for name, curved in members if curved}
+        if quadratic & set(kept):
+            effect = ("Kratos' 3-node 3D beam (LinearTimoshenkoCurvedBeamElement3D3N) "
+                      "gives ApplyFinalStressesOfPreviousStageToInitialState no stress to "
+                      "carry, so the calculation stops at the start of the second stage "
+                      "a member is in ('The stress vectors on the integration points "
+                      "could not be retrieved'). Keep each member to one stage.")
+        else:
+            effect = ("Kratos' 2-node 3D beam (LinearTimoshenkoBeamElement3D2N) gives "
+                      "ApplyFinalStressesOfPreviousStageToInitialState a plane stress of "
+                      "three components where its 3D law has six, so what it carries "
+                      "into the next stage is not the member's real state. Treat member "
+                      "forces after the first stage as unverified.")
+        out.append(f"member(s) {', '.join(kept)} stay in the model from one stage to the "
+                   f"next, and Kratos cannot carry a 3D beam's forces correctly. {effect} "
+                   "No 3D model with a member has been run through a stage change yet.")
+    return out
 
 
 # ── Interfaces ──────────────────────────────────────────────────────────────

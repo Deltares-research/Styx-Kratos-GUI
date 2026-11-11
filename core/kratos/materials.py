@@ -570,6 +570,16 @@ def _panel_variables(section: PanelSection) -> dict:
     return _ordered(dict(section.variables), PANEL_ORDER)
 
 
+def anchor_prestress(section: AnchorSection, prestress: float):
+    """The `TRUSS_PRESTRESS_PK2` an anchor is written with. That is the anchor's own
+    prestress, or the one its tendon's variables carry when the anchor has none.
+
+    The stage builder also reads this. A prestressed anchor needs the temporary prestress
+    workaround in every stage that carries its stress (`core.kratos.parameters._exclude_prestress`).
+    """
+    return prestress or section.variables.get("TRUSS_PRESTRESS_PK2", prestress)
+
+
 def _anchor_variables(section: AnchorSection, prestress: float, dim: int,
                       warnings: list[str]) -> dict:
     """The tendon's property set, the anchor's own prestress in it, smeared over the
@@ -593,8 +603,7 @@ def _anchor_variables(section: AnchorSection, prestress: float, dim: int,
         if warning not in warnings:
             warnings.append(warning)
     v = dict(section.variables)
-    if prestress or "TRUSS_PRESTRESS_PK2" not in v:
-        v["TRUSS_PRESTRESS_PK2"] = prestress
+    v["TRUSS_PRESTRESS_PK2"] = anchor_prestress(section, prestress)
     if dim == 2:
         per_metre = 1.0 / section.spacing
         for name in SMEARED_ANCHOR:

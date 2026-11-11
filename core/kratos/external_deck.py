@@ -91,12 +91,28 @@ def deck_project(directory: str | Path, parameters: str = deck_files.PARAMETERS_
 
 def input_files(deck: Deck) -> list[str]:
     """Every file the deck reads, by name: the parameters, the mesh, then each
-    materials file in the order the stages first ask for it."""
+    materials file in the order the stages first ask for it, then each process module
+    of the deck's own.
+
+    A process module of the deck's own is a process with a `python_module` and no
+    `kratos_module`, which Kratos imports from the directory the deck runs in. It is
+    taken along only when it is a file beside the deck. A module installed elsewhere is
+    found where it is installed. A deck this application exported has one only when it
+    needs the temporary prestress workaround
+    (`core.kratos.deck_files.PRESTRESS_WORKAROUND_NAME`)."""
     parameters = _parameters(deck)
     names = [deck.parameters]
     meshes: list[str] = []
     materials: list[str] = []
+    modules: list[str] = []
     for stage in _stages(parameters):
+        listed = (stage.get("stage_settings") or {}).get("processes")
+        for processes in listed.values() if isinstance(listed, dict) else []:
+            for process in processes if isinstance(processes, list) else []:
+                module = process.get("python_module") if isinstance(process, dict) else None
+                if isinstance(module, str) and "kratos_module" not in process \
+                        and "." not in module:
+                    modules.append(f"{module}.py")
         for modeler in (stage.get("stage_preprocess") or {}).get("modelers") or []:
             if str(modeler.get("name", "")).endswith(MDPA_MODELER):
                 meshes.append(modeler.get("Parameters", {}).get("input_filename", ""))
@@ -112,6 +128,9 @@ def input_files(deck: Deck) -> list[str]:
     for material in materials:
         if material and material not in names:
             names.append(material)
+    for module in modules:
+        if module not in names and _path(deck, module).is_file():
+            names.append(module)
     return names
 
 
