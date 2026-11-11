@@ -79,6 +79,25 @@ def test_mesh_grows_a_size_back_over_a_band(cli, site):
     assert (mesh.body_sizes, mesh.size_bands) == ({}, {}), "the band goes with its size"
 
 
+def test_mesh_refuses_a_size_for_an_anchor_as_refine_mesh_does(cli, tmp_path):
+    """An anchor is one truss element, so a size has nothing to act on. The GUI's
+    Refine mesh says so; the command line says the same, and does not offer one."""
+    from tests.models.excavation import excavation_project
+    path = session.save(excavation_project(staged=False), tmp_path / "pit.json")
+
+    ran = cli("mesh", path, "--body-size", "strut", "0.5")
+
+    assert ran.code == 1
+    assert "Strut takes no mesh size: an anchor is one element" in ran.err
+    assert "strut" not in session.load(path).mesh.body_sizes
+
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    payload["mesh"]["body_sizes"] = {"gone": 1.0}
+    path.write_text(json.dumps(payload), encoding="utf-8")
+    offered = cli("mesh", path).err.split("A size can be given to: ")[1].split(".")[0]
+    assert "sheetpile" in offered.split(", ") and "strut" not in offered.split(", ")
+
+
 def test_mesh_refuses_a_size_for_a_part_that_is_not_in_the_model(cli, site):
     payload = json.loads(site.read_text(encoding="utf-8"))
     payload["mesh"]["body_sizes"] = {"gone": 1.0}

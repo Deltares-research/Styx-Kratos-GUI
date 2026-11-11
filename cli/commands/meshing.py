@@ -97,7 +97,7 @@ def mesh_settings(project: Project) -> MeshRequest:
     if unknown:
         raise CommandError("the mesh settings name objects this model does not have: "
                            + ", ".join(unknown) + ". A size can be given to: "
-                           + ", ".join(project.mesh_size_keys()) + ". Correct the name, "
+                           + ", ".join(_offered_keys(project)) + ". Correct the name, "
                            f"or take the size away: kratos-cli mesh FILE --body-size "
                            f"{unknown[0]} none")
     return settings
@@ -134,10 +134,17 @@ def _with_settings(project: Project, args: argparse.Namespace) -> Project:
         project = session.with_value(project, "mesh.order", args.order)
     sizes = dict(project.mesh.body_sizes)
     bands = dict(project.mesh.size_bands)
+    anchors = {anchor.id: anchor.name or anchor.id for anchor in project.anchors}
     for key, size in args.body_size:
         if size.lower() == "none":
             sizes.pop(key, None)
             bands.pop(key, None)
+        elif key in anchors:
+            # As the GUI's Refine mesh refuses it (js/mesh-settings.js changeSelected).
+            # A size an older project keeps for an anchor still loads and meshes.
+            raise CommandError(f"--body-size {key}: {anchors[key]} takes no mesh size: an "
+                               "anchor is one element. Give the size to a layer, a soil "
+                               "body, a line or a point.")
         else:
             sizes[key] = _number("--body-size", key, size)
     for key, band in args.band:
@@ -153,6 +160,13 @@ def _with_settings(project: Project, args: argparse.Namespace) -> Project:
         project = session.with_value(project, "mesh", {
             **project.mesh.model_dump(), "body_sizes": sizes, "size_bands": bands})
     return project
+
+
+def _offered_keys(project: Project) -> list[str]:
+    """The keys a new size can name: those of `Project.mesh_size_keys` but the anchors,
+    which the GUI's Mesh group and Refine mesh leave out too."""
+    anchors = {anchor.id for anchor in project.anchors}
+    return [key for key in project.mesh_size_keys() if key not in anchors]
 
 
 def _number(option: str, key: str, text: str) -> float:
