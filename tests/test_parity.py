@@ -36,7 +36,8 @@ def test_materials_match_frozen_data_js():
     # And the seed is that table, as every project in that shape is converted.
     project = seed_project(simple=False)
     assert [m.model_dump() for m in project.materials] == [
-        templates.Material.model_validate(migration.material(m, project.dimension)).model_dump()
+        templates.Material.model_validate(
+            migration.without_water(migration.material(m, project.dimension))).model_dump()
         for m in templates._DEMO_MATERIALS]
 
 

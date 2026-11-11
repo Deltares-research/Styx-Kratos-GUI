@@ -94,6 +94,14 @@
     return project;
   }
 
+  /* The same, against Mohr-Coulomb soils: a Coulomb contact takes their strength,
+     reduced by R_inter, so the R_inter row is listed once the law is Coulomb. */
+  function mohrCoulombInterface() {
+    var project = freeInterface();
+    project.materials.forEach(function (m) { m.constitutive_law = 'GeoMohrCoulombLawPlaneStrain'; });
+    return project;
+  }
+
   var MODELS = [['2D', function () { return window.VIEWPORT_PAYLOADS.project; }],
                 ['3D', function () { return window.VIEWPORT_PAYLOADS.project3d; }],
                 ['conditions and custom soil', conditionsAndBodies],
@@ -180,7 +188,7 @@
   });
 
   test('an interface picks its law, and its R_inter can go back to each soil\'s own', function () {
-    withProject(freeInterface(), function () {
+    withProject(mohrCoulombInterface(), function () {
       var contact = App.INTERFACES[0];
       var section = App.INTERFACE_SECTIONS.filter(function (s) {
         return s.id === contact.section; })[0];
@@ -192,16 +200,21 @@
            ['GeoIncrementalLinearElasticInterfaceLaw', 'GeoInterfaceCoulombLawPlaneStrain']);
       T.eq(law[4].set('GeoInterfaceCoulombLawPlaneStrain'), null);
       T.eq(section.constitutive_law, 'GeoInterfaceCoulombLawPlaneStrain');
+      // The law says what else is listed: the rows are drawn again, as a save does.
+      App.Model.rebuildDerived();
 
-      var rInter = row('R_inter (Coulomb law only)');
+      var rInter = row('R_inter');
       T.eq(rInter[4].get(), section.r_inter);
       T.eq(rInter[4].set(0.5), null);
       T.eq(section.r_inter, 0.5);
       T.ok(rInter[4].set(1.5), 'above 1 is refused');
+      App.Model.rebuildDerived();
       var saved = App.commitSelectionEdit, committed = [];
       App.commitSelectionEdit = function (key) { committed.push(key); };
       try {
-        row('Strength')[4].run();
+        rows().filter(function (r) {
+          return r[4] && r[4].kind === 'button' && r[4].text === 'Each soil’s own R_inter';
+        })[0][4].run();
         T.eq(section.r_inter, null, "each soil's own");
         T.eq(committed, [contact.id]);
       } finally { App.commitSelectionEdit = saved; }
@@ -209,12 +222,15 @@
   });
 
   test("an R_inter left to each soil reads so, and a number typed in sets one", function () {
-    var project = freeInterface();
-    project.interface_sections.forEach(function (s) { s.r_inter = null; });
+    var project = mohrCoulombInterface();
+    project.interface_sections.forEach(function (s) {
+      s.r_inter = null;
+      s.constitutive_law = 'GeoInterfaceCoulombLawPlaneStrain';
+    });
     withProject(project, function () {
       var contact = App.INTERFACES[0];
       var rInter = App.OBJECT_PROPS[contact.id].groups.Contact.filter(function (r) {
-        return r[0] === 'R_inter (Coulomb law only)'; })[0];
+        return r[0] === 'R_inter'; })[0];
       T.eq(rInter[1], 'each soil\u2019s own');
       T.eq(rInter[4].set(rInter[4].get()), null, 'writing back what it read changes nothing');
       T.eq(rInter[4].set(0.6), null);

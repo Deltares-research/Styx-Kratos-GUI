@@ -18,9 +18,7 @@ both, as the reference's `initial_materials.json` is.
 
 The Mohr-Coulomb case is also the model of the `kratos-cli` tutorial
 (`docs/cli_tutorials/CROW_case.md`) and of the ready-made model it starts from: change one,
-and change the other with it. The soils carry a permeability as a soil made in the GUI or
-with `material add` does; with the pore pressure fixed (`CONSTANT_PW_FIELD`), nothing
-reads it.
+and change the other with it.
 
     run tests/models/crow.py      in the GUI's command box: open it there
 """
@@ -64,12 +62,7 @@ def r_inter(delta: float, phi: float) -> float:
     return math.tan(math.radians(delta)) / math.tan(math.radians(phi))
 
 
-DAY = 86_400.0
-"""Seconds in a day: a permeability of 1 m/day is 1 / DAY m/s."""
-
-
-def _soil(model, id_, name, color, density, modulus, poisson, cohesion, phi, delta, k0,
-          permeability):
+def _soil(model, id_, name, color, density, modulus, poisson, cohesion, phi, delta, k0):
     """A soil with the reference's numbers, SI. An elastic one has no strength: the
     reference's has none either."""
     strength = {} if model == LINEAR_ELASTIC else {
@@ -82,14 +75,8 @@ def _soil(model, id_, name, color, density, modulus, poisson, cohesion, phi, del
                         "YOUNG_MODULUS": modulus,
                         "POISSON_RATIO": poisson,
                         "DENSITY_SOLID": density,
-                        "DENSITY_WATER": 1.01937e3,
                         "POROSITY": 0.0,
                         "BULK_MODULUS_SOLID": 1.0e10,
-                        "BULK_MODULUS_FLUID": 2.2e9,
-                        "DYNAMIC_VISCOSITY": 1.0e-3,
-                        "PERMEABILITY_XX": permeability,
-                        "PERMEABILITY_YY": permeability,
-                        "PERMEABILITY_XY": 0.0,
                         **strength,
                         "K0_NC": k0,
                         **RETENTION,
@@ -99,9 +86,9 @@ def _soil(model, id_, name, color, density, modulus, poisson, cohesion, phi, del
 def project(model: str = MOHR_COULOMB) -> Project:
     """The model with `model`'s soils and contacts: `LINEAR_ELASTIC` or `MOHR_COULOMB`."""
     clay = _soil(model, "clay", "Clay", "#c4a86a", 1.83486e3, 9.0e5, 0.2, 3.0e3, 22.5,
-                 11.25, 0.62, 1.0 / DAY)
+                 11.25, 0.62)
     sand = _soil(model, "sand", "Sand", "#b08a6a", 2.03874e3, 7.4286e6, 0.3, 0.0, 32.5,
-                 20.0, 0.46, 5.0 / DAY)
+                 20.0, 0.46)
     sheet_pile = BeamSection(id="sheetpile", name="Sheet pile", variables={
         "YOUNG_MODULUS": 8.4449e9, "POISSON_RATIO": 0.0, "DENSITY": 298.36,
         "CROSS_AREA": 0.4924, "I33": 0.4924 ** 3 / 12, "AREA_EFFECTIVE_Y": 1.0e4})

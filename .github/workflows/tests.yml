@@ -29,9 +29,9 @@ jobs:
         # 3.11: quickjs ships wheels for it, so the headless JS suites run.
         python: ["3.11"]
         include:
-          # The developers' venv; quickjs has no wheel here, so the runner reports headless as skipped.
+          # The newest Python; quickjs has no wheel here, so the runner reports headless as skipped.
           - os: windows-latest
-            python: "3.13"
+            python: "3.15"
     env:
       KRATOS_GUI_TEST_BROWSER_CHANNEL: bundled
       PYTHONUTF8: "1"

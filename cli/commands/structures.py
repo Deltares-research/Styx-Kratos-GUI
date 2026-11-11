@@ -81,8 +81,11 @@ SECTION_VARIABLES = (
     "the soil each stretch of the interface runs against (shear = G / virtual thickness, "
     "normal = 10 x shear). A Coulomb law (--law GeoInterfaceCoulombLawPlaneStrain) also "
     "reads GEO_COHESION and GEO_FRICTION_ANGLE, derived from the soil with --r-inter when "
-    "left out, and the soil's GEO_ENABLE_TENSION_CUT_OFF. Either law takes the soil's "
-    "RETENTION_LAW, saturations and BIOT_COEFFICIENT when left out.")
+    "left out, and the soil's GEO_ENABLE_TENSION_CUT_OFF; a linear elastic soil has no "
+    "strength to give, so against one they have to be set. A Coulomb section given, by "
+    "--law or --material, a linear elastic soil gets the Mohr-Coulomb defaults as its own, "
+    "as the GUI gives them; set them after. Either law takes the soil's RETENTION_LAW, "
+    "saturations and BIOT_COEFFICIENT when left out.")
 """What `section add` and `section set` say about their NAME=VALUE words."""
 
 
@@ -139,10 +142,13 @@ def add_section(args: argparse.Namespace) -> Answer:
     project = session.add_section(project, args.kind, section)
     fields = _section_values(args, args.kind)
     variables = assignments(args.variables)
+    notes: list[str] = []
     if fields or variables:
         project = session.update_section(project, args.id, kind=args.kind,
-                                         variables=variables, **fields)
-    return edited(args, project, f"added {args.kind} section ({id_and_name(section)})")
+                                         variables=variables, notes=notes, **fields)
+    answer = edited(args, project, f"added {args.kind} section ({id_and_name(section)})")
+    answer.lines += notes
+    return answer
 
 
 def update_section(args: argparse.Namespace) -> Answer:
@@ -151,10 +157,13 @@ def update_section(args: argparse.Namespace) -> Answer:
     fields = _section_values(args, kind)
     if args.name is not None:
         fields["name"] = args.name
+    notes: list[str] = []
     project = session.update_section(project, args.id, kind=kind,
                                      variables=assignments(args.variables),
-                                     unset=args.unset, **fields)
-    return edited(args, project, f"changed {kind} section {args.id}")
+                                     unset=args.unset, notes=notes, **fields)
+    answer = edited(args, project, f"changed {kind} section {args.id}")
+    answer.lines += notes
+    return answer
 
 
 def remove_section(args: argparse.Namespace) -> Answer:

@@ -20,14 +20,8 @@
         "YOUNG_MODULUS": 900000.0,
         "POISSON_RATIO": 0.2,
         "DENSITY_SOLID": 1834.86,
-        "DENSITY_WATER": 1019.37,
         "POROSITY": 0.0,
         "BULK_MODULUS_SOLID": 10000000000.0,
-        "BULK_MODULUS_FLUID": 2200000000.0,
-        "DYNAMIC_VISCOSITY": 0.001,
-        "PERMEABILITY_XX": 1.1574074074074073e-05,
-        "PERMEABILITY_YY": 1.1574074074074073e-05,
-        "PERMEABILITY_XY": 0.0,
         "GEO_COHESION": 3000.0,
         "GEO_FRICTION_ANGLE": 22.5,
         "GEO_DILATANCY_ANGLE": 0.0,
@@ -53,14 +47,8 @@
         "YOUNG_MODULUS": 7428600.0,
         "POISSON_RATIO": 0.3,
         "DENSITY_SOLID": 2038.74,
-        "DENSITY_WATER": 1019.37,
         "POROSITY": 0.0,
         "BULK_MODULUS_SOLID": 10000000000.0,
-        "BULK_MODULUS_FLUID": 2200000000.0,
-        "DYNAMIC_VISCOSITY": 0.001,
-        "PERMEABILITY_XX": 5.787037037037037e-05,
-        "PERMEABILITY_YY": 5.787037037037037e-05,
-        "PERMEABILITY_XY": 0.0,
         "GEO_COHESION": 0.0,
         "GEO_FRICTION_ANGLE": 32.5,
         "GEO_DILATANCY_ANGLE": 0.0,
@@ -384,6 +372,10 @@
     }
   ],
   "water": null,
+  "fluid": {
+    "bulk_modulus": null,
+    "dynamic_viscosity": null
+  },
   "boundary_conditions": [
     {
       "id": "fixed_bottom",

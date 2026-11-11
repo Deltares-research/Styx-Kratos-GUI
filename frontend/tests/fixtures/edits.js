@@ -28,11 +28,8 @@ window.EDITS_FIXTURE =
             "YOUNG_MODULUS": 2000000.0,
             "POISSON_RATIO": 0.3,
             "DENSITY_SOLID": 1732.9255861365953,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.0,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 1e-08,
             "PERMEABILITY_YY": 1e-08,
             "PERMEABILITY_XY": 0.0,
@@ -54,11 +51,8 @@ window.EDITS_FIXTURE =
             "YOUNG_MODULUS": 30000000.0,
             "POISSON_RATIO": 0.3,
             "DENSITY_SOLID": 1936.7991845056065,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.0,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 1e-05,
             "PERMEABILITY_YY": 1e-05,
             "PERMEABILITY_XY": 0.0,
@@ -382,6 +376,10 @@ window.EDITS_FIXTURE =
         "margin": 3.0,
         "thickness": 0.06,
         "specific_weight": null
+      },
+      "fluid": {
+        "bulk_modulus": null,
+        "dynamic_viscosity": null
       },
       "boundary_conditions": [
         {
@@ -582,11 +580,8 @@ window.EDITS_FIXTURE =
             "YOUNG_MODULUS": 2000000.0,
             "POISSON_RATIO": 0.3,
             "DENSITY_SOLID": 1732.9255861365953,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.0,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 1e-08,
             "PERMEABILITY_YY": 1e-08,
             "PERMEABILITY_XY": 0.0,
@@ -608,11 +603,8 @@ window.EDITS_FIXTURE =
             "YOUNG_MODULUS": 30000000.0,
             "POISSON_RATIO": 0.3,
             "DENSITY_SOLID": 1936.7991845056065,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.0,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 1e-05,
             "PERMEABILITY_YY": 1e-05,
             "PERMEABILITY_XY": 0.0,
@@ -936,6 +928,10 @@ window.EDITS_FIXTURE =
         "margin": 3.0,
         "thickness": 0.06,
         "specific_weight": null
+      },
+      "fluid": {
+        "bulk_modulus": null,
+        "dynamic_viscosity": null
       },
       "boundary_conditions": [
         {
@@ -1169,11 +1165,8 @@ window.EDITS_FIXTURE =
             "YOUNG_MODULUS": 2000000.0,
             "POISSON_RATIO": 0.3,
             "DENSITY_SOLID": 1732.9255861365953,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.0,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 1e-08,
             "PERMEABILITY_YY": 1e-08,
             "PERMEABILITY_XY": 0.0,
@@ -1195,11 +1188,8 @@ window.EDITS_FIXTURE =
             "YOUNG_MODULUS": 30000000.0,
             "POISSON_RATIO": 0.3,
             "DENSITY_SOLID": 1936.7991845056065,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.0,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 1e-05,
             "PERMEABILITY_YY": 1e-05,
             "PERMEABILITY_XY": 0.0,
@@ -1221,11 +1211,8 @@ window.EDITS_FIXTURE =
             "YOUNG_MODULUS": 2000000.0,
             "POISSON_RATIO": 0.3,
             "DENSITY_SOLID": 1732.9255861365953,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.0,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 1e-08,
             "PERMEABILITY_YY": 1e-08,
             "PERMEABILITY_XY": 0.0,
@@ -1550,6 +1537,10 @@ window.EDITS_FIXTURE =
         "thickness": 0.06,
         "specific_weight": null
       },
+      "fluid": {
+        "bulk_modulus": null,
+        "dynamic_viscosity": null
+      },
       "boundary_conditions": [
         {
           "id": "fixed_bottom",
@@ -1749,11 +1740,8 @@ window.EDITS_FIXTURE =
             "YOUNG_MODULUS": 2000000.0,
             "POISSON_RATIO": 0.3,
             "DENSITY_SOLID": 1732.9255861365953,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.0,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 1e-08,
             "PERMEABILITY_YY": 1e-08,
             "PERMEABILITY_XY": 0.0,
@@ -1775,11 +1763,8 @@ window.EDITS_FIXTURE =
             "YOUNG_MODULUS": 30000000.0,
             "POISSON_RATIO": 0.3,
             "DENSITY_SOLID": 1936.7991845056065,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.0,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 1e-05,
             "PERMEABILITY_YY": 1e-05,
             "PERMEABILITY_XY": 0.0,
@@ -2075,6 +2060,10 @@ window.EDITS_FIXTURE =
         "thickness": 0.06,
         "specific_weight": null
       },
+      "fluid": {
+        "bulk_modulus": null,
+        "dynamic_viscosity": null
+      },
       "boundary_conditions": [
         {
           "id": "fixed_bottom",
@@ -2270,11 +2259,8 @@ window.EDITS_FIXTURE =
             "YOUNG_MODULUS": 2000000.0,
             "POISSON_RATIO": 0.3,
             "DENSITY_SOLID": 1732.9255861365953,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.0,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 1e-08,
             "PERMEABILITY_YY": 1e-08,
             "PERMEABILITY_XY": 0.0,
@@ -2296,11 +2282,8 @@ window.EDITS_FIXTURE =
             "YOUNG_MODULUS": 30000000.0,
             "POISSON_RATIO": 0.3,
             "DENSITY_SOLID": 1936.7991845056065,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.0,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 1e-05,
             "PERMEABILITY_YY": 1e-05,
             "PERMEABILITY_XY": 0.0,
@@ -2624,6 +2607,10 @@ window.EDITS_FIXTURE =
         "margin": 3.0,
         "thickness": 0.06,
         "specific_weight": null
+      },
+      "fluid": {
+        "bulk_modulus": null,
+        "dynamic_viscosity": null
       },
       "boundary_conditions": [
         {
@@ -3292,11 +3279,8 @@ window.EDITS_FIXTURE =
               "YOUNG_MODULUS": 2000000.0,
               "POISSON_RATIO": 0.3,
               "DENSITY_SOLID": 1732.9255861365953,
-              "DENSITY_WATER": 1019.367991845056,
               "POROSITY": 0.0,
               "BULK_MODULUS_SOLID": 10000000000.0,
-              "BULK_MODULUS_FLUID": 2200000000.0,
-              "DYNAMIC_VISCOSITY": 0.001,
               "PERMEABILITY_XX": 1e-08,
               "PERMEABILITY_YY": 1e-08,
               "PERMEABILITY_XY": 0.0,
@@ -3318,11 +3302,8 @@ window.EDITS_FIXTURE =
               "YOUNG_MODULUS": 30000000.0,
               "POISSON_RATIO": 0.3,
               "DENSITY_SOLID": 1936.7991845056065,
-              "DENSITY_WATER": 1019.367991845056,
               "POROSITY": 0.0,
               "BULK_MODULUS_SOLID": 10000000000.0,
-              "BULK_MODULUS_FLUID": 2200000000.0,
-              "DYNAMIC_VISCOSITY": 0.001,
               "PERMEABILITY_XX": 1e-05,
               "PERMEABILITY_YY": 1e-05,
               "PERMEABILITY_XY": 0.0,
@@ -3510,11 +3491,8 @@ window.EDITS_FIXTURE =
               "YOUNG_MODULUS": 2000000.0,
               "POISSON_RATIO": 0.3,
               "DENSITY_SOLID": 1732.9255861365953,
-              "DENSITY_WATER": 1019.367991845056,
               "POROSITY": 0.0,
               "BULK_MODULUS_SOLID": 10000000000.0,
-              "BULK_MODULUS_FLUID": 2200000000.0,
-              "DYNAMIC_VISCOSITY": 0.001,
               "PERMEABILITY_XX": 1e-08,
               "PERMEABILITY_YY": 1e-08,
               "PERMEABILITY_XY": 0.0,
@@ -3536,11 +3514,8 @@ window.EDITS_FIXTURE =
               "YOUNG_MODULUS": 30000000.0,
               "POISSON_RATIO": 0.3,
               "DENSITY_SOLID": 1936.7991845056065,
-              "DENSITY_WATER": 1019.367991845056,
               "POROSITY": 0.0,
               "BULK_MODULUS_SOLID": 10000000000.0,
-              "BULK_MODULUS_FLUID": 2200000000.0,
-              "DYNAMIC_VISCOSITY": 0.001,
               "PERMEABILITY_XX": 1e-05,
               "PERMEABILITY_YY": 1e-05,
               "PERMEABILITY_XY": 0.0,
@@ -3555,7 +3530,11 @@ window.EDITS_FIXTURE =
             "r_inter": 0.7,
             "interface_permeability": "Neutral"
           }
-        ]
+        ],
+        "fluid": {
+          "bulk_modulus": null,
+          "dynamic_viscosity": null
+        }
       }
     },
     {

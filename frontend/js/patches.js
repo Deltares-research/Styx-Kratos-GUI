@@ -1667,6 +1667,17 @@ App.LivePatches = (function () {
         return App.Api.put('/api/project', opened)
           .then(function (project) {
             return adoptProject(project, 'Opened project: ' + file.name);
+          })
+          // A file saved in an older shape may have lost values on the way in: the
+          // server says which, as the first Save writes them away.
+          .then(function () {
+            return App.Api.post('/api/project/migration-notes', opened);
+          })
+          .then(function (result) {
+            if (!App.Command) return;
+            (result.notes || []).forEach(function (note) {
+              if (App.Command.warn) App.Command.warn(note); else App.Command.note(note);
+            });
           });
       }).catch(function (error) {
         if (App.Command) App.Command.err('Could not open ' + file.name + ': ' + error.message);
@@ -2442,7 +2453,7 @@ App.LivePatches = (function () {
     ['gravity [on|off]', 'show, or switch on or off, the self weight'],
     ['units [SI|kN]', 'show the unit system, or convert the project to another'],
     ['soillayers', 'open the Modify soil layers window'],
-    ['materials', 'open the Material sets window'],
+    ['materials', 'open the Soil materials window'],
     ['cleargeometry', 'remove the drawn and imported solids'],
     ['colour <part>|all|off', 'draw a part of the mesh in its own colour'],
     ['node <id>', 'which SubModelParts a node is in'],
@@ -2954,6 +2965,11 @@ App.LivePatches = (function () {
     (App.MODES || []).forEach(function (mode) {
       if (mode.id === 'soil') mode.hint = SOIL_HINT;
     });
+    // The frozen "Show material sets…" (js/data.js) opens the Soil materials window.
+    (App.RAILS.soil || []).forEach(function (tool) {
+      if (tool && tool.action === 'materials') tool.tip = 'Soil materials…';
+    });
+    menuItemsFor('materials').forEach(function (item) { item.label = 'Soil materials…'; });
 
     // Add Import model to Structures rail
     if (App.RAILS.structures) {
@@ -4157,6 +4173,7 @@ App.LivePatches = (function () {
       var frozenMaterials = App.Dialogs.materials;
       App.Dialogs.materials = function (onClose) {
         var snapshot = copy(App.MATERIALS || []);
+        var fluidSnapshot = copy(App.FLUID || {});
         frozenMaterials(onClose);
         var dialogs = document.querySelectorAll('#modal-layer .dialog');
         var dialog = dialogs[dialogs.length - 1];
@@ -4165,6 +4182,7 @@ App.LivePatches = (function () {
         var committed = false;
         function discard() {
           App.MATERIALS = copy(snapshot);
+          App.FLUID = copy(fluidSnapshot);
           if (App.Model && App.Model.rebuildDerived) App.Model.rebuildDerived();
           if (App.Explorer && App.state) App.Explorer.mountTree(App.state.mode);
         }
@@ -4193,13 +4211,14 @@ App.LivePatches = (function () {
             });
 
             App.Api.patch('/api/project/materials',
-                          { materials: App.Model.materialsToServer(App.MATERIALS) })
+                          { materials: App.Model.materialsToServer(App.MATERIALS),
+                            fluid: App.FLUID || null })
               .then(function (response) {
                 App.Model.apply(response.project);
                 return App.Viewport.refresh();
               })
               .then(function () {
-                App.Command.ok('Material sets saved — ' + App.MATERIALS.length
+                App.Command.ok('Soil materials saved — ' + App.MATERIALS.length
                                + ' soil materials. Geometry regenerated.');
                 committed = true;
                 dialog.querySelector('.dlg-x').click();

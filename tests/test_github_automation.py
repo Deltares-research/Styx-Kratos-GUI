@@ -274,6 +274,21 @@ def test_the_archive_is_built_from_the_tag_and_started_before_it_is_published(re
         "a release that does not start is not shipped"
 
 
+def test_a_tag_that_is_not_the_version_in_the_code_is_not_released(release):
+    build = release["jobs"]["build"]
+    run = commands(build)
+    assert "core.version import VERSION" in run and "GITHUB_REF_NAME" in run
+    assert "core.version import describe" in run,         "the unpacked archive has to say the version of its tag"
+    checkout = next(step for step in build["steps"]
+                    if str(step.get("uses", "")).startswith("actions/checkout"))
+    assert checkout.get("with", {}).get("fetch-depth") == 0,         "git archive writes `git describe` into the download, which needs the tag"
+
+
+def test_git_archive_writes_the_version_into_the_download():
+    lines = (ROOT / ".gitattributes").read_text(encoding="utf-8").splitlines()
+    assert any(line.split() == ["core/version.py", "export-subst"] for line in lines)
+
+
 def test_only_the_publishing_job_may_write(release):
     publish = release["jobs"]["publish"]
     assert publish["needs"] == "build"
@@ -517,6 +532,14 @@ def test_the_issue_forms_are_complete(name):
     ids = [field["id"] for field in form["body"] if "id" in field]
     assert ids and len(ids) == len(set(ids)), "an id may be used once"
     assert any(field.get("validations", {}).get("required") for field in form["body"])
+
+
+def test_a_bug_report_asks_for_the_version_where_styx_says_it():
+    form = load(GITHUB / "ISSUE_TEMPLATE" / "bug_report.yml")
+    field = next(field for field in form["body"] if field.get("id") == "version")
+    assert field["validations"]["required"] is True
+    assert "kratos-cli --version" in field["attributes"]["description"]
+    assert "About" in field["attributes"]["description"]
 
 
 def test_blank_issues_are_turned_off():
