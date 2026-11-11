@@ -214,6 +214,9 @@
     App.Explorer.mountPhases();
     var buttons = ctx.dock.querySelectorAll('.stage-toolbar button.tbtn');
     T.eq(buttons.length, 4, 'add, insert, duplicate, delete');
+    T.eq(Array.prototype.map.call(buttons, function (b) { return b.getAttribute('data-action'); }),
+         ['addStage', 'insertStage', 'duplicateStage', 'deleteStage']);
+    T.eq(buttons[0].getAttribute('aria-label'), 'Add stage');
     buttons[0].click();
     return done(ctx, new Promise(function (r) { setTimeout(r, 20); }).then(function () {
       T.eq(ctx.patches[0].body.stages.length, model().stages.length + 1, 'one added');

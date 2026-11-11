@@ -1294,6 +1294,13 @@ App.LivePatches = (function () {
       if (tool === '-') return;
       var button = buttons[i++];
       if (!button) return;
+      // The frozen rail draws an icon only. Named here, so a test, the tutorial script
+      // and a screen reader can find a tool without counting buttons. `data-tool` is
+      // set on every tool (by its icon when it has no action yet).
+      if (tool.action) button.setAttribute('data-action', tool.action);
+      else button.removeAttribute('data-action');
+      button.setAttribute('data-tool', tool.action || tool.icon);
+      if (tool.tip) button.setAttribute('aria-label', tool.tip);
       // A tool on NOT_YET is greyed but not `disabled`: Chrome sends no mouseenter
       // to a disabled button, and that is the event its tip waits for. `not-yet`
       // keeps its pointer events (css/live.css) and guardNotYet eats the click.
@@ -1913,18 +1920,21 @@ App.LivePatches = (function () {
        insert, which has no icon of its own in the frozen set. */
     [['new', 'Add stage', function () {
         return App.Stages.added(App.PROJECT);
-      }, 'Stage added.'],
+      }, 'Stage added.', 'addStage'],
      ['phase', 'Insert stage above the selected one', function () {
         return selected ? App.Stages.inserted(App.PROJECT, selected) : null;
-      }, 'Stage inserted.'],
+      }, 'Stage inserted.', 'insertStage'],
      ['copy', 'Duplicate the selected stage', function () {
         return selected ? App.Stages.copied(App.PROJECT, selected) : null;
-      }, 'Stage duplicated.'],
+      }, 'Stage duplicated.', 'duplicateStage'],
      ['delete', 'Delete the selected stage', function () {
         return selected ? App.Stages.removed(App.PROJECT, selected) : null;
-      }, 'Stage deleted.']
+      }, 'Stage deleted.', 'deleteStage']
     ].forEach(function (spec) {
+      // Named, as the rail buttons are, so a script or a screen reader can find it.
       var button = el('button.tbtn', { type: 'button' });
+      button.setAttribute('data-action', spec[4]);
+      button.setAttribute('aria-label', spec[1]);
       button.appendChild(icon(spec[0]));
       App.UI.attachTip(button, spec[1]);
       button.disabled = spec[0] !== 'new' && !selected;
