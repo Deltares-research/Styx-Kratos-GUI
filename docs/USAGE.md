@@ -181,7 +181,13 @@ The preset values are only a start. Check them for your soil.
 
 **Create soil surface…** (in 2D) or **Create soil volume…** (in 3D) adds a body of soil that
 is not a layer, for example an embankment or a lens. Type the corners of its outline and
-select its material.
+select its material. In a terminal, `kratos-cli surface add` makes the same soil surface.
+
+A line splits a soil surface in the same way as a layer (see below). Each part then has its
+own row in the Model explorer, for example *Embankment · Part 1*. Select a part and click
+**Edit coordinates…** to change the corners of the whole surface. A new material for the
+surface goes to all of its parts. In 3D, a line splits a soil volume only if the volume is
+a polygon extruded along z, or a box.
 
 ### Lines that split the soil
 
@@ -191,8 +197,8 @@ them there if needed, and select **Save**. The arrow in the corner of the button
 **Line by coordinates…**, which opens the same window with no drawing first. While you
 draw, you can also type `x y` in the command box to place a point.
 
-Where a line crosses a soil layer from one edge to another, the layer becomes separate soil
-parts. A sheet pile splits a layer in the same way. In the Model explorer each part has its
+Where a line crosses a soil layer or a soil surface from one edge to another, it becomes
+separate soil parts. A sheet pile splits a layer in the same way. In the Model explorer each part has its
 own row, for example *Soil_Top · Part 1*. In **Staged construction** you can switch each
 part off in its own stage. Select a part to rename it or to give it another material. A
 part starts with its layer's material. Change the layer's material, in the **Soil layers**

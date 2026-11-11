@@ -250,16 +250,21 @@ def _build_layered_soil(project: Project) -> BuildResult:
         d = project.domain
         owners = {}
         for piece in project.split_soil():
-            if piece.body is None:
+            if piece.layer is not None and piece.body is None:
                 layer = piece.layer
                 tag = gmsh.model.occ.addBox(d.x0, layer.bottom, d.z0, d.dx,
                                             layer.top - layer.bottom, d.dz)
             else:
-                tag = _soil_piece(piece.piece, d.z0, d.dz)
+                # A piece of a drawn soil surface spans the part's own z range.
+                z0, z1 = piece.z if piece.z is not None else (d.z0, d.z1)
+                tag = _soil_piece(piece.piece, z0, z1 - z0)
             owners[tag] = {piece.key}
 
         notes: list[str] = []
-        custom_volumes, overlays = _import_custom_parts(project.custom_parts, notes)
+        # A part a line cut is built as its pieces above, not read from its .brep.
+        cut = set(project.cut_parts())
+        custom_volumes, overlays = _import_custom_parts(
+            [part for part in project.custom_parts if part.key not in cut], notes)
         for tag, key in custom_volumes.items():
             owners[tag] = {key}
 
@@ -308,8 +313,8 @@ def _build_layered_soil(project: Project) -> BuildResult:
 
 
 def _soil_piece(piece: regions.Piece, z0: float, dz: float) -> int:
-    """A piece of a layer that lines cut off, as its solid: its outline swept across the
-    domain's z range. Built whole, so which body a solid is needs no finding out after a
+    """A piece of a layer or of a drawn soil surface that lines cut off, as its solid: its
+    outline swept across the domain's z range, or the part's. Built whole, so which body a solid is needs no finding out after a
     boolean; `_fragment` makes the seams between the pieces conformal."""
     def loop(outline: regions.Polyline) -> int:
         points = [gmsh.model.occ.addPoint(x, y, z0) for x, y in outline]

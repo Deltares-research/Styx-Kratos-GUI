@@ -1711,17 +1711,20 @@ def _part_names(project: Project) -> dict[str, str]:
     # of: `Upper_Sand`, then `Upper_Sand_lift1`. A staged body has no name of its own in
     # the project -- the user named the layer, not the lift -- so it takes the layer's
     # and says which part of it this is.
-    layers = {f"soil_{layer.id}": layer for layer in project.layers}
+    owners = {f"soil_{layer.id}": _sanitise(layer.name) or layer.id for layer in project.layers}
+    # A piece of a drawn soil surface is named after the surface, as a layer's is.
+    owners.update({part.key: _sanitise(part.label) or part.key for part in project.custom_parts})
     recorded = {piece.key: piece.body.name for piece in project.split_soil() if piece.body}
     for key, *_ in project.soil_bodies():
         stem, _, suffix = key.partition("__")
-        layer = layers[stem]
-        base = _sanitise(layer.name) or layer.id
+        base = owners[stem]
         # A piece a line cut off has a name of its own, which the deck says.
         suffix = _sanitise(recorded[key]) or suffix if key in recorded else suffix
         names[key] = _unique(f"{base}_{suffix}" if suffix else base, used)
+    cut = set(project.cut_parts())
     for part in project.custom_parts:
-        names[part.key] = _unique(_sanitise(part.label) or part.key, used)
+        if part.key not in cut:
+            names[part.key] = _unique(_sanitise(part.label) or part.key, used)
     for load in project.loads:
         names[load.id] = _unique(_sanitise(load.name) or load.id, used)
     for beam in project.beams:

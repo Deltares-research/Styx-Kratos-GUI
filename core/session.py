@@ -196,9 +196,10 @@ def _replace(temporary: str, path: Path) -> None:
 # ── Every edit ──────────────────────────────────────────────────────────────
 
 def _sizable_keys(project: Project) -> set[str]:
-    """What a mesh size can name: the bodies, and a cut layer's key, which names each of
-    its pieces."""
-    return {*project.part_keys(), *(f"soil_{layer.id}" for layer in project.layers)}
+    """What a mesh size can name: the bodies, and a cut layer's or soil surface's key, which
+    names each of its pieces."""
+    return {*project.part_keys(), *(f"soil_{layer.id}" for layer in project.layers),
+            *(part.key for part in project.custom_parts)}
 
 
 def _edited(project: Project, payload: dict) -> Project:
@@ -226,19 +227,28 @@ def _edited(project: Project, payload: dict) -> Project:
 def _parts_take_their_layers_material(project: Project, payload: dict) -> None:
     """Every part of a layer the edit gives another material takes that material, a part
     given one of its own included: what the user changes is the soil of the whole layer.
+    The same for every piece of a drawn soil surface (a custom part) given another material.
 
-    Only the edits of a layer call this. An undo or an opened file sets the layers and the
-    parts together, as they were, and each part keeps the material it was written with.
-    A layer whose material is the one it had has not been given another, which matters
-    because the soil layers window sends every layer on every change.
+    Only the edits of a layer or of a custom part call this. An undo or an opened file sets
+    the layers and the parts together, as they were, and each part keeps the material it
+    was written with. A layer whose material is the one it had has not been given another,
+    which matters because the soil layers window sends every layer on every change.
     """
-    before = {layer.id: layer.mat for layer in project.layers}
-    given = {layer["id"]: layer.get("mat") for layer in payload.get("layers") or []
-             if isinstance(layer, dict) and layer.get("id") in before
-             and layer.get("mat") != before[layer["id"]]}
+    def changed(records: list | None, key: str, before: dict[str, str | None]) -> dict:
+        return {record[key]: record.get("mat") for record in records or []
+                if isinstance(record, dict) and record.get(key) in before
+                and record.get("mat") is not None
+                and record.get("mat") != before[record[key]]}
+
+    layers = changed(payload.get("layers"), "id",
+                     {layer.id: layer.mat for layer in project.layers})
+    parts = changed(payload.get("custom_parts"), "key",
+                    {part.key: part.mat for part in project.custom_parts})
     for body in payload.get("bodies") or []:
-        if isinstance(body, dict) and body.get("layer") in given:
-            body["mat"] = given[body["layer"]]
+        if isinstance(body, dict) and body.get("layer") in layers:
+            body["mat"] = layers[body["layer"]]
+        elif isinstance(body, dict) and body.get("part") in parts:
+            body["mat"] = parts[body["part"]]
 
 
 def removed_sizes(before: Project, after: Project) -> list[str]:
@@ -528,7 +538,10 @@ def with_created_part(project: Project, recipe: dict,
         edited.custom_parts.insert(at, part)
     else:
         edited.custom_parts.append(part)
-    return edited, part
+    # Validated, so a line across the new outline cuts it into pieces at once.
+    payload = edited.model_dump()
+    _parts_take_their_layers_material(project, payload)
+    return _edited(project, payload), part
 
 
 def with_imported_part(project: Project, filename: str | None, built: dict,
@@ -567,7 +580,9 @@ def without_custom_parts(project: Project, keys: list[str]) -> Project:
     goes with it -- it describes nothing else.
     """
     gone = set(keys)
-    users = [(stage.id, sorted(gone & set(stage.activate + stage.deactivate)))
+    # A piece a line cut off the part goes with it.
+    pieces = {key for key, *_ in project.soil_bodies() if key.partition("__")[0] in gone}
+    users = [(stage.id, sorted((gone | pieces) & set(stage.activate + stage.deactivate)))
              for stage in project.stages]
     users = [(stage, named) for stage, named in users if named]
     if users:
@@ -594,8 +609,8 @@ def edit_notes(before: Project, after: Project) -> list[str]:
     was = {line.id: line for line in before.lines}
     idle = after.idle_lines()
     return removed_sizes(before, after) + [
-        f"Line {line.name!r} splits no soil: a line has to cross a soil layer from one edge "
-        "to another."
+        f"Line {line.name!r} splits no soil: a line has to cross a soil layer or a soil "
+        f"{'surface' if after.dimension == 2 else 'volume'} from one edge to another."
         for line in after.lines if line.id in idle and was.get(line.id) != line]
 
 
@@ -1060,11 +1075,11 @@ def remove_line(project: Project, id: str) -> Project:
 
 def update_body(project: Project, key: str, **fields) -> Project:
     """The soil body `key` with its `name` or its `material` changed; `material=None` gives
-    it its layer's material as it is now. A body that is a whole layer is that layer's to
-    change."""
+    it its layer's or soil surface's material as it is now. A body that is a whole layer
+    is that layer's to change, and a whole soil surface is a custom part."""
     payload = project.model_dump()
-    for body in payload.get("bodies", []):
-        if f"soil_{body['layer']}__{body['id']}" == key:
+    for record, body in zip(project.bodies, payload.get("bodies", [])):
+        if record.key == key:
             if "name" in fields:
                 body["name"] = fields["name"]
             if "material" in fields:
@@ -1073,6 +1088,9 @@ def update_body(project: Project, key: str, **fields) -> Project:
     if any(f"soil_{layer.id}" == key for layer in project.layers):
         raise UnknownPart(f"{key} is a whole layer, not a part cut off by a line: change it "
                           "as a layer")
+    if any(part.key == key for part in project.custom_parts):
+        raise UnknownPart(f"{key} is a whole drawn solid, not a part cut off by a line: "
+                          "change it as a volume")
     raise UnknownPart(f"no soil body with key {key!r}")
 
 
@@ -1087,6 +1105,7 @@ def assign_part_material(project: Project, key: str, material: str) -> Project:
     for part in payload["custom_parts"]:
         if part["key"] == key:
             part["mat"], part["color"] = material, project.material(material).color
+    _parts_take_their_layers_material(project, payload)
     return _edited(project, payload)
 
 

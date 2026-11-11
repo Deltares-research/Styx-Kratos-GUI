@@ -1265,4 +1265,44 @@
       T.eq(body.mat, 'm4');
     });
   });
+
+  /* Issue #125: a line across a drawn soil surface cuts it into soil bodies, and each
+     gets a row and a Selection explorer entry, as a piece of a layer does. */
+  function cutSurface() {
+    var surface = { key: 'drawn_0', label: 'Bank', color: '#c4a86a', source: 'gui', mat: 'm2',
+                    recipe: { kind: 'polygon_extrude', extrusion: [0, 0, 40],
+                              vertices: [[0, 0, 0], [3, 0, 0], [3, 3, 0], [0, 3, 0]] } };
+    return Object.assign(project(TWO, [surface], true), {
+      bodies: [{ id: 'part1', name: 'Part 1', part: 'drawn_0', point: [0.5, 1.5], mat: 'm2' },
+               { id: 'part2', name: 'Part 2', part: 'drawn_0', point: [2, 1.5], mat: 'm4' }],
+      soil_body_keys: ['soil_L1', 'soil_L2', 'drawn_0__part1', 'drawn_0__part2'],
+      soil_body_labels: { soil_L1: 'Soil_1', soil_L2: 'Soil_2',
+                          drawn_0__part1: 'Bank · Part 1', drawn_0__part2: 'Bank · Part 2' },
+      soil_body_materials: { soil_L1: 'm2', soil_L2: 'm4', drawn_0__part1: 'm2',
+                             drawn_0__part2: 'm4' }
+    });
+  }
+
+  test('each piece of a cut soil surface has its own row, in place of the surface', function () {
+    withProject(cutSurface(), function () {
+      var node = soilNode(App.TREES.soil);
+      var objs = (node.children || []).map(function (c) { return c.obj; });
+      T.eq(objs, ['soil_L1', 'soil_L2', 'drawn_0__part1', 'drawn_0__part2']);
+      T.eq(node.count, 4);
+      T.eq(node.children[3].label, 'Bank · Part 2  ·  Clay, stiff');
+    });
+  });
+
+  test('a piece of a soil surface names the surface and keeps its own material', function () {
+    withProject(cutSurface(), function () {
+      var props = App.OBJECT_PROPS['drawn_0__part2'];
+      T.eq(props.title, 'Bank · Part 2');
+      var surface = props.groups.General.filter(function (row) {
+        return row[0] === 'Soil surface';
+      })[0];
+      T.eq(surface[1], 'Bank');
+      T.eq(materialRow('drawn_0__part2')[4].get(), 'm4');
+      T.ok(App.Lines.bodyOf('drawn_0__part2'), 'App.Lines knows the piece by its key');
+    });
+  });
 })();

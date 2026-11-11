@@ -9,8 +9,9 @@ from core import scripting, session
 from core.geometry import solid_model
 from core.kratos import condition_checks, writer
 from core.model import drafts, script_writer, stages
-from core.model.schemas import (Beam, BeamSection, DimensionUpdate, Domain, LayersUpdate, Line,
-                                Material, Project, SoilBody, SoilLayer, Stage)
+from core.model.schemas import (Beam, BeamSection, CustomPart, DimensionUpdate, Domain,
+                                LayersUpdate, Line, Material, Project, SoilBody, SoilLayer,
+                                Stage)
 
 DOMAIN = Domain(x0=0.0, x1=20.0, z0=0.0, z1=10.0, y_top=0.0, y_bottom=-12.0)
 
@@ -366,7 +367,8 @@ def test_a_line_that_splits_nothing_gets_a_note():
     idle = Line(id="idle", name="Idle", points=[(5.0, 0.0), (5.0, -3.0)])
     project = session.add_line(model(), idle)
     assert session.edit_notes(model(), project) == [
-        "Line 'Idle' splits no soil: a line has to cross a soil layer from one edge to another."]
+        "Line 'Idle' splits no soil: a line has to cross a soil layer or a soil surface "
+        "from one edge to another."]
     assert session.edit_notes(project, project) == []
 
 
@@ -536,3 +538,164 @@ def test_a_model_script_writes_the_lines_and_the_bodies(tmp_path):
     again = scripting.load_project(path)
     assert again.soil_body_labels == project.soil_body_labels
     assert again.lines == project.lines
+
+
+# ── Drawn soil surfaces (issue #125) ─────────────────────────────────────────────
+
+SQUARE = [(0.0, 0.0), (3.0, 0.0), (3.0, 3.0), (0.0, 3.0)]
+ACROSS = Line(id="across", name="Across", points=[(1.0, 3.0), (1.0, 0.0)])
+
+
+def surface(project: Project, outline=SQUARE, key="drawn_0", mat="sand", **fields) -> CustomPart:
+    """A soil surface as Create soil surface… draws one: the outline swept along z across
+    the domain (`drafts.section_prism`)."""
+    recipe = drafts.section_prism(project, outline)
+    return CustomPart(key=key, label=fields.pop("label", "Surface"), source="gui", recipe=recipe,
+                      mat=mat, **fields)
+
+
+def on_a_surface(**fields) -> Project:
+    """The steps of the issue: a new project with only a drawn soil surface in it."""
+    empty = Project(name="Surface", dimension=2, domain=Domain(
+        x0=0.0, x1=3.0, z0=0.0, z1=1.0, y_top=3.0, y_bottom=0.0),
+        materials=[material("sand"), material("grout")], layers=[])
+    return edited(empty, custom_parts=[surface(empty).model_dump()], **fields)
+
+
+def test_a_line_across_a_drawn_soil_surface_splits_it():
+    project = on_a_surface(lines=[ACROSS.model_dump()])
+    assert project.soil_body_keys == ["drawn_0__part1", "drawn_0__part2"]
+    assert project.soil_body_labels == {"drawn_0__part1": "Surface · Part 1",
+                                        "drawn_0__part2": "Surface · Part 2"}
+    assert [(body.part, body.layer, body.id, body.mat) for body in project.bodies] == [
+        ("drawn_0", None, "part1", "sand"), ("drawn_0", None, "part2", "sand")]
+    assert project.cut_parts() == ["drawn_0"]
+    assert "drawn_0" not in project.part_keys()
+    assert "drawn_0" in project.soil_part_keys()      # the whole surface, for a condition
+    assert project.idle_lines() == []
+
+
+def test_a_surface_no_line_crosses_stays_one_custom_part():
+    stops = Line(id="stops", name="Stops", points=[(1.0, 3.0), (1.0, 1.0)])
+    project = on_a_surface(lines=[stops.model_dump()])
+    assert project.soil_body_keys == [] and project.bodies == []
+    assert "drawn_0" in project.part_keys()
+    assert project.idle_lines() == ["stops"]
+    assert session.edit_notes(on_a_surface(), project) == [
+        "Line 'Stops' splits no soil: a line has to cross a soil layer or a soil surface "
+        "from one edge to another."]
+
+
+def test_a_part_with_no_material_or_another_shape_is_not_split():
+    project = on_a_surface()
+    plain = surface(project, key="drawn_1", mat=None)
+    tube = CustomPart(key="drawn_2", label="Tube", source="gui", mat="sand", recipe={
+        "kind": "cylinder", "center": [1.0, 1.0, 0.0], "axis": [0.0, 0.0, 1.0], "radius": 0.5})
+    assert plain.section_outline() is None and tube.section_outline() is None
+    assert surface(project).section_outline() == (tuple(SQUARE), 0.0, 1.0)
+
+
+def test_a_soil_box_has_a_rectangle_for_its_outline():
+    box = CustomPart(key="drawn_0", label="Box", source="gui", mat="sand", recipe={
+        "kind": "box", "origin": [2.0, 1.0, 0.0], "size": [-2.0, 2.0, 5.0]})
+    assert box.section_outline() == (((0.0, 1.0), (2.0, 1.0), (2.0, 3.0), (0.0, 3.0)), 0.0, 5.0)
+
+
+def test_a_stage_that_names_the_surface_names_each_piece_once_a_line_cuts_it():
+    project = on_a_surface(stages=[Stage(id="first", name="First").model_dump(),
+                                   Stage(id="dig", name="Dig", parent="first",
+                                         deactivate=["drawn_0"]).model_dump()])
+    cut = session.add_line(project, ACROSS)
+    assert cut.stages[1].deactivate == ["drawn_0__part1", "drawn_0__part2"]
+
+
+def test_a_piece_of_a_surface_can_be_renamed_and_given_its_own_material():
+    project = session.update_body(on_a_surface(lines=[ACROSS.model_dump()]), "drawn_0__part1",
+                                  name="Core", material="grout")
+    assert project.soil_body_labels["drawn_0__part1"] == "Surface · Core"
+    assert project.soil_body_materials == {"drawn_0__part1": "grout", "drawn_0__part2": "sand"}
+    with pytest.raises(session.UnknownPart, match="whole drawn solid"):
+        session.update_body(project, "drawn_0", name="Whole")
+
+
+def test_a_new_material_for_the_surface_goes_to_every_piece():
+    project = session.update_body(on_a_surface(lines=[ACROSS.model_dump()]), "drawn_0__part1",
+                                  material="grout")
+    changed = session.assign_part_material(project, "drawn_0", "grout")
+    assert set(changed.soil_body_materials.values()) == {"grout"}
+    back = session.assign_part_material(changed, "drawn_0", "sand")
+    assert set(back.soil_body_materials.values()) == {"sand"}
+
+
+def test_a_surface_cannot_be_deleted_while_a_stage_uses_a_piece_of_it():
+    project = on_a_surface(lines=[ACROSS.model_dump()])
+    staged = edited(project, stages=[Stage(id="first", name="First").model_dump(),
+                                     Stage(id="dig", name="Dig", parent="first",
+                                           deactivate=["drawn_0__part1"]).model_dump()])
+    with pytest.raises(session.EditRefused, match="drawn_0__part1"):
+        session.without_custom_part(staged, "drawn_0")
+    gone = session.without_custom_part(project, "drawn_0")
+    assert gone.bodies == [] and gone.soil_body_keys == []
+
+
+def test_a_mesh_size_on_the_surface_stays_and_sizes_every_piece():
+    sized = on_a_surface(mesh={"element_size": 1.0, "body_sizes": {"drawn_0": 0.25}})
+    cut = session.add_line(sized, ACROSS)
+    assert cut.mesh.body_sizes == {"drawn_0": 0.25}
+    assert cut.expand_body_keys(["drawn_0"]) == ["drawn_0__part1", "drawn_0__part2"]
+
+
+def test_each_piece_of_a_surface_is_a_sub_model_part_with_its_material():
+    project = session.update_body(on_a_surface(lines=[ACROSS.model_dump()]), "drawn_0__part2",
+                                  material="grout")
+    deck = deck_of(project)
+    assert "Begin SubModelPart Surface_Part_1" in deck["mdpa"]
+    assert "Begin SubModelPart Surface_Part_2" in deck["mdpa"]
+    assert "Begin SubModelPart Surface\n" not in deck["mdpa"]
+    assert "Surface_Part_1" in deck["materials"] and "Surface_Part_2" in deck["materials"]
+
+
+def test_each_piece_of_a_surface_is_its_own_face():
+    project = on_a_surface(lines=[ACROSS.model_dump()])
+    with solid_model.session():
+        built = solid_model.build_geometry(project)
+    assert built.dim == 2
+    assert built.mass["drawn_0__part1"] == pytest.approx(3.0)
+    assert built.mass["drawn_0__part2"] == pytest.approx(6.0)
+    assert not built.volumes.get("drawn_0")
+
+
+def test_a_solid_model_sweeps_each_piece_across_the_surface():
+    project = on_a_surface(lines=[ACROSS.model_dump()], dimension=3)
+    with solid_model.session():
+        built = solid_model.build_geometry(project)
+    assert built.dim == 3
+    assert built.mass["drawn_0__part1"] == pytest.approx(3.0)
+    assert built.mass["drawn_0__part2"] == pytest.approx(6.0)
+
+
+def test_a_surface_on_the_layers_is_split_beside_them():
+    """An embankment on the ground: the line cuts the layer and the surface, each into its
+    own pieces."""
+    ground = model()
+    bank = surface(ground, outline=[(2.0, 0.0), (8.0, 0.0), (6.0, 2.0), (4.0, 2.0)])
+    line = Line(id="l", name="L", points=[(5.0, 3.0), (5.0, -4.0)])
+    project = edited(ground, custom_parts=[bank.model_dump()], lines=[line.model_dump()])
+    assert project.soil_body_keys == ["soil_top__part1", "soil_top__part2", "soil_low",
+                                      "drawn_0__part1", "drawn_0__part2"]
+
+
+def test_a_saved_surface_and_its_pieces_read_back_the_same(tmp_path):
+    project = session.update_body(on_a_surface(lines=[ACROSS.model_dump()]), "drawn_0__part1",
+                                  name="Core")
+    saved = project.model_dump(mode="json")
+    assert "layer" not in saved["bodies"][0]
+    again = Project.model_validate(saved)
+    assert again.soil_body_labels == project.soil_body_labels
+
+
+def test_a_record_needs_a_layer_or_a_part():
+    with pytest.raises(ValidationError, match="either a layer or a part"):
+        SoilBody(id="p", name="P", point=(0.0, 0.0))
+    with pytest.raises(ValidationError, match="either a layer or a part"):
+        SoilBody(id="p", name="P", layer="top", part="drawn_0", point=(0.0, 0.0))
