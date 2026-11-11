@@ -88,8 +88,9 @@ App.MeshSettings = (function () {
     return out;
   }
 
-  /* Every body that can be meshed: the layer stack, plus any custom part that
-     has been given a material (those are soil too). */
+  /* Every body that is meshed: the layer stack, plus any custom part that has been
+     given a material (those are soil too). The whole model is always meshed, as
+     `kratos-cli mesh` meshes it: a part that should have no mesh is removed. */
   function meshBodies(project) {
     var bodies = ((project && project.layers) || []).map(function (layer) {
       return { key: 'soil_' + layer.id, label: layer.name || layer.id };
@@ -100,13 +101,7 @@ App.MeshSettings = (function () {
     return bodies;
   }
 
-  function meshTargets(project, selection, isVisible) {
-    var keys = meshBodies(project).map(function (b) { return b.key; });
-    if (keys.indexOf(selection) >= 0) return [selection];
-    return keys.filter(function (key) { return isVisible(key); });
-  }
-
-  function bodyControls(project, selectedKeys) {
+  function bodyControls(project) {
     var mesh = (project && project.mesh) || {};
     var fallback = Number(mesh.element_size || defaults.element_size);
     var sizes = mesh.body_sizes || {};
@@ -115,7 +110,6 @@ App.MeshSettings = (function () {
       return {
         key: body.key,
         label: body.label,
-        enabled: selectedKeys.indexOf(body.key) >= 0,
         size: own ? Number(sizes[body.key]) : fallback,
         follows: !own
       };
@@ -328,23 +322,6 @@ App.MeshSettings = (function () {
     }).catch(reportError);
   }
 
-  /* The bodies of `project` that this window's check boxes leave out. */
-  function leftOutBodies(project, selectedKeys) {
-    return meshBodies(project).map(function (body) { return body.key; })
-      .filter(function (key) { return selectedKeys.indexOf(key) < 0; });
-  }
-
-  /* The bodies to mesh after a choice in this window, or null when it made none or left
-     nothing. It is kept as what was left out (`App.MESH_BODIES_LEFT_OUT`) because the
-     model changes under it: a body added later is meshed, as `kratos-cli` meshes it, and
-     a deleted body is not asked for, which the server would refuse. */
-  function chosenBodies(project, leftOut) {
-    if (!Array.isArray(leftOut)) return null;
-    var kept = meshBodies(project).map(function (body) { return body.key; })
-      .filter(function (key) { return leftOut.indexOf(key) < 0; });
-    return kept.length ? kept : null;
-  }
-
   function open() {
     if (!App.PROJECT || document.getElementById('mesh-settings-dialog')) return;
     var el = App.UI.el, settings = fromProject(App.PROJECT);
@@ -380,20 +357,12 @@ App.MeshSettings = (function () {
       node.value = settings[name]; return node;
     }
 
-    var targets = chosenBodies(App.PROJECT, App.MESH_BODIES_LEFT_OUT)
-      || meshTargets(App.PROJECT, App.state.selection, App.Viewport.isVisible);
     var bodyTable = el('div.mesh-body-table');
-    // The checkbox column carries no caption: "Mesh" does not fit a 16px box, and
-    // the help text beside the table already explains what ticking one does.
     bodyTable.appendChild(el('div.mesh-body-head', null, [
-      el('span'), el('span', { text: 'Layer' }), el('span', { text: 'Target size' }),
+      el('span', { text: 'Layer' }), el('span', { text: 'Target size' }),
       el('span', { text: 'Band' })
     ]));
-    bodyControls(App.PROJECT, targets).forEach(function (bodyRow) {
-      var enabled = el('input.mesh-body-enabled', {
-        type: 'checkbox', checked: bodyRow.enabled, 'data-body-key': bodyRow.key
-      });
-      enabled.checked = bodyRow.enabled;
+    bodyControls(App.PROJECT).forEach(function (bodyRow) {
       var size = el('input.mesh-setting-control.mesh-body-size', {
         type: 'number', min: '0.01', step: '0.1', value: bodyRow.size,
         'data-body-size-key': bodyRow.key
@@ -407,27 +376,17 @@ App.MeshSettings = (function () {
       });
       var bandNow = localSize(App.PROJECT, bodyRow.key).band;
       band.value = bandNow === null ? '' : bandNow;
-
-      /* The target size only applies to a layer that is being meshed, so follow
-         the checkbox: greyed out when unchecked, and skipped by read(). */
-      var bodyRowNode = el('label.mesh-body-row', null, [
-        enabled, el('span', { text: bodyRow.label }), size, band
-      ]);
-      function syncEnabled() {
-        size.disabled = band.disabled = !enabled.checked;
-        bodyRowNode.classList.toggle('off', !enabled.checked);
-      }
-      enabled.addEventListener('change', syncEnabled);
-      syncEnabled();
-      bodyTable.appendChild(bodyRowNode);
+      bodyTable.appendChild(el('label.mesh-body-row', null, [
+        el('span', { text: bodyRow.label }), size, band
+      ]));
     });
     row('Layer mesh sizes', bodyTable,
-        'Check every layer to mesh. Each checked layer can use an independent target size; shared faces remain conformal. Band: the distance outside the layer over which its size grows back to the global size [m].');
+        'Every layer is meshed, and shared faces keep common nodes. Each layer can have its own target size. Band: the distance outside the layer over which its size grows back to the global size [m]. To leave a part out of the mesh, remove it from the model.');
 
     var locals = localControls(App.PROJECT);
     if (locals.length) {
       var localTable = el('div.mesh-body-table');
-      localTable.appendChild(el('div.mesh-body-head.mesh-structure-row', null, [
+      localTable.appendChild(el('div.mesh-body-head', null, [
         el('span', { text: 'Structure, line or point' }), el('span', { text: 'Size' }),
         el('span', { text: 'Band' })
       ]));
@@ -442,7 +401,7 @@ App.MeshSettings = (function () {
           'data-structure-key': localRow.key
         });
         band.value = localRow.band === null ? '' : localRow.band;
-        localTable.appendChild(el('label.mesh-body-row.mesh-structure-row', {
+        localTable.appendChild(el('label.mesh-body-row', {
           title: localRow.kind
         }, [el('span', { text: localRow.label }), size, band]));
       });
@@ -489,24 +448,16 @@ App.MeshSettings = (function () {
       form.querySelectorAll('[name]').forEach(function (control) {
         value[control.name] = control.type === 'checkbox' ? control.checked : control.value;
       });
-      var selectedKeys = [], rows = [];
-      form.querySelectorAll('.mesh-body-enabled').forEach(function (control) {
-        var key = control.getAttribute('data-body-key');
-        if (control.checked) selectedKeys.push(key);
-      });
-      if (!selectedKeys.length) throw new Error('Select at least one layer to mesh.');
+      var rows = [];
       form.querySelectorAll('.mesh-body-size').forEach(function (control) {
         var key = control.getAttribute('data-body-size-key');
         var size = Number(control.value);
-        var meshed = selectedKeys.indexOf(key) >= 0;
-        if (meshed && !(size > 0)) {
+        if (!(size > 0)) {
           throw new Error('Mesh size for ' + key + ' must be greater than zero.');
         }
         var bandControl = form.querySelector('.mesh-body-band[data-body-band-key="' + key + '"]');
         var band = typedNumber(bandControl, key);
         if (band !== null && !(band >= 0)) throw new Error('The band of ' + key + ' cannot be negative.');
-        // Keep a size typed for a layer that is currently unchecked, so ticking it
-        // again does not silently fall back to the global size.
         rows.push({ key: key, size: size, band: band,
                     follows: control.hasAttribute('data-follows-global') });
       });
@@ -529,7 +480,6 @@ App.MeshSettings = (function () {
       var local = savedLocalSizes({ body_sizes: sizes, size_bands: bands }, localRows);
       value.body_sizes = local.body_sizes;
       value.size_bands = local.size_bands;
-      value.volume_keys = selectedKeys;
       return validate(merge(App.PROJECT, value));
     }
     function typedNumber(control, key) {
@@ -543,11 +493,8 @@ App.MeshSettings = (function () {
       try { settings = read(); message.textContent = ''; }
       catch (error) { message.textContent = error.message; return; }
       apply.disabled = generate.disabled = true;
-      var selectedKeys = settings.volume_keys.slice();
-      var savedSettings = Object.assign({}, settings); delete savedSettings.volume_keys;
-      var project = JSON.parse(JSON.stringify(App.PROJECT)); project.mesh = savedSettings;
+      var project = JSON.parse(JSON.stringify(App.PROJECT)); project.mesh = settings;
       App.Api.put('/api/project', project).then(function (saved) {
-        App.MESH_BODIES_LEFT_OUT = leftOutBodies(App.PROJECT, selectedKeys);
         App.Model.apply(saved); close();
         App.Command.ok('Mesh properties updated.');
         if (andGenerate) App.runAction({ action: 'generateMesh' });
@@ -569,13 +516,13 @@ App.MeshSettings = (function () {
     });
   }
   return {
-    fromProject: fromProject, validate: validate, meshTargets: meshTargets,
-    bodyControls: bodyControls, savedBodySizes: savedBodySizes, leftOutBodies: leftOutBodies,
+    fromProject: fromProject, validate: validate, meshBodies: meshBodies,
+    bodyControls: bodyControls, savedBodySizes: savedBodySizes,
     localSize: localSize, withLocalSize: withLocalSize, localProblem: localProblem,
     localObjects: localObjects, localControls: localControls, savedLocalSizes: savedLocalSizes,
     sizableKeys: sizableKeys, saveLocalSize: saveLocalSize, selectionRows: selectionRows,
     sizeNow: sizeNow, changeSelected: changeSelected,
-    chosenBodies: chosenBodies, algorithmRow: algorithmRow, merge: merge, open: open,
+    algorithmRow: algorithmRow, merge: merge, open: open,
     TITLE: TITLE, optimizationChoices: optimizationChoices, optimizationHelp: optimizationHelp,
     opensOnModeTab: opensOnModeTab
   };

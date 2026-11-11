@@ -2173,9 +2173,8 @@ App.Viewport = (function () {
       smoothing: 10, curvature_points: 16, size_min_factor: 0.05,
       second_order_linear: true
     }, {
-      refinements: meshRefinements(),
-      volume_keys: App.MeshSettings.chosenBodies(App.PROJECT, App.MESH_BODIES_LEFT_OUT)
-        || App.MeshSettings.meshTargets(App.PROJECT, App.state.selection, isVisible)
+      // No `volume_keys`: the whole model is meshed, whatever is selected or hidden.
+      refinements: meshRefinements()
     });
   }
 

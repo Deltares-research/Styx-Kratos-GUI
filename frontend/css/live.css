@@ -53,7 +53,7 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
 .mesh-body-head,
 .mesh-body-row {
   display: grid;
-  grid-template-columns: 22px minmax(0, 1fr) 74px 64px;
+  grid-template-columns: minmax(0, 1fr) 74px 64px;
   gap: 8px;
   align-items: center;
   min-height: 30px;
@@ -70,16 +70,8 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
   border-bottom: 1px solid var(--c-border);
 }
 .mesh-body-row + .mesh-body-row { border-top: 1px solid var(--c-border); }
-.mesh-body-enabled { width: 16px; height: 16px; margin: 0; }
 /* Fills its column and keeps the border/height of the fields below. */
 .mesh-body-size, .mesh-body-band { width: 100%; height: 24px; }
-/* An unchecked layer is not meshed, so its target size does not apply. */
-.mesh-body-size:disabled, .mesh-body-band:disabled {
-  background: var(--c-panel); color: var(--c-ink-faint);
-}
-.mesh-body-row.off > span { color: var(--c-ink-faint); }
-/* A structure row has no check box: it is meshed with the soil it stands in. */
-.mesh-structure-row { grid-template-columns: minmax(0, 1fr) 74px 64px; }
 .mesh-structure-size, .mesh-structure-band { width: 100%; height: 24px; }
 .mesh-settings-message { color: #a12622; max-width: 280px; }
 

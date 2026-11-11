@@ -390,7 +390,7 @@ When you open Mesh mode, the **Mesh properties** window opens:
 
 | Setting | What it does |
 |---|---|
-| Layer mesh sizes | Select the layers to mesh, and give each one its own target size. A layer with no size of its own shows the global size and follows it. Type a value to give the layer its own size. **Band** is the distance outside the layer over which its size grows back to the global size. Styx meshes the selected layers together, so their shared faces have common nodes. |
+| Layer mesh sizes | Every layer is meshed, and each layer can have its own target size. A layer with no size of its own shows the global size and follows it. Type a value to give the layer its own size. **Band** is the distance outside the layer over which its size grows back to the global size. Styx meshes the layers together, so their shared faces have common nodes. To leave a part out of the mesh, remove it from the model. |
 | Structure mesh sizes | The element size at each structure, interface, normal load, soil line, condition on a line or at a point, and point load, and its **Band**: the distance over which the size grows back to the global size. Empty: the object takes the size of the mesh around it. |
 | Global element size | The maximum length of an element edge, in metres |
 | Element order | Linear elements, or quadratic elements with a midside node on each edge |

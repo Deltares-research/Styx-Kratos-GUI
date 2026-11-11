@@ -19,46 +19,33 @@
       .then(function (error) { T.ok(/element size/i.test(error.message)); });
   });
 
-  test('mesh targets prefer the selected body and otherwise use visible bodies', function () {
-    var project = { layers: [{ id: 'L1' }, { id: 'L2' }] };
-    var visible = function (key) { return key === 'soil_L2'; };
-    T.eq(App.MeshSettings.meshTargets(project, 'soil_L1', visible), ['soil_L1']);
-    T.eq(App.MeshSettings.meshTargets(project, null, visible), ['soil_L2']);
-  });
-
   test('mesh bodies include material-bearing custom soil but not unassigned geometry', function () {
     var project = {
       layers: [{ id: 'L1', name: 'Upper' }],
       custom_parts: [{ key: 'fill', label: 'Backfill', mat: 'sand' },
                      { key: 'drawing', label: 'Unassigned geometry' }]
     };
-    T.eq(App.MeshSettings.bodyControls(project, ['fill']).map(function (row) {
-      return { key: row.key, label: row.label, enabled: row.enabled };
-    }), [{ key: 'soil_L1', label: 'Upper', enabled: false },
-         { key: 'fill', label: 'Backfill', enabled: true }]);
-    T.eq(App.MeshSettings.meshTargets(project, 'fill', function () { return false; }), ['fill']);
-    T.eq(App.MeshSettings.meshTargets(project, 'drawing', function () { return true; }),
-         ['soil_L1', 'fill']);
+    T.eq(App.MeshSettings.bodyControls(project).map(function (row) {
+      return { key: row.key, label: row.label };
+    }), [{ key: 'soil_L1', label: 'Upper' }, { key: 'fill', label: 'Backfill' }]);
   });
 
-  test('body controls preserve multiple selections and independent sizes', function () {
+  test('body controls keep independent sizes', function () {
     var rows = App.MeshSettings.bodyControls(
       { layers: [{ id: 'L1', name: 'Upper' }, { id: 'L2', name: 'Lower' }],
-        mesh: { element_size: 2.5, body_sizes: { soil_L1: 1.0, soil_L2: 4.0 } } },
-      ['soil_L1', 'soil_L2']
+        mesh: { element_size: 2.5, body_sizes: { soil_L1: 1.0, soil_L2: 4.0 } } }
     );
     T.eq(rows, [
-      { key: 'soil_L1', label: 'Upper', enabled: true, size: 1.0, follows: false },
-      { key: 'soil_L2', label: 'Lower', enabled: true, size: 4.0, follows: false }
+      { key: 'soil_L1', label: 'Upper', size: 1.0, follows: false },
+      { key: 'soil_L2', label: 'Lower', size: 4.0, follows: false }
     ]);
   });
 
   test('a row with no size of its own shows the global size and follows it', function () {
     var rows = App.MeshSettings.bodyControls(
-      { layers: [{ id: 'L1', name: 'Upper' }], mesh: { element_size: 2.5, body_sizes: {} } },
-      ['soil_L1']
+      { layers: [{ id: 'L1', name: 'Upper' }], mesh: { element_size: 2.5, body_sizes: {} } }
     );
-    T.eq(rows, [{ key: 'soil_L1', label: 'Upper', enabled: true, size: 2.5, follows: true }]);
+    T.eq(rows, [{ key: 'soil_L1', label: 'Upper', size: 2.5, follows: true }]);
   });
 
   test('the window keeps a size it has no row for', function () {
@@ -145,32 +132,16 @@
     T.eq(App.MeshSettings.sizeNow(project, 'floor'), 4, 'the global size');
   });
 
-  test('a choice is what was left out of it', function () {
-    var project = { layers: [{ id: 'L1' }, { id: 'L2' }],
-                    custom_parts: [{ key: 'drawn_0', mat: 'm1' }, { key: 'shown_only' }] };
-    T.eq(App.MeshSettings.leftOutBodies(project, ['soil_L1', 'drawn_0']), ['soil_L2']);
-    T.eq(App.MeshSettings.leftOutBodies(project, ['soil_L1', 'soil_L2', 'drawn_0']), []);
-  });
-
-  test('a choice names only the bodies the project still has', function () {
-    var project = { layers: [{ id: 'L1' }, { id: 'L3' }],
-                    custom_parts: [{ key: 'drawn_0', mat: 'm1' }] };
-    T.eq(App.MeshSettings.chosenBodies(project, ['soil_L3', 'soil_L_deleted']),
-         ['soil_L1', 'drawn_0']);
-  });
-
-  test('a body added after a choice is meshed, as kratos-cli meshes it', function () {
-    var before = { layers: [{ id: 'L1' }, { id: 'L2' }] };
-    var leftOut = App.MeshSettings.leftOutBodies(before, ['soil_L1']);
-    var after = { layers: [{ id: 'L1' }, { id: 'L2' }, { id: 'L_new' }] };
-    T.eq(App.MeshSettings.chosenBodies(after, leftOut), ['soil_L1', 'soil_L_new']);
-  });
-
-  test('no choice, or a choice with nothing left, is no choice', function () {
-    var project = { layers: [{ id: 'L1' }] };
-    T.eq(App.MeshSettings.chosenBodies(project, null), null);
-    T.eq(App.MeshSettings.chosenBodies(project, undefined), null);
-    T.eq(App.MeshSettings.chosenBodies(project, ['soil_L1']), null);
+  test('the viewport meshes the whole model, whatever is selected or hidden', function () {
+    var saved = { PROJECT: App.PROJECT, state: App.state };
+    try {
+      App.PROJECT = { layers: [{ id: 'L1' }, { id: 'L2' }], mesh: { element_size: 2.5 } };
+      App.state = { mode: 'mesh', selection: 'soil_L1' };
+      T.eq(App.Viewport.meshSettings().volume_keys, undefined);
+      T.eq(App.Viewport.meshSettings().element_size, 2.5);
+    } finally {
+      App.PROJECT = saved.PROJECT; App.state = saved.state;
+    }
   });
 })();
 

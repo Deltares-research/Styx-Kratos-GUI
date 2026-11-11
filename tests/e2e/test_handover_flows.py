@@ -58,8 +58,8 @@ def test_a_sized_strut_and_interface_deleted_in_the_gui_leave_a_project_both_mes
 
 def test_a_project_stays_meshable_after_mesh_properties_and_a_deleted_layer(
         app_page, live_server, tmp_path):
-    """Its Apply leaves alone the sizes it shows no row for, and its choice of layers
-    asks neither for a layer deleted later nor leaves out one added later."""
+    """Its Apply leaves alone the sizes it shows no row for, and the mesh and the export
+    name no layers, so a layer deleted later is not asked for and one added later is meshed."""
     project = excavation_project(staged=False)
     sizes = {"sheetpile": 0.5, "strut": 0.5, "soil_L_mid": 1.0}
     project = project.model_copy(update={"mesh": project.mesh.model_copy(
@@ -101,15 +101,15 @@ def test_a_project_stays_meshable_after_mesh_properties_and_a_deleted_layer(
                                   "bottom": project["layers"][-1]["bottom"] - 5}]
     app_page.evaluate("""stack => App.Api.patch('/api/project/layers', {layers: stack})
         .then(function (answer) { App.Model.apply(answer.project); })""", stack)
-    asked = app_page.evaluate("App.Export.meshRequest().volume_keys")
-    assert asked == ["soil_L_top", "soil_L_bot", "soil_L_new"]
+    assert app_page.evaluate("App.Export.meshRequest().volume_keys") is None
+    assert app_page.evaluate("App.Viewport.meshSettings().volume_keys") is None
     assert app_page.errors == []
 
 
 def test_mesh_properties_saves_what_it_shows(app_page, live_server):
     """A row with no size of its own follows the global size as it is typed; a size typed
-    on a row is kept, also when it is the old global size; an unticked layer stays out
-    until another project is opened."""
+    on a row is kept, also when it is the old global size. Every layer is meshed: the
+    window has no check box to leave one out."""
     project = excavation_project(staged=False)
     assert project.mesh.element_size == 5.0
     assert app_page.request.put(live_server["url"] + "/api/project",
@@ -125,19 +125,14 @@ def test_mesh_properties_saves_what_it_shows(app_page, live_server):
     assert window.locator("[data-body-size-key=soil_L_mid]").input_value() == "2.5"
     window.locator("[data-body-size-key=soil_L_top]").fill("5")
     window.locator("[data-body-size-key=soil_L_bot]").fill("7")
-    window.locator("[data-body-key=soil_L_bot]").uncheck()
+    assert window.locator(".mesh-body-table input[type=checkbox]").count() == 0
     window.get_by_role("button", name="Apply", exact=True).click()
     app_page.wait_for_selector("#mesh-settings-dialog", state="detached", timeout=LONG)
 
     mesh = app_page.request.get(live_server["url"] + "/api/project").json()["mesh"]
     assert mesh["element_size"] == 2.5
     assert mesh["body_sizes"] == {**project.mesh.body_sizes, "soil_L_top": 5.0, "soil_L_bot": 7.0}
-    assert app_page.evaluate("App.Export.meshRequest().volume_keys") == ["soil_L_top", "soil_L_mid"]
-
-    app_page.locator(TOOL.format("newProject")).click()
-    app_page.locator("#modal-layer .dialog").filter(has_text="New project").get_by_role(
-        "button", name="OK").click()
-    app_page.wait_for_function("App.MESH_BODIES_LEFT_OUT === null", timeout=LONG)
+    assert app_page.evaluate("App.Export.meshRequest().volume_keys") is None
     assert app_page.errors == []
 
 

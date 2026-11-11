@@ -18,7 +18,7 @@
 
   function withEnvironment(initial, body) {
     var keys = ['PROJECT', 'LOADS', 'BEAMS', 'BEAM_SECTIONS', 'PANEL_SECTIONS', 'ANCHORS',
-                'ANCHOR_SECTIONS', 'NORMAL_LOADS', 'MATERIALS', 'MESH_BODIES_LEFT_OUT',
+                'ANCHOR_SECTIONS', 'NORMAL_LOADS', 'MATERIALS',
                 'Api', 'Model', 'Viewport', 'Explorer', 'Command', 'Dialogs', 'DrawInput',
                 'state', 'selectObject', 'runAction', 'matById'];
     var saved = {};
@@ -43,7 +43,6 @@
     App.matById = function (id) {
       T.eq(id, 'soil'); return App.MATERIALS[0];
     };
-    App.MESH_BODIES_LEFT_OUT = null;
     App.state = { mode: 'structures', selection: null };
     App.selectObject = function (id) { ctx.selected.push(id); App.state.selection = id; };
     App.runAction = function (spec) { ctx.actions.push(spec.action); };
@@ -121,21 +120,16 @@
     T.ok(found, 'No button named ' + text); return found;
   }
 
-  test('mesh dialog validates selection and sizes before saving and generating', function () {
+  test('mesh dialog meshes every layer and validates sizes before saving and generating', function () {
     return withEnvironment(project(), function (ctx) {
       App.MeshSettings.open();
       App.MeshSettings.open();
       T.eq(document.querySelectorAll('#mesh-settings-dialog').length, 1);
       var dialog = document.getElementById('mesh-settings-dialog');
-      var boxes = dialog.querySelectorAll('.mesh-body-enabled');
-      boxes.forEach(function (box) { box.checked = false; box.dispatchEvent(new Event('change')); });
-      T.ok(dialog.querySelector('.mesh-body-size').disabled);
-      realButton(dialog, 'Apply').click();
-      T.ok(/at least one layer/.test(dialog.querySelector('.mesh-settings-message').textContent));
-      T.eq(ctx.requests.length, 0);
-      boxes[0].checked = true; boxes[0].dispatchEvent(new Event('change'));
+      T.eq(dialog.querySelectorAll('.mesh-body-table input[type=checkbox]').length, 0,
+           'no layer can be left out of the mesh');
+      T.eq(dialog.querySelectorAll('.mesh-body-size').length, 2, 'one size per layer');
       var size = dialog.querySelector('.mesh-body-size');
-      T.ok(!size.disabled);
       size.value = '0';
       size.dispatchEvent(new Event('input', { bubbles: true }));
       realButton(dialog, 'Apply').click();
@@ -151,9 +145,7 @@
         T.eq(ctx.requests[0].body.mesh.algorithm_3d, 'hxt', 'the hidden algorithm is preserved');
         T.eq(ctx.requests[0].body.mesh.algorithm_2d, 'delaunay');
         T.eq(ctx.requests[0].body.mesh.body_sizes.soil_L1, 1.25);
-        T.eq(ctx.requests[0].body.mesh.volume_keys, undefined, 'selection is not a stored mesh setting');
-        T.eq(App.MESH_BODIES_LEFT_OUT, ['soil_L2']);
-        T.eq(App.MeshSettings.chosenBodies(App.PROJECT, App.MESH_BODIES_LEFT_OUT), ['soil_L1']);
+        T.eq(ctx.requests[0].body.mesh.volume_keys, undefined, 'the window names no bodies');
         T.eq(ctx.actions, ['generateMesh']);
         T.eq(ctx.applied.length, 1);
         T.ok(!document.getElementById('mesh-settings-dialog'));

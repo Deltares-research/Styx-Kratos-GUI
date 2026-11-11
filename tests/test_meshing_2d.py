@@ -282,9 +282,9 @@ def test_a_size_asked_for_a_structure_reaches_the_mesh():
 
 
 def test_a_structure_s_size_holds_when_the_layers_to_mesh_are_named():
-    """The Mesh properties window always names the layers it meshes (`volume_keys`). The
-    wall is in none of them, and its size was dropped with it: the window's sheet-pile
-    size did nothing in the GUI, though the export and `kratos-cli` honoured it."""
+    """A request may name the layers it meshes (`volume_keys`). The wall is in none of
+    them, and its size was once dropped with it: the sheet-pile size did nothing when
+    the layers were named, though a request that named none honoured it."""
     project = excavation_like()
     layers = [f"soil_{layer.id}" for layer in project.layers]
 

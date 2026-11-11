@@ -1,8 +1,7 @@
 /* Calculate — handing the deck to Kratos and reporting what came back. */
 
 function withCalculateStubs(body) {
-  var saved = { Api: App.Api, Command: App.Command, PROJECT: App.PROJECT, Results: App.Results,
-                LEFT_OUT: App.MESH_BODIES_LEFT_OUT };
+  var saved = { Api: App.Api, Command: App.Command, PROJECT: App.PROJECT, Results: App.Results };
   var logged = [];
   App.Command = {
     ok: function (line) { logged.push(['ok', line]); },
@@ -17,12 +16,10 @@ function withCalculateStubs(body) {
   } };
   App.PROJECT = { name: 'Deep excavation — Rotterdam Zuid',
                   mesh: { element_size: 2.5, order: 2 } };
-  App.MESH_BODIES_LEFT_OUT = null;
 
   function restore() {
     App.Api = saved.Api; App.Command = saved.Command; App.PROJECT = saved.PROJECT;
     App.Results = saved.Results;
-    App.MESH_BODIES_LEFT_OUT = saved.LEFT_OUT;
   }
 
   var outcome;
