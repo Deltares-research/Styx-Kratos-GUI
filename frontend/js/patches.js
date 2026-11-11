@@ -1603,20 +1603,6 @@ App.LivePatches = (function () {
 
   /* ── New, open, save ─────────────────────────────────────────────────────── */
 
-  function confirmDialog(title, text, onConfirm) {
-    if (!App.Dialogs || !App.Dialogs.open) return onConfirm();
-    App.Dialogs.open({
-      title: title, width: 440, height: 220,
-      buttons: [{ label: 'OK', primary: true, onClick: onConfirm }, { label: 'Cancel' }],
-      build: function (body) {
-        body.appendChild(App.UI.el('div.dlg-simple', null, [
-          App.UI.el('h3', { text: title }),
-          App.UI.el('p', { text: text })
-        ]));
-      }
-    });
-  }
-
   /* Applies a project the user chose -- the seed, or a file -- and starts its history
      over: the steps that came before belong to a document that is no longer open. */
   function adoptProject(project, message) {
@@ -1661,15 +1647,41 @@ App.LivePatches = (function () {
   }
 
   /* An empty site, not the seeded demo -- the server owns what "empty" means, and a
-     second definition here would be one to keep in step. */
-  function newProject() {
+     second definition here would be one to keep in step. `name`, from the New project
+     window, is what `kratos-cli new --name` sets. */
+  function newProject(name) {
     return App.Api.post('/api/project/new')
       .then(function (result) {
-        return adoptProject(result.project, 'New project started — empty site.');
+        var project = result.project;
+        if (!name || name === project.name) return project;
+        return App.Api.put('/api/project', Object.assign({}, project, { name: name }));
+      })
+      .then(function (project) {
+        return adoptProject(project, 'New project started — empty site.');
       })
       .catch(function (error) {
         if (App.Command) App.Command.err('Could not start a new project: ' + error.message);
       });
+  }
+
+  /* File > Project properties…: the project's name, as `kratos-cli set FILE name ...`
+     sets it. Through the whole-project PUT, so Undo takes it back like any edit. */
+  function projectProperties() {
+    var now = (App.PROJECT && App.PROJECT.name) || '';
+    return App.NameDialog.ask({
+      title: 'Project properties', label: 'Project name', value: now,
+      help: 'Shown in the title bar, and the name Save gives the file.'
+    }).then(function (name) {
+      if (name === null || name === now) return;
+      var project = JSON.parse(JSON.stringify(App.PROJECT));
+      project.name = name;
+      return App.Api.put('/api/project', project).then(function (saved) {
+        App.Model.apply(saved);
+        if (App.Command) App.Command.ok('Project name: ' + name + '.');
+      }).catch(function (error) {
+        if (App.Command) App.Command.err('Could not rename the project: ' + error.message);
+      });
+    });
   }
 
   function projectFromFileText(text) {
@@ -2700,11 +2712,14 @@ App.LivePatches = (function () {
       }
 
       if (item && item.action === 'newProject') {
-        confirmDialog('New project',
-          'This discards the current model and starts again from an empty project. '
-          + 'Save first if you want to keep it.', newProject);
-        return;
+        return App.NameDialog.ask({
+          title: 'New project', label: 'Project name', value: 'Untitled project',
+          text: 'This discards the current model and starts again from an empty project. '
+            + 'Save first if you want to keep it.',
+          help: 'Shown in the title bar, and the name Save gives the file.'
+        }).then(function (name) { if (name !== null) return newProject(name); });
       }
+      if (item && item.action === 'projectProperties') return projectProperties();
       if (item && item.action === 'openProject') { openProject(); return; }
       if (item && item.action === 'saveProject') return saveProject();
       if (item && item.action === 'undo') return App.History.undo();
@@ -2983,6 +2998,14 @@ App.LivePatches = (function () {
          running the Python that builds them -- `run <file.py>` in the command box --
          which works for any model, not only the one somebody thought to add a
          button for. See `runScript`. */
+      // The project's name, beside the other whole-project items (Save, Pack project).
+      if (!fileMenu.items.some(function (item) { return item && item.action === 'projectProperties'; })) {
+        var packAt = fileMenu.items.findIndex(function (item) {
+          return item && item.label === 'Pack project…';
+        });
+        fileMenu.items.splice(packAt === -1 ? fileMenu.items.length : packAt + 1, 0,
+          { label: 'Project properties…', action: 'projectProperties' });
+      }
       if (!fileMenu.items.some(function (item) { return item && item.action === 'importMdpa'; })) {
         // Belongs beside Export model -- the same File > Print/Export group -- not
         // tacked on after Exit, which is where a plain push would leave it.
@@ -4415,6 +4438,7 @@ App.LivePatches = (function () {
     STRUCTURES_RAIL_GROUPS: STRUCTURES_RAIL_GROUPS,
     nameSoilBodyActions: nameSoilBodyActions,
     deleteRequest: deleteRequest, deleteCustomPart: deleteCustomPart, onTreeContextMenu: onTreeContextMenu,
+    projectProperties: projectProperties,
     objectKind: objectKind, renameObject: renameObject, deleteObject: deleteObject,
     syncCalculate: syncCalculate, calculateTip: calculateTip, CALCULATE_TIP: CALCULATE_TIP,
     resetForTests: resetForTests

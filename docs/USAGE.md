@@ -53,7 +53,11 @@ Click **Calculate** between Staged construction and Results.
 
 ## Projects
 
-- **New project:** **File** → **New project…** starts an empty site.
+- **New project:** **File** → **New project…** starts an empty site. Type the project name
+  in the window. The name shows in the title bar, and **Save** names the file after it.
+- **Project name:** **File** → **Project properties…** changes the name of the open project.
+  In the terminal, `kratos-cli new FILE --name NAME` and `kratos-cli set FILE name NAME` do
+  the same.
 - **Open project:** **File** → **Open project…** opens a project file (`.json`).
 - **Save:** **File** → **Save** or **Save as…** writes the project as a `.json` file. In
   Chrome and Edge, a window asks where to save the file. Other browsers put the file in your

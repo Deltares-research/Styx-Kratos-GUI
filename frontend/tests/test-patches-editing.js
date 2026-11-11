@@ -269,6 +269,49 @@
     });
   });
 
+  test('the New project window names the project, as kratos-cli new --name does', function () {
+    return withShell(function (ctx, host) {
+      App.runAction({ action: 'newProject' });
+      var dialog = host.querySelector('.name-dialog-window');
+      var input = dialog.querySelector('input[name=name]');
+      T.eq(input.value, 'Untitled project');
+      input.value = 'Pit A';
+      Array.prototype.filter.call(dialog.querySelectorAll('button'), function (button) {
+        return button.textContent === 'OK';
+      })[0].click();
+      return settle().then(settle).then(settle).then(function () {
+        T.eq(ctx.requests.map(function (r) { return r.method + ' ' + r.path; }),
+             ['POST /api/project/new', 'PUT /api/project']);
+        T.eq(ctx.requests[1].body.name, 'Pit A');
+        T.eq(App.PROJECT.name, 'Pit A');
+      });
+    });
+  });
+
+  test('Project properties renames the project; Cancel and the same name write nothing', function () {
+    return withShell(function (ctx) {
+      var file = App.MENUS.filter(function (m) { return m.label === 'File'; })[0];
+      T.ok(file.items.some(function (item) {
+        return item && item.action === 'projectProperties' && item.label === 'Project properties…';
+      }), 'File > Project properties…');
+      var answers = [null, App.PROJECT.name, 'Pit B'];
+      App.NameDialog = { ask: function (options) {
+        T.eq(options.value, App.PROJECT.name);
+        return Promise.resolve(answers.shift());
+      } };
+      return App.LivePatches.projectProperties().then(function () {
+        return App.LivePatches.projectProperties();
+      }).then(function () {
+        T.eq(ctx.requests, [], 'cancelled, then unchanged');
+        return App.LivePatches.projectProperties();
+      }).then(function () {
+        T.eq(ctx.requests[0].method + ' ' + ctx.requests[0].path, 'PUT /api/project');
+        T.eq(App.PROJECT.name, 'Pit B');
+        T.ok(ctx.lines.indexOf('ok:Project name: Pit B.') >= 0);
+      });
+    });
+  });
+
   test('new project waits for confirmation and save failures report the picker error', function () {
     return withShell(function (ctx, host) {
       App.runAction({ action: 'newProject' });
