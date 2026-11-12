@@ -1,5 +1,6 @@
 # Two scans that need nothing from GitHub's paid security features:
-#   pip-audit  known vulnerabilities in the pinned packages, the app's and the test tools'
+#   pip-audit  known vulnerabilities in the pinned packages: the app's, the test tools' and
+#              the tutorial site's
 #   gitleaks   secrets (tokens, keys, passwords) anywhere in the git history
 # The weekly run catches advisories published after the last push.
 name: security
@@ -32,12 +33,12 @@ jobs:
         with:
           python-version: "3.11"
 
-      # pip-audit resolves both files in a throwaway environment and asks the PyPI
+      # pip-audit resolves the files in a throwaway environment and asks the PyPI
       # advisory database about every package, the dependencies' dependencies included.
       - name: pip-audit
         run: |
           python -m pip install pip-audit==2.10.1
-          pip-audit --progress-spinner off -r requirements.txt -r requirements-dev.txt
+          pip-audit --progress-spinner off -r requirements.txt -r requirements-dev.txt \n            -r requirements-docs.txt
 
   gitleaks:
     name: gitleaks

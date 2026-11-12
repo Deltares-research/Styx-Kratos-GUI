@@ -1,0 +1,21 @@
+# The GUI tutorials site: docs/gui_tutorials/ only, built with Zensical
+# (requirements-docs.txt), which reads this file.
+#   python tools/gui_tutorial.py      screenshots, then the site in build/gui_tutorials/site/
+# CI builds and publishes it: .github/workflows/docs-site.yml.
+site_name: Styx GUI tutorials
+docs_dir: docs/gui_tutorials
+site_dir: build/gui_tutorials/site
+
+theme:
+  name: material
+  features:
+    - navigation.footer
+    - content.code.copy
+
+markdown_extensions:
+  - tables
+  - attr_list
+
+nav:
+  - Home: index.md
+  - CROW excavation wall: CROW_case.md
