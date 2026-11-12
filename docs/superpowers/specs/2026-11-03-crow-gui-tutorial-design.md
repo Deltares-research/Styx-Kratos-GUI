@@ -1,7 +1,8 @@
 # CROW GUI tutorial with screenshots that update themselves
 
-**Status:** approved, revised 2026-11-12. Nothing in it is built yet. The GUI can build the
-whole model since PR #130.
+**Status:** approved, revised 2026-11-12, and built on 2026-11-12. Two choices were made
+while building it: the site is built with Zensical, because Material for MkDocs is no
+longer maintained, and the site build runs on Windows, the platform of the recorded run.
 
 ## The goal
 
@@ -108,8 +109,8 @@ tutorial.
 
 `docs-site.yml` has two jobs.
 
-1. **build** runs on each pull request and each push to `main`, on `ubuntu-latest`, with
-   the browser that the e2e tier uses:
+1. **build** runs on each pull request and each push to `main`, on `windows-latest`, the
+   platform of the recorded run, with the browser that the e2e tier uses:
    - `python tools/test.py e2e -k gui_tutorials --doc-screenshots docs/gui_tutorials/images`,
      with `--strict-deck` added on a push to `main`
    - `mkdocs build --strict`
