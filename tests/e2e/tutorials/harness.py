@@ -8,6 +8,12 @@ none of that. Reading `App.PROJECT` is fine in a wait or a check: it changes not
 
 A step waits for what it waits on (a condition, or the end of the page's requests to the
 server), never for a fixed time, so a slower computer only makes the tutorial slower.
+
+`Tour.picture` takes a screenshot where the page shows one. Without a folder to write to
+(the test's `--doc-screenshots DIR`), it only records the name. The screenshots are the
+same on every run of one computer: a fixed window size, no animations, no text cursor, the
+mouse away from the model, and the cursor coordinates in the status bar hidden. A window
+that scrolls is shown from its top, or scrolled just far enough to show what is marked.
 """
 
 from __future__ import annotations
@@ -15,6 +21,7 @@ from __future__ import annotations
 import re
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Callable
 
 from tests.e2e.conftest import command
@@ -25,6 +32,23 @@ LONG = 120_000
 TOOL = '#maintoolbar .tbtn[data-action="{}"]'
 QUIET = 0.15
 """Seconds with no request to the server before the page counts as settled."""
+
+MARK = "tutorial-mark"
+SHOT = "tutorial-shot"
+HIDDEN = ("#sb-coords",)
+"""What changes with the mouse, and so is hidden in every screenshot."""
+STYLE = (f".{MARK} {{ outline: 3px solid #e8590c !important;"
+         " outline-offset: -1px !important; }"
+         + "".join(f" .{SHOT} {selector} {{ visibility: hidden !important; }}"
+                   for selector in HIDDEN))
+"""How a screenshot shows the reader what to click (an orange outline), and what it
+hides. The classes are only on the page while the screenshot is taken."""
+
+TO_THE_TOP = """() => document.querySelectorAll('#modal-layer .dialog *').forEach(e => {
+    const overflow = getComputedStyle(e).overflowY;
+    if ((overflow === 'auto' || overflow === 'scroll') && e.scrollHeight > e.clientHeight)
+        e.scrollTop = 0;
+})"""
 
 
 @dataclass(frozen=True)
@@ -51,6 +75,8 @@ class Tour:
     """A tutorial played on one page."""
 
     page: object
+    out: Path | None = None
+    """Where the screenshots go, or None to make none."""
     pictures: list[str] = field(default_factory=list)
     """The screenshot names, in order, that the played steps asked for."""
     step: Step | None = None
@@ -61,6 +87,8 @@ class Tour:
         page.on("request", self._sent)
         page.on("requestfinished", self._done)
         page.on("requestfailed", self._done)
+        if self.out is not None:
+            self.out.mkdir(parents=True, exist_ok=True)
 
     # ── requests to the server ─────────────────────────────────────────────
 
@@ -94,14 +122,42 @@ class Tour:
 
     # ── screenshots ────────────────────────────────────────────────────────
 
-    def picture(self, part: str = "", of=None, mark: str | None = None) -> None:
-        """The screenshot of this moment of the step: the whole page, or the window or
-        panel `of` (a locator), with the tool `mark` (a selector) outlined.
+    def picture(self, part: str = "", of=None, mark=()) -> None:
+        """The screenshot of this moment of the step, `<step id>[_<part>].png`: the whole
+        page, or only the window or panel `of` (a locator). `mark` is what to outline:
+        one selector or locator, or a list of them.
 
         Without a folder to write to, it only records the name, so a test can hold the
         page to the list of screenshots without making them."""
         name = self.step.id + (f"_{part}" if part else "")
+        assert name not in self.pictures, f"two screenshots named {name}"
         self.pictures.append(name)
+        if self.out is None:
+            return
+        page = self.page
+        self.settle()
+        if not page.evaluate("!!document.getElementById('tutorial-style')"):
+            page.add_style_tag(content=STYLE)
+            page.evaluate("document.head.lastElementChild.id = 'tutorial-style'")
+        # Away from the model and the rail, so nothing shows a hover.
+        size = page.viewport_size
+        page.mouse.move(size["width"] - 2, size["height"] - 2)
+        marked = [page.locator(m) if isinstance(m, str) else m
+                  for m in ([mark] if isinstance(mark, str) or hasattr(mark, "evaluate_all")
+                            else mark)]
+        page.evaluate(TO_THE_TOP)
+        for locator in marked:
+            assert locator.count(), f"{name}: nothing to mark at {locator}"
+            locator.first.scroll_into_view_if_needed()
+            locator.evaluate_all(f"(es) => es.forEach(e => e.classList.add('{MARK}'))")
+        page.evaluate(f"document.body.classList.add('{SHOT}')")
+        # Two frames, so the outline and the last redraw are on screen.
+        page.evaluate("new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)))")
+        (of or page).screenshot(path=str(self.out / f"{name}.png"), animations="disabled",
+                                caret="hide")
+        page.evaluate(f"document.body.classList.remove('{SHOT}');"
+                      f"document.querySelectorAll('.{MARK}')"
+                      f".forEach(e => e.classList.remove('{MARK}'))")
 
     # ── playing ────────────────────────────────────────────────────────────
 
@@ -148,10 +204,15 @@ def mode(tour: Tour, name: str) -> None:
     tour.settle()
 
 
+def rail_tool(key: str) -> str:
+    """The selector of a rail tool, to click or to mark."""
+    return f'#toolrail .rail-btn[data-tool="{key}"]'
+
+
 def rail(tour: Tour, key: str, flyout: str | None = None) -> None:
     """A tool on the rail, or one item of its flyout (the small corner of the button)."""
     page = tour.page
-    button = page.locator(f'#toolrail .rail-btn[data-tool="{key}"]')
+    button = page.locator(rail_tool(key))
     assert button.count() == 1, f"no rail tool {key}"
     if not flyout:
         button.click()
@@ -203,13 +264,17 @@ def choose_in_selection(tour: Tour, label: str, option: str) -> None:
     tour.settle()
 
 
-def rename(tour: Tour, label: str, new: str) -> None:
-    """Right-click a row of the Model explorer, Rename…, type the new name, OK."""
+def rename(tour: Tour, label: str, new: str, picture: str = "") -> None:
+    """Right-click a row of the Model explorer, Rename…, type the new name, OK. With
+    `picture`, the screenshot of that part is taken with the name typed."""
     page = tour.page
-    tree_row(page, label).locator(".tree-label").click(button="right")
+    row = tree_row(page, label)
+    row.locator(".tree-label").click(button="right")
     page.get_by_text("Rename…", exact=True).locator("visible=true").last.click()
     dialog = page.locator("#modal-layer .name-dialog-window")
     dialog.locator("input[name=name]").fill(new)
+    if picture:
+        tour.picture(picture, mark=[row, dialog.get_by_role("button", name="OK")])
     dialog.get_by_role("button", name="OK").click()
     dialog.wait_for(state="detached")
     tour.settle()

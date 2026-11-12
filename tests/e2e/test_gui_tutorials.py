@@ -5,11 +5,17 @@ Each tutorial is a list of steps in `tests/e2e/tutorials/`. The test plays them 
 one, holds each to its own check, and at the end holds the deck the GUI writes to the deck
 of the tutorial's model in `tests/models/`. A changed button, window or default that
 breaks a step, or makes the GUI build another model, fails here.
+
+With `--doc-screenshots DIR` the steps also save their screenshots, in `DIR/<tutorial>/`
+(`python tools/gui_tutorial.py <tutorial>` runs this).
 """
 
 from __future__ import annotations
 
 import json
+from pathlib import Path
+
+import pytest
 
 from core.geometry import solid_model
 from core.kratos import writer
@@ -76,12 +82,25 @@ def deck_view(export: dict) -> dict:
             "mesh": mesh_view(export["mdpa"])}
 
 
-def test_the_crow_tutorial_builds_the_crow_model(app_page, live_server):
-    tour = Tour(app_page)
-    tour.play(crow_tutorial.STEPS)
+TUTORIALS = {"crow": crow_tutorial}
+"""Each tutorial by its name: the name of its screenshot folder and of its test."""
+
+
+@pytest.mark.parametrize("name", list(TUTORIALS))
+def test_the_tutorial_builds_its_model(name, app_page, live_server, request):
+    tutorial = TUTORIALS[name]
+    folder = request.config.getoption("--doc-screenshots")
+    out = Path(folder) / name if folder else None
+    if out is not None:
+        for old in out.glob("*.png"):
+            old.unlink()
+    tour = Tour(app_page, out=out)
+    tour.play(tutorial.STEPS)
+    if out is not None:
+        assert sorted(p.stem for p in out.glob("*.png")) == sorted(tour.pictures)
 
     got, want = deck_view(gui_deck(app_page, live_server)), \
-        deck_view(script_deck(crow_tutorial.MODEL))
+        deck_view(script_deck(tutorial.MODEL))
     assert got["materials"] == want["materials"]
     assert got["parameters"] == want["parameters"]
     assert got["mesh"]["nodes"] == want["mesh"]["nodes"]

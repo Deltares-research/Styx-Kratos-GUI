@@ -43,6 +43,10 @@ def pytest_addoption(parser):
     parser.addoption("--js-coverage", action="store_true", default=False,
                      help="collect function coverage of frontend/js in the browser unit suite "
                           "(written to htmlcov-js/summary.json)")
+    parser.addoption("--doc-screenshots", metavar="DIR", default=None,
+                     help="save the screenshots of the GUI tutorials in DIR/<tutorial>/ "
+                          "(tests/e2e/test_gui_tutorials.py; python tools/gui_tutorial.py "
+                          "does this for you)")
 
 
 @pytest.fixture(autouse=True, scope="session")

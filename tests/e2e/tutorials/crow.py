@@ -12,10 +12,11 @@ in the Model explorer.
 
 from __future__ import annotations
 
-from tests.e2e.tutorials.harness import (LONG, Step, Tour, choose_in_selection, field,
-                                         fill, mode, project, rail, rename,
-                                         select_in_tree, set_in_selection, tool,
-                                         tree_row, type_command, window)
+from tests.e2e.tutorials.harness import (LONG, TOOL, Step, Tour, choose_in_selection,
+                                         field, fill, mode, project, rail, rail_tool,
+                                         rename, select_in_tree, selection_row,
+                                         set_in_selection, tool, tree_row, type_command,
+                                         window)
 from tests.models import crow
 
 MODEL = crow.project(crow.MOHR_COULOMB)
@@ -31,7 +32,7 @@ def new_project(tour: Tour) -> None:
     page = tour.page
     tool(tour, "newProject")
     window(page).locator("input[name=name]").fill(MODEL.name)
-    tour.picture()
+    tour.picture(mark=TOOL.format("newProject"))
     window(page).get_by_role("button", name="OK").click()
     tour.until(f"App.PROJECT.name === {MODEL.name!r}")
     tool(tour, "viewMode2D")
@@ -71,6 +72,9 @@ def soils(tour: Tour) -> None:
     page = tour.page
     mode(tour, "soil")
     rail(tour, "materials")
+    window(page).locator('[data-action="create-soil"]').wait_for()
+    tour.picture(mark=[rail_tool("materials"),
+                       window(page).locator('[data-action="create-soil"]')])
     for soil in MODEL.materials:
         # Create soil opens the new soil's properties at once.
         window(page).locator('[data-action="create-soil"]').click()
@@ -84,7 +88,16 @@ def soils(tour: Tour) -> None:
             _put_variable(tour, props, variable, value)
         fill(props.locator('[data-field="rInter"]'), repr(soil.r_inter))
         tour.settle()
-        tour.picture(soil.id)
+        # The first soil from the top of its window and at its strength; the second
+        # only from the top, as the page says to do the same.
+        tour.picture(soil.id, of=props)
+        if soil is MODEL.materials[0]:
+            tour.picture(f"{soil.id}_strength", of=props, mark=[
+                props.locator('[data-variable="GEO_COHESION"]'),
+                props.locator('[data-variable="GEO_FRICTION_ANGLE"]'),
+                props.locator('[data-variable="GEO_DILATANCY_ANGLE"]'),
+                props.locator('[data-variable="K0_NC"]'),
+                props.locator('[data-field="rInter"]')])
         props.get_by_role("button", name="Close").click()
     window(page).get_by_role("button", name="OK").click()
     tour.until(f"App.PROJECT.materials.length === {len(MODEL.materials)}")
@@ -114,7 +127,7 @@ def layers(tour: Tour) -> None:
         fill(row.locator("input").nth(0), layer.name)
         row.locator("select").select_option(label=soil_names[layer.mat])
         fill(row.locator("input").nth(2), f"{layer.bottom:g}")
-    tour.picture()
+    tour.picture(mark=rail_tool("soilLayers"))
     dialog.locator(".dlg-foot .btn-primary").click()
     tour.until(f"App.PROJECT.layers.length === {len(MODEL.layers)}")
     tour.settle()
@@ -122,6 +135,8 @@ def layers(tour: Tour) -> None:
     select_in_tree(tour, MODEL.layers[0].name)
     set_in_selection(tour, "x max", f"{MODEL.domain.x1:g}")
     tour.until(f"App.PROJECT.domain.x1 === {MODEL.domain.x1}")
+    tour.picture("width", mark=[tree_row(page, MODEL.layers[0].name),
+                                selection_row(page, "x max")])
 
 
 def three_layers(tour: Tour) -> None:
@@ -145,7 +160,7 @@ def water(tour: Tour) -> None:
     field(page, "Where").select_option(label="Whole soil")
     field(page, "Type").select_option(WATER.fluid_pressure_type)
     field(page, "Reference level").fill(f"{WATER.reference_coordinate:g}")
-    tour.picture()
+    tour.picture(mark=rail_tool("createBoundaryCondition"))
     window(page).get_by_role("button", name="Save").click()
     tour.until(f"App.PROJECT.boundary_conditions.some(b => b.name === {WATER.name!r})")
 
@@ -170,7 +185,7 @@ def wall(tour: Tour) -> None:
                          ("y2", y2), *WALL_SECTION.variables.items(),
                          ("Spacing", WALL_SECTION.spacing)]:
         field(page, label).fill(repr(value) if isinstance(value, float) else str(value))
-    tour.picture()
+    tour.picture(mark=rail_tool("createSheetPile"))
     window(page).get_by_role("button", name="Save").click()
     tour.until("(App.PROJECT.beams || []).length === 1")
 
@@ -194,10 +209,11 @@ def lines(tour: Tour) -> None:
     rail(tour, "drawLine", "Draw line")
     for x, y in FLOOR_1.points:
         type_command(tour, f"{x:g} {y:g}")
+    tour.picture("drawn", mark=[rail_tool("drawLine"), "#cmd-entry"])
     type_command(tour, "")
     field(page, "Name").wait_for()
     field(page, "Name").fill(FLOOR_1.name)
-    tour.picture("drawn")
+    tour.picture("drawn_window", of=window(page))
     window(page).get_by_role("button", name="Save").click()
     tour.until("(App.PROJECT.lines || []).length === 1")
     # One typed in a window.
@@ -207,7 +223,7 @@ def lines(tour: Tour) -> None:
     for index, (x, y) in enumerate(FLOOR_2.points):
         points.nth(index).locator("input").nth(0).fill(f"{x:g}")
         points.nth(index).locator("input").nth(1).fill(f"{y:g}")
-    tour.picture("typed")
+    tour.picture("typed", mark=rail_tool("drawLine"))
     window(page).get_by_role("button", name="Save").click()
     tour.until("(App.PROJECT.lines || []).length === 2")
 
@@ -225,9 +241,12 @@ BODY_NAMES = [
 
 def name_the_bodies(tour: Tour) -> None:
     tree_row(tour.page, BODY_NAMES[0][0]).wait_for()
-    tour.picture("before")
-    for label, name in BODY_NAMES:
-        rename(tour, label, name)
+    page = tour.page
+    tour.picture("before", mark=[tree_row(page, label) for label, _ in BODY_NAMES])
+    for index, (label, name) in enumerate(BODY_NAMES):
+        rename(tour, label, name, picture="rename" if index == 0 else "")
+    tour.picture("after", mark=[tree_row(page, f"{label.split(' · ')[0]} · {name}")
+                                for label, name in BODY_NAMES])
 
 
 def bodies_named(tour: Tour) -> None:
@@ -250,14 +269,15 @@ def strut(tour: Tour) -> None:
     rail(tour, "createAnchor")
     tour.until("(App.PROJECT.anchors || []).length === 1")
     tour.settle()
-    for label, value in [*STRUT_SECTION.variables.items(),
-                         ("Spacing", STRUT_SECTION.spacing),
-                         ("Head x", STRUT.head[0]), ("Head y", STRUT.head[1]),
-                         ("Tail x", STRUT.tail[0]), ("Tail y", STRUT.tail[1])]:
+    typed = [*STRUT_SECTION.variables.items(), ("Spacing", STRUT_SECTION.spacing),
+             ("Head x", STRUT.head[0]), ("Head y", STRUT.head[1]),
+             ("Tail x", STRUT.tail[0]), ("Tail y", STRUT.tail[1])]
+    for label, value in typed:
         set_in_selection(tour, label, f"{value:g}")
     page.locator("#grid-selection button", has_text="No tension limit").click()
     tour.settle()
-    tour.picture()
+    tour.picture(mark=[rail_tool("createAnchor"), selection_row(page, "Tension limit"),
+                       *(selection_row(page, label) for label, _ in typed)])
     rename(tour, page.evaluate("App.PROJECT.anchors[0].name"), STRUT.name)
 
 
@@ -281,15 +301,18 @@ def interface(tour: Tour) -> None:
     rail(tour, "interface")
     field(page, "Name").fill(CONTACT.name)
     field(page, "Side").select_option("both")
-    tour.picture("window")
+    tour.picture("window", mark=rail_tool("interface"))
     window(page).get_by_role("button", name="Save").click()
     tour.until("(App.PROJECT.interfaces || []).length === 1")
     tour.settle()
     set_in_selection(tour, "Virtual thickness", f"{CONTACT_SECTION.virtual_thickness:g}")
     choose_in_selection(tour, "Law", "Coulomb")
-    page.locator("#grid-selection button", has_text="Each soil’s own R_inter").click()
+    # The button goes once it is used: the screenshot shows it before.
+    own = page.locator("#grid-selection button", has_text="Each soil’s own R_inter")
+    tour.picture("contact", mark=[selection_row(page, "Law"),
+                                  selection_row(page, "Virtual thickness"), own])
+    own.click()
     tour.settle()
-    tour.picture("contact")
 
 
 def one_interface(tour: Tour) -> None:
@@ -312,7 +335,7 @@ def loads(tour: Tour) -> None:
                          ("x max", SURCHARGE.x1), ("y", SURCHARGE.y),
                          ("qx", SURCHARGE.components[0]), ("qy", SURCHARGE.components[1])]:
         field(page, label).fill(value if isinstance(value, str) else f"{value:g}")
-    tour.picture("surcharge")
+    tour.picture("surcharge", mark=rail_tool("createLoad"))
     window(page).get_by_role("button", name="Save").click()
     tour.until("(App.PROJECT.loads || []).length === 1")
     for index, load in enumerate(MODEL.normal_loads, start=1):
@@ -327,7 +350,9 @@ def loads(tour: Tour) -> None:
         field(page, "Type").select_option(load.fluid_pressure_type)
         field(page, "Reference level").fill(f"{load.reference_coordinate:g}")
         if index == 1:
-            tour.picture("water")
+            tour.picture("water", mark=[
+                rail_tool("createLoad"),
+                window(page).get_by_role("button", name="Add point")])
         window(page).get_by_role("button", name="Save").click()
         tour.until(f"(App.PROJECT.normal_loads || []).length === {index}")
 
@@ -354,7 +379,7 @@ def mesh(tour: Tour) -> None:
     wall_row = dialog.locator("label.mesh-body-row").filter(has_text=WALL.name)
     wall_row.locator(".mesh-structure-size").fill(f"{MODEL.mesh.body_sizes['sheetpile']:g}")
     wall_row.locator(".mesh-structure-band").fill(f"{MODEL.mesh.size_bands['sheetpile']:g}")
-    tour.picture("window")
+    tour.picture("window", mark=wall_row)
     dialog.get_by_role("button", name="Apply and generate").click()
     tour.until("App.Viewport.hasMesh && App.Viewport.hasMesh()", timeout=LONG)
     tour.picture("mesh")
@@ -405,7 +430,7 @@ def stages(tour: Tour) -> None:
     _pick_stage(tour, MODEL.stages[0].name)
     for label in INITIAL_OFF:
         _switch(tour, label, False)
-    tour.picture("initial")
+    tour.picture("initial", mark=[tree_row(page, label) for label in INITIAL_OFF])
     for number, (stage, (on, off)) in enumerate(zip(MODEL.stages[2:], SWITCHES), start=3):
         page.locator('.stage-toolbar .tbtn[data-action="addStage"]').click()
         tour.until(f"App.PROJECT.stages.length === {number}")
@@ -425,14 +450,15 @@ def stages(tour: Tour) -> None:
             texts.nth(index).press("Enter")
             tour.settle()
         if number == 3:
-            tour.picture("window")
+            tour.picture("window", of=dialog)
         dialog.get_by_role("button", name="Close").click()
         _pick_stage(tour, stage.name)
         for label in on:
             _switch(tour, label, True)
         for label in off:
             _switch(tour, label, False)
-    tour.picture("last")
+    tour.picture("last", mark=['.stage-toolbar .tbtn[data-action="addStage"]',
+                               *(tree_row(page, label) for label in on + off)])
 
 
 def seven_stages(tour: Tour) -> None:
@@ -452,7 +478,7 @@ def calculate(tour: Tour) -> None:
     rail(tour, "plotResults")
     tour.page.locator("#modal-layer .dialog").last.wait_for()
     tour.settle()
-    tour.picture("plot")
+    tour.picture("plot", mark=rail_tool("plotResults"))
 
 
 STEPS = [
