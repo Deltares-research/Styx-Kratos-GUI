@@ -77,6 +77,10 @@ def stood_in(monkeypatch, tmp_path):
     monkeypatch.setattr(_launcher, "check_environment",
                         lambda python: calls.__setitem__("check", calls["check"] + 1))
     monkeypatch.setattr(_launcher.os, "execv", lambda exe, argv: calls.__setitem__("exec", argv))
+    monkeypatch.setattr(_launcher.subprocess, "call",
+                        lambda argv: calls.__setitem__("call", argv) or 0)
+    # The tests below read the POSIX start; the Windows one has a test of its own.
+    monkeypatch.setattr(_launcher, "EXEC_REPLACES_THE_PROCESS", True)
     monkeypatch.setattr(_launcher.os, "chdir", lambda path: None)
     monkeypatch.delenv(_launcher.ALLOWED_HOSTS_ENV, raising=False)
     # Whatever this machine happens to be serving on 8000 is not these tests' business.
@@ -219,6 +223,18 @@ def test_opening_the_browser_preserves_the_server_exit_status(stood_in, monkeypa
     timer.start.assert_called_once_with()
     assert server.call_args.args[0][-2:] == ["--port", "9000"]
     assert stood_in["exec"] is None
+
+
+def test_on_windows_the_server_is_a_child_process_so_a_path_with_a_space_works(
+        stood_in, monkeypatch):
+    python = Path("C:/Users/someone/OneDrive - Deltares/styx/.venv/Scripts/python.exe")
+    monkeypatch.setattr(_launcher, "ensure_environment", lambda: python)
+    monkeypatch.setattr(_launcher, "EXEC_REPLACES_THE_PROCESS", False)
+
+    assert _launcher.main([]) == 0
+
+    assert stood_in["exec"] is None
+    assert stood_in["call"][:3] == [str(python), "-m", "uvicorn"]
 
 
 def test_a_failed_server_exec_is_reported_as_a_launcher_error(

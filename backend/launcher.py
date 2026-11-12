@@ -26,6 +26,13 @@ MINIMUM_PYTHON = (3, 10)
 # A development checkout has requirements.txt next to the package; an installed wheel does not.
 _is_installed = not REQUIREMENTS.is_file()
 
+EXEC_REPLACES_THE_PROCESS = sys.platform != "win32"
+"""Whether `os.execv` can start the server in place of this process. On Windows it
+cannot: it starts a second process and ends this one, so `uv run` gives the prompt back
+while the server still runs, and it does not quote its arguments, so a Python in a
+folder with a space in its name (`OneDrive - Deltares`) is cut at the space. There the
+server is a child process instead."""
+
 
 def platform_venv_name(platform: str = sys.platform) -> str:
     if platform == "win32":
@@ -178,6 +185,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.open_browser:
             url = f"http://{args.host}:{args.port}/"
             threading.Timer(1.0, webbrowser.open, args=(url,)).start()
+        if args.open_browser or not EXEC_REPLACES_THE_PROCESS:
             return subprocess.call(command)
         os.execv(str(python), command)
     except (OSError, RuntimeError, subprocess.CalledProcessError) as error:
