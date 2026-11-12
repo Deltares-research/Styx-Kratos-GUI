@@ -5,7 +5,7 @@ This document provides step-by-step instructions for installing and running the 
 ## Prerequisites
 
 - Python 3.10 or newer
-- pip (Python package manager)
+- pip (Python package manager) **or** [uv](https://docs.astral.sh/uv/) (a fast alternative to pip; every `pip` command below has a `uv` equivalent)
 
 ## Step 1: Build the Wheel (if needed)
 
@@ -19,6 +19,12 @@ pip install build
 python -m build --wheel
 ```
 
+Or with uv (no separate build tool install needed):
+
+```bash
+uv build --wheel
+```
+
 The wheel file will be created in the `dist/` directory as `kratos_gui-0.1.0-py3-none-any.whl`.
 
 ## Step 2: Install the Wheel
@@ -27,6 +33,12 @@ The wheel file will be created in the `dist/` directory as `kratos_gui-0.1.0-py3
 
 ```bash
 pip install dist/kratos_gui-0.1.0-py3-none-any.whl
+```
+
+Or with uv:
+
+```bash
+uv pip install dist/kratos_gui-0.1.0-py3-none-any.whl
 ```
 
 ### Option B: Install in a fresh virtual environment (Recommended)
@@ -47,12 +59,38 @@ source kratos_env/bin/activate
 pip install dist/kratos_gui-0.1.0-py3-none-any.whl
 ```
 
+Or with uv:
+
+```bash
+# Create a virtual environment
+uv venv kratos_env
+
+# Activate it
+# On Windows:
+kratos_env\Scripts\activate
+# On Linux/macOS:
+source kratos_env/bin/activate
+
+# Install the wheel
+uv pip install dist/kratos_gui-0.1.0-py3-none-any.whl
+```
+
+Alternatively, `uv tool` installs the application into its own isolated environment and puts `kratos-gui` on your PATH, without manual activation:
+
+```bash
+uv tool install dist/kratos_gui-0.1.0-py3-none-any.whl
+```
+
 ### Option C: Install from PyPI (after uploading)
 
 Once the package is published to PyPI:
 
 ```bash
 pip install kratos-gui
+# or
+uv pip install kratos-gui
+# or
+uv tool install kratos-gui
 ```
 
 ## Step 3: Verify Installation
@@ -107,6 +145,10 @@ To remove the application:
 
 ```bash
 pip uninstall kratos-gui
+# or, with uv
+uv pip uninstall kratos-gui
+# or, if installed via uv tool
+uv tool uninstall kratos-gui
 ```
 
 If you created a virtual environment, you can also delete it entirely:
@@ -131,6 +173,8 @@ python --version
 
 # Check if the package is installed
 pip list | grep kratos
+# or, with uv
+uv pip list | grep kratos
 ```
 
 If using a virtual environment, make sure it's activated.
@@ -150,6 +194,8 @@ If you encounter import errors, try reinstalling:
 ```bash
 pip uninstall kratos-gui
 pip install dist/kratos_gui-0.1.0-py3-none-any.whl --force-reinstall
+# or, with uv
+uv pip install dist/kratos_gui-0.1.0-py3-none-any.whl --reinstall
 ```
 
 ## Differences from `run.bat` / `run.sh`
@@ -161,7 +207,7 @@ The wheel-based installation provides several advantages:
 | Setup | Creates local venv on first run | Installs dependencies globally |
 | Portability | Ties venv to checkout location | Can be installed anywhere |
 | Distribution | Requires full repository | Single .whl file (~50-100 MB) |
-| Updates | Pull changes from git | pip install --upgrade |
+| Updates | Pull changes from git | pip install --upgrade (or uv pip install --upgrade) |
 | Multi-instance | Creates separate venvs per platform | Shares dependencies |
 
 Both methods run the same application code and offer identical functionality.
