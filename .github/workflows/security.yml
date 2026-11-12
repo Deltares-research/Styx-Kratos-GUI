@@ -38,7 +38,8 @@ jobs:
       - name: pip-audit
         run: |
           python -m pip install pip-audit==2.10.1
-          pip-audit --progress-spinner off -r requirements.txt -r requirements-dev.txt \n            -r requirements-docs.txt
+          pip-audit --progress-spinner off -r requirements.txt -r requirements-dev.txt \
+            -r requirements-docs.txt
 
   gitleaks:
     name: gitleaks
