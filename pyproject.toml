@@ -23,6 +23,7 @@ dependencies = [
 
 [project.scripts]
 deltaresstyx = "backend.launcher:main"
+kratos-cli = "cli.__main__:run"
 
 [tool.setuptools]
 include-package-data = true
