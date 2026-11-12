@@ -371,7 +371,7 @@ to the global size. These are the **Mesh size** and **Band** of the object in th
 
 ```text
 crow.json> mesh --size 5.0 --order 2 --body-size sheetpile 0.5 --band sheetpile 30
-3036 nodes, 1466 elements (1466 Triangle 6)
+3036 nodes, 1466 elements (1466 Triangle 6), average element size 2.183 m
 mesh settings kept: wrote ...\crow.json
 ```
 
@@ -462,7 +462,7 @@ wrote the Kratos deck CROW_excavation_wall to deck:
   initial_materials.json
   ProjectParameters.json
   kratos_gui_units.json
-3036 nodes, 1466 elements (1466 Triangle 6)
+3036 nodes, 1466 elements (1466 Triangle 6), average element size 2.183 m
 next: kratos-cli run deck
 note: interface section 'Wall contact' against 'Clay' (Interface_Soil_Top_retained, ...): normal stiffness 3.75e+06 and shear stiffness 3.75e+05 N/m³, 10 G / t and G / t (E = 9e+05 Pa, nu = 0.2, t = 1 m); cohesion 1441 Pa = 0.480217 x 3000, friction angle 11.2 deg, tan reduced by 0.480217 from 22.5 deg; saturation as the soil's (SaturatedBelowPhreaticLevelLaw). Type a value on the section to replace one.
 note: interface section 'Wall contact' against 'Sand' (Interface_Soil_Bottom): ...

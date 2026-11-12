@@ -30,6 +30,9 @@ class MeshStats:
     by_type: dict[str, int]
     quality_histogram: dict[str, int]
     seconds: float
+    average_size: float = 0.0
+    """The mean edge length of the elements [m]: halfway between each element's
+    shortest and longest edge, averaged. 0 for an empty mesh."""
 
     def to_dict(self) -> dict:
         return {
@@ -38,6 +41,7 @@ class MeshStats:
             "by_type": self.by_type,
             "quality_histogram": self.quality_histogram,
             "seconds": self.seconds,
+            "average_size": self.average_size,
         }
 
 
@@ -493,12 +497,16 @@ def _stats(seconds: float, dim: int = 3) -> MeshStats:
         all_elements.extend(int(tag) for tag in tags)
 
     histogram = {label: 0 for label in QUALITY_LABELS}
+    average_size = 0.0
     if all_elements:
         qualities = gmsh.model.mesh.getElementQualities(all_elements, "minSICN")
         for quality in qualities:
             value = min(1.0, float(quality))
             index = sum(value >= boundary for boundary in QUALITY_BINS)
             histogram[QUALITY_LABELS[index]] += 1
+        shortest = gmsh.model.mesh.getElementQualities(all_elements, "minEdge")
+        longest = gmsh.model.mesh.getElementQualities(all_elements, "maxEdge")
+        average_size = float(sum(shortest) + sum(longest)) / (2 * len(all_elements))
 
     return MeshStats(
         nodes=len(node_tags),
@@ -506,6 +514,7 @@ def _stats(seconds: float, dim: int = 3) -> MeshStats:
         by_type=by_type,
         quality_histogram=histogram,
         seconds=round(seconds, 3),
+        average_size=round(average_size, 4),
     )
 
 

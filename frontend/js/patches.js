@@ -2083,7 +2083,7 @@ App.LivePatches = (function () {
     var was = (App.Stages.activeParts(App.PROJECT, stage) || []).indexOf(key) >= 0;
     var owned = App.Stages.ownership(App.PROJECT, stage, key);
     var list = App.Stages.toggled(App.PROJECT, stage, key);
-    var label = (App.PROJECT.soil_body_labels || {})[key] || key;
+    var label = App.Stages.partLabel(App.PROJECT, key);
     saveStages(list, label + (was ? ' switched off in ' : ' switched on in ') +
                      (stageById(stage) || {}).name +
                      (owned === 'inherited'
@@ -2388,10 +2388,15 @@ App.LivePatches = (function () {
              which part you are naming. */
           var on = stage.activate || [], off = stage.deactivate || [];
           var active = App.Stages.activeParts(App.PROJECT, stage.id) || [];
+          var named = function (keys) {
+            return keys.map(function (key) {
+              return App.Stages.partLabel(App.PROJECT, key);
+            }).join(', ');
+          };
           var changes = el('div.pgrid');
           changes.appendChild(el('div.pgrid-group', { text: 'Staged construction' }));
-          [['Activated here', on.length ? on.join(', ') : '—'],
-           ['Deactivated here', off.length ? off.join(', ') : '—'],
+          [['Activated here', on.length ? named(on) : '—'],
+           ['Deactivated here', off.length ? named(off) : '—'],
            ['Active in this stage', active.length + ' of ' +
             App.Stages.stageableKeys(App.PROJECT).length + ' parts']
           ].forEach(function (row) {
@@ -2412,7 +2417,7 @@ App.LivePatches = (function () {
             var back = el('div.pgrid');
             back.appendChild(el('div.pgrid-group', { text: 'Not in the model here' }));
             hidden.forEach(function (key) {
-              var label = (App.PROJECT.soil_body_labels || {})[key] || key;
+              var label = App.Stages.partLabel(App.PROJECT, key);
               var button = el('button.btn.btn-sm', { text: 'Switch on', type: 'button' });
               button.addEventListener('click', function () {
                 saveStages(App.Stages.toggled(App.PROJECT, stage.id, key),

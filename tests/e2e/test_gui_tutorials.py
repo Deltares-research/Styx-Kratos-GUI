@@ -21,7 +21,7 @@ from core.geometry import solid_model
 from core.kratos import writer
 from tests import mdpa
 from tests.e2e.tutorials import crow as crow_tutorial
-from tests.e2e.tutorials.harness import Tour
+from tests.e2e.tutorials.harness import Tour, open_as_started
 
 
 def gui_deck(page, server) -> dict:
@@ -94,6 +94,7 @@ def test_the_tutorial_builds_its_model(name, app_page, live_server, request):
     if out is not None:
         for old in out.glob("*.png"):
             old.unlink()
+    open_as_started(app_page, live_server["url"])
     tour = Tour(app_page, out=out)
     tour.play(tutorial.STEPS)
     if out is not None:

@@ -175,6 +175,18 @@ class Tour:
 
 # ── clicking the GUI ───────────────────────────────────────────────────────
 
+def open_as_started(page, url: str) -> None:
+    """The app as a reader sees it when Styx starts: the empty 2D project the server
+    opens on. Test setup resets to the demo model, which no reader has seen."""
+    answer = page.request.post(url + "/api/project/new")
+    assert answer.ok, answer.text()
+    page.reload()
+    page.wait_for_function("window.App && App.PROJECT && App.PROJECT.layers"
+                           " && App.PROJECT.layers.length === 0 && App.Viewport"
+                           " && App.Viewport.getScene && App.Viewport.getScene()",
+                           timeout=LONG)
+
+
 def window(page):
     """The window on top."""
     return page.locator("#modal-layer .dialog").last

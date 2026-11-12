@@ -366,6 +366,22 @@
     T.ok(hidden.indexOf('soil_L2__pit') < 0, 'an active body was hidden');
   });
 
+  test('a part is named as the Model explorer names it, not by its key', function () {
+    /* The Stages window lists the parts a stage switches; `beam_1` and
+       `normalload_2` tell the reader nothing the Model explorer would. */
+    var p = {
+      soil_body_labels: { soil_L1__lift1: 'Soil_Top · lift 1' },
+      beams: [{ id: 'beam_1', name: 'SheetPileWall' }],
+      normal_loads: [{ id: 'normalload_2', name: 'WaterLoad_Stage2' }],
+      stages: [{ id: 'beam_1', name: 'A stage that shares the id' }]
+    };
+    T.eq(App.Stages.partLabel(p, 'soil_L1__lift1'), 'Soil_Top · lift 1');
+    T.eq(App.Stages.partLabel(p, 'beam_1'), 'SheetPileWall', 'a stage is not a part');
+    T.eq(App.Stages.partLabel(p, 'normalload_2'), 'WaterLoad_Stage2');
+    T.eq(App.Stages.partLabel(p, 'gone'), 'gone', 'a key with no part is shown as it is');
+    T.eq(App.Stages.partLabel(null, 'beam_1'), 'beam_1');
+  });
+
   test('the hidden set is exactly the complement of the active one', function () {
     var p = project();
     Object.keys(FIXTURE.active_parts).forEach(function (id) {

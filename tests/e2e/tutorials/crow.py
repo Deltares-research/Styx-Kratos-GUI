@@ -35,8 +35,8 @@ def new_project(tour: Tour) -> None:
     tour.picture(mark=TOOL.format("newProject"))
     window(page).get_by_role("button", name="OK").click()
     tour.until(f"App.PROJECT.name === {MODEL.name!r}")
-    tool(tour, "viewMode2D")
-    tour.until("App.PROJECT.dimension === 2")
+    # A new project is a 2D section already: no need to press 2D.
+    tour.until("App.PROJECT.dimension === 2 && App.state.modelMode === '2d'")
 
 
 def project_is_new(tour: Tour) -> None:

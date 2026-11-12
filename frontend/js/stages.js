@@ -470,10 +470,29 @@ App.Stages = (function () {
     });
   }
 
+  /* The name a reader knows a stageable part by, as the Model explorer shows it: a
+     soil body's label ("Soil_Top · lift 1"), or the name of the object with that id
+     (a wall, a load, an interface ...). A key that names nothing is shown as it is. */
+  function partLabel(project, key) {
+    if (!project) return key;
+    var bodies = project.soil_body_labels || {};
+    if (bodies[key]) return bodies[key];
+    var fields = Object.keys(project).filter(function (field) {
+      return field !== 'stages' && Array.isArray(project[field]);
+    });
+    for (var i = 0; i < fields.length; i += 1) {
+      var match = project[fields[i]].filter(function (item) {
+        return item && typeof item === 'object' && item.id === key && item.name;
+      })[0];
+      if (match) return match.name;
+    }
+    return key;
+  }
+
   return {
     GROUNDWATER_FLOW: GROUNDWATER_FLOW, groundwaterFlow: groundwaterFlow,
     chainTo: chainTo, activeParts: activeParts, stageableKeys: stageableKeys,
-    hiddenKeys: hiddenKeys,
+    hiddenKeys: hiddenKeys, partLabel: partLabel,
     order: order, branchProblem: branchProblem, rows: rows, overview: overview,
     added: added, inserted: inserted, removed: removed, copied: copied,
     ownership: ownership, toggled: toggled, setActive: setActive, stateIn: stateIn
