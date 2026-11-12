@@ -28,11 +28,8 @@ window.EDITS_FIXTURE =
             "YOUNG_MODULUS": 2000000.0,
             "POISSON_RATIO": 0.3,
             "DENSITY_SOLID": 1732.9255861365953,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.0,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 1e-08,
             "PERMEABILITY_YY": 1e-08,
             "PERMEABILITY_XY": 0.0,
@@ -54,11 +51,8 @@ window.EDITS_FIXTURE =
             "YOUNG_MODULUS": 30000000.0,
             "POISSON_RATIO": 0.3,
             "DENSITY_SOLID": 1936.7991845056065,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.0,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 1e-05,
             "PERMEABILITY_YY": 1e-05,
             "PERMEABILITY_XY": 0.0,
@@ -97,18 +91,98 @@ window.EDITS_FIXTURE =
           "bottom": -40.0
         }
       ],
-      "excavation": {
-        "x0": 0.0,
-        "x1": 6.0,
-        "z0": 0.0,
-        "z1": 10.0,
-        "floor_y": -7.0,
-        "levels": [
-          -2.0,
-          -4.5,
-          -7.0
-        ]
-      },
+      "lines": [
+        {
+          "id": "floor_1",
+          "name": "Floor of lift 1",
+          "points": [
+            [
+              0.0,
+              -2.0
+            ],
+            [
+              6.0,
+              -2.0
+            ]
+          ]
+        },
+        {
+          "id": "floor_2",
+          "name": "Floor of lift 2",
+          "points": [
+            [
+              0.0,
+              -4.5
+            ],
+            [
+              6.0,
+              -4.5
+            ]
+          ]
+        }
+      ],
+      "bodies": [
+        {
+          "id": "lift1",
+          "name": "lift 1",
+          "layer": "L_top",
+          "point": [
+            3.0,
+            -1.0
+          ],
+          "mat": "m_upper"
+        },
+        {
+          "id": "retained",
+          "name": "retained",
+          "layer": "L_top",
+          "point": [
+            33.0,
+            -3.5
+          ],
+          "mat": "m_upper"
+        },
+        {
+          "id": "lift2",
+          "name": "lift 2",
+          "layer": "L_top",
+          "point": [
+            3.0,
+            -3.25
+          ],
+          "mat": "m_upper"
+        },
+        {
+          "id": "lift3",
+          "name": "lift 3",
+          "layer": "L_top",
+          "point": [
+            3.0,
+            -5.75
+          ],
+          "mat": "m_upper"
+        },
+        {
+          "id": "pit",
+          "name": "below the pit",
+          "layer": "L_mid",
+          "point": [
+            3.0,
+            -8.5
+          ],
+          "mat": "m_upper"
+        },
+        {
+          "id": "retained",
+          "name": "retained",
+          "layer": "L_mid",
+          "point": [
+            33.0,
+            -8.5
+          ],
+          "mat": "m_upper"
+        }
+      ],
       "loads": [
         {
           "id": "surcharge",
@@ -303,6 +377,10 @@ window.EDITS_FIXTURE =
         "thickness": 0.06,
         "specific_weight": null
       },
+      "fluid": {
+        "bulk_modulus": null,
+        "dynamic_viscosity": null
+      },
       "boundary_conditions": [
         {
           "id": "fixed_bottom",
@@ -414,7 +492,6 @@ window.EDITS_FIXTURE =
           "strut": 0.5,
           "wall_contact": 0.5,
           "water_1": 0.5,
-          "soil_L_mid": 1.0,
           "soil_L_mid__pit": 1.0,
           "soil_L_top__lift3": 1.0
         },
@@ -436,34 +513,40 @@ window.EDITS_FIXTURE =
       "stages": [],
       "deck": null,
       "soil_body_keys": [
-        "soil_L_top",
-        "soil_L_mid",
-        "soil_L_bot",
         "soil_L_top__lift1",
+        "soil_L_top__retained",
         "soil_L_top__lift2",
         "soil_L_top__lift3",
         "soil_L_mid__pit",
-        "soil_L_bot__pit"
+        "soil_L_mid__retained",
+        "soil_L_bot"
       ],
       "soil_body_labels": {
-        "soil_L_top": "Soil_Top",
-        "soil_L_mid": "Soil_Middle",
-        "soil_L_bot": "Soil_Bottom",
         "soil_L_top__lift1": "Soil_Top · lift 1",
+        "soil_L_top__retained": "Soil_Top · retained",
         "soil_L_top__lift2": "Soil_Top · lift 2",
         "soil_L_top__lift3": "Soil_Top · lift 3",
         "soil_L_mid__pit": "Soil_Middle · below the pit",
-        "soil_L_bot__pit": "Soil_Bottom · below the pit"
+        "soil_L_mid__retained": "Soil_Middle · retained",
+        "soil_L_bot": "Soil_Bottom"
+      },
+      "soil_body_materials": {
+        "soil_L_top__lift1": "m_upper",
+        "soil_L_top__retained": "m_upper",
+        "soil_L_top__lift2": "m_upper",
+        "soil_L_top__lift3": "m_upper",
+        "soil_L_mid__pit": "m_upper",
+        "soil_L_mid__retained": "m_upper",
+        "soil_L_bot": "m_lower"
       },
       "stageable_parts": [
-        "soil_L_top",
-        "soil_L_mid",
-        "soil_L_bot",
         "soil_L_top__lift1",
+        "soil_L_top__retained",
         "soil_L_top__lift2",
         "soil_L_top__lift3",
         "soil_L_mid__pit",
-        "soil_L_bot__pit",
+        "soil_L_mid__retained",
+        "soil_L_bot",
         "sheetpile",
         "strut",
         "wall_contact",
@@ -496,11 +579,8 @@ window.EDITS_FIXTURE =
             "YOUNG_MODULUS": 2000000.0,
             "POISSON_RATIO": 0.3,
             "DENSITY_SOLID": 1732.9255861365953,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.0,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 1e-08,
             "PERMEABILITY_YY": 1e-08,
             "PERMEABILITY_XY": 0.0,
@@ -522,11 +602,8 @@ window.EDITS_FIXTURE =
             "YOUNG_MODULUS": 30000000.0,
             "POISSON_RATIO": 0.3,
             "DENSITY_SOLID": 1936.7991845056065,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.0,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 1e-05,
             "PERMEABILITY_YY": 1e-05,
             "PERMEABILITY_XY": 0.0,
@@ -565,18 +642,98 @@ window.EDITS_FIXTURE =
           "bottom": -40.0
         }
       ],
-      "excavation": {
-        "x0": 0.0,
-        "x1": 6.0,
-        "z0": 0.0,
-        "z1": 10.0,
-        "floor_y": -7.0,
-        "levels": [
-          -2.0,
-          -4.5,
-          -7.0
-        ]
-      },
+      "lines": [
+        {
+          "id": "floor_1",
+          "name": "Floor of lift 1",
+          "points": [
+            [
+              0.0,
+              -2.0
+            ],
+            [
+              6.0,
+              -2.0
+            ]
+          ]
+        },
+        {
+          "id": "floor_2",
+          "name": "Floor of lift 2",
+          "points": [
+            [
+              0.0,
+              -4.5
+            ],
+            [
+              6.0,
+              -4.5
+            ]
+          ]
+        }
+      ],
+      "bodies": [
+        {
+          "id": "lift1",
+          "name": "lift 1",
+          "layer": "L_top",
+          "point": [
+            3.0,
+            -1.0
+          ],
+          "mat": "m_upper"
+        },
+        {
+          "id": "retained",
+          "name": "retained",
+          "layer": "L_top",
+          "point": [
+            33.0,
+            -3.5
+          ],
+          "mat": "m_upper"
+        },
+        {
+          "id": "lift2",
+          "name": "lift 2",
+          "layer": "L_top",
+          "point": [
+            3.0,
+            -3.25
+          ],
+          "mat": "m_upper"
+        },
+        {
+          "id": "lift3",
+          "name": "lift 3",
+          "layer": "L_top",
+          "point": [
+            3.0,
+            -5.75
+          ],
+          "mat": "m_upper"
+        },
+        {
+          "id": "pit",
+          "name": "below the pit",
+          "layer": "L_mid",
+          "point": [
+            3.0,
+            -8.5
+          ],
+          "mat": "m_upper"
+        },
+        {
+          "id": "retained",
+          "name": "retained",
+          "layer": "L_mid",
+          "point": [
+            33.0,
+            -8.5
+          ],
+          "mat": "m_upper"
+        }
+      ],
       "loads": [
         {
           "id": "surcharge",
@@ -771,6 +928,10 @@ window.EDITS_FIXTURE =
         "thickness": 0.06,
         "specific_weight": null
       },
+      "fluid": {
+        "bulk_modulus": null,
+        "dynamic_viscosity": null
+      },
       "boundary_conditions": [
         {
           "id": "fixed_bottom",
@@ -882,7 +1043,6 @@ window.EDITS_FIXTURE =
           "strut": 0.5,
           "wall_contact": 0.5,
           "water_1": 0.5,
-          "soil_L_mid": 1.0,
           "soil_L_mid__pit": 1.0,
           "soil_L_top__lift3": 1.0,
           "drawn_0": 0.5
@@ -936,34 +1096,40 @@ window.EDITS_FIXTURE =
       "stages": [],
       "deck": null,
       "soil_body_keys": [
-        "soil_L_top",
-        "soil_L_mid",
-        "soil_L_bot",
         "soil_L_top__lift1",
+        "soil_L_top__retained",
         "soil_L_top__lift2",
         "soil_L_top__lift3",
         "soil_L_mid__pit",
-        "soil_L_bot__pit"
+        "soil_L_mid__retained",
+        "soil_L_bot"
       ],
       "soil_body_labels": {
-        "soil_L_top": "Soil_Top",
-        "soil_L_mid": "Soil_Middle",
-        "soil_L_bot": "Soil_Bottom",
         "soil_L_top__lift1": "Soil_Top · lift 1",
+        "soil_L_top__retained": "Soil_Top · retained",
         "soil_L_top__lift2": "Soil_Top · lift 2",
         "soil_L_top__lift3": "Soil_Top · lift 3",
         "soil_L_mid__pit": "Soil_Middle · below the pit",
-        "soil_L_bot__pit": "Soil_Bottom · below the pit"
+        "soil_L_mid__retained": "Soil_Middle · retained",
+        "soil_L_bot": "Soil_Bottom"
+      },
+      "soil_body_materials": {
+        "soil_L_top__lift1": "m_upper",
+        "soil_L_top__retained": "m_upper",
+        "soil_L_top__lift2": "m_upper",
+        "soil_L_top__lift3": "m_upper",
+        "soil_L_mid__pit": "m_upper",
+        "soil_L_mid__retained": "m_upper",
+        "soil_L_bot": "m_lower"
       },
       "stageable_parts": [
-        "soil_L_top",
-        "soil_L_mid",
-        "soil_L_bot",
         "soil_L_top__lift1",
+        "soil_L_top__retained",
         "soil_L_top__lift2",
         "soil_L_top__lift3",
         "soil_L_mid__pit",
-        "soil_L_bot__pit",
+        "soil_L_mid__retained",
+        "soil_L_bot",
         "sheetpile",
         "strut",
         "wall_contact",
@@ -997,11 +1163,8 @@ window.EDITS_FIXTURE =
             "YOUNG_MODULUS": 2000000.0,
             "POISSON_RATIO": 0.3,
             "DENSITY_SOLID": 1732.9255861365953,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.0,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 1e-08,
             "PERMEABILITY_YY": 1e-08,
             "PERMEABILITY_XY": 0.0,
@@ -1023,11 +1186,8 @@ window.EDITS_FIXTURE =
             "YOUNG_MODULUS": 30000000.0,
             "POISSON_RATIO": 0.3,
             "DENSITY_SOLID": 1936.7991845056065,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.0,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 1e-05,
             "PERMEABILITY_YY": 1e-05,
             "PERMEABILITY_XY": 0.0,
@@ -1049,11 +1209,8 @@ window.EDITS_FIXTURE =
             "YOUNG_MODULUS": 2000000.0,
             "POISSON_RATIO": 0.3,
             "DENSITY_SOLID": 1732.9255861365953,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.0,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 1e-08,
             "PERMEABILITY_YY": 1e-08,
             "PERMEABILITY_XY": 0.0,
@@ -1092,18 +1249,98 @@ window.EDITS_FIXTURE =
           "bottom": -40.0
         }
       ],
-      "excavation": {
-        "x0": 0.0,
-        "x1": 6.0,
-        "z0": 0.0,
-        "z1": 10.0,
-        "floor_y": -7.0,
-        "levels": [
-          -2.0,
-          -4.5,
-          -7.0
-        ]
-      },
+      "lines": [
+        {
+          "id": "floor_1",
+          "name": "Floor of lift 1",
+          "points": [
+            [
+              0.0,
+              -2.0
+            ],
+            [
+              6.0,
+              -2.0
+            ]
+          ]
+        },
+        {
+          "id": "floor_2",
+          "name": "Floor of lift 2",
+          "points": [
+            [
+              0.0,
+              -4.5
+            ],
+            [
+              6.0,
+              -4.5
+            ]
+          ]
+        }
+      ],
+      "bodies": [
+        {
+          "id": "lift1",
+          "name": "lift 1",
+          "layer": "L_top",
+          "point": [
+            3.0,
+            -1.0
+          ],
+          "mat": "m_upper"
+        },
+        {
+          "id": "retained",
+          "name": "retained",
+          "layer": "L_top",
+          "point": [
+            33.0,
+            -3.5
+          ],
+          "mat": "m_upper"
+        },
+        {
+          "id": "lift2",
+          "name": "lift 2",
+          "layer": "L_top",
+          "point": [
+            3.0,
+            -3.25
+          ],
+          "mat": "m_upper"
+        },
+        {
+          "id": "lift3",
+          "name": "lift 3",
+          "layer": "L_top",
+          "point": [
+            3.0,
+            -5.75
+          ],
+          "mat": "m_upper"
+        },
+        {
+          "id": "pit",
+          "name": "below the pit",
+          "layer": "L_mid",
+          "point": [
+            3.0,
+            -8.5
+          ],
+          "mat": "m_upper"
+        },
+        {
+          "id": "retained",
+          "name": "retained",
+          "layer": "L_mid",
+          "point": [
+            33.0,
+            -8.5
+          ],
+          "mat": "m_upper"
+        }
+      ],
       "loads": [
         {
           "id": "surcharge",
@@ -1298,6 +1535,10 @@ window.EDITS_FIXTURE =
         "thickness": 0.06,
         "specific_weight": null
       },
+      "fluid": {
+        "bulk_modulus": null,
+        "dynamic_viscosity": null
+      },
       "boundary_conditions": [
         {
           "id": "fixed_bottom",
@@ -1409,7 +1650,6 @@ window.EDITS_FIXTURE =
           "strut": 0.5,
           "wall_contact": 0.5,
           "water_1": 0.5,
-          "soil_L_mid": 1.0,
           "soil_L_mid__pit": 1.0,
           "soil_L_top__lift3": 1.0
         },
@@ -1431,34 +1671,40 @@ window.EDITS_FIXTURE =
       "stages": [],
       "deck": null,
       "soil_body_keys": [
-        "soil_L_top",
-        "soil_L_mid",
-        "soil_L_bot",
         "soil_L_top__lift1",
+        "soil_L_top__retained",
         "soil_L_top__lift2",
         "soil_L_top__lift3",
         "soil_L_mid__pit",
-        "soil_L_bot__pit"
+        "soil_L_mid__retained",
+        "soil_L_bot"
       ],
       "soil_body_labels": {
-        "soil_L_top": "Soil_Top",
-        "soil_L_mid": "Soil_Middle",
-        "soil_L_bot": "Soil_Bottom",
         "soil_L_top__lift1": "Soil_Top · lift 1",
+        "soil_L_top__retained": "Soil_Top · retained",
         "soil_L_top__lift2": "Soil_Top · lift 2",
         "soil_L_top__lift3": "Soil_Top · lift 3",
         "soil_L_mid__pit": "Soil_Middle · below the pit",
-        "soil_L_bot__pit": "Soil_Bottom · below the pit"
+        "soil_L_mid__retained": "Soil_Middle · retained",
+        "soil_L_bot": "Soil_Bottom"
+      },
+      "soil_body_materials": {
+        "soil_L_top__lift1": "m_upper",
+        "soil_L_top__retained": "m_upper",
+        "soil_L_top__lift2": "m_upper",
+        "soil_L_top__lift3": "m_upper",
+        "soil_L_mid__pit": "m_upper",
+        "soil_L_mid__retained": "m_upper",
+        "soil_L_bot": "m_lower"
       },
       "stageable_parts": [
-        "soil_L_top",
-        "soil_L_mid",
-        "soil_L_bot",
         "soil_L_top__lift1",
+        "soil_L_top__retained",
         "soil_L_top__lift2",
         "soil_L_top__lift3",
         "soil_L_mid__pit",
-        "soil_L_bot__pit",
+        "soil_L_mid__retained",
+        "soil_L_bot",
         "sheetpile",
         "strut",
         "wall_contact",
@@ -1491,11 +1737,8 @@ window.EDITS_FIXTURE =
             "YOUNG_MODULUS": 2000000.0,
             "POISSON_RATIO": 0.3,
             "DENSITY_SOLID": 1732.9255861365953,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.0,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 1e-08,
             "PERMEABILITY_YY": 1e-08,
             "PERMEABILITY_XY": 0.0,
@@ -1517,11 +1760,8 @@ window.EDITS_FIXTURE =
             "YOUNG_MODULUS": 30000000.0,
             "POISSON_RATIO": 0.3,
             "DENSITY_SOLID": 1936.7991845056065,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.0,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 1e-05,
             "PERMEABILITY_YY": 1e-05,
             "PERMEABILITY_XY": 0.0,
@@ -1560,18 +1800,98 @@ window.EDITS_FIXTURE =
           "bottom": -40.0
         }
       ],
-      "excavation": {
-        "x0": 0.0,
-        "x1": 6.0,
-        "z0": 0.0,
-        "z1": 10.0,
-        "floor_y": -7.0,
-        "levels": [
-          -2.0,
-          -4.5,
-          -7.0
-        ]
-      },
+      "lines": [
+        {
+          "id": "floor_1",
+          "name": "Floor of lift 1",
+          "points": [
+            [
+              0.0,
+              -2.0
+            ],
+            [
+              6.0,
+              -2.0
+            ]
+          ]
+        },
+        {
+          "id": "floor_2",
+          "name": "Floor of lift 2",
+          "points": [
+            [
+              0.0,
+              -4.5
+            ],
+            [
+              6.0,
+              -4.5
+            ]
+          ]
+        }
+      ],
+      "bodies": [
+        {
+          "id": "lift1",
+          "name": "lift 1",
+          "layer": "L_top",
+          "point": [
+            3.0,
+            -1.0
+          ],
+          "mat": "m_upper"
+        },
+        {
+          "id": "retained",
+          "name": "retained",
+          "layer": "L_top",
+          "point": [
+            33.0,
+            -3.5
+          ],
+          "mat": "m_upper"
+        },
+        {
+          "id": "lift2",
+          "name": "lift 2",
+          "layer": "L_top",
+          "point": [
+            3.0,
+            -3.25
+          ],
+          "mat": "m_upper"
+        },
+        {
+          "id": "lift3",
+          "name": "lift 3",
+          "layer": "L_top",
+          "point": [
+            3.0,
+            -5.75
+          ],
+          "mat": "m_upper"
+        },
+        {
+          "id": "pit",
+          "name": "below the pit",
+          "layer": "L_mid",
+          "point": [
+            3.0,
+            -8.5
+          ],
+          "mat": "m_upper"
+        },
+        {
+          "id": "retained",
+          "name": "retained",
+          "layer": "L_mid",
+          "point": [
+            33.0,
+            -8.5
+          ],
+          "mat": "m_upper"
+        }
+      ],
       "loads": [
         {
           "id": "surcharge",
@@ -1737,6 +2057,10 @@ window.EDITS_FIXTURE =
         "thickness": 0.06,
         "specific_weight": null
       },
+      "fluid": {
+        "bulk_modulus": null,
+        "dynamic_viscosity": null
+      },
       "boundary_conditions": [
         {
           "id": "fixed_bottom",
@@ -1846,7 +2170,6 @@ window.EDITS_FIXTURE =
         "body_sizes": {
           "sheetpile": 0.5,
           "water_1": 0.5,
-          "soil_L_mid": 1.0,
           "soil_L_mid__pit": 1.0,
           "soil_L_top__lift3": 1.0
         },
@@ -1868,34 +2191,40 @@ window.EDITS_FIXTURE =
       "stages": [],
       "deck": null,
       "soil_body_keys": [
-        "soil_L_top",
-        "soil_L_mid",
-        "soil_L_bot",
         "soil_L_top__lift1",
+        "soil_L_top__retained",
         "soil_L_top__lift2",
         "soil_L_top__lift3",
         "soil_L_mid__pit",
-        "soil_L_bot__pit"
+        "soil_L_mid__retained",
+        "soil_L_bot"
       ],
       "soil_body_labels": {
-        "soil_L_top": "Soil_Top",
-        "soil_L_mid": "Soil_Middle",
-        "soil_L_bot": "Soil_Bottom",
         "soil_L_top__lift1": "Soil_Top · lift 1",
+        "soil_L_top__retained": "Soil_Top · retained",
         "soil_L_top__lift2": "Soil_Top · lift 2",
         "soil_L_top__lift3": "Soil_Top · lift 3",
         "soil_L_mid__pit": "Soil_Middle · below the pit",
-        "soil_L_bot__pit": "Soil_Bottom · below the pit"
+        "soil_L_mid__retained": "Soil_Middle · retained",
+        "soil_L_bot": "Soil_Bottom"
+      },
+      "soil_body_materials": {
+        "soil_L_top__lift1": "m_upper",
+        "soil_L_top__retained": "m_upper",
+        "soil_L_top__lift2": "m_upper",
+        "soil_L_top__lift3": "m_upper",
+        "soil_L_mid__pit": "m_upper",
+        "soil_L_mid__retained": "m_upper",
+        "soil_L_bot": "m_lower"
       },
       "stageable_parts": [
-        "soil_L_top",
-        "soil_L_mid",
-        "soil_L_bot",
         "soil_L_top__lift1",
+        "soil_L_top__retained",
         "soil_L_top__lift2",
         "soil_L_top__lift3",
         "soil_L_mid__pit",
-        "soil_L_bot__pit",
+        "soil_L_mid__retained",
+        "soil_L_bot",
         "sheetpile",
         "water_1",
         "water_2",
@@ -1926,11 +2255,8 @@ window.EDITS_FIXTURE =
             "YOUNG_MODULUS": 2000000.0,
             "POISSON_RATIO": 0.3,
             "DENSITY_SOLID": 1732.9255861365953,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.0,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 1e-08,
             "PERMEABILITY_YY": 1e-08,
             "PERMEABILITY_XY": 0.0,
@@ -1952,11 +2278,8 @@ window.EDITS_FIXTURE =
             "YOUNG_MODULUS": 30000000.0,
             "POISSON_RATIO": 0.3,
             "DENSITY_SOLID": 1936.7991845056065,
-            "DENSITY_WATER": 1019.367991845056,
             "POROSITY": 0.0,
             "BULK_MODULUS_SOLID": 10000000000.0,
-            "BULK_MODULUS_FLUID": 2200000000.0,
-            "DYNAMIC_VISCOSITY": 0.001,
             "PERMEABILITY_XX": 1e-05,
             "PERMEABILITY_YY": 1e-05,
             "PERMEABILITY_XY": 0.0,
@@ -1995,18 +2318,98 @@ window.EDITS_FIXTURE =
           "bottom": -40.0
         }
       ],
-      "excavation": {
-        "x0": 0.0,
-        "x1": 6.0,
-        "z0": 0.0,
-        "z1": 10.0,
-        "floor_y": -7.0,
-        "levels": [
-          -2.0,
-          -4.5,
-          -7.0
-        ]
-      },
+      "lines": [
+        {
+          "id": "floor_1",
+          "name": "Floor of lift 1",
+          "points": [
+            [
+              0.0,
+              -2.0
+            ],
+            [
+              6.0,
+              -2.0
+            ]
+          ]
+        },
+        {
+          "id": "floor_2",
+          "name": "Floor of lift 2",
+          "points": [
+            [
+              0.0,
+              -4.5
+            ],
+            [
+              6.0,
+              -4.5
+            ]
+          ]
+        }
+      ],
+      "bodies": [
+        {
+          "id": "lift1",
+          "name": "lift 1",
+          "layer": "L_top",
+          "point": [
+            3.0,
+            -1.0
+          ],
+          "mat": "m_upper"
+        },
+        {
+          "id": "retained",
+          "name": "retained",
+          "layer": "L_top",
+          "point": [
+            33.0,
+            -3.5
+          ],
+          "mat": "m_upper"
+        },
+        {
+          "id": "lift2",
+          "name": "lift 2",
+          "layer": "L_top",
+          "point": [
+            3.0,
+            -3.25
+          ],
+          "mat": "m_upper"
+        },
+        {
+          "id": "lift3",
+          "name": "lift 3",
+          "layer": "L_top",
+          "point": [
+            3.0,
+            -5.75
+          ],
+          "mat": "m_upper"
+        },
+        {
+          "id": "pit",
+          "name": "below the pit",
+          "layer": "L_mid",
+          "point": [
+            3.0,
+            -8.5
+          ],
+          "mat": "m_upper"
+        },
+        {
+          "id": "retained",
+          "name": "retained",
+          "layer": "L_mid",
+          "point": [
+            33.0,
+            -8.5
+          ],
+          "mat": "m_upper"
+        }
+      ],
       "loads": [
         {
           "id": "surcharge",
@@ -2201,6 +2604,10 @@ window.EDITS_FIXTURE =
         "thickness": 0.06,
         "specific_weight": null
       },
+      "fluid": {
+        "bulk_modulus": null,
+        "dynamic_viscosity": null
+      },
       "boundary_conditions": [
         {
           "id": "fixed_bottom",
@@ -2312,7 +2719,6 @@ window.EDITS_FIXTURE =
           "strut": 0.5,
           "wall_contact": 0.5,
           "water_1": 0.5,
-          "soil_L_mid": 1.0,
           "soil_L_mid__pit": 1.0,
           "soil_L_top__lift3": 1.0
         },
@@ -2454,34 +2860,40 @@ window.EDITS_FIXTURE =
       ],
       "deck": null,
       "soil_body_keys": [
-        "soil_L_top",
-        "soil_L_mid",
-        "soil_L_bot",
         "soil_L_top__lift1",
+        "soil_L_top__retained",
         "soil_L_top__lift2",
         "soil_L_top__lift3",
         "soil_L_mid__pit",
-        "soil_L_bot__pit"
+        "soil_L_mid__retained",
+        "soil_L_bot"
       ],
       "soil_body_labels": {
-        "soil_L_top": "Soil_Top",
-        "soil_L_mid": "Soil_Middle",
-        "soil_L_bot": "Soil_Bottom",
         "soil_L_top__lift1": "Soil_Top · lift 1",
+        "soil_L_top__retained": "Soil_Top · retained",
         "soil_L_top__lift2": "Soil_Top · lift 2",
         "soil_L_top__lift3": "Soil_Top · lift 3",
         "soil_L_mid__pit": "Soil_Middle · below the pit",
-        "soil_L_bot__pit": "Soil_Bottom · below the pit"
+        "soil_L_mid__retained": "Soil_Middle · retained",
+        "soil_L_bot": "Soil_Bottom"
+      },
+      "soil_body_materials": {
+        "soil_L_top__lift1": "m_upper",
+        "soil_L_top__retained": "m_upper",
+        "soil_L_top__lift2": "m_upper",
+        "soil_L_top__lift3": "m_upper",
+        "soil_L_mid__pit": "m_upper",
+        "soil_L_mid__retained": "m_upper",
+        "soil_L_bot": "m_lower"
       },
       "stageable_parts": [
-        "soil_L_top",
-        "soil_L_mid",
-        "soil_L_bot",
         "soil_L_top__lift1",
+        "soil_L_top__retained",
         "soil_L_top__lift2",
         "soil_L_top__lift3",
         "soil_L_mid__pit",
-        "soil_L_bot__pit",
+        "soil_L_mid__retained",
+        "soil_L_bot",
         "sheetpile",
         "strut",
         "wall_contact",
@@ -2636,6 +3048,32 @@ window.EDITS_FIXTURE =
       "project": "pit",
       "body": {
         "loads": []
+      }
+    },
+    {
+      "title": "a line",
+      "call": "Lines.remove",
+      "target": "floor_2",
+      "method": "PATCH",
+      "route": "/api/project/lines",
+      "project": "pit",
+      "body": {
+        "lines": [
+          {
+            "id": "floor_1",
+            "name": "Floor of lift 1",
+            "points": [
+              [
+                0.0,
+                -2.0
+              ],
+              [
+                6.0,
+                -2.0
+              ]
+            ]
+          }
+        ]
       }
     },
     {
@@ -2836,11 +3274,8 @@ window.EDITS_FIXTURE =
               "YOUNG_MODULUS": 2000000.0,
               "POISSON_RATIO": 0.3,
               "DENSITY_SOLID": 1732.9255861365953,
-              "DENSITY_WATER": 1019.367991845056,
               "POROSITY": 0.0,
               "BULK_MODULUS_SOLID": 10000000000.0,
-              "BULK_MODULUS_FLUID": 2200000000.0,
-              "DYNAMIC_VISCOSITY": 0.001,
               "PERMEABILITY_XX": 1e-08,
               "PERMEABILITY_YY": 1e-08,
               "PERMEABILITY_XY": 0.0,
@@ -2862,11 +3297,8 @@ window.EDITS_FIXTURE =
               "YOUNG_MODULUS": 30000000.0,
               "POISSON_RATIO": 0.3,
               "DENSITY_SOLID": 1936.7991845056065,
-              "DENSITY_WATER": 1019.367991845056,
               "POROSITY": 0.0,
               "BULK_MODULUS_SOLID": 10000000000.0,
-              "BULK_MODULUS_FLUID": 2200000000.0,
-              "DYNAMIC_VISCOSITY": 0.001,
               "PERMEABILITY_XX": 1e-05,
               "PERMEABILITY_YY": 1e-05,
               "PERMEABILITY_XY": 0.0,
@@ -3054,11 +3486,8 @@ window.EDITS_FIXTURE =
               "YOUNG_MODULUS": 2000000.0,
               "POISSON_RATIO": 0.3,
               "DENSITY_SOLID": 1732.9255861365953,
-              "DENSITY_WATER": 1019.367991845056,
               "POROSITY": 0.0,
               "BULK_MODULUS_SOLID": 10000000000.0,
-              "BULK_MODULUS_FLUID": 2200000000.0,
-              "DYNAMIC_VISCOSITY": 0.001,
               "PERMEABILITY_XX": 1e-08,
               "PERMEABILITY_YY": 1e-08,
               "PERMEABILITY_XY": 0.0,
@@ -3080,11 +3509,8 @@ window.EDITS_FIXTURE =
               "YOUNG_MODULUS": 30000000.0,
               "POISSON_RATIO": 0.3,
               "DENSITY_SOLID": 1936.7991845056065,
-              "DENSITY_WATER": 1019.367991845056,
               "POROSITY": 0.0,
               "BULK_MODULUS_SOLID": 10000000000.0,
-              "BULK_MODULUS_FLUID": 2200000000.0,
-              "DYNAMIC_VISCOSITY": 0.001,
               "PERMEABILITY_XX": 1e-05,
               "PERMEABILITY_YY": 1e-05,
               "PERMEABILITY_XY": 0.0,
@@ -3099,7 +3525,11 @@ window.EDITS_FIXTURE =
             "r_inter": 0.7,
             "interface_permeability": "Neutral"
           }
-        ]
+        ],
+        "fluid": {
+          "bulk_modulus": null,
+          "dynamic_viscosity": null
+        }
       }
     },
     {

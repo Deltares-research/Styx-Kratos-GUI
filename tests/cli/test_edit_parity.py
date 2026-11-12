@@ -110,6 +110,11 @@ def _conditions(project: dict, id: str) -> dict:
     return {"boundary_conditions": edits.without(project["boundary_conditions"], id)}
 
 
+def _lines(project: dict, id: str) -> dict:
+    """`lines.js` `remove`."""
+    return {"lines": edits.without(project["lines"], id)}
+
+
 def _layers_from_the_tree(project: dict, id: str) -> dict:
     """The Model explorer's Delete on a layer (`SoilLayersDialog.removeById`, then
     `App.commitSelectionEdit`): the stack, with the domain, the water and the custom
@@ -131,8 +136,9 @@ def _stages(project: dict, id: str) -> dict:
 
 
 def _materials(project: dict, id: str) -> dict:
-    """The Material sets window's Delete, then its OK: the library without it."""
-    return {"materials": edits.without(project["materials"], id)}
+    """The Material sets window's Delete, then its OK: the library without it, and the
+    water edited in the same window, as it was."""
+    return {"materials": edits.without(project["materials"], id), "fluid": project["fluid"]}
 
 
 @dataclass(frozen=True)
@@ -172,6 +178,8 @@ CASES = [
          _structures("beams", "beam_sections"), project="pit without strut or contact"),
     Case("a line load", ("load", "remove", "surcharge"), "App.Loads.remove",
          "Loads.remove", STRUCTURES, _loads),
+    Case("a line", ("line", "remove", "floor_2"), "App.Lines.remove", "Lines.remove",
+         "/api/project/lines", _lines),
     Case("a normal load", ("normal-load", "remove", "water_1"), "App.NormalLoads.remove",
          "NormalLoads.remove", STRUCTURES, _structures("normal_loads", None)),
     Case("a boundary condition", ("boundary", "remove", "roller_front"),

@@ -26,12 +26,12 @@ jobs:
       fail-fast: false
       matrix:
         os: [windows-latest, ubuntu-latest, macos-latest]
-        # The oldest Python the README allows, and a current one.
-        python: ["3.10", "3.13"]
+        # The oldest Python the README allows, and the newest.
+        python: ["3.10", "3.15"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python }}
 

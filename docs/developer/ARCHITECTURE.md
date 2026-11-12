@@ -16,9 +16,9 @@ the tests).
 | Part | What |
 |---|---|
 | Web framework | FastAPI 0.143.0 and Uvicorn 0.34.0 |
-| Validation | Pydantic 2.12.5. `Project` in `core/model/schemas.py` is the one description of a model. |
+| Validation | Pydantic 2.14.2. `Project` in `core/model/schemas.py` is the one description of a model. |
 | Geometry and mesh | Gmsh 4.13.1 (OpenCASCADE kernel) |
-| Numerics | NumPy 2.2.6 (Python 3.10) or 2.3.5 (Python 3.11 and newer) |
+| Numerics | NumPy 2.2.6 (Python 3.10), 2.3.5 (Python 3.11 to 3.14) or 2.5.4 (Python 3.15 and newer) |
 | State | One project in memory (`backend/store.py`). No database and no login. Runs are folders on disk. |
 | Processes | Gmsh in a `ProcessPoolExecutor(max_workers=1)` (`core/gmsh_worker.py`). Kratos in a new subprocess for each run (`core/analysis/calculation.py`). |
 | Solver | Kratos Multiphysics GeoMechanicsApplication. The launcher does not install it. Styx finds it through `kratos.local.json` or `KRATOS_GUI_PYTHON` and `KRATOS_GUI_KRATOS`. |
@@ -42,7 +42,7 @@ Module paths are relative to `core/`.
 | Step | Module | What happens |
 |---|---|---|
 | 1. Edit | `model/schemas.py`, `session.py` | Each edit goes through one path (`session._edited`): it drops the mesh size of a body the edit took away, then checks the full project again |
-| 2. Build | `geometry/solid_model.py` | Boxes, then a boolean fragment, then the pit cut out, then the structures embedded. 2D sections and 3D solids. |
+| 2. Build | `geometry/solid_model.py` | A solid for each soil piece (`model/regions.py` finds the pieces), then a boolean fragment, then the structures embedded. 2D sections and 3D solids. |
 | 3. Draw | `geometry/tessellation.py` | A fast surface triangulation (about 0.1 s) for the view only. It is not a finite-element mesh. |
 | 4. Mesh | `geometry/meshing.py` | The finite-element mesh, made again from the geometry each time |
 | 5. Split | `kratos/interfaces.py` | Duplicates the nodes along a wall and writes zero-thickness contact elements |
@@ -77,12 +77,12 @@ is one step of the pipeline:
 
 | Package | Modules |
 |---|---|
-| `core/model/` | `schemas.py` (the `Project`), `units.py` (unit systems), `soil_models.py` (the soil models a material can be: law, parameters, defaults), `migration.py` (old project files), `templates.py` (empty and demo projects), `drafts.py` (where a new structure goes, as the GUI tools put it), `stages.py` (stage tree → Kratos stages), `script_writer.py` (the model as a Python script), `wall_translation.py` and `load_translation.py` (2D ↔ 3D) |
+| `core/model/` | `schemas.py` (the `Project`), `units.py` (unit systems), `soil_models.py` (the soil models a material can be: law, parameters, defaults), `regions.py` (the pieces lines and sheet piles cut a layer into), `migration.py` (old project files), `templates.py` (empty and demo projects), `drafts.py` (where a new structure goes, as the GUI tools put it), `stages.py` (stage tree → Kratos stages), `script_writer.py` (the model as a Python script), `wall_translation.py` and `load_translation.py` (2D ↔ 3D) |
 | `core/geometry/` | `solid_model.py` (OpenCASCADE solids), `tessellation.py` (view), `meshing.py` (finite-element mesh), `cad_import.py` (CAD files), `primitives.py` (recipes for drawn solids) |
 | `core/kratos/` | `writer.py` (the deck), `materials.py` (`MaterialParameters.json`), `parameters.py` (`ProjectParameters.json`: stages, solver, output), `condition_checks.py` (the boundary condition warnings the export and `check` share), `interfaces.py` (split nodes along walls), `deck_files.py` (file names of the deck), `external_deck.py` (existing decks), `mdpa_reader.py`, `node_parts.py` |
 | `core/analysis/` | `calculation.py` (run folder, subprocess, failure messages), `kratos_main.py` (runs inside the Python of Kratos) |
 | `core/results/` | `catalog.py` (list of runs, file access, cache), `gid_reader.py` (GiD ASCII), `fields.py` (quantities, units, invariants), `mesh.py` (buffers for the view), `parts.py`, `members.py` (curves along walls and interfaces) |
-| `core/` | `session.py` (each edit of a project, and the project file: the HTTP routes and the command line both use it), `gmsh_worker.py` (the Gmsh process), `scripting.py` (`run <file.py>`). They send work to several packages, so they are above all five. |
+| `core/` | `session.py` (each edit of a project, and the project file: the HTTP routes and the command line both use it), `gmsh_worker.py` (the Gmsh process), `scripting.py` (`run <file.py>`). They send work to several packages, so they are above all five. `version.py` (the version of Styx that the About box, `kratos-cli --version` and the release workflow use) is outside the packages too. |
 
 ### Import rule
 
@@ -114,14 +114,14 @@ the HTTP parts.
 
 | Group | Module | Routes |
 |---|---|---|
-| Project | `routes/project.py` | `GET`/`PUT /api/project`; `POST /api/project/new`, `/reset`, `/script`, `/script/save`, `/stages/defaults`; `PATCH /api/project/layers`, `/materials`, `/structures`, `/conditions`, `/stages`, `/dimension`, `/units`; `PUT /api/project/water`; `DELETE /api/project/custom_parts` |
+| Project | `routes/project.py` | `GET`/`PUT /api/project`; `POST /api/project/new`, `/reset`, `/script`, `/script/save`, `/stages/defaults`, `/migration-notes`; `PATCH /api/project/layers`, `/materials` (the soils and `fluid`), `/lines`, `/bodies/{key}`, `/structures`, `/conditions`, `/stages`, `/dimension`, `/units`; `PUT /api/project/water`; `DELETE /api/project/custom_parts` |
 | Geometry | `routes/geometry.py` | `GET /api/geometry`; `POST /api/geometry/create`, `/import`; `DELETE /api/geometry/parts/{key}` |
 | Mesh | `routes/mesh.py` | `POST /api/mesh`, `/api/mesh/labels`, `/api/mesh/node-parts` |
 | Decks | `routes/decks.py` | `POST /api/export/mdpa`, `/api/import/mdpa`, `/api/calculate` |
 | Runs | `routes/results.py` | `GET /api/results/runs`, `/runs/{run}`, `/runs/{run}/files/{name}`, `/runs/{run}/archive` |
 | Results of a stage | `routes/results.py` | `GET /api/results/runs/{run}/stages/{n}/fields`, `/mesh`, `/field/{name}`, `/displacement`, `/at/{node}`, `/parts` |
 | Results of a member | `routes/results.py` | `GET /api/results/runs/{run}/members`, `/members/{member}/{quantity}` |
-| Health | `main.py` | `GET /api/health` |
+| Health | `main.py` | `GET /api/health` (also the version of Styx) |
 
 ## Command-line modules (`cli/`)
 
@@ -132,9 +132,9 @@ the HTTP parts.
 | `cli/terminal/files.py` | The project file that a command reads, and where an edit is written |
 | `cli/terminal/output.py`, `style.py`, `tables.py` | The answer of a command: text, JSON, colour, CSV |
 | `cli/terminal/words.py` | How the words of a command line become a command and its values |
-| `cli/commands/project.py` | `new`, `show`, `check`, `build`, `script`, `dimension`, `units`, `water` |
+| `cli/commands/project.py` | `new`, `show`, `check`, `build`, `script`, `dimension`, `units`, `water`, `fluid` |
 | `cli/commands/edit.py` | `get`, `set`, `add`, `remove` |
-| `cli/commands/ground.py`, `volumes.py` | `domain`, `material`, `layer`, `excavation`, `parts`; `volume` |
+| `cli/commands/ground.py`, `volumes.py` | `domain`, `material`, `layer`, `line`, `body`, `parts`; `volume` |
 | `cli/commands/structures.py` | `section`, `beam`, `wall`, `member`, `anchor`, `interface`, `load`, `normal-load` |
 | `cli/commands/conditions.py` | `boundary`, `gravity` |
 | `cli/commands/meshing.py`, `stages.py` | `mesh`, `export`; `stages` |
@@ -155,8 +155,8 @@ shell. Only the camera of `base/js/orbit.js` is replaced; all other behaviour is
 | Connection to the shell | `patches.js`: menu actions, tool rails, panels, windows, the command box |
 | Data | `api.js`, `model.js` (server project → shape that the shell needs), `buffers.js`, `history.js` (undo and redo), `units.js`, `unit-table.js` |
 | View | `viewport.js` (three.js), `orbit.js` (camera with y up), `canvas-renderer.js`, `ruler.js`, `mesh-labels.js`, `part-colors.js`, `node-parts.js` |
-| Modelling tools | `draw-input.js`, `beams.js`, `anchors.js`, `interfaces.js`, `loads.js`, `normal-loads.js`, `water-command.js`, `soil-volume-dialog.js`, `soil-layers-dialog.js` (the **Modify soil layers** window, in place of the shell's own) |
-| Materials | `material-sets.js`, `material-library.js`, `property-sets.js`, `soil-models.js` and `soil-model-table.js` (the soil models, generated from `core/model/soil_models.py`) |
+| Modelling tools | `draw-input.js`, `lines.js`, `beams.js`, `anchors.js`, `interfaces.js`, `loads.js`, `normal-loads.js`, `water-command.js`, `soil-volume-dialog.js`, `soil-layers-dialog.js` (the **Modify soil layers** window, in place of the shell's own) |
+| Soil materials | `material-sets.js` (the **Soil materials** window: the soils, and the project's water under **Water**), `material-library.js`, `property-sets.js`, `soil-models.js` and `soil-model-table.js` (the soil models, generated from `core/model/soil_models.py`) |
 | Mesh and stages | `mesh-settings.js`, `stages.js` |
 | Files and scripts | `export.js`, `import-dialog.js`, `mdpa-import-dialog.js`, `download.js`, `zip.js`, `deck.js`, `script-command.js` |
 | Calculation and results | `calculate.js`, `results.js` (the `results …` commands), `results-render.js` (colours, legend, CSV), `results-view.js` (the contours on screen), `results-plot.js` (`results plot …` and its SVG figure) |
@@ -167,7 +167,7 @@ shell. Only the camera of `base/js/orbit.js` is replaced; all other behaviour is
 run folder (~/KratosGUI/runs/<deck>_<time>/)
   <deck>.mdpa, ProjectParameters.json           → part names, stage order, output names
   <deck>_<stage>.post.msh / .post.res           → results/gid_reader → results/fields, mesh, parts
-  <stage>__output_wall.json, __output_interface → results/members
+  <stage>__output_wall.json, __output_interface_<face> → results/members
         │
         ▼  results/catalog.py (finds the files, reads each one once, caches by size and time)
   /api/results/... routes
@@ -210,4 +210,5 @@ tests:
 | Frozen `frontend/base/` and live `frontend/js/` | The first design stays as it is. The live code wraps it, so the two never mix. |
 | Part keys | One string is the Gmsh physical group, the `userData.key` in the view, the `obj:` of the tree, and the `OBJECT_PROPS` key |
 | Logic without DOM, thin DOM code | Logic that needs no page goes into a module without `document`, so the tests can run it without a browser. `patches.js` and `results-view.js` only connect it to the page. |
+| The pore water is the project's (`Project.fluid`) | Every soil holds the same water, so it is one record and not a copy in each soil, which could disagree. A soil that sets `DENSITY_WATER`, `BULK_MODULUS_FLUID` or `DYNAMIC_VISCOSITY` itself is refused. The export writes the water into each soil: the bulk modulus and the viscosity from `fluid` (water's at 20 °C where unset), `DENSITY_WATER` from the water level's specific weight. `migration.lift_water` moves the soils' water of an older file into `fluid`, and names each soil whose deck that changes. |
 | Runs are folders, results are files | A run never changes after it ends, and Styx reads it from disk. So results survive a restart of the server, and you can share a run as a ZIP file. |

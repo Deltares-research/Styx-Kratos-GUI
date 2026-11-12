@@ -7,9 +7,9 @@ benchmark runner sends exactly that project through the REST API, the path the G
 
 from __future__ import annotations
 
-from core.model import migration, stages
+from core.model import migration
 from tests.models import excavation
-from core.model.schemas import Project, standard_conditions
+from core.model.schemas import Project, Stage, standard_conditions
 from core.model.templates import blank_project
 
 
@@ -76,13 +76,13 @@ def column(layers: list[tuple[float, float, dict]], width: float = 1.0,
     # The benchmark's own description of a soil is the engineer's (kN/m3, kN/m2, m/day),
     # which is what its analytical checks are written in; the project holds what Kratos
     # reads, converted the way every project in that shape is (`core/model/migration.py`).
-    p["materials"] = [mat["kratos"] if "kratos" in mat else migration.material(mat, 2)
+    # Its water is the project's (`Project.fluid`), which is water's here.
+    p["materials"] = [mat["kratos"] if "kratos" in mat
+                      else migration.without_water(migration.material(mat, 2))
                       for mat in materials]
     p["layers"] = [{"id": f"L{i}", "name": f"Layer_{i}", "mat": mat["id"],
                     "top": t, "bottom": b}
                    for i, (t, b, mat) in enumerate(layers, start=1)]
-    p["excavation"] = {"x0": 0.0, "x1": width / 2, "z0": 0.0, "z1": 0.5,
-                       "floor_y": bottom + 0.5 * (top - bottom)}
     p["section_offset"] = 0.5
     p["water"] = {"y": water_y} if water_y is not None else None
     # Hydrostatic about the water level, or about the base -- zero everywhere -- in a
@@ -110,7 +110,7 @@ def column_under_drawn_fill(fill: tuple[float, float, dict],
     p = column([layer], width=width, name=name).model_dump(mode="json")
     p["domain"]["y_top"] = fill_top
     p["materials"].append(fill_material["kratos"] if "kratos" in fill_material
-                          else migration.material(fill_material, 2))
+                          else migration.without_water(migration.material(fill_material, 2)))
     corners = [(0.0, fill_top), (0.0, fill_bottom), (width, fill_bottom), (width, fill_top)]
     p["custom_parts"] = [{
         "key": "drawn_0", "label": "Fill", "source": "gui", "mat": fill_material["id"],
@@ -130,14 +130,33 @@ def symmetric_pit(width: float = 80.0, pit: tuple[float, float] = (35.0, 45.0),
     p.update(beams=[], anchors=[], interfaces=[], loads=[], normal_loads=[], stages=[],
              water=None, name="Symmetric pit")
     p["domain"] = dict(p["domain"], x0=0.0, x1=width)
-    p["excavation"] = {k: v for k, v in p["excavation"].items() if k != "floor_y"}
-    p["excavation"].update(x0=pit[0], x1=pit[1], levels=list(levels))
+    # The pit's two sides, and a floor per lift: the lines close each lift, and its record
+    # gives it a key.
+    deepest = levels[-1]
+    p["lines"] = [{"id": "left", "name": "Left side",
+                   "points": [(pit[0], p["domain"]["y_top"]), (pit[0], deepest)]},
+                  {"id": "right", "name": "Right side",
+                   "points": [(pit[1], p["domain"]["y_top"]), (pit[1], deepest)]},
+                  *[{"id": f"floor_{index}", "name": f"Floor {index}",
+                     "points": [(pit[0], level), (pit[1], level)]}
+                    for index, level in enumerate(levels, start=1)]]
+    p["bodies"] = [{"id": f"lift{index}", "name": f"lift {index}", "layer": "L_top",
+                    "point": ((pit[0] + pit[1]) / 2, (level + ceiling) / 2)}
+                   for index, (level, ceiling)
+                   in enumerate(zip(levels, (p["domain"]["y_top"], *levels)), start=1)]
     p["mesh"] = dict(p["mesh"], body_sizes={}, refinements=[], element_size=2.0)
-    project = Project.model_validate(p)
-    project = Project.model_validate(
-        project.model_dump() | {"stages": [ph.model_dump()
-                                           for ph in stages.staged_excavation_stages(project)]})
-    return project
+    settled = [Stage(id="initial", name="Initial stage", calculation="K0 procedure"),
+               Stage(id="null_step", name="Null step", parent="initial",
+                     calculation="Null step", max_iterations=150)]
+    parent = "null_step"
+    for index in range(1, len(levels) + 1):
+        ordinal = ("First", "Second", "Third")[index - 1]
+        settled.append(Stage(id=f"dig_{index}", name=f"{ordinal} excavation", parent=parent,
+                             deactivate=[f"soil_L_top__lift{index}"], max_iterations=150,
+                             tolerated_error=1e-3))
+        parent = f"dig_{index}"
+    p["stages"] = [stage.model_dump() for stage in settled]
+    return Project.model_validate(p)
 
 
 def project() -> Project:

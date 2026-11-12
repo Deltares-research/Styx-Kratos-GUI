@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- The server writes the version of Styx in (backend/main.py, index). -->
+<meta name="styx-version" content="">
 <title>Styx</title>
 <link rel="icon" type="image/png" sizes="32x32" href="/assets/styx-icon-32.png">
 <link rel="icon" type="image/png" sizes="192x192" href="/assets/styx-icon-192.png">
@@ -154,6 +156,8 @@
      ══════════════════════════════════════════════════════════════ -->
 <script src="/vendor/three.min.js"></script>
 <script src="/js/data.js"></script>
+<!-- Before app.js boots: the title bar shows the version the server wrote above. -->
+<script src="/live/js/version.js"></script>
 <!-- Right after the frozen data: its "phase" labels read "stage" before anything draws them. -->
 <script src="/live/js/vocabulary.js"></script>
 <script src="/live/js/unit-table.js"></script>
@@ -198,6 +202,7 @@
 <script src="/live/js/anchors.js"></script>
 <script src="/live/js/interfaces.js"></script>
 <script src="/live/js/normal-loads.js"></script>
+<script src="/live/js/lines.js"></script>
 <script src="/live/js/boundary-conditions.js"></script>
 <!-- The stage model. Before patches.js, which replaces the frozen stages
      panel with one that reads it. -->

@@ -280,11 +280,17 @@ App.LivePatches = (function () {
     if (App.Anchors && App.Anchors.isAnchorKey(key)) return 'anchor';
     if (App.Interfaces && App.Interfaces.isInterfaceKey(key)) return 'interface';
     if (App.NormalLoads && App.NormalLoads.isNormalLoadKey(key)) return 'normal_load';
+    if (App.Lines && App.Lines.isLineKey(key)) return 'line';
+    if (App.Lines && App.Lines.bodyOf(key)) return 'body';
     if (App.Loads && App.Loads.isLoadKey(key)) return 'load';
     if (App.BoundaryConditions && App.BoundaryConditions.isConditionKey(key)) {
       return 'condition';
     }
     return null;
+  }
+
+  function lineByKey(key) {
+    return (App.LINES || []).filter(function (item) { return item.id === key; })[0];
   }
 
   function conditionByKey(key) {
@@ -322,6 +328,8 @@ App.LivePatches = (function () {
       : kind === 'anchor' ? anchorByKey(key)
       : kind === 'interface' ? interfaceByKey(key)
       : kind === 'normal_load' ? normalLoadByKey(key)
+      : kind === 'line' ? lineByKey(key)
+      : kind === 'body' ? App.Lines.bodyOf(key)
       : kind === 'load' ? loadByKey(key)
       : kind === 'condition' ? conditionByKey(key) : null;
     return obj ? (kind === 'part' ? obj.label : obj.name) : '';
@@ -373,6 +381,15 @@ App.LivePatches = (function () {
       normalLoad.name = name;
       return App.NormalLoads.save(normalLoad).catch(reportRenameError);
     }
+    if (kind === 'line') {
+      var line = lineByKey(key);
+      if (!line) return;
+      line.name = name;
+      return App.Lines.save(line).catch(reportRenameError);
+    }
+    if (kind === 'body') {
+      return App.Lines.saveBody(key, { name: name }).catch(reportRenameError);
+    }
     if (kind === 'load') {
       var load = loadByKey(key);
       if (!load) return;
@@ -393,6 +410,7 @@ App.LivePatches = (function () {
     if (kind === 'anchor') return App.Anchors.remove(key);
     if (kind === 'interface') return App.Interfaces.remove(key);
     if (kind === 'normal_load') return App.NormalLoads.remove(key);
+    if (kind === 'line') return App.Lines.remove(key);
     if (kind === 'load') return App.Loads.remove(key);
     if (kind === 'condition') return App.BoundaryConditions.remove(key);
   }
@@ -867,6 +885,7 @@ App.LivePatches = (function () {
   function openProperties(kind, key) {
     var owner = kind === 'load' ? App.Loads
       : kind === 'normal_load' ? App.NormalLoads
+      : kind === 'line' ? App.Lines
       : kind === 'condition' ? App.BoundaryConditions
       : kind === 'beam' ? App.Beams
       : kind === 'interface' ? App.Interfaces : null;
@@ -895,7 +914,8 @@ App.LivePatches = (function () {
       { label: App.Viewport.isVisible(key) ? 'Hide' : 'Show', icon: 'eye' },
       '-',
       { label: 'Rename…', action: 'renameObject' },
-      { label: 'Delete', icon: 'delete', action: 'deleteObject' },
+      // A soil body goes when the line that made it goes.
+      { label: 'Delete', icon: 'delete', action: 'deleteObject', disabled: kind === 'body' },
       '-',
       { label: 'Properties…', icon: 'settings' }
     ], event.clientX, event.clientY, function (it) {
@@ -940,7 +960,8 @@ App.LivePatches = (function () {
      element is a surface with a different node layout and no fixture to pin it. */
   /* The rulers measure two named axes of one plane. In 3D the screen edges are three
      axes mixed by the orbit, so a number on an edge would be a number for nothing. */
-  var TWO_D_ONLY = ['interface', 'createNormalLoad', 'toggleRuler', 'createSupportLine',
+  var TWO_D_ONLY = ['interface', 'createNormalLoad', 'drawLine', 'createLineByCoordinates',
+                    'toggleRuler', 'createSupportLine',
                     'createSupportPoint', 'createWaterPressureLine',
                     'createWaterPressurePoint', 'createSeepageLine'];
 
@@ -1647,6 +1668,17 @@ App.LivePatches = (function () {
         return App.Api.put('/api/project', opened)
           .then(function (project) {
             return adoptProject(project, 'Opened project: ' + file.name);
+          })
+          // A file saved in an older shape may have lost values on the way in: the
+          // server says which, as the first Save writes them away.
+          .then(function () {
+            return App.Api.post('/api/project/migration-notes', opened);
+          })
+          .then(function (result) {
+            if (!App.Command) return;
+            (result.notes || []).forEach(function (note) {
+              if (App.Command.warn) App.Command.warn(note); else App.Command.note(note);
+            });
           });
       }).catch(function (error) {
         if (App.Command) App.Command.err('Could not open ' + file.name + ': ' + error.message);
@@ -2415,7 +2447,7 @@ App.LivePatches = (function () {
     ['gravity [on|off]', 'show, or switch on or off, the self weight'],
     ['units [SI|kN]', 'show the unit system, or convert the project to another'],
     ['soillayers', 'open the Modify soil layers window'],
-    ['materials', 'open the Material sets window'],
+    ['materials', 'open the Soil materials window'],
     ['cleargeometry', 'remove the drawn and imported solids'],
     ['colour <part>|all|off', 'draw a part of the mesh in its own colour'],
     ['node <id>', 'which SubModelParts a node is in'],
@@ -2642,7 +2674,6 @@ App.LivePatches = (function () {
       
       var drawModes = {
         'drawPoint': 'point',
-        'drawLine': 'line',
         'drawPolygon': 'polygon',
         'drawBox': 'box',
         'drawCylinder': 'cylinder'
@@ -2653,6 +2684,14 @@ App.LivePatches = (function () {
         return;
       }
       
+      if (item && item.action === 'drawLine') {
+        if (App.Lines) App.Lines.start();
+        return;
+      }
+      if (item && item.action === 'createLineByCoordinates') {
+        if (App.Lines) App.Lines.typed();
+        return;
+      }
       if (item && item.action === 'generateMesh') {
         var size = App.PROJECT && App.PROJECT.mesh ? App.PROJECT.mesh.element_size : 2.5;
         requestMesh(true, 'mesh ' + size);
@@ -2912,13 +2951,25 @@ App.LivePatches = (function () {
       soilMenu.items.push({ label: 'Create soil volume…', icon: 'cube', action: 'createSoilVolume' });
     }
     if (soilMenu) soilMenu.items = orderSoilMenu(soilMenu.items);
+    // The frozen "Show material sets…" (js/data.js) opens the Soil materials window.
+    (App.RAILS.soil || []).forEach(function (tool) {
+      if (tool && tool.action === 'materials') tool.tip = 'Soil materials…';
+    });
+    menuItemsFor('materials').forEach(function (item) { item.label = 'Soil materials…'; });
 
     // Add Import model to Structures rail
     if (App.RAILS.structures) {
       App.RAILS.structures.forEach(function(tool) {
         if (!tool || !tool.icon) return;
         if (tool.icon === 'point') tool.action = 'drawPoint';
-        if (tool.icon === 'line') tool.action = 'drawLine';
+        // A line that splits the soil: drawn, or typed in its window.
+        if (tool.icon === 'line') {
+          tool.action = 'drawLine';
+          tool.flyout = [
+            { icon: 'line', label: 'Draw line', action: 'drawLine' },
+            { icon: 'line', label: 'Line by coordinates…', action: 'createLineByCoordinates' }
+          ];
+        }
         if (tool.icon === 'polygon') tool.action = 'drawPolygon';
         // The frozen rail drew an interface button but had nothing to hang on it.
         if (tool.icon === 'interface') tool.action = 'interface';
@@ -4045,6 +4096,15 @@ App.LivePatches = (function () {
         return;
       }
 
+      if (App.Lines && App.Lines.isLineKey(reselect)) {
+        var line = (App.LINES || []).filter(function (item) { return item.id === reselect; })[0];
+        if (line) return App.Lines.save(line);
+      }
+
+      if (App.Lines && App.Lines.bodyOf(reselect)) {
+        return App.Lines.saveBody(reselect, { mat: App.Lines.bodyOf(reselect).mat || null });
+      }
+
       if (App.NormalLoads && App.NormalLoads.isNormalLoadKey(reselect)) {
         var normalLoad = (App.NORMAL_LOADS || []).filter(function (item) {
           return item.id === reselect;
@@ -4091,6 +4151,7 @@ App.LivePatches = (function () {
       var frozenMaterials = App.Dialogs.materials;
       App.Dialogs.materials = function (onClose) {
         var snapshot = copy(App.MATERIALS || []);
+        var fluidSnapshot = copy(App.FLUID || {});
         frozenMaterials(onClose);
         var dialogs = document.querySelectorAll('#modal-layer .dialog');
         var dialog = dialogs[dialogs.length - 1];
@@ -4099,6 +4160,7 @@ App.LivePatches = (function () {
         var committed = false;
         function discard() {
           App.MATERIALS = copy(snapshot);
+          App.FLUID = copy(fluidSnapshot);
           if (App.Model && App.Model.rebuildDerived) App.Model.rebuildDerived();
           if (App.Explorer && App.state) App.Explorer.mountTree(App.state.mode);
         }
@@ -4127,13 +4189,14 @@ App.LivePatches = (function () {
             });
 
             App.Api.patch('/api/project/materials',
-                          { materials: App.Model.materialsToServer(App.MATERIALS) })
+                          { materials: App.Model.materialsToServer(App.MATERIALS),
+                            fluid: App.FLUID || null })
               .then(function (response) {
                 App.Model.apply(response.project);
                 return App.Viewport.refresh();
               })
               .then(function () {
-                App.Command.ok('Material sets saved — ' + App.MATERIALS.length
+                App.Command.ok('Soil materials saved — ' + App.MATERIALS.length
                                + ' soil materials. Geometry regenerated.');
                 committed = true;
                 dialog.querySelector('.dlg-x').click();

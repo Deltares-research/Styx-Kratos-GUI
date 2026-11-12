@@ -84,13 +84,17 @@ EDITED = PROJECT_KEYS | {"edit_notes"}
 EVERYTHING = {"project", "tree", "geometry", "mesh"}
 
 CONTRACTS = [
-    Contract("GET", "/api/health", lambda c: c.get("/api/health"), {"ok", "gmsh_version"}),
+    Contract("GET", "/api/health", lambda c: c.get("/api/health"),
+             {"ok", "version", "gmsh_version"}),
     Contract("GET", "/api/project", lambda c: c.get("/api/project"),
              {"name", "layers", "materials", "stages", "deck", "mesh"}),
     Contract("PUT", "/api/project", lambda c: c.put("/api/project", json=_project(c)),
              {"name", "layers", "materials"},
              bad=lambda c: c.put("/api/project", json={**_project(c), "no_such_key": 1}),
              bad_status=422),
+    Contract("POST", "/api/project/migration-notes",
+             lambda c: c.post("/api/project/migration-notes", json=_project(c)), {"notes"},
+             bad=lambda c: c.post("/api/project/migration-notes", json=[]), bad_status=422),
     Contract("POST", "/api/project/reset", lambda c: c.post("/api/project/reset"),
              PROJECT_KEYS, EVERYTHING),
     Contract("POST", "/api/project/new", lambda c: c.post("/api/project/new"),
@@ -124,6 +128,20 @@ CONTRACTS = [
              lambda c: c.patch("/api/project/structures", json=_structures(c)),
              EDITED,
              bad=lambda c: c.patch("/api/project/structures", json={}), bad_status=422),
+    Contract("PATCH", "/api/project/lines",
+             lambda c: c.patch("/api/project/lines", json={"lines": [
+                 {"id": "l", "name": "L", "points": [[1.0, 0.0], [1.0, -2.0]]}]}),
+             EDITED,
+             bad=lambda c: c.patch("/api/project/lines", json={"lines": [
+                 {"id": "l", "name": "L", "points": [[1.0, 0.0]]}]}), bad_status=422),
+    Contract("PATCH", "/api/project/bodies/{key}",
+             lambda c: (c.patch("/api/project/lines", json={"lines": [
+                 {"id": "l", "name": "L", "points": [[1.0, 0.0], [1.0, -8.0]]}]}),
+                        c.patch(f"/api/project/bodies/{c.get('/api/project').json()['soil_body_keys'][0]}",
+                                json={"name": "A"}))[1],
+             EDITED,
+             bad=lambda c: c.patch("/api/project/bodies/no_such_body", json={"name": "A"}),
+             bad_status=404),
     Contract("PATCH", "/api/project/conditions",
              lambda c: c.patch("/api/project/conditions", json={
                  "boundary_conditions": _project(c)["boundary_conditions"],

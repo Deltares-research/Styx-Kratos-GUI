@@ -103,19 +103,28 @@ def _sand(**variables) -> schemas.Material:
     return schemas.Material(**{**SAND, "variables": {**SAND["variables"], **variables}})
 
 
-def test_k0_defaults_to_jaky_from_the_friction_angle():
-    """1 - sin(phi): the normally consolidated K0 a soil's own friction angle gives
-    (0.62 at 22.3 deg, 0.46 at 32.7 deg)."""
-    from core.kratos.materials import jaky
-    assert jaky(_sand(GEO_FRICTION_ANGLE=30.0)) == pytest.approx(0.5)
-    assert jaky(_sand(GEO_FRICTION_ANGLE=22.3)) == pytest.approx(0.62, abs=5e-3)
+def test_k0_defaults_to_jaky_from_the_friction_angle_of_a_plastic_soil():
+    """1 - sin(phi): the normally consolidated K0 a Mohr-Coulomb soil's own friction
+    angle gives (0.62 at 22.3 deg, 0.46 at 32.7 deg)."""
+    from core.kratos.materials import k0_nc
+    plastic = {"constitutive_law": "GeoMohrCoulombLawPlaneStrain"}
+    assert k0_nc(_sand(GEO_FRICTION_ANGLE=30.0).model_copy(update=plastic)) == \
+        pytest.approx(0.5)
+    assert k0_nc(_sand(GEO_FRICTION_ANGLE=22.3).model_copy(update=plastic)) == \
+        pytest.approx(0.62, abs=5e-3)
+
+
+def test_k0_of_an_elastic_soil_is_the_elastic_one_whatever_its_friction_angle():
+    from core.kratos.materials import k0_nc
+    assert k0_nc(_sand(GEO_FRICTION_ANGLE=30.0)) == pytest.approx(0.28 / 0.72)
 
 
 def test_a_material_with_no_friction_angle_has_no_k0():
-    """Non-porous rock carries neither, and nothing should be invented for it."""
-    from core.kratos.materials import jaky
+    """Non-porous rock with neither a friction angle nor a Poisson ratio: nothing should
+    be invented for it."""
+    from core.kratos.materials import k0_nc
     rock = schemas.Material(**{**SAND, "variables": {"YOUNG_MODULUS": 2e9}})
-    assert jaky(rock) is None
+    assert k0_nc(rock) is None
 
 
 # ── Soil layers ─────────────────────────────────────────────────────────────
@@ -217,10 +226,11 @@ def test_an_empty_level_list_means_unspecified_not_invalid():
 
 
 def test_every_excavation_level_must_lie_inside_the_domain():
-    """Not just the floor: an intermediate lift above the ground is just as wrong."""
+    """The full build's floor, which is its one level."""
     p = seed_project(simple=False)
     bad = p.model_dump()
-    bad["excavation"]["levels"] = [5.0, bad["excavation"]["floor_y"]]
+    bad["excavation"] = {k: v for k, v in bad["excavation"].items() if k != "floor_y"}
+    bad["excavation"]["levels"] = [5.0]
     with pytest.raises(ValidationError, match="domain"):
         schemas.Project.model_validate(bad)
 
@@ -240,7 +250,7 @@ def _layered_pit() -> schemas.Project:
     (-12..-60) are never dug. That produces eight bodies -- see
     plan/outdated/staged-construction-plan.md sec 0.1.
     """
-    p = seed_project(simple=False).model_dump()
+    p = seed_project().model_dump()
     p["domain"] |= {"y_top": 0.0, "y_bottom": -60.0}
     p["layers"] = [
         {"id": "L1", "name": "Soil_1", "mat": p["materials"][0]["id"],
@@ -251,9 +261,8 @@ def _layered_pit() -> schemas.Project:
          "top": -12.0, "bottom": -60.0},
     ]
     # `levels` supersedes the seed's `floor_y`, and the two may not disagree.
-    p["excavation"] = {k: v for k, v in p["excavation"].items() if k != "floor_y"}
-    p["excavation"] |= {"x0": 0.0, "x1": 5.0, "levels": [-2.0, -5.0, -8.0]}
-    p["wall"] |= {"top_y": 0.0, "toe_y": -13.0}
+    p["excavation"] = {"x0": 0.0, "x1": 5.0, "z0": p["domain"]["z0"],
+                         "z1": p["domain"]["z1"], "levels": [-2.0, -5.0, -8.0]}
     return schemas.Project.model_validate(p)
 
 
@@ -264,12 +273,13 @@ def test_an_unstaged_project_has_one_soil_body_per_layer():
 
 
 def test_a_staged_excavation_splits_the_soil_inside_the_pit_into_lifts():
-    bodies = {key: (y0, y1) for key, y0, y1, _ in _layered_pit().soil_bodies()}
+    bodies = {key: (y0, y1) for key, y0, y1 in _layered_pit().soil_bodies()}
     assert bodies == {
-        # Outside the pit outline the layers are untouched and keep their own keys.
-        "soil_L1": (-8.0, 0.0),
-        "soil_L2": (-12.0, -8.0),
-        "soil_L3": (-60.0, -12.0),
+        # Outside the pit outline: what had the layer's plain key, which a cut layer has
+        # no more.
+        "soil_L1__outside": (-8.0, 0.0),
+        "soil_L2__outside": (-12.0, -8.0),
+        "soil_L3__outside": (-60.0, -12.0),
         # Inside it, layer 1 is dug away one lift per stage ...
         "soil_L1__lift1": (-2.0, 0.0),
         "soil_L1__lift2": (-5.0, -2.0),
@@ -284,14 +294,14 @@ def test_a_staged_excavation_splits_the_soil_inside_the_pit_into_lifts():
 def test_a_lift_crossing_a_layer_boundary_yields_one_body_per_layer():
     """Bodies are the intersection of a layer with a lift, so a lift deeper than the
     layer it starts in cannot produce one body spanning two materials."""
+    # The first lift is dug straight through L1 and on into L2.
     p = _layered_pit().model_dump()
-    # The first lift is dug straight through L1 and on into L2. `floor_y` follows
-    # `levels` rather than the other way round, so it goes out with the levels it
-    # belonged to.
-    p["excavation"] = {k: v for k, v in p["excavation"].items() if k != "floor_y"}
-    p["excavation"]["levels"] = [-10.0, -11.0]
+    p.pop("lines")
+    p.pop("bodies")
+    p["excavation"] = {"x0": 0.0, "x1": 5.0, "z0": p["domain"]["z0"], "z1": p["domain"]["z1"],
+                       "levels": [-10.0, -11.0]}
     bodies = {key: (y0, y1)
-              for key, y0, y1, _ in schemas.Project.model_validate(p).soil_bodies()}
+              for key, y0, y1 in schemas.Project.model_validate(p).soil_bodies()}
     assert bodies["soil_L1__lift1"] == (-8.0, 0.0)     # the part of lift 1 in L1 ...
     assert bodies["soil_L2__lift1"] == (-10.0, -8.0)   # ... and the part in L2
     assert bodies["soil_L2__pit"] == (-12.0, -11.0)    # below the floor, still in L2
@@ -307,14 +317,13 @@ def test_staged_soil_bodies_are_part_keys():
         assert key in keys
 
 
-def test_excavation_levels_survive_a_round_trip():
-    p = seed_project(simple=False)
-    raw = p.model_dump()
-    raw["excavation"]["levels"] = [-2.0, -5.0, -7.0]
-    reloaded = schemas.Project.model_validate(
-        schemas.Project.model_validate(raw).model_dump())
-    assert reloaded.excavation.levels == [-2.0, -5.0, -7.0]
-    assert reloaded.excavation.floor_y == -7.0
+def test_an_old_pit_becomes_lines_and_stays_lines_on_a_round_trip():
+    project = _layered_pit()
+    assert project.excavation is None
+    assert [line.id for line in project.lines] == ["pit_side", "pit_level_1", "pit_level_2"]
+    reloaded = schemas.Project.model_validate(project.model_dump())
+    assert reloaded.lines == project.lines
+    assert reloaded.soil_body_keys == project.soil_body_keys
 
 
 # ── Load conditions ────────────────────────────────────────────────────────
@@ -1417,8 +1426,8 @@ def test_asking_for_a_layer_asks_for_the_lifts_dug_out_of_it():
     """
     p = _layered_pit()
     assert set(p.expand_body_keys(["soil_L1"])) == {
-        "soil_L1", "soil_L1__lift1", "soil_L1__lift2", "soil_L1__lift3"}
-    assert p.expand_body_keys(["soil_L3"]) == ["soil_L3", "soil_L3__pit"]
+        "soil_L1__outside", "soil_L1__lift1", "soil_L1__lift2", "soil_L1__lift3"}
+    assert p.expand_body_keys(["soil_L3"]) == ["soil_L3__pit", "soil_L3__outside"]
     # Anything that is not a soil layer is passed through untouched.
     assert p.expand_body_keys(["wall", "soil_L2__pit"]) == ["wall", "soil_L2__pit"]
 
@@ -1478,7 +1487,7 @@ def test_each_soil_body_has_a_label_saying_which_part_of_its_layer_it_is():
     p = _layered_pit()
     labels = p.soil_body_labels
     assert set(labels) == set(p.soil_body_keys)
-    assert labels["soil_L1"] == "Soil_1"
+    assert labels["soil_L1__outside"] == "Soil_1 · outside the pit"
     assert labels["soil_L1__lift1"] == "Soil_1 · lift 1"
     assert labels["soil_L1__lift3"] == "Soil_1 · lift 3"
     assert labels["soil_L2__pit"] == "Soil_2 · below the pit"
@@ -1692,7 +1701,7 @@ def _without_demo_blocks(payload: dict) -> dict:
 def test_a_layered_model_needs_none_of_the_demo_blocks():
     project = schemas.Project.model_validate(_without_demo_blocks(seed_project().model_dump()))
     assert all(getattr(project, name) is None for name in schemas.FULL_BUILD_BLOCKS)
-    assert project.pit_levels() == []
+    assert project.excavation is None
     # No pit, so no lifts: one body per layer, as with a pit of one level.
     assert project.soil_bodies() == seed_project().soil_bodies()
     with pytest.raises(ValueError, match="no excavation"):
@@ -1720,7 +1729,8 @@ def test_a_model_saved_with_placeholder_blocks_still_opens():
     }
     project = schemas.Project.model_validate(payload)
     assert project.struts is not None and project.struts.xs == []
-    assert project.pit_levels() == [-1.0]
+    # One level dug nothing in a layered model, so it goes when the file is opened.
+    assert project.excavation is None
 
 
 @pytest.mark.parametrize("record, changes, message", [

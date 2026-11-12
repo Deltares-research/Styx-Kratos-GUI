@@ -73,6 +73,14 @@ def test_health_reports_the_gmsh_version(client):
     assert body["gmsh_version"].startswith("4.")
 
 
+def test_health_and_the_page_say_the_version_kratos_cli_says(client):
+    from core.version import describe
+
+    assert client.get("/api/health").json()["version"] == describe()
+    page = client.get("/").text
+    assert f'<meta name="styx-version" content="{describe()}">' in page
+
+
 # ── Project ─────────────────────────────────────────────────────────────────
 
 def test_get_project_returns_something_the_schema_accepts_back(client):
@@ -771,6 +779,26 @@ def test_put_project_opens_a_file_saved_with_boreholes(client):
         (0.0, -8.0), (-8.0, -25.0)]
 
 
+def test_migration_notes_name_the_soil_whose_water_is_overridden(client):
+    """A file saved before 2026-11-02, as Open sends it: the PUT takes it in the new
+    shape, and this route says which soil's own water that dropped."""
+    old = seed_project().model_dump(mode="json")
+    del old["fluid"]
+    for material in old["materials"]:
+        material["variables"]["GEO_DRAINAGE_TYPE"] = "CONSTANT_PW_FIELD"
+    old["materials"][0]["variables"]["DYNAMIC_VISCOSITY"] = 1e-3
+    old["materials"][1]["variables"]["DYNAMIC_VISCOSITY"] = 5e-3
+
+    response = client.post("/api/project/migration-notes", json=old)
+
+    assert response.status_code == 200
+    notes = response.json()["notes"]
+    assert len(notes) == 1 and notes[0].startswith("Sand, loose:")
+    current = client.post("/api/project/migration-notes",
+                          json=seed_project().model_dump(mode="json"))
+    assert current.json() == {"notes": []}
+
+
 def test_patch_layers_refuses_boreholes(client):
     """The layer update has no boreholes to carry any more; one sent is an error, not
     something quietly dropped."""
@@ -1179,14 +1207,17 @@ def test_the_live_shell_replaces_only_the_viewport_and_the_orbit_controller(clie
                              "soil-layers-dialog.js",
                              "export.js", "calculate.js", "history.js", "loads.js",
                              "beams.js", "anchors.js",
-                             "interfaces.js", "normal-loads.js", "boundary-conditions.js",
-                             "material-library.js",
+                             "interfaces.js", "normal-loads.js", "lines.js",
+                             "boundary-conditions.js", "material-library.js",
                              "orbit.js", "ruler.js", "mesh-labels.js",
                              "download.js", "zip.js", "stages.js", "results.js",
                              "results-render.js", "results-view.js", "part-colors.js",
                              "water-command.js", "script-command.js", "node-parts.js",
                              "deck.js",
                              "results-plot.js",
+                             # The version the server writes into the page, in place of
+                             # the frozen js/data.js's own.
+                             "version.js",
                              # The unit system and the Kratos property sets the editors
                              # show, and the Material sets dialog that replaces the frozen
                              # one's old sheet (plan/outdated/kratos-native-inputs-plan.md).
@@ -1579,15 +1610,15 @@ def test_a_staged_excavation_can_be_opened_and_drawn(client):
     assert loaded.status_code == 200, loaded.text
     project = loaded.json()["project"]
     assert project["dimension"] == 2
-    assert len(project["excavation"]["levels"]) == 3
+    assert [line["id"] for line in project["lines"]] == ["floor_1", "floor_2"]
     assert project["beams"] and project["anchors"] and project["normal_loads"]
 
     geometry = client.get("/api/geometry")
     assert geometry.status_code == 200
     drawn = {section["key"] for section in geometry.json()["sections"]}
-    # Eight soil bodies, the wall and the strut. The loads are arrow glyphs the
+    # Seven soil bodies, the wall and the strut. The loads are arrow glyphs the
     # viewport draws from the project itself, so they are not in this payload.
-    assert len([k for k in drawn if k.startswith("soil_")]) == 8
+    assert len([k for k in drawn if k.startswith("soil_")]) == 7
     assert {"sheetpile", "strut"} <= drawn
 
 
@@ -1599,10 +1630,9 @@ def test_a_staged_excavation_can_be_opened_and_drawn(client):
 
 def _staged_project() -> dict:
     """The seed with a pit dug in three lifts, so there is something to stage."""
-    payload = seed_project(simple=False).model_dump()
-    payload["excavation"] = {k: v for k, v in payload["excavation"].items()
-                             if k != "floor_y"}
-    payload["excavation"] |= {"levels": [-3.0, -5.0, -7.0]}
+    payload = seed_project().model_dump()
+    payload["excavation"] = {"x0": 8.0, "x1": 16.0, "z0": 0.0, "z1": 25.0,
+                             "levels": [-3.0, -5.0, -7.0]}
     return payload
 
 

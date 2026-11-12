@@ -16,8 +16,9 @@ from fastapi.exceptions import RequestValidationError
 from backend import store
 from backend.routes.common import refusals, stored
 from core import session
-from core.model import stages
-from core.model.schemas import (ConditionsUpdate, DimensionUpdate, LayersUpdate, MaterialsUpdate,
+from core.model import migration, stages
+from core.model.schemas import (BodyUpdate, ConditionsUpdate, DimensionUpdate, LayersUpdate,
+                                LinesUpdate, MaterialsUpdate,
                                 StagesUpdate, Project, StructuresUpdate, UnitsUpdate,
                                 WaterUpdate)
 
@@ -37,6 +38,14 @@ async def put_project(project: Project) -> Project:
     from core import scripting
 
     return store.put(await asyncio.to_thread(scripting.with_solids, project, False))
+
+
+@router.post("/api/project/migration-notes")
+def migration_notes(document: dict) -> dict:
+    """What opening `document`, a project file as saved, changes in its deck
+    (`migration.notes`). The GUI's Open asks after the PUT above took the file: the
+    project it got back is already in the new shape, and the old values are gone."""
+    return {"notes": migration.notes(document)}
 
 
 @router.post("/api/project/reset")
@@ -137,6 +146,25 @@ async def patch_materials(update: MaterialsUpdate) -> dict:
     # Soil colour comes from the assigned material (`_colors_by_volume` in
     # core/geometry/tessellation.py), so the geometry has to be re-tessellated even though
     # no shape changed.
+    return stored(project) | {"invalidates": ["project", "tree", "geometry"]}
+
+
+@router.patch("/api/project/lines")
+async def patch_lines(update: LinesUpdate) -> dict:
+    """Replace the lines that split the soil (`session.replace_lines`): what the GUI's Line
+    window sends."""
+    with refusals():
+        project = session.replace_lines(store.get(), update)
+    return stored(project) | {"invalidates": ["project", "tree", "geometry", "mesh"]}
+
+
+@router.patch("/api/project/bodies/{key}")
+async def patch_body(key: str, update: BodyUpdate) -> dict:
+    """A soil body's name or material (`session.update_body`); a field left out stays."""
+    fields = {("material" if field == "mat" else field): getattr(update, field)
+              for field in update.model_fields_set}
+    with refusals():
+        project = session.update_body(store.get(), key, **fields)
     return stored(project) | {"invalidates": ["project", "tree", "geometry"]}
 
 

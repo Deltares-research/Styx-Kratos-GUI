@@ -74,11 +74,13 @@ VELOCITY = _q("velocity", (0, 1, -1), "m/s", "m/s")
 FLOW_RATE = _q("flow rate per metre", (0, 2, -1), "m³/s/m", "m³/s/m")
 DIMENSIONLESS = _q("dimensionless", (0, 0, 0), "", "")
 ANGLE = _q("angle", (0, 0, 0), "°", "°")
+RADIAN = _q("angle in radians", (0, 0, 0), "rad", "rad")
 
 QUANTITIES = {q.name: q for q in (STRESS, FORCE, LINE_FORCE, MOMENT_PER_LENGTH, DENSITY,
                                   SPECIFIC_WEIGHT, STIFFNESS_PER_AREA, VISCOSITY,
                                   PERMEABILITY, AREA, INERTIA, LENGTH, ACCELERATION,
-                                  VELOCITY, FLOW_RATE, DIMENSIONLESS, ANGLE)}
+                                  VELOCITY, FLOW_RATE, DIMENSIONLESS, ANGLE,
+                                  RADIAN)}
 
 VARIABLES: dict[str, Quantity] = {
     # Soil
@@ -92,6 +94,11 @@ VARIABLES: dict[str, Quantity] = {
     "PERMEABILITY_YZ": PERMEABILITY, "PERMEABILITY_ZX": PERMEABILITY,
     "GEO_COHESION": STRESS, "GEO_FRICTION_ANGLE": ANGLE, "GEO_DILATANCY_ANGLE": ANGLE,
     "GEO_TENSILE_STRENGTH": STRESS,
+    # A linear Coulomb hardening's slopes, per unit of plastic strain: Kratos takes the
+    # angles' in radians, whatever the angles themselves are in.
+    "GEO_COHESION_FUNCTION_COEFFICIENTS": STRESS,
+    "GEO_FRICTION_ANGLE_FUNCTION_COEFFICIENTS": RADIAN,
+    "GEO_DILATANCY_ANGLE_FUNCTION_COEFFICIENTS": RADIAN,
     "K0_NC": DIMENSIONLESS, "K0_MAIN_DIRECTION": DIMENSIONLESS,
     "K0_VALUE_XX": DIMENSIONLESS, "K0_VALUE_YY": DIMENSIONLESS,
     "K0_VALUE_ZZ": DIMENSIONLESS, "OCR": DIMENSIONLESS,
@@ -227,4 +234,10 @@ def convert_project(payload: dict, target: str) -> tuple[dict, list[str]]:
         out["water"] = {**water,
                         "specific_weight": value(water.get("specific_weight"),
                                                  SPECIFIC_WEIGHT)}
+    fluid = payload.get("fluid")
+    if isinstance(fluid, dict):
+        out["fluid"] = {**fluid,
+                        "bulk_modulus": value(fluid.get("bulk_modulus"), STRESS),
+                        "dynamic_viscosity": value(fluid.get("dynamic_viscosity"),
+                                                   VISCOSITY)}
     return out, notes

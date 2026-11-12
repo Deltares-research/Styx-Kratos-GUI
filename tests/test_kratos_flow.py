@@ -193,9 +193,17 @@ def test_the_soil_is_water_pressure_elements_and_nothing_else(case_a):
     assert not deck.conditions
 
 
+def as_written(reference: dict) -> dict:
+    """The reference's `Variables` as the project writes them: its water is the
+    project's, whose DENSITY_WATER is 10 kN/m3 over g to the last digit, where the
+    reference rounds it to six."""
+    assert reference["DENSITY_WATER"] == pytest.approx(10_000.0 / 9.81, rel=1e-5)
+    return {**reference, "DENSITY_WATER": 10_000.0 / 9.81}
+
+
 def test_the_material_is_written_as_given(case_a):
     soil = json.loads(case_a["materials"])["properties"][0]["Material"]["Variables"]
-    assert soil == REFERENCE_SOIL
+    assert soil == as_written(REFERENCE_SOIL)
 
 
 def test_a_linear_mesh_gets_the_linear_element(gmsh_session):
@@ -297,7 +305,7 @@ def test_the_phreatic_start_comes_first_and_the_heads_replace_it(case_b):
 
 def test_the_van_genuchten_soil_is_the_reference_one(case_b):
     soil = json.loads(case_b["materials"])["properties"][0]["Material"]["Variables"]
-    assert soil == REFERENCE_SOIL_B
+    assert soil == as_written(REFERENCE_SOIL_B)
     assert not case_b["warnings"]
 
 

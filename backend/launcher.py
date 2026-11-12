@@ -104,7 +104,8 @@ def check_environment(python: Path) -> None:
     probe = (
         "import fastapi, gmsh, numpy, uvicorn; "
         "from backend.main import app; "
-        "print('Environment OK: gmsh ' + gmsh.__version__)"
+        "from core.version import describe; "
+        "print('Environment OK: Styx ' + describe() + ', gmsh ' + gmsh.__version__)"
     )
     subprocess.check_call([str(python), "-c", probe], cwd=ROOT)
 

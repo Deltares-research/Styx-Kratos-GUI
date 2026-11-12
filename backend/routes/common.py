@@ -52,9 +52,10 @@ def refusals():
 def stored(project: Project) -> dict:
     """Store the edited `project`, and start the answer to the edit: the project, and in
     `edit_notes` the mesh sizes the edit took away with their bodies
-    (`session.removed_sizes`). The GUI shows `edit_notes` in its Session log whatever
-    edit it made (frontend/js/api.js); kratos-cli prints the same note."""
-    notes = session.removed_sizes(store.get(), project)
+    and each line that splits no soil (`session.edit_notes`). The GUI shows `edit_notes` in
+    its Session log whatever edit it made (frontend/js/api.js); kratos-cli prints the same
+    notes."""
+    notes = session.edit_notes(store.get(), project)
     store.put(project)
     return {"project": project, "edit_notes": notes}
 

@@ -22,6 +22,13 @@
    "section": "string"
   }
  ],
+ "body list": [
+  {
+   "key": "string",
+   "label": "string",
+   "material": "string"
+  }
+ ],
  "boundary list": [
   {
    "active": "boolean",
@@ -120,6 +127,13 @@
    "top": "number"
   }
  ],
+ "line list": [
+  {
+   "id": "string",
+   "name": "string",
+   "points": "array"
+  }
+ ],
  "load list": [
   {
    "active": "boolean",
@@ -161,6 +175,7 @@
    "color": "string",
    "id": "string",
    "interface_permeability": "string",
+   "model": "string",
    "name": "string",
    "r_inter": "number",
    "variables": "object"
