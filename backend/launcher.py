@@ -17,22 +17,14 @@ import sys
 import threading
 import venv
 import webbrowser
-import importlib.resources
 
 
 ROOT = Path(__file__).resolve().parents[1]
 REQUIREMENTS = ROOT / "requirements.txt"
 MINIMUM_PYTHON = (3, 10)
 
-# Detect if running from installed wheel vs development checkout
-_is_installed = False
-try:
-    # If we can access frontend as a package resource, we're installed
-    if hasattr(importlib.resources, 'files'):
-        importlib.resources.files('backend')
-    _is_installed = True
-except (ModuleNotFoundError, TypeError):
-    pass
+# A development checkout has requirements.txt next to the package; an installed wheel does not.
+_is_installed = not REQUIREMENTS.is_file()
 
 
 def platform_venv_name(platform: str = sys.platform) -> str:
