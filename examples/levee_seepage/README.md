@@ -116,4 +116,6 @@ python levee_seepage.py --calculate            # write the deck, run it, print t
 `python` is the environment `kratos-cli` runs in: `..\..\.venv-windows\Scripts\python.exe`
 on Windows, `../../.venv-linux/bin/python` on Linux.
 
-The commands are all in [docs/CLI.md](../../docs/CLI.md).
+[docs/cli_tutorials/levee_seepage_case.md](../../docs/cli_tutorials/levee_seepage_case.md)
+builds this model command by command. The commands are all in
+[docs/CLI.md](../../docs/CLI.md).
