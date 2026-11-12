@@ -237,6 +237,37 @@ def test_on_windows_the_server_is_a_child_process_so_a_path_with_a_space_works(
     assert stood_in["call"][:3] == [str(python), "-m", "uvicorn"]
 
 
+# ── Started from an installed wheel ─────────────────────────────────────────
+
+def test_an_installed_wheel_runs_in_its_own_python_and_builds_no_environment(monkeypatch):
+    from unittest.mock import Mock
+
+    monkeypatch.setattr(_launcher, "_is_installed", True)
+    create = Mock()
+    install = Mock()
+    monkeypatch.setattr(_launcher.venv, "EnvBuilder", create)
+    monkeypatch.setattr(_launcher.subprocess, "check_call", install)
+
+    assert _launcher.ensure_environment() == Path(_launcher.sys.executable)
+    create.assert_not_called()
+    install.assert_not_called()
+
+
+@_pytest.mark.parametrize("installed, moved_to", [(True, []), (False, [_launcher.ROOT])])
+def test_only_a_checkout_starts_the_server_from_its_own_folder(
+        stood_in, monkeypatch, installed, moved_to):
+    """`uvicorn backend.main:app` finds `backend` in a checkout only from its root; an
+    installed wheel has it on the path already, and stays in the user's folder."""
+    monkeypatch.setattr(_launcher, "_is_installed", installed)
+    moves = []
+    monkeypatch.setattr(_launcher.os, "chdir", moves.append)
+
+    _launcher.main([])
+
+    assert moves == moved_to
+    assert "backend.main:app" in stood_in["exec"]
+
+
 def test_a_failed_server_exec_is_reported_as_a_launcher_error(
         stood_in, monkeypatch, capsys):
     from unittest.mock import Mock
