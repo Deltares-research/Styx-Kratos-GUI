@@ -5,7 +5,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "deltaresstyx"
-version = "0.1.1"
+# One version number, VERSION in core/version.py, for the wheel and for what Styx shows.
+dynamic = ["version"]
 description = "A GUI for the Kratos structural analysis framework"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -27,6 +28,9 @@ kratos-cli = "cli.__main__:run"
 
 [tool.setuptools]
 include-package-data = true
+
+[tool.setuptools.dynamic]
+version = {attr = "core.version.VERSION"}
 
 [tool.setuptools.packages.find]
 include = ["backend*", "core*", "cli*"]

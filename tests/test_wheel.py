@@ -34,6 +34,15 @@ def test_the_cli_command_is_the_kratos_cli_that_the_wrappers_start():
     assert entry_point("kratos-cli") is cli_main.run
 
 
+def test_the_wheel_takes_its_version_from_core_version():
+    """The release workflow checks the tag against `VERSION`; a second number in
+    `pyproject.toml` could ship a wheel that says another version than the app."""
+    assert "version" not in PROJECT["project"]
+    assert "version" in PROJECT["project"]["dynamic"]
+    assert PROJECT["tool"]["setuptools"]["dynamic"]["version"] == {
+        "attr": "core.version.VERSION"}
+
+
 def test_the_cli_command_runs_and_answers_in_utf8():
     ran = subprocess.run(
         [sys.executable, "-c", "from cli.__main__ import run; raise SystemExit(run())",
