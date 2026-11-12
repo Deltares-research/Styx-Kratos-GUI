@@ -10,13 +10,15 @@ description = "A GUI for the Kratos structural analysis framework"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
-    "fastapi==0.143.0",
+    "fastapi==0.162.0",
     "uvicorn[standard]==0.34.0",
-    "pydantic==2.12.5",
+    "pydantic==2.14.3",
     "gmsh==4.13.1",
     "numpy==2.2.6; python_version < '3.11'",
-    "numpy==2.3.5; python_version >= '3.11'",
-    "python-multipart==0.0.32",
+    "numpy==2.3.5; python_version >= '3.11' and python_version < '3.15'",
+    "numpy==2.5.4; python_version >= '3.15'",
+    "python-multipart==0.0.32; python_version < '3.11'",
+    "python-multipart==0.0.33; python_version >= '3.11'",
 ]
 
 [project.scripts]
