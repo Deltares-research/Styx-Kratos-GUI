@@ -34,7 +34,10 @@ boundary conditions, and its water pressures are compared with that calculation 
     corner (4, 6) on;
   - the crest, from (0, 6) to (4, 6), and the model's bottom have no condition, so no
     water flows through them.
-- **Start values**: hydrostatic about 5.0 m. ( better change this to one that uses a multiline that drops from 5.0 to -0.5 over the core )
+- **Start values**: hydrostatic below a phreatic multi-line through (−36, 5), (−2, 5),
+  (15, −0.5) and (54, −0.5): the river level up to just before the crest, dropping
+  through the levee to the polder level. Above the line the suction is capped at 100 kPa,
+  as on the river and polder heads.
 - **Stages**: one stage, of the type **Groundwater flow**, with the seepage strategy, at
   most 300 iterations and a residual error tolerance of 1e-4.
 - **Mesh**: linear, 1.0 m.

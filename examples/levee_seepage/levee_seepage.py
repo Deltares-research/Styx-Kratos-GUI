@@ -79,6 +79,12 @@ RIVER_LEVEL, POLDER_LEVEL = 5.0, -0.5
 CUT_OFF = 1.0e5
 """Pa: the largest suction a fixed head may give. The river head holds the outer slope
 above the river level too, up to the crest, where it is 10 kPa of suction."""
+START_PHREATIC_LINE = [(LEFT_X, RIVER_LEVEL), (-2.0, RIVER_LEVEL),
+                       (15.0, POLDER_LEVEL), (RIGHT_X, POLDER_LEVEL)]
+"""The phreatic line the calculation starts from, m: the river level up to x = -2, just
+before the crest, then dropping through the levee to the polder level at x = 15. It is
+closer to the solution than one level everywhere."""
+
 
 # The flow properties, SI. A conductivity K of 1 m/day is an intrinsic permeability of
 # K mu / (rho_w g), with the water's unit weight of 10 kN/m3.
@@ -114,11 +120,14 @@ BOUNDARY_CONDITIONS = [
     # crest's inner corner on.
     SeepageCondition(id="seepage_face", name="Seepage face", on="line",
                      points=[(4.0, CREST_Y), (22.0, GROUND_Y), (RIGHT_X, GROUND_Y)]),
-    # Start values: hydrostatic about the river level. The crest, from (0, 6) to (4, 6),
-    # and the bottom have no condition, so no water flows through them.
+    # Start values: hydrostatic below a phreatic line that drops through the levee from
+    # the river level to the polder level (START_PHREATIC_LINE). The crest,
+    # from (0, 6) to (4, 6), and the bottom have no condition, so no water flows
+    # through them.
     WaterPressureCondition(id="start", name="Start values", on="domain",
-                           fluid_pressure_type="Hydrostatic", is_fixed=False,
-                           reference_coordinate=RIVER_LEVEL,
+                           fluid_pressure_type="Phreatic_Multi_Line", is_fixed=False,
+                           x_coordinates=[x for x, _ in START_PHREATIC_LINE],
+                           y_coordinates=[y for _, y in START_PHREATIC_LINE],
                            pressure_tension_cut_off=CUT_OFF),
 ]
 

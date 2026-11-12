@@ -197,12 +197,22 @@
       "face": null,
       "part": null,
       "points": null,
-      "fluid_pressure_type": "Hydrostatic",
+      "fluid_pressure_type": "Phreatic_Multi_Line",
       "is_fixed": false,
       "value": 0.0,
-      "reference_coordinate": 5.0,
-      "x_coordinates": null,
-      "y_coordinates": null,
+      "reference_coordinate": null,
+      "x_coordinates": [
+        -36.0,
+        -2.0,
+        15.0,
+        54.0
+      ],
+      "y_coordinates": [
+        5.0,
+        5.0,
+        -0.5,
+        -0.5
+      ],
       "z_coordinates": null,
       "pressure_tension_cut_off": 100000.0,
       "active": true
