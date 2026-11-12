@@ -254,10 +254,12 @@ App.Viewport = (function () {
     return { edges: edges, seams: seams };
   }
 
-  /* The closed outline, in the section, of a drawn soil part a line can cut: a polygon
-     swept along z, or a box (core/model/schemas.py `CustomPart.section_outline`). */
+  /* The closed outline, in the section, of a drawn part that is a polygon swept along z
+     or a box. Which parts a line can cut is the server's rule
+     (core/model/schemas.py `CustomPart.section_outline`): only a cut part has pieces
+     (`<part>__<id>` in `soil_body_keys`) that look its outline up here. */
   function partOutline(part) {
-    var recipe = part && part.mat && part.recipe;
+    var recipe = part && part.recipe;
     var points = null;
     if (recipe && recipe.kind === 'polygon_extrude' && recipe.vertices) {
       points = recipe.vertices.map(function (v) { return [v[0], v[1]]; });
