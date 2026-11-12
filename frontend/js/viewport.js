@@ -173,9 +173,9 @@ App.Viewport = (function () {
      one along the line. They are drawn with the line, so hiding the line in the Model
      explorer hides all of it, not only its dashes over the seam. An edge on a layer's
      outline, or on the outline of a drawn soil surface, stays the soil's, as it is there
-     with or without the line. In 3D an edge
-     across the model at one of the line's points goes with it too, unless it is the
-     domain's side. Pure, so it is testable without a renderer.
+     with or without the line. In 3D an edge across the model at one of the line's points
+     goes with it too, unless it is the domain's side. Pure, so it is testable without a
+     renderer.
 
      Returns `edges`, each section's flat LineSegments pairs less the seams, and
      `seams`, one `{line, section, edges}` per line and section that has one. */

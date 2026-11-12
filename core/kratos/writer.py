@@ -1714,14 +1714,15 @@ def _part_names(project: Project) -> dict[str, str]:
     owners = {f"soil_{layer.id}": _sanitise(layer.name) or layer.id for layer in project.layers}
     # A piece of a drawn soil surface is named after the surface, as a layer's is.
     owners.update({part.key: _sanitise(part.label) or part.key for part in project.custom_parts})
-    recorded = {piece.key: piece.body.name for piece in project.split_soil() if piece.body}
-    for key, *_ in project.soil_bodies():
-        stem, _, suffix = key.partition("__")
-        base = owners[stem]
+    pieces = project.split_soil()
+    for piece in pieces:
+        stem, _, suffix = piece.key.partition("__")
         # A piece a line cut off has a name of its own, which the deck says.
-        suffix = _sanitise(recorded[key]) or suffix if key in recorded else suffix
-        names[key] = _unique(f"{base}_{suffix}" if suffix else base, used)
-    cut = set(project.cut_parts())
+        if piece.body is not None:
+            suffix = _sanitise(piece.body.name) or suffix
+        names[piece.key] = _unique(f"{owners[stem]}_{suffix}" if suffix else owners[stem],
+                                   used)
+    cut = {piece.part.key for piece in pieces if piece.part is not None}
     for part in project.custom_parts:
         if part.key not in cut:
             names[part.key] = _unique(_sanitise(part.label) or part.key, used)

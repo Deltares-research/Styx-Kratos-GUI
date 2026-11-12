@@ -1089,8 +1089,10 @@ def update_body(project: Project, key: str, **fields) -> Project:
         raise UnknownPart(f"{key} is a whole layer, not a part cut off by a line: change it "
                           "as a layer")
     if any(part.key == key for part in project.custom_parts):
-        raise UnknownPart(f"{key} is a whole drawn solid, not a part cut off by a line: "
-                          "change it as a volume")
+        noun, command = (("soil surface", "surface set") if project.dimension == 2
+                         else ("soil volume", "volume"))
+        raise UnknownPart(f"{key} is a whole {noun}, not a part cut off by a line: change it "
+                          f"with `{command}`")
     raise UnknownPart(f"no soil body with key {key!r}")
 
 

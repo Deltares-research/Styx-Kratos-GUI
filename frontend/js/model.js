@@ -1741,7 +1741,7 @@ App.Model = (function () {
         } }],
       [owner.noun || 'Layer', owner.name, '', true],
       // The materials only, the part's chosen: it has one of its own from the moment
-      // a line cuts it off, and keeps it when its layer's changes.
+      // a line cuts it off, until its layer or surface is given another.
       ['Material', bodyMaterial(owner, key).name, '', false, {
         kind: 'select',
         options: function () {

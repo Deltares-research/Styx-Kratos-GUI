@@ -1,9 +1,9 @@
 """The pieces a soil layer or a drawn soil surface falls into when lines cut it.
 
 A layer is a rectangle in the section, a drawn soil surface a polygon (`polygon_pieces`),
-and what cuts them is any number of polylines: the lines a user draws and the sheet piles. This module takes the two and answers with the
-closed pieces, the one thing `Project.soil_bodies`, the geometry and the deck all have to
-agree on. Pure Python: the project is validated outside the gmsh worker, and the browser
+and what cuts them is any number of polylines: the lines a user draws and the sheet piles.
+This module takes the two and answers with the closed pieces, the one thing
+`Project.soil_bodies`, the geometry and the deck all have to agree on. Pure Python: the project is validated outside the gmsh worker, and the browser
 reads the answer off the project.
 
 The cut is a small planar graph. Every segment is clipped to the rectangle and split where

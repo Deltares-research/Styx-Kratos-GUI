@@ -614,8 +614,24 @@ def test_a_piece_of_a_surface_can_be_renamed_and_given_its_own_material():
                                   name="Core", material="grout")
     assert project.soil_body_labels["drawn_0__part1"] == "Surface · Core"
     assert project.soil_body_materials == {"drawn_0__part1": "grout", "drawn_0__part2": "sand"}
-    with pytest.raises(session.UnknownPart, match="whole drawn solid"):
+    with pytest.raises(session.UnknownPart,
+                       match="drawn_0 is a whole soil surface, .*with `surface set`"):
         session.update_body(project, "drawn_0", name="Whole")
+
+
+def test_a_whole_soil_volume_is_changed_with_volume():
+    project = on_a_surface(lines=[ACROSS.model_dump()], dimension=3)
+    with pytest.raises(session.UnknownPart,
+                       match="drawn_0 is a whole soil volume, .*with `volume`"):
+        session.update_body(project, "drawn_0", name="Whole")
+
+
+def test_two_pieces_of_a_surface_cannot_share_a_name():
+    project = on_a_surface(lines=[ACROSS.model_dump()])
+    with pytest.raises(ValueError, match=(
+            "in soil surface 'Surface' are both called 'Part 2': give each part of a soil "
+            "surface a name of its own")):
+        session.update_body(project, "drawn_0__part1", name="Part 2")
 
 
 def test_a_new_material_for_the_surface_goes_to_every_piece():

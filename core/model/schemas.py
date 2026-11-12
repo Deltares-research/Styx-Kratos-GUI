@@ -2037,7 +2037,7 @@ class Project(Base):
                       update={"mat": piece.owner_mat}))
                   for piece in pieces]
         self.bodies = [piece.body for piece in pieces if piece.body is not None]
-        _reject_same_names(pieces)
+        _reject_same_names(pieces, self.dimension)
         # The viewport keeps a line's drawing under its id, beside the parts', the
         # conditions' and the water level's.
         taken = sorted({line.id for line in self.lines}
@@ -2766,8 +2766,8 @@ class Project(Base):
 
     def soil_bodies(self) -> list[tuple[str, float, float]]:
         """Every soil body the layers and the drawn soil surfaces are split into, as
-        `(part key, y_bottom, y_top)` (`split_soil`). Empty for a project with no ground in it yet, the site the server
-        opens on, for which `part_keys` asks during validation.
+        `(part key, y_bottom, y_top)` (`split_soil`). Empty for a project with no ground in
+        it yet, the site the server opens on, for which `part_keys` asks during validation.
         """
         return [(piece.key, piece.piece.bottom, piece.piece.top)
                 for piece in self.split_soil()]
@@ -2810,8 +2810,10 @@ class Project(Base):
         # the namespace and the geometry from disagreeing about how many soil bodies a
         # project has.
         soils = [key for key, *_ in self.soil_bodies()]
-        # A part cut into pieces is its pieces, which are soil bodies above.
-        cut = set(self.cut_parts())
+        # A part cut into pieces is its pieces, which are soil bodies above. The stems
+        # also hold the layers' `soil_<id>`, which no custom part key (`drawn_N`,
+        # `imported_N`) can be.
+        cut = {key.partition("__")[0] for key in soils}
         customs = [p.key for p in self.custom_parts if p.key not in cut]
         beams = ([beam.id for beam in self.beams] + [a.id for a in self.anchors]
                  + [i.id for i in self.interfaces])
@@ -2910,10 +2912,10 @@ def _deck_word(name: str) -> str:
     return name.strip().casefold() if word[:1].isdigit() or not word else word
 
 
-def _reject_same_names(pieces: list[SoilPiece]) -> None:
-    """Refuse two pieces of one layer, or of one drawn soil surface, with the same name: the
-    explorer, the stages and the deck could not tell them apart. Pieces of two layers may share one, as `Top_Pit` and
-    `Low_Pit`."""
+def _reject_same_names(pieces: list[SoilPiece], dimension: int) -> None:
+    """Refuse two pieces of one layer, or of one drawn soil surface, with the same name:
+    the explorer, the stages and the deck could not tell them apart. Pieces of two layers
+    may share one, as `Top_Pit` and `Low_Pit`."""
     seen: dict[tuple[str, str], SoilPiece] = {}
     for piece in pieces:
         if piece.body is None:
@@ -2926,6 +2928,7 @@ def _reject_same_names(pieces: list[SoilPiece]) -> None:
         names = (f"both called {piece.body.name!r}" if first.body.name == piece.body.name
                  else f"called {first.body.name!r} and {piece.body.name!r}, which differ "
                       f"only in case or punctuation")
-        what = "layer" if piece.layer is not None else "drawn soil"
+        what = ("layer" if piece.layer is not None
+                else "soil surface" if dimension == 2 else "soil volume")
         raise ValueError(f"{first.key} and {piece.key} in {what} {piece.owner_name!r} are "
                          f"{names}: give each part of a {what} a name of its own")
