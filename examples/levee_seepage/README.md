@@ -4,7 +4,7 @@ A steady-state groundwater flow under and through a clay levee on a clay cover o
 sand aquifer. The river stands against the outer slope; the water flows to the polder
 and leaves through the inner slope and the polder surface. The model is rebuilt from a
 reference calculation of the same section, with the same geometry, soil properties and
-boundary conditions, and its water pressures are compared with that calculation's below.
+boundary conditions, and its water pressures are compared with that calculation below.
 
 | File | What it is |
 |---|---|
@@ -24,20 +24,19 @@ boundary conditions, and its water pressures are compared with that calculation'
 - **Flow properties**: all four bodies share them. The saturated hydraulic conductivity
   is 1 m/day, isotropic (an intrinsic permeability of 1.157e-12 m² with a water unit
   weight of 10 kN/m³). The retention curve is Van Genuchten, with ga = 3.83 1/m (an air
-  entry pressure of 2611 Pa), gn = 1.3774, gl = 1.25, a residual saturation of 0.062 and
-  a relative permeability of at least 1e-4.
+  entry pressure of 2.611 kPa), gn = 1.3774, gl = 1.25, a residual saturation of 0.062 and
+  a lower limit on relative permeability of 1e-4.
 - **Water**:
-  - the left side, the foreland and the outer slope up to the crest are held at a water
+  - the left side, the river bottom and the dike outer slope up to the crest are held at a water
     level of 5.0 m (the river);
   - the right side is held at −0.5 m (the polder);
-  - the crest from x = 0.5 m, the inner slope and the polder surface are a seepage face.
-    It starts just off the crest's outer corner, so that the corner stays held at the
-    river level: on a node shared with the river head, the seepage strategy would free
-    it in suction;
-  - the bottom has no condition, so no water flows through it.
-- **Start values**: hydrostatic about 5.0 m.
+  - the inner slope and the polder surface are a seepage face, from the crest's inner
+    corner (4, 6) on;
+  - the crest, from (0, 6) to (4, 6), and the model's bottom have no condition, so no
+    water flows through them.
+- **Start values**: hydrostatic about 5.0 m. ( better change this to one that uses a multiline that drops from 5.0 to -0.5 over the core )
 - **Stages**: one stage, of the type **Groundwater flow**, with the seepage strategy, at
-  most 300 iterations and a tolerance of 1e-4.
+  most 300 iterations and a residual error tolerance of 1e-4.
 - **Mesh**: linear, 1.0 m.
 
 The river level holds on the outer slope above 5.0 m too, as in the reference
@@ -48,9 +47,9 @@ calculation: up to the crest the soil there is held in suction, 10 kPa at (0, 6)
 The seepage strategy converges in 20 iterations. It opens the seepage face on the inner
 slope from an exit point at x = 19.2 m (y = 0.95 m), and the whole polder surface beyond.
 
-- The water that comes in from the river leaves on the polder side: 2.88 m³/day per
-  metre, in and out. 2.04 of it leaves through the seepage face and 0.84 through the
-  right side.
+- The water that comes in from the river leaves on the polder side: 2.87 m³/day per
+  metre, in and out. 2.03 of it leaves through the seepage face and 0.84 through the
+  right side. None of it goes through the crest.
 
 The water pressures, compared with the reference calculation at its 4007 nodes (in kPa,
 Kratos' sign: suction positive):

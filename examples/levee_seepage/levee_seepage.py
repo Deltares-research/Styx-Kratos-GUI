@@ -5,8 +5,9 @@ and the polder surface.
 A 90 m wide section, 22 m deep: a sand aquifer from y = -22 to -2, a clay cover from -2
 to 0, and on it a clay levee with a core and an outer layer, its crest 4 m wide at
 y = 6. The river stands at 5.0 m on the outer slope, the foreland and the left side;
-the right side is held at -0.5 m, the polder level. The crest (but its outer corner), the
-inner slope and the polder surface are a seepage face; the bottom is closed. One "Groundwater flow" stage.
+the right side is held at -0.5 m, the polder level. The inner slope and the polder
+surface are a seepage face; the crest and the bottom are closed. One "Groundwater flow"
+stage.
 levee_seepage.json beside it is the same model, as the GUI saves it.
 
     python levee_seepage.py               write the deck into this folder
@@ -75,8 +76,6 @@ OUTER_LAYER = [(-18.0, 0.0), (0.0, CREST_Y), (4.0, CREST_Y), (22.0, 0.0), (18.0,
 
 # The heads, m: the river on the left, the polder on the right.
 RIVER_LEVEL, POLDER_LEVEL = 5.0, -0.5
-SEEPAGE_START_X = 0.5
-"""m: where the seepage face starts on the crest, half an element off the river head."""
 CUT_OFF = 1.0e5
 """Pa: the largest suction a fixed head may give. The river head holds the outer slope
 above the river level too, up to the crest, where it is 10 kPa of suction."""
@@ -90,8 +89,8 @@ PERMEABILITY = CONDUCTIVITY * VISCOSITY / WATER_UNIT_WEIGHT
 VAN_GENUCHTEN_GA = 3.83               # 1/m
 
 # Linear triangles of 1 m. The seepage strategy opens or closes one node of the face per
-# iteration, and the face (the crest, the inner slope and the polder) has about 60 nodes
-# at this size: the iterations leave room for all of them.
+# iteration, and the face (the inner slope and the polder) has about 55 nodes at this
+# size: the iterations leave room for all of them.
 ELEMENT_SIZE = 1.0
 ELEMENT_ORDER = 1
 MAX_ITERATIONS = 300
@@ -111,14 +110,12 @@ BOUNDARY_CONDITIONS = [
                            fluid_pressure_type="Hydrostatic", is_fixed=True,
                            reference_coordinate=POLDER_LEVEL,
                            pressure_tension_cut_off=CUT_OFF),
-    # The water may leave through the crest, the inner slope and the polder surface. The
-    # face starts just off the crest's outer corner: on a node it shared with the river
-    # head, the seepage strategy would free the node the river holds.
+    # The water may leave through the inner slope and the polder surface, from the
+    # crest's inner corner on.
     SeepageCondition(id="seepage_face", name="Seepage face", on="line",
-                     points=[(SEEPAGE_START_X, CREST_Y), (4.0, CREST_Y), (22.0, GROUND_Y),
-                             (RIGHT_X, GROUND_Y)]),
-    # Start values: hydrostatic about the river level. The bottom has no condition, so
-    # no water flows through it.
+                     points=[(4.0, CREST_Y), (22.0, GROUND_Y), (RIGHT_X, GROUND_Y)]),
+    # Start values: hydrostatic about the river level. The crest, from (0, 6) to (4, 6),
+    # and the bottom have no condition, so no water flows through them.
     WaterPressureCondition(id="start", name="Start values", on="domain",
                            fluid_pressure_type="Hydrostatic", is_fixed=False,
                            reference_coordinate=RIVER_LEVEL,
