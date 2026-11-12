@@ -1,0 +1,1065 @@
+{
+  "TIME": [
+    3.0
+  ],
+  "NODE_1": {
+    "BENDING_MOMENT": [
+      -6600.53608091904
+    ],
+    "SHEAR_FORCE": [
+      -6739.659370876008
+    ],
+    "AXIAL_FORCE": [
+      -100.8371250957399
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.006734389074539911
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.03841328743691606
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_4": {
+    "BENDING_MOMENT": [
+      316.3347504795736
+    ],
+    "SHEAR_FORCE": [
+      5429.496205308095
+    ],
+    "AXIAL_FORCE": [
+      583.569686995756
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.0010413998951965529
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.03841386291041176
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_5": {
+    "BENDING_MOMENT": [
+      117.5417448504251
+    ],
+    "SHEAR_FORCE": [
+      185.2314253593596
+    ],
+    "AXIAL_FORCE": [
+      36.13684874265982
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.08292081286293917
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.038434501317659825
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_6": {
+    "BENDING_MOMENT": [
+      -7930.765295378893
+    ],
+    "SHEAR_FORCE": [
+      -13628.419690073164
+    ],
+    "AXIAL_FORCE": [
+      -6942.400875096804
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.07148109501780404
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.038433343350483616
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_7": {
+    "BENDING_MOMENT": [
+      -16827.39998257379
+    ],
+    "SHEAR_FORCE": [
+      -21472.885691713353
+    ],
+    "AXIAL_FORCE": [
+      -9902.266357802313
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.06770047183090763
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.038432331978852825
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_8": {
+    "BENDING_MOMENT": [
+      -35593.2706883319
+    ],
+    "SHEAR_FORCE": [
+      9991.363293045426
+    ],
+    "AXIAL_FORCE": [
+      -8076.056686842921
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.046894838805152196
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.03842578591971026
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_9": {
+    "BENDING_MOMENT": [
+      -1449.7951477591248
+    ],
+    "SHEAR_FORCE": [
+      8847.741186699368
+    ],
+    "AXIAL_FORCE": [
+      -11169.012603461706
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.029458196529874085
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.038418698735832583
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_81": {
+    "BENDING_MOMENT": [
+      -459.86499408399527
+    ],
+    "SHEAR_FORCE": [
+      -2620.1341921756402
+    ],
+    "AXIAL_FORCE": [
+      -1938.2551521387095
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.07910281364415578
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.03843438677667498
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_82": {
+    "BENDING_MOMENT": [
+      -2815.168023865362
+    ],
+    "SHEAR_FORCE": [
+      -7133.6718279249735
+    ],
+    "AXIAL_FORCE": [
+      -4245.894741184022
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.07528708415533537
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.03843401536377983
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_83": {
+    "BENDING_MOMENT": [
+      -188.77563344876037
+    ],
+    "SHEAR_FORCE": [
+      -1225.2695130722716
+    ],
+    "AXIAL_FORCE": [
+      -952.584397879455
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.08101174304293975
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.0384344737687085
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_84": {
+    "BENDING_MOMENT": [
+      -1639.7548001450557
+    ],
+    "SHEAR_FORCE": [
+      -4860.471294960029
+    ],
+    "AXIAL_FORCE": [
+      -3088.86927774587
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.07719433900234972
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.03843423575006307
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_85": {
+    "BENDING_MOMENT": [
+      -5365.4091141392
+    ],
+    "SHEAR_FORCE": [
+      -10359.782761085435
+    ],
+    "AXIAL_FORCE": [
+      -5588.823791744796
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.07338209394106084
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.038433719625338356
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_86": {
+    "BENDING_MOMENT": [
+      -12277.976995279198
+    ],
+    "SHEAR_FORCE": [
+      -17487.20483582611
+    ],
+    "AXIAL_FORCE": [
+      -8411.110113999743
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.06958621666245202
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.03843288139381503
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_87": {
+    "BENDING_MOMENT": [
+      -39939.93725765398
+    ],
+    "SHEAR_FORCE": [
+      7117.334016140927
+    ],
+    "AXIAL_FORCE": [
+      -7917.0245924924
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.05007063600700518
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.038426747505837085
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_88": {
+    "BENDING_MOMENT": [
+      -42345.23775443951
+    ],
+    "SHEAR_FORCE": [
+      2136.575429537547
+    ],
+    "AXIAL_FORCE": [
+      -8169.352246201024
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.05336430789188598
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.03842771434299779
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_89": {
+    "BENDING_MOMENT": [
+      -41755.74006267793
+    ],
+    "SHEAR_FORCE": [
+      -4881.907548901636
+    ],
+    "AXIAL_FORCE": [
+      -8819.467757736484
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.05678248991229337
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.038428735836671335
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_90": {
+    "BENDING_MOMENT": [
+      -36857.16642722856
+    ],
+    "SHEAR_FORCE": [
+      -14795.154206816223
+    ],
+    "AXIAL_FORCE": [
+      -10034.770927812435
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.06032284310803275
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.03842986735448635
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_91": {
+    "BENDING_MOMENT": [
+      -27707.08811284884
+    ],
+    "SHEAR_FORCE": [
+      -20815.203106682788
+    ],
+    "AXIAL_FORCE": [
+      -10493.67944691457
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.0639708395530498
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.0384311045125394
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_92": {
+    "BENDING_MOMENT": [
+      -37758.53385240685
+    ],
+    "SHEAR_FORCE": [
+      8551.684229398521
+    ],
+    "AXIAL_FORCE": [
+      -7997.067102263853
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.04846869317783059
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.03842626901883101
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_93": {
+    "BENDING_MOMENT": [
+      -41143.27146907762
+    ],
+    "SHEAR_FORCE": [
+      4639.407454232361
+    ],
+    "AXIAL_FORCE": [
+      -8040.737522655365
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.05170216877057346
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.038427227105466644
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_94": {
+    "BENDING_MOMENT": [
+      -42043.10149660775
+    ],
+    "SHEAR_FORCE": [
+      -1377.0027185266192
+    ],
+    "AXIAL_FORCE": [
+      -8495.290462583402
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.05505776102994119
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.03842821533922375
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_95": {
+    "BENDING_MOMENT": [
+      -39374.59073928693
+    ],
+    "SHEAR_FORCE": [
+      -9752.154276403062
+    ],
+    "AXIAL_FORCE": [
+      -9410.3103632528
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.0585380211821166
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.038429283828852245
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_96": {
+    "BENDING_MOMENT": [
+      -32294.55660772616
+    ],
+    "SHEAR_FORCE": [
+      -17932.896306188086
+    ],
+    "AXIAL_FORCE": [
+      -10288.871366640436
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.06213482941507077
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.03843047930002908
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_97": {
+    "BENDING_MOMENT": [
+      -22303.932727722167
+    ],
+    "SHEAR_FORCE": [
+      -21195.643867174134
+    ],
+    "AXIAL_FORCE": [
+      -10208.26965020916
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.06582735977987295
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.03843172634844948
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_98": {
+    "BENDING_MOMENT": [
+      -6323.016173446621
+    ],
+    "SHEAR_FORCE": [
+      10574.290882653426
+    ],
+    "AXIAL_FORCE": [
+      -11348.36306203485
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.03225885446201792
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.038420052354075515
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_99": {
+    "BENDING_MOMENT": [
+      -11936.549763629715
+    ],
+    "SHEAR_FORCE": [
+      11775.020415107887
+    ],
+    "AXIAL_FORCE": [
+      -10629.570852044444
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.03507869159660358
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.038421375207160234
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_100": {
+    "BENDING_MOMENT": [
+      -17988.439310307396
+    ],
+    "SHEAR_FORCE": [
+      12328.286697271062
+    ],
+    "AXIAL_FORCE": [
+      -9780.360877184452
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.03793426354512661
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.03842260100736611
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_101": {
+    "BENDING_MOMENT": [
+      -24167.074935011355
+    ],
+    "SHEAR_FORCE": [
+      12282.673477996097
+    ],
+    "AXIAL_FORCE": [
+      -9069.024958627459
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.040843424097614905
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.03842373428989637
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_102": {
+    "BENDING_MOMENT": [
+      -30160.42267364676
+    ],
+    "SHEAR_FORCE": [
+      11565.623815014585
+    ],
+    "AXIAL_FORCE": [
+      -8488.832467692238
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.043824401228907246
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.03842478993333284
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_103": {
+    "BENDING_MOMENT": [
+      -3884.98338891994
+    ],
+    "SHEAR_FORCE": [
+      9708.579061510705
+    ],
+    "AXIAL_FORCE": [
+      -11257.416904947102
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.030857080485370555
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.038419372947938686
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_104": {
+    "BENDING_MOMENT": [
+      -9128.576753721232
+    ],
+    "SHEAR_FORCE": [
+      11178.690244351958
+    ],
+    "AXIAL_FORCE": [
+      -11001.557312463414
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.033665377672119
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.03842072434268182
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_105": {
+    "BENDING_MOMENT": [
+      -14962.885166050997
+    ],
+    "SHEAR_FORCE": [
+      12052.139814659364
+    ],
+    "AXIAL_FORCE": [
+      -10194.413404237499
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.03650091215140486
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.03842200056828409
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_106": {
+    "BENDING_MOMENT": [
+      -21076.95175221144
+    ],
+    "SHEAR_FORCE": [
+      12303.973005152984
+    ],
+    "AXIAL_FORCE": [
+      -9424.986683596282
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.03938100428410945
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.03842317834574701
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_107": {
+    "BENDING_MOMENT": [
+      -27161.768765100056
+    ],
+    "SHEAR_FORCE": [
+      11922.25559438434
+    ],
+    "AXIAL_FORCE": [
+      -8779.298247270706
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.04232380988741446
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.03842427081766697
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_108": {
+    "BENDING_MOMENT": [
+      -32872.22063263059
+    ],
+    "SHEAR_FORCE": [
+      10774.831796047765
+    ],
+    "AXIAL_FORCE": [
+      -8283.158077219636
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.04534739324681045
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.03842529408369498
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_109": {
+    "BENDING_MOMENT": [
+      2462.556233489574
+    ],
+    "SHEAR_FORCE": [
+      6742.3067273620345
+    ],
+    "AXIAL_FORCE": [
+      -10253.98150256801
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.026662327350644287
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.03841741079025892
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_110": {
+    "BENDING_MOMENT": [
+      5234.762134600636
+    ],
+    "SHEAR_FORCE": [
+      4284.964810067378
+    ],
+    "AXIAL_FORCE": [
+      -8664.824688409371
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.02385969600025835
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.0384162727661381
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_111": {
+    "BENDING_MOMENT": [
+      6679.356283487947
+    ],
+    "SHEAR_FORCE": [
+      1431.7625181206422
+    ],
+    "AXIAL_FORCE": [
+      -6600.201895710985
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.021042145019269137
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.038415356097004597
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_112": {
+    "BENDING_MOMENT": [
+      6629.267853269976
+    ],
+    "SHEAR_FORCE": [
+      -1638.359585268202
+    ],
+    "AXIAL_FORCE": [
+      -5069.761246423515
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.0182054553043806
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.038414654275974985
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_113": {
+    "BENDING_MOMENT": [
+      5056.782295470866
+    ],
+    "SHEAR_FORCE": [
+      -4611.5956005421285
+    ],
+    "AXIAL_FORCE": [
+      -3850.5506341367773
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.015349788199312995
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.03841411795031055
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_114": {
+    "BENDING_MOMENT": [
+      2081.273409448856
+    ],
+    "SHEAR_FORCE": [
+      -7186.065028417048
+    ],
+    "AXIAL_FORCE": [
+      -2811.0186677188485
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.01247976097127567
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.03841371747047185
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_115": {
+    "BENDING_MOMENT": [
+      -1989.125952122681
+    ],
+    "SHEAR_FORCE": [
+      -8845.18140658156
+    ],
+    "AXIAL_FORCE": [
+      -1819.9915827226466
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.009604061786909918
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.03841343915112471
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_116": {
+    "BENDING_MOMENT": [
+      506.7133012508704
+    ],
+    "SHEAR_FORCE": [
+      7793.859892852473
+    ],
+    "AXIAL_FORCE": [
+      -10711.247686792483
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.02806045041454476
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.038418041062833475
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_117": {
+    "BENDING_MOMENT": [
+      3848.3548287654803
+    ],
+    "SHEAR_FORCE": [
+      5513.682545044559
+    ],
+    "AXIAL_FORCE": [
+      -9464.420299356341
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.02526244306827697
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.0384168180890029
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_118": {
+    "BENDING_MOMENT": [
+      5958.890555488037
+    ],
+    "SHEAR_FORCE": [
+      2864.5670050736717
+    ],
+    "AXIAL_FORCE": [
+      -7623.513242257718
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.022453136913414915
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.03841578347625583
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_119": {
+    "BENDING_MOMENT": [
+      6657.475907818107
+    ],
+    "SHEAR_FORCE": [
+      -104.81740934919287
+    ],
+    "AXIAL_FORCE": [
+      -5836.720924887524
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.019626276403444737
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.0384149820418279
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_120": {
+    "BENDING_MOMENT": [
+      5846.310923937361
+    ],
+    "SHEAR_FORCE": [
+      -3123.812908656678
+    ],
+    "AXIAL_FORCE": [
+      -4460.372511048625
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.016779796281855844
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.03841436770515593
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_121": {
+    "BENDING_MOMENT": [
+      3574.8147289942535
+    ],
+    "SHEAR_FORCE": [
+      -5893.568660689121
+    ],
+    "AXIAL_FORCE": [
+      -3330.6056044852985
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.01391610423545722
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.038413902004155155
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_122": {
+    "BENDING_MOMENT": [
+      62.378832352773316
+    ],
+    "SHEAR_FORCE": [
+      -7994.981690784419
+    ],
+    "AXIAL_FORCE": [
+      -2314.653292820145
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.011041934583126323
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.03841356330261602
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_123": {
+    "BENDING_MOMENT": [
+      -4149.174423847925
+    ],
+    "SHEAR_FORCE": [
+      -8429.156439766644
+    ],
+    "AXIAL_FORCE": [
+      -1261.7369086632266
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.008167682150771466
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.038413346374196286
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_124": {
+    "BENDING_MOMENT": [
+      -4818.6205343339025
+    ],
+    "SHEAR_FORCE": [
+      12482.93017156295
+    ],
+    "AXIAL_FORCE": [
+      4245.559449601114
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.0038814714578531825
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.03841357138871346
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_125": {
+    "BENDING_MOMENT": [
+      -6142.713920841286
+    ],
+    "SHEAR_FORCE": [
+      3207.578828713247
+    ],
+    "AXIAL_FORCE": [
+      2361.495776698724
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.005305645468092411
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.03841337337114714
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  },
+  "NODE_126": {
+    "BENDING_MOMENT": [
+      -1990.043552270218
+    ],
+    "SHEAR_FORCE": [
+      9225.513211000192
+    ],
+    "AXIAL_FORCE": [
+      2424.4511417397525
+    ],
+    "TOTAL_DISPLACEMENT_X": [
+      -0.002460695494368555
+    ],
+    "TOTAL_DISPLACEMENT_Y": [
+      -0.03841377248753982
+    ],
+    "TOTAL_DISPLACEMENT_Z": [
+      0.0
+    ]
+  }
+}

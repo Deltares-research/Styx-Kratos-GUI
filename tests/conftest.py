@@ -47,6 +47,12 @@ def pytest_addoption(parser):
                      help="save the screenshots of the GUI tutorials in DIR/<tutorial>/ "
                           "(tests/e2e/test_gui_tutorials.py; python tools/gui_tutorial.py "
                           "does this for you)")
+    parser.addoption("--record-run", action="store_true", default=False,
+                     help="with --run-kratos: keep the real run of each GUI tutorial in "
+                          "tests/fixtures/tutorial_runs/<tutorial>/, for the replay")
+    parser.addoption("--strict-deck", action="store_true", default=False,
+                     help="fail a GUI tutorial whose deck differs from its recorded run, "
+                          "instead of warning")
 
 
 @pytest.fixture(autouse=True, scope="session")

@@ -1,0 +1,173 @@
+{
+  "TIME": [
+    5.0
+  ],
+  "NODE_3025": {
+    "GEO_EFFECTIVE_TRACTION_VECTOR": [
+      [
+        -118408.67015897746,
+        35223.15543738457
+      ]
+    ]
+  },
+  "NODE_3027": {
+    "GEO_EFFECTIVE_TRACTION_VECTOR": [
+      [
+        -50637.25832373054,
+        9297.067731032785
+      ]
+    ]
+  },
+  "NODE_3037": {
+    "GEO_EFFECTIVE_TRACTION_VECTOR": [
+      [
+        -13708.995744943457,
+        4087.461498295956
+      ]
+    ]
+  },
+  "NODE_3094": {
+    "GEO_EFFECTIVE_TRACTION_VECTOR": [
+      [
+        -24495.488262994604,
+        6191.801797067118
+      ]
+    ]
+  },
+  "NODE_3096": {
+    "GEO_EFFECTIVE_TRACTION_VECTOR": [
+      [
+        -36420.87297269392,
+        8518.328940248572
+      ]
+    ]
+  },
+  "NODE_3098": {
+    "GEO_EFFECTIVE_TRACTION_VECTOR": [
+      [
+        -47721.988809853756,
+        10723.06726806165
+      ]
+    ]
+  },
+  "NODE_3100": {
+    "GEO_EFFECTIVE_TRACTION_VECTOR": [
+      [
+        -59877.289547767046,
+        13094.448803224039
+      ]
+    ]
+  },
+  "NODE_3102": {
+    "GEO_EFFECTIVE_TRACTION_VECTOR": [
+      [
+        -60754.45791701547,
+        13265.575862843074
+      ]
+    ]
+  },
+  "NODE_3104": {
+    "GEO_EFFECTIVE_TRACTION_VECTOR": [
+      [
+        -62051.395753477555,
+        13518.595882993359
+      ]
+    ]
+  },
+  "NODE_3106": {
+    "GEO_EFFECTIVE_TRACTION_VECTOR": [
+      [
+        -67261.16447554796,
+        14534.971340611632
+      ]
+    ]
+  },
+  "NODE_3108": {
+    "GEO_EFFECTIVE_TRACTION_VECTOR": [
+      [
+        -19100.35748248173,
+        5139.26399577773
+      ]
+    ]
+  },
+  "NODE_3110": {
+    "GEO_EFFECTIVE_TRACTION_VECTOR": [
+      [
+        -30488.90198200984,
+        7361.058809485686
+      ]
+    ]
+  },
+  "NODE_3112": {
+    "GEO_EFFECTIVE_TRACTION_VECTOR": [
+      [
+        -42119.02487008432,
+        9629.983228807276
+      ]
+    ]
+  },
+  "NODE_3114": {
+    "GEO_EFFECTIVE_TRACTION_VECTOR": [
+      [
+        -53617.9538927545,
+        11873.312994680608
+      ]
+    ]
+  },
+  "NODE_3116": {
+    "GEO_EFFECTIVE_TRACTION_VECTOR": [
+      [
+        -60528.437783536705,
+        13221.481522220574
+      ]
+    ]
+  },
+  "NODE_3118": {
+    "GEO_EFFECTIVE_TRACTION_VECTOR": [
+      [
+        -61393.220270289174,
+        13390.192216035013
+      ]
+    ]
+  },
+  "NODE_3120": {
+    "GEO_EFFECTIVE_TRACTION_VECTOR": [
+      [
+        -64789.9692532133,
+        14052.865068921645
+      ]
+    ]
+  },
+  "NODE_3122": {
+    "GEO_EFFECTIVE_TRACTION_VECTOR": [
+      [
+        -74109.0615862466,
+        15870.92979307114
+      ]
+    ]
+  },
+  "NODE_3125": {
+    "GEO_EFFECTIVE_TRACTION_VECTOR": [
+      [
+        -75158.48999747177,
+        25705.717521076134
+      ]
+    ]
+  },
+  "NODE_3127": {
+    "GEO_EFFECTIVE_TRACTION_VECTOR": [
+      [
+        -119354.17144603953,
+        40821.53082449089
+      ]
+    ]
+  },
+  "NODE_3129": {
+    "GEO_EFFECTIVE_TRACTION_VECTOR": [
+      [
+        -73424.35242901221,
+        25112.60754136517
+      ]
+    ]
+  }
+}

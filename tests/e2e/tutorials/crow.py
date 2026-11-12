@@ -20,6 +20,7 @@ from tests.e2e.tutorials.harness import (LONG, TOOL, Step, Tour, choose_in_selec
 from tests.models import crow
 
 MODEL = crow.project(crow.MOHR_COULOMB)
+PAGE = "CROW_case.md"
 
 
 def _by_id(items, key):

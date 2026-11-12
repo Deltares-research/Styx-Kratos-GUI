@@ -1,27 +1,35 @@
 """The GUI tutorials in `docs/gui_tutorials/`, played on the real page as a reader follows
-them. Opt-in: `--run-e2e`; with `--run-kratos` too, Kratos itself calculates.
+them. Opt-in: `--run-e2e`.
 
 Each tutorial is a list of steps in `tests/e2e/tutorials/`. The test plays them one by
 one, holds each to its own check, and at the end holds the deck the GUI writes to the deck
 of the tutorial's model in `tests/models/`. A changed button, window or default that
-breaks a step, or makes the GUI build another model, fails here.
+breaks a step, or makes the GUI build another model, fails here. The screenshots the steps
+take must be the screenshots the tutorial's page shows.
 
-With `--doc-screenshots DIR` the steps also save their screenshots, in `DIR/<tutorial>/`
-(`python tools/gui_tutorial.py <tutorial>` runs this).
+Calculate replays the tutorial's recorded Kratos run (`tests/fakes/replay_kratos.py`), so
+the Results steps show real results on a computer without Kratos. A deck that differs from
+the recorded one gives a warning, or with `--strict-deck` a failure. With `--run-kratos`,
+Kratos itself calculates, and with `--record-run` too, that run becomes the recorded run.
+
+With `--doc-screenshots DIR` the steps also save their screenshots, in `DIR/<tutorial>/`.
+`python tools/gui_tutorial.py` runs this for you.
 """
 
 from __future__ import annotations
 
-import json
+import warnings
 from pathlib import Path
 
 import pytest
 
+from core.analysis import calculation
 from core.geometry import solid_model
 from core.kratos import writer
-from tests import mdpa
-from tests.e2e.tutorials import crow as crow_tutorial
+from tests import deck_compare
+from tests.e2e import tutorials
 from tests.e2e.tutorials.harness import Tour, open_as_started
+from tests.fakes import replay_kratos
 
 
 def gui_deck(page, server) -> dict:
@@ -37,73 +45,58 @@ def script_deck(model) -> dict:
         return writer.export_project(model)
 
 
-def _plain(value):
-    """A JSON value as Kratos reads it: -0.0 is 0.0, and a whole number typed as 2290
-    is the 2290.0 a script writes."""
-    if isinstance(value, dict):
-        return {key: _plain(item) for key, item in value.items()}
-    if isinstance(value, list):
-        return [_plain(item) for item in value]
-    if isinstance(value, bool) or not isinstance(value, (int, float)):
-        return value
-    return float(value) + 0.0
+def _calculate_with(name: str, request, monkeypatch) -> tuple:
+    """What Calculate runs in this test: Kratos (and what it answered, to record), or the
+    replay of the recorded run."""
+    if request.config.getoption("--run-kratos"):
+        answers: list[dict] = []
+        real = calculation.run
+
+        def run_and_keep(export):
+            answers.append(real(export))
+            return answers[-1]
+
+        monkeypatch.setattr(calculation, "run", run_and_keep)
+        return answers, None
+    assert not request.config.getoption("--record-run"), "--record-run needs --run-kratos"
+    folder = tutorials.RUNS / name
+    assert (folder / replay_kratos.ANSWER).exists(), \
+        f"no recorded run in {folder}: run `python tools/gui_tutorial.py {name} --record`"
+    replay = replay_kratos.Replay(folder, f"python tools/gui_tutorial.py {name} --record")
+    monkeypatch.setattr(calculation, "run", replay)
+    return None, replay
 
 
-def _point(deck, node: int) -> tuple:
-    return tuple(round(c, 9) + 0.0 for c in deck.nodes[node])
-
-
-def mesh_view(text: str) -> dict:
-    """The mesh, without its numbers: the GUI and a script number the same nodes and
-    elements in another order."""
-    deck = mdpa.parse(text)
-
-    def entries(blocks):
-        return sorted((block.name, sorted(tuple(_point(deck, n) for n in nodes)
-                                          for nodes in block.entries.values()))
-                      for block in blocks)
-
-    def ids_to_points(ids, blocks):
-        lookup = {i: nodes for block in blocks for i, nodes in block.entries.items()}
-        return sorted(tuple(sorted(_point(deck, n) for n in lookup[i])) for i in ids)
-
-    return {"nodes": sorted(_point(deck, n) for n in deck.nodes),
-            "elements": entries(deck.elements),
-            "conditions": entries(deck.conditions),
-            "parts": {name: (sorted(_point(deck, n) for n in part.nodes),
-                             ids_to_points(part.elements, deck.elements),
-                             ids_to_points(part.conditions, deck.conditions))
-                      for name, part in deck.parts.items()}}
-
-
-def deck_view(export: dict) -> dict:
-    return {"parameters": _plain(json.loads(export["project_parameters"])),
-            "materials": _plain(json.loads(export["materials"])),
-            "mesh": mesh_view(export["mdpa"])}
-
-
-TUTORIALS = {"crow": crow_tutorial}
-"""Each tutorial by its name: the name of its screenshot folder and of its test."""
-
-
-@pytest.mark.parametrize("name", list(TUTORIALS))
-def test_the_tutorial_builds_its_model(name, app_page, live_server, request):
-    tutorial = TUTORIALS[name]
+@pytest.mark.parametrize("name", tutorials.names())
+def test_the_tutorial_builds_its_model(name, app_page, live_server, request, monkeypatch):
+    tutorial = tutorials.load(name)
     folder = request.config.getoption("--doc-screenshots")
     out = Path(folder) / name if folder else None
     if out is not None:
         for old in out.glob("*.png"):
             old.unlink()
+    answers, replay = _calculate_with(name, request, monkeypatch)
     open_as_started(app_page, live_server["url"])
     tour = Tour(app_page, out=out)
     tour.play(tutorial.STEPS)
     if out is not None:
         assert sorted(p.stem for p in out.glob("*.png")) == sorted(tour.pictures)
 
-    got, want = deck_view(gui_deck(app_page, live_server)), \
-        deck_view(script_deck(tutorial.MODEL))
+    got = deck_compare.deck_view(gui_deck(app_page, live_server))
+    want = deck_compare.deck_view(script_deck(tutorial.MODEL))
     assert got["materials"] == want["materials"]
     assert got["parameters"] == want["parameters"]
     assert got["mesh"]["nodes"] == want["mesh"]["nodes"]
     assert got["mesh"] == want["mesh"]
     assert app_page.errors == []
+
+    if answers is not None and request.config.getoption("--record-run"):
+        assert answers and answers[-1]["ok"], f"the Kratos run failed: {answers[-1:]}"
+        replay_kratos.record(answers[-1], tutorials.RUNS / name)
+    if replay is not None and replay.problems:
+        message = " ".join(replay.problems)
+        assert not request.config.getoption("--strict-deck"), message
+        replay_kratos.note(message)
+        warnings.warn(message, stacklevel=1)
+    assert tutorials.page_images(name) == tour.pictures, \
+        f"{tutorial.PAGE} must show the screenshots the steps take, in their order"
