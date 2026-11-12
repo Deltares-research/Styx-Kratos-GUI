@@ -94,11 +94,11 @@ def mesh_project(project: Project, element_size: float | None = None,
 
     started = time.perf_counter()
     built = solid_model.build_geometry(project)
-    # Expanded, because what picks these picks *layers*: the Mesh properties dialog
-    # lists `project.layers`, and a staged layer is several bodies. Naming the layer has
-    # to bring the lifts dug out of it, or a project whose pit is staged meshes only the
-    # ground outside it -- see `Project.expand_body_keys`. A no-op when nothing is
-    # staged, and on a list that already names bodies.
+    # Expanded, because what picks these may pick *layers*: a script, or a choice made
+    # before a line cut the layer, names the layer, and a staged layer is several
+    # bodies. Naming the layer has to bring the lifts dug out of it, or a project whose
+    # pit is staged meshes only the ground outside it -- see `Project.expand_body_keys`.
+    # A no-op when nothing is staged, and on a list that already names bodies.
     meshed_keys = project.expand_body_keys(volume_keys) if volume_keys \
         else project.part_keys()
     unknown = sorted(set(meshed_keys) - set(project.part_keys()))

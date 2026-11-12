@@ -48,8 +48,8 @@
       ['soil_L1', 'soil_L2']
     );
     T.eq(rows, [
-      { key: 'soil_L1', label: 'Upper', enabled: true, size: 1.0, follows: false },
-      { key: 'soil_L2', label: 'Lower', enabled: true, size: 4.0, follows: false }
+      { key: 'soil_L1', owner: 'soil_L1', label: 'Upper', enabled: true, size: 1.0, follows: false },
+      { key: 'soil_L2', owner: 'soil_L2', label: 'Lower', enabled: true, size: 4.0, follows: false }
     ]);
   });
 
@@ -58,7 +58,7 @@
       { layers: [{ id: 'L1', name: 'Upper' }], mesh: { element_size: 2.5, body_sizes: {} } },
       ['soil_L1']
     );
-    T.eq(rows, [{ key: 'soil_L1', label: 'Upper', enabled: true, size: 2.5, follows: true }]);
+    T.eq(rows, [{ key: 'soil_L1', owner: 'soil_L1', label: 'Upper', enabled: true, size: 2.5, follows: true }]);
   });
 
   test('the window keeps a size it has no row for', function () {
@@ -105,6 +105,56 @@
     var leftOut = App.MeshSettings.leftOutBodies(before, ['soil_L1']);
     var after = { layers: [{ id: 'L1' }, { id: 'L2' }, { id: 'L_new' }] };
     T.eq(App.MeshSettings.chosenBodies(after, leftOut), ['soil_L1', 'soil_L_new']);
+  });
+
+  /* Issue #125: a line splits a layer or a soil surface into parts, and each part is its
+     own SubModelPart, so the window has a row for each part, named as in the explorer. */
+  function cutProject(sizes) {
+    return {
+      layers: [{ id: 'L1', name: 'Clay' }],
+      custom_parts: [{ key: 'drawn_0', label: 'Embankment', mat: 'sand' }],
+      soil_body_keys: ['soil_L1__part1', 'soil_L1__part2', 'drawn_0__part1', 'drawn_0__part2'],
+      soil_body_labels: { soil_L1__part1: 'Clay · Part 1', soil_L1__part2: 'Clay · Part 2',
+                          drawn_0__part1: 'Embankment · Part 1',
+                          drawn_0__part2: 'Embankment · Part 2' },
+      mesh: { element_size: 2.5, body_sizes: sizes || {} }
+    };
+  }
+
+  test('a layer or soil surface cut by a line has a row for each part', function () {
+    var rows = App.MeshSettings.bodyControls(cutProject(), ['drawn_0__part2']);
+    T.eq(rows.map(function (row) { return [row.key, row.label, row.enabled]; }), [
+      ['soil_L1__part1', 'Clay · Part 1', false],
+      ['soil_L1__part2', 'Clay · Part 2', false],
+      ['drawn_0__part1', 'Embankment · Part 1', false],
+      ['drawn_0__part2', 'Embankment · Part 2', true]
+    ]);
+    T.eq(App.MeshSettings.meshTargets(cutProject(), 'drawn_0__part1', function () { return true; }),
+         ['drawn_0__part1']);
+  });
+
+  test('a size set on a layer before a line cut it shows on each part', function () {
+    var project = cutProject({ soil_L1: 1.5, wall: 0.5 });
+    var rows = App.MeshSettings.bodyControls(project, []);
+    T.eq([rows[0].size, rows[0].follows, rows[1].size, rows[1].follows], [1.5, false, 1.5, false]);
+    T.eq([rows[2].size, rows[2].follows], [2.5, true]);
+    T.eq(App.MeshSettings.savedBodySizes(project, rows), { soil_L1: 1.5, wall: 0.5 },
+         'saved as it was while no part shows another size');
+  });
+
+  test('a part given another size splits the layer size over the parts', function () {
+    var project = cutProject({ soil_L1: 1.5, wall: 0.5 });
+    var rows = App.MeshSettings.bodyControls(project, []);
+    rows[0].size = 1;
+    T.eq(App.MeshSettings.savedBodySizes(project, rows),
+         { wall: 0.5, soil_L1__part1: 1, soil_L1__part2: 1.5 });
+  });
+
+  test('a layer left out before a line cut it leaves out each of its parts', function () {
+    T.eq(App.MeshSettings.chosenBodies(cutProject(), ['soil_L1']),
+         ['drawn_0__part1', 'drawn_0__part2']);
+    T.eq(App.MeshSettings.chosenBodies(cutProject(), ['drawn_0__part1']),
+         ['soil_L1__part1', 'soil_L1__part2', 'drawn_0__part2']);
   });
 
   test('no choice, or a choice with nothing left, is no choice', function () {

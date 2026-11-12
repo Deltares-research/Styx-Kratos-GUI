@@ -102,14 +102,18 @@ def test_a_project_stays_meshable_after_mesh_properties_and_a_deleted_layer(
     app_page.evaluate("""stack => App.Api.patch('/api/project/layers', {layers: stack})
         .then(function (answer) { App.Model.apply(answer.project); })""", stack)
     asked = app_page.evaluate("App.Export.meshRequest().volume_keys")
-    assert asked == ["soil_L_top", "soil_L_bot", "soil_L_new"]
+    # The lines cut the top layer into parts, and the window asks for each (issue #125).
+    assert [key.partition("__")[0] for key in asked] == [
+        "soil_L_top", "soil_L_top", "soil_L_top", "soil_L_top", "soil_L_bot", "soil_L_new"]
+    assert asked == app_page.evaluate("App.PROJECT.soil_body_keys")
     assert app_page.errors == []
 
 
 def test_mesh_properties_saves_what_it_shows(app_page, live_server):
     """A row with no size of its own follows the global size as it is typed; a size typed
     on a row is kept, also when it is the old global size; an unticked layer stays out
-    until another project is opened."""
+    until another project is opened. A layer the lines and the sheet pile cut has a row
+    for each part (issue #125)."""
     project = excavation_project(staged=False)
     assert project.mesh.element_size == 5.0
     assert app_page.request.put(live_server["url"] + "/api/project",
@@ -122,8 +126,9 @@ def test_mesh_properties_saves_what_it_shows(app_page, live_server):
     app_page.evaluate("App.MeshSettings.open()")
     window = app_page.locator("#mesh-settings-dialog")
     window.locator("[name=element_size]").fill("2.5")
-    assert window.locator("[data-body-size-key=soil_L_mid]").input_value() == "2.5"
-    window.locator("[data-body-size-key=soil_L_top]").fill("5")
+    assert window.locator(".mesh-body-row").count() == len(project.soil_body_keys) == 7
+    assert window.locator("[data-body-size-key=soil_L_mid__pit]").input_value() == "2.5"
+    window.locator("[data-body-size-key=soil_L_top__lift1]").fill("5")
     window.locator("[data-body-size-key=soil_L_bot]").fill("7")
     window.locator("[data-body-key=soil_L_bot]").uncheck()
     window.get_by_role("button", name="Apply", exact=True).click()
@@ -131,8 +136,11 @@ def test_mesh_properties_saves_what_it_shows(app_page, live_server):
 
     mesh = app_page.request.get(live_server["url"] + "/api/project").json()["mesh"]
     assert mesh["element_size"] == 2.5
-    assert mesh["body_sizes"] == {**project.mesh.body_sizes, "soil_L_top": 5.0, "soil_L_bot": 7.0}
-    assert app_page.evaluate("App.Export.meshRequest().volume_keys") == ["soil_L_top", "soil_L_mid"]
+    assert mesh["body_sizes"] == {**project.mesh.body_sizes, "soil_L_top__lift1": 5.0,
+                                  "soil_L_bot": 7.0}
+    assert app_page.evaluate("App.Export.meshRequest().volume_keys") == [
+        "soil_L_top__lift1", "soil_L_top__retained", "soil_L_top__lift2", "soil_L_top__lift3",
+        "soil_L_mid__pit", "soil_L_mid__retained"]
 
     app_page.locator(TOOL.format("newProject")).click()
     app_page.locator("#modal-layer .dialog").filter(has_text="New project").get_by_role(

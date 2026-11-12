@@ -89,13 +89,26 @@ App.MeshSettings = (function () {
   }
 
   /* Every body that can be meshed: the layer stack, plus any custom part that
-     has been given a material (those are soil too). */
+     has been given a material (those are soil too). A layer or a soil surface that a
+     line cut is its pieces, one row each, as in the Model explorer: the project
+     publishes their keys and names (`soil_body_keys`, `soil_body_labels`), so the split
+     is not worked out a second time here. `owner` is the key of the layer or surface. */
   function meshBodies(project) {
-    var bodies = ((project && project.layers) || []).map(function (layer) {
-      return { key: 'soil_' + layer.id, label: layer.name || layer.id };
+    var published = (project && project.soil_body_keys) || [];
+    var labels = (project && project.soil_body_labels) || {};
+    function pieces(owner, name) {
+      var mine = published.filter(function (key) { return key.split('__')[0] === owner; });
+      if (!mine.length) mine = [owner];
+      return mine.map(function (key) {
+        return { key: key, owner: owner, label: labels[key] || name };
+      });
+    }
+    var bodies = [];
+    ((project && project.layers) || []).forEach(function (layer) {
+      bodies = bodies.concat(pieces('soil_' + layer.id, layer.name || layer.id));
     });
     ((project && project.custom_parts) || []).forEach(function (part) {
-      if (part.mat) bodies.push({ key: part.key, label: part.label });
+      if (part.mat) bodies = bodies.concat(pieces(part.key, part.label));
     });
     return bodies;
   }
@@ -110,23 +123,40 @@ App.MeshSettings = (function () {
     var mesh = (project && project.mesh) || {};
     var fallback = Number(mesh.element_size || defaults.element_size);
     var sizes = mesh.body_sizes || {};
+    function has(key) { return Object.prototype.hasOwnProperty.call(sizes, key); }
     return meshBodies(project).map(function (body) {
-      var own = Object.prototype.hasOwnProperty.call(sizes, body.key);
+      // A size set on the whole layer or surface, before a line cut it, is each piece's.
+      var from = has(body.key) ? body.key : has(body.owner) ? body.owner : null;
       return {
         key: body.key,
+        owner: body.owner,
         label: body.label,
         enabled: selectedKeys.indexOf(body.key) >= 0,
-        size: own ? Number(sizes[body.key]) : fallback,
-        follows: !own
+        size: from ? Number(sizes[from]) : fallback,
+        follows: !from
       };
     });
   }
 
   /* The sizes the window saves. It has rows for the layers only, so a size it has no row
      for -- a structure's, a lift's, set in `kratos-cli` or a script -- stays as it is. A
-     row that `follows` the global size has had no size typed, and asks for none. */
+     row that `follows` the global size has had no size typed, and asks for none.
+     A size on a whole layer or surface that a line cut shows on each of its pieces'
+     rows. While every one of those rows still shows it, it stays as it is. Once one
+     shows another size, each piece's row saves its own size and the whole one goes:
+     two sizes for one body would leave the mesher to choose. */
   function savedBodySizes(project, rows) {
     var sizes = Object.assign({}, ((project && project.mesh) || {}).body_sizes);
+    function has(key) { return Object.prototype.hasOwnProperty.call(sizes, key); }
+    var whole = {};
+    rows.forEach(function (row) {
+      if (row.owner && row.owner !== row.key && has(row.owner)) {
+        var same = row.size === Number(sizes[row.owner]) && !has(row.key);
+        whole[row.owner] = (whole[row.owner] !== false) && same;
+      }
+    });
+    Object.keys(whole).forEach(function (owner) { if (!whole[owner]) delete sizes[owner]; });
+    rows = rows.filter(function (row) { return !whole[row.owner] || row.owner === row.key; });
     rows.forEach(function (row) {
       if (!(row.size > 0)) delete sizes[row.key];
       else if (!row.follows) sizes[row.key] = row.size;
@@ -143,11 +173,15 @@ App.MeshSettings = (function () {
   /* The bodies to mesh after a choice in this window, or null when it made none or left
      nothing. It is kept as what was left out (`App.MESH_BODIES_LEFT_OUT`) because the
      model changes under it: a body added later is meshed, as `kratos-cli` meshes it, and
-     a deleted body is not asked for, which the server would refuse. */
+     a deleted body is not asked for, which the server would refuse. A layer left out
+     before a line cut it leaves out each of its pieces. */
   function chosenBodies(project, leftOut) {
     if (!Array.isArray(leftOut)) return null;
-    var kept = meshBodies(project).map(function (body) { return body.key; })
-      .filter(function (key) { return leftOut.indexOf(key) < 0; });
+    var kept = meshBodies(project)
+      .filter(function (body) {
+        return leftOut.indexOf(body.key) < 0 && leftOut.indexOf(body.owner) < 0;
+      })
+      .map(function (body) { return body.key; });
     return kept.length ? kept : null;
   }
 
@@ -157,8 +191,8 @@ App.MeshSettings = (function () {
     var layer = document.getElementById('modal-layer');
     var scrim = el('div.scrim');
     var dialog = el('div.dialog.mesh-settings-dialog', { id: 'mesh-settings-dialog' });
-    dialog.style.width = '660px'; dialog.style.height = '570px';
-    dialog.style.left = Math.max(20, (window.innerWidth - 660) / 2) + 'px';
+    dialog.style.width = '720px'; dialog.style.height = '570px';
+    dialog.style.left = Math.max(20, (window.innerWidth - 720) / 2) + 'px';
     dialog.style.top = Math.max(20, (window.innerHeight - 570) / 2) + 'px';
 
     var closeButton = el('button.dlg-x', { text: '✕', type: 'button' });
@@ -201,7 +235,7 @@ App.MeshSettings = (function () {
       enabled.checked = bodyRow.enabled;
       var size = el('input.mesh-setting-control.mesh-body-size', {
         type: 'number', min: '0.01', step: '0.1', value: bodyRow.size,
-        'data-body-size-key': bodyRow.key
+        'data-body-size-key': bodyRow.key, 'data-body-owner': bodyRow.owner
       });
       size.value = bodyRow.size;
       if (bodyRow.follows) size.setAttribute('data-follows-global', '');
@@ -210,7 +244,7 @@ App.MeshSettings = (function () {
       /* The target size only applies to a layer that is being meshed, so follow
          the checkbox: greyed out when unchecked, and skipped by read(). */
       var bodyRowNode = el('label.mesh-body-row', null, [
-        enabled, el('span', { text: bodyRow.label }), size
+        enabled, el('span', { text: bodyRow.label, title: bodyRow.label }), size
       ]);
       function syncEnabled() {
         size.disabled = !enabled.checked;
@@ -221,7 +255,7 @@ App.MeshSettings = (function () {
       bodyTable.appendChild(bodyRowNode);
     });
     row('Layer mesh sizes', bodyTable,
-        'Check every layer to mesh. Each checked layer can use an independent target size; shared faces remain conformal.');
+        'Check every layer to mesh. A layer or soil surface that a line splits has a row for each part. Each checked row can use an independent target size; shared faces remain conformal.');
 
     var globalSize = row('Global element size', input('element_size', 'number', { min: '0.01', step: '0.1' }),
         'Maximum target edge length in model units. Smaller values create more tetrahedra.');
@@ -277,7 +311,8 @@ App.MeshSettings = (function () {
         }
         // Keep a size typed for a layer that is currently unchecked, so ticking it
         // again does not silently fall back to the global size.
-        rows.push({ key: key, size: size, follows: control.hasAttribute('data-follows-global') });
+        rows.push({ key: key, owner: control.getAttribute('data-body-owner'), size: size,
+                    follows: control.hasAttribute('data-follows-global') });
       });
       value.body_sizes = savedBodySizes(App.PROJECT, rows);
       value.volume_keys = selectedKeys;

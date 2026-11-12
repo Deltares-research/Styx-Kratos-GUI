@@ -2783,11 +2783,12 @@ class Project(Base):
     def expand_body_keys(self, keys: list[str]) -> list[str]:
         """Turn a list that may name soil *layers* into one naming soil *bodies*.
 
-        A cut layer is several bodies, and the parts of the app that let a user pick soil
-        pick layers, because that is what a user drew: the Mesh properties dialog lists
-        `project.layers` (`frontend/js/mesh-settings.js`). Naming a layer therefore has to
-        mean every piece of it, or checking one there would mesh some of it and leave the
-        rest out of the model.
+        A cut layer is several bodies, and a key saved before the cut, or typed in a
+        script, still names the layer, because that is what a user drew. (The Mesh
+        properties dialog lists the pieces of a cut layer or soil surface, one row each:
+        `frontend/js/mesh-settings.js`.) Naming a layer therefore has to mean every piece
+        of it, or a size or a choice made for it would reach some of it and leave the rest
+        out of the model.
 
         Anything that is not a soil layer passes through untouched, and a key that
         already names a body is kept as it stands, so this is safe to apply to any list

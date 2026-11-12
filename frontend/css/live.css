@@ -8,7 +8,7 @@
 .mesh-settings-form {
   align-self: flex-start;
   display: grid;
-  grid-template-columns: 165px minmax(170px, 220px) 1fr;
+  grid-template-columns: 165px minmax(170px, 270px) 1fr;
   gap: 10px 12px;
   align-items: center;
   width: 100%;

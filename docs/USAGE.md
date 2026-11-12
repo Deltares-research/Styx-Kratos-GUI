@@ -384,7 +384,7 @@ When you open Mesh mode, the **Mesh properties** window opens:
 
 | Setting | What it does |
 |---|---|
-| Layer mesh sizes | Select the layers to mesh, and give each one its own target size. A layer with no size of its own shows the global size and follows it. Type a value to give the layer its own size. Styx meshes the selected layers together, so their shared faces have common nodes. Sizes that are not in this table, for example the size of a sheet pile set in `kratos-cli`, do not change. |
+| Layer mesh sizes | Select the layers to mesh, and give each one its own target size. A layer or a soil surface that a line splits has one row for each part, named as in the Model explorer. A layer with no size of its own shows the global size and follows it. Type a value to give the layer its own size. Styx meshes the selected layers together, so their shared faces have common nodes. Sizes that are not in this table, for example the size of a sheet pile set in `kratos-cli`, do not change. |
 | Global element size | The maximum length of an element edge, in metres |
 | Element order | Linear elements, or quadratic elements with a midside node on each edge |
 | 2D algorithm, 3D algorithm | The Gmsh algorithm that makes the elements |
