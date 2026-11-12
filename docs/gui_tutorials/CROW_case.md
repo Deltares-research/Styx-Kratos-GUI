@@ -57,6 +57,8 @@ How the GUI takes the values that you type:
   click that button. **Cancel** leaves the model as it was.
 - In the Soil material window and in the Selection explorer, a value is used when you
   leave the field (press Tab) or press Enter.
+- Type a point as the decimal sign: `0.5`. Some number fields show their value with the
+  decimal sign of your Windows region settings, for example `0,15`. They take a point too.
 - The Styx server keeps the project in its memory. Save it at the end (step 14), or at any
   time with **File** > **Save**.
 

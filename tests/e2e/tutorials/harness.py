@@ -192,6 +192,15 @@ def window(page):
     return page.locator("#modal-layer .dialog").last
 
 
+def window_fits(tour: Tour) -> None:
+    """The window on top shows all its fields at once, as the page's screenshot of it
+    must: its body does not scroll."""
+    content, shown = window(tour.page).locator(".dlg-body").evaluate(
+        "b => [b.scrollHeight, b.clientHeight]")
+    assert content <= shown + 1, \
+        f"the window scrolls: {content} px of fields in {shown} px"
+
+
 def field(page, label: str):
     """The control after the label `label` in the window on top."""
     return window(page).locator(

@@ -16,7 +16,7 @@ from tests.e2e.tutorials.harness import (LONG, TOOL, Step, Tour, choose_in_selec
                                          field, fill, mode, project, rail, rail_tool,
                                          rename, select_in_tree, selection_row,
                                          set_in_selection, tool, tree_row, type_command,
-                                         window)
+                                         window, window_fits)
 from tests.models import crow
 
 MODEL = crow.project(crow.MOHR_COULOMB)
@@ -161,6 +161,7 @@ def water(tour: Tour) -> None:
     field(page, "Where").select_option(label="Whole soil")
     field(page, "Type").select_option(WATER.fluid_pressure_type)
     field(page, "Reference level").fill(f"{WATER.reference_coordinate:g}")
+    window_fits(tour)
     tour.picture(mark=rail_tool("createBoundaryCondition"))
     window(page).get_by_role("button", name="Save").click()
     tour.until(f"App.PROJECT.boundary_conditions.some(b => b.name === {WATER.name!r})")
@@ -186,6 +187,7 @@ def wall(tour: Tour) -> None:
                          ("y2", y2), *WALL_SECTION.variables.items(),
                          ("Spacing", WALL_SECTION.spacing)]:
         field(page, label).fill(repr(value) if isinstance(value, float) else str(value))
+    window_fits(tour)
     tour.picture(mark=rail_tool("createSheetPile"))
     window(page).get_by_role("button", name="Save").click()
     tour.until("(App.PROJECT.beams || []).length === 1")
@@ -302,6 +304,7 @@ def interface(tour: Tour) -> None:
     rail(tour, "interface")
     field(page, "Name").fill(CONTACT.name)
     field(page, "Side").select_option("both")
+    window_fits(tour)
     tour.picture("window", mark=rail_tool("interface"))
     window(page).get_by_role("button", name="Save").click()
     tour.until("(App.PROJECT.interfaces || []).length === 1")
@@ -336,6 +339,7 @@ def loads(tour: Tour) -> None:
                          ("x max", SURCHARGE.x1), ("y", SURCHARGE.y),
                          ("qx", SURCHARGE.components[0]), ("qy", SURCHARGE.components[1])]:
         field(page, label).fill(value if isinstance(value, str) else f"{value:g}")
+    window_fits(tour)
     tour.picture("surcharge", mark=rail_tool("createLoad"))
     window(page).get_by_role("button", name="Save").click()
     tour.until("(App.PROJECT.loads || []).length === 1")
@@ -350,6 +354,7 @@ def loads(tour: Tour) -> None:
             rows.nth(row).locator("input").nth(1).fill(f"{y:g}")
         field(page, "Type").select_option(load.fluid_pressure_type)
         field(page, "Reference level").fill(f"{load.reference_coordinate:g}")
+        window_fits(tour)
         if index == 1:
             tour.picture("water", mark=[
                 rail_tool("createLoad"),

@@ -410,7 +410,7 @@ App.MeshSettings = (function () {
     }
 
     var globalSize = row('Global element size', input('element_size', 'number', { min: '0.01', step: '0.1' }),
-        'Maximum target edge length in model units. Smaller values create more tetrahedra.');
+        'The largest edge length of an element [m]. A smaller value makes more, smaller elements.');
     globalSize.addEventListener('input', function () {
       if (!(Number(globalSize.value) > 0)) return;
       form.querySelectorAll('.mesh-body-size[data-follows-global]').forEach(function (control) {
