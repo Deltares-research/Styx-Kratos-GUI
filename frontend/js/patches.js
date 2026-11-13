@@ -2354,7 +2354,9 @@ App.LivePatches = (function () {
             node.style.paddingLeft = (8 + row.depth * 4) + 'px';
             node.title = row.label + ' · ' + row.kind;
             node.appendChild(el('span.phase-dot.' + row.state));
-            node.appendChild(el('span.phase-name', { text: row.label }));
+            var name = el('span.phase-name', { text: row.heading + ' ' });
+            name.appendChild(el('span.phase-id', { text: '[' + row.id + ']' }));
+            node.appendChild(name);
             node.appendChild(el('span.phase-kind', { text: row.kind }));
             node.addEventListener('click', function () {
               selected = row.id;

@@ -183,12 +183,17 @@ def default_stages(project: Project) -> list[Stage]:
 # leaves the project alone; `core.session` stores it the way `PATCH /api/project/stages`
 # does. `tests/test_stage_parity.py` holds the two sides to the same answers.
 
-def _fresh_id(project: Project, stem: str) -> str:
-    taken = {stage.id for stage in project.stages}
-    number = 1
-    while f"{stem}_{number}" in taken:
+def _fresh_number(project: Project) -> int:
+    """The number N of a new stage: its place in the list (one more than the stages
+    there are), raised until both the id `stage_N` and the name `Stage N` are free.
+    The id and the name of a new stage then carry the same number (`Stage 3`,
+    `stage_3`), not two that count different things (issue #135)."""
+    ids = {stage.id for stage in project.stages}
+    names = {stage.name for stage in project.stages}
+    number = len(project.stages) + 1
+    while f"stage_{number}" in ids or f"Stage {number}" in names:
         number += 1
-    return f"{stem}_{number}"
+    return number
 
 
 def _copies(project: Project) -> list[Stage]:
@@ -207,7 +212,8 @@ def added(project: Project) -> list[Stage]:
     """Add: a blank stage at the end of the sequence, starting from the last one."""
     listed = _copies(project)
     tail = _last(project)
-    listed.append(Stage(id=_fresh_id(project, "stage"), name=f"Stage {len(listed) + 1}",
+    number = _fresh_number(project)
+    listed.append(Stage(id=f"stage_{number}", name=f"Stage {number}",
                         parent=tail.id if tail else None))
     return listed
 
@@ -219,7 +225,8 @@ def inserted(project: Project, id: str) -> list[Stage]:
     at = next((n for n, stage in enumerate(listed) if stage.id == id), None)
     if at is None:
         return listed
-    made = Stage(id=_fresh_id(project, "stage"), name="New stage", parent=listed[at].parent)
+    made = Stage(id=f"stage_{_fresh_number(project)}", name="New stage",
+                 parent=listed[at].parent)
     listed[at].parent = made.id
     listed.insert(at, made)
     return listed
@@ -247,7 +254,7 @@ def copied(project: Project, id: str) -> list[Stage]:
     if at is None:
         return listed
     original = listed[at]
-    made = Stage(id=_fresh_id(project, "stage"), name=f"{original.name} (copy)",
+    made = Stage(id=f"stage_{_fresh_number(project)}", name=f"{original.name} (copy)",
                  parent=original.id, calculation=original.calculation,
                  reset_displacements=original.reset_displacements,
                  max_iterations=original.max_iterations,

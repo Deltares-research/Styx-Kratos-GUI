@@ -244,12 +244,16 @@ App.Stages = (function () {
       total = Math.round(total * 1000) / 1000;
       var interval = Number(stage.time_interval) || 0;
       var failedHere = !!(run && run.failed) && position === completed;
+      // `heading` is the line without its id: the Stages window draws the `[id]`
+      // after it in a lighter colour, so the name reads first.
+      var heading = row.name + (interval || total
+        ? ' - ' + days(interval) + ', T = ' + days(total) : '');
       return {
         number: position + 1, id: row.id, name: row.name, kind: row.kind,
         depth: row.depth, interval: interval, total: total,
         state: failedHere ? 'failed' : row.state,
-        label: row.name + (interval || total
-          ? ' - ' + days(interval) + ', T = ' + days(total) : '') + ' [' + row.id + ']',
+        heading: heading,
+        label: heading + ' [' + row.id + ']',
         log: position < completed ? 'OK' : failedHere ? 'Failed' : 'Not calculated'
       };
     });
@@ -257,11 +261,18 @@ App.Stages = (function () {
 
   /* ── Editing: every one of these returns a new list ──────────────────── */
 
-  function freshId(project, stem) {
-    var taken = index(project);
-    var n = 1;
-    while (taken[stem + '_' + n]) n += 1;
-    return stem + '_' + n;
+  /* The number N of a new stage: its place in the list (one more than the stages
+     there are), raised until both the id `stage_N` and the name `Stage N` are free.
+     The id and the name of a new stage then carry the same number (`Stage 3`,
+     `stage_3`), not two that count different things (issue #135). */
+  function freshNumber(project) {
+    var list = stagesOf(project);
+    var ids = {};
+    var names = {};
+    list.forEach(function (stage) { ids[stage.id] = true; names[stage.name] = true; });
+    var n = list.length + 1;
+    while (ids['stage_' + n] || names['Stage ' + n]) n += 1;
+    return n;
   }
 
   function blank(project, id, name, parent) {
@@ -286,8 +297,8 @@ App.Stages = (function () {
   function added(project) {
     var list = copy(stagesOf(project));
     var tail = lastOf(project);
-    var id = freshId(project, 'stage');
-    list.push(blank(project, id, 'Stage ' + (list.length + 1),
+    var n = freshNumber(project);
+    list.push(blank(project, 'stage_' + n, 'Stage ' + n,
                     tail ? tail.id : null));
     return list;
   }
@@ -303,7 +314,7 @@ App.Stages = (function () {
     var target = byId[id];
     if (!target) return copy(stagesOf(project));
 
-    var made = blank(project, freshId(project, 'stage'), 'New stage', target.parent);
+    var made = blank(project, 'stage_' + freshNumber(project), 'New stage', target.parent);
     var list = copy(stagesOf(project));
     list.forEach(function (stage) {
       if (stage.id === id) stage.parent = made.id;
@@ -346,7 +357,7 @@ App.Stages = (function () {
     var original = byId[id];
     if (!original) return copy(stagesOf(project));
 
-    var made = blank(project, freshId(project, 'stage'),
+    var made = blank(project, 'stage_' + freshNumber(project),
                      original.name + ' (copy)', original.id);
     made.calculation = original.calculation || 'Plastic';
     made.reset_displacements = !!original.reset_displacements;

@@ -132,7 +132,7 @@ window.STAGE_FIXTURE =
           "time_interval": 0.0
         },
         {
-          "id": "stage_1",
+          "id": "stage_8",
           "name": "Stage 8",
           "parent": "settle",
           "calculation": "Plastic",
@@ -202,7 +202,7 @@ window.STAGE_FIXTURE =
           "time_interval": 0.0
         },
         {
-          "id": "stage_1",
+          "id": "stage_8",
           "name": "New stage",
           "parent": "build_wall",
           "calculation": "Plastic",
@@ -217,7 +217,7 @@ window.STAGE_FIXTURE =
         {
           "id": "dig_1",
           "name": "Dig to -2.0 m",
-          "parent": "stage_1",
+          "parent": "stage_8",
           "calculation": "Plastic",
           "loading": "Staged construction",
           "activate": [
@@ -288,7 +288,7 @@ window.STAGE_FIXTURE =
       ],
       "result": [
         {
-          "id": "stage_1",
+          "id": "stage_8",
           "name": "New stage",
           "parent": null,
           "calculation": "Plastic",
@@ -303,7 +303,7 @@ window.STAGE_FIXTURE =
         {
           "id": "initial",
           "name": "Initial stage",
-          "parent": "stage_1",
+          "parent": "stage_8",
           "calculation": "K0 procedure",
           "loading": "Staged construction",
           "activate": [],
@@ -681,7 +681,7 @@ window.STAGE_FIXTURE =
           "time_interval": 0.0
         },
         {
-          "id": "stage_1",
+          "id": "stage_8",
           "name": "Wall installation (copy)",
           "parent": "build_wall",
           "calculation": "Plastic",
@@ -696,7 +696,7 @@ window.STAGE_FIXTURE =
         {
           "id": "dig_1",
           "name": "Dig to -2.0 m",
-          "parent": "stage_1",
+          "parent": "stage_8",
           "calculation": "Plastic",
           "loading": "Staged construction",
           "activate": [
@@ -881,7 +881,7 @@ window.STAGE_FIXTURE =
           "time_interval": 0.0
         },
         {
-          "id": "stage_1",
+          "id": "stage_8",
           "name": "Consolidate (copy)",
           "parent": "settle",
           "calculation": "Plastic",

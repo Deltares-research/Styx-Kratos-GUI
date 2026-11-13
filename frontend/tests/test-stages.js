@@ -192,6 +192,21 @@
     T.eq(ids.length, new Set(ids).size, 'duplicate stage id: ' + ids.join(', '));
   });
 
+  // Issue #135: after the two default stages, Add made `Stage 3` with the id `stage_1`.
+  test('add gives the new stage the same number in its name and its id', function () {
+    var p = project();
+    p.stages = [
+      { id: 'initial', name: 'Initial stage', parent: null },
+      { id: 'null_step', name: 'Null step', parent: 'initial' }
+    ];
+    var made = App.Stages.added(p)[2];
+    T.eq([made.id, made.name], ['stage_3', 'Stage 3']);
+
+    p.stages.push({ id: 'dig', name: 'Stage 4', parent: 'null_step' });
+    made = App.Stages.added(p)[3];
+    T.eq([made.id, made.name], ['stage_5', 'Stage 5'], 'a number whose name is taken is skipped');
+  });
+
   test('add on an empty project makes a root', function () {
     var p = project();
     p.stages = [];
@@ -534,6 +549,7 @@
     T.eq(rows[3].label, 'Slag 2 - 22 d, T = 39 d [4_Slag_2]');
     T.eq(rows[4].label, 'Kraan load - 0.5 d, T = 39.5 d [5_Kraan]');
     T.eq(rows[0].label, 'Initial stage [1_Initial_stage]', 'no time, no times');
+    T.eq(rows[3].heading, 'Slag 2 - 22 d, T = 39 d', 'the line without its id');
   });
 
   test('before any calculation every stage says so', function () {
