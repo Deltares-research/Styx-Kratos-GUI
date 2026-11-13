@@ -215,6 +215,9 @@ PS> kratos-cli boundary levee.json add start --name "Start values" --domain --wa
 added start  Start values  water pressure on the whole soil; phreatic line (-36, 5) -> (-2, 5) -> (15, -0.5) -> (54, -0.5), cut-off 100000, initial; wrote levee.json
 
 PS> kratos-cli boundary levee.json list
+fixed_bottom  Fixed bottom  displacement on the bottom face; fixed in x y z
+roller_left  Roller left  displacement on the left face; fixed in x
+roller_right  Roller right  displacement on the right face; fixed in x
 river_head  River head  water pressure on line (-36, -22) -> (-36, 0) -> (-18, 0) -> (0, 6); hydrostatic about 5 m, cut-off 100000, fixed
 polder_head  Polder head  water pressure on line (54, 0) -> (54, -22); hydrostatic about -0.5 m, cut-off 100000, fixed
 seepage_face  Seepage face  seepage on line (4, 6) -> (22, 0) -> (54, 0); water may leave the soil here
@@ -222,7 +225,8 @@ start  Start values  water pressure on the whole soil; phreatic line (-36, 5) ->
 The front and back supports are kept for the solid model; the 2D section holds z by itself.
 ```
 
-The last line is printed for every 2D model; there are no supports left.
+The supports stay in the list, but the Groundwater flow stage does not use them, so they
+do not change the deck. The last line is printed for every 2D model.
 
 ## Step 6. The calculation and the mesh
 
@@ -263,7 +267,7 @@ levee_seepage  (levee.json)
   parts       soil_cover, soil_aquifer, levee_core, levee_outer
   structures  none
   water       none
-  conditions  river_head (water pressure on line (-36, -22) -> (-36, 0) -> (-18, 0) -> (0, 6)), polder_head (water pressure on line (54, 0) -> (54, -22)), seepage_face (seepage on line (4, 6) -> (22, 0) -> (54, 0)), start (water pressure on the whole soil)
+  conditions  fixed_bottom (displacement on the bottom face), roller_left (displacement on the left face), roller_right (displacement on the right face), river_head (water pressure on line (-36, -22) -> (-36, 0) -> (-18, 0) -> (0, 6)), polder_head (water pressure on line (54, 0) -> (54, -22)), seepage_face (seepage on line (4, 6) -> (22, 0) -> (54, 0)), start (water pressure on the whole soil)
   gravity     on
   stages      flow
   mesh        element size 1, order 1
@@ -271,7 +275,8 @@ levee_seepage  (levee.json)
 
 `show` gives the domain as `y -22 .. 0`: the command line keeps the domain's top at the
 top of the first layer, the ground surface. The levee above it is drawn parts, which the
-mesher takes as they are. See [The same model as the script](#the-same-model-as-the-script).
+mesher takes as they are, so the mesh and the Kratos input files do not depend on the
+domain's top.
 
 ## Step 8. Run it
 
@@ -335,7 +340,7 @@ kratos-cli export script.json --out deck_script
 ```
 
 The two decks, `levee_seepage.mdpa`, `ProjectParameters.json`, `MaterialParameters.json`
-and `kratos_gui_units.json`, are the same as given by [The same model as the script](#the-same-model-as-the-script).
+and `kratos_gui_units.json`, are identical: Kratos calculates the same model.
 
 ## In the GUI
 
