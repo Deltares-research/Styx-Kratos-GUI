@@ -220,6 +220,7 @@ and adds only the values that are missing
 | Calculate (F9) | Makes the mesh, writes the files, and runs Kratos in a new run folder | Tested |
 | Kratos location | `kratos.local.json` or environment variables: Python of Kratos, build folder, runs folder, time limit (default 3600 s) | Tested |
 | Failed runs | The log names the stage that failed | Tested |
+| Convergence while Kratos runs | The **Convergence** window opens with Calculate and shows the relative and the absolute residual of each iteration, about once a second, until the run ends. `kratos-cli run --follow` and `calculate --follow` print the same iterations. The points arrive one by one only where the Kratos build shares the C runtime of its Python, which is so on the Windows build that the tests use. Linux is not tested. | Limited |
 
 ### B6. Results mode
 
@@ -232,6 +233,7 @@ and adds only the values that are missing
 | Loads and water | The loads and the water level of the stage on screen over the colours, when the run is of the open project (`results loads on\|off`) | Tested |
 | Values at a node | All quantities at one node (`results at <node>`) | Tested |
 | Plots along the wall | Bending moment M, shear force Q, normal force N, displacements ux and uy along the wall, and the tractions tn and ts along the interface, with one line for each stage. Save as PNG, PDF, SVG or CSV. | Tested |
+| Convergence plot | The residuals of each iteration of any run, also of a run that failed, read from its `kratos.log`: targets, iterations where the criterion was met, steps cut back or at the iteration limit, and the fraction of unbalance when Kratos printed it. Save as PNG, PDF, SVG or CSV. A deck with two convergence criteria prints two lines per iteration, and the plot counts both as iterations. | Tested |
 | Export | The field on screen as CSV; one file of a run, or the full run as a ZIP file | Tested |
 | Slip plane, factor of safety | Not available | Not available |
 
@@ -247,11 +249,12 @@ and adds only the values that are missing
 | `boundary`, `gravity` | Lists the boundary conditions or puts the standard supports back; shows gravity or switches it on or off |
 | `soillayers`, `materials` | Opens the soil windows |
 | `colour`, `node` | Shows parts of the mesh in colour, or the parts that contain a node |
-| `results …` | `runs`, `open`, `stage`, `fields`, `field`, `at`, `bands`, `smooth`, `map`, `deform`, `range`, `reverse`, `mesh`, `loads`, `plot`, `csv`, `files`, `get`, `zip` |
+| `results …` | `runs`, `open`, `stage`, `fields`, `field`, `at`, `bands`, `smooth`, `map`, `deform`, `range`, `reverse`, `mesh`, `loads`, `plot`, `convergence`, `csv`, `files`, `get`, `zip` |
 | `view`, `zoomfit`, `goto<mode>`, `clear`, `help` | Changes the view or the mode, clears the log, lists the commands |
 
 The `Project` is a pydantic model that a script can build directly. The server also has a
-REST API: `/api/project`, `/api/mesh`, `/api/calculate`, `/api/results/…`.
+REST API: `/api/project`, `/api/mesh`, `/api/calculate`, `/api/calculate/status`,
+`/api/results/…`.
 
 ### B8. Command line (kratos-cli)
 

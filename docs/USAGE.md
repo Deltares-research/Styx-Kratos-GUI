@@ -496,12 +496,60 @@ Click **Calculate** in the toolbar, or press <kbd>F9</kbd> outside Mesh mode. St
 3. runs Kratos, and
 4. opens Results mode when Kratos is done.
 
-While Kratos runs, the log shows *Meshing, writing the deck and running Kratos…*. You can run
-one calculation at a time. If a stage fails, the log shows which stage failed and why, and
-the Stages explorer shows which stages finished.
+While Kratos runs, the log shows *Meshing, writing the deck and running Kratos…*, and the
+**Convergence** window shows each iteration of the solver (see
+[Follow the solver](#follow-the-solver)). You can run one calculation at a time. If a stage
+fails, the log shows which stage failed and why, and the Stages explorer shows which stages
+finished.
 
 Styx never overwrites or deletes a run folder. See
 [What a calculation writes](KRATOS_SETUP.md#what-a-calculation-writes).
+
+### Follow the solver
+
+When you click **Calculate**, the **Convergence** window opens at the bottom right. It shows
+how the solver converges while Kratos runs, so you can see early if a stage has problems.
+You can move and resize the window. If you close it, the run continues.
+
+After each iteration, Kratos compares two residuals with their targets: the relative
+residual and the absolute residual. A residual is the force that is still out of balance.
+The criterion is met when one of the two residuals is below its target.
+
+The top of the window gives the stage that runs and the last residuals in words, for
+example *Step 2, iteration 5. Relative 3.2e-03 (target 1.0e-04).* Below it, the plot has two
+panels with the iteration number on the horizontal axis:
+
+| Item | What it shows |
+|---|---|
+| Upper panel | The relative residual of each iteration, on a log scale |
+| Lower panel | The absolute residual of each iteration, on a log scale |
+| Dashed line | The target of the residual |
+| Green X | An iteration where the criterion was met |
+| Red mark after an iteration | A step that reached the maximum number of iterations, or that Kratos cut back to a smaller step |
+| Red dot on the top edge | A residual that is not a number (`nan`) or infinite: the solution diverged |
+| Grey bands | The stages, with the stage name where it fits |
+| Red line and right axis | The fraction of unbalance, from 0 to 1. Kratos prints it only when the stage uses load stepping, so most runs do not show it. |
+
+Point at a dot to see its stage, step, iteration and residuals.
+
+When the run ends, the window stays open. It says *Finished in 12.3 s*, or the stage where
+the run stopped.
+
+If the window says *Kratos printed no residuals*, the deck has `echo_level` 0 in
+`solver_settings`. Styx writes 1. In an existing Kratos deck, set it to 1 in
+`ProjectParameters.json`, and calculate again.
+
+To see the plot of a run later, also of a run that failed, do one of these:
+
+- Click **Results** → **Convergence…**.
+- In Results mode, click **Convergence** in the tool rail.
+- Type `results convergence`.
+
+Styx shows the run that Kratos works on, else the open run, else the newest run.
+
+To save the plot, click **Save ▾** in the window and choose a format. **PNG**, **PDF** or
+**SVG** saves the figure, and **CSV** saves one row for each iteration. The file is of the
+run that the window shows.
 
 ## Export and import Kratos files
 
@@ -557,6 +605,8 @@ model, also when the mesh is shown deformed. Type `results loads off` to hide th
   that stage, so the face a pit is dug against starts at the pit floor.
   Click **Save ▾** and choose a format: **PNG**, **PDF** or **SVG** saves the figure, and
   **CSV** saves the numbers. The plot of an interface is saved in the same way.
+- **Convergence of the solver:** click **Convergence** in the tool rail, or type
+  `results convergence`. See [Follow the solver](#follow-the-solver).
 - **Values at a node:** click **Results** → **Value at a node…**, or type
   `results at <node>`.
 - **Save the field as CSV:** click **Save CSV**, or type `results csv`.

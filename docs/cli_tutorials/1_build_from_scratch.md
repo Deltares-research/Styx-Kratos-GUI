@@ -124,8 +124,9 @@ stages add sheet_pile --name "Sheet pile" --activate sheetpile_1 --reset-displac
 stages add loading --name Load --activate surcharge --max-iterations 150 --tolerance 1e-3
 
 # 8. Check the model, write the input files, run Kratos and read the results.
-#    `run .` prints nothing until Kratos has finished. Its run folder, with a copy of
-#    the input files, is made in your folder at the start; kratos.log is added at the end.
+#    `run .` prints nothing until Kratos has finished (`run . --follow` prints each
+#    iteration). Its run folder, with a copy of the input files, is made in your folder
+#    at the start, and Kratos writes kratos.log into it line by line.
 #    In `results show 1`, 1 is the run's number in `results runs` (1 is the newest),
 #    not a stage. The stages it lists are picked with --stage, e.g. --stage 2.
 show
