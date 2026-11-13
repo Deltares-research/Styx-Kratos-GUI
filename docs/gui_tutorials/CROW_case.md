@@ -3,7 +3,7 @@
 In this tutorial you build a staged sheet-pile excavation in the Styx GUI, from an empty
 project to the bending moment in the wall. You use only the windows, the tool rail and the
 explorers of the GUI. The tutorial is for a geotechnical engineer who has not used Styx
-before. It takes about 45 minutes.
+before.
 
 The model is the CROW excavation wall with Mohr-Coulomb soils. It is the same model as the
 [`kratos-cli` tutorial of the CROW case](https://github.com/Deltares-research/Styx-Kratos-GUI/blob/main/docs/cli_tutorials/CROW_case.md), and Kratos uses the
