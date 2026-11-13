@@ -4,7 +4,7 @@ It does what a Kratos run leaves behind, for exactly the deck it is given: a run
 directory named the way `calculation.new_run_directory` names one, the deck written by
 `calculation.write_deck`, synthetic GiD output per stage (`tests/fakes/gid_writer.py`),
 member output for the wall, a `kratos.log` with the stage markers the real runner prints
--- and the same answer dict. The app has no fake mode: the end-to-end fixture swaps this
+and the residual lines Kratos prints (`log_lines`) -- and the same answer dict. The app has no fake mode: the end-to-end fixture swaps this
 in with a monkeypatch, so Results mode can be driven on a machine with no Kratos.
 
 The fields are analytic, so a test can say what the page should show:
@@ -75,7 +75,34 @@ def _member_outputs(export: dict, directory: Path, params: dict) -> list[str]:
     return written
 
 
-def fake_run(export: dict) -> dict:
+ITERATIONS = 3
+"""Residual lines per stage in the fake log; the last one meets the target."""
+
+
+def log_lines(stage: str, index: int, total: int) -> list[list[str]]:
+    """One stage of the log, as groups of lines: the stage's start, then one group per
+    iteration, then the stage's end. Groups, so `slow_run` can write them one by one.
+
+    The residuals fall tenfold per iteration from `10 ** -index`, so each stage's numbers
+    say which stage they are."""
+    marker = calculation.STAGE_MARKER
+    start = [f"{marker} begin {index}/{total} {stage}",
+             "GeoMechanics Analysis: Analysis -START-",
+             "GeoMechanics Analysis: cycle:  1",
+             f"GeoMechanics Analysis: TIME      :  {float(index)}"]
+    iterations = []
+    for n in range(ITERATIONS):
+        relative = 10.0 ** -(index + n)
+        lines = [f"RESIDUAL CRITERION:  :: [ Obtained ratio = {relative:g}; Expected ratio "
+                 f"= {10.0 ** -(index + ITERATIONS - 1):g}; Absolute norm = "
+                 f"{relative * 1e-6:g}; Expected norm =  1e-09]"]
+        if n == ITERATIONS - 1:
+            lines.append("RESIDUAL CRITERION: Convergence is achieved")
+        iterations.append(lines)
+    return [start, *iterations, [f"{marker} end {index}/{total} {stage}"]]
+
+
+def fake_run(export: dict, seconds_per_iteration: float = 0.0) -> dict:
     started = time.monotonic()
     directory = calculation.new_run_directory(export["deck_name"])
     params = json.loads(export["project_parameters"])
@@ -85,11 +112,14 @@ def fake_run(export: dict) -> dict:
                          gauss={"CAUCHY_STRESS_TENSOR": _stress})
     _member_outputs(export, directory, params)
     order = params["orchestrator"]["settings"]["execution_list"]
-    log = []
-    for index, stage in enumerate(order, start=1):
-        log.append(f"{calculation.STAGE_MARKER} begin {index}/{len(order)} {stage}")
-        log.append(f"{calculation.STAGE_MARKER} end {index}/{len(order)} {stage}")
-    (directory / calculation.LOG_NAME).write_text("\n".join(log) + "\n", encoding="utf-8")
+    with calculation.in_progress(directory), \
+            open(directory / calculation.LOG_NAME, "w", encoding="utf-8") as log:
+        for index, stage in enumerate(order, start=1):
+            for group in log_lines(stage, index, len(order)):
+                log.write("\n".join(group) + "\n")
+                log.flush()
+                if seconds_per_iteration and group[0].startswith("RESIDUAL"):
+                    time.sleep(seconds_per_iteration)
     inputs = [f"{export['deck_name']}.mdpa", calculation.PARAMETERS_NAME]
     outputs = sorted(p.name for p in directory.iterdir()
                      if p.name not in inputs and p.name != calculation.LOG_NAME
@@ -97,3 +127,12 @@ def fake_run(export: dict) -> dict:
     return {"ok": True, "returncode": 0, "stage": None,
             "seconds": round(time.monotonic() - started, 1), "directory": str(directory),
             "inputs": inputs, "outputs": outputs, "log": calculation.LOG_NAME, "error": None}
+
+
+def slow_run(seconds_per_iteration: float):
+    """`fake_run` that writes its log the way a real run does: an iteration at a time,
+    `seconds_per_iteration` apart, while `calculation.current_run` names the run. For
+    the end-to-end test of the live convergence window."""
+    def run(export: dict) -> dict:
+        return fake_run(export, seconds_per_iteration)
+    return run

@@ -85,6 +85,19 @@ async def calculate_project(settings: ExportRequest) -> dict:
                      "run": Path(result["directory"]).name}
 
 
+@router.get("/api/calculate/status")
+def calculate_status() -> dict:
+    """Whether a calculation is running, and which run directory Kratos works in.
+
+    `run` is null while the deck is being written and before Kratos starts. A page
+    that loads during a run asks this, so it can follow the run's convergence
+    (`frontend/js/convergence-window.js`).
+    """
+    current = calculation.current_run()
+    return {"running": calculation.running() or current is not None,
+            "run": current.name if current is not None else None}
+
+
 async def _calculate_deck(deck: Deck) -> dict:
     from core.kratos import external_deck
 

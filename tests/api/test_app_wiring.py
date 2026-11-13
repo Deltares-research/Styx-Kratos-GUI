@@ -35,7 +35,7 @@ OWNERS = [
     (lambda path: path.startswith("/api/geometry"), "backend.routes.geometry"),
     (lambda path: path.startswith("/api/mesh"), "backend.routes.mesh"),
     (lambda path: path.startswith(("/api/export/", "/api/import/")), "backend.routes.decks"),
-    (lambda path: path == "/api/calculate", "backend.routes.decks"),
+    (lambda path: path.startswith("/api/calculate"), "backend.routes.decks"),
     (lambda path: path.startswith("/api/results/"), "backend.routes.results"),
     (lambda path: path.startswith("/api/files/"), "backend.routes.files"),
 ]

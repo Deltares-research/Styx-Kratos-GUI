@@ -475,7 +475,7 @@ then, and the one it has now."""
 NOW = {old: RENAMED_IN_PACKAGE.get(new, new) for old, new in MOVED.items()}
 """Each flat module, and where it is now."""
 
-ADDED = {"kratos": {"condition_checks", "deck_files"}}
+ADDED = {"kratos": {"condition_checks", "deck_files"}, "results": {"convergence"}}
 """Modules a package has that no flat module became."""
 
 

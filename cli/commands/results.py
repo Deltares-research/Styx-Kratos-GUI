@@ -11,6 +11,7 @@
     members RUN        the members the run wrote curves for, and their quantities
     profile RUN MEMBER [QUANTITY]
                        one quantity along a wall or interface, stage by stage
+    convergence RUN    how the solver converged, stage by stage, read off the log
     get RUN FILE       a copy of one of its files
     archive RUN        the whole run as one zip
 
@@ -20,7 +21,9 @@ machine or not (plan D12). `--stage` takes a stage's number or words of its stag
 ("first excavation"); without it, the last stage that wrote results is read, which is
 where the GUI opens a run too. Each answer is the one the `/api/results` routes give for
 the same question, and `--csv` writes the file the GUI's `results csv` and
-`results plot csv` save (`cli.terminal.tables`).
+`results plot csv` save (`cli.terminal.tables`). `convergence --csv` writes the file the
+GUI's `results convergence csv` saves (`cli.terminal.tables.convergence_csv`); the plot
+itself, as SVG, PNG or PDF, is the GUI's only.
 """
 
 from __future__ import annotations
@@ -34,7 +37,7 @@ from cli.terminal import tables
 from cli.terminal.files import add_runs_dir, environment
 from cli.terminal.output import STDOUT, Answer, CommandError
 from core.analysis import calculation
-from core.results import catalog, fields
+from core.results import catalog, convergence, fields
 
 
 def register(commands, common: argparse.ArgumentParser) -> None:
@@ -79,6 +82,11 @@ def register(commands, common: argparse.ArgumentParser) -> None:
     profile.add_argument("quantity", nargs="?",
                          help="M, Q, N, ux, uy, tn, ts, or a word of its label "
                               "(default: the bending moment)")
+    converged = action("convergence", show_convergence,
+                       "how the solver converged, read off the run's log", csv=True)
+    converged.add_argument("--stage", metavar="STAGE",
+                           help="its number, or words of its stage: every iteration of "
+                                "that stage (default: one row per stage)")
     get = action("get", get_file, "copy one file of a run")
     get.add_argument("file", help="as `results files` lists it")
     _out(get, "the file's own name, here")
@@ -322,6 +330,96 @@ def _target(args: argparse.Namespace, name: str) -> Path:
         raise CommandError(f"{target} is already there. Give --force to overwrite it, or "
                            "another --out.")
     return target
+
+
+# ── Convergence ─────────────────────────────────────────────────────────────
+
+def show_convergence(args: argparse.Namespace) -> Answer:
+    """The run's convergence: a row per stage, or with `--stage` a row per iteration of
+    that stage. The same data the GUI's convergence window draws."""
+    with environment(args):
+        data = convergence.of_run(_run(args.run))
+    name = data["run"]
+    if not data["iterations"]:
+        reason = (convergence.NO_RESIDUALS if data["stages"] else
+                  "Kratos did not start solving." if data["log"] else "The run has no log.")
+        return Answer(data=data, lines=[f"{name}: no iterations. {reason}"],
+                      csv=tables.convergence_csv(data))
+    if args.stage is not None:
+        stage = _convergence_stage(data, args.stage, name)
+        return Answer(data=data, lines=_iteration_lines(data, stage),
+                      csv=tables.convergence_csv(data, stage=stage["index"]))
+    rows = convergence.stage_rows(data)
+    count = len(data["iterations"])
+    state = (" (still running)" if data["running"] else
+             f"; stopped in stage {data['failed_at']['index']} of {data['failed_at']['of']}"
+             if data["failed_at"] else "")
+    lines = [f"{name}: {count} iteration{'s' if count != 1 else ''} in {len(rows)} "
+             f"stage{'s' if len(rows) != 1 else ''}{state}",
+             f"  {'stage':<34}{'iter.':>6}{'steps':>6}  {'relative (target)':<22}"
+             f"{'absolute (target)':<22}"]
+    for row in rows:
+        label = (f"{row['index']:>3}  {_tidy(row['name'])}" if row["index"] is not None
+                 else "  -  (no stage line)")
+        lines.append(f"  {label[:33]:<34}{row['iterations']:>6}{row['steps']:>6}  "
+                     f"{_pair(row['relative'], row['relative_target']):<22}"
+                     f"{_pair(row['absolute'], row['absolute_target']):<22}"
+                     + ("met" if row["met"] else "not met"))
+        extra = [f"{row['cut_backs']} cut-back{'s' if row['cut_backs'] != 1 else ''}"
+                 ] if row["cut_backs"] else []
+        if row["max_iterations"]:
+            extra.append(f"{row['max_iterations']} step(s) at the iteration limit")
+        if extra:
+            lines.append(f"{'':7}{', '.join(extra)}")
+    lines.append("`--stage N` lists every iteration of a stage; `--csv` writes them all.")
+    return Answer(data=data, lines=lines, csv=tables.convergence_csv(data))
+
+
+def _convergence_stage(data: dict, wanted: str, given: str) -> dict:
+    """The stage `--stage` names in the convergence data: its number or words of its
+    name, as `_stage` matches a stage of the results."""
+    stages = data["stages"]
+    if wanted.strip().isdigit():
+        found = next((stage for stage in stages if stage["index"] == int(wanted)), None)
+    else:
+        words = re.sub(r"[^a-z0-9]+", " ", wanted.lower()).strip()
+        found = next((stage for stage in stages if stage["name"] and words in
+                      re.sub(r"[^a-z0-9]+", " ", stage["name"].lower())), None)
+    if found is None:
+        raise CommandError(f"In {given}, no stage with iterations matches {wanted!r}. "
+                           "Its stages: " + (", ".join(
+                               f"{stage['index']} {_tidy(stage['name'] or '')}".strip()
+                               for stage in stages) or "none") + ".")
+    return found
+
+
+def _iteration_lines(data: dict, stage: dict) -> list[str]:
+    stages = data["stages"]
+    order = stages.index(stage)
+    end = stages[order + 1]["at"] if order + 1 < len(stages) else len(data["iterations"])
+    lines = [f"Stage {stage['index']} ({_tidy(stage['name'] or '')}): "
+             f"{end - stage['at']} iteration(s)",
+             f"  {'iter.':>6}{'step':>6}  {'relative (target)':<22}{'absolute (target)':<22}"]
+    for at in range(stage["at"], end):
+        iteration = data["iterations"][at]
+        lines.append(f"  {at + 1:>6}{iteration['step'] or '':>6}  "
+                     f"{_pair(iteration['relative'], iteration['relative_target']):<22}"
+                     f"{_pair(iteration['absolute'], iteration['absolute_target']):<22}"
+                     + ("met" if iteration["met"] else ""))
+        for event in data["events"]:
+            if event["at"] == at + 1:
+                lines.append(f"{'':16}" + convergence.event_text(event))
+    return lines
+
+
+def _pair(value, target) -> str:
+    return f"{_value(value)} ({_value(target)})"
+
+
+def _value(value) -> str:
+    if value is None:
+        return "-"
+    return value if isinstance(value, str) else tables.shown(value)
 
 
 # ── Shared ──────────────────────────────────────────────────────────────────
