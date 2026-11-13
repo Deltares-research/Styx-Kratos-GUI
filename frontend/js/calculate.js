@@ -16,8 +16,10 @@
    *   it does not reuse the export's download path. A download is for taking the deck
        elsewhere; this one runs where the files are written, and the user never sees a
        save window because nothing is being saved to a place they chose.
-   *   it does not poll. The request stays open for as long as the solver runs, which is
-       what makes a progress bar possible later without changing anything here.
+   *   it does not poll. The request stays open for as long as the solver runs. The
+       progress is the Convergence window's (`convergence-window.js`): it hears from
+       `onChange` when a run starts and ends, and asks the server once a second how
+       the solver converges in between.
    ══════════════════════════════════════════════════════════════════ */
 
 var App = window.App || {};
@@ -52,8 +54,8 @@ App.Calculate = (function () {
      its materials, its flow conditions, whether Kratos is installed -- is the
      server's to judge, after the press, with its full reason in the command log. */
 
-  var RUNNING = 'Calculating… Kratos is running this model. The command log says '
-              + 'when it finishes.';
+  var RUNNING = 'Calculating… Kratos is running this model. The Convergence window '
+              + 'shows how it goes, and the command log says when it finishes.';
 
   function nothingToMesh(project) {
     var noun = project.dimension === 2 ? 'surface' : 'volume';
@@ -76,19 +78,21 @@ App.Calculate = (function () {
 
   function running() { return inFlight; }
 
-  /* Told when a run starts and when it ends, however it ends. Adding the same
-     function twice adds it once: js/patches.js installs more than once in the tests. */
+  /* Told when a run starts and when it ends, however it ends: `fn(running, result)`,
+     with the server's answer as `result` when a run ended with one (none when the
+     request failed). Adding the same function twice adds it once: js/patches.js
+     installs more than once in the tests. */
   function onChange(fn) {
     if (typeof fn === 'function' && listeners.indexOf(fn) < 0) listeners.push(fn);
   }
 
   /* A listener that throws must not turn a finished run into "Calculation failed":
      its error is rethrown on its own, where the page's error reporter sees it. */
-  function setInFlight(value) {
+  function setInFlight(value, result) {
     if (inFlight === value) return;
     inFlight = value;
     listeners.slice().forEach(function (fn) {
-      try { fn(inFlight); } catch (err) { setTimeout(function () { throw err; }, 0); }
+      try { fn(inFlight, result); } catch (err) { setTimeout(function () { throw err; }, 0); }
     });
   }
 
@@ -160,7 +164,7 @@ App.Calculate = (function () {
     log('note', 'Meshing, writing the deck and running Kratos…');
 
     return App.Api.post('/api/calculate', request()).then(function (result) {
-      setInFlight(false);
+      setInFlight(false, result);
       /* The run just written becomes the one `results` opens, before anything is
          printed about it. No round trip: the response already carries the run id,
          so pressing Calculate and then typing `results files` works with nothing

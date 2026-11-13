@@ -92,12 +92,13 @@ Genuchten soil.
 | `node SOURCE NODE ...` | Which SubModelParts a node of the deck is in, and the nodes an interface split from it |
 | `deck show SOURCE` | A deck's mesh, SubModelParts and stages |
 | `export P --out DIR [--name NAME]` | Write the Kratos deck into `DIR` |
-| `run DECK [--runs-dir DIR] [--timeout S]` | Run a deck directory (or its `ProjectParameters.json`) |
-| `calculate P [--runs-dir DIR] [--timeout S]` | `export` and `run` in one step |
+| `run DECK [--runs-dir DIR] [--timeout S] [--follow]` | Run a deck directory (or its `ProjectParameters.json`) |
+| `calculate P [--runs-dir DIR] [--timeout S] [--follow]` | `export` and `run` in one step |
 | `results runs [--runs-dir DIR]` | The runs on this machine, newest first, numbered |
 | `results show\|stages\|files RUN` | A run's stages, its files and whether it finished; `RUN` is its id, its number, or a run directory |
 | `results fields\|field\|at RUN ... [--stage S]` | What a stage can show, one field (`--csv` for every value), every field at one node |
 | `results members\|profile RUN ...` | The walls and interfaces the run wrote curves for, and one quantity along one, stage by stage (`--csv`) |
+| `results convergence RUN [--stage S]` | How the solver converged, read off the run's log: a row per stage, or per iteration of one stage (`--csv`) |
 | `results get\|archive RUN ...` | A copy of one file of a run, or the whole run as a zip |
 | `picture geometry\|mesh P ...` | Save a picture of the model or its mesh, as the GUI's camera button does. See [Pictures](#pictures). |
 | `picture stage P [--stage S\|all]` | Save a picture of one stage, or of every stage (the default) |
@@ -572,6 +573,9 @@ kratos-cli results at 1 1234 --stage 4              # every field at node 1234
 kratos-cli results members 1                        # wall, interface_left, interface_right, ...
 kratos-cli results profile 1 wall M --csv wall_M.csv
 kratos-cli results profile 1 interface_right normal # the normal traction, by a word of it
+kratos-cli results convergence 1                    # iterations and last residuals, per stage
+kratos-cli results convergence 1 --stage 4          # every iteration of stage 4
+kratos-cli results convergence 1 --csv convergence.csv
 kratos-cli results get 1 kratos.log --out logs/
 kratos-cli results archive 1                        # <run>.zip, here
 kratos-cli results field D:/copied/Pit_A_2026-10-12_09-14 uy   # a run anywhere
@@ -592,6 +596,12 @@ kratos-cli results field D:/copied/Pit_A_2026-10-12_09-14 uy   # a run anywhere
 - **`profile MEMBER [QUANTITY]`**: `M`, `Q`, `N`, `ux`, `uy` along a wall, `tn`, `ts` along
   an interface, or a word of the label (`moment`, `shear`, `normal`). Without a quantity it
   is the bending moment. `--stage` narrows it to one stage.
+- **`convergence`** reads the residuals Kratos printed for each iteration from the run's
+  `kratos.log`: the relative and the absolute residual and their targets, whether the
+  convergence criterion was met, and the steps that were cut back or reached the
+  iteration limit. It works on a run that stopped, and on a run that is still running.
+  A deck with two convergence criteria prints two lines per iteration, and both are
+  counted as iterations.
 - **Which interface members a run has.** Each face of the wall has its own member:
   `interface_left` and `interface_right`, the faces toward -x and +x
   (`results profile 1 interface_left tn`). An interface flatter than 45 degrees has
@@ -599,8 +609,8 @@ kratos-cli results field D:/copied/Pit_A_2026-10-12_09-14 uy   # a run anywhere
   whose contact is on in that stage, so the face a pit is dug against starts at the pit
   floor. With more than one interface, the member names start with the interface's id: `contact_left`.
   `results members` lists them.
-- **`--csv FILE`** writes the file the GUI saves (`results csv`, and the plot window's
-  `results plot csv`), number for number, in UTF-8. `--csv` alone prints it, for a pipe;
+- **`--csv FILE`** writes the file the GUI saves (`results csv`, the plot window's
+  `results plot csv`, and `results convergence csv`), number for number, in UTF-8. `--csv` alone prints it, for a pipe;
   in Windows PowerShell 5.1, `>` would save that as UTF-16, so give the file instead. `--json` gives what the GUI's `/api/results`
   routes answer for the same question.
 - The numbers are the run's own, in its project's units, which `results show` names.
@@ -648,6 +658,9 @@ viewport's. A command can also be typed with a leading `_` in the box (`_mesh`).
 | `results plot members`, `results plot list` | `kratos-cli results members RUN` |
 | `results plot csv` | `kratos-cli results profile RUN MEMBER --csv FILE` |
 | `results plot svg`, `results plot png`, `results plot pdf` | — the viewport's: a picture of the plot |
+| `results convergence` | `kratos-cli results convergence RUN` |
+| `results convergence csv` | `kratos-cli results convergence RUN --csv FILE` |
+| `results convergence svg`, `results convergence png`, `results convergence pdf` | — the viewport's: a picture of the convergence plot |
 | `results files` | `kratos-cli results files RUN` |
 | `results get <file>` | `kratos-cli results get RUN FILE` |
 | `results zip`, `results archive` | `kratos-cli results archive RUN` |
@@ -715,11 +728,14 @@ the deck stays as it was and every run is kept. The runs root is `KRATOS_GUI_RUN
 `~/KratosGUI/runs`, which the GUI's Results mode reads too. `--runs-dir` puts the run somewhere
 else. Kratos is found the way the GUI finds it: [KRATOS_SETUP.md](KRATOS_SETUP.md).
 
-`run` and `calculate` print nothing while Kratos runs. The run directory and its copy of
-the deck are there from the start; `kratos.log`, Kratos' own output, is written into it
-when the run ends. The run time grows quickly with the mesh: `mesh P` reports the number
-of nodes and elements before a run, and `--timeout` (an hour by default) stops a run that
-takes too long.
+`run` and `calculate` print nothing while Kratos runs, unless `--follow` is given: then
+they print a line on stderr for each stage and for each iteration of the solver, with its
+residuals, so stdout keeps the answer alone (and `--json` stays valid JSON). The run
+directory and its copy of the deck are there from the start, and Kratos' own output goes
+into `kratos.log` there line by line while it runs; `kratos-cli results convergence RUN` in
+a second terminal reads it at any time. The run time grows quickly with the mesh: `mesh P`
+reports the number of nodes and elements before a run, and `--timeout` (an hour by default)
+stops a run that takes too long.
 
 ## Output and exit codes
 
@@ -728,5 +744,6 @@ script instead. The exit code is 0 when the command did what it was asked, 1 whe
 file or Kratos refused it, and 2 when the command line itself could not be read. A refusal is
 printed on stderr as `error: <reason>`; with `--json` it is also printed on stdout as
 `{"ok": false, "error": ...}`. The exporter's warnings go to stderr as `warning: ...`.
-`--csv`, for the commands with a table (`results field`, `results profile`), prints that
+`--csv`, for the commands with a table (`results field`, `results profile`,
+`results convergence`), prints that
 table as CSV, or writes it into the file it is given; it does not go with `--json`.

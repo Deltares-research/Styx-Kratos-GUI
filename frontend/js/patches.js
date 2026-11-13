@@ -2652,6 +2652,13 @@ App.LivePatches = (function () {
         else openResultsWindow();
         return;
       }
+      // The Results menu's and rail's "Convergence": `results convergence`, without
+      // switching to Results mode -- it is read while a run goes on, and of a run that
+      // wrote no results at all.
+      if (item && item.action === 'showConvergence') {
+        resultsCommand('results convergence');
+        return;
+      }
       // The rail's "Plot along the wall": the same `results plot` the command box runs,
       // which opens the plot window when it has something to draw.
       if (item && item.action === 'plotResults') {
@@ -3259,6 +3266,11 @@ App.LivePatches = (function () {
           + '<circle cx="17.5" cy="12.5" r="1.3"/>';
       }
 
+      if (App.ICONS && !App.ICONS.convergence) {
+        App.ICONS.convergence = '<path d="M4 4v16h16"/>'
+          + '<path d="M7 6l3 5 3-2 3 6 3 2"/><path d="M6 17.5h14" stroke-dasharray="2 2"/>';
+      }
+
       App.RAILS = App.RAILS || {};
       App.RAILS.results = [
         { icon: 'select', tip: 'Select', toggle: true, on: true },
@@ -3266,7 +3278,9 @@ App.LivePatches = (function () {
         // The chooser opens with the mode; this is how it comes back once closed.
         { icon: 'results', tip: 'Choose results', action: 'chooseResults' },
         { icon: 'wallplot', tip: 'Plot along the wall — M, Q, N, ux and the earth '
-            + 'pressure on it, every stage', action: 'plotResults' }
+            + 'pressure on it, every stage', action: 'plotResults' },
+        { icon: 'convergence', tip: 'Convergence — how the solver converged, iteration '
+            + 'by iteration', action: 'showConvergence' }
       ];
 
       /* `App.setMode` is frozen and knows only about the stages panel (js/app.js:25).
@@ -3309,6 +3323,10 @@ App.LivePatches = (function () {
           }
         });
       }
+
+      // The Convergence window: its own file, which hears from App.Calculate and
+      // App.ConvergencePlot itself.
+      if (App.ConvergenceWindow) App.ConvergenceWindow.install();
 
       /* The plot window is drawn from `App.ResultsPlot.state()` and nothing else, and
          opens when a `results plot` asks for it -- typed, or from any button. */
@@ -3426,6 +3444,7 @@ App.LivePatches = (function () {
             cmd: 'results range auto' },
           '-',
           { label: 'Value at a node…', action: 'resultsAtNode' },
+          { label: 'Convergence…', icon: 'convergence', action: 'showConvergence' },
           { label: 'Plot along the wall…', icon: 'wallplot', action: 'resultsRun',
             cmd: 'results plot' },
           { label: 'Save field as CSV', action: 'resultsRun', cmd: 'results csv' },

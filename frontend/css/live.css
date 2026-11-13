@@ -405,6 +405,19 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
 .rp-host { flex: 1 1 auto; min-height: 0; overflow: auto; background: #fff; }
 .rp-host svg { display: block; width: 100%; height: auto; }
 
+/* The Convergence window (frontend/js/convergence-window.js): two status lines in words
+   and numbers, then the figure of frontend/js/convergence-plot.js, scaled to the width. */
+.dlg-convergence .dlg-body { overflow: hidden; padding: 0; }
+.cv-window { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.cv-status {
+  flex: 0 0 auto; padding: 6px 12px; font-size: 12px; line-height: 1.45;
+  border-bottom: 1px solid var(--c-border-soft);
+}
+.cv-line1 { font-weight: 600; color: var(--c-ink); }
+.cv-line2 { color: var(--c-ink-soft); min-height: 1.45em; }
+.cv-host { flex: 1 1 auto; min-height: 0; overflow: auto; background: #fff; }
+.cv-host svg { display: block; width: 100%; height: auto; }
+
 /* The Model explorer's colour toggle (Mesh mode): beside the eye, a square in the part's
    own colour -- outlined while off, filled while on, half filled for a group that is
    partly on. See addPartColorToggles in frontend/js/patches.js. */
