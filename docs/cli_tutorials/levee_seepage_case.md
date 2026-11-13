@@ -282,17 +282,21 @@ domain's top.
 
 ```text
 PS> kratos-cli calculate levee.json
-run levee_seepage_2026-11-12_13-55 finished in 24 s: 3 files in ...\levee_seepage_2026-11-12_13-55
-next: kratos-cli results show levee_seepage_2026-11-12_13-55
+run levee_seepage_<YYYY-MM-DD>_<hh-mm> finished in <t> s: 3 files in <your folder>\levee_seepage_<YYYY-MM-DD>_<hh-mm>
+next: kratos-cli results show levee_seepage_<YYYY-MM-DD>_<hh-mm>
 
 PS> kratos-cli results show 1
-levee_seepage_2026-11-12_13-55  (deck levee_seepage, started 2026-11-12T13:55)
+levee_seepage_<YYYY-MM-DD>_<hh-mm>  (deck levee_seepage, started <YYYY-MM-DD>T<hh:mm>)
   complete, SI units, 8 files, 1013.4 KB
     1  Flow                          results
 ```
 
 `calculate` meshes the model, writes the deck into a new run folder and runs Kratos there.
 The run folder is in `KRATOS_GUI_RUNS`, the folder you set it to; `1` is the newest run.
+The parts in `<...>` differ with every run: `<YYYY-MM-DD>` and `<hh-mm>` are the date and
+time the run started, `<t>` is how long it took (about 25 s), and `<your folder>` is the
+folder `KRATOS_GUI_RUNS` is set to.
+
 
 ## Step 9. The results
 
