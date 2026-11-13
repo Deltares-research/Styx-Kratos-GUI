@@ -233,17 +233,23 @@ def rail_tool(key: str) -> str:
 def rail(tour: Tour, key: str, flyout: str | None = None) -> None:
     """A tool on the rail, or one item of its flyout (the small corner of the button)."""
     page = tour.page
+    # A window just saved redraws the rail: wait for that redraw to end.
+    tour.settle()
     button = page.locator(rail_tool(key))
     assert button.count() == 1, f"no rail tool {key}"
     if not flyout:
         button.click()
         return
     item = page.get_by_text(flyout, exact=True).locator("visible=true")
-    box = button.bounding_box()
-    corner = (box["x"] + box["width"] - 3, box["y"] + box["height"] - 3)
     # A click on the corner while the flyout of the tool just used is closing can close
-    # the new one as well: click again until it shows.
+    # the new one as well: click again until it shows. The corner is measured each time,
+    # because the button has no box while the rail is drawn again.
     for _ in range(3):
+        button.wait_for(state="visible")
+        box = button.bounding_box()
+        if box is None:
+            continue
+        corner = (box["x"] + box["width"] - 3, box["y"] + box["height"] - 3)
         page.mouse.move(*corner)
         page.mouse.click(*corner)
         try:
