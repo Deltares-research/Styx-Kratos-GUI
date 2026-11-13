@@ -455,8 +455,13 @@ def stages(tour: Tour) -> None:
             texts.nth(index).fill(f"{value:g}")
             texts.nth(index).press("Enter")
             tour.settle()
+        reset = dialog.locator(".pgrid-row").filter(
+            has_text="Reset displacements to zero").locator("input[type=checkbox]")
+        if reset.is_checked() != stage.reset_displacements:
+            reset.click()
+            tour.settle()
         if number == 3:
-            tour.picture("window", of=dialog)
+            tour.picture("window", of=dialog, mark=reset)
         dialog.get_by_role("button", name="Close").click()
         _pick_stage(tour, stage.name)
         for label in on:
@@ -469,9 +474,10 @@ def stages(tour: Tour) -> None:
 
 def seven_stages(tour: Tour) -> None:
     got = project(tour)["stages"]
-    assert [(s["name"], s["calculation"], s["max_iterations"], s["tolerated_error"])
-            for s in got] == \
-        [(s.name, s.calculation, s.max_iterations, s.tolerated_error) for s in MODEL.stages]
+    assert [(s["name"], s["calculation"], s["reset_displacements"], s["max_iterations"],
+             s["tolerated_error"]) for s in got] == \
+        [(s.name, s.calculation, s.reset_displacements, s.max_iterations, s.tolerated_error)
+         for s in MODEL.stages]
 
 
 # ── 12. Calculate, and the moment in the wall ──────────────────────────────
@@ -485,6 +491,33 @@ def calculate(tour: Tour) -> None:
     tour.page.locator("#modal-layer .dialog").last.wait_for()
     tour.settle()
     tour.picture("plot", mark=rail_tool("plotResults"))
+    # The plot window, then the Choose results window that Results mode opened under it.
+    for _ in range(2):
+        window(tour.page).locator(".dlg-foot").get_by_role("button", name="Close").click()
+        tour.settle()
+    tour.page.locator("#modal-layer .dialog").first.wait_for(state="detached")
+
+
+# ── 13. Contour plots of the last stage ────────────────────────────────────
+
+LAST_STAGE = len(MODEL.stages)
+CONTOURS = (("sxx", "horizontal"), ("syy", "vertical"), ("u", "displacement"))
+"""The fields the page shows on the mesh, and the name of each screenshot."""
+
+
+def contours(tour: Tour) -> None:
+    panel = tour.page.locator("#panel-results")
+    stage = panel.locator('select[data-res="stage"]')
+    stage.select_option(str(LAST_STAGE))
+    tour.until(f"App.Results.stage() === {LAST_STAGE}", timeout=LONG)
+    for name, part in CONTOURS:
+        # The panel is drawn again after each change: find the list each time.
+        panel.locator('select[data-res="field"]').select_option(name)
+        tour.until(f"App.Results.field() && App.Results.field().field === {name!r}",
+                   timeout=LONG)
+        tour.settle()
+        tour.picture(part, mark=[panel.locator('select[data-res="stage"]'),
+                                 panel.locator('select[data-res="field"]')])
 
 
 STEPS = [
@@ -501,4 +534,5 @@ STEPS = [
     Step("11_mesh", "Make the mesh", mesh, meshed),
     Step("12_stages", "Set up the seven stages", stages, seven_stages),
     Step("13_results", "Calculate and look at the wall", calculate),
+    Step("14_contours", "Look at the stresses and the displacements", contours),
 ]

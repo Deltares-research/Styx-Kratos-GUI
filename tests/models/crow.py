@@ -167,8 +167,12 @@ def project(model: str = MOHR_COULOMB) -> Project:
                               *(load.id for load in water_loads)]),
             Stage(id="null_step", name="Null step", parent="initial",
                   calculation="Null step", max_iterations=150),
+            # As the reference does: the displacements start from zero when the wall goes
+            # in, so they show what the construction did, without the settlement of the
+            # K0 stage under the soil's own weight.
             Stage(id="install_wall", name="Wall installation", parent="null_step",
-                  activate=["sheetpile", "wall_contact", "surcharge"], **solved),
+                  activate=["sheetpile", "wall_contact", "surcharge"],
+                  reset_displacements=True, **solved),
             Stage(id="dig_1", name="First excavation", parent="install_wall",
                   activate=["water_1"], deactivate=["soil_L_top__lift1"],
                   max_iterations=500, tolerated_error=1e-3),

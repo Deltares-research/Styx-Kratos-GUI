@@ -436,6 +436,7 @@
     }
   ],
   "gravity": true,
+  "gravity_acceleration": 9.81,
   "mesh": {
     "element_size": 5.0,
     "order": 2,
@@ -502,7 +503,7 @@
         "surcharge"
       ],
       "deactivate": [],
-      "reset_displacements": false,
+      "reset_displacements": true,
       "max_iterations": 150,
       "tolerated_error": 0.001,
       "time_interval": 0.0

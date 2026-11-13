@@ -402,7 +402,7 @@ crow.json> stages defaults
 wrote ...\crow.json
 crow.json> stages deactivate initial sheetpile strut wall_contact surcharge water_1 water_2 water_3
 sheetpile, strut, wall_contact, surcharge, water_1, water_2, water_3 out of the model from stage initial on; wrote ...\crow.json
-crow.json> stages add install_wall --name "Wall installation" --activate sheetpile wall_contact surcharge --max-iterations 150 --tolerance 1e-3
+crow.json> stages add install_wall --name "Wall installation" --activate sheetpile wall_contact surcharge --reset-displacements --max-iterations 150 --tolerance 1e-3
 added stage (id install_wall, name Wall installation) after null_step; wrote ...\crow.json
 crow.json> stages add dig_1 --name "First excavation" --activate water_1 --deactivate soil_L_top__part3 --max-iterations 500 --tolerance 1e-3
 added stage (id dig_1, name First excavation) after install_wall; wrote ...\crow.json
@@ -433,6 +433,11 @@ In words: settle the ground with K0, take a null step, install the wall with its
 and the surcharge, then dig lift by lift with that lift's water load, and put the strut in
 right after the lift that exposes its head. The excavation stages get more iterations,
 because the soil yields there.
+
+`--reset-displacements` starts the displacements from zero when the wall goes in. In the K0
+stage the soil settles more than 2 m under its own weight; after the reset, the
+displacements show only what the construction does. Kratos' own CROW test resets them in
+the same stage. `stages show install_wall` says `displacements reset`.
 
 To look at a stage, or change one:
 
@@ -604,14 +609,14 @@ Stage 7 (Third excavation) offers:
     pw        Pore pressure                   Pa      nodes
 
 crow.json> results field 1 uy
-u_y (m), stage 7 (Third excavation): -2.75 to 0 over 3129 nodes
-  min -2.75 at node 15
-  max 0 at node 16
+u_y (m), stage 7 (Third excavation): -0.3398 to 0.4460 over 3129 nodes
+  min -0.3398 at node 15
+  max 0.4460 at node 161
 
 crow.json> results field 1 syy --stage third --csv syy_stage7.csv
 wrote syy_stage7.csv (1262 rows)
 
-crow.json> results at 1 15 --stage 7                    every field at node 15
+crow.json> results at 1 161 --stage 7                   every field at node 161
 ```
 
 - **Which stage.** Without `--stage`, a command reads the last stage. `--stage` takes the
@@ -619,10 +624,11 @@ crow.json> results at 1 15 --stage 7                    every field at node 15
   id (`dig_3`).
 - **Stresses** are read per element, as Kratos computed them. `--location nodes` averages
   them onto the nodes.
-- **Why 2.75 m?** `u_y` is the total since the start, the K0 stage included, when the
-  soft clay settles under its own weight. The last lift adds less than a millimetre at the
-  far-right corner (node 15): `results at 1 15 --stage 7` shows Δu_y = −9.47e-4 m. To see
-  what one stage did, read the stage fields `du`, `dux` and `duy`.
+- **What `u_y` shows.** `u_y` is the total since the wall installation, the stage that
+  resets the displacements. The surface at the far right (node 15) settles 0.34 m, mostly
+  under the surcharge. The pit floor (node 161, at y = −8 m) heaves 0.45 m, and the third
+  lift alone gives 0.25 m of that: `results at 1 161 --stage 7` shows Δu_y = 0.2521 m. To
+  see what one stage did, read the stage fields `du`, `dux` and `duy`.
 
 #### The raw files
 

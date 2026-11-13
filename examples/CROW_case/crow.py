@@ -294,6 +294,7 @@ STAGES = [
         name="Wall installation",
         parent="null_step",
         activate=["sheetpile", "wall_contact", "surcharge"],
+        reset_displacements=True,
         max_iterations=150,
         tolerated_error=0.001,
     ),

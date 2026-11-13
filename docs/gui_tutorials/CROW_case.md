@@ -1,9 +1,9 @@
 # Build the CROW excavation wall in the GUI
 
 In this tutorial you build a staged sheet-pile excavation in the Styx GUI, from an empty
-project to the bending moment in the wall. You use only the windows, the tool rail and the
-explorers of the GUI. The tutorial is for a geotechnical engineer who has not used Styx
-before.
+project to the bending moment in the wall and the stresses in the soil. You use only the
+windows, the tool rail and the explorers of the GUI. The tutorial is for a geotechnical
+engineer who has not used Styx before.
 
 The model is the CROW excavation wall with Mohr-Coulomb soils. It is the same model as the
 [`kratos-cli` tutorial of the CROW case](https://github.com/Deltares-research/Styx-Kratos-GUI/blob/main/docs/cli_tutorials/CROW_case.md), and Kratos uses the
@@ -59,7 +59,7 @@ How the GUI takes the values that you type:
   leave the field (press Tab) or press Enter.
 - Type a point as the decimal sign: `0.5`. Some number fields show their value with the
   decimal sign of your Windows region settings, for example `0,15`. They take a point too.
-- The Styx server keeps the project in its memory. Save it at the end (step 14), or at any
+- The Styx server keeps the project in its memory. Save it at the end (step 15), or at any
   time with **File** > **Save**.
 
 ## 1. Start a new project
@@ -425,6 +425,10 @@ five construction stages:
 All five stages have the calculation type **Plastic** and a tolerated error of `0.001`. The
 excavation stages have more iterations, because the soil yields there.
 
+The stage Wall installation also resets the displacements to zero. In the K0 procedure the
+soil settles more than 2 m under its own weight. After the reset, the displacements show
+only what the construction does. Kratos' own CROW test resets them in the same stage.
+
 For each stage in the table:
 
 1. In the toolbar of the Stages explorer, click **Add stage** (the first button). The new
@@ -432,14 +436,15 @@ For each stage in the table:
 2. Click **Stages…**. The Stages window opens with the new stage selected.
 3. Type the **Name**. In **Calculation type**, select **Plastic**. Type the **Max
    iterations**, and type `0.001` in **Tolerated error**. Press Enter after each value.
-4. Click **Close**.
-5. In the Stages explorer, click the new stage.
-6. In the Model explorer, select the check boxes of the objects to switch on, and clear the
+4. For Wall installation only: select **Reset displacements to zero**.
+5. Click **Close**.
+6. In the Stages explorer, click the new stage.
+7. In the Model explorer, select the check boxes of the objects to switch on, and clear the
    check boxes of the objects to switch off.
 
 The Stages window of the first new stage:
 
-![The Stages window of the stage Wall installation, with its name, calculation type and numerical control.](images/crow/12_stages_window.png)
+![The Stages window of the stage Wall installation, with its name, calculation type and numerical control. The Reset displacements to zero check box is outlined.](images/crow/12_stages_window.png)
 
 After the last stage, the Stages explorer shows seven stages:
 
@@ -461,10 +466,47 @@ third excavation, the largest bending moment is about 341 kN·m/m, at y = −6.5
 about 109 mm into the pit. These are the values that the benchmark BM-CROW-MC compares with
 the results of Kratos' own CROW test.
 
-**Save SVG** saves the figure and **Save CSV** saves the numbers. The Results explorer, at
-the right, shows contour plots of each stage on the mesh.
+**Save SVG** saves the figure and **Save CSV** saves the numbers.
 
-## 14. Save the project
+## 14. Look at the stresses and the displacements
+
+When the calculation was complete, Styx also opened the **Choose results** window. It is
+under the plot window, and it covers the model.
+
+1. Click **Close** in the Plot along the wall window, then click **Close** in the Choose
+   results window.
+2. In the Results explorer, at the bottom right, in **Stage**, select **7 Third
+   excavation**.
+3. In **Field**, select **Effective stresses · σxx (Pa)**. This is the horizontal
+   effective stress.
+
+![The horizontal effective stress after the third excavation. The Stage and Field lists of the Results explorer are outlined.](images/crow/14_contours_horizontal.png)
+
+The colours show the stress on the mesh, and the legend at the right gives the values.
+Compression is negative. The horizontal stress goes from about −9 kPa near the ground
+surface to about −275 kPa at the bottom of the model. The pit, at the left of the wall, has
+no colours, because its soil is excavated. Under the pit floor the stresses are small,
+because the soil above that floor is gone.
+
+4. In **Field**, select **Effective stresses · σyy (Pa)**. This is the vertical effective
+   stress.
+
+![The vertical effective stress after the third excavation. The Stage and Field lists are outlined.](images/crow/14_contours_vertical.png)
+
+The vertical stress goes from about −1 kPa near the ground surface to about −600 kPa at the
+bottom. At the same depth, the horizontal stress is about half of the vertical stress.
+
+5. In **Field**, select **Deformations · |u| (m)**. This is the magnitude of the total
+   displacement since the wall installation, the stage that resets the displacements.
+
+![The magnitude of the total displacement after the third excavation. The Stage and Field lists are outlined.](images/crow/14_contours_displacement.png)
+
+The largest displacement is about 0.45 m, at the pit floor: the floor heaves when the soil
+above it is dug out. The third lift alone gives about 0.25 m of this heave. Behind the
+wall, the ground surface settles up to about 0.34 m, mostly under the surcharge. To see
+what one stage did by itself, select **Stage deformations · |Δu| (m)** in **Field**.
+
+## 15. Save the project
 
 1. Click **File** > **Save**.
 2. In the save window of your browser, select a folder and click **Save**.

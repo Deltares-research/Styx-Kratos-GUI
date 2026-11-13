@@ -2,7 +2,7 @@
   "ok": true,
   "returncode": 0,
   "stage": null,
-  "seconds": 182.3,
+  "seconds": 184.8,
   "inputs": [
     "CROW_excavation_wall.mdpa",
     "MaterialParameters.json",
@@ -28,7 +28,7 @@
     "7_Third_excavation__output_wall.json",
     "CROW_excavation_wall_1_Initial_stage.post.msh",
     "CROW_excavation_wall_1_Initial_stage.post.res",
-    "CROW_excavation_wall_2026-11-12_20-53.post.lst",
+    "CROW_excavation_wall_2026-11-13_22-30.post.lst",
     "CROW_excavation_wall_2_Null_step.post.msh",
     "CROW_excavation_wall_2_Null_step.post.res",
     "CROW_excavation_wall_3_Wall_installation.post.msh",
