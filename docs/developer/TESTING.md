@@ -138,7 +138,9 @@ python tools/gui_tutorial.py NAME --headed   # one tutorial; watch the browser p
 The screenshots go in `docs/gui_tutorials/images/<name>/` and the site in
 `build/gui_tutorials/site/`. Neither is committed. CI makes both for every pull request
 (the artifact `gui-tutorials-site` of the [docs site](../../.github/workflows/docs-site.yml)
-run) and publishes the site from `main`.
+run) and publishes the site from `main`. To look at the site of a pull request, download
+the artifact from the **Artifacts** list at the bottom of the run's summary page, unzip
+it, and open `index.html`. It needs no web server; only the search box does not work.
 
 **When you change the GUI.** If a tutorial step breaks, the `e2e` tier fails with the step
 and the reason. Fix the step in `tests/e2e/tutorials/<name>.py`, and the page if the reader
