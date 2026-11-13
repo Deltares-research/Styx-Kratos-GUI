@@ -3,11 +3,9 @@
 A steady-state groundwater flow under and through a clay levee, built and run from
 PowerShell. The commands build the same model as
 [`examples/levee_seepage/levee_seepage.py`](../../examples/levee_seepage/levee_seepage.py):
-the Kratos input files they write are byte for byte the model script's.
+the Kratos input files they write are identical.
 
-Every command below was run on 2026-11-12, and the output shown is what it printed (long
-paths are shortened to `...\`). The
-ready-made model and a comparison of its results with a reference calculation are in
+For the ready-made model and a comparison of its results with a reference calculation are in
 [`examples/levee_seepage/`](../../examples/levee_seepage/README.md).
 
 ## What you build
@@ -20,8 +18,8 @@ A 2D plane-strain section, 90 m wide and 28 m high, in SI units (m, N, Pa, kg/m�
   river at 5.0 m  ~ ~ ~ ~   /core\
                            /      \   seepage face: inner slope and polder
  y = 0     +--------------+        +. . . . . . . . . . . . . . . . . . . +
-           |  Cover, clay                                                 |  polder
- y = -2    +--------------------------------------------------------------+  at -0.5 m
+           |  Cover, clay                                                 |  polder groundwater
+ y = -2    +--------------------------------------------------------------+  level at -0.5 m
            |  Aquifer, sand                                               |
  y = -22   +--------------------------------------------------------------+
 ```
@@ -37,11 +35,10 @@ A 2D plane-strain section, 90 m wide and 28 m high, in SI units (m, N, Pa, kg/m�
 
 ## Before you start
 
-- Kratos must be set up on this machine: see [Setting up Kratos](../KRATOS_SETUP.md). The
-  model needs a Kratos build that has the seepage condition (`GeoSeepageCondition2D2N`).
+- Kratos must be set up on this machine: see [Setting up Kratos](../KRATOS_SETUP.md).
 - Work in a folder of your own, so the files stay out of the repository.
 - In the commands, `kratos-cli` is `<repo>\kratos-cli.bat`, where `<repo>` is the folder
-  you cloned this repository into. Make it a name in your PowerShell, and write the runs
+  you cloned this repository into. It is convenient to make it a name in your PowerShell, and write the runs
   into your folder too:
 
 ```powershell
@@ -108,7 +105,7 @@ changed material m_clay; wrote levee.json
 
 ## Step 3. The layers
 
-The first layer starts at the top of the domain, 6 m, so the cover's top is moved down to
+The first layer starts at the top of the domain (here the top of the dike at 6 m), so the cover's top is moved down to
 the ground surface at 0 m. The levee comes on top of it in step 4.
 
 ```text
@@ -128,7 +125,7 @@ aquifer  Aquifer  of m_sand: -2 .. -22
 
 ## Step 4. The levee
 
-The levee is two polygons drawn in the section, each a soil body of clay. The core runs
+The levee is created by drawing two polygons drawn in the section, each a soil body of clay. The core runs
 from (−14, 0) up to 4.5 m and down to (18, 0), and reaches 0.5 m into the cover; a drawn
 part takes the place of the layer it overlaps. The outer layer wraps the core, from
 (−18, 0) over the crest to (22, 0):
@@ -143,7 +140,7 @@ added drawn_1 (Levee outer layer, soil of m_clay); wrote levee.json
 
 `volume add` names a drawn part `drawn_0`, `drawn_1`, ..., gives it its material's colour
 and keeps its label in its recipe. The model script calls the parts `levee_core` and
-`levee_outer`, draws them grey and keeps no label in the recipe. These lines make the
+`levee_outer`, draws them grey. These lines make the
 parts the script's:
 
 ```text
@@ -159,12 +156,6 @@ custom_parts[levee_core].color = "#888888"; wrote levee.json
 PS> kratos-cli set levee.json "custom_parts[levee_outer].color" "#888888"
 custom_parts[levee_outer].color = "#888888"; wrote levee.json
 
-PS> kratos-cli remove levee.json "custom_parts[levee_core].recipe.label"
-removed custom_parts[levee_core].recipe.label; wrote levee.json
-
-PS> kratos-cli remove levee.json "custom_parts[levee_outer].recipe.label"
-removed custom_parts[levee_outer].recipe.label; wrote levee.json
-
 PS> kratos-cli parts levee.json
 soil_cover  Cover
 soil_aquifer  Aquifer
@@ -176,8 +167,8 @@ The key is what the stages and the deck's part names use; the colour shows in th
 
 ## Step 5. The water
 
-A new project has the standard supports. A groundwater flow calculation leaves them out
-anyway, but the model script has none, so they go. The front and back rollers are there
+A new project has standard supports that block the normal movement of sides by rollers and fix the bottom motion in all directions.
+A groundwater flow calculation does not make use of them. The front and back rollers are there
 for a 3D model and are not listed in 2D:
 
 ```text
@@ -188,16 +179,8 @@ roller_right  Roller right  displacement on the right face; fixed in x
 The front and back supports are kept for the solid model; the 2D section holds z by itself.
 ```
 
-```powershell
-kratos-cli boundary levee.json remove fixed_bottom
-kratos-cli boundary levee.json remove roller_left
-kratos-cli boundary levee.json remove roller_right
-kratos-cli boundary levee.json remove roller_front
-kratos-cli boundary levee.json remove roller_back
-```
-
-The river holds the left side, the foreland and the outer slope up to the crest's outer
-corner, all as one line. The polder holds the right side:
+The riverside boundary condition specifies the water level in the river and includes the left side, the foreland and the outer slope up to the crest's outer
+corner, all as one line that connects the line pieces. The polder side boundary condition specifies the far field groundwater level in the polder on the right side:
 
 ```text
 PS> kratos-cli boundary levee.json add river_head --name "River head" --line -36 -22 -36 0 -18 0 0 6 --water-pressure Hydrostatic --reference-coordinate 5 --pressure-tension-cut-off 1e5
@@ -219,11 +202,11 @@ PS> kratos-cli boundary levee.json add seepage_face --name "Seepage face" --seep
 added seepage_face  Seepage face  seepage on line (4, 6) -> (22, 0) -> (54, 0); water may leave the soil here; wrote levee.json
 ```
 
-The crest, from (0, 6) to (4, 6), and the bottom have no condition, so no water flows
+The crest, from (0, 6) to (4, 6), and the bottom have no boundary condition specified, so no water flows
 through them.
 
-The flow is nonlinear, because of the Van Genuchten soil and the seepage face, and the
-iterations start from start values. These are hydrostatic below a phreatic line that
+The flow is nonlinear, because of the Van Genuchten retention law and the seepage face, and the
+nonlinear iteration strategy starts from a given initial field for the water pressure. These are hydrostatic below a phreatic line that
 drops through the levee from the river level to the polder level. `--initial` makes them
 start values only, which the calculation then changes:
 
@@ -244,8 +227,9 @@ The last line is printed for every 2D model; there are no supports left.
 ## Step 6. The calculation and the mesh
 
 One stage, of the type Groundwater flow. Kratos' seepage strategy opens or closes one
-node of the seepage face per iteration, and the face has about 55 nodes on this mesh, so
-the stage allows 300 iterations. The mesh is linear triangles of 1 m:
+node of the seepage face per iteration, and the face has about 55 nodes on this mesh,
+the stage allows 300 iterations to allow for opening or closing of all these nodes and convergence of the water pressure field.
+The mesh is made with linear interpolation triangles of 1 m:
 
 ```text
 PS> kratos-cli stages levee.json add flow --name Flow --calculation flow
@@ -327,8 +311,8 @@ Effective saturation (-), stage 1 (Flow): 0.4838 to 1.04 over 2628 nodes
 `--csv` writes every value.
 ```
 
-- Kratos' sign for the water pressure is suction positive. The fixed river head gives
-  −270 kPa at the bottom left corner. The largest suction, 16.8 kPa, is in the dry soil of
+- Kratos' sign for the water pressure is suction positive. The fixed river head gives compression of
+  −270 kPa at the bottom left corner. The largest suction, 16.8 kPa, is in the soil of
   the outer layer at the crest's inner corner (4, 6), where the soil is least saturated.
 - `flow_rate` is the water each node takes in (negative) or lets out (positive), per
   metre of the section. The water comes in from the river and leaves through the seepage
@@ -351,14 +335,7 @@ kratos-cli export script.json --out deck_script
 ```
 
 The two decks, `levee_seepage.mdpa`, `ProjectParameters.json`, `MaterialParameters.json`
-and `kratos_gui_units.json`, are the same, byte for byte: Kratos calculates the same
-model. The two project files differ only where nothing is calculated:
-
-| Field | `levee.json` | `script.json` | Why |
-|---|---|---|---|
-| `domain.y_top` | 0 | 6 | The command line keeps the domain's top at the first layer's top. The mesh and the deck do not depend on it. |
-| `custom_parts[...].source_file` | a `.brep` per drawing | a `.brep` named after the recipe | Where each solid's geometry is kept on this computer. The geometry is the same. |
-| the order of keys, `0` against `0.0` in a recipe's `extrusion` | | | How the file is written. |
+and `kratos_gui_units.json`, are the same as given by [The same model as the script](#the-same-model-as-the-script).
 
 ## In the GUI
 
