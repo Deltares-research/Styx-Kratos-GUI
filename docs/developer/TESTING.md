@@ -142,6 +142,52 @@ run) and publishes the site from `main`. To look at the site of a pull request, 
 the artifact from the **Artifacts** list at the bottom of the run's summary page, unzip
 it, and open `index.html`. It needs no web server; only the search box does not work.
 
+### How CI makes the site
+
+The [docs site](../../.github/workflows/docs-site.yml) workflow makes the screenshots and
+the site. These events start it:
+
+| Event | Result |
+|---|---|
+| A pull request is opened or gets new commits | The site as the artifact `gui-tutorials-site`, kept for 14 days |
+| A push to `main`, for example a merge | The same artifact, and the job `publish` puts the site on GitHub Pages |
+| **Run workflow** on the workflow's page in the **Actions** tab | The site as the artifact |
+
+The workflow runs on Windows, because the recorded runs were made on Windows. The deck
+compare then meets the same Gmsh build, and the screenshots get the fonts of a local
+preview on Windows. The job does these steps:
+
+1. It installs Python 3.11, the packages of `requirements.txt`, `requirements-dev.txt` and
+   `requirements-docs.txt`, and the Chromium browser of Playwright.
+2. It runs `python tools/gui_tutorial.py`. On a push to `main`, it adds `--strict-deck`.
+3. The script runs `tests/e2e/test_gui_tutorials.py` with
+   `--doc-screenshots docs/gui_tutorials/images`. The test starts the server on a free
+   port and opens the GUI in Chromium.
+4. The test plays the steps of each tutorial. At each `tour.picture(...)` in a step, it
+   saves a PNG, with an orange outline on the control to use.
+5. Calculate replays the recorded run, so the Results screenshots show real Kratos
+   results. If the deck differs from the recorded deck, a pull request gets a warning and
+   a push to `main` fails.
+6. The script checks that each screenshot that a page names exists. Then it runs
+   `zensical build --strict --clean -f mkdocs.yml`, which writes the site to
+   `build/gui_tutorials/site/`.
+7. The workflow uploads that folder as the artifact. On `main`, the job `publish` gives the
+   artifact to GitHub Pages.
+
+> [!NOTE]
+> The job `publish` works only if GitHub Pages is on for the repository, with
+> **Settings > Pages > Source** set to **GitHub Actions**.
+
+The tools that make the site:
+
+| Tool | What it does |
+|---|---|
+| GitHub Actions | Runs the workflow |
+| Playwright and pytest | Play the steps in Chromium, take the screenshots, and fail the run if a step breaks |
+| Zensical (`requirements-docs.txt`) | Makes HTML pages from the Markdown pages and the screenshots. It reads `mkdocs.yml`. |
+| Material theme | The look of the site |
+| GitHub Pages | Holds the published site |
+
 **When you change the GUI.** If a tutorial step breaks, the `e2e` tier fails with the step
 and the reason. Fix the step in `tests/e2e/tutorials/<name>.py`, and the page if the reader
 must do something else. A new or removed screenshot must be added to or removed from
