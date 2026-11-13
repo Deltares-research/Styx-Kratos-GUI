@@ -29,6 +29,11 @@ result, and which of them are worth keeping is theirs to decide.
 `run` is synchronous and blocking -- it is a subprocess and a wait. The route calls it
 off the event loop (`asyncio.to_thread`), which is also what keeps the rest of the app
 answering while a solver has the machine.
+
+The log grows while Kratos works: each line Kratos prints is written to `kratos.log` at
+once, and `current_run` names the run directory in progress. That is what lets the
+convergence plot (`core.results.convergence`) follow a run live, and what keeps
+`core.results.catalog` from reading a half-written log as a failed run.
 """
 
 from __future__ import annotations
@@ -76,7 +81,7 @@ LOG_NAME = "kratos.log"
 # parses them, so there is one spelling in one place. Safe to import from here --
 # the runner is a script that imports Kratos only inside `run()`, which is what
 # lets the server read its constants without a Kratos build (see its docstring).
-from core.analysis.kratos_main import STAGE_MARKER
+from core.analysis.kratos_main import STAGE_MARKER, UNBUFFERED_NOTE
 
 _STAGE_LINE = re.compile(
     re.escape(STAGE_MARKER) + r" (begin|end) (\d+)/(\d+) (.*?)\s*$", re.MULTILINE)
@@ -120,6 +125,11 @@ behind the first."""
 
 # The route runs `run` on a worker thread, so the check and the set must be one step.
 _claim = threading.Lock()
+
+_current: Path | None = None
+"""The run directory Kratos is working in now, or None. Set for exactly as long as the
+Kratos process lives (`in_progress`), so a run directory that is named here has a log
+that is still growing."""
 
 
 class CalculationError(RuntimeError):
@@ -298,6 +308,43 @@ def _one_at_a_time():
         _running = False
 
 
+def running() -> bool:
+    """True while a calculation holds the machine, from the deck being written to the
+    end of the run. The meshing before it is not counted: that is the route's."""
+    return _running
+
+
+def current_run() -> Path | None:
+    """The run directory Kratos is working in now, or None."""
+    return _current
+
+
+def is_current(directory: Path) -> bool:
+    """True when `directory` is the run in progress: its log is not finished yet."""
+    current = _current
+    if current is None:
+        return False
+    try:
+        return Path(directory).resolve() == current.resolve()
+    except OSError:
+        return False
+
+
+@contextmanager
+def in_progress(directory: Path):
+    """Name `directory` as the run in progress for the length of the block.
+
+    Public so that a stand-in for `run` (the end-to-end tests' fake Kratos) can say the
+    same thing the real run says.
+    """
+    global _current
+    _current = Path(directory)
+    try:
+        yield
+    finally:
+        _current = None
+
+
 def _run_directory(deck_name: str) -> Path:
     try:
         return new_run_directory(deck_name)
@@ -313,25 +360,8 @@ def _execute(python: str, environment: dict[str, str], directory: Path,
     before = _contents(directory)
 
     started = time.monotonic()
-    try:
-        completed = subprocess.run(
-            [python, *COMMAND], cwd=directory, env=environment,
-            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            text=True, encoding="utf-8", errors="replace", timeout=timeout(),
-        )
-        output, returncode = completed.stdout, completed.returncode
-    except subprocess.TimeoutExpired as expired:
-        output = _text(expired.output) + (
-            f"\n\nGiven up on after {timeout():.0f} s. Raise {TIMEOUT_ENV} if the "
-            "model is meant to take this long.")
-        returncode = None
-    except OSError as failure:
-        raise CalculationError(
-            f"The python to run Kratos with, {python}, could not be started: "
-            f"{failure}. It has to be a python interpreter; correct it in "
-            f"{SETTINGS_FILE} or in {PYTHON_ENV}.") from failure
+    output, returncode = _follow(python, environment, directory)
 
-    (directory / LOG_NAME).write_text(output, encoding="utf-8")
     stage = failed_stage(output)
     return {
         "ok": returncode == 0,
@@ -350,6 +380,64 @@ def _execute(python: str, environment: dict[str, str], directory: Path,
         "log": LOG_NAME,
         "error": None if returncode == 0 else _explain(output, stage=stage),
     }
+
+
+def _follow(python: str, environment: dict[str, str],
+            directory: Path) -> tuple[str, int | None]:
+    """Run Kratos in `directory` and copy its output into the log as it comes.
+
+    Each line goes into `kratos.log` at once, so the log can be read during the run.
+    A timer kills the process at `timeout()`. Returns everything Kratos printed and its
+    exit code, or None as the exit code when the timer had to kill it. The log is
+    opened before the process starts, so a run in progress always has one.
+    """
+    given_up = threading.Event()
+    lines: list[str] = []
+    with in_progress(directory), \
+            open(directory / LOG_NAME, "w", encoding="utf-8") as log:
+        try:
+            process = subprocess.Popen(
+                [python, *COMMAND], cwd=directory, env=environment,
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, encoding="utf-8", errors="replace",
+            )
+        except OSError as failure:
+            raise CalculationError(
+                f"The python to run Kratos with, {python}, could not be started: "
+                f"{failure}. It has to be a python interpreter; correct it in "
+                f"{SETTINGS_FILE} or in {PYTHON_ENV}.") from failure
+
+        def give_up() -> None:
+            given_up.set()
+            process.kill()
+
+        timer = threading.Timer(timeout(), give_up)
+        timer.daemon = True
+        timer.start()
+        try:
+            assert process.stdout is not None
+            for line in process.stdout:
+                lines.append(line)
+                log.write(line)
+                log.flush()
+            process.wait()
+        finally:
+            timer.cancel()
+            if process.poll() is None:
+                # Only when reading the output failed (a full disk, say): a run that
+                # is no longer watched must not hold the machine on its own.
+                process.kill()
+                process.wait()
+            if process.stdout is not None:
+                process.stdout.close()
+
+        if given_up.is_set():
+            note = (f"\n\nGiven up on after {timeout():.0f} s. Raise {TIMEOUT_ENV} if "
+                    "the model is meant to take this long.")
+            lines.append(note)
+            log.write(note)
+            return "".join(lines), None
+    return "".join(lines), process.returncode
 
 
 def failed_stage(output: str) -> tuple[int, int, str] | None:
@@ -375,13 +463,6 @@ def _contents(directory: Path) -> set[str]:
     return {path.name for path in directory.iterdir()}
 
 
-def _text(output: str | bytes | None) -> str:
-    # TimeoutExpired.output is bytes on POSIX even with text=True.
-    if isinstance(output, bytes):
-        return output.decode("utf-8", errors="replace")
-    return output or ""
-
-
 def _explain(output: str, lines: int = 30,
              stage: tuple[int, int, str] | None = None) -> str:
     """Why the run failed, as far as anything here can tell.
@@ -401,7 +482,8 @@ def _explain(output: str, lines: int = 30,
     # The stage markers are scaffolding, not output. Left in, forty of them would
     # push Kratos' own reason off the end of the message they exist to improve.
     tail = [line for line in output.strip().splitlines()
-            if line.strip() and STAGE_MARKER not in line][-lines:]
+            if line.strip() and STAGE_MARKER not in line
+            and line.strip() != UNBUFFERED_NOTE][-lines:]
     reason = "\n".join(tail) or "Kratos exited without saying why; see the log."
     if stage is None:
         return reason

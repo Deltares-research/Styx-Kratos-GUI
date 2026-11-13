@@ -419,24 +419,84 @@ def test_a_run_past_the_timeout_is_given_up_on_and_says_where(runs, monkeypatch)
     assert calculation.run(DECK)["ok"] is True, "the button is free again"
 
 
-def test_a_timeout_with_its_output_in_bytes_is_still_reported(runs, monkeypatch):
-    """`TimeoutExpired.output` is bytes even with text=True on POSIX (the subprocess
-    docs say so), whatever Windows hands back."""
-    import subprocess
-
-    def timed_out(command, **kwargs):
-        raise subprocess.TimeoutExpired(
-            command, 1, output=(marker("begin", 2, 3, "2_Dig") + "\nhalf a l\xe9ne")
-            .encode("utf-8"))
-
-    monkeypatch.setenv(calculation.PYTHON_ENV, sys.executable)
-    monkeypatch.setattr(calculation.subprocess, "run", timed_out)
+def test_a_timeout_keeps_a_half_written_last_line(runs, monkeypatch):
+    """What Kratos printed before it was killed is kept, a last line with no newline
+    and a letter outside ASCII too: that line is often the one that says why."""
+    monkeypatch.setenv(calculation.TIMEOUT_ENV, "1")
+    stand_in(monkeypatch,
+             "import sys, time;"
+             f"print({marker('begin', 2, 3, '2_Dig')!r}, flush=True);"
+             "sys.stdout.buffer.write('half a l\\xe9ne'.encode('utf-8'));"
+             "sys.stdout.flush(); time.sleep(30)")
 
     result = calculation.run(DECK)
 
     assert result["ok"] is False
+    assert result["returncode"] is None
     assert result["stage"] == {"index": 2, "of": 3, "name": "2_Dig"}
     assert "half a l\xe9ne" in result["error"]
+
+
+# ── The log grows while Kratos works ────────────────────────────────────────
+
+GROWING = (
+    "import os, time\n"
+    "print('first line', flush=True)\n"
+    "for _ in range(400):\n"
+    "    if os.path.exists('go'): break\n"
+    "    time.sleep(0.05)\n"
+    "print('last line', flush=True)\n")
+"""A stand-in that prints one line, then waits for the test to create `go`."""
+
+
+def test_the_log_holds_each_line_while_the_run_goes_on(runs, monkeypatch):
+    """The convergence plot reads the log during the run, so a line must be in the
+    log as soon as Kratos printed it, not when the run ends."""
+    import threading
+    import time
+
+    stand_in(monkeypatch, GROWING)
+    seen: dict = {}
+
+    def watch() -> None:
+        deadline = time.monotonic() + 15
+        while time.monotonic() < deadline:
+            directory = calculation.current_run()
+            log = directory / calculation.LOG_NAME if directory else None
+            if log is not None and log.is_file() and "first line" in log.read_text(
+                    encoding="utf-8"):
+                seen["log"] = log.read_text(encoding="utf-8")
+                seen["running"] = calculation.running()
+                seen["current"] = calculation.is_current(directory)
+                (directory / "go").write_text("", encoding="utf-8")
+                return
+            time.sleep(0.02)
+
+    watcher = threading.Thread(target=watch)
+    watcher.start()
+    result = calculation.run(DECK)
+    watcher.join()
+
+    assert result["ok"] is True
+    assert "first line" in seen["log"] and "last line" not in seen["log"]
+    assert seen["running"] is True and seen["current"] is True
+    log = (Path(result["directory"]) / calculation.LOG_NAME).read_text(encoding="utf-8")
+    assert log.splitlines() == ["first line", "last line"]
+    assert calculation.current_run() is None
+    assert calculation.is_current(Path(result["directory"])) is False
+    assert calculation.running() is False
+
+
+def test_no_run_is_in_progress_after_one_that_could_not_start(runs, monkeypatch, tmp_path):
+    not_a_program = tmp_path / "python.exe"
+    not_a_program.write_text("not a program", encoding="utf-8")
+    monkeypatch.setenv(calculation.PYTHON_ENV, str(not_a_program))
+
+    with pytest.raises(calculation.CalculationError):
+        calculation.run(DECK)
+
+    assert calculation.current_run() is None
+    assert calculation.running() is False
 
 
 def test_a_timeout_that_is_not_a_number_falls_back_to_the_default(monkeypatch):
