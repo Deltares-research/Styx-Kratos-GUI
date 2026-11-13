@@ -47,7 +47,8 @@ window.CONVERGENCE_FIXTURE =
 '''
 
 MADE_UP = {
-    # What a run that blows up prints, a zero, and a stage name with a comma in it.
+    # What a run that blows up prints, a zero, a stage name with a comma in it, and the
+    # fraction of unbalance Kratos' load stepping scheme prints after a step.
     "nan_and_zero": "\n".join([
         f"{MARKER} begin 1/1 1_Dig, then wait",
         "GeoMechanics Analysis: Analysis -START-",
@@ -55,6 +56,7 @@ MADE_UP = {
         "RESIDUAL CRITERION:  :: [ Obtained ratio = 0; Expected ratio = 0.0001; "
         "Absolute norm = 0; Expected norm =  1e-09]",
         "RESIDUAL CRITERION: Convergence is achieved",
+        "Load stepping: Fraction of unbalance: 0.5",
         "GeoMechanics Analysis: cycle:  1", "GeoMechanics Analysis: TIME      :  1.0",
         "RESIDUAL CRITERION:  :: [ Obtained ratio = nan; Expected ratio = 0.0001; "
         "Absolute norm = -nan(ind); Expected norm =  1e-09]",
@@ -102,6 +104,7 @@ def test_the_fixture_has_the_cases_worth_having():
             "empty"} <= set(document)
     made_up = document["nan_and_zero"]["data"]["iterations"]
     assert [i["relative"] for i in made_up] == [0.0, "nan", "inf"]
+    assert document["nan_and_zero"]["data"]["fractions"] == [{"at": 1, "value": 0.5}]
     assert '"1_Dig, then wait"' in document["nan_and_zero"]["csv"], "a comma is quoted"
 
 

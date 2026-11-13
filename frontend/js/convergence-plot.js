@@ -9,10 +9,12 @@
 
    The look is that of the ConvergencePlotter in Deltares' FEA-Tools: two panels that
    share the iteration axis, the relative residual above the absolute one, on a log
-   scale, a dashed line for the target, a green mark where the criterion was met, grey
-   bands for the stages and thin lines where a step starts. It adds a red mark where a
-   step reached the iteration limit or was cut back, and a tooltip on every dot. A dot
-   is drawn for every iteration, because many stages have only one.
+   scale, a dashed line for the target, a green X where the criterion was met, grey
+   bands for the stages and thin lines where a step starts. When Kratos printed the
+   fraction of unbalance (only its load stepping scheme does), a red line shows it on a
+   second axis, 0 to 1, on the right of both panels. It adds a red mark where a step
+   reached the iteration limit or was cut back, and a tooltip on every dot. A dot is
+   drawn for every iteration, because many stages have only one.
 
    ── The command line is the feature ──────────────────────────────────────
 
@@ -37,8 +39,10 @@ App.ConvergencePlot = (function () {
 
   var ROOT = '/api/results/runs';
 
-  /* The figure, in SVG units: two panels of the same height, one above the other. */
-  var FIG = { width: 560, left: 64, right: 18, top: 30, panel: 150, gap: 14,
+  /* The figure, in SVG units: two panels of the same height, one above the other.
+     `right` is the margin on the right; `fraction` is that margin when the second axis,
+     the fraction of unbalance, needs room for its numbers and its name. */
+  var FIG = { width: 560, left: 64, right: 18, fraction: 44, top: 30, panel: 150, gap: 14,
               bottom: 38, legend: 18 };
   var LINE = '#1f77b4';      // matplotlib's first colour, the original's residual line
   var TARGET = '#222';
@@ -199,8 +203,27 @@ App.ConvergencePlot = (function () {
 
   /* ── The figure ───────────────────────────────────────────────────────── */
 
+  /* The fractions of unbalance worth drawing: those that are a number. */
+  function fractionsOf(data) {
+    return ((data && data.fractions) || []).filter(function (f) { return finite(f.value); });
+  }
+
+  /* The right edge of the panels: further in when the second axis is drawn. */
+  function rightEdge(data) {
+    return FIG.width - (fractionsOf(data).length ? FIG.fraction : FIG.right);
+  }
+
+  /* A second legend row holds the fraction of unbalance, when there is one. */
   function height(data) {
-    return FIG.top + 2 * FIG.panel + FIG.gap + FIG.bottom + FIG.legend;
+    return FIG.top + 2 * FIG.panel + FIG.gap + FIG.bottom
+           + FIG.legend * (fractionsOf(data).length ? 2 : 1);
+  }
+
+  /* An X, the original's 'x' marker, centred on (x, y), `half` wide either way. */
+  function cross(x, y, half) {
+    return 'M' + fixed(x - half) + ',' + fixed(y - half) + 'l' + fixed(2 * half) + ','
+           + fixed(2 * half) + 'm0,' + fixed(-2 * half) + 'l' + fixed(-2 * half) + ','
+           + fixed(2 * half);
   }
 
   /* Where each stage's band runs, in iterations: from just before its first iteration
@@ -231,7 +254,7 @@ App.ConvergencePlot = (function () {
 
   /* One panel: `key` is 'relative' or 'absolute'. */
   function panel(data, key, top, sx, count, lastPanel) {
-    var left = FIG.left, right = FIG.width - FIG.right, bottom = top + FIG.panel;
+    var left = FIG.left, right = rightEdge(data), bottom = top + FIG.panel;
     var iterations = data.iterations || [];
     var out = ['<g class="cp-panel cp-' + key + '">'];
     var range = decades(iterations.map(function (it) { return it[key]; })
@@ -316,8 +339,8 @@ App.ConvergencePlot = (function () {
                + ' stroke="' + LINE + '" stroke-width="1.3" stroke-linejoin="round"/>');
     });
 
-    // A dot for every iteration, with its tooltip; a green ring where the criterion was
-    // met; a red cross on the top edge for a value that is not a number.
+    // A dot for every iteration, with its tooltip; a green X over it where the criterion
+    // was met; a red cross on the top edge for a value that is not a number.
     var r = iterations.length > 400 ? 1.4 : iterations.length > 100 ? 2 : 2.6;
     iterations.forEach(function (it, i) {
       var x = fixed(sx(i + 1)), cy = fixed(sy(it[key]));
@@ -328,12 +351,14 @@ App.ConvergencePlot = (function () {
                  + tip + '</path>');
         return;
       }
-      if (it.met) {
-        out.push('<circle class="cp-met" cx="' + x + '" cy="' + cy + '" r="' + fixed(r + 2.4)
-                 + '" fill="none" stroke="' + MET + '" stroke-width="1.4"/>');
-      }
       out.push('<circle class="cp-dot" cx="' + x + '" cy="' + cy + '" r="' + r + '" fill="'
                + LINE + '">' + tip + '</circle>');
+      if (it.met) {
+        // Over the dot, so it shows; the dot under it keeps the tooltip.
+        out.push('<path class="cp-met" d="' + cross(sx(i + 1), sy(it[key]), r + 1.8)
+                 + '" stroke="' + MET + '" stroke-width="1.6" fill="none"'
+                 + ' pointer-events="none"/>');
+      }
     });
 
     // A red mark on the top edge where a step reached the limit or was cut back.
@@ -349,21 +374,45 @@ App.ConvergencePlot = (function () {
                + marked[n].join('; ')) + '</title></path>');
     });
 
-    // The fraction of unbalance, on its own axis from 0 to 1, when Kratos printed one.
-    var fractions = (data.fractions || []).filter(function (f) { return finite(f.value); });
-    if (key === 'relative' && fractions.length) {
+    // The fraction of unbalance, when Kratos printed one: a red line with an x at each
+    // value, on a second axis from 0 to 1 on the right, as the original draws it. Kratos
+    // prints it once a step, after the step's last iteration, so that is where it sits.
+    var fractions = fractionsOf(data);
+    if (fractions.length) {
       var fy = function (v) { return bottom - Math.max(0, Math.min(1, v)) * (bottom - top); };
-      out.push('<polyline class="cp-fraction" points="' + fractions.map(function (f) {
-        return fixed(sx(Math.max(1, f.at))) + ',' + fixed(fy(f.value));
-      }).join(' ') + '" fill="none" stroke="' + EVENT + '" stroke-width="1"/>');
-      [0, 0.5, 1].forEach(function (v) {
-        out.push('<text class="cp-tick" x="' + (right + 3) + '" y="' + fixed(fy(v))
+      var at = function (f) { return Math.max(1, Math.min(count, f.at)); };
+      out.push('<g class="cp-fraction">');
+      if (fractions.length > 1) {
+        out.push('<polyline class="cp-fraction-line" points="' + fractions.map(function (f) {
+          return fixed(sx(at(f))) + ',' + fixed(fy(f.value));
+        }).join(' ') + '" fill="none" stroke="' + EVENT + '" stroke-width="1.1"/>');
+      }
+      var half = fractions.length > 200 ? 1.8 : 2.6;
+      fractions.forEach(function (f) {
+        out.push('<path class="cp-fraction-mark" d="' + cross(sx(at(f)), fy(f.value), half)
+                 + '" stroke="' + EVENT + '" stroke-width="1.2" fill="none"><title>'
+                 + esc('Fraction of unbalance ' + format(f.value) + ', after iteration '
+                       + at(f)) + '</title></path>');
+      });
+      [0, 0.2, 0.4, 0.6, 0.8, 1].forEach(function (v) {
+        var ty = fixed(fy(v));
+        out.push('<line x1="' + right + '" y1="' + ty + '" x2="' + (right + 3) + '" y2="' + ty
+                 + '" stroke="' + EVENT + '"/>');
+        out.push('<text class="cp-tick cp-fraction-tick" x="' + (right + 5) + '" y="' + ty
                  + '" dy="0.35em" fill="' + EVENT + '">' + v + '</text>');
       });
+      out.push('<text class="cp-ylabel cp-fraction-label" transform="translate('
+               + (FIG.width - 7) + ',' + fixed((top + bottom) / 2) + ') rotate(90)"'
+               + ' text-anchor="middle" fill="' + EVENT + '">Fraction of unbalance</text>');
+      out.push('</g>');
     }
 
     out.push('<rect x="' + left + '" y="' + top + '" width="' + (right - left) + '" height="'
              + FIG.panel + '" fill="none" stroke="' + FRAME + '"/>');
+    if (fractions.length) {
+      out.push('<line class="cp-fraction-spine" x1="' + right + '" y1="' + top + '" x2="'
+               + right + '" y2="' + bottom + '" stroke="' + EVENT + '"/>');
+    }
 
     // The iteration axis: tick marks on both panels, numbers under the lower one.
     iterationTicks(count, 8).forEach(function (n) {
@@ -384,7 +433,7 @@ App.ConvergencePlot = (function () {
   function stageLabels(data, sx, count) {
     var out = [];
     bands(data, count).forEach(function (band) {
-      var x0 = Math.max(FIG.left, sx(band.from)), x1 = Math.min(FIG.width - FIG.right, sx(band.to));
+      var x0 = Math.max(FIG.left, sx(band.from)), x1 = Math.min(rightEdge(data), sx(band.to));
       var room = x1 - x0 - 4;
       var stage = band.stage;
       var number = stage.index === null || stage.index === undefined ? '' : String(stage.index);
@@ -398,7 +447,7 @@ App.ConvergencePlot = (function () {
     return out.join('');
   }
 
-  function legend(y) {
+  function legend(data, y) {
     var x = FIG.left;
     var out = ['<g class="cp-legend" transform="translate(' + x + ',' + y + ')">'];
     out.push('<line x1="0" y1="0" x2="16" y2="0" stroke="' + LINE + '" stroke-width="1.3"/>'
@@ -406,12 +455,20 @@ App.ConvergencePlot = (function () {
              + '<text x="20" y="0" dy="0.35em">residual</text>');
     out.push('<line x1="78" y1="0" x2="96" y2="0" stroke="' + TARGET
              + '" stroke-dasharray="5,3"/><text x="100" y="0" dy="0.35em">target</text>');
-    out.push('<circle cx="146" cy="0" r="4.5" fill="none" stroke="' + MET
-             + '" stroke-width="1.4"/><text x="155" y="0" dy="0.35em">criterion met</text>');
+    out.push('<circle cx="146" cy="0" r="2.4" fill="' + LINE + '"/><path d="'
+             + cross(146, 0, 4.2) + '" stroke="' + MET + '" stroke-width="1.6" fill="none"/>'
+             + '<text x="155" y="0" dy="0.35em">criterion met</text>');
     out.push('<path d="M232,-4h8l-4,7z" fill="' + EVENT + '"/>'
              + '<text x="245" y="0" dy="0.35em">iteration limit or cut-back</text>');
     out.push('<rect x="380" y="-5" width="14" height="10" fill="' + BANDS[1] + '"/>'
              + '<text x="398" y="0" dy="0.35em">stage</text>');
+    if (fractionsOf(data).length) {
+      out.push('<g class="cp-legend-fraction" transform="translate(0,' + FIG.legend + ')">'
+               + '<line x1="0" y1="0" x2="16" y2="0" stroke="' + EVENT + '" stroke-width="1.1"/>'
+               + '<path d="' + cross(8, 0, 2.6) + '" stroke="' + EVENT + '" stroke-width="1.2"'
+               + ' fill="none"/><text x="20" y="0" dy="0.35em" fill="' + EVENT + '">'
+               + 'fraction of unbalance (right axis)</text></g>');
+    }
     out.push('</g>');
     return out.join('');
   }
@@ -421,7 +478,7 @@ App.ConvergencePlot = (function () {
     data = data || {};
     var iterations = data.iterations || [];
     var count = Math.max(1, iterations.length);
-    var left = FIG.left, right = FIG.width - FIG.right;
+    var left = FIG.left, right = rightEdge(data);
     function sx(n) { return left + (n - 0.5) / count * (right - left); }
     var h = height(data);
     var out = ['<svg xmlns="http://www.w3.org/2000/svg" class="cp-figure" viewBox="0 0 '
@@ -440,7 +497,8 @@ App.ConvergencePlot = (function () {
                + fixed(upper + FIG.panel / 2) + '" text-anchor="middle" fill="#888">'
                + 'no iterations yet</text>');
     }
-    out.push(legend(h - FIG.legend / 2 - 2));
+    var rows = fractionsOf(data).length ? 2 : 1;
+    out.push(legend(data, h - FIG.legend * (rows - 0.5) - 2));
     out.push('</svg>');
     return out.join('');
   }

@@ -1113,7 +1113,12 @@ window.CONVERGENCE_FIXTURE =
      "factor": 0.5
     }
    ],
-   "fractions": [],
+   "fractions": [
+    {
+     "at": 1,
+     "value": 0.5
+    }
+   ],
    "stage": {
     "index": 1,
     "of": 1,

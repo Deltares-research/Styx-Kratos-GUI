@@ -131,11 +131,73 @@
     T.ok(upper[1][1] < upper[50][1], 'the larger residual is further up the page');
   });
 
-  test('a green ring where the criterion was met, and only there', function () {
+  test('a green X where the criterion was met, in both panels, and only there', function () {
     var limit = data('iteration_limit');
     var met = limit.iterations.filter(function (it) { return it.met; }).length;
-    T.eq(count(panels(P.svg(limit))[0], 'cp-met'), met);
+    panels(P.svg(limit)).forEach(function (panel) {
+      T.eq(count(panel, 'cp-met'), met);
+    });
     T.eq(count(panels(P.svg(data('seepage')))[0], 'cp-met'), 20);
+    var mark = /<path class="cp-met" d="M[\d.,-]+l[\d.]+,[\d.]+m0,-[\d.]+l-[\d.]+,[\d.]+"[^>]*>/
+      .exec(P.svg(limit));
+    T.ok(mark, 'an X, two strokes, not a ring');
+    T.ok(mark[0].indexOf('stroke="#2ca02c"') !== -1, 'green');
+    T.ok(P.svg(limit).indexOf('<circle class="cp-met"') === -1, 'no ring left');
+  });
+
+  test('the X sits on the dot it marks, and leaves the dot its tooltip', function () {
+    var upper = panels(P.svg(data('seepage')))[0];
+    var first = dots(upper)[0];
+    var mark = /<path class="cp-met" d="M([\d.]+),([\d.]+)l([\d.]+),/.exec(upper);
+    var half = Number(mark[3]) / 2;
+    T.near(Number(mark[1]) + half, first[0], 0.11);
+    T.near(Number(mark[2]) + half, first[1], 0.11);
+    T.ok(/class="cp-met"[^>]*pointer-events="none"/.test(upper));
+  });
+
+  test('the fraction of unbalance: a red line with an x at each value, on a second axis',
+       function () {
+    var limit = data('iteration_limit');
+    limit.fractions = [{ at: 1, value: 1 }, { at: 51, value: 0.5 }, { at: 60, value: 0 }];
+    var svg = P.svg(limit);
+    panels(svg).forEach(function (panel) {
+      T.eq(count(panel, 'cp-fraction-line'), 1, 'in both panels');
+      T.eq(count(panel, 'cp-fraction-mark'), 3, 'an x at each value');
+      T.ok(panel.indexOf('>Fraction of unbalance</text>') !== -1, 'the axis is named');
+      T.eq(count(panel, 'cp-tick cp-fraction-tick'), 6, '0 to 1 on the right');
+      T.ok(/cp-fraction-tick"[^>]*fill="#d62728">1</.test(panel), 'in red');
+    });
+    var upper = panels(svg)[0];
+    var frame = /<rect x="64" y="(\d+)" width="(\d+)" height="150" fill="none"/.exec(upper);
+    var top = Number(frame[1]);
+    var points = /class="cp-fraction-line" points="([^"]+)"/.exec(upper)[1].split(' ')
+      .map(function (p) { return p.split(',').map(Number); });
+    T.near(points[0][1], top, 0.11, '1 on the top edge');
+    T.near(points[1][1], top + 75, 0.11, '0.5 half way');
+    T.near(points[2][1], top + 150, 0.11, '0 on the bottom edge');
+    T.eq(points[1][0], dots(upper)[50][0], 'after the iteration Kratos printed it');
+    T.ok(svg.indexOf('Fraction of unbalance 0.5000, after iteration 51') !== -1
+         || svg.indexOf('Fraction of unbalance 0.5, after iteration 51') !== -1,
+         'each x has a tooltip');
+    T.ok(svg.indexOf('fraction of unbalance (right axis)</text>') !== -1, 'in the legend');
+    T.eq(Number(frame[2]), P.FIG.width - P.FIG.fraction - P.FIG.left, 'room on the right');
+  });
+
+  test('no second axis when Kratos printed no fraction', function () {
+    var svg = P.svg(data('iteration_limit'));
+    T.eq(count(svg, 'cp-fraction'), 0);
+    T.ok(svg.indexOf('Fraction of unbalance') === -1);
+    T.ok(svg.indexOf('fraction of unbalance') === -1, 'nor a legend row');
+    var frame = /<rect x="64" y="\d+" width="(\d+)" height="150" fill="none"/.exec(svg);
+    T.eq(Number(frame[1]), P.FIG.width - P.FIG.right - P.FIG.left, 'the panels keep the width');
+  });
+
+  test('a fraction the parser read from a log is drawn', function () {
+    var made = data('nan_and_zero');
+    T.eq(made.fractions, [{ at: 1, value: 0.5 }]);
+    var upper = panels(P.svg(made))[0];
+    T.eq(count(upper, 'cp-fraction-mark'), 1);
+    T.eq(count(upper, 'cp-fraction-line'), 0, 'one value is a mark, not a line');
   });
 
   test('a red mark where a step hit the limit and was cut back, with both in words', function () {
