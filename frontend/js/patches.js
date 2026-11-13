@@ -3743,6 +3743,11 @@ App.LivePatches = (function () {
                                           function () { plotReloading = null; });
     }
 
+    function convergenceShown() {
+      var W = App.ConvergenceWindow;
+      return !!(W && W.state && W.state().open);
+    }
+
     function syncResultsPanel(on) {
       var panel = document.getElementById('panel-results');
       var dock = document.getElementById('dock');
@@ -3751,11 +3756,15 @@ App.LivePatches = (function () {
       if (App.UI && App.UI.syncDock) App.UI.syncDock(dock);
       if (on) {
         mountResultsPanel();
-        // Entering the mode opens the chooser, every time. It is what the mode is
-        // for, and the dock panel alone is easy to miss down the side of the page.
-        // The rail's "Choose results" reopens it after it has been closed. It fills
-        // itself as it is built, so there is nothing to render afterwards.
-        openResultsWindow();
+        // Entering the mode opens the chooser. It is what the mode is for, and the
+        // dock panel alone is easy to miss down the side of the page. The rail's
+        // "Choose results" reopens it after it has been closed. It fills itself as it
+        // is built, so there is nothing to render afterwards.
+        //
+        // But not over an open Convergence window: at the end of a Calculate, the
+        // chooser would hide how the run ended, and after a failed run that is what
+        // the user came to read. The dock panel has the same controls meanwhile.
+        if (!convergenceShown()) openResultsWindow();
       } else {
         // Leaving takes the contour off the model rather than leaving it behind under
         // the geometry, where it would be neither editable nor explicable -- and the

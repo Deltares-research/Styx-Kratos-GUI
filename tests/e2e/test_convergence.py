@@ -61,10 +61,12 @@ def test_the_window_follows_a_run_and_the_results_menu_opens_it_again(app_page, 
     assert box["x"] + box["width"] > dock["x"] - 40, "at the right of the viewport"
     assert box["y"] + box["height"] > viewport["height"] - 120, "at the bottom"
 
+    # Results mode came on with the run, and left Choose results closed: it would lie
+    # over the window and hide how the run ended.
+    page.wait_for_function("App.state.mode === 'results'", timeout=LONG)
+    assert page.locator(".dlg-results").count() == 0
     window.get_by_role("button", name="Close").click()
     window.wait_for(state="detached")
-    # The Choose results window opened with Results mode; it lies over the menu.
-    page.locator(".dlg-results").get_by_role("button", name="Close").click()
 
     page.locator("#menubar").get_by_text("Results", exact=True).click()
     page.locator("#menu-layer").get_by_text("Convergence…").click()

@@ -453,4 +453,24 @@
     }).then(function () { dock.remove(); }, function (error) { dock.remove(); throw error; }));
   });
 
+  test('results: with the Convergence window open, entering Results leaves the chooser closed', function () {
+    var dock = document.createElement('div');
+    dock.id = 'dock';
+    dock.innerHTML = '<div id="panel-results"><div id="panel-results-body"></div></div><span id="sb-hint"></span>';
+    document.body.appendChild(dock);
+    var ctx = rig(true);
+    var real = App.ConvergenceWindow;
+    App.ConvergenceWindow = { state: function () { return { open: true }; } };
+    return done(ctx, App.Results.handleCommand('results open ' + RUN).then(function () {
+      App.setMode('results');
+      T.eq(dialogTitled(ctx, 'Choose results'), undefined, 'it would hide how the run ended');
+      T.eq(dock.querySelector('#panel-results').hidden, false, 'the dock panel has the controls');
+      App.runAction({ action: 'chooseResults' });
+      T.ok(dialogTitled(ctx, 'Choose results'), 'the rail opens it');
+      App.setMode('soil');
+      T.eq(dialogTitled(ctx, 'Choose results'), undefined);
+    }).then(function () { App.ConvergenceWindow = real; dock.remove(); },
+            function (error) { App.ConvergenceWindow = real; dock.remove(); throw error; }));
+  });
+
 })();

@@ -533,7 +533,9 @@ panels with the iteration number on the horizontal axis:
 Point at a dot to see its stage, step, iteration and residuals.
 
 When the run ends, the window stays open. It says *Finished in 12.3 s*, or the stage where
-the run stopped.
+the run stopped. Styx opens Results mode, but it does not open the **Choose results**
+window while the Convergence window is open, because it would cover it. Use the Results
+explorer in the dock, or click **Choose results** in the tool rail.
 
 If the window says *Kratos printed no residuals*, the deck has `echo_level` 0 in
 `solver_settings`. Styx writes 1. In an existing Kratos deck, set it to 1 in
