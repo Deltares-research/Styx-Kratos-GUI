@@ -20,13 +20,19 @@
   var BASE = '/api/results/runs/' + RUN;
 
   var real = { Api: App.Api, Command: App.Command, Download: App.Download,
-               Picture: App.Picture, current: App.Results && App.Results.current };
+               Picture: App.Picture, current: App.Results && App.Results.current,
+               Window: App.ConvergenceWindow };
 
   var log, api, saved, events;
 
   function data(name) { return JSON.parse(JSON.stringify(CASES[name].data)); }
 
+  // A Convergence window that is closed: the command then picks the run itself.
+  var CLOSED = { state: function () { return { open: false }; } };
+  var OPEN = { state: function () { return { open: true }; } };
+
   function setup(answers, open) {
+    App.ConvergenceWindow = CLOSED;
     log = [];
     api = { calls: [] };
     saved = [];
@@ -371,6 +377,32 @@
       });
   });
 
+  test('with the Convergence window open, a file is of the run it shows, asked for at once',
+       function () {
+    var shown = Object.assign({ run: RUN }, data('iteration_limit'));
+    setup({}, 'Other_2026-11-01_10-00');
+    P.show(RUN, shown);
+    App.ConvergenceWindow = OPEN;
+    var pending = P.command('png');
+    T.eq(saved.length, 1, 'saved before any answer, so the click still opens the save window');
+    return pending.then(function () { return P.command('csv'); }).then(function () {
+      T.eq(api.calls, [], 'not the open run, nor any other');
+      T.eq(saved.map(function (s) { return s.name; }),
+           [RUN + '_convergence.png', RUN + '_convergence.csv']);
+      T.eq(saved[1].text, CASES.iteration_limit.csv);
+    });
+  });
+
+  test('with the Convergence window open and no run in it, nothing is saved', function () {
+    setup({});
+    App.ConvergenceWindow = OPEN;
+    return P.command('png').then(function () {
+      T.eq(saved, []);
+      T.eq(api.calls, []);
+      T.ok(/Nothing to save yet/.test(text()), text());
+    });
+  });
+
   test('a word it does not know is refused with the ones it does', function () {
     setup({});
     return P.command('tiff').then(function () {
@@ -386,6 +418,7 @@
     App.Command = real.Command;
     App.Download = real.Download;
     App.Picture = real.Picture;
+    App.ConvergenceWindow = real.Window;
     if (App.Results && real.current) App.Results.current = real.current;
   });
 

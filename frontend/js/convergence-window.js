@@ -23,7 +23,11 @@
    the plot window: it is read beside the model.
 
    The figure and the words are `App.ConvergencePlot`'s, tested headless. This file is
-   the DOM around them, tested in the browser (`tests/e2e/test_flows.py`).
+   the DOM around them, tested in the browser (`frontend/tests/test-convergence-window.js`
+   and `tests/e2e/test_convergence.py`).
+
+   Its Save button saves what it shows, as `results convergence png | pdf | svg | csv`
+   from the command box does while it is open.
    ══════════════════════════════════════════════════════════════════ */
 
 var App = window.App || {};
@@ -58,13 +62,24 @@ App.ConvergenceWindow = (function () {
     if (!App.Dialogs || !App.Dialogs.open || !document.getElementById('modal-layer')) {
       return null;
     }
+    var saveMenu = null;
     var handle = App.Dialogs.open({
       title: 'Convergence',
       width: SIZE.width, height: SIZE.height,
-      buttons: [{ label: 'Close', primary: true }],
-      onClose: function () { win = null; stop(); }
+      buttons: [
+        { label: 'Save ▾', keepOpen: true, onClick: function () { saveMenu.toggle(); } },
+        { label: 'Close', primary: true }
+      ],
+      onClose: function () { if (saveMenu) saveMenu.close(); win = null; stop(); }
     });
     handle.dialog.classList.add('dlg-convergence');
+    // The same Save button as the plot window: a pick runs `results convergence png`
+    // and the like, which saves what this window shows (see `App.ConvergencePlot`).
+    // Before any run is shown there is nothing to save, and the command says so.
+    saveMenu = App.Picture.saveMenu(handle.dialog.querySelector('.dlg-foot .btn'),
+                                    function (format) {
+                                      App.ConvergencePlot.command(format);
+                                    });
 
     // Modeless: the scrim belongs to a modal dialog, and would take the viewport's
     // pointer events with it (see the plot window in patches.js).
@@ -75,10 +90,11 @@ App.ConvergenceWindow = (function () {
       if (scrim.parentNode) scrim.parentNode.removeChild(scrim);
     }
 
-    // Bottom right, clear of the model tree on the left and of the status bar.
+    // Bottom right of the viewport: left of the dock, so the model tree stays in view,
+    // and above the status bar. Without room beside the dock, at the page's right edge.
     var box = handle.dialog;
     var w = box.offsetWidth || SIZE.width, h = box.offsetHeight || SIZE.height;
-    box.style.left = Math.max(8, window.innerWidth - w - 16) + 'px';
+    box.style.left = Math.max(8, rightEdge(w) - w) + 'px';
     box.style.top = Math.max(8, window.innerHeight - h - 48) + 'px';
 
     win = handle;
@@ -88,6 +104,14 @@ App.ConvergenceWindow = (function () {
 
   function close() {
     if (win) win.close();
+  }
+
+  /* Where the window's right side goes: 8 px left of the dock, when the dock is shown
+     and leaves room for a window `width` wide beside it. */
+  function rightEdge(width) {
+    var dock = document.getElementById('dock');
+    var left = dock && dock.offsetWidth ? dock.getBoundingClientRect().left : 0;
+    return left - 8 >= width + 8 ? left - 8 : window.innerWidth - 16;
   }
 
   /* What the status line says, in two lines: what is going on, and the last numbers. */

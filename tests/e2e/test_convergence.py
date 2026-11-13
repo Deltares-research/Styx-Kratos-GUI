@@ -8,10 +8,13 @@ iterations per stage, seven stages.
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from tests.e2e.conftest import command, log_text
 from tests.e2e.test_flows import LONG, run_model
+from tests.e2e.test_pictures import PRIVATE_WINDOWS, files_of, png_dpi, wait_saved
 
 SECONDS_PER_ITERATION = 0.25
 ITERATIONS = 7 * 3
@@ -52,8 +55,10 @@ def test_the_window_follows_a_run_and_the_results_menu_opens_it_again(app_page, 
     assert dots(page) == ITERATIONS
     assert "Criterion met" in window.locator(".cv-line2").inner_text()
     box = window.bounding_box()
+    dock = page.locator("#dock").bounding_box()
     viewport = page.viewport_size
-    assert box["x"] + box["width"] > viewport["width"] - 40, "at the right"
+    assert box["x"] + box["width"] <= dock["x"], "left of the dock: the model tree stays in view"
+    assert box["x"] + box["width"] > dock["x"] - 40, "at the right of the viewport"
     assert box["y"] + box["height"] > viewport["height"] - 120, "at the bottom"
 
     window.get_by_role("button", name="Close").click()
@@ -82,4 +87,26 @@ def test_the_command_box_opens_it_and_says_how_to_save(app_page):
 
     window.wait_for(state="visible", timeout=LONG)
     assert "results convergence csv" in log_text(page)
+    assert page.errors == []
+
+
+def test_the_save_button_saves_the_run_the_window_shows(app_page):
+    page = app_page
+    run_model(page)
+    page.evaluate(PRIVATE_WINDOWS)
+    page.locator('#maintoolbar .tbtn[data-action="calculate"]').click()
+    window = page.locator(".dlg-convergence")
+    window.locator(".cv-line1").filter(has_text="Finished").wait_for(timeout=LONG)
+    run = page.evaluate("App.ConvergenceWindow.state().run")
+
+    for label, ending in (("PNG", ".png"), ("CSV", ".csv")):
+        window.get_by_role("button", name="Save ▾").click()
+        page.locator("#modal-layer .menu").get_by_text(label, exact=True).click()
+        wait_saved(page, re.escape(f"Saved {run}_convergence{ending}"))
+
+    saved = files_of(page)
+    assert set(saved) == {f"{run}_convergence.png", f"{run}_convergence.csv"}
+    assert round(png_dpi(saved[f"{run}_convergence.png"])) == 300
+    rows = saved[f"{run}_convergence.csv"].decode("utf-8").splitlines()
+    assert len(rows) == 1 + ITERATIONS, "a header and a row per iteration"
     assert page.errors == []

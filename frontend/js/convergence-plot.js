@@ -22,7 +22,10 @@
                                               is working on, else the open run, else
                                               the newest run
        results convergence csv | svg | png | pdf
-                                              the numbers, or the figure, as a file
+                                              the numbers, or the figure, as a file: of
+                                              the run in the Convergence window while
+                                              it is open (its Save button runs these),
+                                              else of the run chosen as above
 
    `kratos-cli results convergence RUN` prints the same data as a table, and its
    `--csv` writes the same file as `csv` here (`tests/test_convergence_parity.py`).
@@ -591,6 +594,11 @@ App.ConvergencePlot = (function () {
 
   /* ── Saving ───────────────────────────────────────────────────────────── */
 
+  function windowOpen() {
+    var W = App.ConvergenceWindow;
+    return !!(W && W.state && W.state().open);
+  }
+
   function save(kind) {
     var data = view.data;
     var name = view.run + '_convergence.' + kind;
@@ -617,6 +625,16 @@ App.ConvergencePlot = (function () {
       log('err', 'No such convergence command: "' + verb + '". `results convergence` '
                  + 'shows it; `csv`, `svg`, `png` or `pdf` after it saves it.');
       return Promise.resolve();
+    }
+    // With the Convergence window open, a file is of what it shows: its Save button and
+    // the command box save the same run. Saved at once, with nothing asked first, so
+    // the browser still takes it as the click's and opens its save window.
+    if (verb && windowOpen()) {
+      if (!view.run || !view.data) {
+        log('note', 'Nothing to save yet: the Convergence window shows no run.');
+        return Promise.resolve(null);
+      }
+      return Promise.resolve(save(verb));
     }
     return whichRun().then(function (run) {
       if (!run) {
