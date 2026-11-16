@@ -43,7 +43,14 @@ App.MaterialSets = (function () {
 
   function waterVariables() {
     var fluid = App.FLUID || {};
-    return S.water(App.Units.current(), waterWeight(), fluid.bulk_modulus, fluid.dynamic_viscosity);
+    return S.water(App.Units.current(), waterWeight(), fluid.bulk_modulus, fluid.dynamic_viscosity,
+                   projectGravity());
+  }
+
+  /* Project.gravity_acceleration, in m/s2: what the unit weights and the water's density
+     are worked out with. */
+  function projectGravity() {
+    return App.PROJECT ? App.PROJECT.gravity_acceleration : undefined;
   }
 
   /* A number as the window shows it: six significant figures, and a power of ten when it
@@ -558,7 +565,8 @@ App.MaterialSets = (function () {
       // numbers: shown with the parameters they belong to.
       var system = App.Units.current(), flow = flowProject(), water = waterVariables();
       var derived = S.derived(m.constitutive_law, m.variables, water, system, flow);
-      var computed = S.computed(m.constitutive_law, m.variables, water, system, flow);
+      var computed = S.computed(m.constitutive_law, m.variables, water, system, flow,
+                                projectGravity());
       function after(names) {
         names.forEach(function (name) {
           if (computed[name] !== undefined) grid.appendChild(computedRow(name, computed[name]));

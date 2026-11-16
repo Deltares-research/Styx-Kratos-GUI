@@ -153,6 +153,19 @@
         && button.getAttribute('aria-disabled') === 'true';
   }
 
+  test('each rail button carries its action and its tip, so a script or a reader can name it', function () {
+    withButton(SOIL, function () {
+      T.eq(document.querySelector('#toolrail .rail-btn[data-action="calculate"]'), railButton());
+      T.ok(/Calculate/.test(railButton().getAttribute('aria-label')),
+           railButton().getAttribute('aria-label'));
+      var tools = (App.RAILS.staged || []).filter(function (t) { return t !== '-'; });
+      var buttons = document.querySelectorAll('#toolrail .rail-btn');
+      tools.forEach(function (tool, i) {
+        T.eq(buttons[i].getAttribute('data-tool'), tool.action || tool.icon);
+      });
+    });
+  });
+
   test('with nothing to mesh, every Calculate is greyed out and its tip says why', function () {
     withButton(BLANK, function () {
       var reason = App.Calculate.state(BLANK, false).reason;

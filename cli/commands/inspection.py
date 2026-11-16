@@ -154,6 +154,8 @@ def show_deck(args: argparse.Namespace) -> Answer:
         lines.append(f"  {len(stages)} stages:")
         for number, stage in enumerate(stages, start=1):
             change: list[str] = [stage.calculation]
+            if stage.stress_initialisation != "none":
+                change.append(f"{stage.stress_initialisation} stresses")
             if stage.activate:
                 change.append("activates " + ", ".join(stage.activate))
             if stage.deactivate:

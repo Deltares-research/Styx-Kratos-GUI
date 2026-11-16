@@ -40,7 +40,8 @@ SYSTEMS: dict[str, System] = {
 }
 
 GRAVITY_SI = 9.81
-"""m/s2. The magnitude the deck's gravity is written with."""
+"""m/s2. The gravitational acceleration a new project has (`Project.gravity_acceleration`),
+and the one that turns a legacy file's unit weights into densities."""
 
 
 @dataclass(frozen=True)
@@ -72,6 +73,7 @@ LENGTH = _q("length", (0, 1, 0), "m", "m")
 ACCELERATION = _q("acceleration", (0, 1, -2), "m/s²", "m/s²")
 VELOCITY = _q("velocity", (0, 1, -1), "m/s", "m/s")
 FLOW_RATE = _q("flow rate per metre", (0, 2, -1), "m³/s/m", "m³/s/m")
+TIME = _q("time", (0, 0, 1), "s", "s")
 DIMENSIONLESS = _q("dimensionless", (0, 0, 0), "", "")
 ANGLE = _q("angle", (0, 0, 0), "°", "°")
 RADIAN = _q("angle in radians", (0, 0, 0), "rad", "rad")
@@ -79,7 +81,7 @@ RADIAN = _q("angle in radians", (0, 0, 0), "rad", "rad")
 QUANTITIES = {q.name: q for q in (STRESS, FORCE, LINE_FORCE, MOMENT_PER_LENGTH, DENSITY,
                                   SPECIFIC_WEIGHT, STIFFNESS_PER_AREA, VISCOSITY,
                                   PERMEABILITY, AREA, INERTIA, LENGTH, ACCELERATION,
-                                  VELOCITY, FLOW_RATE, DIMENSIONLESS, ANGLE,
+                                  VELOCITY, FLOW_RATE, TIME, DIMENSIONLESS, ANGLE,
                                   RADIAN)}
 
 VARIABLES: dict[str, Quantity] = {
@@ -129,10 +131,10 @@ def system(name: str) -> System:
             from None
 
 
-def gravity(name: str) -> float:
-    """Gravity's magnitude in the system `name`."""
+def gravity(name: str, acceleration_si: float = GRAVITY_SI) -> float:
+    """The gravitational acceleration `acceleration_si`, in m/s2, in the system `name`."""
     s = system(name)
-    return GRAVITY_SI * s.time ** 2 / s.length
+    return acceleration_si * s.time ** 2 / s.length
 
 
 def _unit(quantity: Quantity, s: System) -> float:

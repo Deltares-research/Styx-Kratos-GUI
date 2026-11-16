@@ -1,7 +1,7 @@
 """The FastAPI app, assembled from its parts.
 
 The routes of the HTTP API live in `backend/routes/`, one module per group of the API
-table in `docs/developer/ARCHITECTURE.md` (project, geometry, mesh, decks, results), and
+table in `docs/developer/ARCHITECTURE.md` (project, geometry, mesh, decks, results, files), and
 what they share in `backend/routes/common.py`. The Host/Origin check and the no-cache
 headers are `backend/middleware.py`. This module puts them together: the gmsh worker's
 lifespan, the handler for a crashed worker, the middleware in the order it runs, the
@@ -28,7 +28,7 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from backend.middleware import do_not_cache_sources, only_this_browser_tab
-from backend.routes import decks, geometry, mesh, project, results
+from backend.routes import decks, files, geometry, mesh, project, results
 from core import gmsh_worker, version
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -78,6 +78,7 @@ app.include_router(geometry.router)
 app.include_router(mesh.router)
 app.include_router(decks.router)
 app.include_router(results.router)
+app.include_router(files.router)
 
 
 @app.get("/api/health")

@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import atexit
 import functools
+import importlib.util
 import os
 import pathlib
 import shutil
@@ -62,6 +63,12 @@ def require_kratos() -> None:
     reason = kratos_missing()
     if reason:
         pytest.skip(reason)
+
+
+def require_no_kratos() -> None:
+    """For a test of the real import failing: it cannot fail where this interpreter has Kratos."""
+    if importlib.util.find_spec("KratosMultiphysics") is not None:
+        pytest.skip("Kratos is installed for this interpreter")
 
 
 def _new_root(prefix: str) -> pathlib.Path:

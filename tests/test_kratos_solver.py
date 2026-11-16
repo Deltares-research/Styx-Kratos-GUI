@@ -190,35 +190,39 @@ def test_the_output_asks_for_displacement_and_water_pressure(section):
 
 # ── What docs/FEATURES.md A1 promises about the solver, pinned─────────────────
 
-def test_the_linear_solver_is_the_direct_skyline_one_on_one_thread(section):
-    """A direct solver, a block builder and one OpenMP thread in every stage: the
-    reference decks' settings, and the ones every validated run used."""
+def test_the_default_is_newton_raphson_with_the_direct_sparse_lu_solver_on_one_thread(
+        section):
+    """Newton-Raphson, a scaled direct Sparse LU, a block builder and one OpenMP thread
+    in every stage that says nothing else (`core.model.solver`)."""
     for settings in stages(section):
         solver = settings["solver_settings"]
-        assert solver["linear_solver_settings"]["solver_type"] == "skyline_lu_factorization"
+        assert solver["strategy_type"] == "newton_raphson"
+        assert solver["linear_solver_settings"] == {
+            "solver_type": "LinearSolversApplication.sparse_lu", "scaling": True}
         assert solver["block_builder"] is True
         assert settings["problem_data"]["number_of_threads"] == 1
 
 
 def test_the_default_tolerances_and_step_controls(section):
-    """Relative 1e-4, absolute 1e-9, 6 to 15 iterations, halving and doubling -- the
-    defaults a stage can override (`Stage.max_iterations`, `tolerated_error`)."""
+    """Relative 1e-4, absolute 1e-9, 6 to 15 iterations, one attempt, halving and
+    doubling -- the defaults a stage can override (`Stage.max_iterations`,
+    `tolerated_error`, `absolute_tolerance`, `solver_settings`)."""
     solver = stages(section)[0]["solver_settings"]
     assert (solver["residual_relative_tolerance"], solver["residual_absolute_tolerance"]) == (1e-4, 1e-9)
     assert (solver["min_iterations"], solver["max_iterations"]) == (6, 15)
+    assert solver["number_cycles"] == 1
     assert (solver["reduction_factor"], solver["increase_factor"]) == (0.5, 2.0)
 
 
-def test_each_stage_is_one_step_and_the_settling_stages_sit_before_zero():
-    """dt = 1 per stage; the K0 stage and the null step run at negative time, as in the
-    reference deck, so the construction starts at t = 0."""
+def test_each_stage_lasts_a_second_and_the_first_starts_at_zero():
+    """1 s per stage in one step, the defaults; the K0 stage is the first, at t = 0."""
     import json as _json
     from tests.models import excavation
     params = _json.loads(writer.export_project(excavation.excavation_project(staged=True))["project_parameters"])
     order = params["orchestrator"]["settings"]["execution_list"]
     times = [(params["stages"][n]["stage_settings"]["problem_data"]["start_time"],
               params["stages"][n]["stage_settings"]["problem_data"]["end_time"]) for n in order]
-    assert times[:3] == [(-2.0, -1.0), (-1.0, 0.0), (0.0, 1.0)]
+    assert times[:3] == [(0.0, 1.0), (1.0, 2.0), (2.0, 3.0)]
     assert all(end - start == 1.0 for start, end in times)
     assert all(params["stages"][n]["stage_settings"]["solver_settings"]["time_stepping"]
                ["time_step"] == 1.0 for n in order)

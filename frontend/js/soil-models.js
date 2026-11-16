@@ -221,13 +221,14 @@ App.SoilModels = (function () {
   function constant(name) { return table().constants[name]; }
 
   /* The water every soil shares as Kratos reads it, in `system`: the project's values,
-     water's where it gives none (null or undefined). */
-  function water(system, specificWeight, bulkModulus, viscosity) {
+     water's where it gives none (null or undefined). `gravity` is the project's
+     gravity_acceleration in m/s2: the density is the specific weight over it. */
+  function water(system, specificWeight, bulkModulus, viscosity, gravity) {
     var given = function (v) { return v !== null && v !== undefined; };
     var weight = given(specificWeight) ? specificWeight
       : App.Units.fromSI(constant('WATER_SPECIFIC_WEIGHT'), 'specific weight', system);
     return {
-      DENSITY_WATER: weight / App.Units.gravity(system),
+      DENSITY_WATER: weight / App.Units.gravity(system, gravity),
       BULK_MODULUS_FLUID: given(bulkModulus) ? bulkModulus
         : App.Units.fromSI(constant('WATER_BULK_MODULUS'), 'stress', system),
       DYNAMIC_VISCOSITY: given(viscosity) ? viscosity
@@ -295,10 +296,10 @@ App.SoilModels = (function () {
   /* What follows from a soil's numbers, in `system`: its unit weight dry and saturated
      and, where its permeability is listed, the Darcy conductivity it makes
      (core/model/soil_models.py `computed`). Nothing of these is written. */
-  function computed(law, variables, waterVariables, system, flow) {
+  function computed(law, variables, waterVariables, system, flow, gravity) {
     variables = variables || {};
     var every = Object.assign({}, derived(law, variables, waterVariables, system, flow), variables);
-    var g = App.Units.gravity(system);
+    var g = App.Units.gravity(system, gravity);
     var gammaW = waterVariables.DENSITY_WATER * g;
     var out = {};
     var density = number(every, 'DENSITY_SOLID'), porosity = number(every, 'POROSITY');

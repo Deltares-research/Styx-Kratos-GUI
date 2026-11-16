@@ -154,7 +154,7 @@ def mesh_job(project_json: str, settings_json: str) -> dict:
         size_min_factor=settings.size_min_factor,
         second_order_linear=settings.second_order_linear,
         volume_keys=settings.volume_keys,
-        body_sizes=settings.body_sizes,
+        body_sizes=settings.body_sizes, size_bands=settings.size_bands,
     ).to_dict()
 
 

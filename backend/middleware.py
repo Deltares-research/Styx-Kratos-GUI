@@ -44,7 +44,7 @@ def allowed_hosts() -> set[str]:
     return set(LOOPBACK_HOSTS) | {h.strip().lower() for h in extra.split(",") if h.strip()}
 
 
-def _host_name(netloc: str) -> str:
+def host_name(netloc: str) -> str:
     """`host[:port]` or `[v6]:port`, without the port, lower-cased."""
     netloc = netloc.strip().lower()
     if netloc.startswith("["):
@@ -67,7 +67,7 @@ async def only_this_browser_tab(request, call_next):
       `Origin` (a same-origin GET, curl, a test client) is not a browser crossing sites.
     """
     allowed = allowed_hosts()
-    if _host_name(request.headers.get("host", "")) not in allowed:
+    if host_name(request.headers.get("host", "")) not in allowed:
         return JSONResponse(status_code=400, content={"detail": (
             f"Refused: this server answers to {', '.join(sorted(allowed))} as its host, "
             f"not {request.headers.get('host', '')!r}. To serve it under another name, "
@@ -75,7 +75,7 @@ async def only_this_browser_tab(request, call_next):
     origin = request.headers.get("origin")
     if origin is not None:
         parsed = urlsplit(origin)
-        if not parsed.scheme or _host_name(parsed.netloc) not in allowed:
+        if not parsed.scheme or host_name(parsed.netloc) not in allowed:
             return JSONResponse(status_code=403, content={"detail": (
                 f"Refused: a request from another site (origin {origin!r}) may not use "
                 "this server.")})

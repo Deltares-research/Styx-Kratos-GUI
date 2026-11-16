@@ -2,7 +2,7 @@
 
 Kratos' GeoMechanicsApplication test `tests/Muskat/saturated_hydrostatic`, built as a
 Styx model: a 1.62 m by 4 m column of saturated soil, the water held at a level of 3.0 m
-on the left face and 1.6 m on the right, and one "Groundwater flow" stage.
+on the left face and 1.6 m on the right, and one flow stage.
 muskat_saturated.json beside it is the same model, as the GUI saves it.
 
     python muskat_saturated.py                  write the deck into this folder
@@ -122,7 +122,7 @@ def project() -> Project:
                           x_min=WIDTH - 0.12, x_max=WIDTH, y_min=0.0, y_max=HEIGHT,
                           z_min=0.0, z_max=1.0)]),
 
-        stages=[Stage(id="flow", name="Flow", calculation="Groundwater flow")],
+        stages=[Stage(id="flow", name="Flow", calculation="flow")],
     )
 
 

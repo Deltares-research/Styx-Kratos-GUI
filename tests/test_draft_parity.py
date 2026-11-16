@@ -304,18 +304,20 @@ def soil_model_cases() -> dict:
         return {"law": law, "variables": variables,
                 "required": soil_models.required(law, variables)}
 
-    def derived(title, law, variables, system, flow=False, **water):
-        water_variables = soil_models.water(system, **water)
+    def derived(title, law, variables, system, flow=False, gravity=None, **water):
+        water_variables = soil_models.water(system, gravity=gravity, **water)
         return {"title": title, "law": law, "variables": variables, "system": system,
-                "flow": flow, "water": water_variables,
+                "flow": flow, "gravity": gravity, "water": water_variables,
                 "derived": soil_models.derived(law, variables, water_variables, system, flow),
                 "computed": soil_models.computed(law, variables, water_variables, system,
-                                                 flow)}
+                                                 flow, gravity)}
 
-    def water(system, specific_weight=None, bulk_modulus=None, viscosity=None):
+    def water(system, specific_weight=None, bulk_modulus=None, viscosity=None,
+              gravity=None):
         return {"system": system, "specific_weight": specific_weight,
-                "bulk_modulus": bulk_modulus, "viscosity": viscosity,
-                "water": soil_models.water(system, specific_weight, bulk_modulus, viscosity)}
+                "bulk_modulus": bulk_modulus, "viscosity": viscosity, "gravity": gravity,
+                "water": soil_models.water(system, specific_weight, bulk_modulus, viscosity,
+                                           gravity)}
 
     def shown(model, variables, flow=False):
         return {"model": model, "variables": variables, "flow": flow,
@@ -342,6 +344,8 @@ def soil_model_cases() -> dict:
             derived("a blank soil", ELASTIC_2D, soil_models.blank_si(), "SI"),
             derived("a blank soil with the Van Genuchten law", ELASTIC_2D,
                     {**soil_models.blank_si(), "RETENTION_LAW": "VanGenuchtenLaw"}, "SI"),
+            derived("a coupled soil in a project with g = 10 m/s2", MOHR_COULOMB_2D,
+                    {**coupled, "PERMEABILITY_XX": 3.0e-12}, "kN", gravity=10.0),
         ],
         "water": [
             water("SI"),
@@ -349,6 +353,7 @@ def soil_model_cases() -> dict:
             water("SI", bulk_modulus=2.0e9),
             water("kN", viscosity=1.3e-6),
             water("SI", 9810.0, 1.0e20, 1.3e-3),
+            water("kN", 10.0, gravity=9.80665),
         ],
         "blank": soil_models.blank_si(),
         "fill_choice": [

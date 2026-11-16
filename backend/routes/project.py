@@ -40,11 +40,33 @@ async def put_project(project: Project) -> Project:
     return store.put(await asyncio.to_thread(scripting.with_solids, project, False))
 
 
+@router.post("/api/project/open")
+async def open_project(document: dict) -> dict:
+    """Open a project file the GUI read: what `PUT /api/project` does with it, and the
+    notes on what opening it changes about its calculation (`migration.notes`), for the
+    command log. The document is taken as it is in the file, as only the old shape says
+    what the conversion loses; it is refused as `PUT` refuses it, field by field."""
+    from pydantic import ValidationError
+
+    from core import scripting
+
+    try:
+        project = Project.model_validate(document)
+    except ValidationError as failure:
+        raise RequestValidationError([
+            {**error, "loc": ("body", *error["loc"])}
+            for error in failure.errors(include_url=False, include_context=False)
+        ]) from failure
+    project = store.put(await asyncio.to_thread(scripting.with_solids, project, False))
+    return {"project": project, "notes": migration.notes(document),
+            "invalidates": ["project", "tree", "geometry", "mesh"]}
+
+
 @router.post("/api/project/migration-notes")
 def migration_notes(document: dict) -> dict:
     """What opening `document`, a project file as saved, changes in its deck
-    (`migration.notes`). The GUI's Open asks after the PUT above took the file: the
-    project it got back is already in the new shape, and the old values are gone."""
+    (`migration.notes`), without opening it. The GUI's Open gets them from
+    `/api/project/open` instead, in the same request that takes the file."""
     return {"notes": migration.notes(document)}
 
 
@@ -179,10 +201,9 @@ async def patch_structures(update: StructuresUpdate) -> dict:
 
 @router.patch("/api/project/conditions")
 async def patch_conditions(update: ConditionsUpdate) -> dict:
-    """Replace the boundary conditions as one list, and set gravity
-    (`session.replace_conditions`); a field left out stays as it is. What the GUI's
-    boundary conditions dialog, its explorer rows and the `boundary` and `gravity`
-    commands send (frontend/js/boundary-conditions.js)."""
+    """Replace the boundary conditions as one list (`session.replace_conditions`).
+    What the GUI's boundary conditions dialog, its explorer rows and the `boundary`
+    command send (frontend/js/boundary-conditions.js)."""
     with refusals():
         project = session.replace_conditions(store.get(), update)
     # A condition on a drawn line or point is embedded in the section, so the mesh
@@ -211,19 +232,6 @@ async def patch_stages(update: StagesUpdate) -> dict:
             "type": "value_error", "loc": ("body", "stages"), "msg": str(failure),
             "input": [stage.model_dump() for stage in update.stages],
         }]) from failure
-    return stored(project) | {"invalidates": ["project"]}
-
-
-@router.post("/api/project/stages/defaults")
-@router.post("/api/project/phases/defaults", include_in_schema=False, deprecated=True)
-async def seed_default_stages() -> dict:
-    """What "Create default stages" gives: the initial stage, then the null step.
-
-    `session.default_stages` makes it; this endpoint is only the way the GUI reaches it.
-    It replaces whatever is there: it is the way back out of a broken sequence.
-    """
-    with refusals():
-        project = session.default_stages(store.get())
     return stored(project) | {"invalidates": ["project"]}
 
 

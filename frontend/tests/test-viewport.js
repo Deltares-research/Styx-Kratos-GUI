@@ -360,11 +360,40 @@
    at any pan or zoom -- a grid that stops mid-screen reads as the edge of the
    model. sectionGridSpec is what it has to be for the rectangle now in view. */
 (function () {
-  var CELL = 2.5;
+  var CELL = 2;
 
   function spec(center, halfW, halfH) {
     return App.Viewport.sectionGridSpec(CELL, center, halfW, halfH);
   }
+
+  function isNice(value) {
+    var mantissa = value / Math.pow(10, Math.floor(Math.log10(value) + 1e-9));
+    return [1, 2, 5, 10].some(function (m) { return Math.abs(mantissa - m) < 1e-6; });
+  }
+
+  test('the grid cell is a step the rulers also take: 1, 2 or 5 times a power of ten', function () {
+    // A 3 m wide model used to get 0.6 m cells, off every ruler tick.
+    [[3, 2], [0.4, 0.2], [12, 6], [37, 20], [250, 40], [1e-3, 1e-3]].forEach(function (size) {
+      var cell = App.Viewport.gridCell({ size: [size[0], size[1], 1] });
+      T.ok(isNice(cell), size[0] + ' m model: ' + cell);
+      T.ok(Math.max(size[0], size[1]) * 1.6 / cell >= 8, 'too few cells: ' + cell);
+    });
+    T.eq(App.Viewport.gridCell({ size: [3, 2, 1] }), 0.5);
+  });
+
+  test('zooming in and out walks the 2D cell through 1, 2, 5, 10, on the ruler ticks', function () {
+    var width = 800, seen = [];
+    // From 2 m to 400 m across the screen.
+    for (var halfW = 1; halfW <= 200; halfW *= 1.25) {
+      var cell = App.Viewport.sectionGridCell(halfW, width, 0.5);
+      var ruler = App.Ruler.plan({ center: [0, 0], halfW: halfW, halfH: halfW / 2,
+                                   width: width, height: width / 2 });
+      T.eq(cell, ruler.h.step, 'grid and ruler disagree at half-width ' + halfW);
+      if (seen[seen.length - 1] !== cell) seen.push(cell);
+    }
+    T.eq(seen.join(' '), '0.2 0.5 1 2 5 10 20 50');
+    T.eq(App.Viewport.sectionGridCell(10, 0, 0.5), 0.5, 'no size yet: the model cell');
+  });
 
   test('the grid covers the whole visible rectangle, not just the model', function () {
     var g = spec([25, -12.5], 60, 30);
@@ -386,6 +415,7 @@
     T.eq(near.cell, CELL, 'at working zoom the cell is the one the model chose');
     T.ok(far.cell > near.cell, 'a wide view has to coarsen: ' + far.cell);
     T.ok(far.cell % CELL === 0, 'and stay a multiple of it, so lines survive the change');
+    T.ok(isNice(far.cell), 'and a step the rulers also take: ' + far.cell);
     T.ok(far.divisions <= App.Viewport.MAX_GRID_DIVISIONS, 'unbounded line count: ' + far.divisions);
     T.ok(far.span / 2 >= 4000, 'still has to cover the view');
   });
@@ -494,6 +524,7 @@
     App.Viewport.setVisible('mesh', true);
     App.Viewport.select(null);
     T.eq(App.Viewport.hasMesh(), false);
+    T.eq(App.Viewport.clearMesh(), false, 'no mesh: nothing to clear');
   });
 
   /* An imported .mdpa's preview lives outside `groups`/`frame` entirely (viewport.js's
@@ -598,52 +629,31 @@
 })();
 
 (function () {
-  /* Which refinements a mesh is built with. A model can carry a graded mesh of its own
-     (a model script can refine its excavation and grade out to the far field), and
-     `meshSettings` used to overwrite that with `App.MESH_REFINEMENTS || []` -- so the
-     Generate-mesh button flattened a grading the project had asked for. */
+  /* Which refinement boxes a mesh is built with. A model can carry a graded mesh of its
+     own (a model script can refine its excavation and grade out to the far field), and
+     the Generate-mesh button must not flatten a grading the project asked for. */
 
   var BOX = { kind: 'box', size: 0.75, thickness: 45, x_min: -1, x_max: 8,
               y_min: -16, y_max: 1, z_min: -1, z_max: 11 };
 
-  function withState(local, project, run) {
-    var saved = { refinements: App.MESH_REFINEMENTS, project: App.PROJECT };
-    App.MESH_REFINEMENTS = local;
+  function withState(project, run) {
+    var saved = App.PROJECT;
     App.PROJECT = project;
-    try { run(); } finally {
-      App.MESH_REFINEMENTS = saved.refinements;
-      App.PROJECT = saved.project;
-    }
+    try { run(); } finally { App.PROJECT = saved; }
   }
 
-  test("a model's own refinements are used when none is set this session", function () {
-    withState(undefined, { mesh: { refinements: [BOX] } }, function () {
+  test("a model's own refinements are used", function () {
+    withState({ mesh: { refinements: [BOX] } }, function () {
       T.eq(App.Viewport.meshRefinements().length, 1);
       T.eq(App.Viewport.meshRefinements()[0].thickness, 45);
     });
   });
 
-  test('a refinement set from the toolbar wins over the model\'s', function () {
-    var local = [{ kind: 'box', size: 0.2, x_min: 0, x_max: 1,
-                   y_min: 0, y_max: 1, z_min: 0, z_max: 1 }];
-    withState(local, { mesh: { refinements: [BOX] } }, function () {
-      T.eq(App.Viewport.meshRefinements()[0].size, 0.2);
-    });
-  });
-
-  test('resetting the local refinement falls back to the model, not to none', function () {
-    /* "Reset" leaves an empty array behind, and an empty array is truthy -- so a plain
-       `||` would read it as a choice and mesh the model flat. */
-    withState([], { mesh: { refinements: [BOX] } }, function () {
-      T.eq(App.Viewport.meshRefinements().length, 1);
-    });
-  });
-
   test('a project that asks for no refinement gets none', function () {
-    withState(undefined, { mesh: {} }, function () {
+    withState({ mesh: {} }, function () {
       T.eq(App.Viewport.meshRefinements(), []);
     });
-    withState(undefined, null, function () {
+    withState(null, function () {
       T.eq(App.Viewport.meshRefinements(), []);
     });
   });
@@ -797,5 +807,23 @@
     var cut = App.Viewport.lineSeams(SECTIONS, Object.assign({}, PROJECT, { lines: [] }));
     T.eq(cut.seams, []);
     T.eq(cut.edges.soil_top__part1, SECTIONS[0].edges);
+  });
+})();
+
+/* Generate mesh meshes the whole model, as kratos-cli mesh does: no volume_keys in
+   the request, whatever is selected or hidden. This needs viewport.js, so it runs
+   in the browser suite only. */
+
+(function () {
+  test('the viewport meshes the whole model, whatever is selected or hidden', function () {
+    var saved = { PROJECT: App.PROJECT, state: App.state };
+    try {
+      App.PROJECT = { layers: [{ id: 'L1' }, { id: 'L2' }], mesh: { element_size: 2.5 } };
+      App.state = { mode: 'mesh', selection: 'soil_L1' };
+      T.eq(App.Viewport.meshSettings().volume_keys, undefined);
+      T.eq(App.Viewport.meshSettings().element_size, 2.5);
+    } finally {
+      App.PROJECT = saved.PROJECT; App.state = saved.state;
+    }
   });
 })();

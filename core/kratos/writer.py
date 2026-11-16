@@ -246,6 +246,7 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
         size_min_factor=settings.size_min_factor,
         second_order_linear=settings.second_order_linear,
         volume_keys=settings.volume_keys, body_sizes=settings.body_sizes,
+        size_bands=settings.size_bands,
     )
     dim = 2 if project.dimension == 2 else 3
     names = _part_names(project)
@@ -499,9 +500,6 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
         ties=tuple((master, slave, key) for key, (master, slave) in ties.items())
              if dim == 2 else (),
         faces=face_outputs,
-        unsaturated=tuple(name for name, material in part_materials
-                          if project.material(material).variables.get(
-                              "RETENTION_LAW", SATURATED) != SATURATED),
         seepage=tuple(names[key] for key, _, rows in conditions if flow and rows),
     )
     kratos_stages = _stages(project, deck, wall_parts, staged_ties)
@@ -526,7 +524,10 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
         # A Timoshenko beam and a shell carry rotations; soil, a truss tendon and an
         # interface do not, and dofs no element uses cost memory for nothing.
         rotation_dofs=bool(beam_blocks or panel_blocks),
-        gravity=project.gravity,
+        # The initial stage's stress initialisation decides it: K0 or gravity loading
+        # puts the self weight on every body, none leaves it out (`stages.gravity`).
+        gravity=stages.gravity(project),
+        gravity_acceleration=project.gravity_acceleration,
     )
     return {
         "mdpa": _render(coordinates, node_id, numbered, condition_blocks, parts),
@@ -588,9 +589,6 @@ WALL_EXTRAPOLATED = ("AXIAL_FORCE", "BENDING_MOMENT", "SHEAR_FORCE")
 FLOW_EXTRAPOLATED = ("EFFECTIVE_SATURATION", "FLUID_FLUX_VECTOR")
 """What a groundwater flow stage makes nodal, over its soil, as the reference decks do:
 the saturation and the flux are Gauss-point values of the water pressure elements."""
-SATURATED = "SaturatedLaw"
-"""Kratos' retention law when a material names none: a soil saturated whatever its water
-pressure, whose flow is linear in it."""
 INTERFACE_VARIABLES = ("GEO_EFFECTIVE_TRACTION_VECTOR",)
 """What the `JsonOutputProcess` of a staged deck writes for each face of an interface, and
 what is made nodal for it."""
@@ -615,12 +613,9 @@ class _Deck:
     faces: tuple[tuple[str, tuple[str | None, ...]], ...] = ()
     """(member name, the node part its curve reads in each stage, in stage order, or None
     in a stage with no contact on) per face of each wall interface (`_face_outputs`)."""
-    unsaturated: tuple[str, ...] = ()
-    """The soil parts whose retention law makes the permeability depend on the water
-    pressure, so that a flow stage with any of them in it is solved by Newton-Raphson."""
     seepage: tuple[str, ...] = ()
-    """The parts of the seepage faces' conditions: a flow stage with any is solved by the
-    seepage strategy, in every stage."""
+    """The parts of the seepage faces' conditions: a flow stage has the seepage process
+    of each, in every stage."""
 
 
 def _deck_active(deck: _Deck, keys: set[str]) -> frozenset[str]:
@@ -664,16 +659,9 @@ def _sequenced_stages(project: Project, deck: _Deck) -> list[parameters.Stage]:
     """One Kratos stage per Styx stage. Raises `stages.StageError` if the tree does not linearise."""
     steps = stages.transitions(project)
 
-    # The reference deck starts at -2.0: its K0 stage and its null step sit at negative
-    # time so that real construction starts at 0 and two runs' result files line up
-    # stage for stage. Cosmetic to Kratos, and free to reproduce -- the leading run of
-    # stages that are not ordinary plastic steps is exactly what "before construction"
-    # means.
-    settling = 0
-    for stage, _, _ in steps:
-        if stage.calculation not in ("K0 procedure", "Null step"):
-            break
-        settling += 1
+    # The first stage starts at the initial stage's start time -- 0 unless the user set
+    # another -- and each stage starts where the one before it ended.
+    start_time = steps[0][0].start_time if steps else 0.0
 
     out: list[parameters.Stage] = []
     keys = set(project.stageable_keys())
@@ -694,11 +682,11 @@ def _sequenced_stages(project: Project, deck: _Deck) -> list[parameters.Stage]:
         deactivate = tuple(name for name in deck.bodies
                            if name in was and name not in live)
 
-        k0 = stage.calculation == "K0 procedure"
+        k0 = stage.stress_initialisation == "K0"
         # What the first stage holds arrives in it, imported with the mesh rather than
         # activated, and there is no stage before it to carry a stress from: Kratos
         # refuses to look one up (`ApplyFinalStressesOfPreviousStageToInitialState`). A
-        # wall in the model from the start -- default stages switch nothing off -- has
+        # wall in the model from the start -- a first stage that switches nothing off -- has
         # its interfaces' neighbours found there, and its stresses carried from the
         # second stage on.
         first = index == 0
@@ -712,7 +700,7 @@ def _sequenced_stages(project: Project, deck: _Deck) -> list[parameters.Stage]:
         beams = tuple(name for name in deck.beams if name in live)
         contacts = tuple(name for name in deck.interfaces if name in live)
 
-        flow = stage.calculation == stages.GROUNDWATER_FLOW
+        flow = stage.calculation == stages.FLOW
         bodies = tuple(name for name in deck.bodies if name in live)
         extrapolate: tuple[tuple[tuple[str, ...], tuple[str, ...]], ...] = ()
         if flow and bodies:
@@ -735,7 +723,9 @@ def _sequenced_stages(project: Project, deck: _Deck) -> list[parameters.Stage]:
             deactivate=deactivate,
             active=live,
             bodies=bodies,
-            start_time=float(index - settling),
+            start_time=start_time,
+            duration=stage.duration,
+            time_step=stage.time_step,
             modeler=index == 0,
             # The tie holds the two copies of a split node together for as long as the
             # structure that split them is not installed. Derived from the interface's
@@ -750,26 +740,23 @@ def _sequenced_stages(project: Project, deck: _Deck) -> list[parameters.Stage]:
             extrapolate=extrapolate,
             json_output=output,
             reset_displacements=stage.reset_displacements,
+            convergence_criterion=stage.convergence_criterion,
             max_iterations=stage.max_iterations,
             tolerated_error=stage.tolerated_error,
+            absolute_tolerance=stage.absolute_tolerance,
             materials_filename=(deck_files.INITIAL_MATERIALS_NAME if k0
                                 else deck_files.MATERIALS_NAME),
             conditions=frozenset(key for key in keys if key in water),
-            flow_strategy=_flow_strategy(deck, live) if flow else None,
+            # The model's, not the deck's, so that the stage panel shows the default
+            # the deck is written with.
+            calculation=stage.calculation,
+            model_strategy=stages.model_strategy(project, stage),
+            solver_settings=tuple(stage.solver_settings.items()),
             seepage=deck.seepage if flow else (),
+            time_integration=stage.time_integration,
         ))
+        start_time += stage.duration
     return out
-
-
-def _flow_strategy(deck: _Deck, live: frozenset[str]) -> str:
-    """The `parameters.FLOW_STRATEGIES` entry a flow stage is solved with: the seepage
-    strategy where there is a seepage face, Newton-Raphson where a soil's permeability
-    depends on the water pressure, one linear solve otherwise."""
-    if deck.seepage:
-        return "newton_raphson_with_seepage"
-    if any(name in live for name in deck.unsaturated):
-        return "newton_raphson"
-    return "linear"
 
 
 # ── Interfaces ──────────────────────────────────────────────────────────────
