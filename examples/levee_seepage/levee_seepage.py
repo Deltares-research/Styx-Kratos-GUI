@@ -60,10 +60,11 @@ from core.model.schemas import (CustomPart, Domain, Material,  # noqa: E402
                                 WaterPressureCondition)
 
 # The section: x from -36 to 54, the soil from y = -22 up to the ground surface at 0 and
-# the levee's crest at 6. A plane-strain section 1 m deep.
+# the levee's crest at 6. The z extent is a new project's (`kratos-cli new`), -10 to 10,
+# so the plane-strain section is cut through its middle, at z = 0.
 LEFT_X, RIGHT_X = -36.0, 54.0
 BOTTOM_Y, GROUND_Y, CREST_Y = -22.0, 0.0, 6.0
-Z0, Z1 = 0.0, 1.0
+Z0, Z1 = -10.0, 10.0
 
 # The aquifer and the cover are layers across the whole section.
 AQUIFER_TOP_Y = -2.0
