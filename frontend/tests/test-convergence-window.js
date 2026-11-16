@@ -1,5 +1,6 @@
 /* ══════════════════════════════════════════════════════════════════
-   test-convergence-window.js — the Convergence window's Save button.
+   test-convergence-window.js — the Convergence window: its Save button, and how it
+   follows a run.
 
    The window is opened the way `results convergence` opens it, on a real log the
    server parsed (`fixtures/convergence-cases.js`), with the server's routes answered by
@@ -7,7 +8,8 @@
    pick saves the run the window shows, at once: nothing is asked of the server
    between the click and the save window, or the browser would not open that window.
 
-   The live part -- the window following a run -- is in `tests/e2e/test_convergence.py`.
+   Calculate opens it and it follows the run, with the same stand-in. The same with a
+   real server and Kratos stood in for is in `tests/e2e/test_convergence.py`.
    ══════════════════════════════════════════════════════════════════ */
 
 (function () {
@@ -131,6 +133,143 @@
       T.eq(named('.png').kind, 'png');
       T.ok(/^<svg/.test(named('.png').text), 'the figure on screen');
     }));
+  });
+
+  /* ── Following a run ────────────────────────────────────────────────────
+
+     Calculate is pressed with the server stood in for: `/api/calculate` answers only
+     when the test says so, and `/api/calculate/status` answers what `status()` says.
+     The window asks once a second; here the clock is hurried, so a test does not wait
+     for it. */
+
+  function hurry() {
+    var real = window.setTimeout;
+    window.setTimeout = function (fn, ms) {
+      return real(fn, ms === W.POLL_MS ? 0 : ms);
+    };
+    return function () { window.setTimeout = real; };
+  }
+
+  function live(ctx, status) {
+    var get = App.Api.get;
+    var asked = '/api/calculate/status';
+    var convergence = BASE + '/convergence';
+    ctx.running = true;
+    App.Api.get = function (path) {
+      if (path === asked) {
+        var next = status();
+        return next instanceof Error ? Promise.reject(next) : Promise.resolve(next);
+      }
+      if (path === convergence) {
+        return get(path).then(function (data) {
+          return Object.assign({}, data, { running: ctx.running });
+        });
+      }
+      return get(path);
+    };
+    var answer = {};
+    var calculated = new Promise(function (resolve, reject) {
+      answer.resolve = resolve;
+      answer.reject = reject;
+    });
+    App.Api.post = function () { return calculated; };
+    var saved = { Export: App.Export, Results: App.Results };
+    App.Export = { meshRequest: function () { return {}; } };
+    App.Results = Object.assign({}, App.Results, {
+      remember: function () { return Promise.resolve(); }
+    });
+    var slow = hurry();
+    var restore = ctx.restore;
+    ctx.restore = function () {
+      slow();
+      restore();
+      App.Export = saved.Export;
+      App.Results = saved.Results;
+    };
+    return answer;
+  }
+
+  function until(check, what) {
+    var tries = 0;
+    return new Promise(function (resolve, reject) {
+      (function look() {
+        if (check()) return resolve();
+        if (++tries > 100) return reject(new Error('never: ' + what()));
+        setTimeout(look, 10);
+      })();
+    });
+  }
+
+  function statusLine(ctx) {
+    var win = windowOf(ctx);
+    return win ? win.querySelector('.cv-line1').textContent : null;
+  }
+
+  test('convergence window: Calculate opens it, it follows the run and says how it ended', function () {
+    var ctx = rig();
+    var answers = [
+      new Error('the server did not answer'),     // asked again a second later
+      { running: true, run: null }                // still meshing
+    ];
+    var answer = live(ctx, function () {
+      return answers.length ? answers.shift() : { running: true, run: RUN };
+    });
+    var calculated = App.Calculate.run();
+    return done(ctx, until(function () { return W.state().open; },
+                           function () { return 'the window opens'; })
+      .then(function () {
+        T.eq(statusLine(ctx), 'Meshing and writing the deck…');
+        return until(function () { return W.state().phase === 'running'; },
+                     function () { return 'running, but ' + W.state().phase; });
+      }).then(function () {
+        T.eq(W.state().run, RUN, 'the run the server named');
+        return until(function () { return /^Running/.test(statusLine(ctx)); },
+                     function () { return 'Running…, but ' + statusLine(ctx); });
+      }).then(function () {
+        T.ok(windowOf(ctx).querySelector('.cv-host svg'), 'the figure is drawn');
+        ctx.running = false;
+        answer.resolve({ ok: true, run: RUN, seconds: 12.5, outputs: [], directory: 'runs',
+                         stats: { elements: 10, nodes: 20 }, warnings: [] });
+        return calculated;
+      }).then(function () {
+        return until(function () { return statusLine(ctx) === 'Finished in 12.5 s'; },
+                     function () { return 'Finished in 12.5 s, but ' + statusLine(ctx); });
+      }).then(function () {
+        T.eq(W.state().phase, 'finished');
+        T.eq(W.state().open, true, 'the window stays open with the last figure');
+      }));
+  });
+
+  test('convergence window: refused because another run goes on, it follows that run', function () {
+    var ctx = rig();
+    var refused = false;
+    // While this page's request is open, Kratos works for nobody yet; once it is
+    // refused, the run started elsewhere shows.
+    var answer = live(ctx, function () {
+      return { running: true, run: refused ? RUN : null };
+    });
+    var calculated = App.Calculate.run();
+    return done(ctx, until(function () { return W.state().open; },
+                           function () { return 'the window opens'; })
+      .then(function () {
+        var busy = new Error('busy');
+        busy.status = 409;
+        refused = true;
+        answer.reject(busy);
+        return calculated;
+      }).then(function () {
+        T.ok(ctx.lines.some(function (line) { return /earlier calculation/.test(line); }),
+             'the command log says why');
+        return until(function () { return W.state().run === RUN; },
+                     function () { return 'the other run, but ' + W.state().run; });
+      }).then(function () {
+        T.eq(W.state().phase, 'running');
+        ctx.running = false;
+        return until(function () { return W.state().phase === 'shown'; },
+                     function () { return 'shown, but ' + W.state().phase; });
+      }).then(function () {
+        T.ok(statusLine(ctx).indexOf(RUN) === 0, 'it names the run: ' + statusLine(ctx));
+      }));
   });
 
   test('convergence window: closing it closes its Save menu', function () {
