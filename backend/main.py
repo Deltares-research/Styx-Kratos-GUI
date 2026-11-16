@@ -34,13 +34,8 @@ from core import gmsh_worker, version
 
 # Try to get frontend path from installed package, fall back to development path
 try:
-    if hasattr(importlib.resources, 'files'):
-        # Python 3.9+
-        backend_files = importlib.resources.files('backend')
-        ROOT = Path(str(backend_files)).parents[0]
-    else:
-        raise AttributeError
-except (ModuleNotFoundError, AttributeError, TypeError):
+    ROOT = Path(str(importlib.resources.files("backend"))).parents[0]
+except (ModuleNotFoundError, TypeError):
     # Development mode: get path relative to this file
     ROOT = Path(__file__).resolve().parents[1]
 

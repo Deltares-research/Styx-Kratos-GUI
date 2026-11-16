@@ -144,7 +144,8 @@ uv build --wheel
 The wheel goes into `dist/`, for example `dist/deltaresstyx-0.1.0-py3-none-any.whl`. Its
 version is `VERSION` in `core/version.py`. The wheel holds the Python code and the browser
 app, and it gives the commands `deltaresstyx` and `kratos-cli`. Kratos is a package of its
-own, so it is not in the wheel.
+own, and since the names of the packages on Nexus and PyPI are not consistent yet, it is not
+added as a dependency in the wheel.
 
 ## Next steps
 
