@@ -246,21 +246,33 @@
     }));
   });
 
-  test('results: "Results at node" asks for a number and refuses anything else', function () {
+  test('results: "Value at a node" asks for a number in an app window and refuses anything else',
+       function () {
     var ctx = rig();
+    window.prompt = function () { throw new Error('the browser prompt must not open'); };
+    function win() { return dialogTitled(ctx, 'Value at a node'); }
+    function input() { return win().querySelector('input[name=name]'); }
     return done(ctx, App.Results.handleCommand('results open ' + RUN).then(function () {
-      window.prompt = function () { return ' 2 '; };
       App.runAction({ action: 'resultsAtNode' });
-      window.prompt = function () { return 'two'; };
-      App.runAction({ action: 'resultsAtNode' });
-      window.prompt = function () { return null; };
-      App.runAction({ action: 'resultsAtNode' });
+      T.ok(win().classList.contains('name-dialog-window'), 'the app window, not a prompt');
+      input().value = ' 2 ';
+      button(win(), 'OK').click();
       return settle(20);
     }).then(function () {
       T.ok(ctx.commands.indexOf('results at 2') >= 0, ctx.commands.join(' | '));
-      T.ok(ctx.lines.some(function (l) { return /"two" is not a node number/.test(l); }));
+      T.ok(!win(), 'closed after OK');
+      App.runAction({ action: 'resultsAtNode' });
+      input().value = 'two';
+      button(win(), 'OK').click();
+      T.ok(win(), 'a refused number keeps the window open');
+      T.eq(win().querySelector('.mesh-settings-message').textContent,
+           '"two" is not a node number.');
+      button(win(), 'Cancel').click();
+      return settle(20);
+    }).then(function () {
+      T.ok(!win());
       T.eq(ctx.commands.filter(function (c) { return /^results at/.test(c); }).length, 1,
-           'a cancelled prompt asks nothing');
+           'a refused or cancelled number asks nothing');
     }));
   });
 

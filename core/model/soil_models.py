@@ -512,19 +512,26 @@ def filled_note(model: str, names: list[str]) -> str | None:
 # ── The water, and what follows from a soil's numbers ───────────────────────
 
 def water(system: str, specific_weight: float | None = None,
-          bulk_modulus: float | None = None, viscosity: float | None = None) -> dict:
+          bulk_modulus: float | None = None, viscosity: float | None = None,
+          gravity: float | None = None) -> dict:
     """The water every soil shares as Kratos reads it, in `system`: the project's
     values (`schemas.Fluid`, `WaterLevel.specific_weight`), water's where it gives
-    none."""
+    none. `gravity` is `Project.gravity_acceleration` (default 9.81 m/s2): the density
+    is the specific weight over it."""
     weight = (specific_weight if specific_weight is not None else
               units.from_si(WATER_SPECIFIC_WEIGHT_SI, units.SPECIFIC_WEIGHT, system))
     return {
-        "DENSITY_WATER": weight / units.gravity(system),
+        "DENSITY_WATER": weight / _gravity(system, gravity),
         "BULK_MODULUS_FLUID": (bulk_modulus if bulk_modulus is not None else
                                units.from_si(WATER_BULK_MODULUS_SI, units.STRESS, system)),
         "DYNAMIC_VISCOSITY": (viscosity if viscosity is not None else
                               units.from_si(WATER_VISCOSITY_SI, units.VISCOSITY, system)),
     }
+
+
+def _gravity(system: str, gravity: float | None) -> float:
+    """`Project.gravity_acceleration` (m/s2) in `system`, or the default 9.81 m/s2."""
+    return units.gravity(system) if gravity is None else units.gravity(system, gravity)
 
 
 def _number(value: Any) -> float | None:
@@ -663,13 +670,14 @@ Not Kratos variables: nothing of these is written."""
 
 
 def computed(law: str, variables: dict, water_variables: dict, system: str,
-             flow: bool = False) -> dict:
+             flow: bool = False, gravity: float | None = None) -> dict:
     """What follows from a soil's numbers, for the window to show beside them, in
     `system`: its unit weight dry, (1 - n) rho_s g, and saturated, with n gamma_w on
     top -- what Kratos weighs it at above and below the phreatic level -- and, where its
-    permeability is listed, the Darcy conductivity that is: k = kappa gamma_w / mu."""
+    permeability is listed, the Darcy conductivity that is: k = kappa gamma_w / mu.
+    `gravity` is `Project.gravity_acceleration` (default 9.81 m/s2)."""
     every = {**derived(law, variables, water_variables, system, flow), **variables}
-    g = units.gravity(system)
+    g = _gravity(system, gravity)
     gamma_w = water_variables["DENSITY_WATER"] * g
     out: dict = {}
     density, porosity = _number(every.get("DENSITY_SOLID")), _number(every.get("POROSITY"))

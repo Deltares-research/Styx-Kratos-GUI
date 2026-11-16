@@ -10,7 +10,8 @@ prescribes there: displacements held at zero (`--fixed`, `--roller`, `--fix`,
 `core.model.drafts.water_pressure_condition`), or a seepage face, where water may leave
 the soil in a groundwater flow calculation (`--seepage`, on a face or a line,
 `core.model.drafts.seepage_condition`). `boundary standard` puts back the
-supports a new project starts with. `gravity` switches the self weight on and off.
+supports a new project starts with. Whether the bodies have their self weight is the
+initial stage's stress initialisation (`kratos-cli stages`), not a condition.
 
 A hydrostatic water pressure given no `--reference-coordinate` is given the project's
 water level, which the record then keeps as its own; the command says which level it
@@ -27,7 +28,7 @@ from cli.terminal.words import (NAME_HELP, action, coordinates, edited, existing
                                 id_help, named_ids, noun)
 from core import session
 from core.kratos import condition_checks
-from core.model import drafts
+from core.model import drafts, stages
 from core.model.schemas import FACES, Project
 
 PRESSURE_TYPES = ("Uniform", "Hydrostatic", "Phreatic_Multi_Line")
@@ -66,12 +67,18 @@ def register(commands, common: argparse.ArgumentParser) -> None:
                 "place of the supports on the faces")
 
     gravity = commands.add_parser("gravity", parents=[common],
-                                  help="show, or switch on or off, the self weight",
-                                  description="Whether gravity acts: the self weight of "
-                                              "every body, in every stage. On in a new "
-                                              "project.")
+                                  help="show whether the self weight acts, or set g",
+                                  description="Whether the self weight acts, and the "
+                                              "gravitational acceleration g: 9.81 m/s2 in "
+                                              "a new project. A number sets g, in m/s2, as "
+                                              "File > Project properties does in the GUI. "
+                                              "There is no switch: the initial stage's "
+                                              "stress initialisation decides whether the "
+                                              "self weight acts (kratos-cli stages P set "
+                                              "initial --stress-initialisation ...).")
     add_project(gravity)
-    gravity.add_argument("switch", nargs="?", choices=("on", "off"), type=str.lower)
+    gravity.add_argument("acceleration", nargs="?", type=_acceleration, metavar="G",
+                         help="the gravitational acceleration g, in m/s2")
     add_writing(gravity)
     gravity.set_defaults(handler=set_gravity)
 
@@ -290,19 +297,45 @@ def standard_conditions(args: argparse.Namespace) -> Answer:
     return answer
 
 
+def _acceleration(text: str) -> float:
+    """g in m/s2. `on` and `off` are refused with what decides the self weight now."""
+    word = text.strip().lower()
+    if word in ("on", "off"):
+        raise argparse.ArgumentTypeError(
+            "gravity has no switch: the initial stage's stress initialisation decides "
+            "whether the self weight acts (stages P set initial --stress-initialisation "
+            "k0|gravity|none). Give a number to set g, in m/s2")
+    try:
+        value = float(word)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{text!r} is not a number (g in m/s2)") from None
+    if not value > 0:
+        raise argparse.ArgumentTypeError(f"g must be above 0 m/s2, not {text}")
+    return value
+
+
 def set_gravity(args: argparse.Namespace) -> Answer:
     project = read(args)
-    if args.switch is None:
-        return Answer(data={"gravity": project.gravity}, lines=[_gravity_line(project)])
-    project = session.set_gravity(project, args.switch == "on")
+    if args.acceleration is None:
+        return Answer(data=_gravity_data(project), lines=[_gravity_line(project)])
+    project = session.set_gravity_acceleration(project, args.acceleration)
     target, where = written(args, project)
-    return Answer(data={"file": str(target) if target else None, "gravity": project.gravity},
+    return Answer(data={"file": str(target) if target else None, **_gravity_data(project)},
                   lines=[f"{_gravity_line(project)} {where}"])
 
 
+def _gravity_data(project: Project) -> dict:
+    return {"gravity": stages.gravity(project),
+            "gravity_acceleration": project.gravity_acceleration}
+
+
 def _gravity_line(project: Project) -> str:
-    return ("Gravity is on: every body has its self weight." if project.gravity else
-            "Gravity is off: no body has a self weight.")
+    """As the GUI's command box says it (`frontend/js/boundary-conditions.js`
+    `gravityLine`)."""
+    g = f"g = {project.gravity_acceleration:g} m/s²"
+    return (f"The self weight acts on every body, with {g}." if stages.gravity(project)
+            else f"The self weight is off: the initial stage initialises no stresses ({g} "
+                 "when it acts).")
 
 
 def remove_condition(args: argparse.Namespace) -> Answer:

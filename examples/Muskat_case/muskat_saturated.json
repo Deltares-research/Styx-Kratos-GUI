@@ -99,7 +99,7 @@
       "active": true
     }
   ],
-  "gravity": true,
+  "gravity_acceleration": 9.81,
   "mesh": {
     "element_size": 0.4,
     "order": 2,
@@ -111,6 +111,7 @@
     "size_min_factor": 0.05,
     "second_order_linear": true,
     "body_sizes": {},
+    "size_bands": {},
     "refinements": [
       {
         "kind": "box",
@@ -131,14 +132,21 @@
       "id": "flow",
       "name": "Flow",
       "parent": null,
-      "calculation": "Groundwater flow",
+      "calculation": "flow",
+      "stress_initialisation": "none",
+      "time_integration": "static",
       "loading": "Staged construction",
       "activate": [],
       "deactivate": [],
       "reset_displacements": false,
+      "convergence_criterion": "water_pressure_criterion",
       "max_iterations": 15,
       "tolerated_error": 0.0001,
-      "time_interval": 0.0
+      "absolute_tolerance": 1e-08,
+      "start_time": 0.0,
+      "duration": 1.0,
+      "time_step": 1.0,
+      "solver_settings": {}
     }
   ],
   "deck": null,
@@ -148,9 +156,15 @@
   "soil_body_labels": {
     "soil_soil": "soil"
   },
+  "soil_body_materials": {
+    "soil_soil": "m_soil"
+  },
   "stageable_parts": [
     "soil_soil",
     "left_head",
     "right_head"
-  ]
+  ],
+  "model_strategies": {
+    "flow": "linear"
+  }
 }

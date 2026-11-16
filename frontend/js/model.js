@@ -466,7 +466,8 @@ App.Model = (function () {
     return interfaceNode;
   }
 
-  /* "Model conditions": the boundary conditions, one row each, and gravity. The frozen
+  /* "Model conditions": the boundary conditions, one row each. Gravity is not one of
+     them: the initial stage's stress initialisation decides it (Stage explorer). The frozen
      tree's own "Model conditions" (js/data.js) lists a demo's rows -- Domain, Water,
      Climate -- that select nothing, and two rows of one label would be the dead-twin
      problem `dropFrozenInterfaceRow` solves; it is dropped the same way. */
@@ -593,18 +594,6 @@ App.Model = (function () {
     };
   }
 
-  function gravityProps() {
-    return {
-      title: 'Gravity', icon: 'settings',
-      groups: { 'General': [
-        ['Gravity acts', App.PROJECT && App.PROJECT.gravity === false ? 'No' : 'Yes', '', false,
-         yesNo(function () { return !(App.PROJECT && App.PROJECT.gravity === false); },
-               function (on) { App.PENDING_GRAVITY = on; return null; })],
-        ['', 'The self weight of every body, in every stage.', '', true]
-      ] }
-    };
-  }
-
   function ensureLinesNode() {
     if (!linesNode) {
       linesNode = { label: 'Lines', icon: 'line', count: 0,
@@ -711,10 +700,10 @@ App.Model = (function () {
   function syncTrees(layeredSoil, soil) {
     var top = layeredSoil ? (soil ? [soil] : []) : topLevelUnion();
     var groups = [customGeometryNode, importedMeshNode, linesNode, sheetPileNode, anchorNode,
-                  interfaceNode, normalLoadNode, loadConditionsNode];
+                  interfaceNode, normalLoadNode, loadConditionsNode, modelConditionsNode];
     function empty(node) { return groups.indexOf(node) >= 0 && !(node.children || []).length; }
     top = top.filter(function (node) { return !empty(node); });
-    groups.concat([waterLevelNode, modelConditionsNode]).forEach(function (node) {
+    groups.concat([waterLevelNode]).forEach(function (node) {
       if (node && !empty(node) && !containsNode(top, node)) top.push(node);
     });
     var tree = orderTree(top);
@@ -1214,6 +1203,43 @@ App.Model = (function () {
       }));
   }
 
+  /* The forces a tendon gives way at, in tension and in compression: a number typed in
+     place, or none, which is no limit (`kratos-cli section set ID --tension-limit
+     none`). Empty means none; a set limit has a button that takes it away, as a typed
+     interface stiffness has one that derives it again. */
+  function tendonLimitRows(tendon, anchorId) {
+    var unit = App.Units.label('force');
+    var rows = [];
+    [['tension_limit', 'Tension limit', 'tension'],
+     ['compression_limit', 'Compression limit', 'compression']].forEach(function (limit) {
+      var field = limit[0];
+      var value = tendon[field];
+      rows.push([limit[1], value === null || value === undefined ? '' : String(value), unit,
+                 false, {
+        kind: 'number', decimals: 0, unit: unit,
+        get: function () { return tendon[field] === undefined ? null : tendon[field]; },
+        set: function (number) {
+          if (number !== null && !Number.isFinite(number)) {
+            return limit[1] + ' must be a number.';
+          }
+          var was = tendon[field];
+          tendon[field] = number;
+          var problem = App.Anchors ? App.Anchors.validateSection(tendon) : null;
+          if (problem) { tendon[field] = was; return problem; }
+          return null;
+        }
+      }]);
+      if (value !== null && value !== undefined) {
+        rows.push(['Limit', '', '', false, { kind: 'button', text: 'No ' + limit[2] + ' limit',
+          run: function () {
+            tendon[field] = null;
+            if (App.commitSelectionEdit) App.commitSelectionEdit(anchorId);
+          } }]);
+      }
+    });
+    return rows;
+  }
+
   /* The 3D anchor: both ends in space, and no out-of-plane spacing to smear over --
      it is the discrete member the user drew, where it was drawn. */
   function spaceAnchorProps(anchor) {
@@ -1241,7 +1267,7 @@ App.Model = (function () {
                               App.PropertySets.decimals(anchor.prestress))],
           ['Active', anchor.active !== false, '', true]
         ],
-        'Tendon': tendonRows(tendon, 3),
+        'Tendon': tendonRows(tendon, 3).concat(tendonLimitRows(tendon, anchor.id)),
         'Geometry': geometry
       }
     };
@@ -1273,7 +1299,7 @@ App.Model = (function () {
         'Tendon': tendonRows(tendon, 2).concat([
           ['Spacing', String(tendon.spacing), 'm', false,
            tendonNumberEditor(tendon, 'spacing', 'm', 3)]
-        ]),
+        ], tendonLimitRows(tendon, anchor.id)),
         'Geometry': geometry
       }
     };
@@ -1402,6 +1428,25 @@ App.Model = (function () {
         if (problem) { section[field] = was; return problem; }
         return null;
       }
+    };
+  }
+
+  /* R_inter: one number for the whole contact, or none, which is each soil's own
+     (`Material.r_inter`) along the stretch that runs against it. None reads as words;
+     writing those words back changes nothing, as a derived stiffness does. */
+  var EACH_SOIL = 'each soil’s own';
+
+  function contactRInter(section) {
+    return section.r_inter === null || section.r_inter === undefined
+      ? EACH_SOIL : section.r_inter;
+  }
+
+  function contactRInterEditor(section) {
+    var number = contactNumberEditor(section, 'r_inter', '', 2);
+    return {
+      kind: 'number', decimals: 2, unit: '',
+      get: function () { return contactRInter(section); },
+      set: function (value) { return value === EACH_SOIL ? null : number.set(value); }
     };
   }
 
@@ -1579,10 +1624,17 @@ App.Model = (function () {
           return strength.indexOf(row[0]) >= 0;
         }));
       } else {
-        properties.push(contact.r_inter === null || contact.r_inter === undefined
-          ? ['R_inter', 'each soil’s own', '', true]
-          : ['R_inter', String(contact.r_inter), '', false,
-             contactNumberEditor(contact, 'r_inter', '', 2)]);
+        // One number for the whole contact, typed in place; or none, which reads
+        // "each soil's own", and the button goes back to that.
+        properties.push(['R_inter', contactRInter(contact) === EACH_SOIL
+          ? EACH_SOIL : String(contact.r_inter), '', false, contactRInterEditor(contact)]);
+        if (contactRInter(contact) !== EACH_SOIL) {
+          properties.push(['R_inter', '', '', false, { kind: 'button',
+            text: 'Each soil’s own R_inter', run: function () {
+              contact.r_inter = null;
+              if (App.commitSelectionEdit) App.commitSelectionEdit(record.id);
+            } }]);
+        }
       }
     }
     properties.push(
@@ -1713,10 +1765,13 @@ App.Model = (function () {
           ['Name', body.name, '', true],
           ['Rename', '', '', false, { kind: 'button', text: 'Rename…',
             run: function () {
-              var name = window.prompt('New name', body.name);
-              if (name && name.trim() && App.Lines) {
-                App.Lines.saveBody(key, { name: name.trim() }).catch(function () {});
-              }
+              return App.NameDialog.ask({ title: 'Rename', value: body.name,
+                                          help: 'Shown in the Model explorer.' })
+                .then(function (name) {
+                  if (name !== null && App.Lines) {
+                    return App.Lines.saveBody(key, { name: name }).catch(function () {});
+                  }
+                });
             } }],
           ['Layer', layer.name, '', true],
           // The materials only, the part's chosen: it has one of its own from the moment
@@ -1870,8 +1925,7 @@ App.Model = (function () {
                      // Filled in from the geometry response, which measures it.
                      ['Volume', '—', 'm³', true],
                      ['Active', true]],
-        'Geometry': geometryRows(layer),
-        'Mesh':     [['Coarseness factor', '1.000'], ['Element count', '—', '', true]]
+        'Geometry': geometryRows(layer)
       }
     };
   }
@@ -2044,17 +2098,27 @@ App.Model = (function () {
     });
     boundaryNode.count = listed.length;
     boundaryNode.children = listed.map(conditionChild);
-    var gravityOn = !(App.PROJECT && App.PROJECT.gravity === false);
-    // No "Boundary conditions [0]" row for a model without any; gravity always acts or not.
-    conditionsNode.children = (listed.length ? [boundaryNode] : []).concat([{
-      label: 'Gravity  ·  ' + (gravityOn ? 'on' : 'off'), icon: 'settings', leaf: true,
-      obj: 'gravity' }]);
+    // No "Boundary conditions [0]" row, nor an empty "Model conditions", for a model
+    // without any.
+    conditionsNode.children = listed.length ? [boundaryNode] : [];
     previousConditionKeys.forEach(function (key) { delete App.OBJECT_PROPS[key]; });
     conditions.forEach(function (record) {
       App.OBJECT_PROPS[record.id] = conditionProps(record);
     });
-    App.OBJECT_PROPS.gravity = gravityProps();
     previousConditionKeys = conditions.map(function (record) { return record.id; });
+
+    // The local mesh size of every object that can have one, in one place: a layer, a
+    // soil body, a structure, an anchor, a soil line, a load, a condition. A condition
+    // on a face shows the size of the face, and one on a soil part that of the part.
+    if (App.MeshSettings && App.MeshSettings.sizableKeys) {
+      var sizable = App.MeshSettings.sizableKeys(App.PROJECT);
+      Object.keys(App.OBJECT_PROPS).forEach(function (id) {
+        var props = App.OBJECT_PROPS[id];
+        var key = App.MeshSettings.sizeKeyOf(App.PROJECT, id);
+        if (key === null || sizable.indexOf(key) < 0 || !(props && props.groups)) return;
+        props.groups.Mesh = App.MeshSettings.selectionRows(key, id);
+      });
+    }
 
     // Last, so every node it has to place already exists.
     syncTrees(!!(App.PROJECT && App.PROJECT.layered_soil), sharedSoilNodes[0]);
@@ -2074,6 +2138,26 @@ App.Model = (function () {
 
   function groupedInteger(value) {
     return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  }
+
+  /* No mesh (Mesh > Clear mesh): the Mesh statistics read "—" again. */
+  function clearMeshStats() {
+    var props = App.OBJECT_PROPS && App.OBJECT_PROPS.mesh;
+    if (props && props.groups && props.groups.Statistics) {
+      props.groups.Statistics.forEach(function (row) {
+        if (row[0] === 'Element type' || row[0] === 'Elements' || row[0] === 'Nodes'
+            || row[0] === 'Average element size') row[1] = '—';
+      });
+    }
+    Object.keys(App.TREES || {}).forEach(function (mode) {
+      (function walk(items) {
+        (items || []).forEach(function (item) {
+          if (item.obj === 'mesh' && /^Elements:/.test(item.label)) item.label = 'Elements: —';
+          if (item.obj === 'mesh' && /^Nodes:/.test(item.label)) item.label = 'Nodes: —';
+          walk(item.children);
+        });
+      })(App.TREES[mode]);
+    });
   }
 
   function setMeshStats(stats) {
@@ -2127,12 +2211,13 @@ App.Model = (function () {
 
   return {
     fromProject: fromProject, materialsToServer: materialsToServer,
-    extentOf: extentOf,
+    extentOf: extentOf, loadsFor: loadsFor,
     pendingDomain: pendingDomain, pendingWater: pendingWater,
     outOfPlaneAxis: outOfPlaneAxis,
     apply: apply, load: load,
     projectTitle: projectTitle, syncTitle: syncTitle,
     rebuildDerived: rebuildDerived, setVolumes: setVolumes, setMeshStats: setMeshStats,
+    clearMeshStats: clearMeshStats,
     setImportedParts: setImportedParts,
     domain: function () { return domain; }
   };

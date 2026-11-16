@@ -1167,6 +1167,28 @@ def test_the_mockup_viewport_is_not_served(client):
     assert client.get("/js/viewport.js").status_code == 404
 
 
+_BROWSER_BOX = re.compile(r"\b(?:window\.)?(prompt|alert|confirm)\s*\(")
+
+
+def test_no_browser_prompt_alert_or_confirm_opens():
+    """Every question the GUI asks is an app window. The browser's own prompt, alert
+    and confirm boxes cannot be shown in a screenshot of the page, so the scripted
+    GUI tutorial could not reach them. The live modules use none; the one frozen use,
+    the Model explorer's Rename of a soil layer, is never reached: the live tree menu
+    takes that row (frontend/js/patches.js, onTreeContextMenu)."""
+    live = Path(__file__).resolve().parents[1] / "frontend" / "js"
+    found = [f"{path.name}: {line.strip()}"
+             for path in sorted(live.glob("*.js"))
+             for line in path.read_text(encoding="utf-8").splitlines()
+             if _BROWSER_BOX.search(line) and not line.lstrip().startswith(("//", "*", "/*"))]
+    assert found == []
+    frozen = [f"{path.name}: {line.strip()}"
+              for path in sorted((BASE / "js").glob("*.js"))
+              for line in path.read_text(encoding="utf-8").splitlines()
+              if _BROWSER_BOX.search(line)]
+    assert frozen == ["explorer.js: var name = window.prompt('Layer name', layer.name);"]
+
+
 # ── The live shell ──────────────────────────────────────────────────────────
 
 def test_root_serves_the_live_shell(client):
@@ -1194,9 +1216,10 @@ def test_the_live_shell_replaces_only_the_viewport_and_the_orbit_controller(clie
                            "toolbars.js", "explorer.js", "command.js", "dialogs.js", "app.js"}
     # Additions rather than substitutions -- they have no frozen counterpart:
     # soil-volume-dialog.js, canvas-renderer.js, ruler.js, mesh-labels.js,
-    # download.js, zip.js, stages.js, results.js, results-render.js, results-view.js,
+    # download.js, zip.js, stages.js, solver-settings.js, results.js, results-render.js,
+    # results-view.js,
     # part-colors.js, water-command.js, script-command.js, node-parts.js, deck.js,
-    # results-plot.js, vocabulary.js.
+    # results-plot.js, vocabulary.js, point-list.js.
     # The assertion above is the one that guards the portability claim.
     assert set(replaced) == {"api.js", "buffers.js", "model.js", "viewport.js", "patches.js",
                              "vocabulary.js",
@@ -1208,9 +1231,17 @@ def test_the_live_shell_replaces_only_the_viewport_and_the_orbit_controller(clie
                              "export.js", "calculate.js", "history.js", "loads.js",
                              "beams.js", "anchors.js",
                              "interfaces.js", "normal-loads.js", "lines.js",
+                             # The x, y point list of the Line and normal load windows.
+                             "point-list.js",
+                             # The Rename and project name window, in place of
+                             # the browser's prompt.
+                             "name-dialog.js",
                              "boundary-conditions.js", "material-library.js",
                              "orbit.js", "ruler.js", "mesh-labels.js",
                              "download.js", "zip.js", "stages.js", "results.js",
+                             # A stage's expert solver settings, generated from
+                             # core/model/solver.py, which stages.js resolves.
+                             "solver-settings.js",
                              "results-render.js", "results-view.js", "part-colors.js",
                              "water-command.js", "script-command.js", "node-parts.js",
                              "deck.js",
@@ -1719,34 +1750,33 @@ def test_patch_stages_can_clear_the_sequence(client):
     client.put("/api/project", json=seed_project().model_dump())
 
 
-def test_post_default_stages_seeds_the_initial_stage_and_the_null_step(client):
-    """What "Create default stages" gives: `stages.default_stages`, the initial stage
-    and the null step, and nothing else -- even for a project with lifts to dig."""
+def test_there_is_no_default_stages_route(client):
+    """Every stage is the user's to add: there are no default stages."""
+    for route in ("/api/project/stages/defaults", "/api/project/phases/defaults"):
+        assert client.post(route).status_code in (404, 405)
+
+
+def test_a_stage_carries_its_three_choices(client):
     client.put("/api/project", json=_staged_project())
-
-    response = client.post("/api/project/stages/defaults")
+    response = client.patch("/api/project/stages", json={"stages": [
+        {"id": "initial", "name": "Initial stage", "stress_initialisation": "K0"},
+        {"id": "shake", "name": "Shake", "parent": "initial",
+         "time_integration": "dynamic"}]})
     assert response.status_code == 200
-    seeded = response.json()["project"]["stages"]
-    assert [p["id"] for p in seeded] == ["initial", "null_step"]
-    assert seeded[0]["calculation"] == "K0 procedure"
-    assert seeded[0]["parent"] is None
-    assert seeded[1]["parent"] == "initial"
-
-    assert client.get("/api/project").json()["stages"] == seeded
+    got = [(s["calculation"], s["stress_initialisation"], s["time_integration"])
+           for s in response.json()["project"]["stages"]]
+    assert got == [("mechanical", "K0", "static"), ("mechanical", "none", "dynamic")]
 
     client.put("/api/project", json=seed_project().model_dump())
 
 
-def test_post_default_stages_replaces_what_is_there(client):
-    """"Reset to defaults" is the only way back out of a sequence the user has broken,
-    so it overwrites rather than refusing because stages already exist."""
+def test_a_flow_stage_with_a_stress_initialisation_is_refused(client):
     client.put("/api/project", json=_staged_project())
-    client.patch("/api/project/stages", json={"stages": [
-        {"id": "mine", "name": "Just the one"}]})
-
-    seeded = client.post("/api/project/stages/defaults").json()["project"]["stages"]
-    assert [p["id"] for p in seeded][0] == "initial"
-    assert "mine" not in [p["id"] for p in seeded]
+    response = client.patch("/api/project/stages", json={"stages": [
+        {"id": "flow", "name": "Flow", "calculation": "flow",
+         "stress_initialisation": "K0"}]})
+    assert response.status_code == 422
+    assert "no stresses to initialise" in str(response.json()["detail"])
 
     client.put("/api/project", json=seed_project().model_dump())
 
@@ -1764,16 +1794,10 @@ def test_the_old_patch_phases_route_still_answers(client):
     response = client.patch("/api/project/phases", json={"phases": [
         {"id": "initial", "name": "Initial stage", "calculation": "K0 procedure"}]})
     assert response.status_code == 200
-    assert [s["id"] for s in client.get("/api/project").json()["stages"]] == ["initial"]
-
-    client.put("/api/project", json=seed_project().model_dump())
-
-
-def test_the_old_default_phases_route_still_answers(client):
-    client.put("/api/project", json=_staged_project())
-    new = client.post("/api/project/stages/defaults").json()["project"]["stages"]
-    old = client.post("/api/project/phases/defaults").json()["project"]["stages"]
-    assert old == new
+    stored = client.get("/api/project").json()["stages"]
+    assert [s["id"] for s in stored] == ["initial"]
+    assert (stored[0]["calculation"], stored[0]["stress_initialisation"]) == \
+        ("mechanical", "K0")
 
     client.put("/api/project", json=seed_project().model_dump())
 
@@ -1793,7 +1817,9 @@ def test_a_branch_sent_as_phases_is_refused_under_stages(client):
 
 def test_a_project_put_with_phases_is_accepted(client):
     client.put("/api/project", json=_staged_project())
-    client.post("/api/project/stages/defaults")
+    client.patch("/api/project/stages", json={"stages": [
+        {"id": "initial", "name": "Initial stage", "stress_initialisation": "K0"},
+        {"id": "null_step", "name": "Null step", "parent": "initial"}]})
     doc = client.get("/api/project").json()
     doc["phases"] = doc.pop("stages")
     assert client.put("/api/project", json=doc).status_code == 200

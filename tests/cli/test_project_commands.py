@@ -122,7 +122,7 @@ def test_check_refuses_mesh_settings_for_a_part_the_model_does_not_have(cli, sit
     ran = cli("check", site)
 
     assert ran.code == 1
-    assert "mesh settings name bodies this model does not have: removed_body" in ran.err
+    assert "mesh settings name objects this model does not have: removed_body" in ran.err
 
 
 def test_check_refuses_stages_that_branch(cli, site):
@@ -147,22 +147,22 @@ def test_check_refuses_flow_and_deformation_stages_mixed(cli, site):
     said before meshing, in the export's words."""
     payload = json.loads(site.read_text(encoding="utf-8"))
     payload["stages"] = [
-        {"id": "initial", "name": "Initial stage", "calculation": "K0 procedure"},
+        {"id": "initial", "name": "Initial stage", "stress_initialisation": "K0"},
         {"id": "flow", "name": "Flow", "parent": "initial",
-         "calculation": "Groundwater flow"},
+         "calculation": "flow"},
     ]
     site.write_text(json.dumps(payload), encoding="utf-8")
 
     ran = cli("check", site)
 
     assert ran.code == 1
-    assert ("cannot mix groundwater flow stages ('Flow') with deformation stages "
+    assert ("cannot mix flow stages ('Flow') with mechanical stages "
             "('Initial stage')") in ran.err
 
 
 def test_check_refuses_a_flow_stage_with_no_fixed_head(cli, site):
     payload = json.loads(site.read_text(encoding="utf-8"))
-    payload["stages"] = [{"id": "flow", "name": "Flow", "calculation": "Groundwater flow"}]
+    payload["stages"] = [{"id": "flow", "name": "Flow", "calculation": "flow"}]
     payload["boundary_conditions"] = []
     for material in payload["materials"]:
         material["variables"]["PERMEABILITY_XX"] = 1e-12
@@ -338,7 +338,7 @@ def test_an_edit_of_a_deck_s_stages_is_refused(cli, tmp_path):
         "deck": Deck(directory=str(tmp_path))}), tmp_path / "deck.json")
     before = path.read_bytes()
 
-    ran = cli("stages", path, "defaults")
+    ran = cli("stages", path, "add")
 
     assert ran.code == 1
     assert "Edit the deck" in ran.err
@@ -372,3 +372,20 @@ def test_a_fault_in_this_program_is_raised_not_dressed_up_as_a_refusal(cli, site
     monkeypatch.setattr(commands, "summary", broken)
     with pytest.raises(KeyError, match="a bug"):
         cli("show", site)
+
+
+def test_opening_an_old_file_says_what_gravity_off_no_longer_does(cli, site):
+    """Gravity was a switch of its own until 2026-11-03 (`migration.notes`): off in a
+    project with no stages, there is no initial stage to leave the self weight out, so
+    the command that opens the file says so. A file that is not there has nothing to
+    say, but the refusal."""
+    document = json.loads(site.read_text(encoding="utf-8"))
+    site.write_text(json.dumps({**document, "stages": [], "gravity": False}),
+                    encoding="utf-8")
+    ran = cli("show", site)
+    assert ran.code == 0
+    assert "switched gravity off" in ran.err
+    assert "switched gravity off" not in cli("show", site.with_name("none.json")).err
+    document["gravity"] = True
+    site.write_text(json.dumps(document), encoding="utf-8")
+    assert "gravity" not in cli("show", site).err

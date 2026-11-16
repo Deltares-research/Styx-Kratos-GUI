@@ -14,49 +14,51 @@
   },
   "materials": [
     {
-      "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
+      "constitutive_law": "GeoMohrCoulombLawPlaneStrain",
       "variables": {
         "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
         "YOUNG_MODULUS": 900000.0,
         "POISSON_RATIO": 0.2,
-        "DENSITY_SOLID": 1834.8623853211009,
+        "DENSITY_SOLID": 1834.86,
         "POROSITY": 0.0,
-        "PERMEABILITY_XX": 1.1574074074074073e-05,
-        "GEO_COHESION": 1000.0,
-        "GEO_FRICTION_ANGLE": 22.3,
-        "BULK_MODULUS_SOLID": 10000000000.0,
-        "PERMEABILITY_YY": 1.1574074074074073e-05,
-        "PERMEABILITY_XY": 0.0,
-        "K0_NC": 0.62
+        "GEO_COHESION": 3000.0,
+        "GEO_FRICTION_ANGLE": 22.5,
+        "GEO_DILATANCY_ANGLE": 0.0,
+        "GEO_ENABLE_TENSION_CUT_OFF": false,
+        "K0_NC": 0.62,
+        "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+        "SATURATED_SATURATION": 1.0,
+        "RESIDUAL_SATURATION": 1e-10
       },
       "tables": {},
-      "id": "m_upper",
-      "name": "Upper ground",
+      "id": "clay",
+      "name": "Clay",
       "color": "#c4a86a",
-      "r_inter": 0.7,
+      "r_inter": 0.48021693505171,
       "interface_permeability": "Neutral"
     },
     {
-      "constitutive_law": "GeoLinearElasticPlaneStrain2DLaw",
+      "constitutive_law": "GeoMohrCoulombLawPlaneStrain",
       "variables": {
         "GEO_DRAINAGE_TYPE": "CONSTANT_PW_FIELD",
         "YOUNG_MODULUS": 7428600.0,
         "POISSON_RATIO": 0.3,
-        "DENSITY_SOLID": 2038.735983690112,
+        "DENSITY_SOLID": 2038.74,
         "POROSITY": 0.0,
-        "PERMEABILITY_XX": 5.787037037037037e-05,
         "GEO_COHESION": 0.0,
-        "GEO_FRICTION_ANGLE": 32.7,
-        "BULK_MODULUS_SOLID": 10000000000.0,
-        "PERMEABILITY_YY": 5.787037037037037e-05,
-        "PERMEABILITY_XY": 0.0,
-        "K0_NC": 0.46
+        "GEO_FRICTION_ANGLE": 32.5,
+        "GEO_DILATANCY_ANGLE": 0.0,
+        "GEO_ENABLE_TENSION_CUT_OFF": false,
+        "K0_NC": 0.46,
+        "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+        "SATURATED_SATURATION": 1.0,
+        "RESIDUAL_SATURATION": 1e-10
       },
       "tables": {},
-      "id": "m_lower",
-      "name": "Deep sand",
+      "id": "sand",
+      "name": "Sand",
       "color": "#b08a6a",
-      "r_inter": 0.7,
+      "r_inter": 0.571318827227732,
       "interface_permeability": "Neutral"
     }
   ],
@@ -64,21 +66,21 @@
     {
       "id": "L_top",
       "name": "Soil_Top",
-      "mat": "m_upper",
+      "mat": "clay",
       "top": 0.0,
       "bottom": -8.0
     },
     {
       "id": "L_mid",
       "name": "Soil_Middle",
-      "mat": "m_upper",
+      "mat": "clay",
       "top": -8.0,
       "bottom": -12.0
     },
     {
       "id": "L_bot",
       "name": "Soil_Bottom",
-      "mat": "m_lower",
+      "mat": "sand",
       "top": -12.0,
       "bottom": -60.0
     }
@@ -122,7 +124,7 @@
         2.5,
         -1.0
       ],
-      "mat": "m_upper"
+      "mat": "clay"
     },
     {
       "id": "retained",
@@ -132,7 +134,7 @@
         40.0,
         -4.0
       ],
-      "mat": "m_upper"
+      "mat": "clay"
     },
     {
       "id": "lift2",
@@ -142,7 +144,7 @@
         2.5,
         -3.5
       ],
-      "mat": "m_upper"
+      "mat": "clay"
     },
     {
       "id": "lift3",
@@ -152,7 +154,7 @@
         2.5,
         -6.5
       ],
-      "mat": "m_upper"
+      "mat": "clay"
     },
     {
       "id": "pit",
@@ -162,7 +164,7 @@
         2.5,
         -10.0
       ],
-      "mat": "m_upper"
+      "mat": "clay"
     },
     {
       "id": "retained",
@@ -172,7 +174,7 @@
         40.0,
         -10.0
       ],
-      "mat": "m_upper"
+      "mat": "clay"
     }
   ],
   "loads": [
@@ -202,7 +204,7 @@
         "DENSITY": 298.36,
         "CROSS_AREA": 0.4924,
         "I33": 0.009948850085333335,
-        "AREA_EFFECTIVE_Y": 10.0
+        "AREA_EFFECTIVE_Y": 10000.0
       },
       "tables": {},
       "id": "sheetpile",
@@ -240,7 +242,7 @@
         "DENSITY": 0.0
       },
       "tables": {},
-      "id": "strand",
+      "id": "strut",
       "name": "Strut",
       "spacing": 1.0,
       "tension_limit": null,
@@ -252,7 +254,7 @@
       "id": "strut",
       "name": "Strut",
       "kind": "anchor",
-      "section": "strand",
+      "section": "strut",
       "head": [
         5.0,
         -1.5
@@ -267,13 +269,13 @@
   ],
   "interface_sections": [
     {
-      "constitutive_law": "GeoIncrementalLinearElasticInterfaceLaw",
+      "constitutive_law": "GeoInterfaceCoulombLawPlaneStrain",
       "variables": {},
       "tables": {},
       "id": "contact",
       "name": "Wall contact",
       "material": null,
-      "r_inter": 0.7,
+      "r_inter": null,
       "virtual_thickness": 1.0,
       "permeability": "Neutral"
     }
@@ -433,7 +435,7 @@
       "active": true
     }
   ],
-  "gravity": true,
+  "gravity_acceleration": 9.81,
   "mesh": {
     "element_size": 5.0,
     "order": 2,
@@ -447,19 +449,10 @@
     "body_sizes": {
       "sheetpile": 0.5
     },
-    "refinements": [
-      {
-        "kind": "box",
-        "size": 0.75,
-        "thickness": 45.0,
-        "x_min": -1.0,
-        "x_max": 8.0,
-        "z_min": -1.0,
-        "z_max": 11.0,
-        "y_min": -16.0,
-        "y_max": 1.0
-      }
-    ]
+    "size_bands": {
+      "sheetpile": 30.0
+    },
+    "refinements": []
   },
   "custom_parts": [],
   "stages": [
@@ -467,7 +460,9 @@
       "id": "initial",
       "name": "Initial stage",
       "parent": null,
-      "calculation": "K0 procedure",
+      "calculation": "mechanical",
+      "stress_initialisation": "K0",
+      "time_integration": "static",
       "loading": "Staged construction",
       "activate": [],
       "deactivate": [
@@ -480,28 +475,42 @@
         "water_3"
       ],
       "reset_displacements": false,
+      "convergence_criterion": "residual_criterion",
       "max_iterations": 15,
       "tolerated_error": 0.0001,
-      "time_interval": 0.0
+      "absolute_tolerance": 1e-09,
+      "start_time": 0.0,
+      "duration": 1.0,
+      "time_step": 1.0,
+      "solver_settings": {}
     },
     {
       "id": "null_step",
       "name": "Null step",
       "parent": "initial",
-      "calculation": "Null step",
+      "calculation": "mechanical",
+      "stress_initialisation": "none",
+      "time_integration": "static",
       "loading": "Staged construction",
       "activate": [],
       "deactivate": [],
       "reset_displacements": false,
+      "convergence_criterion": "residual_criterion",
       "max_iterations": 150,
       "tolerated_error": 0.0001,
-      "time_interval": 0.0
+      "absolute_tolerance": 1e-09,
+      "start_time": 0.0,
+      "duration": 1.0,
+      "time_step": 1.0,
+      "solver_settings": {}
     },
     {
-      "id": "install_sheetpile",
-      "name": "SheetPileWall installation",
+      "id": "install_wall",
+      "name": "Wall installation",
       "parent": "null_step",
-      "calculation": "Plastic",
+      "calculation": "mechanical",
+      "stress_initialisation": "none",
+      "time_integration": "static",
       "loading": "Staged construction",
       "activate": [
         "sheetpile",
@@ -509,16 +518,23 @@
         "surcharge"
       ],
       "deactivate": [],
-      "reset_displacements": true,
+      "reset_displacements": false,
+      "convergence_criterion": "residual_criterion",
       "max_iterations": 150,
       "tolerated_error": 0.001,
-      "time_interval": 0.0
+      "absolute_tolerance": 1e-09,
+      "start_time": 0.0,
+      "duration": 1.0,
+      "time_step": 1.0,
+      "solver_settings": {}
     },
     {
       "id": "dig_1",
       "name": "First excavation",
-      "parent": "install_sheetpile",
-      "calculation": "Plastic",
+      "parent": "install_wall",
+      "calculation": "mechanical",
+      "stress_initialisation": "none",
+      "time_integration": "static",
       "loading": "Staged construction",
       "activate": [
         "water_1"
@@ -527,30 +543,44 @@
         "soil_L_top__lift1"
       ],
       "reset_displacements": false,
-      "max_iterations": 150,
+      "convergence_criterion": "residual_criterion",
+      "max_iterations": 500,
       "tolerated_error": 0.001,
-      "time_interval": 0.0
+      "absolute_tolerance": 1e-09,
+      "start_time": 0.0,
+      "duration": 1.0,
+      "time_step": 1.0,
+      "solver_settings": {}
     },
     {
       "id": "install_strut",
       "name": "Strut installation",
       "parent": "dig_1",
-      "calculation": "Plastic",
+      "calculation": "mechanical",
+      "stress_initialisation": "none",
+      "time_integration": "static",
       "loading": "Staged construction",
       "activate": [
         "strut"
       ],
       "deactivate": [],
       "reset_displacements": false,
+      "convergence_criterion": "residual_criterion",
       "max_iterations": 150,
       "tolerated_error": 0.001,
-      "time_interval": 0.0
+      "absolute_tolerance": 1e-09,
+      "start_time": 0.0,
+      "duration": 1.0,
+      "time_step": 1.0,
+      "solver_settings": {}
     },
     {
       "id": "dig_2",
       "name": "Second excavation",
       "parent": "install_strut",
-      "calculation": "Plastic",
+      "calculation": "mechanical",
+      "stress_initialisation": "none",
+      "time_integration": "static",
       "loading": "Staged construction",
       "activate": [
         "water_2"
@@ -560,15 +590,22 @@
         "water_1"
       ],
       "reset_displacements": false,
-      "max_iterations": 150,
+      "convergence_criterion": "residual_criterion",
+      "max_iterations": 300,
       "tolerated_error": 0.001,
-      "time_interval": 0.0
+      "absolute_tolerance": 1e-09,
+      "start_time": 0.0,
+      "duration": 1.0,
+      "time_step": 1.0,
+      "solver_settings": {}
     },
     {
       "id": "dig_3",
       "name": "Third excavation",
       "parent": "dig_2",
-      "calculation": "Plastic",
+      "calculation": "mechanical",
+      "stress_initialisation": "none",
+      "time_integration": "static",
       "loading": "Staged construction",
       "activate": [
         "water_3"
@@ -578,9 +615,14 @@
         "water_2"
       ],
       "reset_displacements": false,
-      "max_iterations": 150,
+      "convergence_criterion": "residual_criterion",
+      "max_iterations": 300,
       "tolerated_error": 0.001,
-      "time_interval": 0.0
+      "absolute_tolerance": 1e-09,
+      "start_time": 0.0,
+      "duration": 1.0,
+      "time_step": 1.0,
+      "solver_settings": {}
     }
   ],
   "deck": null,
@@ -603,13 +645,13 @@
     "soil_L_bot": "Soil_Bottom"
   },
   "soil_body_materials": {
-    "soil_L_top__lift1": "m_upper",
-    "soil_L_top__retained": "m_upper",
-    "soil_L_top__lift2": "m_upper",
-    "soil_L_top__lift3": "m_upper",
-    "soil_L_mid__pit": "m_upper",
-    "soil_L_mid__retained": "m_upper",
-    "soil_L_bot": "m_lower"
+    "soil_L_top__lift1": "clay",
+    "soil_L_top__retained": "clay",
+    "soil_L_top__lift2": "clay",
+    "soil_L_top__lift3": "clay",
+    "soil_L_mid__pit": "clay",
+    "soil_L_mid__retained": "clay",
+    "soil_L_bot": "sand"
   },
   "stageable_parts": [
     "soil_L_top__lift1",
@@ -627,5 +669,6 @@
     "water_3",
     "surcharge",
     "pore_pressure"
-  ]
+  ],
+  "model_strategies": {}
 }

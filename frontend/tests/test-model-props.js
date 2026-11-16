@@ -94,6 +94,14 @@
     return project;
   }
 
+  /* The same, against Mohr-Coulomb soils: a Coulomb contact takes their strength,
+     reduced by R_inter, so the R_inter row is listed once the law is Coulomb. */
+  function mohrCoulombInterface() {
+    var project = freeInterface();
+    project.materials.forEach(function (m) { m.constitutive_law = 'GeoMohrCoulombLawPlaneStrain'; });
+    return project;
+  }
+
   var MODELS = [['2D', function () { return window.VIEWPORT_PAYLOADS.project; }],
                 ['3D', function () { return window.VIEWPORT_PAYLOADS.project3d; }],
                 ['conditions and custom soil', conditionsAndBodies],
@@ -114,6 +122,121 @@
       T.eq(member.points[1][1], changed);
       T.ok(y2.set(member.points[0][1]), 'coincident endpoints are refused');
       T.eq(y2.get(), changed, 'the refused coordinate is rolled back');
+    });
+  });
+
+  test("an anchor's force limits are typed in place, and taken away with a button", function () {
+    var project = JSON.parse(JSON.stringify(window.VIEWPORT_PAYLOADS.project));
+    var pile = project.beams[0];
+    var anchor = App.Anchors.draftFromPoints(project, [pile.points[0], [pile.points[0][0] - 1,
+                                                                        pile.points[0][1]]]);
+    project.anchors = [anchor];
+    project.anchor_sections = App.Anchors.sectionsFor(project, anchor);
+    project.anchor_sections.forEach(function (section) {
+      if (section.id === anchor.section) {
+        section.tension_limit = 900;
+        section.compression_limit = null;
+      }
+    });
+    withProject(project, function () {
+      var tendon = App.ANCHOR_SECTIONS.filter(function (s) { return s.id === anchor.section; })[0];
+      function rows() { return App.OBJECT_PROPS[anchor.id].groups.Tendon; }
+      function row(label) { return rows().filter(function (r) { return r[0] === label; }); }
+      var tension = row('Tension limit')[0], compression = row('Compression limit')[0];
+      T.ok(tension && compression, 'both limits have a row');
+      T.eq(tension[4].get(), tendon.tension_limit);
+      T.eq(compression[4].get(), null, 'a tendon takes no compression: no limit');
+      T.ok(tension[4].set(-5), 'a limit must be above nought');
+      T.eq(compression[4].set(250), null);
+      T.eq(tendon.compression_limit, 250);
+      var saved = App.commitSelectionEdit, committed = [];
+      App.commitSelectionEdit = function (key) { committed.push(key); };
+      try {
+        var clear = row('Limit').filter(function (r) { return /tension/.test(r[4].text); })[0];
+        T.ok(clear, 'a set tension limit can be taken away');
+        clear[4].run();
+        T.eq(tendon.tension_limit, null);
+        T.eq(committed, [anchor.id]);
+      } finally { App.commitSelectionEdit = saved; }
+    });
+  });
+
+  test('a layer and a sheet pile have a Mesh group: size and band', function () {
+    var project = JSON.parse(JSON.stringify(window.VIEWPORT_PAYLOADS.project));
+    var pile = project.beams[0].id;
+    project.mesh = Object.assign({}, project.mesh, { body_sizes: {}, size_bands: {} });
+    project.mesh.body_sizes[pile] = 0.5;
+    project.mesh.size_bands[pile] = 4;
+    withProject(project, function () {
+      var layerKey = 'soil_' + App.LAYERS[0].id;
+      [layerKey, pile].forEach(function (key) {
+        var rows = App.OBJECT_PROPS[key] && App.OBJECT_PROPS[key].groups.Mesh;
+        T.ok(rows, key + ' has a Mesh group');
+        T.eq(rows.slice(0, 2).map(function (r) { return r[0]; }), ['Mesh size', 'Band'], key);
+      });
+      var wall = App.OBJECT_PROPS[pile].groups.Mesh;
+      T.eq([wall[0][4].get(), wall[1][4].get()], [0.5, 4]);
+      T.eq(wall[2][0], 'Size', 'a size of its own can go back to the global size');
+      var layer = App.OBJECT_PROPS[layerKey].groups.Mesh;
+      T.eq(layer[0][4].get(), 'global');
+      T.ok(/before a band/.test(layer[1][4].set(5)), 'no band without a size');
+      try {
+        T.eq(layer[0][4].set(1.5), null);
+        T.eq(App.PENDING_MESH_SIZE, { key: layerKey, size: 1.5, band: null });
+      } finally { App.PENDING_MESH_SIZE = undefined; }
+    });
+  });
+
+  test('an interface picks its law, and its R_inter can go back to each soil\'s own', function () {
+    withProject(mohrCoulombInterface(), function () {
+      var contact = App.INTERFACES[0];
+      var section = App.INTERFACE_SECTIONS.filter(function (s) {
+        return s.id === contact.section; })[0];
+      function rows() { return App.OBJECT_PROPS[contact.id].groups.Contact; }
+      function row(label) { return rows().filter(function (r) { return r[0] === label; })[0]; }
+      var law = row('Law');
+      T.ok(law, 'the law is a row');
+      T.eq(law[4].options().map(function (o) { return o.value; }),
+           ['GeoIncrementalLinearElasticInterfaceLaw', 'GeoInterfaceCoulombLawPlaneStrain']);
+      T.eq(law[4].set('GeoInterfaceCoulombLawPlaneStrain'), null);
+      T.eq(section.constitutive_law, 'GeoInterfaceCoulombLawPlaneStrain');
+      // The law says what else is listed: the rows are drawn again, as a save does.
+      App.Model.rebuildDerived();
+
+      var rInter = row('R_inter');
+      T.eq(rInter[4].get(), section.r_inter);
+      T.eq(rInter[4].set(0.5), null);
+      T.eq(section.r_inter, 0.5);
+      T.ok(rInter[4].set(1.5), 'above 1 is refused');
+      App.Model.rebuildDerived();
+      var saved = App.commitSelectionEdit, committed = [];
+      App.commitSelectionEdit = function (key) { committed.push(key); };
+      try {
+        rows().filter(function (r) {
+          return r[4] && r[4].kind === 'button' && r[4].text === 'Each soil’s own R_inter';
+        })[0][4].run();
+        T.eq(section.r_inter, null, "each soil's own");
+        T.eq(committed, [contact.id]);
+      } finally { App.commitSelectionEdit = saved; }
+    });
+  });
+
+  test("an R_inter left to each soil reads so, and a number typed in sets one", function () {
+    var project = mohrCoulombInterface();
+    project.interface_sections.forEach(function (s) {
+      s.r_inter = null;
+      s.constitutive_law = 'GeoInterfaceCoulombLawPlaneStrain';
+    });
+    withProject(project, function () {
+      var contact = App.INTERFACES[0];
+      var rInter = App.OBJECT_PROPS[contact.id].groups.Contact.filter(function (r) {
+        return r[0] === 'R_inter'; })[0];
+      T.eq(rInter[1], 'each soil\u2019s own');
+      T.eq(rInter[4].set(rInter[4].get()), null, 'writing back what it read changes nothing');
+      T.eq(rInter[4].set(0.6), null);
+      var section = App.INTERFACE_SECTIONS.filter(function (s) {
+        return s.id === contact.section; })[0];
+      T.eq(section.r_inter, 0.6);
     });
   });
 
@@ -271,10 +394,11 @@
           return Promise.resolve();
         };
         ['Loads', 'NormalLoads', 'Beams', 'Anchors', 'Interfaces', 'SoilVolumeDialog',
-         'BoundaryConditions'].forEach(function (module) {
+         'BoundaryConditions', 'MeshSettings'].forEach(function (module) {
           saved[module] = App[module];
           App[module] = Object.assign({}, App[module]);
-          (module === 'SoilVolumeDialog' ? ['open'] : ['edit', 'remove']).forEach(function (verb) {
+          (module === 'SoilVolumeDialog' ? ['open']
+            : module === 'MeshSettings' ? ['saveLocalSize'] : ['edit', 'remove']).forEach(function (verb) {
             App[module][verb] = function () {
               reached.push({ method: module + '.' + verb, args: Array.prototype.slice.call(arguments) });
               return Promise.resolve();
@@ -297,8 +421,13 @@
                 return (entry[1] || []).some(function (record) { return record.id === key; });
               })[0];
               var expected;
-              if (part) expected = { method: 'SoilVolumeDialog.open', args: [part] };
-              else if (label === 'Stiffness') expected = { method: 'commitSelectionEdit', args: [key] };
+              if (label === 'Size') {
+                expected = { method: 'MeshSettings.saveLocalSize', args: [key, null, null] };
+              }
+              else if (part) expected = { method: 'SoilVolumeDialog.open', args: [part] };
+              else if (label === 'Stiffness' || label === 'Limit' || label === 'Strength') {
+                expected = { method: 'commitSelectionEdit', args: [key] };
+              }
               else {
                 T.ok(module, where + ': no expected object family');
                 T.ok(label === 'Edit' || label === 'Delete', where + ': no expected button action');

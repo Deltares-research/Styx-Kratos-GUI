@@ -263,10 +263,9 @@ def test_the_load_value_and_the_anchor_support_reach_the_process_file(golden, de
 
 
 STAGES = [
-    {"id": "initial", "name": "Initial stage", "calculation": "K0 procedure",
+    {"id": "initial", "name": "Initial stage", "stress_initialisation": "K0",
      "deactivate": ["pile_1", "anchor_1", "load_1"]},
-    {"id": "null_step", "name": "Null step", "parent": "initial",
-     "calculation": "Null step"},
+    {"id": "null_step", "name": "Null step", "parent": "initial"},
     {"id": "wall", "name": "Wall installation", "parent": "null_step",
      "activate": ["pile_1", "load_1"], "reset_displacements": True},
     {"id": "dig", "name": "Excavation", "parent": "wall", "deactivate": ["soil_L1__part1"]},

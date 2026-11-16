@@ -270,16 +270,16 @@ def test_stages_that_branch_are_refused_naming_the_branches():
         session.replace_stages(staged(), StagesUpdate(stages=sequence))
 
 
-def test_the_default_stages_are_the_model_s_own():
-    project = staged()
-
-    assert session.default_stages(project).stages == stages.default_stages(project)
+def test_there_are_no_default_stages():
+    """A project starts with no stages, and every one is the user's to add."""
+    assert not hasattr(session, "default_stages")
+    assert not hasattr(stages, "default_stages")
 
 
 @pytest.mark.parametrize("edit", [
     lambda p: session.replace_stages(p, StagesUpdate(stages=[])),
-    session.default_stages,
-], ids=["replace", "defaults"])
+    lambda p: session.add_stage(p)[0],
+], ids=["replace", "add"])
 def test_the_stages_of_a_deck_are_read_only(edit):
     with pytest.raises(session.DeckReadOnly, match="Edit the deck"):
         edit(a_deck())
@@ -429,7 +429,7 @@ def test_a_value_is_read_by_its_path():
 
 
 def test_a_path_may_still_say_phases():
-    project = session.default_stages(seed_project())
+    project, _ = session.add_stage(seed_project())
 
     assert session.value_at(project, "phases") == session.value_at(project, "stages")
     renamed = session.with_value(project, f"phases[{project.stages[0].id}].name", "First")
@@ -777,6 +777,10 @@ def test_a_material_is_changed_variable_by_variable():
     assert material.name == "Fill, stiff"
 
 
+def test_a_material_gets_its_own_r_inter():
+    assert session.update_material(seed_project(), "m1", r_inter=0.45).materials[0].r_inter         == 0.45
+
+
 def test_unsetting_a_variable_the_material_does_not_have_is_refused():
     with pytest.raises(session.EditRefused, match="NOPE"):
         session.update_material(seed_project(), "m1", unset=["NOPE"])
@@ -997,6 +1001,18 @@ def test_a_body_a_3d_edit_takes_away_takes_its_mesh_size_with_it():
     assert session.removed_sizes(project, volume_gone) == [
         "Removed the mesh size of drawn_0 (0.5): the edit took that body away. If it "
         "comes back, set its size again."]
+
+
+def test_a_soil_line_removed_takes_its_mesh_size_and_band_with_it():
+    project = excavation_project(staged=False)
+    mesh = project.mesh.model_copy(update={"body_sizes": {"floor_1": 0.5, "floor_2": 0.5},
+                                           "size_bands": {"floor_1": 5.0, "floor_2": 5.0}})
+    project = project.model_copy(update={"mesh": mesh})
+
+    edited = session.remove_line(project, "floor_2")
+
+    assert edited.mesh.body_sizes == {"floor_1": 0.5}
+    assert edited.mesh.size_bands == {"floor_1": 5.0}
 
 
 def test_a_size_for_a_body_the_model_never_had_is_left_for_check_to_name():

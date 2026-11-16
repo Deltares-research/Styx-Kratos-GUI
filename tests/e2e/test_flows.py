@@ -232,9 +232,8 @@ def test_the_units_command_converts_the_project_and_the_status_bar_follows(app_p
 
 
 def test_the_boundary_conditions_are_set_in_their_window_and_by_command(app_page, live_server):
-    """The standard supports a new project has, the dialog's whole-soil row given a dry
-    pore pressure, and gravity switched off from the command box: each one write the
-    server stores."""
+    """The standard supports a new project has, and the dialog's whole-soil row given a
+    dry pore pressure: each one write the server stores."""
     url = live_server["url"] + "/api/project"
     command(app_page, "boundary list")
     app_page.wait_for_function("document.querySelector('#cmd-log').innerText"
@@ -257,10 +256,6 @@ def test_the_boundary_conditions_are_set_in_their_window_and_by_command(app_page
     assert [(c["on"], c["fluid_pressure_type"], c["value"]) for c in water] == [
         ("domain", "Uniform", 0.0)]
     assert sum(c["kind"] == "displacement" for c in stored["boundary_conditions"]) == 5
-
-    command(app_page, "gravity off")
-    app_page.wait_for_function("App.PROJECT.gravity === false", timeout=LONG)
-    assert app_page.request.get(url).json()["gravity"] is False
     assert app_page.errors == []
 
 
@@ -334,8 +329,11 @@ def panel_button(page, text: str):
 def rename_body(page, row: str, name: str) -> None:
     """Select the body's row and rename it with the button in its panel."""
     tree_row(page, row).click()
-    page.once("dialog", lambda dialog: dialog.accept(name))
     panel_button(page, "Rename…").click()
+    window = page.locator("#modal-layer .name-dialog-window")
+    window.locator("input[name=name]").fill(name)
+    window.get_by_role("button", name="OK").click()
+    window.wait_for(state="detached")
 
 
 def press(page, keys: str) -> None:
@@ -363,6 +361,26 @@ def test_a_soil_part_is_renamed_in_its_panel(app_page, live_server):
     mdpa = app_page.request.post(url + "/api/export/mdpa", data={}).json()["mdpa"]
     assert "Begin SubModelPart Top_Pit" in mdpa.splitlines()
     assert "Top_Part_1" not in mdpa
+    assert app_page.errors == []
+
+
+def test_a_soil_layer_is_renamed_from_the_model_explorer_menu(app_page, live_server):
+    """Right-click, Rename…: the app's Rename window, not the browser's prompt."""
+    url = live_server["url"]
+    layer = app_page.evaluate("App.LAYERS[0]")
+    key = "soil_" + layer["id"]
+    row = app_page.locator(f'#tree-model .tree-row[data-obj="{key}"]')
+    row.click(button="right")
+    app_page.locator(".menu .menu-item", has_text="Rename…").click()
+    window = app_page.locator("#modal-layer .name-dialog-window")
+    assert window.locator("input[name=name]").input_value() == layer["name"]
+    window.locator("input[name=name]").fill("Clay top")
+    window.get_by_role("button", name="OK").click()
+    window.wait_for(state="detached")
+
+    app_page.wait_for_function("App.LAYERS[0].name === 'Clay top'", timeout=LONG)
+    stored = app_page.request.get(url + "/api/project").json()
+    assert stored["layers"][0]["name"] == "Clay top"
     assert app_page.errors == []
 
 

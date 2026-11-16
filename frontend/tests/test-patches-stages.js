@@ -141,39 +141,148 @@
     }));
   });
 
-  /* The calculation type select of the selected stage, and its Reset displacements box. */
+  /* The selects of the selected stage -- calculation type, stress initialisation (a
+     mechanical stage only), time integration and, for a mechanical stage, the
+     convergence criterion -- and its Reset displacements box. */
   function stageControls(ctx) {
     var grid = ctx.layer.querySelector('.stages-overview .pgrid');
-    return { select: grid.querySelector('select'),
+    var selects = grid.querySelectorAll('select');
+    return { select: selects[0], selects: selects,
              reset: grid.querySelector('input.pgrid-check') };
   }
 
-  test('stages window: Groundwater flow is a calculation type, and choosing it is one PATCH',
+  function values(select) {
+    return Array.prototype.map.call(select.options, function (o) { return o.value; });
+  }
+
+  test('stages window: a stage chooses its calculation type, stress initialisation, ' +
+       'time integration and convergence criterion', function () {
+    var ctx = rig(model());
+    try {
+      App.runAction({ action: 'stages' });
+      var selects = stageControls(ctx).selects;
+      T.eq(selects.length, 4);
+      T.eq(values(selects[0]), ['mechanical', 'flow']);
+      T.eq(values(selects[1]), ['K0', 'gravity', 'none']);
+      T.eq(values(selects[2]), ['static', 'dynamic']);
+      T.eq(values(selects[3]), ['residual_criterion', 'displacement_criterion']);
+      T.eq(selects[1].value, model().stages[0].stress_initialisation);
+    } finally { ctx.restore(); }
+  });
+
+  /* Gravity has no switch of its own: the initial stage's stress initialisation is it,
+     and the row under it says which (`core.model.stages.gravity`). */
+  test('stages window: the initial stage says whether its stresses bring gravity',
        function () {
+    function gravityRow(stresses) {
+      var project = JSON.parse(JSON.stringify(model()));
+      project.stages[0].stress_initialisation = stresses;
+      var ctx = rig(project);
+      try {
+        App.runAction({ action: 'stages' });
+        var rows = ctx.layer.querySelectorAll('.stages-overview .pgrid .pgrid-row');
+        var row = Array.prototype.filter.call(rows, function (r) {
+          var key = r.querySelector('.pgrid-key');
+          return key && key.textContent === 'Gravity';
+        })[0];
+        return row ? row.querySelector('.pgrid-val').textContent : null;
+      } finally { ctx.restore(); }
+    }
+    T.eq(gravityRow('K0'), 'On: every body has its self weight');
+    T.eq(gravityRow('gravity'), 'On: every body has its self weight');
+    T.eq(gravityRow('none'), 'Off: no body has a self weight');
+  });
+
+  test('stages window: a later stage shows the calculation type and has no stress ' +
+       'initialisation', function () {
+    var ctx = rig(model());
+    try {
+      App.state.phase = model().stages[2].id;
+      App.runAction({ action: 'stages' });
+      var grid = ctx.layer.querySelector('.stages-overview .pgrid');
+      T.eq(grid.querySelectorAll('select').length, 2,
+           'only time integration and the convergence criterion to choose');
+      T.ok(/from the initial stage/.test(grid.textContent));
+      T.ok(!/Stress initialisation/.test(grid.textContent));
+    } finally { ctx.restore(); }
+  });
+
+  test('stages window: flow is a calculation type of the initial stage, and choosing it ' +
+       'is one PATCH that makes every stage a flow stage', function () {
     var ctx = rig(model());
     App.runAction({ action: 'stages' });
     var select = stageControls(ctx).select;
-    T.ok(Array.prototype.some.call(select.options, function (o) {
-      return o.value === 'Groundwater flow';
-    }), 'the select offers Groundwater flow');
-    T.ok(!stageControls(ctx).reset.disabled, 'a deformation stage can reset displacements');
-    select.value = 'Groundwater flow';
+    T.ok(values(select).indexOf('flow') >= 0, 'the select offers flow');
+    T.ok(!stageControls(ctx).reset.disabled, 'a mechanical stage can reset displacements');
+    select.value = 'flow';
     select.dispatchEvent(new Event('change'));
     return done(ctx, new Promise(function (r) { setTimeout(r, 20); }).then(function () {
       T.eq(ctx.patches.length, 1);
-      T.eq(ctx.patches[0].body.stages[0].calculation, 'Groundwater flow');
+      T.ok(ctx.patches[0].body.stages.every(function (stage) {
+        return stage.calculation === 'flow' && stage.stress_initialisation === 'none' &&
+          stage.convergence_criterion === 'water_pressure_criterion';
+      }), 'not every stage became a flow stage');
     }));
   });
 
-  test('stages window: a groundwater flow stage greys out Reset displacements', function () {
+  test('stages window: choosing dynamic time integration is one PATCH', function () {
+    var ctx = rig(model());
+    App.runAction({ action: 'stages' });
+    var select = stageControls(ctx).selects[2];
+    select.value = 'dynamic';
+    select.dispatchEvent(new Event('change'));
+    return done(ctx, new Promise(function (r) { setTimeout(r, 20); }).then(function () {
+      T.eq(ctx.patches.length, 1);
+      T.eq(ctx.patches[0].body.stages[0].time_integration, 'dynamic');
+    }));
+  });
+
+  test('stages window: choosing a convergence criterion is one PATCH', function () {
+    var ctx = rig(model());
+    App.runAction({ action: 'stages' });
+    var select = stageControls(ctx).selects[3];
+    select.value = 'displacement_criterion';
+    select.dispatchEvent(new Event('change'));
+    return done(ctx, new Promise(function (r) { setTimeout(r, 20); }).then(function () {
+      T.eq(ctx.patches.length, 1);
+      T.eq(ctx.patches[0].body.stages[0].convergence_criterion, 'displacement_criterion');
+    }));
+  });
+
+  test('stages window: a flow stage converges on the water pressure or the residual',
+       function () {
     var flow = JSON.parse(JSON.stringify(model()));
     flow.stages.forEach(function (stage) {
-      stage.calculation = 'Groundwater flow';
+      stage.calculation = 'flow';
+      stage.stress_initialisation = 'none';
+      stage.convergence_criterion = 'residual_criterion';
+    });
+    var ctx = rig(flow);
+    try {
+      App.runAction({ action: 'stages' });
+      var grid = ctx.layer.querySelector('.stages-overview .pgrid');
+      var selects = stageControls(ctx).selects;
+      T.eq(selects.length, 3, 'calculation type, time integration, convergence criterion');
+      T.eq(values(selects[2]), ['water_pressure_criterion', 'residual_criterion']);
+      T.eq(selects[2].value, 'residual_criterion');
+      T.ok(/Absolute tolerance/.test(grid.textContent));
+    } finally { ctx.restore(); }
+  });
+
+  test('stages window: a flow stage has no stress initialisation and greys out Reset ' +
+       'displacements', function () {
+    var flow = JSON.parse(JSON.stringify(model()));
+    flow.stages.forEach(function (stage) {
+      stage.calculation = 'flow';
+      stage.stress_initialisation = 'none';
       stage.reset_displacements = true;
     });
     var ctx = rig(flow);
     try {
       App.runAction({ action: 'stages' });
+      T.eq(stageControls(ctx).selects.length, 3,
+           'no stress initialisation row: calculation type, time integration, ' +
+           'convergence criterion');
       var reset = stageControls(ctx).reset;
       T.ok(reset.disabled, 'the box cannot be changed');
       T.ok(/no displacements/.test(reset.title), 'its tooltip says why');
@@ -214,6 +323,9 @@
     App.Explorer.mountPhases();
     var buttons = ctx.dock.querySelectorAll('.stage-toolbar button.tbtn');
     T.eq(buttons.length, 4, 'add, insert, duplicate, delete');
+    T.eq(Array.prototype.map.call(buttons, function (b) { return b.getAttribute('data-action'); }),
+         ['addStage', 'insertStage', 'duplicateStage', 'deleteStage']);
+    T.eq(buttons[0].getAttribute('aria-label'), 'Add stage');
     buttons[0].click();
     return done(ctx, new Promise(function (r) { setTimeout(r, 20); }).then(function () {
       T.eq(ctx.patches[0].body.stages.length, model().stages.length + 1, 'one added');
@@ -228,6 +340,29 @@
     }));
   });
 
+  test('stage list: a stage that is added, inserted or duplicated is selected', function () {
+    var ctx = rig(model());
+    var before = model().stages.map(function (stage) { return stage.id; });
+    function fresh() {
+      var last = ctx.patches[ctx.patches.length - 1].body.stages;
+      return last.filter(function (stage) { return before.indexOf(stage.id) < 0; })
+        .map(function (stage) { return stage.id; });
+    }
+    function press(index) {
+      App.state.phase = model().stages[1].id;
+      App.Explorer.mountPhases();
+      ctx.dock.querySelectorAll('.stage-toolbar button.tbtn')[index].click();
+      return new Promise(function (r) { setTimeout(r, 20); });
+    }
+    return done(ctx, [0, 1, 2].reduce(function (chain, index) {
+      return chain.then(function () { return press(index); }).then(function () {
+        T.eq(fresh().length, 1, 'one new stage');
+        T.eq(App.state.phase, fresh()[0], 'button ' + index + ' selects the stage it made');
+        App.Model.apply(JSON.parse(JSON.stringify(model())));
+      });
+    }, Promise.resolve()));
+  });
+
   test("stage list: the dock's Stages… button opens the window", function () {
     var ctx = rig(model());
     try {
@@ -239,19 +374,18 @@
     } finally { ctx.restore(); }
   });
 
-  test('stage list: with no stages the dock offers to create the defaults', function () {
+  test('stage list: with no stages there are no defaults to create, only Add stage',
+       function () {
     var bare = JSON.parse(JSON.stringify(model()));
     bare.stages = [];
     var ctx = rig(bare);
-    App.Explorer.mountPhases();
-    var button = Array.prototype.filter.call(ctx.dock.querySelectorAll('button'), function (b) {
-      return /default/i.test(b.textContent);
-    })[0];
-    T.ok(button, 'a button to create the default stages');
-    button.click();
-    return done(ctx, new Promise(function (r) { setTimeout(r, 20); }).then(function () {
-      T.eq(ctx.posts[0].path, '/api/project/stages/defaults');
-    }));
+    try {
+      App.Explorer.mountPhases();
+      T.ok(!Array.prototype.some.call(ctx.dock.querySelectorAll('button'), function (b) {
+        return /default/i.test(b.textContent);
+      }), 'no button to create default stages');
+      T.ok(/Add stage/.test(ctx.dock.textContent), 'the hint says how to start');
+    } finally { ctx.restore(); }
   });
 
   test('staged mode: clicking a part switches it for the selected stage', function () {
@@ -264,6 +398,91 @@
       T.eq(ctx.patches.length, 1, 'one PATCH of the sequence');
       T.ok(ctx.lines.some(function (l) { return /switched (on|off) in/.test(l); }),
            ctx.lines.join(' | '));
+    }));
+  });
+
+  /* ── The expert solver settings ──────────────────────────────────────── */
+
+  function expert(ctx) {
+    return ctx.layer.querySelector('.stages-overview .pgrid-expert');
+  }
+
+  function expertRow(ctx, label) {
+    var rows = expert(ctx).querySelectorAll('.pgrid-row');
+    return Array.prototype.filter.call(rows, function (r) {
+      return r.querySelector('.pgrid-key').textContent === label;
+    })[0] || null;
+  }
+
+  test('stages window: the expert settings start closed, and open on a click', function () {
+    var ctx = rig(model());
+    try {
+      App.runAction({ action: 'stages' });
+      var section = expert(ctx);
+      T.ok(section, 'the grid has an expert settings section');
+      T.ok(!section.querySelector('.pgrid-row'), 'closed, it holds no rows');
+      section.querySelector('.pgrid-toggle').click();
+      T.ok(App.state.stageExpert, 'it stays open for the session');
+      T.eq(expertRow(ctx, 'Strategy').querySelector('select').value, 'newton_raphson');
+      var linear = expertRow(ctx, 'Linear solver').querySelector('select');
+      T.ok(linear, 'Newton-Raphson offers the linear solver');
+      T.eq(linear.value, 'LinearSolversApplication.sparse_lu');
+      T.ok(!expertRow(ctx, 'Newmark beta'), 'a static stage has no time scheme');
+    } finally { ctx.restore(); }
+  });
+
+  test('stages window: a dynamic stage shows its Rayleigh damping among its own ' +
+       'settings, not the expert ones', function () {
+    var dynamic = JSON.parse(JSON.stringify(model()));
+    dynamic.stages.forEach(function (stage) {
+      stage.calculation = 'mechanical';
+      stage.time_integration = 'dynamic';
+    });
+    var ctx = rig(dynamic);
+    App.state.stageExpert = true;
+    try {
+      App.runAction({ action: 'stages' });
+      var grid = ctx.layer.querySelector('.stages-overview .pgrid');
+      var groups = Array.prototype.map.call(grid.querySelectorAll(':scope > .pgrid-group'),
+                                            function (g) { return g.textContent; });
+      T.ok(groups.indexOf('Damping') === 1, 'right after General: ' + groups.join(', '));
+      T.ok(!expertRow(ctx, 'Rayleigh mass damping'), 'not an expert setting');
+      T.ok(expertRow(ctx, 'Newmark beta'), 'the Newmark coefficients still are');
+    } finally { ctx.restore(); }
+  });
+
+  test('stages window: choosing a strategy is one PATCH of the stage\'s own expert ' +
+       'settings', function () {
+    var ctx = rig(model());
+    App.state.stageExpert = true;
+    App.runAction({ action: 'stages' });
+    var select = expertRow(ctx, 'Strategy').querySelector('select');
+    select.value = 'quasi_newton';
+    select.dispatchEvent(new Event('change'));
+    return done(ctx, new Promise(function (r) { setTimeout(r, 20); }).then(function () {
+      T.eq(ctx.patches.length, 1, 'one PATCH of the sequence');
+      var first = ctx.patches[0].body.stages[0];
+      T.eq(first.solver_settings, { strategy_type: 'quasi_newton' });
+      var linear = expertRow(ctx, 'Linear solver');
+      T.ok(!linear.querySelector('select'),
+           'the dialog redraws, and the quasi-Newton strategy fixes the linear solver');
+      T.ok(/Sparse LU/.test(linear.textContent), linear.textContent);
+    }));
+  });
+
+  test('stages window: a changed expert setting says so, and its button puts the ' +
+       'default back', function () {
+    var changed = JSON.parse(JSON.stringify(model()));
+    changed.stages[0].solver_settings = { min_iterations: 3 };
+    var ctx = rig(changed);
+    App.state.stageExpert = true;
+    App.runAction({ action: 'stages' });
+    T.ok(/1 changed/.test(expert(ctx).querySelector('.pgrid-toggle').textContent));
+    var row = expertRow(ctx, 'Min iterations');
+    T.ok(row.querySelector('.pgrid-key.changed'), 'marked as changed');
+    row.querySelector('button.pgrid-reset').click();
+    return done(ctx, new Promise(function (r) { setTimeout(r, 20); }).then(function () {
+      T.eq(ctx.patches[0].body.stages[0].solver_settings, {});
     }));
   });
 

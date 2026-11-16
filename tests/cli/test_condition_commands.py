@@ -265,7 +265,7 @@ def test_a_flow_project_notes_that_its_supports_are_left_out(cli, tmp_path):
     path = tmp_path / "new.json"
     assert cli("new", path).code == 0
     assert condition_checks.FLOW_NOTE not in cli("boundary", path, "list").out
-    assert cli("stages", path, "add", "flow", "--calculation", "flow").code == 0
+    assert cli("stages", path, "set", "initial", "--calculation", "flow").code == 0
     listed = cli("boundary", path, "list").out
     assert listed.strip().endswith(condition_checks.FLOW_NOTE)
     assert "fixed_bottom" in listed
@@ -349,25 +349,36 @@ def test_check_says_when_nothing_holds_the_model(cli, dry):
 
 # ── gravity ─────────────────────────────────────────────────────────────────
 
-def test_gravity_shows_and_switches_the_self_weight(cli, dry):
-    assert "Gravity is on" in cli("gravity", dry).out
-    ran = cli("gravity", dry, "off")
+def test_show_says_whether_the_initial_stage_s_stresses_bring_gravity(cli, dry):
+    """No switch of its own: the initial stage's stress initialisation decides it."""
+    assert "gravity     on" in cli("show", dry).out
+    assert cli("stages", dry, "add").code == 0
+    assert cli("show", dry, "--json").json()["gravity"] is True
+    assert cli("stages", dry, "set", "initial", "--stress-initialisation", "none").code == 0
 
-    assert ran.code == 0, ran.err
-    assert session.load(dry).gravity is False
-    assert "Gravity is off" in ran.out
     assert "gravity     off" in cli("show", dry).out
     assert cli("show", dry, "--json").json()["gravity"] is False
-    assert cli("gravity", dry, "ON").code == 0
-    assert session.load(dry).gravity is True
 
 
-def test_check_warns_about_a_k0_stage_without_gravity(cli, dry):
-    assert cli("stages", dry, "defaults").code == 0
-    assert cli("gravity", dry, "off").code == 0
+def test_gravity_sets_g_as_the_project_properties_window_does(cli, dry):
+    assert "with g = 9.81 m/s²" in cli("gravity", dry).out
+    ran = cli("gravity", dry, "9.80665")
 
-    assert "is a K0 procedure, whose stresses come from the self weight" \
-        in cli("check", dry).err
+    assert ran.code == 0, ran.err
+    assert session.load(dry).gravity_acceleration == 9.80665
+    assert "with g = 9.80665 m/s²" in ran.out
+    assert "g = 9.80665 m/s²" in cli("show", dry).out
+    assert cli("show", dry, "--json").json()["gravity_acceleration"] == 9.80665
+    for wrong in ("0", "-9.81", "maybe"):
+        refused = cli("gravity", dry, wrong)
+        assert refused.code != 0, wrong
+    assert session.load(dry).gravity_acceleration == 9.80665
+
+
+def test_gravity_has_no_switch(cli, dry):
+    refused = cli("gravity", dry, "off")
+    assert refused.code != 0
+    assert "stress initialisation" in refused.err
 
 
 # ── Seepage faces ───────────────────────────────────────────────────────────
