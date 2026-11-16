@@ -29,6 +29,22 @@ App.LivePatches = (function () {
       + integer(stats.nodes) + ' nodes (' + stats.seconds.toFixed(1) + ' s).';
   }
 
+  /* Mesh > Clear mesh, the rail's Clear mesh and `clearmesh`. The mesh settings and the
+     local sizes stay; Generate mesh (F9) makes the mesh again. */
+  function clearMesh() {
+    if (inFlight) {
+      App.Command.note('Mesh generation is running; clear the mesh when it is done.');
+      return;
+    }
+    if (!App.Viewport.clearMesh || !App.Viewport.clearMesh()) {
+      App.Command.note('There is no mesh to clear.');
+      return;
+    }
+    if (App.Model.clearMeshStats) App.Model.clearMeshStats();
+    if (App.state.selection === 'mesh' && App.selectObject) App.selectObject(null);
+    App.Command.ok('Mesh cleared. Generate mesh (F9) makes it again with the same settings.');
+  }
+
   function requestMesh(selectAfter, echo) {
     if (inFlight) {
       if (App.Command && App.Command.note) App.Command.note('Mesh generation is already running.');
@@ -273,7 +289,14 @@ App.LivePatches = (function () {
   /* Which of the live-owned collections a tree row's key belongs to, if any --
      the frozen menu (js/explorer.js:89-98) only ever wires up rename/delete for a
      soil layer, so every other kind of live object -- drawn/imported geometry, a
-     sheet pile or wall, an anchor, a load -- needs the same two actions built here. */
+     sheet pile or wall, an anchor, a load -- needs the same two actions built here.
+     A soil layer is here too: the frozen menu renames it with the browser's prompt,
+     which a screenshot cannot show and a test cannot fill in. */
+  function layerOf(key) {
+    if (!key || key.indexOf('soil_') !== 0 || !App.layerById) return null;
+    return App.layerById(key.slice(5)) || null;
+  }
+
   function objectKind(key) {
     if (isDeletableCustomPart(key)) return 'part';
     if (App.Beams && App.Beams.isBeamKey(key)) return 'beam';
@@ -286,6 +309,7 @@ App.LivePatches = (function () {
     if (App.BoundaryConditions && App.BoundaryConditions.isConditionKey(key)) {
       return 'condition';
     }
+    if (layerOf(key)) return 'layer';
     return null;
   }
 
@@ -331,7 +355,8 @@ App.LivePatches = (function () {
       : kind === 'line' ? lineByKey(key)
       : kind === 'body' ? App.Lines.bodyOf(key)
       : kind === 'load' ? loadByKey(key)
-      : kind === 'condition' ? conditionByKey(key) : null;
+      : kind === 'condition' ? conditionByKey(key)
+      : kind === 'layer' ? layerOf(key) : null;
     return obj ? (kind === 'part' ? obj.label : obj.name) : '';
   }
 
@@ -339,17 +364,21 @@ App.LivePatches = (function () {
     if (App.Command && App.Command.err) App.Command.err(error.message);
   }
 
-  /* One rename path for every live kind: prompt, write the field the frozen grid
-     already treats as the display name, then save through each kind's own door --
-     a custom part goes back through the layers/domain/custom_parts PATCH (see
-     commitSelectionEdit), a beam/anchor/load through its own module, which is what
-     validates, persists and refreshes the tree for it already. */
+  /* One rename path for every live kind: ask in the Rename window (js/name-dialog.js),
+     write the field the frozen grid already treats as the display name, then save
+     through each kind's own door -- a custom part goes back through the
+     layers/domain/custom_parts PATCH (see commitSelectionEdit), a beam/anchor/load
+     through its own module, which is what validates, persists and refreshes the tree
+     for it already. */
   function renameObject(kind, key) {
-    var name = window.prompt('New name', objectName(kind, key));
-    if (name === null) return;
-    name = name.trim();
-    if (!name) { reportRenameError(new Error('Name cannot be empty.')); return; }
+    return App.NameDialog.ask({ title: 'Rename', value: objectName(kind, key),
+                                help: 'Shown in the Model explorer.' })
+      .then(function (name) {
+        if (name !== null) return renamed(kind, key, name);
+      });
+  }
 
+  function renamed(kind, key, name) {
     if (kind === 'part') {
       var part = partByKey(key);
       if (!part) return;
@@ -402,6 +431,13 @@ App.LivePatches = (function () {
       condition.name = name;
       return App.BoundaryConditions.save(condition).catch(reportRenameError);
     }
+    if (kind === 'layer') {
+      var layer = layerOf(key);
+      if (!layer) return;
+      layer.name = name;
+      if (App.Command && App.Command.ok) App.Command.ok('Renamed soil layer to ' + name + '.');
+      return App.commitSelectionEdit(key);
+    }
   }
 
   function deleteObject(kind, key) {
@@ -413,6 +449,23 @@ App.LivePatches = (function () {
     if (kind === 'line') return App.Lines.remove(key);
     if (kind === 'load') return App.Loads.remove(key);
     if (kind === 'condition') return App.BoundaryConditions.remove(key);
+    if (kind === 'layer') return deleteLayer(key);
+  }
+
+  /* The frozen Delete of a layer, kept as it was: the stack closes the gap
+     (App.deleteLayerById is the Soil layers window's), and the soil model goes to
+     the server as one write. */
+  function deleteLayer(key) {
+    var layer = layerOf(key);
+    if (!layer) return;
+    var error = App.deleteLayerById(layer.id);
+    if (error) {
+      if (App.Command && App.Command.err) App.Command.err(error);
+      return;
+    }
+    if (App.Command && App.Command.ok) App.Command.ok('Deleted soil layer ' + layer.name + '.');
+    if (App.state && App.state.selection === key) App.selectObject(null);
+    return App.commitSelectionEdit(null);
   }
 
   /* explorer.js builds one tree DOM row per App.TREES[mode] node, in the same
@@ -1027,13 +1080,9 @@ App.LivePatches = (function () {
      exists. NOT_YET holds the actions that do run, but not what their label says:
 
        importSoilLayers   the mockup's import dialog, which imports nothing.
-       refineMesh,        one box over the excavation whatever is selected, so a
-       coarsenMesh,       refinement nobody placed. Mesh properties… is where the
-       resetMeshRefinement  element size is set.
        drawPoint          draws a point, which the server then refuses: the creation
                           recipes (core/geometry/primitives.py) have no `point` kind. */
-  var NOT_YET = ['importSoilLayers', 'refineMesh', 'coarsenMesh', 'resetMeshRefinement',
-                 'drawPoint'];
+  var NOT_YET = ['importSoilLayers', 'drawPoint'];
 
   /* Appended to a greyed rail tool's tip, the tip being the only words a rail button
      has. Menus need no such suffix: a grey row in a list of black ones says it. */
@@ -1215,6 +1264,9 @@ App.LivePatches = (function () {
      so there is no borehole to make. */
   var SOIL_DROPPED = ['createBorehole'];
 
+  /* The status bar's words for Soil mode, in place of the frozen ones about boreholes. */
+  var SOIL_HINT = 'Soil mode — define the soil materials and the soil layers.';
+
   function orderStructuresRail(tools) {
     return orderRail(tools, STRUCTURES_RAIL_GROUPS, STRUCTURES_RAIL_DROPPED);
   }
@@ -1300,6 +1352,13 @@ App.LivePatches = (function () {
       if (tool === '-') return;
       var button = buttons[i++];
       if (!button) return;
+      // The frozen rail draws an icon only. Named here, so a test, the tutorial script
+      // and a screen reader can find a tool without counting buttons. `data-tool` is
+      // set on every tool (by its icon when it has no action yet).
+      if (tool.action) button.setAttribute('data-action', tool.action);
+      else button.removeAttribute('data-action');
+      button.setAttribute('data-tool', tool.action || tool.icon);
+      if (tool.tip) button.setAttribute('aria-label', tool.tip);
       // A tool on NOT_YET is greyed but not `disabled`: Chrome sends no mouseenter
       // to a disabled button, and that is the event its tip waits for. `not-yet`
       // keeps its pointer events (css/live.css) and guardNotYet eats the click.
@@ -1565,27 +1624,11 @@ App.LivePatches = (function () {
 
   /* ── New, open, save ─────────────────────────────────────────────────────── */
 
-  function confirmDialog(title, text, onConfirm) {
-    if (!App.Dialogs || !App.Dialogs.open) return onConfirm();
-    App.Dialogs.open({
-      title: title, width: 440, height: 220,
-      buttons: [{ label: 'OK', primary: true, onClick: onConfirm }, { label: 'Cancel' }],
-      build: function (body) {
-        body.appendChild(App.UI.el('div.dlg-simple', null, [
-          App.UI.el('h3', { text: title }),
-          App.UI.el('p', { text: text })
-        ]));
-      }
-    });
-  }
-
   /* Applies a project the user chose -- the seed, or a file -- and starts its history
      over: the steps that came before belong to a document that is no longer open. */
   function adoptProject(project, message) {
     App.Model.apply(project);
     App.History.reset();
-    // The Mesh properties window's choice of layers is about the document left behind.
-    App.MESH_BODIES_LEFT_OUT = null;
     syncHistoryButtons();
     // A previewed or accepted .mdpa belongs to the document that was open when it was
     // loaded -- swapping to a different one (new or opened) leaves all of it behind:
@@ -1623,15 +1666,64 @@ App.LivePatches = (function () {
   }
 
   /* An empty site, not the seeded demo -- the server owns what "empty" means, and a
-     second definition here would be one to keep in step. */
-  function newProject() {
+     second definition here would be one to keep in step. `name`, from the New project
+     window, is what `kratos-cli new --name` sets. */
+  function newProject(name) {
     return App.Api.post('/api/project/new')
       .then(function (result) {
-        return adoptProject(result.project, 'New project started — empty site.');
+        var project = result.project;
+        if (!name || name === project.name) return project;
+        return App.Api.put('/api/project', Object.assign({}, project, { name: name }));
+      })
+      .then(function (project) {
+        return adoptProject(project, 'New project started — empty site.');
       })
       .catch(function (error) {
         if (App.Command) App.Command.err('Could not start a new project: ' + error.message);
       });
+  }
+
+  /* File > Project properties…: the project's name, as `kratos-cli set FILE name ...`
+     sets it, and the gravitational acceleration g, as `kratos-cli gravity FILE G` sets
+     it. Through the whole-project PUT, so Undo takes it back like any edit. */
+  function projectProperties() {
+    var project = App.PROJECT || {};
+    var name = project.name || '';
+    var g = typeof project.gravity_acceleration === 'number' ? project.gravity_acceleration
+                                                             : App.Units.gravity('SI');
+    return App.NameDialog.form({
+      title: 'Project properties',
+      fields: [
+        { name: 'name', label: 'Project name', value: name, empty: 'Type a name.',
+          help: 'Shown in the title bar, and the name Save gives the file.' },
+        { name: 'gravity_acceleration', label: 'Gravity', value: g, unit: 'm/s²',
+          empty: 'Type the gravitational acceleration, in m/s².',
+          check: function (text) {
+            var value = Number(text);
+            return isFinite(value) && value > 0 ? null : 'Gravity is a number above 0 m/s².';
+          },
+          help: 'The self weight of every body. The water keeps its specific weight.' }
+      ]
+    }).then(function (values) {
+      if (values === null) return;
+      var newG = Number(values.gravity_acceleration);
+      var said = [];
+      if (values.name !== name) said.push('Project name: ' + values.name + '.');
+      if (newG !== g) said.push('Gravity: g = ' + newG + ' m/s².');
+      if (!said.length) return;
+      // Only what changed: a rename leaves the project's gravity fields as they are.
+      var edited = JSON.parse(JSON.stringify(App.PROJECT));
+      edited.name = values.name;
+      if (newG !== g) edited.gravity_acceleration = newG;
+      return App.Api.put('/api/project', edited).then(function (saved) {
+        App.Model.apply(saved);
+        if (App.Command) App.Command.ok(said.join(' '));
+      }).catch(function (error) {
+        if (App.Command) {
+          App.Command.err('Could not change the project properties: ' + error.message);
+        }
+      });
+    });
   }
 
   function projectFromFileText(text) {
@@ -1924,30 +2016,40 @@ App.LivePatches = (function () {
        insert, which has no icon of its own in the frozen set. */
     [['new', 'Add stage', function () {
         return App.Stages.added(App.PROJECT);
-      }, 'Stage added.'],
+      }, 'Stage added.', 'addStage'],
      ['phase', 'Insert stage above the selected one', function () {
         return selected ? App.Stages.inserted(App.PROJECT, selected) : null;
-      }, 'Stage inserted.', 'Nothing goes before the initial stage.'],
+      }, 'Stage inserted.', 'insertStage', 'Nothing goes before the initial stage.'],
      ['copy', 'Duplicate the selected stage', function () {
         return selected ? App.Stages.copied(App.PROJECT, selected) : null;
-      }, 'Stage duplicated.'],
+      }, 'Stage duplicated.', 'duplicateStage'],
      ['delete', 'Delete the selected stage', function () {
         return selected ? App.Stages.removed(App.PROJECT, selected) : null;
-      }, 'Stage deleted.', 'The initial stage is always there.']
+      }, 'Stage deleted.', 'deleteStage', 'The initial stage is always there.']
     ].forEach(function (spec) {
+      // Named, as the rail buttons are, so a script or a screen reader can find it.
       var button = el('button.tbtn', { type: 'button' });
+      button.setAttribute('data-action', spec[4]);
+      button.setAttribute('aria-label', spec[1]);
       button.appendChild(icon(spec[0]));
       App.UI.attachTip(button, spec[1]);
       button.disabled = spec[0] !== 'new' && !selected;
       button.addEventListener('click', function () {
         App.UI.hideTip();
+        var before = ((App.PROJECT && App.PROJECT.stages) || []).map(function (stage) {
+          return stage.id;
+        });
         var list = spec[2]();
         if (!list) { App.Command.err('Select a stage first.'); return; }
         // Insert and Delete refuse the initial stage (App.Stages.inserted, .removed).
-        if (spec[4] && App.Stages.isInitial(App.PROJECT, selected)) {
-          App.Command.err(spec[4]);
+        if (spec[5] && App.Stages.isInitial(App.PROJECT, selected)) {
+          App.Command.err(spec[5]);
           return;
         }
+        // A stage just made is the one to fill in next, so it is selected; after a
+        // delete, selectedStageId falls back to the first.
+        var made = list.filter(function (stage) { return before.indexOf(stage.id) < 0; })[0];
+        if (made) App.state.phase = made.id;
         saveStages(list, spec[3]);
       });
       bar.appendChild(button);
@@ -2663,10 +2765,12 @@ App.LivePatches = (function () {
     ['stages', 'the Stages overview: every stage, its time and result'],
     ['water <level>|off', 'set or remove the water level, e.g. water -1.5'],
     ['boundary [list|standard]', 'the boundary conditions, or put the standard supports back'],
+    ['gravity [G]', 'show whether the self weight acts, or set g in m/s²'],
     ['units [SI|kN]', 'show the unit system, or convert the project to another'],
     ['soillayers', 'open the Modify soil layers window'],
     ['materials', 'open the Soil materials window'],
     ['cleargeometry', 'remove the drawn and imported solids'],
+    ['clearmesh', 'clear the mesh; its settings stay'],
     ['colour <part>|all|off', 'draw a part of the mesh in its own colour'],
     ['node <id>', 'which SubModelParts a node is in'],
     ['gotosoil, gotostructures, gotomesh, gotoflow, gotostaged', 'open a mode'],
@@ -2865,11 +2969,14 @@ App.LivePatches = (function () {
       }
 
       if (item && item.action === 'newProject') {
-        confirmDialog('New project',
-          'This discards the current model and starts again from an empty project. '
-          + 'Save first if you want to keep it.', newProject);
-        return;
+        return App.NameDialog.ask({
+          title: 'New project', label: 'Project name', value: 'Untitled project',
+          text: 'This discards the current model and starts again from an empty project. '
+            + 'Save first if you want to keep it.',
+          help: 'Shown in the title bar, and the name Save gives the file.'
+        }).then(function (name) { if (name !== null) return newProject(name); });
       }
+      if (item && item.action === 'projectProperties') return projectProperties();
       if (item && item.action === 'openProject') { openProject(); return; }
       if (item && item.action === 'saveProject') return saveProject();
       if (item && item.action === 'undo') return App.History.undo();
@@ -2910,9 +3017,14 @@ App.LivePatches = (function () {
         if (App.Lines) App.Lines.typed();
         return;
       }
+      if (item && item.action === 'clearMesh') {
+        clearMesh();
+        return;
+      }
       if (item && item.action === 'generateMesh') {
         var size = App.PROJECT && App.PROJECT.mesh ? App.PROJECT.mesh.element_size : 2.5;
-        requestMesh(true, 'mesh ' + size);
+        // Refine/Coarsen/Reset remake the mesh and leave their object selected.
+        requestMesh(!item.keepSelection, 'mesh ' + size);
         return;
       }
       if (item && item.action === 'createSoilVolume') {
@@ -2998,8 +3110,12 @@ App.LivePatches = (function () {
         App.MeshSettings.open();
         return;
       }
-      // Refine, coarsen and reset are on NOT_YET and refused at the top: they set one
-      // box over the excavation whatever was selected.
+      // The selected object's local mesh size: halved, doubled, or taken away
+      // (js/mesh-settings.js).
+      var MESH_SIZE_FACTORS = { refineMesh: 0.5, coarsenMesh: 2, resetMeshRefinement: null };
+      if (item && Object.prototype.hasOwnProperty.call(MESH_SIZE_FACTORS, item.action)) {
+        return App.MeshSettings.changeSelected(MESH_SIZE_FACTORS[item.action]);
+      }
       var result = frozenAction(item);
       // The frozen toggles flip the state and the toolbar button, never the menu tick.
       syncCheckMarks();
@@ -3041,6 +3157,15 @@ App.LivePatches = (function () {
               'Reset local refinement': 'resetMeshRefinement', 'View mesh': 'viewMesh' },
       'Flow conditions': { 'Create water level': 'createWaterPressureLine' }
     };
+    // Clear mesh, under Generate mesh: the two are a pair.
+    var meshMenu = (App.MENUS || []).filter(function (m) { return m.label === 'Mesh'; })[0];
+    if (meshMenu && !meshMenu.items.some(function (i) { return i && i.action === 'clearMesh'; })) {
+      var generateItem = meshMenu.items.filter(function (i) {
+        return i && i.action === 'generateMesh';
+      })[0];
+      meshMenu.items.splice(meshMenu.items.indexOf(generateItem) + 1, 0,
+        { label: 'Clear mesh', icon: 'delete', action: 'clearMesh' });
+    }
     (App.MENUS || []).forEach(function (menu) {
       var wanted = MENU_ACTIONS[menu.label];
       if (!wanted) return;
@@ -3130,11 +3255,27 @@ App.LivePatches = (function () {
     // not by tip: greyRailTools appends to the tip.
     var MESH_TOOL_ACTIONS = { refine: 'refineMesh', coarsen: 'coarsenMesh',
                               resetmesh: 'resetMeshRefinement' };
+    // The frozen tips do not say that the tool works on the selected object.
+    var MESH_TOOL_TIPS = {
+      refine: 'Refine mesh — halve the mesh size of the selected object',
+      coarsen: 'Coarsen mesh — double the mesh size of the selected object',
+      resetmesh: 'Reset local refinement — the selected object takes the global mesh size'
+    };
     (App.RAILS.mesh || []).forEach(function (tool) {
-      if (tool && MESH_TOOL_ACTIONS[tool.icon]) tool.action = MESH_TOOL_ACTIONS[tool.icon];
+      if (tool && MESH_TOOL_ACTIONS[tool.icon]) {
+        tool.action = MESH_TOOL_ACTIONS[tool.icon];
+        tool.tip = MESH_TOOL_TIPS[tool.icon];
+      }
     });
     if (!(App.RAILS.mesh || []).some(function (tool) { return tool && tool.action === 'meshSettings'; })) {
       App.RAILS.mesh.splice(2, 0, { icon: 'settings', tip: 'Mesh properties…', action: 'meshSettings' }, '-');
+    }
+    if (!(App.RAILS.mesh || []).some(function (tool) { return tool && tool.action === 'clearMesh'; })) {
+      var generateTool = (App.RAILS.mesh || []).filter(function (tool) {
+        return tool && tool.action === 'generateMesh';
+      })[0];
+      App.RAILS.mesh.splice(App.RAILS.mesh.indexOf(generateTool) + 1, 0,
+        { icon: 'delete', tip: 'Clear mesh — the settings and local sizes stay', action: 'clearMesh' });
     }
     
     /* File > Export model... is inert in the frozen mockup: js/data.js:99 gives the
@@ -3158,6 +3299,14 @@ App.LivePatches = (function () {
          running the Python that builds them -- `run <file.py>` in the command box --
          which works for any model, not only the one somebody thought to add a
          button for. See `runScript`. */
+      // The project's name, beside the other whole-project items (Save, Pack project).
+      if (!fileMenu.items.some(function (item) { return item && item.action === 'projectProperties'; })) {
+        var packAt = fileMenu.items.findIndex(function (item) {
+          return item && item.label === 'Pack project…';
+        });
+        fileMenu.items.splice(packAt === -1 ? fileMenu.items.length : packAt + 1, 0,
+          { label: 'Project properties…', action: 'projectProperties' });
+      }
       if (!fileMenu.items.some(function (item) { return item && item.action === 'importMdpa'; })) {
         // Belongs beside Export model -- the same File > Print/Export group -- not
         // tacked on after Exit, which is where a plain push would leave it.
@@ -3193,6 +3342,10 @@ App.LivePatches = (function () {
       soilMenu.items.push({ label: 'Create soil volume…', icon: 'cube', action: 'createSoilVolume' });
     }
     if (soilMenu) soilMenu.items = orderSoilMenu(soilMenu.items);
+    // The frozen Soil-mode hint asks for boreholes, which a layer no longer has.
+    (App.MODES || []).forEach(function (mode) {
+      if (mode.id === 'soil') mode.hint = SOIL_HINT;
+    });
     // The frozen "Show material sets…" (js/data.js) opens the Soil materials window.
     (App.RAILS.soil || []).forEach(function (tool) {
       if (tool && tool.action === 'materials') tool.tip = 'Soil materials…';
@@ -3644,19 +3797,22 @@ App.LivePatches = (function () {
       if (App.Menu && App.Menu.mountBar) App.Menu.mountBar();
     }
 
-    /* The one menu entry that needs a value typed. A prompt rather than a dialog of
-       its own: it asks for one integer, and the answer is printed to the command log
-       by the same `results at` the command box runs. */
+    /* The one menu entry that needs a value typed. It asks for one integer in the
+       app's own small window (js/name-dialog.js), not the browser's prompt, and the
+       answer is printed to the command log by the same `results at` the command box
+       runs. */
     function askForNode() {
       if (App.state && App.state.mode !== 'results') App.setMode('results');
-      var node = window.prompt('Show every field at which node number?');
-      if (node === null) return;
-      node = String(node).trim();
-      if (!/^\d+$/.test(node)) {
-        if (App.Command) App.Command.err('"' + node + '" is not a node number.');
-        return;
-      }
-      resultsCommand('results at ' + node);
+      return App.NameDialog.ask({
+        title: 'Value at a node', label: 'Node number',
+        help: 'Every field at this node is printed in the Session log.',
+        empty: 'Type a node number.',
+        check: function (text) {
+          return /^\d+$/.test(text) ? null : '"' + text + '" is not a node number.';
+        }
+      }).then(function (node) {
+        if (node !== null) resultsCommand('results at ' + node);
+      });
     }
 
     function itemsOf(label) {
@@ -4264,6 +4420,11 @@ App.LivePatches = (function () {
         stagesDialog();
         return;
       }
+      if (cmd === 'clearmesh') {
+        if (App.Command.write) App.Command.write('echo', '> ' + text.trim());
+        clearMesh();
+        return;
+      }
       if (cmd === 'cleargeometry') {
         if (App.Command.note) App.Command.note('Clearing custom geometry...');
         return deleteRequest('/api/project/custom_parts', 'Could not clear custom geometry.')
@@ -4347,6 +4508,14 @@ App.LivePatches = (function () {
        showing a value the model does not hold. */
     App.commitSelectionEdit = function (objKey) {
       var reselect = objKey === undefined ? App.state.selection : objKey;
+
+      // A row of the Mesh group: the object's local mesh size, a mesh setting.
+      if (App.PENDING_MESH_SIZE) {
+        var pending = App.PENDING_MESH_SIZE;
+        App.PENDING_MESH_SIZE = undefined;
+        return App.MeshSettings.saveLocalSize(pending.key, pending.size, pending.band)
+          .catch(function (error) { App.Command.err(error.message); });
+      }
 
       if (App.Loads && App.Loads.isLoadKey(reselect)) {
         var load = (App.LOADS || []).filter(function (item) { return item.id === reselect; })[0];
@@ -4621,6 +4790,7 @@ App.LivePatches = (function () {
     STRUCTURES_RAIL_GROUPS: STRUCTURES_RAIL_GROUPS,
     nameSoilBodyActions: nameSoilBodyActions,
     deleteRequest: deleteRequest, deleteCustomPart: deleteCustomPart, onTreeContextMenu: onTreeContextMenu,
+    projectProperties: projectProperties,
     objectKind: objectKind, renameObject: renameObject, deleteObject: deleteObject,
     syncCalculate: syncCalculate, calculateTip: calculateTip, CALCULATE_TIP: CALCULATE_TIP,
     resetForTests: resetForTests

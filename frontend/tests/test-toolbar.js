@@ -461,6 +461,12 @@
     T.eq(App.LivePatches.moveBefore(['mesh'], keyOf, 'flow', 'mesh'), ['mesh']);
   });
 
+  test('the Soil-mode hint speaks of materials and layers, not boreholes', function () {
+    var soil = App.MODES.filter(function (mode) { return mode.id === 'soil'; })[0];
+    T.ok(!/borehole/i.test(soil.hint), soil.hint);
+    T.ok(/layers/.test(soil.hint), soil.hint);
+  });
+
   test('ordering the Soil rail keeps a tool it does not recognise', function () {
     var mine = { icon: 'star', tip: 'Something new', action: 'doSomething' };
     var keys = App.LivePatches.orderSoilRail([

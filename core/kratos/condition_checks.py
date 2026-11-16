@@ -25,11 +25,8 @@ for loading the mesher.
 from __future__ import annotations
 
 from core.model import stages
-from core.model.schemas import (DisplacementCondition, Material, Stage, Project,
-                                SeepageCondition, WaterPressureCondition)
-
-SECTION_FACES = ("bottom", "left", "right", "top")
-"""The faces a 2D section has. Front and back bound the solid model along z only."""
+from core.model.schemas import (SECTION_FACES, DisplacementCondition, Material, Stage,
+                                Project, SeepageCondition, WaterPressureCondition)
 
 
 def warnings(project: Project) -> list[str]:

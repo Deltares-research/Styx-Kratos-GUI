@@ -476,6 +476,7 @@ window.EDITS_FIXTURE =
           "active": true
         }
       ],
+      "gravity_acceleration": 9.81,
       "mesh": {
         "element_size": 5.0,
         "order": 2,
@@ -494,6 +495,7 @@ window.EDITS_FIXTURE =
           "soil_L_mid__pit": 1.0,
           "soil_L_top__lift3": 1.0
         },
+        "size_bands": {},
         "refinements": [
           {
             "kind": "box",
@@ -1027,6 +1029,7 @@ window.EDITS_FIXTURE =
           "active": true
         }
       ],
+      "gravity_acceleration": 9.81,
       "mesh": {
         "element_size": 5.0,
         "order": 2,
@@ -1046,6 +1049,7 @@ window.EDITS_FIXTURE =
           "soil_L_top__lift3": 1.0,
           "drawn_0": 0.5
         },
+        "size_bands": {},
         "refinements": [
           {
             "kind": "box",
@@ -1634,6 +1638,7 @@ window.EDITS_FIXTURE =
           "active": true
         }
       ],
+      "gravity_acceleration": 9.81,
       "mesh": {
         "element_size": 5.0,
         "order": 2,
@@ -1652,6 +1657,7 @@ window.EDITS_FIXTURE =
           "soil_L_mid__pit": 1.0,
           "soil_L_top__lift3": 1.0
         },
+        "size_bands": {},
         "refinements": [
           {
             "kind": "box",
@@ -2156,6 +2162,7 @@ window.EDITS_FIXTURE =
           "active": true
         }
       ],
+      "gravity_acceleration": 9.81,
       "mesh": {
         "element_size": 5.0,
         "order": 2,
@@ -2172,6 +2179,7 @@ window.EDITS_FIXTURE =
           "soil_L_mid__pit": 1.0,
           "soil_L_top__lift3": 1.0
         },
+        "size_bands": {},
         "refinements": [
           {
             "kind": "box",
@@ -2703,6 +2711,7 @@ window.EDITS_FIXTURE =
           "active": true
         }
       ],
+      "gravity_acceleration": 9.81,
       "mesh": {
         "element_size": 5.0,
         "order": 2,
@@ -2721,6 +2730,7 @@ window.EDITS_FIXTURE =
           "soil_L_mid__pit": 1.0,
           "soil_L_top__lift3": 1.0
         },
+        "size_bands": {},
         "refinements": [
           {
             "kind": "box",

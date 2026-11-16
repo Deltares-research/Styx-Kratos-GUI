@@ -85,8 +85,9 @@ Genuchten soil.
 | `load P list\|add\|set\|remove ...` | Loads: `add point [--at X Y]`, `add line [--x FROM TO]` (2D), `add surface [--x ...] [--z ...]` (3D), `--components ...` |
 | `normal-load P list\|add\|set\|remove ...` | Pressures normal to a line, in 2D: `add [ID] --points ... [--hydrostatic [--reference-coordinate Y] \| --pressure S]` |
 | `boundary P list\|add\|set\|remove\|standard ...` | The boundary conditions: `add [ID] --face F\|--part KEY\|--line ...\|--point X Y --fixed\|--roller\|--fix AXIS ...` for a support, `add [ID] --domain\|... --water-pressure TYPE ...` for a water pressure, `add [ID] --face F\|--line ... --seepage` for a seepage face; `standard` puts back the standard supports |
+| `gravity P [G]` | Show whether the self weight acts, or set g in m/s² (9.81 in a new project). The initial stage's stress initialisation decides whether the self weight acts |
 | `parts P` | Every part by its key, and every water pressure condition: the names stages activate and deactivate |
-| `mesh P [--size S] [--order 1\|2]` | Mesh the model and report its size. `--size` and `--order` are kept in the project |
+| `mesh P [--size S] [--order 1\|2] [--body-size KEY S] [--band KEY B]` | Mesh the model and report its size. The settings given are kept in the project, as the **Mesh properties** window keeps them. `--body-size` is the element size at one object, by its key: a layer (`soil_<layer>`) or soil body, a sheet pile, an anchor (at its head), an interface, a normal load, a soil line, a load, a boundary condition, or a face of the model (`face_bottom`, `face_left`, `face_right`, `face_top`, and in 3D `face_front`, `face_back`). A condition on a face keeps its size as the size of that face, and a condition on a soil part as the size of that part; a condition on the whole soil is refused. `none` takes the size and its band away. `--band` is the distance over which that size grows back to the element size; `none` takes it away |
 | `stages P [list\|show\|add\|copy\|set\|remove\|activate\|deactivate] ...` | The construction sequence, edited as the GUI's Stages toolbar edits it. `phases` is the old name and still works |
 | `node SOURCE NODE ...` | Which SubModelParts a node of the deck is in, and the nodes an interface split from it |
 | `deck show SOURCE` | A deck's mesh, SubModelParts and stages |
@@ -194,11 +195,13 @@ kratos-cli parts pit.json                                 # soil_top, ... for th
   `FULLY_COUPLED` (its "Fully coupled"). `DRAINED` given becomes `CONSTANT_PW_FIELD`.
   `UNDRAINED` given becomes `FULLY_COUPLED` with its own permeability, and `set` says
   so. A permeability given to a soil that does not read it is kept, and `set` says that
-  it is not used. `--color` is a
-  `#rrggbb` colour, such as `#c4a86a`. Without it, `add` gives a colour no other soil has, as the GUI does. The export derives some variables that are left
-  out, and its warning lists them. It also derives `K0_NC`, as ν / (1 − ν) for a
-  linear elastic soil and 1 − sin φ for a Mohr-Coulomb one, into
-  `initial_materials.json`, but that warning does not list it.
+  it is not used. `--color` is a `#rrggbb` colour, such as `#c4a86a`. Without it, `add`
+  gives a colour no other soil has, as the GUI does. The export derives some variables
+  that are left out, and its warning lists them. It also derives `K0_NC`, as ν / (1 − ν)
+  for a linear elastic soil and 1 − sin φ for a Mohr-Coulomb one, into
+  `initial_materials.json`, but that warning does not list it. `--r-inter` is the factor
+  an interface puts on this soil's cohesion and tan φ (default 0.7), the **Rinter** field
+  of the Soil materials window.
 - **Soil models**: `--model linear-elastic` or `--model mohr-coulomb` sets the law for the
   model's dimension, as the **Soil model** list of the Soil material window does. The
   values the soil already has stay, except those another model reads and this one does
@@ -276,7 +279,7 @@ kratos-cli interface pit.json add contact --structure sheet --side right
 kratos-cli interface pit.json add upper --structure sheet --side left --from 6 0 --to 6 -1
 kratos-cli load pit.json add line surcharge --x 6 60 --components 0 -10000
 kratos-cli normal-load pit.json add water_1 --hydrostatic --points 0 -2 6 -2 6 -1
-kratos-cli set pit.json mesh.body_sizes.sheet 0.5
+kratos-cli mesh pit.json --body-size sheet 0.5
 ```
 
 - **Where a new one goes.** A structure given no geometry is put where the GUI's tool
@@ -408,7 +411,10 @@ kratos-cli boundary dam.json add exit --seepage --line 1.62 0.48 1.62 4     # a 
   the initial stage's stress initialisation (`stages P set initial
   --stress-initialisation ...`). `k0` and `gravity` put it on every body, structures too,
   in every stage; `none` leaves it out of every stage, for a model loaded by its
-  conditions alone. A flow sequence always has it. `show P` says which.
+  conditions alone. A flow sequence always has it. `show P` and `gravity P` say which.
+  `gravity P 9.80665` sets the acceleration g in m/s², as **File** → **Project
+  properties…** does in the GUI. The water keeps its specific weight: its density is
+  written as the specific weight divided by g.
 - `check` prints what the export will warn about the conditions: a model nothing holds, a
   water level that fixes nothing, a coupled soil with no water pressure condition or a
   stage that leaves its water free, a condition this dimension does not have.
@@ -680,9 +686,11 @@ viewport's. A command can also be typed with a leading `_` in the box (`_mesh`).
 | `script <file.py> [--force]` | `kratos-cli script P --out FILE.py` |
 | `export` | `kratos-cli export P --out DIR` |
 | `mesh` | `kratos-cli mesh P` |
+| `clearmesh` | — the viewport's: kratos-cli keeps no mesh, and each `mesh` or `export` makes it again |
 | `stages`, `phases` | `kratos-cli stages P` |
 | `water <level>`, `water off` | `kratos-cli water P LEVEL`, `kratos-cli water P off` |
 | `boundary`, `boundary list`, `boundary standard` | `kratos-cli boundary P list`, `kratos-cli boundary P standard` |
+| `gravity`, `gravity 9.80665` | `kratos-cli gravity P`, `kratos-cli gravity P 9.80665` |
 | `units`, `units <system>` | `kratos-cli units P`, `kratos-cli units P kN` |
 | `node <id>` | `kratos-cli node P NODE` |
 | `cleargeometry` | `kratos-cli volume P clear` |

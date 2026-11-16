@@ -22,13 +22,13 @@ from __future__ import annotations
 
 import argparse
 
-from cli.terminal.files import read
+from cli.terminal.files import add_project, add_writing, read, written
 from cli.terminal.output import Answer, CommandError
 from cli.terminal.words import (NAME_HELP, action, coordinates, edited, existing, given,
                                 id_help, named_ids, noun)
 from core import session
 from core.kratos import condition_checks
-from core.model import drafts
+from core.model import drafts, stages
 from core.model.schemas import FACES, Project
 
 PRESSURE_TYPES = ("Uniform", "Hydrostatic", "Phreatic_Multi_Line")
@@ -65,6 +65,22 @@ def register(commands, common: argparse.ArgumentParser) -> None:
     action(actions, common, "standard", standard_conditions,
            help="the standard supports, the bottom fixed and the sides on rollers, in "
                 "place of the supports on the faces")
+
+    gravity = commands.add_parser("gravity", parents=[common],
+                                  help="show whether the self weight acts, or set g",
+                                  description="Whether the self weight acts, and the "
+                                              "gravitational acceleration g: 9.81 m/s2 in "
+                                              "a new project. A number sets g, in m/s2, as "
+                                              "File > Project properties does in the GUI. "
+                                              "There is no switch: the initial stage's "
+                                              "stress initialisation decides whether the "
+                                              "self weight acts (kratos-cli stages P set "
+                                              "initial --stress-initialisation ...).")
+    add_project(gravity)
+    gravity.add_argument("acceleration", nargs="?", type=_acceleration, metavar="G",
+                         help="the gravitational acceleration g, in m/s2")
+    add_writing(gravity)
+    gravity.set_defaults(handler=set_gravity)
 
 
 def _fields(parser: argparse.ArgumentParser) -> None:
@@ -279,6 +295,47 @@ def standard_conditions(args: argparse.Namespace) -> Answer:
                                    "rollers")
     answer.lines += listed_lines(project)
     return answer
+
+
+def _acceleration(text: str) -> float:
+    """g in m/s2. `on` and `off` are refused with what decides the self weight now."""
+    word = text.strip().lower()
+    if word in ("on", "off"):
+        raise argparse.ArgumentTypeError(
+            "gravity has no switch: the initial stage's stress initialisation decides "
+            "whether the self weight acts (stages P set initial --stress-initialisation "
+            "k0|gravity|none). Give a number to set g, in m/s2")
+    try:
+        value = float(word)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{text!r} is not a number (g in m/s2)") from None
+    if not value > 0:
+        raise argparse.ArgumentTypeError(f"g must be above 0 m/s2, not {text}")
+    return value
+
+
+def set_gravity(args: argparse.Namespace) -> Answer:
+    project = read(args)
+    if args.acceleration is None:
+        return Answer(data=_gravity_data(project), lines=[_gravity_line(project)])
+    project = session.set_gravity_acceleration(project, args.acceleration)
+    target, where = written(args, project)
+    return Answer(data={"file": str(target) if target else None, **_gravity_data(project)},
+                  lines=[f"{_gravity_line(project)} {where}"])
+
+
+def _gravity_data(project: Project) -> dict:
+    return {"gravity": stages.gravity(project),
+            "gravity_acceleration": project.gravity_acceleration}
+
+
+def _gravity_line(project: Project) -> str:
+    """As the GUI's command box says it (`frontend/js/boundary-conditions.js`
+    `gravityLine`)."""
+    g = f"g = {project.gravity_acceleration:g} m/s²"
+    return (f"The self weight acts on every body, with {g}." if stages.gravity(project)
+            else f"The self weight is off: the initial stage initialises no stresses ({g} "
+                 "when it acts).")
 
 
 def remove_condition(args: argparse.Namespace) -> Answer:

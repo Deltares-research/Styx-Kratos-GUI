@@ -118,7 +118,7 @@ and adds only the values that are missing
 
 | Feature | Kratos | Dim | Status |
 |---|---|---|---|
-| Self weight | `VOLUME_ACCELERATION` on the computational part, which holds the nodes of every body, structures included, in every stage. In a mechanical sequence the initial stage's stress initialisation decides it: K0 or gravity loading has it, none has none; the initial stage's **Gravity** row in the **Stages** window says which. A flow sequence always has it. | 2D, 3D | Tested |
+| Self weight | `VOLUME_ACCELERATION` on the computational part, which holds the nodes of every body, structures included, in every stage, with g = 9.81 m/s² or the project's own g (`gravity 9.80665`, or **File** → **Project properties…**). In a mechanical sequence the initial stage's stress initialisation decides it: K0 or gravity loading has it, none has none; the initial stage's **Gravity** row in the **Stages** window says which. A flow sequence always has it. | 2D, 3D | Tested |
 | Point load | `PointLoadCondition2D1N` / `3D1N`, `POINT_LOAD` | 2D, 3D | Tested |
 | Line load | `LineLoadCondition2D2N` / `LineLoadDiffOrderCondition2D3N`, `LINE_LOAD` | 2D | Tested |
 | Surface load | `UPwFaceLoadCondition3D3N` / `SurfaceLoadDiffOrderCondition3D6N`, `SURFACE_LOAD` | 3D | Limited |
@@ -207,8 +207,8 @@ and adds only the values that are missing
 | Size and order | Global element size; linear or quadratic elements, optionally with straight edges |
 | Algorithms | 2D: frontal, delaunay, meshadapt, auto. 3D: delaunay, frontal, hxt. |
 | Quality | Optimisation (none, gmsh, netgen), smoothing steps, points along curves, minimum size factor |
-| Local control | A target size for each soil layer and each structure; box and cylinder refinement zones; **Refine**, **Coarsen** and **Reset local refinement** |
-| Selection | Only the selected layers get a mesh. Shared faces keep common nodes. |
+| Local control | An element size and a band (the distance over which the size grows back to the global size) for each soil layer and body, structure, interface, normal load, soil line, condition on a line or at a point, and point load, in the Selection explorer, the **Mesh properties** window and `kratos-cli mesh`; **Refine mesh**, **Coarsen mesh** and **Reset local refinement** on the selected object. Box and cylinder refinement zones from a model script or `kratos-cli add` still mesh. |
+| Whole model | Every soil layer and soil body gets a mesh, also when it is hidden or another object is selected, as with `kratos-cli mesh`. Shared faces keep common nodes. To leave a part out of the mesh, remove it from the model. |
 | Mesh labels | Node and element numbers on the mesh, spread out where nodes overlap |
 
 ### B5. Calculation and export
@@ -243,7 +243,7 @@ and adds only the values that are missing
 | `mesh`, `calculate`, `export` | Makes the mesh, calculates, or writes the Kratos files |
 | `stages` | Opens the **Stages** window |
 | `water`, `units`, `cleargeometry` | Changes the water level or the unit system, or removes drawn and imported solids |
-| `boundary` | Lists the boundary conditions or puts the standard supports back |
+| `boundary`, `gravity` | Lists the boundary conditions or puts the standard supports back; shows whether the self weight acts, or sets g |
 | `soillayers`, `materials` | Opens the soil windows |
 | `colour`, `node` | Shows parts of the mesh in colour, or the parts that contain a node |
 | `results …` | `runs`, `open`, `stage`, `fields`, `field`, `at`, `bands`, `smooth`, `map`, `deform`, `range`, `reverse`, `mesh`, `loads`, `plot`, `csv`, `files`, `get`, `zip` |
@@ -280,8 +280,7 @@ REST API: `/api/project`, `/api/mesh`, `/api/calculate`, `/api/results/…`.
    User-defined models (UDSM, UMAT) are written as typed, without a test.
 2. **No factor of safety.** Styx has no φ–c reduction stage.
 3. **Groundwater flow is 2D only.** A project cannot mix flow stages
-   with mechanical stages, and a drawn condition line has no element size of its own
-   (a box refinement gives a seepage face its fine mesh). With a Van Genuchten soil, the
+   with mechanical stages. With a Van Genuchten soil, the
    Newton-Raphson iterations can fall into a cycle on some meshes and stop without
    converging; another element size then helps.
 4. **3D is not proven.** No 3D element, law or interface has run in Kratos in a test.

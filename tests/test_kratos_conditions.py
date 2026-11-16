@@ -276,6 +276,37 @@ def weightless(project: Project) -> Project:
         Stage(id="initial", name="Initial stage").model_dump()]})
 
 
+def test_g_is_9_81_in_a_new_project_and_in_an_old_file():
+    assert blank_project().gravity_acceleration == 9.81
+    payload = seed_project().model_dump()
+    del payload["gravity_acceleration"]
+    assert Project.model_validate(payload).gravity_acceleration == 9.81
+    for wrong in (0.0, -9.81):
+        with pytest.raises(ValueError):
+            Project.model_validate({**payload, "gravity_acceleration": wrong})
+
+
+def test_the_self_weight_and_the_water_density_follow_the_projects_g(gmsh_session):
+    """g is the deck's VOLUME_ACCELERATION; the water's density is its specific weight
+    over g, so the water pressures Kratos derives stay those of the specific weight."""
+    def written(project: Project) -> tuple[list[float], float]:
+        export = writer.export_project(project, MESH)
+        doc = json.loads(export["project_parameters"])
+        processes = doc["stages"]["1_Stage"]["stage_settings"]["processes"]
+        weight = next(p["Parameters"]["value"] for p in processes["loads_process_list"]
+                      if p["Parameters"].get("variable_name") == "VOLUME_ACCELERATION")
+        materials = json.loads(export["materials"])["properties"]
+        return weight, materials[0]["Material"]["Variables"]["DENSITY_WATER"]
+
+    project = section(None)
+    weight, density = written(project)
+    assert weight == [0.0, -9.81, 0.0]
+    assert density == pytest.approx(project.water_specific_weight / 9.81)
+    weight, density = written(session.set_gravity_acceleration(project, 10.0))
+    assert weight == [0.0, -10.0, 0.0]
+    assert density == pytest.approx(project.water_specific_weight / 10.0)
+
+
 def test_without_a_stress_initialisation_no_stage_has_the_self_weight(gmsh_session):
     on = writer.export_project(section(None), MESH)
     off = writer.export_project(weightless(section(None)), MESH)
@@ -344,10 +375,18 @@ def test_the_conditions_update_replaces_the_list_or_leaves_it():
     assert kept.boundary_conditions == project.boundary_conditions
     cleared = session.replace_conditions(project, ConditionsUpdate(boundary_conditions=[]))
     assert cleared.boundary_conditions == []
+    g = session.replace_conditions(project, ConditionsUpdate(gravity_acceleration=9.80665))
+    assert g.gravity_acceleration == 9.80665
 
 
 def test_a_model_script_says_nothing_about_gravity():
     assert "gravity=" not in script_writer.script(section(None))
+
+
+def test_a_model_script_writes_its_own_g_out():
+    script = script_writer.script(session.set_gravity_acceleration(section(None), 9.80665))
+    assert "gravity_acceleration=9.80665" in script
+    assert "gravity_acceleration=" not in script_writer.script(section(None))
 
 
 def test_a_condition_on_an_absent_soil_body_is_omitted_with_a_warning(gmsh_session):

@@ -271,6 +271,83 @@
     });
   });
 
+  test('the New project window names the project, as kratos-cli new --name does', function () {
+    return withShell(function (ctx, host) {
+      App.runAction({ action: 'newProject' });
+      var dialog = host.querySelector('.name-dialog-window');
+      var input = dialog.querySelector('input[name=name]');
+      T.eq(input.value, 'Untitled project');
+      input.value = 'Pit A';
+      Array.prototype.filter.call(dialog.querySelectorAll('button'), function (button) {
+        return button.textContent === 'OK';
+      })[0].click();
+      return settle().then(settle).then(settle).then(function () {
+        T.eq(ctx.requests.map(function (r) { return r.method + ' ' + r.path; }),
+             ['POST /api/project/new', 'PUT /api/project']);
+        T.eq(ctx.requests[1].body.name, 'Pit A');
+        T.eq(App.PROJECT.name, 'Pit A');
+      });
+    });
+  });
+
+  test('Project properties renames the project; Cancel and the same name write nothing', function () {
+    return withShell(function (ctx) {
+      var file = App.MENUS.filter(function (m) { return m.label === 'File'; })[0];
+      T.ok(file.items.some(function (item) {
+        return item && item.action === 'projectProperties' && item.label === 'Project properties…';
+      }), 'File > Project properties…');
+      var name = App.PROJECT.name;
+      delete App.PROJECT.gravity_acceleration;   // a project from before the field
+      var answers = [null, { name: name, gravity_acceleration: '9.81' },
+                     { name: 'Pit B', gravity_acceleration: '9.81' }];
+      App.NameDialog = { form: function (options) {
+        T.eq(options.fields.map(function (f) { return [f.name, f.value]; }),
+             [['name', App.PROJECT.name], ['gravity_acceleration', 9.81]]);
+        return Promise.resolve(answers.shift());
+      } };
+      return App.LivePatches.projectProperties().then(function () {
+        return App.LivePatches.projectProperties();
+      }).then(function () {
+        T.eq(ctx.requests, [], 'cancelled, then unchanged');
+        return App.LivePatches.projectProperties();
+      }).then(function () {
+        T.eq(ctx.requests[0].method + ' ' + ctx.requests[0].path, 'PUT /api/project');
+        T.eq('gravity_acceleration' in ctx.requests[0].body, false,
+             'a rename of a project without g sends no g');
+        T.eq(App.PROJECT.name, 'Pit B');
+        T.ok(ctx.lines.indexOf('ok:Project name: Pit B.') >= 0);
+      });
+    });
+  });
+
+  test('Project properties sets g, as kratos-cli gravity P G does, and refuses g <= 0', function () {
+    return withShell(function (ctx, host) {
+      App.LivePatches.projectProperties();
+      var dialog = host.querySelector('.name-dialog-window');
+      var input = dialog.querySelector('input[name=gravity_acceleration]');
+      T.eq(input.value, '9.81');
+      T.ok(dialog.textContent.indexOf('m/s²') >= 0, 'the unit is shown');
+      function ok() {
+        Array.prototype.filter.call(dialog.querySelectorAll('button'), function (button) {
+          return button.textContent === 'OK';
+        })[0].click();
+      }
+      input.value = '0';
+      ok();
+      T.ok(host.querySelector('.name-dialog-window'), 'g = 0 keeps the window open');
+      T.ok(dialog.textContent.indexOf('Gravity is a number above 0 m/s².') >= 0);
+      input.value = '9.80665';
+      ok();
+      return settle().then(settle).then(function () {
+        T.eq(ctx.requests.map(function (r) { return r.method + ' ' + r.path; }),
+             ['PUT /api/project']);
+        T.eq(ctx.requests[0].body.gravity_acceleration, 9.80665);
+        T.eq(App.PROJECT.gravity_acceleration, 9.80665);
+        T.ok(ctx.lines.indexOf('ok:Gravity: g = 9.80665 m/s².') >= 0);
+      });
+    });
+  });
+
   test('new project waits for confirmation and save failures report the picker error', function () {
     return withShell(function (ctx, host) {
       App.runAction({ action: 'newProject' });
@@ -296,17 +373,105 @@
   test('renaming a drawn body and a boundary condition saves through their respective owners', function () {
     return withShell(function (ctx) {
       App.PROJECT.custom_parts = [{ key: 'drawn_rename', label: 'Old body' }];
-      window.prompt = function () { return '  New body  '; };
+      var asked = [];
+      App.NameDialog = { ask: function (options) {
+        asked.push(options.value);
+        return Promise.resolve(asked.length === 1 ? 'New body' : 'New support');
+      } };
       return App.LivePatches.renameObject('part', 'drawn_rename').then(function () {
+        T.eq(asked, ['Old body'], 'the Rename window opens on the name it has');
         T.eq(ctx.requests[0].body.custom_parts[0].label, 'New body');
         var record = App.BoundaryConditions.draftDisplacement(App.PROJECT, 'face', { face: 'bottom' });
         App.PROJECT.boundary_conditions = [record];
         App.BOUNDARY_CONDITIONS = [record];
-        window.prompt = function () { return 'New support'; };
         return App.LivePatches.renameObject('condition', record.id);
       }).then(function () {
         T.eq(ctx.requests[1].path, '/api/project/conditions');
         T.eq(ctx.requests[1].body.boundary_conditions[0].name, 'New support');
+      });
+    });
+  });
+
+  test('a soil layer renames in the Rename window and deletes from the Model explorer, '
+       + 'with no browser prompt', function () {
+    return withShell(function (ctx, host) {
+      window.prompt = function () { throw new Error('the browser prompt must not open'); };
+      App.Explorer.mountTree('soil');
+      var menus = [];
+      App.Menu.openAt = function (items, x, y, pick) { menus.push({ items: items, pick: pick }); };
+      function rightClick(key) {
+        var row = host.querySelector('#tree-model .tree-row[data-obj="' + key + '"]');
+        T.ok(row, 'a row for ' + key);
+        row.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }));
+        var menu = menus[menus.length - 1];
+        return function (label) {
+          var item = menu.items.filter(function (it) { return it && it.label === label; })[0];
+          T.eq(!!item.disabled, false, label + ' is enabled for a soil layer');
+          return menu.pick(item);
+        };
+      }
+      var first = App.LAYERS[0], second = App.LAYERS[1];
+      var count = App.LAYERS.length;
+      rightClick('soil_' + first.id)('Rename…');
+      T.eq(menus.length, 1, 'one menu: the frozen one must not open as well');
+      var dialog = host.querySelector('.name-dialog-window');
+      T.ok(dialog, 'the Rename window opens');
+      var input = dialog.querySelector('input[name=name]');
+      T.eq(input.value, first.name);
+      input.value = 'Clay top';
+      Array.prototype.filter.call(dialog.querySelectorAll('button'), function (button) {
+        return button.textContent === 'OK';
+      })[0].click();
+      return settle().then(settle).then(function () {
+        T.eq(ctx.requests[0].path, '/api/project/layers');
+        T.eq(ctx.requests[0].body.layers[0].name, 'Clay top');
+        T.ok(ctx.lines.indexOf('ok:Renamed soil layer to Clay top.') >= 0, ctx.lines.join(' | '));
+        App.Explorer.mountTree('soil');
+        return rightClick('soil_' + second.id)('Delete');
+      }).then(function () {
+        T.eq(ctx.requests[1].path, '/api/project/layers');
+        T.eq(ctx.requests[1].body.layers.length, count - 1);
+        T.ok(!ctx.requests[1].body.layers.some(function (l) { return l.id === second.id; }));
+      });
+    });
+  });
+
+  test('a cancelled rename saves nothing', function () {
+    return withShell(function (ctx) {
+      App.PROJECT.custom_parts = [{ key: 'drawn_rename', label: 'Old body' }];
+      App.NameDialog = { ask: function () { return Promise.resolve(null); } };
+      return App.LivePatches.renameObject('part', 'drawn_rename').then(function () {
+        T.eq(ctx.requests, []);
+      });
+    });
+  });
+
+  test('the Rename window answers the typed name, refuses an empty one, and null on Cancel', function () {
+    return withShell(function () {
+      var layer = document.getElementById('modal-layer');
+      function shown() { return layer.querySelector('.name-dialog-window'); }
+      function button(label) {
+        return Array.prototype.filter.call(shown().querySelectorAll('.dlg-foot .btn'),
+          function (b) { return b.textContent === label; })[0];
+      }
+      var first = App.NameDialog.ask({ title: 'Rename', value: 'Old' });
+      var input = shown().querySelector('input[name=name]');
+      T.eq(input.value, 'Old');
+      T.eq(shown().querySelector('.dlg-title').textContent, 'Rename');
+      input.value = '   ';
+      button('OK').click();
+      T.ok(shown(), 'an empty name keeps the window open');
+      T.eq(shown().querySelector('.mesh-settings-message').textContent, 'Type a name.');
+      input.value = '  New  ';
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+      return first.then(function (name) {
+        T.eq(name, 'New');
+        T.ok(!shown(), 'closed after OK');
+        var second = App.NameDialog.ask({ value: 'Old' });
+        button('Cancel').click();
+        return second;
+      }).then(function (name) {
+        T.eq(name, null);
       });
     });
   });
@@ -459,7 +624,9 @@
             return stage.id === selectedId ? Object.assign({}, stage, { parent: inserted.id }) : stage;
           }), 'insertion preserves every other stage');
         T.eq(ctx.requests[0].body.stages, App.PROJECT.stages);
-        T.eq(App.state.phase, selectedId);
+        T.eq(App.state.phase, inserted.id, 'the inserted stage is selected, to fill in');
+        App.state.phase = selectedId;
+        App.Explorer.mountPhases();
         host.querySelectorAll('.stage-toolbar button')[2].click();
         return settle();
       }).then(function () {

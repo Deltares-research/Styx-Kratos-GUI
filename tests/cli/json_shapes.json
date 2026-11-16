@@ -70,6 +70,7 @@
   },
   "file": "string",
   "gravity": "boolean",
+  "gravity_acceleration": "number",
   "layers": [
    "string"
   ],
@@ -260,6 +261,7 @@
   },
   "file": "string",
   "gravity": "boolean",
+  "gravity_acceleration": "number",
   "layers": [
    "string"
   ],

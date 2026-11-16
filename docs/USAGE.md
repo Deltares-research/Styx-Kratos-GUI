@@ -30,8 +30,8 @@ explorer**, below the Model explorer.
 Some menu items and tools come from the first design of the GUI and do nothing yet. They are
 grey, in the menus and on the tool rail, and you cannot select them. The tip of a grey tool
 says *not available yet*. These are, for example: **Import soil layers…**, **Create point**,
-**Create plate**, **Create beam**, **Create embedded beam**, **Tunnel designer…**, **Refine
-mesh**, **Coarsen mesh**, the wells, drains and flow functions, **Select multiple objects**,
+**Create plate**, **Create beam**, **Create embedded beam**, **Tunnel designer…**, the
+wells, drains and flow functions, **Select multiple objects**,
 **Activate selection**, **Deactivate selection**, **Preview stage**, **Pack project…**,
 **Print…**, the **Expert** menu (except **Command line**), and **Help** → **Reference
 manual** and **Tutorial manual**.
@@ -53,7 +53,12 @@ Click **Calculate** between Staged construction and Results.
 
 ## Projects
 
-- **New project:** **File** → **New project…** starts an empty site.
+- **New project:** **File** → **New project…** starts an empty site. Type the project name
+  in the window. The name shows in the title bar, and **Save** names the file after it.
+- **Project properties:** **File** → **Project properties…** changes the name of the open
+  project and the gravitational acceleration g (9.81 m/s² in a new project).
+  In the terminal, `kratos-cli new FILE --name NAME` and `kratos-cli set FILE name NAME` do
+  the same.
 - **Open project:** **File** → **Open project…** opens a project file (`.json`).
 - **Save:** **File** → **Save** or **Save as…** writes the project as a `.json` file. In
   Chrome and Edge, a window asks where to save the file. Other browsers put the file in your
@@ -86,7 +91,8 @@ Right-click in the viewport for more commands: hide the selected object, hide al
 objects, show all, show node or element labels, and visibility settings.
 
 Right-click an object in the Model explorer to zoom to it, rename it, delete it, or open its
-properties.
+properties. This works for every object, soil layers too. **Rename…** opens a small window:
+type the new name and click **OK**, or press <kbd>Enter</kbd>.
 
 ## Soil mode
 
@@ -219,10 +225,10 @@ narrower than the model in z cannot be made of lines, and the project does not o
 | Sheet pile (2D) | Click **Create sheet pile…**. Type the two end points and the section properties, then click **Save**. |
 | Wall panel (3D) | Click **Create wall panel…**. Type the corners of the footprint, the **Top level** and the **Toe level**. |
 | Member (3D): a bored pile, a king post or a strut | Click **Create member…**. |
-| Anchor | Click **Create anchor…** (in 3D: **Create anchor in space…**). Styx puts the head of the anchor on a sheet pile, a wall panel or a member. Then change the head, the tail and the prestress in the Selection explorer. |
+| Anchor | Click **Create anchor…** (in 3D: **Create anchor in space…**). Styx puts the head of the anchor on a sheet pile, a wall panel or a member. Then change the head, the tail and the prestress in the Selection explorer. The **Tension limit** and **Compression limit** of the tendon are design values: Kratos does not use them, and the export warns while one is set. A new tendon has a tension limit of 900 kN. Type another value, or click **No tension limit** or **No compression limit** to take a limit away. |
 | Interface (2D only) | Click **Create interface…**. Select the sheet pile in **Along**, or **Own coordinates**, then click **Save**. See [Interfaces](#interfaces). |
 | Point or line load (2D), surface load (3D) | Click **Create load**. Type the position and the load components, or click **Pick on model…** and click in the viewport. |
-| Normal load (2D only) | Click **Create normal load**. Type the two end points. Select **Uniform** and type the pressure, or select **Hydrostatic** and type the **Reference level**, where the pressure is zero. An empty level takes the water level. The arrows of a hydrostatic load grow with depth below its level. |
+| Normal load (2D only) | Click **Create normal load**. Type the points of the line: **Add point** adds one after the last, and **Remove** takes one away. Or click **Pick on model…**, click the points in the viewport and press <kbd>Enter</kbd>. Select **Uniform** and type the pressure, or select **Hydrostatic** and type the **Reference level**, where the pressure is zero. A hydrostatic load does not use a pressure. An empty level takes the water level. The arrows of a hydrostatic load grow with depth below its level. |
 | Support (2D only, along a line or at a point) | Click **Create boundary condition** and select **Line prescribed displacement** or **Point prescribed displacement**. Click the points in the viewport, then select the components to fix. See [Boundary conditions](#boundary-conditions). |
 | Point, line, surface, or box (3D only) | Click the tool, then click the points in the viewport. You can also type `x y` or `x y z` in the command box for each point. Press <kbd>Enter</kbd> to finish a line or a surface, or <kbd>Esc</kbd> to stop. |
 | Solid from a CAD file | Click **Import model…** and select a STEP, IGES, BREP, STL or OBJ file. |
@@ -257,11 +263,15 @@ explorer, and **Properties…** on the Model explorer row, open the same window.
    pile. For a retaining wall, you usually select both.
 5. In **Contact**, select the contact properties, or **New contact**. You change their
    numbers in the Selection explorer: the law, the stiffnesses, the soil, the virtual
-   thickness, and the permeability. The **Elastic** law reads the stiffnesses only. The
-   **Coulomb** law reads a strength too: under **Strength**, select **From the soil**
-   (the soil's, reduced by `R_inter`) or **Set on the interface** (type `GEO_COHESION`
-   and `GEO_FRICTION_ANGLE`). A linear elastic soil has no strength, so against one the
-   contact gets its own, and you set it.
+   thickness, and the permeability. A new contact takes the soil each part of the
+   interface runs against (**From the soil it runs against**). The **Elastic** law reads
+   the stiffnesses only. The **Coulomb** law reads a strength too, and slips when the
+   shear stress reaches it: under **Strength**, select **From the soil** (the soil's,
+   reduced by **R_inter**) or **Set on the interface** (type `GEO_COHESION` and
+   `GEO_FRICTION_ANGLE`). **R_inter** is one number for the whole contact; click **Each
+   soil's own R_inter** to use the R_inter of each soil instead. A linear elastic soil has
+   no strength, so against one the contact gets its own, and you set it. The contact takes
+   the saturation of its soil, and a Coulomb contact also takes its tension cut-off.
 
 You can make as many interfaces as you need, for example one on each face of a pile, or
 two on parts of one face. Two interfaces on the same face of a pile over the same length
@@ -354,7 +364,10 @@ warns about it, and about a model that nothing holds.
 initialisation of the initial stage (see [Stage settings](#stage-settings)): **K0
 procedure** and **Gravity loading** put it on every body, the soil and the structures, in
 every stage; **None** leaves it out of every stage. The initial stage's **Gravity** row in
-the **Stages** window says which. A flow calculation always has it.
+the **Stages** window says which. A flow calculation always has it. The acceleration g is
+9.81 m/s² unless you change it in **File** → **Project properties…**. The water keeps its
+specific weight when g changes: Styx writes the water's density as the specific weight
+divided by g.
 
 A **seepage face** is a part of the soil's outer boundary where the water may leave the
 soil in a groundwater flow calculation, for example the downstream face of a dam above the
@@ -380,7 +393,8 @@ When you open Mesh mode, the **Mesh properties** window opens:
 
 | Setting | What it does |
 |---|---|
-| Layer mesh sizes | Select the layers to mesh, and give each one its own target size. A layer with no size of its own shows the global size and follows it. Type a value to give the layer its own size. Styx meshes the selected layers together, so their shared faces have common nodes. Sizes that are not in this table, for example the size of a sheet pile set in `kratos-cli`, do not change. |
+| Layer mesh sizes | Every layer is meshed, and each layer can have its own target size. A layer with no size of its own shows the global size and follows it. Type a value to give the layer its own size. **Band** is the distance outside the layer over which its size grows back to the global size. Styx meshes the layers together, so their shared faces have common nodes. To leave a part out of the mesh, remove it from the model. |
+| Object mesh sizes | The element size at each structure, anchor, interface, normal load, soil line, load, condition on a line or at a point, and face of the model, and its **Band**: the distance over which the size grows back to the global size. Empty: the object takes the size of the mesh around it. With the layers, these rows cover every node group that the Kratos input file has. |
 | Global element size | The maximum length of an element edge, in metres |
 | Element order | Linear elements, or quadratic elements with a midside node on each edge |
 | 2D algorithm, 3D algorithm | The Gmsh algorithm that makes the elements |
@@ -392,6 +406,48 @@ When you open Mesh mode, the **Mesh properties** window opens:
 
 Click **Apply and generate** to make the mesh, or **Apply** to only keep the settings.
 <kbd>F9</kbd> in Mesh mode makes the mesh again with the saved settings.
+**Mesh** → **Clear mesh**, the tool under **Generate mesh** on the tool rail, or the command
+`clearmesh` removes the mesh from the view. The mesh settings and the local mesh sizes stay,
+so <kbd>F9</kbd> makes the same mesh again.
+
+### A finer mesh at one object
+
+You can give a finer mesh to a layer, a soil body, a sheet pile, an anchor, an interface,
+a normal load, a soil line, a load (point, line or surface), a boundary condition, or a face
+of the model. Select the object. The **Mesh** group of the Selection explorer then shows two
+rows:
+
+- **Mesh size**: the element size at the object. *global* means that the object has no
+  size of its own.
+- **Band**: the distance over which the size grows back to the global size. With a band of
+  0, the size applies on the object only, and the mesh next to it changes size as Gmsh
+  chooses. A point with a band of 0 gets its size within one element of it.
+
+Click **Use the global size** to remove the object's own size. **Mesh** → **Refine mesh**
+halves the size of the selected object, **Coarsen mesh** doubles it, and **Reset local
+refinement** removes it. The same tools are on the tool rail in Mesh mode. A tool keeps the
+band. If a mesh is shown in Mesh mode, the tool makes the mesh again, so you see the change
+at once, and the object stays selected, so you can click the tool again.
+
+Some objects use the size of another object:
+
+- An anchor is one element. Its size applies at its head, where it connects to the
+  structure. The tail is a fixed point outside the soil mesh.
+- A condition on a face uses the size of that face. All conditions on the same face share
+  one size, because the Kratos input file has one node group for each face. The Mesh group
+  of the condition shows **Size of** with the name of the face. The faces are also in the
+  **Mesh properties** window, also the top face, which often has no condition.
+- A condition on a soil part uses the size of that part.
+- A condition on the whole soil has no size of its own. The whole soil uses the global
+  element size.
+
+For example, select the sheet pile, type 0.5 in **Mesh size** and 45 in **Band**: the
+elements are 0.5 m along the wall and round its toe, and grow to the global size 45 m away.
+A band only makes the mesh finer: on a size that is larger than the global size, it does
+nothing.
+
+A model from an older version can have a refinement box (`mesh.refinements`). Styx still
+meshes it. To add one, use `kratos-cli add` or a model script.
 
 A mesh size belongs to its body. An edit that takes a body away also removes the body's
 size: for example, deleting a layer or a structure, or moving a layer boundary so that
@@ -627,8 +683,9 @@ model, also when the mesh is shown deformed. Type `results loads off` to hide th
   that stage, so the face a pit is dug against starts at the pit floor.
   Click **Save ▾** and choose a format: **PNG**, **PDF** or **SVG** saves the figure, and
   **CSV** saves the numbers. The plot of an interface is saved in the same way.
-- **Values at a node:** click **Results** → **Value at a node…**, or type
-  `results at <node>`.
+- **Values at a node:** click **Results** → **Value at a node…**, type the node number in
+  the small window and click **OK**. Or type `results at <node>`. The values appear in the
+  Session log.
 - **Save the field as CSV:** click **Save CSV**, or type `results csv`.
 - **Save the full run:** click **Download run**, or type `results zip`.
 
@@ -761,10 +818,12 @@ Type a command in the command box below the log, and press <kbd>Enter</kbd>. Use
 | `script <file.py>` | Writes the model as a Python script |
 | `export` | Writes the Kratos input files, as **File** → **Export model…** |
 | `mesh` | Makes the mesh |
+| `clearmesh` | Removes the mesh from the view; its settings stay |
 | `calculate` | Calculates the model, as the **Calculate** button |
 | `stages` | Opens the **Stages** window |
 | `water <level>`, `water off` | Sets or removes the water level |
 | `boundary`, `boundary standard` | Lists the boundary conditions, or puts the standard supports back |
+| `gravity`, `gravity 9.80665` | Shows whether the self weight acts, or sets g in m/s² |
 | `units`, `units SI`, `units kN` | Shows or changes the unit system |
 | `soillayers`, `materials` | Opens the **Modify soil layers** or **Soil materials** window |
 | `cleargeometry` | Removes all drawn and imported solids |

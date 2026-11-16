@@ -128,6 +128,22 @@ def test_the_panel_is_fragmented_into_the_soil_so_the_two_share_nodes():
     assert duplicates == 0, "a second node sits on top of a wall node"
 
 
+def test_a_panel_takes_its_own_mesh_size():
+    """A wall panel is faces, one dimension below the soil, as a sheet pile is a curve in
+    a section: its size is a field on its faces, and a band grows it back out."""
+    from core.geometry import meshing
+    project = structured([PANEL])
+
+    def elements(sizes, bands=None):
+        with solid_model.session():
+            return meshing.mesh_project(project, element_size=6.0, order=1,
+                                        body_sizes=sizes, size_bands=bands or {}
+                                        ).stats.elements
+
+    plain, sized = elements({}), elements({"panel_1": 2.0})
+    assert plain < sized < elements({"panel_1": 2.0}, {"panel_1": 6.0})
+
+
 def test_a_wall_that_stops_inside_the_soil_does_not_cut_the_body_in_two():
     """A panel shorter than the block leaves the soil one volume, imprinted."""
     shallow = PANEL | {"y_toe": -6.0, "footprint": [[12.0, 8.0], [12.0, 16.0]]}
