@@ -98,11 +98,53 @@ Genuchten soil.
 | `results fields\|field\|at RUN ... [--stage S]` | What a stage can show, one field (`--csv` for every value), every field at one node |
 | `results members\|profile RUN ...` | The walls and interfaces the run wrote curves for, and one quantity along one, stage by stage (`--csv`) |
 | `results get\|archive RUN ...` | A copy of one file of a run, or the whole run as a zip |
+| `picture geometry\|mesh P ...` | Save a picture of the model or its mesh, as the GUI's camera button does. See [Pictures](#pictures). |
+| `picture stage P [--stage S\|all]` | Save a picture of one stage, or of every stage (the default) |
+| `picture result RUN [FIELD\|all] [--stage S\|all] ...` | Save a picture of a result, or of every field and stage |
 | `shell [P]` | Type commands one after another, without `kratos-cli` and the project file |
 
 `P` is a project file (`.json`), or a model script (`.py`) for the commands that only read the
 model: `show`, `check`, `get`, the `list` actions, `parts`, `stages show`, `node`, `mesh`
 (without `--size` or `--order`), `export` and `calculate`.
+
+
+## Pictures
+
+`kratos-cli picture` saves the pictures of the GUI's camera button, as PNG, PDF or SVG at 300 dpi:
+
+```bash
+kratos-cli picture mesh site.json --out mesh.png
+kratos-cli picture stage site.json --format png,pdf --out pictures/
+kratos-cli picture result 1 uy --stage all --map viridis --out pictures/
+kratos-cli picture result 1 --field all --stage 3 --csv --out pictures/
+kratos-cli picture stage site.json --format pdf --one-pdf --out stages.pdf
+```
+
+The command draws with the GUI's own page, so the pictures are the same, and each one shows the
+whole model. It starts the Styx server and Chrome or Edge with no window. Set `KRATOS_GUI_BROWSER` to the program if the command
+does not find one. On a computer with neither browser, the command stops and says so.
+
+| Option | What it does |
+|---|---|
+| `--format LIST` | `png`, `pdf` and `svg`, with a comma between them (default: `png`) |
+| `--width CM` | The width of the picture (default: 16) |
+| `--view front\|top\|side\|iso` | The camera, in a 3D model |
+| `--no-rulers`, `--no-axes`, `--grid` | What to leave out, or add |
+| `--out PATH` | A file, or a folder. A path that ends in `/` makes the folder. More than one file needs a folder. A file must end in its format, as `.png`. |
+| `--force` | Overwrite files that exist |
+
+These are the words of `picture save` in the GUI's command box: `--format`, `--width`,
+`--stage all`, `--field all`, `--one-pdf`, `--no-legend`, `--no-rulers`, `--no-axes`, `--grid` and
+`--csv` mean the same in both.
+
+`picture stage` and `picture result` also take `--one-pdf`, which puts all the pictures in one PDF
+file, one per page. It needs `pdf` in `--format`.
+
+`picture result` takes the field as `FIELD` or as `--field FIELD`, and `all` for every field.
+It also takes `--no-legend`, `--csv` (the field values too), `--map`, `--bands`,
+`--range MIN MAX`, `--deform` and `--mesh`, which mean what the `results` commands of the GUI's
+command box mean, and `--project P` to draw the loads and the water of the model over the result.
+A run in a folder outside the runs root must keep its name, `<deck>_<date>_<time>`.
 
 ## Axes
 
@@ -651,6 +693,8 @@ viewport's. A command can also be typed with a leading `_` in the box (`_mesh`).
 | `soillayer`, `plate`, `beam`, `anchor` | `kratos-cli layer P add`, `kratos-cli wall P add`, `kratos-cli beam P add`, `kratos-cli anchor P add` (the box answers these with a placeholder and builds nothing) |
 | `point`, `line`, `surface` | — a placeholder answer in the box; nothing is built |
 | `colour <part>`, `color <part>` | — the viewport's: a part drawn in its own colour |
+| `picture`, `picture copy` | — the viewport's: the Save picture window, and the clipboard |
+| `picture save [--format LIST] [--stage all] [--field all] ...` | `kratos-cli picture geometry P`, `kratos-cli picture mesh P`, `kratos-cli picture stage P`, `kratos-cli picture result RUN` |
 | `view iso\|top\|front\|side`, `zoomfit`, `clear` | — the viewport's and the log's |
 | `gotosoil`, `gotostructures`, `gotomesh`, `gotoflow`, `gotoflowconditions`, `gotostaged` | — the viewport's: the mode tabs |
 | `results` | `kratos-cli results show RUN` |
@@ -664,7 +708,7 @@ viewport's. A command can also be typed with a leading `_` in the box (`_mesh`).
 | `results plot [member] [quantity]` | `kratos-cli results profile RUN MEMBER QUANTITY` |
 | `results plot members`, `results plot list` | `kratos-cli results members RUN` |
 | `results plot csv` | `kratos-cli results profile RUN MEMBER --csv FILE` |
-| `results plot svg` | — the viewport's: a picture of the plot |
+| `results plot svg`, `results plot png`, `results plot pdf` | — the viewport's: a picture of the plot |
 | `results files` | `kratos-cli results files RUN` |
 | `results get <file>` | `kratos-cli results get RUN FILE` |
 | `results zip`, `results archive` | `kratos-cli results archive RUN` |

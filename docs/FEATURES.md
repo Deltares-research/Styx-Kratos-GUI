@@ -168,6 +168,7 @@ and adds only the values that are missing
 | Keyboard shortcuts | Ctrl+Z, Ctrl+Y, Ctrl+S, Ctrl+O, Ctrl+N, F5 (zoom to fit), F9 (calculate, or make the mesh in Mesh mode), Esc. The arrow keys recall earlier commands. | Tested |
 | Checks | The server checks the full project at each edit | Tested |
 | Display | WebGL, with a CPU renderer when no GPU is available | Tested |
+| Pictures | The view as PNG, PDF or SVG at 300 dpi, in a width that you select, from the camera button, the File menu or a right click. Copy to the clipboard. Every stage and every result field into one folder, with the field values as CSV. `kratos-cli picture` makes the same pictures with Chrome or Edge. SVG and PDF are vector, except contour colours and 3D faces, which are an image at 300 dpi. | Tested. Opening in Word, Adobe Reader and Inkscape is checked by hand. |
 | 2D and 3D | Change between a 2D plane-strain section (at a z offset that you select) and the 3D model. Loads and walls are converted. | Tested |
 | Modes | Soil, Structures, Flow conditions, Mesh, Staged construction, Results | Tested. Flow conditions sets the water level and the water pressure conditions. |
 | Panels | Model explorer, Selection explorer, docked panels, right-click menus | Tested |
@@ -229,7 +230,7 @@ and adds only the values that are missing
 | Display | Colour bands or smooth shading, colour map, reversed scale, automatic or fixed range, deformed mesh with a selected or automatic scale | Tested |
 | Loads and water | The loads and the water level of the stage on screen over the colours, when the run is of the open project (`results loads on\|off`) | Tested |
 | Values at a node | All quantities at one node (`results at <node>`) | Tested |
-| Plots along the wall | Bending moment M, shear force Q, normal force N, displacements ux and uy along the wall, and the tractions tn and ts along the interface, with one line for each stage. Save as SVG or CSV. | Tested |
+| Plots along the wall | Bending moment M, shear force Q, normal force N, displacements ux and uy along the wall, and the tractions tn and ts along the interface, with one line for each stage. Save as PNG, PDF, SVG or CSV. | Tested |
 | Export | The field on screen as CSV; one file of a run, or the full run as a ZIP file | Tested |
 | Slip plane, factor of safety | Not available | Not available |
 
@@ -258,7 +259,7 @@ REST API: `/api/project`, `/api/mesh`, `/api/calculate`, `/api/results/…`.
 | Commands | Each step of the GUI as a terminal command, on the same project file: site, soil, structures, loads, mesh, stages, export, run, results. See the [kratos-cli reference](CLI.md). | Tested |
 | Shell | `kratos-cli shell` reads commands one after the other, with undo and redo, from a terminal, a file or a pipe | Tested |
 | Model scripts | `script` writes the model as Python; `build` writes a project from a script. Each command that reads a model accepts a script. | Tested |
-| Results | Numbers and CSV files only. Pictures need the GUI. | Tested |
+| Results | `results` gives numbers and CSV files. `picture` saves pictures with Chrome or Edge. | Tested |
 | Parity with the GUI | A test checks that each command of the GUI command box has a terminal command in the reference | Tested |
 
 ### B9. Tests and benchmarks

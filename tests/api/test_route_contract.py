@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import io
 import json
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
@@ -27,6 +28,7 @@ from fastapi.testclient import TestClient
 
 from core.kratos import external_deck
 from backend.main import app
+from backend.routes import files as files_routes
 from tests.api.served import api_routes
 from core.model.templates import seed_project
 from tests import results_run
@@ -75,6 +77,13 @@ def _first_node(c):
 def _box(c):
     return c.post("/api/geometry/create", json={
         "kind": "box", "origin": [0, 0, 0], "size": [1, 1, 1], "label": "B"}).json()["parts"][0]["key"]
+
+
+def _on_this_computer() -> TestClient:
+    """A browser on the server's own computer, which may write in the folder called `chosen`
+    (the `client` fixture). The table's client is not one, so its request for the folder
+    window opens nothing."""
+    return TestClient(app, base_url="http://127.0.0.1:8000", client=("127.0.0.1", 50000))
 
 
 PROJECT_KEYS = {"project", "invalidates"}
@@ -275,6 +284,19 @@ CONTRACTS = [
              bad=lambda c: c.post("/api/import/mdpa", files={"file": ("d.mdpa", io.BytesIO(
                  b"Begin Nodes\n1 zero 0 0\nEnd Nodes\n"))}),
              bad_status=422),
+    Contract("POST", "/api/files/folder", lambda c: c.post("/api/files/folder"), {"no_window"}),
+    Contract("GET", "/api/files/folder/{folder}/{name}",
+             lambda c: _on_this_computer().get("/api/files/folder/chosen/a.png"), {"exists"},
+             bad=lambda c: c.get("/api/files/folder/chosen/a.png"), bad_status=403),
+    Contract("PUT", "/api/files/folder/{folder}/{name}",
+             lambda c: _on_this_computer().put("/api/files/folder/chosen/a.png", content=b"x"), {"path"},
+             bad=lambda c: _on_this_computer().put("/api/files/folder/chosen/a.exe", content=b"x"),
+             bad_status=422),
+    Contract("DELETE", "/api/files/folder/{folder}",
+             lambda c: _on_this_computer().delete("/api/files/folder/chosen"), {"released"},
+             bad=lambda c: c.delete("/api/files/folder/chosen"), bad_status=403),
+    Contract("GET", "/api/files/picture-job/{token}", lambda c: c.get("/api/files/picture-job/x"),
+             {"ok"}),
     Contract("GET", "/", lambda c: c.get("/"), set(), content_type="text/html"),
 ]
 
@@ -294,6 +316,10 @@ def client(monkeypatch, tmp_path):
     monkeypatch.delenv(calculation.KRATOS_ENV, raising=False)
     monkeypatch.setenv(calculation.PYTHON_ENV, __import__("sys").executable)
     monkeypatch.setattr(calculation, "COMMAND", ["-c", "print('stand-in')"])
+    chosen = tmp_path / "chosen"
+    chosen.mkdir()
+    monkeypatch.setitem(files_routes._folders, "chosen",
+                        files_routes.Folder(chosen, time.monotonic()))
     with TestClient(app) as c:
         c.post("/api/project/reset")
         yield c

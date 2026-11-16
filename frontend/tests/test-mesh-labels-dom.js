@@ -69,8 +69,10 @@
       App.LivePatches.extendViewportMenu();
       App.viewportContextMenu({}, null);
 
-      T.eq(seen.length, 3, 'the frozen row, a separator and the labels row');
+      T.eq(seen.length, 6, 'the frozen row, the labels row and the two picture rows');
       T.eq(seen[2].label, 'Show labels');
+      T.eq(seen[4].action, 'copyPicture');
+      T.eq(seen[5].action, 'savePicture');
       T.ok(App.Menu.openAt === stub, 'the one-shot openAt put the real one back');
       T.eq(picked, null);
     } finally {

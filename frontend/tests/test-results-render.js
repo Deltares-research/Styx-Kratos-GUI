@@ -478,4 +478,22 @@
     T.eq(rows.length, field.ids.length + 1, 'header plus one row per id');
   });
 
+
+  /* ── The range line of a saved picture ──────────────────────────────── */
+
+  test('the range line says each extreme, with its unit and node', function () {
+    var lines = App.ResultsRender.rangeLines({ ids: [4, 5, 6], values: [1.5, -2, null], unit: 'm',
+                                             location: 'nodes' });
+    T.eq(lines, ['Maximum value = 1.50 m (node 4)', 'Minimum value = -2.00 m (node 5)']);
+  });
+
+  test('a field per element says element', function () {
+    var lines = App.ResultsRender.rangeLines({ ids: [7], values: [3], unit: 'kPa', location: 'elements' });
+    T.eq(lines, ['Maximum value = 3.00 kPa (element 7)', 'Minimum value = 3.00 kPa (element 7)']);
+  });
+
+  test('a field with no values has no range line', function () {
+    T.eq(App.ResultsRender.rangeLines({ ids: [1], values: [null], unit: 'm' }), null);
+    T.eq(App.ResultsRender.rangeLines({ ids: [], values: [], unit: 'm' }), null);
+  });
 })();
