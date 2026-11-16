@@ -736,6 +736,18 @@ App.Stages = (function () {
      it, exported exactly as it always was. Empty too when no stage is selected or the
      selected one has gone -- "hide nothing" is the safe answer to "I do not know",
      because the opposite hides the whole model. */
+  /* The stage on screen: `wanted` when the project has it, else the first stage, else
+     null. The stages panel highlights the first stage when the remembered one is not in
+     the project (a fresh boot, a project just opened), so the viewport has to read the
+     selection the same way -- or the panel shows the initial stage while the viewport
+     ghosts nothing until the user clicks away and back. */
+  function selectedId(project, wanted) {
+    var list = stagesOf(project);
+    if (!list.length) return null;
+    var found = list.filter(function (stage) { return stage.id === wanted; })[0];
+    return (found || list[0]).id;
+  }
+
   function hiddenKeys(project, stageId, mode) {
     if (mode !== 'staged') return [];
     var active = activeParts(project, stageId);
@@ -753,7 +765,7 @@ App.Stages = (function () {
     groundwaterFlow: groundwaterFlow, kindOf: kindOf, edited: edited,
     initialOf: initialOf, isInitial: isInitial,
     chainTo: chainTo, activeParts: activeParts, stageableKeys: stageableKeys,
-    hiddenKeys: hiddenKeys,
+    hiddenKeys: hiddenKeys, selectedId: selectedId,
     order: order, branchProblem: branchProblem, rows: rows, overview: overview,
     startOf: startOf,
     added: added, inserted: inserted, removed: removed, copied: copied,

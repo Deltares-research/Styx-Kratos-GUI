@@ -653,6 +653,19 @@
     T.eq(App.Stages.hiddenKeys(project(), 'no_such_stage', 'staged'), []);
   });
 
+  test('the selected stage falls back to the first when the remembered one is gone', function () {
+    /* The panel highlights the first stage on a project just opened (App.state.phase
+       still holds the boot default), so the viewport must hide what that stage hides --
+       not nothing until the user clicks another stage and back. */
+    var p = project();
+    T.eq(App.Stages.selectedId(p, 'prop'), 'prop');
+    T.eq(App.Stages.selectedId(p, 'no_such_stage'), p.stages[0].id);
+    T.eq(App.Stages.selectedId(p, null), p.stages[0].id);
+    var empty = project();
+    empty.stages = [];
+    T.eq(App.Stages.selectedId(empty, 'prop'), null);
+  });
+
   /* ── The Stages overview ───────────────────────────────────────────────
      The "Stages" window: every stage on one line with how long it lasts and
      the time reached at its end, and -- beside it -- what the last calculation made

@@ -1974,11 +1974,7 @@ App.LivePatches = (function () {
   }
 
   function selectedStageId() {
-    var list = (App.PROJECT && App.PROJECT.stages) || [];
-    if (!list.length) return null;
-    var wanted = App.state && App.state.phase;
-    var found = list.filter(function (ph) { return ph.id === wanted; })[0];
-    return found ? found.id : list[0].id;
+    return App.Stages.selectedId(App.PROJECT, App.state && App.state.phase);
   }
 
   function stageById(id) {

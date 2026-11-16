@@ -2341,7 +2341,7 @@ App.Viewport = (function () {
     if (!App.Stages || !App.Stages.hiddenKeys) return {};
     var hidden = {};
     var mode = App.state && App.state.mode;
-    var stage = App.state && App.state.phase;
+    var stage = viewedStage(App.state && App.state.phase);
     if (mode === 'results') {
       // The project's stage the result on screen is of, read as Staged construction
       // reads its own; and what the export left out (the check box off) was never in
@@ -2358,6 +2358,13 @@ App.Viewport = (function () {
     App.Stages.hiddenKeys(App.PROJECT, stage, mode)
       .forEach(function (key) { hidden[key] = true; });
     return hidden;
+  }
+
+  /* The stage the stages panel shows as selected: `App.state.phase`, or the first
+     stage when that id is not in the project (stages.js selectedId). */
+  function viewedStage(phase) {
+    return App.Stages && App.Stages.selectedId
+      ? App.Stages.selectedId(App.PROJECT, phase) : phase;
   }
 
   /* The parts the selected stage has switched off that are still drawn, as ghosts:
@@ -2487,7 +2494,8 @@ App.Viewport = (function () {
     if (!importedMeshGroup) return;
     importedMeshGroup.visible = mode !== 'results';
     var active = App.Deck
-      ? App.Deck.activeForView(App.PROJECT, App.state && App.state.phase, mode) : null;
+      ? App.Deck.activeForView(App.PROJECT, viewedStage(App.state && App.state.phase), mode)
+      : null;
     Object.keys(importedSectionGroups).forEach(function (key) {
       importedSectionGroups[key].visible = App.Deck
         ? App.Deck.sectionShown(importedSectionParts[key], importedEyes[key], active)
