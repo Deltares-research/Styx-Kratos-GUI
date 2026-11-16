@@ -51,8 +51,8 @@
                 "analysis_stage": "Stages.KratosMultiphysics.GeoMechanicsApplication.GeoMechanicsAnalysis",
                 "problem_data": {
                     "problem_name": "CROW_excavation_wall_1_Initial_stage",
-                    "start_time": -2.0,
-                    "end_time": -1.0,
+                    "start_time": 0.0,
+                    "end_time": 1.0,
                     "echo_level": 1,
                     "parallel_type": "OpenMP",
                     "number_of_threads": 1
@@ -61,31 +61,30 @@
                     "solver_type": "U_Pw",
                     "model_part_name": "PorousDomain",
                     "solution_type": "static",
-                    "scheme_type": "Newmark",
-                    "strategy_type": "newton_raphson",
                     "convergence_criterion": "residual_criterion",
-                    "residual_relative_tolerance": 0.0001,
-                    "residual_absolute_tolerance": 1e-09,
-                    "min_iterations": 6,
                     "max_iterations": 15,
-                    "number_cycles": 1,
-                    "reduction_factor": 0.5,
-                    "increase_factor": 2.0,
                     "time_stepping": {
-                        "time_step": 1.0
+                        "time_step": 1.0,
+                        "minimum_allowable_value": 0.0001,
+                        "max_delta_time_factor": 1000.0
                     },
                     "buffer_size": 2,
                     "echo_level": 1,
                     "reset_totals": false,
                     "clear_storage": false,
-                    "compute_reactions": true,
-                    "move_mesh_flag": false,
-                    "reform_dofs_at_each_step": false,
-                    "block_builder": true,
+                    "strategy_type": "newton_raphson",
                     "linear_solver_settings": {
-                        "solver_type": "skyline_lu_factorization",
+                        "solver_type": "LinearSolversApplication.sparse_lu",
                         "scaling": true
                     },
+                    "min_iterations": 6,
+                    "number_cycles": 1,
+                    "reduction_factor": 0.5,
+                    "increase_factor": 2.0,
+                    "block_builder": true,
+                    "reform_dofs_at_each_step": false,
+                    "compute_reactions": true,
+                    "move_mesh_flag": false,
                     "domain_size": 2,
                     "rotation_dofs": true,
                     "model_import_settings": {
@@ -121,7 +120,9 @@
                         "Soil_Middle_below_the_pit",
                         "Soil_Middle_retained",
                         "Soil_Bottom"
-                    ]
+                    ],
+                    "residual_relative_tolerance": 0.0001,
+                    "residual_absolute_tolerance": 1e-09
                 },
                 "processes": {
                     "constraints_process_list": [
@@ -424,8 +425,8 @@
                 "analysis_stage": "Stages.KratosMultiphysics.GeoMechanicsApplication.GeoMechanicsAnalysis",
                 "problem_data": {
                     "problem_name": "CROW_excavation_wall_2_Null_step",
-                    "start_time": -1.0,
-                    "end_time": 0.0,
+                    "start_time": 1.0,
+                    "end_time": 2.0,
                     "echo_level": 1,
                     "parallel_type": "OpenMP",
                     "number_of_threads": 1
@@ -434,31 +435,30 @@
                     "solver_type": "U_Pw",
                     "model_part_name": "PorousDomain",
                     "solution_type": "static",
-                    "scheme_type": "Newmark",
-                    "strategy_type": "newton_raphson",
                     "convergence_criterion": "residual_criterion",
-                    "residual_relative_tolerance": 0.0001,
-                    "residual_absolute_tolerance": 1e-09,
-                    "min_iterations": 6,
                     "max_iterations": 150,
-                    "number_cycles": 1,
-                    "reduction_factor": 0.5,
-                    "increase_factor": 2.0,
                     "time_stepping": {
-                        "time_step": 1.0
+                        "time_step": 1.0,
+                        "minimum_allowable_value": 0.0001,
+                        "max_delta_time_factor": 1000.0
                     },
                     "buffer_size": 2,
                     "echo_level": 1,
                     "reset_totals": false,
                     "clear_storage": false,
-                    "compute_reactions": true,
-                    "move_mesh_flag": false,
-                    "reform_dofs_at_each_step": false,
-                    "block_builder": true,
+                    "strategy_type": "newton_raphson",
                     "linear_solver_settings": {
-                        "solver_type": "skyline_lu_factorization",
+                        "solver_type": "LinearSolversApplication.sparse_lu",
                         "scaling": true
                     },
+                    "min_iterations": 6,
+                    "number_cycles": 1,
+                    "reduction_factor": 0.5,
+                    "increase_factor": 2.0,
+                    "block_builder": true,
+                    "reform_dofs_at_each_step": false,
+                    "compute_reactions": true,
+                    "move_mesh_flag": false,
                     "domain_size": 2,
                     "rotation_dofs": true,
                     "model_import_settings": {
@@ -494,7 +494,9 @@
                         "Soil_Middle_below_the_pit",
                         "Soil_Middle_retained",
                         "Soil_Bottom"
-                    ]
+                    ],
+                    "residual_relative_tolerance": 0.0001,
+                    "residual_absolute_tolerance": 1e-09
                 },
                 "processes": {
                     "constraints_process_list": [
@@ -797,8 +799,8 @@
                 "analysis_stage": "Stages.KratosMultiphysics.GeoMechanicsApplication.GeoMechanicsAnalysis",
                 "problem_data": {
                     "problem_name": "CROW_excavation_wall_3_Wall_installation",
-                    "start_time": 0.0,
-                    "end_time": 1.0,
+                    "start_time": 2.0,
+                    "end_time": 3.0,
                     "echo_level": 1,
                     "parallel_type": "OpenMP",
                     "number_of_threads": 1
@@ -807,31 +809,30 @@
                     "solver_type": "U_Pw",
                     "model_part_name": "PorousDomain",
                     "solution_type": "static",
-                    "scheme_type": "Newmark",
-                    "strategy_type": "newton_raphson",
                     "convergence_criterion": "residual_criterion",
-                    "residual_relative_tolerance": 0.001,
-                    "residual_absolute_tolerance": 1e-09,
-                    "min_iterations": 6,
                     "max_iterations": 150,
-                    "number_cycles": 1,
-                    "reduction_factor": 0.5,
-                    "increase_factor": 2.0,
                     "time_stepping": {
-                        "time_step": 1.0
+                        "time_step": 1.0,
+                        "minimum_allowable_value": 0.0001,
+                        "max_delta_time_factor": 1000.0
                     },
                     "buffer_size": 2,
                     "echo_level": 1,
                     "reset_totals": true,
                     "clear_storage": false,
-                    "compute_reactions": true,
-                    "move_mesh_flag": false,
-                    "reform_dofs_at_each_step": false,
-                    "block_builder": true,
+                    "strategy_type": "newton_raphson",
                     "linear_solver_settings": {
-                        "solver_type": "skyline_lu_factorization",
+                        "solver_type": "LinearSolversApplication.sparse_lu",
                         "scaling": true
                     },
+                    "min_iterations": 6,
+                    "number_cycles": 1,
+                    "reduction_factor": 0.5,
+                    "increase_factor": 2.0,
+                    "block_builder": true,
+                    "reform_dofs_at_each_step": false,
+                    "compute_reactions": true,
+                    "move_mesh_flag": false,
                     "domain_size": 2,
                     "rotation_dofs": true,
                     "model_import_settings": {
@@ -882,7 +883,9 @@
                         "Interface_Soil_Middle_retained",
                         "Interface_Soil_Middle_below_the_pit",
                         "Interface_Soil_Bottom"
-                    ]
+                    ],
+                    "residual_relative_tolerance": 0.001,
+                    "residual_absolute_tolerance": 1e-09
                 },
                 "processes": {
                     "constraints_process_list": [
@@ -1284,8 +1287,8 @@
                 "analysis_stage": "Stages.KratosMultiphysics.GeoMechanicsApplication.GeoMechanicsAnalysis",
                 "problem_data": {
                     "problem_name": "CROW_excavation_wall_4_First_excavation",
-                    "start_time": 1.0,
-                    "end_time": 2.0,
+                    "start_time": 3.0,
+                    "end_time": 4.0,
                     "echo_level": 1,
                     "parallel_type": "OpenMP",
                     "number_of_threads": 1
@@ -1294,31 +1297,30 @@
                     "solver_type": "U_Pw",
                     "model_part_name": "PorousDomain",
                     "solution_type": "static",
-                    "scheme_type": "Newmark",
-                    "strategy_type": "newton_raphson",
                     "convergence_criterion": "residual_criterion",
-                    "residual_relative_tolerance": 0.001,
-                    "residual_absolute_tolerance": 1e-09,
-                    "min_iterations": 6,
                     "max_iterations": 500,
-                    "number_cycles": 1,
-                    "reduction_factor": 0.5,
-                    "increase_factor": 2.0,
                     "time_stepping": {
-                        "time_step": 1.0
+                        "time_step": 1.0,
+                        "minimum_allowable_value": 0.0001,
+                        "max_delta_time_factor": 1000.0
                     },
                     "buffer_size": 2,
                     "echo_level": 1,
                     "reset_totals": false,
                     "clear_storage": false,
-                    "compute_reactions": true,
-                    "move_mesh_flag": false,
-                    "reform_dofs_at_each_step": false,
-                    "block_builder": true,
+                    "strategy_type": "newton_raphson",
                     "linear_solver_settings": {
-                        "solver_type": "skyline_lu_factorization",
+                        "solver_type": "LinearSolversApplication.sparse_lu",
                         "scaling": true
                     },
+                    "min_iterations": 6,
+                    "number_cycles": 1,
+                    "reduction_factor": 0.5,
+                    "increase_factor": 2.0,
+                    "block_builder": true,
+                    "reform_dofs_at_each_step": false,
+                    "compute_reactions": true,
+                    "move_mesh_flag": false,
                     "domain_size": 2,
                     "rotation_dofs": true,
                     "model_import_settings": {
@@ -1365,7 +1367,9 @@
                         "Interface_Soil_Middle_retained",
                         "Interface_Soil_Middle_below_the_pit",
                         "Interface_Soil_Bottom"
-                    ]
+                    ],
+                    "residual_relative_tolerance": 0.001,
+                    "residual_absolute_tolerance": 1e-09
                 },
                 "processes": {
                     "constraints_process_list": [
@@ -1760,8 +1764,8 @@
                 "analysis_stage": "Stages.KratosMultiphysics.GeoMechanicsApplication.GeoMechanicsAnalysis",
                 "problem_data": {
                     "problem_name": "CROW_excavation_wall_5_Strut_installation",
-                    "start_time": 2.0,
-                    "end_time": 3.0,
+                    "start_time": 4.0,
+                    "end_time": 5.0,
                     "echo_level": 1,
                     "parallel_type": "OpenMP",
                     "number_of_threads": 1
@@ -1770,31 +1774,30 @@
                     "solver_type": "U_Pw",
                     "model_part_name": "PorousDomain",
                     "solution_type": "static",
-                    "scheme_type": "Newmark",
-                    "strategy_type": "newton_raphson",
                     "convergence_criterion": "residual_criterion",
-                    "residual_relative_tolerance": 0.001,
-                    "residual_absolute_tolerance": 1e-09,
-                    "min_iterations": 6,
                     "max_iterations": 150,
-                    "number_cycles": 1,
-                    "reduction_factor": 0.5,
-                    "increase_factor": 2.0,
                     "time_stepping": {
-                        "time_step": 1.0
+                        "time_step": 1.0,
+                        "minimum_allowable_value": 0.0001,
+                        "max_delta_time_factor": 1000.0
                     },
                     "buffer_size": 2,
                     "echo_level": 1,
                     "reset_totals": false,
                     "clear_storage": false,
-                    "compute_reactions": true,
-                    "move_mesh_flag": false,
-                    "reform_dofs_at_each_step": false,
-                    "block_builder": true,
+                    "strategy_type": "newton_raphson",
                     "linear_solver_settings": {
-                        "solver_type": "skyline_lu_factorization",
+                        "solver_type": "LinearSolversApplication.sparse_lu",
                         "scaling": true
                     },
+                    "min_iterations": 6,
+                    "number_cycles": 1,
+                    "reduction_factor": 0.5,
+                    "increase_factor": 2.0,
+                    "block_builder": true,
+                    "reform_dofs_at_each_step": false,
+                    "compute_reactions": true,
+                    "move_mesh_flag": false,
                     "domain_size": 2,
                     "rotation_dofs": true,
                     "model_import_settings": {
@@ -1844,7 +1847,9 @@
                         "Interface_Soil_Middle_retained",
                         "Interface_Soil_Middle_below_the_pit",
                         "Interface_Soil_Bottom"
-                    ]
+                    ],
+                    "residual_relative_tolerance": 0.001,
+                    "residual_absolute_tolerance": 1e-09
                 },
                 "processes": {
                     "constraints_process_list": [
@@ -2269,8 +2274,8 @@
                 "analysis_stage": "Stages.KratosMultiphysics.GeoMechanicsApplication.GeoMechanicsAnalysis",
                 "problem_data": {
                     "problem_name": "CROW_excavation_wall_6_Second_excavation",
-                    "start_time": 3.0,
-                    "end_time": 4.0,
+                    "start_time": 5.0,
+                    "end_time": 6.0,
                     "echo_level": 1,
                     "parallel_type": "OpenMP",
                     "number_of_threads": 1
@@ -2279,31 +2284,30 @@
                     "solver_type": "U_Pw",
                     "model_part_name": "PorousDomain",
                     "solution_type": "static",
-                    "scheme_type": "Newmark",
-                    "strategy_type": "newton_raphson",
                     "convergence_criterion": "residual_criterion",
-                    "residual_relative_tolerance": 0.001,
-                    "residual_absolute_tolerance": 1e-09,
-                    "min_iterations": 6,
                     "max_iterations": 300,
-                    "number_cycles": 1,
-                    "reduction_factor": 0.5,
-                    "increase_factor": 2.0,
                     "time_stepping": {
-                        "time_step": 1.0
+                        "time_step": 1.0,
+                        "minimum_allowable_value": 0.0001,
+                        "max_delta_time_factor": 1000.0
                     },
                     "buffer_size": 2,
                     "echo_level": 1,
                     "reset_totals": false,
                     "clear_storage": false,
-                    "compute_reactions": true,
-                    "move_mesh_flag": false,
-                    "reform_dofs_at_each_step": false,
-                    "block_builder": true,
+                    "strategy_type": "newton_raphson",
                     "linear_solver_settings": {
-                        "solver_type": "skyline_lu_factorization",
+                        "solver_type": "LinearSolversApplication.sparse_lu",
                         "scaling": true
                     },
+                    "min_iterations": 6,
+                    "number_cycles": 1,
+                    "reduction_factor": 0.5,
+                    "increase_factor": 2.0,
+                    "block_builder": true,
+                    "reform_dofs_at_each_step": false,
+                    "compute_reactions": true,
+                    "move_mesh_flag": false,
                     "domain_size": 2,
                     "rotation_dofs": true,
                     "model_import_settings": {
@@ -2348,7 +2352,9 @@
                         "Interface_Soil_Middle_retained",
                         "Interface_Soil_Middle_below_the_pit",
                         "Interface_Soil_Bottom"
-                    ]
+                    ],
+                    "residual_relative_tolerance": 0.001,
+                    "residual_absolute_tolerance": 1e-09
                 },
                 "processes": {
                     "constraints_process_list": [
@@ -2743,8 +2749,8 @@
                 "analysis_stage": "Stages.KratosMultiphysics.GeoMechanicsApplication.GeoMechanicsAnalysis",
                 "problem_data": {
                     "problem_name": "CROW_excavation_wall_7_Third_excavation",
-                    "start_time": 4.0,
-                    "end_time": 5.0,
+                    "start_time": 6.0,
+                    "end_time": 7.0,
                     "echo_level": 1,
                     "parallel_type": "OpenMP",
                     "number_of_threads": 1
@@ -2753,31 +2759,30 @@
                     "solver_type": "U_Pw",
                     "model_part_name": "PorousDomain",
                     "solution_type": "static",
-                    "scheme_type": "Newmark",
-                    "strategy_type": "newton_raphson",
                     "convergence_criterion": "residual_criterion",
-                    "residual_relative_tolerance": 0.001,
-                    "residual_absolute_tolerance": 1e-09,
-                    "min_iterations": 6,
                     "max_iterations": 300,
-                    "number_cycles": 1,
-                    "reduction_factor": 0.5,
-                    "increase_factor": 2.0,
                     "time_stepping": {
-                        "time_step": 1.0
+                        "time_step": 1.0,
+                        "minimum_allowable_value": 0.0001,
+                        "max_delta_time_factor": 1000.0
                     },
                     "buffer_size": 2,
                     "echo_level": 1,
                     "reset_totals": false,
                     "clear_storage": false,
-                    "compute_reactions": true,
-                    "move_mesh_flag": false,
-                    "reform_dofs_at_each_step": false,
-                    "block_builder": true,
+                    "strategy_type": "newton_raphson",
                     "linear_solver_settings": {
-                        "solver_type": "skyline_lu_factorization",
+                        "solver_type": "LinearSolversApplication.sparse_lu",
                         "scaling": true
                     },
+                    "min_iterations": 6,
+                    "number_cycles": 1,
+                    "reduction_factor": 0.5,
+                    "increase_factor": 2.0,
+                    "block_builder": true,
+                    "reform_dofs_at_each_step": false,
+                    "compute_reactions": true,
+                    "move_mesh_flag": false,
                     "domain_size": 2,
                     "rotation_dofs": true,
                     "model_import_settings": {
@@ -2817,7 +2822,9 @@
                         "Interface_Soil_Middle_retained",
                         "Interface_Soil_Middle_below_the_pit",
                         "Interface_Soil_Bottom"
-                    ]
+                    ],
+                    "residual_relative_tolerance": 0.001,
+                    "residual_absolute_tolerance": 1e-09
                 },
                 "processes": {
                     "constraints_process_list": [

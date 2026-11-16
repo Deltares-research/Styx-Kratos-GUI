@@ -16,7 +16,7 @@ Natural Coordinates: Given
 0.666667 0.166667
 0.166667 0.666667
 End GaussPoints
-Result "DISPLACEMENT" "Kratos" 5 Vector OnNodes
+Result "DISPLACEMENT" "Kratos" 7 Vector OnNodes
 Values
 1 -0.0236758 0.00103013 0
 2 0 0.0535454 0
@@ -3148,7 +3148,7 @@ Values
 3128 -0.0172042 0.0138592 0
 3129 -0.0167822 0.0292195 0
 End Values
-Result "TOTAL_DISPLACEMENT" "Kratos" 5 Vector OnNodes
+Result "TOTAL_DISPLACEMENT" "Kratos" 7 Vector OnNodes
 Values
 1 -0.0369928 -0.00869276 0
 2 0 0.0871716 0
@@ -6280,7 +6280,7 @@ Values
 3128 -0.0228975 0.0124973 0
 3129 -0.0233009 0.0326636 0
 End Values
-Result "WATER_PRESSURE" "Kratos" 5 Scalar OnNodes
+Result "WATER_PRESSURE" "Kratos" 7 Scalar OnNodes
 Values
 1 -105000
 2 -105000
@@ -9412,13 +9412,13 @@ Values
 3128 -112500
 3129 -112500
 End Values
-Result "CAUCHY_STRESS_TENSOR" "Kratos" 5 Matrix OnGaussPoints "lin1_element_gp"
+Result "CAUCHY_STRESS_TENSOR" "Kratos" 7 Matrix OnGaussPoints "lin1_element_gp"
 Values
 End Values
-Result "CAUCHY_STRESS_TENSOR" "Kratos" 5 Matrix OnGaussPoints "lin2_element_gp"
+Result "CAUCHY_STRESS_TENSOR" "Kratos" 7 Matrix OnGaussPoints "lin2_element_gp"
 Values
 End Values
-Result "CAUCHY_STRESS_TENSOR" "Kratos" 5 Matrix OnGaussPoints "tri3_element_gp"
+Result "CAUCHY_STRESS_TENSOR" "Kratos" 7 Matrix OnGaussPoints "tri3_element_gp"
 Values
 55 -18009.1 -46487.9 -21776.8 -666.304 0 0
  -17934.2 -45065.8 -21370.1 -2524.72 0 0
@@ -9727,7 +9727,7 @@ Values
  -23294.3 -50631.6 -23860.9 -298.327 0 0
  -9367.34 -27466.2 -9555.84 27.0208 0 0
 157 -9555.85 -29029.6 -10365.2 26.4985 0 0
- -16623.6 -40943.1 -17692.7 1.43285 0 0
+ -16623.6 -40943.1 -17692.7 1.43284 0 0
  -18189.6 -43968.9 -19535.8 -54.7817 0 0
 158 -34069.4 -80759.5 -42250.3 -5675.93 0 0
  -35103.1 -82823.1 -43188.6 -5326.84 0 0
@@ -10117,8 +10117,8 @@ Values
  -38484.9 -82765 -45639.5 -7199.63 0 0
  -37599.3 -81291.9 -44827.4 -7319.66 0 0
 287 -14264.9 -29722.4 -11362.8 105.573 0 0
- -12934.9 -28376.5 -11014.7 1405.33 0 0
- -12822.6 -24880.1 -8600.76 -166.109 0 0
+ -12935 -28376.5 -11014.7 1405.33 0 0
+ -12822.6 -24880.1 -8600.76 -166.108 0 0
 288 -13665.6 -23070.4 -9444.43 -1182.31 0 0
  -14742.4 -25134.2 -9691.56 -289.738 0 0
  -14439 -21545.1 -7962.03 -332.384 0 0
@@ -13207,11 +13207,11 @@ Values
  -94401.6 -55527 -47514.6 -35277.9 0 0
  -94824.2 -64379.1 -50304.9 -39969.2 0 0
 End Values
-Result "HYDRAULIC_HEAD" "Kratos" 5 Scalar OnGaussPoints "lin1_element_gp"
+Result "HYDRAULIC_HEAD" "Kratos" 7 Scalar OnGaussPoints "lin1_element_gp"
 Values
 1493 0
 End Values
-Result "HYDRAULIC_HEAD" "Kratos" 5 Scalar OnGaussPoints "lin2_element_gp"
+Result "HYDRAULIC_HEAD" "Kratos" 7 Scalar OnGaussPoints "lin2_element_gp"
 Values
 1467 0
  0
@@ -13338,7 +13338,7 @@ Values
 1545 0
  0
 End Values
-Result "HYDRAULIC_HEAD" "Kratos" 5 Scalar OnGaussPoints "tri3_element_gp"
+Result "HYDRAULIC_HEAD" "Kratos" 7 Scalar OnGaussPoints "tri3_element_gp"
 Values
 55 -1.5
  -1.5

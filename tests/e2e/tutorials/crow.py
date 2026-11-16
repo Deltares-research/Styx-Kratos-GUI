@@ -406,12 +406,16 @@ INITIAL_OFF = [WALL.name, STRUT.name, CONTACT.name, SURCHARGE.name,
 
 SWITCHES = [
     # (what the stage switches on, what it switches off), by Model explorer label
+    ([], []),
     ([WALL.name, CONTACT.name, SURCHARGE.name], []),
     (["WaterLoad_Stage1"], ["Soil_Top · lift 1"]),
     ([STRUT.name], []),
     (["WaterLoad_Stage2"], ["Soil_Top · lift 2", "WaterLoad_Stage1"]),
     (["WaterLoad_Stage3"], ["Soil_Top · lift 3", "WaterLoad_Stage2"]),
 ]
+"""For each stage after the initial one: the null step switches nothing."""
+
+STRESS_INITIALISATION = {"K0": "K0 procedure", "gravity": "Gravity loading", "none": "None"}
 
 
 def _switch(tour: Tour, label: str, on: bool) -> None:
@@ -427,57 +431,75 @@ def _pick_stage(tour: Tour, name: str) -> None:
     tour.settle()
 
 
+def _stage_row(dialog, label: str):
+    """The row of the Stages window whose key is exactly `label`."""
+    return dialog.locator(".pgrid-row").filter(
+        has=dialog.page.locator(".pgrid-key", has_text=label))
+
+
+def _type_in_stage(tour: Tour, dialog, label: str, text: str) -> None:
+    box = _stage_row(dialog, label).locator("input").first
+    box.fill(text)
+    box.press("Enter")
+    tour.settle()
+
+
+def _open_stages(tour: Tour):
+    tour.page.locator(".stage-toolbar button", has_text="Stages…").click()
+    dialog = window(tour.page)
+    _stage_row(dialog, "Name").locator("input").first.wait_for()
+    return dialog
+
+
 def stages(tour: Tour) -> None:
     page = tour.page
     mode(tour, "staged")
-    page.get_by_role("button", name="Create default stages").click()
-    tour.until("(App.PROJECT.stages || []).length === 2")
+    add = page.locator('.stage-toolbar .tbtn[data-action="addStage"]')
+    first = MODEL.stages[0]
+    # A new project has its initial stage already, with gravity loading.
+    assert [stage["name"] for stage in project(tour)["stages"]] == [first.name]
+    _pick_stage(tour, first.name)
+    dialog = _open_stages(tour)
+    stresses = _stage_row(dialog, "Stress initialisation").locator("select")
+    stresses.select_option(label=STRESS_INITIALISATION[first.stress_initialisation])
     tour.settle()
-    _pick_stage(tour, MODEL.stages[0].name)
+    tour.picture("window", of=dialog, mark=_stage_row(dialog, "Stress initialisation"))
+    dialog.get_by_role("button", name="Close").click()
+    _pick_stage(tour, first.name)
     for label in INITIAL_OFF:
         _switch(tour, label, False)
-    tour.picture("initial", mark=[tree_row(page, label) for label in INITIAL_OFF])
-    for number, (stage, (on, off)) in enumerate(zip(MODEL.stages[2:], SWITCHES), start=3):
-        page.locator('.stage-toolbar .tbtn[data-action="addStage"]').click()
+    tour.picture("initial", mark=[add, *(tree_row(page, label) for label in INITIAL_OFF)])
+    for number, (stage, (on, off)) in enumerate(zip(MODEL.stages[1:], SWITCHES), start=2):
+        add.click()
         tour.until(f"App.PROJECT.stages.length === {number}")
         tour.settle()
-        page.locator(".stage-toolbar button", has_text="Stages…").click()
-        dialog = window(page)
-        texts = dialog.locator(".stages-overview .pgrid input:not([type=checkbox])")
-        texts.nth(0).wait_for()
-        for index, value in [(0, stage.name)]:
-            texts.nth(index).fill(value)
-            texts.nth(index).press("Enter")
-            tour.settle()
-        dialog.locator(".stages-overview .pgrid select").first.select_option(stage.calculation)
-        tour.settle()
-        for index, value in [(2, stage.max_iterations), (3, stage.tolerated_error)]:
-            texts.nth(index).fill(f"{value:g}")
-            texts.nth(index).press("Enter")
-            tour.settle()
-        reset = dialog.locator(".pgrid-row").filter(
-            has_text="Reset displacements to zero").locator("input[type=checkbox]")
+        dialog = _open_stages(tour)
+        _type_in_stage(tour, dialog, "Name", stage.name)
+        _type_in_stage(tour, dialog, "Max iterations", str(stage.max_iterations))
+        _type_in_stage(tour, dialog, "Tolerated error", f"{stage.tolerated_error:g}")
+        reset = _stage_row(dialog, "Reset displacements to zero").locator(
+            "input[type=checkbox]")
         if reset.is_checked() != stage.reset_displacements:
             reset.click()
             tour.settle()
-        if number == 3:
-            tour.picture("window", of=dialog, mark=reset)
+        if stage.reset_displacements:
+            tour.picture("reset", of=dialog, mark=_stage_row(dialog, "Reset displacements to zero"))
         dialog.get_by_role("button", name="Close").click()
         _pick_stage(tour, stage.name)
         for label in on:
             _switch(tour, label, True)
         for label in off:
             _switch(tour, label, False)
-    tour.picture("last", mark=['.stage-toolbar .tbtn[data-action="addStage"]',
-                               *(tree_row(page, label) for label in on + off)])
+    tour.picture("last", mark=[add, *(tree_row(page, label) for label in on + off)])
 
 
 def seven_stages(tour: Tour) -> None:
     got = project(tour)["stages"]
-    assert [(s["name"], s["calculation"], s["reset_displacements"], s["max_iterations"],
-             s["tolerated_error"]) for s in got] == \
-        [(s.name, s.calculation, s.reset_displacements, s.max_iterations, s.tolerated_error)
-         for s in MODEL.stages]
+    assert [(s["name"], s["calculation"], s["stress_initialisation"],
+             s["reset_displacements"], s["max_iterations"], s["tolerated_error"])
+            for s in got] == \
+        [(s.name, s.calculation, s.stress_initialisation, s.reset_displacements,
+          s.max_iterations, s.tolerated_error) for s in MODEL.stages]
 
 
 # ── 12. Calculate, and the moment in the wall ──────────────────────────────

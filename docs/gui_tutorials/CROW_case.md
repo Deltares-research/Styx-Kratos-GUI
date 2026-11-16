@@ -399,31 +399,42 @@ A stage is one calculation step of the construction. Each stage starts from the 
 before it. In Staged construction mode, the check box of a row in the Model explorer says
 whether that object is in the model in the selected stage.
 
-First make the initial stage and the null step:
+A new project already has the initial stage. It calculates the initial stresses in the
+soil. Set it to the K0 procedure:
 
 1. Click the **Staged construction** tab.
-2. In the Stages explorer, click **Create default stages**. The explorer shows **Initial
-   stage** (K0 procedure) and **Null step**.
-3. Click **Initial stage**.
-4. In the Model explorer, clear the check boxes of **SheetPileWall**, **Strut**,
+2. In the Stages explorer, click **Initial stage**.
+3. Click **Stages…**.
+4. In **Stress initialisation**, select **K0 procedure**.
+5. Click **Close**.
+
+![The Stages window of the initial stage. The Stress initialisation row is outlined.](images/crow/12_stages_window.png)
+
+The initial stage also sets the calculation type of all stages: **Mechanical (U-Pw)**. Keep
+it. The K0 procedure makes the initial stresses in the soil without the wall, so switch
+off the objects that are not there yet:
+
+1. In the Stages explorer, click **Initial stage**.
+2. In the Model explorer, clear the check boxes of **SheetPileWall**, **Strut**,
    **Interface**, **WaterLoad_Stage1**, **WaterLoad_Stage2**, **WaterLoad_Stage3** and
    **Load**.
 
-![The initial stage, with the wall, strut, interface and loads switched off in the Model explorer.](images/crow/12_stages_initial.png)
+![The initial stage, with the wall, strut, interface and loads switched off in the Model explorer. The Add stage button is outlined.](images/crow/12_stages_initial.png)
 
-The K0 procedure makes the initial stresses in the soil without the wall. Then add the
-five construction stages:
+Then add the null step and the five construction stages:
 
-| Stage | Name | Max iterations | Switch on | Switch off |
-|---|---|---|---|---|
-| 3 | `Wall installation` | `150` | SheetPileWall, Interface, Load | |
-| 4 | `First excavation` | `500` | WaterLoad_Stage1 | Soil_Top · lift 1 |
-| 5 | `Strut installation` | `150` | Strut | |
-| 6 | `Second excavation` | `300` | WaterLoad_Stage2 | Soil_Top · lift 2, WaterLoad_Stage1 |
-| 7 | `Third excavation` | `300` | WaterLoad_Stage3 | Soil_Top · lift 3, WaterLoad_Stage2 |
+| Stage | Name | Max iterations | Tolerated error | Switch on | Switch off |
+|---|---|---|---|---|---|
+| 2 | `Null step` | `150` | `0.0001` | | |
+| 3 | `Wall installation` | `150` | `0.001` | SheetPileWall, Interface, Load | |
+| 4 | `First excavation` | `500` | `0.001` | WaterLoad_Stage1 | Soil_Top · lift 1 |
+| 5 | `Strut installation` | `150` | `0.001` | Strut | |
+| 6 | `Second excavation` | `300` | `0.001` | WaterLoad_Stage2 | Soil_Top · lift 2, WaterLoad_Stage1 |
+| 7 | `Third excavation` | `300` | `0.001` | WaterLoad_Stage3 | Soil_Top · lift 3, WaterLoad_Stage2 |
 
-All five stages have the calculation type **Plastic** and a tolerated error of `0.001`. The
-excavation stages have more iterations, because the soil yields there.
+The null step changes nothing in the model. Kratos' own CROW test has the same stage after
+the K0 procedure. The excavation stages have more iterations, because the soil yields
+there.
 
 The stage Wall installation also resets the displacements to zero. In the K0 procedure the
 soil settles more than 2 m under its own weight. After the reset, the displacements show
@@ -434,17 +445,17 @@ For each stage in the table:
 1. In the toolbar of the Stages explorer, click **Add stage** (the first button). The new
    stage comes after the last stage.
 2. Click **Stages…**. The Stages window opens with the new stage selected.
-3. Type the **Name**. In **Calculation type**, select **Plastic**. Type the **Max
-   iterations**, and type `0.001` in **Tolerated error**. Press Enter after each value.
+3. Type the **Name**, the **Max iterations** and the **Tolerated error**. Press Enter
+   after each value.
 4. For Wall installation only: select **Reset displacements to zero**.
 5. Click **Close**.
 6. In the Stages explorer, click the new stage.
 7. In the Model explorer, select the check boxes of the objects to switch on, and clear the
    check boxes of the objects to switch off.
 
-The Stages window of the first new stage:
+The Stages window of the stage Wall installation:
 
-![The Stages window of the stage Wall installation, with its name, calculation type and numerical control. The Reset displacements to zero check box is outlined.](images/crow/12_stages_window.png)
+![The Stages window of the stage Wall installation. The Reset displacements to zero row is outlined.](images/crow/12_stages_reset.png)
 
 After the last stage, the Stages explorer shows seven stages:
 
@@ -466,7 +477,7 @@ third excavation, the largest bending moment is about 341 kN·m/m, at y = −6.5
 about 109 mm into the pit. These are the values that the benchmark BM-CROW-MC compares with
 the results of Kratos' own CROW test.
 
-**Save SVG** saves the figure and **Save CSV** saves the numbers.
+**Save** saves the figure as PNG, PDF or SVG, or the numbers as CSV.
 
 ## 14. Look at the stresses and the displacements
 
