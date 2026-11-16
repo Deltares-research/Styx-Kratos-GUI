@@ -41,6 +41,7 @@ def live_server(request, tmp_path_factory):
 
     from core.analysis import calculation
     from backend.main import app
+    from backend.routes import files
     from tests.fakes import fake_kratos
 
     root = tmp_path_factory.mktemp("e2e-runs")
@@ -48,6 +49,13 @@ def live_server(request, tmp_path_factory):
     patch.setenv(calculation.RUNS_ENV, str(root))
     if not request.config.getoption("--run-kratos"):
         patch.setattr(calculation, "run", fake_kratos.fake_run)
+
+    # A real folder window would wait for a person. With this, the browser's own takes over,
+    # and a test that wants the server's replaces this answer.
+    def no_folder_window(_start):
+        raise files.NoFolderWindow("in a test")
+
+    patch.setattr(files, "choose_folder", no_folder_window)
 
     port = _free_port()
     # ws="none": the app has no websockets, and importing uvicorn's websocket protocol

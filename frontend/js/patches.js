@@ -776,6 +776,11 @@ App.LivePatches = (function () {
     return true;
   }
 
+  function runPictureCommand(text) {
+    if (!App.Picture) return false;
+    return App.Picture.command(text) !== false;
+  }
+
   /* `water ...`, typed: set, show or remove the project's water level. What to send is
      `App.WaterCommand`'s (tested headless); this sends it and redraws from the project
      the server stored. `false` when it is not this command. */
@@ -1782,6 +1787,15 @@ App.LivePatches = (function () {
     return items.concat(['-', App.MeshLabels.menuItem()]);
   }
 
+  /* The picture rows. Copying needs localhost or https, so on a LAN address the row is
+     grey rather than a click that answers with an error. */
+  function withPictureRows(items) {
+    if (!App.Picture) return items;
+    return items.concat(['-',
+      { label: 'Copy picture', icon: 'copy', action: 'copyPicture', disabled: !App.Picture.canCopy() },
+      { label: 'Save picture…', icon: 'camera', action: 'savePicture' }]);
+  }
+
   var LABEL_NOUNS = { nodes: 'Node', elements: 'Element' };
 
   /* One toggle per kind, each independent of the other: a node number and the number of
@@ -1815,7 +1829,7 @@ App.LivePatches = (function () {
       var openAt = App.Menu.openAt;
       App.Menu.openAt = function (items, x, y, onPick) {
         App.Menu.openAt = openAt;
-        openAt(gateViewportItems(withLabelRows(items)), x, y, function (item) {
+        openAt(gateViewportItems(withPictureRows(withLabelRows(items))), x, y, function (item) {
           if (item && item.action === 'toggleNodeLabels') return toggleLabels('nodes');
           if (item && item.action === 'toggleElementLabels') return toggleLabels('elements');
           if (onPick) onPick(item);
@@ -2747,6 +2761,14 @@ App.LivePatches = (function () {
         }
         return;
       }
+      if (item && item.action === 'savePicture') {
+        if (App.PictureDialog) App.PictureDialog.open();
+        return;
+      }
+      if (item && item.action === 'copyPicture') {
+        if (App.Picture) App.Picture.copy();
+        return;
+      }
       if (item && item.action === 'exportModel') {
         if (App.Export) App.Export.run();
         return;
@@ -2883,6 +2905,15 @@ App.LivePatches = (function () {
         action: 'toggleRuler', on: rulersOn()
       });
     }
+    /* The camera goes with the file group: it saves something too. */
+    if (!App.ICONS.camera) {
+      App.ICONS.camera = '<path d="M3 8h4l2-3h6l2 3h4v11H3z"/><circle cx="12" cy="13" r="3.5"/>';
+    }
+    if (!App.TOOLBAR.some(function (t) { return t && t.action === 'savePicture'; })) {
+      App.TOOLBAR.splice(App.TOOLBAR.indexOf('|'), 0, {
+        icon: 'camera', tip: 'Save picture — the view as PNG, PDF or SVG', action: 'savePicture'
+      });
+    }
     var viewMenu = (App.MENUS || []).filter(function (m) { return m.label === 'View'; })[0];
     if (viewMenu && !viewMenu.items.some(function (i) { return i && i.action === 'toggleRuler'; })) {
       var gridItem = viewMenu.items.filter(function (i) { return i && i.action === 'toggleGrid'; })[0];
@@ -2912,6 +2943,13 @@ App.LivePatches = (function () {
           item.action = 'exportModel';
         }
       });
+      if (!fileMenu.items.some(function (item) { return item && item.action === 'savePicture'; })) {
+        var printAt = fileMenu.items.findIndex(function (item) {
+          return item && item.label === 'Print…';
+        });
+        fileMenu.items.splice(printAt < 0 ? fileMenu.items.length : printAt, 0,
+                              { label: 'Save picture…', icon: 'camera', action: 'savePicture' });
+      }
       /* There is deliberately no menu item for any one model. Models are opened by
          running the Python that builds them -- `run <file.py>` in the command box --
          which works for any model, not only the one somebody thought to add a
@@ -3589,21 +3627,18 @@ App.LivePatches = (function () {
       if (plotWindow) return plotWindow;
       if (!App.Dialogs || !App.Dialogs.open) return null;
 
-      var act = function (label, cmd) {
-        return { label: label, keepOpen: true,
-                 onClick: function () { resultsCommand(cmd); } };
-      };
+      var saveMenu = null;
       var handle = App.Dialogs.open({
         title: 'Plot along the wall',
         width: 1180, height: 560,
         buttons: [
-          act('Save SVG', 'results plot svg'),
-          act('Save CSV', 'results plot csv'),
+          { label: 'Save ▾', keepOpen: true, onClick: function () { saveMenu.toggle(); } },
           { label: 'Close', primary: true }
         ],
-        onClose: function () { plotWindow = null; plotColumns = 0; }
+        onClose: function () { saveMenu.close(); plotWindow = null; plotColumns = 0; }
       });
       handle.dialog.classList.add('dlg-plot');
+      saveMenu = plotSaveMenu(handle.dialog.querySelector('.dlg-foot .btn'));
 
       var layer = document.getElementById('modal-layer');
       var scrims = layer ? layer.querySelectorAll('.scrim') : [];
@@ -3621,6 +3656,59 @@ App.LivePatches = (function () {
         new ResizeObserver(function () { renderPlotWindow(false); }).observe(handle.body);
       }
       return handle;
+    }
+
+    /* The plot window's one Save button: a small menu of the formats `results plot`
+       saves, opened above the button when there is no room below it. A pick saves at
+       once, from its own click, so the browser still opens its save window. The page
+       closes an open menu on any press outside it -- on this button too -- so the click
+       that follows such a press must not open the menu again. */
+    var PLOT_SAVE_FORMATS = [
+      { label: 'PNG', format: 'png' },
+      { label: 'PDF', format: 'pdf' },
+      { label: 'SVG', format: 'svg' },
+      { label: 'CSV', format: 'csv' }
+    ];
+
+    function plotSaveMenu(button) {
+      var open = false, justClosed = false, pressClosed = false;
+      button.setAttribute('aria-haspopup', 'menu');
+      button.setAttribute('aria-expanded', 'false');
+      button.addEventListener('mousedown', function () { pressClosed = justClosed; });
+
+      function show() {
+        App.UI.closePopups(0);
+        var r = button.getBoundingClientRect();
+        var menu = App.UI.popup(App.Menu.build(PLOT_SAVE_FORMATS, function (it) {
+          resultsCommand('results plot ' + it.format);
+        }), r.left, r.bottom);
+        // The menu layer lies under the dialogs' layer, so the menu goes up beside the
+        // window it belongs to. Both layers cover the page, so it keeps its place.
+        var dialogs = document.getElementById('modal-layer');
+        if (dialogs) dialogs.appendChild(menu);
+        var height = menu.getBoundingClientRect().height;
+        if (r.bottom + height > window.innerHeight - 4) {
+          menu.style.top = Math.max(4, Math.round(r.top - height)) + 'px';
+        }
+        open = true;
+        button.setAttribute('aria-expanded', 'true');
+        App.UI.whenClosed(function () {
+          open = false;
+          button.setAttribute('aria-expanded', 'false');
+          justClosed = true;
+          setTimeout(function () { justClosed = false; }, 0);
+        });
+      }
+
+      return {
+        toggle: function () {
+          var closedByThisPress = pressClosed;
+          pressClosed = false;
+          if (open) App.UI.closePopups(0);
+          else if (!closedByThisPress) show();
+        },
+        close: function () { if (open) App.UI.closePopups(0); }
+      };
     }
 
     function closePlotWindow() {
@@ -3945,6 +4033,8 @@ App.LivePatches = (function () {
         if (handledByResults !== false) return handledByResults;
       }
 
+      // `picture`, `picture copy`, `picture save`: the Save picture window's words.
+      if (runPictureCommand(text)) return;
       // `colour <part>`: the Model explorer's colour toggle, typed.
       if (runColourCommand(text)) return;
       // `water <level>` / `water off`: the project's water level.

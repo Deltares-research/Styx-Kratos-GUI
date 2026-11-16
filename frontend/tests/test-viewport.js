@@ -360,11 +360,40 @@
    at any pan or zoom -- a grid that stops mid-screen reads as the edge of the
    model. sectionGridSpec is what it has to be for the rectangle now in view. */
 (function () {
-  var CELL = 2.5;
+  var CELL = 2;
 
   function spec(center, halfW, halfH) {
     return App.Viewport.sectionGridSpec(CELL, center, halfW, halfH);
   }
+
+  function isNice(value) {
+    var mantissa = value / Math.pow(10, Math.floor(Math.log10(value) + 1e-9));
+    return [1, 2, 5, 10].some(function (m) { return Math.abs(mantissa - m) < 1e-6; });
+  }
+
+  test('the grid cell is a step the rulers also take: 1, 2 or 5 times a power of ten', function () {
+    // A 3 m wide model used to get 0.6 m cells, off every ruler tick.
+    [[3, 2], [0.4, 0.2], [12, 6], [37, 20], [250, 40], [1e-3, 1e-3]].forEach(function (size) {
+      var cell = App.Viewport.gridCell({ size: [size[0], size[1], 1] });
+      T.ok(isNice(cell), size[0] + ' m model: ' + cell);
+      T.ok(Math.max(size[0], size[1]) * 1.6 / cell >= 8, 'too few cells: ' + cell);
+    });
+    T.eq(App.Viewport.gridCell({ size: [3, 2, 1] }), 0.5);
+  });
+
+  test('zooming in and out walks the 2D cell through 1, 2, 5, 10, on the ruler ticks', function () {
+    var width = 800, seen = [];
+    // From 2 m to 400 m across the screen.
+    for (var halfW = 1; halfW <= 200; halfW *= 1.25) {
+      var cell = App.Viewport.sectionGridCell(halfW, width, 0.5);
+      var ruler = App.Ruler.plan({ center: [0, 0], halfW: halfW, halfH: halfW / 2,
+                                   width: width, height: width / 2 });
+      T.eq(cell, ruler.h.step, 'grid and ruler disagree at half-width ' + halfW);
+      if (seen[seen.length - 1] !== cell) seen.push(cell);
+    }
+    T.eq(seen.join(' '), '0.2 0.5 1 2 5 10 20 50');
+    T.eq(App.Viewport.sectionGridCell(10, 0, 0.5), 0.5, 'no size yet: the model cell');
+  });
 
   test('the grid covers the whole visible rectangle, not just the model', function () {
     var g = spec([25, -12.5], 60, 30);
@@ -386,6 +415,7 @@
     T.eq(near.cell, CELL, 'at working zoom the cell is the one the model chose');
     T.ok(far.cell > near.cell, 'a wide view has to coarsen: ' + far.cell);
     T.ok(far.cell % CELL === 0, 'and stay a multiple of it, so lines survive the change');
+    T.ok(isNice(far.cell), 'and a step the rulers also take: ' + far.cell);
     T.ok(far.divisions <= App.Viewport.MAX_GRID_DIVISIONS, 'unbounded line count: ' + far.divisions);
     T.ok(far.span / 2 >= 4000, 'still has to cover the view');
   });
