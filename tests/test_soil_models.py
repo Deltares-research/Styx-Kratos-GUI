@@ -343,6 +343,58 @@ def test_interface_materials_preserve_user_values_and_refuse_unresolvable_stiffn
         )
 
 
+RETENTION = {"BIOT_COEFFICIENT": 1.0, "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+             "SATURATED_SATURATION": 1.0, "RESIDUAL_SATURATION": 1e-10,
+             "MINIMUM_RELATIVE_PERMEABILITY": 1e-4}
+
+
+def _clay(**variables):
+    return Material(id="clay", name="Clay", color="#c4a86a",
+                    constitutive_law="GeoMohrCoulombLawPlaneStrain",
+                    r_inter=0.5, variables={"YOUNG_MODULUS": 9e5, "POISSON_RATIO": 0.2,
+                                            "GEO_COHESION": 3000.0,
+                                            "GEO_FRICTION_ANGLE": 22.5, **variables})
+
+
+def test_a_contact_takes_the_saturation_of_the_soil_it_runs_against():
+    """The soil's retention law and saturations, as the contact's strength is the soil's:
+    the reference deck gives each interface the retention of its soil."""
+    derived = []
+
+    got = materials._interface_variables(InterfaceSection(id="c", name="C"), seed_project(),
+                                         [], _clay(**RETENTION), derived)
+
+    assert {name: got[name] for name in RETENTION} == RETENTION
+    assert "interface section 'C': RETENTION_LAW" in derived
+
+
+def test_a_coulomb_contact_takes_the_soil_s_tension_cut_off_and_an_elastic_one_does_not():
+    soil = _clay(GEO_ENABLE_TENSION_CUT_OFF=True, GEO_TENSILE_STRENGTH=1000.0)
+    coulomb = InterfaceSection(id="c", name="C",
+                               constitutive_law="GeoInterfaceCoulombLawPlaneStrain")
+
+    got = materials._interface_variables(coulomb, seed_project(), [], soil, [])
+
+    assert got["GEO_ENABLE_TENSION_CUT_OFF"] is True
+    assert got["GEO_TENSILE_STRENGTH"] == pytest.approx(500.0), "reduced by r_inter"
+    elastic = materials._interface_variables(InterfaceSection(id="e", name="E"),
+                                             seed_project(), [], soil, [])
+    assert "GEO_ENABLE_TENSION_CUT_OFF" not in elastic
+    assert "GEO_TENSILE_STRENGTH" not in elastic
+
+
+def test_what_a_contact_gives_itself_is_kept_over_its_soil_s():
+    contact = InterfaceSection(id="c", name="C",
+                               constitutive_law="GeoInterfaceCoulombLawPlaneStrain",
+                               variables={"RETENTION_LAW": "SaturatedLaw",
+                                          "GEO_ENABLE_TENSION_CUT_OFF": False})
+
+    got = materials._interface_variables(
+        contact, seed_project(), [], _clay(GEO_ENABLE_TENSION_CUT_OFF=True, **RETENTION), [])
+
+    assert (got["RETENTION_LAW"], got["GEO_ENABLE_TENSION_CUT_OFF"]) == ("SaturatedLaw", False)
+
+
 @pytest.mark.parametrize("law, dimension", [
     ("GeoMohrCoulombWithTensionCutOff2D", 2),
     ("GeoMohrCoulombWithTensionCutOff3D", 3),

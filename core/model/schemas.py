@@ -1090,6 +1090,17 @@ FACES = ("bottom", "left", "right", "front", "back", "top")
 
 Face = Literal["bottom", "left", "right", "front", "back", "top"]
 
+SECTION_FACES = ("bottom", "left", "right", "top")
+"""The faces a 2D section has: front and back are not in its plane."""
+
+
+def face_size_key(face: str) -> str:
+    """The key a mesh size on the domain face `face` is kept under in
+    `MeshSettings.body_sizes`: `face_bottom`, `face_left`, ... One key per face, whatever
+    conditions are on it, as the deck writes one node part per face (`Bottom_Fixed`,
+    `Left_Edge`, ... in `core/kratos/writer.py`), whether or not a condition is on it."""
+    return f"face_{face}"
+
 ConditionTarget = Literal["domain", "face", "part", "line", "point"]
 """What a condition acts on: the first of the two questions the GUI's condition dialog
 asks. The second -- which face, which part, where -- is the field it names (`face`,
@@ -1569,6 +1580,14 @@ class MeshSettings(Base):
     size_min_factor: float = Field(default=0.05, gt=0, le=1)
     second_order_linear: bool = True
     body_sizes: dict[Ident, PositiveSize] = Field(default_factory=dict)
+    """A local mesh size per object, by its key (`Project.mesh_size_keys`): a layer or
+    a soil body, a structure, an anchor, a soil line, a drawn condition, a load, a face
+    of the model."""
+    size_bands: dict[Ident, Annotated[float, Field(ge=0)]] = Field(default_factory=dict)
+    """The distance, in metres, over which a size of `body_sizes` grows back to
+    `element_size` away from its object. Without one, a size keeps to its object: a
+    body's holds inside it, a line's on it, and the mesh round them grades as gmsh
+    likes. A point's holds within one element of it."""
     refinements: list[BoxRefinement | CylinderRefinement] = Field(default_factory=list)
     """Local size fields, finer than `element_size`, in the region each one covers.
 
@@ -1576,6 +1595,13 @@ class MeshSettings(Base):
     a refinement is part of what a model is: a deep excavation wants a fine mesh around
     its wall whoever opens it and whichever button they press. Left on the request, it
     had to be re-typed for every mesh and could not travel in a saved project at all."""
+
+    @model_validator(mode="after")
+    def _a_band_has_a_size(self) -> MeshSettings:
+        alone = sorted(set(self.size_bands) - set(self.body_sizes))
+        if alone:
+            raise ValueError(f"a band needs a mesh size on the same object: {', '.join(alone)}")
+        return self
 
 
 class WaterUpdate(Base):
@@ -1639,6 +1665,7 @@ class ConditionsUpdate(Base):
     """The boundary conditions, replaced as one list
     (`core.session.replace_conditions`). Left out, they stay as they are."""
     boundary_conditions: list[BoundaryCondition] | None = None
+    gravity_acceleration: float | None = Field(default=None, gt=0)
 
 
 class LinesUpdate(Base):
@@ -1864,6 +1891,12 @@ class Project(Base):
     every project saved before the conditions existed, and a new one -- it is the
     standard supports (`standard_conditions`), which are what the export always wrote;
     given, even empty, it is exactly what it lists."""
+    gravity_acceleration: float = Field(default=units.GRAVITY_SI, gt=0)
+    """The gravitational acceleration g, in m/s2: both unit systems measure length in
+    metres and time in seconds. The deck's self weight (`VOLUME_ACCELERATION`) is g, and
+    the water's density is its specific weight over g (`water_variables`), so the water
+    pressures stay those of `WaterLevel.specific_weight` whatever g is. Whether the self
+    weight acts at all is the initial stage's (`core.model.stages.gravity`)."""
     mesh: MeshSettings = Field(default_factory=MeshSettings)
     custom_parts: list[CustomPart] = Field(default_factory=list)
     stages: list[Stage] = Field(default_factory=list)
@@ -2038,7 +2071,8 @@ class Project(Base):
         """The water every soil is written with: `DENSITY_WATER`, `BULK_MODULUS_FLUID`
         and `DYNAMIC_VISCOSITY`, in the project's units (`soil_models.water`)."""
         return soil_models.water(self.unit_system, self.water_specific_weight,
-                                 self.fluid.bulk_modulus, self.fluid.dynamic_viscosity)
+                                 self.fluid.bulk_modulus, self.fluid.dynamic_viscosity,
+                                 gravity=self.gravity_acceleration)
 
     @model_validator(mode="after")
     def _a_layered_model_has_no_pit(self) -> Project:
@@ -2828,6 +2862,55 @@ class Project(Base):
                 if expanded not in out:
                     out.append(expanded)
         return out
+
+    def mesh_size_keys(self) -> list[str]:
+        """What a local mesh size can name (`MeshSettings.body_sizes`): every part, each
+        layer (all its bodies), each soil line, each condition drawn on a line or at a
+        point, each load (point, line or surface), and each face of the domain
+        (`face_size_key`). Together these are every node part the deck writes: a
+        condition on a face is on that face's part, one on a soil part is on that part,
+        and one on the whole soil is on every soil body (`mesh_size_key_of`).
+
+        Every load and every face whatever the dimension, so a size is kept when the
+        model is switched to the other dimension and back; `listed_mesh_size_keys` is
+        what this dimension shows."""
+        keys = [*self.part_keys(), *(f"soil_{layer.id}" for layer in self.layers),
+                *(line.id for line in self.lines),
+                *(c.id for c in self.boundary_conditions if c.on in ("line", "point")),
+                *(load.id for load in self.loads),
+                *(face_size_key(face) for face in FACES)]
+        return list(dict.fromkeys(keys))
+
+    def listed_mesh_size_keys(self) -> list[str]:
+        """The keys of `mesh_size_keys` this dimension lists, as the GUI's Mesh
+        properties window lists them (`frontend/js/mesh-settings.js` sizableKeys): the
+        loads this dimension builds, and the faces it has -- a 2D section has no front
+        and back."""
+        built = {load.id for load in self.loads_for(self.dimension)}
+        faces = SECTION_FACES if self.dimension == 2 else FACES
+        hidden = ({load.id for load in self.loads} - built) | {
+            face_size_key(face) for face in FACES if face not in faces}
+        return [key for key in self.mesh_size_keys() if key not in hidden]
+
+    def mesh_size_key_of(self, key: str) -> str | None:
+        """The key whose mesh size the object `key` has, or None for one that takes the
+        global element size.
+
+        Most objects have their own key. A boundary condition on a face has the face's
+        (`face_size_key`): the face is the node part, and every condition on it shares
+        it. One on a soil part has that part's. One on the whole soil has none: the
+        whole soil is meshed at the global element size. A key that names no object is
+        handed back as it is."""
+        condition = next((c for c in self.boundary_conditions if c.id == key), None)
+        if condition is None:
+            return key
+        if condition.on == "face" and condition.face is not None:
+            return face_size_key(condition.face)
+        if condition.on == "part":
+            return condition.part
+        if condition.on == "domain":
+            return None
+        return key
 
     def part_keys(self) -> list[str]:
         """The frontend's userData.key namespace, in render order."""

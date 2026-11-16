@@ -71,9 +71,14 @@ App.Units = (function () {
     return out;
   }
 
-  function gravity(name) {
+  /* The gravitational acceleration in the system `name`: `accelerationSI` in m/s2
+     (Project.gravity_acceleration), or the 9.81 m/s2 a new project has
+     (core/model/units.py `gravity`). */
+  function gravity(name, accelerationSI) {
     var s = table().systems[name || current()];
-    return table().gravity * s.time * s.time / s.length;
+    var g = accelerationSI === null || accelerationSI === undefined ? table().gravity
+                                                                    : accelerationSI;
+    return g * s.time * s.time / s.length;
   }
 
   function statusText(project) { return 'Units: ' + title(system(project)); }

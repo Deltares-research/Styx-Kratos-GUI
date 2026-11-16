@@ -154,10 +154,10 @@ shell. Only the camera of `base/js/orbit.js` is replaced; all other behaviour is
 
 | Role | Modules in `frontend/js/` |
 |---|---|
-| Connection to the shell | `patches.js`: menu actions, tool rails, panels, windows, the command box |
+| Connection to the shell | `patches.js`: menu actions, tool rails, panels, windows, the command box. `name-dialog.js` (the small window that asks for a name or a number, in place of the browser's prompt), `version.js` (the real version in the title bar), `vocabulary.js` (the shell's "phase" becomes "stage") |
 | Data | `api.js`, `model.js` (server project → shape that the shell needs), `buffers.js`, `history.js` (undo and redo), `units.js`, `unit-table.js` |
 | View | `viewport.js` (three.js), `orbit.js` (camera with y up), `canvas-renderer.js`, `ruler.js`, `mesh-labels.js`, `part-colors.js`, `node-parts.js` |
-| Modelling tools | `draw-input.js`, `lines.js`, `beams.js`, `anchors.js`, `interfaces.js`, `loads.js`, `normal-loads.js`, `water-command.js`, `soil-volume-dialog.js`, `soil-layers-dialog.js` (the **Modify soil layers** window, in place of the shell's own) |
+| Modelling tools | `draw-input.js`, `lines.js`, `beams.js`, `anchors.js`, `interfaces.js`, `loads.js`, `normal-loads.js`, `boundary-conditions.js` (the boundary conditions window, and the `boundary` and `gravity` commands), `point-list.js` (the list of points in the Line and normal load windows), `water-command.js`, `soil-volume-dialog.js`, `soil-layers-dialog.js` (the **Modify soil layers** window, in place of the shell's own) |
 | Soil materials | `material-sets.js` (the **Soil materials** window: the soils, and the project's water under **Water**), `material-library.js`, `property-sets.js`, `soil-models.js` and `soil-model-table.js` (the soil models, generated from `core/model/soil_models.py`) |
 | Mesh and stages | `mesh-settings.js`, `stages.js` and `solver-settings.js` (a stage's expert solver settings, generated from `core/model/solver.py`) |
 | Saved pictures | `picture-draw.js` (the scene as a list of shapes in mm), `picture-writers.js` (SVG, PDF, the PNG's dpi); both without a DOM. `picture.js` (reads the scene, canvas, clipboard, save windows, the walk over stages and fields, the job of `kratos-cli picture`), `picture-dialog.js` |

@@ -18,7 +18,7 @@
 
   function withEnvironment(initial, body) {
     var keys = ['PROJECT', 'LOADS', 'BEAMS', 'BEAM_SECTIONS', 'PANEL_SECTIONS', 'ANCHORS',
-                'ANCHOR_SECTIONS', 'NORMAL_LOADS', 'MATERIALS', 'MESH_BODIES_LEFT_OUT',
+                'ANCHOR_SECTIONS', 'NORMAL_LOADS', 'MATERIALS',
                 'Api', 'Model', 'Viewport', 'Explorer', 'Command', 'Dialogs', 'DrawInput',
                 'state', 'selectObject', 'runAction', 'matById'];
     var saved = {};
@@ -43,7 +43,6 @@
     App.matById = function (id) {
       T.eq(id, 'soil'); return App.MATERIALS[0];
     };
-    App.MESH_BODIES_LEFT_OUT = null;
     App.state = { mode: 'structures', selection: null };
     App.selectObject = function (id) { ctx.selected.push(id); App.state.selection = id; };
     App.runAction = function (spec) { ctx.actions.push(spec.action); };
@@ -121,21 +120,16 @@
     T.ok(found, 'No button named ' + text); return found;
   }
 
-  test('mesh dialog validates selection and sizes before saving and generating', function () {
+  test('mesh dialog meshes every layer and validates sizes before saving and generating', function () {
     return withEnvironment(project(), function (ctx) {
       App.MeshSettings.open();
       App.MeshSettings.open();
       T.eq(document.querySelectorAll('#mesh-settings-dialog').length, 1);
       var dialog = document.getElementById('mesh-settings-dialog');
-      var boxes = dialog.querySelectorAll('.mesh-body-enabled');
-      boxes.forEach(function (box) { box.checked = false; box.dispatchEvent(new Event('change')); });
-      T.ok(dialog.querySelector('.mesh-body-size').disabled);
-      realButton(dialog, 'Apply').click();
-      T.ok(/at least one layer/.test(dialog.querySelector('.mesh-settings-message').textContent));
-      T.eq(ctx.requests.length, 0);
-      boxes[0].checked = true; boxes[0].dispatchEvent(new Event('change'));
+      T.eq(dialog.querySelectorAll('.mesh-body-table input[type=checkbox]').length, 0,
+           'no layer can be left out of the mesh');
+      T.eq(dialog.querySelectorAll('.mesh-body-size').length, 2, 'one size per layer');
       var size = dialog.querySelector('.mesh-body-size');
-      T.ok(!size.disabled);
       size.value = '0';
       size.dispatchEvent(new Event('input', { bubbles: true }));
       realButton(dialog, 'Apply').click();
@@ -151,12 +145,120 @@
         T.eq(ctx.requests[0].body.mesh.algorithm_3d, 'hxt', 'the hidden algorithm is preserved');
         T.eq(ctx.requests[0].body.mesh.algorithm_2d, 'delaunay');
         T.eq(ctx.requests[0].body.mesh.body_sizes.soil_L1, 1.25);
-        T.eq(ctx.requests[0].body.mesh.volume_keys, undefined, 'selection is not a stored mesh setting');
-        T.eq(App.MESH_BODIES_LEFT_OUT, ['soil_L2']);
-        T.eq(App.MeshSettings.chosenBodies(App.PROJECT, App.MESH_BODIES_LEFT_OUT), ['soil_L1']);
+        T.eq(ctx.requests[0].body.mesh.volume_keys, undefined, 'the window names no bodies');
         T.eq(ctx.actions, ['generateMesh']);
         T.eq(ctx.applied.length, 1);
         T.ok(!document.getElementById('mesh-settings-dialog'));
+      });
+    });
+  });
+
+  test("mesh dialog sizes a sheet pile and keeps the model's refinement boxes", function () {
+    var initial = project();
+    initial.beams = [{ id: 'sheetpile', name: 'SheetPileWall', section: 'sp',
+                       points: [[5, 0], [5, -13]] }];
+    var box = { kind: 'box', size: 0.75, thickness: 45, x_min: -1, x_max: 8,
+                y_min: -16, y_max: 1, z_min: -1, z_max: 41 };
+    initial.mesh.refinements = [box];
+    return withEnvironment(initial, function (ctx) {
+      App.MeshSettings.open();
+      var dialog = document.getElementById('mesh-settings-dialog');
+      var pile = dialog.querySelector('.mesh-structure-size[data-structure-key="sheetpile"]');
+      T.ok(pile, 'the sheet pile has a size field');
+      T.eq(pile.value, '', 'no size of its own yet: it takes the mesh around it');
+      pile.value = '0.5';
+      dialog.querySelector('.mesh-structure-band[data-structure-key="sheetpile"]').value = '10';
+      T.ok(!/box/i.test(dialog.textContent), 'the window has no refinement boxes');
+      realButton(dialog, 'Apply').click();
+      return drain().then(function () {
+        var mesh = ctx.requests[0].body.mesh;
+        T.eq(mesh.body_sizes.sheetpile, 0.5);
+        T.eq(mesh.size_bands, { sheetpile: 10 });
+        T.eq(mesh.refinements, [box], 'a box made in a script or with add is kept');
+      });
+    });
+  });
+
+  test("refine, coarsen and reset change the selected object's mesh size", function () {
+    var initial = project();
+    initial.beams = [{ id: 'sheetpile', name: 'Wall', section: 'sp', points: [[5, 0], [5, -13]] }];
+    return withEnvironment(initial, function (ctx) {
+      function sizes() { return ctx.requests[ctx.requests.length - 1].body.mesh; }
+      return App.MeshSettings.changeSelected(0.5).then(function () {
+        T.eq(ctx.requests.length, 0, 'nothing selected: nothing to refine');
+        T.ok(/Select a layer/.test(ctx.logs[0][1]));
+        App.state.selection = 'sheetpile';
+        return App.MeshSettings.changeSelected(0.5);
+      }).then(function () {
+        T.eq(sizes().body_sizes, { sheetpile: 1.25 }, 'half the global size it took');
+        return App.MeshSettings.changeSelected(2);
+      }).then(function () {
+        T.eq(sizes().body_sizes, { sheetpile: 2.5 }, 'twice its own');
+        return App.MeshSettings.changeSelected(null);
+      }).then(function () {
+        T.eq(sizes().body_sizes, {}, 'reset: the global size again');
+        T.ok(/Wall takes the global mesh size again/.test(ctx.logs[ctx.logs.length - 1][1]));
+        T.eq(ctx.selected, ['sheetpile', 'sheetpile', 'sheetpile'],
+          'the Selection explorer is drawn again, so its Mesh size row shows the new size');
+        T.eq(ctx.actions, [], 'no mesh on screen: none is made');
+      });
+    });
+  });
+
+  test('refine sizes an anchor, a line load and, for a condition on a face, the face', function () {
+    var initial = project();
+    initial.anchors = [{ id: 'strut', name: 'Strut', section: 'a', head: [5, -1], tail: [0, -1] }];
+    initial.loads = [{ id: 'surcharge', name: 'Surcharge', kind: 'line', x0: 5, x1: 20, y: 0,
+                       components: [0, -10] }];
+    initial.boundary_conditions = [{ id: 'fixed_bottom', name: 'Fixed bottom',
+                                     kind: 'displacement', on: 'face', face: 'bottom' }];
+    return withEnvironment(initial, function (ctx) {
+      function sizes() { return ctx.requests[ctx.requests.length - 1].body.mesh.body_sizes; }
+      App.state.selection = 'strut';
+      return App.MeshSettings.changeSelected(0.5).then(function () {
+        T.eq(sizes(), { strut: 1.25 });
+        App.state.selection = 'surcharge';
+        return App.MeshSettings.changeSelected(0.5);
+      }).then(function () {
+        T.eq(sizes(), { strut: 1.25, surcharge: 1.25 });
+        App.state.selection = 'fixed_bottom';
+        return App.MeshSettings.changeSelected(0.5);
+      }).then(function () {
+        T.eq(sizes(), { strut: 1.25, surcharge: 1.25, face_bottom: 1.25 },
+             'the size of the face the condition is on');
+        T.ok(/Bottom face  ·  Fixed bottom: 1.25 m/.test(ctx.logs[ctx.logs.length - 1][1]),
+             ctx.logs[ctx.logs.length - 1][1]);
+        T.eq(ctx.selected[ctx.selected.length - 1], 'fixed_bottom',
+             'the condition is drawn again, so its Mesh group shows the new size');
+      });
+    });
+  });
+
+  test('refine says that a condition on the whole soil takes the global size', function () {
+    var initial = project();
+    initial.boundary_conditions = [{ id: 'pore', name: 'Pore pressure', kind: 'water_pressure',
+                                     on: 'domain' }];
+    return withEnvironment(initial, function (ctx) {
+      App.state.selection = 'pore';
+      return App.MeshSettings.changeSelected(0.5).then(function () {
+        T.eq(ctx.requests.length, 0);
+        T.ok(/^Pore pressure acts on the whole soil/.test(ctx.logs[0][1]), ctx.logs[0][1]);
+      });
+    });
+  });
+
+  test('refine in Mesh mode makes the shown mesh again and keeps the selection', function () {
+    var initial = project();
+    initial.beams = [{ id: 'sheetpile', name: 'Wall', section: 'sp', points: [[5, 0], [5, -13]] }];
+    return withEnvironment(initial, function (ctx) {
+      App.state.mode = 'mesh';
+      App.state.selection = 'sheetpile';
+      App.Viewport.hasMesh = function () { return true; };
+      var asked = [];
+      App.runAction = function (spec) { asked.push(spec); };
+      return App.MeshSettings.changeSelected(0.5).then(function () {
+        T.eq(asked, [{ action: 'generateMesh', keepSelection: true }]);
+        T.eq(App.state.selection, 'sheetpile');
       });
     });
   });
@@ -374,21 +476,75 @@
     });
   });
 
-  test('normal-load picker converts section coordinates and reopens the editor', function () {
+  function pointRows(dialog) {
+    return Array.prototype.map.call(dialog.form.querySelectorAll('.line-point'), function (row) {
+      return Array.prototype.map.call(row.querySelectorAll('input'), function (input) {
+        return input.value;
+      });
+    });
+  }
+
+  test('normal-load picker draws a polyline of any length and reopens the editor', function () {
     return withEnvironment(project(), function (ctx) {
       App.NormalLoads.start();
-      button(latest(ctx), 'Pick on model\u2026');
-      T.eq(ctx.drawn.mode, 'load');
-      T.eq(ctx.drawn.options.count, 2);
-      ctx.drawn.options.onComplete([[5, -2, 0], [15, -4, 0]]);
+      button(latest(ctx), 'Pick on model…');
+      T.eq(ctx.drawn.mode, 'line');
+      ctx.drawn.options.onComplete([[0, -2, 0], [5, -2, 0], [5, -1.5, 0]]);
       var dialog = latest(ctx);
-      T.eq(field(dialog, 'x1').value, '5');
-      T.eq(field(dialog, 'y2').value, '-4');
+      T.eq(pointRows(dialog), [['0', '-2'], ['5', '-2'], ['5', '-1.5']]);
       field(dialog, 'Pressure').value = '120';
       return button(dialog, 'Save').then(function () {
         T.ok(dialog.closed);
-        T.eq(ctx.requests[0].body.normal_loads[0].points, [[5, -2], [15, -4]]);
+        T.eq(ctx.requests[0].body.normal_loads[0].points, [[0, -2], [5, -2], [5, -1.5]]);
       });
+    });
+  });
+
+  test('the normal-load window adds and removes points, as the Line window does', function () {
+    return withEnvironment(project(), function (ctx) {
+      App.NormalLoads.start();
+      var dialog = latest(ctx);
+      var start = pointRows(dialog);
+      T.eq(start.length, 2);
+      realButton(dialog.form, 'Add point').click();
+      var rows = pointRows(dialog);
+      T.eq(rows.length, 3);
+      T.eq(rows[2], [String(Number(start[1][0]) + 1), start[1][1]]);
+      dialog.form.querySelectorAll('.line-point')[2].querySelector('input').value = '30';
+      field(dialog, 'Pressure').value = '10';
+      return button(dialog, 'Save').then(function () {
+        var points = ctx.requests[0].body.normal_loads[0].points;
+        T.eq(points.length, 3);
+        T.eq(points[2][0], 30);
+      });
+    });
+  });
+
+  test('a hydrostatic normal load is saved without a pressure, which it does not read', function () {
+    return withEnvironment(project(), function (ctx) {
+      App.NormalLoads.start();
+      var dialog = latest(ctx);
+      change(field(dialog, 'Type'), 'Hydrostatic');
+      T.ok(field(dialog, 'Pressure').disabled, 'nothing to type: the level sets the pressure');
+      field(dialog, 'Reference level').value = '-1.5';
+      return button(dialog, 'Save').then(function () {
+        T.ok(dialog.closed);
+        var saved = ctx.requests[0].body.normal_loads[0];
+        T.eq(saved.fluid_pressure_type, 'Hydrostatic');
+        T.eq(saved.reference_coordinate, -1.5);
+        T.eq(saved.pressure, 0);
+      });
+    });
+  });
+
+  test('a uniform normal load still asks for its pressure', function () {
+    return withEnvironment(project(), function (ctx) {
+      App.NormalLoads.start();
+      var dialog = latest(ctx);
+      T.eq(field(dialog, 'Pressure').disabled, false);
+      T.eq(button(dialog, 'Save'), null);
+      T.ok(/pressure/.test(dialog.form.textContent));
+      T.eq(ctx.requests.length, 0);
     });
   });
 
@@ -423,6 +579,29 @@
         return App.BoundaryConditions.applyStandard();
       }).then(function () {
         T.ok(ctx.requests[3].body.boundary_conditions.length > 0);
+      });
+    });
+  });
+
+  test('a new condition switched to water pressure or seepage gets that kind of id and name', function () {
+    return withEnvironment(project(), function (ctx) {
+      App.BoundaryConditions.openRecord();
+      var dialog = latest(ctx);
+      change(field(dialog, 'Condition'), 'water_pressure');
+      change(field(dialog, 'Where'), 'domain');
+      field(dialog, 'Reference level').value = '-1';
+      return button(dialog, 'Save').then(function () {
+        var water = ctx.requests[0].body.boundary_conditions[0];
+        T.eq([water.id, water.name], ['waterpressure_1', 'Water pressure 1']);
+        App.BoundaryConditions.openRecord();
+        dialog = latest(ctx);
+        field(dialog, 'Name').value = 'Polder face';
+        change(field(dialog, 'Condition'), 'seepage');
+        change(field(dialog, 'Where'), 'face');
+        return button(dialog, 'Save');
+      }).then(function () {
+        var seepage = ctx.requests[1].body.boundary_conditions[1];
+        T.eq([seepage.id, seepage.name], ['seepage_1', 'Polder face'], 'a typed name is kept');
       });
     });
   });

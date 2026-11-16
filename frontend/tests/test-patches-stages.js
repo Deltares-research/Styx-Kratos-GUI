@@ -333,6 +333,9 @@
     App.Explorer.mountPhases();
     var buttons = ctx.dock.querySelectorAll('.stage-toolbar button.tbtn');
     T.eq(buttons.length, 4, 'add, insert, duplicate, delete');
+    T.eq(Array.prototype.map.call(buttons, function (b) { return b.getAttribute('data-action'); }),
+         ['addStage', 'insertStage', 'duplicateStage', 'deleteStage']);
+    T.eq(buttons[0].getAttribute('aria-label'), 'Add stage');
     buttons[0].click();
     return done(ctx, new Promise(function (r) { setTimeout(r, 20); }).then(function () {
       T.eq(ctx.patches[0].body.stages.length, model().stages.length + 1, 'one added');
@@ -345,6 +348,29 @@
       T.ok(ctx.patches[1].body.stages.every(function (p) { return p.id !== model().stages[1].id; }),
            'the selected stage is gone');
     }));
+  });
+
+  test('stage list: a stage that is added, inserted or duplicated is selected', function () {
+    var ctx = rig(model());
+    var before = model().stages.map(function (stage) { return stage.id; });
+    function fresh() {
+      var last = ctx.patches[ctx.patches.length - 1].body.stages;
+      return last.filter(function (stage) { return before.indexOf(stage.id) < 0; })
+        .map(function (stage) { return stage.id; });
+    }
+    function press(index) {
+      App.state.phase = model().stages[1].id;
+      App.Explorer.mountPhases();
+      ctx.dock.querySelectorAll('.stage-toolbar button.tbtn')[index].click();
+      return new Promise(function (r) { setTimeout(r, 20); });
+    }
+    return done(ctx, [0, 1, 2].reduce(function (chain, index) {
+      return chain.then(function () { return press(index); }).then(function () {
+        T.eq(fresh().length, 1, 'one new stage');
+        T.eq(App.state.phase, fresh()[0], 'button ' + index + ' selects the stage it made');
+        App.Model.apply(JSON.parse(JSON.stringify(model())));
+      });
+    }, Promise.resolve()));
   });
 
   test("stage list: the dock's Stages… button opens the window", function () {

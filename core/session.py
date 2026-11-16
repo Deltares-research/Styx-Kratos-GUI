@@ -196,9 +196,9 @@ def _replace(temporary: str, path: Path) -> None:
 # ── Every edit ──────────────────────────────────────────────────────────────
 
 def _sizable_keys(project: Project) -> set[str]:
-    """What a mesh size can name: the bodies, and a cut layer's key, which names each of
-    its pieces."""
-    return {*project.part_keys(), *(f"soil_{layer.id}" for layer in project.layers)}
+    """What a mesh size can name: the bodies, a cut layer's key, which names each of
+    its pieces, and the lines and points of `Project.mesh_size_keys`."""
+    return set(project.mesh_size_keys())
 
 
 def _edited(project: Project, payload: dict) -> Project:
@@ -219,8 +219,9 @@ def _edited(project: Project, payload: dict) -> Project:
     if not lost:
         return edited
     kept = {key: size for key, size in sizes.items() if key not in lost}
+    bands = {key: band for key, band in edited.mesh.size_bands.items() if key not in lost}
     return edited.model_copy(update={"mesh": edited.mesh.model_copy(
-        update={"body_sizes": kept})})
+        update={"body_sizes": kept, "size_bands": bands})})
 
 
 def _parts_take_their_layers_material(project: Project, payload: dict) -> None:
@@ -595,8 +596,10 @@ def edit_notes(before: Project, after: Project) -> list[str]:
 def unknown_mesh_keys(project: Project, settings: MeshRequest) -> list[str]:
     """The bodies `settings` names -- to mesh, or to size -- that this project does not
     have, sorted. Empty when every one is the project's own."""
-    named = project.expand_body_keys([*(settings.volume_keys or []), *settings.body_sizes])
-    return sorted(set(named) - set(project.part_keys()))
+    meshed = project.expand_body_keys(list(settings.volume_keys or []))
+    sized = project.expand_body_keys(list(settings.body_sizes))
+    return sorted((set(meshed) - set(project.part_keys()))
+                  | (set(sized) - set(project.mesh_size_keys())))
 
 
 def nothing_to_mesh(project: Project) -> str | None:
@@ -962,9 +965,11 @@ def add_material(project: Project, material) -> Project:
 def update_material(project: Project, id: str, *, name: str | None = None,
                     color: str | None = None, law: str | None = None,
                     model: str | None = None, variables: dict | None = None,
-                    unset: Sequence[str] = (), notes: list[str] | None = None) -> Project:
+                    unset: Sequence[str] = (), notes: list[str] | None = None,
+                    r_inter: float | None = None) -> Project:
     """The material `id` with the fields and variables given; `unset` names variables to
-    leave out, so the export derives them where it can.
+    leave out, so the export derives them where it can. `r_inter` is the factor an
+    interface puts on this soil's strength.
 
     `model` makes it that soil model (`core/model/soil_models.py`): its law in the
     project's dimension. What the soil then lists and lacks gets the model's default, as
@@ -981,7 +986,8 @@ def update_material(project: Project, id: str, *, name: str | None = None,
     payload = project.model_dump()
     record = payload["materials"][_index(project.materials, id, "material")]
     before_law, before = record["constitutive_law"], dict(record["variables"])
-    for field, value in (("name", name), ("color", color), ("constitutive_law", law)):
+    for field, value in (("name", name), ("color", color), ("constitutive_law", law),
+                         ("r_inter", r_inter)):
         if value is not None:
             record[field] = value
     if law is not None:
@@ -1324,6 +1330,8 @@ def replace_conditions(project: Project, update: ConditionsUpdate) -> Project:
         _refuse_staged_conditions(project, {c.id for c in update.boundary_conditions})
         payload["boundary_conditions"] = [c.model_dump()
                                           for c in update.boundary_conditions]
+    if update.gravity_acceleration is not None:
+        payload["gravity_acceleration"] = update.gravity_acceleration
     return _edited(project, payload)
 
 
@@ -1372,6 +1380,15 @@ def standard_conditions(project: Project) -> Project:
     payload["boundary_conditions"] = kept
     standard = drafts.standard_conditions(_edited(project, payload))
     payload["boundary_conditions"] = [c.model_dump() for c in standard] + kept
+    return _edited(project, payload)
+
+
+def set_gravity_acceleration(project: Project, acceleration: float) -> Project:
+    """`project` with the gravitational acceleration `acceleration`, in m/s2 (`kratos-cli
+    gravity P 9.80665`, File > Project properties). Whether the self weight acts is the
+    initial stage's stress initialisation (`core.model.stages.gravity`)."""
+    payload = project.model_dump()
+    payload["gravity_acceleration"] = acceleration
     return _edited(project, payload)
 
 

@@ -82,10 +82,31 @@
           'pore']);
   });
 
-  test('a line that is not boundary is not this command', function () {
+  test('gravity says whether the self weight acts; it has no switch', function () {
+    T.eq(BC().command('gravity', section()).message,
+         'The self weight acts on every body, with g = 9.81 m/s².');
+    T.eq(BC().command('gravity off', section()).ok, false);
+    T.eq(BC().command('gravity ON', section()).ok, false);
+    T.eq(BC().command('gravity maybe', section()).ok, false);
+    var none = Object.assign(section(), { stages: [
+      { id: 'initial', parent: null, calculation: 'mechanical', stress_initialisation: 'none' }] });
+    T.eq(BC().command('gravity', none).message,
+         'The self weight is off: the initial stage initialises no stresses (g = 9.81 m/s² '
+         + 'when it acts).');
+  });
+
+  test('gravity with a number sets g, as kratos-cli gravity P G does', function () {
+    var answer = BC().command('gravity 9.80665', section());
+    T.eq(answer.body, { gravity_acceleration: 9.80665 });
+    T.eq(answer.message, 'The self weight acts on every body, with g = 9.80665 m/s².');
+    T.eq(BC().command('gravity 0', section()).ok, false);
+    T.eq(BC().command('gravity -9.81', section()).ok, false);
+  });
+
+  test('a line that is not boundary or gravity is not this command', function () {
     T.eq(BC().command('water -2', section()), false);
-    T.eq(BC().command('gravity off', section()), false,
-         'gravity is the stress initialisation of the initial stage, not a command');
+    T.eq(BC().command('gravity off', section()).ok, false,
+         'the self weight is the stress initialisation of the initial stage, not a switch');
     T.eq(BC().command('boundary teleport', section()).ok, false);
   });
 

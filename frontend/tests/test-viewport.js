@@ -594,6 +594,7 @@
     App.Viewport.setVisible('mesh', true);
     App.Viewport.select(null);
     T.eq(App.Viewport.hasMesh(), false);
+    T.eq(App.Viewport.clearMesh(), false, 'no mesh: nothing to clear');
   });
 
   /* An imported .mdpa's preview lives outside `groups`/`frame` entirely (viewport.js's
@@ -698,52 +699,31 @@
 })();
 
 (function () {
-  /* Which refinements a mesh is built with. A model can carry a graded mesh of its own
-     (a model script can refine its excavation and grade out to the far field), and
-     `meshSettings` used to overwrite that with `App.MESH_REFINEMENTS || []` -- so the
-     Generate-mesh button flattened a grading the project had asked for. */
+  /* Which refinement boxes a mesh is built with. A model can carry a graded mesh of its
+     own (a model script can refine its excavation and grade out to the far field), and
+     the Generate-mesh button must not flatten a grading the project asked for. */
 
   var BOX = { kind: 'box', size: 0.75, thickness: 45, x_min: -1, x_max: 8,
               y_min: -16, y_max: 1, z_min: -1, z_max: 11 };
 
-  function withState(local, project, run) {
-    var saved = { refinements: App.MESH_REFINEMENTS, project: App.PROJECT };
-    App.MESH_REFINEMENTS = local;
+  function withState(project, run) {
+    var saved = App.PROJECT;
     App.PROJECT = project;
-    try { run(); } finally {
-      App.MESH_REFINEMENTS = saved.refinements;
-      App.PROJECT = saved.project;
-    }
+    try { run(); } finally { App.PROJECT = saved; }
   }
 
-  test("a model's own refinements are used when none is set this session", function () {
-    withState(undefined, { mesh: { refinements: [BOX] } }, function () {
+  test("a model's own refinements are used", function () {
+    withState({ mesh: { refinements: [BOX] } }, function () {
       T.eq(App.Viewport.meshRefinements().length, 1);
       T.eq(App.Viewport.meshRefinements()[0].thickness, 45);
     });
   });
 
-  test('a refinement set from the toolbar wins over the model\'s', function () {
-    var local = [{ kind: 'box', size: 0.2, x_min: 0, x_max: 1,
-                   y_min: 0, y_max: 1, z_min: 0, z_max: 1 }];
-    withState(local, { mesh: { refinements: [BOX] } }, function () {
-      T.eq(App.Viewport.meshRefinements()[0].size, 0.2);
-    });
-  });
-
-  test('resetting the local refinement falls back to the model, not to none', function () {
-    /* "Reset" leaves an empty array behind, and an empty array is truthy -- so a plain
-       `||` would read it as a choice and mesh the model flat. */
-    withState([], { mesh: { refinements: [BOX] } }, function () {
-      T.eq(App.Viewport.meshRefinements().length, 1);
-    });
-  });
-
   test('a project that asks for no refinement gets none', function () {
-    withState(undefined, { mesh: {} }, function () {
+    withState({ mesh: {} }, function () {
       T.eq(App.Viewport.meshRefinements(), []);
     });
-    withState(undefined, null, function () {
+    withState(null, function () {
       T.eq(App.Viewport.meshRefinements(), []);
     });
   });
@@ -897,5 +877,23 @@
     var cut = App.Viewport.lineSeams(SECTIONS, Object.assign({}, PROJECT, { lines: [] }));
     T.eq(cut.seams, []);
     T.eq(cut.edges.soil_top__part1, SECTIONS[0].edges);
+  });
+})();
+
+/* Generate mesh meshes the whole model, as kratos-cli mesh does: no volume_keys in
+   the request, whatever is selected or hidden. This needs viewport.js, so it runs
+   in the browser suite only. */
+
+(function () {
+  test('the viewport meshes the whole model, whatever is selected or hidden', function () {
+    var saved = { PROJECT: App.PROJECT, state: App.state };
+    try {
+      App.PROJECT = { layers: [{ id: 'L1' }, { id: 'L2' }], mesh: { element_size: 2.5 } };
+      App.state = { mode: 'mesh', selection: 'soil_L1' };
+      T.eq(App.Viewport.meshSettings().volume_keys, undefined);
+      T.eq(App.Viewport.meshSettings().element_size, 2.5);
+    } finally {
+      App.PROJECT = saved.PROJECT; App.state = saved.state;
+    }
   });
 })();

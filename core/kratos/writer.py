@@ -246,6 +246,7 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
         size_min_factor=settings.size_min_factor,
         second_order_linear=settings.second_order_linear,
         volume_keys=settings.volume_keys, body_sizes=settings.body_sizes,
+        size_bands=settings.size_bands,
     )
     dim = 2 if project.dimension == 2 else 3
     names = _part_names(project)
@@ -534,6 +535,7 @@ def _export(project: Project, settings: MeshRequest, include_materials: bool) ->
         # The initial stage's stress initialisation decides it: K0 or gravity loading
         # puts the self weight on every body, none leaves it out (`stages.gravity`).
         gravity=stages.gravity(project),
+        gravity_acceleration=project.gravity_acceleration,
     )
     return {
         "mdpa": _render(coordinates, node_id, numbered, condition_blocks, parts),

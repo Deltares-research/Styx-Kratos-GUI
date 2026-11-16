@@ -34,9 +34,8 @@ App.Export = (function () {
     return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
   }
 
-  /* The mesh settings the deck is built with: the project's own, plus any local
-     refinement and any explicit body selection. `volume_keys` is left off unless
-     the user picked bodies, and the server then meshes everything. */
+  /* The mesh settings the deck is built with: the project's own, plus its refinement
+     boxes. It names no bodies (`volume_keys`), so the server meshes the whole model. */
   function meshRequest() {
     var project = App.PROJECT || {};
     var settings = Object.assign({}, project.mesh || {}, {
@@ -44,8 +43,6 @@ App.Export = (function () {
          deck is built from the mesh the user is looking at rather than a flatter one. */
       refinements: App.Viewport.meshRefinements()
     });
-    var chosen = App.MeshSettings.chosenBodies(project, App.MESH_BODIES_LEFT_OUT);
-    if (chosen) settings.volume_keys = chosen;
     return settings;
   }
 

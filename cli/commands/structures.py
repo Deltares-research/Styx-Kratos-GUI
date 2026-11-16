@@ -81,9 +81,11 @@ SECTION_VARIABLES = (
     "the soil each stretch of the interface runs against (shear = G / virtual thickness, "
     "normal = 10 x shear). A Coulomb law (--law GeoInterfaceCoulombLawPlaneStrain) also "
     "reads GEO_COHESION and GEO_FRICTION_ANGLE, derived from the soil with --r-inter when "
-    "left out; a linear elastic soil has no strength to give, so against one they have to "
-    "be set. A Coulomb section given, by --law or --material, a linear elastic soil gets "
-    "the Mohr-Coulomb defaults as its own, as the GUI gives them; set them after.")
+    "left out, and the soil's GEO_ENABLE_TENSION_CUT_OFF; a linear elastic soil has no "
+    "strength to give, so against one they have to be set. A Coulomb section given, by "
+    "--law or --material, a linear elastic soil gets the Mohr-Coulomb defaults as its own, "
+    "as the GUI gives them; set them after. Either law takes the soil's RETENTION_LAW, "
+    "saturations and BIOT_COEFFICIENT when left out.")
 """What `section add` and `section set` say about their NAME=VALUE words."""
 
 

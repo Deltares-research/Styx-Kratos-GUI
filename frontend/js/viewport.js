@@ -2710,18 +2710,12 @@ App.Viewport = (function () {
      mesh itself, and the node numbering the ID labels are drawn from -- and a numbering
      taken from different settings than the mesh on screen would be numbers for a mesh
      nobody is looking at. */
-  /* The refinements a mesh is built with: the ones set from the toolbar this session
-     if there are any, and otherwise the model's own (`MeshSettings.refinements`). A
-     model can carry a graded mesh -- a model script can refine its excavation and
-     grade out to the far field -- and it has to mesh that way from the Generate-mesh
-     button and from Export alike, not only from a script.
-
-     Length, not truthiness: "Reset local mesh refinement" leaves an empty array behind,
-     and an empty array is truthy. Reset means "back to what the model asks for", not
-     "no refinement at all". */
+  /* The refinement boxes a mesh is built with: the model's own
+     (`MeshSettings.refinements`). A model script or `kratos-cli add` can give a model a
+     box, and it has to mesh that way from the Generate-mesh button and from Export
+     alike, not only from a script. Refine mesh and its twins change local sizes
+     (`body_sizes`), never a box. */
   function meshRefinements() {
-    var local = App.MESH_REFINEMENTS;
-    if (local && local.length) return local.slice();
     var mesh = App.PROJECT && App.PROJECT.mesh;
     return (mesh && mesh.refinements) ? mesh.refinements.slice() : [];
   }
@@ -2732,9 +2726,8 @@ App.Viewport = (function () {
       smoothing: 10, curvature_points: 16, size_min_factor: 0.05,
       second_order_linear: true
     }, {
-      refinements: meshRefinements(),
-      volume_keys: App.MeshSettings.chosenBodies(App.PROJECT, App.MESH_BODIES_LEFT_OUT)
-        || App.MeshSettings.meshTargets(App.PROJECT, App.state.selection, isVisible)
+      // No `volume_keys`: the whole model is meshed, whatever is selected or hidden.
+      refinements: meshRefinements()
     });
   }
 
@@ -2800,6 +2793,31 @@ App.Viewport = (function () {
   }
 
   function hasMesh() { return meshBuilt; }
+
+  /* Mesh > Clear mesh: the generated mesh goes, and the model is drawn as it is before
+     a mesh is made. Everything that belongs to that mesh goes with it: the coloured
+     parts, the node and element numbers, and the node -> parts index. The settings and
+     the local sizes stay in the project, so Generate mesh makes the same mesh again.
+     False when there was no mesh to clear. */
+  function clearMesh() {
+    if (!meshBuilt) return false;
+    disposeGroup(groups.mesh);
+    groups.mesh = new THREE.Group();
+    groups.mesh.name = 'mesh';
+    scene.add(groups.mesh);
+    meshBuilt = false;
+    meshPartKeys = [];
+    meshPartGroups = {};
+    generatedLabels = null;
+    forgetNodeParts();
+    refreshLabels();
+    App.MESH_STATS = null;
+    setMode(App.state.mode);
+    // The Model explorer's colour toggles are drawn only for parts with mesh elements.
+    if (App.Explorer && App.Explorer.mountTree) App.Explorer.mountTree(App.state.mode);
+    needsRender = true;
+    return true;
+  }
 
   /* ── Which SubModelParts a node is in ──────────────────────────────────
      The node -> parts index of the deck this project exports (`/api/mesh/node-parts`,
@@ -3641,6 +3659,7 @@ App.Viewport = (function () {
     refreshLabels: refreshLabels, syncLabels: syncLabels,
     projectToScreen: projectToScreen,
     showImportedMesh: showImportedMesh, clearImportedMesh: clearImportedMesh,
+    clearMesh: clearMesh,
     syncPartColors: syncPartColors, coloredPartKeys: coloredPartKeys, partColor: partColor,
     boundsOf: boundsOf, growBBox: growBBox,
     nodeParts: nodeParts, nodePartsLoaded: nodePartsLoaded, markNodes: markNodes,

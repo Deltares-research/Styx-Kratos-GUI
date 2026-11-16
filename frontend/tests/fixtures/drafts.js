@@ -39,6 +39,7 @@ window.DRAFTS_FIXTURE =
         },
         "system": "SI",
         "flow": false,
+        "gravity": null,
         "water": {
           "DENSITY_WATER": 1019.367991845056,
           "BULK_MODULUS_FLUID": 2200000000.0,
@@ -73,6 +74,7 @@ window.DRAFTS_FIXTURE =
         },
         "system": "kN",
         "flow": false,
+        "gravity": null,
         "water": {
           "DENSITY_WATER": 1.019367991845056,
           "BULK_MODULUS_FLUID": 2200000.0,
@@ -108,6 +110,7 @@ window.DRAFTS_FIXTURE =
         },
         "system": "SI",
         "flow": false,
+        "gravity": null,
         "water": {
           "DENSITY_WATER": 1000.0,
           "BULK_MODULUS_FLUID": 2000000000.0,
@@ -136,6 +139,7 @@ window.DRAFTS_FIXTURE =
         },
         "system": "SI",
         "flow": true,
+        "gravity": null,
         "water": {
           "DENSITY_WATER": 1019.367991845056,
           "BULK_MODULUS_FLUID": 2200000000.0,
@@ -160,6 +164,7 @@ window.DRAFTS_FIXTURE =
         },
         "system": "SI",
         "flow": false,
+        "gravity": null,
         "water": {
           "DENSITY_WATER": 1019.367991845056,
           "BULK_MODULUS_FLUID": 2200000000.0,
@@ -181,6 +186,7 @@ window.DRAFTS_FIXTURE =
         },
         "system": "kN",
         "flow": false,
+        "gravity": null,
         "water": {
           "DENSITY_WATER": 1.019367991845056,
           "BULK_MODULUS_FLUID": 2200000.0,
@@ -201,6 +207,7 @@ window.DRAFTS_FIXTURE =
         },
         "system": "kN",
         "flow": false,
+        "gravity": null,
         "water": {
           "DENSITY_WATER": 1.019367991845056,
           "BULK_MODULUS_FLUID": 2200000.0,
@@ -227,6 +234,7 @@ window.DRAFTS_FIXTURE =
         },
         "system": "SI",
         "flow": false,
+        "gravity": null,
         "water": {
           "DENSITY_WATER": 1019.367991845056,
           "BULK_MODULUS_FLUID": 2200000000.0,
@@ -249,6 +257,7 @@ window.DRAFTS_FIXTURE =
         },
         "system": "SI",
         "flow": false,
+        "gravity": null,
         "water": {
           "DENSITY_WATER": 1019.367991845056,
           "BULK_MODULUS_FLUID": 2200000000.0,
@@ -260,6 +269,46 @@ window.DRAFTS_FIXTURE =
           "VAN_GENUCHTEN_GL": 1.25
         },
         "computed": {}
+      },
+      {
+        "title": "a coupled soil in a project with g = 10 m/s2",
+        "law": "GeoMohrCoulombLawPlaneStrain",
+        "variables": {
+          "GEO_DRAINAGE_TYPE": "FULLY_COUPLED",
+          "YOUNG_MODULUS": 10000000.0,
+          "POISSON_RATIO": 0.3,
+          "DENSITY_SOLID": 1732.9255861365953,
+          "POROSITY": 0.35,
+          "RETENTION_LAW": "SaturatedBelowPhreaticLevelLaw",
+          "SATURATED_SATURATION": 1.0,
+          "RESIDUAL_SATURATION": 1e-10,
+          "GEO_COHESION": 1000.0,
+          "GEO_FRICTION_ANGLE": 30.0,
+          "GEO_DILATANCY_ANGLE": 0.0,
+          "GEO_ENABLE_TENSION_CUT_OFF": false,
+          "PERMEABILITY_XX": 3e-12
+        },
+        "system": "kN",
+        "flow": false,
+        "gravity": 10.0,
+        "water": {
+          "DENSITY_WATER": 1.0,
+          "BULK_MODULUS_FLUID": 2200000.0,
+          "DYNAMIC_VISCOSITY": 1e-06
+        },
+        "derived": {
+          "BULK_MODULUS_SOLID": 10000000.0,
+          "PERMEABILITY_YY": 3e-12,
+          "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
+          "BIOT_COEFFICIENT": 0.16666666666666674,
+          "K0_NC": 0.5
+        },
+        "computed": {
+          "UNIT_WEIGHT_DRY": 11264.01630988787,
+          "UNIT_WEIGHT_SATURATED": 11267.51630988787,
+          "HYDRAULIC_CONDUCTIVITY_XX": 3e-05,
+          "HYDRAULIC_CONDUCTIVITY_YY": 3e-05
+        }
       }
     ],
     "water": [
@@ -268,6 +317,7 @@ window.DRAFTS_FIXTURE =
         "specific_weight": null,
         "bulk_modulus": null,
         "viscosity": null,
+        "gravity": null,
         "water": {
           "DENSITY_WATER": 1019.367991845056,
           "BULK_MODULUS_FLUID": 2200000000.0,
@@ -279,6 +329,7 @@ window.DRAFTS_FIXTURE =
         "specific_weight": null,
         "bulk_modulus": null,
         "viscosity": null,
+        "gravity": null,
         "water": {
           "DENSITY_WATER": 1.019367991845056,
           "BULK_MODULUS_FLUID": 2200000.0,
@@ -290,6 +341,7 @@ window.DRAFTS_FIXTURE =
         "specific_weight": null,
         "bulk_modulus": 2000000000.0,
         "viscosity": null,
+        "gravity": null,
         "water": {
           "DENSITY_WATER": 1019.367991845056,
           "BULK_MODULUS_FLUID": 2000000000.0,
@@ -301,6 +353,7 @@ window.DRAFTS_FIXTURE =
         "specific_weight": null,
         "bulk_modulus": null,
         "viscosity": 1.3e-06,
+        "gravity": null,
         "water": {
           "DENSITY_WATER": 1.019367991845056,
           "BULK_MODULUS_FLUID": 2200000.0,
@@ -312,10 +365,23 @@ window.DRAFTS_FIXTURE =
         "specific_weight": 9810.0,
         "bulk_modulus": 1e+20,
         "viscosity": 0.0013,
+        "gravity": null,
         "water": {
           "DENSITY_WATER": 1000.0,
           "BULK_MODULUS_FLUID": 1e+20,
           "DYNAMIC_VISCOSITY": 0.0013
+        }
+      },
+      {
+        "system": "kN",
+        "specific_weight": 10.0,
+        "bulk_modulus": null,
+        "viscosity": null,
+        "gravity": 9.80665,
+        "water": {
+          "DENSITY_WATER": 1.0197162129779282,
+          "BULK_MODULUS_FLUID": 2200000.0,
+          "DYNAMIC_VISCOSITY": 1e-06
         }
       }
     ],
@@ -5227,7 +5293,7 @@ window.DRAFTS_FIXTURE =
           "tables": {},
           "id": "interfacesection_1",
           "name": "Interface",
-          "material": "m1",
+          "material": null,
           "r_inter": 0.7,
           "virtual_thickness": 0.01,
           "permeability": "Neutral"

@@ -351,6 +351,28 @@ App.BoundaryConditions = (function () {
     return record.name + '  ·  ' + what;
   }
 
+  /* Whether the self weight acts, as `core.model.stages.gravity` says it: a mechanical
+     sequence has it when its initial stage initialises the stresses (K0 or gravity
+     loading); a flow sequence and a project with no stages have it. */
+  function selfWeight(project) {
+    var first = ((project && project.stages) || []).filter(function (stage) {
+      return stage.parent == null;
+    })[0];
+    if (!first || (first.calculation || 'mechanical') !== 'mechanical') return true;
+    return (first.stress_initialisation || 'none') !== 'none';
+  }
+
+  /* As `kratos-cli gravity` says it (`cli/commands/conditions.py` `_gravity_line`). */
+  function gravityLine(project) {
+    var g = project && typeof project.gravity_acceleration === 'number'
+      ? project.gravity_acceleration : App.Units.gravity('SI');
+    var said = 'g = ' + g + ' m/s²';
+    return selfWeight(project)
+      ? 'The self weight acts on every body, with ' + said + '.'
+      : 'The self weight is off: the initial stage initialises no stresses (' + said
+        + ' when it acts).';
+  }
+
   /* Said under a 2D list that leaves the front and back supports out
      (`condition_checks.SECTION_NOTE`). */
   var SECTION_NOTE = 'The front and back supports are kept for the solid model; the 2D '
@@ -380,15 +402,34 @@ App.BoundaryConditions = (function () {
     return lines;
   }
 
-  /* ── The command box: `boundary` ─────────────────────────────────────── */
+  /* ── The command box: `boundary` and `gravity` ───────────────────────── */
 
   /* `false` for a line that is not this command; otherwise `{ok, message, body}`,
      where `body` is what to PATCH, or null when there is nothing to send. */
   function command(text, project) {
     var words = String(text || '').trim().split(/\s+/);
     var word = (words[0] || '').toLowerCase();
-    if (word !== 'boundary') return false;
+    if (word !== 'boundary' && word !== 'gravity') return false;
     var arg = (words[1] || '').toLowerCase();
+
+    if (word === 'gravity') {
+      if (!arg) return { ok: true, body: null, message: gravityLine(project) };
+      if (arg === 'on' || arg === 'off') {
+        return { ok: false, body: null, message: 'Gravity has no switch: the initial '
+                 + "stage's stress initialisation decides whether the self weight acts "
+                 + '(Stages window). Give a number to set g, e.g. `gravity 9.81`.' };
+      }
+      var g = Number(arg);
+      if (!isFinite(g) || words.length > 2) {
+        return { ok: false, body: null, message: '"' + words.slice(1).join(' ')
+                 + '" is not a number. Use `gravity 9.81` (g in m/s²).' };
+      }
+      if (!(g > 0)) {
+        return { ok: false, body: null, message: 'g must be above 0 m/s², not ' + arg + '.' };
+      }
+      var after = Object.assign({}, project || {}, { gravity_acceleration: g });
+      return { ok: true, body: { gravity_acceleration: g }, message: gravityLine(after) };
+    }
 
     if (!arg || arg === 'list') {
       return { ok: true, body: null, message: listedLines(project).join('\n') };
@@ -855,6 +896,10 @@ App.BoundaryConditions = (function () {
     function submit() {
       var kind = c.kind.value;
       var on = c.on.value;
+      // A new condition opens as a support; switched to another kind, it takes that
+      // kind's id and name (waterpressure_1, "Water pressure 1"), as the command line's.
+      var draftName = record ? record.name : null;
+      if (record && !known && record.kind !== kind) record = null;
       var where = { };
       if (on === 'face') where.face = c.face.value;
       if (on === 'part') where.part = c.part.value;
@@ -900,7 +945,8 @@ App.BoundaryConditions = (function () {
           made = draftWaterPressure(project, on, opts);
         }
       } catch (error) { message.textContent = error.message; return null; }
-      made.name = c.name.value.trim() || made.name;
+      var typed = c.name.value.trim();
+      if (typed && !(record === null && typed === draftName)) made.name = typed;
       made.active = c.active.checked;
       return save(made).then(function () { shell.close(); }, function (error) {
         message.textContent = error.message;

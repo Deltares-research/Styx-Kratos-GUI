@@ -82,6 +82,10 @@ COULOMB_INTERFACE_LAWS = ("GeoInterfaceCoulombLawPlaneStrain",
 
 INTERFACE_STRENGTH = ("GEO_COHESION", "GEO_FRICTION_ANGLE")
 
+RETENTION_VARIABLES = ("BIOT_COEFFICIENT", "RETENTION_LAW", "SATURATED_SATURATION",
+                       "RESIDUAL_SATURATION", "MINIMUM_RELATIVE_PERMEABILITY")
+"""How saturated a contact is, taken from its soil when the contact does not say."""
+
 BEAM_LAW = "TimoshenkoBeamElasticConstitutiveLaw"
 """The law paired with `LinearTimoshenkoCurvedBeamElement2D*N`."""
 
@@ -268,6 +272,8 @@ def _interface_note(section: InterfaceSection, project: Project, soil: Material 
         if section.constitutive_law == INTERFACE_LAW:
             shown.append("read only by a Coulomb law")
         parts.append(", ".join(shown))
+    if "RETENTION_LAW" in taken:
+        parts.append(f"saturation as the soil's ({variables['RETENTION_LAW']})")
     return "; ".join(parts) or None
 
 
@@ -450,6 +456,22 @@ def _interface_variables(section: InterfaceSection, project: Project,
                 math.atan(math.tan(math.radians(phi)) * r_inter)), derived, label)
     if soil is not None or coulomb:
         _fill(v, "GEO_DILATANCY_ANGLE", 0.0, derived, label)
+    if coulomb and soil is not None and not elastic_soil:
+        # A Coulomb contact opens in tension as its soil does, at the soil's tensile
+        # strength reduced like its cohesion. A linear elastic soil has none to give.
+        r_inter = section.r_inter if section.r_inter is not None else soil.r_inter
+        cut_off = soil.variables.get("GEO_ENABLE_TENSION_CUT_OFF")
+        if isinstance(cut_off, bool):
+            _fill(v, "GEO_ENABLE_TENSION_CUT_OFF", cut_off, derived, label)
+        tensile = soil.number("GEO_TENSILE_STRENGTH")
+        if v.get("GEO_ENABLE_TENSION_CUT_OFF") is True and tensile is not None:
+            _fill(v, "GEO_TENSILE_STRENGTH", tensile * r_inter, derived, label)
+    if soil is not None:
+        # Saturated where its soil is: the reference deck gives each interface the
+        # retention law and saturations of the soil beside it.
+        for name in RETENTION_VARIABLES:
+            if name in soil.variables:
+                _fill(v, name, soil.variables[name], derived, label)
     if coulomb:
         _check_coulomb_strength(section, soil, elastic_soil, v)
     return _ordered(v, INTERFACE_ORDER)

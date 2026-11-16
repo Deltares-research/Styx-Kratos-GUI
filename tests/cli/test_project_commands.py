@@ -122,7 +122,7 @@ def test_check_refuses_mesh_settings_for_a_part_the_model_does_not_have(cli, sit
     ran = cli("check", site)
 
     assert ran.code == 1
-    assert "mesh settings name bodies this model does not have: removed_body" in ran.err
+    assert "mesh settings name objects this model does not have: removed_body" in ran.err
 
 
 def test_check_refuses_stages_that_branch(cli, site):

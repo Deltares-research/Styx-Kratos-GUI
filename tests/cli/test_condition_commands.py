@@ -360,8 +360,25 @@ def test_show_says_whether_the_initial_stage_s_stresses_bring_gravity(cli, dry):
     assert cli("show", dry, "--json").json()["gravity"] is False
 
 
-def test_gravity_is_no_command(cli, dry):
-    assert cli("gravity", dry, "off").code != 0
+def test_gravity_sets_g_as_the_project_properties_window_does(cli, dry):
+    assert "with g = 9.81 m/s²" in cli("gravity", dry).out
+    ran = cli("gravity", dry, "9.80665")
+
+    assert ran.code == 0, ran.err
+    assert session.load(dry).gravity_acceleration == 9.80665
+    assert "with g = 9.80665 m/s²" in ran.out
+    assert "g = 9.80665 m/s²" in cli("show", dry).out
+    assert cli("show", dry, "--json").json()["gravity_acceleration"] == 9.80665
+    for wrong in ("0", "-9.81", "maybe"):
+        refused = cli("gravity", dry, wrong)
+        assert refused.code != 0, wrong
+    assert session.load(dry).gravity_acceleration == 9.80665
+
+
+def test_gravity_has_no_switch(cli, dry):
+    refused = cli("gravity", dry, "off")
+    assert refused.code != 0
+    assert "stress initialisation" in refused.err
 
 
 # ── Seepage faces ───────────────────────────────────────────────────────────

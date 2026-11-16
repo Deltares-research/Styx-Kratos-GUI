@@ -4812,6 +4812,7 @@ window.STAGE_FIXTURE =
         "active": true
       }
     ],
+    "gravity_acceleration": 9.81,
     "mesh": {
       "element_size": 2.5,
       "order": 2,
@@ -4823,6 +4824,7 @@ window.STAGE_FIXTURE =
       "size_min_factor": 0.05,
       "second_order_linear": true,
       "body_sizes": {},
+      "size_bands": {},
       "refinements": []
     },
     "custom_parts": [],

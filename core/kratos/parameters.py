@@ -365,6 +365,7 @@ def project_parameters(
     body_parts: Sequence[str] = (),
     rotation_dofs: bool = False,
     gravity: bool = True,
+    gravity_acceleration: float = GRAVITY,
 ) -> str:
     """`constraints` is (sub-model part name, DISPLACEMENT is_fixed per axis), with
     optionally the id of the support it comes from, which a stage switches
@@ -385,7 +386,8 @@ def project_parameters(
     names every element-carrying sub-model part, and `rotation_dofs` says whether
     anything in the deck has rotations -- a beam or a shell does, soil does not.
     `gravity` is `core.model.stages.gravity`: off, no stage has the self weight
-    process."""
+    process. `gravity_acceleration` is `Project.gravity_acceleration`, the self weight's
+    g."""
     rendered: dict[str, dict] = {}
     for index, stage in enumerate(stages):
         live = stage.active
@@ -394,7 +396,7 @@ def project_parameters(
         # Gravity first, and in every stage of a deck that has it: it is what gives the
         # continuum elements their self weight, and it is not filtered because the part
         # it names is the one the solver assembles out of whatever is active.
-        loads_processes = [_gravity()] if gravity else []
+        loads_processes = [_gravity(gravity_acceleration)] if gravity else []
         # In the project's units, which are the deck's: written as they stand.
         loads_processes += [_load(name, variable, active, list(value))
                             for name, variable, active, value in loads if keep(name)]
@@ -1020,7 +1022,7 @@ def _seepage(part_name: str) -> dict:
     }
 
 
-def _gravity() -> dict:
+def _gravity(acceleration: float = GRAVITY) -> dict:
     """Self weight, as a body load on the computational model part.
 
     Copied field for field from `staged_construction_for_generated_mesh.json`, where it
@@ -1043,9 +1045,12 @@ def _gravity() -> dict:
         trusses as well as the soil, and their elements read the nodal
         `VOLUME_ACCELERATION` with their own `DENSITY` (`GetBodyForce`). So one process
         gives every body its self weight.
+
+    `acceleration` is `Project.gravity_acceleration`, 9.81 m/s2 unless the user sets
+    another.
     """
     return _load(COMPUTATIONAL_MODEL_PART, "VOLUME_ACCELERATION",
-                 [False, True, False], [0.0, -GRAVITY, 0.0])
+                 [False, True, False], [0.0, -acceleration, 0.0])
 
 
 def _load(part_name: str, variable: str, active: list[bool], value: list[float]) -> dict:
