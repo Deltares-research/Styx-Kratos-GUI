@@ -79,21 +79,15 @@ All four soil bodies share one set of flow properties, as in the model script:
 Only the permeability, the viscosity, the water density and the retention law change the
 flow. Kratos' flow element checks that the other values are there. The values are typed
 out in full, so they are the script's to the last digit. A new soil starts from the
-default sand, which has a cohesion and a friction angle; these soils have neither, so
-`--unset` removes them:
+default sand, which has Young's modulus, Poisson's ratio, a cohesion, a friction angle etc.; these properties will not be used in the intended flow computation here.
+As they also do not harm the computation, they are left as is. You may use `material m_sand --unset <property>` to remove them.
 
 ```text
 PS> kratos-cli material levee.json add m_sand --name Sand --color "#e6c86e" --law GeoLinearElasticPlaneStrain2DLaw GEO_DRAINAGE_TYPE=FULLY_COUPLED YOUNG_MODULUS=1e4 POISSON_RATIO=0.3 DENSITY_SOLID=2650.0 DENSITY_WATER=1019.367991845056 POROSITY=0.3333333333333333 BULK_MODULUS_SOLID=1e20 BULK_MODULUS_FLUID=1e20 PERMEABILITY_XX=1.1574074074074074e-12 PERMEABILITY_YY=1.1574074074074074e-12 PERMEABILITY_XY=0.0 DYNAMIC_VISCOSITY=1e-3 BIOT_COEFFICIENT=1.0 RETENTION_LAW=VanGenuchtenLaw SATURATED_SATURATION=1.0 RESIDUAL_SATURATION=0.0620347394540943 VAN_GENUCHTEN_AIR_ENTRY_PRESSURE=2610.9660574412533 VAN_GENUCHTEN_GN=1.3774 VAN_GENUCHTEN_GL=1.25 MINIMUM_RELATIVE_PERMEABILITY=1e-4
 added material m_sand; wrote levee.json
 
-PS> kratos-cli material levee.json set m_sand --unset GEO_COHESION --unset GEO_FRICTION_ANGLE
-changed material m_sand; wrote levee.json
-
 PS> kratos-cli material levee.json add m_clay --name Clay --color "#8fa37a" --law GeoLinearElasticPlaneStrain2DLaw GEO_DRAINAGE_TYPE=FULLY_COUPLED YOUNG_MODULUS=1e4 POISSON_RATIO=0.3 DENSITY_SOLID=2650.0 DENSITY_WATER=1019.367991845056 POROSITY=0.3333333333333333 BULK_MODULUS_SOLID=1e20 BULK_MODULUS_FLUID=1e20 PERMEABILITY_XX=1.1574074074074074e-12 PERMEABILITY_YY=1.1574074074074074e-12 PERMEABILITY_XY=0.0 DYNAMIC_VISCOSITY=1e-3 BIOT_COEFFICIENT=1.0 RETENTION_LAW=VanGenuchtenLaw SATURATED_SATURATION=1.0 RESIDUAL_SATURATION=0.0620347394540943 VAN_GENUCHTEN_AIR_ENTRY_PRESSURE=2610.9660574412533 VAN_GENUCHTEN_GN=1.3774 VAN_GENUCHTEN_GL=1.25 MINIMUM_RELATIVE_PERMEABILITY=1e-4
 added material m_clay; wrote levee.json
-
-PS> kratos-cli material levee.json set m_clay --unset GEO_COHESION --unset GEO_FRICTION_ANGLE
-changed material m_clay; wrote levee.json
 ```
 
 > [!TIP]
