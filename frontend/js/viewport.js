@@ -570,8 +570,8 @@ App.Viewport = (function () {
      Each condition drawn from its own record, client side, like the water line.
 
      2D: a support is a row of symbols along its face or line, or one at its point --
-     the clamp of a fixed support (a stem on hatched ground) when it holds x and y, a
-     triangle on rollers when it holds one of them, pointing along the one it holds --
+     the clamp of a fixed support (hatched ground on the face) when it holds x and y, a
+     triangle on two rollers when it holds one of them, pointing along the one it holds --
      and a water pressure is its own level or phreatic line, dashed, with "h = ..."
      beside it (a uniform one: its target outlined, "p = ..."). 3D: the face outline in
      the condition's colour, and a level as the outline of its plane.
@@ -844,9 +844,9 @@ App.Viewport = (function () {
         stroke([p(0, 0.15 * s), p(0, 1.0 * s), p(-0.25 * s, 0.7 * s), p(0, 1.0 * s),
                 p(0.25 * s, 0.7 * s)]);
       } else if (symbol.roller) {
-        // A triangle on three rollers.
+        // A triangle on two rollers.
         stroke([p(0, 0), p(-0.5 * s, 0.8 * s), p(0.5 * s, 0.8 * s), p(0, 0)]);
-        [-0.34, 0, 0.34].forEach(function (along) {
+        [-0.25, 0.25].forEach(function (along) {
           var ring = [];
           for (var k = 0; k <= 16; k += 1) {
             var angle = (k / 16) * Math.PI * 2;
@@ -856,10 +856,11 @@ App.Viewport = (function () {
           stroke(ring);
         });
       } else {
-        // The clamp: a stem out to hatched ground.
-        var clamp = [p(0, 0), p(0, 0.7 * s), p(-0.6 * s, 0.7 * s), p(0.6 * s, 0.7 * s)];
-        for (var h = -0.6; h <= 0.31; h += 0.3) {
-          clamp.push(p(h * s, 0.7 * s), p((h + 0.3) * s, 1.05 * s));
+        // The clamp: hatched ground on the face itself, with no stem -- a line along
+        // the face and four parallel slashes out of it, leaning to one side.
+        var clamp = [p(-0.6 * s, 0), p(0.6 * s, 0)];
+        for (var h = -0.3; h <= 0.61; h += 0.3) {
+          clamp.push(p(h * s, 0), p((h - 0.3) * s, 0.35 * s));
         }
         stroke(clamp, true);
       }
