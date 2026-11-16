@@ -967,8 +967,8 @@ App.LivePatches = (function () {
     var kind = objectKind(key);
     if (!kind) {
       // Not ours -- the frozen menu handles it (soil layers, groups, …), with its dead
-      // "Properties…" greyed on the way. See greyFrozenTreeProperties.
-      if (row) greyFrozenTreeProperties();
+      // rows taken out on the way. See dropFrozenTreeDeadRows.
+      if (row) dropFrozenTreeDeadRows();
       return;
     }
 
@@ -1076,8 +1076,9 @@ App.LivePatches = (function () {
      plates and embedded beams, a tunnel designer, a Python interpreter, a macro
      library. Most of it has nothing behind it, and a button that looks ready and
      then answers "not available" in the log is a button the user learns to distrust
-     -- along with every button beside it. So a control with no live behaviour is
-     drawn greyed, in every place it appears, by one rule:
+     -- along with every button beside it. A greyed one only clutters the menu. So a
+     control with no live behaviour is taken out, in every place it appears, by one
+     rule:
 
        a control works when it carries an action that is not on NOT_YET. A row with
        no action works only when it opens a real submenu -- an array the caller
@@ -1092,10 +1093,6 @@ App.LivePatches = (function () {
                           recipes (core/geometry/primitives.py) have no `point` kind. */
   var NOT_YET = ['importSoilLayers', 'drawPoint'];
 
-  /* Appended to a greyed rail tool's tip, the tip being the only words a rail button
-     has. Menus need no such suffix: a grey row in a list of black ones says it. */
-  var NOT_YET_TIP = ' — not available yet';
-
   /* Separators ('-') and section captions are not controls, so they always pass. */
   function implemented(item) {
     if (!item || typeof item !== 'object' || item.title) return true;
@@ -1103,26 +1100,38 @@ App.LivePatches = (function () {
     return Array.isArray(item.sub);
   }
 
-  /* The name a control goes by in the log, without the suffix its tip was given. */
+  /* The name a control goes by in the log. */
   function controlName(item) {
-    return String(item.label || item.tip || item.action || '').replace(NOT_YET_TIP, '');
+    return String(item.label || item.tip || item.action || '');
   }
 
-  /* Greys every row of a menu or flyout that does nothing, descending into real
-     submenus. It only ever greys: rows that are greyed for another reason (2D or 3D,
-     an empty undo history) are owned by the code that greys them. A tick on a row
-     that does nothing -- "Global water level" -- is a state nobody can change, so it
-     goes too. */
-  function greyNotYet(items) {
-    (items || []).forEach(function (item) {
-      if (!item || typeof item !== 'object') return;
-      if (!implemented(item)) { item.disabled = true; item.checked = false; }
-      if (Array.isArray(item.sub)) greyNotYet(item.sub);
-    });
+  /* A separator with nothing on one side of it, or right after another, fences off
+     nothing. Removing rows leaves such separators behind, so they go too. In place:
+     js/menubar.js and js/toolbars.js read these very arrays. */
+  function tidySeparators(items) {
+    for (var i = items.length - 1; i >= 0; i--) {
+      if (items[i] !== '-') continue;
+      if (i === 0 || i === items.length - 1 || items[i + 1] === '-') items.splice(i, 1);
+    }
+    return items;
+  }
+
+  /* Takes every row of a menu or flyout that does nothing out of the list, in place,
+     descending into real submenus. Rows that are greyed for another reason (2D or 3D,
+     an empty undo history) are not touched: they work at other times. */
+  function dropNotYet(items) {
+    if (!Array.isArray(items)) return items;
+    for (var i = items.length - 1; i >= 0; i--) {
+      var item = items[i];
+      if (!implemented(item)) { items.splice(i, 1); continue; }
+      if (item && Array.isArray(item.sub)) dropNotYet(item.sub);
+      if (item && Array.isArray(item.flyout)) dropNotYet(item.flyout);
+    }
+    return tidySeparators(items);
   }
 
   /* The rail's half of it, on the data js/toolbars.js mounts from, so a remount on a
-     mode change draws the tool greyed with no second pass.
+     mode change draws the rail without them with no second pass.
 
      "Select" is the exception that is not one: the frozen rail gives it no action,
      but it is the pointer every mode starts with and picking works. Without an action
@@ -1130,33 +1139,29 @@ App.LivePatches = (function () {
      `select`, which App.runAction answers by ending whatever draw or pick tool is
      running.
 
-     A greyed tool loses its flyout: a corner triangle on a tool that does nothing
-     offers variants of nothing, and the tip would say "click the corner for more".
-
      It runs once, at the end of install(), when every live action has been hung on
-     the frozen tools -- run earlier, it would grey Create point for still having
-     none. The verdict is kept on the tool as `notYet`, which is what gateRail reads
-     after each mount. */
-  function greyRailTools() {
+     the frozen tools -- run earlier, it would take out Create line for still having
+     none. */
+  function dropRailTools() {
     Object.keys(App.RAILS || {}).forEach(function (mode) {
       (App.RAILS[mode] || []).forEach(function (tool) {
-        if (!tool || typeof tool !== 'object') return;
-        if (tool.icon === 'select' && !tool.action) tool.action = 'select';
-        if (implemented(tool)) return;
-        tool.notYet = true;
-        delete tool.flyout;
-        // "Tunnel designer… — not available yet" reads as two pauses; the ellipsis
-        // promises a window that is not there, so it goes.
-        if (tool.tip && tool.tip.indexOf(NOT_YET_TIP) < 0) {
-          tool.tip = tool.tip.replace(/…$/, '') + NOT_YET_TIP;
-        }
+        if (tool && tool.icon === 'select' && !tool.action) tool.action = 'select';
       });
+      dropNotYet(App.RAILS[mode]);
     });
   }
 
-  function greyEverythingNotYet() {
-    (App.MENUS || []).forEach(function (menu) { greyNotYet(menu.items); });
-    greyRailTools();
+  /* A menu with nothing left in it would open an empty box, so it goes. In place, as
+     js/menubar.js reads this very array. */
+  function dropEverythingNotYet() {
+    var menus = App.MENUS || [];
+    menus.forEach(function (menu) { dropNotYet(menu.items); });
+    var kept = menus.filter(function (menu) {
+      return (menu.items || []).some(function (item) { return item !== '-'; });
+    });
+    menus.length = 0;
+    Array.prototype.push.apply(menus, kept);
+    dropRailTools();
   }
 
   /* The ticks in the menus, read from the state they describe rather than left at
@@ -1201,38 +1206,29 @@ App.LivePatches = (function () {
   }
 
   /* The frozen tree menu (js/explorer.js:102) ends in a "Properties…" that its
-     callback lets fall off the end for every row. The live rows get a menu of their
-     own with a working one (onTreeContextMenu); for the rest, the frozen row
+     callback lets fall off the end for every row, and greys "Rename…" and "Delete"
+     with no action on every row that is not a soil layer. The live rows get a menu of
+     their own with working ones (onTreeContextMenu); for the rest, the frozen row
      listener runs right after this, inside the same event, and calls App.Menu.openAt
-     -- so a one-shot openAt is lent for that call and greys the row on the way
-     through. The timer puts the real one back should the frozen listener not run. */
-  function greyFrozenTreeProperties() {
+     -- so a one-shot openAt is lent for that call and takes those dead rows out on
+     the way through. "Hide"/"Show" has no action either, but the frozen callback
+     answers it by its label, so it stays. The timer puts the real openAt back should
+     the frozen listener not run. */
+  function dropFrozenTreeDeadRows() {
     if (!App.Menu || typeof App.Menu.openAt !== 'function' || App.Menu.openAt.__tree) return;
     var menu = App.Menu;
     var openAt = menu.openAt;
     var lent = function (items, x, y, onPick) {
       menu.openAt = openAt;
-      (items || []).forEach(function (item) {
-        if (item && /^Properties/.test(item.label || '') && !item.action) item.disabled = true;
-      });
-      return openAt(items, x, y, onPick);
+      var kept = tidySeparators((items || []).filter(function (item) {
+        return !item || typeof item !== 'object' || item.title || item.action
+          || /^(Hide|Show)$/.test(item.label || '');
+      }));
+      return openAt(kept, x, y, onPick);
     };
     lent.__tree = true;
     menu.openAt = lent;
     setTimeout(function () { if (menu.openAt === lent) menu.openAt = openAt; }, 0);
-  }
-
-  /* The title bar's minimise, maximise and close (frontend/index.html) are drawn like a
-     desktop window's and have no listener: a page cannot minimise the browser it is
-     in. Greyed, and their tooltips say so. */
-  function greyWindowControls() {
-    if (typeof document === 'undefined') return;
-    Array.prototype.forEach.call(document.querySelectorAll('#titlebar .wc'), function (b) {
-      if (b.disabled) return;
-      b.disabled = true;
-      b.classList.add('disabled');
-      b.title = (b.title || 'Window control') + ' — not available in Styx';
-    });
   }
 
   /* ── Structures rail order ──────────────────────────────────────────────
@@ -1281,10 +1277,9 @@ App.LivePatches = (function () {
 
   function orderSoilRail(tools) { return orderRail(tools, SOIL_RAIL_GROUPS, SOIL_DROPPED); }
 
-  /* The Soil menu reads as its rail does; importing layers is a menu-only door. */
+  /* The Soil menu reads as its rail does. */
   var SOIL_MENU_GROUPS = [
     ['materials', 'soilLayers'],
-    ['importSoilLayers'],
     ['createSoilVolume']
   ];
 
@@ -1353,7 +1348,6 @@ App.LivePatches = (function () {
     var rail = document.getElementById('toolrail');
     var tools = (App.RAILS || {})[mode || (App.state || {}).mode] || [];
     if (!rail) return;
-    guardNotYet(rail);
     var buttons = rail.querySelectorAll('.rail-btn');
     var i = 0;
     tools.forEach(function (tool) {
@@ -1367,36 +1361,11 @@ App.LivePatches = (function () {
       else button.removeAttribute('data-action');
       button.setAttribute('data-tool', tool.action || tool.icon);
       if (tool.tip) button.setAttribute('aria-label', tool.tip);
-      // A tool on NOT_YET is greyed but not `disabled`: Chrome sends no mouseenter
-      // to a disabled button, and that is the event its tip waits for. `not-yet`
-      // keeps its pointer events (css/live.css) and guardNotYet eats the click.
-      var missing = !!tool.notYet;
-      var off = missing || !availableNow(tool.action) || calculateOff(tool);
+      var off = !availableNow(tool.action) || calculateOff(tool);
       if (tool.action === 'calculate') paintCalculating(button);
       button.classList.toggle('disabled', off);
-      button.classList.toggle('not-yet', missing);
-      button.disabled = off && !missing;
-      if (missing) button.setAttribute('aria-disabled', 'true');
-      else button.removeAttribute('aria-disabled');
+      button.disabled = off;
     });
-  }
-
-  /* One capturing listener on the rail itself, which runs before the listeners
-     js/toolbars.js puts on each button: a press on a not-yet tool goes no further,
-     so neither the tool nor its "not implemented" note nor the active highlight
-     happens -- and the tip, which a press would otherwise hide, stays up to say why.
-     The rail element outlives every remount (App.UI.clear only empties it). */
-  function guardNotYet(rail) {
-    if (rail.__notYetGuard) return;
-    rail.__notYetGuard = true;
-    function guard(event) {
-      var button = event.target.closest && event.target.closest('.rail-btn.not-yet');
-      if (!button) return;
-      event.preventDefault();
-      event.stopPropagation();
-    }
-    rail.addEventListener('click', guard, true);
-    rail.addEventListener('mousedown', guard, true);
   }
 
   /* One place decides what is available, so the toolbar, the menus, the rail and the
@@ -2932,7 +2901,7 @@ App.LivePatches = (function () {
     var frozenAction = App.runAction;
     App.runAction = function (item) {
       // A menu item or tool from the mockup that nothing implements yet, or one on
-      // NOT_YET. Both are greyed wherever they are drawn, so this is a stale menu or a
+      // NOT_YET. Both are taken out wherever they are drawn, so this is a stale menu or a
       // caller that did not ask `implemented` -- and it gets the same answer.
       if (item && (!item.action || NOT_YET.indexOf(item.action) >= 0)) {
         if (controlName(item) && App.Command) {
@@ -3180,8 +3149,8 @@ App.LivePatches = (function () {
 
     /* The menu twins of tools that work, given the tool's action -- a row that does
        nothing beside a button that does the same thing is the disagreement this
-       file exists to stop. Refine, coarsen and reset get theirs so that NOT_YET greys
-       the rows and the rail buttons together. */
+       file exists to stop. Refine, coarsen and reset get theirs so that the rows and
+       the rail buttons are kept or taken out together. */
     var MENU_ACTIONS = {
       File: { 'New project…': 'newProject', 'Open project…': 'openProject',
               'Save': 'saveProject', 'Save as…': 'saveProject' },
@@ -3303,8 +3272,8 @@ App.LivePatches = (function () {
     }
     applyRulers();
 
-    // Named so that NOT_YET can grey them, here and in the Mesh menu alike. By icon,
-    // not by tip: greyRailTools appends to the tip.
+    // Named so that they are kept, here and in the Mesh menu alike. By icon, not by
+    // tip, since the tip is replaced just below.
     var MESH_TOOL_ACTIONS = { refine: 'refineMesh', coarsen: 'coarsenMesh',
                               resetmesh: 'resetMeshRefinement' };
     // The frozen tips do not say that the tool works on the selected object.
@@ -3548,12 +3517,11 @@ App.LivePatches = (function () {
     if (App.Menu && App.Menu.mountBar && document.getElementById('menubar')) App.Menu.mountBar();
 
     /* Every live action is on its tool and its menu row by now, so whatever is still
-       without one is what Styx does not do: grey it, in the menus and on the rail.
+       without one is what Styx does not do: take it out, of the menus and the rail.
        See NOT_YET. The rest is the menus starting out in step with the toolbar:
        Undo was enabled in the Edit menu and greyed on the toolbar until the first
        edit, and the ticks were js/data.js's, not the state's. */
-    greyEverythingNotYet();
-    greyWindowControls();
+    dropEverythingNotYet();
     syncHistoryButtons();
     syncCheckMarks();
 
@@ -4845,8 +4813,8 @@ App.LivePatches = (function () {
     THREE_D_ONLY: THREE_D_ONLY, availableIn2D: availableIn2D,
     TWO_D_ONLY: TWO_D_ONLY, availableIn3D: availableIn3D,
     syncDimensionAvailability: syncDimensionAvailability, syncHistoryButtons: syncHistoryButtons,
-    NOT_YET: NOT_YET, NOT_YET_TIP: NOT_YET_TIP, implemented: implemented,
-    greyEverythingNotYet: greyEverythingNotYet, syncCheckMarks: syncCheckMarks,
+    NOT_YET: NOT_YET, implemented: implemented, tidySeparators: tidySeparators,
+    dropEverythingNotYet: dropEverythingNotYet, syncCheckMarks: syncCheckMarks,
     gateViewportItems: gateViewportItems,
     newProject: newProject, openProject: openProject, saveProject: saveProject,
     projectFileName: projectFileName, projectFromFileText: projectFromFileText,

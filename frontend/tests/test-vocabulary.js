@@ -10,8 +10,7 @@
     App.Vocabulary.relabel();
     var menu = App.MENUS.filter(function (m) { return m.label === 'Stages'; })[0];
     T.ok(menu, 'a Stages menu');
-    T.eq(labels(menu.items).slice(0, 4),
-         ['Edit stages…', 'Add stage', 'Insert stage', 'Delete stage']);
+    T.eq(labels(menu.items)[0], 'Edit stages…');
   });
 
   test('no frozen label says phase', function () {

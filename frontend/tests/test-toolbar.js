@@ -383,20 +383,19 @@
   /* ── Structures rail order ─────────────────────────────────────── */
 
   /* Every live tool was appended to the frozen rail, so sheet piles, anchors and
-     the import tools ended up after "Tunnel designer" instead of beside the
-     members they belong with. The rail is composed in build order now. */
+     the import tools ended up after the frozen tools instead of beside the members
+     they belong with. The rail is composed in build order now; the tools with
+     nothing behind them are taken out. */
   test('the Structures rail is ordered by how a model is built', function () {
     withInstall(function () {});
     var keys = (App.RAILS.structures || []).map(function (tool) {
       return tool === '-' ? '-' : (tool.action || tool.icon);
     });
     T.eq(keys, [
-      'select', 'selectmulti',
-      '-', 'drawPoint', 'drawLine', 'drawPolygon', 'drawBox',
-      '-', 'plate', 'beam', 'embedded', 'createSheetPile', 'createMember',
-      'createAnchor', 'interface',
+      'select',
+      '-', 'drawLine', 'drawPolygon', 'drawBox',
+      '-', 'createSheetPile', 'createMember', 'createAnchor', 'interface',
       '-', 'createLoad', 'createBoundaryCondition',
-      '-', 'tunnel',
       '-', 'importModel'
     ]);
   });
@@ -436,8 +435,7 @@
     withInstall(function () {});
     var soil = App.MENUS.filter(function (m) { return m.label === 'Soil'; })[0];
     var keys = soil.items.map(function (item) { return item === '-' ? '-' : item.action; });
-    T.eq(keys, ['materials', 'soilLayers', '-', 'importSoilLayers', '-',
-      'createSoilVolume']);
+    T.eq(keys, ['materials', 'soilLayers', '-', 'createSoilVolume']);
   });
 
   test('Flow conditions comes before Mesh, on the mode tabs and in the menu bar', function () {

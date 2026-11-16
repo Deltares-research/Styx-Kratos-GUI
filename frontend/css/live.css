@@ -169,29 +169,13 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
    state for these, because none of them did anything. Matches .tbtn.disabled. */
 .rail-btn.disabled { color: var(--c-disabled); pointer-events: none; }
 
-/* ── What Styx does not do yet ──────────────────────────────────────────────
-   patches.js NOT_YET / `implemented`. A rail tool with nothing behind it is greyed
-   like one of the wrong dimension, but keeps its pointer events so that its tip --
-   "… — not available yet" -- can still say why. It carries aria-disabled rather
-   than `disabled`, which would stop the tip too; patches.js guardNotYet refuses the
-   click. The hover is held at grey so it does not light up as if it were ready. */
-.rail-btn.disabled.not-yet,
-.rail-btn.disabled.not-yet:hover {
-  pointer-events: auto; cursor: not-allowed;
-  background: none; border-color: transparent; color: var(--c-disabled);
-}
-
 /* Buttons the live layer greys with the `disabled` attribute alone -- the stage
    toolbar, the soil-volume table, a dialog's footer while it saves -- looked exactly
    as pressable as before, because the frozen sheet styles only the `.disabled`
    class. The Calculate button is left to its own section further down. */
 .tbtn:disabled:not(.tbtn-cta) { color: var(--c-disabled); pointer-events: none; }
 .btn:disabled { opacity: .5; pointer-events: none; }
-.rail-btn:disabled:not(.not-yet) { color: var(--c-disabled); pointer-events: none; }
-
-/* The title bar's window controls, which a page cannot work. */
-.wc:disabled svg { stroke: rgba(255, 255, 255, .4); }
-.wc:disabled:hover { background: none; }
+.rail-btn:disabled { color: var(--c-disabled); pointer-events: none; }
 
 /* ── 2D rulers ──────────────────────────────────────────────────────
    One canvas per viewport edge, painted by frontend/js/ruler.js from the same

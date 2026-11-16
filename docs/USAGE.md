@@ -27,14 +27,8 @@ GUI is the part of Styx that you use in the browser. To install Styx, see
 Staged construction mode adds a **Stages explorer**, and Results mode adds a **Results
 explorer**, below the Model explorer.
 
-Some menu items and tools come from the first design of the GUI and do nothing yet. They are
-grey, in the menus and on the tool rail, and you cannot select them. The tip of a grey tool
-says *not available yet*. These are, for example: **Import soil layers…**, **Create point**,
-**Create plate**, **Create beam**, **Create embedded beam**, **Tunnel designer…**, the
-wells, drains and flow functions, **Select multiple objects**,
-**Activate selection**, **Deactivate selection**, **Preview stage**, **Pack project…**,
-**Print…**, the **Expert** menu (except **Command line**), and **Help** → **Reference
-manual** and **Tutorial manual**.
+The menus and the tool rail show only the items that work. Plates, beams, wells, drains and
+other tools that Styx does not have yet are not shown.
 
 ## The order of work
 
@@ -299,8 +293,7 @@ explorer. You can also type `water -1.5` to set the level to -1.5 m, or `water o
 remove the water. A condition keeps its own level when the water level changes.
 
 **Create water pressure line** draws a water pressure along a line or at a point (2D).
-**Boundary conditions…** opens the window of all conditions. The well, drain and flow
-function tools are not available yet.
+**Boundary conditions…** opens the window of all conditions.
 
 ## Boundary conditions
 
@@ -614,9 +607,6 @@ stress initialisation:
 
 The window also lists the parts that each stage switches on and off, and the result of the
 last calculation for each stage.
-
-The **Activate selection**, **Deactivate selection** and **Preview stage** tools in the tool
-rail are not available yet.
 
 ## Calculate
 

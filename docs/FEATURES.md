@@ -173,7 +173,6 @@ and adds only the values that are missing
 | Modes | Soil, Structures, Flow conditions, Mesh, Staged construction, Results | Tested. Flow conditions sets the water level and the water pressure conditions. |
 | Panels | Model explorer, Selection explorer, docked panels, right-click menus | Tested |
 | Navigation | Iso, top, front and side views; zoom to fit; rotate; rulers on all four edges in 2D | Tested |
-| Placeholder items | Some menu items and tools of the first design do nothing. They show *"…" is not available in Styx yet*. | — |
 
 ### B2. Geometry and soil
 
