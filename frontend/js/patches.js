@@ -29,6 +29,22 @@ App.LivePatches = (function () {
       + integer(stats.nodes) + ' nodes (' + stats.seconds.toFixed(1) + ' s).';
   }
 
+  /* Mesh > Clear mesh, the rail's Clear mesh and `clearmesh`. The mesh settings and the
+     local sizes stay; Generate mesh (F9) makes the mesh again. */
+  function clearMesh() {
+    if (inFlight) {
+      App.Command.note('Mesh generation is running; clear the mesh when it is done.');
+      return;
+    }
+    if (!App.Viewport.clearMesh || !App.Viewport.clearMesh()) {
+      App.Command.note('There is no mesh to clear.');
+      return;
+    }
+    if (App.Model.clearMeshStats) App.Model.clearMeshStats();
+    if (App.state.selection === 'mesh' && App.selectObject) App.selectObject(null);
+    App.Command.ok('Mesh cleared. Generate mesh (F9) makes it again with the same settings.');
+  }
+
   function requestMesh(selectAfter, echo) {
     if (inFlight) {
       if (App.Command && App.Command.note) App.Command.note('Mesh generation is already running.');
@@ -2754,6 +2770,7 @@ App.LivePatches = (function () {
     ['soillayers', 'open the Modify soil layers window'],
     ['materials', 'open the Soil materials window'],
     ['cleargeometry', 'remove the drawn and imported solids'],
+    ['clearmesh', 'clear the mesh; its settings stay'],
     ['colour <part>|all|off', 'draw a part of the mesh in its own colour'],
     ['node <id>', 'which SubModelParts a node is in'],
     ['gotosoil, gotostructures, gotomesh, gotoflow, gotostaged', 'open a mode'],
@@ -3000,6 +3017,10 @@ App.LivePatches = (function () {
         if (App.Lines) App.Lines.typed();
         return;
       }
+      if (item && item.action === 'clearMesh') {
+        clearMesh();
+        return;
+      }
       if (item && item.action === 'generateMesh') {
         var size = App.PROJECT && App.PROJECT.mesh ? App.PROJECT.mesh.element_size : 2.5;
         // Refine/Coarsen/Reset remake the mesh and leave their object selected.
@@ -3136,6 +3157,15 @@ App.LivePatches = (function () {
               'Reset local refinement': 'resetMeshRefinement', 'View mesh': 'viewMesh' },
       'Flow conditions': { 'Create water level': 'createWaterPressureLine' }
     };
+    // Clear mesh, under Generate mesh: the two are a pair.
+    var meshMenu = (App.MENUS || []).filter(function (m) { return m.label === 'Mesh'; })[0];
+    if (meshMenu && !meshMenu.items.some(function (i) { return i && i.action === 'clearMesh'; })) {
+      var generateItem = meshMenu.items.filter(function (i) {
+        return i && i.action === 'generateMesh';
+      })[0];
+      meshMenu.items.splice(meshMenu.items.indexOf(generateItem) + 1, 0,
+        { label: 'Clear mesh', icon: 'delete', action: 'clearMesh' });
+    }
     (App.MENUS || []).forEach(function (menu) {
       var wanted = MENU_ACTIONS[menu.label];
       if (!wanted) return;
@@ -3239,6 +3269,13 @@ App.LivePatches = (function () {
     });
     if (!(App.RAILS.mesh || []).some(function (tool) { return tool && tool.action === 'meshSettings'; })) {
       App.RAILS.mesh.splice(2, 0, { icon: 'settings', tip: 'Mesh properties…', action: 'meshSettings' }, '-');
+    }
+    if (!(App.RAILS.mesh || []).some(function (tool) { return tool && tool.action === 'clearMesh'; })) {
+      var generateTool = (App.RAILS.mesh || []).filter(function (tool) {
+        return tool && tool.action === 'generateMesh';
+      })[0];
+      App.RAILS.mesh.splice(App.RAILS.mesh.indexOf(generateTool) + 1, 0,
+        { icon: 'delete', tip: 'Clear mesh — the settings and local sizes stay', action: 'clearMesh' });
     }
     
     /* File > Export model... is inert in the frozen mockup: js/data.js:99 gives the
@@ -4381,6 +4418,11 @@ App.LivePatches = (function () {
       if (cmd === 'stages' || cmd === 'phases') {
         if (App.Command.write) App.Command.write('echo', '> ' + text.trim());
         stagesDialog();
+        return;
+      }
+      if (cmd === 'clearmesh') {
+        if (App.Command.write) App.Command.write('echo', '> ' + text.trim());
+        clearMesh();
         return;
       }
       if (cmd === 'cleargeometry') {

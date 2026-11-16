@@ -2140,6 +2140,26 @@ App.Model = (function () {
     return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
   }
 
+  /* No mesh (Mesh > Clear mesh): the Mesh statistics read "—" again. */
+  function clearMeshStats() {
+    var props = App.OBJECT_PROPS && App.OBJECT_PROPS.mesh;
+    if (props && props.groups && props.groups.Statistics) {
+      props.groups.Statistics.forEach(function (row) {
+        if (row[0] === 'Element type' || row[0] === 'Elements' || row[0] === 'Nodes'
+            || row[0] === 'Average element size') row[1] = '—';
+      });
+    }
+    Object.keys(App.TREES || {}).forEach(function (mode) {
+      (function walk(items) {
+        (items || []).forEach(function (item) {
+          if (item.obj === 'mesh' && /^Elements:/.test(item.label)) item.label = 'Elements: —';
+          if (item.obj === 'mesh' && /^Nodes:/.test(item.label)) item.label = 'Nodes: —';
+          walk(item.children);
+        });
+      })(App.TREES[mode]);
+    });
+  }
+
   function setMeshStats(stats) {
     if (!stats) return;
     var elements = groupedInteger(stats.elements);
@@ -2197,6 +2217,7 @@ App.Model = (function () {
     apply: apply, load: load,
     projectTitle: projectTitle, syncTitle: syncTitle,
     rebuildDerived: rebuildDerived, setVolumes: setVolumes, setMeshStats: setMeshStats,
+    clearMeshStats: clearMeshStats,
     setImportedParts: setImportedParts,
     domain: function () { return domain; }
   };

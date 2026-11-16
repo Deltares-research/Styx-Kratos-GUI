@@ -686,6 +686,7 @@ viewport's. A command can also be typed with a leading `_` in the box (`_mesh`).
 | `script <file.py> [--force]` | `kratos-cli script P --out FILE.py` |
 | `export` | `kratos-cli export P --out DIR` |
 | `mesh` | `kratos-cli mesh P` |
+| `clearmesh` | — the viewport's: kratos-cli keeps no mesh, and each `mesh` or `export` makes it again |
 | `stages`, `phases` | `kratos-cli stages P` |
 | `water <level>`, `water off` | `kratos-cli water P LEVEL`, `kratos-cli water P off` |
 | `boundary`, `boundary list`, `boundary standard` | `kratos-cli boundary P list`, `kratos-cli boundary P standard` |

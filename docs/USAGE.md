@@ -406,6 +406,9 @@ When you open Mesh mode, the **Mesh properties** window opens:
 
 Click **Apply and generate** to make the mesh, or **Apply** to only keep the settings.
 <kbd>F9</kbd> in Mesh mode makes the mesh again with the saved settings.
+**Mesh** → **Clear mesh**, the tool under **Generate mesh** on the tool rail, or the command
+`clearmesh` removes the mesh from the view. The mesh settings and the local mesh sizes stay,
+so <kbd>F9</kbd> makes the same mesh again.
 
 ### A finer mesh at one object
 
@@ -815,6 +818,7 @@ Type a command in the command box below the log, and press <kbd>Enter</kbd>. Use
 | `script <file.py>` | Writes the model as a Python script |
 | `export` | Writes the Kratos input files, as **File** → **Export model…** |
 | `mesh` | Makes the mesh |
+| `clearmesh` | Removes the mesh from the view; its settings stay |
 | `calculate` | Calculates the model, as the **Calculate** button |
 | `stages` | Opens the **Stages** window |
 | `water <level>`, `water off` | Sets or removes the water level |

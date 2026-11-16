@@ -524,6 +524,7 @@
     App.Viewport.setVisible('mesh', true);
     App.Viewport.select(null);
     T.eq(App.Viewport.hasMesh(), false);
+    T.eq(App.Viewport.clearMesh(), false, 'no mesh: nothing to clear');
   });
 
   /* An imported .mdpa's preview lives outside `groups`/`frame` entirely (viewport.js's

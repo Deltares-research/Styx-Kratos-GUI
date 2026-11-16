@@ -2331,6 +2331,31 @@ App.Viewport = (function () {
 
   function hasMesh() { return meshBuilt; }
 
+  /* Mesh > Clear mesh: the generated mesh goes, and the model is drawn as it is before
+     a mesh is made. Everything that belongs to that mesh goes with it: the coloured
+     parts, the node and element numbers, and the node -> parts index. The settings and
+     the local sizes stay in the project, so Generate mesh makes the same mesh again.
+     False when there was no mesh to clear. */
+  function clearMesh() {
+    if (!meshBuilt) return false;
+    disposeGroup(groups.mesh);
+    groups.mesh = new THREE.Group();
+    groups.mesh.name = 'mesh';
+    scene.add(groups.mesh);
+    meshBuilt = false;
+    meshPartKeys = [];
+    meshPartGroups = {};
+    generatedLabels = null;
+    forgetNodeParts();
+    refreshLabels();
+    App.MESH_STATS = null;
+    setMode(App.state.mode);
+    // The Model explorer's colour toggles are drawn only for parts with mesh elements.
+    if (App.Explorer && App.Explorer.mountTree) App.Explorer.mountTree(App.state.mode);
+    needsRender = true;
+    return true;
+  }
+
   /* ── Which SubModelParts a node is in ──────────────────────────────────
      The node -> parts index of the deck this project exports (`/api/mesh/node-parts`,
      built by `App.NodeParts`), fetched the first time it is asked for and kept until
@@ -3170,6 +3195,7 @@ App.Viewport = (function () {
     refreshLabels: refreshLabels, syncLabels: syncLabels,
     projectToScreen: projectToScreen,
     showImportedMesh: showImportedMesh, clearImportedMesh: clearImportedMesh,
+    clearMesh: clearMesh,
     syncPartColors: syncPartColors, coloredPartKeys: coloredPartKeys, partColor: partColor,
     boundsOf: boundsOf, growBBox: growBBox,
     nodeParts: nodeParts, nodePartsLoaded: nodePartsLoaded, markNodes: markNodes,
