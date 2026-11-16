@@ -54,13 +54,11 @@ Every command below can then be pasted as it is.
 PS> kratos-cli new levee.json --force --dim 2 --name levee_seepage
 wrote levee.json: levee_seepage (2D section at z = 0, SI)
 
-PS> kratos-cli domain levee.json --x -36 54 --y -22 6 --z 0 1
-domain x -36 .. 54, y -22 .. 6 (2D section at z = 0.5); wrote levee.json
-The section at z = 0 is outside the new domain, so it is cut through its middle, at z = 0.5.
+PS> kratos-cli domain levee.json --x -36 54 --y -22 6
+domain x -36 .. 54, y -22 .. 6 (2D section at z = 0); wrote levee.json
 ```
 
-The name `levee_seepage` also names the deck's files (`levee_seepage.mdpa`). The `--z`
-extent has no effect in plane strain: the section is taken through its middle.
+The name `levee_seepage` also names the deck's files (`levee_seepage.mdpa`).
 
 ## Step 2. The soils
 
@@ -256,7 +254,7 @@ If a stage allows fewer iterations than its seepage faces have nodes, `export` a
 
 ```text
 PS> kratos-cli check levee.json
-ok: levee_seepage (2D section at z = 0.5, SI)
+ok: levee_seepage (2D section at z = 0, SI)
 
 PS> kratos-cli show levee.json
 levee_seepage  (levee.json)
@@ -363,7 +361,7 @@ conditions** in the Model explorer.
 
 The same commands work in `kratos-cli shell`, one per line, without `kratos-cli` and the
 project file: `new levee.json --force --dim 2 --name levee_seepage`, then
-`domain --x -36 54 --y -22 6 --z 0 1`, and so on. See [CROW_case.md](CROW_case.md) for the
+`domain --x -36 54 --y -22 6, and so on. See also [CROW_case.md](CROW_case.md) for the
 shell, and [CLI.md](../CLI.md) for every command.
 
 
