@@ -330,7 +330,7 @@ def test_a_flow_calculation_is_refused_when_a_part_has_no_permeability():
     grout = material("grout")
     del grout.variables["PERMEABILITY_XX"]
     project = model(lines=[PIT_SIDE], materials=[material("sand"), grout],
-                    stages=[Stage(id="flow", name="Flow", calculation=stages.GROUNDWATER_FLOW)])
+                    stages=[Stage(id="flow", name="Flow", calculation=stages.FLOW)])
     assert "Soil grout" not in (condition_checks.flow_refusal(project) or "")
     refusal = condition_checks.flow_refusal(
         session.update_body(project, "soil_top__part1", material="grout"))

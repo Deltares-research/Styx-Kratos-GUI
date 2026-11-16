@@ -24,6 +24,8 @@ GROUPS = (project, edit, ground, volumes, structures, conditions, meshing, stage
 REMOVED = {
     "excavation": "excavation is gone: split the soil with `line add`.",
     "stages staged-excavation": "staged-excavation is gone: add each stage with `stages add`.",
+    "stages defaults": "defaults is gone: a project starts with its initial stage; add each "
+                       "further stage with `stages add`.",
 }
 """Commands and actions that were taken out, as typed after `kratos-cli`, and what to do
 instead. They are no parser, so neither `--help`, the shell's `help` nor its completion

@@ -469,7 +469,6 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
 .bc-other { display: flex; gap: 8px; align-items: center; padding: 2px 0;
   font-family: var(--font-mono); font-size: var(--fs-sm); }
 .bc-other span { flex: 1 1 auto; }
-.bc-gravity { display: block; margin-top: 12px; }
 .bc-axes label { margin-right: 6px; }
 
 /* ── Calculate: greyed out, and while it runs ─────────────────────────────
@@ -501,6 +500,19 @@ input.mesh-setting-control[type="checkbox"] { width: 16px; height: 16px; justify
 @media (prefers-reduced-motion: reduce) {
   .tbtn.calculating::before, .rail-btn.calculating::before { animation: none; }
 }
+
+/* The stage panel's expert solver settings (patches.js `expertSettings`): a group
+   header that opens and closes them, the sub-groups inside, a changed setting's
+   marker and the button that puts it back to its default. */
+.pgrid-toggle { cursor: pointer; }
+.pgrid-toggle::before { content: '\25b8'; display: inline-block; width: 12px; }
+.pgrid-expert.open > .pgrid-toggle::before { content: '\25be'; }
+.pgrid-subgroup { padding: 3px 8px 1px 14px; font-size: var(--fs-sm); font-weight: 600;
+  color: var(--c-ink-faint); }
+.pgrid-key.changed { color: var(--c-ink); font-weight: 600; }
+.pgrid-reset { flex: 0 0 auto; margin-left: 3px; padding: 0 4px; border: 0;
+  background: none; color: var(--c-ink-faint); cursor: pointer; font-size: var(--fs-md); }
+.pgrid-reset:hover { color: var(--brand-primary); }
 
 /* ── The Save picture window ──────────────────────────────────────────── */
 .picture-body { width: 100%; padding: 14px 18px; overflow: auto; }

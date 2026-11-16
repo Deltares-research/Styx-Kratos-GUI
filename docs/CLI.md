@@ -35,7 +35,7 @@ kratos-cli water site.json -2                 # the level a new water pressure c
 kratos-cli boundary site.json set pore_pressure --reference-coordinate -2
 kratos-cli set site.json mesh.element_size 1.5
 kratos-cli mesh site.json
-kratos-cli stages site.json defaults
+kratos-cli stages site.json add                 # the initial stage (an empty site has it already)
 kratos-cli check site.json
 kratos-cli export site.json --out deck/      # Pit_A.mdpa, MaterialParameters.json, ProjectParameters.json
 kratos-cli run deck/
@@ -85,10 +85,9 @@ Genuchten soil.
 | `load P list\|add\|set\|remove ...` | Loads: `add point [--at X Y]`, `add line [--x FROM TO]` (2D), `add surface [--x ...] [--z ...]` (3D), `--components ...` |
 | `normal-load P list\|add\|set\|remove ...` | Pressures normal to a line, in 2D: `add [ID] --points ... [--hydrostatic [--reference-coordinate Y] \| --pressure S]` |
 | `boundary P list\|add\|set\|remove\|standard ...` | The boundary conditions: `add [ID] --face F\|--part KEY\|--line ...\|--point X Y --fixed\|--roller\|--fix AXIS ...` for a support, `add [ID] --domain\|... --water-pressure TYPE ...` for a water pressure, `add [ID] --face F\|--line ... --seepage` for a seepage face; `standard` puts back the standard supports |
-| `gravity P [on\|off]` | Show, or switch on or off, the self weight of every body (on in a new project) |
 | `parts P` | Every part by its key, and every water pressure condition: the names stages activate and deactivate |
 | `mesh P [--size S] [--order 1\|2]` | Mesh the model and report its size. `--size` and `--order` are kept in the project |
-| `stages P [list\|show\|defaults\|add\|copy\|set\|remove\|activate\|deactivate] ...` | The construction sequence, edited as the GUI's Stages toolbar edits it. `phases` is the old name and still works |
+| `stages P [list\|show\|add\|copy\|set\|remove\|activate\|deactivate] ...` | The construction sequence, edited as the GUI's Stages toolbar edits it. `phases` is the old name and still works |
 | `node SOURCE NODE ...` | Which SubModelParts a node of the deck is in, and the nodes an interface split from it |
 | `deck show SOURCE` | A deck's mesh, SubModelParts and stages |
 | `export P --out DIR [--name NAME]` | Write the Kratos deck into `DIR` |
@@ -405,13 +404,14 @@ kratos-cli boundary dam.json add exit --seepage --line 1.62 0.48 1.62 4     # a 
   least to the most specific target: the whole soil, a part, a face, a line, a point. On a
   node two of them share, the more specific one wins. Two fixed conditions on the same kind
   of target that share nodes give a warning.
-- **Gravity.** `gravity P off` takes the self weight out of every stage, for a model loaded
-  by its conditions alone; `gravity P on` puts it back. A K0 procedure takes its stresses
-  from the self weight, so with gravity off they are zero, and the export says so.
+- **Gravity.** There is no switch of its own: whether the self weight acts is decided by
+  the initial stage's stress initialisation (`stages P set initial
+  --stress-initialisation ...`). `k0` and `gravity` put it on every body, structures too,
+  in every stage; `none` leaves it out of every stage, for a model loaded by its
+  conditions alone. A flow sequence always has it. `show P` says which.
 - `check` prints what the export will warn about the conditions: a model nothing holds, a
   water level that fixes nothing, a coupled soil with no water pressure condition or a
-  stage that leaves its water free, a condition this dimension does not have, a K0
-  procedure with gravity off.
+  stage that leaves its water free, a condition this dimension does not have.
 
 ## The stages, command by command
 
@@ -426,7 +426,8 @@ works everywhere: `kratos-cli phases ...`, a `phases` path in `get`, `set`, `add
 Styx cannot read.
 
 ```bash
-kratos-cli stages pit.json defaults                # the initial stage and the null step
+kratos-cli stages pit.json set initial --stress-initialisation k0   # a new project has it
+kratos-cli stages pit.json add null_step --name "Null step" --max-iterations 150
 kratos-cli stages pit.json deactivate initial sheet strut tie contact surcharge water_1
 kratos-cli stages pit.json add wall --name Wall --activate sheet contact surcharge --reset-displacements
 kratos-cli stages pit.json add dig_1 --name "Dig 1" --activate water_1 --deactivate soil_top__part3 --max-iterations 150 --tolerance 1e-3
@@ -440,38 +441,99 @@ kratos-cli stages pit.json deactivate dig_2 pore
 kratos-cli stages pit.json list
 ```
 
-- **`defaults`** makes the initial stage and the null step, as the GUI's Create default
-  stages does. It replaces the sequence there is.
+- **The initial stage.** A new project starts with one stage, `initial` ("Initial
+  stage"), mechanical with gravity loading. It chooses the calculation type and the
+  stress initialisation of the whole sequence. It cannot be removed, and nothing goes
+  `--before` it. `add` on a project saved without stages makes it.
 - **`add [ID]`** puts a stage at the end of the sequence (the toolbar's Add); with
   `--before STAGE` it goes between that stage and the one it starts from (Insert).
   **`copy STAGE`** puts a stage with the same solver settings right after `STAGE` (Copy),
-  and the stages after it then start from the copy. **`remove`** heals the chain: the
-  removed stage's children start from its parent.
+  and the stages after it then start from the copy; a copy has no stress
+  initialisation. **`remove`** heals the chain: the removed stage's children start from
+  its parent.
 - **`activate` / `deactivate STAGE KEY ...`** put parts in or out of the model from that
   stage on, as the Model explorer's checkbox does, with the smallest instruction that
   does it: switching a part back to what the stage inherits drops the instruction.
   `add` and `copy` take `--activate` and `--deactivate` the same way.
-- **`set STAGE`** changes `--name`, `--calculation k0|plastic|null|flow`,
-  `--reset-displacements` / `--keep-displacements`, `--max-iterations`, `--tolerance`
-  (the residual relative tolerance), `--time-interval` (days) and `--parent`.
-- **`flow`** (also `groundwater-flow`) is the Groundwater flow calculation: a
-  steady-state flow of the water alone, on the soil. Every stage of a project must then
-  be a flow stage, and `check` and `export` refuse a project that mixes flow and
-  deformation stages. A flow stage has no displacements, so it refuses
+- **`set STAGE`** changes `--name`, `--calculation mechanical|flow`,
+  `--stress-initialisation k0|gravity|none`, `--time-integration static|dynamic`,
+  `--reset-displacements` / `--keep-displacements`, `--convergence-criterion`,
+  `--max-iterations`, `--tolerance` and `--absolute-tolerance` (the convergence
+  criterion's relative and absolute tolerance), `--start-time`, `--duration`,
+  `--time-step`,
+  `--solver KEY=VALUE ...`, `--solver-default KEY ...` and `--parent`. `add` and `copy`
+  take the same options.
+- **`--calculation`** is what the sequence solves for, set on the initial stage and
+  given to every stage; a later stage refuses it. **`mechanical`** (also `upw`) is the
+  deformation of the soil with the water pressure in it, Kratos' `U_Pw` solver.
+  **`flow`** (also `pw` and `groundwater-flow`) is the flow of the water alone, on the
+  soil, Kratos' `Pw` solver. A flow stage has no displacements, so it refuses
   `--reset-displacements` and `--keep-displacements`.
-- **Defaults.** A stage that is not given these options is a plastic calculation with
-  at most 15 iterations, a tolerance of 1e-4, the displacements of the stage before kept,
-  and a time interval of 0 days. `stages show ID` prints a stage's settings.
-- **A seepage face** (`boundary add --seepage`, above) makes a flow stage use Kratos'
-  seepage strategy, `newton_raphson_with_seepage`.
-- **The solver** of a deformation stage is the same for every stage and no option
-  changes it: a static U-Pw analysis (displacements and water pressure), Newton-Raphson
-  iterations on a residual criterion, one step per stage, and the direct
-  `skyline_lu_factorization` linear solver. It is written into `ProjectParameters.json`,
-  and `SOLVER` in [`core/kratos/parameters.py`](../core/kratos/parameters.py) lists every
-  setting. A flow stage uses the Pw solver (`FLOW_SOLVER` there): one linear solve for a
-  saturated soil, Newton-Raphson iterations with the stage's `--max-iterations` and
-  `--tolerance` for a soil with another retention law.
+- **`--stress-initialisation`** is how the initial stage of a mechanical sequence sets
+  up the stresses; a later stage refuses it. **`k0`** derives them from the self weight
+  and each soil's K0 (the K0 procedure), **`gravity`** solves for them under the self
+  weight (gravity loading), and **`none`** sets up none, and leaves the self weight out
+  of every stage. A flow sequence has no stresses: it refuses `k0` and `gravity`, and
+  `--calculation flow` sets the stress initialisation to `none`.
+- **`--convergence-criterion`** (also `--convergence`) is what Kratos checks to decide
+  that the stage has converged. A mechanical stage takes **`residual`** (the default) or
+  **`displacement`**; a flow stage **`water_pressure`** (the default) or **`residual`**.
+  A flow stage of a project saved before the criterion could be chosen keeps the
+  `residual` it was solved on.
+  Each refuses the other's. Kratos' own names, with `_criterion`, work too.
+  A new `--calculation` gives a stage on the other type's criterion the new type's
+  default.
+- **`--time-integration`** is **`static`** (equilibrium; a steady state for a flow stage)
+  or **`dynamic`** (in time: Kratos' `Dynamic` solution type with inertia for a
+  mechanical stage, `Transient_Groundwater_Flow` for a flow stage).
+- **Defaults.** A stage that is not given these options has the initial stage's
+  calculation type, no stress initialisation (the initial stage itself: gravity loading),
+  static time integration, the calculation type's convergence criterion, at most 15
+  iterations, a relative tolerance of 1e-4 and an absolute one of 1e-9 (1e-12 on the
+  displacement criterion and 1e-8 on the water pressure, which a new criterion takes
+  along unless the stage has its own absolute tolerance), the displacements
+  of the stage before kept, and a duration of 1 s in one time step of 1 s.
+  `stages show ID` prints a stage's settings.
+- **`--start-time`** is when the initial stage starts, in the project's unit of time
+  (0 unless it is set). Every later stage starts where the stage before it ended, so a
+  later stage refuses it; `stages show ID` prints when a stage starts.
+- **`--duration`** is how long the stage lasts and **`--time-step`** the step Kratos
+  solves it in, both in the project's unit of time (seconds in every unit system). The
+  stage runs from where the stage before it ended, in `duration / time-step` steps; a
+  step longer than the duration is refused.
+- **A seepage face** (`boundary add --seepage`, above) makes every flow stage use
+  Kratos' seepage strategy, `newton_raphson_with_seepage`, with one attempt per step. It
+  is written in a 2D groundwater flow calculation only; a mechanical deck leaves it out.
+- **`--solver KEY=VALUE ...`** sets a stage's expert solver settings, the ones the
+  Stages window shows under **Expert settings**: the strategy, the linear solver, the
+  time step control, the time scheme of a dynamic stage, and the assembly.
+  `stages show ID` lists the ones that apply to the stage, with their values, a `*` on
+  the ones the stage set, and the reason for a fixed one. A switch takes `true` or
+  `false`, and a choice takes its value or its label in any case.
+  **`--solver-default KEY ...`** puts settings back to their defaults:
+
+  ```bash
+  kratos-cli stages pit.json set dig_1 --solver strategy_type=newton_raphson linear_solver_type=amgcl
+  kratos-cli stages pit.json set dig_1 --solver-default linear_solver_type
+  ```
+
+  A setting a stage cannot have, or a value it cannot take, is refused, with the
+  settings it can have. Each setting the stage does not set has the default for its
+  calculation type and time integration. A mechanical stage is solved by Newton-Raphson
+  (`strategy_type=newton_raphson`) with the scaled `LinearSolversApplication.sparse_lu`
+  linear solver unless the stage chooses another. The quasi-Newton strategy
+  (`strategy_type=quasi_newton`) always uses that linear solver, unscaled: it
+  factorises the stiffness matrix once and reuses it. Unscaled, a fully coupled soil
+  with a very low permeability can settle a few percent too little. A flow stage uses the strategy its soil calls for: one linear solve
+  for a saturated soil, Newton-Raphson for a soil with another retention law. Its linear
+  solver is `sparse_lu`. A step that does not converge is not tried again
+  (`number_cycles=1`); with more attempts, each is smaller. A dynamic mechanical stage on
+  `scheme_type=backward_euler` is Kratos' quasi-static U-Pw, without inertia. A new
+  `--calculation` puts every stage's expert settings back to the new type's defaults.
+  [`core/model/solver.py`](../core/model/solver.py) lists every setting, with its
+  default and when it applies. `SOLVER` and `FLOW_SOLVER` in
+  [`core/kratos/parameters.py`](../core/kratos/parameters.py) are the rest of what
+  `ProjectParameters.json` gets.
 - A sequence that would branch, two stages starting from one, is refused, because Kratos
   runs one sequence. So is a part the model does not have.
 
@@ -482,7 +544,7 @@ kratos-cli stages pit.json list
 pit.json> water -2
 pit.json> layer add L4 --material sand --thickness 10
 pit.json> undo
-pit.json> stages defaults
+pit.json> stages add
 pit.json> calculate
 pit.json> results field 1 uy
 pit.json> exit
@@ -621,7 +683,6 @@ viewport's. A command can also be typed with a leading `_` in the box (`_mesh`).
 | `stages`, `phases` | `kratos-cli stages P` |
 | `water <level>`, `water off` | `kratos-cli water P LEVEL`, `kratos-cli water P off` |
 | `boundary`, `boundary list`, `boundary standard` | `kratos-cli boundary P list`, `kratos-cli boundary P standard` |
-| `gravity`, `gravity on`, `gravity off` | `kratos-cli gravity P`, `kratos-cli gravity P on`, `kratos-cli gravity P off` |
 | `units`, `units <system>` | `kratos-cli units P`, `kratos-cli units P kN` |
 | `node <id>` | `kratos-cli node P NODE` |
 | `cleargeometry` | `kratos-cli volume P clear` |

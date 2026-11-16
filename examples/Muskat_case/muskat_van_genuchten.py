@@ -4,7 +4,7 @@ heads, with an unsaturated zone above the phreatic line.
 Kratos' GeoMechanicsApplication test `tests/Muskat/van_genuchten_hydrostatic`, built as a
 Styx model: a 1.62 m by 4 m column of a Van Genuchten soil, the water held at a level of
 3.0 m on the left face and 1.62 m on the right, started from a phreatic line, and one
-"Groundwater flow" stage. muskat_van_genuchten.json beside it is the same model, as the
+flow stage. muskat_van_genuchten.json beside it is the same model, as the
 GUI saves it.
 
     python muskat_van_genuchten.py               write the deck into this folder
@@ -76,9 +76,13 @@ PHREATIC_Y = [3.22, 3.22, 0.48, 0.48]
 ELEMENT_SIZE = 0.1
 ELEMENT_ORDER = 2
 
-# The deck's Newton-Raphson settings: at most 100 iterations, relative tolerance 1e-3.
+# The deck's Newton-Raphson settings: on the residual criterion, rather than on the water
+# pressure a flow stage converges on unless it says otherwise, at most 100 iterations,
+# relative tolerance 1e-3, absolute tolerance 1e-15.
+CONVERGENCE_CRITERION = "residual_criterion"
 MAX_ITERATIONS = 100
 TOLERANCE = 1e-3
+ABSOLUTE_TOLERANCE = 1e-15
 
 # The two heads and the start values. No support: a groundwater flow calculation solves
 # the water pressure alone, and a face with no water pressure condition (the top and the
@@ -140,8 +144,10 @@ def project() -> Project:
 
         mesh=MeshSettings(element_size=ELEMENT_SIZE, order=ELEMENT_ORDER),
 
-        stages=[Stage(id="flow", name="Flow", calculation="Groundwater flow",
-                      max_iterations=MAX_ITERATIONS, tolerated_error=TOLERANCE)],
+        stages=[Stage(id="flow", name="Flow", calculation="flow",
+                      convergence_criterion=CONVERGENCE_CRITERION,
+                      max_iterations=MAX_ITERATIONS, tolerated_error=TOLERANCE,
+                      absolute_tolerance=ABSOLUTE_TOLERANCE)],
     )
 
 

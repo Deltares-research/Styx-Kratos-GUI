@@ -203,16 +203,23 @@
  ],
  "phases list": [
   {
+   "absolute_tolerance": "number",
    "activate": "array",
    "calculation": "string",
+   "convergence_criterion": "string",
    "deactivate": "array",
+   "duration": "number",
    "id": "string",
    "loading": "string",
    "max_iterations": "number",
    "name": "string",
    "parent": "null|string",
    "reset_displacements": "boolean",
-   "time_interval": "number",
+   "solver_settings": "object",
+   "start_time": "number",
+   "stress_initialisation": "string",
+   "time_integration": "string",
+   "time_step": "number",
    "tolerated_error": "number"
   }
  ],
@@ -288,16 +295,23 @@
  },
  "stages list": [
   {
+   "absolute_tolerance": "number",
    "activate": "array",
    "calculation": "string",
+   "convergence_criterion": "string",
    "deactivate": "array",
+   "duration": "number",
    "id": "string",
    "loading": "string",
    "max_iterations": "number",
    "name": "string",
    "parent": "null|string",
    "reset_displacements": "boolean",
-   "time_interval": "number",
+   "solver_settings": "object",
+   "start_time": "number",
+   "stress_initialisation": "string",
+   "time_integration": "string",
+   "time_step": "number",
    "tolerated_error": "number"
   }
  ],

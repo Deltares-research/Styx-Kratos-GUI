@@ -124,7 +124,6 @@ EDITS = {
     "patch_materials": "replace_materials",
     "patch_structures": "replace_structures",
     "patch_stages": "replace_stages",
-    "seed_default_stages": "default_stages",
     "patch_dimension": "set_dimension",
     "patch_units": "set_units",
     "clear_custom_parts": "without_custom_parts",

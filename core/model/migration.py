@@ -260,6 +260,139 @@ def rename_phases(value: dict) -> dict:
     out["stages"] = out.pop("phases")
     return out
 
+
+OLD_CALCULATIONS = {
+    "K0 procedure": ("mechanical", "K0"),
+    "Plastic": ("mechanical", "none"),
+    "Null step": ("mechanical", "none"),
+    "Groundwater flow": ("flow", "none"),
+}
+
+
+def stage_calculation(value: dict) -> dict:
+    """A stage saved before 2026-11 names one of four calculations. Now a stage has a
+    calculation type and, if it is mechanical, a stress initialisation. A null step was
+    a plastic stage that changes nothing, and it still is one. A stage in the new shape,
+    or with a value that is neither, is left alone for the schema to judge.
+
+    An initial plastic stage, or null step, becomes one initialised by gravity loading:
+    that is what it was, as gravity was on unless the project switched it off
+    (`drop_gravity`), and the initial stage's stress initialisation is now what decides
+    the self weight (`core.model.stages.gravity`). Initialised by none, it would lose
+    it.
+
+    An old flow stage was solved on the residual criterion, and keeps it, rather than
+    taking a new flow stage's default, the water pressure one: `flow_tolerance` gives it
+    the residual absolute tolerance it was written with."""
+    old = OLD_CALCULATIONS.get(str(value.get("calculation")))
+    if old is None:
+        return value
+    calculation, stresses = old
+    if calculation == "mechanical" and stresses == "none" and value.get("parent") is None:
+        stresses = "gravity"
+    out = {**value, "calculation": calculation, "stress_initialisation": stresses}
+    if calculation == "flow":
+        out.setdefault("convergence_criterion", "residual_criterion")
+    return out
+
+
+def stage_time(value: dict) -> dict:
+    """A stage saved before 2026-11 has a `time_interval` in days, which the deck never
+    read: every stage ran for one second in one step. Now a stage has a `duration` and a
+    `time_step` in the project's unit of time, which is seconds in every system. A zero
+    interval -- every stage the GUI made -- becomes the default; any other one its
+    seconds, in one step, so the deck still solves the stage once."""
+    if "time_interval" not in value:
+        return value
+    out = {key: v for key, v in value.items() if key != "time_interval"}
+    days = value["time_interval"]
+    if isinstance(days, (int, float)) and not isinstance(days, bool) and days > 0:
+        out.setdefault("duration", days * SECONDS_PER_DAY)
+        out.setdefault("time_step", out["duration"])
+    return out
+
+
+def drop_gravity(value: dict) -> dict:
+    """A document saved before 2026-11-03 switches gravity on and off for itself
+    (`gravity`). Now the initial stage's stress initialisation decides it
+    (`core.model.stages.gravity`): none leaves the self weight out. Gravity off becomes
+    an initial mechanical stage that initialises no stresses -- the stresses it had with
+    gravity off were zero -- and the key is dropped. A flow sequence, or a project with
+    no stages, always has the self weight now."""
+    if "gravity" not in value:
+        return value
+    out = {key: v for key, v in value.items() if key != "gravity"}
+    stages = out.get("stages")
+    if value["gravity"] is not False or not isinstance(stages, list):
+        return out
+    out["stages"] = [_without_stresses(stage) for stage in stages]
+    return out
+
+
+def _without_stresses(stage: object) -> object:
+    if not isinstance(stage, dict) or stage.get("parent") is not None:
+        return stage
+    converted = stage_calculation(stage)
+    if converted.get("calculation", "mechanical") != "mechanical":
+        # Unchanged, so that `flow_tolerance` still knows it for an old flow stage.
+        return stage
+    return {**converted, "stress_initialisation": "none"}
+
+
+def gravity_notes(value: object) -> list[str]:
+    """What `drop_gravity` changes about the calculation of the document `value`, as it
+    was saved: gravity switched off in a project with no stages, or in a flow sequence,
+    is on now. Empty when gravity was not switched off, or still is off (`notes`)."""
+    if not isinstance(value, dict) or value.get("gravity") is not False:
+        return []
+    stages = value.get("stages", value.get("phases"))
+    first = next((stage for stage in stages if isinstance(stage, dict)
+                  and stage.get("parent") is None), None) if isinstance(stages, list) else None
+    if first is None:
+        return ["This project switched gravity off, which is no longer a switch of its "
+                "own: the initial stage's stress initialisation decides it, and with no "
+                "stages the self weight acts. To leave it out, add an initial stage and "
+                "set its stress initialisation to none."]
+    if stage_calculation(first).get("calculation") == "flow":
+        return ["This project switched gravity off, which a flow calculation no longer "
+                "can: the water has its weight again, so it flows from the differences "
+                "in head rather than in pressure, and the hydraulic head is written. A "
+                "horizontal section cannot be modelled now."]
+    return []
+
+
+def flow_tolerance(value: dict) -> dict:
+    """A flow stage saved before 2026-11 has no absolute tolerance, and was written with
+    the one of the Kratos deck its strategy was copied from: Muskat's
+    `van_genuchten_hydrostatic`'s 1e-15 for Newton-Raphson, which a soil whose
+    permeability depends on the water pressure is solved by -- without a seepage face,
+    whose strategy has the default's 1e-9. A linear stage writes none. So a project
+    with such a soil and no seepage face gives its old flow stages 1e-15, and the deck
+    stays as it was."""
+    stages = value.get("stages")
+    if not isinstance(stages, list):
+        return value
+    conditions = value.get("boundary_conditions")
+    if isinstance(conditions, list) and any(
+            isinstance(c, dict) and c.get("kind") == "seepage" for c in conditions):
+        return value
+    materials = value.get("materials")
+    if not isinstance(materials, list) or not any(
+            isinstance(m, dict) and isinstance(m.get("variables"), dict)
+            and m["variables"].get("RETENTION_LAW", "SaturatedLaw") != "SaturatedLaw"
+            for m in materials):
+        return value
+    return {**value, "stages": [
+        {**stage, "absolute_tolerance": VAN_GENUCHTEN_ABSOLUTE_TOLERANCE}
+        if isinstance(stage, dict) and stage.get("calculation") == "Groundwater flow"
+        and "absolute_tolerance" not in stage else stage
+        for stage in stages]}
+
+
+VAN_GENUCHTEN_ABSOLUTE_TOLERANCE = 1e-15
+"""Kratos' `tests/Muskat/van_genuchten_hydrostatic`'s `residual_absolute_tolerance`."""
+
+
 def drop_boreholes(value: dict) -> dict:
     """A document saved before 2026-10-24 hangs each layer's levels on boreholes:
     `tops` and `bots` map a borehole id to a level. Now a layer has one `top` and one
@@ -530,7 +663,7 @@ def k0_notes(value: object) -> list[str]:
     if not isinstance(value, dict) or "fluid" in value:
         return []
     stages = value.get("stages")
-    if not any(isinstance(s, dict) and s.get("calculation") == "K0 procedure"
+    if not any(isinstance(s, dict) and stage_calculation(s).get("stress_initialisation") == "K0"
                for s in (stages if isinstance(stages, list) else [])):
         return []
     notes = []
@@ -580,7 +713,7 @@ def drained_notes(value: object) -> list[str]:
         return []
     every = value.get("stages")
     if isinstance(every, list) and every and all(
-            isinstance(s, dict) and s.get("calculation") == stages.GROUNDWATER_FLOW
+            isinstance(s, dict) and stage_calculation(s).get("calculation") == stages.FLOW
             for s in every):
         return []
     return [f"{soil}: a DRAINED soil is written as Kratos' CONSTANT_PW_FIELD now, so its "
@@ -601,27 +734,29 @@ def upgraded(value: object) -> object:
 
 def notes(value: object) -> list[str]:
     """What opening `value` changes in its deck that the user has to know, one line
-    each: the soils' own water it replaces (`water_notes`), the linear elastic soils
-    whose K0 changes (`k0_notes`), the undrained soils that are coupled now
-    (`undrained_notes`), the drained soils that are not any more (`drained_notes`) and
-    the contacts that lose their soil's strength (`contact_notes`). Empty for a current
-    document. Said when a file is opened (`core.session.migration_notes`, the GUI's
-    Open), as the first save of it writes the new shape and the old values are gone."""
+    each: the gravity it no longer switches off (`gravity_notes`), the soils' own water
+    it replaces (`water_notes`), the linear elastic soils whose K0 changes
+    (`k0_notes`), the undrained soils that are coupled now (`undrained_notes`), the
+    drained soils that are not any more (`drained_notes`) and the contacts that lose
+    their soil's strength (`contact_notes`). Empty for a current document. Said when a
+    file is opened (`core.session.migration_notes`, the GUI's Open), as the first save
+    of it writes the new shape and the old values are gone."""
+    gravity = gravity_notes(value)
     value = _before_water(value)
-    return (water_notes(value) + k0_notes(value) + undrained_notes(value)
+    return (gravity + water_notes(value) + k0_notes(value) + undrained_notes(value)
             + drained_notes(value) + contact_notes(value))
 
 
 def _before_water(value: object) -> object:
     if isinstance(value, dict):
-        value = rename_phases(value)
+        value = drop_gravity(rename_phases(value))
     if is_legacy(value):
         value = migrate(value)
     elif isinstance(value, dict):
         value = migrate_records(value)
     if not isinstance(value, dict):
         return value
-    return screen_sides(drop_boreholes(value))
+    return flow_tolerance(screen_sides(drop_boreholes(value)))
 
 
 def _on_screen(interface: object, piles: dict) -> object:

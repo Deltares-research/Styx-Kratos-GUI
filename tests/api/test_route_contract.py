@@ -101,6 +101,11 @@ CONTRACTS = [
              {"name", "layers", "materials"},
              bad=lambda c: c.put("/api/project", json={**_project(c), "no_such_key": 1}),
              bad_status=422),
+    Contract("POST", "/api/project/open",
+             lambda c: c.post("/api/project/open", json={**_project(c), "gravity": False}),
+             {"project", "notes", "invalidates"}, EVERYTHING,
+             bad=lambda c: c.post("/api/project/open", json={**_project(c), "no_such_key": 1}),
+             bad_status=422),
     Contract("POST", "/api/project/migration-notes",
              lambda c: c.post("/api/project/migration-notes", json=_project(c)), {"notes"},
              bad=lambda c: c.post("/api/project/migration-notes", json=[]), bad_status=422),
@@ -153,8 +158,7 @@ CONTRACTS = [
              bad_status=404),
     Contract("PATCH", "/api/project/conditions",
              lambda c: c.patch("/api/project/conditions", json={
-                 "boundary_conditions": _project(c)["boundary_conditions"],
-                 "gravity": True}),
+                 "boundary_conditions": _project(c)["boundary_conditions"]}),
              EDITED,
              bad=lambda c: c.patch("/api/project/conditions", json={"boundary_conditions": [
                  {"id": "d", "name": "d", "kind": "displacement", "on": "domain"}]}),
@@ -165,13 +169,9 @@ CONTRACTS = [
                  {"id": "a", "name": "A"}, {"id": "b", "name": "B", "parent": "a",
                                             "deactivate": ["no_such_part"]}]}),
              bad_status=422),
-    Contract("POST", "/api/project/stages/defaults",
-             lambda c: c.post("/api/project/stages/defaults"), EDITED),
     # The pre-rename routes, kept so old clients keep working.
     Contract("PATCH", "/api/project/phases",
              lambda c: c.patch("/api/project/phases", json={"phases": []}), EDITED),
-    Contract("POST", "/api/project/phases/defaults",
-             lambda c: c.post("/api/project/phases/defaults"), EDITED),
     Contract("PATCH", "/api/project/dimension",
              lambda c: c.patch("/api/project/dimension",
                                json={"dimension": _project(c)["dimension"]}),
@@ -480,7 +480,6 @@ REFUSED_FOR_A_DECK = [
     ("POST", "/api/mesh", COARSE), ("POST", "/api/mesh/labels", COARSE),
     ("POST", "/api/mesh/node-parts", COARSE), ("POST", "/api/export/mdpa", COARSE),
     ("PATCH", "/api/project/stages", {"stages": []}),
-    ("POST", "/api/project/stages/defaults", None),
 ]
 
 
