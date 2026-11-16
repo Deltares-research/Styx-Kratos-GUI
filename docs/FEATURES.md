@@ -162,7 +162,7 @@ and adds only the values that are missing
 | Feature | Detail | Status |
 |---|---|---|
 | Architecture | A browser front end (three.js, no build step) and a local FastAPI server. Gmsh runs in its own worker process, so a Gmsh crash does not stop the server. | Tested |
-| Start | `run.bat` or `run.sh` makes its own Python environment and starts the server. `run.bat` also opens the browser. `--check` only checks the setup. | Tested on Windows, Linux and macOS |
+| Start | `run.bat` or `run.sh` makes its own Python environment and starts the server. `run.bat` also opens the browser when the server is ready. `--check` only checks the setup. | Tested on Windows, Linux and macOS |
 | Project files | New, Open, Save, Save as (a project JSON file). The server keeps the open project in memory only. | Tested |
 | Undo and redo | Up to 40 steps, each a copy of the full project | Tested |
 | Keyboard shortcuts | Ctrl+Z, Ctrl+Y, Ctrl+S, Ctrl+O, Ctrl+N, F5 (zoom to fit), F9 (calculate, or make the mesh in Mesh mode), Esc. The arrow keys recall earlier commands. | Tested |

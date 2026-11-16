@@ -81,7 +81,7 @@ If you get `Permission denied` (this can happen after unpacking a ZIP), run `bas
 instead.
 
 Then open **<http://127.0.0.1:8000/>** in your browser. On Windows this happens
-automatically. Leave the terminal window open while you work, and press <kbd>Ctrl</kbd>+<kbd>C</kbd>
+automatically, as soon as the server is ready. Leave the terminal window open while you work, and press <kbd>Ctrl</kbd>+<kbd>C</kbd>
 in it to stop the server.
 
 What the launcher does:

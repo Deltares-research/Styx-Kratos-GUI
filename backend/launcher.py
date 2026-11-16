@@ -15,6 +15,7 @@ import socket
 import subprocess
 import sys
 import threading
+import time
 import venv
 import webbrowser
 
@@ -130,6 +131,24 @@ def port_in_use(host: str, port: int) -> bool:
         return False
 
 
+def open_when_ready(url: str, host: str, port: int, server: subprocess.Popen,
+                    *, timeout: float = 120.0, interval: float = 0.25) -> bool:
+    """Open `url` in the browser once the server answers on `port`.
+
+    Uvicorn only binds the port after the app is imported and started, so the first
+    successful connection means the page can load. Opening the browser earlier shows a
+    "site can't be reached" page until the server is up. Gives up, without opening
+    anything, if the server exits or `timeout` seconds pass first.
+    """
+    deadline = time.monotonic() + timeout
+    while server.poll() is None and time.monotonic() < deadline:
+        if port_in_use(host, port):
+            webbrowser.open(url)
+            return True
+        time.sleep(interval)
+    return False
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Set up and run the kratos-GUI backend")
     parser.add_argument("--check", action="store_true", help="install and validate dependencies, then exit")
@@ -164,8 +183,15 @@ def main(argv: list[str] | None = None) -> int:
         os.environ.update(server_environment(args, dict(os.environ)))
         if args.open_browser:
             url = f"http://{args.host}:{args.port}/"
-            threading.Timer(1.0, webbrowser.open, args=(url,)).start()
-            return subprocess.call(command)
+            with subprocess.Popen(command) as server:
+                threading.Thread(target=open_when_ready,
+                                 args=(url, args.host, args.port, server),
+                                 daemon=True).start()
+                try:
+                    return server.wait()
+                except BaseException:
+                    server.kill()
+                    raise
         os.execv(str(python), command)
     except (OSError, RuntimeError, subprocess.CalledProcessError) as error:
         print(f"Launcher failed: {error}", file=sys.stderr)

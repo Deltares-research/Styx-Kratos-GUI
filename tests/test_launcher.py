@@ -194,7 +194,7 @@ def test_a_server_already_on_the_port_is_refused_not_opened(stood_in, monkeypatc
     monkeypatch.setattr(_launcher, "port_in_use", lambda host, port: True)
     opened = []
     monkeypatch.setattr(_launcher.webbrowser, "open", opened.append)
-    monkeypatch.setattr(_launcher.subprocess, "call",
+    monkeypatch.setattr(_launcher.subprocess, "Popen",
                         lambda argv: stood_in.__setitem__("call", argv))
 
     assert _launcher.main(["--open-browser"]) == 1
@@ -205,20 +205,70 @@ def test_a_server_already_on_the_port_is_refused_not_opened(stood_in, monkeypatc
 
 
 def test_opening_the_browser_preserves_the_server_exit_status(stood_in, monkeypatch):
-    from unittest.mock import Mock
+    from unittest.mock import MagicMock, Mock
 
-    timer = Mock()
-    factory = Mock(return_value=timer)
-    server = Mock(return_value=7)
-    monkeypatch.setattr(_launcher.threading, "Timer", factory)
-    monkeypatch.setattr(_launcher.subprocess, "call", server)
+    server = MagicMock()
+    server.__enter__.return_value = server
+    server.wait.return_value = 7
+    popen = Mock(return_value=server)
+    thread = Mock()
+    factory = Mock(return_value=thread)
+    monkeypatch.setattr(_launcher.subprocess, "Popen", popen)
+    monkeypatch.setattr(_launcher.threading, "Thread", factory)
 
     assert _launcher.main(["--open-browser", "--port", "9000"]) == 7
+    assert popen.call_args.args[0][-2:] == ["--port", "9000"]
     factory.assert_called_once_with(
-        1.0, _launcher.webbrowser.open, args=("http://127.0.0.1:9000/",))
-    timer.start.assert_called_once_with()
-    assert server.call_args.args[0][-2:] == ["--port", "9000"]
+        target=_launcher.open_when_ready,
+        args=("http://127.0.0.1:9000/", "127.0.0.1", 9000, server), daemon=True)
+    thread.start.assert_called_once_with()
     assert stood_in["exec"] is None
+
+
+class _Server:
+    """A stand-in for the server process: running until told otherwise."""
+
+    def __init__(self, exits_after: int | None = None):
+        self.polls = 0
+        self.exits_after = exits_after
+
+    def poll(self):
+        self.polls += 1
+        if self.exits_after is not None and self.polls > self.exits_after:
+            return 1
+        return None
+
+
+def test_the_browser_opens_only_once_the_server_answers(monkeypatch):
+    """Opening before the server is up shows "site can't be reached" for a few seconds."""
+    answers = iter([False, False, True])
+    opened = []
+    monkeypatch.setattr(_launcher, "port_in_use", lambda host, port: next(answers))
+    monkeypatch.setattr(_launcher.webbrowser, "open", opened.append)
+
+    assert _launcher.open_when_ready("http://127.0.0.1:8000/", "127.0.0.1", 8000,
+                                     _Server(), interval=0)
+    assert opened == ["http://127.0.0.1:8000/"]
+
+
+def test_the_browser_stays_closed_when_the_server_exits_first(monkeypatch):
+    opened = []
+    monkeypatch.setattr(_launcher, "port_in_use", lambda host, port: False)
+    monkeypatch.setattr(_launcher.webbrowser, "open", opened.append)
+
+    assert not _launcher.open_when_ready("http://127.0.0.1:8000/", "127.0.0.1", 8000,
+                                         _Server(exits_after=3), interval=0)
+    assert opened == []
+
+
+def test_the_browser_stays_closed_when_the_server_never_answers(monkeypatch):
+    opened = []
+    monkeypatch.setattr(_launcher, "port_in_use", lambda host, port: False)
+    monkeypatch.setattr(_launcher.webbrowser, "open", opened.append)
+
+    assert not _launcher.open_when_ready("http://127.0.0.1:8000/", "127.0.0.1", 8000,
+                                         _Server(), timeout=0.05, interval=0.01)
+    assert opened == []
 
 
 def test_a_failed_server_exec_is_reported_as_a_launcher_error(
