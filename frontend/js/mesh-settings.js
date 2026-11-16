@@ -25,9 +25,28 @@ App.MeshSettings = (function () {
   }
 
   /* The Mesh tab is also how you go back to look at a mesh, so once there is one the
-     dialog stays shut: switching tabs must not put a regenerate button in front of it. */
-  function opensOnModeTab(hasMesh) {
-    return !hasMesh;
+     dialog stays shut: switching tabs must not put a regenerate button in front of it.
+     A calculation meshes the model too: when its mesh still fits the model
+     (`calculated`), the tab shows that mesh rather than asking how to make one. */
+  function opensOnModeTab(hasMesh, calculated) {
+    return !hasMesh && !calculated;
+  }
+
+  function meshesOnModeTab(hasMesh, calculated) {
+    return !hasMesh && !!calculated;
+  }
+
+  /* The project fields the mesher (core/geometry) never reads. Editing one of them --
+     a stage, a material, the project name -- leaves the mesh as it is. Every other
+     field counts, so a field added later drops the mesh until it is listed here. */
+  var NOT_MESHED = ['name', 'stages', 'materials', 'fluid', 'gravity_acceleration'];
+
+  /* What a mesh is made from: the project without NOT_MESHED, and the settings sent to
+     the mesher. Two equal keys give the same mesh. */
+  function meshKey(project, settings) {
+    var inputs = Object.assign({}, project || {});
+    NOT_MESHED.forEach(function (field) { delete inputs[field]; });
+    return JSON.stringify({ project: inputs, settings: settings || null });
   }
 
   function fromProject(project) {
@@ -570,7 +589,16 @@ App.MeshSettings = (function () {
     document.addEventListener('click', function (event) {
       if (!(event.target.closest && event.target.closest('.mode-tab[data-mode="mesh"]'))) return;
       var hasMesh = !!(App.Viewport && App.Viewport.hasMesh && App.Viewport.hasMesh());
-      if (opensOnModeTab(hasMesh)) open();
+      var calculated = !!(App.Viewport && App.Viewport.calculatedMeshFits
+        && App.Viewport.calculatedMeshFits());
+      if (meshesOnModeTab(hasMesh, calculated)) {
+        if (App.Command && App.Command.note) {
+          App.Command.note('Showing the mesh of the last calculation.');
+        }
+        App.runAction({ action: 'generateMesh' });
+      } else if (opensOnModeTab(hasMesh, calculated)) {
+        open();
+      }
     });
   }
   return {
@@ -583,6 +611,6 @@ App.MeshSettings = (function () {
     sizeNow: sizeNow, changeSelected: changeSelected,
     algorithmRow: algorithmRow, merge: merge, open: open,
     TITLE: TITLE, optimizationChoices: optimizationChoices, optimizationHelp: optimizationHelp,
-    opensOnModeTab: opensOnModeTab
+    opensOnModeTab: opensOnModeTab, meshesOnModeTab: meshesOnModeTab, meshKey: meshKey
   };
 })();

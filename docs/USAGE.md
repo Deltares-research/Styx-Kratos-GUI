@@ -389,7 +389,13 @@ leaves a seepage face out, and warns.
 
 ## Mesh mode
 
-When you open Mesh mode, the **Mesh properties** window opens:
+When you open Mesh mode and there is no mesh yet, the **Mesh properties** window opens.
+When there is a mesh, Mesh mode shows it, and the window stays closed. Use the
+**Mesh properties** tool to change the settings and mesh again. A calculation also makes a
+mesh: after it, Mesh mode shows that mesh. A change to the stages, the materials or the
+project name keeps the mesh. Any other change to the model removes it.
+
+The **Mesh properties** window has these settings:
 
 | Setting | What it does |
 |---|---|

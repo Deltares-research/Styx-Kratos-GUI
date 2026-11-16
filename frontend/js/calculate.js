@@ -158,9 +158,19 @@ App.Calculate = (function () {
     }
     setInFlight(true);
     log('note', 'Meshing, writing the deck and running Kratos…');
+    // The run meshes the model on the server. Its key goes to the viewport, so the
+    // Mesh tab can show that mesh afterwards instead of asking how to make one. A deck
+    // case brings its own mesh, so there is nothing to remember for it.
+    var viewport = App.Viewport;
+    var meshKey = viewport && viewport.meshKey && !(App.PROJECT && App.PROJECT.deck)
+      ? viewport.meshKey() : null;
 
     return App.Api.post('/api/calculate', request()).then(function (result) {
       setInFlight(false);
+      // `stats` means the export, and so the mesh, was made -- even when Kratos failed.
+      if (meshKey && result && result.stats && viewport.rememberCalculatedMesh) {
+        viewport.rememberCalculatedMesh(meshKey);
+      }
       /* The run just written becomes the one `results` opens, before anything is
          printed about it. No round trip: the response already carries the run id,
          so pressing Calculate and then typing `results files` works with nothing

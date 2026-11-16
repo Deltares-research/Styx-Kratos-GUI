@@ -1511,10 +1511,16 @@ App.Viewport = (function () {
         rebuildFrame(payload.bbox);
         buildGroups(payload);
         rebuildHome(payload.bbox);
+        // An edit the mesher never sees (a stage, a material, the name) leaves the mesh
+        // as it was, so it is drawn again and the Mesh tab still shows it. Any other
+        // edit drops it: a mesh of the old model would be a wrong picture of this one.
+        var keepMesh = meshBuilt && meshShown !== null && meshShown.key === currentMeshKey();
         meshBuilt = false;
         // The geometry moved, so the mesh that was numbered is gone with it.
         generatedLabels = null;
         forgetNodeParts();
+        if (keepMesh) drawMesh(meshShown.result);
+        else meshShown = null;
         refreshLabels();
 
         var triangles = payload.sections.reduce(function (n, s) {
@@ -1524,6 +1530,8 @@ App.Viewport = (function () {
              + triangles.toLocaleString('en-GB') + ' display triangles.');
 
         ui.hide();
+        // A kept mesh is numbered again, after this overlay: see generateMesh.
+        if (keepMesh && App.MeshLabels && App.MeshLabels.anyActive()) renumberLabels();
         // Re-mounts the tree and the property grid against the new layer list.
         App.setMode(App.state.mode);
         setProjection(dimension === 2 ? false : App.state.projection !== false);
@@ -2268,55 +2276,43 @@ App.Viewport = (function () {
     });
   }
 
+  /* The mesh on screen, as the server sent it, with the key of what it was made from
+     (`App.MeshSettings.meshKey`). refresh() draws it again when the key still fits. */
+  var meshShown = null;
+  /* The key of the mesh the last calculation made on the server, or null. */
+  var calculatedKey = null;
+
+  function currentMeshKey() {
+    if (!App.MeshSettings || !App.MeshSettings.meshKey) return null;
+    return App.MeshSettings.meshKey(App.PROJECT, meshSettings());
+  }
+
+  /* A calculation meshes the model on the server. Its key is kept so the Mesh tab can
+     show that mesh later without asking for settings (js/calculate.js). */
+  function rememberCalculatedMesh(key) { calculatedKey = key || null; }
+
+  /* True when there is no mesh on screen, but the last calculation made one for the
+     model as it is now. */
+  function calculatedMeshFits() {
+    return !meshBuilt && calculatedKey !== null && calculatedKey === currentMeshKey();
+  }
+
   function generateMesh(done) {
     var ui = overlay();
     ui.show('Meshing with gmsh…', 20);
 
     var settings = meshSettings();
+    var key = currentMeshKey();
     App.Api.post('/api/mesh', settings).then(function (result) {
       ui.show('Uploading mesh…', 90);
-
-      disposeGroup(groups.mesh);
-      groups.mesh = new THREE.Group();
-      groups.mesh.name = 'mesh';
-      result.sections.forEach(function (section) {
-        var mesh = new THREE.Mesh(App.Buffers.geometry(section), new THREE.MeshLambertMaterial({
-          color: 0xd9dee6, transparent: true, opacity: 0.95, side: THREE.DoubleSide,
-          polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1
-        }));
-        mesh.material.userData = { base: mesh.material.emissive.clone() };
-        mesh.userData.key = 'mesh';
-        groups.mesh.add(mesh);
-
-        var wire = new THREE.LineSegments(
-          new THREE.WireframeGeometry(mesh.geometry),
-          new THREE.LineBasicMaterial({ color: 0x37474f, transparent: true, opacity: 0.75 })
-        );
-        wire.userData.noPick = true;
-        groups.mesh.add(wire);
-      });
-      buildPartColors(result.parts || []);
-      scene.add(groups.mesh);
-      if (!(('mesh') in visible)) visible.mesh = true;
-
-      meshBuilt = true;
-      // Different mesh, different nodes: whatever was numbered before is now numbering
-      // a mesh that no longer exists.
-      generatedLabels = null;
-      forgetNodeParts();
-      App.MESH_STATS = result.stats;
-      if (App.Model && App.Model.setMeshStats) App.Model.setMeshStats(result.stats);
+      drawMesh(result);
+      meshShown = { key: key, result: result };
       (result.log || []).filter(function (line) { return /warning|error/i.test(line); })
         .slice(-5).forEach(function (line) {
           if (/error/i.test(line) && App.Command.err) App.Command.err(line);
           else note(line);
         });
       ui.hide();
-      setMode(App.state.mode);
-      // The Model explorer's colour toggles are only drawn for parts that have mesh
-      // elements, so the tree is mounted again now that there are some.
-      if (App.Explorer && App.Explorer.mountTree) App.Explorer.mountTree(App.state.mode);
-      needsRender = true;
       // Last, and only if the numbers are on screen: re-numbering means a second trip
       // to the server with its own progress overlay, which must not start under this
       // one's.
@@ -2329,6 +2325,45 @@ App.Viewport = (function () {
     });
   }
 
+  /* Put a mesh from `POST /api/mesh` on screen, in place of the one there was. */
+  function drawMesh(result) {
+    disposeGroup(groups.mesh);
+    groups.mesh = new THREE.Group();
+    groups.mesh.name = 'mesh';
+    result.sections.forEach(function (section) {
+      var mesh = new THREE.Mesh(App.Buffers.geometry(section), new THREE.MeshLambertMaterial({
+        color: 0xd9dee6, transparent: true, opacity: 0.95, side: THREE.DoubleSide,
+        polygonOffset: true, polygonOffsetFactor: 1, polygonOffsetUnits: 1
+      }));
+      mesh.material.userData = { base: mesh.material.emissive.clone() };
+      mesh.userData.key = 'mesh';
+      groups.mesh.add(mesh);
+
+      var wire = new THREE.LineSegments(
+        new THREE.WireframeGeometry(mesh.geometry),
+        new THREE.LineBasicMaterial({ color: 0x37474f, transparent: true, opacity: 0.75 })
+      );
+      wire.userData.noPick = true;
+      groups.mesh.add(wire);
+    });
+    buildPartColors(result.parts || []);
+    scene.add(groups.mesh);
+    if (!(('mesh') in visible)) visible.mesh = true;
+
+    meshBuilt = true;
+    // Different mesh, different nodes: whatever was numbered before is now numbering
+    // a mesh that no longer exists.
+    generatedLabels = null;
+    forgetNodeParts();
+    App.MESH_STATS = result.stats;
+    if (App.Model && App.Model.setMeshStats) App.Model.setMeshStats(result.stats);
+    setMode(App.state.mode);
+    // The Model explorer's colour toggles are only drawn for parts that have mesh
+    // elements, so the tree is mounted again now that there are some.
+    if (App.Explorer && App.Explorer.mountTree) App.Explorer.mountTree(App.state.mode);
+    needsRender = true;
+  }
+
   function hasMesh() { return meshBuilt; }
 
   /* Mesh > Clear mesh: the generated mesh goes, and the model is drawn as it is before
@@ -2337,6 +2372,10 @@ App.Viewport = (function () {
      the local sizes stay in the project, so Generate mesh makes the same mesh again.
      False when there was no mesh to clear. */
   function clearMesh() {
+    // A mesh cleared on purpose stays cleared: the Mesh tab must not bring back the
+    // calculation's one.
+    meshShown = null;
+    calculatedKey = null;
     if (!meshBuilt) return false;
     disposeGroup(groups.mesh);
     groups.mesh = new THREE.Group();
@@ -3190,7 +3229,8 @@ App.Viewport = (function () {
     WORLD_UP: WORLD_UP,
     generateMesh: generateMesh, meshRefinements: meshRefinements,
     hasMesh: hasMesh, resize: resize,
-    meshSettings: meshSettings,
+    meshSettings: meshSettings, meshKey: currentMeshKey,
+    rememberCalculatedMesh: rememberCalculatedMesh, calculatedMeshFits: calculatedMeshFits,
     setLabels: setLabels, labelsOn: labelsOn,
     refreshLabels: refreshLabels, syncLabels: syncLabels,
     projectToScreen: projectToScreen,
