@@ -1182,15 +1182,61 @@ App.Viewport = (function () {
      Grid and bounds, sized to the model rather than to constants
      ══════════════════════════════════════════════════════════════ */
 
-  /* The 3D grid is a plane the model stands on, so it is sized to the model. Its cell
-     is the unit both grids are drawn in: the 2D one coarsens by whole multiples of it
-     so a coarse line is always a line the fine grid also had. */
+  /* The 3D grid is a plane the model stands on, so it is sized to the model, and so is
+     its cell. The 2D grid's cell follows the zoom instead (sectionGridCell). */
   function modelGridSpan(frame) { return Math.max(frame.size[0], frame.size[1]) * 1.6; }
+
+  /* 1, 2 or 5 times a power of ten, as the rulers step (js/ruler.js), so a grid line
+     falls on a ruler tick. Mantissa and exponent apart, so 0.1 * 2 never drifts. */
+  var NICE = [1, 2, 5];
+
+  function niceParts(value) {
+    var exp = Math.floor(Math.log10(value) + 1e-9);
+    return { mantissa: value / Math.pow(10, exp), exp: exp };
+  }
+
+  function niceValue(index, exp) {
+    var e = exp + Math.floor(index / NICE.length);
+    var m = NICE[((index % NICE.length) + NICE.length) % NICE.length];
+    return e < 0 ? m / Math.pow(10, -e) : m * Math.pow(10, e);
+  }
+
+  /* The largest 1-2-5 step that is not more than `value`. */
+  function niceAtMost(value) {
+    var p = niceParts(value);
+    var i = p.mantissa >= 5 - 1e-9 ? 2 : p.mantissa >= 2 - 1e-9 ? 1 : 0;
+    return niceValue(i, p.exp);
+  }
+
+  /* The next 1-2-5 step up from `step` that is a whole multiple of `base`. */
+  function coarserNice(step, base) {
+    var p = niceParts(step);
+    var i = p.mantissa >= 5 - 1e-9 ? 2 : p.mantissa >= 2 - 1e-9 ? 1 : 0;
+    for (var k = 1; k < 40; k++) {
+      var next = niceValue(i + k, p.exp);
+      var ratio = next / base;
+      if (Math.abs(ratio - Math.round(ratio)) < 1e-6) return next;
+    }
+    return step * 10;
+  }
+
+  /* At least eight cells across the model, and none wider than 2 m on a large one. */
+  var MAX_MODEL_CELL = 2;
 
   function gridCell(frame) {
     var span = modelGridSpan(frame);
-    return span / Math.max(8, Math.round(span / 2.5));
+    if (!(span > 0) || !isFinite(span)) return 1;
+    return niceAtMost(Math.min(span / 8, MAX_MODEL_CELL));
   }
+
+  /* The model-sized grid: whole cells, an even count so the centre is a line, and one
+     cell more than the span so snapping the centre to the lattice leaves no gap. */
+  function modelGridDivisions(frame) {
+    var divisions = Math.ceil(modelGridSpan(frame) / gridCell(frame) - 1e-9) + 1;
+    return divisions % 2 ? divisions + 1 : divisions;
+  }
+
+  function snapToCell(value, cell) { return Math.round(value / cell) * cell; }
 
   /* Beyond this the lines are closer than a pixel and cost more than they show. */
   var MAX_GRID_DIVISIONS = 240;
@@ -1207,7 +1253,7 @@ App.Viewport = (function () {
   function sectionGridSpec(cell, center, halfW, halfH) {
     var c = cell > 0 ? cell : 1;
     var needed = Math.max(halfW, halfH) * GRID_MARGIN * 2;
-    while (needed / c > MAX_GRID_DIVISIONS) c *= 2;
+    while (needed / c > MAX_GRID_DIVISIONS) c = coarserNice(c, cell > 0 ? cell : 1);
     var divisions = Math.ceil(needed / c);
     if (divisions % 2) divisions += 1;      // symmetric about the centre
     return {
@@ -1215,6 +1261,14 @@ App.Viewport = (function () {
       u: Math.round(center[0] / c) * c, v: Math.round(center[1] / c) * c,
       center: [center[0], center[1]], halfW: halfW, halfH: halfH
     };
+  }
+
+  /* The 2D cell follows the zoom: the rulers' labelled step for the same visible width
+     (js/ruler.js), so every grid line is a numbered tick and zooming walks 1, 2, 5, 10.
+     `fallback` is for a view with no size yet. */
+  function sectionGridCell(halfW, widthPx, fallback) {
+    if (!(halfW > 0) || !(widthPx > 0) || !App.Ruler) return fallback > 0 ? fallback : 1;
+    return App.Ruler.niceStep(2 * halfW / widthPx * App.Ruler.MIN_SPACING);
   }
 
   /* Rebuilt only when the view has actually left what is drawn, or needs a different
@@ -1259,7 +1313,8 @@ App.Viewport = (function () {
   function syncSectionGrid() {
     if (dimension !== 2 || !showGrid || !frame || !gridGroup || !cam.isOrthographicCamera) return;
     var view = visibleHalfExtent();
-    var next = sectionGridSpec(gridCell(frame), sectionCenter(), view.halfW, view.halfH);
+    var cell = sectionGridCell(view.halfW, host && host.clientWidth, gridCell(frame));
+    var next = sectionGridSpec(cell, sectionCenter(), view.halfW, view.halfH);
     if (!sectionGridNeedsRebuild(gridSpec, next)) return;
     gridSpec = next;
     makeReferenceGrid(next.span, next.divisions);
@@ -1291,9 +1346,9 @@ App.Viewport = (function () {
   /* Back to the model-sized grid: what 3D wants, and what 2D starts from. */
   function resetReferenceGrid() {
     if (!frame || !gridGroup) return;
-    var span = modelGridSpan(frame);
+    var divisions = modelGridDivisions(frame);
     gridSpec = null;
-    makeReferenceGrid(span, Math.round(span / gridCell(frame)));
+    makeReferenceGrid(divisions * gridCell(frame), divisions);
     orientReferenceGrid(activeView, frameBBox());
   }
 
@@ -1303,11 +1358,11 @@ App.Viewport = (function () {
     disposeGroup(gridGroup);
     disposeGroup(boundsGroup);
 
-    var span = modelGridSpan(frame);
+    var divisions = modelGridDivisions(frame);
 
     gridGroup = new THREE.Group();
     gridSpec = null;                       // the 2D grid is re-derived from the camera
-    makeReferenceGrid(span, Math.round(span / gridCell(frame)));
+    makeReferenceGrid(divisions * gridCell(frame), divisions);
     orientReferenceGrid(activeView, bbox);
 
     boundsGroup = new THREE.Group();
@@ -1383,6 +1438,8 @@ App.Viewport = (function () {
     sp.scale.set(4 * (scale || 1), 1 * (scale || 1), 1);
     sp.position.set(x, y, z);
     sp.userData.noPick = true;
+    sp.userData.pictureText = { text: text, fraction: 40 / 64, color: 0x1d2430, halo: true,
+                                bold: true };
     sp.renderOrder = 10;
     return sp;
   }
@@ -1638,6 +1695,30 @@ App.Viewport = (function () {
     refresh().catch(function () { /* already reported to the command log */ });
   }
 
+  /* What a saved picture needs of the view on screen (picture.js). The camera is brought
+     up to date, as a frame would do: the picture must not lag behind the last orbit. */
+  function pictureView() {
+    if (!scene || !cam || !host) return null;
+    orbit.apply(cam);
+    syncSectionGrid();
+    scene.updateMatrixWorld(true);
+    cam.updateMatrixWorld(true);
+    cam.matrixWorldInverse.copy(cam.matrixWorld).invert();
+    var section = dimension === 2 && !!cam.isOrthographicCamera && !!frame;
+    var extent = section ? visibleHalfExtent() : null;
+    var shown = triadAxes(dimension);
+    return {
+      scene: scene, camera: cam, width: host.clientWidth, height: host.clientHeight,
+      section: dimension === 2,
+      // Furniture of the moment, not of the model.
+      leaveOut: boxHelper ? [boxHelper] : [],
+      grid: [gridGroup, boundsGroup],
+      gridOn: !!showGrid,
+      rulers: section ? { center: sectionCenter(), halfW: extent.halfW, halfH: extent.halfH } : null,
+      axes: AXES.filter(function (axis) { return shown.indexOf(axis.name) >= 0; })
+    };
+  }
+
   /* ── Axis triad (its own tiny renderer) ─────────────────────── */
 
   /* All three in 3D; in 2D only the two the section is drawn in, which are x and
@@ -1820,6 +1901,15 @@ App.Viewport = (function () {
       groups[k].visible = true;
       revealed.push(k);
     });
+  }
+
+  function selectedKey() {
+    return selected;
+  }
+
+  /* The tabs that draw the model, each with its own parts. Results draws a result. */
+  function modelTabs() {
+    return Object.keys(modeGroups).filter(function (mode) { return mode !== 'results'; });
   }
 
   function select(key) {
@@ -2417,6 +2507,8 @@ App.Viewport = (function () {
     sprite.scale.set(0.035, 0.035, 1);
     sprite.renderOrder = 12;
     sprite.userData.noPick = true;
+    sprite.userData.pictureText = { text: letter, fraction: 34 / 64, color: colour, ring: colour,
+                                    bold: true, fixed: true };
     return sprite;
   }
 
@@ -2887,6 +2979,11 @@ App.Viewport = (function () {
     var c = center || (ref.plane === 'xz' ? [frame.center[0], frame.center[2]]
                      : ref.plane === 'xy' ? [frame.center[0], frame.center[1]]
                                           : [frame.center[1], frame.center[2]]);
+    if (!center) {
+      // On the lattice the 2D grid and the rulers use, not wherever the model's middle is.
+      var cell = gridCell(frame);
+      c = [snapToCell(c[0], cell), snapToCell(c[1], cell)];
+    }
     referenceGrid.rotation.set(0, 0, 0);
     if (ref.plane === 'xz') {
       referenceGrid.position.set(c[0], ref.offset, c[1]);
@@ -2924,6 +3021,11 @@ App.Viewport = (function () {
   }
 
   function dolly(dir) { if (orbit) orbit.dolly(dir); }
+
+  /* Whether the camera is still easing to a view: a picture taken now shows it on the way. */
+  function cameraMoving() {
+    return !!orbit && orbit.tick();
+  }
 
   /* ── Navigation mode: the toolbar's pan / rotate pair ───────────────────────
 
@@ -3044,7 +3146,8 @@ App.Viewport = (function () {
 
   return {
     init: init, setMode: setMode, setVisible: setVisible, isVisible: isVisible,
-    select: select, setView: setView, zoomFit: zoomFit, dolly: dolly,
+    select: select, selectedKey: selectedKey, modelTabs: modelTabs,
+    setView: setView, zoomFit: zoomFit, dolly: dolly, cameraMoving: cameraMoving,
     setProjection: setProjection, setGrid: setGrid, syncRulers: syncRulers,
     setViewMode: setViewMode, is2D: is2D,
     setNavMode: setNavMode, getNavMode: getNavMode,
@@ -3052,6 +3155,7 @@ App.Viewport = (function () {
     orthoHalfHeight: orthoHalfHeight, ORTHO_BASE: ORTHO_BASE,
     radiusLimits: radiusLimits, pickPlane: pickPlane, modelSpan: modelSpan,
     sectionGridSpec: sectionGridSpec, sectionGridNeedsRebuild: sectionGridNeedsRebuild,
+    gridCell: gridCell, sectionGridCell: sectionGridCell,
     MAX_GRID_DIVISIONS: MAX_GRID_DIVISIONS,
     makeRenderer: makeRenderer, WEBGL_HELP: WEBGL_HELP,
     SOFTWARE_HELP: SOFTWARE_HELP,
@@ -3093,6 +3197,7 @@ App.Viewport = (function () {
     applyStageVisibility: applyStageVisibility,
     normalLoadGlyphSpec: normalLoadGlyphSpec,
     getScene: function() { return scene; },
+    pictureView: pictureView,
     getCamera: function() { return cam; },
     getCanvas: function() { return canvas; },
     // Ask for one frame. The loop is gated on `needsRender`, so anything that adds to

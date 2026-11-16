@@ -77,7 +77,7 @@ is one step of the pipeline:
 
 | Package | Modules |
 |---|---|
-| `core/model/` | `schemas.py` (the `Project`), `units.py` (unit systems), `soil_models.py` (the soil models a material can be: law, parameters, defaults), `regions.py` (the pieces lines and sheet piles cut a layer into), `migration.py` (old project files), `templates.py` (empty and demo projects), `drafts.py` (where a new structure goes, as the GUI tools put it), `stages.py` (stage tree → Kratos stages), `script_writer.py` (the model as a Python script), `wall_translation.py` and `load_translation.py` (2D ↔ 3D) |
+| `core/model/` | `schemas.py` (the `Project`), `units.py` (unit systems), `soil_models.py` (the soil models a material can be: law, parameters, defaults), `regions.py` (the pieces lines and sheet piles cut a layer into), `migration.py` (old project files), `templates.py` (empty and demo projects), `drafts.py` (where a new structure goes, as the GUI tools put it), `stages.py` (stage tree → Kratos stages), `solver.py` (a stage's expert solver settings: defaults, when each applies, the deck they write), `script_writer.py` (the model as a Python script), `wall_translation.py` and `load_translation.py` (2D ↔ 3D) |
 | `core/geometry/` | `solid_model.py` (OpenCASCADE solids), `tessellation.py` (view), `meshing.py` (finite-element mesh), `cad_import.py` (CAD files), `primitives.py` (recipes for drawn solids) |
 | `core/kratos/` | `writer.py` (the deck), `materials.py` (`MaterialParameters.json`), `parameters.py` (`ProjectParameters.json`: stages, solver, output), `condition_checks.py` (the boundary condition warnings the export and `check` share), `interfaces.py` (split nodes along walls), `deck_files.py` (file names of the deck), `external_deck.py` (existing decks), `mdpa_reader.py`, `node_parts.py` |
 | `core/analysis/` | `calculation.py` (run folder, subprocess, failure messages), `kratos_main.py` (runs inside the Python of Kratos) |
@@ -114,13 +114,14 @@ the HTTP parts.
 
 | Group | Module | Routes |
 |---|---|---|
-| Project | `routes/project.py` | `GET`/`PUT /api/project`; `POST /api/project/new`, `/reset`, `/script`, `/script/save`, `/stages/defaults`, `/migration-notes`; `PATCH /api/project/layers`, `/materials` (the soils and `fluid`), `/lines`, `/bodies/{key}`, `/structures`, `/conditions`, `/stages`, `/dimension`, `/units`; `PUT /api/project/water`; `DELETE /api/project/custom_parts` |
+| Project | `routes/project.py` | `GET`/`PUT /api/project`; `POST /api/project/new`, `/open`, `/reset`, `/script`, `/script/save`, `/migration-notes`; `PATCH /api/project/layers`, `/materials` (the soils and `fluid`), `/lines`, `/bodies/{key}`, `/structures`, `/conditions`, `/stages`, `/dimension`, `/units`; `PUT /api/project/water`; `DELETE /api/project/custom_parts` |
 | Geometry | `routes/geometry.py` | `GET /api/geometry`; `POST /api/geometry/create`, `/import`; `DELETE /api/geometry/parts/{key}` |
 | Mesh | `routes/mesh.py` | `POST /api/mesh`, `/api/mesh/labels`, `/api/mesh/node-parts` |
 | Decks | `routes/decks.py` | `POST /api/export/mdpa`, `/api/import/mdpa`, `/api/calculate` |
 | Runs | `routes/results.py` | `GET /api/results/runs`, `/runs/{run}`, `/runs/{run}/files/{name}`, `/runs/{run}/archive` |
 | Results of a stage | `routes/results.py` | `GET /api/results/runs/{run}/stages/{n}/fields`, `/mesh`, `/field/{name}`, `/displacement`, `/at/{node}`, `/parts` |
 | Results of a member | `routes/results.py` | `GET /api/results/runs/{run}/members`, `/members/{member}/{quantity}` |
+| Files | `routes/files.py` | `POST /api/files/folder` opens the system's folder window; `GET`/`PUT /api/files/folder/{folder}/{name}`; `DELETE /api/files/folder/{folder}` hands the folder back when the save ends. For a browser on the same computer, and only pictures and CSV files in a folder chosen in that window. A folder id lasts for one save, and at most 15 minutes without use. One folder window is open at a time, and it closes after 10 minutes. `GET /api/files/picture-job/{token}` says whether the page may run the picture job in its address: only on a server `kratos-cli picture` started with that token. |
 | Health | `main.py` | `GET /api/health` (also the version of Styx) |
 
 ## Command-line modules (`cli/`)
@@ -136,9 +137,10 @@ the HTTP parts.
 | `cli/commands/edit.py` | `get`, `set`, `add`, `remove` |
 | `cli/commands/ground.py`, `volumes.py` | `domain`, `material`, `layer`, `line`, `body`, `parts`; `volume` |
 | `cli/commands/structures.py` | `section`, `beam`, `wall`, `member`, `anchor`, `interface`, `load`, `normal-load` |
-| `cli/commands/conditions.py` | `boundary`, `gravity` |
+| `cli/commands/conditions.py` | `boundary` |
 | `cli/commands/meshing.py`, `stages.py` | `mesh`, `export`; `stages` |
 | `cli/commands/inspection.py`, `analysis.py`, `results.py` | `node`, `deck show`; `run`, `calculate`; `results` |
+| `cli/commands/picture.py`, `cli/terminal/pictures.py` | `picture`: starts the server and a headless browser as separate processes, gives the page a job in its address, and takes the files on a one-time receiver |
 | `cli/commands/interactive.py` | `shell` |
 | `cli/kratos-shell.*`, `cli/kratos-init-powershell.bat` | Helper scripts for the tutorials |
 
@@ -157,7 +159,8 @@ shell. Only the camera of `base/js/orbit.js` is replaced; all other behaviour is
 | View | `viewport.js` (three.js), `orbit.js` (camera with y up), `canvas-renderer.js`, `ruler.js`, `mesh-labels.js`, `part-colors.js`, `node-parts.js` |
 | Modelling tools | `draw-input.js`, `lines.js`, `beams.js`, `anchors.js`, `interfaces.js`, `loads.js`, `normal-loads.js`, `water-command.js`, `soil-volume-dialog.js`, `soil-layers-dialog.js` (the **Modify soil layers** window, in place of the shell's own) |
 | Soil materials | `material-sets.js` (the **Soil materials** window: the soils, and the project's water under **Water**), `material-library.js`, `property-sets.js`, `soil-models.js` and `soil-model-table.js` (the soil models, generated from `core/model/soil_models.py`) |
-| Mesh and stages | `mesh-settings.js`, `stages.js` |
+| Mesh and stages | `mesh-settings.js`, `stages.js` and `solver-settings.js` (a stage's expert solver settings, generated from `core/model/solver.py`) |
+| Saved pictures | `picture-draw.js` (the scene as a list of shapes in mm), `picture-writers.js` (SVG, PDF, the PNG's dpi); both without a DOM. `picture.js` (reads the scene, canvas, clipboard, save windows, the walk over stages and fields, the job of `kratos-cli picture`), `picture-dialog.js` |
 | Files and scripts | `export.js`, `import-dialog.js`, `mdpa-import-dialog.js`, `download.js`, `zip.js`, `deck.js`, `script-command.js` |
 | Calculation and results | `calculate.js`, `results.js` (the `results …` commands), `results-render.js` (colours, legend, CSV), `results-view.js` (the contours on screen), `results-plot.js` (`results plot …` and its SVG figure) |
 

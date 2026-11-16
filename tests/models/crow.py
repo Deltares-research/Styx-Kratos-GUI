@@ -162,11 +162,10 @@ def project(model: str = MOHR_COULOMB) -> Project:
         mesh=MeshSettings(element_size=5.0, order=2, body_sizes={"sheetpile": 0.5},
                           size_bands={"sheetpile": 30.0}),
         stages=[
-            Stage(id="initial", name="Initial stage", calculation="K0 procedure",
+            Stage(id="initial", name="Initial stage", stress_initialisation="K0",
                   deactivate=["sheetpile", "strut", "wall_contact", "surcharge",
                               *(load.id for load in water_loads)]),
-            Stage(id="null_step", name="Null step", parent="initial",
-                  calculation="Null step", max_iterations=150),
+            Stage(id="null_step", name="Null step", parent="initial", max_iterations=150),
             Stage(id="install_wall", name="Wall installation", parent="null_step",
                   activate=["sheetpile", "wall_contact", "surcharge"], **solved),
             Stage(id="dig_1", name="First excavation", parent="install_wall",

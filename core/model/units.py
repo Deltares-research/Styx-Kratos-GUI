@@ -73,6 +73,7 @@ LENGTH = _q("length", (0, 1, 0), "m", "m")
 ACCELERATION = _q("acceleration", (0, 1, -2), "m/s²", "m/s²")
 VELOCITY = _q("velocity", (0, 1, -1), "m/s", "m/s")
 FLOW_RATE = _q("flow rate per metre", (0, 2, -1), "m³/s/m", "m³/s/m")
+TIME = _q("time", (0, 0, 1), "s", "s")
 DIMENSIONLESS = _q("dimensionless", (0, 0, 0), "", "")
 ANGLE = _q("angle", (0, 0, 0), "°", "°")
 RADIAN = _q("angle in radians", (0, 0, 0), "rad", "rad")
@@ -80,7 +81,7 @@ RADIAN = _q("angle in radians", (0, 0, 0), "rad", "rad")
 QUANTITIES = {q.name: q for q in (STRESS, FORCE, LINE_FORCE, MOMENT_PER_LENGTH, DENSITY,
                                   SPECIFIC_WEIGHT, STIFFNESS_PER_AREA, VISCOSITY,
                                   PERMEABILITY, AREA, INERTIA, LENGTH, ACCELERATION,
-                                  VELOCITY, FLOW_RATE, DIMENSIONLESS, ANGLE,
+                                  VELOCITY, FLOW_RATE, TIME, DIMENSIONLESS, ANGLE,
                                   RADIAN)}
 
 VARIABLES: dict[str, Quantity] = {

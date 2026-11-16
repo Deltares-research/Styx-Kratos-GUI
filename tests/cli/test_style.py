@@ -27,7 +27,7 @@ ANSWER = [
     "  domain      x 0 .. 20, y 0 .. 10",
     "  layers      soil",
     "1  initial  Initial stage",
-    "     calculation: K0 procedure; deactivates sheetpile_1, load",
+    "     calculation: mechanical, K0 stresses, static; deactivates sheetpile_1, load",
     "soil  soil  of m_soil: 10 .. 0",
     "ok: simple_dike (2D section at z = 5, SI)",
     "Water level: 5.00 m (specific weight 10000). wrote C:\\work\\simple_dike.json",

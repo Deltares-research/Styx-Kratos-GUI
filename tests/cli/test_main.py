@@ -92,6 +92,9 @@ REMOVED = [
      "excavation is gone: split the soil with `line add`."),
     (["stages", "{site}", "staged-excavation"],
      "staged-excavation is gone: add each stage with `stages add`."),
+    (["stages", "{site}", "defaults"],
+     "defaults is gone: a project starts with its initial stage; add each further stage "
+     "with `stages add`."),
 ]
 
 

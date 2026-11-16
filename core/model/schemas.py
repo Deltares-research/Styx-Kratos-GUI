@@ -24,7 +24,7 @@ from typing import Annotated, Any, Literal, NamedTuple
 from pydantic import (AfterValidator, BaseModel, Field, SerializerFunctionWrapHandler,
                       computed_field, field_validator, model_serializer, model_validator)
 
-from core.model import migration, polylines, regions, soil_models, units
+from core.model import migration, polylines, regions, soil_models, solver, units
 
 Hex = Annotated[str, Field(pattern=r"^#[0-9a-fA-F]{6}$")]
 Ident = Annotated[str, Field(min_length=1, max_length=64)]
@@ -1351,6 +1351,46 @@ BoundaryCondition = Annotated[DisplacementCondition | WaterPressureCondition
 """One record of `Project.boundary_conditions`, told apart by its `kind`."""
 
 
+CalculationType = Literal["mechanical", "flow"]
+StressInitialisation = Literal["K0", "gravity", "none"]
+TimeIntegration = Literal["static", "dynamic"]
+ConvergenceCriterion = Literal["residual_criterion", "displacement_criterion",
+                               "water_pressure_criterion"]
+
+CONVERGENCE_CRITERIA: dict[str, tuple[str, ...]] = {
+    calculation: tuple(name for name, _ in criteria)
+    for calculation, criteria in solver.CRITERIA.items()}
+"""The convergence criteria a stage of each calculation type can be solved on, its
+default first: Kratos' names, which its `U_Pw` and `Pw` solvers read
+(`core.kratos.parameters.CONVERGENCE_TOLERANCES`). Listed, with their labels, in
+`core.model.solver.CRITERIA`, which the browser reads too.
+
+The residual one is the default of a mechanical stage: every reference deck converges
+on it. Kratos' displacement criterion measures the update of every degree of freedom,
+the water pressure too: in a coupled soil whose water pressure builds up, it does not
+converge where the residual one does. The water pressure one is the default of a flow
+stage, which solves for the water pressure alone, as Kratos' own `Pw` solver has it
+(`geomechanics_Pw_solver.py`). It can fail to settle with a seepage face, whose opening
+and closing keeps the water pressure moving (a quadratic Muskat case C); such a stage
+can be set to the residual one. A flow stage saved before the criterion could be chosen
+was solved on the residual one, and keeps it (`migration.stage_calculation`). Kratos'
+`displacement_and_water_pressure_criterion` is not offered: Kratos 10.4.4 cannot build
+it (`geomechanics_U_Pw_solver.py` hands `MixedGenericCriteria` two criteria where it
+takes variables)."""
+
+ABSOLUTE_TOLERANCES: dict[str, float] = solver.ABSOLUTE_TOLERANCES
+"""The default absolute tolerance of each convergence criterion (`Stage.absolute_tolerance`)."""
+
+
+def followed_tolerance(tolerance: float, old: str, new: str) -> float:
+    """The absolute tolerance of a stage whose criterion goes from `old` to `new`: the new
+    criterion's default if it was the old one's, otherwise the stage's own."""
+    if old in ABSOLUTE_TOLERANCES and new in ABSOLUTE_TOLERANCES \
+            and tolerance == ABSOLUTE_TOLERANCES[old]:
+        return ABSOLUTE_TOLERANCES[new]
+    return tolerance
+
+
 class Stage(Base):
     """One construction stage: what changes about the model, and how it is solved.
 
@@ -1382,12 +1422,21 @@ class Stage(Base):
     """The stage this one starts from. `None` only for the first, which starts from the
     model as built."""
 
-    calculation: Literal["K0 procedure", "Plastic", "Null step",
-                         "Groundwater flow"] = "Plastic"
-    """"Groundwater flow" is a steady-state flow of the water alone (Kratos' `Pw` solver,
-    `Steady_State_Groundwater_Flow`). It needs water pressure elements, and the mesh is
-    one for all the stages, so a project mixes it with no other type: the export refuses
-    the mix (`core.model.stages.groundwater_flow`)."""
+    calculation: CalculationType = "mechanical"
+    """What the stage solves for. "mechanical" is the deformation of the soil and the
+    water pressure in it (Kratos' `U_Pw` solver); "flow" is the flow of the water alone
+    (the `Pw` solver). A flow stage needs water pressure elements, and the mesh is one
+    for all the stages, so a project mixes it with no other type: the export refuses the
+    mix (`core.model.stages.groundwater_flow`). A new type is a new value here, and its
+    Kratos solver in `core.kratos.parameters.SOLVERS`."""
+    stress_initialisation: StressInitialisation = "none"
+    """How a mechanical stage sets up its initial stresses. "K0" derives them from the
+    self weight and each soil's K0 (Kratos' `ApplyK0ProcedureProcess`); "gravity" solves
+    for them under the self weight; "none" continues from the stage before. A flow stage
+    has no stresses, so it has none."""
+    time_integration: TimeIntegration = "static"
+    """"static" solves for equilibrium; "dynamic" integrates in time -- inertia in a
+    mechanical stage, a transient flow in a flow stage."""
     loading: Literal["Staged construction"] = "Staged construction"
 
     activate: list[Ident] = Field(default_factory=list)
@@ -1401,13 +1450,103 @@ class Stage(Base):
     turns it on when the wall is installed, so the wall's own deflection is measured
     from the ground it was built into rather than from the undisturbed state."""
 
-    max_iterations: int = Field(default=15, gt=0)
-    tolerated_error: float = Field(default=1e-4, gt=0)
-    """Kratos' `residual_relative_tolerance`."""
+    convergence_criterion: ConvergenceCriterion = "residual_criterion"
+    """What Kratos measures to decide the stage has converged: one of
+    `CONVERGENCE_CRITERIA` for its calculation type. A stage that names none -- one
+    made without it -- has its type's default: the residual criterion for a mechanical
+    stage, the water pressure one for a flow stage. A flow stage saved before it could
+    be chosen has the residual one, which it was solved on."""
+    max_iterations: int = Field(default=int(solver.STAGE_DEFAULTS["max_iterations"]), gt=0)
+    tolerated_error: float = Field(default=solver.STAGE_DEFAULTS["tolerated_error"], gt=0)
+    """The convergence criterion's relative tolerance: Kratos'
+    `<quantity>_relative_tolerance` for each quantity it measures."""
+    absolute_tolerance: float = Field(
+        default=solver.ABSOLUTE_TOLERANCES["residual_criterion"], gt=0)
+    """Its absolute tolerance, `<quantity>_absolute_tolerance`. A stage that names none
+    has its criterion's default (`ABSOLUTE_TOLERANCES`): the reference decks' 1e-9 for
+    the residual criterion, 1e-12 for the displacement one, 1e-8 for the water pressure.
+    A stage solved in several steps can need more than 1e-9: it reaches equilibrium in
+    the first, after which every step starts from a round-off residual of 1e-9 to 1e-8
+    that 1e-9 cannot be met below, and Kratos runs out of cycles with the model already
+    at rest (an interface model, a 3D excavation, 2026-11-04)."""
 
-    time_interval: float = Field(default=0.0, ge=0)
-    """Days. Zero for the static stages this exporter writes; carried because the stage
-    panel has it and a consolidation stage would need it."""
+    start_time: float = Field(default=0.0, allow_inf_nan=False)
+    """The time the calculation starts at, in the project's unit of time: the deck's
+    `start_time` of the first stage. Read on the initial stage only -- every later
+    stage starts where the one before it ended."""
+    duration: float = Field(default=solver.STAGE_DEFAULTS["duration"], gt=0)
+    """How long the stage lasts, in the project's unit of time (`core.model.units`): its
+    deck's `end_time` minus its `start_time`. A static stage has no real clock, so the
+    default is the one second every stage was before it could be set."""
+    time_step: float = Field(default=solver.STAGE_DEFAULTS["time_step"], gt=0)
+    """The solver's `time_step`, in the same unit: the stage is solved in
+    `duration / time_step` steps. The default solves it in one."""
+
+    solver_settings: dict[str, bool | int | float | str] = Field(default_factory=dict)
+    """The expert solver settings this stage changed from their defaults, by name
+    (`core.model.solver.SETTINGS`): the strategy, the linear solver, the time step
+    control, the time scheme of a dynamic stage, the assembly. Every one it does not
+    name has the default for its calculation type and time integration, so a stage
+    that names none -- every stage saved before they could be set -- is solved as the
+    defaults are: by Newton-Raphson with Sparse LU if it is mechanical. A setting that does not apply to
+    the stage as it is now is kept, and neither shown nor written (`solver.resolve`)."""
+
+    @field_validator("solver_settings")
+    @classmethod
+    def _known_solver_settings(cls, value: dict) -> dict:
+        found = solver.problems(value)
+        if found:
+            raise ValueError("; ".join(found))
+        return solver.normalised(value)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _old_calculation(cls, value: object) -> object:
+        """A stage saved before 2026-11 names one of four calculations
+        (`migration.stage_calculation`), and has a time interval in days
+        (`migration.stage_time`) and no convergence criterion, which is then its
+        calculation type's default. A stage that names no absolute tolerance has its
+        criterion's (`ABSOLUTE_TOLERANCES`)."""
+        if not isinstance(value, dict):
+            return value
+        value = migration.stage_time(migration.stage_calculation(value))
+        if value.get("convergence_criterion") is None:
+            calculation = value.get("calculation", "mechanical")
+            if calculation in CONVERGENCE_CRITERIA:
+                value = {**value,
+                         "convergence_criterion": CONVERGENCE_CRITERIA[calculation][0]}
+        if "absolute_tolerance" not in value \
+                and value.get("convergence_criterion") in ABSOLUTE_TOLERANCES:
+            value = {**value, "absolute_tolerance":
+                     ABSOLUTE_TOLERANCES[value["convergence_criterion"]]}
+        return value
+
+    @model_validator(mode="after")
+    def _step_fits(self) -> Stage:
+        if self.time_step > self.duration:
+            raise ValueError(
+                f"stage {self.id!r} has a time step of {self.time_step:g}, longer than "
+                f"its duration of {self.duration:g}: make the step at most the duration")
+        return self
+
+    @model_validator(mode="after")
+    def _criterion_fits(self) -> Stage:
+        allowed = CONVERGENCE_CRITERIA[self.calculation]
+        if self.convergence_criterion not in allowed:
+            raise ValueError(
+                f"stage {self.id!r} is a {self.calculation} stage, which is not solved on "
+                f"the {self.convergence_criterion}: use "
+                f"{' or '.join(allowed)}")
+        return self
+
+    @model_validator(mode="after")
+    def _stresses_are_mechanical(self) -> Stage:
+        if self.calculation != "mechanical" and self.stress_initialisation != "none":
+            raise ValueError(
+                f"stage {self.id!r} is a {self.calculation} stage, which has no stresses "
+                f"to initialise: set its stress initialisation to none, or make it a "
+                "mechanical stage")
+        return self
 
     @model_validator(mode="after")
     def _one_instruction_per_part(self) -> Stage:
@@ -1519,10 +1658,9 @@ class StructuresUpdate(Base):
 
 
 class ConditionsUpdate(Base):
-    """The boundary conditions, replaced as one list, and gravity
-    (`core.session.replace_conditions`). A field left out stays as it is."""
+    """The boundary conditions, replaced as one list
+    (`core.session.replace_conditions`). Left out, they stay as they are."""
     boundary_conditions: list[BoundaryCondition] | None = None
-    gravity: bool | None = None
     gravity_acceleration: float | None = Field(default=None, gt=0)
 
 
@@ -1749,16 +1887,12 @@ class Project(Base):
     every project saved before the conditions existed, and a new one -- it is the
     standard supports (`standard_conditions`), which are what the export always wrote;
     given, even empty, it is exactly what it lists."""
-    gravity: bool = True
-    """Whether gravity acts: the self weight of every body, in every stage. On unless the
-    user switches it off -- for a model loaded by its boundary conditions alone, say. A
-    K0 procedure derives its stresses from the self weight, so with gravity off they are
-    zero (`core.kratos.condition_checks`)."""
     gravity_acceleration: float = Field(default=units.GRAVITY_SI, gt=0)
     """The gravitational acceleration g, in m/s2: both unit systems measure length in
     metres and time in seconds. The deck's self weight (`VOLUME_ACCELERATION`) is g, and
     the water's density is its specific weight over g (`water_variables`), so the water
-    pressures stay those of `WaterLevel.specific_weight` whatever g is."""
+    pressures stay those of `WaterLevel.specific_weight` whatever g is. Whether the self
+    weight acts at all is the initial stage's (`core.model.stages.gravity`)."""
     mesh: MeshSettings = Field(default_factory=MeshSettings)
     custom_parts: list[CustomPart] = Field(default_factory=list)
     stages: list[Stage] = Field(default_factory=list)
@@ -1777,7 +1911,9 @@ class Project(Base):
         before 2026-10-24 has boreholes (`migration.drop_boreholes`), and one saved
         before 2026-10-25 reads an interface's side walking its line
         (`migration.screen_sides`). One saved before 2026-11-02 has no `fluid`: its soils
-        carry the water themselves (`migration.lift_water`)."""
+        carry the water themselves (`migration.lift_water`). One saved before 2026-11-03
+        switches gravity itself (`migration.drop_gravity`), and one saved before 2026-11
+        has flow stages with no absolute tolerance (`migration.flow_tolerance`)."""
         return migration.upgraded(value)
 
     @model_serializer(mode="wrap")
@@ -1802,7 +1938,7 @@ class Project(Base):
         `extra: forbid` would refuse it over values the server itself produced.
         """
         derived = ("soil_body_keys", "soil_body_labels", "soil_body_materials",
-                   "stageable_parts")
+                   "stageable_parts", "model_strategies", "flow_strategies")
         if not isinstance(value, dict) or not any(k in value for k in derived):
             return value
         return {k: v for k, v in value.items() if k not in derived}
@@ -2819,6 +2955,21 @@ class Project(Base):
         may not share a name with a method on the same model.
         """
         return self.stageable_keys()
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def model_strategies(self) -> dict[str, str]:
+        """The strategy each stage's model calls for, by stage id
+        (`core.model.stages.model_strategy`): a flow stage's default, and the only one
+        it can have with a seepage face.
+
+        Published because the stage panel shows a stage's expert settings with their
+        defaults (`frontend/js/stages.js`'s `solverRows`), and this default depends on
+        the soil in the stage and the project's conditions, which is the server's to
+        work out. Empty for a mechanical project."""
+        from core.model import stages  # stages imports this module
+        found = {stage.id: stages.model_strategy(self, stage) for stage in self.stages}
+        return {id: strategy for id, strategy in found.items() if strategy is not None}
 
     def stageable_keys(self) -> list[str]:
         """What a stage may switch on and off, which is wider than what is drawn.

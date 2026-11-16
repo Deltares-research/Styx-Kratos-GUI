@@ -93,7 +93,7 @@ def column(layers: list[tuple[float, float, dict]], width: float = 1.0,
          "on": "domain", "reference_coordinate": water_y if water_y is not None else bottom}]
     p["mesh"] = {"element_size": min(width, (top - bottom) / 10), "order": 2}
     if k0_stage:
-        p["stages"] = [{"id": "initial", "name": "Initial stage", "calculation": "K0 procedure"}]
+        p["stages"] = [{"id": "initial", "name": "Initial stage", "stress_initialisation": "K0"}]
     return Project.model_validate(p)
 
 
@@ -145,9 +145,9 @@ def symmetric_pit(width: float = 80.0, pit: tuple[float, float] = (35.0, 45.0),
                    for index, (level, ceiling)
                    in enumerate(zip(levels, (p["domain"]["y_top"], *levels)), start=1)]
     p["mesh"] = dict(p["mesh"], body_sizes={}, refinements=[], element_size=2.0)
-    settled = [Stage(id="initial", name="Initial stage", calculation="K0 procedure"),
+    settled = [Stage(id="initial", name="Initial stage", stress_initialisation="K0"),
                Stage(id="null_step", name="Null step", parent="initial",
-                     calculation="Null step", max_iterations=150)]
+                     max_iterations=150)]
     parent = "null_step"
     for index in range(1, len(levels) + 1):
         ordinal = ("First", "Second", "Third")[index - 1]
