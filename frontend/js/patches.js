@@ -3235,6 +3235,23 @@ App.LivePatches = (function () {
       App.ICONS.section2d = '<path d="M4 5h16v14H4z"/><path d="M4 12h16"/><path d="M8 5v14"/>';
     }
 
+    /* The sheet pile and the anchor share one cross-section: the ground higher on
+       the right than on the left, drawn faded, and the part the tool makes drawn
+       in full over it -- the wall with its interlock hooks at both ends, or the
+       anchor's plate, rod and grout body. The sheet pile tool, the wall panel and
+       their rows in the Model explorer ask for 'wall', which data.js never had, so
+       they used to fall back to the info glyph. data.js's 'anchor' (a ship's
+       anchor) is replaced so the two read as one family. */
+    var iconGround = '<path d="M2 15h8.5M10.5 8.5H22" opacity=".32"/>';
+    if (!App.ICONS.wall) {
+      App.ICONS.wall = '<path d="M12.4 5.6V4h-1.9v16H8.6v-1.4"/>' + iconGround;
+    }
+    if (!App.ICONS.anchor || App.ICONS.anchor.indexOf('opacity') < 0) {
+      App.ICONS.anchor = '<path d="M11.4 9.6v2.6" stroke-width="2.2"/>'
+                       + '<path d="M11.4 10.9l5.2 2.4"/>'
+                       + '<path d="M16.6 13.3l4.4 2" stroke-width="3"/>' + iconGround;
+    }
+
     // A rule with three ticks: the thing itself, not a metaphor for it.
     if (!App.ICONS.ruler) {
       App.ICONS.ruler = '<path d="M3 8h18v8H3z"/><path d="M7.5 8v4"/><path d="M12 8v5"/>'

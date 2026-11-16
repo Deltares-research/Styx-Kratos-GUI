@@ -458,6 +458,24 @@
     });
   });
 
+  test('the sheet pile tool and its flyout have a glyph of their own', function () {
+    var tool = (App.RAILS.structures || []).filter(function (item) {
+      return item && item.action === 'createSheetPile';
+    })[0];
+    T.ok(tool, 'the sheet pile tool exists');
+    [tool].concat(tool.flyout || []).forEach(function (item) {
+      T.ok(App.ICONS[item.icon], (item.label || item.tip) + ' needs an icon in App.ICONS');
+    });
+    T.ok(App.ICONS.wall !== App.ICONS.info, 'not the info glyph');
+  });
+
+  test('the sheet pile and anchor icons share the faded ground line', function () {
+    var ground = '<path d="M2 15h8.5M10.5 8.5H22" opacity=".32"/>';
+    T.ok(App.ICONS.wall.indexOf(ground) >= 0, 'the sheet pile icon has the ground');
+    T.ok(App.ICONS.anchor.indexOf(ground) >= 0, 'the anchor icon has the ground');
+    T.ok(App.ICONS.wall !== App.ICONS.anchor, 'and each draws its own part over it');
+  });
+
   test('each mode maps to the patch body the server expects', function () {
     T.eq(App.LivePatches.patchFor('2d'), { dimension: 2 });
     T.eq(App.LivePatches.patchFor('3d'), { dimension: 3 });
