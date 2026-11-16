@@ -160,6 +160,10 @@ def soil(id_: str, name: str, color: str) -> Material:
                         "VAN_GENUCHTEN_GN": 1.3774,
                         "VAN_GENUCHTEN_GL": 1.25,
                         "MINIMUM_RELATIVE_PERMEABILITY": 1.0e-4,
+                        # Not read by the linear elastic law; the default sand's values,
+                        # kept so the model is the CLI tutorial's to the last digit.
+                        "GEO_COHESION": 0.0,
+                        "GEO_FRICTION_ANGLE": 30.0,
                     })
 
 
@@ -168,7 +172,7 @@ def drawn(key: str, label: str, material: str,
     """A polygon drawn in the section, extruded over the model's depth as the GUI does."""
     return CustomPart(
         key=key, label=label, source="gui", mat=material,
-        recipe={"kind": "polygon_extrude", "material": material,
+        recipe={"kind": "polygon_extrude", "label": label, "material": material,
                 "vertices": [[x, y, Z0] for x, y in corners],
                 "extrusion": [0.0, 0.0, Z1 - Z0]})
 

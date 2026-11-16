@@ -35,7 +35,9 @@
         "VAN_GENUCHTEN_AIR_ENTRY_PRESSURE": 2610.9660574412533,
         "VAN_GENUCHTEN_GN": 1.3774,
         "VAN_GENUCHTEN_GL": 1.25,
-        "MINIMUM_RELATIVE_PERMEABILITY": 0.0001
+        "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
+        "GEO_COHESION": 0.0,
+        "GEO_FRICTION_ANGLE": 30.0
       },
       "tables": {},
       "id": "m_sand",
@@ -66,7 +68,9 @@
         "VAN_GENUCHTEN_AIR_ENTRY_PRESSURE": 2610.9660574412533,
         "VAN_GENUCHTEN_GN": 1.3774,
         "VAN_GENUCHTEN_GL": 1.25,
-        "MINIMUM_RELATIVE_PERMEABILITY": 0.0001
+        "MINIMUM_RELATIVE_PERMEABILITY": 0.0001,
+        "GEO_COHESION": 0.0,
+        "GEO_FRICTION_ANGLE": 30.0
       },
       "tables": {},
       "id": "m_clay",
@@ -241,6 +245,7 @@
       "source_file": "D:\\Checkouts\\Deltares-research\\Styx-Kratos-GUI\\.data\\recipe-6c27ceb8b54b8bc57aa6f0e66fb83435b175d007.brep",
       "recipe": {
         "kind": "polygon_extrude",
+        "label": "Levee core",
         "material": "m_clay",
         "vertices": [
           [
@@ -299,6 +304,7 @@
       "source_file": "D:\\Checkouts\\Deltares-research\\Styx-Kratos-GUI\\.data\\recipe-795a7d09db02e605c696f3b5879913284070bea7.brep",
       "recipe": {
         "kind": "polygon_extrude",
+        "label": "Levee outer layer",
         "material": "m_clay",
         "vertices": [
           [
