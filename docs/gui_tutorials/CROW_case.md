@@ -99,11 +99,17 @@ The model has two Mohr-Coulomb soils:
 | **K0, normally consolidated** | `0.62` | `0.46` |
 | **Rinter** | `0.48021693505171` | `0.571318827227732` |
 
-- The density of the solid is the unit weight divided by g: 18 kN/m³ for the clay and
-  20 kN/m³ for the sand. With a porosity of 0, it is also the saturated unit weight.
-- **Mechanical only** solves the displacements with a pore pressure that you give
-  (step 4). It does not calculate a groundwater flow.
-- **Rinter** reduces the strength of the soil along the wall (step 9). It is
+- Kratos calculates the unit weight of the soil from the density of the solid ρs, the
+  density of the water ρw and the porosity n:
+
+  - dry: γdry = (1 − n) · ρs · g
+  - saturated: γsat = ((1 − n) · ρs + n · ρw) · g
+
+  With n = 0, the two are the same: γ = ρs · g. The densities in the table give
+  γ = 18 kN/m³ for the clay and 20 kN/m³ for the sand, the unit weights of the CROW case.
+- The **Mechanical only** drainage type solves the displacements with an imposed pore
+  pressure, which you give in step 4. It does not calculate groundwater flow.
+- **Rinter** reduces the strength of the soil along interfaces (step 9). It is
   tan δ / tan φ, where δ is the wall friction angle (11.25° for the clay, 20° for the sand)
   and φ is the friction angle of the soil.
 
@@ -161,8 +167,9 @@ All layers are now 80 m wide.
 
 ## 4. Give the soil its water pressure
 
-The pore pressure is hydrostatic, zero at the water table (y = −1.5 m), in the whole soil
-and in all stages.
+The water table is at y = −1.5 m in all stages. Below the water table the pore pressure is
+hydrostatic: it is zero at the water table and grows by 10 kPa per metre of depth. Above
+the water table the pore pressure is zero.
 
 1. Click the **Structures** tab.
 2. On the tool rail, click the small arrow in the corner of **Create boundary condition**,
@@ -176,7 +183,8 @@ and in all stages.
 ![The Create boundary condition window for the water pressure. The Create boundary condition tool is outlined.](images/crow/04_water.png)
 
 A new project already has the displacement conditions: the bottom is fixed, and the left
-and right sides are on rollers. The Model explorer now shows four boundary conditions.
+and right sides are fixed in the horizontal direction only. The Model explorer now shows
+four boundary conditions.
 
 ## 5. Add the sheet pile wall
 
@@ -194,7 +202,13 @@ variables in SI units:
 | **CROSS_AREA** | `0.4924` | A (m²) |
 | **I33** | `0.009948850085333335` | I = t³ / 12 (m⁴) |
 | **AREA_EFFECTIVE_Y** | `10000` | a large shear area, so the wall has no shear deformation (m²) |
-| **Spacing** | `1` | one wall per metre (m) |
+| **Spacing** | `1` | 1 m of wall per metre out of plane, for plane strain (m) |
+
+The thickness 0.4924 m is not the real thickness of the steel. It is the thickness of a
+solid plate that has the same bending stiffness EI and axial stiffness EA as the sheet
+pile. For that reason, the density is low: ρ · A = 298.36 × 0.4924 ≈ 147 kg per m² of
+wall, close to the mass of a steel sheet pile. The values are those of Kratos' own CROW
+test.
 
 1. On the tool rail, click **Create sheet pile…**.
 2. Type the values from the table. Scroll down to see all fields.
@@ -317,7 +331,8 @@ by the soil's own **Rinter** from step 2.
    ![The Create interface window. The Create interface tool is outlined.](images/crow/09_interface_window.png)
 
 5. In the Selection explorer of the interface, set **Virtual thickness** to `1` and press
-   Enter.
+   Enter. With a virtual thickness of 1 m, the stiffness of the interface comes directly
+   from the shear modulus of the soil, as the next paragraph shows.
 6. In **Law**, select **Coulomb**.
 7. In the **R_inter** row, click **Each soil's own R_inter**.
 
@@ -326,7 +341,10 @@ by the soil's own **Rinter** from step 2.
 A Coulomb interface slips when the shear stress reaches the reduced strength of the soil.
 Styx derives the stiffness of the interface from the soil: the shear stiffness is G / t
 and the normal stiffness is 10 G / t, where G is the shear modulus of the soil and t is
-the virtual thickness.
+the virtual thickness. For the clay, G = 375 kPa, so the shear stiffness is 375 kPa/m and
+the normal stiffness is 3 750 kPa/m. The factor 10 makes the interface much stiffer across
+the wall than along it: the soil can slip along the wall, but it does not go into the wall
+or come away from it. Kratos' reference interface materials use the same factor.
 
 ## 10. Add the surcharge and the water loads
 
@@ -388,8 +406,10 @@ stage of this model can fail to converge.
 
 ![The Mesh properties window. The SheetPileWall row with its size and band is outlined.](images/crow/11_mesh_window.png)
 
-The mesh has 1 466 elements and 3 036 nodes. The Selection explorer of the mesh shows these
-numbers, and an average element size of 2.183 m:
+On the computer that made this page, the mesh has 1 466 elements and 3 036 nodes, with an
+average element size of 2.183 m. Gmsh can make a slightly different mesh on another
+computer or operating system, so your numbers can differ a little. The Selection explorer
+of the mesh shows them:
 
 ![The mesh, fine near the wall and coarse at the far side.](images/crow/11_mesh_mesh.png)
 
@@ -505,7 +525,9 @@ because the soil above that floor is gone.
 ![The vertical effective stress after the third excavation. The Stage and Field lists are outlined.](images/crow/14_contours_vertical.png)
 
 The vertical stress goes from about −1 kPa near the ground surface to about −600 kPa at the
-bottom. At the same depth, the horizontal stress is about half of the vertical stress.
+bottom. Deep in the sand, the horizontal stress is about half of the vertical stress: at the
+bottom, −275 kPa against −600 kPa. This ratio is close to K0 of the sand, 0.46. Near the
+ground surface and near the wall, the ratio is different.
 
 5. In **Field**, select **Deformations · |u| (m)**. This is the magnitude of the total
    displacement since the wall installation, the stage that resets the displacements.
