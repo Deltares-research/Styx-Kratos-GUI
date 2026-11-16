@@ -74,8 +74,10 @@ ELEMENT_ORDER = 1
 RIGHT_FACE_SIZE = 0.04
 
 # The seepage strategy opens or closes one node of the face per iteration. The face has
-# 89 nodes at this size, of which about 35 open, in as many iterations. The tolerance is
-# that of Kratos' seepage tests.
+# 89 nodes at this size, of which about 35 open, in as many iterations. The criterion and
+# the tolerance are those of Kratos' seepage tests: the residual, rather than the water
+# pressure a flow stage converges on unless it says otherwise.
+CONVERGENCE_CRITERION = "residual_criterion"
 MAX_ITERATIONS = 100
 TOLERANCE = 1e-4
 
@@ -147,6 +149,7 @@ def project() -> Project:
                           z_min=0.0, z_max=1.0)]),
 
         stages=[Stage(id="flow", name="Flow", calculation="flow",
+                      convergence_criterion=CONVERGENCE_CRITERION,
                       max_iterations=MAX_ITERATIONS, tolerated_error=TOLERANCE)],
     )
 

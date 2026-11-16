@@ -433,7 +433,6 @@
       "active": true
     }
   ],
-  "gravity": true,
   "mesh": {
     "element_size": 5.0,
     "order": 2,
@@ -482,9 +481,14 @@
         "water_3"
       ],
       "reset_displacements": false,
+      "convergence_criterion": "residual_criterion",
       "max_iterations": 15,
       "tolerated_error": 0.0001,
-      "time_interval": 0.0
+      "absolute_tolerance": 1e-09,
+      "start_time": 0.0,
+      "duration": 1.0,
+      "time_step": 1.0,
+      "solver_settings": {}
     },
     {
       "id": "null_step",
@@ -497,9 +501,14 @@
       "activate": [],
       "deactivate": [],
       "reset_displacements": false,
+      "convergence_criterion": "residual_criterion",
       "max_iterations": 150,
       "tolerated_error": 0.0001,
-      "time_interval": 0.0
+      "absolute_tolerance": 1e-09,
+      "start_time": 0.0,
+      "duration": 1.0,
+      "time_step": 1.0,
+      "solver_settings": {}
     },
     {
       "id": "install_sheetpile",
@@ -516,9 +525,14 @@
       ],
       "deactivate": [],
       "reset_displacements": true,
+      "convergence_criterion": "residual_criterion",
       "max_iterations": 150,
       "tolerated_error": 0.001,
-      "time_interval": 0.0
+      "absolute_tolerance": 1e-09,
+      "start_time": 0.0,
+      "duration": 1.0,
+      "time_step": 1.0,
+      "solver_settings": {}
     },
     {
       "id": "dig_1",
@@ -535,9 +549,14 @@
         "soil_L_top__lift1"
       ],
       "reset_displacements": false,
+      "convergence_criterion": "residual_criterion",
       "max_iterations": 150,
       "tolerated_error": 0.001,
-      "time_interval": 0.0
+      "absolute_tolerance": 1e-09,
+      "start_time": 0.0,
+      "duration": 1.0,
+      "time_step": 1.0,
+      "solver_settings": {}
     },
     {
       "id": "install_strut",
@@ -552,9 +571,14 @@
       ],
       "deactivate": [],
       "reset_displacements": false,
+      "convergence_criterion": "residual_criterion",
       "max_iterations": 150,
       "tolerated_error": 0.001,
-      "time_interval": 0.0
+      "absolute_tolerance": 1e-09,
+      "start_time": 0.0,
+      "duration": 1.0,
+      "time_step": 1.0,
+      "solver_settings": {}
     },
     {
       "id": "dig_2",
@@ -572,9 +596,14 @@
         "water_1"
       ],
       "reset_displacements": false,
+      "convergence_criterion": "residual_criterion",
       "max_iterations": 150,
       "tolerated_error": 0.001,
-      "time_interval": 0.0
+      "absolute_tolerance": 1e-09,
+      "start_time": 0.0,
+      "duration": 1.0,
+      "time_step": 1.0,
+      "solver_settings": {}
     },
     {
       "id": "dig_3",
@@ -592,9 +621,14 @@
         "water_2"
       ],
       "reset_displacements": false,
+      "convergence_criterion": "residual_criterion",
       "max_iterations": 150,
       "tolerated_error": 0.001,
-      "time_interval": 0.0
+      "absolute_tolerance": 1e-09,
+      "start_time": 0.0,
+      "duration": 1.0,
+      "time_step": 1.0,
+      "solver_settings": {}
     }
   ],
   "deck": null,
@@ -641,5 +675,6 @@
     "water_3",
     "surcharge",
     "pore_pressure"
-  ]
+  ],
+  "model_strategies": {}
 }

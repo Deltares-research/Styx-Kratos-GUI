@@ -160,7 +160,6 @@
       "active": true
     }
   ],
-  "gravity": true,
   "mesh": {
     "element_size": 1.0,
     "order": 1,
@@ -190,9 +189,14 @@
         "surcharge"
       ],
       "reset_displacements": false,
+      "convergence_criterion": "residual_criterion",
       "max_iterations": 15,
       "tolerated_error": 0.0001,
-      "time_interval": 0.0
+      "absolute_tolerance": 1e-09,
+      "start_time": 0.0,
+      "duration": 1.0,
+      "time_step": 1.0,
+      "solver_settings": {}
     },
     {
       "id": "sheet_pile",
@@ -207,9 +211,14 @@
       ],
       "deactivate": [],
       "reset_displacements": true,
+      "convergence_criterion": "residual_criterion",
       "max_iterations": 150,
       "tolerated_error": 0.001,
-      "time_interval": 0.0
+      "absolute_tolerance": 1e-09,
+      "start_time": 0.0,
+      "duration": 1.0,
+      "time_step": 1.0,
+      "solver_settings": {}
     },
     {
       "id": "loading",
@@ -224,9 +233,14 @@
       ],
       "deactivate": [],
       "reset_displacements": false,
+      "convergence_criterion": "residual_criterion",
       "max_iterations": 150,
       "tolerated_error": 0.001,
-      "time_interval": 0.0
+      "absolute_tolerance": 1e-09,
+      "start_time": 0.0,
+      "duration": 1.0,
+      "time_step": 1.0,
+      "solver_settings": {}
     }
   ],
   "deck": null,
@@ -236,9 +250,13 @@
   "soil_body_labels": {
     "soil_soil": "soil"
   },
+  "soil_body_materials": {
+    "soil_soil": "m_soil"
+  },
   "stageable_parts": [
     "soil_soil",
     "sheetpile_1",
     "surcharge"
-  ]
+  ],
+  "model_strategies": {}
 }

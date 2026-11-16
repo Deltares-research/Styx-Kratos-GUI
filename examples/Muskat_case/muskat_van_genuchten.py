@@ -76,8 +76,10 @@ PHREATIC_Y = [3.22, 3.22, 0.48, 0.48]
 ELEMENT_SIZE = 0.1
 ELEMENT_ORDER = 2
 
-# The deck's Newton-Raphson settings: at most 100 iterations, relative tolerance 1e-3,
-# absolute tolerance 1e-15.
+# The deck's Newton-Raphson settings: on the residual criterion, rather than on the water
+# pressure a flow stage converges on unless it says otherwise, at most 100 iterations,
+# relative tolerance 1e-3, absolute tolerance 1e-15.
+CONVERGENCE_CRITERION = "residual_criterion"
 MAX_ITERATIONS = 100
 TOLERANCE = 1e-3
 ABSOLUTE_TOLERANCE = 1e-15
@@ -143,6 +145,7 @@ def project() -> Project:
         mesh=MeshSettings(element_size=ELEMENT_SIZE, order=ELEMENT_ORDER),
 
         stages=[Stage(id="flow", name="Flow", calculation="flow",
+                      convergence_criterion=CONVERGENCE_CRITERION,
                       max_iterations=MAX_ITERATIONS, tolerated_error=TOLERANCE,
                       absolute_tolerance=ABSOLUTE_TOLERANCE)],
     )

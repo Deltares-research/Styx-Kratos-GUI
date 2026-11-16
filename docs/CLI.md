@@ -417,7 +417,8 @@ kratos-cli stages pit.json list
   `--stress-initialisation k0|gravity|none`, `--time-integration static|dynamic`,
   `--reset-displacements` / `--keep-displacements`, `--convergence-criterion`,
   `--max-iterations`, `--tolerance` and `--absolute-tolerance` (the convergence
-  criterion's relative and absolute tolerance), `--duration`, `--time-step`,
+  criterion's relative and absolute tolerance), `--start-time`, `--duration`,
+  `--time-step`,
   `--solver KEY=VALUE ...`, `--solver-default KEY ...` and `--parent`. `add` and `copy`
   take the same options.
 - **`--calculation`** is what the sequence solves for, set on the initial stage and
@@ -451,6 +452,9 @@ kratos-cli stages pit.json list
   along unless the stage has its own absolute tolerance), the displacements
   of the stage before kept, and a duration of 1 s in one time step of 1 s.
   `stages show ID` prints a stage's settings.
+- **`--start-time`** is when the initial stage starts, in the project's unit of time
+  (0 unless it is set). Every later stage starts where the stage before it ended, so a
+  later stage refuses it; `stages show ID` prints when a stage starts.
 - **`--duration`** is how long the stage lasts and **`--time-step`** the step Kratos
   solves it in, both in the project's unit of time (seconds in every unit system). The
   stage runs from where the stage before it ended, in `duration / time-step` steps; a

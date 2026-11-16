@@ -14,6 +14,7 @@ import pytest
 
 from core import session
 from core.kratos import deck_files
+from core.model import stages
 from core.model.schemas import Deck
 from core.model.templates import blank_project
 from tests.models import excavation
@@ -92,6 +93,30 @@ def test_set_changes_a_stage_s_fields(cli, pit):
     dig = _stage(pit, "dig_1")
     assert (dig.name, dig.reset_displacements, dig.duration, dig.time_step) == (
         "Dig to -2", False, 20.0, 5.0)
+
+
+def test_set_starts_the_calculation_at_the_initial_stage_s_start_time(cli, pit):
+    assert cli("stages", pit, "set", "initial", "--start-time", "-2").code == 0
+
+    assert _stage(pit, "initial").start_time == -2.0
+    project = session.load(pit)
+    # Every later stage picks up where the one before it ended: here, one second each.
+    assert stages.start_of(project, "initial") == -2.0
+    assert stages.start_of(project, "null_step") == -1.0
+    assert "from -1 s" in cli("stages", pit, "show", "null_step").out
+
+
+@pytest.mark.parametrize("command", [
+    ("set", "dig_1"), ("add", "dig_4"), ("copy", "dig_1"),
+])
+def test_a_later_stage_refuses_a_start_time(cli, pit, command):
+    before = pit.read_text(encoding="utf-8")
+
+    ran = cli("stages", pit, *command, "--start-time", "5")
+
+    assert ran.code == 1
+    assert "not the initial stage" in ran.err and "--start-time" in ran.err
+    assert pit.read_text(encoding="utf-8") == before
 
 
 def test_set_refuses_a_time_step_longer_than_the_stage(cli, pit):

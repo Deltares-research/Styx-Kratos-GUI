@@ -21,7 +21,9 @@ Model explorer make (`core.model.stages`), stored the way the GUI stores it
 A sequence that would branch, or a part the model does not have, is refused. So is
 --reset-displacements or --keep-displacements on a flow stage, which has no
 displacements: the GUI greys that box out; and a stress initialisation other than none
-on a flow stage, which has no stresses: the GUI hides that row. So is a convergence
+on a flow stage, which has no stresses: the GUI hides that row; and --start-time on a
+later stage, which starts where the one before it ended: the GUI shows that row but
+does not let it be set. So is a convergence
 criterion the stage's calculation type does not have: a mechanical stage converges on
 the residual or the displacement, a flow stage on the water pressure or the residual.
 Making the sequence a flow one sets the stress initialisation to none, the
@@ -159,6 +161,9 @@ def _stage_fields(parser: argparse.ArgumentParser) -> None:
                         help="the convergence criterion's relative tolerance")
     parser.add_argument("--absolute-tolerance", type=float,
                         help="the convergence criterion's absolute tolerance")
+    parser.add_argument("--start-time", type=float,
+                        help="when the initial stage starts, in the project's unit of time "
+                             "(s); every later stage starts where the one before it ended")
     parser.add_argument("--duration", type=float,
                         help="how long the stage lasts, in the project's unit of time (s)")
     parser.add_argument("--time-step", type=float,
@@ -183,7 +188,8 @@ def _parts(parser: argparse.ArgumentParser) -> None:
 
 FIELDS = ("name", "calculation", "stress_initialisation", "time_integration",
           "reset_displacements", "convergence_criterion", "max_iterations",
-          "tolerated_error", "absolute_tolerance", "duration", "time_step")
+          "tolerated_error", "absolute_tolerance", "start_time", "duration",
+          "time_step")
 
 
 # ── Handlers ────────────────────────────────────────────────────────────────
@@ -201,7 +207,8 @@ def show_stage(args: argparse.Namespace) -> Answer:
     out = [key for key in project.stageable_keys() if key not in active]
     lines = [f"{stage.id}  {stage.name}" + (f"  (after {stage.parent})" if stage.parent
                                             else ""),
-             "  " + _settings(stage, units.label(units.TIME, project.unit_system)),
+             "  " + _settings(project, stage,
+                              units.label(units.TIME, project.unit_system)),
              "  in the model: " + (", ".join(keys) or "nothing"),
              "  not in the model: " + (", ".join(out) or "nothing")]
     if stage.activate:
@@ -232,6 +239,7 @@ def add_stage(args: argparse.Namespace) -> Answer:
     project, stage = session.add_stage(read(args), before=args.before,
                                        id=args.id, **fields)
     _no_reset_in_flow(args, stage)
+    _start_on_the_initial_stage(args, project, stage)
     return _added(args, project, stage)
 
 
@@ -244,6 +252,7 @@ def copy_stage(args: argparse.Namespace) -> Answer:
     project, stage = session.add_stage(project, copy_of=args.original, id=args.id,
                                        **fields)
     _no_reset_in_flow(args, stage)
+    _start_on_the_initial_stage(args, project, stage)
     return _added(args, project, stage)
 
 
@@ -256,6 +265,7 @@ def update_stage(args: argparse.Namespace) -> Answer:
     _with_solver(args, fields, {} if changes_type else stage.solver_settings)
     project = session.update_stage(project, args.id, **fields)
     _no_reset_in_flow(args, session.find_stage(project, args.id))
+    _start_on_the_initial_stage(args, project, session.find_stage(project, args.id))
     return _edited(args, project, f"changed stage {args.id}")
 
 
@@ -345,6 +355,18 @@ def _no_reset_in_flow(args: argparse.Namespace, stage) -> None:
                            "--keep-displacements.")
 
 
+def _start_on_the_initial_stage(args: argparse.Namespace, project: Project,
+                                stage) -> None:
+    """The calculation's clock starts at the initial stage, and every later stage starts
+    where the one before it ended: the GUI shows a later stage's start time but does not
+    let it be set, and --start-time is refused there."""
+    if args.start_time is not None and stage.parent is not None:
+        raise CommandError(f"stage {stage.id!r} is not the initial stage: it starts where "
+                           "the stage before it ends, at "
+                           f"{stages.start_of(project, stage):g}. Leave out --start-time, "
+                           "or set it on the initial stage.")
+
+
 def _added(args: argparse.Namespace, project: Project, stage) -> Answer:
     for keys, wanted in ((args.activate, True), (args.deactivate, False)):
         if keys:
@@ -363,7 +385,7 @@ def _records(project) -> list[dict]:
     return [stage.model_dump(mode="json") for stage in project.stages]
 
 
-def _settings(stage, second: str) -> str:
+def _settings(project: Project, stage, second: str) -> str:
     """`second` is the project's unit of time, as it is labelled."""
     settings = [_calculation(stage),
                 f"{stage.convergence_criterion.replace('_', ' ')}, "
@@ -371,7 +393,8 @@ def _settings(stage, second: str) -> str:
                 f"(absolute {stage.absolute_tolerance:g})"]
     if stage.reset_displacements and stage.calculation != stages.FLOW:
         settings.append("displacements reset")
-    settings.append(f"{stage.duration:g} {second} in steps of {stage.time_step:g} {second}")
+    settings.append(f"from {stages.start_of(project, stage):g} {second}, "
+                    f"{stage.duration:g} {second} in steps of {stage.time_step:g} {second}")
     return "; ".join(settings)
 
 

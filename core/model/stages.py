@@ -181,6 +181,14 @@ def _chain_to(project: Project, stage: Stage | str) -> list[Stage]:
     return list(reversed(chain))
 
 
+def start_of(project: Project, stage: Stage | str) -> float:
+    """When `stage` starts, in the project's unit of time: the initial stage's
+    `start_time` plus the durations of the stages before it along its chain -- the deck's
+    `start_time` for it (`core.kratos.writer._sequenced_stages`; `App.Stages.startOf`)."""
+    chain = _chain_to(project, stage)
+    return chain[0].start_time + sum(each.duration for each in chain[:-1])
+
+
 def active_parts(project: Project, stage: Stage | str) -> set[str]:
     """Which parts are in the model during `stage`.
 

@@ -475,6 +475,11 @@ In the **Stages** window, select a stage and set:
 - **Damping**, for a dynamic mechanical stage on the Newmark scheme: the **Rayleigh
   mass damping** (alpha) and **Rayleigh stiffness damping** (beta), both 0 until you set
   them.
+- **Start time**, in the initial stage only: when the calculation starts, 0 unless you
+  set it. A later stage shows its start time, where the stage before it ends, but cannot
+  change it (`kratos-cli stages PROJECT set STAGE --start-time`, on the initial stage).
+- **Stage duration** and **Time step**: how long the stage lasts and the step Kratos
+  solves it in, both in the project's unit of time.
 - **Reset displacements to zero**
 - **Convergence criterion**: what Kratos checks to decide that a stage has converged. A
   mechanical stage converges on the **Residual** (the default) or the **Displacement**; a
