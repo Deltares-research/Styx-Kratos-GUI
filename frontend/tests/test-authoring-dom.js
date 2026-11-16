@@ -205,14 +205,44 @@
     });
   });
 
-  test('refine names a selected object that takes no mesh size', function () {
+  test('refine sizes an anchor, a line load and, for a condition on a face, the face', function () {
     var initial = project();
     initial.anchors = [{ id: 'strut', name: 'Strut', section: 'a', head: [5, -1], tail: [0, -1] }];
+    initial.loads = [{ id: 'surcharge', name: 'Surcharge', kind: 'line', x0: 5, x1: 20, y: 0,
+                       components: [0, -10] }];
+    initial.boundary_conditions = [{ id: 'fixed_bottom', name: 'Fixed bottom',
+                                     kind: 'displacement', on: 'face', face: 'bottom' }];
     return withEnvironment(initial, function (ctx) {
+      function sizes() { return ctx.requests[ctx.requests.length - 1].body.mesh.body_sizes; }
       App.state.selection = 'strut';
       return App.MeshSettings.changeSelected(0.5).then(function () {
+        T.eq(sizes(), { strut: 1.25 });
+        App.state.selection = 'surcharge';
+        return App.MeshSettings.changeSelected(0.5);
+      }).then(function () {
+        T.eq(sizes(), { strut: 1.25, surcharge: 1.25 });
+        App.state.selection = 'fixed_bottom';
+        return App.MeshSettings.changeSelected(0.5);
+      }).then(function () {
+        T.eq(sizes(), { strut: 1.25, surcharge: 1.25, face_bottom: 1.25 },
+             'the size of the face the condition is on');
+        T.ok(/Bottom face  ·  Fixed bottom: 1.25 m/.test(ctx.logs[ctx.logs.length - 1][1]),
+             ctx.logs[ctx.logs.length - 1][1]);
+        T.eq(ctx.selected[ctx.selected.length - 1], 'fixed_bottom',
+             'the condition is drawn again, so its Mesh group shows the new size');
+      });
+    });
+  });
+
+  test('refine says that a condition on the whole soil takes the global size', function () {
+    var initial = project();
+    initial.boundary_conditions = [{ id: 'pore', name: 'Pore pressure', kind: 'water_pressure',
+                                     on: 'domain' }];
+    return withEnvironment(initial, function (ctx) {
+      App.state.selection = 'pore';
+      return App.MeshSettings.changeSelected(0.5).then(function () {
         T.eq(ctx.requests.length, 0);
-        T.ok(/^Strut takes no mesh size/.test(ctx.logs[0][1]), ctx.logs[0][1]);
+        T.ok(/^Pore pressure acts on the whole soil/.test(ctx.logs[0][1]), ctx.logs[0][1]);
       });
     });
   });

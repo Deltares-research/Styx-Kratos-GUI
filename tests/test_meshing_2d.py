@@ -474,6 +474,41 @@ def test_a_point_load_and_a_point_condition_take_a_size():
         assert plain < sized < graded, key
 
 
+def test_a_line_load_an_anchor_and_every_face_take_a_size():
+    """Every node part the deck writes can be sized: the edges under a line load, the
+    soil round an anchor's head, and the soil's edges on each face of the section."""
+    project = excavation_like()
+    plain = elements_of(project, element_size=8.0)
+    for key in ("surcharge", "strut", "face_bottom", "face_left", "face_right", "face_top"):
+        sized = elements_of(project, element_size=8.0, body_sizes={key: 0.5})
+        graded = elements_of(project, element_size=8.0, body_sizes={key: 0.5},
+                             size_bands={key: 10.0})
+        assert plain < sized < graded, key
+
+
+def test_a_line_load_and_a_face_size_the_edges_the_deck_puts_them_on():
+    """The edges under the surcharge, and the soil's edges on the left of the section:
+    on the line of the load or the face, and nowhere else."""
+    import gmsh
+    project = excavation_like()
+    load = next(load for load in project.loads if load.id == "surcharge")
+    sizes = {"surcharge": 0.5, "face_left": 0.5}
+    with solid_model.session():
+        built = solid_model.build_geometry(project)
+        soil = meshing._finite_element_volumes(project, built, project.part_keys())
+        curves = meshing._curves_of(project, built, sizes, 2, soil)
+        under = [gmsh.model.getBoundingBox(1, tag) for tag in curves["surcharge"]]
+        left = [gmsh.model.getBoundingBox(1, tag) for tag in curves["face_left"]]
+    assert under and left
+    assert all(abs(box[1] - load.y) < 1e-6 and abs(box[4] - load.y) < 1e-6
+               and box[0] >= load.x0 - 1e-6 and box[3] <= load.x1 + 1e-6 for box in under)
+    assert sum(box[3] - box[0] for box in under) == pytest.approx(load.x1 - load.x0)
+    x0 = project.domain.x0
+    assert all(abs(box[0] - x0) < 1e-6 and abs(box[3] - x0) < 1e-6 for box in left)
+    assert sum(box[4] - box[1] for box in left) == pytest.approx(
+        project.domain.y_top - project.domain.y_bottom)
+
+
 def test_a_size_names_an_object_the_model_has():
     with pytest.raises(ValueError, match="unknown mesh body size key"):
         elements_of(excavation_like(), element_size=8.0, body_sizes={"nowhere": 1.0})

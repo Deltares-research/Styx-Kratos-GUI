@@ -1090,6 +1090,17 @@ FACES = ("bottom", "left", "right", "front", "back", "top")
 
 Face = Literal["bottom", "left", "right", "front", "back", "top"]
 
+SECTION_FACES = ("bottom", "left", "right", "top")
+"""The faces a 2D section has: front and back are not in its plane."""
+
+
+def face_size_key(face: str) -> str:
+    """The key a mesh size on the domain face `face` is kept under in
+    `MeshSettings.body_sizes`: `face_bottom`, `face_left`, ... One key per face, whatever
+    conditions are on it, as the deck writes one node part per face (`Bottom_Fixed`,
+    `Left_Edge`, ... in `core/kratos/writer.py`), whether or not a condition is on it."""
+    return f"face_{face}"
+
 ConditionTarget = Literal["domain", "face", "part", "line", "point"]
 """What a condition acts on: the first of the two questions the GUI's condition dialog
 asks. The second -- which face, which part, where -- is the field it names (`face`,
@@ -1427,7 +1438,8 @@ class MeshSettings(Base):
     second_order_linear: bool = True
     body_sizes: dict[Ident, PositiveSize] = Field(default_factory=dict)
     """A local mesh size per object, by its key (`Project.mesh_size_keys`): a layer or
-    a soil body, a structure, a soil line, a drawn condition, a point load."""
+    a soil body, a structure, an anchor, a soil line, a drawn condition, a load, a face
+    of the model."""
     size_bands: dict[Ident, Annotated[float, Field(ge=0)]] = Field(default_factory=dict)
     """The distance, in metres, over which a size of `body_sizes` grows back to
     `element_size` away from its object. Without one, a size keeps to its object: a
@@ -2714,12 +2726,51 @@ class Project(Base):
     def mesh_size_keys(self) -> list[str]:
         """What a local mesh size can name (`MeshSettings.body_sizes`): every part, each
         layer (all its bodies), each soil line, each condition drawn on a line or at a
-        point, and each point load."""
+        point, each load (point, line or surface), and each face of the domain
+        (`face_size_key`). Together these are every node part the deck writes: a
+        condition on a face is on that face's part, one on a soil part is on that part,
+        and one on the whole soil is on every soil body (`mesh_size_key_of`).
+
+        Every load and every face whatever the dimension, so a size is kept when the
+        model is switched to the other dimension and back; `listed_mesh_size_keys` is
+        what this dimension shows."""
         keys = [*self.part_keys(), *(f"soil_{layer.id}" for layer in self.layers),
                 *(line.id for line in self.lines),
                 *(c.id for c in self.boundary_conditions if c.on in ("line", "point")),
-                *(load.id for load in self.loads if load.kind == "point")]
+                *(load.id for load in self.loads),
+                *(face_size_key(face) for face in FACES)]
         return list(dict.fromkeys(keys))
+
+    def listed_mesh_size_keys(self) -> list[str]:
+        """The keys of `mesh_size_keys` this dimension lists, as the GUI's Mesh
+        properties window lists them (`frontend/js/mesh-settings.js` sizableKeys): the
+        loads this dimension builds, and the faces it has -- a 2D section has no front
+        and back."""
+        built = {load.id for load in self.loads_for(self.dimension)}
+        faces = SECTION_FACES if self.dimension == 2 else FACES
+        hidden = ({load.id for load in self.loads} - built) | {
+            face_size_key(face) for face in FACES if face not in faces}
+        return [key for key in self.mesh_size_keys() if key not in hidden]
+
+    def mesh_size_key_of(self, key: str) -> str | None:
+        """The key whose mesh size the object `key` has, or None for one that takes the
+        global element size.
+
+        Most objects have their own key. A boundary condition on a face has the face's
+        (`face_size_key`): the face is the node part, and every condition on it shares
+        it. One on a soil part has that part's. One on the whole soil has none: the
+        whole soil is meshed at the global element size. A key that names no object is
+        handed back as it is."""
+        condition = next((c for c in self.boundary_conditions if c.id == key), None)
+        if condition is None:
+            return key
+        if condition.on == "face" and condition.face is not None:
+            return face_size_key(condition.face)
+        if condition.on == "part":
+            return condition.part
+        if condition.on == "domain":
+            return None
+        return key
 
     def part_keys(self) -> list[str]:
         """The frontend's userData.key namespace, in render order."""

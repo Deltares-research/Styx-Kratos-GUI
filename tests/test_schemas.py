@@ -554,6 +554,36 @@ def test_a_mesh_size_can_name_a_soil_line_a_drawn_condition_and_a_point_load():
     assert len(keys) == len(set(keys))
 
 
+def test_a_mesh_size_can_name_every_node_part_of_the_deck():
+    """A load of any kind, an anchor and every face of the model, as well as the bodies,
+    structures, lines and drawn conditions. A section lists four faces, a solid six,
+    and every face stays a key, so a size survives a switch to the other dimension."""
+    project = excavation_project(staged=False)
+    keys = project.mesh_size_keys()
+    assert {"surcharge", "strut", "face_bottom", "face_front", "face_top"} <= set(keys)
+    listed = project.listed_mesh_size_keys()
+    assert [key for key in listed if key.startswith("face_")] == [
+        "face_bottom", "face_left", "face_right", "face_top"]
+    solid = schemas.Project.model_validate({**project.model_dump(), "dimension": 3})
+    assert "face_front" in solid.listed_mesh_size_keys()
+
+
+def test_a_condition_has_the_size_of_what_it_is_on():
+    """On a face: the face's. On a soil part: the part's. On the whole soil: none, the
+    whole soil takes the element size. On a line or a point, and anything else: its own."""
+    project = excavation_project(staged=False)
+    of = project.mesh_size_key_of
+    assert of("fixed_bottom") == "face_bottom"
+    assert of("roller_left") == "face_left"
+    assert of("pore_pressure") is None
+    assert of("sheetpile") == "sheetpile"
+    wet = schemas.WaterPressureCondition(id="wet", name="Wet", on="part", part="soil_L_top",
+                                         reference_coordinate=0.0)
+    with_part = project.model_copy(update={
+        "boundary_conditions": [*project.boundary_conditions, wet]})
+    assert with_part.mesh_size_key_of("wet") == "soil_L_top"
+
+
 def test_mesh_request_accepts_an_explicit_body_selection():
     request = schemas.MeshRequest(
         element_size=2, order=1, volume_keys=["soil_L1", "soil_L2"],

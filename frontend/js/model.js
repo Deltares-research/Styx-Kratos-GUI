@@ -2126,11 +2126,15 @@ App.Model = (function () {
     previousConditionKeys = conditions.map(function (record) { return record.id; });
 
     // The local mesh size of every object that can have one, in one place: a layer, a
-    // soil body, a structure, a soil line, a drawn condition, a point load.
+    // soil body, a structure, an anchor, a soil line, a load, a condition. A condition
+    // on a face shows the size of the face, and one on a soil part that of the part.
     if (App.MeshSettings && App.MeshSettings.sizableKeys) {
-      App.MeshSettings.sizableKeys(App.PROJECT).forEach(function (key) {
-        var props = App.OBJECT_PROPS[key];
-        if (props && props.groups) props.groups.Mesh = App.MeshSettings.selectionRows(key);
+      var sizable = App.MeshSettings.sizableKeys(App.PROJECT);
+      Object.keys(App.OBJECT_PROPS).forEach(function (id) {
+        var props = App.OBJECT_PROPS[id];
+        var key = App.MeshSettings.sizeKeyOf(App.PROJECT, id);
+        if (key === null || sizable.indexOf(key) < 0 || !(props && props.groups)) return;
+        props.groups.Mesh = App.MeshSettings.selectionRows(key, id);
       });
     }
 
@@ -2205,7 +2209,7 @@ App.Model = (function () {
 
   return {
     fromProject: fromProject, materialsToServer: materialsToServer,
-    extentOf: extentOf,
+    extentOf: extentOf, loadsFor: loadsFor,
     pendingDomain: pendingDomain, pendingWater: pendingWater,
     outOfPlaneAxis: outOfPlaneAxis,
     apply: apply, load: load,

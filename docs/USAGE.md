@@ -391,7 +391,7 @@ When you open Mesh mode, the **Mesh properties** window opens:
 | Setting | What it does |
 |---|---|
 | Layer mesh sizes | Every layer is meshed, and each layer can have its own target size. A layer with no size of its own shows the global size and follows it. Type a value to give the layer its own size. **Band** is the distance outside the layer over which its size grows back to the global size. Styx meshes the layers together, so their shared faces have common nodes. To leave a part out of the mesh, remove it from the model. |
-| Structure mesh sizes | The element size at each structure, interface, normal load, soil line, condition on a line or at a point, and point load, and its **Band**: the distance over which the size grows back to the global size. Empty: the object takes the size of the mesh around it. |
+| Object mesh sizes | The element size at each structure, anchor, interface, normal load, soil line, load, condition on a line or at a point, and face of the model, and its **Band**: the distance over which the size grows back to the global size. Empty: the object takes the size of the mesh around it. With the layers, these rows cover every node group that the Kratos input file has. |
 | Global element size | The maximum length of an element edge, in metres |
 | Element order | Linear elements, or quadratic elements with a midside node on each edge |
 | 2D algorithm, 3D algorithm | The Gmsh algorithm that makes the elements |
@@ -406,9 +406,10 @@ Click **Apply and generate** to make the mesh, or **Apply** to only keep the set
 
 ### A finer mesh at one object
 
-You can give a finer mesh to a layer, a soil body, a sheet pile, an interface, a normal
-load, a soil line, a condition on a line or at a point, or a point load. Select the object.
-The **Mesh** group of the Selection explorer then shows two rows:
+You can give a finer mesh to a layer, a soil body, a sheet pile, an anchor, an interface,
+a normal load, a soil line, a load (point, line or surface), a boundary condition, or a face
+of the model. Select the object. The **Mesh** group of the Selection explorer then shows two
+rows:
 
 - **Mesh size**: the element size at the object. *global* means that the object has no
   size of its own.
@@ -420,8 +421,19 @@ Click **Use the global size** to remove the object's own size. **Mesh** → **Re
 halves the size of the selected object, **Coarsen mesh** doubles it, and **Reset local
 refinement** removes it. The same tools are on the tool rail in Mesh mode. A tool keeps the
 band. If a mesh is shown in Mesh mode, the tool makes the mesh again, so you see the change
-at once, and the object stays selected, so you can click the tool again. An anchor has no
-mesh size, because it is one element.
+at once, and the object stays selected, so you can click the tool again.
+
+Some objects use the size of another object:
+
+- An anchor is one element. Its size applies at its head, where it connects to the
+  structure. The tail is a fixed point outside the soil mesh.
+- A condition on a face uses the size of that face. All conditions on the same face share
+  one size, because the Kratos input file has one node group for each face. The Mesh group
+  of the condition shows **Size of** with the name of the face. The faces are also in the
+  **Mesh properties** window, also the top face, which often has no condition.
+- A condition on a soil part uses the size of that part.
+- A condition on the whole soil has no size of its own. The whole soil uses the global
+  element size.
 
 For example, select the sheet pile, type 0.5 in **Mesh size** and 45 in **Band**: the
 elements are 0.5 m along the wall and round its toe, and grow to the global size 45 m away.

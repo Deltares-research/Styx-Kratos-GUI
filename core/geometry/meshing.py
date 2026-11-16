@@ -10,7 +10,9 @@ import gmsh
 
 from core.geometry import solid_model
 from core.model import polylines
-from core.model.schemas import BoxRefinement, CylinderRefinement, Project, WaterLevel
+from core.model.schemas import (FACES, BoxRefinement, CylinderRefinement, LineLoad,
+                                Project, SpaceAnchor, SurfaceLoad, WaterLevel,
+                                face_size_key)
 from core.geometry.tessellation import DECIMALS, Section
 
 
@@ -135,7 +137,7 @@ def mesh_project(project: Project, element_size: float | None = None,
     # Every curve asked for, not only those among `meshed_keys`: that list names the
     # soil bodies to mesh (the Mesh properties window sends its ticked layers), and a
     # wall standing in them is meshed with them whether it is named or not.
-    curves_of = _curves_of(project, built, requested_sizes, dim)
+    curves_of = _curves_of(project, built, requested_sizes, dim, finite_element_tags)
     curve_sizes = {
         tag: size
         for key, size in requested_sizes.items()
@@ -143,7 +145,7 @@ def mesh_project(project: Project, element_size: float | None = None,
     }
     # A 3D wall panel is faces, and a soil line in a solid model is the faces it was
     # swept into: one dimension below the model, as a curve is in a section.
-    faces_of = _faces_of(project, built, requested_sizes, dim)
+    faces_of = _faces_of(project, built, requested_sizes, dim, finite_element_tags)
     face_sizes = {
         tag: size
         for key, size in requested_sizes.items()
@@ -221,17 +223,31 @@ def _entities_on(points: list[tuple[float, float]], dim: int,
 
 
 def _curves_of(project: Project, built: solid_model.BuildResult,
-               sizes: dict[str, float], dim: int) -> dict[str, list[int]]:
+               sizes: dict[str, float], dim: int,
+               soil: list[int] | None = None) -> dict[str, list[int]]:
     """Part key -> the curves a size on it applies to. The structures the build embeds
     have their own (`built.curves`). A soil line and an interface on a pile have none:
-    their curves are found on their polylines, the soil line's only in a section."""
+    their curves are found on their polylines, the soil line's only in a section. A
+    line load's are the soil's edges under it (in a solid model, the curve it imprints
+    at the section plane), and in a section a face of the domain is the soil's edges on
+    it. `soil` is the soil's own entities, of the model's dimension."""
     curves = dict(built.curves)
     lines = {line.id: line for line in project.lines} if dim == 2 else {}
+    loads = {load.id: load for load in project.loads_for(dim) if load.kind == "line"}
+    faces = {face_size_key(face): face for face in FACES} if dim == 2 else {}
     for key in sizes:
         if key in curves:
             continue
         if key in lines:
             curves[key] = _entities_on([(p[0], p[1]) for p in lines[key].points], 1)
+            continue
+        if key in loads:
+            load = loads[key]
+            assert isinstance(load, LineLoad)
+            curves[key] = _soil_entities_under(project, load, 1, soil or [], dim)
+            continue
+        if key in faces:
+            curves[key] = _soil_entities_on_face(faces[key], soil or [], dim)
             continue
         interface = next((i for i in project.interfaces
                           if i.id == key and i.structure is not None), None)
@@ -242,28 +258,113 @@ def _curves_of(project: Project, built: solid_model.BuildResult,
 
 
 def _faces_of(project: Project, built: solid_model.BuildResult,
-              sizes: dict[str, float], dim: int) -> dict[str, list[int]]:
+              sizes: dict[str, float], dim: int,
+              soil: list[int] | None = None) -> dict[str, list[int]]:
     """Part key -> the faces a size on it applies to, in a solid model only: a wall
-    panel's own faces, and the faces a soil line was swept into."""
+    panel's own faces, the faces a soil line was swept into, the soil's faces under a
+    surface load, and the soil's faces on a face of the domain."""
     if dim != 3:
         return {}
     faces = dict(built.faces)
     for line in project.lines:
         if line.id in sizes and line.id not in faces:
             faces[line.id] = _entities_on([(p[0], p[1]) for p in line.points], 2)
+    for load in project.loads_for(dim):
+        if isinstance(load, SurfaceLoad) and load.id in sizes and load.id not in faces:
+            faces[load.id] = _soil_entities_under(project, load, 2, soil or [], dim)
+    for face in FACES:
+        key = face_size_key(face)
+        if key in sizes and key not in faces:
+            faces[key] = _soil_entities_on_face(face, soil or [], dim)
     return faces
 
 
-def _point_of(project: Project, key: str, dim: int) -> tuple[float, float, float] | None:
-    """Where the point condition or the point load `key` is, or None."""
-    for condition in project.boundary_conditions:
-        if condition.id == key and condition.on == "point" and condition.points:
-            x, y = condition.points[0]
-            return (x, y, 0.0)
+def _soil_entities(soil: list[int], dim: int, entity_dim: int) -> list[int]:
+    """The entities of dimension `entity_dim` that bound the soil entities `soil` (of
+    the model's dimension `dim`), found one dimension down at a time."""
+    tags = list(soil)
+    for level in range(dim, entity_dim, -1):
+        tags = sorted({abs(tag) for _, tag in gmsh.model.getBoundary(
+            [(level, tag) for tag in tags], combined=False, oriented=False)})
+    return tags
+
+
+def _soil_entities_under(project: Project, load: LineLoad | SurfaceLoad,
+                         entity_dim: int, soil: list[int], dim: int) -> list[int]:
+    """The soil's entities of dimension `entity_dim` that lie under `load`, at its
+    elevation and inside its footprint: the edges a line load is applied on in a
+    section, the faces a surface load is applied on in a solid model, and the curve a
+    line load imprints at the section plane of a solid model. The same test as
+    `loaded_elements`, entity by entity, which the imprint makes exact."""
+    y = project.elevation_of(load)
+    tolerance = solid_model.TOLERANCE
+    if isinstance(load, SurfaceLoad):
+        x0, x1, z0, z1 = load.x0, load.x1, load.z0, load.z1
+    else:
+        x0, x1 = load.x0, load.x1
+        cut = project.cut_at()
+        z0, z1 = (cut, cut) if dim == 3 else (-math.inf, math.inf)
+    out = []
+    for tag in _soil_entities(soil, dim, entity_dim):
+        box = gmsh.model.getBoundingBox(entity_dim, tag)
+        if (abs(box[1] - y) <= tolerance and abs(box[4] - y) <= tolerance
+                and box[0] >= x0 - tolerance and box[3] <= x1 + tolerance
+                and box[2] >= z0 - tolerance and box[5] <= z1 + tolerance):
+            out.append(tag)
+    return out
+
+
+FACE_PLANES = {"bottom": (1, min), "top": (1, max), "left": (0, min), "right": (0, max),
+               "front": (2, min), "back": (2, max)}
+"""A face of the domain -> its axis (x 0, y 1, z 2) and which end of the soil it is at,
+as `core.kratos.writer.BOUNDARIES` reads it."""
+
+
+def _soil_entities_on_face(face: str, soil: list[int], dim: int) -> list[int]:
+    """The soil's entities one dimension below the model that lie on the domain face
+    `face`: its edges on that side of a section, its faces on that side of a solid.
+    The side is measured from the soil itself, as the deck measures its face parts
+    (`core.kratos.writer._boundary_nodes`), so an embankment drawn above the layer block
+    is the top. A section has no front and back."""
+    axis, end = FACE_PLANES[face]
+    if not soil or (dim == 2 and axis == 2):
+        return []
+    corners = [gmsh.model.getValue(0, tag, []) for tag in _soil_entities(soil, dim, 0)]
+    if not corners:
+        return []
+    plane = end(corner[axis] for corner in corners)
+    tolerance = solid_model.TOLERANCE
+    out = []
+    for tag in _soil_entities(soil, dim, dim - 1):
+        box = gmsh.model.getBoundingBox(dim - 1, tag)
+        if abs(box[axis] - plane) <= tolerance and abs(box[axis + 3] - plane) <= tolerance:
+            out.append(tag)
+    return out
+
+
+def _points_of(project: Project, key: str, dim: int) -> list[tuple[float, float, float]]:
+    """Where the point condition, the point load or the anchor `key` is, or nothing.
+
+    An anchor is sized at its head, the node it shares with the structure it hangs
+    from. Its tail is a fixed point no element of the soil holds, so there is no mesh
+    there to size. A point condition is drawn in a section only, and a 3D anchor is
+    built in a solid model only."""
+    cut = project.cut_at() if dim == 3 else 0.0
+    if dim == 2:
+        for condition in project.boundary_conditions:
+            if condition.id == key and condition.on == "point" and condition.points:
+                x, y = condition.points[0]
+                return [(x, y, 0.0)]
     for load in project.loads:
         if load.id == key and load.kind == "point":
-            return (load.x, load.y, 0.0) if dim == 2 else (load.x, load.y, project.cut_at())
-    return None
+            return [(load.x, load.y, cut)]
+    for anchor in project.anchors:
+        if anchor.id != key:
+            continue
+        if isinstance(anchor, SpaceAnchor):
+            return [anchor.head] if dim == 3 else []
+        return [(anchor.head[0], anchor.head[1], cut)]
+    return []
 
 
 def _graded_sizes(project: Project, built: solid_model.BuildResult, base: float,
@@ -279,9 +380,9 @@ def _graded_sizes(project: Project, built: solid_model.BuildResult, base: float,
     out: list[GradedSize] = []
     for key, size in sizes.items():
         band = bands.get(key, 0.0)
-        at = _point_of(project, key, dim)
-        if at is not None:
-            out.append(GradedSize(size=size, band=band, at=at))
+        points = _points_of(project, key, dim)
+        if points:
+            out.extend(GradedSize(size=size, band=band, at=at) for at in points)
             continue
         if band <= 0.0 or size >= base:
             continue

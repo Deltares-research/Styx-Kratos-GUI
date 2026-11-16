@@ -75,22 +75,41 @@
 
   /* ── Local mesh sizes ───────────────────────────────────────────────── */
 
-  test('every structure, interface, normal load, soil line, drawn condition and point load has a row', function () {
+  test('every node part of the deck has a row: structures, anchors, loads, conditions and faces', function () {
     var project = {
+      dimension: 2,
       beams: [{ id: 'sheetpile', name: 'Wall' }], anchors: [{ id: 'strut', name: 'Strut' }],
       interfaces: [{ id: 'contact', name: 'Contact' }],
       normal_loads: [{ id: 'water_1', name: 'Water' }], lines: [{ id: 'floor', name: 'Floor' }],
-      boundary_conditions: [{ id: 'left', name: 'Left', on: 'face' },
+      boundary_conditions: [{ id: 'left', name: 'Left roller', on: 'face', face: 'left' },
                             { id: 'pin', name: 'Pin', on: 'point' }],
       loads: [{ id: 'push', name: 'Push', kind: 'point' }, { id: 'strip', name: 'Strip', kind: 'line' }],
-      mesh: { element_size: 5, body_sizes: { sheetpile: 0.5 }, size_bands: { sheetpile: 10 } }
+      mesh: { element_size: 5, body_sizes: { sheetpile: 0.5, face_left: 1 },
+              size_bands: { sheetpile: 10 } }
     };
-    T.eq(App.MeshSettings.localControls(project).map(function (row) {
-      return [row.key, row.size, row.band];
-    }), [['sheetpile', 0.5, 10], ['contact', null, null], ['water_1', null, null],
-         ['floor', null, null], ['pin', null, null], ['push', null, null]],
-         'an anchor, a face condition and a line load have none');
-    T.eq(App.MeshSettings.localControls({ mesh: {} }), []);
+    var rows = App.MeshSettings.localControls(project);
+    T.eq(rows.map(function (row) { return [row.key, row.size, row.band]; }),
+         [['sheetpile', 0.5, 10], ['strut', null, null], ['contact', null, null],
+          ['water_1', null, null], ['floor', null, null], ['pin', null, null],
+          ['push', null, null], ['strip', null, null], ['face_bottom', null, null],
+          ['face_left', 1, null], ['face_right', null, null], ['face_top', null, null]],
+         'a section has no front and back face');
+    T.eq(rows[9].label, 'Left face  ·  Left roller', 'a face names the conditions on it');
+    T.eq(App.MeshSettings.localControls({ mesh: {} }).map(function (row) { return row.key; }),
+         ['face_bottom', 'face_left', 'face_right', 'face_front', 'face_back', 'face_top'],
+         'a solid model has all six faces');
+  });
+
+  test('a condition on a face has the size of the face, one on the whole soil has none', function () {
+    var project = { boundary_conditions: [
+      { id: 'fixed_bottom', on: 'face', face: 'bottom' }, { id: 'wet', on: 'part', part: 'soil_L1' },
+      { id: 'pore', on: 'domain' }, { id: 'pin', on: 'point' }] };
+    var of = App.MeshSettings.sizeKeyOf;
+    T.eq(of(project, 'fixed_bottom'), 'face_bottom');
+    T.eq(of(project, 'wet'), 'soil_L1');
+    T.eq(of(project, 'pore'), null);
+    T.eq(of(project, 'pin'), 'pin');
+    T.eq(of(project, 'surcharge'), 'surcharge', 'anything else has its own');
   });
 
   test('a size is saved with its band, and a row left empty takes both away', function () {
@@ -118,11 +137,13 @@
       { key: 'soil_L2', size: 5, follows: true, band: null }]), { soil_L1: 5 });
   });
 
-  test('what can take a size: the layers, their bodies, the lines and the points', function () {
-    var project = { layers: [{ id: 'L1' }], soil_body_keys: ['soil_L1__pit', 'soil_L1__kept'],
+  test('what can take a size: the layers, their bodies, the objects and the faces', function () {
+    var project = { dimension: 2, layers: [{ id: 'L1' }],
+                    soil_body_keys: ['soil_L1__pit', 'soil_L1__kept'],
                     beams: [{ id: 'sheetpile' }], lines: [{ id: 'floor' }] };
     T.eq(App.MeshSettings.sizableKeys(project),
-         ['soil_L1', 'soil_L1__pit', 'soil_L1__kept', 'sheetpile', 'floor']);
+         ['soil_L1', 'soil_L1__pit', 'soil_L1__kept', 'sheetpile', 'floor',
+          'face_bottom', 'face_left', 'face_right', 'face_top']);
   });
 
   test('refine halves the size an object is meshed at, coarsen doubles it', function () {
