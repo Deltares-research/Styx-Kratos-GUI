@@ -384,18 +384,17 @@ mesh settings kept: wrote ...\crow.json
 
 #### Step 12. The construction stages
 
-`stages defaults` makes the initial stage and the null step. `stages deactivate` switches parts
-out of one stage only -- the stages already after it keep what they had -- so the parts that
-are not built yet are taken out of both. Each `stages add` adds one stage after the last,
-starting with what the stage before it has, and names what it switches on and off:
+A new project starts with its initial stage, which chooses the stress initialisation of the
+whole sequence: K0 here. `stages deactivate` switches parts out of one stage only -- the
+stages already after it keep what they had -- so the parts that are not built yet are taken
+out of both. Each `stages add` adds one stage after the last, starting with what the stage
+before it has, and names what it switches on and off:
 
 ```text
-crow.json> stages defaults
-1  initial  Initial stage
-     calculation: K0 procedure
-2  null_step  Null step  (after initial)
-     calculation: Null step
-wrote ...\crow.json
+crow.json> stages set initial --stress-initialisation k0
+changed stage initial; wrote ...\crow.json
+crow.json> stages add null_step --name "Null step" --max-iterations 150
+added stage (id null_step, name Null step) after initial; wrote ...\crow.json
 crow.json> stages deactivate initial sheetpile strut wall_contact surcharge water_1 water_2 water_3
 sheetpile, strut, wall_contact, surcharge, water_1, water_2, water_3 out of the model in stage initial; wrote ...\crow.json
 crow.json> stages deactivate null_step sheetpile strut wall_contact surcharge water_1 water_2 water_3
@@ -412,19 +411,19 @@ crow.json> stages add dig_3 --name "Third excavation" --activate water_3 --deact
 added stage (id dig_3, name Third excavation) after dig_2; wrote ...\crow.json
 crow.json> stages list
 1  initial  Initial stage
-     calculation: K0 procedure; deactivates sheetpile, strut, wall_contact, surcharge, water_1, water_2, water_3
+     calculation: mechanical, K0 stresses, static; deactivates sheetpile, strut, wall_contact, surcharge, water_1, water_2, water_3
 2  null_step  Null step  (after initial)
-     calculation: Null step
+     calculation: mechanical, static
 3  install_sheetpile  SheetPileWall installation  (after null_step)
-     calculation: Plastic; activates sheetpile, wall_contact, surcharge
+     calculation: mechanical, static; activates sheetpile, wall_contact, surcharge
 4  dig_1  First excavation  (after install_sheetpile)
-     calculation: Plastic; activates water_1; deactivates soil_L_top__part3
+     calculation: mechanical, static; activates water_1; deactivates soil_L_top__part3
 5  install_strut  Strut installation  (after dig_1)
-     calculation: Plastic; activates strut
+     calculation: mechanical, static; activates strut
 6  dig_2  Second excavation  (after install_strut)
-     calculation: Plastic; activates water_2; deactivates soil_L_top__part1, water_1
+     calculation: mechanical, static; activates water_2; deactivates soil_L_top__part1, water_1
 7  dig_3  Third excavation  (after dig_2)
-     calculation: Plastic; activates water_3; deactivates soil_L_top__part4, water_2
+     calculation: mechanical, static; activates water_3; deactivates soil_L_top__part4, water_2
 ```
 
 In words: settle the ground with K0, take a null step, install the wall with its interface

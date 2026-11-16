@@ -130,7 +130,7 @@ def project() -> Project:
 
         stages=[
             # The ground alone, its stresses set by K0.
-            Stage(id="initial", name="Initial stage", calculation="K0 procedure",
+            Stage(id="initial", name="Initial stage", stress_initialisation="K0",
                   deactivate=["sheetpile_1", "surcharge"]),
             # Displacements reset, so what follows is measured from the ground it went into.
             Stage(id="sheet_pile", name="Sheet pile", parent="initial",

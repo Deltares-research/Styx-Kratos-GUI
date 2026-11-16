@@ -3,7 +3,7 @@
 Kratos' own `tests/Muskat/saturated_hydrostatic` (case A of
 plan/done/groundwater-flow-plan.md), as a project: a 1.62 m by 4 m column of saturated
 soil, the water held at a level of 3.0 m on the left face and 1.6 m on the right, one
-"Groundwater flow" stage. The soil and the heads are the reference deck's, value for
+flow stage. The soil and the heads are the reference deck's, value for
 value. No support: a flow calculation leaves them out.
 
 The head is linear in x between the faces, so the answer is known exactly
@@ -74,7 +74,7 @@ VAN_GENUCHTEN = {
 }
 """What Kratos' `tests/Muskat/van_genuchten_hydrostatic` changes in the material."""
 
-FLOW = Stage(id="flow", name="Flow", calculation="Groundwater flow")
+FLOW = Stage(id="flow", name="Flow", calculation="flow")
 
 CONDUCTIVITY = SOIL["PERMEABILITY_XX"] * SOIL["DENSITY_WATER"] * 9.81 / SOIL["DYNAMIC_VISCOSITY"]
 """K = k rho_w g / mu, m/s: the hydraulic conductivity Kratos' flow element uses."""
@@ -185,8 +185,10 @@ def van_genuchten(order: int = 2, size: float = 0.1) -> Project:
     return muskat(
         conditions=[head("left_head", "left", LEFT_LEVEL),
                     head("right_head", "right", RIGHT_LEVEL_B), PHREATIC_START],
-        stages=[Stage(id="flow", name="Flow", calculation="Groundwater flow",
-                      max_iterations=100, tolerated_error=1e-3)],
+        stages=[Stage(id="flow", name="Flow", calculation="flow",
+                      convergence_criterion="residual_criterion",
+                      max_iterations=100, tolerated_error=1e-3,
+                      absolute_tolerance=1e-15)],
         soil={**SOIL, **VAN_GENUCHTEN}, order=order,
         mesh=MeshSettings(element_size=size, order=order),
         name="Semi-Muskat, Van Genuchten")
@@ -235,15 +237,21 @@ START = WaterPressureCondition(
 """The start values of `tests/seepage_tests`: hydrostatic about the upstream level."""
 
 
-def seepage(order: int = 1, max_iterations: int = 100) -> Project:
+def seepage(order: int = 1, max_iterations: int = 100,
+            convergence_criterion: str = "residual_criterion") -> Project:
     """Case C: the Van Genuchten soil, the left head at 3.0 m, the tail water and the
     seepage face on the right face, meshed at 0.4 m and at `FACE_SIZE` along the right
     face, started from `START`. The flow stage has the seepage decks' tolerance of 1e-4
     and `max_iterations`: the seepage strategy opens one node of the face per iteration,
-    and the face has 89 nodes at this size, of which 35 open (35 iterations, linear)."""
+    and the face has 89 nodes at this size, of which 35 open (35 iterations, linear).
+
+    It converges on the residual criterion, as the seepage decks do. On the quadratic
+    mesh the water pressure criterion does not: the face opening and closing keeps the
+    ratio near 1.6e-3 (2026-11-03)."""
     return muskat(
         conditions=[head("left_head", "left", LEFT_LEVEL), TAIL, SEEPAGE_FACE, START],
-        stages=[Stage(id="flow", name="Flow", calculation="Groundwater flow",
+        stages=[Stage(id="flow", name="Flow", calculation="flow",
+                      convergence_criterion=convergence_criterion,
                       max_iterations=max_iterations, tolerated_error=1e-4)],
         soil={**SOIL, **VAN_GENUCHTEN}, order=order,
         mesh=MeshSettings(element_size=0.4, order=order, refinements=[BoxRefinement(

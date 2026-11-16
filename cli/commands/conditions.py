@@ -10,7 +10,8 @@ prescribes there: displacements held at zero (`--fixed`, `--roller`, `--fix`,
 `core.model.drafts.water_pressure_condition`), or a seepage face, where water may leave
 the soil in a groundwater flow calculation (`--seepage`, on a face or a line,
 `core.model.drafts.seepage_condition`). `boundary standard` puts back the
-supports a new project starts with. `gravity` switches the self weight on and off.
+supports a new project starts with. Whether the bodies have their self weight is the
+initial stage's stress initialisation (`kratos-cli stages`), not a condition.
 
 A hydrostatic water pressure given no `--reference-coordinate` is given the project's
 water level, which the record then keeps as its own; the command says which level it
@@ -21,7 +22,7 @@ from __future__ import annotations
 
 import argparse
 
-from cli.terminal.files import add_project, add_writing, read, written
+from cli.terminal.files import read
 from cli.terminal.output import Answer, CommandError
 from cli.terminal.words import (NAME_HELP, action, coordinates, edited, existing, given,
                                 id_help, named_ids, noun)
@@ -64,16 +65,6 @@ def register(commands, common: argparse.ArgumentParser) -> None:
     action(actions, common, "standard", standard_conditions,
            help="the standard supports, the bottom fixed and the sides on rollers, in "
                 "place of the supports on the faces")
-
-    gravity = commands.add_parser("gravity", parents=[common],
-                                  help="show, or switch on or off, the self weight",
-                                  description="Whether gravity acts: the self weight of "
-                                              "every body, in every stage. On in a new "
-                                              "project.")
-    add_project(gravity)
-    gravity.add_argument("switch", nargs="?", choices=("on", "off"), type=str.lower)
-    add_writing(gravity)
-    gravity.set_defaults(handler=set_gravity)
 
 
 def _fields(parser: argparse.ArgumentParser) -> None:
@@ -288,21 +279,6 @@ def standard_conditions(args: argparse.Namespace) -> Answer:
                                    "rollers")
     answer.lines += listed_lines(project)
     return answer
-
-
-def set_gravity(args: argparse.Namespace) -> Answer:
-    project = read(args)
-    if args.switch is None:
-        return Answer(data={"gravity": project.gravity}, lines=[_gravity_line(project)])
-    project = session.set_gravity(project, args.switch == "on")
-    target, where = written(args, project)
-    return Answer(data={"file": str(target) if target else None, "gravity": project.gravity},
-                  lines=[f"{_gravity_line(project)} {where}"])
-
-
-def _gravity_line(project: Project) -> str:
-    return ("Gravity is on: every body has its self weight." if project.gravity else
-            "Gravity is off: no body has a self weight.")
 
 
 def remove_condition(args: argparse.Namespace) -> Answer:

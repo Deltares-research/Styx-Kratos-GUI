@@ -36,7 +36,8 @@ JS = ROOT / "frontend" / "js"
 # plain scripts sharing one global, exactly as the browser loads them.
 SUITES = {
     "stages": (
-        [TESTS / "fixtures" / "stage-cases.js", JS / "stages.js"],
+        [TESTS / "fixtures" / "stage-cases.js", TESTS / "fixtures" / "solver-cases.js",
+         JS / "solver-settings.js", JS / "stages.js"],
         TESTS / "test-stages.js",
     ),
     # `results.js` loads no other module and touches no DOM, by design -- see its
@@ -89,14 +90,28 @@ SUITES = {
     # `run <case.py>` for a deck case: whether its mesh came along, the Model explorer
     # rows and the log line. Showing it and switching to the Mesh tab are DOM.
     "deck": (
-        [JS / "stages.js", JS / "deck.js"],
+        [JS / "solver-settings.js", JS / "stages.js", JS / "deck.js"],
         TESTS / "test-deck.js",
     ),
     # `results plot` and the figure it draws: the wall and interface curves per stage.
     # results.js comes along because it is what routes the command here.
     "results-plot": (
-        [JS / "results-render.js", JS / "results.js", JS / "results-plot.js"],
+        [JS / "download.js", JS / "results-render.js", JS / "results.js", JS / "results-plot.js"],
         TESTS / "test-results-plot.js",
+    ),
+    # A saved picture: the scene as a list of shapes, then those shapes as a file. Reading
+    # the scene, the canvas, the clipboard and the save windows are in the browser suite.
+    "picture-draw": (
+        [JS / "results-render.js", JS / "ruler.js", JS / "picture-draw.js"],
+        TESTS / "test-picture-draw.js",
+    ),
+    "picture-dialog": (
+        [JS / "picture-draw.js", JS / "picture-dialog.js"],
+        TESTS / "test-picture-dialog.js",
+    ),
+    "picture-writers": (
+        [JS / "zip.js", JS / "picture-draw.js", JS / "picture-writers.js"],
+        TESTS / "test-picture-writers.js",
     ),
     # The rulers' arithmetic: steps, ticks, labels, the ranges a view shows. Painting
     # the canvases and the toolbar wiring are test-ruler-dom.js, in the browser.
@@ -122,7 +137,8 @@ SUITES = {
         # task P0.4: what Calculate just wrote has to become the run `results` opens.
         # It touches no DOM either, so it loads here as cleanly as results.js does.
         # stages.js gives `projectStage` the project's stage order to match a run to.
-        [JS / "stages.js", JS / "results-render.js", JS / "results.js", JS / "calculate.js"],
+        [JS / "download.js", JS / "solver-settings.js", JS / "stages.js",
+         JS / "results-render.js", JS / "results.js", JS / "calculate.js"],
         TESTS / "test-results.js",
     ),
     # The project's unit system: labels, conversions of library presets, and the

@@ -84,9 +84,13 @@
       err:  function (line) { log.push(['err', line]); },
       write: function (kind, line) { log.push([kind, line]); }
     };
-    App.Download = { anchor: function (name, text, mime) {
-      saved.push({ name: name, text: text, mime: mime });
-    } };
+    // No save window here: a test must not depend on what the browser makes of its click.
+    App.Download = Object.assign({}, App.Download, {
+      pickFile: function () { return Promise.resolve(null); },
+      anchor: function (name, text, mime) {
+        saved.push({ name: name, text: text, mime: mime });
+      }
+    });
 
     var answers = overrides || {};
     App.Api = {

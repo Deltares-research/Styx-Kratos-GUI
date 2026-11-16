@@ -696,7 +696,7 @@
     });
   });
 
-  test('boundary grid applies standard supports, clears them, and saves changed water and gravity', function () {
+  test('boundary grid applies standard supports, clears them, and saves changed water', function () {
     return withEnvironment(project(), function (ctx) {
       App.BoundaryConditions.open();
       var dialog = latest(ctx);
@@ -710,7 +710,6 @@
       var number = dialog.form.querySelector('.bc-number');
       T.eq(number.disabled, false);
       number.value = '-125';
-      dialog.form.querySelector('.bc-gravity input').checked = false;
       ctx.failure = new Error('Boundary grid refused');
       return button(dialog, 'Save').then(function () {
         T.eq(dialog.closed, false);
@@ -720,7 +719,6 @@
       }).then(function () {
         T.ok(dialog.closed);
         var sent = ctx.requests[1].body;
-        T.eq(sent.gravity, false);
         T.ok(sent.boundary_conditions.some(function (record) { return record.value === -125; }));
         App.BoundaryConditions.open();
         dialog = latest(ctx);

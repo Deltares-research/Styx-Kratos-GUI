@@ -36,13 +36,13 @@ Part A lists what Styx sends to Kratos. Part B lists what the GUI and `kratos-cl
 |---|---|---|---|
 | Kratos application | GeoMechanicsApplication, solver type `U_Pw`, model part `PorousDomain` | Tested | [kratos/parameters.py](../core/kratos/parameters.py) `SOLVER` |
 | Orchestrator | `SequentialOrchestrator` over named stages, each a `GeoMechanicsAnalysis` stage | Tested | [kratos/parameters.py](../core/kratos/parameters.py) `ORCHESTRATOR` |
-| Analysis type | Static, Newmark scheme, Newton-Raphson, residual criterion. You cannot change it. | Tested | [kratos/parameters.py](../core/kratos/parameters.py) `SOLVER` |
-| Linear solver | `skyline_lu_factorization` (direct), block builder, 1 thread. You cannot change it. | Tested | same |
-| Tolerances | Relative 1e-4, absolute 1e-9, 6 to 15 iterations, reduction factor 0.5, increase factor 2.0. You can change the maximum number of iterations and the relative tolerance for each stage. | Tested | same |
-| Time steps | One step for each stage (Δt = 1). The settling stages are at negative time, as in the reference deck. | Tested | [kratos/writer.py](../core/kratos/writer.py) |
+| Analysis type | Static, or dynamic with Newmark or Backward Euler (Kratos' quasi-static U-Pw for a mechanical stage); Rayleigh damping is set for each dynamic mechanical stage. The strategy is chosen for each stage in its expert settings: Newton-Raphson (the default for a mechanical stage), quasi-Newton, Newton-Raphson with line search, or one linear solve; each with its own parameters. A flow stage's default is what its model calls for: one linear solve for a saturated soil, Newton-Raphson for one whose permeability depends on the water pressure, Newton-Raphson with seepage with a seepage face. The convergence criterion is chosen for each stage: residual (the default) or displacement for a mechanical stage; water pressure (the default) or residual for a flow stage; a flow stage of a project saved before the criterion could be chosen keeps the residual it was solved on. Kratos' `displacement_and_water_pressure_criterion` is not offered: Kratos 10.4.4 cannot build it. | Tested | [kratos/parameters.py](../core/kratos/parameters.py) `SOLVER` |
+| Linear solver | Chosen for each stage in its expert settings: `sparse_lu` or `skyline_lu_factorization` (direct), `amgcl`, `bicgstab` or `cg` (iterative), each with its own parameters. The default is `sparse_lu`, scaled. The quasi-Newton strategy always uses `sparse_lu`, unscaled, shown but not changeable: a fully coupled soil with a very low permeability then settles a few percent too little (5% for 1e-16 m²), as the system is too badly conditioned to factorise unscaled. Block builder, 1 thread. | Tested | [model/solver.py](../core/model/solver.py) |
+| Tolerances | Relative 1e-4, absolute 1e-9 (1e-12 on the displacement criterion, 1e-8 on the water pressure), 6 to 15 iterations, one attempt per step, reduction factor 0.5, increase factor 2.0 (1.0 for a dynamic mechanical stage, whose Newmark result changes when its step grows, and for an iterating flow stage). A stage solved in several steps can need an absolute tolerance of 1e-8: the steps after it has settled start from a round-off residual that 1e-9 cannot be met below. You can change the maximum number of iterations and the relative and absolute tolerances of the convergence criterion for each stage, and the time step control in its expert settings. | Tested | same |
+| Time steps | Each stage has a duration and a time step, in the project's unit of time (seconds); by default 1 s each, so one step for each stage. The first stage starts at time 0 and each stage starts where the one before it ended. | Tested | [kratos/writer.py](../core/kratos/writer.py) |
 | Units | One unit system for each project: SI (N, m, kg, s) or kN (kN, m, t, s). You type all values in it, the input files contain them without conversion, and the results come back in it. | Tested in both systems | [model/units.py](../core/model/units.py) |
-| Groundwater flow | A project whose stages are all "Groundwater flow": solver type `Pw`, `Steady_State_Groundwater_Flow`, `sparse_lu` linear solver. One linear solve for a saturated soil, Newton-Raphson for a soil with another retention law. The deck holds the soil only. 2D only. A project that mixes flow and deformation stages is refused. | Tested: the decks against the Kratos references `tests/Muskat/saturated_hydrostatic` and `van_genuchten_hydrostatic`; Kratos runs against the exact solution and the Kratos regression values (saturated), and against the Kratos regression values (Van Genuchten). The Muskat tutorial is run as a test, command by command, and cases A and C are built in the GUI: both give the decks of the model scripts and, in Kratos, the same answers | [kratos/parameters.py](../core/kratos/parameters.py) `FLOW_SOLVER` |
-| Dynamics, consolidation, arc-length control, updated mesh | Not supported. The `time_interval` of a stage is not exported. | Not available | [model/schemas.py](../core/model/schemas.py) `Stage` |
+| Groundwater flow | A project whose stages are all flow stages: solver type `Pw`, `Steady_State_Groundwater_Flow` (static) or `Transient_Groundwater_Flow` (dynamic), `sparse_lu` linear solver. One linear solve for a saturated soil, Newton-Raphson for a soil with another retention law. The deck holds the soil only. 2D only. A project that mixes flow and mechanical stages is refused. | Tested: the decks against the Kratos references `tests/Muskat/saturated_hydrostatic` and `van_genuchten_hydrostatic`; Kratos runs against the exact solution and the Kratos regression values (saturated), and against the Kratos regression values (Van Genuchten). The Muskat tutorial is run as a test, command by command, and cases A and C are built in the GUI: both give the decks of the model scripts and, in Kratos, the same answers | [kratos/parameters.py](../core/kratos/parameters.py) `FLOW_SOLVER` |
+| Consolidation, arc-length control | Not supported. A dynamic stage and the updated mesh (`move_mesh_flag`, in a stage's expert settings) are written to the deck, but no test runs them in Kratos. | Not available | [model/schemas.py](../core/model/schemas.py) `Stage` |
 
 ### A2. Soil elements
 
@@ -118,7 +118,7 @@ and adds only the values that are missing
 
 | Feature | Kratos | Dim | Status |
 |---|---|---|---|
-| Self weight | `VOLUME_ACCELERATION` on the computational part, in every stage. Gravity can be switched off for the whole model (`gravity off`, or the **Gravity** row). | 2D, 3D | Tested |
+| Self weight | `VOLUME_ACCELERATION` on the computational part, which holds the nodes of every body, structures included, in every stage. In a mechanical sequence the initial stage's stress initialisation decides it: K0 or gravity loading has it, none has none; the initial stage's **Gravity** row in the **Stages** window says which. A flow sequence always has it. | 2D, 3D | Tested |
 | Point load | `PointLoadCondition2D1N` / `3D1N`, `POINT_LOAD` | 2D, 3D | Tested |
 | Line load | `LineLoadCondition2D2N` / `LineLoadDiffOrderCondition2D3N`, `LINE_LOAD` | 2D | Tested |
 | Surface load | `UPwFaceLoadCondition3D3N` / `SurfaceLoadDiffOrderCondition3D6N`, `SURFACE_LOAD` | 3D | Limited |
@@ -127,7 +127,7 @@ and adds only the values that are missing
 | Load distribution | Uniform only. No load that changes with time. | — | Not available |
 | Water pressure conditions | `ApplyScalarConstraintTableProcess`: `Uniform`, `Hydrostatic` (about the level of the condition) or `Phreatic_Multi_Line`, fixed or as start values only, on the whole soil, a soil part, a face, a drawn line or a point. Without a condition, Styx fixes no water pressure. | 2D, 3D (lines and points 2D) | Tested |
 | Water conditions for each stage | A stage switches a water pressure condition on or off, as it does a load. The Kratos stage writes the conditions that its stage has on. | 2D, 3D | Tested |
-| Seepage face | `GeoSeepageCondition2D2N` / `2D3N` on the mesh edges of a face or of a line along the soil's outer boundary, one `ApplySeepageBoundaryProcess`, and the `newton_raphson_with_seepage` strategy. Groundwater flow only, in every stage. A line through the soil is refused. | 2D | Tested: the deck against Kratos' `tests/seepage_tests` and the STEM Muskat geometry, and a Kratos run against the water balance and the Dupuit-Charny discharge |
+| Seepage face | `GeoSeepageCondition2D2N` / `2D3N` on the mesh edges of a face or of a line along the soil's outer boundary, one `ApplySeepageBoundaryProcess`, and the `newton_raphson_with_seepage` strategy. Groundwater flow only, in every stage; a mechanical deck leaves it out and says so. A line through the soil is refused. | 2D | Tested: the deck against Kratos' `tests/seepage_tests` and the STEM Muskat geometry, and a Kratos run against the water balance and the Dupuit-Charny discharge |
 | Displacement conditions | `ApplyVectorConstraintTableProcess` on a face, a soil part, a drawn line or a point, in the components x, y, z that you select. A new project has the bottom fixed and the sides on rollers. | 2D, 3D (lines and points 2D) | Tested |
 | Anchor tail support | The tail node is fixed | 2D, 3D | Tested |
 
@@ -135,12 +135,11 @@ and adds only the values that are missing
 
 | Feature | Detail | Status |
 |---|---|---|
-| Stage types | K0 procedure, plastic, null step, groundwater flow. Every stage of a groundwater flow project is a flow stage. | Tested |
+| Stage settings | A new project starts with its initial stage, which cannot be deleted or preceded. Calculation type, chosen in the initial stage for every stage: mechanical (`U_Pw`) or flow (`Pw`). Stress initialisation, of the initial stage of a mechanical sequence only: K0 procedure, gravity loading (the default) or none. Time integration: static or dynamic (`Dynamic` for a mechanical stage, `Transient_Groundwater_Flow` for a flow stage). Every stage of a groundwater flow project is a flow stage. A new calculation type is one entry in `schemas.Stage` and `parameters.SOLVERS`. | Tested: the decks; no dynamic stage has run in Kratos in a test |
 | Stage tree | Each stage has a parent, and keeps only what it switches on and off. Kratos needs one sequence, so Styx makes the tree into a list. A tree that branches is refused. | Tested |
-| Default stages | **Create default stages** (GUI) and `stages P defaults` (CLI) make the initial stage (K0) and a null step | Tested |
 | Staged excavation | A wall and lines split the soil into lifts, and a stage switches each lift off. `tests/models/excavation.py` and the tutorial model have the 7 stages of the Kratos staged-excavation reference: K0, null step, wall installation, then one stage for each lift with its water load, and the strut after the lift that uncovers it. | Tested |
 | Switch parts on and off | `ActivateModelPartOperation` / `DeactivateModelPartOperation` for soil bodies, lifts, beams, anchors, interfaces and loads | Tested |
-| Settings for each stage | Reset displacements (`reset_totals`), maximum iterations, tolerance | Tested |
+| Settings for each stage | Reset displacements (`reset_totals`), convergence criterion, maximum iterations, relative and absolute tolerance, and the expert solver settings: strategy, linear solver, time step control, time scheme of a dynamic stage, assembly. Only those that apply are shown, each with the default for the stage's calculation type and time integration | Tested |
 | Stresses carried to the next stage | `ApplyFinalStressesOfPreviousStageToInitialState` for the interfaces, beams and anchors in two stages in a row. This includes the two-stage deck of a project without stages. The soil keeps its own stress. A prestressed anchor also gets a **temporary workaround**: `kratos_gui_prestress_workaround.py`, shipped with the deck. Without it, Kratos adds the prestress again in every stage. The workaround goes once Kratos is fixed. In 3D, Kratos cannot carry the forces of a wall panel or a member, and the export warns when one is in two stages in a row. | Tested, in Kratos too (2D) |
 | Initial stresses | `apply_k0_procedure_process`, with its own `initial_materials.json` | Tested |
 | Soil connected before the wall is built | `AssignMasterSlaveConstraintsToNeighboursUtility` ties the split nodes together until the wall is installed | Tested |
@@ -151,8 +150,8 @@ and adds only the values that are missing
 
 | Output | Variables | Status |
 |---|---|---|
-| GiD ASCII files (`.post.res`, `.post.msh`), one pair for each stage | Nodal `DISPLACEMENT`, `TOTAL_DISPLACEMENT`, `WATER_PRESSURE`; `CAUCHY_STRESS_TENSOR` and `HYDRAULIC_HEAD` (not with gravity off) at the Gauss points | Tested |
-| Groundwater flow, one pair of GiD files for each stage | Nodal `WATER_PRESSURE`, `EFFECTIVE_SATURATION` and `FLUID_FLUX_VECTOR` (the last two extrapolated from the Gauss points), and `NODAL_WATER_FLOW_RATE` with a seepage face; `HYDRAULIC_HEAD` at the Gauss points (not with gravity off) | Tested |
+| GiD ASCII files (`.post.res`, `.post.msh`), one pair for each stage | Nodal `DISPLACEMENT`, `TOTAL_DISPLACEMENT`, `WATER_PRESSURE`; `CAUCHY_STRESS_TENSOR` and `HYDRAULIC_HEAD` (not without the self weight) at the Gauss points | Tested |
+| Groundwater flow, one pair of GiD files for each stage | Nodal `WATER_PRESSURE`, `EFFECTIVE_SATURATION` and `FLUID_FLUX_VECTOR` (the last two extrapolated from the Gauss points), and `NODAL_WATER_FLOW_RATE` with a seepage face; `HYDRAULIC_HEAD` at the Gauss points | Tested |
 | Wall forces at the nodes | `AXIAL_FORCE`, `BENDING_MOMENT`, `SHEAR_FORCE` | Tested: a live Kratos run is checked, and agrees with the Kratos reference curves |
 | Interface tractions | `GEO_EFFECTIVE_TRACTION_VECTOR`, written to JSON on the retained side | Tested |
 
@@ -169,6 +168,7 @@ and adds only the values that are missing
 | Keyboard shortcuts | Ctrl+Z, Ctrl+Y, Ctrl+S, Ctrl+O, Ctrl+N, F5 (zoom to fit), F9 (calculate, or make the mesh in Mesh mode), Esc. The arrow keys recall earlier commands. | Tested |
 | Checks | The server checks the full project at each edit | Tested |
 | Display | WebGL, with a CPU renderer when no GPU is available | Tested |
+| Pictures | The view as PNG, PDF or SVG at 300 dpi, in a width that you select, from the camera button, the File menu or a right click. Copy to the clipboard. Every stage and every result field into one folder, with the field values as CSV. `kratos-cli picture` makes the same pictures with Chrome or Edge. SVG and PDF are vector, except contour colours and 3D faces, which are an image at 300 dpi. | Tested. Opening in Word, Adobe Reader and Inkscape is checked by hand. |
 | 2D and 3D | Change between a 2D plane-strain section (at a z offset that you select) and the 3D model. Loads and walls are converted. | Tested |
 | Modes | Soil, Structures, Flow conditions, Mesh, Staged construction, Results | Tested. Flow conditions sets the water level and the water pressure conditions. |
 | Panels | Model explorer, Selection explorer, docked panels, right-click menus | Tested |
@@ -198,7 +198,7 @@ and adds only the values that are missing
 | Loads | Point, line and surface loads by their components. You can switch each one off. |
 | Normal loads | A line with uniform or hydrostatic pressure |
 | Water | One water level for the full model. A new hydrostatic condition or normal load takes it as its own level. You can change the specific weight of the water. |
-| Boundary conditions | The **Boundary conditions** window: a row for each face and one for the whole soil, with the support and the water pressure on each, and the conditions on parts, lines and points. Tools draw a support or a water pressure along a line or at a point (2D). **Gravity** on or off. |
+| Boundary conditions | The **Boundary conditions** window: a row for each face and one for the whole soil, with the support and the water pressure on each, and the conditions on parts, lines and points. Tools draw a support or a water pressure along a line or at a point (2D). |
 
 ### B4. Mesh
 
@@ -225,12 +225,12 @@ and adds only the values that are missing
 | Feature | Detail | Status |
 |---|---|---|
 | Runs | List all runs, open one, go through its stages | Tested |
-| Quantities | \|u\|, u_x, u_y, u_z, total and for each stage; σ'xx, σ'yy, σ'zz, σ'xy, σ'yz, σ'xz; p', q, σ1, σ2, σ3, τ_max; pore pressure; hydraulic head (with gravity on); effective saturation, the flux q, q_x, q_y, q_z and, with a seepage face, the nodal water flow rate of a groundwater flow run. Total stresses and saturation if Kratos wrote them. | Tested |
+| Quantities | \|u\|, u_x, u_y, u_z, total and for each stage; σ'xx, σ'yy, σ'zz, σ'xy, σ'yz, σ'xz; p', q, σ1, σ2, σ3, τ_max; pore pressure; hydraulic head (with the self weight); effective saturation, the flux q, q_x, q_y, q_z and, with a seepage face, the nodal water flow rate of a groundwater flow run. Total stresses and saturation if Kratos wrote them. | Tested |
 | Signs and units | Compression is negative, as Kratos writes it. All quantities are in the unit system of the run (Pa for SI, kPa for kN); lengths in m. | Tested |
 | Display | Colour bands or smooth shading, colour map, reversed scale, automatic or fixed range, deformed mesh with a selected or automatic scale | Tested |
 | Loads and water | The loads and the water level of the stage on screen over the colours, when the run is of the open project (`results loads on\|off`) | Tested |
 | Values at a node | All quantities at one node (`results at <node>`) | Tested |
-| Plots along the wall | Bending moment M, shear force Q, normal force N, displacements ux and uy along the wall, and the tractions tn and ts along the interface, with one line for each stage. Save as SVG or CSV. | Tested |
+| Plots along the wall | Bending moment M, shear force Q, normal force N, displacements ux and uy along the wall, and the tractions tn and ts along the interface, with one line for each stage. Save as PNG, PDF, SVG or CSV. | Tested |
 | Export | The field on screen as CSV; one file of a run, or the full run as a ZIP file | Tested |
 | Slip plane, factor of safety | Not available | Not available |
 
@@ -243,7 +243,7 @@ and adds only the values that are missing
 | `mesh`, `calculate`, `export` | Makes the mesh, calculates, or writes the Kratos files |
 | `stages` | Opens the **Stages** window |
 | `water`, `units`, `cleargeometry` | Changes the water level or the unit system, or removes drawn and imported solids |
-| `boundary`, `gravity` | Lists the boundary conditions or puts the standard supports back; shows gravity or switches it on or off |
+| `boundary` | Lists the boundary conditions or puts the standard supports back |
 | `soillayers`, `materials` | Opens the soil windows |
 | `colour`, `node` | Shows parts of the mesh in colour, or the parts that contain a node |
 | `results …` | `runs`, `open`, `stage`, `fields`, `field`, `at`, `bands`, `smooth`, `map`, `deform`, `range`, `reverse`, `mesh`, `loads`, `plot`, `csv`, `files`, `get`, `zip` |
@@ -259,7 +259,7 @@ REST API: `/api/project`, `/api/mesh`, `/api/calculate`, `/api/results/…`.
 | Commands | Each step of the GUI as a terminal command, on the same project file: site, soil, structures, loads, mesh, stages, export, run, results. See the [kratos-cli reference](CLI.md). | Tested |
 | Shell | `kratos-cli shell` reads commands one after the other, with undo and redo, from a terminal, a file or a pipe | Tested |
 | Model scripts | `script` writes the model as Python; `build` writes a project from a script. Each command that reads a model accepts a script. | Tested |
-| Results | Numbers and CSV files only. Pictures need the GUI. | Tested |
+| Results | `results` gives numbers and CSV files. `picture` saves pictures with Chrome or Edge. | Tested |
 | Parity with the GUI | A test checks that each command of the GUI command box has a terminal command in the reference | Tested |
 
 ### B9. Tests and benchmarks
@@ -272,14 +272,15 @@ REST API: `/api/project`, `/api/mesh`, `/api/calculate`, `/api/results/…`.
 
 ## Main gaps
 
-1. **A plastic stage applies its load in one step.** A Mohr-Coulomb soil runs in Kratos
-   (the staged excavation of `tests/models/excavation.py` runs all its stages), but a
-   stage that makes much of the soil yield can stop without converging, because the
-   stage has no load steps. More iterations and a larger tolerance per stage can help.
+1. **A stage applies its load in one step by default.** A Mohr-Coulomb soil runs in
+   Kratos (the staged excavation of `tests/models/excavation.py` runs all its stages),
+   but a stage that makes much of the soil yield can stop without converging in one
+   step. A time step shorter than the stage's duration, more iterations, or a larger
+   tolerance can help.
    User-defined models (UDSM, UMAT) are written as typed, without a test.
 2. **No factor of safety.** Styx has no φ–c reduction stage.
-3. **Groundwater flow is steady-state and 2D only.** A project cannot mix flow stages
-   with deformation stages, and a drawn condition line has no element size of its own
+3. **Groundwater flow is 2D only.** A project cannot mix flow stages
+   with mechanical stages, and a drawn condition line has no element size of its own
    (a box refinement gives a seepage face its fine mesh). With a Van Genuchten soil, the
    Newton-Raphson iterations can fall into a cycle on some meshes and stop without
    converging; another element size then helps.
@@ -288,6 +289,7 @@ REST API: `/api/project`, `/api/mesh`, `/api/calculate`, `/api/results/…`.
    next. A panel starts each stage at zero force. A quadratic member stops the run, and
    a linear one carries a stress of the wrong size. The export warns when one is in two
    stages in a row.
-5. **Fixed solver settings.** The calculation type of the stages chooses the analysis
-   (deformation or groundwater flow). You cannot change the linear solver.
+5. **Only the solver settings listed.** A stage's expert settings offer the
+   strategies and linear solvers above, not all of Kratos': no arc-length or piping
+   strategy, and no Pardiso or other linear solver this Kratos build does not have.
 6. **No single-element test** to check a soil model on its own.

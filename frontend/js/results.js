@@ -525,18 +525,40 @@ App.Results = (function () {
                  + '". `results files` lists what it does have.');
       return Promise.resolve();
     }
-    App.Results.download(fileUrl(openRun.id, name), name);
-    log('ok', 'Downloading ' + name + '.');
-    return Promise.resolve();
+    return saveFrom(fileUrl(openRun.id, name), name, 'application/octet-stream').then(function (saved) {
+      if (saved) log('ok', 'Downloading ' + name + '.');
+    }).catch(fail);
+  }
+
+  /* The save window first, while the click still counts (download.js). With no window, a
+     link: the bytes are not pulled through memory just to be handed back. */
+  function saveFrom(url, name, mime) {
+    return App.Download.pickFile(name, mime).then(function (target) {
+      if (target === App.Download.CANCELLED) {
+        log('note', name + ' not saved.');
+        return false;
+      }
+      if (!target) {
+        App.Results.download(url, name);
+        return true;
+      }
+      return fetch(url).then(function (response) {
+        if (!response.ok) throw new Error('The server did not send ' + name + '.');
+        return response.blob();
+      }).then(function (blob) {
+        return App.Download.write(target, name, blob, mime);
+      }).then(function () { return true; });
+    });
   }
 
   function getArchive() {
     if (!needRun()) return Promise.resolve();
     var name = openRun.id + '.zip';
-    App.Results.download(archiveUrl(openRun.id), name);
-    log('ok', 'Downloading ' + name + ' — ' + plural(openRun.files.length, 'file')
-              + ', ' + size(openRun.bytes) + ' before compression.');
-    return Promise.resolve();
+    var described = name + ' — ' + plural(openRun.files.length, 'file')
+                  + ', ' + size(openRun.bytes) + ' before compression.';
+    return saveFrom(archiveUrl(openRun.id), name, 'application/zip').then(function (saved) {
+      if (saved) log('ok', 'Downloading ' + described);
+    }).catch(fail);
   }
 
   /* ── Choosing a stage ─────────────────────────────────────────────────── */
@@ -740,6 +762,23 @@ App.Results = (function () {
     }).catch(fail);
   }
 
+  /* A saved picture walks the stages and fields without a line in the log for each. */
+  function show(stageIndex, fieldName) {
+    var ready = stageIndex === view.stage ? Promise.resolve() : useStage(stageIndex, true);
+    return ready.then(function () {
+      if (!fieldName || (view.field && view.field.field === fieldName)) return null;
+      return useField(fieldName, null, true);
+    });
+  }
+
+  function fieldNames() {
+    var names = [];
+    ((view.catalogue && view.catalogue.groups) || []).forEach(function (group) {
+      group.fields.forEach(function (entry) { names.push(entry.name); });
+    });
+    return names;
+  }
+
   function needField(what) {
     if (view.field) return true;
     log('err', 'Nothing is on screen yet. `results field <name>` draws one'
@@ -895,12 +934,19 @@ App.Results = (function () {
   function exportCsv() {
     if (!needField('`results csv` saves it')) return Promise.resolve();
     var name = [openRun.id, 'stage' + view.stage, view.field.field].join('_') + '.csv';
-    App.Download.anchor(name, App.ResultsRender.csv(view.field, {
+    var text = App.ResultsRender.csv(view.field, {
       run: openRun.id, stage: stageName(view.stage)
-    }), 'text/csv');
-    log('ok', 'Saved ' + name + ' — '
-              + plural(view.field.ids.length, 'row') + '.');
-    return Promise.resolve();
+    });
+    var rows = view.field.ids.length;
+    return App.Download.pickFile(name, 'text/csv').then(function (target) {
+      if (target === App.Download.CANCELLED) {
+        log('note', name + ' not saved.');
+        return null;
+      }
+      return App.Download.write(target, name, text, 'text/csv').then(function () {
+        log('ok', 'Saved ' + name + ' — ' + plural(rows, 'row') + '.');
+      });
+    }).catch(fail);
   }
 
   function describeCurrent() {
@@ -974,6 +1020,7 @@ App.Results = (function () {
     current: current, forget: forget, remember: remember,
     onChange: onChange, ready: ready,
     stage: stage, location: location, field: field, state: state,
+    show: show, fieldNames: fieldNames,
     fileUrl: fileUrl, archiveUrl: archiveUrl, download: download,
     draw: draw, present: present, redraw: redraw,
     options: function () { return options; },

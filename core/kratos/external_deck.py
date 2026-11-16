@@ -36,7 +36,9 @@ import shutil
 from pathlib import Path, PurePath
 
 from core.kratos import deck_files, mdpa_reader, node_parts
-from core.model.schemas import Deck, Domain, Stage, Project
+from core.kratos.parameters import CONVERGENCE_TOLERANCES
+from core.model.solver import from_deck, resolve
+from core.model.schemas import CONVERGENCE_CRITERIA, Deck, Domain, Stage, Project
 from core.model.templates import blank_project
 
 
@@ -169,7 +171,6 @@ builds or removes."""
 
 K0_PROCESS = "apply_k0_procedure_process"
 STAGE_NUMBER = re.compile(r"^\d+_")
-SECONDS_PER_DAY = 86400.0
 
 
 def stage_parts(stage: dict) -> list[str]:
@@ -202,9 +203,9 @@ def styx_stages(parameters: dict) -> list[Stage]:
 
     Stages resolve from "everything is there" (`core.model.stages.active_parts`), so the first
     one deactivates what its Kratos stage does not have; every later one stores only what
-    changed. The calculation type is read where the deck says it: a K0 stage runs the
-    K0 procedure process, and a null step is named as one -- the deck has no other
-    marker for it.
+    changed. The calculation is read where the deck says it: a flow stage by its
+    solution type, a K0 stage by the K0 procedure process it runs, a dynamic stage by
+    its solution type.
     """
     order = ((parameters.get("orchestrator") or {}).get("settings") or {})         .get("execution_list") or list(parameters.get("stages") or {})
     stages = parameters.get("stages") or {}
@@ -233,31 +234,58 @@ def _styx_stage(name: str, stage: dict, parent: str | None, *, activate: list[st
     title = STAGE_NUMBER.sub("", name).replace("_", " ") or name
     fields: dict = {"id": name, "name": title, "parent": parent,
                     "activate": activate, "deactivate": deactivate,
-                    "calculation": _calculation(stage, title),
+                    **_calculation(stage),
                     "reset_displacements": bool(solver.get("reset_displacements", False))}
     if isinstance(solver.get("max_iterations"), int) and solver["max_iterations"] > 0:
         fields["max_iterations"] = solver["max_iterations"]
-    tolerance = solver.get("residual_relative_tolerance")
-    if isinstance(tolerance, (int, float)) and tolerance > 0:
-        fields["tolerated_error"] = float(tolerance)
+    # The deck's criterion when it is one a stage can have -- Kratos' default, which is
+    # the stage's, when it names none. Otherwise the stage's default, with the
+    # tolerances of the residual criterion.
+    allowed = CONVERGENCE_CRITERIA[fields["calculation"]]
+    criterion = str(solver.get("convergence_criterion", allowed[0])).lower()
+    measured = "residual"
+    if criterion in allowed:
+        fields["convergence_criterion"] = criterion
+        measured = CONVERGENCE_TOLERANCES[criterion]
+    for key, field in (("relative", "tolerated_error"), ("absolute", "absolute_tolerance")):
+        tolerance = solver.get(f"{measured}_{key}_tolerance")
+        if isinstance(tolerance, (int, float)) and tolerance > 0:
+            fields[field] = float(tolerance)
     start, end = problem.get("start_time"), problem.get("end_time")
     if isinstance(start, (int, float)) and isinstance(end, (int, float)) and end > start:
-        # Seconds in the deck, days in a stage. The K0 and null steps span one
-        # second of pseudo-time, which is no time at all to anyone reading days.
-        fields["time_interval"] = round((end - start) / SECONDS_PER_DAY, 3)
+        # The deck's own time, which is the project's: seconds in every unit system.
+        fields["duration"] = float(end - start)
+        if parent is None:
+            fields["start_time"] = float(start)
+        step = (solver.get("time_stepping") or {}).get("time_step")
+        fields["time_step"] = (float(step) if isinstance(step, (int, float))
+                               and 0 < step <= end - start else fields["duration"])
+    # The deck's own expert settings, where it differs from a stage's defaults: shown
+    # as they are, since it is the deck that runs.
+    stated = from_deck(solver)
+    fields["solver_settings"] = {
+        row["key"]: row["value"]
+        for row in resolve(fields["calculation"], fields.get("time_integration", "static"),
+                           stated)
+        if row["overridden"] and row["value"] != row["default"]}
     return Stage(**fields)
 
 
-def _calculation(stage: dict, title: str) -> str:
+def _calculation(stage: dict) -> dict:
+    """The stage's calculation type, stress initialisation and time integration."""
     solver = (stage.get("stage_settings") or {}).get("solver_settings") or {}
-    if "groundwater_flow" in str(solver.get("solution_type", "")).lower():
-        return "Groundwater flow"
+    solution = str(solver.get("solution_type", "")).lower()
+    if "groundwater_flow" in solution:
+        return {"calculation": "flow",
+                "time_integration": "dynamic" if "transient" in solution else "static"}
+    fields = {"calculation": "mechanical",
+              "time_integration": "dynamic" if solution == "dynamic" else "static"}
     processes = (stage.get("stage_settings") or {}).get("processes") or {}
     for group in processes.values():
         for process in group if isinstance(group, list) else []:
             if K0_PROCESS in str(process.get("python_module", "")):
-                return "K0 procedure"
-    return "Null step" if "null step" in title.lower() else "Plastic"
+                fields["stress_initialisation"] = "K0"
+    return fields
 
 
 # ── Running it ──────────────────────────────────────────────────────────────

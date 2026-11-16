@@ -1,7 +1,7 @@
 """The FastAPI app, assembled from its parts.
 
 The routes of the HTTP API live in `backend/routes/`, one module per group of the API
-table in `docs/developer/ARCHITECTURE.md` (project, geometry, mesh, decks, results), and
+table in `docs/developer/ARCHITECTURE.md` (project, geometry, mesh, decks, results, files), and
 what they share in `backend/routes/common.py`. The Host/Origin check and the no-cache
 headers are `backend/middleware.py`. This module puts them together: the gmsh worker's
 lifespan, the handler for a crashed worker, the middleware in the order it runs, the
@@ -17,21 +17,26 @@ global assignment, so `frontend/js/orbit.js`, loaded after the base one, wins.
 
 from __future__ import annotations
 
+import asyncio
+import html
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from backend.middleware import do_not_cache_sources, only_this_browser_tab
-from backend.routes import decks, geometry, mesh, project, results
-from core import gmsh_worker
+from backend.routes import decks, files, geometry, mesh, project, results
+from core import gmsh_worker, version
 
 ROOT = Path(__file__).resolve().parents[1]
 FRONTEND = ROOT / "frontend"
 BASE = FRONTEND / "base"
+
+VERSION_SLOT = '<meta name="styx-version" content="">'
+"""Where `index` writes the version into the page, for `frontend/js/version.js`."""
 
 
 @asynccontextmanager
@@ -40,6 +45,8 @@ async def lifespan(_: FastAPI):
     # imports gmsh in it, which takes a second or two -- better spent now than charged
     # to whoever asks for geometry first.
     await gmsh_worker.run(gmsh_worker.version_job)
+    # Asks git once, off the event loop; the page and the health check read the answer.
+    print(f"Styx {await asyncio.to_thread(version.describe)}", flush=True)
     yield
     gmsh_worker.shutdown()
 
@@ -71,19 +78,26 @@ app.include_router(geometry.router)
 app.include_router(mesh.router)
 app.include_router(decks.router)
 app.include_router(results.router)
+app.include_router(files.router)
 
 
 @app.get("/api/health")
 async def health() -> dict:
-    """Proves the worker subprocess is up and gmsh loaded inside it."""
-    return {"ok": True, "gmsh_version": await gmsh_worker.run(gmsh_worker.version_job)}
+    """Proves the worker subprocess is up and gmsh loaded inside it, and says which
+    version of Styx answered."""
+    return {"ok": True, "version": version.describe(),
+            "gmsh_version": await gmsh_worker.run(gmsh_worker.version_job)}
 
 
 # ── Static ──────────────────────────────────────────────────────────────────
 
 @app.get("/")
-async def index() -> FileResponse:
-    return FileResponse(FRONTEND / "index.html")
+async def index() -> HTMLResponse:
+    """The page, with the version of Styx written into it: the title bar and the About
+    box need it before the first request could bring it."""
+    page = (FRONTEND / "index.html").read_text(encoding="utf-8")
+    said = html.escape(version.describe(), quote=True)
+    return HTMLResponse(page.replace(VERSION_SLOT, VERSION_SLOT.replace('""', f'"{said}"')))
 
 
 for folder in ("css", "js"):

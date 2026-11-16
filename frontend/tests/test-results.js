@@ -103,9 +103,11 @@
     //   `Download.anchor`   - a file made here, which is how CSV leaves the app.
     App.Results.download = function (url, name) { opened.push([url, name]); };
     saved = [];
-    App.Download = { anchor: function (name, text, mime) {
-      saved.push([name, text, mime]);
-    } };
+    // No save window here: a test must not depend on what the browser makes of its click.
+    App.Download = Object.assign({}, App.Download, {
+      pickFile: function () { return Promise.resolve(null); },
+      anchor: function (name, text, mime) { saved.push([name, text, mime]); }
+    });
     App.Results.forget();
   }
 

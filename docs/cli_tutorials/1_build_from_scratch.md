@@ -115,11 +115,13 @@ mesh --size 1 --order 1
 # 7. The stages: K0 on the soil alone, then the sheet pile, then the load.
 #    Every part starts in the model, so the first stage switches off what is not built yet:
 #    the sheet pile and the load. The later stages switch them back on, one at a time.
-#    An option left out takes its default: --calculation plastic, --max-iterations 15,
+#    An option left out takes its default: --calculation mechanical,
+#    --stress-initialisation none, --time-integration static, --max-iterations 15,
 #    --tolerance 1e-4, and the displacements of the stage before are kept.
 #    `stages show initial` prints a stage's settings. The solver is the same for every
 #    stage; "The stages, command by command" in docs/CLI.md says what it is.
-stages add initial --name "Initial stage" --calculation k0 --deactivate sheetpile_1 surcharge
+stages set initial --stress-initialisation k0
+stages deactivate initial sheetpile_1 surcharge
 stages add sheet_pile --name "Sheet pile" --activate sheetpile_1 --reset-displacements --max-iterations 150 --tolerance 1e-3
 stages add loading --name Load --activate surcharge --max-iterations 150 --tolerance 1e-3
 
@@ -152,9 +154,10 @@ exit
 > - To open the model again later, run `cli\kratos-shell.bat` on the same folder, then
 >   `open simple_dike.json`.
 
-The shell reads the results as numbers and CSV files; it draws no pictures. To see a
-field drawn on the mesh, start the GUI on the same runs folder and open the run in its
-Results mode. In PowerShell:
+The shell reads the results as numbers and CSV files. `picture result 1 --out pictures/`
+saves a field drawn on the mesh as a PNG, with Chrome or Edge; see
+[Pictures](../CLI.md#pictures). To look around the results, start the GUI on the same runs
+folder and open the run in its Results mode. In PowerShell:
 
 ```powershell
 $env:KRATOS_GUI_RUNS = "C:\Users\you\simple_dike"

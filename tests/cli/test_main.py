@@ -67,6 +67,22 @@ def test_no_command_is_a_usage_error(cli):
     assert "usage" in ran.err.lower()
 
 
+def test_version_says_what_the_gui_about_box_says(cli):
+    from core.version import describe
+
+    ran = cli("--version")
+
+    assert ran.code == 0
+    assert ran.out.strip() == f"Styx {describe()}"
+
+
+def test_version_answers_in_json_with_json_before_or_after(cli):
+    from core.version import describe
+
+    assert cli("--json", "--version").json() == {"version": describe()}
+    assert cli("--version", "--json").json() == {"version": describe()}
+
+
 def test_an_unknown_command_is_a_usage_error(cli):
     assert cli("frobnicate").code == 2
 
@@ -76,6 +92,9 @@ REMOVED = [
      "excavation is gone: split the soil with `line add`."),
     (["stages", "{site}", "staged-excavation"],
      "staged-excavation is gone: add each stage with `stages add`."),
+    (["stages", "{site}", "defaults"],
+     "defaults is gone: a project starts with its initial stage; add each further stage "
+     "with `stages add`."),
 ]
 
 

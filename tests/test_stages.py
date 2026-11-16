@@ -203,9 +203,8 @@ def test_the_displacements_are_reset_when_the_wall_goes_in():
 
 def test_the_first_staged_stage_is_the_only_k0_one():
     made = _model().stages
-    assert made[0].calculation == "K0 procedure"
-    assert made[1].calculation == "Null step"
-    assert all(ph.calculation == "Plastic" for ph in made[2:])
+    assert all(ph.calculation == "mechanical" for ph in made)
+    assert [ph.stress_initialisation for ph in made] == ["K0"] + ["none"] * (len(made) - 1)
 
 
 def test_the_test_models_stages_linearise():
@@ -221,49 +220,287 @@ def test_an_anchor_is_installed_after_the_lift_that_exposes_it():
     assert order.index("dig_1") < order.index("install_strut") < order.index("dig_2")
 
 
-# -- default_stages ----------------------------------------------------------
-# What "Create default stages" gives: Initial stage, then Null step, and nothing else.
-# Every further stage is the user's to add.
+# -- the three choices of a stage ------------------------------------------------
+# A calculation type, mechanical or flow; a stress initialisation, of a mechanical
+# stage only; and a time integration. There are no default stages: every stage is the
+# user's to add.
 
-def test_the_default_is_the_initial_stage_then_the_null_step():
-    made = stages.default_stages(_model())
-    assert [(ph.id, ph.name, ph.parent) for ph in made] == [
-        ("initial", "Initial stage", None),
-        ("null_step", "Null step", "initial"),
-    ]
-    assert made[0].calculation == "K0 procedure"
-    assert made[1].calculation == "Null step"
-    assert made[1].max_iterations == 150
+def test_a_stage_is_a_static_mechanical_stage_with_no_stress_initialisation():
+    made = schemas.Stage(id="s", name="S")
+    assert (made.calculation, made.stress_initialisation, made.time_integration) == \
+        ("mechanical", "none", "static")
 
 
-def test_a_new_model_gets_no_excavation_stage():
+@pytest.mark.parametrize("calculation", ["mechanical", "flow"])
+@pytest.mark.parametrize("time_integration", ["static", "dynamic"])
+def test_either_calculation_type_solves_statically_or_in_time(calculation,
+                                                              time_integration):
+    made = schemas.Stage(id="s", name="S", calculation=calculation,
+                         time_integration=time_integration)
+    assert made.time_integration == time_integration
+
+
+@pytest.mark.parametrize("stresses", ["K0", "gravity", "none"])
+def test_a_mechanical_stage_initialises_its_stresses_three_ways(stresses):
+    assert schemas.Stage(id="s", name="S",
+                         stress_initialisation=stresses).stress_initialisation == stresses
+
+
+@pytest.mark.parametrize("stresses", ["K0", "gravity"])
+def test_a_flow_stage_has_no_stresses_to_initialise(stresses):
+    with pytest.raises(ValueError, match="no stresses to initialise"):
+        schemas.Stage(id="s", name="S", calculation="flow", stress_initialisation=stresses)
+
+
+@pytest.mark.parametrize("field,value", [
+    ("calculation", "Plastic2"), ("stress_initialisation", "k0"),
+    ("time_integration", "quasi_static")])
+def test_a_choice_that_is_not_one_is_refused(field, value):
+    with pytest.raises(ValueError):
+        schemas.Stage(id="s", name="S", **{field: value})
+
+
+@pytest.mark.parametrize("old,new", [
+    ("K0 procedure", ("mechanical", "K0")),
+    ("Plastic", ("mechanical", "none")),
+    ("Null step", ("mechanical", "none")),
+    ("Groundwater flow", ("flow", "none")),
+])
+def test_a_stage_saved_with_an_old_calculation_opens_in_the_new_shape(old, new):
+    made = schemas.Stage.model_validate({"id": "s", "name": "S", "parent": "before",
+                                         "calculation": old})
+    assert (made.calculation, made.stress_initialisation) == new
+    assert made.time_integration == "static"
+
+
+@pytest.mark.parametrize("old,new", [
+    ("K0 procedure", ("mechanical", "K0")),
+    ("Plastic", ("mechanical", "gravity")),
+    ("Null step", ("mechanical", "gravity")),
+    ("Groundwater flow", ("flow", "none")),
+])
+def test_an_old_initial_stage_keeps_the_self_weight_it_had(old, new):
+    """An initial plastic stage, or null step, had the self weight, as gravity was on
+    unless the project switched it off; now its stress initialisation decides it
+    (`stages.gravity`), so it opens initialised by gravity loading."""
+    made = schemas.Stage.model_validate({"id": "s", "name": "S", "calculation": old})
+    assert (made.calculation, made.stress_initialisation) == new
+
+
+@pytest.mark.parametrize("calculation,default,tolerance", [
+    ("mechanical", "residual_criterion", 1e-9),
+    ("flow", "water_pressure_criterion", 1e-8)])
+def test_a_stage_converges_on_its_calculation_type_s_default_criterion(calculation,
+                                                                      default, tolerance):
+    """The residual criterion for a mechanical stage, the water pressure one for a flow
+    stage, each with its own absolute tolerance."""
+    made = schemas.Stage(id="s", name="S", calculation=calculation)
+    assert (made.convergence_criterion, made.tolerated_error, made.absolute_tolerance) == \
+        (default, 1e-4, tolerance)
+    # A stage that names none opens with the default too.
+    saved = schemas.Stage.model_validate({"id": "s", "name": "S",
+                                          "calculation": calculation})
+    assert saved.convergence_criterion == default
+
+
+def test_an_old_flow_stage_keeps_the_residual_criterion_it_was_solved_on():
+    saved = schemas.Stage.model_validate({"id": "s", "name": "S",
+                                          "calculation": "Groundwater flow"})
+    assert (saved.calculation, saved.convergence_criterion, saved.absolute_tolerance) == \
+        ("flow", "residual_criterion", 1e-9)
+
+
+@pytest.mark.parametrize("calculation,criterion", [
+    ("mechanical", "residual_criterion"), ("mechanical", "displacement_criterion"),
+    ("flow", "water_pressure_criterion"), ("flow", "residual_criterion")])
+def test_each_calculation_type_has_its_own_convergence_criteria(calculation, criterion):
+    made = schemas.Stage(id="s", name="S", calculation=calculation,
+                         convergence_criterion=criterion)
+    assert made.convergence_criterion == criterion
+
+
+@pytest.mark.parametrize("calculation,criterion", [
+    ("mechanical", "water_pressure_criterion"), ("flow", "displacement_criterion")])
+def test_a_criterion_of_the_other_calculation_type_is_refused(calculation, criterion):
+    with pytest.raises(ValueError, match="is not solved on the"):
+        schemas.Stage(id="s", name="S", calculation=calculation,
+                      convergence_criterion=criterion)
+
+
+def test_the_combined_criterion_kratos_cannot_build_is_no_choice():
+    with pytest.raises(ValueError):
+        schemas.Stage(id="s", name="S",
+                      convergence_criterion="displacement_and_water_pressure_criterion")
+
+
+def test_there_is_no_default_sequence():
+    assert not hasattr(stages, "default_stages")
+
+
+def test_a_copy_keeps_the_calculation_and_the_time_integration_not_the_stresses():
+    """A copy comes after the original, and only the initial stage initialises the
+    stresses."""
+    p = _project(schemas.Stage(id="initial", name="Initial", stress_initialisation="K0",
+                               time_integration="dynamic"))
+    made = stages.copied(p, "initial")[1]
+    assert (made.calculation, made.stress_initialisation, made.time_integration) == \
+        ("mechanical", "none", "dynamic")
+
+
+def test_a_copy_keeps_the_convergence_criterion_and_its_tolerances():
+    p = _project(schemas.Stage(id="initial", name="Initial",
+                               convergence_criterion="residual_criterion",
+                               tolerated_error=1e-3, absolute_tolerance=1e-6))
+    made = stages.copied(p, "initial")[1]
+    assert (made.convergence_criterion, made.tolerated_error, made.absolute_tolerance) == \
+        ("residual_criterion", 1e-3, 1e-6)
+
+
+# -- the initial stage ---------------------------------------------------------
+# It chooses the calculation type and the stress initialisation of the whole sequence,
+# and a new project starts with it.
+
+def test_a_new_project_starts_with_the_initial_stage():
     from core.model.templates import blank_project
-
-    assert [ph.id for ph in stages.default_stages(blank_project())] ==         ["initial", "null_step"]
-
-
-def test_the_default_switches_nothing_off():
-    """With no stage after them to switch anything back on, every part has to be active
-    from the start: a part that is off in every stage is missing from the deck."""
-    for ph in stages.default_stages(_model()):
-        assert not ph.activate and not ph.deactivate, ph.id
+    made = blank_project().stages
+    assert [(s.id, s.name, s.parent, s.calculation, s.stress_initialisation)
+            for s in made] == [("initial", "Initial stage", None, "mechanical", "gravity")]
 
 
-def test_the_default_makes_a_project_that_validates_and_linearises():
-    staged = schemas.Project.model_validate(
-        _model().model_dump()
-        | {"stages": [ph.model_dump() for ph in stages.default_stages(_model())]})
-    assert [ph.id for ph in stages.linearise(staged)] == ["initial", "null_step"]
+def test_a_project_with_no_stages_gets_the_initial_stage_first():
+    p = _project()
+    assert stages.added(p) == [stages.initial_stage()]
 
 
-def test_an_unexcavated_project_still_gets_a_sequence():
-    """Opening staged mode on a project with nothing dug must not produce an empty or
-    invalid list -- the stage editor has to have something to show."""
-    p = seed_project(simple=False)
-    made = stages.default_stages(p)
-    assert [ph.id for ph in made] == ["initial", "null_step"]
-    schemas.Project.model_validate(
-        p.model_dump() | {"stages": [ph.model_dump() for ph in made]})
+def test_the_initial_stage_is_neither_deleted_nor_preceded():
+    p = _project(_stage("initial"), _stage("dig", parent="initial"))
+    assert stages.removed(p, "initial") == p.stages
+    assert stages.inserted(p, "initial") == p.stages
+
+
+def test_a_later_stage_has_the_initial_stage_s_calculation_type():
+    p = _project(_stage("initial", calculation="flow"))
+    assert stages.added(p)[-1].calculation == "flow"
+    p = _project(_stage("initial", calculation="flow"), _stage("b", parent="initial",
+                                                                calculation="flow"))
+    assert stages.inserted(p, "b")[1].calculation == "flow"
+
+
+def test_the_calculation_type_is_set_in_the_initial_stage_for_every_stage():
+    p = _project(_stage("initial", stress_initialisation="K0"),
+                 _stage("dig", parent="initial"))
+    flow = stages.edited(p, "initial", "calculation", "flow")
+    assert [(s.calculation, s.stress_initialisation) for s in flow] == \
+        [("flow", "none"), ("flow", "none")]
+    assert stages.edited(p, "dig", "calculation", "flow") == p.stages
+    assert stages.edited(p, "dig", "stress_initialisation", "K0") == p.stages
+    assert stages.edited(p, "dig", "time_integration", "dynamic")[1].time_integration == \
+        "dynamic"
+
+
+def test_trying_flow_and_going_back_to_mechanical_keeps_the_self_weight():
+    """The initial stage of a new project is initialised by gravity loading; a flow
+    sequence has none, so going back to mechanical gives it gravity loading again
+    rather than leaving the self weight out of every stage."""
+    p = blank_project()
+    assert stages.gravity(p)
+    flow = p.model_copy(update={"stages": stages.edited(p, "initial", "calculation",
+                                                        "flow")})
+    back = flow.model_copy(update={"stages": stages.edited(flow, "initial", "calculation",
+                                                           "mechanical")})
+    assert back.stages[0].stress_initialisation == "gravity"
+    assert stages.gravity(back)
+    # Its own choice, made before trying flow, is gone with flow; none stays none when
+    # the type does not change.
+    off = _project(_stage("initial", stress_initialisation="none"),
+                   _stage("dig", parent="initial"))
+    assert [s.stress_initialisation
+            for s in stages.edited(off, "initial", "calculation", "mechanical")] == \
+        ["none", "none"]
+    two = _project(_stage("initial", calculation="flow"),
+                   _stage("dig", parent="initial", calculation="flow"))
+    assert [s.stress_initialisation
+            for s in stages.edited(two, "initial", "calculation", "mechanical")] == \
+        ["gravity", "none"]
+
+
+def test_a_later_stage_with_a_stress_initialisation_can_go_back_to_none():
+    """An old project's later K0 procedure opens as a later stage initialised by K0,
+    which `check_settings` refuses every edit with: setting it to none has to work."""
+    p = _project(_stage("initial", stress_initialisation="K0"),
+                 _stage("dig", parent="initial", stress_initialisation="K0"))
+    with pytest.raises(stages.StageError, match="only the initial stage"):
+        stages.check_settings(p)
+    fixed = p.model_copy(update={"stages": stages.edited(p, "dig", "stress_initialisation",
+                                                         "none")})
+    assert fixed.stages[1].stress_initialisation == "none"
+    stages.check_settings(fixed)
+    assert stages.edited(fixed, "dig", "stress_initialisation", "gravity") == fixed.stages
+
+
+def test_a_new_calculation_type_gives_every_stage_a_criterion_it_has():
+    """Every stage gets the new type's default -- the water pressure one for flow, the
+    residual one for mechanical: a flow stage made from a mechanical one converges as a
+    new flow stage does. The same type again changes nothing."""
+    p = _project(_stage("initial", convergence_criterion="displacement_criterion"),
+                 _stage("dig", parent="initial"))
+    flow = stages.edited(p, "initial", "calculation", "flow")
+    assert [s.convergence_criterion for s in flow] == ["water_pressure_criterion"] * 2
+    back = stages.edited(_project(*flow), "initial", "calculation", "mechanical")
+    assert [s.convergence_criterion for s in back] == ["residual_criterion"] * 2
+    same = stages.edited(p, "initial", "calculation", "mechanical")
+    assert [s.convergence_criterion for s in same] == \
+        ["displacement_criterion", "residual_criterion"]
+
+
+def test_a_stage_on_the_displacement_criterion_defaults_to_an_absolute_tolerance_of_1e_12():
+    def made(**kw):
+        return schemas.Stage.model_validate(_stage("a", **kw)).absolute_tolerance
+    assert made(convergence_criterion="displacement_criterion") == 1e-12
+    assert made() == 1e-9
+    assert made(convergence_criterion="displacement_criterion",
+                absolute_tolerance=1e-6) == 1e-6
+
+
+def test_a_new_criterion_takes_its_default_absolute_tolerance_unless_the_stage_has_its_own():
+    p = _project(_stage("initial"), _stage("dig", parent="initial", absolute_tolerance=1e-6))
+    on = stages.edited(p, "initial", "convergence_criterion", "displacement_criterion")
+    assert (on[0].convergence_criterion, on[0].absolute_tolerance) == \
+        ("displacement_criterion", 1e-12)
+    off = stages.edited(_project(*on), "initial", "convergence_criterion",
+                        "residual_criterion")
+    assert off[0].absolute_tolerance == 1e-9
+    own = stages.edited(p, "dig", "convergence_criterion", "displacement_criterion")
+    assert own[1].absolute_tolerance == 1e-6
+    flow = stages.edited(_project(*on), "initial", "calculation", "flow")
+    assert flow[0].absolute_tolerance == 1e-8
+    residual = stages.edited(_project(*flow), "initial", "convergence_criterion",
+                             "residual_criterion")
+    assert residual[0].absolute_tolerance == 1e-9
+
+
+def test_a_sequence_that_chooses_them_elsewhere_is_refused():
+    with pytest.raises(stages.StageError, match="not mechanical, as the initial stage"):
+        stages.check_settings(_project(_stage("initial"),
+                                       _stage("b", parent="initial", calculation="flow")))
+    with pytest.raises(stages.StageError, match="only the initial stage"):
+        stages.check_settings(_project(_stage("initial"),
+                                       _stage("b", parent="initial",
+                                              stress_initialisation="gravity")))
+    stages.check_settings(_project(_stage("initial", stress_initialisation="K0"),
+                                   _stage("b", parent="initial")))
+
+
+@pytest.mark.parametrize("stresses,on", [("K0", True), ("gravity", True), ("none", False)])
+def test_the_initial_stage_s_stress_initialisation_decides_gravity(stresses, on):
+    p = _project(_stage("initial", stress_initialisation=stresses),
+                 _stage("dig", parent="initial"))
+    assert stages.gravity(p) is on
+
+
+def test_a_flow_sequence_and_an_unstaged_project_keep_their_gravity():
+    assert stages.gravity(_project(_stage("initial", calculation="flow"))) is True
+    assert stages.gravity(_project()) is True
 
 
 # -- structure refusals and long chains (alpha 1.7) -------------------------
@@ -406,7 +643,6 @@ def test_the_phases_module_still_imports():
     from core.model import phases, stages
     assert phases.PhaseError is stages.StageError
     assert phases.linearise is stages.linearise
-    assert phases.default_phases is stages.default_stages
 
 
 def test_adding_a_stage_to_an_unresolved_branch_uses_the_last_stored_stage():
