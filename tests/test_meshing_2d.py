@@ -429,15 +429,17 @@ def test_without_a_band_a_size_meshes_as_it_always_did():
 def test_a_band_on_a_layer_grows_its_size_out_into_the_next_one():
     project = excavation_like()
     sizes = {"soil_L_top": 1.0}
-    assert elements_of(project, element_size=8.0, body_sizes=sizes,
-                       size_bands={"soil_L_top": 10.0})         > elements_of(project, element_size=8.0, body_sizes=sizes)
+    assert (elements_of(project, element_size=8.0, body_sizes=sizes,
+                        size_bands={"soil_L_top": 10.0})
+            > elements_of(project, element_size=8.0, body_sizes=sizes))
 
 
 def test_a_band_on_a_size_coarser_than_the_mesh_does_nothing():
     project = excavation_like()
     sizes = {"soil_L_bot": 12.0}
-    assert elements_of(project, element_size=8.0, body_sizes=sizes,
-                       size_bands={"soil_L_bot": 20.0})         == elements_of(project, element_size=8.0, body_sizes=sizes)
+    assert (elements_of(project, element_size=8.0, body_sizes=sizes,
+                        size_bands={"soil_L_bot": 20.0})
+            == elements_of(project, element_size=8.0, body_sizes=sizes))
 
 
 def test_a_soil_line_takes_a_size():
@@ -453,7 +455,8 @@ def test_a_soil_line_takes_a_size():
 
 def test_an_interface_on_a_pile_sizes_the_pile_it_runs_along():
     project = excavation_like()
-    assert elements_of(project, element_size=8.0, body_sizes={"wall_contact": 0.5})         == elements_of(project, element_size=8.0, body_sizes={"sheetpile": 0.5})
+    assert (elements_of(project, element_size=8.0, body_sizes={"wall_contact": 0.5})
+            == elements_of(project, element_size=8.0, body_sizes={"sheetpile": 0.5}))
 
 
 def test_a_point_load_and_a_point_condition_take_a_size():
