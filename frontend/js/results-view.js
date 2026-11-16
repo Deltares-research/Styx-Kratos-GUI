@@ -39,6 +39,13 @@ App.ResultsView = (function () {
     if (App.Viewport && App.Viewport.requestRender) App.Viewport.requestRender();
   }
 
+  /* The ID labels read what is drawn here (labelPoints), so each change to it --
+     another stage, field or deformation, a part's eye, the result cleared -- has
+     them gathered again. */
+  function relabel() {
+    if (App.Viewport && App.Viewport.refreshLabels) App.Viewport.refreshLabels();
+  }
+
   /* ── Clearing ─────────────────────────────────────────────────────────── */
 
   function clear() {
@@ -54,6 +61,7 @@ App.ResultsView = (function () {
     drawn = [];
     shown = null;
     showLegend(null);
+    relabel();
     render();
   }
 
@@ -108,6 +116,24 @@ App.ResultsView = (function () {
     render();
   }
 
+  /* The node or element numbers of what is on screen, as `{id, x, y, z}` at the drawn
+     (deformed) positions, for frontend/js/mesh-labels.js. A part whose eye is closed
+     is left out, and a node two parts share is listed once. */
+  function labelPoints(kind) {
+    var seen = {}, out = [];
+    drawn.forEach(function (entry) {
+      var objects = entry.objects || [];
+      if (objects.length && !objects[0].visible) return;
+      App.ResultsRender.labelPoints(entry.section, entry.positions, kind)
+        .forEach(function (point) {
+          if (seen[point.id]) return;
+          seen[point.id] = true;
+          out.push(point);
+        });
+    });
+    return out;
+  }
+
   /* Each part's contour follows the eye of its row in the Model explorer -- the deck
      part of the same name, for a deck case (App.Deck.resultShown). A part with no row
      there is always drawn. */
@@ -118,6 +144,7 @@ App.ResultsView = (function () {
       var on = App.Deck.resultShown(entry.section.part, eyeOf);
       (entry.objects || []).forEach(function (object) { object.visible = on; });
     });
+    relabel();
     render();
   }
 
@@ -336,6 +363,6 @@ App.ResultsView = (function () {
   return {
     draw: draw, clear: clear, isShowing: isShowing, syncVisibility: syncVisibility,
     describeAt: describeAt, nearest: nearest, extremes: extremes,
-    showLegend: showLegend, legendData: legendData
+    showLegend: showLegend, legendData: legendData, labelPoints: labelPoints
   };
 })();

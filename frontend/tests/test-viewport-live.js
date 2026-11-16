@@ -81,6 +81,12 @@
     return booted;
   }
 
+  /* The ID labels number the generated mesh where it is drawn: the Mesh tab. */
+  function meshTab() {
+    App.state.mode = 'mesh';
+    App.Viewport.setMode('mesh');
+  }
+
   function until(check, ms) {
     var deadline = Date.now() + (ms || 5000);
     return new Promise(function (resolve, reject) {
@@ -215,6 +221,33 @@
           App.Viewport.setLabels('elements', false);
           T.ok(!App.Viewport.labelsOn());
         });
+    });
+  });
+
+  test('viewport: the numbers show where the mesh is drawn, and not elsewhere', function () {
+    var savedMode = App.state.mode;
+    return boot().then(function () {
+      meshTab();
+      return new Promise(function (resolve) { App.Viewport.setLabels('nodes', true, resolve); });
+    }).then(function (count) {
+      T.ok(count > 0, 'numbered in the Mesh tab');
+      App.state.mode = 'structures';
+      App.Viewport.setMode('structures');
+      T.eq(App.MeshLabels.count('nodes'), 0, 'Structures draws no mesh, so no numbers');
+      T.ok(App.Viewport.labelsOn('nodes'), 'but they stay on');
+      meshTab();
+      return until(function () { return App.MeshLabels.count('nodes') > 0; });
+    }).then(function () {
+      T.ok(App.MeshLabels.count('nodes') > 0, 'back in the Mesh tab, back on screen');
+    }).then(function () {
+      App.Viewport.setLabels('nodes', false);
+      App.state.mode = savedMode;
+      App.Viewport.setMode(savedMode);
+    }, function (error) {
+      App.Viewport.setLabels('nodes', false);
+      App.state.mode = savedMode;
+      App.Viewport.setMode(savedMode);
+      throw error;
     });
   });
 
@@ -575,6 +608,7 @@
 
   test('viewport: mesh and label request failures report their cause and hide the progress overlay', function () {
     return boot().then(function () {
+      meshTab();
       return new Promise(function (resolve) { App.Viewport.generateMesh(resolve); });
     }).then(function () {
       App.Api.post = function () { return Promise.reject(new Error('Numbering refused')); };
@@ -667,6 +701,7 @@
       standIns();
     }
     return boot().then(function () {
+      meshTab();
       var post = App.Api.post;
       App.Api.post = function (path, body) {
         if (path === '/api/mesh') {

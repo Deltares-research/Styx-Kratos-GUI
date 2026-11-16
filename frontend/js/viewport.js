@@ -2020,8 +2020,21 @@ App.Viewport = (function () {
     // A stage may have switched a part off, and a coloured part follows that.
     syncPartColors();
     applyImportedVisibility(mode);
+    // The numbers follow what this tab draws: gone where the mesh is not, back where
+    // it is. Only a change of tab asks the server for a missing numbering: a redraw
+    // in the same tab comes from generateMesh or a rebuild, which ask for it
+    // themselves once their own progress overlay is down.
+    var tabChanged = mode !== labelledMode;
+    labelledMode = mode;
+    if (labelsOn()) {
+      if (tabChanged) renumberLabels();
+      else refreshLabels();
+    }
     needsRender = true;
   }
+
+  /* The tab the labels were last gathered for (setMode). */
+  var labelledMode = null;
 
   /* An imported deck's sections, drawn or not. Outside `groups`, so the pass above
      never reaches them; this is their pass. Three things decide, and App.Deck (tested
@@ -2129,11 +2142,17 @@ App.Viewport = (function () {
   /* Everything currently on screen that has a number, for one kind of label. An
      imported deck brings its own numbering with it, section by section, so a part the
      eye is closed on is not labelled; a generated mesh's has to be asked for, so it only
-     joins in once `generatedLabels` has arrived. */
+     joins in once `generatedLabels` has arrived, and only while that mesh is drawn --
+     Structures and the other tabs that draw the geometry show no numbers for a mesh
+     they do not show. Results numbers the result mesh it draws (App.ResultsView). */
   function labelledPoints(kind) {
     var list = [];
     if (!App.MeshLabels) return list;
-    if (importedMeshGroup) {
+    if (App.state && App.state.mode === 'results') {
+      return App.ResultsView && App.ResultsView.labelPoints
+        ? App.ResultsView.labelPoints(kind) : list;
+    }
+    if (importedMeshGroup && importedMeshGroup.visible) {
       var sections = Object.keys(importedSectionLabels)
         .filter(function (key) {
           var group = importedSectionGroups[key];
@@ -2144,10 +2163,15 @@ App.Viewport = (function () {
         ? App.MeshLabels.elementsFromSections(sections)
         : App.MeshLabels.nodesFromSections(sections));
     }
-    if (generatedLabels && meshBuilt && visible.mesh !== false) {
+    if (generatedLabels && meshDrawn()) {
       list = list.concat(App.MeshLabels.pointsFromTable(generatedLabels[kind]));
     }
     return list;
+  }
+
+  /* The generated mesh is on screen: built, its eye open, and drawn by this tab. */
+  function meshDrawn() {
+    return meshBuilt && visible.mesh !== false && !!groups.mesh && groups.mesh.visible;
   }
 
   /* Re-gather without re-asking the server: called whenever what is drawn changes. Only
@@ -2165,7 +2189,7 @@ App.Viewport = (function () {
      needs asking, and only once: the numbering costs a full export pass, and nothing but
      a new mesh can change it. */
   function needsNumbering() {
-    return meshBuilt && visible.mesh !== false && !generatedLabels;
+    return meshDrawn() && !generatedLabels;
   }
 
   /* Fetch both tables at once. They come out of one export pass on the server, so asking

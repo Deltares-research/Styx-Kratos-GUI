@@ -457,7 +457,8 @@ removed, and its value. If the body comes back later, for example when you move 
 boundary back, set its size again, or use undo to get the body and its size back.
 
 To see the numbers of the nodes or the elements, right-click in the viewport and select
-**Show labels**. To show a part of the mesh in its own colour, type `colour <part>`. To see
+**Show labels**. The numbers show on the mesh in the Mesh tab, and on the result mesh in
+Results. The other tabs do not show the mesh, so they do not show the numbers. To show a part of the mesh in its own colour, type `colour <part>`. To see
 the parts that contain a node, type `node <id>`.
 
 ## Staged construction mode

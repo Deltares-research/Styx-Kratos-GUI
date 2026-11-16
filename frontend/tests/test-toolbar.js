@@ -380,6 +380,32 @@
     } finally { Object.assign(App, saved); }
   });
 
+  test('turned on in a tab that does not draw the mesh, the IDs stay on for one that does',
+       function () {
+    var saved = { Viewport: App.Viewport, Command: App.Command, state: App.state };
+    var notes = [], changes = [], on = false;
+    App.Command = { note: function (text) { notes.push(text); } };
+    App.Viewport = {
+      hasMesh: function () { return true; },
+      labelsOn: function () { return on; },
+      setLabels: function (kind, value, done) {
+        changes.push(value); on = value;
+        if (done) done(0);                        // nothing drawn here to number
+      }
+    };
+    try {
+      App.state = { mode: 'structures' };
+      App.LivePatches.toggleLabels('nodes');
+      T.eq(changes, [true], 'left on');
+      T.ok(/Mesh tab and in Results/.test(notes[0]), notes[0]);
+      on = false;
+      App.state = { mode: 'results' };
+      App.LivePatches.toggleLabels('nodes');
+      T.eq(changes, [true, true, false], 'Results with no result: off again');
+      T.eq(notes[1], 'Nothing to label — open a result first.');
+    } finally { Object.assign(App, saved); }
+  });
+
   /* ── Structures rail order ─────────────────────────────────────── */
 
   /* Every live tool was appended to the frozen rail, so sheet piles, anchors and

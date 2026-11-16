@@ -1896,6 +1896,18 @@ App.LivePatches = (function () {
     App.Viewport.setLabels(kind, on, function (count) {
       if (!on) return App.Command.note(noun + ' ID labels hidden.');
       if (count === null) return;                            // already reported
+      var mode = App.state && App.state.mode;
+      // The numbers are drawn on a mesh that is on screen. A tab that does not draw the
+      // mesh there is keeps them on for the tabs that do.
+      if (!count && mode !== 'mesh' && mode !== 'results'
+          && App.Viewport.hasMesh && App.Viewport.hasMesh()) {
+        return App.Command.note(noun + ' IDs are on. They are drawn on the mesh: '
+          + 'in the Mesh tab and in Results.');
+      }
+      if (!count && mode === 'results') {
+        App.Viewport.setLabels(kind, false);
+        return App.Command.note('Nothing to label — open a result first.');
+      }
       if (!count) {
         App.Viewport.setLabels(kind, false);
         return App.Command.note(

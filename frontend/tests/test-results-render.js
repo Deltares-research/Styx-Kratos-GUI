@@ -496,4 +496,26 @@
     T.eq(App.ResultsRender.rangeLines({ ids: [1], values: [null], unit: 'm' }), null);
     T.eq(App.ResultsRender.rangeLines({ ids: [], values: [], unit: 'm' }), null);
   });
+
+  /* ── ID labels ───────────────────────────────────────────────────── */
+
+  test('a node number goes at its drawn vertex, deformed or not', function () {
+    var s = section();
+    T.eq(R.labelPoints(s, null, 'nodes')[3], { id: 4, x: 1, y: 1, z: 0 });
+    var moved = [0, 0, 0,  1, -1, 0,  0, 1, 0,  1, 1, 0];
+    T.eq(R.labelPoints(s, moved, 'nodes')[1], { id: 2, x: 1, y: -1, z: 0 },
+         'the number follows the deformed mesh');
+  });
+
+  test('an element number goes at the mean of the vertices it is drawn with', function () {
+    var s = section();
+    s.triangle_elements = [7, 7];                 // one quadrilateral, two triangles
+    s.edge_indices = [0, 1];
+    s.edge_elements = [9];                        // and a beam along the bottom
+    var points = R.labelPoints(s, null, 'elements');
+    T.eq(points.map(function (p) { return p.id; }), [7, 9]);
+    T.eq([points[0].x, points[0].y], [0.5, 0.5], 'four corners, each once');
+    T.eq([points[1].x, points[1].y], [0.5, 0], 'the beam: its two ends');
+    T.eq(R.labelPoints(section(), null, 'elements'), [], 'no element ids, no labels');
+  });
 })();
