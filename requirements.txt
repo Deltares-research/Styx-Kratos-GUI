@@ -1,4 +1,6 @@
-fastapi==0.162.6
+# fastapi 0.162.6 dropped Python 3.10.
+fastapi==0.162.5; python_version < "3.11"
+fastapi==0.162.6; python_version >= "3.11"
 uvicorn[standard]==0.34.0
 pydantic==2.14.3
 gmsh==4.13.1
