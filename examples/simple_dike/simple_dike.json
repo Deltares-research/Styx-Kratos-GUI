@@ -160,7 +160,7 @@
       "active": true
     }
   ],
-  "gravity": true,
+  "gravity_acceleration": 9.81,
   "mesh": {
     "element_size": 1.0,
     "order": 1,
@@ -172,6 +172,7 @@
     "size_min_factor": 0.05,
     "second_order_linear": true,
     "body_sizes": {},
+    "size_bands": {},
     "refinements": []
   },
   "custom_parts": [],
@@ -180,7 +181,9 @@
       "id": "initial",
       "name": "Initial stage",
       "parent": null,
-      "calculation": "K0 procedure",
+      "calculation": "mechanical",
+      "stress_initialisation": "K0",
+      "time_integration": "static",
       "loading": "Staged construction",
       "activate": [],
       "deactivate": [
@@ -188,39 +191,58 @@
         "surcharge"
       ],
       "reset_displacements": false,
+      "convergence_criterion": "residual_criterion",
       "max_iterations": 15,
       "tolerated_error": 0.0001,
-      "time_interval": 0.0
+      "absolute_tolerance": 1e-09,
+      "start_time": 0.0,
+      "duration": 1.0,
+      "time_step": 1.0,
+      "solver_settings": {}
     },
     {
       "id": "sheet_pile",
       "name": "Sheet pile",
       "parent": "initial",
-      "calculation": "Plastic",
+      "calculation": "mechanical",
+      "stress_initialisation": "none",
+      "time_integration": "static",
       "loading": "Staged construction",
       "activate": [
         "sheetpile_1"
       ],
       "deactivate": [],
       "reset_displacements": true,
+      "convergence_criterion": "residual_criterion",
       "max_iterations": 150,
       "tolerated_error": 0.001,
-      "time_interval": 0.0
+      "absolute_tolerance": 1e-09,
+      "start_time": 0.0,
+      "duration": 1.0,
+      "time_step": 1.0,
+      "solver_settings": {}
     },
     {
       "id": "loading",
       "name": "Load",
       "parent": "sheet_pile",
-      "calculation": "Plastic",
+      "calculation": "mechanical",
+      "stress_initialisation": "none",
+      "time_integration": "static",
       "loading": "Staged construction",
       "activate": [
         "surcharge"
       ],
       "deactivate": [],
       "reset_displacements": false,
+      "convergence_criterion": "residual_criterion",
       "max_iterations": 150,
       "tolerated_error": 0.001,
-      "time_interval": 0.0
+      "absolute_tolerance": 1e-09,
+      "start_time": 0.0,
+      "duration": 1.0,
+      "time_step": 1.0,
+      "solver_settings": {}
     }
   ],
   "deck": null,
@@ -230,9 +252,13 @@
   "soil_body_labels": {
     "soil_soil": "soil"
   },
+  "soil_body_materials": {
+    "soil_soil": "m_soil"
+  },
   "stageable_parts": [
     "soil_soil",
     "sheetpile_1",
     "surcharge"
-  ]
+  ],
+  "model_strategies": {}
 }

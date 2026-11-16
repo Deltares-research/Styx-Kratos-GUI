@@ -466,7 +466,8 @@ App.Model = (function () {
     return interfaceNode;
   }
 
-  /* "Model conditions": the boundary conditions, one row each, and gravity. The frozen
+  /* "Model conditions": the boundary conditions, one row each. Gravity is not one of
+     them: the initial stage's stress initialisation decides it (Stage explorer). The frozen
      tree's own "Model conditions" (js/data.js) lists a demo's rows -- Domain, Water,
      Climate -- that select nothing, and two rows of one label would be the dead-twin
      problem `dropFrozenInterfaceRow` solves; it is dropped the same way. */
@@ -593,22 +594,6 @@ App.Model = (function () {
     };
   }
 
-  function gravityProps() {
-    return {
-      title: 'Gravity', icon: 'settings',
-      groups: { 'General': [
-        ['Gravity acts', App.PROJECT && App.PROJECT.gravity === false ? 'No' : 'Yes', '', false,
-         yesNo(function () { return !(App.PROJECT && App.PROJECT.gravity === false); },
-               function (on) { App.PENDING_GRAVITY = on; return null; })],
-        ['', 'The self weight of every body, in every stage.', '', true],
-        ['Acceleration g', String(App.PROJECT && typeof App.PROJECT.gravity_acceleration === 'number'
-                                  ? App.PROJECT.gravity_acceleration : App.Units.gravity('SI')),
-         'm/s²', true],
-        ['', 'Set in File > Project properties.', '', true]
-      ] }
-    };
-  }
-
   function ensureLinesNode() {
     if (!linesNode) {
       linesNode = { label: 'Lines', icon: 'line', count: 0,
@@ -715,10 +700,10 @@ App.Model = (function () {
   function syncTrees(layeredSoil, soil) {
     var top = layeredSoil ? (soil ? [soil] : []) : topLevelUnion();
     var groups = [customGeometryNode, importedMeshNode, linesNode, sheetPileNode, anchorNode,
-                  interfaceNode, normalLoadNode, loadConditionsNode];
+                  interfaceNode, normalLoadNode, loadConditionsNode, modelConditionsNode];
     function empty(node) { return groups.indexOf(node) >= 0 && !(node.children || []).length; }
     top = top.filter(function (node) { return !empty(node); });
-    groups.concat([waterLevelNode, modelConditionsNode]).forEach(function (node) {
+    groups.concat([waterLevelNode]).forEach(function (node) {
       if (node && !empty(node) && !containsNode(top, node)) top.push(node);
     });
     var tree = orderTree(top);
@@ -2113,24 +2098,25 @@ App.Model = (function () {
     });
     boundaryNode.count = listed.length;
     boundaryNode.children = listed.map(conditionChild);
-    var gravityOn = !(App.PROJECT && App.PROJECT.gravity === false);
-    // No "Boundary conditions [0]" row for a model without any; gravity always acts or not.
-    conditionsNode.children = (listed.length ? [boundaryNode] : []).concat([{
-      label: 'Gravity  ·  ' + (gravityOn ? 'on' : 'off'), icon: 'settings', leaf: true,
-      obj: 'gravity' }]);
+    // No "Boundary conditions [0]" row, nor an empty "Model conditions", for a model
+    // without any.
+    conditionsNode.children = listed.length ? [boundaryNode] : [];
     previousConditionKeys.forEach(function (key) { delete App.OBJECT_PROPS[key]; });
     conditions.forEach(function (record) {
       App.OBJECT_PROPS[record.id] = conditionProps(record);
     });
-    App.OBJECT_PROPS.gravity = gravityProps();
     previousConditionKeys = conditions.map(function (record) { return record.id; });
 
     // The local mesh size of every object that can have one, in one place: a layer, a
-    // soil body, a structure, a soil line, a drawn condition, a point load.
+    // soil body, a structure, an anchor, a soil line, a load, a condition. A condition
+    // on a face shows the size of the face, and one on a soil part that of the part.
     if (App.MeshSettings && App.MeshSettings.sizableKeys) {
-      App.MeshSettings.sizableKeys(App.PROJECT).forEach(function (key) {
-        var props = App.OBJECT_PROPS[key];
-        if (props && props.groups) props.groups.Mesh = App.MeshSettings.selectionRows(key);
+      var sizable = App.MeshSettings.sizableKeys(App.PROJECT);
+      Object.keys(App.OBJECT_PROPS).forEach(function (id) {
+        var props = App.OBJECT_PROPS[id];
+        var key = App.MeshSettings.sizeKeyOf(App.PROJECT, id);
+        if (key === null || sizable.indexOf(key) < 0 || !(props && props.groups)) return;
+        props.groups.Mesh = App.MeshSettings.selectionRows(key, id);
       });
     }
 
@@ -2152,6 +2138,26 @@ App.Model = (function () {
 
   function groupedInteger(value) {
     return String(value).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  }
+
+  /* No mesh (Mesh > Clear mesh): the Mesh statistics read "—" again. */
+  function clearMeshStats() {
+    var props = App.OBJECT_PROPS && App.OBJECT_PROPS.mesh;
+    if (props && props.groups && props.groups.Statistics) {
+      props.groups.Statistics.forEach(function (row) {
+        if (row[0] === 'Element type' || row[0] === 'Elements' || row[0] === 'Nodes'
+            || row[0] === 'Average element size') row[1] = '—';
+      });
+    }
+    Object.keys(App.TREES || {}).forEach(function (mode) {
+      (function walk(items) {
+        (items || []).forEach(function (item) {
+          if (item.obj === 'mesh' && /^Elements:/.test(item.label)) item.label = 'Elements: —';
+          if (item.obj === 'mesh' && /^Nodes:/.test(item.label)) item.label = 'Nodes: —';
+          walk(item.children);
+        });
+      })(App.TREES[mode]);
+    });
   }
 
   function setMeshStats(stats) {
@@ -2208,12 +2214,13 @@ App.Model = (function () {
 
   return {
     fromProject: fromProject, materialsToServer: materialsToServer,
-    extentOf: extentOf,
+    extentOf: extentOf, loadsFor: loadsFor,
     pendingDomain: pendingDomain, pendingWater: pendingWater,
     outOfPlaneAxis: outOfPlaneAxis,
     apply: apply, load: load,
     projectTitle: projectTitle, syncTitle: syncTitle,
     rebuildDerived: rebuildDerived, setVolumes: setVolumes, setMeshStats: setMeshStats,
+    clearMeshStats: clearMeshStats,
     setImportedParts: setImportedParts,
     domain: function () { return domain; }
   };

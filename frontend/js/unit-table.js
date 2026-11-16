@@ -190,6 +190,17 @@ App.UNIT_TABLE =
         "kN": "m³/s/m"
       }
     },
+    "time": {
+      "dimension": [
+        0,
+        0,
+        1
+      ],
+      "labels": {
+        "SI": "s",
+        "kN": "s"
+      }
+    },
     "dimensionless": {
       "dimension": [
         0,

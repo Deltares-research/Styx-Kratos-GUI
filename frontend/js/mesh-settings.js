@@ -165,9 +165,40 @@ App.MeshSettings = (function () {
     return null;
   }
 
-  /* The lines and points of `project` a size can be given to, in the order the Model
-     explorer lists them (`Project.mesh_size_keys`). An anchor is one truss element and
-     has none. */
+  /* The faces of the model, as `Project.listed_mesh_size_keys` lists them: a 2D
+     section has no front and back. */
+  var FACES = ['bottom', 'left', 'right', 'front', 'back', 'top'];
+  var SECTION_FACES = ['bottom', 'left', 'right', 'top'];
+  function modelFaces(project) {
+    return project && project.dimension === 2 ? SECTION_FACES : FACES;
+  }
+
+  /* The key a size on the face `face` is kept under (`schemas.face_size_key`). One per
+     face, whatever conditions are on it: the deck writes one node part per face. */
+  function faceKey(face) { return 'face_' + face; }
+
+  /* "Bottom face  ·  Fixed bottom": the face, and the conditions on it. */
+  function faceLabel(project, face) {
+    var on = ((project && project.boundary_conditions) || []).filter(function (c) {
+      return c.on === 'face' && c.face === face;
+    }).map(function (c) { return c.name || c.id; });
+    var name = face.charAt(0).toUpperCase() + face.slice(1) + ' face';
+    return on.length ? name + '  ·  ' + on.join(', ') : name;
+  }
+
+  /* The loads this dimension builds (`Project.loads_for`), as the Model explorer lists
+     them. */
+  function builtLoads(project) {
+    if (App.Model && App.Model.loadsFor) return App.Model.loadsFor(project || {});
+    return (project && project.loads) || [];
+  }
+
+  /* Everything but the soil that a size can be given to, as
+     `Project.listed_mesh_size_keys` lists it: the structures, the anchors (sized at
+     their head), the interfaces, the normal loads, the soil lines, the conditions on a
+     line or at a point, the loads, and the faces of the model. Together with the soil
+     these are every node part the deck writes. A condition on a face is on that face's
+     part, and takes its size (`sizeKeyOf`). */
   function localObjects(project) {
     var p = project || {};
     var out = [];
@@ -177,17 +208,36 @@ App.MeshSettings = (function () {
       });
     }
     add(p.beams, 'structure');
+    add(p.anchors, 'anchor');
     add(p.interfaces, 'interface');
     add(p.normal_loads, 'normal load');
     add(p.lines, 'line');
     add((p.boundary_conditions || []).filter(function (c) {
       return c.on === 'line' || c.on === 'point';
     }), 'condition');
-    add((p.loads || []).filter(function (load) { return load.kind === 'point'; }), 'point load');
+    add(builtLoads(p), 'load');
+    modelFaces(p).forEach(function (face) {
+      out.push({ key: faceKey(face), label: faceLabel(p, face), kind: 'face' });
+    });
     return out;
   }
 
-  /* Every key a size can name: the layers, their bodies and the lines and points. */
+  /* The key whose size the object `id` has, or null for one that takes the global size
+     (`Project.mesh_size_key_of`). A condition on a face has the face's, one on a soil
+     part the part's, and one on the whole soil none: the whole soil is meshed at the
+     global element size. Anything else has its own. */
+  function sizeKeyOf(project, id) {
+    var condition = ((project && project.boundary_conditions) || []).filter(function (c) {
+      return c.id === id;
+    })[0];
+    if (!condition) return id;
+    if (condition.on === 'face' && condition.face) return faceKey(condition.face);
+    if (condition.on === 'part') return condition.part || null;
+    if (condition.on === 'domain') return null;
+    return id;
+  }
+
+  /* Every key a size can name: the layers, their bodies, and `localObjects`. */
   function sizableKeys(project) {
     var keys = meshBodies(project).map(function (body) { return body.key; })
       .concat((project && project.soil_body_keys) || []);
@@ -233,9 +283,11 @@ App.MeshSettings = (function () {
     var name = nameOf(App.PROJECT, key);
     return App.Api.put('/api/project', project).then(function (saved) {
       App.Model.apply(saved);
-      // Drawn again, or its Mesh size row keeps the old size until the next click.
-      if (App.selectObject && App.state && App.state.selection === key) {
-        App.selectObject(key, 'tree');
+      // Drawn again, or its Mesh size row keeps the old size until the next click. A
+      // condition on a face shows the face's size, so it is drawn again too.
+      var selected = App.state && App.state.selection;
+      if (App.selectObject && selected && sizeKeyOf(App.PROJECT, selected) === key) {
+        App.selectObject(selected, 'tree');
       }
       if (App.Command && App.Command.ok) {
         App.Command.ok(size === null ? name + ' takes the global mesh size again.'
@@ -249,9 +301,11 @@ App.MeshSettings = (function () {
   /* The Selection explorer's Mesh group for `key`. The explorer calls
      App.commitSelectionEdit after an edit, which sends what is kept in
      App.PENDING_MESH_SIZE (js/patches.js). With no size of its own the object reads
-     "global"; writing that back, or the band it shows, changes nothing. */
+     "global"; writing that back, or the band it shows, changes nothing. `id` is the
+     selected object when its size is another's: a condition on a face shows the
+     face's size, and says so. */
   var GLOBAL = 'global';
-  function selectionRows(key) {
+  function selectionRows(key, id) {
     var now = localSize(App.PROJECT, key);
     function keep(size, band) {
       if ((size !== null && !Number.isFinite(size)) || (band !== null && !Number.isFinite(band))) {
@@ -274,6 +328,9 @@ App.MeshSettings = (function () {
         get: function () { return now.band || 0; },
         set: function (band) { return keep(now.size, band); } }]
     ];
+    if (id !== undefined && id !== key) {
+      rows.unshift(['Size of', nameOf(App.PROJECT, key), '', true]);
+    }
     if (now.size !== null) {
       rows.push(['Size', '', '', false, { kind: 'button', text: 'Use the global size',
         run: function () {
@@ -296,17 +353,18 @@ App.MeshSettings = (function () {
      selected object. On the Mesh tab with a mesh on screen the mesh is made again, so
      the user sees what the tool did; the object stays selected for the next press. */
   function changeSelected(factor) {
-    var key = App.state && App.state.selection;
+    var selected = App.state && App.state.selection;
+    var key = selected ? sizeKeyOf(App.PROJECT, selected) : null;
     if (!key || sizableKeys(App.PROJECT).indexOf(key) < 0) {
       if (App.Command && App.Command.note) {
-        var anchor = ((App.PROJECT && App.PROJECT.anchors) || []).filter(function (a) {
-          return a.id === key;
-        })[0];
-        var named = anchor ? (anchor.name || anchor.id) : null;
-        App.Command.note(named
-          ? named + ' takes no mesh size: an anchor is one element. '
-            + 'Select a layer, a soil body, a line or a point.'
-          : 'Select a layer, a soil body, a line or a point first.');
+        var whole = selected && key === null
+          ? ((App.PROJECT && App.PROJECT.boundary_conditions) || []).filter(function (c) {
+            return c.id === selected;
+          })[0] : null;
+        App.Command.note(whole
+          ? (whole.name || whole.id) + ' acts on the whole soil, which is meshed at the '
+            + 'global element size. Change it in Mesh properties.'
+          : 'Select a layer, a soil body, a structure, a load, a condition or a line first.');
       }
       return Promise.resolve(null);
     }
@@ -387,7 +445,7 @@ App.MeshSettings = (function () {
     if (locals.length) {
       var localTable = el('div.mesh-body-table');
       localTable.appendChild(el('div.mesh-body-head', null, [
-        el('span', { text: 'Structure, line or point' }), el('span', { text: 'Size' }),
+        el('span', { text: 'Object' }), el('span', { text: 'Size' }),
         el('span', { text: 'Band' })
       ]));
       locals.forEach(function (localRow) {
@@ -405,8 +463,8 @@ App.MeshSettings = (function () {
           title: localRow.kind
         }, [el('span', { text: localRow.label }), size, band]));
       });
-      row('Structure mesh sizes', localTable,
-          'The element size at each structure, line or point, and the band over which it grows back to the global size [m]. Empty: it takes the size of the mesh around it. Also in the Selection explorer of each object.');
+      row('Object mesh sizes', localTable,
+          'The element size at each structure, anchor (at its head), interface, normal load, soil line, load, condition on a line or at a point, and face of the model, and the band over which it grows back to the global size [m]. A condition on a face takes the size of the face. Empty: it takes the size of the mesh around it. Also in the Selection explorer of each object.');
     }
 
     var globalSize = row('Global element size', input('element_size', 'number', { min: '0.01', step: '0.1' }),
@@ -520,7 +578,8 @@ App.MeshSettings = (function () {
     bodyControls: bodyControls, savedBodySizes: savedBodySizes,
     localSize: localSize, withLocalSize: withLocalSize, localProblem: localProblem,
     localObjects: localObjects, localControls: localControls, savedLocalSizes: savedLocalSizes,
-    sizableKeys: sizableKeys, saveLocalSize: saveLocalSize, selectionRows: selectionRows,
+    sizableKeys: sizableKeys, sizeKeyOf: sizeKeyOf, faceKey: faceKey,
+    saveLocalSize: saveLocalSize, selectionRows: selectionRows,
     sizeNow: sizeNow, changeSelected: changeSelected,
     algorithmRow: algorithmRow, merge: merge, open: open,
     TITLE: TITLE, optimizationChoices: optimizationChoices, optimizationHelp: optimizationHelp,

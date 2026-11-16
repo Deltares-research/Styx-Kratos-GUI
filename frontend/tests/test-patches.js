@@ -45,6 +45,54 @@
     }
   });
 
+  test('clear mesh drops the mesh and its statistics, and says when there is none', function () {
+    var saved = {
+      action: App.runAction, viewport: App.Viewport, command: App.Command,
+      state: App.state, setMode: App.setMode, select: App.selectObject,
+      menu: App.Menu, model: App.Model
+    };
+    var lines = [], selected = 'mesh', meshed = true, statsCleared = 0;
+    App.state = { mode: 'mesh', selection: 'mesh' };
+    App.setMode = function (mode) { App.state.mode = mode; };
+    App.selectObject = function (key) { selected = key; App.state.selection = key; };
+    App.Menu = { mountBar: function () {}, openAt: function () {} };
+    App.Command = {
+      write: function (kind, text) { lines.push(kind + ':' + text); },
+      ok: function (text) { lines.push('ok:' + text); },
+      note: function (text) { lines.push('note:' + text); }, run: function () {}
+    };
+    App.Viewport = {
+      clearMesh: function () { var had = meshed; meshed = false; return had; },
+      hasMesh: function () { return meshed; }
+    };
+    App.Model = { clearMeshStats: function () { statsCleared += 1; } };
+    App.runAction = function () { throw new Error('frozen action should not run'); };
+
+    try {
+      App.LivePatches.install();
+      App.runAction({ action: 'clearMesh' });
+      T.eq(meshed, false);
+      T.eq(statsCleared, 1, 'the Mesh statistics read "—" again');
+      T.eq(selected, null, 'the cleared mesh is no longer selected');
+      T.ok(/^ok:Mesh cleared/.test(lines[lines.length - 1]), lines.join(' | '));
+      App.runAction({ action: 'clearMesh' });
+      T.eq(lines[lines.length - 1], 'note:There is no mesh to clear.');
+      T.eq(statsCleared, 1);
+      var menu = (App.MENUS || []).filter(function (m) { return m.label === 'Mesh'; })[0];
+      var labels = menu.items.map(function (i) { return i && i.label; });
+      T.eq(labels[labels.indexOf('Generate mesh…') + 1], 'Clear mesh',
+           'Clear mesh sits under Generate mesh');
+      T.ok((App.RAILS.mesh || []).some(function (tool) {
+        return tool && tool.action === 'clearMesh';
+      }), 'the Mesh rail has the tool');
+    } finally {
+      App.runAction = saved.action; App.Viewport = saved.viewport; App.Command = saved.command;
+      App.state = saved.state; App.setMode = saved.setMode; App.selectObject = saved.select;
+      App.Menu = saved.menu; App.Model = saved.model;
+      App.LivePatches.resetForTests();
+    }
+  });
+
   test('layer snapshots are deep and can restore cancelled edits', function () {
     var saved = App.LAYERS;
     App.LAYERS = [{ id: 'L1', top: 0, bottom: -8 }];

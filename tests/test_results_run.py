@@ -23,6 +23,7 @@ def no_settings(monkeypatch, tmp_path):
 def test_the_servers_own_python_is_not_taken_for_kratos(no_settings, monkeypatch):
     """The fallback `calculation.interpreter()` takes with nothing configured exists and
     runs, and has no Kratos in it."""
+    results_run.require_no_kratos()
     monkeypatch.setenv(calculation.PYTHON_ENV, sys.executable)
     reason = results_run.kratos_missing()
     assert reason and "not installed" in reason

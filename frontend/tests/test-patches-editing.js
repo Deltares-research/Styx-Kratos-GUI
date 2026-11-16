@@ -245,10 +245,12 @@
       }
       function restore() { HTMLInputElement.prototype.click = click; }
       function writes() {
-        return ctx.requests.filter(function (r) { return r.method === 'PUT'; }).length;
+        // Opening is a POST to /api/project/open; anything but a GET writes.
+        return ctx.requests.filter(function (r) { return r.method !== 'GET'; }).length;
       }
       return choose('Opened site.json', JSON.stringify(ctx.server)).then(function () {
-        T.eq(ctx.requests[0].method, 'PUT');
+        T.eq(ctx.requests[0].method, 'POST');
+        T.eq(ctx.requests[0].path, '/api/project/open');
         T.eq(ctx.requests[0].body.name, 'Opened site');
         T.eq(App.PROJECT.name, 'Opened site');
         return choose('Broken.json', 'not json');
@@ -546,6 +548,7 @@
     return withShell(function (ctx, host) {
       var id = App.PROJECT.stages[1].id;
       App.state.mode = 'staged'; App.state.phase = id;
+      App.PROJECT.stages[1].time_step = 1;
       App.Explorer.mountPhases();
       function control(label) {
         var rows = Array.prototype.slice.call(host.querySelectorAll('#list-phases .pgrid-row'));
@@ -564,7 +567,7 @@
         ['Max iterations', 'abc', 'must be a number'],
         ['Max iterations', '1.5', 'must be a whole number'],
         ['Max iterations', '0', 'must be at least 1'],
-        ['Time interval', '-1', 'must be at least 0'],
+        ['Time step', '-1', 'must be greater than 0'],
         ['Tolerated error', '0', 'must be greater than 0']
       ].forEach(function (entry) {
         var original = control(entry[0]).value;
@@ -576,10 +579,10 @@
       change('Max iterations', '30');
       return settle().then(function () {
         T.eq(App.PROJECT.stages[1].max_iterations, 30);
-        change('Time interval', '0,25');
+        change('Time step', '0,25');
         return settle();
       }).then(function () {
-        T.eq(App.PROJECT.stages[1].time_interval, 0.25);
+        T.eq(App.PROJECT.stages[1].time_step, 0.25);
         var reset = control('Reset displacements to zero');
         var desired = !reset.checked;
         reset.checked = desired; reset.dispatchEvent(new Event('change', { bubbles: true }));
@@ -601,7 +604,7 @@
       var selected = App.PROJECT.stages[1], selectedId = selected.id;
       selected.max_iterations = 37;
       selected.tolerated_error = 0.0007;
-      selected.time_interval = 2.5;
+      selected.time_step = 2.5;
       selected.reset_displacements = true;
       ctx.server = copy(App.PROJECT);
       var original = copy(App.PROJECT.stages);
@@ -633,7 +636,7 @@
         T.eq(duplicate.parent, selectedId, 'the copy starts from the selected stage');
         T.ok(!ctx.requests[0].body.stages.some(function (stage) { return stage.id === duplicate.id; }));
         T.eq(duplicate.name, selected.name + ' (copy)');
-        ['calculation', 'reset_displacements', 'max_iterations', 'tolerated_error', 'time_interval'].forEach(function (key) {
+        ['calculation', 'reset_displacements', 'max_iterations', 'tolerated_error', 'time_step'].forEach(function (key) {
           T.eq(duplicate[key], selected[key], 'copied ' + key);
         });
         T.eq(duplicate.activate, []);
@@ -652,22 +655,6 @@
           T.eq(ctx.loaded, 1, 'a refusal reloads the stored sequence');
           T.ok(ctx.lines.indexOf('err:Stage sequence refused') >= 0);
         });
-      });
-    });
-  });
-
-  test('failed default-stage creation is reported without replacing the open project', function () {
-    return withShell(function (ctx, host) {
-      App.PROJECT.stages = []; ctx.server.stages = [];
-      App.Explorer.mountPhases();
-      var button = Array.prototype.filter.call(host.querySelectorAll('#list-phases button'),
-        function (node) { return node.textContent === 'Create default stages'; })[0];
-      ctx.failure = new Error('No stage defaults available');
-      button.click();
-      return settle().then(function () {
-        T.eq(ctx.requests[0].path, '/api/project/stages/defaults');
-        T.eq(App.PROJECT.stages, []);
-        T.ok(ctx.lines.indexOf('err:No stage defaults available') >= 0);
       });
     });
   });

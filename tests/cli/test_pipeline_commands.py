@@ -54,7 +54,7 @@ def test_a_deck_is_not_meshed(cli, tmp_path):
 
 
 def test_mesh_sizes_a_body_as_the_mesh_window_does(cli, site):
-    """The Layer and Structure mesh sizes of the Mesh properties window."""
+    """The Layer and Object mesh sizes of the Mesh properties window."""
     assert cli("mesh", site, "--body-size", "soil_L1", "2").code == 0
     assert session.load(site).mesh.body_sizes == {"soil_L1": 2.0}
 
@@ -79,23 +79,37 @@ def test_mesh_grows_a_size_back_over_a_band(cli, site):
     assert (mesh.body_sizes, mesh.size_bands) == ({}, {}), "the band goes with its size"
 
 
-def test_mesh_refuses_a_size_for_an_anchor_as_refine_mesh_does(cli, tmp_path):
-    """An anchor is one truss element, so a size has nothing to act on. The GUI's
-    Refine mesh says so; the command line says the same, and does not offer one."""
+def test_mesh_sizes_every_node_part_as_the_gui_does(cli, tmp_path):
+    """An anchor (at its head), a line load and a face of the model take a size, as in
+    the GUI's Mesh properties window. A condition on a face takes the size of the face,
+    as its Mesh group in the Selection explorer does, and one on the whole soil is
+    refused: the whole soil is meshed at the element size."""
     from tests.models.excavation import excavation_project
     path = session.save(excavation_project(staged=False), tmp_path / "pit.json")
 
-    ran = cli("mesh", path, "--body-size", "strut", "0.5")
+    ran = cli("mesh", path, "--body-size", "strut", "0.5", "--body-size", "surcharge", "1",
+              "--body-size", "fixed_bottom", "2", "--band", "fixed_bottom", "10",
+              "--body-size", "face_top", "1.5")
 
-    assert ran.code == 1
-    assert "Strut takes no mesh size: an anchor is one element" in ran.err
-    assert "strut" not in session.load(path).mesh.body_sizes
+    assert ran.code == 0, ran.err
+    mesh = session.load(path).mesh
+    assert {"strut": 0.5, "surcharge": 1.0, "face_bottom": 2.0,
+            "face_top": 1.5}.items() <= mesh.body_sizes.items()
+    assert mesh.size_bands["face_bottom"] == 10.0
+    assert "fixed_bottom" not in mesh.body_sizes
+
+    refused = cli("mesh", path, "--body-size", "pore_pressure", "1")
+    assert refused.code == 1 and "acts on the whole soil" in refused.err
 
     payload = json.loads(path.read_text(encoding="utf-8"))
     payload["mesh"]["body_sizes"] = {"gone": 1.0}
+    payload["mesh"]["size_bands"] = {}
     path.write_text(json.dumps(payload), encoding="utf-8")
     offered = cli("mesh", path).err.split("A size can be given to: ")[1].split(".")[0]
-    assert "sheetpile" in offered.split(", ") and "strut" not in offered.split(", ")
+    offered = offered.split(", ")
+    assert {"sheetpile", "strut", "surcharge", "face_bottom", "face_left", "face_right",
+            "face_top"} <= set(offered)
+    assert "face_front" not in offered, "a 2D section has no front face"
 
 
 def test_mesh_refuses_a_size_for_a_part_that_is_not_in_the_model(cli, site):
@@ -111,9 +125,12 @@ def test_mesh_refuses_a_size_for_a_part_that_is_not_in_the_model(cli, site):
 
 # ── stages ──────────────────────────────────────────────────────────────────
 
-def test_stages_defaults_gives_the_initial_stage_and_the_null_step(cli, site):
-    assert cli("stages", site, "defaults").code == 0
+def test_there_are_no_default_stages(cli, site):
+    """Every stage is the user's to add."""
+    assert cli("stages", site, "defaults").code == 2
 
+    assert cli("stages", site, "add").code == 0
+    assert cli("stages", site, "add").code == 0
     stages = session.load(site).stages
     assert len(stages) == 2 and stages[1].parent == stages[0].id
     listed = cli("stages", site, "list").out

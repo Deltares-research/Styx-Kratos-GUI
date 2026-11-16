@@ -15,7 +15,8 @@
                                         label: moment, shear, normal, traction...
        results plot <member> [<q>]      wall, interface_left, interface_right
        results plot members             what this run can plot
-       results plot csv | svg           the numbers, or the figure, as a file
+       results plot csv | svg | png | pdf
+                                        the numbers, or the figure, as a file
 
    The plot window and its buttons (patches.js) build these same strings.
 
@@ -413,7 +414,8 @@ App.ResultsPlot = (function () {
       log('note', '  ' + pad(stage.index, 4) + pad(stage.stage || stage.name, 30)
                   + pad(extreme('max', stage.max), 28) + extreme('min', stage.min));
     });
-    log('note', '`results plot csv` saves the numbers, `results plot svg` the figure.');
+    log('note', '`results plot csv` saves the numbers, `results plot svg`, `png` or `pdf` '
+                + 'the figure.');
   }
 
   function listMembers(list) {
@@ -450,9 +452,18 @@ App.ResultsPlot = (function () {
   function save(kind) {
     var plot = view.plot;
     var name = [view.run, plot.member, plot.quantity].join('_') + '.' + kind;
-    if (kind === 'csv') App.Download.anchor(name, csv(plot), 'text/csv');
-    else App.Download.anchor(name, svg(plot), 'image/svg+xml');
-    log('ok', 'Saved ' + name + '.');
+    if (kind === 'png' || kind === 'pdf') return App.Picture.saveFigure(svg(plot), name, kind);
+    var text = kind === 'csv' ? csv(plot) : svg(plot);
+    var mime = kind === 'csv' ? 'text/csv' : 'image/svg+xml';
+    return App.Download.pickFile(name, mime).then(function (target) {
+      if (target === App.Download.CANCELLED) {
+        log('note', name + ' not saved.');
+        return null;
+      }
+      return App.Download.write(target, name, text, mime).then(function () {
+        log('ok', 'Saved ' + name + '.');
+      });
+    }).catch(fail);
   }
 
   /* ── The command ──────────────────────────────────────────────────────── */
@@ -475,10 +486,10 @@ App.ResultsPlot = (function () {
                     + 'or no stage with one.');
         return null;
       }
-      if (verb === 'csv' || verb === 'svg') {
+      if (verb === 'csv' || verb === 'svg' || verb === 'png' || verb === 'pdf') {
         var ready = view.plot ? Promise.resolve(view.plot)
                               : fetchPlot(run, pick(list, []), false);
-        return ready.then(function (plot) { if (plot) save(verb); });
+        return ready.then(function (plot) { return plot ? save(verb) : null; });
       }
       var picked = pick(list, tokens);
       return picked ? fetchPlot(run, picked, true) : null;

@@ -29,10 +29,13 @@ def register(commands, common: argparse.ArgumentParser) -> None:
     mesh.add_argument("--body-size", nargs=2, action="append", default=[],
                       metavar=("KEY", "SIZE"),
                       help="the element size at one object, by its key: a layer "
-                           "(soil_<layer>) or soil body, a sheet pile, an interface, a "
-                           "normal load, a soil line, a condition on a line or at a point, "
-                           "or a point load; none takes the size and its band away. "
-                           "Repeat for more")
+                           "(soil_<layer>) or soil body, a sheet pile, an anchor (at its "
+                           "head), an interface, a normal load, a soil line, a load, a "
+                           "boundary condition, or a face of the model (face_bottom, "
+                           "face_left, face_right, face_top, and face_front, face_back "
+                           "in 3D). A condition on a face takes the size of that face, "
+                           "one on a soil part the size of that part. none takes the "
+                           "size and its band away. Repeat for more")
     mesh.add_argument("--band", nargs=2, action="append", default=[],
                       metavar=("KEY", "BAND"),
                       help="the distance, in metres, over which the size of --body-size "
@@ -134,20 +137,15 @@ def _with_settings(project: Project, args: argparse.Namespace) -> Project:
         project = session.with_value(project, "mesh.order", args.order)
     sizes = dict(project.mesh.body_sizes)
     bands = dict(project.mesh.size_bands)
-    anchors = {anchor.id: anchor.name or anchor.id for anchor in project.anchors}
     for key, size in args.body_size:
+        key = _size_key("--body-size", project, key)
         if size.lower() == "none":
             sizes.pop(key, None)
             bands.pop(key, None)
-        elif key in anchors:
-            # As the GUI's Refine mesh refuses it (js/mesh-settings.js changeSelected).
-            # A size an older project keeps for an anchor still loads and meshes.
-            raise CommandError(f"--body-size {key}: {anchors[key]} takes no mesh size: an "
-                               "anchor is one element. Give the size to a layer, a soil "
-                               "body, a line or a point.")
         else:
             sizes[key] = _number("--body-size", key, size)
     for key, band in args.band:
+        key = _size_key("--band", project, key)
         value = 0.0 if band.lower() == "none" else _number("--band", key, band)
         if value == 0.0:
             bands.pop(key, None)
@@ -163,10 +161,21 @@ def _with_settings(project: Project, args: argparse.Namespace) -> Project:
 
 
 def _offered_keys(project: Project) -> list[str]:
-    """The keys a new size can name: those of `Project.mesh_size_keys` but the anchors,
-    which the GUI's Mesh group and Refine mesh leave out too."""
-    anchors = {anchor.id for anchor in project.anchors}
-    return [key for key in project.mesh_size_keys() if key not in anchors]
+    """The keys a new size can name in this dimension, as the GUI's Mesh properties
+    window lists them (`Project.listed_mesh_size_keys`)."""
+    return project.listed_mesh_size_keys()
+
+
+def _size_key(option: str, project: Project, key: str) -> str:
+    """The key the size of the object `key` is kept under (`Project.mesh_size_key_of`),
+    as the Mesh group of the GUI's Selection explorer keeps it: a condition on a face
+    takes the size of the face, one on a soil part the size of the part. One on the
+    whole soil is refused: the whole soil is meshed at the element size."""
+    sized = project.mesh_size_key_of(key)
+    if sized is None:
+        raise CommandError(f"{option} {key}: it acts on the whole soil, which is meshed at "
+                           "the element size; change that with --size")
+    return sized
 
 
 def _number(option: str, key: str, text: str) -> float:

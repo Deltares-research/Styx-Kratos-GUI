@@ -253,6 +253,13 @@ App.ResultsView = (function () {
       + '<div class="vp-legend-foot">stage ' + payload.stage + '</div>';
   }
 
+  /* What the legend says now, for a saved picture to say the same. */
+  function legendData() {
+    if (!shown) return null;
+    return { title: shown.field.label, unit: shown.field.unit, stage: shown.stage,
+             options: shown.options, range: App.ResultsRender.rangeLines(shown.field) };
+  }
+
   function css(rgb) {
     return 'rgb(' + rgb.map(function (c) {
       return Math.round(Math.max(0, Math.min(1, c)) * 255);
@@ -329,6 +336,6 @@ App.ResultsView = (function () {
   return {
     draw: draw, clear: clear, isShowing: isShowing, syncVisibility: syncVisibility,
     describeAt: describeAt, nearest: nearest, extremes: extremes,
-    showLegend: showLegend
+    showLegend: showLegend, legendData: legendData
   };
 })();

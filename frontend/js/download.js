@@ -15,6 +15,10 @@
 
    Where there is no picker (Firefox, Safari, a file:// page) `write` falls
    back to the anchor download that was here before, so nothing is lost.
+
+   A save of many files takes a folder, and the browser's folder window refuses Downloads,
+   Desktop and Documents. So `pickFolder` asks the server first, which on the user's own
+   computer opens the system's window and writes the files (backend/routes/files.py).
    ══════════════════════════════════════════════════════════════════ */
 
 var App = window.App || {};
@@ -36,14 +40,82 @@ App.Download = (function () {
     });
   }
 
-  function pickFile(suggestedName, mime) {
+  /* `id` names a kind of save: the browser opens that window in the folder last used for
+     it. */
+  function pickFile(suggestedName, mime, id) {
     if (typeof window.showSaveFilePicker !== 'function') return Promise.resolve(null);
     var accept = {};
     accept[mime || 'text/plain'] = [extensionOf(suggestedName) || '.txt'];
-    return settle(window.showSaveFilePicker({
+    var options = {
       suggestedName: suggestedName,
       types: [{ description: suggestedName, accept: accept }]
-    }));
+    };
+    if (id) options.id = id;
+    return settle(window.showSaveFilePicker(options));
+  }
+
+  /* `null` where the server cannot open the window: it is on another computer, or has no
+     display. The answer comes at once then, so the click still counts for the browser's.
+     A window open already is the user's to answer: this save stops, and says why. */
+  function serverFolder() {
+    return App.Api.post('/api/files/folder', {}).then(function (answer) {
+      if (answer.no_window) return null;
+      if (answer.busy) {
+        if (App.Command && App.Command.err) App.Command.err(answer.busy);
+        return CANCELLED;
+      }
+      return answer.cancelled ? CANCELLED : { server: answer.id, name: answer.name };
+    }, function () { return null; });
+  }
+
+  function browserFolder(id) {
+    if (typeof window.showDirectoryPicker !== 'function') return Promise.resolve(null);
+    return settle(window.showDirectoryPicker({ id: id, mode: 'readwrite' }));
+  }
+
+  function pickFolder(id) {
+    return serverFolder().then(function (folder) { return folder || browserFolder(id); });
+  }
+
+  function onServer(folder, name) {
+    return '/api/files/folder/' + encodeURIComponent(folder.server) + '/' + encodeURIComponent(name);
+  }
+
+  /* The save is over: the server's id for the folder writes nothing more. A folder of the
+     browser has nothing to hand back, and a failure here costs nothing -- the server forgets
+     an unused id by itself. */
+  function releaseFolder(folder) {
+    if (!folder || !folder.server) return Promise.resolve();
+    var path = '/api/files/folder/' + encodeURIComponent(folder.server);
+    return window.fetch(App.Api.base + path, { method: 'DELETE' })
+      .then(function () {}, function () {});
+  }
+
+  function writeOnServer(folder, name, content) {
+    return window.fetch(App.Api.base + onServer(folder, name), { method: 'PUT', body: content })
+      .then(function (response) {
+        if (response.ok) return null;
+        return response.json().catch(function () { return {}; }).then(function (answer) {
+          throw new Error(answer.detail || name + ' could not be written.');
+        });
+      });
+  }
+
+  function exists(folder, name) {
+    if (folder.server) {
+      return App.Api.get(onServer(folder, name)).then(function (answer) { return answer.exists; });
+    }
+    return folder.getFileHandle(name).then(function () { return true; }, function (error) {
+      if (error && error.name === 'NotFoundError') return false;
+      throw error;
+    });
+  }
+
+  function writeInFolder(folder, name, content) {
+    if (folder.server) return writeOnServer(folder, name, content);
+    return folder.getFileHandle(name, { create: true }).then(function (handle) {
+      return writeHandle(handle, content);
+    });
   }
 
   function writeHandle(handle, text) {
@@ -76,5 +148,7 @@ App.Download = (function () {
     setTimeout(function () { URL.revokeObjectURL(url); }, 0);
   }
 
-  return { CANCELLED: CANCELLED, pickFile: pickFile, write: write, anchor: anchor };
+  return { CANCELLED: CANCELLED, pickFile: pickFile, pickFolder: pickFolder, exists: exists,
+           writeInFolder: writeInFolder, releaseFolder: releaseFolder, write: write,
+           anchor: anchor };
 })();

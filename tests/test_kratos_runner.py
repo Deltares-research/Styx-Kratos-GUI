@@ -19,6 +19,7 @@ import pytest
 from core.kratos import parameters
 from core.analysis import calculation, kratos_main
 from core.analysis.kratos_main import STAGE_MARKER
+from tests import results_run
 
 STUB = Path(__file__).resolve().parent / "fakes" / "kratos_stub"
 
@@ -182,6 +183,7 @@ def test_without_kratos_the_runner_fails_the_way_calculate_explains(
         tmp_path, monkeypatch):
     """The import is the first thing `run` does, so `calculation._explain` sees the
     ModuleNotFoundError it turns into "configure the Kratos build"."""
+    results_run.require_no_kratos()
     deck(tmp_path, STAGES[:1])
 
     completed = run_runner(tmp_path, stub=False, monkeypatch=monkeypatch)

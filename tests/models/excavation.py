@@ -100,11 +100,10 @@ def _stages() -> list[Stage]:
     it."""
     solved = {"max_iterations": 150, "tolerated_error": 1e-3}
     return [
-        Stage(id="initial", name="Initial stage", calculation="K0 procedure",
+        Stage(id="initial", name="Initial stage", stress_initialisation="K0",
               deactivate=["sheetpile", "strut", "wall_contact", "surcharge",
                           "water_1", "water_2", "water_3"]),
-        Stage(id="null_step", name="Null step", parent="initial", calculation="Null step",
-              max_iterations=150),
+        Stage(id="null_step", name="Null step", parent="initial", max_iterations=150),
         Stage(id="install_sheetpile", name="SheetPileWall installation", parent="null_step",
               activate=["sheetpile", "wall_contact", "surcharge"], reset_displacements=True,
               **solved),

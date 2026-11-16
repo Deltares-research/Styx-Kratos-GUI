@@ -437,15 +437,17 @@ def test_without_a_band_a_size_meshes_as_it_always_did():
 def test_a_band_on_a_layer_grows_its_size_out_into_the_next_one():
     project = excavation_like()
     sizes = {"soil_L_top": 1.0}
-    assert elements_of(project, element_size=8.0, body_sizes=sizes,
-                       size_bands={"soil_L_top": 10.0})         > elements_of(project, element_size=8.0, body_sizes=sizes)
+    assert (elements_of(project, element_size=8.0, body_sizes=sizes,
+                        size_bands={"soil_L_top": 10.0})
+            > elements_of(project, element_size=8.0, body_sizes=sizes))
 
 
 def test_a_band_on_a_size_coarser_than_the_mesh_does_nothing():
     project = excavation_like()
     sizes = {"soil_L_bot": 12.0}
-    assert elements_of(project, element_size=8.0, body_sizes=sizes,
-                       size_bands={"soil_L_bot": 20.0})         == elements_of(project, element_size=8.0, body_sizes=sizes)
+    assert (elements_of(project, element_size=8.0, body_sizes=sizes,
+                        size_bands={"soil_L_bot": 20.0})
+            == elements_of(project, element_size=8.0, body_sizes=sizes))
 
 
 def test_a_soil_line_takes_a_size():
@@ -461,7 +463,8 @@ def test_a_soil_line_takes_a_size():
 
 def test_an_interface_on_a_pile_sizes_the_pile_it_runs_along():
     project = excavation_like()
-    assert elements_of(project, element_size=8.0, body_sizes={"wall_contact": 0.5})         == elements_of(project, element_size=8.0, body_sizes={"sheetpile": 0.5})
+    assert (elements_of(project, element_size=8.0, body_sizes={"wall_contact": 0.5})
+            == elements_of(project, element_size=8.0, body_sizes={"sheetpile": 0.5}))
 
 
 def test_a_point_load_and_a_point_condition_take_a_size():
@@ -480,6 +483,41 @@ def test_a_point_load_and_a_point_condition_take_a_size():
         graded = elements_of(project, element_size=8.0, body_sizes={key: 0.5},
                              size_bands={key: 10.0})
         assert plain < sized < graded, key
+
+
+def test_a_line_load_an_anchor_and_every_face_take_a_size():
+    """Every node part the deck writes can be sized: the edges under a line load, the
+    soil round an anchor's head, and the soil's edges on each face of the section."""
+    project = excavation_like()
+    plain = elements_of(project, element_size=8.0)
+    for key in ("surcharge", "strut", "face_bottom", "face_left", "face_right", "face_top"):
+        sized = elements_of(project, element_size=8.0, body_sizes={key: 0.5})
+        graded = elements_of(project, element_size=8.0, body_sizes={key: 0.5},
+                             size_bands={key: 10.0})
+        assert plain < sized < graded, key
+
+
+def test_a_line_load_and_a_face_size_the_edges_the_deck_puts_them_on():
+    """The edges under the surcharge, and the soil's edges on the left of the section:
+    on the line of the load or the face, and nowhere else."""
+    import gmsh
+    project = excavation_like()
+    load = next(load for load in project.loads if load.id == "surcharge")
+    sizes = {"surcharge": 0.5, "face_left": 0.5}
+    with solid_model.session():
+        built = solid_model.build_geometry(project)
+        soil = meshing._finite_element_volumes(project, built, project.part_keys())
+        curves = meshing._curves_of(project, built, sizes, 2, soil)
+        under = [gmsh.model.getBoundingBox(1, tag) for tag in curves["surcharge"]]
+        left = [gmsh.model.getBoundingBox(1, tag) for tag in curves["face_left"]]
+    assert under and left
+    assert all(abs(box[1] - load.y) < 1e-6 and abs(box[4] - load.y) < 1e-6
+               and box[0] >= load.x0 - 1e-6 and box[3] <= load.x1 + 1e-6 for box in under)
+    assert sum(box[3] - box[0] for box in under) == pytest.approx(load.x1 - load.x0)
+    x0 = project.domain.x0
+    assert all(abs(box[0] - x0) < 1e-6 and abs(box[3] - x0) < 1e-6 for box in left)
+    assert sum(box[4] - box[1] for box in left) == pytest.approx(
+        project.domain.y_top - project.domain.y_bottom)
 
 
 def test_a_size_names_an_object_the_model_has():
