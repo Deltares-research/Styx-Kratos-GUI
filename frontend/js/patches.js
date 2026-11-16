@@ -3221,6 +3221,15 @@ App.LivePatches = (function () {
                        + '<path d="M16.6 13.3l4.4 2" stroke-width="3"/>' + iconGround;
     }
 
+    /* A boundary condition is a support: a triangle on hatched ground, the symbol
+       engineering drawings use and the one the viewport draws on the soil edges.
+       data.js's 'prescribed' (an arrow onto a line) read as a load, so it is
+       replaced in place and the tool, its flyout, the menu row and the explorer rows
+       all change with it. */
+    App.ICONS.prescribed = '<path d="M12 3.5l-6.5 11h13z"/><path d="M3 17.5h18"/>'
+                         + '<path d="M6.5 17.5L4 21M11 17.5L8.5 21M15.5 17.5L13 21'
+                         + 'M20 17.5L17.5 21"/>';
+
     // A rule with three ticks: the thing itself, not a metaphor for it.
     if (!App.ICONS.ruler) {
       App.ICONS.ruler = '<path d="M3 8h18v8H3z"/><path d="M7.5 8v4"/><path d="M12 8v5"/>'
