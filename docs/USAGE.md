@@ -56,9 +56,9 @@ Click **Calculate** between Staged construction and Results.
 - **New project:** **File** → **New project…** starts an empty site. Type the project name
   in the window. The name shows in the title bar, and **Save** names the file after it.
 - **Project properties:** **File** → **Project properties…** changes the name of the open
-  project and the gravitational acceleration g (9.81 m/s² in a new project).
-  In the terminal, `kratos-cli new FILE --name NAME` and `kratos-cli set FILE name NAME` do
-  the same.
+  project, the gravitational acceleration g (9.81 m/s² in a new project) and the unit
+  system. In the terminal, `kratos-cli set FILE name NAME`, `kratos-cli gravity FILE G` and
+  `kratos-cli units FILE kN` do the same.
 - **Open project:** **File** → **Open project…** opens a project file (`.json`).
 - **Save:** **File** → **Save** or **Save as…** writes the project as a `.json` file. In
   Chrome and Edge, a window asks where to save the file. Other browsers put the file in your
@@ -68,8 +68,10 @@ Click **Calculate** between Staged construction and Results.
 - **2D or 3D:** the **2D** button shows a plane-strain section through the model. The **3D**
   button shows the full solid model. When you change between them, Styx converts the loads
   and the walls.
-- **Units:** the project uses one unit system: SI (N, m, kg, s) or kN (kN, m, t, s). Click
-  the units in the status bar, or type `units kN` or `units SI`, to convert all values.
+- **Units:** the project uses one unit system: SI (N, m, kg, s) or kN (kN, m, t, s). For
+  example, a cohesion of 5000 Pa in SI is 5 kPa in kN. To convert all values, choose the
+  **Unit system** in **File** → **Project properties…**, click the units in the status bar,
+  or type `units kN` or `units SI`. Lengths stay in m and g stays in m/s².
 - **A model from a Python script:** type `run <file.py>` in the command box. For an example,
   type `run tests/models/excavation.py`.
 

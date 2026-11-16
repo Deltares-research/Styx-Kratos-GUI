@@ -891,7 +891,16 @@ App.LivePatches = (function () {
     if (!answer.ok) { App.Command.err(answer.message); return true; }
     if (!answer.body) { App.Command.note(answer.message); return true; }
     App.Command.note(answer.message);
-    App.Api.patch('/api/project/units', answer.body)
+    convertUnits(answer.body);
+    return true;
+  }
+
+  /* PATCH /api/project/units with `body` ({ unit_system }): the server converts every
+     value once (core/model/units.py `convert_project`). Then the model, the viewport
+     and the explorer are redrawn, and the server's notes are shown. Shared by the
+     `units` command and File > Project properties…. */
+  function convertUnits(body) {
+    return App.Api.patch('/api/project/units', body)
       .then(function (result) {
         App.Model.apply(result.project);
         return App.Viewport.refresh().then(function () { return result; });
@@ -904,7 +913,6 @@ App.LivePatches = (function () {
         App.Command.ok('The project is now in ' + App.Units.title() + '.');
       })
       .catch(function (error) { App.Command.err(error.message); });
-    return true;
   }
 
   /* DELETE `path`, rejecting with the server's own `detail` when it refuses. A part a
@@ -1684,13 +1692,17 @@ App.LivePatches = (function () {
   }
 
   /* File > Project properties…: the project's name, as `kratos-cli set FILE name ...`
-     sets it, and the gravitational acceleration g, as `kratos-cli gravity FILE G` sets
-     it. Through the whole-project PUT, so Undo takes it back like any edit. */
+     sets it, the gravitational acceleration g, as `kratos-cli gravity FILE G` sets it,
+     and the unit system, as `kratos-cli units FILE SYSTEM` (or the `units` command)
+     sets it. Name and g go through the whole-project PUT; a new unit system then goes
+     through PATCH /api/project/units, which converts every value once. Undo takes back
+     each of the two like any edit. */
   function projectProperties() {
     var project = App.PROJECT || {};
     var name = project.name || '';
     var g = typeof project.gravity_acceleration === 'number' ? project.gravity_acceleration
                                                              : App.Units.gravity('SI');
+    var system = App.Units.system(project);
     return App.NameDialog.form({
       title: 'Project properties',
       fields: [
@@ -1702,26 +1714,47 @@ App.LivePatches = (function () {
             var value = Number(text);
             return isFinite(value) && value > 0 ? null : 'Gravity is a number above 0 m/s².';
           },
-          help: 'The self weight of every body. The water keeps its specific weight.' }
+          help: 'The self weight of every body. The water keeps its specific weight.' },
+        { name: 'unit_system', label: 'Unit system', value: system,
+          choices: App.Units.systems().map(function (s) {
+            return { value: s.name, label: s.title };
+          }),
+          help: 'A change converts every value: a cohesion of 5000 Pa becomes 5 kPa.' }
       ]
     }).then(function (values) {
       if (values === null) return;
       var newG = Number(values.gravity_acceleration);
+      var newSystem = values.unit_system || system;
       var said = [];
       if (values.name !== name) said.push('Project name: ' + values.name + '.');
       if (newG !== g) said.push('Gravity: g = ' + newG + ' m/s².');
-      if (!said.length) return;
-      // Only what changed: a rename leaves the project's gravity fields as they are.
-      var edited = JSON.parse(JSON.stringify(App.PROJECT));
-      edited.name = values.name;
-      if (newG !== g) edited.gravity_acceleration = newG;
-      return App.Api.put('/api/project', edited).then(function (saved) {
-        App.Model.apply(saved);
-        if (App.Command) App.Command.ok(said.join(' '));
-      }).catch(function (error) {
+      var convert = newSystem !== system;
+      if (!said.length && !convert) return;
+      var put = Promise.resolve(true);
+      if (said.length) {
+        // Only what changed: a rename leaves the project's gravity fields as they are.
+        var edited = JSON.parse(JSON.stringify(App.PROJECT));
+        edited.name = values.name;
+        if (newG !== g) edited.gravity_acceleration = newG;
+        put = App.Api.put('/api/project', edited).then(function (saved) {
+          App.Model.apply(saved);
+          if (App.Command) App.Command.ok(said.join(' '));
+          return true;
+        }).catch(function (error) {
+          if (App.Command) {
+            App.Command.err('Could not change the project properties: ' + error.message);
+          }
+          return false;
+        });
+      }
+      return put.then(function (done) {
+        if (!done || !convert) return;
         if (App.Command) {
-          App.Command.err('Could not change the project properties: ' + error.message);
+          if (App.Command.write) App.Command.write('echo', '> units ' + newSystem);
+          App.Command.note('Converting every value from ' + App.Units.title(system)
+                           + ' to ' + App.Units.title(newSystem) + '…');
         }
+        return convertUnits({ unit_system: newSystem });
       });
     });
   }

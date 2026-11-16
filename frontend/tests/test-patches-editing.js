@@ -302,7 +302,8 @@
                      { name: 'Pit B', gravity_acceleration: '9.81' }];
       App.NameDialog = { form: function (options) {
         T.eq(options.fields.map(function (f) { return [f.name, f.value]; }),
-             [['name', App.PROJECT.name], ['gravity_acceleration', 9.81]]);
+             [['name', App.PROJECT.name], ['gravity_acceleration', 9.81],
+              ['unit_system', App.Units.current()]]);
         return Promise.resolve(answers.shift());
       } };
       return App.LivePatches.projectProperties().then(function () {
@@ -344,6 +345,51 @@
         T.eq(ctx.requests[0].body.gravity_acceleration, 9.80665);
         T.eq(App.PROJECT.gravity_acceleration, 9.80665);
         T.ok(ctx.lines.indexOf('ok:Gravity: g = 9.80665 m/s².') >= 0);
+      });
+    });
+  });
+
+  test('Project properties converts the unit system, as the units command does', function () {
+    return withShell(function (ctx, host) {
+      var now = App.Units.current();
+      var other = App.Units.systems().filter(function (s) { return s.name !== now; })[0];
+      App.LivePatches.projectProperties();
+      var dialog = host.querySelector('.name-dialog-window');
+      var select = dialog.querySelector('select[name=unit_system]');
+      T.ok(select, 'the unit system is a drop-down list');
+      T.eq(Array.prototype.map.call(select.options, function (o) { return o.value; }),
+           App.Units.systems().map(function (s) { return s.name; }));
+      T.eq(select.value, now, 'the project\'s own system is chosen');
+      T.ok(dialog.textContent.indexOf(App.Units.title(other.name)) >= 0);
+      select.value = other.name;
+      dialog.querySelector('input[name=name]').value = 'Pit C';
+      Array.prototype.filter.call(dialog.querySelectorAll('button'), function (button) {
+        return button.textContent === 'OK';
+      })[0].click();
+      return settle().then(settle).then(settle).then(function () {
+        T.eq(ctx.requests.map(function (r) { return r.method + ' ' + r.path; }),
+             ['PUT /api/project', 'PATCH /api/project/units']);
+        T.eq(ctx.requests[1].body, { unit_system: other.name });
+        T.eq(App.PROJECT.name, 'Pit C');
+        T.eq(App.PROJECT.unit_system, other.name);
+        T.ok(ctx.lines.indexOf('note:Converted library values') >= 0, 'the notes are shown');
+        T.ok(ctx.lines.indexOf('ok:The project is now in ' + other.title + '.') >= 0);
+      });
+    });
+  });
+
+  test('Project properties sends only the units request when only the system changes', function () {
+    return withShell(function (ctx) {
+      var now = App.Units.current();
+      var other = App.Units.systems().filter(function (s) { return s.name !== now; })[0];
+      App.NameDialog = { form: function () {
+        return Promise.resolve({ name: App.PROJECT.name, gravity_acceleration: '9.81',
+                                 unit_system: other.name });
+      } };
+      return App.LivePatches.projectProperties().then(function () {
+        T.eq(ctx.requests.map(function (r) { return r.method + ' ' + r.path; }),
+             ['PATCH /api/project/units']);
+        T.eq(ctx.refreshed, 1, 'the viewport is redrawn after the conversion');
       });
     });
   });
