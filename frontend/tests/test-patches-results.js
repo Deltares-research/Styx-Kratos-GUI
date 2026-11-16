@@ -465,4 +465,39 @@
     }).then(function () { dock.remove(); }, function (error) { dock.remove(); throw error; }));
   });
 
+  test('results: coming back to Results shows the same result and the same windows', function () {
+    var dock = document.createElement('div');
+    dock.id = 'dock';
+    dock.innerHTML = '<div id="panel-results"><div id="panel-results-body"></div></div>';
+    document.body.appendChild(dock);
+    var ctx = rig(true);
+    var drawn = [];
+    App.ResultsView.draw = function (payload) { drawn.push(payload.field.field); };
+    return done(ctx, App.Results.handleCommand('results open ' + RUN).then(function () {
+      App.state.mode = 'soil';
+      App.setMode('results');
+      T.ok(dialogTitled(ctx, 'Choose results'), 'the first visit opens the chooser');
+      return resultsCommand('results field uy');
+    }).then(function () {
+      button(dialogTitled(ctx, 'Choose results'), 'Close').click();
+      App.setMode('mesh');
+      App.setMode('soil');
+      drawn.length = 0;
+      App.setMode('results');
+      T.eq(dialogTitled(ctx, 'Choose results'), undefined,
+           'a chooser closed before leaving stays closed');
+      return settle(30);
+    }).then(function () {
+      T.eq(drawn, ['uy'], 'the same field is drawn again');
+      App.runAction({ action: 'chooseResults' });
+      App.setMode('mesh');
+      App.setMode('results');
+      T.ok(dialogTitled(ctx, 'Choose results'), 'a chooser open when leaving comes back');
+    }).then(function () { dock.remove(); }, function (error) { dock.remove(); throw error; }));
+
+    function resultsCommand(text) {
+      return Promise.resolve(App.Results.handleCommand(text)).then(function () { return settle(30); });
+    }
+  });
+
 })();

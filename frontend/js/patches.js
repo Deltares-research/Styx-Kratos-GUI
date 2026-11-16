@@ -2876,6 +2876,8 @@ App.LivePatches = (function () {
     var plotWindow = null;       // the wall/interface plot window, while it is open
     var plotColumns = 0;         // panels per row it was last drawn with
     var plotReloading = null;    // the run a reload of the plot is under way for
+    var resultsLeft = null;      // what Results showed when it was left, to come back to
+    var inResults = false;       // whether Results is the mode on screen
 
     extendViewportMenu();
 
@@ -3620,7 +3622,8 @@ App.LivePatches = (function () {
       App.RAILS.results = [
         { icon: 'select', tip: 'Select', toggle: true, on: true },
         '-',
-        // The chooser opens with the mode; this is how it comes back once closed.
+        // The chooser opens the first time the mode shows a run; this is how it comes
+        // back once closed.
         { icon: 'results', tip: 'Choose results', action: 'chooseResults' },
         { icon: 'wallplot', tip: 'Plot along the wall — M, Q, N, ux and the earth '
             + 'pressure on it, every stage', action: 'plotResults' }
@@ -4142,17 +4145,36 @@ App.LivePatches = (function () {
       if (!panel || !dock) return;
       panel.hidden = !on;
       if (App.UI && App.UI.syncDock) App.UI.syncDock(dock);
+      var resultsOn = inResults;
+      inResults = on;
       if (on) {
         mountResultsPanel();
-        // Entering the mode opens the chooser, every time. It is what the mode is
-        // for, and the dock panel alone is easy to miss down the side of the page.
-        // The rail's "Choose results" reopens it after it has been closed. It fills
-        // itself as it is built, so there is nothing to render afterwards.
+        var back = resultsLeft;
+        resultsLeft = null;
+        if (back && back.run === App.Results.current() && App.Results.field()) {
+          // Back to a run the user was already looking at: the same contour, and the
+          // same windows open as when they left. The rail's "Choose results" brings
+          // the chooser back if it was closed.
+          App.Results.redraw();
+          if (back.chooser) openResultsWindow();
+          if (back.plot) openPlotWindow();
+          return;
+        }
+        // First time in for this run: open the chooser. It is what the mode is for,
+        // and the dock panel alone is easy to miss down the side of the page. It
+        // fills itself as it is built, so there is nothing to render afterwards.
         openResultsWindow();
       } else {
+        // Remember what was on screen, so coming back shows it again. Only on the
+        // way out of Results: going from one other mode to the next must not
+        // overwrite it.
+        if (resultsOn && App.Results.current()) {
+          resultsLeft = { run: App.Results.current(),
+                          chooser: !!resultsWindow, plot: !!plotWindow };
+        }
         // Leaving takes the contour off the model rather than leaving it behind under
         // the geometry, where it would be neither editable nor explicable -- and the
-        // window with it, since it belongs to a mode that is no longer on.
+        // windows with it, since they belong to a mode that is no longer on.
         closeResultsWindow();
         closePlotWindow();
         if (App.ResultsView) App.ResultsView.clear();

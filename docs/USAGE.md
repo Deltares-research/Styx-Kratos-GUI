@@ -680,6 +680,10 @@ screen: a load that the stage switched off is not shown. They are shown only whe
 was calculated from the open project, with the same stages. They stay where they are in the
 model, also when the mesh is shown deformed. Type `results loads off` to hide them.
 
+When you go to a different tab and then back to Results, Styx shows the same result again.
+The **Choose results** window and the wall plot open again only if they were open when you
+left.
+
 ### Other results
 
 - **Plot along the wall:** click **Plot wall…**, or type `results plot`. The plot shows the
