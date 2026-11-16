@@ -269,7 +269,7 @@ STAGES = [
     Stage(
         id="initial",
         name="Initial stage",
-        calculation="K0 procedure",
+        stress_initialisation="K0",
         deactivate=[
             "sheetpile",
             "strut",
@@ -284,7 +284,6 @@ STAGES = [
         id="null_step",
         name="Null step",
         parent="initial",
-        calculation="Null step",
         max_iterations=150,
     ),
     Stage(

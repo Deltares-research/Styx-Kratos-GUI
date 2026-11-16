@@ -280,6 +280,25 @@ App.ResultsRender = (function () {
     return value.toFixed(decimals);
   }
 
+  /* The smallest and the largest value and where they are, as `kratos-cli results field`
+     says them. For a saved picture, whatever the legend's limits were set to. `null` for a
+     field with no values. */
+  function rangeLines(field) {
+    var low = null, high = null;
+    (field.values || []).forEach(function (value, i) {
+      if (value === null || value === undefined) return;
+      if (low === null || value < field.values[low]) low = i;
+      if (high === null || value > field.values[high]) high = i;
+    });
+    if (low === null) return null;
+    var where = field.location === 'elements' ? 'element' : 'node';
+    function say(name, i) {
+      return name + ' value = ' + format(field.values[i]) + (field.unit ? ' ' + field.unit : '')
+           + ' (' + where + ' ' + field.ids[i] + ')';
+    }
+    return [say('Maximum', high), say('Minimum', low)];
+  }
+
   /* ── Deformation ──────────────────────────────────────────────────────── */
 
   /* Original positions plus `factor` times the displacement at each vertex. A vertex
@@ -338,7 +357,7 @@ App.ResultsRender = (function () {
     AUTO_FRACTION: AUTO_FRACTION,
     sample: sample, position: position, ramp: ramp,
     vertexValues: vertexValues, colors: colors,
-    legend: legend, format: format,
+    legend: legend, format: format, rangeLines: rangeLines,
     deform: deform, autoFactor: autoFactor, csv: csv
   };
 })();

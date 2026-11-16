@@ -434,6 +434,7 @@ def staged_stage(name: str, domain: list[str], loads: tuple = (), *,
     solver = body["stage_settings"]["solver_settings"]
     solver.update({"problem_domain_sub_model_part_list": domain,
                    "reset_displacements": reset, "max_iterations": 50,
+                   "convergence_criterion": "residual_criterion",
                    "residual_relative_tolerance": 0.01})
     processes = {
         "loads_process_list": [
@@ -521,15 +522,20 @@ def test_the_resolved_stages_are_the_stages_own_part_lists(staged):
 
 def test_a_stage_carries_its_stage_settings(staged):
     by_id = {stage.id: stage for stage in staged.stages}
-    assert by_id["1_Initial_stage"].calculation == "K0 procedure"
-    assert by_id["2_Null_step"].calculation == "Null step"
-    assert by_id["3_Fill"].calculation == "Plastic"
+    assert by_id["1_Initial_stage"].stress_initialisation == "K0"
+    assert by_id["2_Null_step"].stress_initialisation == "none"
+    assert all(stage.calculation == "mechanical" for stage in staged.stages)
+    assert all(stage.time_integration == "static" for stage in staged.stages)
+    assert by_id["3_Fill"].stress_initialisation == "none"
     assert by_id["3_Fill"].reset_displacements is True
     assert by_id["4_Crane"].reset_displacements is False
     assert by_id["3_Fill"].max_iterations == 50
+    assert by_id["3_Fill"].convergence_criterion == "residual_criterion"
     assert by_id["3_Fill"].tolerated_error == 0.01
-    assert by_id["3_Fill"].time_interval == 17.0
-    assert by_id["1_Initial_stage"].time_interval == 0.0
+    # The deck's own seconds, which are the project's. Its solver names no step, so
+    # each stage is one step, as Kratos would run it.
+    assert (by_id["3_Fill"].duration, by_id["3_Fill"].time_step) == (17 * 86400.0,) * 2
+    assert (by_id["1_Initial_stage"].duration, by_id["1_Initial_stage"].time_step) == (1.0, 1.0)
 
 
 def test_a_deck_without_part_lists_has_stages_that_change_nothing(project):
@@ -547,7 +553,6 @@ def test_a_decks_stages_are_not_edited_here(client, staged):
                             json={"stages": [p.model_dump() for p in staged.stages[:2]]})
     assert response.status_code == 422
     assert "deck" in response.json()["detail"]
-    assert client.post("/api/project/stages/defaults").status_code == 422
 
 
 def test_staging_brings_the_units_record_when_the_deck_has_one(project, deck_dir, tmp_path):

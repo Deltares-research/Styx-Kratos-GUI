@@ -1,5 +1,5 @@
 /* ══════════════════════════════════════════════════════════════════
-   boundary-conditions.js — the boundary conditions and gravity.
+   boundary-conditions.js — the boundary conditions.
 
    A boundary condition is a record of `Project.boundary_conditions`
    (core/model/schemas.py), and the deck holds these and no others: a project with
@@ -16,9 +16,10 @@
 
    The drafts here are the twins of core/model/drafts.py's
    `displacement_condition`, `water_pressure_condition` and `standard_conditions`,
-   held to them by tests/test_draft_parity.py. `command` answers `boundary` and
-   `gravity` in the command box, with the words `kratos-cli boundary` and
-   `kratos-cli gravity` take. Every write is one `PATCH /api/project/conditions`.
+   held to them by tests/test_draft_parity.py. `command` answers `boundary` in the
+   command box, with the words `kratos-cli boundary` takes. Every write is one
+   `PATCH /api/project/conditions`. Gravity is not a condition: the initial stage's
+   stress initialisation decides it (`core.model.stages.gravity`).
    The logic has no DOM in it; `open` and `openRecord` are the two windows.
    ══════════════════════════════════════════════════════════════════ */
 
@@ -350,12 +351,6 @@ App.BoundaryConditions = (function () {
     return record.name + '  ·  ' + what;
   }
 
-  function gravityLine(project) {
-    return project && project.gravity === false
-      ? 'Gravity is off: no body has a self weight.'
-      : 'Gravity is on: every body has its self weight.';
-  }
-
   /* Said under a 2D list that leaves the front and back supports out
      (`condition_checks.SECTION_NOTE`). */
   var SECTION_NOTE = 'The front and back supports are kept for the solid model; the 2D '
@@ -385,26 +380,15 @@ App.BoundaryConditions = (function () {
     return lines;
   }
 
-  /* ── The command box: `boundary` and `gravity` ───────────────────────── */
+  /* ── The command box: `boundary` ─────────────────────────────────────── */
 
   /* `false` for a line that is not this command; otherwise `{ok, message, body}`,
      where `body` is what to PATCH, or null when there is nothing to send. */
   function command(text, project) {
     var words = String(text || '').trim().split(/\s+/);
     var word = (words[0] || '').toLowerCase();
-    if (word !== 'boundary' && word !== 'gravity') return false;
+    if (word !== 'boundary') return false;
     var arg = (words[1] || '').toLowerCase();
-
-    if (word === 'gravity') {
-      if (!arg) return { ok: true, body: null, message: gravityLine(project) };
-      if ((arg !== 'on' && arg !== 'off') || words.length > 2) {
-        return { ok: false, body: null, message: '"' + words.slice(1).join(' ')
-                 + '" is not on or off. Use `gravity on` or `gravity off`.' };
-      }
-      var on = arg === 'on';
-      return { ok: true, body: { gravity: on },
-               message: gravityLine({ gravity: on }) };
-    }
 
     if (!arg || arg === 'list') {
       return { ok: true, body: null, message: listedLines(project).join('\n') };
@@ -499,10 +483,6 @@ App.BoundaryConditions = (function () {
   function applyStandard() {
     return saveAll(withStandard(App.PROJECT),
                    'The standard supports: the bottom fixed, the sides on rollers.');
-  }
-
-  function setGravity(on) {
-    return send({ gravity: !!on }, gravityLine({ gravity: !!on }));
   }
 
   /* ── The face grid of the dialog: pure ───────────────────────────────── */
@@ -685,13 +665,13 @@ App.BoundaryConditions = (function () {
 
   /* The Boundary conditions window: a row for each face of the model and one for the
      whole soil, the support and the water pressure on each; below them the conditions
-     on parts, lines and points; and gravity. Save writes them all in one request. */
+     on parts, lines and points. Save writes them all in one request. */
   function open() {
     if (!App.Dialogs || !App.Dialogs.open || !App.PROJECT) return null;
     var project = App.PROJECT;
     var rows = grid(project);
     var controls = [];
-    var message, gravity, shell;
+    var message, shell;
 
     function read() {
       return rows.map(function (row, i) {
@@ -714,9 +694,7 @@ App.BoundaryConditions = (function () {
         message.textContent = error.message;
         return null;
       }
-      var body = { boundary_conditions: list };
-      if (gravity.checked !== (App.PROJECT.gravity !== false)) body.gravity = gravity.checked;
-      return send(body, 'Saved the boundary conditions.').then(function () {
+      return send({ boundary_conditions: list }, 'Saved the boundary conditions.').then(function () {
         shell.close();
       }, function (error) { message.textContent = error.message; });
     }
@@ -855,13 +833,6 @@ App.BoundaryConditions = (function () {
           list.appendChild(item);
         });
         body.appendChild(list);
-
-        var row = el('label.bc-gravity');
-        gravity = el('input', { type: 'checkbox' });
-        gravity.checked = project.gravity !== false;
-        row.appendChild(gravity);
-        row.appendChild(document.createTextNode(' Gravity: the self weight of every body'));
-        body.appendChild(row);
 
         message = el('div.mesh-settings-message');
         body.appendChild(message);
@@ -1150,11 +1121,11 @@ App.BoundaryConditions = (function () {
     standardConditions: standardConditions, withStandard: withStandard,
     soilPartKeys: soilPartKeys, facesOf: facesOf, heldBySection: heldBySection,
     unusedInFlow: unusedInFlow, waterIn: waterIn,
-    line: line, listedLines: listedLines, label: label, gravityLine: gravityLine,
+    line: line, listedLines: listedLines, label: label,
     command: command,
     grid: grid, others: others, applyGrid: applyGrid, parsePoints: parsePoints,
     isConditionKey: isConditionKey, find: find,
-    save: save, remove: remove, applyStandard: applyStandard, setGravity: setGravity,
+    save: save, remove: remove, applyStandard: applyStandard,
     activeState: activeState, setActive: setActive,
     open: open, openRecord: openRecord, draw: draw, edit: edit
   };
