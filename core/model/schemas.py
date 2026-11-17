@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import math
 import re
-from collections.abc import Mapping, Sequence
+from collections.abc import Iterable, Mapping, Sequence
 from typing import Annotated, Any, Literal, NamedTuple
 
 from pydantic import (AfterValidator, BaseModel, Field, SerializerFunctionWrapHandler,
@@ -2910,6 +2910,17 @@ def _deck_word(name: str) -> str:
     tell. A name the deck does not take, one that starts with a digit, is its own word."""
     word = "_".join(re.findall(r"[^\W_]+", name)).casefold()
     return name.strip().casefold() if word[:1].isdigit() or not word else word
+
+
+def numbered_name(name: str, taken: Iterable[str]) -> str:
+    """`name`, or else `name_2`, `name_3`, ...: the first that no name in `taken` writes as
+    the same word in the deck (`_deck_word`). The deck numbers two parts of one name in the
+    same way (`core.kratos.writer._unique`), so the name a user sees is the deck's."""
+    words = {_deck_word(other) for other in taken}
+    candidate, number = name, 2
+    while _deck_word(candidate) in words:
+        candidate, number = f"{name}_{number}", number + 1
+    return candidate
 
 
 def _reject_same_names(pieces: list[SoilPiece], dimension: int) -> None:

@@ -41,8 +41,8 @@ from core.model.schemas import (ConditionsUpdate, CustomPart, DimensionUpdate, L
                                 Line, LinesUpdate,
                                 MaterialsUpdate, MeshRequest, Panel, StagesUpdate, Project,
                                 StructuresUpdate,
-                                UnitsUpdate, WaterLevel, WaterUpdate, point_on_panel,
-                                point_on_polyline)
+                                UnitsUpdate, WaterLevel, WaterUpdate, numbered_name,
+                                point_on_panel, point_on_polyline)
 from core.model.wall_translation import translate as translate_walls
 
 
@@ -209,8 +209,11 @@ def _edited(project: Project, payload: dict) -> Project:
     a size belongs to its body, so an edit that takes a body away takes its size too --
     a layer removed or split, a line removed, a structure deleted -- whichever
     front end made the edit and however it was sent. A size for a body the model never
-    had is kept: `unknown_mesh_keys` names it as the mistake it is.
+    had is kept: `unknown_mesh_keys` names it as the mistake it is. And a soil layer or
+    a custom part the edit adds or renames gets a name no other one has
+    (`_distinct_soil_names`).
     """
+    _distinct_soil_names(project, payload)
     edited = Project.model_validate(payload)
     sizes = edited.mesh.body_sizes
     if not sizes:
@@ -222,6 +225,55 @@ def _edited(project: Project, payload: dict) -> Project:
     kept = {key: size for key, size in sizes.items() if key not in lost}
     return edited.model_copy(update={"mesh": edited.mesh.model_copy(
         update={"body_sizes": kept})})
+
+
+def _soil_names(payload: dict) -> list[tuple[str, dict, str]]:
+    """Every soil layer and custom part in `payload`, in the deck's order, as
+    `(the key it is known by, its record, the field that holds its name)`."""
+    layers = [(f"soil_{record.get('id')}", record, "name")
+              for record in payload.get("layers") or [] if isinstance(record, dict)]
+    parts = [(str(record.get("key")), record, "label")
+             for record in payload.get("custom_parts") or [] if isinstance(record, dict)]
+    return [(key, record, field) for key, record, field in layers + parts
+            if isinstance(record.get(field), str)]
+
+
+def _distinct_soil_names(project: Project, payload: dict) -> None:
+    """Give each soil layer and custom part the edit adds or renames a name that no other
+    one has: a second `Embankment` becomes `Embankment_2`, which is also the name of its
+    sub-model part in the deck (`schemas.numbered_name`), so the Model explorer, kratos-cli
+    and ProjectParameters.json say the same. A name a record already had stays, so an edit
+    never renames what it did not touch. `edit_notes` says which name was numbered."""
+    had = {f"soil_{layer.id}": layer.name for layer in project.layers}
+    had.update({part.key: part.label for part in project.custom_parts})
+    records = _soil_names(payload)
+    taken = [record[field] for key, record, field in records if had.get(key) == record[field]]
+    for key, record, field in records:
+        if had.get(key) != record[field]:
+            record[field] = numbered_name(record[field], taken)
+            taken.append(record[field])
+
+
+def _numbered_names(before: Project, after: Project) -> list[str]:
+    """The note on each soil layer or custom part an edit gave a number, because another
+    one has its name (`_distinct_soil_names`)."""
+    had = {f"soil_{layer.id}": layer.name for layer in before.layers}
+    had.update({part.key: part.label for part in before.custom_parts})
+    records = _soil_names(after.model_dump())
+    notes = []
+    for key, record, field in records:
+        name = record[field]
+        base, _, number = name.rpartition("_")
+        if had.get(key) == name or not base or not number.isdigit() or int(number) < 2:
+            continue
+        others = [other[field_] for key_, other, field_ in records if key_ != key]
+        if numbered_name(base, others) != name:
+            continue
+        what = ("soil layer" if key.startswith("soil_")
+                else "part" if record.get("mat") is None
+                else "soil surface" if after.dimension == 2 else "soil volume")
+        notes.append(f"Named the {what} {name!r}, because {base!r} is already in use.")
+    return notes
 
 
 def _parts_take_their_layers_material(project: Project, payload: dict) -> None:
@@ -541,7 +593,9 @@ def with_created_part(project: Project, recipe: dict,
     # Validated, so a line across the new outline cuts it into pieces at once.
     payload = edited.model_dump()
     _parts_take_their_layers_material(project, payload)
-    return _edited(project, payload), part
+    result = _edited(project, payload)
+    # As stored: a name in use has a number now (`_distinct_soil_names`).
+    return result, next(p for p in result.custom_parts if p.key == key)
 
 
 def with_imported_part(project: Project, filename: str | None, built: dict,
@@ -559,7 +613,9 @@ def with_imported_part(project: Project, filename: str | None, built: dict,
     key = f"imported_{max(taken, default=-1) + 1}"
     part = CustomPart(
         key=key,
-        label=filename or key,
+        # Numbered as a drawn part is when its name is in use (`_distinct_soil_names`).
+        label=numbered_name(filename or key, [record[field] for _, record, field
+                                              in _soil_names(project.model_dump())]),
         source="import",
         source_file=built["brep_path"],
         imported_from=str(Path(source).resolve()) if source is not None else None,
@@ -604,11 +660,12 @@ def without_custom_part(project: Project, key: str) -> Project:
 
 def edit_notes(before: Project, after: Project) -> list[str]:
     """What to tell the user about an edit besides that it was done: the mesh sizes it took
-    away (`removed_sizes`), and each line it made or moved that splits no soil. kratos-cli
-    prints these after its answer and the GUI shows them in its Session log."""
+    away (`removed_sizes`), each soil name it gave a number (`_numbered_names`), and each
+    line it made or moved that splits no soil. kratos-cli prints these after its answer
+    and the GUI shows them in its Session log."""
     was = {line.id: line for line in before.lines}
     idle = after.idle_lines()
-    return removed_sizes(before, after) + [
+    return removed_sizes(before, after) + _numbered_names(before, after) + [
         f"Line {line.name!r} splits no soil: a line has to cross a soil layer or a soil "
         f"{'surface' if after.dimension == 2 else 'volume'} from one edge to another."
         for line in after.lines if line.id in idle and was.get(line.id) != line]

@@ -715,3 +715,57 @@ def test_a_record_needs_a_layer_or_a_part():
         SoilBody(id="p", name="P", point=(0.0, 0.0))
     with pytest.raises(ValidationError, match="either a layer or a part"):
         SoilBody(id="p", name="P", layer="top", part="drawn_0", point=(0.0, 0.0))
+
+
+# ── Soil names in the explorer are the deck's (PR #133 review) ───────────────────
+
+
+def test_a_second_layer_of_one_name_is_numbered_as_the_deck_numbers_it():
+    project = session.add_layer(model(layers=[]), "a", "sand", name="Embankment", bottom=-4.0)
+    project = session.add_layer(project, "b", "sand", name="Embankment", bottom=-8.0)
+    assert [layer.name for layer in project.layers] == ["Embankment", "Embankment_2"]
+    names = writer._part_names(project)
+    assert (names["soil_a"], names["soil_b"]) == ("Embankment", "Embankment_2")
+
+
+def test_a_layer_renamed_in_the_soil_layers_window_to_a_name_in_use_is_numbered():
+    """The window sends every layer: the one that kept its name keeps it, whatever its
+    place in the stack."""
+    before = model()
+    layers = [layer.model_copy(update={"name": "Low"}) if layer.id == "top" else layer
+              for layer in before.layers]
+    project = session.replace_layers(before, LayersUpdate(layers=layers))
+    assert [layer.name for layer in project.layers] == ["Low_2", "Low"]
+    assert session.edit_notes(before, project) == [
+        "Named the soil layer 'Low_2', because 'Low' is already in use."]
+
+
+def test_a_soil_surface_of_a_name_in_use_is_numbered_in_any_case():
+    project = on_a_surface()
+    second = surface(project, outline=[(0.0, 0.0), (1.0, 0.0), (1.0, 1.0)], key="drawn_1",
+                     label="surface")
+    payload = project.model_dump()
+    payload["custom_parts"].append(second.model_dump())
+    again = session.replace_layers(project, LayersUpdate(
+        layers=project.layers, custom_parts=[CustomPart.model_validate(part)
+                                             for part in payload["custom_parts"]]))
+    assert [part.label for part in again.custom_parts] == ["Surface", "surface_2"]
+    assert session.edit_notes(project, again) == [
+        "Named the soil surface 'surface_2', because 'surface' is already in use."]
+
+
+def test_an_edit_leaves_the_names_it_did_not_touch():
+    """A file written before this rule may hold two layers of one name; an edit elsewhere
+    renames neither, and the deck still tells them apart."""
+    twins = model(layers=[SoilLayer(id="top", name="Sand", mat="sand", top=0.0, bottom=-4.0),
+                          SoilLayer(id="low", name="Sand", mat="sand", top=-4.0, bottom=-12.0)])
+    project = session.add_line(twins, PIT_SIDE)
+    assert [layer.name for layer in project.layers] == ["Sand", "Sand"]
+    assert session.edit_notes(twins, project) == []
+
+
+def test_a_name_typed_with_a_number_of_its_own_gets_no_note():
+    before = model()
+    project = session.update_layer(before, "low", name="Top_3")
+    assert project.layers[1].name == "Top_3"
+    assert session.edit_notes(before, project) == []

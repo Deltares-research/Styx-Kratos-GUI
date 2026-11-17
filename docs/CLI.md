@@ -208,6 +208,11 @@ kratos-cli parts pit.json                                 # soil_top, ... for th
   its pieces. `surface list` shows each surface with its corners, and the pieces a line cut
   it into. A soil surface is the same record that `volume add polygon` makes in 2D, so
   `volume list` shows it too. A 3D model has soil volumes, not surfaces: use `volume`.
+- **Names of layers and soil surfaces** are unique. A name that is already in use, given
+  with `layer add`, `layer set`, `surface add` or `surface set`, gets a number: a second
+  *Embankment* becomes *Embankment_2*, and a note says so. Names that differ only in case
+  or punctuation count as the same. This is the name of the SubModelPart in the Kratos
+  input files too, and the name the GUI shows.
 - **A project saved with an excavation** opens with lines and soil bodies in its place: a
   line on each side of the pit, a line at each level, and the bodies `lift1`, `lift2`, ...,
   `pit` and `outside`. A stage that named the whole layer then names the ground outside the
