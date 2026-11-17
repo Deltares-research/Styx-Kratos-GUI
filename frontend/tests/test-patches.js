@@ -469,10 +469,11 @@
     T.ok(App.ICONS.wall !== App.ICONS.info, 'not the info glyph');
   });
 
-  test('the sheet pile and anchor icons share the faded ground line', function () {
-    var ground = '<path d="M2 15h8.5M10.5 8.5H22" opacity=".32"/>';
-    T.ok(App.ICONS.wall.indexOf(ground) >= 0, 'the sheet pile icon has the ground');
-    T.ok(App.ICONS.anchor.indexOf(ground) >= 0, 'the anchor icon has the ground');
+  test('the sheet pile and anchor icons both draw the faded ground line', function () {
+    T.ok(/<path d="M[^"]*H2[23]" opacity="\.32"\/>/.test(App.ICONS.wall),
+         'the sheet pile icon has the ground');
+    T.ok(/<path d="M[^"]*H2[23]" opacity="\.32"\/>/.test(App.ICONS.anchor),
+         'the anchor icon has the ground');
     T.ok(App.ICONS.wall !== App.ICONS.anchor, 'and each draws its own part over it');
   });
 

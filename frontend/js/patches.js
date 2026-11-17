@@ -3218,19 +3218,21 @@ App.LivePatches = (function () {
 
     /* The sheet pile and the anchor share one cross-section: the ground higher on
        the right than on the left, drawn faded, and the part the tool makes drawn
-       in full over it -- the wall with its interlock hooks at both ends, or the
-       anchor's plate, rod and grout body. The sheet pile tool, the wall panel and
-       their rows in the Model explorer ask for 'wall', which data.js never had, so
-       they used to fall back to the info glyph. data.js's 'anchor' (a ship's
-       anchor) is replaced so the two read as one family. */
-    var iconGround = '<path d="M2 15h8.5M10.5 8.5H22" opacity=".32"/>';
-    if (!App.ICONS.wall) {
-      App.ICONS.wall = '<path d="M12.4 5.6V4h-1.9v16H8.6v-1.4"/>' + iconGround;
+       in full over it -- the wall, or the anchor's plate, rod and grout body. The
+       section is drawn close up, the ground reaching nearly to the icon's edges,
+       so the part reads at 14 px; the wall is one straight line, drawn heavier
+       than the icon's usual stroke. The sheet pile tool, the wall panel and their
+       rows in the Model explorer ask for 'wall', which data.js never had, so they
+       used to fall back to the info glyph. data.js's 'anchor' (a ship's anchor)
+       is replaced so the two read as one family. */
+    var iconGround = '<path d="M1 15.5h9.3M10.3 8H23" opacity=".32"/>';
+    if (!App.ICONS.wall || App.ICONS.wall.indexOf('opacity') < 0) {
+      App.ICONS.wall = '<path d="M10.3 2.5v19" stroke-width="2.1"/>' + iconGround;
     }
     if (!App.ICONS.anchor || App.ICONS.anchor.indexOf('opacity') < 0) {
-      App.ICONS.anchor = '<path d="M11.4 9.6v2.6" stroke-width="2.2"/>'
-                       + '<path d="M11.4 10.9l5.2 2.4"/>'
-                       + '<path d="M16.6 13.3l4.4 2" stroke-width="3"/>' + iconGround;
+      App.ICONS.anchor = '<path d="M11.3 9.2v3" stroke-width="2.5"/>'
+                       + '<path d="M11.3 10.7l6 2.8"/>'
+                       + '<path d="M17.3 13.5l4.8 2.2" stroke-width="3.4"/>' + iconGround;
     }
 
     /* A boundary condition is a support: a triangle on hatched ground, the symbol
